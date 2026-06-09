@@ -1,0 +1,616 @@
+use std::convert::Infallible;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+use api_events::{EventEnvelope, EventName};
+use application::{
+    AppServices, ApplicationError, CreateWordObservation, DictionaryProvider, ImportSubtitle,
+    RegisterMedia, UpdateWordProfile,
+};
+use axum::body::Body;
+use axum::extract::{Path, Query, State};
+use axum::http::{HeaderMap, Request, StatusCode};
+use axum::middleware::{self, Next};
+use axum::response::sse::{Event, KeepAlive, Sse};
+use axum::response::{IntoResponse, Response};
+use axum::routing::{get, post};
+use axum::{Json, Router};
+use dictionary_provider::FreeDictionaryProvider;
+use domain::{
+    MediaId, MediaKind, ObservationResult, SubtitleSentenceId, SubtitleTrackId, WordProfileId,
+    WordStatus,
+};
+use serde::{Deserialize, Serialize};
+use tokio::sync::broadcast;
+
+static ERROR_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+
+#[derive(Clone)]
+pub struct ApiState {
+    pub services: AppServices,
+    pub token: Arc<str>,
+    pub events: broadcast::Sender<EventEnvelope>,
+    pub dictionary: Arc<dyn DictionaryProvider>,
+}
+
+impl ApiState {
+    pub fn new(services: AppServices, token: impl Into<Arc<str>>) -> Self {
+        let (events, _) = broadcast::channel(128);
+        Self {
+            services,
+            token: token.into(),
+            events,
+            dictionary: Arc::new(
+                FreeDictionaryProvider::new().expect("dictionary HTTP client must initialize"),
+            ),
+        }
+    }
+}
+
+pub fn router(state: ApiState) -> Router {
+    let protected = Router::new()
+        .route("/v1/media", post(register_media))
+        .route("/v1/media/{media_id}", get(read_media))
+        .route("/v1/media/{media_id}/subtitles", post(import_subtitle))
+        .route("/v1/subtitles/{track_id}", get(read_subtitle))
+        .route("/v1/word-profiles/batch", post(read_words))
+        .route(
+            "/v1/media/{media_id}/progress",
+            get(read_progress).put(update_progress),
+        )
+        .route("/v1/word-profiles", get(read_word).put(update_word))
+        .route("/v1/word-observations", post(create_observation))
+        .route("/v1/events", get(events))
+        .route("/v1/dictionary", get(dictionary_lookup))
+        .route(
+            "/v1/sentences/{sentence_id}/diagnosis",
+            get(diagnose_sentence),
+        )
+        .route_layer(middleware::from_fn_with_state(state.clone(), authorize));
+
+    Router::new()
+        .route("/v1/health", get(health))
+        .merge(protected)
+        .with_state(state)
+}
+
+async fn events(
+    State(state): State<ApiState>,
+) -> Sse<impl futures_core::Stream<Item = Result<Event, Infallible>>> {
+    let mut receiver = state.events.subscribe();
+    let stream = async_stream::stream! {
+        while let Ok(envelope) = receiver.recv().await {
+            yield Ok(Event::default().json_data(envelope).expect("event envelope serializes"));
+        }
+    };
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+async fn authorize(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    request: Request<Body>,
+    next: Next,
+) -> Result<Response, ApiError> {
+    let expected = format!("Bearer {}", state.token);
+    if headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v == expected)
+    {
+        Ok(next.run(request).await)
+    } else {
+        Err(ApiError::unauthorized())
+    }
+}
+
+#[derive(Serialize)]
+struct Health {
+    status: &'static str,
+    api_version: u16,
+}
+
+async fn health() -> Json<Health> {
+    Json(Health {
+        status: "ok",
+        api_version: 1,
+    })
+}
+
+#[derive(Debug, Deserialize)]
+struct RegisterMediaRequest {
+    path: String,
+    fingerprint: String,
+    title: String,
+    kind: MediaKind,
+    duration_ms: Option<u64>,
+}
+
+async fn register_media(
+    State(state): State<ApiState>,
+    Json(request): Json<RegisterMediaRequest>,
+) -> Result<Json<domain::MediaItem>, ApiError> {
+    state
+        .services
+        .register_media(RegisterMedia {
+            path: request.path,
+            fingerprint: request.fingerprint,
+            title: request.title,
+            kind: request.kind,
+            duration_ms: request.duration_ms,
+        })
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn read_media(
+    State(state): State<ApiState>,
+    Path(media_id): Path<String>,
+) -> Result<Json<domain::MediaItem>, ApiError> {
+    let id = MediaId::parse(media_id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .read_media(&id)?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("media"))
+}
+
+#[derive(Debug, Deserialize)]
+struct ImportSubtitleRequest {
+    path: String,
+    language: Option<String>,
+}
+
+async fn import_subtitle(
+    State(state): State<ApiState>,
+    Path(media_id): Path<String>,
+    Json(request): Json<ImportSubtitleRequest>,
+) -> Result<Json<domain::SubtitleTrack>, ApiError> {
+    let media_id = MediaId::parse(media_id).map_err(ApplicationError::from)?;
+    let content = tokio::fs::read(&request.path).await.map_err(|error| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "subtitle_read_error",
+            error.to_string(),
+            false,
+        )
+    })?;
+    let source_name = std::path::Path::new(&request.path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(&request.path)
+        .to_owned();
+    state
+        .services
+        .import_subtitle(ImportSubtitle {
+            media_id,
+            source_name,
+            content,
+            language: request.language,
+        })
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn read_subtitle(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<domain::SubtitleTrack>, ApiError> {
+    let track_id = SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .read_subtitle_track(&track_id)?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("subtitle track"))
+}
+
+async fn read_progress(
+    State(state): State<ApiState>,
+    Path(media_id): Path<String>,
+) -> Result<Json<ProgressResponse>, ApiError> {
+    let id = MediaId::parse(media_id).map_err(ApplicationError::from)?;
+    Ok(Json(ProgressResponse {
+        position_ms: state.services.read_progress(&id)?.map(domain::TimeMs::get),
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateProgressRequest {
+    position_ms: u64,
+}
+
+#[derive(Debug, Serialize)]
+struct ProgressResponse {
+    position_ms: Option<u64>,
+}
+
+async fn update_progress(
+    State(state): State<ApiState>,
+    Path(media_id): Path<String>,
+    Json(request): Json<UpdateProgressRequest>,
+) -> Result<Json<ProgressResponse>, ApiError> {
+    let id = MediaId::parse(media_id).map_err(ApplicationError::from)?;
+    let position = state.services.update_progress(&id, request.position_ms)?;
+    Ok(Json(ProgressResponse {
+        position_ms: Some(position.get()),
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+struct WordQuery {
+    language: String,
+    lemma: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct BatchWordRequest {
+    language: String,
+    lemmas: Vec<String>,
+}
+
+async fn read_words(
+    State(state): State<ApiState>,
+    Json(request): Json<BatchWordRequest>,
+) -> Result<Json<Vec<domain::WordProfile>>, ApiError> {
+    state
+        .services
+        .read_word_profiles(&request.language, &request.lemmas)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn read_word(
+    State(state): State<ApiState>,
+    Query(query): Query<WordQuery>,
+) -> Result<Json<Option<domain::WordProfile>>, ApiError> {
+    state
+        .services
+        .read_word_profile(&query.language, &query.lemma)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateWordRequest {
+    language: String,
+    lemma: String,
+    display_form: String,
+    status: Option<WordStatus>,
+}
+
+async fn update_word(
+    State(state): State<ApiState>,
+    Json(request): Json<UpdateWordRequest>,
+) -> Result<Json<domain::WordProfile>, ApiError> {
+    let profile = state
+        .services
+        .update_word_profile(UpdateWordProfile {
+            language: request.language,
+            lemma: request.lemma,
+            display_form: request.display_form,
+            status: request.status,
+        })
+        .map_err(ApiError::from)?;
+    let _ = state.events.send(EventEnvelope::v1(
+        EventName::WordProfileChanged,
+        serde_json::to_value(&profile).expect("word profile serializes"),
+    ));
+    Ok(Json(profile))
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateObservationRequest {
+    word_profile_id: String,
+    sentence_id: String,
+    original_form: String,
+    result: ObservationResult,
+}
+
+async fn create_observation(
+    State(state): State<ApiState>,
+    Json(request): Json<CreateObservationRequest>,
+) -> Result<Json<domain::WordObservation>, ApiError> {
+    let observation = state
+        .services
+        .create_observation(CreateWordObservation {
+            word_profile_id: WordProfileId::parse(request.word_profile_id)
+                .map_err(ApplicationError::from)?,
+            sentence_id: SubtitleSentenceId::parse(request.sentence_id)
+                .map_err(ApplicationError::from)?,
+            original_form: request.original_form,
+            result: request.result,
+        })
+        .map_err(ApiError::from)?;
+    let _ = state.events.send(EventEnvelope::v1(
+        EventName::WordObservationCreated,
+        serde_json::to_value(&observation).expect("word observation serializes"),
+    ));
+    Ok(Json(observation))
+}
+
+#[derive(Debug, Deserialize)]
+struct DictionaryQuery {
+    language: String,
+    lemma: String,
+}
+
+async fn dictionary_lookup(
+    State(state): State<ApiState>,
+    Query(query): Query<DictionaryQuery>,
+) -> Result<Json<Option<domain::DictionaryLookup>>, ApiError> {
+    state
+        .services
+        .lookup_dictionary(state.dictionary.as_ref(), &query.language, &query.lemma)
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn diagnose_sentence(
+    State(state): State<ApiState>,
+    Path(sentence_id): Path<String>,
+) -> Result<Json<domain::SentenceDiagnosis>, ApiError> {
+    let sentence_id = SubtitleSentenceId::parse(sentence_id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .diagnose_sentence(&sentence_id)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+#[derive(Debug, Serialize)]
+pub struct ErrorBody {
+    pub code: &'static str,
+    pub message: String,
+    pub correlation_id: String,
+    pub retryable: bool,
+}
+
+pub struct ApiError {
+    status: StatusCode,
+    body: ErrorBody,
+}
+
+impl ApiError {
+    fn new(
+        status: StatusCode,
+        code: &'static str,
+        message: impl Into<String>,
+        retryable: bool,
+    ) -> Self {
+        Self {
+            status,
+            body: ErrorBody {
+                code,
+                message: message.into(),
+                correlation_id: format!("api-{}", ERROR_SEQUENCE.fetch_add(1, Ordering::Relaxed)),
+                retryable,
+            },
+        }
+    }
+
+    fn unauthorized() -> Self {
+        Self::new(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "invalid local API token",
+            false,
+        )
+    }
+
+    fn not_found(entity: &'static str) -> Self {
+        Self::new(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            format!("{entity} was not found"),
+            false,
+        )
+    }
+}
+
+impl From<ApplicationError> for ApiError {
+    fn from(value: ApplicationError) -> Self {
+        match value {
+            ApplicationError::NotFound(entity) => Self::not_found(entity),
+            ApplicationError::Validation(field) => Self::new(
+                StatusCode::BAD_REQUEST,
+                "validation_error",
+                format!("{field} must not be empty"),
+                false,
+            ),
+            ApplicationError::Domain(error) => Self::new(
+                StatusCode::BAD_REQUEST,
+                "domain_error",
+                error.to_string(),
+                false,
+            ),
+            ApplicationError::Repository(error) => Self::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "repository_error",
+                error,
+                true,
+            ),
+            ApplicationError::Subtitle(error) => Self::new(
+                StatusCode::BAD_REQUEST,
+                "subtitle_parse_error",
+                error.to_string(),
+                false,
+            ),
+            ApplicationError::DictionaryProvider(error) => Self::new(
+                StatusCode::BAD_GATEWAY,
+                "dictionary_provider_error",
+                error.to_string(),
+                true,
+            ),
+        }
+    }
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "event": "api.error",
+                "status": self.status.as_u16(),
+                "code": self.body.code,
+                "message": self.body.message,
+                "correlation_id": self.body.correlation_id,
+                "retryable": self.body.retryable,
+            })
+        );
+        (self.status, Json(self.body)).into_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::to_bytes;
+    use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
+    use persistence_sqlite::SqliteRepository;
+    use tower::ServiceExt;
+
+    fn test_app() -> Router {
+        let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+        router(ApiState::new(
+            AppServices::new(
+                repo.clone(),
+                repo.clone(),
+                repo.clone(),
+                repo.clone(),
+                repo.clone(),
+                repo,
+            ),
+            "secret",
+        ))
+    }
+
+    #[tokio::test]
+    async fn health_is_public_and_versioned() {
+        let response = test_app()
+            .oneshot(Request::get("/v1/health").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn protected_routes_require_token() {
+        let response = test_app()
+            .oneshot(Request::post("/v1/media").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn media_registration_is_idempotent_over_http() {
+        let app = test_app();
+        let body = serde_json::json!({
+            "path": "/tmp/a.mp4",
+            "fingerprint": "abc",
+            "title": "A",
+            "kind": "video",
+            "duration_ms": 1000
+        })
+        .to_string();
+        let request = || {
+            Request::post("/v1/media")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(body.clone()))
+                .unwrap()
+        };
+        let first = app.clone().oneshot(request()).await.unwrap();
+        assert_eq!(first.status(), StatusCode::OK);
+        let first_body = to_bytes(first.into_body(), usize::MAX).await.unwrap();
+        let second = app.oneshot(request()).await.unwrap();
+        assert_eq!(second.status(), StatusCode::OK);
+        let second_body = to_bytes(second.into_body(), usize::MAX).await.unwrap();
+        let first: serde_json::Value = serde_json::from_slice(&first_body).unwrap();
+        let second: serde_json::Value = serde_json::from_slice(&second_body).unwrap();
+        assert_eq!(first["id"], second["id"]);
+    }
+
+    #[tokio::test]
+    async fn imports_and_reads_complete_subtitle_timeline() {
+        let app = test_app();
+        let media = serde_json::json!({
+            "path": "/tmp/a.mp4",
+            "fingerprint": "subtitle-media",
+            "title": "A",
+            "kind": "video"
+        })
+        .to_string();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/v1/media")
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(media))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let media: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        let fixture = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../testdata/subtitles/timeline.srt"
+        );
+        let request = serde_json::json!({"path": fixture, "language": "en"}).to_string();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/v1/media/{}/subtitles",
+                    media["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(request))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let track: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(track["sentences"].as_array().unwrap().len(), 4);
+        let response = app
+            .oneshot(
+                Request::get(format!("/v1/subtitles/{}", track["id"].as_str().unwrap()))
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn openapi_lists_implemented_routes() {
+        let openapi = include_str!("../../../contracts/openapi/v1.yaml");
+        for path in [
+            "/v1/health",
+            "/v1/media",
+            "/v1/media/{media_id}",
+            "/v1/media/{media_id}/subtitles",
+            "/v1/media/{media_id}/progress",
+            "/v1/subtitles/{track_id}",
+            "/v1/word-profiles",
+            "/v1/word-profiles/batch",
+            "/v1/word-observations",
+            "/v1/events",
+            "/v1/dictionary",
+            "/v1/sentences/{sentence_id}/diagnosis",
+        ] {
+            assert!(openapi.contains(path), "OpenAPI missing {path}");
+        }
+    }
+}

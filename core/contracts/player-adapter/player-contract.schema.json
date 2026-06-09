@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llplayer.next/contracts/player-adapter/v1/player-contract.schema.json",
+  "title": "LLPlayerNext Player Adapter Contract",
+  "oneOf": [
+    { "$ref": "#/$defs/command" },
+    { "$ref": "#/$defs/event" }
+  ],
+  "$defs": {
+    "timeMs": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Integer milliseconds"
+    },
+    "track": {
+      "type": "object",
+      "required": ["id", "kind", "selected"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["audio", "subtitle"] },
+        "language": { "type": ["string", "null"] },
+        "title": { "type": ["string", "null"] },
+        "selected": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "command": {
+      "type": "object",
+      "required": ["version", "command"],
+      "properties": {
+        "version": { "const": 1 },
+        "command": {
+          "enum": [
+            "open",
+            "play",
+            "pause",
+            "stop",
+            "seek",
+            "setVolume",
+            "setPlaybackRate",
+            "selectAudioTrack",
+            "selectSubtitleTrack",
+            "setLoopRange",
+            "clearLoopRange"
+          ]
+        },
+        "uri": { "type": "string" },
+        "positionMs": { "$ref": "#/$defs/timeMs" },
+        "volume": { "type": "number", "minimum": 0, "maximum": 1 },
+        "playbackRate": { "type": "number", "exclusiveMinimum": 0, "maximum": 4 },
+        "trackId": { "type": "string" },
+        "startMs": { "$ref": "#/$defs/timeMs" },
+        "endMs": { "$ref": "#/$defs/timeMs" }
+      },
+      "additionalProperties": false
+    },
+    "event": {
+      "type": "object",
+      "required": ["version", "event"],
+      "properties": {
+        "version": { "const": 1 },
+        "event": {
+          "enum": ["positionChanged", "durationChanged", "stateChanged", "tracksChanged", "error"]
+        },
+        "positionMs": { "$ref": "#/$defs/timeMs" },
+        "durationMs": { "$ref": "#/$defs/timeMs" },
+        "state": {
+          "enum": ["idle", "opening", "ready", "playing", "paused", "stopped", "ended", "error"]
+        },
+        "tracks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/track" }
+        },
+        "error": {
+          "type": "object",
+          "required": ["code", "message", "recoverable"],
+          "properties": {
+            "code": { "type": "string", "minLength": 1 },
+            "message": { "type": "string", "minLength": 1 },
+            "recoverable": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

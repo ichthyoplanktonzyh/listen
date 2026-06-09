@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llplayer.next/contracts/events/v1.schema.json",
+  "title": "LLPlayerNext Event Envelope v1",
+  "type": "object",
+  "required": ["version", "event", "payload"],
+  "properties": {
+    "version": { "const": 1 },
+    "event": {
+      "enum": [
+        "service-started",
+        "service-stopping",
+        "word-profile-changed",
+        "word-observation-created"
+      ]
+    },
+    "payload": { "type": "object" }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,12 @@
+[package]
+name = "dictionary-provider"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+application = { path = "../application" }
+async-trait.workspace = true
+domain = { path = "../domain" }
+reqwest.workspace = true
+serde_json.workspace = true

@@ -1,0 +1,23 @@
+[package]
+name = "api-http"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+application = { path = "../application" }
+api-events = { path = "../api-events" }
+async-stream.workspace = true
+futures-core.workspace = true
+axum.workspace = true
+dictionary-provider = { path = "../dictionary-provider" }
+domain = { path = "../domain" }
+persistence-sqlite = { path = "../persistence-sqlite" }
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tower.workspace = true
+
+[dev-dependencies]
+tower = { workspace = true, features = ["util"] }

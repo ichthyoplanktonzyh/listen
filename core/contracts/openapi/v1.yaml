@@ -1,0 +1,447 @@
+openapi: 3.1.0
+info:
+  title: LLPlayerNext Local API
+  version: 1.0.0
+  description: Versioned loopback-only application-service adapter. Playback control is excluded.
+servers:
+  - url: http://127.0.0.1:{port}
+    variables:
+      port:
+        default: "0"
+security:
+  - bearerAuth: []
+paths:
+  /v1/health:
+    get:
+      security: []
+      operationId: health
+      responses:
+        "200":
+          description: Service health and API version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /v1/media:
+    post:
+      operationId: registerMedia
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterMedia"
+      responses:
+        "200":
+          description: Idempotently registered media
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaItem"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/media/{media_id}:
+    parameters:
+      - $ref: "#/components/parameters/MediaId"
+    get:
+      operationId: readMedia
+      responses:
+        "200":
+          description: Media metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaItem"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/media/{media_id}/progress:
+    parameters:
+      - $ref: "#/components/parameters/MediaId"
+    get:
+      operationId: readProgress
+      responses:
+        "200":
+          description: Last saved position
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Progress"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/media/{media_id}/subtitles:
+    parameters:
+      - $ref: "#/components/parameters/MediaId"
+    post:
+      operationId: importSubtitle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportSubtitle"
+      responses:
+        "200":
+          description: Complete normalized subtitle timeline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubtitleTrack"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/subtitles/{track_id}:
+    parameters:
+      - name: track_id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: readSubtitle
+      responses:
+        "200":
+          description: Complete normalized subtitle timeline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubtitleTrack"
+        default:
+          $ref: "#/components/responses/Error"
+    put:
+      operationId: updateProgress
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Progress"
+      responses:
+        "200":
+          description: Saved position
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Progress"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/word-profiles:
+    get:
+      operationId: readWordProfile
+      parameters:
+        - name: language
+          in: query
+          required: true
+          schema: { type: string }
+        - name: lemma
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Profile or null when not classified
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: "#/components/schemas/WordProfile"
+                  - type: "null"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/word-profiles/batch:
+    post:
+      operationId: readWordProfiles
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchWordProfiles"
+      responses:
+        "200":
+          description: Existing profiles; absent lemmas are unclassified
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WordProfile" }
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/word-observations:
+    post:
+      operationId: createWordObservation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWordObservation"
+      responses:
+        "200":
+          description: Context-specific listening observation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WordObservation"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/events:
+    get:
+      operationId: events
+      responses:
+        "200":
+          description: Versioned server-sent domain event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+  /v1/dictionary:
+    get:
+      operationId: dictionaryLookup
+      parameters:
+        - name: language
+          in: query
+          required: true
+          schema: { type: string }
+        - name: lemma
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Cached or online dictionary result; null when absent
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: "#/components/schemas/DictionaryLookup"
+                  - type: "null"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/sentences/{sentence_id}/diagnosis:
+    parameters:
+      - name: sentence_id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: diagnoseSentence
+      responses:
+        "200":
+          description: Deterministic explainable sentence diagnosis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SentenceDiagnosis"
+        default:
+          $ref: "#/components/responses/Error"
+    put:
+      operationId: updateWordProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWordProfile"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WordProfile"
+        default:
+          $ref: "#/components/responses/Error"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    MediaId:
+      name: media_id
+      in: path
+      required: true
+      schema: { type: string }
+  responses:
+    Error:
+      description: Structured error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Health:
+      type: object
+      required: [status, api_version]
+      properties:
+        status: { const: ok }
+        api_version: { const: 1 }
+    RegisterMedia:
+      type: object
+      required: [path, fingerprint, title, kind]
+      properties:
+        path: { type: string }
+        fingerprint: { type: string }
+        title: { type: string }
+        kind: { enum: [video, audio] }
+        duration_ms: { type: [integer, "null"], minimum: 0 }
+    MediaItem:
+      type: object
+      required: [id, path, fingerprint, title, kind, duration, created_at_ms, updated_at_ms]
+      properties:
+        id: { type: string }
+        path: { type: string }
+        fingerprint: { type: string }
+        title: { type: string }
+        kind: { enum: [video, audio] }
+        duration: { type: [integer, "null"], minimum: 0 }
+        created_at_ms: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
+    Progress:
+      type: object
+      required: [position_ms]
+      properties:
+        position_ms: { type: [integer, "null"], minimum: 0 }
+    ImportSubtitle:
+      type: object
+      required: [path]
+      properties:
+        path: { type: string }
+        language: { type: [string, "null"] }
+    SubtitleToken:
+      type: object
+      required: [index, kind, text, normalized, start_char, end_char]
+      properties:
+        index: { type: integer, minimum: 0 }
+        kind: { enum: [word, whitespace, punctuation, other] }
+        text: { type: string }
+        normalized: { type: [string, "null"] }
+        start_char: { type: integer, minimum: 0 }
+        end_char: { type: integer, minimum: 0 }
+    SubtitleSentence:
+      type: object
+      required: [id, index, start, end, original_text, display_text, tokens]
+      properties:
+        id: { type: string }
+        index: { type: integer, minimum: 0 }
+        start: { type: integer, minimum: 0 }
+        end: { type: integer, minimum: 0 }
+        original_text: { type: string }
+        display_text: { type: string }
+        tokens:
+          type: array
+          items: { $ref: "#/components/schemas/SubtitleToken" }
+    SubtitleTrack:
+      type: object
+      required: [id, media_id, fingerprint, language, source, sentences]
+      properties:
+        id: { type: string }
+        media_id: { type: string }
+        fingerprint: { type: string }
+        language: { type: [string, "null"] }
+        source: { type: string }
+        sentences:
+          type: array
+          items: { $ref: "#/components/schemas/SubtitleSentence" }
+    WordProfile:
+      type: object
+      required: [id, language, lemma, normalized_lemma, display_form, status, updated_at_ms]
+      properties:
+        id: { type: string }
+        language: { type: string }
+        lemma: { type: string }
+        normalized_lemma: { type: string }
+        display_form: { type: string }
+        status:
+          anyOf:
+            - enum: [unknown_meaning, known_not_recognized, known_recognized]
+            - type: "null"
+        updated_at_ms: { type: integer, minimum: 0 }
+    UpdateWordProfile:
+      type: object
+      required: [language, lemma, display_form]
+      properties:
+        language: { type: string }
+        lemma: { type: string }
+        display_form: { type: string }
+        status:
+          anyOf:
+            - enum: [unknown_meaning, known_not_recognized, known_recognized]
+            - type: "null"
+    BatchWordProfiles:
+      type: object
+      required: [language, lemmas]
+      properties:
+        language: { type: string }
+        lemmas:
+          type: array
+          maxItems: 5000
+          items: { type: string }
+    CreateWordObservation:
+      type: object
+      required: [word_profile_id, sentence_id, original_form, result]
+      properties:
+        word_profile_id: { type: string }
+        sentence_id: { type: string }
+        original_form: { type: string }
+        result: { enum: [recognized_in_context, not_recognized_in_context] }
+    WordObservation:
+      type: object
+      required: [id, word_profile_id, sentence_id, original_form, result, created_at_ms]
+      properties:
+        id: { type: string }
+        word_profile_id: { type: string }
+        sentence_id: { type: string }
+        original_form: { type: string }
+        result: { enum: [recognized_in_context, not_recognized_in_context] }
+        created_at_ms: { type: integer, minimum: 0 }
+    DictionaryLookup:
+      type: object
+      required: [query, lemma, definitions, phonetics, provider, cached_at_ms]
+      properties:
+        query: { type: string }
+        lemma: { type: string }
+        definitions:
+          type: array
+          items:
+            type: object
+            required: [part_of_speech, text]
+            properties:
+              part_of_speech: { type: [string, "null"] }
+              text: { type: string }
+        phonetics:
+          type: array
+          items:
+            type: object
+            required: [text, region]
+            properties:
+              text: { type: string }
+              region: { type: [string, "null"] }
+        provider: { type: string }
+        cached_at_ms: { type: integer, minimum: 0 }
+    SentenceDiagnosis:
+      type: object
+      required: [sentence_id, hints, unclassified_lemmas]
+      properties:
+        sentence_id: { type: string }
+        hints:
+          type: array
+          items:
+            type: object
+            required: [kind, message, word_profile_ids]
+            properties:
+              kind:
+                enum: [meaning_barrier, recognition_barrier, insufficient_information, other_factors]
+              message: { type: string }
+              word_profile_ids:
+                type: array
+                items: { type: string }
+        unclassified_lemmas:
+          type: array
+          items: { type: string }
+    Error:
+      type: object
+      required: [code, message, correlation_id, retryable]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        correlation_id: { type: string }
+        retryable: { type: boolean }
