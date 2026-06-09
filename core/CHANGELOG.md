@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased - Milestone 1.5
+
+### Planned
+
+- Status-driven vocabulary books with user-selected status as the authority.
+- Durable status history and source sentence snapshots.
+- Missing-media recovery and independent vocabulary asset backup/restore.
+
 ## 0.2.0 - 2026-06-09
 
 Milestone 1 macOS Apple Silicon MVP.
