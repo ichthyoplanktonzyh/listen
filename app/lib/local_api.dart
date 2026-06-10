@@ -104,6 +104,21 @@ class LocalApi {
       (await _request('GET', '/v1/subtitles/${Uri.encodeComponent(trackId)}'))
           as Map<String, dynamic>;
 
+  Future<String> exportSubtitleSrt(String trackId) async {
+    final request = await _client.getUrl(
+      Uri.parse(
+        '$baseUrl/v1/subtitles/${Uri.encodeComponent(trackId)}/export?format=srt',
+      ),
+    );
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    final response = await request.close();
+    final text = await response.transform(utf8.decoder).join();
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw HttpException(text);
+    }
+    return text;
+  }
+
   Future<List<Map<String, dynamic>>> transcriptionProviders() async =>
       ((await _request('GET', '/v1/transcription/providers')) as List<dynamic>)
           .cast<Map<String, dynamic>>();

@@ -182,6 +182,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String ffmpegPath = '';
   String ffprobePath = '';
   String ytDlpPath = '';
+  String transcriptionQuality = 'balanced';
+  String transcriptionLanguage = 'auto';
+  String transcriptionDestination = 'primary';
   List<AudioTrack> audioTracks = const [];
   String? selectedAudioId;
   List<media.SubtitleTrack> embeddedSubtitleTracks = const [];
@@ -270,6 +273,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ffmpegPath = settings.ffmpegPath;
       ffprobePath = settings.ffprobePath;
       ytDlpPath = settings.ytDlpPath;
+      transcriptionQuality = settings.transcriptionQuality;
+      transcriptionLanguage = settings.transcriptionLanguage;
+      transcriptionDestination = settings.transcriptionDestination;
     });
     await adapter.setRate(rate);
     await adapter.setVolume(volume);
@@ -298,6 +304,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     ffmpegPath: ffmpegPath,
     ffprobePath: ffprobePath,
     ytDlpPath: ytDlpPath,
+    transcriptionQuality: transcriptionQuality,
+    transcriptionLanguage: transcriptionLanguage,
+    transcriptionDestination: transcriptionDestination,
   ).save();
 
   Future<void> _connectApi() async {
@@ -332,6 +341,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _onEvent(Map<String, dynamic> event) {
     if (event['event'] == 'service-started') {
       unawaited(_loadWordProfiles());
+      return;
+    }
+    if (event['event'] == 'transcription-job-changed') {
+      final job = event['payload'] as Map<String, dynamic>;
+      if (job['status'] == 'completed' &&
+          job['media_id'] == mediaId &&
+          job['generated_track_id'] != null) {
+        unawaited(
+          api!
+              .readSubtitle(job['generated_track_id'] as String)
+              .then(
+                (track) => _loadGeneratedTrack(
+                  track,
+                  job['destination'] == 'secondary',
+                ),
+              ),
+        );
+      } else if (mounted && job['media_id'] == mediaId) {
+        setState(
+          () => status =
+              'ASR ${job['status']} · ${job['phase_progress'] as int}%',
+        );
+      }
       return;
     }
     if (event['event'] != 'word-profile-changed') return;
@@ -475,6 +507,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       api: api!,
       mediaId: mediaId!,
       secondary: secondary,
+      preferredQuality: transcriptionQuality,
+      preferredLanguage: transcriptionLanguage,
     );
   }
 
@@ -787,6 +821,76 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   setState(() => secondaryColor = value);
                   refresh(() {});
                 }),
+                const Divider(),
+                Text(
+                  l.text('transcriptionDefaults'),
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                DropdownButtonFormField<String>(
+                  initialValue: transcriptionQuality,
+                  decoration: InputDecoration(
+                    labelText: l.text('preferredQuality'),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'fast', child: Text('Fast')),
+                    DropdownMenuItem(
+                      value: 'balanced',
+                      child: Text('Balanced'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'accurate',
+                      child: Text('Accurate'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => transcriptionQuality = value);
+                    refresh(() {});
+                    unawaited(_saveSettings());
+                  },
+                ),
+                DropdownButtonFormField<String>(
+                  initialValue: transcriptionLanguage,
+                  decoration: InputDecoration(
+                    labelText: l.text('transcriptionLanguage'),
+                  ),
+                  items: [
+                    DropdownMenuItem(
+                      value: 'auto',
+                      child: Text(l.text('automatic')),
+                    ),
+                    const DropdownMenuItem(value: 'en', child: Text('English')),
+                    const DropdownMenuItem(value: 'zh', child: Text('中文')),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => transcriptionLanguage = value);
+                    refresh(() {});
+                    unawaited(_saveSettings());
+                  },
+                ),
+                DropdownButtonFormField<String>(
+                  initialValue: transcriptionDestination,
+                  decoration: InputDecoration(
+                    labelText: l.text('defaultDestination'),
+                  ),
+                  items: [
+                    DropdownMenuItem(
+                      value: 'primary',
+                      child: Text(l.text('primarySubtitle')),
+                    ),
+                    DropdownMenuItem(
+                      value: 'secondary',
+                      child: Text(l.text('secondarySubtitle')),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => transcriptionDestination = value);
+                    refresh(() {});
+                    unawaited(_saveSettings());
+                  },
+                ),
                 const Divider(),
                 Text(
                   l.text('externalTools'),

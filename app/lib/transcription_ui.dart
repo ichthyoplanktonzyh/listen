@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +15,8 @@ Future<void> showGenerateSubtitles({
   required LocalApi api,
   required String mediaId,
   required bool secondary,
+  String preferredQuality = 'balanced',
+  String preferredLanguage = 'auto',
 }) async {
   final l = AppLocalizations.of(context);
   final models = await api.transcriptionModels();
@@ -39,8 +42,11 @@ Future<void> showGenerateSubtitles({
     );
     return;
   }
-  var modelId = installed.first['id'] as String;
-  var language = 'auto';
+  final preferred = installed
+      .where((model) => model['quality'] == preferredQuality)
+      .firstOrNull;
+  var modelId = (preferred ?? installed.first)['id'] as String;
+  var language = preferredLanguage;
   var translate = false;
   await showDialog<void>(
     context: context,
@@ -119,6 +125,10 @@ Future<void> showGenerateSubtitles({
   );
 }
 
+extension<T> on Iterable<T> {
+  T? get firstOrNull => isEmpty ? null : first;
+}
+
 class TranscriptionCenter extends StatefulWidget {
   const TranscriptionCenter({
     required this.api,
@@ -136,6 +146,7 @@ class TranscriptionCenter extends StatefulWidget {
 class _TranscriptionCenterState extends State<TranscriptionCenter> {
   List<Map<String, dynamic>> models = const [];
   List<Map<String, dynamic>> jobs = const [];
+  List<Map<String, dynamic>> providers = const [];
   Timer? timer;
   String? error;
 
@@ -149,13 +160,15 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
   Future<void> _refresh() async {
     try {
       final values = await Future.wait([
+        widget.api.transcriptionProviders(),
         widget.api.transcriptionModels(),
         widget.api.transcriptionJobs(),
       ]);
       if (!mounted) return;
       setState(() {
-        models = values[0];
-        jobs = values[1];
+        providers = values[0];
+        models = values[1];
+        jobs = values[2];
         error = null;
       });
     } catch (value) {
@@ -217,6 +230,23 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
           ),
         ),
       ),
+      for (final provider in providers)
+        ListTile(
+          leading: Icon(
+            provider['available'] == true
+                ? Icons.check_circle_outline
+                : Icons.error_outline,
+          ),
+          title: Text(
+            '${provider['display_name']} · ${provider['runtime_id']}',
+          ),
+          subtitle: Text(
+            provider['available'] == true
+                ? '${provider['runtime_version']} · ${l.text('runtimeReady')}'
+                : (provider['diagnostic'] as String? ??
+                      l.text('providerUnavailable')),
+          ),
+        ),
       Expanded(
         child: ListView.builder(
           itemCount: models.length,
@@ -338,6 +368,32 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                         );
                       },
                       icon: const Icon(Icons.subtitles),
+                    ),
+                  if (status == 'completed')
+                    IconButton(
+                      tooltip: l.text('exportSrt'),
+                      onPressed: () async {
+                        final location = await getSaveLocation(
+                          suggestedName: '${job['media_title']}.generated.srt',
+                        );
+                        if (location == null) return;
+                        final content = await widget.api.exportSubtitleSrt(
+                          job['generated_track_id'] as String,
+                        );
+                        await File(location.path).writeAsString(content);
+                      },
+                      icon: const Icon(Icons.file_download_outlined),
+                    ),
+                  if (status == 'completed')
+                    IconButton(
+                      tooltip: l.text('regenerate'),
+                      onPressed: () => showGenerateSubtitles(
+                        context: context,
+                        api: widget.api,
+                        mediaId: job['media_id'] as String,
+                        secondary: job['destination'] == 'secondary',
+                      ),
+                      icon: const Icon(Icons.auto_fix_high),
                     ),
                 ],
               ),

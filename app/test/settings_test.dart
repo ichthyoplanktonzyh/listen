@@ -16,6 +16,9 @@ void main() {
       'transcript_width': 510,
       'language': 'zh',
       'subtitle_preset': 'compact',
+      'transcription_quality': 'accurate',
+      'transcription_language': 'en',
+      'transcription_destination': 'secondary',
     });
     expect(settings.rate, 0.75);
     expect(settings.volume, 50);
@@ -27,6 +30,9 @@ void main() {
     expect(settings.transcriptWidth, 510);
     expect(settings.language, 'zh');
     expect(settings.subtitlePreset, 'compact');
+    expect(settings.transcriptionQuality, 'accurate');
+    expect(settings.transcriptionLanguage, 'en');
+    expect(settings.transcriptionDestination, 'secondary');
   });
 
   test('migrates version 1 subtitle offset', () {
