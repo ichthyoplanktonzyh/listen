@@ -1418,7 +1418,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   child: Row(
                     children: [
                       Expanded(flex: 3, child: _playerSurface()),
-                      SizedBox(width: transcriptWidth, child: _sidePanel()),
+                      if (subtitlesVisible || selectedWordDetails != null)
+                        SizedBox(width: transcriptWidth, child: _sidePanel()),
                     ],
                   ),
                 ),
@@ -1453,6 +1454,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           : 1.0;
       final subtitlePosition = Offset(subtitlePositionX, subtitlePositionY);
       return Stack(
+        alignment: Alignment.bottomCenter,
         children: [
           Positioned.fill(
             child: ColoredBox(
