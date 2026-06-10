@@ -18,6 +18,7 @@ import 'external_tools.dart';
 import 'player_adapter.dart';
 import 'settings.dart';
 import 'timeline.dart';
+import 'transcription_ui.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -441,6 +442,50 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } catch (error) {
       setState(() => status = 'Subtitle import failed: $error');
     }
+  }
+
+  Future<void> _loadGeneratedTrack(
+    Map<String, dynamic> value,
+    bool secondary,
+  ) async {
+    await adapter.disableNativeSubtitles();
+    if (!mounted) return;
+    setState(() {
+      final imported = SubtitleTrack.fromJson(value);
+      if (secondary) {
+        secondaryTrack = imported;
+        currentSecondaryCue = secondaryCursor.current(position);
+      } else {
+        primaryTrack = imported;
+        currentPrimaryCue = primaryCursor.current(position);
+      }
+      status =
+          'Loaded generated ${secondary ? 'secondary' : 'primary'} subtitle';
+    });
+    if (!secondary) await _loadWordProfiles();
+  }
+
+  Future<void> _generateSubtitles({required bool secondary}) async {
+    if (api == null || mediaId == null) {
+      setState(() => status = 'Open media and connect the local core first');
+      return;
+    }
+    await showGenerateSubtitles(
+      context: context,
+      api: api!,
+      mediaId: mediaId!,
+      secondary: secondary,
+    );
+  }
+
+  Future<void> _openTranscriptionCenter() async {
+    if (api == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) =>
+            TranscriptionCenter(api: api!, loadTrack: _loadGeneratedTrack),
+      ),
+    );
   }
 
   Future<void> _handleDrop(List<String> paths) async {
@@ -1339,15 +1384,63 @@ class _PlayerScreenState extends State<PlayerScreen> {
               icon: const Icon(Icons.language),
               label: Text(l.text('openUrl')),
             ),
-            TextButton.icon(
-              onPressed: () => _openSubtitle(secondary: false),
-              icon: const Icon(Icons.subtitles_outlined),
-              label: Text(l.text('primarySubtitle')),
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'import') {
+                  unawaited(_openSubtitle(secondary: false));
+                } else {
+                  unawaited(_generateSubtitles(secondary: false));
+                }
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'import',
+                  child: Text(l.text('importSubtitleHint')),
+                ),
+                PopupMenuItem(
+                  value: 'generate',
+                  child: Text(l.text('generateSubtitles')),
+                ),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.subtitles_outlined),
+                    const SizedBox(width: 8),
+                    Text(l.text('primarySubtitle')),
+                  ],
+                ),
+              ),
             ),
-            TextButton.icon(
-              onPressed: () => _openSubtitle(secondary: true),
-              icon: const Icon(Icons.closed_caption_outlined),
-              label: Text(l.text('secondarySubtitle')),
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'import') {
+                  unawaited(_openSubtitle(secondary: true));
+                } else {
+                  unawaited(_generateSubtitles(secondary: true));
+                }
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'import',
+                  child: Text(l.text('importSubtitleHint')),
+                ),
+                PopupMenuItem(
+                  value: 'generate',
+                  child: Text(l.text('generateSubtitles')),
+                ),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.closed_caption_outlined),
+                    const SizedBox(width: 8),
+                    Text(l.text('secondarySubtitle')),
+                  ],
+                ),
+              ),
             ),
             PopupMenuButton<String>(
               onSelected: (value) {
@@ -1362,6 +1455,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 }
                 if (value == 'import-word-list') unawaited(_importWordList());
                 if (value == 'archive-media') unawaited(_archiveCurrentMedia());
+                if (value == 'transcription') {
+                  unawaited(_openTranscriptionCenter());
+                }
               },
               itemBuilder: (_) => [
                 PopupMenuItem(
@@ -1388,6 +1484,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 PopupMenuItem(
                   value: 'archive-media',
                   child: Text(l.text('archiveMedia')),
+                ),
+                PopupMenuItem(
+                  value: 'transcription',
+                  child: Text(l.text('transcriptionCenter')),
                 ),
               ],
             ),
@@ -1514,9 +1614,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                   profiles: wordProfiles,
                                   showStyles: statusStylesVisible,
                                   fontSize: primarySize,
-                                  fontFamily: _subtitleFont(
-                                    primaryFontFamily,
-                                  ),
+                                  fontFamily: _subtitleFont(primaryFontFamily),
                                   baseColor: primaryColor,
                                   onWord: _openWord,
                                 ),

@@ -34,7 +34,7 @@ void main() {
       'version': 1,
       'subtitle_offset_ms': -125,
     });
-    expect(settings.version, 4);
+    expect(settings.version, 5);
     expect(settings.primarySubtitleOffsetMs, -125);
   });
 
@@ -65,7 +65,7 @@ void main() {
 
   test('falls back safely for an unsupported settings version', () {
     final settings = AppSettings.fromJson({'version': 999, 'rate': 4});
-    expect(settings.version, 4);
+    expect(settings.version, 5);
     expect(settings.rate, 1);
   });
 }

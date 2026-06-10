@@ -3,7 +3,7 @@ import 'dart:io';
 
 class AppSettings {
   const AppSettings({
-    this.version = 4,
+    this.version = 5,
     this.rate = 1,
     this.volume = 100,
     this.primarySubtitleOffsetMs = 0,
@@ -26,11 +26,18 @@ class AppSettings {
     this.ffmpegPath = '',
     this.ffprobePath = '',
     this.ytDlpPath = '',
+    this.transcriptionQuality = 'balanced',
+    this.transcriptionLanguage = 'auto',
+    this.transcriptionDestination = 'primary',
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     final version = json['version'] as int?;
-    if (version != 1 && version != 2 && version != 3 && version != 4) {
+    if (version != 1 &&
+        version != 2 &&
+        version != 3 &&
+        version != 4 &&
+        version != 5) {
       return const AppSettings();
     }
     final legacyBottomPadding = _number(
@@ -52,13 +59,13 @@ class AppSettings {
       secondarySubtitlesVisible:
           json['secondary_subtitles_visible'] as bool? ?? true,
       statusStylesVisible: json['status_styles_visible'] as bool? ?? true,
-      primaryFontSize: version == 3 || version == 4
+      primaryFontSize: version == 3 || version == 4 || version == 5
           ? _number(json['primary_font_size'], 1, 0.5, 2)
           : (_number(json['primary_font_size'], 24, 12, 72) / 24).clamp(
               0.5,
               2.0,
             ),
-      secondaryFontSize: version == 3 || version == 4
+      secondaryFontSize: version == 3 || version == 4 || version == 5
           ? _number(json['secondary_font_size'], 1, 0.5, 2)
           : (_number(json['secondary_font_size'], 18, 10, 64) / 18).clamp(
               0.5,
@@ -69,7 +76,7 @@ class AppSettings {
       subtitlePreset: json['subtitle_preset'] as String? ?? 'learning',
       language: json['language'] as String? ?? 'system',
       subtitlePositionX: _number(json['subtitle_position_x'], 0.5, 0, 1),
-      subtitlePositionY: version == 4
+      subtitlePositionY: version == 4 || version == 5
           ? _number(json['subtitle_position_y'], 0.82, 0, 1)
           : (1 - legacyBottomPadding / 600).clamp(0.05, 0.95),
       subtitleBackgroundOpacity: _number(
@@ -84,6 +91,12 @@ class AppSettings {
       ffmpegPath: json['ffmpeg_path'] as String? ?? '',
       ffprobePath: json['ffprobe_path'] as String? ?? '',
       ytDlpPath: json['yt_dlp_path'] as String? ?? '',
+      transcriptionQuality:
+          json['transcription_quality'] as String? ?? 'balanced',
+      transcriptionLanguage:
+          json['transcription_language'] as String? ?? 'auto',
+      transcriptionDestination:
+          json['transcription_destination'] as String? ?? 'primary',
     );
   }
 
@@ -110,14 +123,20 @@ class AppSettings {
   final String ffmpegPath;
   final String ffprobePath;
   final String ytDlpPath;
+  final String transcriptionQuality;
+  final String transcriptionLanguage;
+  final String transcriptionDestination;
 
   static File get file => File(
-    '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v4.json',
+    '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v5.json',
   );
 
   static Future<AppSettings> load() async {
     for (final candidate in [
       file,
+      File(
+        '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v4.json',
+      ),
       File(
         '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v3.json',
       ),
@@ -166,6 +185,9 @@ class AppSettings {
         'ffmpeg_path': ffmpegPath,
         'ffprobe_path': ffprobePath,
         'yt_dlp_path': ytDlpPath,
+        'transcription_quality': transcriptionQuality,
+        'transcription_language': transcriptionLanguage,
+        'transcription_destination': transcriptionDestination,
       }),
       flush: true,
     );
