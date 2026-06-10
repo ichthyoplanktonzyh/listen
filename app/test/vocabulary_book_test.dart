@@ -1,8 +1,57 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/main.dart';
+import 'package:llplayer_next/localization.dart';
+
+Widget localized(Widget child, {Locale locale = const Locale('en')}) =>
+    MaterialApp(
+      locale: locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: Scaffold(body: child),
+    );
 
 void main() {
+  test('responsive subtitle sizing limits long compact subtitles', () {
+    final normal = responsiveSubtitleSize(
+      width: 1200,
+      scale: 1,
+      preset: 'learning',
+      textLength: 30,
+    );
+    final longCompact = responsiveSubtitleSize(
+      width: 1200,
+      scale: 1,
+      preset: 'compact',
+      textLength: 160,
+    );
+    expect(normal, lessThanOrEqualTo(34));
+    expect(longCompact, lessThan(normal));
+  });
+
+  test('external word list parser handles TXT and CSV status values', () {
+    expect(parseExternalWordList('hello\n\nworld\n', csv: false), [
+      {'word': 'hello', 'status': null},
+      {'word': 'world', 'status': null},
+    ]);
+    expect(
+      parseExternalWordList(
+        'word,status\nhello,known_recognized\nworld,invalid\n',
+        csv: true,
+      ),
+      [
+        {'word': 'hello', 'status': 'known_recognized'},
+        {'word': 'world', 'status': null},
+      ],
+    );
+  });
+
   testWidgets('vocabulary book shows durable source and unavailable state', (
     tester,
   ) async {
@@ -52,7 +101,9 @@ void main() {
     };
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: VocabularyBookView(words: [word], onWord: (_) {})),
+        home: Scaffold(
+          body: VocabularyBookView(words: [word], onWord: (_) {}),
+        ),
       ),
     );
     expect(find.text('Move me'), findsOneWidget);
@@ -95,7 +146,7 @@ void main() {
         ),
       ),
     );
-    expect(find.text('Current status: known_recognized'), findsOneWidget);
+    expect(find.text('Current status: Known and recognized'), findsOneWidget);
     expect(find.text('unknown_meaning → known_recognized'), findsOneWidget);
     expect(find.byIcon(Icons.play_arrow), findsOneWidget);
     await tester.tap(find.text('A playable source sentence.'));
@@ -125,5 +176,72 @@ void main() {
     await tester.tap(find.byTooltip('Import vocabulary assets'));
     expect(exported, isTrue);
     expect(imported, isTrue);
+  });
+
+  testWidgets(
+    'word learning panel groups providers and edits durable content',
+    (tester) async {
+      String? definition;
+      String? note;
+      await tester.pumpWidget(
+        localized(
+          WordLearningPanel(
+            details: const {
+              'profile': {
+                'display_form': 'Hello',
+                'status': 'unknown_meaning',
+                'user_definition': null,
+                'personal_note': null,
+              },
+              'occurrences': [],
+              'history': [],
+            },
+            dictionary: const {
+              'results': [
+                {
+                  'provider': {'display_name': 'Provider A'},
+                  'lookup': {
+                    'phonetics': [
+                      {'text': '/hello/'},
+                    ],
+                    'definitions': [
+                      {'text': 'a greeting', 'part_of_speech': 'noun'},
+                    ],
+                  },
+                  'error': null,
+                },
+              ],
+            },
+            onStatus: (_) {},
+            onSave: (value, memo) async {
+              definition = value;
+              note = memo;
+            },
+            onSource: (_) {},
+            onHeard: () {},
+            onNotHeard: () {},
+          ),
+        ),
+      );
+      expect(find.text('Provider A'), findsOneWidget);
+      await tester.enterText(find.byType(TextField).first, 'greeting');
+      await tester.enterText(find.byType(TextField).last, 'remember this');
+      await tester.scrollUntilVisible(
+        find.text('Save'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Save'));
+      expect(definition, 'greeting');
+      expect(note, 'remember this');
+    },
+  );
+
+  testWidgets('localization renders simplified Chinese labels', (tester) async {
+    await tester.pumpWidget(
+      localized(const Text('placeholder'), locale: const Locale('zh')),
+    );
+    final context = tester.element(find.text('placeholder'));
+    expect(AppLocalizations.of(context).text('vocabulary'), '词汇本');
   });
 }

@@ -3,7 +3,7 @@ import 'dart:io';
 
 class AppSettings {
   const AppSettings({
-    this.version = 2,
+    this.version = 3,
     this.rate = 1,
     this.volume = 100,
     this.primarySubtitleOffsetMs = 0,
@@ -11,8 +11,10 @@ class AppSettings {
     this.subtitlesVisible = true,
     this.secondarySubtitlesVisible = true,
     this.statusStylesVisible = true,
-    this.primaryFontSize = 24,
-    this.secondaryFontSize = 18,
+    this.primaryFontSize = 1,
+    this.secondaryFontSize = 1,
+    this.subtitlePreset = 'learning',
+    this.language = 'system',
     this.subtitleBottomPadding = 48,
     this.subtitleBackgroundOpacity = 0.72,
     this.primaryColor = 0xffffffff,
@@ -25,7 +27,9 @@ class AppSettings {
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     final version = json['version'] as int?;
-    if (version != 1 && version != 2) return const AppSettings();
+    if (version != 1 && version != 2 && version != 3) {
+      return const AppSettings();
+    }
     return AppSettings(
       rate: _number(json['rate'], 1, 0.25, 4),
       volume: _number(json['volume'], 100, 0, 100),
@@ -39,8 +43,20 @@ class AppSettings {
       secondarySubtitlesVisible:
           json['secondary_subtitles_visible'] as bool? ?? true,
       statusStylesVisible: json['status_styles_visible'] as bool? ?? true,
-      primaryFontSize: _number(json['primary_font_size'], 24, 12, 72),
-      secondaryFontSize: _number(json['secondary_font_size'], 18, 10, 64),
+      primaryFontSize: version == 3
+          ? _number(json['primary_font_size'], 1, 0.7, 1.4)
+          : (_number(json['primary_font_size'], 24, 12, 72) / 24).clamp(
+              0.7,
+              1.4,
+            ),
+      secondaryFontSize: version == 3
+          ? _number(json['secondary_font_size'], 1, 0.7, 1.4)
+          : (_number(json['secondary_font_size'], 18, 10, 64) / 18).clamp(
+              0.7,
+              1.4,
+            ),
+      subtitlePreset: json['subtitle_preset'] as String? ?? 'learning',
+      language: json['language'] as String? ?? 'system',
       subtitleBottomPadding: _number(
         json['subtitle_bottom_padding'],
         48,
@@ -72,6 +88,8 @@ class AppSettings {
   final bool statusStylesVisible;
   final double primaryFontSize;
   final double secondaryFontSize;
+  final String subtitlePreset;
+  final String language;
   final double subtitleBottomPadding;
   final double subtitleBackgroundOpacity;
   final int primaryColor;
@@ -82,12 +100,15 @@ class AppSettings {
   final String ytDlpPath;
 
   static File get file => File(
-    '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v2.json',
+    '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v3.json',
   );
 
   static Future<AppSettings> load() async {
     for (final candidate in [
       file,
+      File(
+        '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v2.json',
+      ),
       File(
         '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v1.json',
       ),
@@ -117,6 +138,8 @@ class AppSettings {
         'status_styles_visible': statusStylesVisible,
         'primary_font_size': primaryFontSize,
         'secondary_font_size': secondaryFontSize,
+        'subtitle_preset': subtitlePreset,
+        'language': language,
         'subtitle_bottom_padding': subtitleBottomPadding,
         'subtitle_background_opacity': subtitleBackgroundOpacity,
         'primary_color': primaryColor,

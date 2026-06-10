@@ -115,9 +115,9 @@ class LocalApi {
   Future<Map<String, dynamic>> updateWordProfile(
     String lemma,
     String displayForm,
-    String? status,
-    [Map<String, dynamic>? source]
-  ) async =>
+    String? status, [
+    Map<String, dynamic>? source,
+  ]) async =>
       (await _request('PUT', '/v1/word-profiles', {
             'language': 'en',
             'lemma': lemma,
@@ -159,15 +159,41 @@ class LocalApi {
     String status, {
     String search = '',
   }) async {
-    final values = await _request(
-      'GET',
-      '/v1/vocabulary?language=en&status=$status&search=${Uri.encodeQueryComponent(search)}&limit=200&offset=0',
-    ) as List<dynamic>;
+    final values =
+        await _request(
+              'GET',
+              '/v1/vocabulary?language=en&status=$status&search=${Uri.encodeQueryComponent(search)}&limit=200&offset=0',
+            )
+            as List<dynamic>;
     return values.cast<Map<String, dynamic>>();
   }
 
   Future<Map<String, dynamic>> wordDetails(String profileId) async =>
       (await _request('GET', '/v1/word-profiles/$profileId/details'))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> updateLearningContent(
+    String profileId, {
+    String? userDefinition,
+    String? personalNote,
+  }) async =>
+      (await _request('PUT', '/v1/word-profiles/$profileId/learning-content', {
+            'user_definition': userDefinition,
+            'personal_note': personalNote,
+          }))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> importExternalVocabulary(
+    List<Map<String, dynamic>> entries, {
+    String? defaultStatus,
+    bool overwriteExisting = false,
+  }) async =>
+      (await _request('POST', '/v1/vocabulary/import-external', {
+            'language': 'en',
+            'entries': entries,
+            'default_status': defaultStatus,
+            'overwrite_existing': overwriteExisting,
+          }))
           as Map<String, dynamic>;
 
   Future<Map<String, dynamic>> exportVocabulary() async =>
@@ -183,12 +209,12 @@ class LocalApi {
     });
   }
 
-  Future<Map<String, dynamic>?> lookupDictionary(String lemma) async =>
+  Future<Map<String, dynamic>> lookupDictionary(String lemma) async =>
       (await _request(
             'GET',
             '/v1/dictionary?language=en&lemma=${Uri.encodeQueryComponent(lemma)}',
           ))
-          as Map<String, dynamic>?;
+          as Map<String, dynamic>;
 
   Future<Map<String, dynamic>> diagnose(String sentenceId) async =>
       (await _request(

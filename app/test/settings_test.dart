@@ -14,6 +14,8 @@ void main() {
       'status_styles_visible': false,
       'primary_font_size': 31,
       'transcript_width': 510,
+      'language': 'zh',
+      'subtitle_preset': 'compact',
     });
     expect(settings.rate, 0.75);
     expect(settings.volume, 50);
@@ -21,8 +23,10 @@ void main() {
     expect(settings.secondarySubtitleOffsetMs, 350);
     expect(settings.subtitlesVisible, isFalse);
     expect(settings.secondarySubtitlesVisible, isFalse);
-    expect(settings.primaryFontSize, 31);
+    expect(settings.primaryFontSize, closeTo(31 / 24, 0.001));
     expect(settings.transcriptWidth, 510);
+    expect(settings.language, 'zh');
+    expect(settings.subtitlePreset, 'compact');
   });
 
   test('migrates version 1 subtitle offset', () {
@@ -30,13 +34,13 @@ void main() {
       'version': 1,
       'subtitle_offset_ms': -125,
     });
-    expect(settings.version, 2);
+    expect(settings.version, 3);
     expect(settings.primarySubtitleOffsetMs, -125);
   });
 
   test('falls back safely for an unsupported settings version', () {
     final settings = AppSettings.fromJson({'version': 999, 'rate': 4});
-    expect(settings.version, 2);
+    expect(settings.version, 3);
     expect(settings.rate, 1);
   });
 }

@@ -26,6 +26,8 @@ class DesktopPlayerAdapter {
   Future<void> selectAudio(AudioTrack track) => player.setAudioTrack(track);
   Future<void> selectSubtitle(SubtitleTrack track) =>
       player.setSubtitleTrack(track);
+  Future<void> disableNativeSubtitles() =>
+      player.setSubtitleTrack(SubtitleTrack.no());
 
   Future<void> dispose() => player.dispose();
 }
