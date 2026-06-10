@@ -2,7 +2,7 @@
 
 Clean-room, macOS-first rewrite of a listening-comprehension media player.
 
-**Current release:** Milestone 1.6 complete, version `0.4.0`.
+**Current release:** Milestone 1.6 complete, version `0.4.1`.
 
 The Milestone 1 MVP targets macOS Apple Silicon and includes the core learning
 loop, dual text subtitles, drag and drop, configurable subtitle presentation,
@@ -16,6 +16,9 @@ missing-media recovery, and versioned JSON export/import are included.
 Version 0.4.0 adds responsive subtitle presets, Chinese/English UI switching,
 existing TXT/CSV vocabulary import, a unified learning panel, durable personal
 definitions and notes, and a provider-agnostic multi-dictionary query boundary.
+
+Version 0.4.1 adds draggable subtitle placement and independent font controls,
+while fixing the video texture black-screen regression found during validation.
 
 ## Repository layout
 

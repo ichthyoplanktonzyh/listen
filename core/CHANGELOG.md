@@ -1,9 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.4.1 - 2026-06-10
 
 - Draggable viewport-relative subtitle placement, independent primary/secondary
   font controls, and a stable video viewport when subtitle visibility changes.
+- Restored the media-kit video texture layout after the subtitle overlay
+  refactor, fixing the black video screen regression.
 
 ## 0.4.0 - 2026-06-10
 

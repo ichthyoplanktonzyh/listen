@@ -1,6 +1,6 @@
 # 跨平台听力理解播放器 Roadmap
 
-> Milestone 1、1.5 与 1.6 状态：已完成。当前发布版本为 `0.4.0`；
+> Milestone 1、1.5 与 1.6 状态：已完成。当前发布版本为 `0.4.1`；
 > M7 移动端验证、Windows/Linux 和其他延期能力进入 Milestone 2。
 > 完成报告见 `docs/release/milestone-1.md`。
 
