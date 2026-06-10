@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Draggable viewport-relative subtitle placement, independent primary/secondary
+  font controls, and a stable video viewport when subtitle visibility changes.
+
 ## 0.4.0 - 2026-06-10
 
 Milestone 1.6 desktop learning experience release.
