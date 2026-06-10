@@ -1194,6 +1194,16 @@ M8 退出条件。
 - 统一词汇学习面板、用户释义和个人笔记。
 - Provider 无关的多来源词典聚合接口与 UI。
 
+### 14.8 Milestone 1.7：本地 Whisper 字幕生成
+
+> 状态：规划中。详细草案见 `docs/planning/milestone-1.7.md`。
+
+- 建立平台无关的 `TranscriptionProvider` 与持久化生成任务模型。
+- macOS Apple Silicon 首版通过 whisper.cpp 为本地视频和音频生成字幕。
+- 生成结果自动持久化为现有可点击学习字幕，并支持导出 SRT。
+- 支持模型与工具校验、语言选择、进度、取消、失败恢复和重试。
+- 后续再增加无时间轴稿件强制对齐、当前播放位置增量生成和其他 Provider。
+
 ## 15. 依赖关系
 
 ```mermaid
@@ -1211,7 +1221,9 @@ flowchart TD
     M6 --> M8["M8 桌面体验增强"]
     M8 --> MS1["Milestone 1 / 0.2.0"]
     MS1 --> M15["Milestone 1.5 词汇学习资产强化"]
-    M15 --> M7["Milestone 2 候选：M7 移动端验证"]
+    M15 --> M16["Milestone 1.6 桌面学习体验"]
+    M16 --> M17["Milestone 1.7 本地 Whisper 字幕生成"]
+    M17 --> M7["Milestone 2 候选：M7 移动端验证"]
     M7 --> FUTURE["移动正式客户端与后续能力"]
 ```
 
