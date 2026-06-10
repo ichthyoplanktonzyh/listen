@@ -18,6 +18,7 @@ class DesktopPlayerAdapter {
 
   Future<void> open(String path) => player.open(Media(path));
   Future<void> playOrPause() => player.playOrPause();
+  Future<void> play() => player.play();
   Future<void> stop() => player.stop();
   Future<void> seek(Duration position) => player.seek(position);
   Future<void> setRate(double rate) => player.setRate(rate);

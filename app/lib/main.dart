@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:desktop_drop/desktop_drop.dart';
@@ -58,11 +59,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Cue? currentSecondaryCue;
   String? mediaId;
   String? mediaPath;
+  String? mediaTitle;
+  String? mediaFingerprint;
   String status = 'Starting local core...';
   Duration position = Duration.zero;
   Duration duration = Duration.zero;
   Duration primarySubtitleOffset = Duration.zero;
   Duration secondarySubtitleOffset = Duration.zero;
+  Duration? sourceLoopStart;
+  Duration? sourceLoopEnd;
   bool playing = false;
   bool muted = false;
   bool loopCue = false;
@@ -232,6 +237,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       unawaited(adapter.seek(primaryCursor.mediaStart(currentPrimaryCue!)));
       return;
     }
+    if (sourceLoopStart != null && sourceLoopEnd != null && value >= sourceLoopEnd!) {
+      unawaited(adapter.seek(sourceLoopStart!));
+      return;
+    }
     if (primaryCue?.id != currentPrimaryCue?.id ||
         secondaryCue?.id != currentSecondaryCue?.id) {
       setState(() {
@@ -265,6 +274,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       secondaryTrack = null;
       currentPrimaryCue = null;
       currentSecondaryCue = null;
+      sourceLoopStart = null;
+      sourceLoopEnd = null;
       status = 'Playing ${path.split(Platform.pathSeparator).last}';
     });
     try {
@@ -272,7 +283,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (media != null) {
         final id = media['id'] as String;
         final saved = await api?.readProgress(id);
-        setState(() => mediaId = id);
+        setState(() {
+          mediaId = id;
+          mediaTitle = media['title'] as String;
+          mediaFingerprint = media['fingerprint'] as String;
+        });
         if (saved != null && saved > Duration.zero) await adapter.seek(saved);
       }
     } catch (error) {
@@ -631,6 +646,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       token.normalized!,
       token.text,
       wordStatus,
+      _sourceFor(token, cue),
     );
     setState(() => wordProfiles[token.normalized!] = profile);
     await _refreshDiagnosis();
@@ -744,6 +760,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           sentenceId: cue.id,
           originalForm: token.text,
           heard: selected == 'observation_heard',
+          source: _sourceFor(token, cue),
         );
         setState(() {
           wordProfiles[lemma] = profile!;
@@ -757,6 +774,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           lemma,
           token.text,
           selected == 'clear' ? null : selected,
+          _sourceFor(token, cue),
         );
         setState(() {
           wordProfiles[lemma] = profile!;
@@ -767,6 +785,111 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } catch (error) {
       setState(() => status = 'Word update failed: $error');
     }
+  }
+
+  Map<String, dynamic>? _sourceFor(SubtitleToken token, Cue cue) {
+    if (mediaFingerprint == null) return null;
+    return {
+      'language': 'en',
+      'normalized_lemma': token.normalized,
+      'media_id': mediaId,
+      'sentence_id': cue.id,
+      'original_form': token.text,
+      'sentence_text': cue.text,
+      'media_title': mediaTitle ?? '',
+      'media_fingerprint': mediaFingerprint,
+      'start_ms': cue.start.inMilliseconds,
+      'end_ms': cue.end.inMilliseconds,
+    };
+  }
+
+  Future<void> _openVocabulary() async {
+    final service = api;
+    if (service == null) return;
+    final occurrence = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => VocabularyScreen(
+          api: service,
+          onExport: _exportVocabulary,
+          onImport: _importVocabulary,
+        ),
+      ),
+    );
+    if (occurrence == null) return;
+    final expectedFingerprint = occurrence['media_fingerprint_snapshot'] as String;
+    if (expectedFingerprint != mediaFingerprint) {
+      String? sourcePath;
+      final linkedMediaId = occurrence['media_id'] as String?;
+      if (linkedMediaId != null) {
+        try {
+          final linkedMedia = await api!.readMedia(linkedMediaId);
+          final linkedPath = linkedMedia['path'] as String;
+          if (await File(linkedPath).exists()) sourcePath = linkedPath;
+        } catch (_) {
+          sourcePath = null;
+        }
+      }
+      if (sourcePath == null) {
+        const group = XTypeGroup(
+          label: 'source media',
+          extensions: ['mp4', 'mkv', 'mov', 'webm', 'm4a', 'mp3', 'wav', 'flac'],
+        );
+        final file = await openFile(acceptedTypeGroups: [group]);
+        if (file == null) return;
+        final fingerprint = await api!.fingerprintFile(file.path);
+        if (fingerprint != expectedFingerprint) {
+          setState(() => status = 'Selected file does not match the source fingerprint');
+          return;
+        }
+        await api!.registerMedia(file.path);
+        sourcePath = file.path;
+      }
+      await _openMediaPath(sourcePath);
+    }
+    final start = Duration(milliseconds: occurrence['start_ms_snapshot'] as int);
+    final end = Duration(milliseconds: occurrence['end_ms_snapshot'] as int);
+    setState(() {
+      sourceLoopStart = start;
+      sourceLoopEnd = end;
+      loopCue = false;
+      status = 'Looping vocabulary source sentence';
+    });
+    await adapter.seek(start);
+    await adapter.play();
+  }
+
+  Future<void> _exportVocabulary() async {
+    final service = api;
+    if (service == null) return;
+    final location = await getSaveLocation(
+      suggestedName: 'LLPlayerNext-vocabulary-v1.json',
+    );
+    if (location == null) return;
+    final bundle = await service.exportVocabulary();
+    await File(location.path).writeAsString(
+      const JsonEncoder.withIndent('  ').convert(bundle),
+    );
+    setState(() => status = 'Exported vocabulary assets');
+  }
+
+  Future<void> _importVocabulary() async {
+    final service = api;
+    if (service == null) return;
+    const group = XTypeGroup(label: 'JSON', extensions: ['json']);
+    final file = await openFile(acceptedTypeGroups: [group]);
+    if (file == null) return;
+    final bundle =
+        jsonDecode(await File(file.path).readAsString()) as Map<String, dynamic>;
+    await service.importVocabulary(bundle);
+    await _loadWordProfiles();
+    setState(() => status = 'Imported vocabulary assets');
+  }
+
+  Future<void> _archiveCurrentMedia() async {
+    if (api == null || mediaId == null) return;
+    await api!.setMediaAvailability(mediaId!, 'archived');
+    setState(() => status = 'Archived current media record; vocabulary assets preserved');
   }
 
   Future<void> _refreshDiagnosis() async {
@@ -848,6 +971,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
           title: const Text('LLPlayerNext'),
           actions: [
             TextButton.icon(
+              onPressed: _openVocabulary,
+              icon: const Icon(Icons.menu_book_outlined),
+              label: const Text('Vocabulary'),
+            ),
+            TextButton.icon(
               onPressed: _openMedia,
               icon: const Icon(Icons.video_file_outlined),
               label: const Text('Open media'),
@@ -872,6 +1000,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 if (value == 'embedded') unawaited(_importEmbeddedSubtitle());
                 if (value == 'settings') unawaited(_openSettings());
                 if (value == 'logs') unawaited(_exportLogs());
+                if (value == 'export-vocabulary') unawaited(_exportVocabulary());
+                if (value == 'import-vocabulary') unawaited(_importVocabulary());
+                if (value == 'archive-media') unawaited(_archiveCurrentMedia());
               },
               itemBuilder: (_) => const [
                 PopupMenuItem(
@@ -880,6 +1011,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 ),
                 PopupMenuItem(value: 'settings', child: Text('Settings')),
                 PopupMenuItem(value: 'logs', child: Text('Export logs')),
+                PopupMenuItem(
+                  value: 'export-vocabulary',
+                  child: Text('Export vocabulary assets'),
+                ),
+                PopupMenuItem(
+                  value: 'import-vocabulary',
+                  child: Text('Import vocabulary assets'),
+                ),
+                PopupMenuItem(
+                  value: 'archive-media',
+                  child: Text('Archive current media'),
+                ),
               ],
             ),
             const SizedBox(width: 12),
@@ -1109,8 +1252,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 FilterChip(
                   label: const Text('Loop sentence'),
                   selected: loopCue,
-                  onSelected: (value) => setState(() => loopCue = value),
+                  onSelected: (value) => setState(() {
+                    loopCue = value;
+                    if (value) {
+                      sourceLoopStart = null;
+                      sourceLoopEnd = null;
+                    }
+                  }),
                 ),
+                if (sourceLoopStart != null)
+                  TextButton(
+                    onPressed: () => setState(() {
+                      sourceLoopStart = null;
+                      sourceLoopEnd = null;
+                    }),
+                    child: const Text('Stop source loop'),
+                  ),
                 const SizedBox(width: 8),
                 FilterChip(
                   label: const Text('Word styles'),
@@ -1311,6 +1468,264 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '${value.inHours.toString().padLeft(2, '0')}:$minutes:$seconds';
   }
+}
+
+class VocabularyScreen extends StatefulWidget {
+  const VocabularyScreen({
+    super.key,
+    required this.api,
+    required this.onExport,
+    required this.onImport,
+  });
+
+  final LocalApi api;
+  final Future<void> Function() onExport;
+  final Future<void> Function() onImport;
+
+  @override
+  State<VocabularyScreen> createState() => _VocabularyScreenState();
+}
+
+class _VocabularyScreenState extends State<VocabularyScreen> {
+  static const statuses = [
+    ('unknown_meaning', 'Unknown meaning'),
+    ('known_not_recognized', 'Known, not recognized'),
+    ('known_recognized', 'Known and recognized'),
+  ];
+  String status = statuses.first.$1;
+  String search = '';
+  bool loading = true;
+  List<Map<String, dynamic>> words = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    setState(() => loading = true);
+    final values = await widget.api.listVocabulary(status, search: search);
+    if (mounted) setState(() { words = values; loading = false; });
+  }
+
+  Future<void> _details(Map<String, dynamic> value) async {
+    final profile = value['profile'] as Map<String, dynamic>;
+    final details = await widget.api.wordDetails(profile['id'] as String);
+    if (!mounted) return;
+    final occurrences = (details['occurrences'] as List<dynamic>)
+        .cast<Map<String, dynamic>>();
+    final history = (details['history'] as List<dynamic>)
+        .cast<Map<String, dynamic>>();
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(profile['display_form'] as String),
+        content: VocabularyDetailsView(
+          profile: profile,
+          occurrences: occurrences,
+          history: history,
+          onSource: (occurrence) {
+            Navigator.pop(context);
+            Navigator.pop(this.context, occurrence);
+          },
+        ),
+        actions: [
+          for (final choice in const [
+            (null, 'Clear'),
+            ('unknown_meaning', 'Unknown'),
+            ('known_not_recognized', 'Not recognized'),
+            ('known_recognized', 'Recognized'),
+          ])
+            TextButton(
+              onPressed: () async {
+                await widget.api.updateWordProfile(
+                  profile['normalized_lemma'] as String,
+                  profile['display_form'] as String,
+                  choice.$1,
+                );
+                if (context.mounted) Navigator.pop(context);
+                await _load();
+              },
+              child: Text(choice.$2),
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: const Text('Vocabulary books'),
+      actions: [
+        VocabularyTransferActions(
+          onExport: widget.onExport,
+          onImport: widget.onImport,
+        ),
+      ],
+    ),
+    body: Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              for (final value in statuses)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(value.$2),
+                    selected: status == value.$1,
+                    onSelected: (_) {
+                      status = value.$1;
+                      unawaited(_load());
+                    },
+                  ),
+                ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: 'Search vocabulary',
+                  ),
+                  onChanged: (value) {
+                    search = value;
+                    unawaited(_load());
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: loading
+              ? const Center(child: CircularProgressIndicator())
+              : VocabularyBookView(words: words, onWord: _details),
+        ),
+      ],
+    ),
+  );
+}
+
+class VocabularyTransferActions extends StatelessWidget {
+  const VocabularyTransferActions({
+    super.key,
+    required this.onExport,
+    required this.onImport,
+  });
+
+  final Future<void> Function() onExport;
+  final Future<void> Function() onImport;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      IconButton(
+        tooltip: 'Export vocabulary assets',
+        onPressed: onExport,
+        icon: const Icon(Icons.file_upload_outlined),
+      ),
+      IconButton(
+        tooltip: 'Import vocabulary assets',
+        onPressed: onImport,
+        icon: const Icon(Icons.file_download_outlined),
+      ),
+    ],
+  );
+}
+
+class VocabularyDetailsView extends StatelessWidget {
+  const VocabularyDetailsView({
+    super.key,
+    required this.profile,
+    required this.occurrences,
+    required this.history,
+    required this.onSource,
+  });
+
+  final Map<String, dynamic> profile;
+  final List<Map<String, dynamic>> occurrences;
+  final List<Map<String, dynamic>> history;
+  final ValueChanged<Map<String, dynamic>> onSource;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 620,
+    height: 480,
+    child: ListView(
+      children: [
+        Text('Current status: ${profile['status']}'),
+        const SizedBox(height: 16),
+        const Text('Sources', style: TextStyle(fontWeight: FontWeight.bold)),
+        for (final occurrence in occurrences)
+          ListTile(
+            title: Text(occurrence['sentence_text_snapshot'] as String),
+            subtitle: Text(
+              '${occurrence['media_title_snapshot']} · encountered ${occurrence['encounter_count']} times',
+            ),
+            trailing: Icon(
+              occurrence['media_id'] == null ? Icons.link_off : Icons.play_arrow,
+            ),
+            onTap: () => onSource(occurrence),
+          ),
+        const Divider(),
+        const Text(
+          'Status history',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        for (final item in history)
+          ListTile(
+            dense: true,
+            title: Text('${item['previous_status']} → ${item['new_status']}'),
+            subtitle: Text('${item['change_source']} · ${item['changed_at_ms']}'),
+          ),
+      ],
+    ),
+  );
+}
+
+class VocabularyBookView extends StatelessWidget {
+  const VocabularyBookView({
+    super.key,
+    required this.words,
+    required this.onWord,
+  });
+
+  final List<Map<String, dynamic>> words;
+  final ValueChanged<Map<String, dynamic>> onWord;
+
+  @override
+  Widget build(BuildContext context) => words.isEmpty
+      ? const Center(child: Text('No words in this book'))
+      : ListView.builder(
+          itemCount: words.length,
+          itemBuilder: (context, index) {
+            final value = words[index];
+            final profile = value['profile'] as Map<String, dynamic>;
+            final occurrences = value['occurrences'] as List<dynamic>;
+            return ListTile(
+              title: Text(profile['display_form'] as String),
+              subtitle: Text(
+                occurrences.isEmpty
+                    ? 'No source snapshot'
+                    : (occurrences.first
+                              as Map<String, dynamic>)['sentence_text_snapshot']
+                          as String,
+              ),
+              trailing: Icon(
+                occurrences.isNotEmpty &&
+                        (occurrences.first
+                                as Map<String, dynamic>)['media_id'] !=
+                            null
+                    ? Icons.play_arrow
+                    : Icons.link_off,
+              ),
+              onTap: () => onWord(value),
+            );
+          },
+        );
 }
 
 class TokenLine extends StatelessWidget {

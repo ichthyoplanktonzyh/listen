@@ -73,8 +73,7 @@ class LocalApi {
   }
 
   Future<Map<String, dynamic>> registerMedia(String path) async {
-    final file = File(path);
-    final fingerprint = await sha256.bind(file.openRead()).first;
+    final fingerprint = await fingerprintFile(path);
     return (await _request('POST', '/v1/media', {
           'path': path,
           'fingerprint': fingerprint.toString(),
@@ -83,6 +82,13 @@ class LocalApi {
         }))
         as Map<String, dynamic>;
   }
+
+  Future<String> fingerprintFile(String path) async =>
+      (await sha256.bind(File(path).openRead()).first).toString();
+
+  Future<Map<String, dynamic>> readMedia(String mediaId) async =>
+      (await _request('GET', '/v1/media/${Uri.encodeComponent(mediaId)}'))
+          as Map<String, dynamic>;
 
   Future<Map<String, dynamic>> importSubtitle(
     String mediaId,
@@ -110,12 +116,14 @@ class LocalApi {
     String lemma,
     String displayForm,
     String? status,
+    [Map<String, dynamic>? source]
   ) async =>
       (await _request('PUT', '/v1/word-profiles', {
             'language': 'en',
             'lemma': lemma,
             'display_form': displayForm,
             'status': status,
+            'source': source,
           }))
           as Map<String, dynamic>;
 
@@ -124,12 +132,54 @@ class LocalApi {
     required String sentenceId,
     required String originalForm,
     required bool heard,
+    Map<String, dynamic>? source,
   }) async {
     await _request('POST', '/v1/word-observations', {
       'word_profile_id': wordProfileId,
       'sentence_id': sentenceId,
       'original_form': originalForm,
       'result': heard ? 'recognized_in_context' : 'not_recognized_in_context',
+      'source': source,
+    });
+  }
+
+  Future<void> clearObservation({
+    required String wordProfileId,
+    required String sentenceId,
+  }) async {
+    await _request('POST', '/v1/word-observations', {
+      'word_profile_id': wordProfileId,
+      'sentence_id': sentenceId,
+      'original_form': '',
+      'clear': true,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> listVocabulary(
+    String status, {
+    String search = '',
+  }) async {
+    final values = await _request(
+      'GET',
+      '/v1/vocabulary?language=en&status=$status&search=${Uri.encodeQueryComponent(search)}&limit=200&offset=0',
+    ) as List<dynamic>;
+    return values.cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> wordDetails(String profileId) async =>
+      (await _request('GET', '/v1/word-profiles/$profileId/details'))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> exportVocabulary() async =>
+      (await _request('GET', '/v1/vocabulary/export')) as Map<String, dynamic>;
+
+  Future<void> importVocabulary(Map<String, dynamic> bundle) async {
+    await _request('POST', '/v1/vocabulary/import', bundle);
+  }
+
+  Future<void> setMediaAvailability(String mediaId, String availability) async {
+    await _request('PUT', '/v1/media/$mediaId/availability', {
+      'availability': availability,
     });
   }
 
@@ -200,6 +250,7 @@ class LocalApi {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw HttpException(text, uri: Uri.parse('$baseUrl$path'));
     }
+    if (text.isEmpty) return null;
     return jsonDecode(text);
   }
 
