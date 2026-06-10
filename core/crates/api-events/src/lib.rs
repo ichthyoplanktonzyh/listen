@@ -13,6 +13,8 @@ pub enum EventName {
     WordObservationCleared,
     VocabularyAssetsImported,
     MediaAvailabilityChanged,
+    TranscriptionModelChanged,
+    TranscriptionJobChanged,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

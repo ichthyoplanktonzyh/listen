@@ -23,6 +23,9 @@ use domain::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
+mod transcription;
+use transcription::{CreateJobRequest, TranscriptionCoordinator};
+
 static ERROR_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
@@ -31,11 +34,24 @@ pub struct ApiState {
     pub token: Arc<str>,
     pub events: broadcast::Sender<EventEnvelope>,
     pub dictionaries: Arc<Vec<Arc<dyn DictionaryProvider>>>,
+    pub transcription: Arc<TranscriptionCoordinator>,
 }
 
 impl ApiState {
-    pub fn new(services: AppServices, token: impl Into<Arc<str>>) -> Self {
+    pub fn new(
+        services: AppServices,
+        transcription_repository: Arc<dyn application::TranscriptionRepository>,
+        token: impl Into<Arc<str>>,
+    ) -> Self {
         let (events, _) = broadcast::channel(128);
+        let transcription = Arc::new(
+            TranscriptionCoordinator::new(
+                services.clone(),
+                transcription_repository,
+                events.clone(),
+            )
+            .expect("transcription coordinator must initialize"),
+        );
         Self {
             services,
             token: token.into(),
@@ -43,6 +59,7 @@ impl ApiState {
             dictionaries: Arc::new(vec![Arc::new(
                 FreeDictionaryProvider::new().expect("dictionary HTTP client must initialize"),
             )]),
+            transcription,
         }
     }
 }
@@ -53,6 +70,7 @@ pub fn router(state: ApiState) -> Router {
         .route("/v1/media/{media_id}", get(read_media))
         .route("/v1/media/{media_id}/subtitles", post(import_subtitle))
         .route("/v1/subtitles/{track_id}", get(read_subtitle))
+        .route("/v1/subtitles/{track_id}/export", get(export_subtitle))
         .route("/v1/word-profiles/batch", post(read_words))
         .route(
             "/v1/media/{media_id}/progress",
@@ -78,6 +96,37 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/v1/events", get(events))
         .route("/v1/dictionary", get(dictionary_lookup))
+        .route("/v1/transcription/providers", get(transcription_providers))
+        .route("/v1/transcription/models", get(transcription_models))
+        .route(
+            "/v1/transcription/models/install",
+            post(install_transcription_model),
+        )
+        .route(
+            "/v1/transcription/models/register-custom",
+            post(register_custom_transcription_model),
+        )
+        .route(
+            "/v1/transcription/models/{model_id}/cancel-install",
+            post(cancel_transcription_model_install),
+        )
+        .route(
+            "/v1/transcription/models/{model_id}",
+            axum::routing::delete(delete_transcription_model),
+        )
+        .route(
+            "/v1/transcription/jobs",
+            get(transcription_jobs).post(create_transcription_job),
+        )
+        .route("/v1/transcription/jobs/{job_id}", get(transcription_job))
+        .route(
+            "/v1/transcription/jobs/{job_id}/cancel",
+            post(cancel_transcription_job),
+        )
+        .route(
+            "/v1/transcription/jobs/{job_id}/retry",
+            post(retry_transcription_job),
+        )
         .route(
             "/v1/sentences/{sentence_id}/diagnosis",
             get(diagnose_sentence),
@@ -218,6 +267,184 @@ async fn read_subtitle(
         .read_subtitle_track(&track_id)?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("subtitle track"))
+}
+
+#[derive(Debug, Deserialize)]
+struct SubtitleExportQuery {
+    format: Option<String>,
+}
+
+async fn export_subtitle(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+    Query(query): Query<SubtitleExportQuery>,
+) -> Result<Response, ApiError> {
+    if query.format.as_deref().unwrap_or("srt") != "srt" {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "unsupported_export_format",
+            "only SRT export is supported",
+            false,
+        ));
+    }
+    let track = state
+        .services
+        .read_subtitle_track(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)?
+        .ok_or_else(|| ApiError::not_found("subtitle track"))?;
+    let mut output = String::new();
+    for sentence in track.sentences {
+        output.push_str(&format!(
+            "{}\n{} --> {}\n{}\n\n",
+            sentence.index + 1,
+            srt_time(sentence.start.get()),
+            srt_time(sentence.end.get()),
+            sentence.display_text
+        ));
+    }
+    Ok((
+        [(
+            axum::http::header::CONTENT_TYPE,
+            "application/x-subrip; charset=utf-8",
+        )],
+        output,
+    )
+        .into_response())
+}
+
+fn srt_time(value: u64) -> String {
+    let hours = value / 3_600_000;
+    let minutes = value / 60_000 % 60;
+    let seconds = value / 1_000 % 60;
+    let milliseconds = value % 1_000;
+    format!("{hours:02}:{minutes:02}:{seconds:02},{milliseconds:03}")
+}
+
+async fn transcription_providers(
+    State(state): State<ApiState>,
+) -> Json<Vec<domain::TranscriptionProviderInfo>> {
+    Json(state.transcription.providers())
+}
+
+async fn transcription_models(
+    State(state): State<ApiState>,
+) -> Result<Json<Vec<domain::TranscriptionModelDescriptor>>, ApiError> {
+    state
+        .transcription
+        .models()
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+#[derive(Debug, Deserialize)]
+struct ModelIdRequest {
+    model_id: String,
+}
+
+async fn install_transcription_model(
+    State(state): State<ApiState>,
+    Json(request): Json<ModelIdRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let id =
+        domain::TranscriptionModelId::parse(request.model_id).map_err(ApplicationError::from)?;
+    let coordinator = state.transcription.clone();
+    tokio::spawn(async move {
+        let _ = coordinator.install_model(id).await;
+    });
+    Ok(Json(serde_json::json!({"installation_started": true})))
+}
+
+#[derive(Debug, Deserialize)]
+struct RegisterCustomModelRequest {
+    path: String,
+}
+
+async fn register_custom_transcription_model(
+    State(state): State<ApiState>,
+    Json(request): Json<RegisterCustomModelRequest>,
+) -> Result<Json<domain::TranscriptionModelDescriptor>, ApiError> {
+    state
+        .transcription
+        .register_custom_model(request.path)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn cancel_transcription_model_install(
+    State(state): State<ApiState>,
+    Path(model_id): Path<String>,
+) -> Result<Json<domain::TranscriptionModelDescriptor>, ApiError> {
+    state
+        .transcription
+        .cancel_model_install(
+            &domain::TranscriptionModelId::parse(model_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn delete_transcription_model(
+    State(state): State<ApiState>,
+    Path(model_id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    state
+        .transcription
+        .delete_model(
+            &domain::TranscriptionModelId::parse(model_id).map_err(ApplicationError::from)?,
+        )
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn transcription_jobs(
+    State(state): State<ApiState>,
+) -> Result<Json<Vec<domain::TranscriptionJob>>, ApiError> {
+    state.transcription.jobs().map(Json).map_err(ApiError::from)
+}
+
+async fn create_transcription_job(
+    State(state): State<ApiState>,
+    Json(request): Json<CreateJobRequest>,
+) -> Result<Json<domain::TranscriptionJob>, ApiError> {
+    state
+        .transcription
+        .clone()
+        .create_job(request)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn transcription_job(
+    State(state): State<ApiState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<domain::TranscriptionJob>, ApiError> {
+    state
+        .transcription
+        .job(&domain::TranscriptionJobId::parse(job_id).map_err(ApplicationError::from)?)?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("transcription job"))
+}
+
+async fn cancel_transcription_job(
+    State(state): State<ApiState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<domain::TranscriptionJob>, ApiError> {
+    state
+        .transcription
+        .cancel_job(&domain::TranscriptionJobId::parse(job_id).map_err(ApplicationError::from)?)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn retry_transcription_job(
+    State(state): State<ApiState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<domain::TranscriptionJob>, ApiError> {
+    state
+        .transcription
+        .clone()
+        .retry_job(&domain::TranscriptionJobId::parse(job_id).map_err(ApplicationError::from)?)
+        .map(Json)
+        .map_err(ApiError::from)
 }
 
 async fn read_progress(
@@ -676,8 +903,9 @@ mod tests {
                 repo.clone(),
                 repo.clone(),
                 repo.clone(),
-                repo,
+                repo.clone(),
             ),
+            repo,
             "secret",
         ))
     }
@@ -799,6 +1027,7 @@ mod tests {
             "/v1/media/{media_id}/subtitles",
             "/v1/media/{media_id}/progress",
             "/v1/subtitles/{track_id}",
+            "/v1/subtitles/{track_id}/export",
             "/v1/word-profiles",
             "/v1/word-profiles/batch",
             "/v1/word-observations",
@@ -812,6 +1041,9 @@ mod tests {
             "/v1/events",
             "/v1/dictionary",
             "/v1/sentences/{sentence_id}/diagnosis",
+            "/v1/transcription/providers",
+            "/v1/transcription/models",
+            "/v1/transcription/jobs",
         ] {
             assert!(openapi.contains(path), "OpenAPI missing {path}");
         }

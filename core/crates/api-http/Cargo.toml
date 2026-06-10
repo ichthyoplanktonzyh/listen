@@ -12,10 +12,13 @@ futures-core.workspace = true
 axum.workspace = true
 dictionary-provider = { path = "../dictionary-provider" }
 domain = { path = "../domain" }
+hex.workspace = true
 persistence-sqlite = { path = "../persistence-sqlite" }
 rand.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 tokio.workspace = true
 tower.workspace = true
 

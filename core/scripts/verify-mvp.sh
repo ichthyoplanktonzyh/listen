@@ -75,5 +75,8 @@ sleep 3
 kill -0 "$pid"
 [[ "$(sqlite3 "$tmp/mvp.sqlite" 'SELECT count(*) FROM media_items;')" == "2" ]]
 [[ -f "$app/Contents/MacOS/api-http" ]]
+[[ -x "$app/Contents/Resources/runtime/whisper-cli" ]]
+[[ -x "$app/Contents/Resources/runtime/ffmpeg" ]]
+[[ -x "$app/Contents/Resources/runtime/ffprobe" ]]
 codesign --verify --deep --strict "$app"
 echo "Packaged macOS MVP smoke test passed."

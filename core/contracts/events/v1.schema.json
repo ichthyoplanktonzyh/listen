@@ -14,7 +14,9 @@
         "word-observation-created",
         "word-observation-cleared",
         "vocabulary-assets-imported",
-        "media-availability-changed"
+        "media-availability-changed",
+        "transcription-model-changed",
+        "transcription-job-changed"
       ]
     },
     "payload": { "type": "object" }

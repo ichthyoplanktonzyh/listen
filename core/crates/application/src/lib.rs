@@ -110,6 +110,33 @@ pub trait PlaybackProgressRepository: Send + Sync {
     fn save(&self, media_id: &MediaId, position: TimeMs) -> Result<(), ApplicationError>;
 }
 
+pub trait TranscriptionRepository: Send + Sync {
+    fn upsert_model(
+        &self,
+        model: &TranscriptionModelDescriptor,
+    ) -> Result<TranscriptionModelDescriptor, ApplicationError>;
+    fn list_models(&self) -> Result<Vec<TranscriptionModelDescriptor>, ApplicationError>;
+    fn get_model(
+        &self,
+        id: &TranscriptionModelId,
+    ) -> Result<Option<TranscriptionModelDescriptor>, ApplicationError>;
+    fn delete_model(&self, id: &TranscriptionModelId) -> Result<(), ApplicationError>;
+    fn create_job(&self, job: &TranscriptionJob) -> Result<TranscriptionJob, ApplicationError>;
+    fn update_job(&self, job: &TranscriptionJob) -> Result<TranscriptionJob, ApplicationError>;
+    fn get_job(
+        &self,
+        id: &TranscriptionJobId,
+    ) -> Result<Option<TranscriptionJob>, ApplicationError>;
+    fn list_jobs(&self) -> Result<Vec<TranscriptionJob>, ApplicationError>;
+    fn find_completed_job(
+        &self,
+        input_fingerprint: &str,
+    ) -> Result<Option<TranscriptionJob>, ApplicationError>;
+    fn interrupt_active_jobs(&self, updated_at_ms: u64) -> Result<(), ApplicationError>;
+    fn save_provenance(&self, provenance: &SubtitleTrackProvenance)
+    -> Result<(), ApplicationError>;
+}
+
 #[async_trait]
 pub trait DictionaryProvider: Send + Sync {
     fn info(&self) -> DictionaryProviderInfo;

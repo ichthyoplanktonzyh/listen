@@ -17,6 +17,15 @@ cd "$root"
 app="$root/apps/desktop/build/macos/Build/Products/Release/LLPlayerNext.app"
 cp "$root/target/release/api-http" "$app/Contents/MacOS/api-http"
 chmod +x "$app/Contents/MacOS/api-http"
+runtime="$root/third_party/runtime/macos-arm64"
+if [[ ! -x "$runtime/whisper-cli" || ! -x "$runtime/ffmpeg" || ! -x "$runtime/ffprobe" ]]; then
+  "$root/scripts/build-asr-runtime.sh"
+fi
+mkdir -p "$app/Contents/Resources/runtime"
+cp "$runtime/whisper-cli" "$runtime/ffmpeg" "$runtime/ffprobe" \
+  "$app/Contents/Resources/runtime/"
+cp "$root/third_party/runtime/manifest.json" \
+  "$app/Contents/Resources/runtime/manifest.json"
 codesign --force --deep --sign - "$app"
 
 mkdir -p "$root/dist"
@@ -24,5 +33,8 @@ rm -f "$root/dist/LLPlayerNext-macos-arm64.zip"
 ditto -c -k --sequesterRsrc --keepParent \
   "$app" "$root/dist/LLPlayerNext-macos-arm64.zip"
 
-file "$app/Contents/MacOS/LLPlayerNext" "$app/Contents/MacOS/api-http"
+file "$app/Contents/MacOS/LLPlayerNext" "$app/Contents/MacOS/api-http" \
+  "$app/Contents/Resources/runtime/whisper-cli" \
+  "$app/Contents/Resources/runtime/ffmpeg" \
+  "$app/Contents/Resources/runtime/ffprobe"
 echo "Built $root/dist/LLPlayerNext-macos-arm64.zip"

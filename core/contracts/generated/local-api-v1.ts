@@ -130,6 +130,43 @@ export class LocalApiV1 {
     return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}`);
   }
 
+  exportSubtitle(trackId: string): Promise<string> {
+    return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}/export?format=srt`);
+  }
+
+  transcriptionProviders(): Promise<unknown[]> {
+    return this.request("/v1/transcription/providers");
+  }
+
+  transcriptionModels(): Promise<unknown[]> {
+    return this.request("/v1/transcription/models");
+  }
+
+  installTranscriptionModel(model_id: string): Promise<unknown> {
+    return this.request("/v1/transcription/models/install", {
+      method: "POST",
+      body: JSON.stringify({ model_id }),
+    });
+  }
+
+  registerCustomTranscriptionModel(path: string): Promise<unknown> {
+    return this.request("/v1/transcription/models/register-custom", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    });
+  }
+
+  transcriptionJobs(): Promise<unknown[]> {
+    return this.request("/v1/transcription/jobs");
+  }
+
+  createTranscriptionJob(input: unknown): Promise<unknown> {
+    return this.request("/v1/transcription/jobs", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
   readWordProfile(language: string, lemma: string): Promise<WordProfile | null> {
     const query = new URLSearchParams({ language, lemma });
     return this.request(`/v1/word-profiles?${query}`);

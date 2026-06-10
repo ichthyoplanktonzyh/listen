@@ -18,3 +18,5 @@ node_modules/
 target/
 testdata/generated/
 spikes/tauri-libmpv/src-tauri/lib/
+third_party/runtime/build/
+third_party/runtime/macos-arm64/

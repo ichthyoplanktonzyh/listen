@@ -68,6 +68,23 @@ paths:
                 $ref: "#/components/schemas/Progress"
         default:
           $ref: "#/components/responses/Error"
+    put:
+      operationId: updateProgress
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Progress"
+      responses:
+        "200":
+          description: Saved position
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Progress"
+        default:
+          $ref: "#/components/responses/Error"
   /v1/media/{media_id}/subtitles:
     parameters:
       - $ref: "#/components/parameters/MediaId"
@@ -105,23 +122,14 @@ paths:
                 $ref: "#/components/schemas/SubtitleTrack"
         default:
           $ref: "#/components/responses/Error"
-    put:
-      operationId: updateProgress
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Progress"
+  /v1/subtitles/{track_id}/export:
+    get:
+      operationId: exportSubtitle
+      parameters:
+        - { name: track_id, in: path, required: true, schema: { type: string } }
+        - { name: format, in: query, schema: { type: string, default: srt } }
       responses:
-        "200":
-          description: Saved position
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Progress"
-        default:
-          $ref: "#/components/responses/Error"
+        "200": { description: Generated SRT subtitle }
   /v1/word-profiles:
     get:
       operationId: readWordProfile
@@ -143,6 +151,23 @@ paths:
                 anyOf:
                   - $ref: "#/components/schemas/WordProfile"
                   - type: "null"
+        default:
+          $ref: "#/components/responses/Error"
+    put:
+      operationId: updateWordProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWordProfile"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WordProfile"
         default:
           $ref: "#/components/responses/Error"
   /v1/word-profiles/batch:
@@ -325,23 +350,60 @@ paths:
                 $ref: "#/components/schemas/SentenceDiagnosis"
         default:
           $ref: "#/components/responses/Error"
-    put:
-      operationId: updateWordProfile
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateWordProfile"
+  /v1/transcription/providers:
+    get:
+      operationId: transcriptionProviders
       responses:
-        "200":
-          description: Updated profile
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WordProfile"
-        default:
-          $ref: "#/components/responses/Error"
+        "200": { description: Available transcription providers and runtimes }
+  /v1/transcription/models:
+    get:
+      operationId: transcriptionModels
+      responses:
+        "200": { description: Model catalog and installation states }
+  /v1/transcription/models/install:
+    post:
+      operationId: installTranscriptionModel
+      responses:
+        "200": { description: Model installation started }
+  /v1/transcription/models/register-custom:
+    post:
+      operationId: registerCustomTranscriptionModel
+      responses:
+        "200": { description: Custom model registered }
+  /v1/transcription/models/{model_id}/cancel-install:
+    post:
+      operationId: cancelTranscriptionModelInstall
+      responses:
+        "200": { description: Model installation cancelled }
+  /v1/transcription/models/{model_id}:
+    delete:
+      operationId: deleteTranscriptionModel
+      responses:
+        "204": { description: Model removed }
+  /v1/transcription/jobs:
+    get:
+      operationId: transcriptionJobs
+      responses:
+        "200": { description: Durable transcription jobs }
+    post:
+      operationId: createTranscriptionJob
+      responses:
+        "200": { description: Queued or idempotently reused transcription job }
+  /v1/transcription/jobs/{job_id}:
+    get:
+      operationId: transcriptionJob
+      responses:
+        "200": { description: Durable transcription job }
+  /v1/transcription/jobs/{job_id}/cancel:
+    post:
+      operationId: cancelTranscriptionJob
+      responses:
+        "200": { description: Cancelled transcription job }
+  /v1/transcription/jobs/{job_id}/retry:
+    post:
+      operationId: retryTranscriptionJob
+      responses:
+        "200": { description: Retried transcription job }
 components:
   securitySchemes:
     bearerAuth:
