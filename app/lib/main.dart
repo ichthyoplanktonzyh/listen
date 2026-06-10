@@ -1452,115 +1452,113 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ? 0.3
           : 1.0;
       final subtitlePosition = Offset(subtitlePositionX, subtitlePositionY);
-      return SizedBox.expand(
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: ColoredBox(
-                color: Colors.black,
-                child: Video(
-                  controller: adapter.videoController,
-                  controls: NoVideoControls,
-                ),
+      return Stack(
+        children: [
+          Positioned.fill(
+            child: ColoredBox(
+              color: Colors.black,
+              child: Video(
+                controller: adapter.videoController,
+                controls: NoVideoControls,
               ),
             ),
-            if (subtitlesVisible &&
-                (currentPrimaryCue != null ||
-                    (secondarySubtitlesVisible && currentSecondaryCue != null)))
-              Align(
-                alignment: Alignment(
-                  subtitlePosition.dx * 2 - 1,
-                  subtitlePosition.dy * 2 - 1,
-                ),
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.move,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onPanUpdate: (details) => setState(() {
-                      final moved = moveSubtitlePosition(
-                        current: Offset(subtitlePositionX, subtitlePositionY),
-                        delta: details.delta,
-                        viewport: constraints.biggest,
-                      );
-                      subtitlePositionX = moved.dx;
-                      subtitlePositionY = moved.dy;
-                    }),
-                    onPanEnd: (_) => unawaited(_saveSettings()),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: constraints.maxWidth * 0.82,
-                      ),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(
-                            alpha: subtitleBackgroundOpacity * backgroundFactor,
-                          ),
-                          borderRadius: BorderRadius.circular(10),
+          ),
+          if (subtitlesVisible &&
+              (currentPrimaryCue != null ||
+                  (secondarySubtitlesVisible && currentSecondaryCue != null)))
+            Align(
+              alignment: Alignment(
+                subtitlePosition.dx * 2 - 1,
+                subtitlePosition.dy * 2 - 1,
+              ),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.move,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onPanUpdate: (details) => setState(() {
+                    final moved = moveSubtitlePosition(
+                      current: Offset(subtitlePositionX, subtitlePositionY),
+                      delta: details.delta,
+                      viewport: constraints.biggest,
+                    );
+                    subtitlePositionX = moved.dx;
+                    subtitlePositionY = moved.dy;
+                  }),
+                  onPanEnd: (_) => unawaited(_saveSettings()),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: constraints.maxWidth * 0.82,
+                    ),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(
+                          alpha: subtitleBackgroundOpacity * backgroundFactor,
                         ),
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: subtitlePreset == 'compact' ? 10 : 18,
-                            vertical: subtitlePreset == 'compact' ? 6 : 12,
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (currentPrimaryCue != null)
-                                GestureDetector(
-                                  onTap: () => _seekCue(currentPrimaryCue),
-                                  child: TokenLine(
-                                    cue: currentPrimaryCue!,
-                                    profiles: wordProfiles,
-                                    showStyles: statusStylesVisible,
-                                    fontSize: primarySize,
-                                    fontFamily: _subtitleFont(
-                                      primaryFontFamily,
-                                    ),
-                                    baseColor: primaryColor,
-                                    onWord: _openWord,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: subtitlePreset == 'compact' ? 10 : 18,
+                          vertical: subtitlePreset == 'compact' ? 6 : 12,
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (currentPrimaryCue != null)
+                              GestureDetector(
+                                onTap: () => _seekCue(currentPrimaryCue),
+                                child: TokenLine(
+                                  cue: currentPrimaryCue!,
+                                  profiles: wordProfiles,
+                                  showStyles: statusStylesVisible,
+                                  fontSize: primarySize,
+                                  fontFamily: _subtitleFont(
+                                    primaryFontFamily,
+                                  ),
+                                  baseColor: primaryColor,
+                                  onWord: _openWord,
+                                ),
+                              ),
+                            if (secondarySubtitlesVisible &&
+                                currentSecondaryCue != null)
+                              GestureDetector(
+                                onTap: () => adapter.seek(
+                                  secondaryCursor.mediaStart(
+                                    currentSecondaryCue!,
                                   ),
                                 ),
-                              if (secondarySubtitlesVisible &&
-                                  currentSecondaryCue != null)
-                                GestureDetector(
-                                  onTap: () => adapter.seek(
-                                    secondaryCursor.mediaStart(
-                                      currentSecondaryCue!,
-                                    ),
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(top: 6),
-                                    child: Text(
-                                      currentSecondaryCue!.text,
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: secondarySize,
-                                        fontFamily: _subtitleFont(
-                                          secondaryFontFamily,
-                                        ),
-                                        color: secondaryColor,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: Text(
+                                    currentSecondaryCue!.text,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: secondarySize,
+                                      fontFamily: _subtitleFont(
+                                        secondaryFontFamily,
                                       ),
+                                      color: secondaryColor,
                                     ),
                                   ),
                                 ),
-                            ],
-                          ),
+                              ),
+                          ],
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-            if (mediaPath == null)
-              Center(
-                child: FilledButton.icon(
-                  onPressed: _openMedia,
-                  icon: const Icon(Icons.folder_open),
-                  label: Text(l.text('openVideoAudio')),
-                ),
+            ),
+          if (mediaPath == null)
+            Center(
+              child: FilledButton.icon(
+                onPressed: _openMedia,
+                icon: const Icon(Icons.folder_open),
+                label: Text(l.text('openVideoAudio')),
               ),
-          ],
-        ),
+            ),
+        ],
       );
     },
   );
