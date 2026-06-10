@@ -1199,6 +1199,8 @@ M8 退出条件。
 > 状态：规划中。详细草案见 `docs/planning/milestone-1.7.md`。
 
 - 建立平台无关的 `TranscriptionProvider` 与持久化生成任务模型。
+- 将 Provider、运行时引擎、模型资产和用户转录配置拆分，使用能力声明与
+  兼容性协商支持未来非 Whisper 模型。
 - macOS Apple Silicon 首版通过 whisper.cpp 为本地视频和音频生成字幕。
 - 生成结果自动持久化为现有可点击学习字幕，并支持导出 SRT。
 - 支持模型与工具校验、语言选择、进度、取消、失败恢复和重试。

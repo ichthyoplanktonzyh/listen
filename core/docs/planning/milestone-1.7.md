@@ -51,6 +51,60 @@ Define a platform-neutral `TranscriptionProvider` contract:
 The contract exposes integer milliseconds and normalized segments only. It does
 not expose whisper.cpp command-line types or model-library objects.
 
+### Replaceable engine and model architecture
+
+Treat these as four separate concepts:
+
+1. `TranscriptionProvider`: integrates one execution family or service and
+   translates its behavior into the shared contract.
+2. `TranscriptionRuntime`: a concrete installed executable, embedded library,
+   local service, or remote service version capable of running compatible
+   models.
+3. `TranscriptionModel`: a discoverable model asset with stable identity,
+   revision, format, provenance, checksum, size, and capabilities.
+4. `TranscriptionProfile`: user-selected runtime-independent defaults such as
+   preferred language, quality tier, translation mode, and segmentation
+   policy.
+
+Model identity must not be a display name such as `small.en`. It uses a stable
+namespaced ID plus an immutable revision and checksum. Jobs store the exact
+provider, runtime, model revision, and normalized settings used, so results
+remain reproducible after defaults or installed models change.
+
+Each model exposes a provider-independent `TranscriptionModelDescriptor`:
+
+- stable model ID, display name, family, revision, format, and provenance;
+- installed, downloadable, remote-only, or unavailable state;
+- file size and cryptographic checksum when locally managed;
+- supported languages and English-only status;
+- capabilities such as transcription, translation, timestamps, word timing,
+  streaming, diarization, and VAD;
+- quality tier and approximate memory/compute requirements;
+- compatible provider IDs, runtime IDs, and version constraints;
+- license and redistribution metadata.
+
+Providers and runtimes expose capability descriptors independently. The
+application selects only compatible runtime/model pairs and validates them
+again when a job starts. Unsupported capabilities degrade explicitly rather
+than being silently ignored.
+
+Public job and subtitle contracts must remain model-family neutral. They may
+record optional word timing or speaker labels as capability-gated metadata,
+but the base timed-segment contract cannot require Whisper-specific tokens,
+GGML/GGUF files, Core ML artifacts, or command-line flags.
+
+Model discovery uses a registry assembled from provider manifests:
+
+- bundled manifests describe models tested by the application;
+- providers may discover manually installed compatible models;
+- future signed remote catalogs may advertise new revisions without an
+  application release;
+- users may add custom model paths, but these remain explicitly unverified.
+
+Changing the default model never mutates existing generated subtitle tracks or
+jobs. Regenerating with another model creates a new track so users can compare
+and choose results without losing the previous version.
+
 ### First provider
 
 The first provider uses a separately installed or application-managed
@@ -72,7 +126,8 @@ user-installed executable.
 
 Add a durable `TranscriptionJob` with:
 
-- job ID, media ID, provider ID, model ID, and selected audio track;
+- job ID, media ID, provider ID, runtime ID/version, model ID/revision/checksum,
+  and selected audio track;
 - requested and detected language;
 - optional translate-to-English mode;
 - status: queued, extracting, transcribing, importing, completed, cancelled,
@@ -88,6 +143,8 @@ not remove vocabulary occurrence snapshots already captured from them.
 
 - Add **Generate subtitles** beside subtitle import actions.
 - Show provider/model availability before starting.
+- Let users choose compatible installed models and remember a preferred
+  quality tier without hard-coding one model name.
 - Offer language auto-detection or explicit language, model selection, and
   primary/secondary destination.
 - Show extraction and transcription progress with cancel support.
@@ -104,6 +161,7 @@ not remove vocabulary occurrence snapshots already captured from them.
 4. Transcript import plus forced alignment.
 5. Incremental generation from the current playback position.
 6. Additional providers such as embedded whisper.cpp or Faster-Whisper.
+7. Signed remote model catalogs and richer model-family capabilities.
 
 ## Explicit Boundaries
 
@@ -113,6 +171,7 @@ not remove vocabulary occurrence snapshots already captured from them.
 - No word-level or phoneme-level timing contract yet.
 - No automatic translation other than provider-supported translate-to-English.
 - No silent background downloads without explicit user action.
+- No assumption that future providers or models belong to the Whisper family.
 
 ## Verification Gate
 
@@ -121,6 +180,11 @@ not remove vocabulary occurrence snapshots already captured from them.
   vocabulary state, and source snapshots.
 - Cancellation removes temporary files and leaves no partial active track.
 - Repeating an identical completed job is idempotent.
+- Switching model or model revision creates a separate generated track and
+  preserves the previous result.
+- Mock providers with incompatible and partially supported models verify
+  capability negotiation and explicit degradation.
+- Jobs remain inspectable after their original runtime or model is removed.
 - Missing executable, model, disk space, corrupt media, and provider failure
   produce structured recoverable errors.
 - Playback remains responsive during background generation.
