@@ -1,7 +1,6 @@
 # 跨平台听力理解播放器 Roadmap
 
-> Milestone 1 状态：已完成。当前发布版本为 `0.2.0`，包含内部阶段
-> M0-M6 与 M8。当前下一阶段是 Milestone 1.5 词汇学习资产强化；
+> Milestone 1 与 Milestone 1.5 状态：已完成。当前发布版本为 `0.3.0`；
 > M7 移动端验证、Windows/Linux 和其他延期能力进入 Milestone 2。
 > 完成报告见 `docs/release/milestone-1.md`。
 
@@ -977,7 +976,8 @@ Repository 接口位于领域或应用层，SQLite 实现位于持久化层。
 
 ## 12.5 Milestone 1.5：词汇学习资产强化
 
-> 状态：规划完成，待实施。详细设计见 `docs/planning/milestone-1.5.md`。
+> 状态：已完成。2026-06-10 发布 0.3.0；验证见
+> `docs/verification/milestone-1.5-report.md`。
 
 ### 12.5.1 目标
 

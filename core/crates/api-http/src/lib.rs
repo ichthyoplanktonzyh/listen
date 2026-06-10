@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use api_events::{EventEnvelope, EventName};
 use application::{
     AppServices, ApplicationError, CreateWordObservation, DictionaryProvider, ImportSubtitle,
-    RegisterMedia, UpdateWordProfile,
+    RegisterMedia, SourceContext, UpdateWordProfile,
 };
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
@@ -17,8 +17,8 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use dictionary_provider::FreeDictionaryProvider;
 use domain::{
-    MediaId, MediaKind, ObservationResult, SubtitleSentenceId, SubtitleTrackId, WordProfileId,
-    WordStatus,
+    LanguageCode, MediaAvailability, MediaId, MediaKind, ObservationResult, SubtitleSentenceId,
+    SubtitleTrackId, VocabularyAssetBundle, WordProfileId, WordStatus,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
@@ -60,6 +60,14 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/v1/word-profiles", get(read_word).put(update_word))
         .route("/v1/word-observations", post(create_observation))
+        .route("/v1/vocabulary", get(list_vocabulary))
+        .route("/v1/vocabulary/export", get(export_vocabulary))
+        .route("/v1/vocabulary/import", post(import_vocabulary))
+        .route("/v1/word-profiles/{profile_id}/details", get(word_details))
+        .route(
+            "/v1/media/{media_id}/availability",
+            axum::routing::put(update_media_availability),
+        )
         .route("/v1/events", get(events))
         .route("/v1/dictionary", get(dictionary_lookup))
         .route(
@@ -276,6 +284,7 @@ struct UpdateWordRequest {
     lemma: String,
     display_form: String,
     status: Option<WordStatus>,
+    source: Option<SourceRequest>,
 }
 
 async fn update_word(
@@ -289,6 +298,10 @@ async fn update_word(
             lemma: request.lemma,
             display_form: request.display_form,
             status: request.status,
+            source: request
+                .source
+                .map(SourceRequest::into_context)
+                .transpose()?,
         })
         .map_err(ApiError::from)?;
     let _ = state.events.send(EventEnvelope::v1(
@@ -303,29 +316,170 @@ struct CreateObservationRequest {
     word_profile_id: String,
     sentence_id: String,
     original_form: String,
-    result: ObservationResult,
+    result: Option<ObservationResult>,
+    clear: Option<bool>,
+    source: Option<SourceRequest>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SourceRequest {
+    language: String,
+    normalized_lemma: String,
+    media_id: Option<String>,
+    sentence_id: Option<String>,
+    original_form: String,
+    sentence_text: String,
+    media_title: String,
+    media_fingerprint: String,
+    start_ms: u64,
+    end_ms: u64,
+}
+
+impl SourceRequest {
+    fn into_context(self) -> Result<SourceContext, ApplicationError> {
+        Ok(SourceContext {
+            language: LanguageCode::parse(self.language)?,
+            normalized_lemma: self.normalized_lemma,
+            media_id: self.media_id.map(MediaId::parse).transpose()?,
+            sentence_id: self
+                .sentence_id
+                .map(SubtitleSentenceId::parse)
+                .transpose()?,
+            original_form: self.original_form,
+            sentence_text: self.sentence_text,
+            media_title: self.media_title,
+            media_fingerprint: self.media_fingerprint,
+            start_ms: self.start_ms,
+            end_ms: self.end_ms,
+        })
+    }
 }
 
 async fn create_observation(
     State(state): State<ApiState>,
     Json(request): Json<CreateObservationRequest>,
-) -> Result<Json<domain::WordObservation>, ApiError> {
+) -> Result<Response, ApiError> {
+    let word_profile_id =
+        WordProfileId::parse(request.word_profile_id).map_err(ApplicationError::from)?;
+    let sentence_id =
+        SubtitleSentenceId::parse(request.sentence_id).map_err(ApplicationError::from)?;
+    if request.clear.unwrap_or(false) {
+        state
+            .services
+            .clear_observation(&word_profile_id, &sentence_id)?;
+        let _ = state.events.send(EventEnvelope::v1(
+            EventName::WordObservationCleared,
+            serde_json::json!({
+                "word_profile_id": word_profile_id,
+                "sentence_id": sentence_id,
+            }),
+        ));
+        return Ok(StatusCode::NO_CONTENT.into_response());
+    }
     let observation = state
         .services
         .create_observation(CreateWordObservation {
-            word_profile_id: WordProfileId::parse(request.word_profile_id)
-                .map_err(ApplicationError::from)?,
-            sentence_id: SubtitleSentenceId::parse(request.sentence_id)
-                .map_err(ApplicationError::from)?,
+            word_profile_id,
+            sentence_id,
             original_form: request.original_form,
-            result: request.result,
+            result: request
+                .result
+                .ok_or(ApplicationError::Validation("result"))?,
+            source: request
+                .source
+                .map(SourceRequest::into_context)
+                .transpose()?,
         })
         .map_err(ApiError::from)?;
     let _ = state.events.send(EventEnvelope::v1(
         EventName::WordObservationCreated,
         serde_json::to_value(&observation).expect("word observation serializes"),
     ));
-    Ok(Json(observation))
+    Ok(Json(observation).into_response())
+}
+
+#[derive(Debug, Deserialize)]
+struct VocabularyQuery {
+    language: Option<String>,
+    status: WordStatus,
+    search: Option<String>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+}
+
+async fn list_vocabulary(
+    State(state): State<ApiState>,
+    Query(query): Query<VocabularyQuery>,
+) -> Result<Json<Vec<domain::WordDetails>>, ApiError> {
+    state
+        .services
+        .list_vocabulary(
+            query.language.as_deref().unwrap_or("en"),
+            query.status,
+            query.search.as_deref().unwrap_or(""),
+            query.limit.unwrap_or(100),
+            query.offset.unwrap_or(0),
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn word_details(
+    State(state): State<ApiState>,
+    Path(profile_id): Path<String>,
+) -> Result<Json<domain::WordDetails>, ApiError> {
+    let id = WordProfileId::parse(profile_id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .word_details(&id)?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("word profile"))
+}
+
+async fn export_vocabulary(
+    State(state): State<ApiState>,
+) -> Result<Json<VocabularyAssetBundle>, ApiError> {
+    state
+        .services
+        .export_vocabulary()
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn import_vocabulary(
+    State(state): State<ApiState>,
+    Json(bundle): Json<VocabularyAssetBundle>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    state.services.import_vocabulary(&bundle)?;
+    let _ = state.events.send(EventEnvelope::v1(
+        EventName::VocabularyAssetsImported,
+        serde_json::json!({"profiles": bundle.profiles.len()}),
+    ));
+    Ok(Json(serde_json::json!({"imported": true})))
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateAvailabilityRequest {
+    availability: MediaAvailability,
+}
+
+async fn update_media_availability(
+    State(state): State<ApiState>,
+    Path(media_id): Path<String>,
+    Json(request): Json<UpdateAvailabilityRequest>,
+) -> Result<Json<domain::MediaItem>, ApiError> {
+    let media = state
+        .services
+        .set_media_availability(
+            &MediaId::parse(media_id).map_err(ApplicationError::from)?,
+            request.availability,
+        )
+        .map_err(ApiError::from)?;
+    let _ = state.events.send(EventEnvelope::v1(
+        EventName::MediaAvailabilityChanged,
+        serde_json::to_value(&media).expect("media serializes"),
+    ));
+    Ok(Json(media))
 }
 
 #[derive(Debug, Deserialize)]
@@ -480,6 +634,7 @@ mod tests {
                 repo.clone(),
                 repo.clone(),
                 repo.clone(),
+                repo.clone(),
                 repo,
             ),
             "secret",
@@ -606,6 +761,11 @@ mod tests {
             "/v1/word-profiles",
             "/v1/word-profiles/batch",
             "/v1/word-observations",
+            "/v1/vocabulary",
+            "/v1/vocabulary/export",
+            "/v1/vocabulary/import",
+            "/v1/word-profiles/{profile_id}/details",
+            "/v1/media/{media_id}/availability",
             "/v1/events",
             "/v1/dictionary",
             "/v1/sentences/{sentence_id}/diagnosis",

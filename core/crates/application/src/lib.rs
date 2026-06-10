@@ -10,6 +10,11 @@ const DICTIONARY_CACHE_TTL_MS: u64 = 30 * 24 * 60 * 60 * 1000;
 pub trait MediaRepository: Send + Sync {
     fn upsert(&self, media: &MediaItem) -> Result<MediaItem, ApplicationError>;
     fn get(&self, id: &MediaId) -> Result<Option<MediaItem>, ApplicationError>;
+    fn set_availability(
+        &self,
+        id: &MediaId,
+        availability: MediaAvailability,
+    ) -> Result<MediaItem, ApplicationError>;
 }
 
 pub trait SubtitleRepository: Send + Sync {
@@ -46,6 +51,36 @@ pub trait WordObservationRepository: Send + Sync {
         &self,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<Vec<WordObservation>, ApplicationError>;
+    fn clear(
+        &self,
+        word_profile_id: &WordProfileId,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<(), ApplicationError>;
+}
+
+pub trait VocabularyAssetRepository: Send + Sync {
+    fn apply_status(
+        &self,
+        profile: &WordProfile,
+        source: Option<&SourceContext>,
+        change_source: WordChangeSource,
+    ) -> Result<WordDetails, ApplicationError>;
+    fn capture_occurrence(
+        &self,
+        profile: &WordProfile,
+        source: &SourceContext,
+    ) -> Result<WordOccurrence, ApplicationError>;
+    fn list_vocabulary(
+        &self,
+        language: &LanguageCode,
+        status: WordStatus,
+        search: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<WordDetails>, ApplicationError>;
+    fn details(&self, id: &WordProfileId) -> Result<Option<WordDetails>, ApplicationError>;
+    fn export_assets(&self) -> Result<VocabularyAssetBundle, ApplicationError>;
+    fn import_assets(&self, bundle: &VocabularyAssetBundle) -> Result<(), ApplicationError>;
 }
 
 pub trait DictionaryCacheRepository: Send + Sync {
@@ -85,6 +120,7 @@ pub struct AppServices {
     observations: Arc<dyn WordObservationRepository>,
     subtitles: Arc<dyn SubtitleRepository>,
     dictionary: Arc<dyn DictionaryCacheRepository>,
+    vocabulary: Arc<dyn VocabularyAssetRepository>,
 }
 
 impl AppServices {
@@ -95,6 +131,7 @@ impl AppServices {
         observations: Arc<dyn WordObservationRepository>,
         subtitles: Arc<dyn SubtitleRepository>,
         dictionary: Arc<dyn DictionaryCacheRepository>,
+        vocabulary: Arc<dyn VocabularyAssetRepository>,
     ) -> Self {
         Self {
             media,
@@ -103,6 +140,7 @@ impl AppServices {
             observations,
             subtitles,
             dictionary,
+            vocabulary,
         }
     }
 
@@ -119,6 +157,7 @@ impl AppServices {
             title: input.title,
             kind: input.kind,
             duration: input.duration_ms.map(TimeMs::new),
+            availability: MediaAvailability::Available,
             created_at_ms,
             updated_at_ms: now,
         })
@@ -164,7 +203,20 @@ impl AppServices {
             status: input.status,
             updated_at_ms: now_ms(),
         };
-        self.words.upsert(&profile)
+        if let Some(source) = input.source.as_ref()
+            && (source.language != profile.language
+                || normalize_lemma(&source.normalized_lemma) != profile.normalized_lemma
+                || source.end_ms < source.start_ms)
+        {
+            return Err(ApplicationError::Validation("source context"));
+        }
+        self.vocabulary
+            .apply_status(
+                &profile,
+                input.source.as_ref(),
+                WordChangeSource::UserSelection,
+            )
+            .map(|details| details.profile)
     }
 
     pub fn read_word_profile(
@@ -197,8 +249,26 @@ impl AppServices {
         input: CreateWordObservation,
     ) -> Result<WordObservation, ApplicationError> {
         require_text(&input.original_form, "original_form")?;
+        let source_profile = input
+            .source
+            .as_ref()
+            .map(|source| {
+                let profile = self
+                    .vocabulary
+                    .details(&input.word_profile_id)?
+                    .map(|details| details.profile)
+                    .ok_or(ApplicationError::NotFound("word profile"))?;
+                if source.language != profile.language
+                    || normalize_lemma(&source.normalized_lemma) != profile.normalized_lemma
+                    || source.end_ms < source.start_ms
+                {
+                    return Err(ApplicationError::Validation("source context"));
+                }
+                Ok(profile)
+            })
+            .transpose()?;
         let created_at_ms = now_ms();
-        self.observations.create(&WordObservation {
+        let observation = self.observations.create(&WordObservation {
             id: WordObservationId::from_fingerprint(
                 "word-observation",
                 &format!(
@@ -212,7 +282,67 @@ impl AppServices {
             original_form: input.original_form,
             result: input.result,
             created_at_ms,
-        })
+        })?;
+        if let (Some(source), Some(profile)) = (input.source.as_ref(), source_profile.as_ref()) {
+            self.vocabulary.capture_occurrence(profile, source)?;
+        }
+        Ok(observation)
+    }
+
+    pub fn clear_observation(
+        &self,
+        word_profile_id: &WordProfileId,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<(), ApplicationError> {
+        self.observations.clear(word_profile_id, sentence_id)
+    }
+
+    pub fn list_vocabulary(
+        &self,
+        language: &str,
+        status: WordStatus,
+        search: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<WordDetails>, ApplicationError> {
+        self.vocabulary.list_vocabulary(
+            &LanguageCode::parse(language)?,
+            status,
+            search,
+            limit.min(200),
+            offset,
+        )
+    }
+
+    pub fn word_details(
+        &self,
+        id: &WordProfileId,
+    ) -> Result<Option<WordDetails>, ApplicationError> {
+        self.vocabulary.details(id)
+    }
+
+    pub fn export_vocabulary(&self) -> Result<VocabularyAssetBundle, ApplicationError> {
+        self.vocabulary.export_assets()
+    }
+
+    pub fn import_vocabulary(
+        &self,
+        bundle: &VocabularyAssetBundle,
+    ) -> Result<(), ApplicationError> {
+        if bundle.version != 1 {
+            return Err(ApplicationError::Validation(
+                "unsupported asset bundle version",
+            ));
+        }
+        self.vocabulary.import_assets(bundle)
+    }
+
+    pub fn set_media_availability(
+        &self,
+        id: &MediaId,
+        availability: MediaAvailability,
+    ) -> Result<MediaItem, ApplicationError> {
+        self.media.set_availability(id, availability)
     }
 
     pub fn import_subtitle(
@@ -326,6 +456,7 @@ pub struct UpdateWordProfile {
     pub lemma: String,
     pub display_form: String,
     pub status: Option<WordStatus>,
+    pub source: Option<SourceContext>,
 }
 
 #[derive(Debug, Clone)]
@@ -334,6 +465,21 @@ pub struct CreateWordObservation {
     pub sentence_id: SubtitleSentenceId,
     pub original_form: String,
     pub result: ObservationResult,
+    pub source: Option<SourceContext>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SourceContext {
+    pub language: LanguageCode,
+    pub normalized_lemma: String,
+    pub media_id: Option<MediaId>,
+    pub sentence_id: Option<SubtitleSentenceId>,
+    pub original_form: String,
+    pub sentence_text: String,
+    pub media_title: String,
+    pub media_fingerprint: String,
+    pub start_ms: u64,
+    pub end_ms: u64,
 }
 
 #[derive(Debug, Clone)]

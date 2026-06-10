@@ -41,8 +41,8 @@
 | M8 | LLPlayer 核心体验增强 |
 | FUTURE | MVP 后研究与增强 |
 
-M0-M6 与 M8 共同构成已完成的 Milestone 1。M1.5 是当前下一阶段；
-M7 和 FUTURE 需求进入 Milestone 2 或后续里程碑。
+M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强化也已
+完成。M7 和 FUTURE 需求进入 Milestone 2 或后续里程碑。
 
 ### 2.3 关键术语
 

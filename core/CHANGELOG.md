@@ -1,12 +1,14 @@
 # Changelog
 
-## Unreleased - Milestone 1.5
+## 0.3.0 - 2026-06-10
 
-### Planned
+Milestone 1.5 vocabulary learning asset release.
 
 - Status-driven vocabulary books with user-selected status as the authority.
 - Durable status history and source sentence snapshots.
 - Missing-media recovery and independent vocabulary asset backup/restore.
+- Latest-effective context observations with clear support.
+- Schema v4 migration with legacy history and source backfill.
 
 ## 0.2.0 - 2026-06-09
 

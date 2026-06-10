@@ -1,5 +1,7 @@
 # Milestone 1.5: Vocabulary Learning Assets
 
+> Status: completed in version 0.3.0 on 2026-06-10.
+
 ## Objective
 
 Make the variable-state vocabulary collection the product's primary durable

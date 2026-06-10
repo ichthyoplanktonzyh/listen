@@ -2,12 +2,16 @@
 
 Clean-room, macOS-first rewrite of a listening-comprehension media player.
 
-**Current release:** Milestone 1 complete, version `0.2.0`.
+**Current release:** Milestone 1.5 complete, version `0.3.0`.
 
 The Milestone 1 MVP targets macOS Apple Silicon and includes the core learning
 loop, dual text subtitles, drag and drop, configurable subtitle presentation,
 embedded text-subtitle extraction, and optional yt-dlp URL resolution. Windows,
 Linux, mobile, OpenSubtitles, and bitmap-subtitle learning remain later work.
+
+Version 0.3.0 makes vocabulary learning records durable independently of media:
+status-driven vocabulary books, status history, source sentence snapshots,
+missing-media recovery, and versioned JSON export/import are included.
 
 ## Repository layout
 
@@ -35,6 +39,7 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ./scripts/validate-contracts.sh
 ./scripts/verify-m1.sh
+./scripts/verify-m15.sh
 ./scripts/build-macos-mvp.sh
 ./scripts/verify-mvp.sh
 ```

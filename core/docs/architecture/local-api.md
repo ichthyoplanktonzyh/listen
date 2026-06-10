@@ -33,6 +33,10 @@ user-facing `message`, a `correlation_id`, and `retryable`. The OpenAPI contract
 is maintained in `contracts/openapi/v1.yaml`; event envelopes use an independent
 integer schema version in `contracts/events/v1.schema.json`.
 
+Milestone 1.5 adds vocabulary-book, word-detail, portable export/import, and
+media-availability routes under the same compatible `/v1` namespace. Exported
+assets never include media bytes or require media files during import.
+
 ## Deliberate Exclusions
 
 Play, pause, seek, position events, subtitle cursor updates, and loop control

@@ -23,3 +23,15 @@ Before every schema upgrade, the sidecar creates
 `llplayernext.sqlite.pre-migration.bak`. If migration fails, quit the app,
 replace the database with this file, and retain the failed database for
 diagnosis.
+
+## Portable Vocabulary Assets
+
+Version 0.3.0 adds `Export vocabulary assets` and `Import vocabulary assets` in
+the desktop menu. The versioned JSON file contains word profiles, status
+history, source sentence snapshots, and current context observations. It does
+not contain media or subtitle files.
+
+Import is idempotent and merges with local assets. Newer profile timestamps win;
+equal timestamps retain the local state. Sources and history are deduplicated.
+The exported JSON can be restored into an empty database without any original
+media or subtitle files.

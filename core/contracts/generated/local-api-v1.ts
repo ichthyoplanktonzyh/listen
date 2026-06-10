@@ -35,6 +35,7 @@ export interface MediaItem {
   duration: number | null;
   created_at_ms: number;
   updated_at_ms: number;
+  availability: "available" | "missing" | "archived";
 }
 
 export interface Progress {
@@ -76,6 +77,7 @@ export interface UpdateWordProfile {
   lemma: string;
   display_form: string;
   status?: WordStatus | null;
+  source?: unknown | null;
 }
 
 export interface WordProfile extends UpdateWordProfile {
@@ -153,6 +155,36 @@ export class LocalApiV1 {
     return this.request("/v1/word-observations", {
       method: "POST",
       body: JSON.stringify(input),
+    });
+  }
+
+  listVocabulary(status: WordStatus, search = ""): Promise<unknown[]> {
+    const query = new URLSearchParams({ language: "en", status, search });
+    return this.request(`/v1/vocabulary?${query}`);
+  }
+
+  wordDetails(profileId: string): Promise<unknown> {
+    return this.request(`/v1/word-profiles/${encodeURIComponent(profileId)}/details`);
+  }
+
+  exportVocabulary(): Promise<unknown> {
+    return this.request("/v1/vocabulary/export");
+  }
+
+  importVocabulary(bundle: unknown): Promise<unknown> {
+    return this.request("/v1/vocabulary/import", {
+      method: "POST",
+      body: JSON.stringify(bundle),
+    });
+  }
+
+  updateMediaAvailability(
+    mediaId: string,
+    availability: "available" | "missing" | "archived",
+  ): Promise<MediaItem> {
+    return this.request(`/v1/media/${encodeURIComponent(mediaId)}/availability`, {
+      method: "PUT",
+      body: JSON.stringify({ availability }),
     });
   }
 

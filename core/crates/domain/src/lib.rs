@@ -34,6 +34,8 @@ string_id!(SubtitleTrackId);
 string_id!(SubtitleSentenceId);
 string_id!(WordProfileId);
 string_id!(WordObservationId);
+string_id!(WordOccurrenceId);
+string_id!(WordStatusHistoryId);
 string_id!(DictionaryEntryId);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -77,6 +79,14 @@ pub enum MediaKind {
     Audio,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MediaAvailability {
+    Available,
+    Missing,
+    Archived,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MediaItem {
     pub id: MediaId,
@@ -85,6 +95,7 @@ pub struct MediaItem {
     pub title: String,
     pub kind: MediaKind,
     pub duration: Option<TimeMs>,
+    pub availability: MediaAvailability,
     pub created_at_ms: u64,
     pub updated_at_ms: u64,
 }
@@ -163,6 +174,60 @@ pub struct WordObservation {
     pub original_form: String,
     pub result: ObservationResult,
     pub created_at_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WordOccurrence {
+    pub id: WordOccurrenceId,
+    pub source_key: String,
+    pub word_profile_id: WordProfileId,
+    pub media_id: Option<MediaId>,
+    pub sentence_id: Option<SubtitleSentenceId>,
+    pub original_form: String,
+    pub sentence_text_snapshot: String,
+    pub media_title_snapshot: String,
+    pub media_fingerprint_snapshot: String,
+    pub start_ms_snapshot: u64,
+    pub end_ms_snapshot: u64,
+    pub first_seen_at_ms: u64,
+    pub last_seen_at_ms: u64,
+    pub encounter_count: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WordChangeSource {
+    UserSelection,
+    Import,
+    LegacyBaseline,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WordStatusHistory {
+    pub id: WordStatusHistoryId,
+    pub word_profile_id: WordProfileId,
+    pub previous_status: Option<WordStatus>,
+    pub new_status: Option<WordStatus>,
+    pub source_occurrence_id: Option<WordOccurrenceId>,
+    pub changed_at_ms: u64,
+    pub change_source: WordChangeSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WordDetails {
+    pub profile: WordProfile,
+    pub history: Vec<WordStatusHistory>,
+    pub occurrences: Vec<WordOccurrence>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VocabularyAssetBundle {
+    pub version: u16,
+    pub exported_at_ms: u64,
+    pub profiles: Vec<WordProfile>,
+    pub history: Vec<WordStatusHistory>,
+    pub occurrences: Vec<WordOccurrence>,
+    pub observations: Vec<WordObservation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

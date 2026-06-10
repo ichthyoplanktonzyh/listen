@@ -10,6 +10,9 @@ pub enum EventName {
     ServiceStopping,
     WordProfileChanged,
     WordObservationCreated,
+    WordObservationCleared,
+    VocabularyAssetsImported,
+    MediaAvailabilityChanged,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

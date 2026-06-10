@@ -182,6 +182,68 @@ paths:
                 $ref: "#/components/schemas/WordObservation"
         default:
           $ref: "#/components/responses/Error"
+  /v1/vocabulary:
+    get:
+      operationId: listVocabulary
+      parameters:
+        - { name: language, in: query, schema: { type: string, default: en } }
+        - { name: status, in: query, required: true, schema: { enum: [unknown_meaning, known_not_recognized, known_recognized] } }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 100, maximum: 200 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: Dynamic vocabulary book
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/WordDetails" } }
+  /v1/vocabulary/export:
+    get:
+      operationId: exportVocabulary
+      responses:
+        "200":
+          description: Versioned portable vocabulary assets
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VocabularyAssetBundle" }
+  /v1/vocabulary/import:
+    post:
+      operationId: importVocabulary
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VocabularyAssetBundle" }
+      responses:
+        "200": { description: Assets merged }
+  /v1/word-profiles/{profile_id}/details:
+    get:
+      operationId: wordDetails
+      parameters:
+        - { name: profile_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Profile, history and durable sources
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WordDetails" }
+  /v1/media/{media_id}/availability:
+    put:
+      operationId: updateMediaAvailability
+      parameters:
+        - $ref: "#/components/parameters/MediaId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [availability]
+              properties:
+                availability: { enum: [available, missing, archived] }
+      responses:
+        "200":
+          description: Updated media
   /v1/events:
     get:
       operationId: events
@@ -285,7 +347,7 @@ components:
         duration_ms: { type: [integer, "null"], minimum: 0 }
     MediaItem:
       type: object
-      required: [id, path, fingerprint, title, kind, duration, created_at_ms, updated_at_ms]
+      required: [id, path, fingerprint, title, kind, duration, availability, created_at_ms, updated_at_ms]
       properties:
         id: { type: string }
         path: { type: string }
@@ -293,6 +355,7 @@ components:
         title: { type: string }
         kind: { enum: [video, audio] }
         duration: { type: [integer, "null"], minimum: 0 }
+        availability: { enum: [available, missing, archived] }
         created_at_ms: { type: integer, minimum: 0 }
         updated_at_ms: { type: integer, minimum: 0 }
     Progress:
@@ -366,6 +429,10 @@ components:
           anyOf:
             - enum: [unknown_meaning, known_not_recognized, known_recognized]
             - type: "null"
+        source:
+          anyOf:
+            - $ref: "#/components/schemas/SourceContext"
+            - type: "null"
     BatchWordProfiles:
       type: object
       required: [language, lemmas]
@@ -377,12 +444,34 @@ components:
           items: { type: string }
     CreateWordObservation:
       type: object
-      required: [word_profile_id, sentence_id, original_form, result]
+      required: [word_profile_id, sentence_id, original_form]
       properties:
         word_profile_id: { type: string }
         sentence_id: { type: string }
         original_form: { type: string }
-        result: { enum: [recognized_in_context, not_recognized_in_context] }
+        result:
+          anyOf:
+            - enum: [recognized_in_context, not_recognized_in_context]
+            - type: "null"
+        clear: { type: boolean, default: false }
+        source:
+          anyOf:
+            - $ref: "#/components/schemas/SourceContext"
+            - type: "null"
+    SourceContext:
+      type: object
+      required: [language, normalized_lemma, original_form, sentence_text, media_title, media_fingerprint, start_ms, end_ms]
+      properties:
+        language: { type: string }
+        normalized_lemma: { type: string }
+        media_id: { type: [string, "null"] }
+        sentence_id: { type: [string, "null"] }
+        original_form: { type: string }
+        sentence_text: { type: string }
+        media_title: { type: string }
+        media_fingerprint: { type: string }
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
     WordObservation:
       type: object
       required: [id, word_profile_id, sentence_id, original_form, result, created_at_ms]
@@ -393,6 +482,52 @@ components:
         original_form: { type: string }
         result: { enum: [recognized_in_context, not_recognized_in_context] }
         created_at_ms: { type: integer, minimum: 0 }
+    WordOccurrence:
+      type: object
+      required: [id, source_key, word_profile_id, original_form, sentence_text_snapshot, media_title_snapshot, media_fingerprint_snapshot, start_ms_snapshot, end_ms_snapshot, first_seen_at_ms, last_seen_at_ms, encounter_count]
+      properties:
+        id: { type: string }
+        source_key: { type: string }
+        word_profile_id: { type: string }
+        media_id: { type: [string, "null"] }
+        sentence_id: { type: [string, "null"] }
+        original_form: { type: string }
+        sentence_text_snapshot: { type: string }
+        media_title_snapshot: { type: string }
+        media_fingerprint_snapshot: { type: string }
+        start_ms_snapshot: { type: integer, minimum: 0 }
+        end_ms_snapshot: { type: integer, minimum: 0 }
+        first_seen_at_ms: { type: integer, minimum: 0 }
+        last_seen_at_ms: { type: integer, minimum: 0 }
+        encounter_count: { type: integer, minimum: 1 }
+    WordStatusHistory:
+      type: object
+      required: [id, word_profile_id, previous_status, new_status, source_occurrence_id, changed_at_ms, change_source]
+      properties:
+        id: { type: string }
+        word_profile_id: { type: string }
+        previous_status: { type: [string, "null"] }
+        new_status: { type: [string, "null"] }
+        source_occurrence_id: { type: [string, "null"] }
+        changed_at_ms: { type: integer, minimum: 0 }
+        change_source: { enum: [user_selection, import, legacy_baseline] }
+    WordDetails:
+      type: object
+      required: [profile, history, occurrences]
+      properties:
+        profile: { $ref: "#/components/schemas/WordProfile" }
+        history: { type: array, items: { $ref: "#/components/schemas/WordStatusHistory" } }
+        occurrences: { type: array, items: { $ref: "#/components/schemas/WordOccurrence" } }
+    VocabularyAssetBundle:
+      type: object
+      required: [version, exported_at_ms, profiles, history, occurrences, observations]
+      properties:
+        version: { const: 1 }
+        exported_at_ms: { type: integer, minimum: 0 }
+        profiles: { type: array, items: { $ref: "#/components/schemas/WordProfile" } }
+        history: { type: array, items: { $ref: "#/components/schemas/WordStatusHistory" } }
+        occurrences: { type: array, items: { $ref: "#/components/schemas/WordOccurrence" } }
+        observations: { type: array, items: { $ref: "#/components/schemas/WordObservation" } }
     DictionaryLookup:
       type: object
       required: [query, lemma, definitions, phonetics, provider, cached_at_ms]

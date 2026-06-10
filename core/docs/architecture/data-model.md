@@ -94,6 +94,6 @@ deletion of vocabulary assets requires an explicit user action.
 - Timeline and observation indexes support ordered subtitle reads and later
   diagnosis queries.
 
-M1 schema version is `2`. Migration tests cover a new database and a historical
-version-1 database. Milestone 1.5 will introduce a later schema version with
-occurrence, status-history, media-availability, and export/restore tests.
+Milestone 1.5 schema version is `4`. Migration tests cover historical versions
+1, 2, and 3. Version 4 adds occurrence snapshots, status history, media
+availability, latest-effective observations, and portable export/restore.

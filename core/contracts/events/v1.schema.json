@@ -11,7 +11,10 @@
         "service-started",
         "service-stopping",
         "word-profile-changed",
-        "word-observation-created"
+        "word-observation-created",
+        "word-observation-cleared",
+        "vocabulary-assets-imported",
+        "media-availability-changed"
       ]
     },
     "payload": { "type": "object" }

@@ -3,8 +3,8 @@
 ## 1. 文档信息
 
 - 文档用途：定义产品目标、MVP 范围、核心体验和架构边界
-- 当前阶段：Milestone 1 已完成，Milestone 1.5 规划中
-- 当前发布：LLPlayerNext 0.2.0 macOS Apple Silicon 单用户 MVP
+- 当前阶段：Milestone 1.5 已完成
+- 当前发布：LLPlayerNext 0.3.0 macOS Apple Silicon 单用户版本
 - 后续平台：Windows、Linux、Android、iOS
 - 参考产品与代码库：LLPlayer
 - 需求明细与验收映射：`requirements.md`
@@ -566,7 +566,7 @@ macOS Apple Silicon 单用户 MVP、共享 Rust 核心、Flutter 桌面客户端
 
 ### 15.2 Milestone 1.5：词汇学习资产强化
 
-状态：规划完成，待实施。
+状态：已完成，随 0.3.0 发布。
 
 Milestone 1.5 将可变状态词汇表确立为产品的核心持久化资产：
 
