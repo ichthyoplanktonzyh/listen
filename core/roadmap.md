@@ -1197,6 +1197,7 @@ M8 退出条件。
 ### 14.8 Milestone 1.7：本地 Whisper 字幕生成
 
 > 状态：规划中。详细草案见 `docs/planning/milestone-1.7.md`。
+> ASR 与模型管理交互规范见 `docs/planning/milestone-1.7-asr-ui.md`。
 
 - 建立平台无关的 `TranscriptionProvider` 与持久化生成任务模型。
 - 将 Provider、运行时引擎、模型资产和用户转录配置拆分，使用能力声明与
@@ -1204,6 +1205,8 @@ M8 退出条件。
 - macOS Apple Silicon 首版通过 whisper.cpp 为本地视频和音频生成字幕。
 - 生成结果自动持久化为现有可点击学习字幕，并支持导出 SRT。
 - 支持模型与工具校验、语言选择、进度、取消、失败恢复和重试。
+- 参考 LLPlayer 的主副字幕 ASR 入口、模型下载管理、语言与高级参数体验，
+  同时保持正常流程与具体模型家族无关。
 - 后续再增加无时间轴稿件强制对齐、当前播放位置增量生成和其他 Provider。
 
 ## 15. 依赖关系

@@ -153,15 +153,49 @@ not remove vocabulary occurrence snapshots already captured from them.
 - Expose generated-source metadata and allow SRT export.
 - Allow retry after failure without duplicating a completed track.
 
+The detailed desktop interaction contract is defined in
+`docs/planning/milestone-1.7-asr-ui.md`.
+
+## LLPlayer Experience Parity
+
+The architecture can support the complete useful LLPlayer ASR experience, but
+the first implementation is intentionally staged.
+
+Required parity before Milestone 1.7 is considered complete:
+
+- start ASR independently for the primary or secondary subtitle destination;
+- choose provider/runtime/model, language auto-detection or explicit language,
+  and provider-supported translate-to-English;
+- install, cancel installation, delete, inspect, and manually locate models;
+- show model size, installation state, compatibility, and hardware guidance;
+- show durable extraction/transcription/import progress and allow cancellation;
+- keep completed generated subtitles after restart and export them as SRT;
+- regenerate with a different model without replacing the previous track;
+- expose provider/runtime diagnostics and actionable configuration errors.
+
+Deferred parity:
+
+- regenerate incrementally from the current playback position;
+- display partial segments while recognition is still running;
+- reuse one running recognition job simultaneously for primary and secondary;
+- provider-specific expert knobs such as raw command arguments;
+- runtime priority tuning and debug-command copying.
+
+These deferred items remain compatible with the provider, runtime, model, and
+durable-job contracts and do not require another public architecture rewrite.
+
 ## Scope Order
 
-1. Whole-file local transcription and automatic persistence.
-2. Model/executable management and diagnostics.
-3. Progress, cancellation, retry, and generated SRT export.
-4. Transcript import plus forced alignment.
-5. Incremental generation from the current playback position.
-6. Additional providers such as embedded whisper.cpp or Faster-Whisper.
-7. Signed remote model catalogs and richer model-family capabilities.
+1. Provider/runtime/model registry and durable transcription jobs.
+2. Whole-file local transcription and automatic persistence.
+3. Model installation, selection, removal, validation, and diagnostics UI.
+4. Progress, cancellation, retry, generated-track selection, and SRT export.
+5. Transcript import plus forced alignment.
+6. Incremental generation from the current playback position and partial
+   segment display.
+7. Shared running jobs for dual subtitle destinations.
+8. Additional providers such as embedded whisper.cpp or Faster-Whisper.
+9. Signed remote model catalogs and richer model-family capabilities.
 
 ## Explicit Boundaries
 
