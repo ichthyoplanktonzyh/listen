@@ -4,7 +4,7 @@
 
 - 文档用途：定义产品目标、MVP 范围、核心体验和架构边界
 - 当前阶段：Milestone 1.5 已完成
-- 当前发布：LLPlayerNext 0.3.0 macOS Apple Silicon 单用户版本
+- 当前发布：LLPlayerNext 0.4.0 macOS Apple Silicon 单用户版本
 - 后续平台：Windows、Linux、Android、iOS
 - 参考产品与代码库：LLPlayer
 - 需求明细与验收映射：`requirements.md`
@@ -593,3 +593,9 @@ Milestone 1.5 完成后，按优先级考虑：
 4. Android 和 iOS 技术验证。
 5. Whisper 转写与翻译。
 6. 更完整的词典、复习和真实语流分析能力。
+
+### 15.4 Milestone 1.6：桌面学习体验与词汇初始化强化
+
+状态：已完成，随 0.4.0 发布。交付响应式字幕预设、中英文桌面界面、已有
+TXT/CSV 词表初始化、统一词汇学习面板、用户释义与笔记，以及为未来离线或
+在线词典保留的多 Provider 聚合边界。当前仍只启用 Free Dictionary API。

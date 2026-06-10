@@ -81,6 +81,18 @@ pub trait VocabularyAssetRepository: Send + Sync {
     fn details(&self, id: &WordProfileId) -> Result<Option<WordDetails>, ApplicationError>;
     fn export_assets(&self) -> Result<VocabularyAssetBundle, ApplicationError>;
     fn import_assets(&self, bundle: &VocabularyAssetBundle) -> Result<(), ApplicationError>;
+    fn update_learning_content(
+        &self,
+        id: &WordProfileId,
+        user_definition: Option<String>,
+        personal_note: Option<String>,
+        updated_at_ms: u64,
+    ) -> Result<WordDetails, ApplicationError>;
+    fn import_external(
+        &self,
+        input: &ExternalVocabularyImport,
+        imported_at_ms: u64,
+    ) -> Result<ExternalVocabularyImportSummary, ApplicationError>;
 }
 
 pub trait DictionaryCacheRepository: Send + Sync {
@@ -100,7 +112,7 @@ pub trait PlaybackProgressRepository: Send + Sync {
 
 #[async_trait]
 pub trait DictionaryProvider: Send + Sync {
-    fn name(&self) -> &'static str;
+    fn info(&self) -> DictionaryProviderInfo;
     async fn lookup(
         &self,
         language: &LanguageCode,
@@ -202,6 +214,9 @@ impl AppServices {
             display_form: input.display_form,
             status: input.status,
             updated_at_ms: now_ms(),
+            user_definition: None,
+            personal_note: None,
+            learning_updated_at_ms: 0,
         };
         if let Some(source) = input.source.as_ref()
             && (source.language != profile.language
@@ -329,7 +344,7 @@ impl AppServices {
         &self,
         bundle: &VocabularyAssetBundle,
     ) -> Result<(), ApplicationError> {
-        if bundle.version != 1 {
+        if bundle.version != 1 && bundle.version != 2 {
             return Err(ApplicationError::Validation(
                 "unsupported asset bundle version",
             ));
@@ -379,43 +394,99 @@ impl AppServices {
 
     pub async fn lookup_dictionary(
         &self,
-        provider: &dyn DictionaryProvider,
+        providers: &[Arc<dyn DictionaryProvider>],
         language: &str,
         lemma: &str,
-    ) -> Result<Option<DictionaryLookup>, ApplicationError> {
+    ) -> Result<DictionaryLookupBundle, ApplicationError> {
         let language = LanguageCode::parse(language.to_owned())?;
         let normalized_lemma = normalize_lemma(lemma);
         require_text(&normalized_lemma, "lemma")?;
-        if let Some(entry) = self
-            .dictionary
-            .get(&language, &normalized_lemma, provider.name())?
-            .filter(|entry| now_ms().saturating_sub(entry.cached_at_ms) < DICTIONARY_CACHE_TTL_MS)
-        {
-            return serde_json::from_str(&entry.payload_json)
-                .map(Some)
-                .map_err(|error| ApplicationError::Repository(error.to_string()));
+        let mut results = Vec::with_capacity(providers.len());
+        for provider in providers {
+            let info = provider.info();
+            if !info
+                .supported_languages
+                .iter()
+                .any(|value| value == language.as_str())
+            {
+                continue;
+            }
+            if let Some(entry) = self
+                .dictionary
+                .get(&language, &normalized_lemma, &info.id)?
+                .filter(|entry| {
+                    now_ms().saturating_sub(entry.cached_at_ms) < DICTIONARY_CACHE_TTL_MS
+                })
+            {
+                let lookup = serde_json::from_str(&entry.payload_json)
+                    .map_err(|error| ApplicationError::Repository(error.to_string()))?;
+                results.push(DictionaryProviderResult {
+                    provider: info,
+                    lookup: Some(lookup),
+                    error: None,
+                });
+                continue;
+            }
+            match provider.lookup(&language, &normalized_lemma).await {
+                Ok(Some(mut lookup)) => {
+                    lookup.cached_at_ms = now_ms();
+                    self.dictionary.put(&DictionaryEntry {
+                        id: DictionaryEntryId::from_fingerprint(
+                            "dictionary",
+                            &format!("{}:{normalized_lemma}:{}", language.as_str(), info.id),
+                        ),
+                        language: language.clone(),
+                        normalized_lemma: normalized_lemma.clone(),
+                        provider: info.id.clone(),
+                        payload_json: serde_json::to_string(&lookup)
+                            .map_err(|error| ApplicationError::Repository(error.to_string()))?,
+                        cached_at_ms: lookup.cached_at_ms,
+                    })?;
+                    results.push(DictionaryProviderResult {
+                        provider: info,
+                        lookup: Some(lookup),
+                        error: None,
+                    });
+                }
+                Ok(None) => results.push(DictionaryProviderResult {
+                    provider: info,
+                    lookup: None,
+                    error: None,
+                }),
+                Err(error) => results.push(DictionaryProviderResult {
+                    provider: info,
+                    lookup: None,
+                    error: Some(error.to_string()),
+                }),
+            }
         }
-        let Some(mut result) = provider.lookup(&language, &normalized_lemma).await? else {
-            return Ok(None);
-        };
-        result.cached_at_ms = now_ms();
-        self.dictionary.put(&DictionaryEntry {
-            id: DictionaryEntryId::from_fingerprint(
-                "dictionary",
-                &format!(
-                    "{}:{normalized_lemma}:{}",
-                    language.as_str(),
-                    provider.name()
-                ),
-            ),
-            language,
+        Ok(DictionaryLookupBundle {
+            query: lemma.to_owned(),
             normalized_lemma,
-            provider: provider.name().into(),
-            payload_json: serde_json::to_string(&result)
-                .map_err(|error| ApplicationError::Repository(error.to_string()))?,
-            cached_at_ms: result.cached_at_ms,
-        })?;
-        Ok(Some(result))
+            results,
+        })
+    }
+
+    pub fn update_word_learning_content(
+        &self,
+        id: &WordProfileId,
+        user_definition: Option<String>,
+        personal_note: Option<String>,
+    ) -> Result<WordDetails, ApplicationError> {
+        self.vocabulary.update_learning_content(
+            id,
+            clean_optional(user_definition),
+            clean_optional(personal_note),
+            now_ms(),
+        )
+    }
+
+    pub fn import_external_vocabulary(
+        &self,
+        input: &ExternalVocabularyImport,
+    ) -> Result<ExternalVocabularyImportSummary, ApplicationError> {
+        LanguageCode::parse(input.language.clone())?;
+        self.vocabulary.import_external(input, now_ms())
     }
 
     pub fn diagnose_sentence(
@@ -511,6 +582,13 @@ fn require_text(value: &str, field: &'static str) -> Result<(), ApplicationError
         return Err(ApplicationError::Validation(field));
     }
     Ok(())
+}
+
+fn clean_optional(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let value = value.trim().to_owned();
+        (!value.is_empty()).then_some(value)
+    })
 }
 
 pub fn now_ms() -> u64 {

@@ -13,7 +13,7 @@ use axum::http::{HeaderMap, Request, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use dictionary_provider::FreeDictionaryProvider;
 use domain::{
@@ -30,7 +30,7 @@ pub struct ApiState {
     pub services: AppServices,
     pub token: Arc<str>,
     pub events: broadcast::Sender<EventEnvelope>,
-    pub dictionary: Arc<dyn DictionaryProvider>,
+    pub dictionaries: Arc<Vec<Arc<dyn DictionaryProvider>>>,
 }
 
 impl ApiState {
@@ -40,9 +40,9 @@ impl ApiState {
             services,
             token: token.into(),
             events,
-            dictionary: Arc::new(
+            dictionaries: Arc::new(vec![Arc::new(
                 FreeDictionaryProvider::new().expect("dictionary HTTP client must initialize"),
-            ),
+            )]),
         }
     }
 }
@@ -64,6 +64,14 @@ pub fn router(state: ApiState) -> Router {
         .route("/v1/vocabulary/export", get(export_vocabulary))
         .route("/v1/vocabulary/import", post(import_vocabulary))
         .route("/v1/word-profiles/{profile_id}/details", get(word_details))
+        .route(
+            "/v1/word-profiles/{profile_id}/learning-content",
+            put(update_learning_content),
+        )
+        .route(
+            "/v1/vocabulary/import-external",
+            post(import_external_vocabulary),
+        )
         .route(
             "/v1/media/{media_id}/availability",
             axum::routing::put(update_media_availability),
@@ -436,6 +444,39 @@ async fn word_details(
         .ok_or_else(|| ApiError::not_found("word profile"))
 }
 
+#[derive(Debug, Deserialize)]
+struct UpdateLearningContentRequest {
+    user_definition: Option<String>,
+    personal_note: Option<String>,
+}
+
+async fn update_learning_content(
+    State(state): State<ApiState>,
+    Path(profile_id): Path<String>,
+    Json(request): Json<UpdateLearningContentRequest>,
+) -> Result<Json<domain::WordDetails>, ApiError> {
+    state
+        .services
+        .update_word_learning_content(
+            &WordProfileId::parse(profile_id).map_err(ApplicationError::from)?,
+            request.user_definition,
+            request.personal_note,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn import_external_vocabulary(
+    State(state): State<ApiState>,
+    Json(request): Json<domain::ExternalVocabularyImport>,
+) -> Result<Json<domain::ExternalVocabularyImportSummary>, ApiError> {
+    state
+        .services
+        .import_external_vocabulary(&request)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 async fn export_vocabulary(
     State(state): State<ApiState>,
 ) -> Result<Json<VocabularyAssetBundle>, ApiError> {
@@ -491,10 +532,10 @@ struct DictionaryQuery {
 async fn dictionary_lookup(
     State(state): State<ApiState>,
     Query(query): Query<DictionaryQuery>,
-) -> Result<Json<Option<domain::DictionaryLookup>>, ApiError> {
+) -> Result<Json<domain::DictionaryLookupBundle>, ApiError> {
     state
         .services
-        .lookup_dictionary(state.dictionary.as_ref(), &query.language, &query.lemma)
+        .lookup_dictionary(state.dictionaries.as_ref(), &query.language, &query.lemma)
         .await
         .map(Json)
         .map_err(ApiError::from)
@@ -765,6 +806,8 @@ mod tests {
             "/v1/vocabulary/export",
             "/v1/vocabulary/import",
             "/v1/word-profiles/{profile_id}/details",
+            "/v1/word-profiles/{profile_id}/learning-content",
+            "/v1/vocabulary/import-external",
             "/v1/media/{media_id}/availability",
             "/v1/events",
             "/v1/dictionary",

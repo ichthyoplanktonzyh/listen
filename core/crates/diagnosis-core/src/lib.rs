@@ -117,6 +117,9 @@ mod tests {
             display_form: word.into(),
             status: Some(status),
             updated_at_ms: 0,
+            user_definition: None,
+            personal_note: None,
+            learning_updated_at_ms: 0,
         }
     }
 

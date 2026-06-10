@@ -17,6 +17,10 @@ fingerprint. IDs never contain database row numbers or player-library values.
 | Word status history (M1.5) | Profile, change time, and ordered status transition |
 | Dictionary cache entry | Language, normalized lemma, and provider |
 
+Schema v5 adds nullable user definition and personal note fields to each word
+profile. Their independent learning-content timestamp prevents backup merges
+from coupling personal edits to status changes.
+
 Media path is mutable metadata, not identity. Registering the same fingerprint
 updates its path and metadata while retaining its ID and creation timestamp.
 Language codes are lowercase ASCII BCP-47-like values. Lemmas are trimmed and
@@ -94,6 +98,5 @@ deletion of vocabulary assets requires an explicit user action.
 - Timeline and observation indexes support ordered subtitle reads and later
   diagnosis queries.
 
-Milestone 1.5 schema version is `4`. Migration tests cover historical versions
-1, 2, and 3. Version 4 adds occurrence snapshots, status history, media
-availability, latest-effective observations, and portable export/restore.
+Milestone 1.6 schema version is `5`. Migration tests cover historical versions
+1 through 4. Version 5 adds durable user definitions and personal notes.

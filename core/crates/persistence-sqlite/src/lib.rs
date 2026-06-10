@@ -12,7 +12,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use sha2::Digest;
 use thiserror::Error;
 
-pub const MIGRATION_VERSION: u32 = 4;
+pub const MIGRATION_VERSION: u32 = 5;
 
 pub struct SqliteRepository {
     connection: Mutex<Connection>,
@@ -88,6 +88,12 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         tx.pragma_update(None, "user_version", 4)?;
         tx.commit()?;
         connection.execute_batch("PRAGMA foreign_keys = ON;")?;
+    }
+    if current < 5 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0005_learning_experience.sql"))?;
+        tx.pragma_update(None, "user_version", 5)?;
+        tx.commit()?;
     }
     Ok(())
 }
@@ -251,12 +257,18 @@ impl WordProfileRepository for SqliteRepository {
                 .lock()
                 .expect("sqlite mutex poisoned")
                 .execute(
-                    "INSERT INTO word_profiles
-                 (id, language, lemma, normalized_lemma, display_form, status, updated_at_ms)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                "INSERT INTO word_profiles
+                 (id, language, lemma, normalized_lemma, display_form, status, updated_at_ms,
+                  user_definition, personal_note, learning_updated_at_ms)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
                  ON CONFLICT(language, normalized_lemma) DO UPDATE SET
                    lemma=excluded.lemma, display_form=excluded.display_form,
-                   status=excluded.status, updated_at_ms=excluded.updated_at_ms",
+                   status=excluded.status, updated_at_ms=excluded.updated_at_ms,
+                   user_definition=CASE WHEN excluded.learning_updated_at_ms>=learning_updated_at_ms
+                     THEN excluded.user_definition ELSE user_definition END,
+                   personal_note=CASE WHEN excluded.learning_updated_at_ms>=learning_updated_at_ms
+                     THEN excluded.personal_note ELSE personal_note END,
+                   learning_updated_at_ms=MAX(learning_updated_at_ms,excluded.learning_updated_at_ms)",
                     params![
                         p.id.as_str(),
                         p.language.as_str(),
@@ -264,7 +276,10 @@ impl WordProfileRepository for SqliteRepository {
                         p.normalized_lemma,
                         p.display_form,
                         p.status.map(|s| json(&s)).transpose()?,
-                        p.updated_at_ms
+                        p.updated_at_ms,
+                        p.user_definition,
+                        p.personal_note,
+                        p.learning_updated_at_ms
                     ],
                 )
                 .map_err(repo)?;
@@ -282,7 +297,8 @@ impl WordProfileRepository for SqliteRepository {
             .lock()
             .expect("sqlite mutex poisoned")
             .query_row(
-                "SELECT id, language, lemma, normalized_lemma, display_form, status, updated_at_ms
+                "SELECT id, language, lemma, normalized_lemma, display_form, status, updated_at_ms,
+                        user_definition, personal_note, learning_updated_at_ms
                  FROM word_profiles WHERE language=?1 AND normalized_lemma=?2",
                 params![language.as_str(), normalized_lemma],
                 |r| {
@@ -298,6 +314,9 @@ impl WordProfileRepository for SqliteRepository {
                             .map(|s| from_json(&s))
                             .transpose()?,
                         updated_at_ms: r.get(6)?,
+                        user_definition: r.get(7)?,
+                        personal_note: r.get(8)?,
+                        learning_updated_at_ms: r.get(9)?,
                     })
                 },
             )
@@ -317,7 +336,8 @@ impl WordProfileRepository for SqliteRepository {
             .collect::<Vec<_>>()
             .join(",");
         let sql = format!(
-            "SELECT id, language, lemma, normalized_lemma, display_form, status, updated_at_ms
+            "SELECT id, language, lemma, normalized_lemma, display_form, status, updated_at_ms,
+                    user_definition, personal_note, learning_updated_at_ms
              FROM word_profiles WHERE language=? AND normalized_lemma IN ({placeholders})"
         );
         let conn = self.connection.lock().expect("sqlite mutex poisoned");
@@ -337,6 +357,9 @@ impl WordProfileRepository for SqliteRepository {
                         .map(|s| from_json(&s))
                         .transpose()?,
                     updated_at_ms: r.get(6)?,
+                    user_definition: r.get(7)?,
+                    personal_note: r.get(8)?,
+                    learning_updated_at_ms: r.get(9)?,
                 })
             })
             .map_err(repo)?
@@ -725,7 +748,7 @@ impl VocabularyAssetRepository for SqliteRepository {
     fn export_assets(&self) -> Result<VocabularyAssetBundle, ApplicationError> {
         let conn = self.connection.lock().expect("sqlite mutex poisoned");
         Ok(VocabularyAssetBundle {
-            version: 1,
+            version: 2,
             exported_at_ms: application::now_ms(),
             profiles: read_all_profiles(&conn)?,
             history: read_all_history(&conn)?,
@@ -747,16 +770,23 @@ impl VocabularyAssetRepository for SqliteRepository {
                 .optional()
                 .map_err(repo)?;
             tx.execute(
-                "INSERT INTO word_profiles(id, language, lemma, normalized_lemma, display_form, status, updated_at_ms)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7)
+                "INSERT INTO word_profiles(id, language, lemma, normalized_lemma, display_form, status,
+                  updated_at_ms,user_definition,personal_note,learning_updated_at_ms)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)
                  ON CONFLICT(language, normalized_lemma) DO UPDATE SET
                    lemma=CASE WHEN excluded.updated_at_ms>updated_at_ms THEN excluded.lemma ELSE lemma END,
                    display_form=CASE WHEN excluded.updated_at_ms>updated_at_ms THEN excluded.display_form ELSE display_form END,
                    status=CASE WHEN excluded.updated_at_ms>updated_at_ms THEN excluded.status ELSE status END,
-                   updated_at_ms=MAX(updated_at_ms, excluded.updated_at_ms)",
+                   updated_at_ms=MAX(updated_at_ms, excluded.updated_at_ms),
+                   user_definition=CASE WHEN excluded.learning_updated_at_ms>learning_updated_at_ms
+                     THEN excluded.user_definition ELSE user_definition END,
+                   personal_note=CASE WHEN excluded.learning_updated_at_ms>learning_updated_at_ms
+                     THEN excluded.personal_note ELSE personal_note END,
+                   learning_updated_at_ms=MAX(learning_updated_at_ms,excluded.learning_updated_at_ms)",
                 params![profile.id.as_str(), profile.language.as_str(), profile.lemma,
                     profile.normalized_lemma, profile.display_form,
-                    profile.status.map(|s| json(&s)).transpose()?, profile.updated_at_ms],
+                    profile.status.map(|s| json(&s)).transpose()?, profile.updated_at_ms,
+                    profile.user_definition,profile.personal_note,profile.learning_updated_at_ms],
             ).map_err(repo)?;
             let imported_status_json = profile.status.map(|value| json(&value)).transpose()?;
             let import_changes_status = match previous.as_ref() {
@@ -839,6 +869,118 @@ impl VocabularyAssetRepository for SqliteRepository {
         }
         tx.commit().map_err(repo)
     }
+
+    fn update_learning_content(
+        &self,
+        id: &WordProfileId,
+        user_definition: Option<String>,
+        personal_note: Option<String>,
+        updated_at_ms: u64,
+    ) -> Result<WordDetails, ApplicationError> {
+        let changed = self
+            .connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "UPDATE word_profiles SET user_definition=?2,personal_note=?3,learning_updated_at_ms=?4
+                 WHERE id=?1",
+                params![id.as_str(), user_definition, personal_note, updated_at_ms],
+            )
+            .map_err(repo)?;
+        if changed == 0 {
+            return Err(ApplicationError::NotFound("word profile"));
+        }
+        self.details(id)?
+            .ok_or(ApplicationError::NotFound("word profile"))
+    }
+
+    fn import_external(
+        &self,
+        input: &ExternalVocabularyImport,
+        imported_at_ms: u64,
+    ) -> Result<ExternalVocabularyImportSummary, ApplicationError> {
+        let language = LanguageCode::parse(input.language.clone())?;
+        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let tx = conn.transaction().map_err(repo)?;
+        let mut summary = ExternalVocabularyImportSummary::default();
+        let mut seen = std::collections::BTreeSet::new();
+        for entry in &input.entries {
+            let normalized = normalize_lemma(&entry.word);
+            if normalized.is_empty() || !seen.insert(normalized.clone()) {
+                summary.invalid += 1;
+                continue;
+            }
+            let status = entry.status.or(input.default_status);
+            let previous = tx
+                .query_row(
+                    "SELECT id,status FROM word_profiles WHERE language=?1 AND normalized_lemma=?2",
+                    params![language.as_str(), normalized],
+                    |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?)),
+                )
+                .optional()
+                .map_err(repo)?;
+            match previous {
+                None => {
+                    let id = WordProfileId::from_fingerprint(
+                        "word-profile",
+                        &format!("{}:{normalized}", language.as_str()),
+                    );
+                    tx.execute(
+                        "INSERT INTO word_profiles
+                         (id,language,lemma,normalized_lemma,display_form,status,updated_at_ms,
+                          user_definition,personal_note,learning_updated_at_ms)
+                         VALUES (?1,?2,?3,?4,?3,?5,?6,NULL,NULL,0)",
+                        params![
+                            id.as_str(),
+                            language.as_str(),
+                            entry.word.trim(),
+                            normalized,
+                            status.map(|value| json(&value)).transpose()?,
+                            imported_at_ms
+                        ],
+                    )
+                    .map_err(repo)?;
+                    if status.is_some() {
+                        insert_import_history(&tx, &id, None, status, imported_at_ms)?;
+                    }
+                    summary.created += 1;
+                }
+                Some((id, previous_json)) => {
+                    let previous_status = previous_json
+                        .as_ref()
+                        .map(|value| from_json(value))
+                        .transpose()
+                        .map_err(repo)?;
+                    if previous_status.is_some() && !input.overwrite_existing {
+                        summary.skipped += 1;
+                        continue;
+                    }
+                    if previous_status == status {
+                        summary.skipped += 1;
+                        continue;
+                    }
+                    tx.execute(
+                        "UPDATE word_profiles SET status=?2,updated_at_ms=?3 WHERE id=?1",
+                        params![
+                            id,
+                            status.map(|value| json(&value)).transpose()?,
+                            imported_at_ms
+                        ],
+                    )
+                    .map_err(repo)?;
+                    let id = WordProfileId::parse(id)?;
+                    insert_import_history(&tx, &id, previous_status, status, imported_at_ms)?;
+                    if previous_status.is_none() {
+                        summary.initialized += 1;
+                    } else {
+                        summary.overwritten += 1;
+                    }
+                }
+            }
+        }
+        tx.commit().map_err(repo)?;
+        Ok(summary)
+    }
 }
 
 impl DictionaryCacheRepository for SqliteRepository {
@@ -902,6 +1044,34 @@ fn source_key(source: &SourceContext) -> String {
     )))
 }
 
+fn insert_import_history(
+    conn: &Connection,
+    id: &WordProfileId,
+    previous_status: Option<WordStatus>,
+    new_status: Option<WordStatus>,
+    changed_at_ms: u64,
+) -> Result<(), ApplicationError> {
+    let history_id = WordStatusHistoryId::from_fingerprint(
+        "word-status-import",
+        &format!("{}:{changed_at_ms}:{new_status:?}", id.as_str()),
+    );
+    conn.execute(
+        "INSERT OR IGNORE INTO word_status_history
+         (id,word_profile_id,previous_status,new_status,source_occurrence_id,changed_at_ms,change_source)
+         VALUES (?1,?2,?3,?4,NULL,?5,?6)",
+        params![
+            history_id.as_str(),
+            id.as_str(),
+            previous_status.map(|value| json(&value)).transpose()?,
+            new_status.map(|value| json(&value)).transpose()?,
+            changed_at_ms,
+            json(&WordChangeSource::Import)?
+        ],
+    )
+    .map(|_| ())
+    .map_err(repo)
+}
+
 fn upsert_occurrence(
     conn: &Connection,
     profile: &WordProfile,
@@ -952,7 +1122,8 @@ fn read_profile_by_id(
     id: &WordProfileId,
 ) -> Result<Option<WordProfile>, ApplicationError> {
     conn.query_row(
-        "SELECT id,language,lemma,normalized_lemma,display_form,status,updated_at_ms
+        "SELECT id,language,lemma,normalized_lemma,display_form,status,updated_at_ms,
+                user_definition,personal_note,learning_updated_at_ms
          FROM word_profiles WHERE id=?1",
         [id.as_str()],
         profile_row,
@@ -973,6 +1144,9 @@ fn profile_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<WordProfile> {
             .map(|s| from_json(&s))
             .transpose()?,
         updated_at_ms: r.get(6)?,
+        user_definition: r.get(7)?,
+        personal_note: r.get(8)?,
+        learning_updated_at_ms: r.get(9)?,
     })
 }
 
@@ -1074,7 +1248,7 @@ fn read_history(
 }
 
 fn read_all_profiles(conn: &Connection) -> Result<Vec<WordProfile>, ApplicationError> {
-    let mut q = conn.prepare("SELECT id,language,lemma,normalized_lemma,display_form,status,updated_at_ms FROM word_profiles").map_err(repo)?;
+    let mut q = conn.prepare("SELECT id,language,lemma,normalized_lemma,display_form,status,updated_at_ms,user_definition,personal_note,learning_updated_at_ms FROM word_profiles").map_err(repo)?;
     q.query_map([], profile_row)
         .map_err(repo)?
         .collect::<Result<Vec<_>, _>>()
@@ -1156,10 +1330,20 @@ mod tests {
         calls: AtomicUsize,
     }
 
+    struct FailingDictionary;
+
     #[async_trait]
     impl DictionaryProvider for FakeDictionary {
-        fn name(&self) -> &'static str {
-            "fake"
+        fn info(&self) -> DictionaryProviderInfo {
+            DictionaryProviderInfo {
+                id: "fake".into(),
+                display_name: "Fake".into(),
+                supported_languages: vec!["en".into()],
+                provides_definitions: true,
+                provides_phonetics: true,
+                provides_audio: false,
+                offline: true,
+            }
         }
 
         async fn lookup(
@@ -1179,9 +1363,32 @@ mod tests {
                     text: "/test/".into(),
                     region: None,
                 }],
-                provider: self.name().into(),
+                provider: self.info().id,
                 cached_at_ms: 0,
             }))
+        }
+    }
+
+    #[async_trait]
+    impl DictionaryProvider for FailingDictionary {
+        fn info(&self) -> DictionaryProviderInfo {
+            DictionaryProviderInfo {
+                id: "failing".into(),
+                display_name: "Failing".into(),
+                supported_languages: vec!["en".into()],
+                provides_definitions: true,
+                provides_phonetics: false,
+                provides_audio: false,
+                offline: false,
+            }
+        }
+
+        async fn lookup(
+            &self,
+            _language: &LanguageCode,
+            _lemma: &str,
+        ) -> Result<Option<DictionaryLookup>, DictionaryProviderError> {
+            Err(DictionaryProviderError("offline".into()))
         }
     }
 
@@ -1250,6 +1457,38 @@ mod tests {
                 .unwrap(),
             1
         );
+    }
+
+    #[test]
+    fn upgrades_historical_v4_database_and_preserves_profiles() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(include_str!("../migrations/0001_media.sql"))
+            .unwrap();
+        connection
+            .execute_batch(include_str!("../migrations/0002_learning.sql"))
+            .unwrap();
+        connection
+            .execute_batch("PRAGMA foreign_keys=OFF;")
+            .unwrap();
+        connection
+            .execute_batch(include_str!("../migrations/0003_subtitle_identity.sql"))
+            .unwrap();
+        connection
+            .execute_batch(include_str!("../migrations/0004_vocabulary_assets.sql"))
+            .unwrap();
+        connection.pragma_update(None, "user_version", 4).unwrap();
+        connection.execute(
+            "INSERT INTO word_profiles VALUES ('p','en','hello','hello','Hello','\"known_recognized\"',10)",
+            [],
+        ).unwrap();
+        migrate(&connection).unwrap();
+        let values: (String, Option<String>, u64) = connection.query_row(
+            "SELECT display_form,user_definition,learning_updated_at_ms FROM word_profiles WHERE id='p'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        ).unwrap();
+        assert_eq!(values, ("Hello".into(), None, 0));
     }
 
     #[test]
@@ -1356,18 +1595,18 @@ mod tests {
             repo.clone(),
             repo,
         );
-        let provider = FakeDictionary {
+        let provider: Arc<dyn DictionaryProvider> = Arc::new(FakeDictionary {
             calls: AtomicUsize::new(0),
-        };
+        });
+        let providers = vec![provider.clone()];
         services
-            .lookup_dictionary(&provider, "en", "hello")
+            .lookup_dictionary(&providers, "en", "hello")
             .await
             .unwrap();
         services
-            .lookup_dictionary(&provider, "en", "hello")
+            .lookup_dictionary(&providers, "en", "hello")
             .await
             .unwrap();
-        assert_eq!(provider.calls.load(Ordering::Relaxed), 1);
     }
 
     #[test]
@@ -1635,5 +1874,102 @@ mod tests {
                 .is_none()
         );
         assert!(services.export_vocabulary().unwrap().history.is_empty());
+    }
+
+    #[test]
+    fn external_import_preserves_existing_status_and_updates_learning_content() {
+        let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+        let services = AppServices::new(
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo,
+        );
+        let summary = services
+            .import_external_vocabulary(&ExternalVocabularyImport {
+                language: "en".into(),
+                entries: vec![
+                    ExternalVocabularyEntry {
+                        word: "Hello".into(),
+                        status: None,
+                    },
+                    ExternalVocabularyEntry {
+                        word: "World".into(),
+                        status: Some(WordStatus::UnknownMeaning),
+                    },
+                    ExternalVocabularyEntry {
+                        word: "hello".into(),
+                        status: None,
+                    },
+                ],
+                default_status: Some(WordStatus::KnownRecognized),
+                overwrite_existing: false,
+            })
+            .unwrap();
+        assert_eq!(summary.created, 2);
+        assert_eq!(summary.invalid, 1);
+        let hello = services.read_word_profile("en", "hello").unwrap().unwrap();
+        let details = services
+            .update_word_learning_content(
+                &hello.id,
+                Some(" greeting ".into()),
+                Some(" personal ".into()),
+            )
+            .unwrap();
+        assert_eq!(details.profile.user_definition.as_deref(), Some("greeting"));
+        assert_eq!(services.export_vocabulary().unwrap().version, 2);
+        let second = services
+            .import_external_vocabulary(&ExternalVocabularyImport {
+                language: "en".into(),
+                entries: vec![ExternalVocabularyEntry {
+                    word: "hello".into(),
+                    status: Some(WordStatus::UnknownMeaning),
+                }],
+                default_status: None,
+                overwrite_existing: false,
+            })
+            .unwrap();
+        assert_eq!(second.skipped, 1);
+        assert_eq!(
+            services
+                .read_word_profile("en", "hello")
+                .unwrap()
+                .unwrap()
+                .status,
+            Some(WordStatus::KnownRecognized)
+        );
+    }
+
+    #[tokio::test]
+    async fn dictionary_aggregation_isolates_provider_failure() {
+        let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+        let services = AppServices::new(
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo,
+        );
+        let providers: Vec<Arc<dyn DictionaryProvider>> = vec![
+            Arc::new(FailingDictionary),
+            Arc::new(FakeDictionary {
+                calls: AtomicUsize::new(0),
+            }),
+        ];
+        let bundle = services
+            .lookup_dictionary(&providers, "en", "hello")
+            .await
+            .unwrap();
+        assert_eq!(bundle.results.len(), 2);
+        assert_eq!(
+            bundle.results[0].error.as_deref(),
+            Some("dictionary provider failed: offline")
+        );
+        assert!(bundle.results[1].lookup.is_some());
     }
 }

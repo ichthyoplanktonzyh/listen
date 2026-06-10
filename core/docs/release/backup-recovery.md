@@ -35,3 +35,6 @@ Import is idempotent and merges with local assets. Newer profile timestamps win;
 equal timestamps retain the local state. Sources and history are deduplicated.
 The exported JSON can be restored into an empty database without any original
 media or subtitle files.
+
+Version 0.4.0 exports vocabulary asset bundle version 2, which also preserves
+user definitions and personal notes. Version 1 bundles remain importable.

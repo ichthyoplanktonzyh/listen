@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 - 2026-06-10
+
+Milestone 1.6 desktop learning experience release.
+
+- Responsive subtitle presets and automatic native-subtitle suppression.
+- Simplified Chinese and English desktop localization.
+- TXT/CSV existing vocabulary import with conflict-safe status initialization.
+- Unified word learning panel with durable user definitions and notes.
+- Provider-agnostic aggregated dictionary API and multi-source UI.
+
 ## 0.3.0 - 2026-06-10
 
 Milestone 1.5 vocabulary learning asset release.

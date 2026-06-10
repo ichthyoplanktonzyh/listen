@@ -2,7 +2,10 @@ use std::time::Duration;
 
 use application::{DictionaryProvider, DictionaryProviderError};
 use async_trait::async_trait;
-use domain::{DictionaryDefinition, DictionaryLookup, DictionaryPhonetic, LanguageCode};
+use domain::{
+    DictionaryDefinition, DictionaryLookup, DictionaryPhonetic, DictionaryProviderInfo,
+    LanguageCode,
+};
 
 pub struct FreeDictionaryProvider {
     client: reqwest::Client,
@@ -31,8 +34,16 @@ impl FreeDictionaryProvider {
 
 #[async_trait]
 impl DictionaryProvider for FreeDictionaryProvider {
-    fn name(&self) -> &'static str {
-        "free-dictionary-api"
+    fn info(&self) -> DictionaryProviderInfo {
+        DictionaryProviderInfo {
+            id: "free-dictionary-api".into(),
+            display_name: "Free Dictionary API".into(),
+            supported_languages: vec!["en".into()],
+            provides_definitions: true,
+            provides_phonetics: true,
+            provides_audio: false,
+            offline: false,
+        }
     }
 
     async fn lookup(
@@ -101,7 +112,7 @@ impl DictionaryProvider for FreeDictionaryProvider {
             lemma: entry["word"].as_str().unwrap_or(lemma).to_owned(),
             definitions,
             phonetics,
-            provider: self.name().into(),
+            provider: self.info().id,
             cached_at_ms: 0,
         }))
     }

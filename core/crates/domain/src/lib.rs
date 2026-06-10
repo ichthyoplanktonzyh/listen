@@ -157,6 +157,12 @@ pub struct WordProfile {
     pub display_form: String,
     pub status: Option<WordStatus>,
     pub updated_at_ms: u64,
+    #[serde(default)]
+    pub user_definition: Option<String>,
+    #[serde(default)]
+    pub personal_note: Option<String>,
+    #[serde(default)]
+    pub learning_updated_at_ms: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -260,6 +266,54 @@ pub struct DictionaryLookup {
     pub phonetics: Vec<DictionaryPhonetic>,
     pub provider: String,
     pub cached_at_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DictionaryProviderInfo {
+    pub id: String,
+    pub display_name: String,
+    pub supported_languages: Vec<String>,
+    pub provides_definitions: bool,
+    pub provides_phonetics: bool,
+    pub provides_audio: bool,
+    pub offline: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DictionaryProviderResult {
+    pub provider: DictionaryProviderInfo,
+    pub lookup: Option<DictionaryLookup>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DictionaryLookupBundle {
+    pub query: String,
+    pub normalized_lemma: String,
+    pub results: Vec<DictionaryProviderResult>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalVocabularyEntry {
+    pub word: String,
+    pub status: Option<WordStatus>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalVocabularyImport {
+    pub language: String,
+    pub entries: Vec<ExternalVocabularyEntry>,
+    pub default_status: Option<WordStatus>,
+    pub overwrite_existing: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct ExternalVocabularyImportSummary {
+    pub created: u64,
+    pub initialized: u64,
+    pub skipped: u64,
+    pub overwritten: u64,
+    pub invalid: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

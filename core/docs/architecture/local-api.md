@@ -37,6 +37,10 @@ Milestone 1.5 adds vocabulary-book, word-detail, portable export/import, and
 media-availability routes under the same compatible `/v1` namespace. Exported
 assets never include media bytes or require media files during import.
 
+Milestone 1.6 adds external word-list import and independent learning-content
+updates. Dictionary lookup now returns an ordered bundle of registered Provider
+results; one Provider failure does not fail the whole lookup.
+
 ## Deliberate Exclusions
 
 Play, pause, seek, position events, subtitle cursor updates, and loop control

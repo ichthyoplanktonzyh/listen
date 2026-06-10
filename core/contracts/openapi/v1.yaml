@@ -216,6 +216,20 @@ paths:
             schema: { $ref: "#/components/schemas/VocabularyAssetBundle" }
       responses:
         "200": { description: Assets merged }
+  /v1/vocabulary/import-external:
+    post:
+      operationId: importExternalVocabulary
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExternalVocabularyImport" }
+      responses:
+        "200":
+          description: External word list import summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExternalVocabularyImportSummary" }
   /v1/word-profiles/{profile_id}/details:
     get:
       operationId: wordDetails
@@ -224,6 +238,26 @@ paths:
       responses:
         "200":
           description: Profile, history and durable sources
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WordDetails" }
+  /v1/word-profiles/{profile_id}/learning-content:
+    put:
+      operationId: updateWordLearningContent
+      parameters:
+        - { name: profile_id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_definition: { type: [string, "null"] }
+                personal_note: { type: [string, "null"] }
+      responses:
+        "200":
+          description: Updated learning content and word details
           content:
             application/json:
               schema: { $ref: "#/components/schemas/WordDetails" }
@@ -268,13 +302,10 @@ paths:
           schema: { type: string }
       responses:
         "200":
-          description: Cached or online dictionary result; null when absent
+          description: Aggregated results from registered dictionary providers
           content:
             application/json:
-              schema:
-                anyOf:
-                  - $ref: "#/components/schemas/DictionaryLookup"
-                  - type: "null"
+              schema: { $ref: "#/components/schemas/DictionaryLookupBundle" }
         default:
           $ref: "#/components/responses/Error"
   /v1/sentences/{sentence_id}/diagnosis:
@@ -406,7 +437,7 @@ components:
           items: { $ref: "#/components/schemas/SubtitleSentence" }
     WordProfile:
       type: object
-      required: [id, language, lemma, normalized_lemma, display_form, status, updated_at_ms]
+      required: [id, language, lemma, normalized_lemma, display_form, status, updated_at_ms, user_definition, personal_note, learning_updated_at_ms]
       properties:
         id: { type: string }
         language: { type: string }
@@ -418,6 +449,9 @@ components:
             - enum: [unknown_meaning, known_not_recognized, known_recognized]
             - type: "null"
         updated_at_ms: { type: integer, minimum: 0 }
+        user_definition: { type: [string, "null"] }
+        personal_note: { type: [string, "null"] }
+        learning_updated_at_ms: { type: integer, minimum: 0 }
     UpdateWordProfile:
       type: object
       required: [language, lemma, display_form]
@@ -522,7 +556,7 @@ components:
       type: object
       required: [version, exported_at_ms, profiles, history, occurrences, observations]
       properties:
-        version: { const: 1 }
+        version: { enum: [1, 2] }
         exported_at_ms: { type: integer, minimum: 0 }
         profiles: { type: array, items: { $ref: "#/components/schemas/WordProfile" } }
         history: { type: array, items: { $ref: "#/components/schemas/WordStatusHistory" } }
@@ -552,6 +586,64 @@ components:
               region: { type: [string, "null"] }
         provider: { type: string }
         cached_at_ms: { type: integer, minimum: 0 }
+    DictionaryLookupBundle:
+      type: object
+      required: [query, normalized_lemma, results]
+      properties:
+        query: { type: string }
+        normalized_lemma: { type: string }
+        results:
+          type: array
+          items:
+            type: object
+            required: [provider, lookup, error]
+            properties:
+              provider:
+                type: object
+                required: [id, display_name, supported_languages, provides_definitions, provides_phonetics, provides_audio, offline]
+                properties:
+                  id: { type: string }
+                  display_name: { type: string }
+                  supported_languages: { type: array, items: { type: string } }
+                  provides_definitions: { type: boolean }
+                  provides_phonetics: { type: boolean }
+                  provides_audio: { type: boolean }
+                  offline: { type: boolean }
+              lookup:
+                anyOf:
+                  - $ref: "#/components/schemas/DictionaryLookup"
+                  - type: "null"
+              error: { type: [string, "null"] }
+    ExternalVocabularyImport:
+      type: object
+      required: [language, entries, default_status, overwrite_existing]
+      properties:
+        language: { type: string }
+        entries:
+          type: array
+          items:
+            type: object
+            required: [word, status]
+            properties:
+              word: { type: string }
+              status:
+                anyOf:
+                  - enum: [unknown_meaning, known_not_recognized, known_recognized]
+                  - type: "null"
+        default_status:
+          anyOf:
+            - enum: [unknown_meaning, known_not_recognized, known_recognized]
+            - type: "null"
+        overwrite_existing: { type: boolean }
+    ExternalVocabularyImportSummary:
+      type: object
+      required: [created, initialized, skipped, overwritten, invalid]
+      properties:
+        created: { type: integer, minimum: 0 }
+        initialized: { type: integer, minimum: 0 }
+        skipped: { type: integer, minimum: 0 }
+        overwritten: { type: integer, minimum: 0 }
+        invalid: { type: integer, minimum: 0 }
     SentenceDiagnosis:
       type: object
       required: [sentence_id, hints, unclassified_lemmas]

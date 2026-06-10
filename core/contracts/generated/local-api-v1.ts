@@ -85,6 +85,9 @@ export interface WordProfile extends UpdateWordProfile {
   normalized_lemma: string;
   status: WordStatus | null;
   updated_at_ms: number;
+  user_definition: string | null;
+  personal_note: string | null;
+  learning_updated_at_ms: number;
 }
 
 export class LocalApiV1 {
@@ -167,6 +170,17 @@ export class LocalApiV1 {
     return this.request(`/v1/word-profiles/${encodeURIComponent(profileId)}/details`);
   }
 
+  updateWordLearningContent(
+    profileId: string,
+    userDefinition: string | null,
+    personalNote: string | null,
+  ): Promise<unknown> {
+    return this.request(`/v1/word-profiles/${encodeURIComponent(profileId)}/learning-content`, {
+      method: "PUT",
+      body: JSON.stringify({ user_definition: userDefinition, personal_note: personalNote }),
+    });
+  }
+
   exportVocabulary(): Promise<unknown> {
     return this.request("/v1/vocabulary/export");
   }
@@ -175,6 +189,13 @@ export class LocalApiV1 {
     return this.request("/v1/vocabulary/import", {
       method: "POST",
       body: JSON.stringify(bundle),
+    });
+  }
+
+  importExternalVocabulary(input: unknown): Promise<unknown> {
+    return this.request("/v1/vocabulary/import-external", {
+      method: "POST",
+      body: JSON.stringify(input),
     });
   }
 
@@ -188,7 +209,7 @@ export class LocalApiV1 {
     });
   }
 
-  dictionaryLookup(language: string, lemma: string): Promise<unknown | null> {
+  dictionaryLookup(language: string, lemma: string): Promise<unknown> {
     const query = new URLSearchParams({ language, lemma });
     return this.request(`/v1/dictionary?${query}`);
   }
