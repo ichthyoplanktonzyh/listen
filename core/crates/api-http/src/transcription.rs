@@ -225,11 +225,19 @@ impl TranscriptionCoordinator {
                 "model is used by an active job",
             ));
         }
-        if let Some(model) = self.repository.get_model(id)?
+        if let Some(mut model) = self.repository.get_model(id)?
             && model.state == TranscriptionModelState::Installed
-            && let Some(path) = model.local_path
+            && let Some(path) = model.local_path.clone()
         {
             let _ = tokio::fs::remove_file(path).await;
+            model.local_path = None;
+            model.installed_bytes = 0;
+            model.state = TranscriptionModelState::Downloadable;
+            model.error = None;
+            model.updated_at_ms = now_ms();
+            self.repository.upsert_model(&model)?;
+            self.emit(EventName::TranscriptionModelChanged, &model);
+            return Ok(());
         }
         self.repository.delete_model(id)
     }
@@ -244,6 +252,7 @@ impl TranscriptionCoordinator {
             .ok_or(ApplicationError::NotFound("transcription model"))?;
         if model.state == TranscriptionModelState::Installing {
             model.state = TranscriptionModelState::Downloadable;
+            model.installed_bytes = 0;
             model.error = Some("Installation cancelled by user.".into());
             model.updated_at_ms = now_ms();
             self.repository.upsert_model(&model)?;
@@ -368,14 +377,21 @@ impl TranscriptionCoordinator {
             .repository
             .get_job(id)?
             .ok_or(ApplicationError::NotFound("transcription job"))?;
-        self.create_job(CreateJobRequest {
+        let mut job = self.clone().create_job(CreateJobRequest {
             media_id: old.media_id.as_str().into(),
             model_id: old.model_id.as_str().into(),
             destination: old.destination,
             purpose: old.purpose,
             language: old.requested_language,
             audio_track: old.audio_track,
-        })
+        })?;
+        if job.id != old.id && job.status == TranscriptionJobStatus::Queued {
+            job.retry_of_job_id = Some(old.id);
+            job.updated_at_ms = now_ms();
+            self.repository.update_job(&job)?;
+            self.emit(EventName::TranscriptionJobChanged, &job);
+        }
+        Ok(job)
     }
 
     async fn run_job(self: Arc<Self>, id: TranscriptionJobId) {
@@ -447,16 +463,31 @@ impl TranscriptionCoordinator {
             "-f".into(),
             wav.to_string_lossy().into_owned(),
             "-osrt".into(),
+            "-oj".into(),
             "-of".into(),
             output.to_string_lossy().into_owned(),
         ];
-        if let Some(language) = &job.requested_language {
-            whisper_args.extend(["-l".into(), language.clone()]);
-        }
+        whisper_args.extend([
+            "-l".into(),
+            job.requested_language
+                .clone()
+                .unwrap_or_else(|| "auto".into()),
+        ]);
         if job.purpose == TranscriptionPurpose::TranslateToEnglish {
             whisper_args.push("-tr".into());
         }
         self.run_command(&job.id, &whisper, &whisper_args).await?;
+        job.detected_language = tokio::fs::read(output.with_extension("json"))
+            .await
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+            .and_then(|value| {
+                value
+                    .pointer("/result/language")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned)
+            })
+            .or_else(|| job.requested_language.clone());
         self.transition(&mut job, TranscriptionJobStatus::Importing, 90)?;
         let srt = tokio::fs::read(output.with_extension("srt"))
             .await
@@ -465,7 +496,17 @@ impl TranscriptionCoordinator {
             media_id: job.media_id.clone(),
             source_name: format!("ASR-{}.srt", file_id(&model.display_name)),
             content: srt,
-            language: job.requested_language.clone().or_else(|| Some("en".into())),
+            language: if job.purpose == TranscriptionPurpose::TranslateToEnglish {
+                Some("en".into())
+            } else {
+                job.requested_language.clone()
+            },
+            identity_salt: Some(format!(
+                "{}:{}:{}",
+                job.provider_id,
+                job.model_id.as_str(),
+                job.model_revision
+            )),
         })?;
         self.repository.save_provenance(&SubtitleTrackProvenance {
             track_id: track.id.clone(),

@@ -1710,7 +1710,9 @@ mod tests {
         connection
             .execute_batch(include_str!("../migrations/0002_learning.sql"))
             .unwrap();
-        connection.execute_batch("PRAGMA foreign_keys=OFF;").unwrap();
+        connection
+            .execute_batch("PRAGMA foreign_keys=OFF;")
+            .unwrap();
         connection
             .execute_batch(include_str!("../migrations/0003_subtitle_identity.sql"))
             .unwrap();
@@ -1731,7 +1733,8 @@ mod tests {
         );
         assert_eq!(
             connection
-                .query_row("SELECT count(*) FROM transcription_jobs", [], |row| row.get::<_, u32>(0))
+                .query_row("SELECT count(*) FROM transcription_jobs", [], |row| row
+                    .get::<_, u32>(0))
                 .unwrap(),
             0
         );
@@ -1784,6 +1787,7 @@ mod tests {
             source_name: "timeline.srt".into(),
             content: include_bytes!("../../../testdata/subtitles/timeline.srt").to_vec(),
             language: Some("en".into()),
+            identity_salt: None,
         };
         let first_track = services.import_subtitle(subtitle.clone()).unwrap();
         let second_track = services.import_subtitle(subtitle).unwrap();
@@ -1882,6 +1886,7 @@ mod tests {
                 source_name: "timeline.srt".into(),
                 content: include_bytes!("../../../testdata/subtitles/timeline.srt").to_vec(),
                 language: Some("en".into()),
+                identity_salt: None,
             })
             .unwrap();
         let sentence = &track.sentences[0];

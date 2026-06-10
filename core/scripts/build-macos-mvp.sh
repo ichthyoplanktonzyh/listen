@@ -26,6 +26,8 @@ cp "$runtime/whisper-cli" "$runtime/ffmpeg" "$runtime/ffprobe" \
   "$app/Contents/Resources/runtime/"
 cp "$root/third_party/runtime/manifest.json" \
   "$app/Contents/Resources/runtime/manifest.json"
+cp "$root/third_party/runtime/THIRD_PARTY_NOTICES.md" \
+  "$app/Contents/Resources/runtime/THIRD_PARTY_NOTICES.md"
 codesign --force --deep --sign - "$app"
 
 mkdir -p "$root/dist"

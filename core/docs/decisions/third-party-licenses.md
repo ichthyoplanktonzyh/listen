@@ -15,8 +15,8 @@ This is an M0 inventory, not legal advice.
 | Free Dictionary API | Online definitions and phonetics | API described as free; server GPL-3.0; returned content provenance requires review before commercial distribution |
 | file_selector | Native file selection | BSD-3-Clause |
 | desktop_drop | Desktop file drag and drop | Apache-2.0 |
-| ffmpeg / ffprobe | Optional embedded text-subtitle extraction | Distribution build and codec license implications must be reviewed before bundling; M8 initially discovers a user-installed executable |
+| ffmpeg / ffprobe | Embedded text-subtitle extraction and ASR audio conversion | Milestone 1.7 bundles a reproducible 8.0.1 arm64 build with GPL, nonfree, and version3 features disabled; release script verifies configuration |
 | yt-dlp | Optional online-media URL resolution | Unlicense; supported sites and downloaded extractor dependencies may have separate terms; M8 does not bypass DRM or access controls |
-| whisper.cpp | Planned local ASR provider for generated learning subtitles | MIT; model provenance, model download terms, bundled binaries, Metal/Core ML artifacts, and release notices require review before distribution |
+| whisper.cpp | Local ASR provider for generated learning subtitles | Milestone 1.7 bundles v1.7.6 arm64 from pinned source commit under MIT; models are explicit checksum-verified user downloads and are not redistributed |
 
 No LLPlayer source code is copied into this repository.

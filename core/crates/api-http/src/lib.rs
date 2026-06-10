@@ -252,6 +252,7 @@ async fn import_subtitle(
             source_name,
             content,
             language: request.language,
+            identity_salt: None,
         })
         .map(Json)
         .map_err(ApiError::from)

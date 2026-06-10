@@ -17,10 +17,11 @@ git -C "$whisper" checkout --detach "$whisper_commit"
 cmake -S "$whisper" -B "$whisper/build-m17" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_OSX_ARCHITECTURES=arm64 \
+  -DBUILD_SHARED_LIBS=OFF \
   -DWHISPER_METAL=ON \
   -DWHISPER_BUILD_TESTS=OFF \
   -DWHISPER_BUILD_EXAMPLES=ON
-cmake --build "$whisper/build-m17" --config Release -j "$jobs"
+cmake --build "$whisper/build-m17" --config Release --target whisper-cli -j "$jobs"
 cp "$whisper/build-m17/bin/whisper-cli" "$output/whisper-cli"
 
 ffmpeg_archive="$build/ffmpeg-8.0.1.tar.xz"
@@ -44,7 +45,11 @@ fi
     --disable-version3 \
     --disable-doc \
     --disable-debug \
+    --disable-ffplay \
+    --disable-libxcb \
+    --disable-sdl2 \
     --disable-shared \
+    --disable-xlib \
     --enable-static
   make -j "$jobs" ffmpeg ffprobe
 )

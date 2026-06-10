@@ -1,6 +1,6 @@
 # 跨平台听力理解播放器 Roadmap
 
-> Milestone 1、1.5 与 1.6 状态：已完成。当前发布版本为 `0.4.1`；
+> Milestone 1、1.5、1.6 与 1.7 状态：已完成。当前发布版本为 `0.5.0`；
 > M7 移动端验证、Windows/Linux 和其他延期能力进入 Milestone 2。
 > 完成报告见 `docs/release/milestone-1.md`。
 
@@ -28,8 +28,9 @@
 后续验证移动端复用路径
 ```
 
-本文档不把真实语流分析、Whisper、OpenSubtitles、位图字幕学习交互和
-商业化纳入 Milestone 1。Milestone 1 已包含可选 `yt-dlp` 在线播放。
+本文档不把真实语流分析、OpenSubtitles、位图字幕学习交互和商业化纳入
+Milestone 1。Milestone 1 已包含可选 `yt-dlp` 在线播放；Milestone 1.7
+已增加本地 ASR 整段字幕生成。
 
 ## 2. 当前上下文快照
 
@@ -1196,7 +1197,8 @@ M8 退出条件。
 
 ### 14.8 Milestone 1.7：本地 Whisper 字幕生成
 
-> 状态：规划中。详细草案见 `docs/planning/milestone-1.7.md`。
+> 状态：已完成。2026-06-10 发布 0.5.0；验证见
+> `docs/verification/v0.5.0-report.md`。详细设计见 `docs/planning/milestone-1.7.md`。
 > ASR 与模型管理交互规范见 `docs/planning/milestone-1.7-asr-ui.md`。
 
 - 建立平台无关的 `TranscriptionProvider` 与持久化生成任务模型。

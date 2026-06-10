@@ -1,6 +1,6 @@
 # ADR 0006: Transcription Provider And Model Boundaries
 
-- Status: Proposed for Milestone 1.7
+- Status: Accepted in Milestone 1.7
 - Date: 2026-06-10
 
 ## Context

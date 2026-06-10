@@ -107,8 +107,8 @@ and choose results without losing the previous version.
 
 ### First provider
 
-The first provider uses a separately installed or application-managed
-`whisper-cli` from whisper.cpp:
+The first provider uses the application-bundled, version-pinned `whisper-cli`
+from whisper.cpp:
 
 1. Resolve and validate `ffmpeg`, `whisper-cli`, and the selected model.
 2. Extract the selected audio track to a temporary 16 kHz mono WAV file.
@@ -117,10 +117,9 @@ The first provider uses a separately installed or application-managed
 5. Import the completed result through the existing subtitle core.
 6. Delete temporary audio and output files after successful persistence.
 
-whisper.cpp is a good macOS-first candidate because it supports Apple Silicon,
-Metal, and Core ML and uses the MIT license. Bundling remains a separate release
-and license review decision; the first implementation may discover a
-user-installed executable.
+whisper.cpp is the macOS-first provider because it supports Apple Silicon and
+Metal and uses the MIT license. The release also bundles a pinned LGPL-only
+FFmpeg/ffprobe build. Models are installed explicitly through Model Manager.
 
 ### Durable job model
 
@@ -190,10 +189,10 @@ durable-job contracts and do not require another public architecture rewrite.
 2. Whole-file local transcription and automatic persistence.
 3. Model installation, selection, removal, validation, and diagnostics UI.
 4. Progress, cancellation, retry, generated-track selection, and SRT export.
-5. Transcript import plus forced alignment.
-6. Incremental generation from the current playback position and partial
+5. Incremental generation from the current playback position and partial
    segment display.
-7. Shared running jobs for dual subtitle destinations.
+6. Shared running jobs for dual subtitle destinations.
+7. Transcript import plus forced alignment.
 8. Additional providers such as embedded whisper.cpp or Faster-Whisper.
 9. Signed remote model catalogs and richer model-family capabilities.
 
@@ -203,6 +202,7 @@ durable-job contracts and do not require another public architecture rewrite.
 - No microphone or live-stream transcription.
 - No speaker diarization.
 - No word-level or phoneme-level timing contract yet.
+- No transcript forced alignment in Milestone 1.7.
 - No automatic translation other than provider-supported translate-to-English.
 - No silent background downloads without explicit user action.
 - No assumption that future providers or models belong to the Whisper family.

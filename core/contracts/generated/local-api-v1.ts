@@ -131,7 +131,7 @@ export class LocalApiV1 {
   }
 
   exportSubtitle(trackId: string): Promise<string> {
-    return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}/export?format=srt`);
+    return this.requestText(`/v1/subtitles/${encodeURIComponent(trackId)}/export?format=srt`);
   }
 
   transcriptionProviders(): Promise<unknown[]> {
@@ -266,5 +266,13 @@ export class LocalApiV1 {
     const response = await fetch(`${this.baseUrl}${path}`, { ...init, headers });
     if (!response.ok) throw (await response.json()) as ErrorBody;
     return (await response.json()) as T;
+  }
+
+  private async requestText(path: string): Promise<string> {
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      headers: { authorization: `Bearer ${this.token}` },
+    });
+    if (!response.ok) throw (await response.json()) as ErrorBody;
+    return response.text();
   }
 }

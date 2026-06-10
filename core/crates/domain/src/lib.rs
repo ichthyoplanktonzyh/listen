@@ -312,6 +312,17 @@ pub struct TranscriptionProviderInfo {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TranscriptionRuntimeDescriptor {
+    pub id: String,
+    pub provider_id: String,
+    pub version: String,
+    pub available: bool,
+    pub supports_translation: bool,
+    pub supported_model_families: Vec<String>,
+    pub diagnostic: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TranscriptionModelDescriptor {
     pub id: TranscriptionModelId,
     pub provider_id: String,
@@ -344,6 +355,29 @@ pub enum TranscriptionDestination {
 pub enum TranscriptionPurpose {
     Transcribe,
     TranslateToEnglish,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TranscriptionProfile {
+    pub preferred_provider_id: Option<String>,
+    pub quality: TranscriptionQuality,
+    pub language: Option<String>,
+    pub purpose: TranscriptionPurpose,
+    pub destination: TranscriptionDestination,
+    pub audio_track: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TranscriptionSegment {
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TranscriptionResult {
+    pub detected_language: Option<String>,
+    pub segments: Vec<TranscriptionSegment>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -2,7 +2,7 @@
 
 Clean-room, macOS-first rewrite of a listening-comprehension media player.
 
-**Current release:** Milestone 1.6 complete, version `0.4.1`.
+**Current release:** Milestone 1.7 complete, version `0.5.0`.
 
 The Milestone 1 MVP targets macOS Apple Silicon and includes the core learning
 loop, dual text subtitles, drag and drop, configurable subtitle presentation,
@@ -19,6 +19,11 @@ definitions and notes, and a provider-agnostic multi-dictionary query boundary.
 
 Version 0.4.1 adds draggable subtitle placement and independent font controls,
 while fixing the video texture black-screen regression found during validation.
+
+Version 0.5.0 adds local whole-media ASR subtitle generation with a replaceable
+provider/model contract, durable background jobs, explicit model management,
+generated-track provenance, SRT export, and bundled macOS Apple Silicon
+whisper.cpp/FFmpeg runtimes. Models remain explicit user downloads.
 
 ## Repository layout
 
@@ -48,6 +53,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 ./scripts/verify-m1.sh
 ./scripts/verify-m15.sh
 ./scripts/verify-m16.sh
+./scripts/verify-m17.sh
 ./scripts/build-macos-mvp.sh
 ./scripts/verify-mvp.sh
 ```
@@ -58,6 +64,10 @@ data, and lifecycle boundaries.
 
 The macOS Apple Silicon release artifact is written to
 `dist/LLPlayerNext-macos-arm64.zip`.
+
+Build and license-check the pinned ASR runtime with
+`./scripts/build-asr-runtime.sh`. Runtime provenance and redistribution notes
+are documented in `docs/release/asr-runtime.md`.
 
 No license is granted for this repository at this stage. The old LLPlayer
 repository is a behavioral reference only; source code is not copied into this

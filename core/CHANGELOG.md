@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.0 - 2026-06-10
+
+Milestone 1.7 local ASR learning subtitle release.
+
+- Provider-, runtime-, model-, and profile-neutral transcription contracts.
+- Durable single-concurrency whole-media jobs with progress, cancellation,
+  retry, restart interruption handling, provenance, and idempotent completion.
+- whisper.cpp model catalog, explicit verified downloads, custom model
+  registration, model management, and persistent job center.
+- Generated subtitles become ordinary interactive learning tracks and support
+  SRT export.
+- Reproducible macOS arm64 whisper.cpp and LGPL-only FFmpeg runtime build,
+  license validation, application bundling, and deterministic fake-runtime
+  acceptance test.
+
 ## 0.4.1 - 2026-06-10
 
 - Draggable viewport-relative subtitle placement, independent primary/secondary

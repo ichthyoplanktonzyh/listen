@@ -401,6 +401,7 @@ impl AppServices {
             source_name: input.source_name,
             content: input.content,
             language,
+            identity_salt: input.identity_salt,
         })?;
         if let Some(existing) = self
             .subtitles
@@ -586,6 +587,7 @@ pub struct ImportSubtitle {
     pub source_name: String,
     pub content: Vec<u8>,
     pub language: Option<String>,
+    pub identity_salt: Option<String>,
 }
 
 #[derive(Debug, Error)]

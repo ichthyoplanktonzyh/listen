@@ -33,12 +33,19 @@ pub struct ImportSubtitle {
     pub source_name: String,
     pub content: Vec<u8>,
     pub language: Option<LanguageCode>,
+    pub identity_salt: Option<String>,
 }
 
 pub fn import(input: ImportSubtitle) -> Result<SubtitleTrack, SubtitleError> {
     let text = decode_text(&input.content)?;
     let format = SubtitleFormat::from_name(&input.source_name)?;
-    let fingerprint = hex::encode(Sha256::digest(&input.content));
+    let fingerprint = hex::encode(Sha256::digest(
+        [
+            input.content.as_slice(),
+            input.identity_salt.as_deref().unwrap_or("").as_bytes(),
+        ]
+        .concat(),
+    ));
     let track_id = SubtitleTrackId::from_fingerprint(
         "subtitle-track",
         &format!("{}:{fingerprint}", input.media_id.as_str()),
@@ -484,6 +491,7 @@ mod tests {
             source_name: "a.srt".into(),
             content: utf16.clone(),
             language: Some(LanguageCode::parse("en").unwrap()),
+            identity_salt: None,
         };
         let first = import(input()).unwrap();
         let second = import(input()).unwrap();
