@@ -3,7 +3,7 @@ import 'dart:io';
 
 class AppSettings {
   const AppSettings({
-    this.version = 3,
+    this.version = 4,
     this.rate = 1,
     this.volume = 100,
     this.primarySubtitleOffsetMs = 0,
@@ -13,9 +13,12 @@ class AppSettings {
     this.statusStylesVisible = true,
     this.primaryFontSize = 1,
     this.secondaryFontSize = 1,
+    this.primaryFontFamily = 'system',
+    this.secondaryFontFamily = 'system',
     this.subtitlePreset = 'learning',
     this.language = 'system',
-    this.subtitleBottomPadding = 48,
+    this.subtitlePositionX = 0.5,
+    this.subtitlePositionY = 0.82,
     this.subtitleBackgroundOpacity = 0.72,
     this.primaryColor = 0xffffffff,
     this.secondaryColor = 0xffb8d8ff,
@@ -27,9 +30,15 @@ class AppSettings {
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     final version = json['version'] as int?;
-    if (version != 1 && version != 2 && version != 3) {
+    if (version != 1 && version != 2 && version != 3 && version != 4) {
       return const AppSettings();
     }
+    final legacyBottomPadding = _number(
+      json['subtitle_bottom_padding'],
+      48,
+      0,
+      400,
+    );
     return AppSettings(
       rate: _number(json['rate'], 1, 0.25, 4),
       volume: _number(json['volume'], 100, 0, 100),
@@ -43,26 +52,26 @@ class AppSettings {
       secondarySubtitlesVisible:
           json['secondary_subtitles_visible'] as bool? ?? true,
       statusStylesVisible: json['status_styles_visible'] as bool? ?? true,
-      primaryFontSize: version == 3
-          ? _number(json['primary_font_size'], 1, 0.7, 1.4)
+      primaryFontSize: version == 3 || version == 4
+          ? _number(json['primary_font_size'], 1, 0.5, 2)
           : (_number(json['primary_font_size'], 24, 12, 72) / 24).clamp(
-              0.7,
-              1.4,
+              0.5,
+              2.0,
             ),
-      secondaryFontSize: version == 3
-          ? _number(json['secondary_font_size'], 1, 0.7, 1.4)
+      secondaryFontSize: version == 3 || version == 4
+          ? _number(json['secondary_font_size'], 1, 0.5, 2)
           : (_number(json['secondary_font_size'], 18, 10, 64) / 18).clamp(
-              0.7,
-              1.4,
+              0.5,
+              2.0,
             ),
+      primaryFontFamily: json['primary_font_family'] as String? ?? 'system',
+      secondaryFontFamily: json['secondary_font_family'] as String? ?? 'system',
       subtitlePreset: json['subtitle_preset'] as String? ?? 'learning',
       language: json['language'] as String? ?? 'system',
-      subtitleBottomPadding: _number(
-        json['subtitle_bottom_padding'],
-        48,
-        0,
-        400,
-      ),
+      subtitlePositionX: _number(json['subtitle_position_x'], 0.5, 0, 1),
+      subtitlePositionY: version == 4
+          ? _number(json['subtitle_position_y'], 0.82, 0, 1)
+          : (1 - legacyBottomPadding / 600).clamp(0.05, 0.95),
       subtitleBackgroundOpacity: _number(
         json['subtitle_background_opacity'],
         0.72,
@@ -88,9 +97,12 @@ class AppSettings {
   final bool statusStylesVisible;
   final double primaryFontSize;
   final double secondaryFontSize;
+  final String primaryFontFamily;
+  final String secondaryFontFamily;
   final String subtitlePreset;
   final String language;
-  final double subtitleBottomPadding;
+  final double subtitlePositionX;
+  final double subtitlePositionY;
   final double subtitleBackgroundOpacity;
   final int primaryColor;
   final int secondaryColor;
@@ -100,12 +112,15 @@ class AppSettings {
   final String ytDlpPath;
 
   static File get file => File(
-    '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v3.json',
+    '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v4.json',
   );
 
   static Future<AppSettings> load() async {
     for (final candidate in [
       file,
+      File(
+        '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v3.json',
+      ),
       File(
         '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v2.json',
       ),
@@ -138,9 +153,12 @@ class AppSettings {
         'status_styles_visible': statusStylesVisible,
         'primary_font_size': primaryFontSize,
         'secondary_font_size': secondaryFontSize,
+        'primary_font_family': primaryFontFamily,
+        'secondary_font_family': secondaryFontFamily,
         'subtitle_preset': subtitlePreset,
         'language': language,
-        'subtitle_bottom_padding': subtitleBottomPadding,
+        'subtitle_position_x': subtitlePositionX,
+        'subtitle_position_y': subtitlePositionY,
         'subtitle_background_opacity': subtitleBackgroundOpacity,
         'primary_color': primaryColor,
         'secondary_color': secondaryColor,

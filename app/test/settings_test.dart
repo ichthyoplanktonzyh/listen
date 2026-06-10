@@ -34,13 +34,38 @@ void main() {
       'version': 1,
       'subtitle_offset_ms': -125,
     });
-    expect(settings.version, 3);
+    expect(settings.version, 4);
     expect(settings.primarySubtitleOffsetMs, -125);
+  });
+
+  test('migrates version 3 subtitle placement and supports v4 fonts', () {
+    final migrated = AppSettings.fromJson({
+      'version': 3,
+      'subtitle_bottom_padding': 60,
+    });
+    expect(migrated.subtitlePositionX, 0.5);
+    expect(migrated.subtitlePositionY, 0.9);
+
+    final current = AppSettings.fromJson({
+      'version': 4,
+      'primary_font_size': 1.8,
+      'secondary_font_size': 0.6,
+      'primary_font_family': 'serif',
+      'secondary_font_family': 'monospace',
+      'subtitle_position_x': 0.2,
+      'subtitle_position_y': 0.3,
+    });
+    expect(current.primaryFontSize, 1.8);
+    expect(current.secondaryFontSize, 0.6);
+    expect(current.primaryFontFamily, 'serif');
+    expect(current.secondaryFontFamily, 'monospace');
+    expect(current.subtitlePositionX, 0.2);
+    expect(current.subtitlePositionY, 0.3);
   });
 
   test('falls back safely for an unsupported settings version', () {
     final settings = AppSettings.fromJson({'version': 999, 'rate': 4});
-    expect(settings.version, 3);
+    expect(settings.version, 4);
     expect(settings.rate, 1);
   });
 }

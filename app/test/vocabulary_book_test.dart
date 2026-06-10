@@ -35,6 +35,24 @@ void main() {
     expect(longCompact, lessThan(normal));
   });
 
+  test('subtitle dragging uses normalized viewport coordinates and clamps', () {
+    final moved = moveSubtitlePosition(
+      current: const Offset(0.5, 0.8),
+      delta: const Offset(100, -100),
+      viewport: const Size(1000, 500),
+    );
+    expect(moved.dx, closeTo(0.6, 0.0001));
+    expect(moved.dy, closeTo(0.6, 0.0001));
+    expect(
+      moveSubtitlePosition(
+        current: const Offset(0.95, 0.05),
+        delta: const Offset(100, -100),
+        viewport: const Size(1000, 500),
+      ),
+      const Offset(1, 0),
+    );
+  });
+
   test('external word list parser handles TXT and CSV status values', () {
     expect(parseExternalWordList('hello\n\nworld\n', csv: false), [
       {'word': 'hello', 'status': null},

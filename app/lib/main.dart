@@ -47,6 +47,15 @@ double responsiveSubtitleSize({
   return base * (secondary ? 0.72 : 1) * scale * presetFactor * lengthFactor;
 }
 
+Offset moveSubtitlePosition({
+  required Offset current,
+  required Offset delta,
+  required Size viewport,
+}) => Offset(
+  (current.dx + delta.dx / viewport.width).clamp(0.0, 1.0),
+  (current.dy + delta.dy / viewport.height).clamp(0.0, 1.0),
+);
+
 List<Map<String, dynamic>> parseExternalWordList(
   String content, {
   required bool csv,
@@ -159,9 +168,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   double volume = 100;
   double primaryFontSize = 1;
   double secondaryFontSize = 1;
+  String primaryFontFamily = 'system';
+  String secondaryFontFamily = 'system';
   String subtitlePreset = 'learning';
   String language = 'system';
-  double subtitleBottomPadding = 48;
+  double subtitlePositionX = 0.5;
+  double subtitlePositionY = 0.82;
   double subtitleBackgroundOpacity = 0.72;
   Color primaryColor = Colors.white;
   Color secondaryColor = const Color(0xffb8d8ff);
@@ -243,10 +255,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       statusStylesVisible = settings.statusStylesVisible;
       primaryFontSize = settings.primaryFontSize;
       secondaryFontSize = settings.secondaryFontSize;
+      primaryFontFamily = settings.primaryFontFamily;
+      secondaryFontFamily = settings.secondaryFontFamily;
       subtitlePreset = settings.subtitlePreset;
       language = settings.language;
       appLanguage.value = language;
-      subtitleBottomPadding = settings.subtitleBottomPadding;
+      subtitlePositionX = settings.subtitlePositionX;
+      subtitlePositionY = settings.subtitlePositionY;
       subtitleBackgroundOpacity = settings.subtitleBackgroundOpacity;
       primaryColor = Color(settings.primaryColor);
       secondaryColor = Color(settings.secondaryColor);
@@ -269,9 +284,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     statusStylesVisible: statusStylesVisible,
     primaryFontSize: primaryFontSize,
     secondaryFontSize: secondaryFontSize,
+    primaryFontFamily: primaryFontFamily,
+    secondaryFontFamily: secondaryFontFamily,
     subtitlePreset: subtitlePreset,
     language: language,
-    subtitleBottomPadding: subtitleBottomPadding,
+    subtitlePositionX: subtitlePositionX,
+    subtitlePositionY: subtitlePositionY,
     subtitleBackgroundOpacity: subtitleBackgroundOpacity,
     primaryColor: primaryColor.toARGB32(),
     secondaryColor: secondaryColor.toARGB32(),
@@ -637,26 +655,65 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 _settingSlider(
                   l.text('subtitleScale'),
                   primaryFontSize,
-                  0.7,
-                  1.4,
+                  0.5,
+                  2,
                   (value) => setState(() => primaryFontSize = value),
+                  refresh,
+                ),
+                _fontSelector(
+                  l.text('primaryFont'),
+                  primaryFontFamily,
+                  (value) => setState(() => primaryFontFamily = value),
                   refresh,
                 ),
                 _settingSlider(
                   l.text('secondaryScale'),
                   secondaryFontSize,
-                  0.7,
-                  1.4,
+                  0.5,
+                  2,
                   (value) => setState(() => secondaryFontSize = value),
+                  refresh,
+                ),
+                _fontSelector(
+                  l.text('secondaryFont'),
+                  secondaryFontFamily,
+                  (value) => setState(() => secondaryFontFamily = value),
+                  refresh,
+                ),
+                Text(
+                  l.text('dragSubtitleHint'),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                _settingSlider(
+                  l.text('horizontalPosition'),
+                  subtitlePositionX,
+                  0,
+                  1,
+                  (value) => setState(() => subtitlePositionX = value),
                   refresh,
                 ),
                 _settingSlider(
                   l.text('verticalPosition'),
-                  subtitleBottomPadding,
+                  subtitlePositionY,
                   0,
-                  400,
-                  (value) => setState(() => subtitleBottomPadding = value),
+                  1,
+                  (value) => setState(() => subtitlePositionY = value),
                   refresh,
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        subtitlePositionX = 0.5;
+                        subtitlePositionY = 0.82;
+                      });
+                      refresh(() {});
+                      unawaited(_saveSettings());
+                    },
+                    icon: const Icon(Icons.restart_alt),
+                    label: Text(l.text('resetSubtitlePosition')),
+                  ),
                 ),
                 _settingSlider(
                   l.text('backgroundOpacity'),
@@ -779,6 +836,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
           onSelected: (_) => update(color),
         ),
     ],
+  );
+
+  Widget _fontSelector(
+    String label,
+    String value,
+    ValueChanged<String> update,
+    StateSetter refresh,
+  ) => DropdownButtonFormField<String>(
+    initialValue: value,
+    decoration: InputDecoration(labelText: label),
+    items: [
+      DropdownMenuItem(value: 'system', child: Text(l.text('systemFont'))),
+      DropdownMenuItem(value: 'serif', child: Text(l.text('serifFont'))),
+      DropdownMenuItem(
+        value: 'monospace',
+        child: Text(l.text('monospaceFont')),
+      ),
+    ],
+    onChanged: (next) {
+      if (next == null) return;
+      update(next);
+      refresh(() {});
+      unawaited(_saveSettings());
+    },
   );
 
   Future<void> _markFirstWord(String? wordStatus) async {
@@ -1337,8 +1418,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   child: Row(
                     children: [
                       Expanded(flex: 3, child: _playerSurface()),
-                      if (subtitlesVisible || selectedWordDetails != null)
-                        SizedBox(width: transcriptWidth, child: _sidePanel()),
+                      SizedBox(width: transcriptWidth, child: _sidePanel()),
                     ],
                   ),
                 ),
@@ -1371,90 +1451,125 @@ class _PlayerScreenState extends State<PlayerScreen> {
           : subtitlePreset == 'compact'
           ? 0.3
           : 1.0;
-      return Stack(
-        alignment: Alignment.bottomCenter,
-        children: [
-          Positioned.fill(
-            child: ColoredBox(
-              color: Colors.black,
-              child: Video(
-                controller: adapter.videoController,
-                controls: NoVideoControls,
+      final subtitlePosition = Offset(subtitlePositionX, subtitlePositionY);
+      return SizedBox.expand(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: ColoredBox(
+                color: Colors.black,
+                child: Video(
+                  controller: adapter.videoController,
+                  controls: NoVideoControls,
+                ),
               ),
             ),
-          ),
-          if (subtitlesVisible &&
-              (currentPrimaryCue != null ||
-                  (secondarySubtitlesVisible && currentSecondaryCue != null)))
-            Padding(
-              padding: EdgeInsets.fromLTRB(32, 32, 32, subtitleBottomPadding),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: constraints.maxWidth * 0.82,
+            if (subtitlesVisible &&
+                (currentPrimaryCue != null ||
+                    (secondarySubtitlesVisible && currentSecondaryCue != null)))
+              Align(
+                alignment: Alignment(
+                  subtitlePosition.dx * 2 - 1,
+                  subtitlePosition.dy * 2 - 1,
                 ),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(
-                      alpha: subtitleBackgroundOpacity * backgroundFactor,
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: subtitlePreset == 'compact' ? 10 : 18,
-                      vertical: subtitlePreset == 'compact' ? 6 : 12,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (currentPrimaryCue != null)
-                          GestureDetector(
-                            onTap: () => _seekCue(currentPrimaryCue),
-                            child: TokenLine(
-                              cue: currentPrimaryCue!,
-                              profiles: wordProfiles,
-                              showStyles: statusStylesVisible,
-                              fontSize: primarySize,
-                              baseColor: primaryColor,
-                              onWord: _openWord,
-                            ),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.move,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onPanUpdate: (details) => setState(() {
+                      final moved = moveSubtitlePosition(
+                        current: Offset(subtitlePositionX, subtitlePositionY),
+                        delta: details.delta,
+                        viewport: constraints.biggest,
+                      );
+                      subtitlePositionX = moved.dx;
+                      subtitlePositionY = moved.dy;
+                    }),
+                    onPanEnd: (_) => unawaited(_saveSettings()),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: constraints.maxWidth * 0.82,
+                      ),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(
+                            alpha: subtitleBackgroundOpacity * backgroundFactor,
                           ),
-                        if (secondarySubtitlesVisible &&
-                            currentSecondaryCue != null)
-                          GestureDetector(
-                            onTap: () => adapter.seek(
-                              secondaryCursor.mediaStart(currentSecondaryCue!),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.only(top: 6),
-                              child: Text(
-                                currentSecondaryCue!.text,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: secondarySize,
-                                  color: secondaryColor,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: subtitlePreset == 'compact' ? 10 : 18,
+                            vertical: subtitlePreset == 'compact' ? 6 : 12,
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (currentPrimaryCue != null)
+                                GestureDetector(
+                                  onTap: () => _seekCue(currentPrimaryCue),
+                                  child: TokenLine(
+                                    cue: currentPrimaryCue!,
+                                    profiles: wordProfiles,
+                                    showStyles: statusStylesVisible,
+                                    fontSize: primarySize,
+                                    fontFamily: _subtitleFont(
+                                      primaryFontFamily,
+                                    ),
+                                    baseColor: primaryColor,
+                                    onWord: _openWord,
+                                  ),
                                 ),
-                              ),
-                            ),
+                              if (secondarySubtitlesVisible &&
+                                  currentSecondaryCue != null)
+                                GestureDetector(
+                                  onTap: () => adapter.seek(
+                                    secondaryCursor.mediaStart(
+                                      currentSecondaryCue!,
+                                    ),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Text(
+                                      currentSecondaryCue!.text,
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: secondarySize,
+                                        fontFamily: _subtitleFont(
+                                          secondaryFontFamily,
+                                        ),
+                                        color: secondaryColor,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
-                      ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          if (mediaPath == null)
-            Center(
-              child: FilledButton.icon(
-                onPressed: _openMedia,
-                icon: const Icon(Icons.folder_open),
-                label: Text(l.text('openVideoAudio')),
+            if (mediaPath == null)
+              Center(
+                child: FilledButton.icon(
+                  onPressed: _openMedia,
+                  icon: const Icon(Icons.folder_open),
+                  label: Text(l.text('openVideoAudio')),
+                ),
               ),
-            ),
-        ],
+          ],
+        ),
       );
     },
   );
+
+  String? _subtitleFont(String value) => switch (value) {
+    'serif' => 'Georgia',
+    'monospace' => 'Menlo',
+    _ => null,
+  };
 
   Widget _sidePanel() => Material(
     color: const Color(0xff151a20),
@@ -2318,6 +2433,7 @@ class TokenLine extends StatelessWidget {
     required this.showStyles,
     required this.onWord,
     this.fontSize = 15,
+    this.fontFamily,
     this.baseColor,
   });
 
@@ -2325,6 +2441,7 @@ class TokenLine extends StatelessWidget {
   final Map<String, Map<String, dynamic>> profiles;
   final bool showStyles;
   final double fontSize;
+  final String? fontFamily;
   final Color? baseColor;
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
 
@@ -2351,7 +2468,11 @@ class TokenLine extends StatelessWidget {
   );
 
   TextStyle _style(BuildContext context, String? status) {
-    final base = TextStyle(fontSize: fontSize, color: baseColor);
+    final base = TextStyle(
+      fontSize: fontSize,
+      fontFamily: fontFamily,
+      color: baseColor,
+    );
     if (!showStyles || status == null) return base;
     return switch (status) {
       'unknown_meaning' => base.copyWith(
