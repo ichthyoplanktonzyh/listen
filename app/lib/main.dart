@@ -19,6 +19,7 @@ import 'player_adapter.dart';
 import 'settings.dart';
 import 'timeline.dart';
 import 'transcription_ui.dart';
+import 'm18_ui.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -185,6 +186,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String transcriptionQuality = 'balanced';
   String transcriptionLanguage = 'auto';
   String transcriptionDestination = 'primary';
+  String openSubtitlesApiKey = '';
   List<AudioTrack> audioTracks = const [];
   String? selectedAudioId;
   List<media.SubtitleTrack> embeddedSubtitleTracks = const [];
@@ -276,6 +278,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       transcriptionQuality = settings.transcriptionQuality;
       transcriptionLanguage = settings.transcriptionLanguage;
       transcriptionDestination = settings.transcriptionDestination;
+      openSubtitlesApiKey = settings.openSubtitlesApiKey;
     });
     await adapter.setRate(rate);
     await adapter.setVolume(volume);
@@ -307,6 +310,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     transcriptionQuality: transcriptionQuality,
     transcriptionLanguage: transcriptionLanguage,
     transcriptionDestination: transcriptionDestination,
+    openSubtitlesApiKey: openSubtitlesApiKey,
   ).save();
 
   Future<void> _connectApi() async {
@@ -666,6 +670,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final ffmpegController = TextEditingController(text: ffmpegPath);
     final ffprobeController = TextEditingController(text: ffprobePath);
     final ytDlpController = TextEditingController(text: ytDlpPath);
+    final openSubtitlesController = TextEditingController(
+      text: openSubtitlesApiKey,
+    );
     await showDialog<void>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -914,6 +921,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     labelText: 'yt-dlp path (auto-detect when empty)',
                   ),
                 ),
+                TextField(
+                  controller: openSubtitlesController,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: l.text('openSubtitlesApiKey'),
+                  ),
+                ),
               ],
             ),
           ),
@@ -928,6 +942,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ffmpegPath = ffmpegController.text.trim();
                   ffprobePath = ffprobeController.text.trim();
                   ytDlpPath = ytDlpController.text.trim();
+                  openSubtitlesApiKey = openSubtitlesController.text.trim();
                 });
                 unawaited(_saveSettings());
                 Navigator.pop(context);
@@ -941,6 +956,104 @@ class _PlayerScreenState extends State<PlayerScreen> {
     ffmpegController.dispose();
     ffprobeController.dispose();
     ytDlpController.dispose();
+    openSubtitlesController.dispose();
+  }
+
+  Future<void> _openLearningAssets() async {
+    if (api == null) return;
+    final occurrence = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(builder: (_) => LearningAssetsScreen(api: api!)),
+    );
+    if (occurrence != null) await _playOccurrence(occurrence);
+  }
+
+  Future<void> _openLearningResources() async {
+    if (api == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => LearningResourceScreen(api: api!)),
+    );
+  }
+
+  Future<void> _showCurrentPhraseCandidates() async {
+    final cue = currentPrimaryCue;
+    if (api == null || cue == null || mediaFingerprint == null) return;
+    await showPhraseCandidates(
+      context: context,
+      api: api!,
+      sentenceId: cue.id,
+      source: {
+        'media_id': mediaId,
+        'sentence_id': cue.id,
+        'sentence_text': cue.text,
+        'media_title': mediaTitle ?? '',
+        'media_fingerprint': mediaFingerprint,
+        'start_ms': cue.start.inMilliseconds,
+        'end_ms': cue.end.inMilliseconds,
+      },
+    );
+  }
+
+  Future<void> _correctCurrentLemma() async {
+    final token = selectedToken;
+    if (api == null || token?.normalized == null) return;
+    final controller = TextEditingController(text: token!.normalized);
+    final corrected = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Correct lemma'),
+        content: TextField(controller: controller),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l.text('cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: Text(l.text('save')),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (corrected == null || corrected.isEmpty) return;
+    await api!.correctLemma(token.normalized!, corrected);
+    if (mounted) setState(() => status = l.text('lemmaCorrectionSaved'));
+  }
+
+  Future<void> _searchOpenSubtitles() async {
+    if (api == null || mediaId == null) return;
+    if (openSubtitlesApiKey.isEmpty) {
+      setState(() => status = l.text('configureOpenSubtitles'));
+      return;
+    }
+    final path = await showOpenSubtitlesSearch(
+      context: context,
+      api: api!,
+      apiKey: openSubtitlesApiKey,
+      initialTitle: mediaTitle ?? '',
+      initialFilename: mediaPath == null
+          ? ''
+          : mediaPath!.split(Platform.pathSeparator).last,
+      mediaPath: mediaPath,
+    );
+    if (path == null || !mounted) return;
+    final secondary = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l.text('openSubtitles')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l.text('usePrimary')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l.text('useSecondary')),
+          ),
+        ],
+      ),
+    );
+    if (secondary != null) await _openSubtitlePath(path, secondary: secondary);
   }
 
   Widget _settingSlider(
@@ -1562,6 +1675,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 if (value == 'transcription') {
                   unawaited(_openTranscriptionCenter());
                 }
+                if (value == 'learning-assets') {
+                  unawaited(_openLearningAssets());
+                }
+                if (value == 'learning-resources') {
+                  unawaited(_openLearningResources());
+                }
+                if (value == 'phrase-candidates') {
+                  unawaited(_showCurrentPhraseCandidates());
+                }
+                if (value == 'correct-lemma') unawaited(_correctCurrentLemma());
+                if (value == 'opensubtitles') {
+                  unawaited(_searchOpenSubtitles());
+                }
               },
               itemBuilder: (_) => [
                 PopupMenuItem(
@@ -1592,6 +1718,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 PopupMenuItem(
                   value: 'transcription',
                   child: Text(l.text('transcriptionCenter')),
+                ),
+                PopupMenuItem(
+                  value: 'learning-assets',
+                  child: Text(l.text('learningAssets')),
+                ),
+                PopupMenuItem(
+                  value: 'learning-resources',
+                  child: Text(l.text('resources')),
+                ),
+                PopupMenuItem(
+                  value: 'phrase-candidates',
+                  child: Text(l.text('phraseCandidates')),
+                ),
+                const PopupMenuItem(
+                  value: 'correct-lemma',
+                  child: Text('Correct selected lemma'),
+                ),
+                PopupMenuItem(
+                  value: 'opensubtitles',
+                  child: Text(l.text('openSubtitles')),
                 ),
               ],
             ),

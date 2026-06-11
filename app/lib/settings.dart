@@ -3,7 +3,7 @@ import 'dart:io';
 
 class AppSettings {
   const AppSettings({
-    this.version = 5,
+    this.version = 6,
     this.rate = 1,
     this.volume = 100,
     this.primarySubtitleOffsetMs = 0,
@@ -29,6 +29,7 @@ class AppSettings {
     this.transcriptionQuality = 'balanced',
     this.transcriptionLanguage = 'auto',
     this.transcriptionDestination = 'primary',
+    this.openSubtitlesApiKey = '',
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
@@ -37,7 +38,8 @@ class AppSettings {
         version != 2 &&
         version != 3 &&
         version != 4 &&
-        version != 5) {
+        version != 5 &&
+        version != 6) {
       return const AppSettings();
     }
     final legacyBottomPadding = _number(
@@ -59,13 +61,13 @@ class AppSettings {
       secondarySubtitlesVisible:
           json['secondary_subtitles_visible'] as bool? ?? true,
       statusStylesVisible: json['status_styles_visible'] as bool? ?? true,
-      primaryFontSize: version == 3 || version == 4 || version == 5
+      primaryFontSize: version == 3 || version == 4 || version == 5 || version == 6
           ? _number(json['primary_font_size'], 1, 0.5, 2)
           : (_number(json['primary_font_size'], 24, 12, 72) / 24).clamp(
               0.5,
               2.0,
             ),
-      secondaryFontSize: version == 3 || version == 4 || version == 5
+      secondaryFontSize: version == 3 || version == 4 || version == 5 || version == 6
           ? _number(json['secondary_font_size'], 1, 0.5, 2)
           : (_number(json['secondary_font_size'], 18, 10, 64) / 18).clamp(
               0.5,
@@ -76,7 +78,7 @@ class AppSettings {
       subtitlePreset: json['subtitle_preset'] as String? ?? 'learning',
       language: json['language'] as String? ?? 'system',
       subtitlePositionX: _number(json['subtitle_position_x'], 0.5, 0, 1),
-      subtitlePositionY: version == 4 || version == 5
+      subtitlePositionY: version == 4 || version == 5 || version == 6
           ? _number(json['subtitle_position_y'], 0.82, 0, 1)
           : (1 - legacyBottomPadding / 600).clamp(0.05, 0.95),
       subtitleBackgroundOpacity: _number(
@@ -97,6 +99,7 @@ class AppSettings {
           json['transcription_language'] as String? ?? 'auto',
       transcriptionDestination:
           json['transcription_destination'] as String? ?? 'primary',
+      openSubtitlesApiKey: json['opensubtitles_api_key'] as String? ?? '',
     );
   }
 
@@ -126,14 +129,18 @@ class AppSettings {
   final String transcriptionQuality;
   final String transcriptionLanguage;
   final String transcriptionDestination;
+  final String openSubtitlesApiKey;
 
   static File get file => File(
-    '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v5.json',
+        '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v6.json',
   );
 
   static Future<AppSettings> load() async {
     for (final candidate in [
       file,
+      File(
+        '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v5.json',
+      ),
       File(
         '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v4.json',
       ),
@@ -188,6 +195,7 @@ class AppSettings {
         'transcription_quality': transcriptionQuality,
         'transcription_language': transcriptionLanguage,
         'transcription_destination': transcriptionDestination,
+        'opensubtitles_api_key': openSubtitlesApiKey,
       }),
       flush: true,
     );

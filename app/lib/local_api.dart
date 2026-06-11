@@ -316,6 +316,151 @@ class LocalApi {
           ))
           as Map<String, dynamic>;
 
+  Future<List<Map<String, dynamic>>> lexicalEntries({
+    String? kind,
+    String? status,
+    String search = '',
+  }) async {
+    final query = <String, String>{
+      'language': 'en',
+      'search': search,
+      'limit': '200',
+      'offset': '0',
+    };
+    if (kind != null) query['kind'] = kind;
+    if (status != null) query['status'] = status;
+    final values =
+        await _request(
+              'GET',
+              '/v1/lexical-entries?${Uri(queryParameters: query).query}',
+            )
+            as List<dynamic>;
+    return values.cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> upsertLexicalEntry(
+    Map<String, dynamic> value,
+  ) async =>
+      (await _request('PUT', '/v1/lexical-entries', value))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> normalizeLexical(String value) async =>
+      (await _request('POST', '/v1/lexical-normalization', {
+            'language': 'en',
+            'value': value,
+          }))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> correctLemma(
+    String original,
+    String corrected,
+  ) async =>
+      (await _request('POST', '/v1/lexical-normalization/correct', {
+            'language': 'en',
+            'original': original,
+            'corrected': corrected,
+          }))
+          as Map<String, dynamic>;
+
+  Future<List<Map<String, dynamic>>> phraseCandidates(
+    String sentenceId,
+  ) async =>
+      ((await _request(
+                'GET',
+                '/v1/sentences/${Uri.encodeComponent(sentenceId)}/phrase-candidates',
+              ))
+              as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+
+  Future<List<Map<String, dynamic>>> learningResources() async =>
+      ((await _request('GET', '/v1/learning-resources')) as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+
+  Future<Map<String, dynamic>> installLearningResource(String id) async =>
+      (await _request(
+            'POST',
+            '/v1/learning-resources/${Uri.encodeComponent(id)}/install',
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> removeLearningResource(String id) async =>
+      (await _request(
+            'DELETE',
+            '/v1/learning-resources/${Uri.encodeComponent(id)}',
+          ))
+          as Map<String, dynamic>;
+
+  Future<List<Map<String, dynamic>>> searchOpenSubtitles({
+    required String apiKey,
+    String? query,
+    String? moviehash,
+    String language = 'en',
+  }) async =>
+      ((await _request('POST', '/v1/subtitle-search', {
+                'api_key': apiKey,
+                'language': language,
+                if (query != null && query.isNotEmpty) 'query': query,
+                if (moviehash != null && moviehash.isNotEmpty)
+                  'moviehash': moviehash,
+              }))
+              as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+
+  Future<String> openSubtitlesMovieHash(String path) async {
+    final file = File(path);
+    final size = await file.length();
+    if (size < 131072) {
+      throw const FileSystemException(
+        'OpenSubtitles hash requires a file of at least 128 KiB',
+      );
+    }
+    final handle = await file.open();
+    try {
+      var sum = BigInt.from(size);
+      for (final offset in [0, size - 65536]) {
+        await handle.setPosition(offset);
+        final bytes = await handle.read(65536);
+        for (var index = 0; index < bytes.length; index += 8) {
+          var value = BigInt.zero;
+          for (var byte = 0; byte < 8; byte++) {
+            value |= BigInt.from(bytes[index + byte]) << (byte * 8);
+          }
+          sum = (sum + value) & BigInt.parse('ffffffffffffffff', radix: 16);
+        }
+      }
+      return sum.toRadixString(16).padLeft(16, '0');
+    } finally {
+      await handle.close();
+    }
+  }
+
+  Future<String> downloadOpenSubtitle({
+    required String apiKey,
+    required int fileId,
+  }) async {
+    final request = await _client.postUrl(
+      Uri.parse('$baseUrl/v1/subtitle-search/download'),
+    );
+    request.headers
+      ..contentType = ContentType.json
+      ..set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.write(jsonEncode({'api_key': apiKey, 'file_id': fileId}));
+    final response = await request.close();
+    final bytes = await response.fold<List<int>>(
+      [],
+      (all, next) => all..addAll(next),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw HttpException(utf8.decode(bytes));
+    }
+    final directory = Directory.systemTemp.createTempSync(
+      'llplayernext-subtitle-',
+    );
+    final path = '${directory.path}/opensubtitles-$fileId.srt';
+    await File(path).writeAsBytes(bytes, flush: true);
+    return path;
+  }
+
   Stream<Map<String, dynamic>> events() async* {
     while (!_closed) {
       try {
