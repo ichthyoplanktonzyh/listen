@@ -186,18 +186,8 @@ class _LearningAssetsScreenState extends State<LearningAssetsScreen> {
             child: ListView(
               children: [
                 for (final details in values)
-                  ListTile(
-                    title: Text(
-                      (details['entry'] as Map<String, dynamic>)['display_form']
-                          as String,
-                    ),
-                    subtitle: Text(
-                      '${l.text((details['entry'] as Map<String, dynamic>)['kind'] as String)} · '
-                      '${l.status((details['entry'] as Map<String, dynamic>)['status'] as String?)}',
-                    ),
-                    trailing: Text(
-                      '${(details['occurrences'] as List<dynamic>).length} ${l.text('sources')}',
-                    ),
+                  LearningAssetTile(
+                    details: details,
                     onTap: () => _details(details),
                   ),
               ],
@@ -253,26 +243,74 @@ class _LearningResourceScreenState extends State<LearningResourceScreen> {
     body: ListView(
       children: [
         for (final value in resources)
-          ListTile(
-            title: Text(value['display_name'] as String),
-            subtitle: Text(
-              '${value['version']} · ${value['license']} · ${value['state']}\n'
-              '${value['checksum_sha256']}',
-            ),
-            isThreeLine: true,
-            trailing: busy == value['id']
-                ? const CircularProgressIndicator()
-                : IconButton(
-                    icon: Icon(
-                      value['state'] == 'installed'
-                          ? Icons.delete_outline
-                          : Icons.download,
-                    ),
-                    onPressed: () => _toggle(value),
-                  ),
+          LearningResourceTile(
+            value: value,
+            busy: busy == value['id'],
+            onToggle: () => _toggle(value),
           ),
       ],
     ),
+  );
+}
+
+class LearningAssetTile extends StatelessWidget {
+  const LearningAssetTile({
+    super.key,
+    required this.details,
+    required this.onTap,
+  });
+
+  final Map<String, dynamic> details;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final entry = details['entry'] as Map<String, dynamic>;
+    return ListTile(
+      title: Text(entry['display_form'] as String),
+      subtitle: Text(
+        '${l.text(entry['kind'] as String)} · '
+        '${l.status(entry['status'] as String?)}',
+      ),
+      trailing: Text(
+        '${(details['occurrences'] as List<dynamic>).length} ${l.text('sources')}',
+      ),
+      onTap: onTap,
+    );
+  }
+}
+
+class LearningResourceTile extends StatelessWidget {
+  const LearningResourceTile({
+    super.key,
+    required this.value,
+    required this.busy,
+    required this.onToggle,
+  });
+
+  final Map<String, dynamic> value;
+  final bool busy;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    title: Text(value['display_name'] as String),
+    subtitle: Text(
+      '${value['version']} · ${value['license']} · ${value['state']}\n'
+      '${value['checksum_sha256']}',
+    ),
+    isThreeLine: true,
+    trailing: busy
+        ? const CircularProgressIndicator()
+        : IconButton(
+            icon: Icon(
+              value['state'] == 'installed'
+                  ? Icons.delete_outline
+                  : Icons.download,
+            ),
+            onPressed: onToggle,
+          ),
   );
 }
 
@@ -368,6 +406,79 @@ Future<void> showPhraseCandidates({
       ),
     ),
   );
+}
+
+Future<Map<String, dynamic>?> showPhraseCandidate({
+  required BuildContext context,
+  required LocalApi api,
+  required Map<String, dynamic> candidate,
+  required Map<String, dynamic> source,
+  String? initialStatus,
+}) async {
+  var status = initialStatus ?? 'known_not_recognized';
+  Map<String, dynamic>? saved;
+  await showDialog<void>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: Text(candidate['display_form'] as String),
+        content: SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(AppLocalizations.of(context).text('phraseCandidatesHint')),
+              const SizedBox(height: 12),
+              Text(candidate['reason'] as String),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: status,
+                items: [
+                  for (final value in const [
+                    'unknown_meaning',
+                    'known_not_recognized',
+                    'known_recognized',
+                  ])
+                    DropdownMenuItem(
+                      value: value,
+                      child: Text(AppLocalizations.of(context).status(value)),
+                    ),
+                ],
+                onChanged: (value) => setState(() => status = value ?? status),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(AppLocalizations.of(context).text('cancel')),
+          ),
+          FilledButton(
+            onPressed: () async {
+              saved = await api.upsertLexicalEntry({
+                'language': 'en',
+                'kind': 'phrase',
+                'canonical_form': candidate['canonical_form'],
+                'display_form': candidate['display_form'],
+                'status': status,
+                'source': {
+                  ...source,
+                  'original_form': candidate['display_form'],
+                  'token_start': candidate['token_start'],
+                  'token_end': candidate['token_end'],
+                },
+              });
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: Text(AppLocalizations.of(context).text('confirmPhrase')),
+          ),
+        ],
+      ),
+    ),
+  );
+  return saved;
 }
 
 Future<String?> showOpenSubtitlesSearch({

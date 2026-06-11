@@ -192,6 +192,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   List<media.SubtitleTrack> embeddedSubtitleTracks = const [];
   String? selectedEmbeddedSubtitleId;
   final wordProfiles = <String, Map<String, dynamic>>{};
+  final phraseProfiles = <String, Map<String, dynamic>>{};
+  List<Map<String, dynamic>> currentPhraseCandidates = const [];
   Map<String, dynamic>? diagnosis;
   Map<String, dynamic>? selectedWordDetails;
   Map<String, dynamic>? selectedDictionary;
@@ -400,6 +402,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       });
       _keepCurrentVisible(primaryCue);
       unawaited(_refreshDiagnosis());
+      unawaited(_loadPhraseCandidates(primaryCue));
     } else {
       setState(() => position = value);
     }
@@ -475,6 +478,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
             '${path.split(Platform.pathSeparator).last}';
       });
       if (!secondary) await _loadWordProfiles();
+      if (!secondary) await _loadPhraseProfiles();
+      if (!secondary) await _loadPhraseCandidates(currentPrimaryCue);
     } catch (error) {
       setState(() => status = 'Subtitle import failed: $error');
     }
@@ -499,6 +504,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           'Loaded generated ${secondary ? 'secondary' : 'primary'} subtitle';
     });
     if (!secondary) await _loadWordProfiles();
+    if (!secondary) await _loadPhraseProfiles();
+    if (!secondary) await _loadPhraseCandidates(currentPrimaryCue);
   }
 
   Future<void> _generateSubtitles({required bool secondary}) async {
@@ -993,6 +1000,55 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
+  Future<void> _loadPhraseCandidates(Cue? cue) async {
+    if (api == null || cue == null) {
+      if (mounted) setState(() => currentPhraseCandidates = const []);
+      return;
+    }
+    try {
+      if (mounted && currentPrimaryCue?.id == cue.id) {
+        setState(() => currentPhraseCandidates = const []);
+      }
+      final candidates = await api!.phraseCandidates(cue.id);
+      if (mounted && currentPrimaryCue?.id == cue.id) {
+        setState(() => currentPhraseCandidates = candidates);
+      }
+    } catch (_) {
+      if (mounted && currentPrimaryCue?.id == cue.id) {
+        setState(() => currentPhraseCandidates = const []);
+      }
+    }
+  }
+
+  Future<void> _openPhrase(Map<String, dynamic> candidate, Cue cue) async {
+    if (api == null || mediaFingerprint == null) return;
+    final canonical = candidate['canonical_form'] as String;
+    final details = await showPhraseCandidate(
+      context: context,
+      api: api!,
+      candidate: candidate,
+      initialStatus:
+          (phraseProfiles[canonical]?['entry']
+                  as Map<String, dynamic>?)?['status']
+              as String?,
+      source: {
+        'media_id': mediaId,
+        'sentence_id': cue.id,
+        'sentence_text': cue.text,
+        'media_title': mediaTitle ?? '',
+        'media_fingerprint': mediaFingerprint,
+        'start_ms': cue.start.inMilliseconds,
+        'end_ms': cue.end.inMilliseconds,
+      },
+    );
+    if (details != null && mounted) {
+      setState(() {
+        phraseProfiles[canonical] = details;
+        status = 'Saved phrase "${candidate['display_form']}"';
+      });
+    }
+  }
+
   Future<void> _correctCurrentLemma() async {
     final token = selectedToken;
     if (api == null || token?.normalized == null) return;
@@ -1020,12 +1076,63 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (mounted) setState(() => status = l.text('lemmaCorrectionSaved'));
   }
 
-  Future<void> _searchOpenSubtitles() async {
-    if (api == null || mediaId == null) return;
-    if (openSubtitlesApiKey.isEmpty) {
-      setState(() => status = l.text('configureOpenSubtitles'));
+  Future<void> _searchOpenSubtitles({bool? secondary}) async {
+    if (api == null) return;
+    if (mediaId == null) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(l.text('openSubtitles')),
+          content: Text(l.text('openMediaForSubtitles')),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(l.text('close')),
+            ),
+          ],
+        ),
+      );
       return;
     }
+    if (openSubtitlesApiKey.isEmpty) {
+      final controller = TextEditingController();
+      final configured = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(l.text('openSubtitles')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(l.text('configureOpenSubtitlesNow')),
+              TextField(
+                controller: controller,
+                obscureText: true,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: l.text('openSubtitlesApiKey'),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(l.text('cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, controller.text.trim()),
+              child: Text(l.text('save')),
+            ),
+          ],
+        ),
+      );
+      controller.dispose();
+      if (configured == null || configured.isEmpty) return;
+      setState(() => openSubtitlesApiKey = configured);
+      await _saveSettings();
+    }
+    if (!mounted) return;
     final path = await showOpenSubtitlesSearch(
       context: context,
       api: api!,
@@ -1037,23 +1144,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
       mediaPath: mediaPath,
     );
     if (path == null || !mounted) return;
-    final secondary = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l.text('openSubtitles')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(l.text('usePrimary')),
+    final destination =
+        secondary ??
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(l.text('openSubtitles')),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(l.text('usePrimary')),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(l.text('useSecondary')),
+              ),
+            ],
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(l.text('useSecondary')),
-          ),
-        ],
-      ),
-    );
-    if (secondary != null) await _openSubtitlePath(path, secondary: secondary);
+        );
+    if (destination != null) {
+      await _openSubtitlePath(path, secondary: destination);
+    }
   }
 
   Widget _settingSlider(
@@ -1174,6 +1285,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
             (profile) =>
                 MapEntry(profile['normalized_lemma'] as String, profile),
           ),
+        );
+    });
+  }
+
+  Future<void> _loadPhraseProfiles() async {
+    if (api == null) return;
+    final values = await api!.lexicalEntries(kind: 'phrase');
+    if (!mounted) return;
+    setState(() {
+      phraseProfiles
+        ..clear()
+        ..addEntries(
+          values.map((details) {
+            final entry = details['entry'] as Map<String, dynamic>;
+            return MapEntry(entry['canonical_form'] as String, details);
+          }),
         );
     });
   }
@@ -1412,6 +1539,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             as Map<String, dynamic>;
     await service.importVocabulary(bundle);
     await _loadWordProfiles();
+    await _loadPhraseProfiles();
     setState(() => status = 'Imported vocabulary assets');
   }
 
@@ -1605,8 +1733,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
               onSelected: (value) {
                 if (value == 'import') {
                   unawaited(_openSubtitle(secondary: false));
-                } else {
+                } else if (value == 'generate') {
                   unawaited(_generateSubtitles(secondary: false));
+                } else if (value == 'opensubtitles') {
+                  unawaited(_searchOpenSubtitles(secondary: false));
                 }
               },
               itemBuilder: (_) => [
@@ -1617,6 +1747,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 PopupMenuItem(
                   value: 'generate',
                   child: Text(l.text('generateSubtitles')),
+                ),
+                PopupMenuItem(
+                  value: 'opensubtitles',
+                  child: Text(l.text('openSubtitles')),
                 ),
               ],
               child: Padding(
@@ -1634,8 +1768,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
               onSelected: (value) {
                 if (value == 'import') {
                   unawaited(_openSubtitle(secondary: true));
-                } else {
+                } else if (value == 'generate') {
                   unawaited(_generateSubtitles(secondary: true));
+                } else if (value == 'opensubtitles') {
+                  unawaited(_searchOpenSubtitles(secondary: true));
                 }
               },
               itemBuilder: (_) => [
@@ -1646,6 +1782,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 PopupMenuItem(
                   value: 'generate',
                   child: Text(l.text('generateSubtitles')),
+                ),
+                PopupMenuItem(
+                  value: 'opensubtitles',
+                  child: Text(l.text('openSubtitles')),
                 ),
               ],
               child: Padding(
@@ -1862,11 +2002,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 child: TokenLine(
                                   cue: currentPrimaryCue!,
                                   profiles: wordProfiles,
+                                  phraseCandidates: currentPhraseCandidates,
+                                  phraseProfiles: phraseProfiles,
                                   showStyles: statusStylesVisible,
                                   fontSize: primarySize,
                                   fontFamily: _subtitleFont(primaryFontFamily),
                                   baseColor: primaryColor,
                                   onWord: _openWord,
+                                  onPhrase: _openPhrase,
                                 ),
                               ),
                             if (secondarySubtitlesVisible &&
@@ -2695,6 +2838,13 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
                         title: Text(
                           (value as Map<String, dynamic>)['text'] as String,
                         ),
+                        trailing:
+                            value['audio_url'] is String &&
+                                (value['audio_url'] as String).isNotEmpty
+                            ? PronunciationButton(
+                                audioUrl: value['audio_url'] as String,
+                              )
+                            : null,
                       ),
                   if (lookup != null)
                     for (final value in lookup['definitions'] as List<dynamic>)
@@ -2773,6 +2923,61 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
   }
 }
 
+class PronunciationButton extends StatefulWidget {
+  const PronunciationButton({super.key, required this.audioUrl});
+
+  final String audioUrl;
+
+  @override
+  State<PronunciationButton> createState() => _PronunciationButtonState();
+}
+
+class _PronunciationButtonState extends State<PronunciationButton> {
+  media.Player? player;
+  bool busy = false;
+
+  Future<void> _play() async {
+    if (busy) return;
+    setState(() => busy = true);
+    try {
+      await player?.dispose();
+      final next = media.Player();
+      player = next;
+      await next.open(media.Media(widget.audioUrl), play: true);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).text('pronunciationUnavailable'),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    unawaited(player?.dispose());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: AppLocalizations.of(context).text('pronunciation'),
+    onPressed: busy ? null : _play,
+    icon: busy
+        ? const SizedBox.square(
+            dimension: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : const Icon(Icons.volume_up_outlined),
+  );
+}
+
 class TokenLine extends StatelessWidget {
   const TokenLine({
     super.key,
@@ -2780,6 +2985,9 @@ class TokenLine extends StatelessWidget {
     required this.profiles,
     required this.showStyles,
     required this.onWord,
+    this.phraseCandidates = const [],
+    this.phraseProfiles = const {},
+    this.onPhrase,
     this.fontSize = 15,
     this.fontFamily,
     this.baseColor,
@@ -2792,28 +3000,86 @@ class TokenLine extends StatelessWidget {
   final String? fontFamily;
   final Color? baseColor;
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
+  final List<Map<String, dynamic>> phraseCandidates;
+  final Map<String, Map<String, dynamic>> phraseProfiles;
+  final Future<void> Function(Map<String, dynamic> candidate, Cue cue)?
+  onPhrase;
 
   @override
   Widget build(BuildContext context) => Text.rich(
-    TextSpan(
-      children: cue.tokens
-          .map((token) {
-            final clickable = token.kind == 'word' && token.normalized != null;
-            final status = profiles[token.normalized]?['status'] as String?;
-            final style = _style(context, status);
-            if (!clickable) return TextSpan(text: token.text, style: style);
-            return WidgetSpan(
-              alignment: PlaceholderAlignment.baseline,
-              baseline: TextBaseline.alphabetic,
-              child: InkWell(
-                onTap: () => onWord(token, cue),
-                child: Text(token.text, style: style),
-              ),
-            );
-          })
-          .toList(growable: false),
-    ),
+    TextSpan(children: _spans(context)),
+    textAlign: TextAlign.center,
   );
+
+  List<InlineSpan> _spans(BuildContext context) {
+    final candidates = _nonOverlappingPhraseCandidates(phraseCandidates);
+    final byStart = {
+      for (final candidate in candidates)
+        candidate['token_start'] as int: candidate,
+    };
+    final spans = <InlineSpan>[];
+    var cursor = 0;
+    while (cursor < cue.tokens.length) {
+      final candidate = byStart[cue.tokens[cursor].index];
+      if (candidate == null) {
+        spans.add(_tokenSpan(context, cue.tokens[cursor]));
+        cursor += 1;
+        continue;
+      }
+      final end = candidate['token_end'] as int;
+      final phraseTokens = <SubtitleToken>[];
+      while (cursor < cue.tokens.length && cue.tokens[cursor].index <= end) {
+        phraseTokens.add(cue.tokens[cursor]);
+        cursor += 1;
+      }
+      final canonical = candidate['canonical_form'] as String;
+      final status =
+          (phraseProfiles[canonical]?['entry']
+                  as Map<String, dynamic>?)?['status']
+              as String?;
+      spans.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          child: PhraseUnderlineSpan(
+            color: _phraseColor(context, status),
+            tooltip: candidate['display_form'] as String,
+            onTap: onPhrase == null ? null : () => onPhrase!(candidate, cue),
+            child: Text.rich(
+              TextSpan(
+                children: phraseTokens
+                    .map((token) => _tokenSpan(context, token))
+                    .toList(growable: false),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return spans;
+  }
+
+  InlineSpan _tokenSpan(BuildContext context, SubtitleToken token) {
+    final clickable = token.kind == 'word' && token.normalized != null;
+    final status = profiles[token.normalized]?['status'] as String?;
+    final style = _style(context, status);
+    if (!clickable) return TextSpan(text: token.text, style: style);
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      child: InkWell(
+        onTap: () => onWord(token, cue),
+        child: Text(token.text, style: style),
+      ),
+    );
+  }
+
+  Color _phraseColor(BuildContext context, String? status) => switch (status) {
+    'unknown_meaning' => Theme.of(context).colorScheme.error,
+    'known_not_recognized' => Colors.amber,
+    'known_recognized' => Colors.greenAccent,
+    _ => Theme.of(context).colorScheme.primary.withValues(alpha: 0.75),
+  };
 
   TextStyle _style(BuildContext context, String? status) {
     final base = TextStyle(
@@ -2840,4 +3106,76 @@ class TokenLine extends StatelessWidget {
       _ => base,
     };
   }
+}
+
+List<Map<String, dynamic>> _nonOverlappingPhraseCandidates(
+  List<Map<String, dynamic>> values,
+) {
+  final sorted = [...values]
+    ..sort((left, right) {
+      final leftLength =
+          (left['token_end'] as int) - (left['token_start'] as int);
+      final rightLength =
+          (right['token_end'] as int) - (right['token_start'] as int);
+      return rightLength.compareTo(leftLength);
+    });
+  final selected = <Map<String, dynamic>>[];
+  for (final candidate in sorted) {
+    final start = candidate['token_start'] as int;
+    final end = candidate['token_end'] as int;
+    final overlaps = selected.any(
+      (value) =>
+          start <= (value['token_end'] as int) &&
+          end >= (value['token_start'] as int),
+    );
+    if (!overlaps) selected.add(candidate);
+  }
+  selected.sort(
+    (left, right) =>
+        (left['token_start'] as int).compareTo(right['token_start'] as int),
+  );
+  return selected;
+}
+
+class PhraseUnderlineSpan extends StatelessWidget {
+  const PhraseUnderlineSpan({
+    super.key,
+    required this.child,
+    required this.color,
+    required this.tooltip,
+    this.onTap,
+  });
+
+  final Widget child;
+  final Color color;
+  final String tooltip;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    clipBehavior: Clip.none,
+    children: [
+      Padding(padding: const EdgeInsets.only(bottom: 5), child: child),
+      Positioned(
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: 6,
+        child: Tooltip(
+          message: tooltip,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onTap,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: Container(height: 2, color: color),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
 }

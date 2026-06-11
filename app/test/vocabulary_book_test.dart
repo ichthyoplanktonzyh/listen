@@ -220,7 +220,10 @@ void main() {
                   'provider': {'display_name': 'Provider A'},
                   'lookup': {
                     'phonetics': [
-                      {'text': '/hello/'},
+                      {
+                        'text': '/hello/',
+                        'audio_url': 'https://example.test/hello.mp3',
+                      },
                     ],
                     'definitions': [
                       {'text': 'a greeting', 'part_of_speech': 'noun'},
@@ -242,6 +245,7 @@ void main() {
         ),
       );
       expect(find.text('Provider A'), findsOneWidget);
+      expect(find.byTooltip('Play pronunciation'), findsOneWidget);
       await tester.enterText(find.byType(TextField).first, 'greeting');
       await tester.enterText(find.byType(TextField).last, 'remember this');
       await tester.scrollUntilVisible(

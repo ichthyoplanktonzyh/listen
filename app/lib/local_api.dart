@@ -4,6 +4,34 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 
+Future<String> computeOpenSubtitlesMovieHash(String path) async {
+  final file = File(path);
+  final size = await file.length();
+  if (size < 131072) {
+    throw const FileSystemException(
+      'OpenSubtitles hash requires a file of at least 128 KiB',
+    );
+  }
+  final handle = await file.open();
+  try {
+    var sum = BigInt.from(size);
+    for (final offset in [0, size - 65536]) {
+      await handle.setPosition(offset);
+      final bytes = await handle.read(65536);
+      for (var index = 0; index < bytes.length; index += 8) {
+        var value = BigInt.zero;
+        for (var byte = 0; byte < 8; byte++) {
+          value |= BigInt.from(bytes[index + byte]) << (byte * 8);
+        }
+        sum = (sum + value) & BigInt.parse('ffffffffffffffff', radix: 16);
+      }
+    }
+    return sum.toRadixString(16).padLeft(16, '0');
+  } finally {
+    await handle.close();
+  }
+}
+
 class LocalApi {
   LocalApi._(
     this.baseUrl,
@@ -397,6 +425,7 @@ class LocalApi {
     String language = 'en',
   }) async =>
       ((await _request('POST', '/v1/subtitle-search', {
+                'provider': 'opensubtitles',
                 'api_key': apiKey,
                 'language': language,
                 if (query != null && query.isNotEmpty) 'query': query,
@@ -406,33 +435,8 @@ class LocalApi {
               as List<dynamic>)
           .cast<Map<String, dynamic>>();
 
-  Future<String> openSubtitlesMovieHash(String path) async {
-    final file = File(path);
-    final size = await file.length();
-    if (size < 131072) {
-      throw const FileSystemException(
-        'OpenSubtitles hash requires a file of at least 128 KiB',
-      );
-    }
-    final handle = await file.open();
-    try {
-      var sum = BigInt.from(size);
-      for (final offset in [0, size - 65536]) {
-        await handle.setPosition(offset);
-        final bytes = await handle.read(65536);
-        for (var index = 0; index < bytes.length; index += 8) {
-          var value = BigInt.zero;
-          for (var byte = 0; byte < 8; byte++) {
-            value |= BigInt.from(bytes[index + byte]) << (byte * 8);
-          }
-          sum = (sum + value) & BigInt.parse('ffffffffffffffff', radix: 16);
-        }
-      }
-      return sum.toRadixString(16).padLeft(16, '0');
-    } finally {
-      await handle.close();
-    }
-  }
+  Future<String> openSubtitlesMovieHash(String path) =>
+      computeOpenSubtitlesMovieHash(path);
 
   Future<String> downloadOpenSubtitle({
     required String apiKey,
@@ -444,7 +448,13 @@ class LocalApi {
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    request.write(jsonEncode({'api_key': apiKey, 'file_id': fileId}));
+    request.write(
+      jsonEncode({
+        'provider': 'opensubtitles',
+        'api_key': apiKey,
+        'file_id': fileId,
+      }),
+    );
     final response = await request.close();
     final bytes = await response.fold<List<int>>(
       [],
