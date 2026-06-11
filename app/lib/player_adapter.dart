@@ -3,7 +3,12 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 class DesktopPlayerAdapter {
   DesktopPlayerAdapter() : player = Player() {
-    videoController = VideoController(player);
+    videoController = VideoController(
+      player,
+      configuration: const VideoControllerConfiguration(
+        enableHardwareAcceleration: false,
+      ),
+    );
   }
 
   final Player player;
