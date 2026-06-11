@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0 - acceptance candidate
+
+- Unified word and user-confirmed phrase learning assets with schema v7 and
+  vocabulary asset bundle v3.
+- Versioned lemma normalization, persistent corrections, and phrase candidates.
+- Explicit checksum-verified ECDICT and CMUdict resource manager.
+- Provider-neutral OpenSubtitles title, filename, and media-hash workflows.
+
 ## 0.5.0 - 2026-06-10
 
 Milestone 1.7 local ASR learning subtitle release.

@@ -43,7 +43,7 @@ details="$(curl --fail --silent -X PUT -H "$auth" -H 'Content-Type: application/
 node -e 'const v=JSON.parse(process.argv[1]);if(v.profile.user_definition!=="a greeting"||v.profile.personal_note!=="learned before")process.exit(1)' "$details"
 
 bundle="$(curl --fail --silent -H "$auth" "$base/v1/vocabulary/export")"
-node -e 'const v=JSON.parse(process.argv[1]);if(v.version!==2||v.profiles.length!==2)process.exit(1)' "$bundle"
+node -e 'const v=JSON.parse(process.argv[1]);if(v.version!==3||v.profiles.length!==2)process.exit(1)' "$bundle"
 
 dictionary="$(curl --silent -H "$auth" "$base/v1/dictionary?language=en&lemma=hello")"
 node -e 'const v=JSON.parse(process.argv[1]);if(!Array.isArray(v.results)||!v.results[0].provider.id)process.exit(1)' "$dictionary"

@@ -95,6 +95,40 @@ pub trait VocabularyAssetRepository: Send + Sync {
     ) -> Result<ExternalVocabularyImportSummary, ApplicationError>;
 }
 
+pub trait LexicalEntryRepository: Send + Sync {
+    fn upsert_lexical_entry(
+        &self,
+        entry: &LexicalEntry,
+        source: Option<&LexicalSourceContext>,
+        change_source: WordChangeSource,
+    ) -> Result<LexicalEntryDetails, ApplicationError>;
+    fn lexical_details(
+        &self,
+        id: &LexicalEntryId,
+    ) -> Result<Option<LexicalEntryDetails>, ApplicationError>;
+    fn list_lexical_entries(
+        &self,
+        language: &LanguageCode,
+        kind: Option<LexicalEntryKind>,
+        status: Option<WordStatus>,
+        search: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<LexicalEntryDetails>, ApplicationError>;
+    fn set_lemma_override(
+        &self,
+        language: &LanguageCode,
+        original_normalized: &str,
+        corrected_normalized: &str,
+        updated_at_ms: u64,
+    ) -> Result<(), ApplicationError>;
+    fn lemma_override(
+        &self,
+        language: &LanguageCode,
+        original_normalized: &str,
+    ) -> Result<Option<String>, ApplicationError>;
+}
+
 pub trait DictionaryCacheRepository: Send + Sync {
     fn put(&self, entry: &DictionaryEntry) -> Result<(), ApplicationError>;
     fn get(
@@ -160,9 +194,11 @@ pub struct AppServices {
     subtitles: Arc<dyn SubtitleRepository>,
     dictionary: Arc<dyn DictionaryCacheRepository>,
     vocabulary: Arc<dyn VocabularyAssetRepository>,
+    lexical: Arc<dyn LexicalEntryRepository>,
 }
 
 impl AppServices {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         media: Arc<dyn MediaRepository>,
         progress: Arc<dyn PlaybackProgressRepository>,
@@ -171,6 +207,7 @@ impl AppServices {
         subtitles: Arc<dyn SubtitleRepository>,
         dictionary: Arc<dyn DictionaryCacheRepository>,
         vocabulary: Arc<dyn VocabularyAssetRepository>,
+        lexical: Arc<dyn LexicalEntryRepository>,
     ) -> Self {
         Self {
             media,
@@ -180,7 +217,133 @@ impl AppServices {
             subtitles,
             dictionary,
             vocabulary,
+            lexical,
         }
+    }
+
+    pub fn normalize_lexical_form(
+        &self,
+        language: &str,
+        value: &str,
+    ) -> Result<LexicalNormalization, ApplicationError> {
+        let language = LanguageCode::parse(language)?;
+        let original = normalize_lemma(value);
+        require_text(&original, "value")?;
+        if let Some(corrected) = self.lexical.lemma_override(&language, &original)? {
+            return Ok(LexicalNormalization {
+                original,
+                normalized: corrected,
+                provider: "user".into(),
+                version: "v1".into(),
+                user_corrected: true,
+            });
+        }
+        let normalized = normalize_american_english(&original);
+        Ok(LexicalNormalization {
+            original,
+            normalized,
+            provider: "en-us-rules".into(),
+            version: "v1".into(),
+            user_corrected: false,
+        })
+    }
+
+    pub fn correct_lemma(
+        &self,
+        language: &str,
+        original: &str,
+        corrected: &str,
+    ) -> Result<LexicalNormalization, ApplicationError> {
+        let language = LanguageCode::parse(language)?;
+        let original = normalize_lemma(original);
+        let corrected = normalize_lemma(corrected);
+        require_text(&original, "original")?;
+        require_text(&corrected, "corrected")?;
+        self.lexical
+            .set_lemma_override(&language, &original, &corrected, now_ms())?;
+        Ok(LexicalNormalization {
+            original,
+            normalized: corrected,
+            provider: "user".into(),
+            version: "v1".into(),
+            user_corrected: true,
+        })
+    }
+
+    pub fn create_lexical_entry(
+        &self,
+        input: UpsertLexicalEntry,
+    ) -> Result<LexicalEntryDetails, ApplicationError> {
+        let language = LanguageCode::parse(input.language)?;
+        let normalization =
+            self.normalize_lexical_form(language.as_str(), &input.canonical_form)?;
+        let normalized_form = if input.kind == LexicalEntryKind::Phrase {
+            normalize_phrase(&input.canonical_form)
+        } else {
+            normalization.normalized.clone()
+        };
+        require_text(&normalized_form, "canonical_form")?;
+        let id = LexicalEntryId::from_fingerprint(
+            "lexical-entry",
+            &format!("{}:{:?}:{normalized_form}", language.as_str(), input.kind),
+        );
+        self.lexical.upsert_lexical_entry(
+            &LexicalEntry {
+                id,
+                language,
+                kind: input.kind,
+                canonical_form: input.canonical_form,
+                normalized_form,
+                display_form: input.display_form,
+                status: input.status,
+                user_definition: input.user_definition,
+                personal_note: input.personal_note,
+                normalization_provider: normalization.provider,
+                normalization_version: normalization.version,
+                user_corrected: normalization.user_corrected,
+                updated_at_ms: now_ms(),
+                learning_updated_at_ms: now_ms(),
+            },
+            input.source.as_ref(),
+            WordChangeSource::UserSelection,
+        )
+    }
+
+    pub fn lexical_details(
+        &self,
+        id: &LexicalEntryId,
+    ) -> Result<Option<LexicalEntryDetails>, ApplicationError> {
+        self.lexical.lexical_details(id)
+    }
+
+    pub fn list_lexical_entries(
+        &self,
+        language: &str,
+        kind: Option<LexicalEntryKind>,
+        status: Option<WordStatus>,
+        search: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<LexicalEntryDetails>, ApplicationError> {
+        self.lexical.list_lexical_entries(
+            &LanguageCode::parse(language)?,
+            kind,
+            status,
+            search,
+            limit.min(200),
+            offset,
+        )
+    }
+
+    pub fn phrase_candidates(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<Vec<PhraseCandidate>, ApplicationError> {
+        let sentence = self
+            .subtitles
+            .get_sentence(sentence_id)?
+            .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
+        Ok(phrase_candidates(&sentence))
     }
 
     pub fn register_media(&self, input: RegisterMedia) -> Result<MediaItem, ApplicationError> {
@@ -252,13 +415,21 @@ impl AppServices {
         {
             return Err(ApplicationError::Validation("source context"));
         }
-        self.vocabulary
+        let updated = self
+            .vocabulary
             .apply_status(
                 &profile,
                 input.source.as_ref(),
                 WordChangeSource::UserSelection,
             )
-            .map(|details| details.profile)
+            .map(|details| details.profile)?;
+        let lexical_source = input.source.as_ref().map(lexical_source_from_word);
+        self.lexical.upsert_lexical_entry(
+            &lexical_from_word(&updated),
+            lexical_source.as_ref(),
+            WordChangeSource::UserSelection,
+        )?;
+        Ok(updated)
     }
 
     pub fn read_word_profile(
@@ -371,12 +542,21 @@ impl AppServices {
         &self,
         bundle: &VocabularyAssetBundle,
     ) -> Result<(), ApplicationError> {
-        if bundle.version != 1 && bundle.version != 2 {
+        if bundle.version != 1 && bundle.version != 2 && bundle.version != 3 {
             return Err(ApplicationError::Validation(
                 "unsupported asset bundle version",
             ));
         }
-        self.vocabulary.import_assets(bundle)
+        self.vocabulary.import_assets(bundle).and_then(|_| {
+            for profile in &bundle.profiles {
+                self.lexical.upsert_lexical_entry(
+                    &lexical_from_word(profile),
+                    None,
+                    WordChangeSource::Import,
+                )?;
+            }
+            Ok(())
+        })
     }
 
     pub fn set_media_availability(
@@ -501,12 +681,18 @@ impl AppServices {
         user_definition: Option<String>,
         personal_note: Option<String>,
     ) -> Result<WordDetails, ApplicationError> {
-        self.vocabulary.update_learning_content(
+        let details = self.vocabulary.update_learning_content(
             id,
             clean_optional(user_definition),
             clean_optional(personal_note),
             now_ms(),
-        )
+        )?;
+        self.lexical.upsert_lexical_entry(
+            &lexical_from_word(&details.profile),
+            None,
+            WordChangeSource::UserSelection,
+        )?;
+        Ok(details)
     }
 
     pub fn import_external_vocabulary(
@@ -514,7 +700,17 @@ impl AppServices {
         input: &ExternalVocabularyImport,
     ) -> Result<ExternalVocabularyImportSummary, ApplicationError> {
         LanguageCode::parse(input.language.clone())?;
-        self.vocabulary.import_external(input, now_ms())
+        let summary = self.vocabulary.import_external(input, now_ms())?;
+        for entry in &input.entries {
+            if let Some(profile) = self.read_word_profile(&input.language, &entry.word)? {
+                self.lexical.upsert_lexical_entry(
+                    &lexical_from_word(&profile),
+                    None,
+                    WordChangeSource::Import,
+                )?;
+            }
+        }
+        Ok(summary)
     }
 
     pub fn diagnose_sentence(
@@ -582,6 +778,41 @@ pub struct SourceContext {
 }
 
 #[derive(Debug, Clone)]
+pub struct LexicalSourceContext {
+    pub media_id: Option<MediaId>,
+    pub sentence_id: Option<SubtitleSentenceId>,
+    pub original_form: String,
+    pub sentence_text: String,
+    pub media_title: String,
+    pub media_fingerprint: String,
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub token_start: Option<u32>,
+    pub token_end: Option<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpsertLexicalEntry {
+    pub language: String,
+    pub kind: LexicalEntryKind,
+    pub canonical_form: String,
+    pub display_form: String,
+    pub status: Option<WordStatus>,
+    pub user_definition: Option<String>,
+    pub personal_note: Option<String>,
+    pub source: Option<LexicalSourceContext>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LexicalNormalization {
+    pub original: String,
+    pub normalized: String,
+    pub provider: String,
+    pub version: String,
+    pub user_corrected: bool,
+}
+
+#[derive(Debug, Clone)]
 pub struct ImportSubtitle {
     pub media_id: MediaId,
     pub source_name: String,
@@ -625,4 +856,119 @@ pub fn now_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .expect("system clock must be after UNIX epoch")
         .as_millis() as u64
+}
+
+fn normalize_phrase(value: &str) -> String {
+    value
+        .split_whitespace()
+        .map(normalize_lemma)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn lexical_from_word(profile: &WordProfile) -> LexicalEntry {
+    LexicalEntry {
+        id: LexicalEntryId::parse(profile.id.as_str().to_owned())
+            .expect("word profile id is a valid lexical id"),
+        language: profile.language.clone(),
+        kind: LexicalEntryKind::Word,
+        canonical_form: profile.lemma.clone(),
+        normalized_form: profile.normalized_lemma.clone(),
+        display_form: profile.display_form.clone(),
+        status: profile.status,
+        user_definition: profile.user_definition.clone(),
+        personal_note: profile.personal_note.clone(),
+        normalization_provider: "legacy-word-api".into(),
+        normalization_version: "v1".into(),
+        user_corrected: false,
+        updated_at_ms: profile.updated_at_ms,
+        learning_updated_at_ms: profile.learning_updated_at_ms,
+    }
+}
+
+fn lexical_source_from_word(source: &SourceContext) -> LexicalSourceContext {
+    LexicalSourceContext {
+        media_id: source.media_id.clone(),
+        sentence_id: source.sentence_id.clone(),
+        original_form: source.original_form.clone(),
+        sentence_text: source.sentence_text.clone(),
+        media_title: source.media_title.clone(),
+        media_fingerprint: source.media_fingerprint.clone(),
+        start_ms: source.start_ms,
+        end_ms: source.end_ms,
+        token_start: None,
+        token_end: None,
+    }
+}
+
+fn normalize_american_english(value: &str) -> String {
+    match value {
+        "went" | "gone" | "going" | "goes" => "go".into(),
+        "was" | "were" | "been" | "being" | "am" | "is" | "are" => "be".into(),
+        "did" | "done" | "doing" | "does" => "do".into(),
+        "had" | "having" | "has" => "have".into(),
+        _ if value.len() > 4 && value.ends_with("ies") => {
+            format!("{}y", &value[..value.len() - 3])
+        }
+        _ if value.len() > 5 && value.ends_with("ing") => value[..value.len() - 3].into(),
+        _ if value.len() > 4 && value.ends_with("ed") => value[..value.len() - 2].into(),
+        _ if value.len() > 3 && value.ends_with('s') && !value.ends_with("ss") => {
+            value[..value.len() - 1].into()
+        }
+        _ => value.into(),
+    }
+}
+
+fn phrase_candidates(sentence: &SubtitleSentence) -> Vec<PhraseCandidate> {
+    const PHRASES: &[&str] = &[
+        "according to",
+        "as well as",
+        "because of",
+        "come up with",
+        "figure out",
+        "get along",
+        "give up",
+        "in front of",
+        "in order to",
+        "look forward to",
+        "make sure",
+        "pick up",
+        "take care of",
+        "turn out",
+        "used to",
+    ];
+    let words = sentence
+        .tokens
+        .iter()
+        .filter(|token| token.kind == SubtitleTokenKind::Word)
+        .collect::<Vec<_>>();
+    let normalized = words
+        .iter()
+        .map(|token| normalize_lemma(&token.text))
+        .collect::<Vec<_>>();
+    let mut values = Vec::new();
+    for phrase in PHRASES {
+        let parts = phrase.split_whitespace().collect::<Vec<_>>();
+        for start in 0..normalized
+            .len()
+            .saturating_sub(parts.len())
+            .saturating_add(1)
+        {
+            if normalized[start..start + parts.len()] == parts {
+                values.push(PhraseCandidate {
+                    canonical_form: (*phrase).into(),
+                    display_form: words[start..start + parts.len()]
+                        .iter()
+                        .map(|token| token.text.as_str())
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    normalized_form: (*phrase).into(),
+                    token_start: words[start].index,
+                    token_end: words[start + parts.len() - 1].index,
+                    reason: "built-in en-US phrase rule".into(),
+                });
+            }
+        }
+    }
+    values
 }

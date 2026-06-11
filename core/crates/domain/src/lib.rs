@@ -39,6 +39,10 @@ string_id!(WordStatusHistoryId);
 string_id!(DictionaryEntryId);
 string_id!(TranscriptionJobId);
 string_id!(TranscriptionModelId);
+string_id!(LexicalEntryId);
+string_id!(LexicalOccurrenceId);
+string_id!(LexicalStatusHistoryId);
+string_id!(LearningResourceId);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -228,6 +232,114 @@ pub struct WordDetails {
     pub occurrences: Vec<WordOccurrence>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LexicalEntryKind {
+    Word,
+    Phrase,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LexicalEntry {
+    pub id: LexicalEntryId,
+    pub language: LanguageCode,
+    pub kind: LexicalEntryKind,
+    pub canonical_form: String,
+    pub normalized_form: String,
+    pub display_form: String,
+    pub status: Option<WordStatus>,
+    pub user_definition: Option<String>,
+    pub personal_note: Option<String>,
+    pub normalization_provider: String,
+    pub normalization_version: String,
+    pub user_corrected: bool,
+    pub updated_at_ms: u64,
+    pub learning_updated_at_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LexicalOccurrence {
+    pub id: LexicalOccurrenceId,
+    pub source_key: String,
+    pub lexical_entry_id: LexicalEntryId,
+    pub media_id: Option<MediaId>,
+    pub sentence_id: Option<SubtitleSentenceId>,
+    pub original_form: String,
+    pub sentence_text_snapshot: String,
+    pub media_title_snapshot: String,
+    pub media_fingerprint_snapshot: String,
+    pub start_ms_snapshot: u64,
+    pub end_ms_snapshot: u64,
+    pub token_start: Option<u32>,
+    pub token_end: Option<u32>,
+    pub first_seen_at_ms: u64,
+    pub last_seen_at_ms: u64,
+    pub encounter_count: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LexicalStatusHistory {
+    pub id: LexicalStatusHistoryId,
+    pub lexical_entry_id: LexicalEntryId,
+    pub previous_status: Option<WordStatus>,
+    pub new_status: Option<WordStatus>,
+    pub changed_at_ms: u64,
+    pub change_source: WordChangeSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LexicalEntryDetails {
+    pub entry: LexicalEntry,
+    pub history: Vec<LexicalStatusHistory>,
+    pub occurrences: Vec<LexicalOccurrence>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PhraseCandidate {
+    pub canonical_form: String,
+    pub display_form: String,
+    pub normalized_form: String,
+    pub token_start: u32,
+    pub token_end: u32,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LearningResourceState {
+    Available,
+    Installing,
+    Installed,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LearningResourceDescriptor {
+    pub id: LearningResourceId,
+    pub display_name: String,
+    pub version: String,
+    pub source_url: String,
+    pub license: String,
+    pub checksum_sha256: String,
+    pub size_bytes: u64,
+    pub local_path: Option<String>,
+    pub state: LearningResourceState,
+    pub installed_bytes: u64,
+    pub error: Option<String>,
+    pub updated_at_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SubtitleSearchResult {
+    pub id: String,
+    pub file_id: u64,
+    pub language: String,
+    pub release: String,
+    pub source: String,
+    pub rating: f64,
+    pub download_count: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VocabularyAssetBundle {
     pub version: u16,
@@ -236,6 +348,12 @@ pub struct VocabularyAssetBundle {
     pub history: Vec<WordStatusHistory>,
     pub occurrences: Vec<WordOccurrence>,
     pub observations: Vec<WordObservation>,
+    #[serde(default)]
+    pub lexical_entries: Vec<LexicalEntry>,
+    #[serde(default)]
+    pub lexical_history: Vec<LexicalStatusHistory>,
+    #[serde(default)]
+    pub lexical_occurrences: Vec<LexicalOccurrence>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

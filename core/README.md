@@ -4,6 +4,12 @@ Clean-room, macOS-first rewrite of a listening-comprehension media player.
 
 **Current release:** Milestone 1.7 complete, version `0.5.0`.
 
+Milestone 1.8 (`0.6.0`) is an acceptance candidate. It adds unified word and
+phrase learning assets, versioned lemma normalization, optional offline
+ECDICT/CMUdict resources, and OpenSubtitles search. It is not released until
+the collaborative checklist in `docs/verification/milestone-1.8-acceptance.md`
+is confirmed.
+
 The Milestone 1 MVP targets macOS Apple Silicon and includes the core learning
 loop, dual text subtitles, drag and drop, configurable subtitle presentation,
 embedded text-subtitle extraction, and optional yt-dlp URL resolution. Windows,

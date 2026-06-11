@@ -6,6 +6,8 @@ use domain::{
     DictionaryDefinition, DictionaryLookup, DictionaryPhonetic, DictionaryProviderInfo,
     LanguageCode,
 };
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 
 pub struct FreeDictionaryProvider {
     client: reqwest::Client,
@@ -115,6 +117,84 @@ impl DictionaryProvider for FreeDictionaryProvider {
             provider: self.info().id,
             cached_at_ms: 0,
         }))
+    }
+}
+
+pub struct EcdictProvider {
+    path: PathBuf,
+}
+
+impl EcdictProvider {
+    pub fn new() -> Self {
+        let id = domain::LearningResourceId::from_fingerprint("learning-resource", "ecdict");
+        let path = PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
+            .join("Library/Application Support/LLPlayerNext/resources/learning")
+            .join(format!("{}.data", id.as_str()));
+        Self { path }
+    }
+}
+
+impl Default for EcdictProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl DictionaryProvider for EcdictProvider {
+    fn info(&self) -> DictionaryProviderInfo {
+        DictionaryProviderInfo {
+            id: "ecdict".into(),
+            display_name: "ECDICT".into(),
+            supported_languages: vec!["en".into()],
+            provides_definitions: true,
+            provides_phonetics: true,
+            provides_audio: false,
+            offline: true,
+        }
+    }
+
+    async fn lookup(
+        &self,
+        _language: &LanguageCode,
+        lemma: &str,
+    ) -> Result<Option<DictionaryLookup>, DictionaryProviderError> {
+        let file = match std::fs::File::open(&self.path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(DictionaryProviderError(error.to_string())),
+        };
+        let prefix = format!("{lemma},");
+        for line in BufReader::new(file).lines().skip(1) {
+            let line = line.map_err(|error| DictionaryProviderError(error.to_string()))?;
+            if !line.starts_with(&prefix) {
+                continue;
+            }
+            let fields = line.split(',').collect::<Vec<_>>();
+            let phonetic = fields.get(1).copied().unwrap_or_default().trim_matches('"');
+            let definition = fields.get(3).copied().unwrap_or_default().trim_matches('"');
+            return Ok(Some(DictionaryLookup {
+                query: lemma.into(),
+                lemma: lemma.into(),
+                definitions: (!definition.is_empty())
+                    .then(|| DictionaryDefinition {
+                        part_of_speech: None,
+                        text: definition.replace("\\n", "\n"),
+                    })
+                    .into_iter()
+                    .collect(),
+                phonetics: (!phonetic.is_empty())
+                    .then(|| DictionaryPhonetic {
+                        text: phonetic.into(),
+                        region: Some("en-US".into()),
+                    })
+                    .into_iter()
+                    .collect(),
+                provider: "ecdict".into(),
+                cached_at_ms: 0,
+            }));
+        }
+        Ok(None)
     }
 }
 

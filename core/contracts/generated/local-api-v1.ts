@@ -134,6 +134,32 @@ export class LocalApiV1 {
     return this.requestText(`/v1/subtitles/${encodeURIComponent(trackId)}/export?format=srt`);
   }
 
+  listLexicalEntries(): Promise<unknown[]> {
+    return this.request("/v1/lexical-entries?language=en&limit=200&offset=0");
+  }
+
+  upsertLexicalEntry(input: unknown): Promise<unknown> {
+    return this.request("/v1/lexical-entries", { method: "PUT", body: JSON.stringify(input) });
+  }
+
+  normalizeLexical(value: string): Promise<unknown> {
+    return this.request("/v1/lexical-normalization", {
+      method: "POST", body: JSON.stringify({ language: "en", value }),
+    });
+  }
+
+  phraseCandidates(sentenceId: string): Promise<unknown[]> {
+    return this.request(`/v1/sentences/${encodeURIComponent(sentenceId)}/phrase-candidates`);
+  }
+
+  learningResources(): Promise<unknown[]> {
+    return this.request("/v1/learning-resources");
+  }
+
+  searchSubtitles(input: unknown): Promise<unknown[]> {
+    return this.request("/v1/subtitle-search", { method: "POST", body: JSON.stringify(input) });
+  }
+
   transcriptionProviders(): Promise<unknown[]> {
     return this.request("/v1/transcription/providers");
   }

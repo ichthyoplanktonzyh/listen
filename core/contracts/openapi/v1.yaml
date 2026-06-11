@@ -130,6 +130,60 @@ paths:
         - { name: format, in: query, schema: { type: string, default: srt } }
       responses:
         "200": { description: Generated SRT subtitle }
+  /v1/lexical-entries:
+    get:
+      operationId: listLexicalEntries
+      responses:
+        "200": { description: Unified word and phrase learning assets }
+    put:
+      operationId: upsertLexicalEntry
+      responses:
+        "200": { description: Updated lexical learning asset }
+  /v1/lexical-entries/{id}:
+    get:
+      operationId: lexicalEntryDetails
+      responses:
+        "200": { description: Lexical asset details }
+  /v1/lexical-normalization:
+    post:
+      operationId: normalizeLexical
+      responses:
+        "200": { description: Versioned lexical normalization result }
+  /v1/lexical-normalization/correct:
+    post:
+      operationId: correctLemma
+      responses:
+        "200": { description: Persisted user lemma correction }
+  /v1/sentences/{sentence_id}/phrase-candidates:
+    get:
+      operationId: phraseCandidates
+      responses:
+        "200": { description: Phrase candidates requiring user confirmation }
+  /v1/learning-resources:
+    get:
+      operationId: learningResources
+      responses:
+        "200": { description: Offline learning resource catalog }
+  /v1/learning-resources/{id}/install:
+    post:
+      operationId: installLearningResource
+      responses:
+        "200": { description: Installed and verified learning resource }
+  /v1/learning-resources/{id}:
+    delete:
+      operationId: removeLearningResource
+      responses:
+        "200": { description: Removed learning resource }
+  /v1/subtitle-search:
+    post:
+      operationId: searchSubtitles
+      responses:
+        "200": { description: Subtitle provider search results }
+  /v1/subtitle-search/download:
+    post:
+      operationId: downloadSubtitle
+      responses:
+        "200": { description: Downloaded subtitle bytes }
   /v1/word-profiles:
     get:
       operationId: readWordProfile

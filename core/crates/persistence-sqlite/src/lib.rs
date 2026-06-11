@@ -12,7 +12,8 @@ use rusqlite::{Connection, OptionalExtension, params};
 use sha2::Digest;
 use thiserror::Error;
 
-pub const MIGRATION_VERSION: u32 = 6;
+pub const MIGRATION_VERSION: u32 = 7;
+mod lexical;
 
 pub struct SqliteRepository {
     connection: Mutex<Connection>,
@@ -99,6 +100,12 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         let tx = connection.unchecked_transaction()?;
         tx.execute_batch(include_str!("../migrations/0006_transcription.sql"))?;
         tx.pragma_update(None, "user_version", 6)?;
+        tx.commit()?;
+    }
+    if current < 7 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0007_lexical_entries.sql"))?;
+        tx.pragma_update(None, "user_version", 7)?;
         tx.commit()?;
     }
     Ok(())
@@ -956,14 +963,19 @@ impl VocabularyAssetRepository for SqliteRepository {
     }
 
     fn export_assets(&self) -> Result<VocabularyAssetBundle, ApplicationError> {
+        let (lexical_entries, lexical_history, lexical_occurrences) =
+            self.export_lexical_assets()?;
         let conn = self.connection.lock().expect("sqlite mutex poisoned");
         Ok(VocabularyAssetBundle {
-            version: 2,
+            version: 3,
             exported_at_ms: application::now_ms(),
             profiles: read_all_profiles(&conn)?,
             history: read_all_history(&conn)?,
             occurrences: read_all_occurrences(&conn)?,
             observations: read_all_observations(&conn)?,
+            lexical_entries,
+            lexical_history,
+            lexical_occurrences,
         })
     }
 
@@ -1077,7 +1089,13 @@ impl VocabularyAssetRepository for SqliteRepository {
             )
             .map_err(repo)?;
         }
-        tx.commit().map_err(repo)
+        tx.commit().map_err(repo)?;
+        drop(conn);
+        self.import_lexical_assets(
+            &bundle.lexical_entries,
+            &bundle.lexical_history,
+            &bundle.lexical_occurrences,
+        )
     }
 
     fn update_learning_content(
@@ -1529,8 +1547,8 @@ fn repo(error: rusqlite::Error) -> ApplicationError {
 mod tests {
     use super::*;
     use application::{
-        AppServices, DictionaryProvider, DictionaryProviderError, ImportSubtitle, RegisterMedia,
-        UpdateWordProfile,
+        AppServices, DictionaryProvider, DictionaryProviderError, ImportSubtitle,
+        LexicalEntryRepository, RegisterMedia, UpdateWordProfile, UpsertLexicalEntry,
     };
     use async_trait::async_trait;
     use std::sync::Arc;
@@ -1729,7 +1747,7 @@ mod tests {
             connection
                 .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
                 .unwrap(),
-            6
+            7
         );
         assert_eq!(
             connection
@@ -1741,9 +1759,66 @@ mod tests {
     }
 
     #[test]
+    fn upgrades_historical_v6_database_and_migrates_words_to_lexical_entries() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(include_str!("../migrations/0001_media.sql"))
+            .unwrap();
+        connection
+            .execute_batch(include_str!("../migrations/0002_learning.sql"))
+            .unwrap();
+        connection
+            .execute_batch("PRAGMA foreign_keys=OFF;")
+            .unwrap();
+        connection
+            .execute_batch(include_str!("../migrations/0003_subtitle_identity.sql"))
+            .unwrap();
+        connection
+            .execute_batch(include_str!("../migrations/0004_vocabulary_assets.sql"))
+            .unwrap();
+        connection.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+        connection
+            .execute_batch(include_str!("../migrations/0005_learning_experience.sql"))
+            .unwrap();
+        connection
+            .execute_batch(include_str!("../migrations/0006_transcription.sql"))
+            .unwrap();
+        connection.pragma_update(None, "user_version", 6).unwrap();
+        connection
+            .execute(
+                "INSERT INTO word_profiles
+             (id,language,lemma,normalized_lemma,display_form,status,updated_at_ms,
+              user_definition,personal_note,learning_updated_at_ms)
+             VALUES ('legacy','en','went','went','Went','\"known_not_recognized\"',10,
+                     'past tense','from a lesson',11)",
+                [],
+            )
+            .unwrap();
+        migrate(&connection).unwrap();
+        let value: (String, String, Option<String>, Option<String>) = connection
+            .query_row(
+                "SELECT kind,display_form,user_definition,personal_note
+                 FROM lexical_entries WHERE id='legacy'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            value,
+            (
+                "\"word\"".into(),
+                "Went".into(),
+                Some("past tense".into()),
+                Some("from a lesson".into())
+            )
+        );
+    }
+
+    #[test]
     fn services_are_idempotent_and_persist_state() {
         let repo = Arc::new(SqliteRepository::in_memory().unwrap());
         let services = AppServices::new(
+            repo.clone(),
             repo.clone(),
             repo.clone(),
             repo.clone(),
@@ -1799,6 +1874,89 @@ mod tests {
     }
 
     #[test]
+    fn lexical_words_and_phrases_keep_independent_state_and_sources() {
+        let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+        let services = AppServices::new(
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo,
+        );
+        let phrase = services
+            .create_lexical_entry(UpsertLexicalEntry {
+                language: "en".into(),
+                kind: LexicalEntryKind::Phrase,
+                canonical_form: "give up".into(),
+                display_form: "give up".into(),
+                status: Some(WordStatus::KnownNotRecognized),
+                user_definition: Some("stop trying".into()),
+                personal_note: None,
+                source: Some(application::LexicalSourceContext {
+                    media_id: None,
+                    sentence_id: None,
+                    original_form: "give up".into(),
+                    sentence_text: "Never give up.".into(),
+                    media_title: "Lesson".into(),
+                    media_fingerprint: "lesson".into(),
+                    start_ms: 10,
+                    end_ms: 20,
+                    token_start: Some(1),
+                    token_end: Some(2),
+                }),
+            })
+            .unwrap();
+        let word = services
+            .create_lexical_entry(UpsertLexicalEntry {
+                language: "en".into(),
+                kind: LexicalEntryKind::Word,
+                canonical_form: "give".into(),
+                display_form: "give".into(),
+                status: Some(WordStatus::KnownRecognized),
+                user_definition: None,
+                personal_note: None,
+                source: None,
+            })
+            .unwrap();
+        assert_ne!(phrase.entry.id, word.entry.id);
+        assert_eq!(phrase.occurrences.len(), 1);
+        assert_eq!(phrase.entry.status, Some(WordStatus::KnownNotRecognized));
+        assert_eq!(word.entry.status, Some(WordStatus::KnownRecognized));
+        services
+            .update_word_profile(UpdateWordProfile {
+                language: "en".into(),
+                lemma: "give".into(),
+                display_form: "give".into(),
+                status: Some(WordStatus::UnknownMeaning),
+                source: None,
+            })
+            .unwrap();
+        let words = services
+            .list_lexical_entries("en", Some(LexicalEntryKind::Word), None, "give", 10, 0)
+            .unwrap();
+        assert_eq!(words.len(), 1);
+        assert_eq!(words[0].entry.status, Some(WordStatus::UnknownMeaning));
+        assert_eq!(
+            services
+                .normalize_lexical_form("en", "went")
+                .unwrap()
+                .normalized,
+            "go"
+        );
+        services.correct_lemma("en", "went", "walk").unwrap();
+        assert_eq!(
+            services
+                .normalize_lexical_form("en", "went")
+                .unwrap()
+                .normalized,
+            "walk"
+        );
+    }
+
+    #[test]
     fn subtitle_save_is_transactional_and_round_trips() {
         let repo = SqliteRepository::in_memory().unwrap();
         let media = MediaItem {
@@ -1843,6 +2001,7 @@ mod tests {
             repo.clone(),
             repo.clone(),
             repo.clone(),
+            repo.clone(),
             repo,
         );
         let provider: Arc<dyn DictionaryProvider> = Arc::new(FakeDictionary {
@@ -1863,6 +2022,7 @@ mod tests {
     fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
         let repo = Arc::new(SqliteRepository::in_memory().unwrap());
         let services = AppServices::new(
+            repo.clone(),
             repo.clone(),
             repo.clone(),
             repo.clone(),
@@ -1998,6 +2158,7 @@ mod tests {
             restored.clone(),
             restored.clone(),
             restored.clone(),
+            restored.clone(),
             restored,
         );
         restored_services.import_vocabulary(&bundle).unwrap();
@@ -2038,11 +2199,30 @@ mod tests {
             let tx = conn.transaction().unwrap();
             for word in 0..10_000 {
                 let profile_id = format!("profile-{word}");
+                let lexical_kind = if word % 2 == 0 {
+                    "\"word\""
+                } else {
+                    "\"phrase\""
+                };
                 tx.execute(
                     "INSERT INTO word_profiles
                      (id,language,lemma,normalized_lemma,display_form,status,updated_at_ms)
                      VALUES (?1,'en',?2,?2,?2,'\"unknown_meaning\"',?3)",
                     params![profile_id, format!("word-{word:05}"), word],
+                )
+                .unwrap();
+                tx.execute(
+                    "INSERT INTO lexical_entries
+                     (id,language,kind,canonical_form,normalized_form,display_form,status,
+                      normalization_provider,normalization_version,user_corrected,
+                      updated_at_ms,learning_updated_at_ms)
+                     VALUES (?1,'en',?2,?3,?3,?3,'\"unknown_meaning\"','test','v1',0,?4,0)",
+                    params![
+                        format!("lexical-{word}"),
+                        lexical_kind,
+                        format!("asset-{word:05}"),
+                        word
+                    ],
                 )
                 .unwrap();
                 for source in 0..5 {
@@ -2085,12 +2265,30 @@ mod tests {
             "large vocabulary query took {:?}",
             started.elapsed()
         );
+        let lexical_started = std::time::Instant::now();
+        let lexical = repo
+            .list_lexical_entries(
+                &LanguageCode::parse("en").unwrap(),
+                Some(LexicalEntryKind::Phrase),
+                Some(WordStatus::UnknownMeaning),
+                "asset-09",
+                200,
+                0,
+            )
+            .unwrap();
+        assert_eq!(lexical.len(), 200);
+        assert!(
+            lexical_started.elapsed() < std::time::Duration::from_secs(2),
+            "large lexical query took {:?}",
+            lexical_started.elapsed()
+        );
     }
 
     #[test]
     fn failed_source_capture_rolls_back_profile_and_history() {
         let repo = Arc::new(SqliteRepository::in_memory().unwrap());
         let services = AppServices::new(
+            repo.clone(),
             repo.clone(),
             repo.clone(),
             repo.clone(),
@@ -2137,6 +2335,7 @@ mod tests {
             repo.clone(),
             repo.clone(),
             repo.clone(),
+            repo.clone(),
             repo,
         );
         let summary = services
@@ -2171,7 +2370,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(details.profile.user_definition.as_deref(), Some("greeting"));
-        assert_eq!(services.export_vocabulary().unwrap().version, 2);
+        assert_eq!(services.export_vocabulary().unwrap().version, 3);
         let second = services
             .import_external_vocabulary(&ExternalVocabularyImport {
                 language: "en".into(),
@@ -2198,6 +2397,7 @@ mod tests {
     async fn dictionary_aggregation_isolates_provider_failure() {
         let repo = Arc::new(SqliteRepository::in_memory().unwrap());
         let services = AppServices::new(
+            repo.clone(),
             repo.clone(),
             repo.clone(),
             repo.clone(),

@@ -15,7 +15,7 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
-use dictionary_provider::FreeDictionaryProvider;
+use dictionary_provider::{EcdictProvider, FreeDictionaryProvider};
 use domain::{
     LanguageCode, MediaAvailability, MediaId, MediaKind, ObservationResult, SubtitleSentenceId,
     SubtitleTrackId, VocabularyAssetBundle, WordProfileId, WordStatus,
@@ -23,7 +23,9 @@ use domain::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
+mod m18;
 mod transcription;
+use m18::M18Coordinator;
 use transcription::{CreateJobRequest, TranscriptionCoordinator};
 
 static ERROR_SEQUENCE: AtomicU64 = AtomicU64::new(1);
@@ -35,6 +37,7 @@ pub struct ApiState {
     pub events: broadcast::Sender<EventEnvelope>,
     pub dictionaries: Arc<Vec<Arc<dyn DictionaryProvider>>>,
     pub transcription: Arc<TranscriptionCoordinator>,
+    pub m18: Arc<M18Coordinator>,
 }
 
 impl ApiState {
@@ -56,10 +59,14 @@ impl ApiState {
             services,
             token: token.into(),
             events,
-            dictionaries: Arc::new(vec![Arc::new(
-                FreeDictionaryProvider::new().expect("dictionary HTTP client must initialize"),
-            )]),
+            dictionaries: Arc::new(vec![
+                Arc::new(EcdictProvider::new()),
+                Arc::new(
+                    FreeDictionaryProvider::new().expect("dictionary HTTP client must initialize"),
+                ),
+            ]),
             transcription,
+            m18: Arc::new(M18Coordinator::new()),
         }
     }
 }
@@ -78,6 +85,31 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/v1/word-profiles", get(read_word).put(update_word))
         .route("/v1/word-observations", post(create_observation))
+        .route(
+            "/v1/lexical-entries",
+            get(m18::list_lexical_entries).put(m18::upsert_lexical_entry),
+        )
+        .route("/v1/lexical-entries/{id}", get(m18::lexical_details))
+        .route("/v1/lexical-normalization", post(m18::normalize_lexical))
+        .route(
+            "/v1/lexical-normalization/correct",
+            post(m18::correct_lemma),
+        )
+        .route(
+            "/v1/sentences/{sentence_id}/phrase-candidates",
+            get(m18::phrase_candidates),
+        )
+        .route("/v1/learning-resources", get(m18::resources))
+        .route(
+            "/v1/learning-resources/{id}/install",
+            post(m18::install_resource),
+        )
+        .route(
+            "/v1/learning-resources/{id}",
+            axum::routing::delete(m18::remove_resource),
+        )
+        .route("/v1/subtitle-search", post(m18::search_subtitles))
+        .route("/v1/subtitle-search/download", post(m18::download_subtitle))
         .route("/v1/vocabulary", get(list_vocabulary))
         .route("/v1/vocabulary/export", get(export_vocabulary))
         .route("/v1/vocabulary/import", post(import_vocabulary))
@@ -795,7 +827,7 @@ pub struct ApiError {
 }
 
 impl ApiError {
-    fn new(
+    pub(crate) fn new(
         status: StatusCode,
         code: &'static str,
         message: impl Into<String>,
@@ -821,13 +853,17 @@ impl ApiError {
         )
     }
 
-    fn not_found(entity: &'static str) -> Self {
+    pub(crate) fn not_found(entity: &'static str) -> Self {
         Self::new(
             StatusCode::NOT_FOUND,
             "not_found",
             format!("{entity} was not found"),
             false,
         )
+    }
+
+    pub(crate) fn gateway(code: &'static str, message: impl Into<String>) -> Self {
+        Self::new(StatusCode::BAD_GATEWAY, code, message, true)
     }
 }
 
@@ -898,6 +934,7 @@ mod tests {
         let repo = Arc::new(SqliteRepository::in_memory().unwrap());
         router(ApiState::new(
             AppServices::new(
+                repo.clone(),
                 repo.clone(),
                 repo.clone(),
                 repo.clone(),
