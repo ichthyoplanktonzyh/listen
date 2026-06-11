@@ -5,8 +5,9 @@ This is an M0 inventory, not legal advice.
 | Dependency | Purpose | License / note |
 |---|---|---|
 | Flutter SDK | Flutter candidate UI | BSD-3-Clause |
-| media_kit packages | Flutter playback candidate | MIT |
-| libmpv/mpv | Playback engine | Build-dependent GPL/LGPL implications; review before distribution |
+| video_player | Flutter playback contract | BSD-3-Clause |
+| fvp | Flutter libmdk adapter and Metal playback backend | BSD-3-Clause |
+| libmdk binary SDK | Playback engine, VideoToolbox decoding, and Metal rendering | Bundled by fvp; distribution and commercial-use terms require final release review |
 | Tauri | Tauri candidate shell | Apache-2.0 OR MIT |
 | tauri-plugin-libmpv | Tauri libmpv embedding | MPL-2.0 |
 | libmpv-wrapper | Plugin native wrapper | Verify release artifact license before distribution |
@@ -16,7 +17,7 @@ This is an M0 inventory, not legal advice.
 | file_selector | Native file selection | BSD-3-Clause |
 | desktop_drop | Desktop file drag and drop | Apache-2.0 |
 | ffmpeg / ffprobe | Embedded text-subtitle extraction and ASR audio conversion | Milestone 1.7 bundles a reproducible 8.0.1 arm64 build with GPL, nonfree, and version3 features disabled; release script verifies configuration |
-| yt-dlp | Optional online-media URL resolution | Unlicense; supported sites and downloaded extractor dependencies may have separate terms; M8 does not bypass DRM or access controls |
+| yt-dlp | Optional online-media URL resolution and explicit user-initiated download | Unlicense; supported sites and downloaded extractor dependencies may have separate terms; LLPlayerNext does not bypass DRM or access controls |
 | whisper.cpp | Local ASR provider for generated learning subtitles | Milestone 1.7 bundles v1.7.6 arm64 from pinned source commit under MIT; models are explicit checksum-verified user downloads and are not redistributed |
 | ECDICT | Optional offline English dictionary and lemma data | MIT; downloaded explicitly from a pinned source revision and checksum-verified |
 | CMU Pronouncing Dictionary | Optional future pronunciation data | BSD-style CMU license; downloaded explicitly from a pinned source revision and checksum-verified |

@@ -6,7 +6,8 @@
 ## Candidates
 
 1. Flutter + media_kit/libmpv
-2. React + TypeScript + Tauri + libmpv
+2. Flutter + video_player/fvp/libmdk
+3. React + TypeScript + Tauri + libmpv
 
 ## Decision gate
 
@@ -25,12 +26,20 @@ Windows and Linux implementation risks must be recorded but do not block M1.
   on macOS Apple Silicon. Video is embedded in the Flutter window, interactive
   subtitle overlay remains available, generated video and audio open, position
   events and track discovery work, and seek/loop diagnostics pass.
+- **Flutter + video_player/fvp:** selected after Xcode 26.5 clean builds made
+  media_kit_video's deprecated OpenGL texture path output black frames. fvp
+  uses VideoToolbox hardware decoding and a Metal renderer on macOS while
+  preserving embedded track selection and the Flutter subtitle overlay. The
+  repository vendors a minimal macOS fvp patch that creates the Flutter texture
+  through `CVMetalTextureCache` and waits for the Metal blit command buffer
+  before publishing each frame.
 
 ## Decision
 
-Use Flutter + media_kit as the macOS MVP desktop client and player adapter
-baseline. Proceed into M1 without waiting for Windows or Linux implementation.
+Use Flutter + video_player/fvp as the macOS desktop player baseline. Keep
+player controls behind the project-owned adapter and do not expose fvp or
+video_player track types to the rest of the client.
 
-Keep the player adapter contract independent of Flutter and media_kit types.
-Revisit the decision if CocoaPods/Swift Package Manager compatibility,
-packaging, or long-session playback reliability becomes unacceptable.
+The packaged libmdk framework is sanitized to remove Homebrew and `/usr/local`
+runtime search paths before signing. Revisit the decision if distribution
+terms, packaging, or long-session playback reliability becomes unacceptable.
