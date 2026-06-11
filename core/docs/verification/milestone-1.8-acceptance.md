@@ -8,7 +8,7 @@ Package:
 
 - `dist/LLPlayerNext-macos-arm64.zip`
 - SHA-256:
-  `5b9e4f809b6528b755c4d29dee1d556c34e4659692d5dc45a923a6054b896126`
+  `443f26ac1194b3712b20660db9466b3cf0caceb92f940219499b29a4b4eaf4e1`
 
 ## Automated Gates
 
@@ -21,6 +21,7 @@ Package:
 - [x] Vocabulary asset v3 conflict merge and repeated-import idempotency
 - [x] OpenSubtitles visible setup/search workflow
 - [x] Provider-supplied pronunciation audio contract and widget action
+- [x] Xcode 26.5 OpenGL black-frame diagnosis and software-rendering workaround
 
 ## Manual Acceptance
 
@@ -41,5 +42,7 @@ Record each item as pass, fail, or pending:
 8. Chinese/English UI and the packaged app behave normally.
 9. A dictionary result with pronunciation audio shows a play action and plays
    without interrupting the current video.
+10. Software rendering avoids black video frames and remains acceptable for
+    representative high-resolution and long-running playback.
 
 The release commit and `v0.6.0` tag remain blocked on user confirmation.

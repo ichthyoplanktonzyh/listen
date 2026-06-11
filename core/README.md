@@ -2,6 +2,10 @@
 
 Clean-room, macOS-first rewrite of a listening-comprehension media player.
 
+**New thread / maintainer handoff:** read
+[`docs/handoff/project-handoff-2026-06-11.md`](docs/handoff/project-handoff-2026-06-11.md)
+before changing branches, closing Milestone 1.8, or starting Milestone 1.9.
+
 **Current release:** Milestone 1.7 complete, version `0.5.0`.
 
 Milestone 1.8 (`0.6.0`) is an acceptance candidate. It adds unified word and
