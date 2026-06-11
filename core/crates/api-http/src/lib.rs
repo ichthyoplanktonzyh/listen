@@ -47,6 +47,8 @@ impl ApiState {
         token: impl Into<Arc<str>>,
     ) -> Self {
         let (events, _) = broadcast::channel(128);
+        let ecdict = Arc::new(EcdictProvider::new());
+        let services = services.with_lexical_normalizers(vec![ecdict.clone()]);
         let transcription = Arc::new(
             TranscriptionCoordinator::new(
                 services.clone(),
@@ -60,7 +62,7 @@ impl ApiState {
             token: token.into(),
             events,
             dictionaries: Arc::new(vec![
-                Arc::new(EcdictProvider::new()),
+                ecdict,
                 Arc::new(
                     FreeDictionaryProvider::new().expect("dictionary HTTP client must initialize"),
                 ),
@@ -821,6 +823,7 @@ pub struct ErrorBody {
     pub retryable: bool,
 }
 
+#[derive(Debug)]
 pub struct ApiError {
     status: StatusCode,
     body: ErrorBody,
@@ -901,6 +904,15 @@ impl From<ApplicationError> for ApiError {
                 error.to_string(),
                 true,
             ),
+            ApplicationError::LexicalNormalizationProvider(error) => Self::new(
+                StatusCode::BAD_GATEWAY,
+                "lexical_normalization_provider_error",
+                error.to_string(),
+                true,
+            ),
+            ApplicationError::Conflict(message) => {
+                Self::new(StatusCode::CONFLICT, "asset_conflict", message, false)
+            }
         }
     }
 }

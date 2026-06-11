@@ -1,6 +1,7 @@
 use application::{ApplicationError, LexicalEntryRepository, LexicalSourceContext};
 use domain::*;
 use rusqlite::{OptionalExtension, params};
+use std::collections::HashMap;
 
 use super::{SqliteRepository, from_json, json, repo};
 
@@ -64,19 +65,27 @@ impl SqliteRepository {
         history: &[LexicalStatusHistory],
         occurrences: &[LexicalOccurrence],
     ) -> Result<(), ApplicationError> {
+        let mut imported_ids = HashMap::new();
         for entry in entries {
-            self.upsert_lexical_entry(entry, None, WordChangeSource::Import)?;
+            let local =
+                self.lexical_entry_by_key(&entry.language, entry.kind, &entry.normalized_form)?;
+            let merged = merge_imported_entry(local.as_ref(), entry);
+            let details = self.upsert_lexical_entry(&merged, None, WordChangeSource::Import)?;
+            imported_ids.insert(entry.id.clone(), details.entry.id);
         }
         let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
         let tx = conn.transaction().map_err(repo)?;
         for value in history {
+            let lexical_entry_id = imported_ids
+                .get(&value.lexical_entry_id)
+                .unwrap_or(&value.lexical_entry_id);
             tx.execute(
                 "INSERT OR IGNORE INTO lexical_status_history
                  (id,lexical_entry_id,previous_status,new_status,changed_at_ms,change_source)
                  VALUES (?1,?2,?3,?4,?5,?6)",
                 params![
                     value.id.as_str(),
-                    value.lexical_entry_id.as_str(),
+                    lexical_entry_id.as_str(),
                     value.previous_status.map(|item| json(&item)).transpose()?,
                     value.new_status.map(|item| json(&item)).transpose()?,
                     value.changed_at_ms,
@@ -86,17 +95,45 @@ impl SqliteRepository {
             .map_err(repo)?;
         }
         for value in occurrences {
+            let lexical_entry_id = imported_ids
+                .get(&value.lexical_entry_id)
+                .unwrap_or(&value.lexical_entry_id);
+            let id = LexicalOccurrenceId::from_fingerprint(
+                "lexical-occurrence",
+                &format!("{}:{}", lexical_entry_id.as_str(), value.source_key),
+            );
             tx.execute(
-                "INSERT OR IGNORE INTO lexical_occurrences
+                "INSERT INTO lexical_occurrences
                  (id,source_key,lexical_entry_id,media_id,sentence_id,original_form,
                   sentence_text_snapshot,media_title_snapshot,media_fingerprint_snapshot,
                   start_ms_snapshot,end_ms_snapshot,token_start,token_end,first_seen_at_ms,
                   last_seen_at_ms,encounter_count)
-                 VALUES (?1,?2,?3,NULL,NULL,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+                 VALUES (?1,?2,?3,NULL,NULL,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)
+                 ON CONFLICT(lexical_entry_id,source_key) DO UPDATE SET
+                   original_form=CASE WHEN excluded.last_seen_at_ms>last_seen_at_ms
+                                      THEN excluded.original_form ELSE original_form END,
+                   sentence_text_snapshot=CASE WHEN excluded.last_seen_at_ms>last_seen_at_ms
+                                               THEN excluded.sentence_text_snapshot
+                                               ELSE sentence_text_snapshot END,
+                   media_title_snapshot=CASE WHEN excluded.last_seen_at_ms>last_seen_at_ms
+                                             THEN excluded.media_title_snapshot
+                                             ELSE media_title_snapshot END,
+                   media_fingerprint_snapshot=CASE WHEN excluded.last_seen_at_ms>last_seen_at_ms
+                                                   THEN excluded.media_fingerprint_snapshot
+                                                   ELSE media_fingerprint_snapshot END,
+                   start_ms_snapshot=CASE WHEN excluded.last_seen_at_ms>last_seen_at_ms
+                                          THEN excluded.start_ms_snapshot ELSE start_ms_snapshot END,
+                   end_ms_snapshot=CASE WHEN excluded.last_seen_at_ms>last_seen_at_ms
+                                        THEN excluded.end_ms_snapshot ELSE end_ms_snapshot END,
+                   token_start=COALESCE(token_start,excluded.token_start),
+                   token_end=COALESCE(token_end,excluded.token_end),
+                   first_seen_at_ms=MIN(first_seen_at_ms,excluded.first_seen_at_ms),
+                   last_seen_at_ms=MAX(last_seen_at_ms,excluded.last_seen_at_ms),
+                   encounter_count=MAX(encounter_count,excluded.encounter_count)",
                 params![
-                    value.id.as_str(),
+                    id.as_str(),
                     value.source_key,
-                    value.lexical_entry_id.as_str(),
+                    lexical_entry_id.as_str(),
                     value.original_form,
                     value.sentence_text_snapshot,
                     value.media_title_snapshot,
@@ -114,6 +151,28 @@ impl SqliteRepository {
         }
         tx.commit().map_err(repo)
     }
+}
+
+fn merge_imported_entry(local: Option<&LexicalEntry>, imported: &LexicalEntry) -> LexicalEntry {
+    let Some(local) = local else {
+        return imported.clone();
+    };
+    let mut merged = if imported.updated_at_ms > local.updated_at_ms {
+        imported.clone()
+    } else {
+        local.clone()
+    };
+    merged.id = local.id.clone();
+    if imported.learning_updated_at_ms > local.learning_updated_at_ms {
+        merged.user_definition = imported.user_definition.clone();
+        merged.personal_note = imported.personal_note.clone();
+        merged.learning_updated_at_ms = imported.learning_updated_at_ms;
+    } else {
+        merged.user_definition = local.user_definition.clone();
+        merged.personal_note = local.personal_note.clone();
+        merged.learning_updated_at_ms = local.learning_updated_at_ms;
+    }
+    merged
 }
 
 impl LexicalEntryRepository for SqliteRepository {
@@ -398,6 +457,28 @@ impl LexicalEntryRepository for SqliteRepository {
                 "SELECT corrected_normalized FROM lemma_overrides WHERE language=?1 AND original_normalized=?2",
                 params![language.as_str(), original_normalized],
                 |row| row.get(0),
+            )
+            .optional()
+            .map_err(repo)
+    }
+
+    fn lexical_entry_by_key(
+        &self,
+        language: &LanguageCode,
+        kind: LexicalEntryKind,
+        normalized_form: &str,
+    ) -> Result<Option<LexicalEntry>, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .query_row(
+                "SELECT id,language,kind,canonical_form,normalized_form,display_form,status,
+                        user_definition,personal_note,normalization_provider,normalization_version,
+                        user_corrected,updated_at_ms,learning_updated_at_ms
+                 FROM lexical_entries
+                 WHERE language=?1 AND kind=?2 AND normalized_form=?3",
+                params![language.as_str(), json(&kind)?, normalized_form],
+                lexical_entry_row,
             )
             .optional()
             .map_err(repo)

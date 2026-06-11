@@ -127,6 +127,12 @@ pub trait LexicalEntryRepository: Send + Sync {
         language: &LanguageCode,
         original_normalized: &str,
     ) -> Result<Option<String>, ApplicationError>;
+    fn lexical_entry_by_key(
+        &self,
+        language: &LanguageCode,
+        kind: LexicalEntryKind,
+        normalized_form: &str,
+    ) -> Result<Option<LexicalEntry>, ApplicationError>;
 }
 
 pub trait DictionaryCacheRepository: Send + Sync {
@@ -185,6 +191,25 @@ pub trait DictionaryProvider: Send + Sync {
 #[error("dictionary provider failed: {0}")]
 pub struct DictionaryProviderError(pub String);
 
+pub trait LexicalNormalizationProvider: Send + Sync {
+    fn provider_id(&self) -> &'static str;
+    fn version(&self) -> &str;
+    fn normalize(
+        &self,
+        language: &LanguageCode,
+        value: &str,
+    ) -> Result<Option<String>, LexicalNormalizationProviderError>;
+    fn phrase_candidates(
+        &self,
+        language: &LanguageCode,
+        sentence: &SubtitleSentence,
+    ) -> Result<Vec<PhraseCandidate>, LexicalNormalizationProviderError>;
+}
+
+#[derive(Debug, Error)]
+#[error("lexical normalization provider failed: {0}")]
+pub struct LexicalNormalizationProviderError(pub String);
+
 #[derive(Clone)]
 pub struct AppServices {
     media: Arc<dyn MediaRepository>,
@@ -195,6 +220,7 @@ pub struct AppServices {
     dictionary: Arc<dyn DictionaryCacheRepository>,
     vocabulary: Arc<dyn VocabularyAssetRepository>,
     lexical: Arc<dyn LexicalEntryRepository>,
+    lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
 }
 
 impl AppServices {
@@ -218,7 +244,16 @@ impl AppServices {
             dictionary,
             vocabulary,
             lexical,
+            lexical_normalizers: Arc::new(Vec::new()),
         }
+    }
+
+    pub fn with_lexical_normalizers(
+        mut self,
+        providers: Vec<Arc<dyn LexicalNormalizationProvider>>,
+    ) -> Self {
+        self.lexical_normalizers = Arc::new(providers);
+        self
     }
 
     pub fn normalize_lexical_form(
@@ -237,6 +272,20 @@ impl AppServices {
                 version: "v1".into(),
                 user_corrected: true,
             });
+        }
+        for provider in self.lexical_normalizers.iter() {
+            if let Some(normalized) = provider
+                .normalize(&language, &original)
+                .map_err(ApplicationError::LexicalNormalizationProvider)?
+            {
+                return Ok(LexicalNormalization {
+                    original,
+                    normalized,
+                    provider: provider.provider_id().into(),
+                    version: provider.version().into(),
+                    user_corrected: false,
+                });
+            }
         }
         let normalized = normalize_american_english(&original);
         Ok(LexicalNormalization {
@@ -259,6 +308,19 @@ impl AppServices {
         let corrected = normalize_lemma(corrected);
         require_text(&original, "original")?;
         require_text(&corrected, "corrected")?;
+        let original_entry =
+            self.lexical
+                .lexical_entry_by_key(&language, LexicalEntryKind::Word, &original)?;
+        let corrected_entry =
+            self.lexical
+                .lexical_entry_by_key(&language, LexicalEntryKind::Word, &corrected)?;
+        if let (Some(original_entry), Some(corrected_entry)) = (original_entry, corrected_entry)
+            && original_entry.id != corrected_entry.id
+        {
+            return Err(ApplicationError::Conflict(
+                "lemma correction target already has a separate word asset",
+            ));
+        }
         self.lexical
             .set_lemma_override(&language, &original, &corrected, now_ms())?;
         Ok(LexicalNormalization {
@@ -343,7 +405,23 @@ impl AppServices {
             .subtitles
             .get_sentence(sentence_id)?
             .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
-        Ok(phrase_candidates(&sentence))
+        let language = LanguageCode::parse("en")?;
+        let mut candidates = Vec::new();
+        for provider in self.lexical_normalizers.iter() {
+            candidates.extend(
+                provider
+                    .phrase_candidates(&language, &sentence)
+                    .map_err(ApplicationError::LexicalNormalizationProvider)?,
+            );
+        }
+        candidates.extend(phrase_candidates(&sentence));
+        candidates.sort_by_key(|value| (value.token_start, value.token_end));
+        candidates.dedup_by(|left, right| {
+            left.normalized_form == right.normalized_form
+                && left.token_start == right.token_start
+                && left.token_end == right.token_end
+        });
+        Ok(candidates)
     }
 
     pub fn register_media(&self, input: RegisterMedia) -> Result<MediaItem, ApplicationError> {
@@ -391,7 +469,9 @@ impl AppServices {
         input: UpdateWordProfile,
     ) -> Result<WordProfile, ApplicationError> {
         let language = LanguageCode::parse(input.language)?;
-        let normalized_lemma = normalize_lemma(&input.lemma);
+        let normalized_lemma = self
+            .normalize_lexical_form(language.as_str(), &input.lemma)?
+            .normalized;
         require_text(&normalized_lemma, "lemma")?;
         let profile = WordProfile {
             id: WordProfileId::from_fingerprint(
@@ -410,7 +490,10 @@ impl AppServices {
         };
         if let Some(source) = input.source.as_ref()
             && (source.language != profile.language
-                || normalize_lemma(&source.normalized_lemma) != profile.normalized_lemma
+                || self
+                    .normalize_lexical_form(profile.language.as_str(), &source.normalized_lemma)?
+                    .normalized
+                    != profile.normalized_lemma
                 || source.end_ms < source.start_ms)
         {
             return Err(ApplicationError::Validation("source context"));
@@ -438,7 +521,14 @@ impl AppServices {
         lemma: &str,
     ) -> Result<Option<WordProfile>, ApplicationError> {
         let language = LanguageCode::parse(language.to_owned())?;
-        self.words.get_by_key(&language, &normalize_lemma(lemma))
+        let raw = normalize_lemma(lemma);
+        let normalized = self
+            .normalize_lexical_form(language.as_str(), lemma)?
+            .normalized;
+        if let Some(value) = self.words.get_by_key(&language, &normalized)? {
+            return Ok(Some(value));
+        }
+        self.words.get_by_key(&language, &raw)
     }
 
     pub fn read_word_profiles(
@@ -447,13 +537,16 @@ impl AppServices {
         lemmas: &[String],
     ) -> Result<Vec<WordProfile>, ApplicationError> {
         let language = LanguageCode::parse(language.to_owned())?;
-        let normalized = lemmas
-            .iter()
-            .map(|lemma| normalize_lemma(lemma))
-            .filter(|lemma| !lemma.is_empty())
-            .collect::<std::collections::BTreeSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>();
+        let mut normalized = std::collections::BTreeSet::new();
+        for lemma in lemmas {
+            let normalized_lemma = self
+                .normalize_lexical_form(language.as_str(), lemma)?
+                .normalized;
+            if !normalized_lemma.is_empty() {
+                normalized.insert(normalized_lemma);
+            }
+        }
+        let normalized = normalized.into_iter().collect::<Vec<_>>();
         self.words.get_many(&language, &normalized)
     }
 
@@ -472,7 +565,13 @@ impl AppServices {
                     .map(|details| details.profile)
                     .ok_or(ApplicationError::NotFound("word profile"))?;
                 if source.language != profile.language
-                    || normalize_lemma(&source.normalized_lemma) != profile.normalized_lemma
+                    || self
+                        .normalize_lexical_form(
+                            profile.language.as_str(),
+                            &source.normalized_lemma,
+                        )?
+                        .normalized
+                        != profile.normalized_lemma
                     || source.end_ms < source.start_ms
                 {
                     return Err(ApplicationError::Validation("source context"));
@@ -835,6 +934,10 @@ pub enum ApplicationError {
     Subtitle(#[from] subtitle_core::SubtitleError),
     #[error(transparent)]
     DictionaryProvider(#[from] DictionaryProviderError),
+    #[error(transparent)]
+    LexicalNormalizationProvider(#[from] LexicalNormalizationProviderError),
+    #[error("{0}")]
+    Conflict(&'static str),
 }
 
 fn require_text(value: &str, field: &'static str) -> Result<(), ApplicationError> {

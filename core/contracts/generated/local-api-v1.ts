@@ -90,6 +90,97 @@ export interface WordProfile extends UpdateWordProfile {
   learning_updated_at_ms: number;
 }
 
+export type LexicalEntryKind = "word" | "phrase";
+
+export interface LexicalEntry {
+  id: string;
+  language: string;
+  kind: LexicalEntryKind;
+  canonical_form: string;
+  normalized_form: string;
+  display_form: string;
+  status: WordStatus | null;
+  user_definition: string | null;
+  personal_note: string | null;
+  normalization_provider: string;
+  normalization_version: string;
+  user_corrected: boolean;
+  updated_at_ms: number;
+  learning_updated_at_ms: number;
+}
+
+export interface LexicalEntryDetails {
+  entry: LexicalEntry;
+  history: unknown[];
+  occurrences: unknown[];
+}
+
+export interface LexicalNormalization {
+  original: string;
+  normalized: string;
+  provider: string;
+  version: string;
+  user_corrected: boolean;
+}
+
+export interface LearningResource {
+  id: string;
+  display_name: string;
+  version: string;
+  source_url: string;
+  license: string;
+  checksum_sha256: string;
+  size_bytes: number;
+  local_path: string | null;
+  state: "available" | "installing" | "installed" | "failed";
+  installed_bytes: number;
+  error: string | null;
+  updated_at_ms: number;
+}
+
+export interface SubtitleSearchResult {
+  id: string;
+  file_id: number;
+  language: string;
+  release: string;
+  source: string;
+  rating: number;
+  download_count: number;
+}
+
+export interface DictionaryPhonetic {
+  text: string;
+  region: string | null;
+  audio_url: string | null;
+}
+
+export interface DictionaryLookup {
+  query: string;
+  lemma: string;
+  definitions: Array<{ part_of_speech: string | null; text: string }>;
+  phonetics: DictionaryPhonetic[];
+  provider: string;
+  cached_at_ms: number;
+}
+
+export interface DictionaryLookupBundle {
+  query: string;
+  normalized_lemma: string;
+  results: Array<{
+    provider: {
+      id: string;
+      display_name: string;
+      supported_languages: string[];
+      provides_definitions: boolean;
+      provides_phonetics: boolean;
+      provides_audio: boolean;
+      offline: boolean;
+    };
+    lookup: DictionaryLookup | null;
+    error: string | null;
+  }>;
+}
+
 export class LocalApiV1 {
   constructor(
     private readonly baseUrl: string,
@@ -134,17 +225,23 @@ export class LocalApiV1 {
     return this.requestText(`/v1/subtitles/${encodeURIComponent(trackId)}/export?format=srt`);
   }
 
-  listLexicalEntries(): Promise<unknown[]> {
+  listLexicalEntries(): Promise<LexicalEntryDetails[]> {
     return this.request("/v1/lexical-entries?language=en&limit=200&offset=0");
   }
 
-  upsertLexicalEntry(input: unknown): Promise<unknown> {
+  upsertLexicalEntry(input: unknown): Promise<LexicalEntryDetails> {
     return this.request("/v1/lexical-entries", { method: "PUT", body: JSON.stringify(input) });
   }
 
-  normalizeLexical(value: string): Promise<unknown> {
+  normalizeLexical(value: string): Promise<LexicalNormalization> {
     return this.request("/v1/lexical-normalization", {
       method: "POST", body: JSON.stringify({ language: "en", value }),
+    });
+  }
+
+  correctLemma(original: string, corrected: string): Promise<LexicalNormalization> {
+    return this.request("/v1/lexical-normalization/correct", {
+      method: "POST", body: JSON.stringify({ language: "en", original, corrected }),
     });
   }
 
@@ -152,12 +249,30 @@ export class LocalApiV1 {
     return this.request(`/v1/sentences/${encodeURIComponent(sentenceId)}/phrase-candidates`);
   }
 
-  learningResources(): Promise<unknown[]> {
+  learningResources(): Promise<LearningResource[]> {
     return this.request("/v1/learning-resources");
   }
 
-  searchSubtitles(input: unknown): Promise<unknown[]> {
+  installLearningResource(id: string): Promise<LearningResource> {
+    return this.request(`/v1/learning-resources/${encodeURIComponent(id)}/install`, {
+      method: "POST",
+    });
+  }
+
+  removeLearningResource(id: string): Promise<LearningResource> {
+    return this.request(`/v1/learning-resources/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+  }
+
+  searchSubtitles(input: unknown): Promise<SubtitleSearchResult[]> {
     return this.request("/v1/subtitle-search", { method: "POST", body: JSON.stringify(input) });
+  }
+
+  downloadSubtitle(input: unknown): Promise<string> {
+    return this.requestText("/v1/subtitle-search/download", {
+      method: "POST", body: JSON.stringify(input),
+    });
   }
 
   transcriptionProviders(): Promise<unknown[]> {
@@ -272,7 +387,7 @@ export class LocalApiV1 {
     });
   }
 
-  dictionaryLookup(language: string, lemma: string): Promise<unknown> {
+  dictionaryLookup(language: string, lemma: string): Promise<DictionaryLookupBundle> {
     const query = new URLSearchParams({ language, lemma });
     return this.request(`/v1/dictionary?${query}`);
   }
@@ -294,9 +409,13 @@ export class LocalApiV1 {
     return (await response.json()) as T;
   }
 
-  private async requestText(path: string): Promise<string> {
+  private async requestText(path: string, init: RequestInit = {}): Promise<string> {
+    const headers = new Headers(init.headers);
+    headers.set("authorization", `Bearer ${this.token}`);
+    if (init.body) headers.set("content-type", "application/json");
     const response = await fetch(`${this.baseUrl}${path}`, {
-      headers: { authorization: `Bearer ${this.token}` },
+      ...init,
+      headers,
     });
     if (!response.ok) throw (await response.json()) as ErrorBody;
     return response.text();

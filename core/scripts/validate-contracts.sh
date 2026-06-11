@@ -16,9 +16,14 @@ if (events.properties.version.const !== 1) throw new Error("event schema version
 for (const path of ["/v1/health", "/v1/media", "/v1/media/{media_id}/progress", "/v1/media/{media_id}/subtitles", "/v1/subtitles/{track_id}", "/v1/subtitles/{track_id}/export", "/v1/lexical-entries", "/v1/lexical-normalization", "/v1/sentences/{sentence_id}/phrase-candidates", "/v1/learning-resources", "/v1/subtitle-search", "/v1/word-profiles", "/v1/word-profiles/batch", "/v1/word-observations", "/v1/vocabulary", "/v1/vocabulary/export", "/v1/vocabulary/import", "/v1/vocabulary/import-external", "/v1/word-profiles/{profile_id}/details", "/v1/word-profiles/{profile_id}/learning-content", "/v1/media/{media_id}/availability", "/v1/events", "/v1/dictionary", "/v1/sentences/{sentence_id}/diagnosis", "/v1/transcription/providers", "/v1/transcription/models", "/v1/transcription/jobs"]) {
   if (!openapi.includes(path + ":")) throw new Error(`OpenAPI missing ${path}`);
 }
-for (const operation of ["health()", "registerMedia(", "updateProgress(", "importSubtitle(", "readSubtitle(", "exportSubtitle(", "listLexicalEntries(", "upsertLexicalEntry(", "normalizeLexical(", "phraseCandidates(", "learningResources(", "searchSubtitles(", "transcriptionProviders(", "transcriptionModels(", "installTranscriptionModel(", "registerCustomTranscriptionModel(", "transcriptionJobs(", "createTranscriptionJob(", "updateWordProfile(", "readWordProfiles(", "createWordObservation(", "listVocabulary(", "wordDetails(", "updateWordLearningContent(", "exportVocabulary(", "importVocabulary(", "importExternalVocabulary(", "updateMediaAvailability(", "dictionaryLookup(", "diagnoseSentence("]) {
+for (const operation of ["health()", "registerMedia(", "updateProgress(", "importSubtitle(", "readSubtitle(", "exportSubtitle(", "listLexicalEntries(", "upsertLexicalEntry(", "normalizeLexical(", "correctLemma(", "phraseCandidates(", "learningResources(", "installLearningResource(", "removeLearningResource(", "searchSubtitles(", "downloadSubtitle(", "transcriptionProviders(", "transcriptionModels(", "installTranscriptionModel(", "registerCustomTranscriptionModel(", "transcriptionJobs(", "createTranscriptionJob(", "updateWordProfile(", "readWordProfiles(", "createWordObservation(", "listVocabulary(", "wordDetails(", "updateWordLearningContent(", "exportVocabulary(", "importVocabulary(", "importExternalVocabulary(", "updateMediaAvailability(", "dictionaryLookup(", "diagnoseSentence("]) {
   if (!client.includes(operation)) throw new Error(`client experiment missing ${operation}`);
 }
+for (const schema of ["LexicalEntry", "LexicalEntryDetails", "LexicalNormalization", "LearningResource", "SubtitleSearchRequest", "SubtitleSearchResult"]) {
+  if (!openapi.includes(`    ${schema}:`)) throw new Error(`missing OpenAPI schema ${schema}`);
+}
+if (!openapi.includes("version: { enum: [1, 2, 3] }")) throw new Error("vocabulary asset v3 missing");
+if (!openapi.includes("audio_url: { type: [string, \"null\"] }")) throw new Error("provider pronunciation audio missing");
 for (const item of examples) {
   if (item.version !== 1 || (!item.command && !item.event)) throw new Error("invalid example");
 }

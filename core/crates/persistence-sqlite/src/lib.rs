@@ -1590,6 +1590,7 @@ mod tests {
                 phonetics: vec![DictionaryPhonetic {
                     text: "/test/".into(),
                     region: None,
+                    audio_url: None,
                 }],
                 provider: self.info().id,
                 cached_at_ms: 0,
@@ -1953,6 +1954,131 @@ mod tests {
                 .unwrap()
                 .normalized,
             "walk"
+        );
+        services
+            .create_lexical_entry(UpsertLexicalEntry {
+                language: "en".into(),
+                kind: LexicalEntryKind::Word,
+                canonical_form: "run".into(),
+                display_form: "run".into(),
+                status: Some(WordStatus::KnownRecognized),
+                user_definition: None,
+                personal_note: None,
+                source: None,
+            })
+            .unwrap();
+        services
+            .create_lexical_entry(UpsertLexicalEntry {
+                language: "en".into(),
+                kind: LexicalEntryKind::Word,
+                canonical_form: "jog".into(),
+                display_form: "jog".into(),
+                status: Some(WordStatus::UnknownMeaning),
+                user_definition: None,
+                personal_note: None,
+                source: None,
+            })
+            .unwrap();
+        assert!(matches!(
+            services.correct_lemma("en", "run", "jog"),
+            Err(application::ApplicationError::Conflict(_))
+        ));
+    }
+
+    #[test]
+    fn lexical_asset_import_merges_newest_fields_and_remaps_sources() {
+        let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+        let services = AppServices::new(
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+        );
+        let local = services
+            .create_lexical_entry(UpsertLexicalEntry {
+                language: "en".into(),
+                kind: LexicalEntryKind::Phrase,
+                canonical_form: "give up".into(),
+                display_form: "give up".into(),
+                status: Some(WordStatus::KnownRecognized),
+                user_definition: Some("local definition".into()),
+                personal_note: Some("local note".into()),
+                source: Some(application::LexicalSourceContext {
+                    media_id: None,
+                    sentence_id: None,
+                    original_form: "give up".into(),
+                    sentence_text: "Never give up.".into(),
+                    media_title: "Local lesson".into(),
+                    media_fingerprint: "lesson".into(),
+                    start_ms: 10,
+                    end_ms: 20,
+                    token_start: Some(1),
+                    token_end: Some(2),
+                }),
+            })
+            .unwrap();
+        let imported_id = LexicalEntryId::from_fingerprint("import", "give up");
+        let mut imported_entry = local.entry.clone();
+        imported_entry.id = imported_id.clone();
+        imported_entry.status = Some(WordStatus::UnknownMeaning);
+        imported_entry.updated_at_ms = local.entry.updated_at_ms;
+        imported_entry.user_definition = Some("newer imported definition".into());
+        imported_entry.personal_note = Some("newer imported note".into());
+        imported_entry.learning_updated_at_ms = local.entry.learning_updated_at_ms + 100;
+        let mut imported_occurrence = local.occurrences[0].clone();
+        imported_occurrence.lexical_entry_id = imported_id.clone();
+        imported_occurrence.first_seen_at_ms =
+            imported_occurrence.first_seen_at_ms.saturating_sub(5);
+        imported_occurrence.last_seen_at_ms += 100;
+        imported_occurrence.encounter_count = 9;
+        let imported_history = LexicalStatusHistory {
+            id: LexicalStatusHistoryId::from_fingerprint("import-history", "give up"),
+            lexical_entry_id: imported_id,
+            previous_status: None,
+            new_status: Some(WordStatus::UnknownMeaning),
+            changed_at_ms: local.entry.updated_at_ms.saturating_sub(1),
+            change_source: WordChangeSource::Import,
+        };
+
+        repo.import_lexical_assets(
+            std::slice::from_ref(&imported_entry),
+            std::slice::from_ref(&imported_history),
+            std::slice::from_ref(&imported_occurrence),
+        )
+        .unwrap();
+        repo.import_lexical_assets(
+            std::slice::from_ref(&imported_entry),
+            std::slice::from_ref(&imported_history),
+            std::slice::from_ref(&imported_occurrence),
+        )
+        .unwrap();
+        let merged = services.lexical_details(&local.entry.id).unwrap().unwrap();
+        assert_eq!(merged.entry.status, Some(WordStatus::KnownRecognized));
+        assert_eq!(
+            merged.entry.user_definition.as_deref(),
+            Some("newer imported definition")
+        );
+        assert_eq!(merged.occurrences.len(), 1);
+        assert_eq!(merged.occurrences[0].encounter_count, 9);
+        assert_eq!(
+            merged
+                .history
+                .iter()
+                .filter(|value| value.change_source == WordChangeSource::Import)
+                .count(),
+            1
+        );
+        assert_eq!(
+            merged
+                .history
+                .iter()
+                .find(|value| value.change_source == WordChangeSource::Import)
+                .map(|value| &value.lexical_entry_id),
+            Some(&local.entry.id)
         );
     }
 

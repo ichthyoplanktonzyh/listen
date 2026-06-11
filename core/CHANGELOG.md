@@ -5,8 +5,13 @@
 - Unified word and user-confirmed phrase learning assets with schema v7 and
   vocabulary asset bundle v3.
 - Versioned lemma normalization, persistent corrections, and phrase candidates.
+- Clickable phrase underlines in learning subtitles; confirmed phrases remain
+  independent assets with their own status and source ranges.
 - Explicit checksum-verified ECDICT and CMUdict resource manager.
 - Provider-neutral OpenSubtitles title, filename, and media-hash workflows.
+- Provider-supplied pronunciation audio in the unified word learning panel.
+- Vocabulary asset v3 import preserves newer local state and independently
+  merges learning content, history, and durable source encounters.
 
 ## 0.5.0 - 2026-06-10
 

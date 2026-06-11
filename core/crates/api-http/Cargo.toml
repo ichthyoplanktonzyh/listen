@@ -8,6 +8,7 @@ rust-version.workspace = true
 application = { path = "../application" }
 api-events = { path = "../api-events" }
 async-stream.workspace = true
+async-trait.workspace = true
 futures-core.workspace = true
 axum.workspace = true
 dictionary-provider = { path = "../dictionary-provider" }

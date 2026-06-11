@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use application::{ApplicationError, LexicalSourceContext, UpsertLexicalEntry};
+use async_trait::async_trait;
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -21,14 +22,27 @@ use crate::{ApiError, ApiState};
 pub struct M18Coordinator {
     client: Client,
     resources: Arc<Mutex<Vec<LearningResourceDescriptor>>>,
-    opensubtitles_base_url: String,
+    resource_dir: PathBuf,
+    subtitle_providers: Arc<Vec<Arc<dyn SubtitleSearchProvider>>>,
 }
 
 impl M18Coordinator {
     pub fn new() -> Self {
-        let mut resources = resource_catalog();
+        let resource_dir = Self::default_resources_dir();
+        let opensubtitles = Arc::new(OpenSubtitlesProvider::new(
+            std::env::var("LLPLAYERNEXT_OPENSUBTITLES_BASE_URL")
+                .unwrap_or_else(|_| "https://api.opensubtitles.com/api/v1".into()),
+        ));
+        Self::with_configuration(resource_catalog(), resource_dir, vec![opensubtitles])
+    }
+
+    fn with_configuration(
+        mut resources: Vec<LearningResourceDescriptor>,
+        resource_dir: PathBuf,
+        subtitle_providers: Vec<Arc<dyn SubtitleSearchProvider>>,
+    ) -> Self {
         for descriptor in &mut resources {
-            let path = Self::resources_dir().join(format!("{}.data", descriptor.id.as_str()));
+            let path = resource_dir.join(format!("{}.data", descriptor.id.as_str()));
             if let Ok(bytes) = std::fs::read(&path) {
                 let checksum = hex::encode(Sha256::digest(&bytes));
                 if descriptor.checksum_sha256 == checksum {
@@ -45,12 +59,12 @@ impl M18Coordinator {
         Self {
             client: Client::new(),
             resources: Arc::new(Mutex::new(resources)),
-            opensubtitles_base_url: std::env::var("LLPLAYERNEXT_OPENSUBTITLES_BASE_URL")
-                .unwrap_or_else(|_| "https://api.opensubtitles.com/api/v1".into()),
+            resource_dir,
+            subtitle_providers: Arc::new(subtitle_providers),
         }
     }
 
-    fn resources_dir() -> PathBuf {
+    fn default_resources_dir() -> PathBuf {
         std::env::var_os("LLPLAYERNEXT_RESOURCES_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| {
@@ -101,10 +115,18 @@ impl M18Coordinator {
                 format!("resource server returned {}", response.status()),
             ));
         }
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|error| ApiError::gateway("resource_download_failed", error.to_string()))?;
+        let bytes = match response.bytes().await {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                descriptor.state = LearningResourceState::Failed;
+                descriptor.error = Some(error.to_string());
+                replace_resource(&self.resources, descriptor);
+                return Err(ApiError::gateway(
+                    "resource_download_failed",
+                    error.to_string(),
+                ));
+            }
+        };
         let checksum = hex::encode(Sha256::digest(&bytes));
         if !descriptor.checksum_sha256.is_empty() && descriptor.checksum_sha256 != checksum {
             descriptor.state = LearningResourceState::Failed;
@@ -117,14 +139,35 @@ impl M18Coordinator {
                 false,
             ));
         }
-        let directory = Self::resources_dir();
-        tokio::fs::create_dir_all(&directory)
-            .await
-            .map_err(|error| ApiError::from(ApplicationError::Repository(error.to_string())))?;
+        let directory = &self.resource_dir;
+        if let Err(error) = tokio::fs::create_dir_all(&directory).await {
+            descriptor.state = LearningResourceState::Failed;
+            descriptor.error = Some(error.to_string());
+            replace_resource(&self.resources, descriptor);
+            return Err(ApiError::from(ApplicationError::Repository(
+                error.to_string(),
+            )));
+        }
         let path = directory.join(format!("{}.data", id.as_str()));
-        tokio::fs::write(&path, &bytes)
-            .await
-            .map_err(|error| ApiError::from(ApplicationError::Repository(error.to_string())))?;
+        let temporary_path = directory.join(format!("{}.data.download", id.as_str()));
+        if let Err(error) = tokio::fs::write(&temporary_path, &bytes).await {
+            let _ = tokio::fs::remove_file(&temporary_path).await;
+            descriptor.state = LearningResourceState::Failed;
+            descriptor.error = Some(error.to_string());
+            replace_resource(&self.resources, descriptor);
+            return Err(ApiError::from(ApplicationError::Repository(
+                error.to_string(),
+            )));
+        }
+        if let Err(error) = tokio::fs::rename(&temporary_path, &path).await {
+            let _ = tokio::fs::remove_file(&temporary_path).await;
+            descriptor.state = LearningResourceState::Failed;
+            descriptor.error = Some(error.to_string());
+            replace_resource(&self.resources, descriptor);
+            return Err(ApiError::from(ApplicationError::Repository(
+                error.to_string(),
+            )));
+        }
         descriptor.checksum_sha256 = checksum;
         descriptor.size_bytes = bytes.len() as u64;
         descriptor.installed_bytes = bytes.len() as u64;
@@ -163,6 +206,84 @@ impl M18Coordinator {
         &self,
         request: &SubtitleSearchRequest,
     ) -> Result<Vec<SubtitleSearchResult>, ApiError> {
+        self.subtitle_provider(request.provider.as_deref())?
+            .search(request)
+            .await
+    }
+
+    async fn download_subtitle(
+        &self,
+        request: &SubtitleDownloadRequest,
+    ) -> Result<Vec<u8>, ApiError> {
+        self.subtitle_provider(request.provider.as_deref())?
+            .download(request)
+            .await
+    }
+
+    fn subtitle_provider(
+        &self,
+        id: Option<&str>,
+    ) -> Result<&Arc<dyn SubtitleSearchProvider>, ApiError> {
+        let id = id.unwrap_or("opensubtitles");
+        self.subtitle_providers
+            .iter()
+            .find(|provider| provider.id() == id)
+            .ok_or_else(|| ApiError::not_found("subtitle search provider"))
+    }
+}
+
+#[async_trait]
+trait SubtitleSearchProvider: Send + Sync {
+    fn id(&self) -> &'static str;
+    async fn search(
+        &self,
+        request: &SubtitleSearchRequest,
+    ) -> Result<Vec<SubtitleSearchResult>, ApiError>;
+    async fn download(&self, request: &SubtitleDownloadRequest) -> Result<Vec<u8>, ApiError>;
+}
+
+struct OpenSubtitlesProvider {
+    client: Client,
+    base_url: String,
+}
+
+impl OpenSubtitlesProvider {
+    fn new(base_url: String) -> Self {
+        Self {
+            client: Client::new(),
+            base_url,
+        }
+    }
+}
+
+#[async_trait]
+impl SubtitleSearchProvider for OpenSubtitlesProvider {
+    fn id(&self) -> &'static str {
+        "opensubtitles"
+    }
+
+    async fn search(
+        &self,
+        request: &SubtitleSearchRequest,
+    ) -> Result<Vec<SubtitleSearchResult>, ApiError> {
+        if request.api_key.trim().is_empty() {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "subtitle_credentials_required",
+                "subtitle provider credentials are required",
+                false,
+            ));
+        }
+        if request.query.as_deref().is_none_or(str::is_empty)
+            && request.moviehash.as_deref().is_none_or(str::is_empty)
+        {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "subtitle_search_query_required",
+                "a title, filename, or media hash is required",
+                false,
+            ));
+        }
         let mut query = vec![("languages", request.language.as_str())];
         if let Some(value) = request.query.as_deref() {
             query.push(("query", value));
@@ -172,7 +293,7 @@ impl M18Coordinator {
         }
         let response = self
             .client
-            .get(format!("{}/subtitles", self.opensubtitles_base_url))
+            .get(format!("{}/subtitles", self.base_url))
             .header("Api-Key", &request.api_key)
             .header("User-Agent", "LLPlayerNext v0.6")
             .query(&query)
@@ -180,10 +301,7 @@ impl M18Coordinator {
             .await
             .map_err(|error| ApiError::gateway("subtitle_search_failed", error.to_string()))?;
         if !response.status().is_success() {
-            return Err(ApiError::gateway(
-                "subtitle_search_failed",
-                format!("OpenSubtitles returned {}", response.status()),
-            ));
+            return Err(subtitle_service_error(response.status(), "search"));
         }
         let payload: serde_json::Value = response
             .json()
@@ -209,13 +327,18 @@ impl M18Coordinator {
             .collect())
     }
 
-    async fn download_subtitle(
-        &self,
-        request: &SubtitleDownloadRequest,
-    ) -> Result<Vec<u8>, ApiError> {
+    async fn download(&self, request: &SubtitleDownloadRequest) -> Result<Vec<u8>, ApiError> {
+        if request.api_key.trim().is_empty() {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "subtitle_credentials_required",
+                "subtitle provider credentials are required",
+                false,
+            ));
+        }
         let response = self
             .client
-            .post(format!("{}/download", self.opensubtitles_base_url))
+            .post(format!("{}/download", self.base_url))
             .header("Api-Key", &request.api_key)
             .header("User-Agent", "LLPlayerNext v0.6")
             .json(&serde_json::json!({"file_id": request.file_id}))
@@ -223,10 +346,7 @@ impl M18Coordinator {
             .await
             .map_err(|error| ApiError::gateway("subtitle_download_failed", error.to_string()))?;
         if !response.status().is_success() {
-            return Err(ApiError::gateway(
-                "subtitle_download_failed",
-                format!("OpenSubtitles returned {}", response.status()),
-            ));
+            return Err(subtitle_service_error(response.status(), "download"));
         }
         let payload: serde_json::Value = response
             .json()
@@ -235,16 +355,45 @@ impl M18Coordinator {
         let link = payload["link"].as_str().ok_or_else(|| {
             ApiError::gateway("subtitle_download_failed", "missing download link")
         })?;
-        let bytes = self
-            .client
-            .get(link)
-            .send()
-            .await
-            .map_err(|error| ApiError::gateway("subtitle_download_failed", error.to_string()))?
+        let response =
+            self.client.get(link).send().await.map_err(|error| {
+                ApiError::gateway("subtitle_download_failed", error.to_string())
+            })?;
+        if !response.status().is_success() {
+            return Err(subtitle_service_error(response.status(), "download"));
+        }
+        response
             .bytes()
             .await
-            .map_err(|error| ApiError::gateway("subtitle_download_failed", error.to_string()))?;
-        Ok(bytes.to_vec())
+            .map(|bytes| bytes.to_vec())
+            .map_err(|error| ApiError::gateway("subtitle_download_failed", error.to_string()))
+    }
+}
+
+fn subtitle_service_error(status: reqwest::StatusCode, operation: &'static str) -> ApiError {
+    match status {
+        reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN => ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "subtitle_authentication_failed",
+            "subtitle provider rejected the configured credentials",
+            false,
+        ),
+        reqwest::StatusCode::TOO_MANY_REQUESTS => ApiError::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "subtitle_rate_limited",
+            "subtitle provider rate limit reached",
+            true,
+        ),
+        status if status.is_server_error() => ApiError::gateway(
+            "subtitle_service_unavailable",
+            format!("subtitle provider {operation} is unavailable"),
+        ),
+        _ => ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "subtitle_request_rejected",
+            format!("subtitle provider rejected the {operation} request"),
+            false,
+        ),
     }
 }
 
@@ -488,6 +637,7 @@ pub async fn remove_resource(
 
 #[derive(Debug, Deserialize)]
 pub struct SubtitleSearchRequest {
+    provider: Option<String>,
     api_key: String,
     language: String,
     query: Option<String>,
@@ -503,6 +653,7 @@ pub async fn search_subtitles(
 
 #[derive(Debug, Deserialize)]
 pub struct SubtitleDownloadRequest {
+    provider: Option<String>,
     api_key: String,
     file_id: u64,
 }
@@ -518,4 +669,148 @@ pub async fn download_subtitle(
         )
             .into_response()
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    fn temp_dir(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "llplayernext-m18-{label}-{}-{}",
+            std::process::id(),
+            application::now_ms()
+        ))
+    }
+
+    fn descriptor(url: String, checksum: String) -> LearningResourceDescriptor {
+        LearningResourceDescriptor {
+            id: LearningResourceId::from_fingerprint("learning-resource", "fixture"),
+            display_name: "Fixture".into(),
+            version: "v1".into(),
+            source_url: url,
+            license: "MIT".into(),
+            checksum_sha256: checksum,
+            size_bytes: 7,
+            local_path: None,
+            state: LearningResourceState::Available,
+            installed_bytes: 0,
+            error: None,
+            updated_at_ms: 0,
+        }
+    }
+
+    async fn serve_once(body: &'static [u8]) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 2048];
+            let _ = stream.read(&mut request).await;
+            let headers = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            stream.write_all(headers.as_bytes()).await.unwrap();
+            stream.write_all(body).await.unwrap();
+        });
+        format!("http://{address}/resource")
+    }
+
+    async fn serve_truncated(body: &'static [u8]) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 2048];
+            let _ = stream.read(&mut request).await;
+            let headers = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len() + 10
+            );
+            stream.write_all(headers.as_bytes()).await.unwrap();
+            stream.write_all(body).await.unwrap();
+        });
+        format!("http://{address}/resource")
+    }
+
+    #[tokio::test]
+    async fn learning_resource_verifies_checksum_and_removes_installed_file() {
+        let body = b"fixture";
+        let url = serve_once(body).await;
+        let checksum = hex::encode(Sha256::digest(body));
+        let resource = descriptor(url, checksum);
+        let id = resource.id.clone();
+        let directory = temp_dir("install");
+        let coordinator =
+            M18Coordinator::with_configuration(vec![resource], directory.clone(), Vec::new());
+        let installed = coordinator.install_resource(&id).await.unwrap();
+        assert_eq!(installed.state, LearningResourceState::Installed);
+        let path = installed.local_path.clone().unwrap();
+        assert!(std::path::Path::new(&path).exists());
+        let removed = coordinator.remove_resource(&id).await.unwrap();
+        assert_eq!(removed.state, LearningResourceState::Available);
+        assert!(!std::path::Path::new(&path).exists());
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[tokio::test]
+    async fn learning_resource_checksum_failure_never_publishes_file() {
+        let url = serve_once(b"wrong").await;
+        let resource = descriptor(url, "expected".into());
+        let id = resource.id.clone();
+        let directory = temp_dir("checksum");
+        let coordinator =
+            M18Coordinator::with_configuration(vec![resource], directory.clone(), Vec::new());
+        let error = coordinator.install_resource(&id).await.unwrap_err();
+        assert_eq!(error.body.code, "checksum_mismatch");
+        assert_eq!(
+            coordinator.list_resources()[0].state,
+            LearningResourceState::Failed
+        );
+        assert!(!directory.join(format!("{}.data", id.as_str())).exists());
+    }
+
+    #[tokio::test]
+    async fn learning_resource_network_failure_is_retryable_and_safe() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        drop(listener);
+        let resource = descriptor(format!("http://{address}/missing"), String::new());
+        let id = resource.id.clone();
+        let directory = temp_dir("offline");
+        let coordinator =
+            M18Coordinator::with_configuration(vec![resource], directory.clone(), Vec::new());
+        let error = coordinator.install_resource(&id).await.unwrap_err();
+        assert!(error.body.retryable);
+        assert_eq!(
+            coordinator.list_resources()[0].state,
+            LearningResourceState::Failed
+        );
+        assert!(!directory.join(format!("{}.data", id.as_str())).exists());
+    }
+
+    #[tokio::test]
+    async fn interrupted_learning_resource_download_leaves_no_partial_file() {
+        let url = serve_truncated(b"partial").await;
+        let resource = descriptor(url, String::new());
+        let id = resource.id.clone();
+        let directory = temp_dir("interrupted");
+        let coordinator =
+            M18Coordinator::with_configuration(vec![resource], directory.clone(), Vec::new());
+        let error = coordinator.install_resource(&id).await.unwrap_err();
+        assert!(error.body.retryable);
+        assert_eq!(
+            coordinator.list_resources()[0].state,
+            LearningResourceState::Failed
+        );
+        assert!(!directory.join(format!("{}.data", id.as_str())).exists());
+        assert!(
+            !directory
+                .join(format!("{}.data.download", id.as_str()))
+                .exists()
+        );
+    }
 }

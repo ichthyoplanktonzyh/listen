@@ -36,5 +36,9 @@ equal timestamps retain the local state. Sources and history are deduplicated.
 The exported JSON can be restored into an empty database without any original
 media or subtitle files.
 
-Version 0.4.0 exports vocabulary asset bundle version 2, which also preserves
-user definitions and personal notes. Version 1 bundles remain importable.
+Milestone 1.8 exports vocabulary asset bundle version 3, which adds unified
+word and phrase assets. Version 3 is the current supported recovery format.
+Repeated imports preserve newer local state, merge user definitions and notes
+by their independent timestamps, deduplicate history, and merge matching source
+snapshots using the earliest first-seen time, latest last-seen time, and largest
+encounter count.

@@ -376,6 +376,8 @@ pub struct DictionaryDefinition {
 pub struct DictionaryPhonetic {
     pub text: String,
     pub region: Option<String>,
+    #[serde(default)]
+    pub audio_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

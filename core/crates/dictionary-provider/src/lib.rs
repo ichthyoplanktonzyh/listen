@@ -1,13 +1,17 @@
-use std::time::Duration;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime};
 
-use application::{DictionaryProvider, DictionaryProviderError};
+use application::{
+    DictionaryProvider, DictionaryProviderError, LexicalNormalizationProvider,
+    LexicalNormalizationProviderError,
+};
 use async_trait::async_trait;
 use domain::{
     DictionaryDefinition, DictionaryLookup, DictionaryPhonetic, DictionaryProviderInfo,
-    LanguageCode,
+    LanguageCode, PhraseCandidate, SubtitleSentence, SubtitleTokenKind, normalize_lemma,
 };
-use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
 
 pub struct FreeDictionaryProvider {
     client: reqwest::Client,
@@ -43,7 +47,7 @@ impl DictionaryProvider for FreeDictionaryProvider {
             supported_languages: vec!["en".into()],
             provides_definitions: true,
             provides_phonetics: true,
-            provides_audio: false,
+            provides_audio: true,
             offline: false,
         }
     }
@@ -99,16 +103,7 @@ impl DictionaryProvider for FreeDictionaryProvider {
             })
             .take(8)
             .collect();
-        let phonetics = entry["phonetics"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|value| value["text"].as_str())
-            .map(|text| DictionaryPhonetic {
-                text: text.to_owned(),
-                region: None,
-            })
-            .collect();
+        let phonetics = parse_free_dictionary_phonetics(entry);
         Ok(Some(DictionaryLookup {
             query: lemma.to_owned(),
             lemma: entry["word"].as_str().unwrap_or(lemma).to_owned(),
@@ -122,15 +117,69 @@ impl DictionaryProvider for FreeDictionaryProvider {
 
 pub struct EcdictProvider {
     path: PathBuf,
+    version: String,
+    index: Mutex<Option<(ResourceSignature, Arc<EcdictIndex>)>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ResourceSignature {
+    len: u64,
+    modified: Option<SystemTime>,
+}
+
+#[derive(Debug, Default)]
+struct EcdictIndex {
+    lemmas: HashMap<String, String>,
+    phrases: HashSet<String>,
+    dictionary: HashMap<String, EcdictEntry>,
+}
+
+#[derive(Debug)]
+struct EcdictEntry {
+    phonetic: String,
+    definition: String,
 }
 
 impl EcdictProvider {
     pub fn new() -> Self {
         let id = domain::LearningResourceId::from_fingerprint("learning-resource", "ecdict");
-        let path = PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
-            .join("Library/Application Support/LLPlayerNext/resources/learning")
+        let path = std::env::var_os("LLPLAYERNEXT_RESOURCES_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
+                    .join("Library/Application Support/LLPlayerNext/resources/learning")
+            })
             .join(format!("{}.data", id.as_str()));
-        Self { path }
+        Self::with_path(path, "bc015ed2")
+    }
+
+    pub fn with_path(path: PathBuf, version: impl Into<String>) -> Self {
+        Self {
+            path,
+            version: version.into(),
+            index: Mutex::new(None),
+        }
+    }
+
+    fn load_index(&self) -> Result<Option<Arc<EcdictIndex>>, String> {
+        let metadata = match std::fs::metadata(&self.path) {
+            Ok(value) => value,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error.to_string()),
+        };
+        let signature = ResourceSignature {
+            len: metadata.len(),
+            modified: metadata.modified().ok(),
+        };
+        let mut cached = self.index.lock().expect("ECDICT index mutex poisoned");
+        if let Some((cached_signature, index)) = cached.as_ref()
+            && *cached_signature == signature
+        {
+            return Ok(Some(index.clone()));
+        }
+        let index = Arc::new(read_ecdict_index(&self.path)?);
+        *cached = Some((signature, index.clone()));
+        Ok(Some(index))
     }
 }
 
@@ -159,43 +208,195 @@ impl DictionaryProvider for EcdictProvider {
         _language: &LanguageCode,
         lemma: &str,
     ) -> Result<Option<DictionaryLookup>, DictionaryProviderError> {
-        let file = match std::fs::File::open(&self.path) {
-            Ok(file) => file,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => return Err(DictionaryProviderError(error.to_string())),
+        let Some(index) = self.load_index().map_err(DictionaryProviderError)? else {
+            return Ok(None);
         };
-        let prefix = format!("{lemma},");
-        for line in BufReader::new(file).lines().skip(1) {
-            let line = line.map_err(|error| DictionaryProviderError(error.to_string()))?;
-            if !line.starts_with(&prefix) {
-                continue;
-            }
-            let fields = line.split(',').collect::<Vec<_>>();
-            let phonetic = fields.get(1).copied().unwrap_or_default().trim_matches('"');
-            let definition = fields.get(3).copied().unwrap_or_default().trim_matches('"');
-            return Ok(Some(DictionaryLookup {
-                query: lemma.into(),
-                lemma: lemma.into(),
-                definitions: (!definition.is_empty())
-                    .then(|| DictionaryDefinition {
-                        part_of_speech: None,
-                        text: definition.replace("\\n", "\n"),
-                    })
-                    .into_iter()
-                    .collect(),
-                phonetics: (!phonetic.is_empty())
-                    .then(|| DictionaryPhonetic {
-                        text: phonetic.into(),
-                        region: Some("en-US".into()),
-                    })
-                    .into_iter()
-                    .collect(),
-                provider: "ecdict".into(),
-                cached_at_ms: 0,
-            }));
-        }
-        Ok(None)
+        let query = normalize_lemma(lemma);
+        let normalized = index
+            .lemmas
+            .get(&query)
+            .cloned()
+            .unwrap_or_else(|| query.clone());
+        let Some(entry) = index.dictionary.get(&normalized) else {
+            return Ok(None);
+        };
+        Ok(Some(DictionaryLookup {
+            query,
+            lemma: normalized,
+            definitions: (!entry.definition.is_empty())
+                .then(|| DictionaryDefinition {
+                    part_of_speech: None,
+                    text: entry.definition.replace("\\n", "\n"),
+                })
+                .into_iter()
+                .collect(),
+            phonetics: (!entry.phonetic.is_empty())
+                .then(|| DictionaryPhonetic {
+                    text: entry.phonetic.clone(),
+                    region: Some("en-US".into()),
+                    audio_url: None,
+                })
+                .into_iter()
+                .collect(),
+            provider: "ecdict".into(),
+            cached_at_ms: 0,
+        }))
     }
+}
+
+fn parse_free_dictionary_phonetics(entry: &serde_json::Value) -> Vec<DictionaryPhonetic> {
+    entry["phonetics"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|value| {
+            let text = value["text"].as_str().unwrap_or_default().to_owned();
+            let audio_url = value["audio"]
+                .as_str()
+                .filter(|value| !value.is_empty())
+                .map(|value| {
+                    if value.starts_with("//") {
+                        format!("https:{value}")
+                    } else {
+                        value.to_owned()
+                    }
+                });
+            (!text.is_empty() || audio_url.is_some()).then_some(DictionaryPhonetic {
+                text,
+                region: None,
+                audio_url,
+            })
+        })
+        .collect()
+}
+
+impl LexicalNormalizationProvider for EcdictProvider {
+    fn provider_id(&self) -> &'static str {
+        "ecdict"
+    }
+
+    fn version(&self) -> &str {
+        &self.version
+    }
+
+    fn normalize(
+        &self,
+        language: &LanguageCode,
+        value: &str,
+    ) -> Result<Option<String>, LexicalNormalizationProviderError> {
+        if !language.as_str().starts_with("en") {
+            return Ok(None);
+        }
+        let Some(index) = self
+            .load_index()
+            .map_err(LexicalNormalizationProviderError)?
+        else {
+            return Ok(None);
+        };
+        Ok(index.lemmas.get(&normalize_lemma(value)).cloned())
+    }
+
+    fn phrase_candidates(
+        &self,
+        language: &LanguageCode,
+        sentence: &SubtitleSentence,
+    ) -> Result<Vec<PhraseCandidate>, LexicalNormalizationProviderError> {
+        if !language.as_str().starts_with("en") {
+            return Ok(Vec::new());
+        }
+        let Some(index) = self
+            .load_index()
+            .map_err(LexicalNormalizationProviderError)?
+        else {
+            return Ok(Vec::new());
+        };
+        let words = sentence
+            .tokens
+            .iter()
+            .filter(|token| token.kind == SubtitleTokenKind::Word)
+            .collect::<Vec<_>>();
+        let normalized = words
+            .iter()
+            .map(|token| normalize_lemma(&token.text))
+            .collect::<Vec<_>>();
+        let mut values = Vec::new();
+        for length in 2..=5 {
+            for start in 0..normalized.len().saturating_sub(length).saturating_add(1) {
+                let phrase = normalized[start..start + length].join(" ");
+                if index.phrases.contains(&phrase) {
+                    values.push(PhraseCandidate {
+                        canonical_form: phrase.clone(),
+                        display_form: words[start..start + length]
+                            .iter()
+                            .map(|token| token.text.as_str())
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                        normalized_form: phrase,
+                        token_start: words[start].index,
+                        token_end: words[start + length - 1].index,
+                        reason: "ECDICT phrase entry".into(),
+                    });
+                }
+            }
+        }
+        Ok(values)
+    }
+}
+
+fn read_ecdict_index(path: &Path) -> Result<EcdictIndex, String> {
+    let mut reader = csv::ReaderBuilder::new()
+        .flexible(true)
+        .from_path(path)
+        .map_err(|error| error.to_string())?;
+    let headers = reader.headers().map_err(|error| error.to_string())?.clone();
+    let column = |name: &str, fallback: usize| {
+        headers
+            .iter()
+            .position(|value| value == name)
+            .unwrap_or(fallback)
+    };
+    let word_column = column("word", 0);
+    let phonetic_column = column("phonetic", 1);
+    let definition_column = column("definition", 2);
+    let exchange_column = column("exchange", 10);
+    let mut index = EcdictIndex::default();
+    for record in reader.records() {
+        let record = record.map_err(|error| error.to_string())?;
+        let word = normalize_lemma(record.get(word_column).unwrap_or_default());
+        if word.is_empty() {
+            continue;
+        }
+        if word.contains(' ') {
+            index.phrases.insert(word.clone());
+        }
+        index
+            .lemmas
+            .entry(word.clone())
+            .or_insert_with(|| word.clone());
+        for exchange in record
+            .get(exchange_column)
+            .unwrap_or_default()
+            .split_whitespace()
+        {
+            let Some((_, forms)) = exchange.split_once(':') else {
+                continue;
+            };
+            for form in forms.split('/') {
+                let form = normalize_lemma(form);
+                if !form.is_empty() {
+                    index.lemmas.entry(form).or_insert_with(|| word.clone());
+                }
+            }
+        }
+        index.dictionary.insert(
+            word,
+            EcdictEntry {
+                phonetic: record.get(phonetic_column).unwrap_or_default().into(),
+                definition: record.get(definition_column).unwrap_or_default().into(),
+            },
+        );
+    }
+    Ok(index)
 }
 
 fn url_encode(value: &str) -> String {
@@ -209,4 +410,86 @@ fn url_encode(value: &str) -> String {
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use domain::{SubtitleSentenceId, SubtitleToken, SubtitleTokenKind, TimeMs};
+
+    fn fixture_path() -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "llplayernext-ecdict-{}-{}.csv",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+
+    #[test]
+    fn ecdict_normalizes_inflections_and_finds_phrase_entries() {
+        let path = fixture_path();
+        std::fs::write(
+            &path,
+            "word,phonetic,definition,translation,pos,collins,oxford,tag,bnc,frq,exchange,detail,audio\n\
+             go,go,move,,,,,,,,\"p:went/gone i:going 3:goes\",,\n\
+             piece of cake,,easy task,,,,,,,,,,\n",
+        )
+        .unwrap();
+        let provider = EcdictProvider::with_path(path.clone(), "fixture-v1");
+        let language = LanguageCode::parse("en-US").unwrap();
+        assert_eq!(
+            provider.normalize(&language, "went").unwrap().as_deref(),
+            Some("go")
+        );
+        assert_eq!(provider.provider_id(), "ecdict");
+        assert_eq!(provider.version(), "fixture-v1");
+
+        let words = ["It", "is", "a", "piece", "of", "cake"];
+        let sentence = SubtitleSentence {
+            id: SubtitleSentenceId::from_fingerprint("sentence", "fixture"),
+            index: 0,
+            start: TimeMs::new(0),
+            end: TimeMs::new(1000),
+            original_text: words.join(" "),
+            display_text: words.join(" "),
+            tokens: words
+                .iter()
+                .enumerate()
+                .map(|(index, value)| SubtitleToken {
+                    index: index as u32,
+                    kind: SubtitleTokenKind::Word,
+                    text: (*value).into(),
+                    normalized: Some(normalize_lemma(value)),
+                    start_char: 0,
+                    end_char: value.len() as u32,
+                })
+                .collect(),
+        };
+        let candidates = provider.phrase_candidates(&language, &sentence).unwrap();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].normalized_form, "piece of cake");
+        assert_eq!(candidates[0].token_start, 3);
+        assert_eq!(candidates[0].token_end, 5);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn free_dictionary_phonetics_preserve_pronunciation_audio() {
+        let entry = serde_json::json!({
+            "phonetics": [
+                {"text": "/həˈloʊ/", "audio": "//example.test/hello-us.mp3"},
+                {"text": "/hɛˈləʊ/", "audio": ""}
+            ]
+        });
+        let values = super::parse_free_dictionary_phonetics(&entry);
+        assert_eq!(values.len(), 2);
+        assert_eq!(
+            values[0].audio_url.as_deref(),
+            Some("https://example.test/hello-us.mp3")
+        );
+        assert_eq!(values[1].audio_url, None);
+    }
 }

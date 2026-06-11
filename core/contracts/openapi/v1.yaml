@@ -133,55 +133,138 @@ paths:
   /v1/lexical-entries:
     get:
       operationId: listLexicalEntries
+      parameters:
+        - { name: language, in: query, schema: { type: string, default: en } }
+        - { name: kind, in: query, schema: { enum: [word, phrase] } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/WordStatus" } }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0 } }
       responses:
-        "200": { description: Unified word and phrase learning assets }
+        "200":
+          description: Unified word and phrase learning assets
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/LexicalEntryDetails" } }
     put:
       operationId: upsertLexicalEntry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpsertLexicalEntry" }
       responses:
-        "200": { description: Updated lexical learning asset }
+        "200":
+          description: Updated lexical learning asset
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LexicalEntryDetails" }
   /v1/lexical-entries/{id}:
     get:
       operationId: lexicalEntryDetails
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
       responses:
-        "200": { description: Lexical asset details }
+        "200":
+          description: Lexical asset details
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LexicalEntryDetails" }
   /v1/lexical-normalization:
     post:
       operationId: normalizeLexical
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NormalizeLexicalRequest" }
       responses:
-        "200": { description: Versioned lexical normalization result }
+        "200":
+          description: Versioned lexical normalization result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LexicalNormalization" }
   /v1/lexical-normalization/correct:
     post:
       operationId: correctLemma
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CorrectLemmaRequest" }
       responses:
-        "200": { description: Persisted user lemma correction }
+        "200":
+          description: Persisted user lemma correction
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LexicalNormalization" }
+        "409": { $ref: "#/components/responses/Error" }
   /v1/sentences/{sentence_id}/phrase-candidates:
     get:
       operationId: phraseCandidates
+      parameters:
+        - { name: sentence_id, in: path, required: true, schema: { type: string } }
       responses:
-        "200": { description: Phrase candidates requiring user confirmation }
+        "200":
+          description: Phrase candidates requiring user confirmation
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/PhraseCandidate" } }
   /v1/learning-resources:
     get:
       operationId: learningResources
       responses:
-        "200": { description: Offline learning resource catalog }
+        "200":
+          description: Offline learning resource catalog
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/LearningResource" } }
   /v1/learning-resources/{id}/install:
     post:
       operationId: installLearningResource
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
       responses:
-        "200": { description: Installed and verified learning resource }
+        "200":
+          description: Installed and verified learning resource
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LearningResource" }
   /v1/learning-resources/{id}:
     delete:
       operationId: removeLearningResource
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
       responses:
-        "200": { description: Removed learning resource }
+        "200":
+          description: Removed learning resource
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LearningResource" }
   /v1/subtitle-search:
     post:
       operationId: searchSubtitles
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SubtitleSearchRequest" }
       responses:
-        "200": { description: Subtitle provider search results }
+        "200":
+          description: Subtitle provider search results
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/SubtitleSearchResult" } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
   /v1/subtitle-search/download:
     post:
       operationId: downloadSubtitle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SubtitleDownloadRequest" }
       responses:
         "200": { description: Downloaded subtitle bytes }
   /v1/word-profiles:
@@ -551,6 +634,173 @@ components:
         sentences:
           type: array
           items: { $ref: "#/components/schemas/SubtitleSentence" }
+    WordStatus:
+      enum: [unknown_meaning, known_not_recognized, known_recognized]
+    LexicalSource:
+      type: object
+      required: [original_form, sentence_text, media_title, media_fingerprint, start_ms, end_ms]
+      properties:
+        media_id: { type: [string, "null"] }
+        sentence_id: { type: [string, "null"] }
+        original_form: { type: string }
+        sentence_text: { type: string }
+        media_title: { type: string }
+        media_fingerprint: { type: string }
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        token_start: { type: [integer, "null"], minimum: 0 }
+        token_end: { type: [integer, "null"], minimum: 0 }
+    UpsertLexicalEntry:
+      type: object
+      required: [language, kind, canonical_form, display_form]
+      properties:
+        language: { type: string }
+        kind: { enum: [word, phrase] }
+        canonical_form: { type: string }
+        display_form: { type: string }
+        status:
+          anyOf:
+            - $ref: "#/components/schemas/WordStatus"
+            - type: "null"
+        user_definition: { type: [string, "null"] }
+        personal_note: { type: [string, "null"] }
+        source:
+          anyOf:
+            - $ref: "#/components/schemas/LexicalSource"
+            - type: "null"
+    LexicalEntry:
+      type: object
+      required: [id, language, kind, canonical_form, normalized_form, display_form, status, user_definition, personal_note, normalization_provider, normalization_version, user_corrected, updated_at_ms, learning_updated_at_ms]
+      properties:
+        id: { type: string }
+        language: { type: string }
+        kind: { enum: [word, phrase] }
+        canonical_form: { type: string }
+        normalized_form: { type: string }
+        display_form: { type: string }
+        status:
+          anyOf:
+            - $ref: "#/components/schemas/WordStatus"
+            - type: "null"
+        user_definition: { type: [string, "null"] }
+        personal_note: { type: [string, "null"] }
+        normalization_provider: { type: string }
+        normalization_version: { type: string }
+        user_corrected: { type: boolean }
+        updated_at_ms: { type: integer, minimum: 0 }
+        learning_updated_at_ms: { type: integer, minimum: 0 }
+    LexicalOccurrence:
+      type: object
+      required: [id, source_key, lexical_entry_id, original_form, sentence_text_snapshot, media_title_snapshot, media_fingerprint_snapshot, start_ms_snapshot, end_ms_snapshot, token_start, token_end, first_seen_at_ms, last_seen_at_ms, encounter_count]
+      properties:
+        id: { type: string }
+        source_key: { type: string }
+        lexical_entry_id: { type: string }
+        media_id: { type: [string, "null"] }
+        sentence_id: { type: [string, "null"] }
+        original_form: { type: string }
+        sentence_text_snapshot: { type: string }
+        media_title_snapshot: { type: string }
+        media_fingerprint_snapshot: { type: string }
+        start_ms_snapshot: { type: integer, minimum: 0 }
+        end_ms_snapshot: { type: integer, minimum: 0 }
+        token_start: { type: [integer, "null"], minimum: 0 }
+        token_end: { type: [integer, "null"], minimum: 0 }
+        first_seen_at_ms: { type: integer, minimum: 0 }
+        last_seen_at_ms: { type: integer, minimum: 0 }
+        encounter_count: { type: integer, minimum: 1 }
+    LexicalStatusHistory:
+      type: object
+      required: [id, lexical_entry_id, previous_status, new_status, changed_at_ms, change_source]
+      properties:
+        id: { type: string }
+        lexical_entry_id: { type: string }
+        previous_status: { type: [string, "null"] }
+        new_status: { type: [string, "null"] }
+        changed_at_ms: { type: integer, minimum: 0 }
+        change_source: { enum: [user_selection, import, legacy_baseline] }
+    LexicalEntryDetails:
+      type: object
+      required: [entry, history, occurrences]
+      properties:
+        entry: { $ref: "#/components/schemas/LexicalEntry" }
+        history: { type: array, items: { $ref: "#/components/schemas/LexicalStatusHistory" } }
+        occurrences: { type: array, items: { $ref: "#/components/schemas/LexicalOccurrence" } }
+    NormalizeLexicalRequest:
+      type: object
+      required: [language, value]
+      properties:
+        language: { type: string }
+        value: { type: string }
+    CorrectLemmaRequest:
+      type: object
+      required: [language, original, corrected]
+      properties:
+        language: { type: string }
+        original: { type: string }
+        corrected: { type: string }
+    LexicalNormalization:
+      type: object
+      required: [original, normalized, provider, version, user_corrected]
+      properties:
+        original: { type: string }
+        normalized: { type: string }
+        provider: { type: string }
+        version: { type: string }
+        user_corrected: { type: boolean }
+    PhraseCandidate:
+      type: object
+      required: [canonical_form, display_form, normalized_form, token_start, token_end, reason]
+      properties:
+        canonical_form: { type: string }
+        display_form: { type: string }
+        normalized_form: { type: string }
+        token_start: { type: integer, minimum: 0 }
+        token_end: { type: integer, minimum: 0 }
+        reason: { type: string }
+    LearningResource:
+      type: object
+      required: [id, display_name, version, source_url, license, checksum_sha256, size_bytes, local_path, state, installed_bytes, error, updated_at_ms]
+      properties:
+        id: { type: string }
+        display_name: { type: string }
+        version: { type: string }
+        source_url: { type: string }
+        license: { type: string }
+        checksum_sha256: { type: string }
+        size_bytes: { type: integer, minimum: 0 }
+        local_path: { type: [string, "null"] }
+        state: { enum: [available, installing, installed, failed] }
+        installed_bytes: { type: integer, minimum: 0 }
+        error: { type: [string, "null"] }
+        updated_at_ms: { type: integer, minimum: 0 }
+    SubtitleSearchRequest:
+      type: object
+      required: [api_key, language]
+      properties:
+        provider: { type: string, default: opensubtitles }
+        api_key: { type: string, writeOnly: true }
+        language: { type: string }
+        query: { type: [string, "null"] }
+        moviehash: { type: [string, "null"] }
+    SubtitleDownloadRequest:
+      type: object
+      required: [api_key, file_id]
+      properties:
+        provider: { type: string, default: opensubtitles }
+        api_key: { type: string, writeOnly: true }
+        file_id: { type: integer, minimum: 0 }
+    SubtitleSearchResult:
+      type: object
+      required: [id, file_id, language, release, source, rating, download_count]
+      properties:
+        id: { type: string }
+        file_id: { type: integer, minimum: 0 }
+        language: { type: string }
+        release: { type: string }
+        source: { type: string }
+        rating: { type: number }
+        download_count: { type: integer, minimum: 0 }
     WordProfile:
       type: object
       required: [id, language, lemma, normalized_lemma, display_form, status, updated_at_ms, user_definition, personal_note, learning_updated_at_ms]
@@ -670,14 +920,17 @@ components:
         occurrences: { type: array, items: { $ref: "#/components/schemas/WordOccurrence" } }
     VocabularyAssetBundle:
       type: object
-      required: [version, exported_at_ms, profiles, history, occurrences, observations]
+      required: [version, exported_at_ms, profiles, history, occurrences, observations, lexical_entries, lexical_history, lexical_occurrences]
       properties:
-        version: { enum: [1, 2] }
+        version: { enum: [1, 2, 3] }
         exported_at_ms: { type: integer, minimum: 0 }
         profiles: { type: array, items: { $ref: "#/components/schemas/WordProfile" } }
         history: { type: array, items: { $ref: "#/components/schemas/WordStatusHistory" } }
         occurrences: { type: array, items: { $ref: "#/components/schemas/WordOccurrence" } }
         observations: { type: array, items: { $ref: "#/components/schemas/WordObservation" } }
+        lexical_entries: { type: array, items: { $ref: "#/components/schemas/LexicalEntry" } }
+        lexical_history: { type: array, items: { $ref: "#/components/schemas/LexicalStatusHistory" } }
+        lexical_occurrences: { type: array, items: { $ref: "#/components/schemas/LexicalOccurrence" } }
     DictionaryLookup:
       type: object
       required: [query, lemma, definitions, phonetics, provider, cached_at_ms]
@@ -696,10 +949,11 @@ components:
           type: array
           items:
             type: object
-            required: [text, region]
+            required: [text, region, audio_url]
             properties:
               text: { type: string }
               region: { type: [string, "null"] }
+              audio_url: { type: [string, "null"] }
         provider: { type: string }
         cached_at_ms: { type: integer, minimum: 0 }
     DictionaryLookupBundle:
