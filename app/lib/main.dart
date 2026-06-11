@@ -8,9 +8,8 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:media_kit/media_kit.dart' hide SubtitleTrack;
-import 'package:media_kit/media_kit.dart' as media;
-import 'package:media_kit_video/media_kit_video.dart';
+import 'package:fvp/fvp.dart' as fvp;
+import 'package:video_player/video_player.dart';
 
 import 'local_api.dart';
 import 'localization.dart';
@@ -23,7 +22,15 @@ import 'm18_ui.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  MediaKit.ensureInitialized();
+  final bundledFfmpeg =
+      '${File(Platform.resolvedExecutable).parent.parent.path}'
+      '/Frameworks/mdk.framework/Versions/A/libffmpeg.8.dylib';
+  fvp.registerWith(
+    options: {
+      'platforms': ['macos'],
+      'global': {'ffmpeg': bundledFfmpeg, 'libffmpeg': bundledFfmpeg},
+    },
+  );
   runApp(const LLPlayerNextApp());
 }
 
@@ -187,9 +194,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String transcriptionLanguage = 'auto';
   String transcriptionDestination = 'primary';
   String openSubtitlesApiKey = '';
-  List<AudioTrack> audioTracks = const [];
+  OnlineMediaDownload? activeDownload;
+  double downloadProgress = 0;
+  String? downloadedMediaPath;
+  List<PlayerTrack> audioTracks = const [];
   String? selectedAudioId;
-  List<media.SubtitleTrack> embeddedSubtitleTracks = const [];
+  List<PlayerTrack> embeddedSubtitleTracks = const [];
   String? selectedEmbeddedSubtitleId;
   final wordProfiles = <String, Map<String, dynamic>>{};
   final phraseProfiles = <String, Map<String, dynamic>>{};
@@ -586,6 +596,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
             onPressed: () => Navigator.pop(context),
             child: Text(l.text('cancel')),
           ),
+          OutlinedButton.icon(
+            onPressed: () async {
+              final value = controller.text.trim();
+              if (value.isEmpty) return;
+              Navigator.pop(context, 'download:$value');
+            },
+            icon: const Icon(Icons.download),
+            label: Text(l.text('downloadVideo')),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(context, controller.text.trim()),
             child: Text(l.text('resolvePlay')),
@@ -595,6 +614,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     controller.dispose();
     if (pageUrl == null || pageUrl.isEmpty) return;
+    if (pageUrl.startsWith('download:')) {
+      await _downloadOnline(pageUrl.substring('download:'.length));
+      return;
+    }
     setState(() => status = 'Resolving online media...');
     try {
       final resolved = await tools.resolveOnlineMedia(pageUrl);
@@ -610,6 +633,55 @@ class _PlayerScreenState extends State<PlayerScreen> {
       });
     } catch (error) {
       setState(() => status = 'Online media failed: $error');
+    }
+  }
+
+  Future<void> _downloadOnline(String pageUrl) async {
+    final directory = await getDirectoryPath(
+      confirmButtonText: l.text('downloadHere'),
+    );
+    if (directory == null) return;
+    setState(() => status = l.text('startingDownload'));
+    try {
+      final download = await tools.downloadOnlineMedia(pageUrl, directory);
+      if (!mounted) {
+        download.cancel();
+        return;
+      }
+      setState(() {
+        activeDownload = download;
+        downloadProgress = 0;
+        downloadedMediaPath = null;
+        status = l.text('downloadingInBackground');
+      });
+      subscriptions.add(
+        download.progress.listen((value) {
+          if (mounted) setState(() => downloadProgress = value);
+        }),
+      );
+      unawaited(
+        download.completed.then(
+          (path) {
+            if (!mounted) return;
+            setState(() {
+              activeDownload = null;
+              downloadedMediaPath = path;
+              status = '${l.text('downloadComplete')}: $path';
+            });
+          },
+          onError: (Object error) {
+            if (!mounted) return;
+            setState(() {
+              activeDownload = null;
+              status = '${l.text('downloadFailed')}: $error';
+            });
+          },
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        setState(() => status = '${l.text('downloadFailed')}: $error');
+      }
     }
   }
 
@@ -1678,6 +1750,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void dispose() {
     if (mediaId != null) unawaited(api?.saveProgress(mediaId!, position));
+    activeDownload?.cancel();
     unawaited(_saveSettings());
     for (final subscription in subscriptions) {
       unawaited(subscription.cancel());
@@ -1913,6 +1986,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ],
                   ),
                 ),
+                if (activeDownload != null || downloadedMediaPath != null)
+                  _downloadStatusBar(),
                 _controls(),
               ],
             ),
@@ -1949,10 +2024,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           Positioned.fill(
             child: ColoredBox(
               color: Colors.black,
-              child: Video(
-                controller: adapter.videoController,
-                controls: NoVideoControls,
-              ),
+              child: PlayerSurface(adapter: adapter),
             ),
           ),
           if (subtitlesVisible &&
@@ -2432,6 +2504,52 @@ class _PlayerScreenState extends State<PlayerScreen> {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(color: Theme.of(context).colorScheme.secondary),
             ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _downloadStatusBar() => Material(
+    color: const Color(0xff18232b),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          const Icon(Icons.download, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: LinearProgressIndicator(
+              value: activeDownload == null ? 1 : downloadProgress,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            activeDownload == null
+                ? l.text('downloadComplete')
+                : '${l.text('downloadingInBackground')} ${(downloadProgress * 100).toStringAsFixed(1)}%',
+          ),
+          const SizedBox(width: 12),
+          if (activeDownload != null)
+            TextButton(
+              onPressed: () {
+                activeDownload?.cancel();
+                setState(() => activeDownload = null);
+              },
+              child: Text(l.text('cancel')),
+            ),
+          if (downloadedMediaPath != null)
+            TextButton(
+              onPressed: () => _openMediaPath(downloadedMediaPath!),
+              child: Text(l.text('openDownloadedVideo')),
+            ),
+          IconButton(
+            onPressed: () => setState(() {
+              downloadedMediaPath = null;
+              if (activeDownload != null) activeDownload?.cancel();
+              activeDownload = null;
+            }),
+            icon: const Icon(Icons.close),
           ),
         ],
       ),
@@ -2933,7 +3051,7 @@ class PronunciationButton extends StatefulWidget {
 }
 
 class _PronunciationButtonState extends State<PronunciationButton> {
-  media.Player? player;
+  VideoPlayerController? player;
   bool busy = false;
 
   Future<void> _play() async {
@@ -2941,9 +3059,10 @@ class _PronunciationButtonState extends State<PronunciationButton> {
     setState(() => busy = true);
     try {
       await player?.dispose();
-      final next = media.Player();
+      final next = VideoPlayerController.networkUrl(Uri.parse(widget.audioUrl));
       player = next;
-      await next.open(media.Media(widget.audioUrl), play: true);
+      await next.initialize();
+      await next.play();
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

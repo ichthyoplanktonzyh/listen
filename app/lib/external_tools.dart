@@ -121,11 +121,42 @@ class ExternalTools {
     return urls.first;
   }
 
+  Future<OnlineMediaDownload> downloadOnlineMedia(
+    String pageUrl,
+    String directory,
+  ) async {
+    final executable = await _resolve(ytDlpPath, 'yt-dlp');
+    final ffmpeg = await _resolve(ffmpegPath, 'ffmpeg');
+    final process = await Process.start(executable, [
+      '--no-playlist',
+      '--newline',
+      '--no-warnings',
+      '--progress',
+      '--progress-template',
+      'download:__LLPLAYER_PROGRESS__:%(progress._percent_str)s',
+      '--print',
+      'after_move:__LLPLAYER_FILE__:%(filepath)s',
+      '--paths',
+      directory,
+      '--ffmpeg-location',
+      ffmpeg,
+      '--output',
+      '%(title).200B [%(id)s].%(ext)s',
+      '--format',
+      'bestvideo[vcodec^=avc1][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4][vcodec^=avc1]/best[ext=mp4]/best',
+      '--merge-output-format',
+      'mp4',
+      pageUrl,
+    ]);
+    return OnlineMediaDownload(process);
+  }
+
   Future<String> _resolve(String configured, String name) async {
     if (configured.isNotEmpty && await File(configured).exists()) {
       return configured;
     }
     for (final candidate in [
+      '${File(Platform.resolvedExecutable).parent.parent.path}/Resources/runtime/$name',
       '/opt/homebrew/bin/$name',
       '/usr/local/bin/$name',
       '/usr/bin/$name',
@@ -176,6 +207,68 @@ class ExternalTools {
     'sami',
     'realtext',
   };
+}
+
+class OnlineMediaDownload {
+  OnlineMediaDownload(this._process) {
+    _finish();
+  }
+
+  final Process _process;
+  final _progress = StreamController<double>.broadcast();
+  final _result = Completer<String?>();
+  String? _outputPath;
+  String _lastError = '';
+  bool _cancelled = false;
+
+  Stream<double> get progress => _progress.stream;
+  Future<String?> get completed => _result.future;
+
+  void cancel() {
+    _cancelled = true;
+    _process.kill(ProcessSignal.sigterm);
+  }
+
+  Future<void> _finish() async {
+    final stdoutFuture = _read(_process.stdout);
+    final stderrFuture = _read(_process.stderr);
+    final code = await _process.exitCode;
+    await Future.wait([stdoutFuture, stderrFuture]);
+    if (_cancelled) {
+      _result.completeError(const ExternalToolError('Download cancelled.'));
+    } else if (code != 0) {
+      _result.completeError(
+        ExternalToolError(
+          _lastError.isEmpty ? 'yt-dlp exited with status $code.' : _lastError,
+        ),
+      );
+    } else if (_outputPath == null) {
+      _result.completeError(
+        const ExternalToolError('yt-dlp did not report a downloaded file.'),
+      );
+    } else {
+      _result.complete(_outputPath);
+    }
+    await _progress.close();
+  }
+
+  Future<void> _read(Stream<List<int>> source) async {
+    await for (final line
+        in source.transform(utf8.decoder).transform(const LineSplitter())) {
+      if (line.startsWith('__LLPLAYER_PROGRESS__:')) {
+        final raw = line
+            .substring('__LLPLAYER_PROGRESS__:'.length)
+            .replaceAll('%', '')
+            .trim();
+        final value = double.tryParse(raw);
+        if (value != null) _progress.add(value.clamp(0, 100) / 100);
+      } else if (line.startsWith('__LLPLAYER_FILE__:')) {
+        _outputPath = line.substring('__LLPLAYER_FILE__:'.length).trim();
+      } else if (line.trim().isNotEmpty) {
+        _lastError = line.trim();
+      }
+    }
+  }
 }
 
 class ExternalToolError implements Exception {
