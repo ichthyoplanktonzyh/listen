@@ -10,9 +10,9 @@ if [[ ! -f "$mdk" ]]; then
 fi
 
 for path in /opt/homebrew/lib /usr/local/lib; do
-  if otool -l "$mdk" | grep -Fq "path $path "; then
+  while otool -l "$mdk" | grep -Fq "path $path "; do
     install_name_tool -delete_rpath "$path" "$mdk"
-  fi
+  done
 done
 
 if otool -l "$mdk" | grep -Eq 'path /(opt/homebrew|usr/local)/lib '; then
