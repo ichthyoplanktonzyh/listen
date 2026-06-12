@@ -29,14 +29,7 @@ class PlayerTracks {
 }
 
 class DesktopPlayerAdapter {
-  DesktopPlayerAdapter() {
-    _positionTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
-      final current = _controller;
-      if (current != null && current.value.isInitialized) {
-        _position.add(current.value.position);
-      }
-    });
-  }
+  DesktopPlayerAdapter();
 
   final controller = ValueNotifier<VideoPlayerController?>(null);
   final _position = StreamController<Duration>.broadcast();
@@ -44,7 +37,6 @@ class DesktopPlayerAdapter {
   final _playing = StreamController<bool>.broadcast();
   final _errors = StreamController<String>.broadcast();
   final _tracks = StreamController<PlayerTracks>.broadcast();
-  late final Timer _positionTimer;
   double _rate = 1;
   double _volume = 100;
   VideoPlayerController? get _controller => controller.value;
@@ -67,6 +59,8 @@ class DesktopPlayerAdapter {
         ? VideoPlayerController.networkUrl(uri)
         : VideoPlayerController.file(File(path));
     controller.value = next;
+    // Event-driven position tracking instead of Timer.periodic polling.
+    // VideoPlayerController extends ValueNotifier and fires on every frame.
     next.addListener(_notify);
     try {
       await next.initialize();
@@ -81,9 +75,12 @@ class DesktopPlayerAdapter {
     }
   }
 
+  /// Called on every [VideoPlayerController] value change (frame-level events).
+  /// Replaces the old Timer.periodic(100ms) polling with true event-driven updates.
   void _notify() {
     final value = _controller?.value;
     if (value == null) return;
+    _position.add(value.position);
     _duration.add(value.duration);
     _playing.add(value.isPlaying);
     if (value.hasError) _errors.add(value.errorDescription ?? 'Playback error');
@@ -151,7 +148,6 @@ class DesktopPlayerAdapter {
       _controller?.setSubtitleTracks(const []);
 
   Future<void> dispose() async {
-    _positionTimer.cancel();
     final value = _controller;
     if (value != null) {
       value.removeListener(_notify);

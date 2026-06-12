@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'local_api.dart';
+import 'services/api_service.dart';
 import 'localization.dart';
 
 class LearningAssetsScreen extends StatefulWidget {

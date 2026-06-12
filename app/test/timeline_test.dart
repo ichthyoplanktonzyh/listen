@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llplayer_next/timeline.dart';
+import 'package:llplayer_next/models/timeline.dart';
 
 Cue cue(String id, int start, int end) => Cue(
   id: id,

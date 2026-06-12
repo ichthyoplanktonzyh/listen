@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llplayer_next/external_tools.dart';
+import 'package:llplayer_next/services/external_tools.dart';
 
 void main() {
   test('embedded subtitle labels disclose bitmap tracks', () {
