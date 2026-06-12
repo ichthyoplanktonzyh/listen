@@ -16,7 +16,10 @@
         "vocabulary-assets-imported",
         "media-availability-changed",
         "transcription-model-changed",
-        "transcription-job-changed"
+        "transcription-job-changed",
+        "pronunciation-analysis-completed",
+        "word-timings-completed",
+        "pronunciation-provider-degraded"
       ]
     },
     "payload": { "type": "object" }

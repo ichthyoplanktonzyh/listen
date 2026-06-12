@@ -130,6 +130,47 @@ paths:
         - { name: format, in: query, schema: { type: string, default: srt } }
       responses:
         "200": { description: Generated SRT subtitle }
+  /v1/pronunciation/providers:
+    get:
+      operationId: pronunciationProviders
+      responses:
+        "200": { description: Provider-neutral pronunciation capability registry }
+  /v1/pronunciation/lookup:
+    get:
+      operationId: pronunciationLookup
+      parameters:
+        - { name: word, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Canonical word pronunciation and variants }
+  /v1/pronunciation/analyze-sentence:
+    post:
+      operationId: analyzeSentencePronunciation
+      responses:
+        "200": { description: Sentence pronunciation, token mapping, and rule hints }
+  /v1/pronunciation/rules:
+    get:
+      operationId: pronunciationRules
+      responses:
+        "200": { description: Deterministic rule analyzer metadata and disclaimer }
+  /v1/subtitles/{track_id}/pronunciation:
+    get:
+      operationId: trackPronunciation
+      responses:
+        "200": { description: Cached or generated pronunciation analyses for a track }
+  /v1/subtitles/{track_id}/pronunciation-analysis:
+    post:
+      operationId: generateTrackPronunciation
+      responses:
+        "200": { description: Generated pronunciation analyses for a track }
+  /v1/subtitles/{track_id}/word-timings:
+    get:
+      operationId: trackWordTimings
+      responses:
+        "200": { description: Word timings with source and provider provenance }
+    post:
+      operationId: generateTrackWordTimings
+      responses:
+        "200": { description: Generated word timings with safe estimated fallback }
   /v1/lexical-entries:
     get:
       operationId: listLexicalEntries

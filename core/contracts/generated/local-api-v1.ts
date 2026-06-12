@@ -72,6 +72,36 @@ export interface SubtitleTrack {
   sentences: SubtitleSentence[];
 }
 
+export type TimingSource =
+  | "asr_reported"
+  | "forced_aligned"
+  | "estimated"
+  | "user_adjusted";
+
+export interface WordTiming {
+  sentence_id: string;
+  token_index: number;
+  text: string;
+  start_ms: number;
+  end_ms: number;
+  confidence: number | null;
+  timing_source: TimingSource;
+  provider_id: string;
+  provider_version: string;
+}
+
+export interface PronunciationProviderInfo {
+  id: string;
+  display_name: string;
+  version: string;
+  languages: string[];
+  accents: string[];
+  phoneme_sets: string[];
+  available: boolean;
+  degraded: boolean;
+  diagnostic: string | null;
+}
+
 export interface UpdateWordProfile {
   language: string;
   lemma: string;
@@ -223,6 +253,45 @@ export class LocalApiV1 {
 
   exportSubtitle(trackId: string): Promise<string> {
     return this.requestText(`/v1/subtitles/${encodeURIComponent(trackId)}/export?format=srt`);
+  }
+
+  pronunciationProviders(): Promise<PronunciationProviderInfo[]> {
+    return this.request("/v1/pronunciation/providers");
+  }
+
+  pronunciationLookup(word: string): Promise<unknown> {
+    return this.request(`/v1/pronunciation/lookup?word=${encodeURIComponent(word)}`);
+  }
+
+  analyzeSentencePronunciation(sentenceId: string): Promise<unknown> {
+    return this.request("/v1/pronunciation/analyze-sentence", {
+      method: "POST", body: JSON.stringify({ sentence_id: sentenceId }),
+    });
+  }
+
+  pronunciationRules(): Promise<unknown> {
+    return this.request("/v1/pronunciation/rules");
+  }
+
+  trackPronunciation(trackId: string): Promise<unknown[]> {
+    return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}/pronunciation`);
+  }
+
+  generateTrackPronunciation(trackId: string): Promise<unknown[]> {
+    return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}/pronunciation-analysis`, {
+      method: "POST",
+    });
+  }
+
+  trackWordTimings(trackId: string): Promise<WordTiming[]> {
+    return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}/word-timings`);
+  }
+
+  generateTrackWordTimings(trackId: string): Promise<WordTiming[]> {
+    return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}/word-timings`, {
+      method: "POST",
+      body: JSON.stringify({ timings: [] }),
+    });
   }
 
   listLexicalEntries(): Promise<LexicalEntryDetails[]> {

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.0 - acceptance candidate
+
+- Provider-neutral pronunciation, phoneme, speech-rule, and word-timing
+  contracts with schema v8.
+- Pinned CMUdict canonical en-US pronunciation with deterministic fallback,
+  lexical stress, ARPAbet, IPA display, variants, and token mapping.
+- Deterministic bounded word timings for ordinary subtitles and local
+  current-word highlighting that remains correct after seek, loop, and rate
+  changes.
+- Rule-based weak form, contraction, linking, flapping, deletion, and
+  assimilation hints that explicitly do not claim real-audio detection.
+- Desktop settings v7, pronunciation diagnostics, API/event contracts, and
+  Milestone 1.9 automated verification.
+
 ## 0.6.0 - acceptance candidate
 
 - Unified word and user-confirmed phrase learning assets with schema v7 and

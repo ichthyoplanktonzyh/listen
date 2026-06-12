@@ -12,7 +12,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use sha2::Digest;
 use thiserror::Error;
 
-pub const MIGRATION_VERSION: u32 = 7;
+pub const MIGRATION_VERSION: u32 = 8;
 mod lexical;
 
 pub struct SqliteRepository {
@@ -106,6 +106,12 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         let tx = connection.unchecked_transaction()?;
         tx.execute_batch(include_str!("../migrations/0007_lexical_entries.sql"))?;
         tx.pragma_update(None, "user_version", 7)?;
+        tx.commit()?;
+    }
+    if current < 8 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0008_pronunciation.sql"))?;
+        tx.pragma_update(None, "user_version", 8)?;
         tx.commit()?;
     }
     Ok(())
@@ -820,6 +826,92 @@ impl SubtitleRepository for SqliteRepository {
                 },
             )
             .optional()
+            .map_err(repo)
+    }
+
+    fn save_pronunciation(&self, analysis: &SentencePronunciation) -> Result<(), ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "INSERT INTO pronunciation_analysis
+                 (sentence_id,provider_id,provider_version,analysis_json,updated_at_ms)
+                 VALUES (?1,?2,?3,?4,unixepoch('subsec') * 1000)
+                 ON CONFLICT(sentence_id) DO UPDATE SET
+                   provider_id=excluded.provider_id,provider_version=excluded.provider_version,
+                   analysis_json=excluded.analysis_json,updated_at_ms=excluded.updated_at_ms",
+                params![
+                    analysis.sentence_id.as_str(),
+                    analysis.provider_id,
+                    analysis.provider_version,
+                    json(analysis)?
+                ],
+            )
+            .map(|_| ())
+            .map_err(repo)
+    }
+
+    fn get_pronunciation(
+        &self,
+        id: &SubtitleSentenceId,
+    ) -> Result<Option<SentencePronunciation>, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .query_row(
+                "SELECT analysis_json FROM pronunciation_analysis WHERE sentence_id=?1",
+                [id.as_str()],
+                |row| from_json(&row.get::<_, String>(0)?),
+            )
+            .optional()
+            .map_err(repo)
+    }
+
+    fn save_word_timings(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+        timings: &[WordTiming],
+    ) -> Result<(), ApplicationError> {
+        let Some(first) = timings.first() else {
+            return Ok(());
+        };
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "INSERT INTO word_timings
+                 (sentence_id,timing_source,provider_id,provider_version,timings_json,updated_at_ms)
+                 VALUES (?1,?2,?3,?4,?5,unixepoch('subsec') * 1000)
+                 ON CONFLICT(sentence_id) DO UPDATE SET
+                   timing_source=excluded.timing_source,provider_id=excluded.provider_id,
+                   provider_version=excluded.provider_version,timings_json=excluded.timings_json,
+                   updated_at_ms=excluded.updated_at_ms",
+                params![
+                    sentence_id.as_str(),
+                    json(&first.timing_source)?,
+                    first.provider_id,
+                    first.provider_version,
+                    json(&timings)?
+                ],
+            )
+            .map(|_| ())
+            .map_err(repo)
+    }
+
+    fn get_word_timings(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<Vec<WordTiming>, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .query_row(
+                "SELECT timings_json FROM word_timings WHERE sentence_id=?1",
+                [sentence_id.as_str()],
+                |row| from_json(&row.get::<_, String>(0)?),
+            )
+            .optional()
+            .map(|value| value.unwrap_or_default())
             .map_err(repo)
     }
 }
@@ -1748,7 +1840,7 @@ mod tests {
             connection
                 .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
                 .unwrap(),
-            7
+            MIGRATION_VERSION
         );
         assert_eq!(
             connection
@@ -1812,6 +1904,63 @@ mod tests {
                 Some("past tense".into()),
                 Some("from a lesson".into())
             )
+        );
+    }
+
+    #[test]
+    fn upgrades_historical_v7_database_and_preserves_lexical_assets() {
+        let connection = Connection::open_in_memory().unwrap();
+        for migration in [
+            include_str!("../migrations/0001_media.sql"),
+            include_str!("../migrations/0002_learning.sql"),
+        ] {
+            connection.execute_batch(migration).unwrap();
+        }
+        connection
+            .execute_batch("PRAGMA foreign_keys=OFF;")
+            .unwrap();
+        for migration in [
+            include_str!("../migrations/0003_subtitle_identity.sql"),
+            include_str!("../migrations/0004_vocabulary_assets.sql"),
+        ] {
+            connection.execute_batch(migration).unwrap();
+        }
+        connection.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+        for migration in [
+            include_str!("../migrations/0005_learning_experience.sql"),
+            include_str!("../migrations/0006_transcription.sql"),
+            include_str!("../migrations/0007_lexical_entries.sql"),
+        ] {
+            connection.execute_batch(migration).unwrap();
+        }
+        connection.pragma_update(None, "user_version", 7).unwrap();
+        connection
+            .execute(
+                "INSERT INTO lexical_entries
+                 (id,language,kind,canonical_form,normalized_form,display_form,status,
+                  normalization_provider,normalization_version,user_corrected,updated_at_ms,
+                  learning_updated_at_ms)
+                 VALUES ('asset','en','\"word\"','hello','hello','Hello','\"known_recognized\"',
+                         'legacy','v1',0,10,0)",
+                [],
+            )
+            .unwrap();
+        migrate(&connection).unwrap();
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT display_form FROM lexical_entries WHERE id='asset'",
+                    [],
+                    |row| { row.get::<_, String>(0) }
+                )
+                .unwrap(),
+            "Hello"
+        );
+        assert_eq!(
+            connection
+                .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+                .unwrap(),
+            MIGRATION_VERSION
         );
     }
 

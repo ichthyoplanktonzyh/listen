@@ -1,6 +1,7 @@
 # 跨平台听力理解播放器 Roadmap
 
-> Milestone 1、1.5、1.6 与 1.7 状态：已完成。当前发布版本为 `0.5.0`；
+> Milestone 1、1.5、1.6、1.7 与 1.8 状态：已完成。Milestone 1.9
+> 发音与词级同步基础已形成 `0.7.0` 验收候选；
 > M7 移动端验证、Windows/Linux 和其他延期能力进入 Milestone 2。
 > 完成报告见 `docs/release/milestone-1.md`。
 
@@ -52,6 +53,7 @@ Milestone 1。Milestone 1 已包含可选 `yt-dlp` 在线播放；Milestone 1.7
 - M0-M6 与 M8 是 Milestone 1 内部实施阶段；M7 延后至 Milestone 2。
 - Milestone 1.5 聚焦词汇状态、状态历史和来源原句快照的长期存续。
 - 用户选择是全局词汇状态的权威来源，系统诊断不得静默修改状态。
+- Milestone 1.9 只提供规范发音和规则型语流候选，不声称检测真实音频语流。
 
 ### 2.2 MVP 核心闭环
 

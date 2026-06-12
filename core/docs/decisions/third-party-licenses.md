@@ -20,7 +20,7 @@ This is an M0 inventory, not legal advice.
 | yt-dlp | Optional online-media URL resolution and explicit user-initiated download | Unlicense; supported sites and downloaded extractor dependencies may have separate terms; LLPlayerNext does not bypass DRM or access controls |
 | whisper.cpp | Local ASR provider for generated learning subtitles | Milestone 1.7 bundles v1.7.6 arm64 from pinned source commit under MIT; models are explicit checksum-verified user downloads and are not redistributed |
 | ECDICT | Optional offline English dictionary and lemma data | MIT; downloaded explicitly from a pinned source revision and checksum-verified |
-| CMU Pronouncing Dictionary | Optional future pronunciation data | BSD-style CMU license; downloaded explicitly from a pinned source revision and checksum-verified |
+| CMU Pronouncing Dictionary | Optional canonical en-US pronunciation data | BSD-style CMU license; downloaded explicitly from pinned revision `74790861` and checksum-verified |
 | OpenSubtitles.com REST API | User-initiated subtitle search and download | User supplies an API key; requests obey service authentication, quotas, and terms |
 
 No LLPlayer source code is copied into this repository.

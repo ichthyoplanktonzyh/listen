@@ -7,6 +7,7 @@ members = [
   "crates/dictionary-provider",
   "crates/diagnosis-core",
   "crates/persistence-sqlite",
+  "crates/speech-analysis",
   "crates/subtitle-core",
 ]
 exclude = ["spikes/tauri-libmpv/src-tauri"]
@@ -15,7 +16,7 @@ resolver = "2"
 [workspace.package]
 edition = "2024"
 rust-version = "1.94"
-version = "0.6.0"
+version = "0.7.0"
 
 [workspace.dependencies]
 axum = "0.8"

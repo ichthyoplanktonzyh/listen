@@ -80,6 +80,25 @@ pub fn router(state: ApiState) -> Router {
         .route("/v1/media/{media_id}/subtitles", post(import_subtitle))
         .route("/v1/subtitles/{track_id}", get(read_subtitle))
         .route("/v1/subtitles/{track_id}/export", get(export_subtitle))
+        .route("/v1/pronunciation/providers", get(pronunciation_providers))
+        .route("/v1/pronunciation/lookup", get(pronunciation_lookup))
+        .route(
+            "/v1/pronunciation/analyze-sentence",
+            post(analyze_pronunciation_sentence),
+        )
+        .route("/v1/pronunciation/rules", get(pronunciation_rules))
+        .route(
+            "/v1/subtitles/{track_id}/pronunciation",
+            get(track_pronunciation),
+        )
+        .route(
+            "/v1/subtitles/{track_id}/pronunciation-analysis",
+            post(generate_track_pronunciation),
+        )
+        .route(
+            "/v1/subtitles/{track_id}/word-timings",
+            get(track_word_timings).post(generate_track_word_timings),
+        )
         .route("/v1/word-profiles/batch", post(read_words))
         .route(
             "/v1/media/{media_id}/progress",
@@ -352,6 +371,113 @@ fn srt_time(value: u64) -> String {
     let seconds = value / 1_000 % 60;
     let milliseconds = value % 1_000;
     format!("{hours:02}:{minutes:02}:{seconds:02},{milliseconds:03}")
+}
+
+async fn pronunciation_providers(
+    State(state): State<ApiState>,
+) -> Json<Vec<domain::PronunciationProviderInfo>> {
+    Json(state.services.pronunciation_providers())
+}
+
+#[derive(Debug, Deserialize)]
+struct PronunciationLookupQuery {
+    word: String,
+}
+
+async fn pronunciation_lookup(
+    State(state): State<ApiState>,
+    Query(query): Query<PronunciationLookupQuery>,
+) -> Result<Json<domain::WordPronunciation>, ApiError> {
+    state
+        .services
+        .lookup_pronunciation(&query.word)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+#[derive(Debug, Deserialize)]
+struct SentenceIdRequest {
+    sentence_id: String,
+}
+
+async fn analyze_pronunciation_sentence(
+    State(state): State<ApiState>,
+    Json(request): Json<SentenceIdRequest>,
+) -> Result<Json<domain::SentencePronunciation>, ApiError> {
+    let value = state.services.analyze_pronunciation(
+        &SubtitleSentenceId::parse(request.sentence_id).map_err(ApplicationError::from)?,
+    )?;
+    let _ = state.events.send(EventEnvelope::v1(
+        EventName::PronunciationAnalysisCompleted,
+        serde_json::json!({"sentence_id": value.sentence_id}),
+    ));
+    Ok(Json(value))
+}
+
+async fn track_pronunciation(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<Vec<domain::SentencePronunciation>>, ApiError> {
+    state
+        .services
+        .analyze_pronunciation_track(
+            &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn generate_track_pronunciation(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<Vec<domain::SentencePronunciation>>, ApiError> {
+    track_pronunciation(State(state), Path(track_id)).await
+}
+
+async fn track_word_timings(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<Vec<domain::WordTiming>>, ApiError> {
+    state
+        .services
+        .word_timings_for_track(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn generate_track_word_timings(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+    request: Option<Json<WordTimingsRequest>>,
+) -> Result<Json<Vec<domain::WordTiming>>, ApiError> {
+    let parsed_track_id =
+        SubtitleTrackId::parse(track_id.clone()).map_err(ApplicationError::from)?;
+    let values = match request {
+        Some(Json(request)) if !request.timings.is_empty() => state
+            .services
+            .store_word_timings(&parsed_track_id, &request.timings)?,
+        _ => state.services.word_timings_for_track(&parsed_track_id)?,
+    };
+    let _ = state.events.send(EventEnvelope::v1(
+        EventName::WordTimingsCompleted,
+        serde_json::json!({"track_id": track_id, "count": values.len()}),
+    ));
+    Ok(Json(values))
+}
+
+#[derive(Debug, Deserialize)]
+struct WordTimingsRequest {
+    timings: Vec<domain::WordTiming>,
+}
+
+async fn pronunciation_rules() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "analyzer_id": "en-us-rules",
+        "version": "v1",
+        "evidence_source": "deterministic_text_rule",
+        "disclaimer": "Rule predictions are contextual possibilities, not detections from the audio.",
+        "families": ["weak_form", "contraction", "linking", "flapping", "deletion", "assimilation"]
+    }))
 }
 
 async fn transcription_providers(
@@ -1078,6 +1204,13 @@ mod tests {
             "/v1/media/{media_id}/progress",
             "/v1/subtitles/{track_id}",
             "/v1/subtitles/{track_id}/export",
+            "/v1/pronunciation/providers",
+            "/v1/pronunciation/lookup",
+            "/v1/pronunciation/analyze-sentence",
+            "/v1/pronunciation/rules",
+            "/v1/subtitles/{track_id}/pronunciation",
+            "/v1/subtitles/{track_id}/pronunciation-analysis",
+            "/v1/subtitles/{track_id}/word-timings",
             "/v1/word-profiles",
             "/v1/word-profiles/batch",
             "/v1/word-observations",

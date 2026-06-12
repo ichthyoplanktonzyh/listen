@@ -100,3 +100,10 @@ deletion of vocabulary assets requires an explicit user action.
 
 Milestone 1.6 schema version is `5`. Migration tests cover historical versions
 1 through 4. Version 5 adds durable user definitions and personal notes.
+# Milestone 1.9 Additions
+
+Schema v8 adds rebuildable `pronunciation_analysis` and `word_timings` rows
+keyed by subtitle sentence, plus durable `speech_rule_confirmations` reserved
+for explicit user confirmations. Every analysis row records provider/version;
+every word timing records its source. These caches are separate from vocabulary
+asset export and can be deleted and regenerated without losing learning data.

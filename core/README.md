@@ -3,17 +3,14 @@
 Clean-room, macOS-first rewrite of a listening-comprehension media player.
 
 **New thread / maintainer handoff:** read
-[`docs/handoff/project-handoff-2026-06-11.md`](docs/handoff/project-handoff-2026-06-11.md)
-before changing branches, closing Milestone 1.8, or starting Milestone 1.9.
+[`docs/handoff/project-handoff-2026-06-12.md`](docs/handoff/project-handoff-2026-06-12.md).
 
-**Current release:** Milestone 1.7 complete, version `0.5.0`.
+**Current release candidate:** Milestone 1.9, version `0.7.0`.
 
-Milestone 1.8 (`0.6.0`) is an acceptance candidate. It adds unified word and
-phrase learning assets, versioned lemma normalization, optional offline
-ECDICT/CMUdict resources, OpenSubtitles search, subtitle-native phrase
-selection, and provider-supplied word pronunciation audio. It is not released
-until the collaborative checklist in
-`docs/verification/milestone-1.8-acceptance.md` is confirmed.
+Milestone 1.9 adds canonical pronunciation and sentence IPA, deterministic word
+timings with local current-word highlighting, and clearly labeled rule-based
+connected-speech hints. CMUdict remains an explicit optional resource and all
+enhancements degrade safely without blocking playback.
 
 The Milestone 1 MVP targets macOS Apple Silicon and includes the core learning
 loop, dual text subtitles, drag and drop, configurable subtitle presentation,
@@ -65,6 +62,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 ./scripts/verify-m15.sh
 ./scripts/verify-m16.sh
 ./scripts/verify-m17.sh
+./scripts/verify-m18.sh
+./scripts/verify-m19.sh
 ./scripts/build-macos-mvp.sh
 ./scripts/verify-mvp.sh
 ```

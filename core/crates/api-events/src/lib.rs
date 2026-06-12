@@ -15,6 +15,9 @@ pub enum EventName {
     MediaAvailabilityChanged,
     TranscriptionModelChanged,
     TranscriptionJobChanged,
+    PronunciationAnalysisCompleted,
+    WordTimingsCompleted,
+    PronunciationProviderDegraded,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

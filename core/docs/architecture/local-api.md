@@ -46,3 +46,9 @@ results; one Provider failure does not fail the whole lookup.
 Play, pause, seek, position events, subtitle cursor updates, and loop control
 stay inside the Flutter desktop client. Sending those high-frequency operations
 through HTTP would add latency and couple the domain service to a player.
+# Milestone 1.9 Additions
+
+`/v1/pronunciation/*` exposes provider capabilities, canonical lookup, sentence
+analysis, and rule metadata. Track-level pronunciation and word-timing routes
+support lazy or batch generation. Playback-frequency current-word selection
+stays inside the Flutter client after the timing timeline is loaded.

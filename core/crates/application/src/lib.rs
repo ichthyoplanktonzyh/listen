@@ -29,6 +29,20 @@ pub trait SubtitleRepository: Send + Sync {
         &self,
         id: &SubtitleSentenceId,
     ) -> Result<Option<SubtitleSentence>, ApplicationError>;
+    fn save_pronunciation(&self, analysis: &SentencePronunciation) -> Result<(), ApplicationError>;
+    fn get_pronunciation(
+        &self,
+        id: &SubtitleSentenceId,
+    ) -> Result<Option<SentencePronunciation>, ApplicationError>;
+    fn save_word_timings(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+        timings: &[WordTiming],
+    ) -> Result<(), ApplicationError>;
+    fn get_word_timings(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<Vec<WordTiming>, ApplicationError>;
 }
 
 pub trait WordProfileRepository: Send + Sync {
@@ -699,6 +713,132 @@ impl AppServices {
         self.subtitles.get_track(track_id)
     }
 
+    pub fn pronunciation_providers(&self) -> Vec<PronunciationProviderInfo> {
+        vec![speech_analysis::provider_info()]
+    }
+
+    pub fn lookup_pronunciation(&self, word: &str) -> Result<WordPronunciation, ApplicationError> {
+        require_text(word, "word")?;
+        Ok(speech_analysis::lookup(word, 0))
+    }
+
+    pub fn analyze_pronunciation(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<SentencePronunciation, ApplicationError> {
+        if let Some(value) = self.subtitles.get_pronunciation(sentence_id)? {
+            return Ok(value);
+        }
+        let sentence = self
+            .subtitles
+            .get_sentence(sentence_id)?
+            .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
+        let value = speech_analysis::analyze_sentence(&sentence);
+        self.subtitles.save_pronunciation(&value)?;
+        Ok(value)
+    }
+
+    pub fn word_timings(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<Vec<WordTiming>, ApplicationError> {
+        let existing = self.subtitles.get_word_timings(sentence_id)?;
+        if !existing.is_empty() {
+            return Ok(existing);
+        }
+        let sentence = self
+            .subtitles
+            .get_sentence(sentence_id)?
+            .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
+        let values = speech_analysis::estimate_word_timings(&sentence);
+        self.subtitles.save_word_timings(sentence_id, &values)?;
+        Ok(values)
+    }
+
+    pub fn analyze_pronunciation_track(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<SentencePronunciation>, ApplicationError> {
+        let track = self
+            .subtitles
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        track
+            .sentences
+            .iter()
+            .map(|sentence| self.analyze_pronunciation(&sentence.id))
+            .collect()
+    }
+
+    pub fn word_timings_for_track(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<WordTiming>, ApplicationError> {
+        let track = self
+            .subtitles
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let mut values = Vec::new();
+        for sentence in track.sentences {
+            values.extend(self.word_timings(&sentence.id)?);
+        }
+        Ok(values)
+    }
+
+    pub fn store_word_timings(
+        &self,
+        track_id: &SubtitleTrackId,
+        timings: &[WordTiming],
+    ) -> Result<Vec<WordTiming>, ApplicationError> {
+        let track = self
+            .subtitles
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let sentences = track
+            .sentences
+            .iter()
+            .map(|sentence| (sentence.id.clone(), sentence))
+            .collect::<std::collections::HashMap<_, _>>();
+        let mut grouped = std::collections::HashMap::<SubtitleSentenceId, Vec<WordTiming>>::new();
+        for timing in timings {
+            let sentence = sentences
+                .get(&timing.sentence_id)
+                .ok_or(ApplicationError::Validation("word timing sentence"))?;
+            if timing.end_ms < timing.start_ms
+                || timing.start_ms < sentence.start.get()
+                || timing.end_ms > sentence.end.get()
+                || !sentence.tokens.iter().any(|token| {
+                    token.index == timing.token_index && token.kind == SubtitleTokenKind::Word
+                })
+            {
+                return Err(ApplicationError::Validation("word timing boundary"));
+            }
+            grouped
+                .entry(timing.sentence_id.clone())
+                .or_default()
+                .push(timing.clone());
+        }
+        for (sentence_id, values) in grouped.iter_mut() {
+            values.sort_by_key(|value| (value.start_ms, value.end_ms, value.token_index));
+            if values
+                .windows(2)
+                .any(|pair| pair[0].end_ms > pair[1].start_ms)
+            {
+                return Err(ApplicationError::Validation("word timing monotonicity"));
+            }
+            let existing = self.subtitles.get_word_timings(sentence_id)?;
+            if existing.first().is_some_and(|current| {
+                values.first().is_some_and(|incoming| {
+                    timing_priority(current.timing_source) > timing_priority(incoming.timing_source)
+                })
+            }) {
+                continue;
+            }
+            self.subtitles.save_word_timings(sentence_id, values)?;
+        }
+        Ok(timings.to_vec())
+    }
+
     pub async fn lookup_dictionary(
         &self,
         providers: &[Arc<dyn DictionaryProvider>],
@@ -832,6 +972,15 @@ impl AppServices {
             &profiles,
             &observations,
         ))
+    }
+}
+
+fn timing_priority(source: TimingSource) -> u8 {
+    match source {
+        TimingSource::Estimated => 1,
+        TimingSource::ForcedAligned => 2,
+        TimingSource::AsrReported => 3,
+        TimingSource::UserAdjusted => 4,
     }
 }
 

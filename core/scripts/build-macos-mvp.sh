@@ -29,11 +29,12 @@ cp "$root/third_party/runtime/manifest.json" \
 cp "$root/third_party/runtime/THIRD_PARTY_NOTICES.md" \
   "$app/Contents/Resources/runtime/THIRD_PARTY_NOTICES.md"
 "$root/scripts/sanitize-macos-player-framework.sh" "$app"
+xattr -cr "$app"
 codesign --force --deep --sign - "$app"
 
 mkdir -p "$root/dist"
 rm -f "$root/dist/LLPlayerNext-macos-arm64.zip"
-ditto -c -k --sequesterRsrc --keepParent \
+ditto -c -k --keepParent \
   "$app" "$root/dist/LLPlayerNext-macos-arm64.zip"
 
 file "$app/Contents/MacOS/LLPlayerNext" "$app/Contents/MacOS/api-http" \
