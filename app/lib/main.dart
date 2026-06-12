@@ -21,7 +21,6 @@ import 'controllers/player_controller.dart';
 import 'controllers/subtitle_controller.dart';
 import 'controllers/learning_controller.dart';
 import 'controllers/settings_controller.dart';
-import 'utils/subtitle_position.dart';
 import 'utils/subtitle_style.dart';
 import 'utils/word_list_parser.dart';
 import 'widgets/subtitle/token_line.dart';
@@ -361,6 +360,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(
       () => wordProfiles[profile['normalized_lemma'] as String] = profile,
     );
+    // Sync to learning controller
+    learningController.setWordProfiles(Map<String, Map<String, dynamic>>.from(
+      wordProfiles,
+    ));
   }
 
   void _onPosition(Duration value) {
@@ -394,6 +397,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       setState(() => position = value);
     }
     position = value;
+    playerController.setPosition(value);
   }
 
   Future<void> _openMedia() async {
@@ -1518,17 +1522,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => CallbackShortcuts(
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([
+      playerController,
+      subtitleController,
+      learningController,
+      settingsController,
+    ]),
+    builder: (context, _) => CallbackShortcuts(
     bindings: {
       const SingleActivator(LogicalKeyboardKey.space): adapter.playOrPause,
       const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
-          _seekCue(primaryCursor.previous(currentPrimaryCue)),
+          _seekCue(subtitleController.primaryCursor.previous(
+            subtitleController.currentPrimaryCue,
+          )),
       const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
-          _seekCue(primaryCursor.next(currentPrimaryCue)),
+          _seekCue(subtitleController.primaryCursor.next(
+            subtitleController.currentPrimaryCue,
+          )),
       const SingleActivator(LogicalKeyboardKey.keyL): () =>
-          setState(() => loopCue = !loopCue),
+          subtitleController.setLoopCue(!subtitleController.loopCue),
       const SingleActivator(LogicalKeyboardKey.keyH): () =>
-          setState(() => subtitlesVisible = !subtitlesVisible),
+          subtitleController.setVisible(!subtitleController.visible),
       const SingleActivator(LogicalKeyboardKey.digit1): () =>
           _markFirstWord('unknown_meaning'),
       const SingleActivator(LogicalKeyboardKey.digit2): () =>
@@ -1599,12 +1614,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   child: Row(
                     children: [
                       Expanded(flex: 3, child: _playerSurface()),
-                      if (subtitlesVisible || selectedWordDetails != null)
-                        SizedBox(width: transcriptWidth, child: _sidePanel()),
+                      if (subtitleController.visible ||
+                          learningController.selectedWordDetails != null)
+                        SizedBox(
+                          width: settingsController.transcriptWidth,
+                          child: _sidePanel(),
+                        ),
                     ],
                   ),
                 ),
-                if (activeDownload != null || downloadedMediaPath != null)
+                if (activeDownload != null ||
+                    playerController.downloadedMediaPath != null)
                   _downloadStatusBar(),
                 _controls(),
               ],
@@ -1613,29 +1633,35 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ),
       ),
     ),
+    ),
   );
 
   Widget _playerSurface() => LayoutBuilder(
     builder: (context, constraints) {
       final primarySize = responsiveSubtitleSize(
         width: constraints.maxWidth,
-        scale: primaryFontSize,
-        preset: subtitlePreset,
-        textLength: currentPrimaryCue?.text.length ?? 1,
+        scale: subtitleController.primaryFontSize,
+        preset: subtitleController.preset,
+        textLength:
+            subtitleController.currentPrimaryCue?.text.length ?? 1,
       );
       final secondarySize = responsiveSubtitleSize(
         width: constraints.maxWidth,
-        scale: secondaryFontSize,
-        preset: subtitlePreset,
-        textLength: currentSecondaryCue?.text.length ?? 1,
+        scale: subtitleController.secondaryFontSize,
+        preset: subtitleController.preset,
+        textLength:
+            subtitleController.currentSecondaryCue?.text.length ?? 1,
         secondary: true,
       );
-      final backgroundFactor = subtitlePreset == 'watching'
+      final backgroundFactor = subtitleController.preset == 'watching'
           ? 0.45
-          : subtitlePreset == 'compact'
+          : subtitleController.preset == 'compact'
           ? 0.3
           : 1.0;
-      final subtitlePosition = Offset(subtitlePositionX, subtitlePositionY);
+      final subtitlePosition = Offset(
+        subtitleController.positionX,
+        subtitleController.positionY,
+      );
       return Stack(
         alignment: Alignment.bottomCenter,
         children: [
@@ -1645,9 +1671,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
               child: PlayerSurface(adapter: adapter),
             ),
           ),
-          if (subtitlesVisible &&
-              (currentPrimaryCue != null ||
-                  (secondarySubtitlesVisible && currentSecondaryCue != null)))
+          if (subtitleController.visible &&
+              (subtitleController.currentPrimaryCue != null ||
+                  (subtitleController.secondaryVisible &&
+                      subtitleController.currentSecondaryCue != null)))
             Align(
               alignment: Alignment(
                 subtitlePosition.dx * 2 - 1,
@@ -1657,15 +1684,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 cursor: SystemMouseCursors.move,
                 child: GestureDetector(
                   behavior: HitTestBehavior.translucent,
-                  onPanUpdate: (details) => setState(() {
-                    final moved = moveSubtitlePosition(
-                      current: Offset(subtitlePositionX, subtitlePositionY),
-                      delta: details.delta,
-                      viewport: constraints.biggest,
+                  onPanUpdate: (details) {
+                    subtitleController.movePosition(
+                      details.delta.dx,
+                      details.delta.dy,
+                      constraints.biggest.width,
+                      constraints.biggest.height,
                     );
-                    subtitlePositionX = moved.dx;
-                    subtitlePositionY = moved.dy;
-                  }),
+                  },
                   onPanEnd: (_) => unawaited(_saveSettings()),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
@@ -1674,51 +1700,61 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(
-                          alpha: subtitleBackgroundOpacity * backgroundFactor,
+                          alpha: subtitleController.backgroundOpacity *
+                              backgroundFactor,
                         ),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Padding(
                         padding: EdgeInsets.symmetric(
-                          horizontal: subtitlePreset == 'compact' ? 10 : 18,
-                          vertical: subtitlePreset == 'compact' ? 6 : 12,
+                          horizontal:
+                              subtitleController.preset == 'compact' ? 10 : 18,
+                          vertical:
+                              subtitleController.preset == 'compact' ? 6 : 12,
                         ),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (currentPrimaryCue != null)
+                            if (subtitleController.currentPrimaryCue != null)
                               GestureDetector(
-                                onTap: () => _seekCue(currentPrimaryCue),
+                                onTap: () => _seekCue(
+                                  subtitleController.currentPrimaryCue,
+                                ),
                                 child: TokenLine(
-                                  cue: currentPrimaryCue!,
-                                  profiles: wordProfiles,
-                                  phraseCandidates: currentPhraseCandidates,
-                                  phraseProfiles: phraseProfiles,
-                                  showStyles: statusStylesVisible,
+                                  cue: subtitleController.currentPrimaryCue!,
+                                  profiles: learningController.wordProfiles,
+                                  phraseCandidates:
+                                      learningController.phraseCandidates,
+                                  phraseProfiles:
+                                      learningController.phraseProfiles,
+                                  showStyles:
+                                      subtitleController.statusStylesVisible,
                                   fontSize: primarySize,
-                                  fontFamily: _subtitleFont(primaryFontFamily),
+                                  fontFamily: _subtitleFont(
+                                    subtitleController.primaryFontFamily,
+                                  ),
                                   baseColor: primaryColor,
                                   onWord: _openWord,
                                   onPhrase: _openPhrase,
                                 ),
                               ),
-                            if (secondarySubtitlesVisible &&
-                                currentSecondaryCue != null)
+                            if (subtitleController.secondaryVisible &&
+                                subtitleController.currentSecondaryCue != null)
                               GestureDetector(
                                 onTap: () => adapter.seek(
-                                  secondaryCursor.mediaStart(
-                                    currentSecondaryCue!,
+                                  subtitleController.secondaryCursor.mediaStart(
+                                    subtitleController.currentSecondaryCue!,
                                   ),
                                 ),
                                 child: Padding(
                                   padding: const EdgeInsets.only(top: 6),
                                   child: Text(
-                                    currentSecondaryCue!.text,
+                                    subtitleController.currentSecondaryCue!.text,
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       fontSize: secondarySize,
                                       fontFamily: _subtitleFont(
-                                        secondaryFontFamily,
+                                        subtitleController.secondaryFontFamily,
                                       ),
                                       color: secondaryColor,
                                     ),
@@ -1733,7 +1769,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 ),
               ),
             ),
-          if (mediaPath == null)
+          if (playerController.mediaPath == null)
             Center(
               child: FilledButton.icon(
                 onPressed: _openMedia,
@@ -1774,19 +1810,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
               label: Text(l.text('diagnosis')),
             ),
           ],
-          selected: {sidePanel},
+          selected: {learningController.sidePanel},
           onSelectionChanged: (value) =>
-              setState(() => sidePanel = value.first),
+              learningController.selectSidePanel(value.first),
           showSelectedIcon: false,
         ),
         Expanded(
-          child: switch (sidePanel) {
+          child: switch (learningController.sidePanel) {
             1 =>
-              selectedWordDetails == null
+              learningController.selectedWordDetails == null
                   ? Center(child: Text(l.text('noWordSelected')))
                   : WordLearningPanel(
-                      details: selectedWordDetails!,
-                      dictionary: selectedDictionary,
+                      details: learningController.selectedWordDetails!,
+                      dictionary: learningController.selectedDictionary,
                       onStatus: _setSelectedWordStatus,
                       onSave: _saveSelectedLearningContent,
                       onSource: _playOccurrence,
@@ -1794,7 +1830,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       onNotHeard: () => _observeSelected(false),
                     ),
             2 =>
-              diagnosis == null
+              learningController.diagnosis == null
                   ? Center(child: Text(l.text('diagnosis')))
                   : _diagnosisCard(),
             _ => _transcript(),
@@ -1805,113 +1841,115 @@ class _PlayerScreenState extends State<PlayerScreen> {
   );
 
   Widget _transcript() => TranscriptPanel(
-    track: primaryTrack,
+    track: subtitleController.primaryTrack,
     scrollController: transcriptController,
     itemExtent: transcriptItemExtent,
-    currentCue: currentPrimaryCue,
-    wordProfiles: wordProfiles,
-    showStyles: statusStylesVisible,
+    currentCue: subtitleController.currentPrimaryCue,
+    wordProfiles: learningController.wordProfiles,
+    showStyles: subtitleController.statusStylesVisible,
     baseColor: primaryColor,
     onWord: _openWord,
     onSeekCue: _seekCue,
   );
 
-  Widget _diagnosisCard() => DiagnosisCard(diagnosis: diagnosis!);
+  Widget _diagnosisCard() =>
+      DiagnosisCard(diagnosis: learningController.diagnosis!);
 
   Widget _controls() => PlaybackControls(
     adapter: adapter,
-    position: position,
-    duration: duration,
-    playing: playing,
-    loopCue: loopCue,
-    sourceLoopStart: sourceLoopStart,
-    statusStylesVisible: statusStylesVisible,
-    subtitlesVisible: subtitlesVisible,
-    secondarySubtitlesVisible: secondarySubtitlesVisible,
-    rate: rate,
-    volume: volume,
-    muted: muted,
-    audioTracks: audioTracks,
-    selectedAudioId: selectedAudioId,
-    embeddedSubtitleTracks: embeddedSubtitleTracks,
-    selectedEmbeddedSubtitleId: selectedEmbeddedSubtitleId,
-    primarySubtitleOffset: primarySubtitleOffset,
-    secondarySubtitleOffset: secondarySubtitleOffset,
-    status: status,
+    position: playerController.position,
+    duration: playerController.duration,
+    playing: playerController.playing,
+    loopCue: subtitleController.loopCue,
+    sourceLoopStart: playerController.sourceLoopStart,
+    statusStylesVisible: subtitleController.statusStylesVisible,
+    subtitlesVisible: subtitleController.visible,
+    secondarySubtitlesVisible: subtitleController.secondaryVisible,
+    rate: playerController.rate,
+    volume: playerController.volume,
+    muted: playerController.muted,
+    audioTracks: playerController.audioTracks as List<PlayerTrack>,
+    selectedAudioId: playerController.selectedAudioId,
+    embeddedSubtitleTracks:
+        playerController.embeddedSubtitleTracks as List<PlayerTrack>,
+    selectedEmbeddedSubtitleId: playerController.selectedEmbeddedSubtitleId,
+    primarySubtitleOffset: subtitleController.primarySubtitleOffset,
+    secondarySubtitleOffset: subtitleController.secondarySubtitleOffset,
+    status: playerController.status,
     onSeek: (value) => adapter.seek(value),
     onSeekToPreviousCue: () =>
-        _seekCue(primaryCursor.previous(currentPrimaryCue)),
+        _seekCue(subtitleController.primaryCursor.previous(
+          subtitleController.currentPrimaryCue,
+        )),
     onSeekToZero: () => adapter.seek(Duration.zero),
     onPlayPause: adapter.playOrPause,
     onStop: adapter.stop,
     onSeekToNextCue: () =>
-        _seekCue(primaryCursor.next(currentPrimaryCue)),
-    onLoopCueChanged: (value) => setState(() {
-      loopCue = value;
-      if (value) {
-        sourceLoopStart = null;
-        sourceLoopEnd = null;
-      }
-    }),
-    onStopSourceLoop: () => setState(() {
-      sourceLoopStart = null;
-      sourceLoopEnd = null;
-    }),
+        _seekCue(subtitleController.primaryCursor.next(
+          subtitleController.currentPrimaryCue,
+        )),
+    onLoopCueChanged: (value) {
+      subtitleController.setLoopCue(value);
+      if (value) playerController.setSourceLoop(null, null);
+    },
+    onStopSourceLoop: () => playerController.setSourceLoop(null, null),
     onStatusStylesChanged: (value) {
-      setState(() => statusStylesVisible = value);
+      subtitleController.setStatusStylesVisible(value);
       unawaited(_saveSettings());
     },
     onSubtitlesVisibleChanged: (value) {
-      setState(() => subtitlesVisible = value);
+      subtitleController.setVisible(value);
       unawaited(_saveSettings());
     },
     onSecondaryVisibleChanged: (value) {
-      setState(() => secondarySubtitlesVisible = value);
+      subtitleController.setSecondaryVisible(value);
       unawaited(_saveSettings());
     },
     onRateChanged: (value) {
-      setState(() => rate = value);
+      playerController.setRate(value);
       adapter.setRate(value);
       unawaited(_saveSettings());
     },
     onVolumeChanged: (value) {
-      setState(() => volume = value);
-      if (!muted) adapter.setVolume(value);
+      playerController.setVolume(value);
+      if (!playerController.muted) adapter.setVolume(value);
       unawaited(_saveSettings());
     },
     onMuteToggle: () {
-      setState(() => muted = !muted);
-      adapter.setVolume(muted ? 0 : volume);
+      final newMuted = !playerController.muted;
+      playerController.setMuted(newMuted);
+      adapter.setVolume(newMuted ? 0 : playerController.volume);
     },
     onAudioTrackChanged: (track) {
-      setState(() => selectedAudioId = track.id);
+      playerController.setSelectedAudioId(track.id);
       adapter.selectAudio(track);
     },
     onEmbeddedSubtitleTrackChanged: (track) {
-      setState(() => selectedEmbeddedSubtitleId = track.id);
+      playerController.setSelectedEmbeddedSubtitleId(track.id);
       adapter.selectSubtitle(track);
     },
     onPrimaryOffsetChanged: (offset) {
-      setState(() => primarySubtitleOffset = offset);
+      subtitleController.setPrimarySubtitleOffset(offset);
       unawaited(_saveSettings());
     },
     onSecondaryOffsetChanged: (offset) {
-      setState(() => secondarySubtitleOffset = offset);
+      subtitleController.setSecondarySubtitleOffset(offset);
       unawaited(_saveSettings());
     },
   );
 
   Widget _downloadStatusBar() => DownloadStatusBar(
     activeDownload: activeDownload,
-    downloadProgress: downloadProgress,
-    downloadedMediaPath: downloadedMediaPath,
+    downloadProgress: playerController.downloadProgress,
+    downloadedMediaPath: playerController.downloadedMediaPath,
     onCancel: () {
       activeDownload?.cancel();
       setState(() => activeDownload = null);
     },
-    onOpenMediaPath: () => _openMediaPath(downloadedMediaPath!),
+    onOpenMediaPath: () =>
+        _openMediaPath(playerController.downloadedMediaPath!),
     onDismiss: () => setState(() {
-      downloadedMediaPath = null;
+      playerController.setDownloadedMediaPath('');
       if (activeDownload != null) activeDownload?.cancel();
       activeDownload = null;
     }),
