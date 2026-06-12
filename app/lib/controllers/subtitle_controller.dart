@@ -92,12 +92,12 @@ class SubtitleState {
       );
 
   TimelineCursor get primaryCursor =>
-      TimelineCursor(primaryTrack?.cues ?? const []);
+      TimelineCursor(primaryTrack?.cues ?? const [], offset: primarySubtitleOffset);
 
   TimelineCursor get secondaryCursor =>
       secondaryTrack != null
-          ? TimelineCursor(secondaryTrack!.cues)
-          : const TimelineCursor([]);
+          ? TimelineCursor(secondaryTrack!.cues, offset: secondarySubtitleOffset)
+          : const TimelineCursor([], offset: Duration.zero);
 
   Cue? get currentCue => currentPrimaryCue;
 }
@@ -188,6 +188,12 @@ class SubtitleController extends ChangeNotifier {
       ),
     );
   }
+
+  void setPositionX(double x) =>
+      _update((s) => s.copyWith(positionX: x.clamp(0.0, 1.0)));
+
+  void setPositionY(double y) =>
+      _update((s) => s.copyWith(positionY: y.clamp(0.0, 1.0)));
 
   void setBackgroundOpacity(double opacity) =>
       _update((s) => s.copyWith(backgroundOpacity: opacity));

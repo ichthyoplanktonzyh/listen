@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 
@@ -34,6 +35,8 @@ class SettingsController extends ChangeNotifier {
   String get transcriptionLanguage => _settings.transcriptionLanguage;
   String get transcriptionDestination => _settings.transcriptionDestination;
   String get openSubtitlesApiKey => _settings.openSubtitlesApiKey;
+  Color get primaryColor => Color(_settings.primaryColor);
+  Color get secondaryColor => Color(_settings.secondaryColor);
 
   /// Load settings from disk and notify listeners.
   Future<void> load() async {

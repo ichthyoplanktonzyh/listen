@@ -1,4 +1,4 @@
-# Handoff — LLPlayerNext Flutter Desktop 重构 (Phases 1–5)
+# Handoff — LLPlayerNext Flutter Desktop 重构 (Phases 1–6)
 
 **日期**: 2026-06-12
 **分支**: `worktree-refactor+flutter-frontend`
@@ -26,7 +26,7 @@ _PlayerScreenState.build() 读取 controller getter
 Widget (纯渲染，不依赖 controller)
 ```
 
-## 已完成：5 个 Phase
+## 已完成：6 个 Phase
 
 ### Phase 1 — 提取数据/服务/工具
 - `lib/models/timeline.dart` — Cue, SubtitleTrack, TimelineCursor
@@ -37,7 +37,7 @@ Widget (纯渲染，不依赖 controller)
 ### Phase 2 — 创建 Controller 层
 - `PlayerController` — PlayerState (19 字段)
 - `SubtitleController` — SubtitleState (20 字段)
-- `LearningController` — LearningState (8 字段)
+- `LearningController` — LearningState (10 字段)
 - `SettingsController` — 包装 AppSettings
 - `AppControllers` — InheritedWidget (updateShouldNotify: false)
 
@@ -69,6 +69,32 @@ Widget (纯渲染，不依赖 controller)
 - `build()`: ListenableBuilder 包裹 → 所有 widget 数据从 controller 读取
 - `AppControllers`: 包裹整棵 widget 树
 
+### Phase 6 — 消灭 Shadow State ✨ (本次)
+
+将 ~55 个 shadow state 字段从 `_PlayerScreenState` 迁移到 4 个 controller。
+
+**改动**:
+- `lib/settings.dart` — 添加 `AppSettings.copyWith()` (27 字段)
+- `lib/controllers/settings_controller.dart` — 添加 `primaryColor`/`secondaryColor` Color getter
+- `lib/controllers/subtitle_controller.dart` — cursor 修复 offset、添加 `setPositionX/Y()`
+- `lib/controllers/learning_controller.dart` — 添加 `selectedToken`/`selectedCue` 到 `LearningState`、`updateSingleWordProfile()`、`updateSinglePhraseProfile()`
+- `lib/controllers/player_controller.dart` — 添加 `setMediaPath()`
+- `lib/main.dart` — **1987 → 1891 行** (−96)
+
+**main.dart 字段数**: ~55 shadow + 4 controller → 12 total（5 service handles + 3 UI local + 4 controllers）
+
+**保留的本地字段**（非 shadow）:
+| 字段 | 原因 |
+|---|---|
+| `adapter` | DesktopPlayerAdapter 硬件适配器 |
+| `transcriptController` | ScrollController — widget 层 |
+| `subscriptions` | StreamSubscription 生命周期管理 |
+| `progressTimer` | Timer 基础设施 |
+| `api` | LocalApi service handle |
+| `status` | UI 状态栏消息（setState 本地管理） |
+| `activeDownload` | OnlineMediaDownload service handle |
+| `dragging` | 拖拽 UI 瞬态状态 |
+
 ## Widget 模式（关键规则）
 
 ```dart
@@ -93,27 +119,39 @@ class MyWidget extends StatelessWidget {
 
 ## 未完成：下一步工作
 
-### 优先级 1：迁移商业方法到 Controller
-`build()` 已从 controller 读取数据，但 ~55 个 "shadow state" 字段仍存在因为商业方法（`_openMediaPath`、`_onEvent`、`_loadWordProfiles` 等）还在写旧字段 + 调 `setState`。
+### 优先级 1：验证测试 ⚠️
 
-需要：
-1. 逐个方法将 `setState(() => field = value)` 替换为 `controller.setXxx(value)`
-2. 方法完成后删除对应的 shadow 字段
-3. 目标：main.dart ~1500 行，shadow 字段清零
+Phase 6 代码改动较大（6 文件，403 insertions / 384 deletions）。**Flutter SDK 在当前 CLI 沙箱中不可用，尚未运行测试。** 需要立即手动验证：
+
+```bash
+cd /Users/shadow/LLPlayerNext/.claude/worktrees/refactor+flutter-frontend/apps/desktop
+flutter analyze        # 预期: No issues found
+flutter test           # 预期: 29/29 passed
+flutter build macos --debug  # 预期: Build successful
+```
 
 ### 优先级 2：Widget 单元测试
+
 提取出的 13 个 widget 现在可以独立测试（因为不再依赖 controller），但尚未编写 widget 测试。
 
 ### 优先级 3：PlayerController adapter 集成
+
 当前 `PlayerController` 不持有 adapter 引用。`togglePlayPause()` 等方法只是翻转状态位，实际的 `adapter.playOrPause()` 由 main.dart 的回调执行。可以考虑让 controller 持有 adapter 引用以封装完整的 action 逻辑。
+
+### 优先级 4：main.dart 进一步瘦身
+
+当前 1891 行，目标 ~1500 行。进一步的瘦身方向：
+- 提取更多独立方法到 mixin 或 helper
+- `_openSettings` 18 个 callback 可通过统一 dispatcher 简化
+- `_searchOpenSubtitles` 等大型方法可提取到独立文件
 
 ## 验证命令
 
 ```bash
 cd /Users/shadow/LLPlayerNext/.claude/worktrees/refactor+flutter-frontend/apps/desktop
-flutter analyze        # No issues found!
-flutter test           # 29/29 passed
-flutter build macos --debug  # ✓ Built successfully
+flutter analyze        # ⚠️ 未执行
+flutter test           # ⚠️ 未执行
+flutter build macos --debug  # ⚠️ 未执行
 ```
 
 ## 合并说明
@@ -128,6 +166,7 @@ git merge worktree-refactor+flutter-frontend
 ## 完整提交历史
 
 ```
+(Phase 6 — 待提交)
 4df95ea Phase 5 Step 9: Update CHANGELOG.md and HANDOFF.md
 8c91df2 Phase 5 Steps 6-8: Mark shadow state, update dispose, wrap AppControllers
 9e613b5 Phase 5 Step 5: Refactor build() to read from controllers

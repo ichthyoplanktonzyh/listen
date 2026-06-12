@@ -201,6 +201,72 @@ class AppSettings {
     );
   }
 
+  AppSettings copyWith({
+    double? rate,
+    double? volume,
+    int? primarySubtitleOffsetMs,
+    int? secondarySubtitleOffsetMs,
+    bool? subtitlesVisible,
+    bool? secondarySubtitlesVisible,
+    bool? statusStylesVisible,
+    double? primaryFontSize,
+    double? secondaryFontSize,
+    String? primaryFontFamily,
+    String? secondaryFontFamily,
+    String? subtitlePreset,
+    String? language,
+    double? subtitlePositionX,
+    double? subtitlePositionY,
+    double? subtitleBackgroundOpacity,
+    int? primaryColor,
+    int? secondaryColor,
+    double? transcriptWidth,
+    String? ffmpegPath,
+    String? ffprobePath,
+    String? ytDlpPath,
+    String? transcriptionQuality,
+    String? transcriptionLanguage,
+    String? transcriptionDestination,
+    String? openSubtitlesApiKey,
+  }) =>
+      AppSettings(
+        version: version,
+        rate: rate ?? this.rate,
+        volume: volume ?? this.volume,
+        primarySubtitleOffsetMs:
+            primarySubtitleOffsetMs ?? this.primarySubtitleOffsetMs,
+        secondarySubtitleOffsetMs:
+            secondarySubtitleOffsetMs ?? this.secondarySubtitleOffsetMs,
+        subtitlesVisible: subtitlesVisible ?? this.subtitlesVisible,
+        secondarySubtitlesVisible:
+            secondarySubtitlesVisible ?? this.secondarySubtitlesVisible,
+        statusStylesVisible: statusStylesVisible ?? this.statusStylesVisible,
+        primaryFontSize: primaryFontSize ?? this.primaryFontSize,
+        secondaryFontSize: secondaryFontSize ?? this.secondaryFontSize,
+        primaryFontFamily: primaryFontFamily ?? this.primaryFontFamily,
+        secondaryFontFamily: secondaryFontFamily ?? this.secondaryFontFamily,
+        subtitlePreset: subtitlePreset ?? this.subtitlePreset,
+        language: language ?? this.language,
+        subtitlePositionX: subtitlePositionX ?? this.subtitlePositionX,
+        subtitlePositionY: subtitlePositionY ?? this.subtitlePositionY,
+        subtitleBackgroundOpacity:
+            subtitleBackgroundOpacity ?? this.subtitleBackgroundOpacity,
+        primaryColor: primaryColor ?? this.primaryColor,
+        secondaryColor: secondaryColor ?? this.secondaryColor,
+        transcriptWidth: transcriptWidth ?? this.transcriptWidth,
+        ffmpegPath: ffmpegPath ?? this.ffmpegPath,
+        ffprobePath: ffprobePath ?? this.ffprobePath,
+        ytDlpPath: ytDlpPath ?? this.ytDlpPath,
+        transcriptionQuality:
+            transcriptionQuality ?? this.transcriptionQuality,
+        transcriptionLanguage:
+            transcriptionLanguage ?? this.transcriptionLanguage,
+        transcriptionDestination:
+            transcriptionDestination ?? this.transcriptionDestination,
+        openSubtitlesApiKey:
+            openSubtitlesApiKey ?? this.openSubtitlesApiKey,
+      );
+
   static double _number(
     Object? value,
     double fallback,

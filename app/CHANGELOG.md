@@ -4,7 +4,7 @@ All notable changes to the LLPlayerNext desktop app.
 
 ---
 
-## Refactoring Initiative — Phases 1–5
+## Refactoring Initiative — Phases 1–6
 
 ### Why This Happened
 
@@ -140,22 +140,101 @@ AppControllers(player, subtitle, learning, settings, api)
 Widget(data, callbacks) — no controller imports, pure constructor DI
 ```
 
-### What's Done vs What's Not
+---
 
-| Done | Not Yet |
+## Phase 6 — Eliminate Shadow State Fields
+
+**Date**: 2026-06-12
+
+### What Changed
+
+Migrated ~55 "shadow state" fields from `_PlayerScreenState` into the 4 controllers. These fields were the last remaining direct state in main.dart — business methods still wrote to them via `setState` while `build()` already read from controllers.
+
+### Changes by File
+
+| File | Type | Detail |
+|---|---|---|
+| `lib/settings.dart` | Feature | Added `AppSettings.copyWith()` (27-field copyWith for incremental settings updates) |
+| `lib/controllers/settings_controller.dart` | Feature | Added `primaryColor` / `secondaryColor` as `Color` getters |
+| `lib/controllers/subtitle_controller.dart` | Fix | `primaryCursor` / `secondaryCursor` now include offset (matching main.dart behavior); added `setPositionX()` / `setPositionY()` |
+| `lib/controllers/learning_controller.dart` | Feature | Added `selectedToken` / `selectedCue` to `LearningState`; added `setSelectedToken()`, `setSelectedCue()`, `updateSingleWordProfile()`, `updateSinglePhraseProfile()` |
+| `lib/controllers/player_controller.dart` | Feature | Added `setMediaPath()` for partial media metadata updates |
+| `lib/main.dart` | Refactor | **1987 → 1891 lines** (−96). All 55 shadow fields replaced by controller reads/writes |
+
+### main.dart Before / After
+
+| Metric | Before | After |
+|---|---|---|
+| State fields | ~55 shadow + 4 controllers | 12 total (5 service handles + 3 UI local + 4 controllers) |
+| `setState` calls | ~50 (mixed shadow + controller) | ~15 (status messages + UI-only like `dragging`, `activeDownload`) |
+| State source of truth | Split (shadow + controllers) | Controllers only |
+| `_loadSettings` setState block | 30 lines | Removed |
+| `_saveSettings` reads | Shadow fields | Controllers |
+| `_onPosition` | Computed cursors from shadows + setState | Controller cursors + `_lastPrimaryCueId` tracking |
+| `_openSettings` callbacks | setState + `_saveSettings()` | Controller setters + `settingsController.update(copyWith(...))` |
+| `tools` getter | Read shadow `ffmpegPath` etc. | Read `settingsController.*` |
+| `primaryCursor` / `secondaryCursor` getters | Shadow getters (deleted) | `subtitleController.primaryCursor` (offset-aware) |
+
+### Retained Local Fields
+
+These 8 fields are NOT shadow state — they're service handles or pure UI-local state:
+
+| Field | Why Kept |
 |---|---|
-| `build()` reads all widget data from controllers | ~55 "shadow" state fields still exist |
-| Adapter streams bridge to controllers | Business methods still write to old fields |
-| Settings load/save uses `SettingsController` | `_openMediaPath` etc. still use `setState` |
-| `AppControllers` wraps widget tree | Shadow fields need removal after migration |
-| All 29 tests pass, zero analyze issues | main.dart still ~1987 lines (down from 3254) |
+| `adapter` | Hardware adapter (DesktopPlayerAdapter) |
+| `transcriptController` | ScrollController — widget layer concern |
+| `subscriptions` | StreamSubscription list — lifecycle management |
+| `progressTimer` | Timer — infrastructure |
+| `api` | LocalApi service handle |
+| `status` | UI status bar messages (setState'd locally) |
+| `activeDownload` | OnlineMediaDownload service handle (has .cancel() method) |
+| `dragging` | Transient drag-and-drop UI state |
 
-The **next phase** should migrate business methods to write to controllers instead of old fields, then remove the ~55 shadow fields. Target: main.dart ~1500 lines with all state in controllers.
+### Migration Pattern
 
-### Test Results (All Phases)
+Every business method followed the same migration:
+
+```dart
+// Before (Phase 5):
+setState(() {
+  primaryTrack = imported;
+  currentPrimaryCue = primaryCursor.current(position);
+});
+// controller NOT updated for these fields
+
+// After (Phase 6):
+subtitleController.setPrimaryTrack(imported);
+subtitleController.setCurrentPrimaryCue(
+  subtitleController.primaryCursor.current(playerController.position),
+);
+// setState removed — controller.setXxx triggers ListenableBuilder rebuild
+```
+
+### Verification Status
+
+⚠️ **Tests not yet run after Phase 6 changes.** Flutter SDK not available in the CI sandbox. Run manually:
+
+```bash
+cd apps/desktop
+flutter analyze        # Expected: No issues found
+flutter test           # Expected: 29/29 passed
+flutter build macos --debug  # Expected: Build successful
+```
+
+---
+
+## Phase 5 — Wire Controllers into main.dart
+
+*(see above)*
+
+---
+
+## Full Commit History
 
 ```
-29/29 tests passed — 0 failures
-flutter analyze — No issues found!
-flutter build macos --debug — ✓ Built successfully
+(Phase 6 — pending commit)
+a60e311 Phase 3: Extract 13 widgets
+f25b2e5 Phase 4: Event-driven position tracking
+a1e01fc Phase 2: Create ChangeNotifier controllers
+ffd3114 Phase 1: Extract models, services, utils
 ```

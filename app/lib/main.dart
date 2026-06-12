@@ -85,100 +85,39 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
+  // ── Service / infrastructure handles ──
   final adapter = DesktopPlayerAdapter();
   final transcriptController = ScrollController();
   final subscriptions = <StreamSubscription<dynamic>>[];
   Timer? progressTimer;
   LocalApi? api;
-  SubtitleTrack? primaryTrack;
-  SubtitleTrack? secondaryTrack;
-  Cue? currentPrimaryCue;
-  Cue? currentSecondaryCue;
-  String? mediaId;
-  String? mediaPath;
-  String? mediaTitle;
-  String? mediaFingerprint;
-  String status = 'Starting local core...';
-  Duration position = Duration.zero;
-  Duration duration = Duration.zero;
-  Duration primarySubtitleOffset = Duration.zero;
-  Duration secondarySubtitleOffset = Duration.zero;
-  Duration? sourceLoopStart;
-  Duration? sourceLoopEnd;
-  bool playing = false;
-  bool muted = false;
-  bool loopCue = false;
-  bool subtitlesVisible = true;
-  bool secondarySubtitlesVisible = true;
-  bool statusStylesVisible = true;
-  bool dragging = false;
-  double rate = 1;
-  double volume = 100;
-  double primaryFontSize = 1;
-  double secondaryFontSize = 1;
-  String primaryFontFamily = 'system';
-  String secondaryFontFamily = 'system';
-  String subtitlePreset = 'learning';
-  String language = 'system';
-  double subtitlePositionX = 0.5;
-  double subtitlePositionY = 0.82;
-  double subtitleBackgroundOpacity = 0.72;
-  Color primaryColor = Colors.white;
-  Color secondaryColor = const Color(0xffb8d8ff);
-  double transcriptWidth = 430;
-  String ffmpegPath = '';
-  String ffprobePath = '';
-  String ytDlpPath = '';
-  String transcriptionQuality = 'balanced';
-  String transcriptionLanguage = 'auto';
-  String transcriptionDestination = 'primary';
-  String openSubtitlesApiKey = '';
-  OnlineMediaDownload? activeDownload;
-  double downloadProgress = 0;
-  String? downloadedMediaPath;
-  List<PlayerTrack> audioTracks = const [];
-  String? selectedAudioId;
-  List<PlayerTrack> embeddedSubtitleTracks = const [];
-  String? selectedEmbeddedSubtitleId;
-  final wordProfiles = <String, Map<String, dynamic>>{};
-  final phraseProfiles = <String, Map<String, dynamic>>{};
-  List<Map<String, dynamic>> currentPhraseCandidates = const [];
-  Map<String, dynamic>? diagnosis;
-  Map<String, dynamic>? selectedWordDetails;
-  Map<String, dynamic>? selectedDictionary;
-  SubtitleToken? selectedToken;
-  Cue? selectedCue;
-  int sidePanel = 0;
 
-  // Phase 5: Controllers (wiring in progress — existing fields still present)
+  // ── Controllers ──
   final playerController = PlayerController();
   final subtitleController = SubtitleController();
   final learningController = LearningController();
   final settingsController = SettingsController();
 
-  // ── Shadow state ──────────────────────────────────────────────────
-  // These fields are kept for business logic methods that haven't been
-  // migrated to controller calls yet. build() reads from controllers
-  // via ListenableBuilder; these fields are updated in parallel by
-  // setState for backward compat. TODO: migrate business methods to
-  // controllers, then remove these fields.
+  // ── Local UI state (not managed by controllers) ──
+  String status = 'Starting local core...';
+  OnlineMediaDownload? activeDownload;
+  bool dragging = false;
 
+  // ── Transient tracking ──
+  String? _lastPrimaryCueId;
+
+  // ── Convenience ──
   AppLocalizations get l => AppLocalizations.of(context);
 
-  TimelineCursor get primaryCursor => TimelineCursor(
-    primaryTrack?.cues ?? const [],
-    offset: primarySubtitleOffset,
-  );
-  TimelineCursor get secondaryCursor => TimelineCursor(
-    secondaryTrack?.cues ?? const [],
-    offset: secondarySubtitleOffset,
-  );
   ExternalTools get tools => ExternalTools(
-    ffmpegPath: ffmpegPath,
-    ffprobePath: ffprobePath,
-    ytDlpPath: ytDlpPath,
+    ffmpegPath: settingsController.ffmpegPath,
+    ffprobePath: settingsController.ffprobePath,
+    ytDlpPath: settingsController.ytDlpPath,
   );
   double get transcriptItemExtent => 76;
+
+  // Tracks the last primary cue id for de-duplicating async calls in _onPosition.
+  String? _lastPrimaryCueId;
 
   @override
   void initState() {
@@ -188,11 +127,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     subscriptions.addAll([
       adapter.position.listen(_onPosition),
       adapter.duration.listen((value) {
-        setState(() => duration = value);
         playerController.setDuration(value);
       }),
       adapter.playing.listen((value) {
-        setState(() => playing = value);
         playerController.setPlaying(value);
       }),
       adapter.errors.listen((value) {
@@ -208,11 +145,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
             break;
           }
         }
-        setState(() {
-          audioTracks = value.audio;
-          selectedAudioId = defaultId;
-          embeddedSubtitleTracks = value.subtitle;
-        });
         playerController.setAudioTracks(value.audio);
         playerController.setSelectedAudioId(defaultId);
         playerController.setEmbeddedSubtitleTracks(value.subtitle);
@@ -239,70 +171,45 @@ class _PlayerScreenState extends State<PlayerScreen> {
     subtitleController.setPrimaryFontFamily(s.primaryFontFamily);
     subtitleController.setSecondaryFontFamily(s.secondaryFontFamily);
     subtitleController.setPreset(s.subtitlePreset);
+    subtitleController.setPositionX(s.subtitlePositionX);
+    subtitleController.setPositionY(s.subtitlePositionY);
+    subtitleController.setBackgroundOpacity(s.subtitleBackgroundOpacity);
     // Sync to player controller
     playerController.setRate(s.rate);
     playerController.setVolume(s.volume);
-    setState(() {
-      rate = s.rate;
-      volume = s.volume;
-      primarySubtitleOffset = Duration(milliseconds: s.primarySubtitleOffsetMs);
-      secondarySubtitleOffset = Duration(milliseconds: s.secondarySubtitleOffsetMs);
-      subtitlesVisible = s.subtitlesVisible;
-      secondarySubtitlesVisible = s.secondarySubtitlesVisible;
-      statusStylesVisible = s.statusStylesVisible;
-      primaryFontSize = s.primaryFontSize;
-      secondaryFontSize = s.secondaryFontSize;
-      primaryFontFamily = s.primaryFontFamily;
-      secondaryFontFamily = s.secondaryFontFamily;
-      subtitlePreset = s.subtitlePreset;
-      language = s.language;
-      appLanguage.value = language;
-      subtitlePositionX = s.subtitlePositionX;
-      subtitlePositionY = s.subtitlePositionY;
-      subtitleBackgroundOpacity = s.subtitleBackgroundOpacity;
-      primaryColor = Color(s.primaryColor);
-      secondaryColor = Color(s.secondaryColor);
-      transcriptWidth = s.transcriptWidth;
-      ffmpegPath = s.ffmpegPath;
-      ffprobePath = s.ffprobePath;
-      ytDlpPath = s.ytDlpPath;
-      transcriptionQuality = s.transcriptionQuality;
-      transcriptionLanguage = s.transcriptionLanguage;
-      transcriptionDestination = s.transcriptionDestination;
-      openSubtitlesApiKey = s.openSubtitlesApiKey;
-    });
-    await adapter.setRate(rate);
-    await adapter.setVolume(volume);
+    appLanguage.value = s.language;
+    await adapter.setRate(playerController.rate);
+    await adapter.setVolume(playerController.volume);
   }
 
   Future<void> _saveSettings() => settingsController.update(
     AppSettings(
-      rate: rate,
-      volume: volume,
-      primarySubtitleOffsetMs: primarySubtitleOffset.inMilliseconds,
-      secondarySubtitleOffsetMs: secondarySubtitleOffset.inMilliseconds,
-      subtitlesVisible: subtitlesVisible,
-      secondarySubtitlesVisible: secondarySubtitlesVisible,
-      statusStylesVisible: statusStylesVisible,
-      primaryFontSize: primaryFontSize,
-      secondaryFontSize: secondaryFontSize,
-      primaryFontFamily: primaryFontFamily,
-      secondaryFontFamily: secondaryFontFamily,
-      subtitlePreset: subtitlePreset,
-      language: language,
-      subtitlePositionX: subtitlePositionX,
-      subtitlePositionY: subtitlePositionY,
-      subtitleBackgroundOpacity: subtitleBackgroundOpacity,
-      primaryColor: primaryColor.toARGB32(),
-      secondaryColor: secondaryColor.toARGB32(),
-      transcriptWidth: transcriptWidth,
-      ffmpegPath: ffmpegPath,
-      ffprobePath: ffprobePath,
-      ytDlpPath: ytDlpPath,
-      transcriptionQuality: transcriptionQuality,
-      transcriptionLanguage: transcriptionLanguage,
-      transcriptionDestination: transcriptionDestination,
-      openSubtitlesApiKey: openSubtitlesApiKey,
+      rate: playerController.rate,
+      volume: playerController.volume,
+      primarySubtitleOffsetMs: subtitleController.primarySubtitleOffset.inMilliseconds,
+      secondarySubtitleOffsetMs: subtitleController.secondarySubtitleOffset.inMilliseconds,
+      subtitlesVisible: subtitleController.visible,
+      secondarySubtitlesVisible: subtitleController.secondaryVisible,
+      statusStylesVisible: subtitleController.statusStylesVisible,
+      primaryFontSize: subtitleController.primaryFontSize,
+      secondaryFontSize: subtitleController.secondaryFontSize,
+      primaryFontFamily: subtitleController.primaryFontFamily,
+      secondaryFontFamily: subtitleController.secondaryFontFamily,
+      subtitlePreset: subtitleController.preset,
+      language: settingsController.language,
+      subtitlePositionX: subtitleController.positionX,
+      subtitlePositionY: subtitleController.positionY,
+      subtitleBackgroundOpacity: subtitleController.backgroundOpacity,
+      primaryColor: settingsController.primaryColor.toARGB32(),
+      secondaryColor: settingsController.secondaryColor.toARGB32(),
+      transcriptWidth: settingsController.transcriptWidth,
+      ffmpegPath: settingsController.ffmpegPath,
+      ffprobePath: settingsController.ffprobePath,
+      ytDlpPath: settingsController.ytDlpPath,
+      transcriptionQuality: settingsController.transcriptionQuality,
+      transcriptionLanguage: settingsController.transcriptionLanguage,
+      transcriptionDestination: settingsController.transcriptionDestination,
+      openSubtitlesApiKey: settingsController.openSubtitlesApiKey,
     ),
   );
 
@@ -316,7 +223,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       });
       subscriptions.add(value.events().listen(_onEvent));
       progressTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-        if (mediaId != null) unawaited(api?.saveProgress(mediaId!, position));
+        if (playerController.mediaId != null) {
+          unawaited(
+            api?.saveProgress(playerController.mediaId!, playerController.position),
+          );
+        }
       });
       unawaited(_runSmokeIfConfigured());
     } catch (error) {
@@ -343,7 +254,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (event['event'] == 'transcription-job-changed') {
       final job = event['payload'] as Map<String, dynamic>;
       if (job['status'] == 'completed' &&
-          job['media_id'] == mediaId &&
+          job['media_id'] == playerController.mediaId &&
           job['generated_track_id'] != null) {
         unawaited(
           api!
@@ -355,7 +266,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 ),
               ),
         );
-      } else if (mounted && job['media_id'] == mediaId) {
+      } else if (mounted && job['media_id'] == playerController.mediaId) {
         setState(
           () => status =
               'ASR ${job['status']} · ${job['phase_progress'] as int}%',
@@ -365,46 +276,36 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     if (event['event'] != 'word-profile-changed') return;
     final profile = event['payload'] as Map<String, dynamic>;
-    setState(
-      () => wordProfiles[profile['normalized_lemma'] as String] = profile,
+    learningController.updateSingleWordProfile(
+      profile['normalized_lemma'] as String,
+      profile,
     );
-    // Sync to learning controller
-    learningController.setWordProfiles(Map<String, Map<String, dynamic>>.from(
-      wordProfiles,
-    ));
   }
 
   void _onPosition(Duration value) {
-    // Bridge to subtitle controller for cue tracking
     subtitleController.updatePosition(value);
 
-    final primaryCue = primaryCursor.current(value);
-    final secondaryCue = secondaryCursor.current(value);
-    if (loopCue &&
-        currentPrimaryCue != null &&
-        value >= primaryCursor.mediaEnd(currentPrimaryCue!)) {
-      unawaited(adapter.seek(primaryCursor.mediaStart(currentPrimaryCue!)));
+    final primaryCue = subtitleController.currentPrimaryCue;
+    if (subtitleController.loopCue &&
+        primaryCue != null &&
+        value >= subtitleController.primaryCursor.mediaEnd(primaryCue)) {
+      unawaited(
+        adapter.seek(subtitleController.primaryCursor.mediaStart(primaryCue)),
+      );
       return;
     }
-    if (sourceLoopStart != null &&
-        sourceLoopEnd != null &&
-        value >= sourceLoopEnd!) {
-      unawaited(adapter.seek(sourceLoopStart!));
+    if (playerController.sourceLoopStart != null &&
+        playerController.sourceLoopEnd != null &&
+        value >= playerController.sourceLoopEnd!) {
+      unawaited(adapter.seek(playerController.sourceLoopStart!));
       return;
     }
-    if (primaryCue?.id != currentPrimaryCue?.id ||
-        secondaryCue?.id != currentSecondaryCue?.id) {
-      setState(() {
-        currentPrimaryCue = primaryCue;
-        currentSecondaryCue = secondaryCue;
-      });
+    if (primaryCue?.id != _lastPrimaryCueId) {
+      _lastPrimaryCueId = primaryCue?.id;
       _keepCurrentVisible(primaryCue);
       unawaited(_refreshDiagnosis());
       unawaited(_loadPhraseCandidates(primaryCue));
-    } else {
-      setState(() => position = value);
     }
-    position = value;
     playerController.setPosition(value);
   }
 
@@ -419,25 +320,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _openMediaPath(String path) async {
-    final previousMediaId = mediaId;
-    final previousPosition = position;
+    final previousMediaId = playerController.mediaId;
+    final previousPosition = playerController.position;
     final previousProgressSave = previousMediaId == null
         ? Future<void>.value()
         : api?.saveProgress(previousMediaId, previousPosition) ??
               Future<void>.value();
     setState(() {
-      mediaPath = path;
-      mediaId = null;
-      position = Duration.zero;
-      duration = Duration.zero;
-      primaryTrack = null;
-      secondaryTrack = null;
-      currentPrimaryCue = null;
-      currentSecondaryCue = null;
-      sourceLoopStart = null;
-      sourceLoopEnd = null;
       status = 'Opening ${path.split(Platform.pathSeparator).last}';
     });
+    playerController.setMediaPath(path);
+    playerController.clearMedia();
+    playerController.setPosition(Duration.zero);
+    playerController.setDuration(Duration.zero);
+    subtitleController.setPrimaryTrack(null);
+    subtitleController.setSecondaryTrack(null);
+    subtitleController.setCurrentPrimaryCue(null);
+    subtitleController.setCurrentSecondaryCue(null);
+    playerController.setSourceLoop(null, null);
     try {
       await adapter.open(path, play: false);
     } catch (error) {
@@ -451,14 +351,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (media != null) {
         final id = media['id'] as String;
         final saved = await api?.readProgress(id);
-        setState(() {
-          mediaId = id;
-          mediaTitle = media['title'] as String;
-          mediaFingerprint = media['fingerprint'] as String;
-        });
+        playerController.setMedia(
+          id: id,
+          path: path,
+          title: media['title'] as String,
+          fingerprint: media['fingerprint'] as String,
+        );
         if (saved != null && saved > Duration.zero) {
           await adapter.seek(saved);
-          if (mounted) setState(() => position = saved);
+          playerController.setPosition(saved);
         }
       }
     } catch (error) {
@@ -479,7 +380,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _openSubtitle({required bool secondary}) async {
-    if (mediaId == null || api == null) {
+    if (playerController.mediaId == null || api == null) {
       setState(() => status = 'Open media and connect the local core first');
       return;
     }
@@ -491,24 +392,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _openSubtitlePath(String path, {required bool secondary}) async {
     try {
-      final value = await api!.importSubtitle(mediaId!, path);
+      final value = await api!.importSubtitle(playerController.mediaId!, path);
       await adapter.disableNativeSubtitles();
+      final imported = SubtitleTrack.fromJson(value);
+      if (secondary) {
+        subtitleController.setSecondaryTrack(imported);
+        subtitleController.setCurrentSecondaryCue(
+          subtitleController.secondaryCursor.current(playerController.position),
+        );
+      } else {
+        subtitleController.setPrimaryTrack(imported);
+        subtitleController.setCurrentPrimaryCue(
+          subtitleController.primaryCursor.current(playerController.position),
+        );
+      }
       setState(() {
-        final imported = SubtitleTrack.fromJson(value);
-        if (secondary) {
-          secondaryTrack = imported;
-          currentSecondaryCue = secondaryCursor.current(position);
-        } else {
-          primaryTrack = imported;
-          currentPrimaryCue = primaryCursor.current(position);
-        }
         status =
             'Loaded ${secondary ? 'secondary' : 'primary'} subtitle: '
             '${path.split(Platform.pathSeparator).last}';
       });
       if (!secondary) await _loadWordProfiles();
       if (!secondary) await _loadPhraseProfiles();
-      if (!secondary) await _loadPhraseCandidates(currentPrimaryCue);
+      if (!secondary) await _loadPhraseCandidates(subtitleController.currentPrimaryCue);
     } catch (error) {
       setState(() => status = 'Subtitle import failed: $error');
     }
@@ -520,35 +425,39 @@ class _PlayerScreenState extends State<PlayerScreen> {
   ) async {
     await adapter.disableNativeSubtitles();
     if (!mounted) return;
+    final imported = SubtitleTrack.fromJson(value);
+    if (secondary) {
+      subtitleController.setSecondaryTrack(imported);
+      subtitleController.setCurrentSecondaryCue(
+        subtitleController.secondaryCursor.current(playerController.position),
+      );
+    } else {
+      subtitleController.setPrimaryTrack(imported);
+      subtitleController.setCurrentPrimaryCue(
+        subtitleController.primaryCursor.current(playerController.position),
+      );
+    }
     setState(() {
-      final imported = SubtitleTrack.fromJson(value);
-      if (secondary) {
-        secondaryTrack = imported;
-        currentSecondaryCue = secondaryCursor.current(position);
-      } else {
-        primaryTrack = imported;
-        currentPrimaryCue = primaryCursor.current(position);
-      }
       status =
           'Loaded generated ${secondary ? 'secondary' : 'primary'} subtitle';
     });
     if (!secondary) await _loadWordProfiles();
     if (!secondary) await _loadPhraseProfiles();
-    if (!secondary) await _loadPhraseCandidates(currentPrimaryCue);
+    if (!secondary) await _loadPhraseCandidates(subtitleController.currentPrimaryCue);
   }
 
   Future<void> _generateSubtitles({required bool secondary}) async {
-    if (api == null || mediaId == null) {
+    if (api == null || playerController.mediaId == null) {
       setState(() => status = 'Open media and connect the local core first');
       return;
     }
     await showGenerateSubtitles(
       context: context,
       api: api!,
-      mediaId: mediaId!,
+      mediaId: playerController.mediaId!,
       secondary: secondary,
-      preferredQuality: transcriptionQuality,
-      preferredLanguage: transcriptionLanguage,
+      preferredQuality: settingsController.transcriptionQuality,
+      preferredLanguage: settingsController.transcriptionLanguage,
     );
   }
 
@@ -567,11 +476,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final subtitles = paths.where(_isSubtitlePath).toList(growable: false);
     if (media.isNotEmpty) await _openMediaPath(media.first);
     for (final path in subtitles) {
-      if (mediaId == null || api == null) {
+      if (playerController.mediaId == null || api == null) {
         setState(() => status = 'Drop or open media before subtitles');
         return;
       }
-      await _openSubtitlePath(path, secondary: primaryTrack != null);
+      await _openSubtitlePath(path, secondary: subtitleController.primaryTrack != null);
     }
     if (media.isEmpty && subtitles.isEmpty) {
       setState(() => status = 'Unsupported dropped file type');
@@ -641,15 +550,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     try {
       final resolved = await tools.resolveOnlineMedia(pageUrl);
       await adapter.open(resolved);
-      setState(() {
-        mediaPath = pageUrl;
-        mediaId = null;
-        primaryTrack = null;
-        secondaryTrack = null;
-        currentPrimaryCue = null;
-        currentSecondaryCue = null;
-        status = 'Playing online media';
-      });
+      playerController.setMediaPath(pageUrl);
+      playerController.clearMedia();
+      subtitleController.setPrimaryTrack(null);
+      subtitleController.setSecondaryTrack(null);
+      subtitleController.setCurrentPrimaryCue(null);
+      subtitleController.setCurrentSecondaryCue(null);
+      setState(() => status = 'Playing online media');
     } catch (error) {
       setState(() => status = 'Online media failed: $error');
     }
@@ -669,13 +576,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
       setState(() {
         activeDownload = download;
-        downloadProgress = 0;
-        downloadedMediaPath = null;
         status = l.text('downloadingInBackground');
       });
+      playerController.setDownloadProgress(0);
+      playerController.setDownloadedMediaPath('');
       subscriptions.add(
         download.progress.listen((value) {
-          if (mounted) setState(() => downloadProgress = value);
+          if (mounted) playerController.setDownloadProgress(value);
         }),
       );
       unawaited(
@@ -684,9 +591,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
             if (!mounted) return;
             setState(() {
               activeDownload = null;
-              downloadedMediaPath = path;
               status = '${l.text('downloadComplete')}: $path';
             });
+            playerController.setDownloadedMediaPath(path);
+            playerController.setDownloadProgress(0);
           },
           onError: (Object error) {
             if (!mounted) return;
@@ -705,8 +613,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _importEmbeddedSubtitle() async {
-    final path = mediaPath;
-    if (path == null || !_isMediaPath(path) || mediaId == null || api == null) {
+    final path = playerController.mediaPath;
+    if (path == null || !_isMediaPath(path) || playerController.mediaId == null || api == null) {
       setState(() => status = 'Open a local media file first');
       return;
     }
@@ -768,92 +676,97 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await showDialog<void>(
       context: context,
       builder: (_) => SettingsDialog(
-        language: language,
-        subtitlePreset: subtitlePreset,
-        primaryFontSize: primaryFontSize,
-        primaryFontFamily: primaryFontFamily,
-        secondaryFontSize: secondaryFontSize,
-        secondaryFontFamily: secondaryFontFamily,
-        subtitlePositionX: subtitlePositionX,
-        subtitlePositionY: subtitlePositionY,
-        subtitleBackgroundOpacity: subtitleBackgroundOpacity,
-        transcriptWidth: transcriptWidth,
-        primaryColor: primaryColor,
-        secondaryColor: secondaryColor,
-        transcriptionQuality: transcriptionQuality,
-        transcriptionLanguage: transcriptionLanguage,
-        transcriptionDestination: transcriptionDestination,
-        ffmpegPath: ffmpegPath,
-        ffprobePath: ffprobePath,
-        ytDlpPath: ytDlpPath,
-        openSubtitlesApiKey: openSubtitlesApiKey,
+        language: settingsController.language,
+        subtitlePreset: subtitleController.preset,
+        primaryFontSize: subtitleController.primaryFontSize,
+        primaryFontFamily: subtitleController.primaryFontFamily,
+        secondaryFontSize: subtitleController.secondaryFontSize,
+        secondaryFontFamily: subtitleController.secondaryFontFamily,
+        subtitlePositionX: subtitleController.positionX,
+        subtitlePositionY: subtitleController.positionY,
+        subtitleBackgroundOpacity: subtitleController.backgroundOpacity,
+        transcriptWidth: settingsController.transcriptWidth,
+        primaryColor: settingsController.primaryColor,
+        secondaryColor: settingsController.secondaryColor,
+        transcriptionQuality: settingsController.transcriptionQuality,
+        transcriptionLanguage: settingsController.transcriptionLanguage,
+        transcriptionDestination: settingsController.transcriptionDestination,
+        ffmpegPath: settingsController.ffmpegPath,
+        ffprobePath: settingsController.ffprobePath,
+        ytDlpPath: settingsController.ytDlpPath,
+        openSubtitlesApiKey: settingsController.openSubtitlesApiKey,
         onLanguageChanged: (v) {
-          setState(() => language = v);
           appLanguage.value = v;
-          unawaited(_saveSettings());
+          settingsController.update(
+            settingsController.settings.copyWith(language: v),
+          );
         },
         onSubtitlePresetChanged: (v) {
-          setState(() => subtitlePreset = v);
+          subtitleController.setPreset(v);
           unawaited(_saveSettings());
         },
         onPrimaryFontSizeChanged: (v) {
-          setState(() => primaryFontSize = v);
+          subtitleController.setPrimaryFontSize(v);
           unawaited(_saveSettings());
         },
         onPrimaryFontFamilyChanged: (v) {
-          setState(() => primaryFontFamily = v);
+          subtitleController.setPrimaryFontFamily(v);
           unawaited(_saveSettings());
         },
         onSecondaryFontSizeChanged: (v) {
-          setState(() => secondaryFontSize = v);
+          subtitleController.setSecondaryFontSize(v);
           unawaited(_saveSettings());
         },
         onSecondaryFontFamilyChanged: (v) {
-          setState(() => secondaryFontFamily = v);
+          subtitleController.setSecondaryFontFamily(v);
           unawaited(_saveSettings());
         },
         onSubtitlePositionXChanged: (v) {
-          setState(() => subtitlePositionX = v);
+          subtitleController.setPositionX(v);
           unawaited(_saveSettings());
         },
         onSubtitlePositionYChanged: (v) {
-          setState(() => subtitlePositionY = v);
+          subtitleController.setPositionY(v);
           unawaited(_saveSettings());
         },
         onSubtitlePositionReset: () {
-          setState(() {
-            subtitlePositionX = 0.5;
-            subtitlePositionY = 0.82;
-          });
+          subtitleController.setPositionX(0.5);
+          subtitleController.setPositionY(0.82);
           unawaited(_saveSettings());
         },
         onBackgroundOpacityChanged: (v) {
-          setState(() => subtitleBackgroundOpacity = v);
+          subtitleController.setBackgroundOpacity(v);
           unawaited(_saveSettings());
         },
         onTranscriptWidthChanged: (v) {
-          setState(() => transcriptWidth = v);
-          unawaited(_saveSettings());
+          settingsController.update(
+            settingsController.settings.copyWith(transcriptWidth: v),
+          );
         },
         onPrimaryColorChanged: (v) {
-          setState(() => primaryColor = v);
-          unawaited(_saveSettings());
+          settingsController.update(
+            settingsController.settings.copyWith(primaryColor: v.toARGB32()),
+          );
         },
         onSecondaryColorChanged: (v) {
-          setState(() => secondaryColor = v);
-          unawaited(_saveSettings());
+          settingsController.update(
+            settingsController.settings.copyWith(secondaryColor: v.toARGB32()),
+          );
         },
         onTranscriptionQualityChanged: (v) {
-          setState(() => transcriptionQuality = v);
-          unawaited(_saveSettings());
+          settingsController.update(
+            settingsController.settings.copyWith(transcriptionQuality: v),
+          );
         },
         onTranscriptionLanguageChanged: (v) {
-          setState(() => transcriptionLanguage = v);
-          unawaited(_saveSettings());
+          settingsController.update(
+            settingsController.settings.copyWith(transcriptionLanguage: v),
+          );
         },
         onTranscriptionDestinationChanged: (v) {
-          setState(() => transcriptionDestination = v);
-          unawaited(_saveSettings());
+          settingsController.update(
+            settingsController.settings.copyWith(transcriptionDestination: v),
+          );
         },
         onSave: ({
           required String ffmpegPath,
@@ -861,13 +774,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
           required String ytDlpPath,
           required String openSubtitlesApiKey,
         }) async {
-          setState(() {
-            this.ffmpegPath = ffmpegPath;
-            this.ffprobePath = ffprobePath;
-            this.ytDlpPath = ytDlpPath;
-            this.openSubtitlesApiKey = openSubtitlesApiKey;
-          });
-          await _saveSettings();
+          await settingsController.update(
+            settingsController.settings.copyWith(
+              ffmpegPath: ffmpegPath,
+              ffprobePath: ffprobePath,
+              ytDlpPath: ytDlpPath,
+              openSubtitlesApiKey: openSubtitlesApiKey,
+            ),
+          );
         },
       ),
     );
@@ -889,18 +803,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _showCurrentPhraseCandidates() async {
-    final cue = currentPrimaryCue;
-    if (api == null || cue == null || mediaFingerprint == null) return;
+    final cue = subtitleController.currentPrimaryCue;
+    if (api == null || cue == null || playerController.mediaFingerprint == null) return;
     await showPhraseCandidates(
       context: context,
       api: api!,
       sentenceId: cue.id,
       source: {
-        'media_id': mediaId,
+        'media_id': playerController.mediaId,
         'sentence_id': cue.id,
         'sentence_text': cue.text,
-        'media_title': mediaTitle ?? '',
-        'media_fingerprint': mediaFingerprint,
+        'media_title': playerController.mediaTitle ?? '',
+        'media_fingerprint': playerController.mediaFingerprint,
         'start_ms': cue.start.inMilliseconds,
         'end_ms': cue.end.inMilliseconds,
       },
@@ -909,55 +823,55 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _loadPhraseCandidates(Cue? cue) async {
     if (api == null || cue == null) {
-      if (mounted) setState(() => currentPhraseCandidates = const []);
+      if (mounted) learningController.setPhraseCandidates(const []);
       return;
     }
     try {
-      if (mounted && currentPrimaryCue?.id == cue.id) {
-        setState(() => currentPhraseCandidates = const []);
+      if (mounted && subtitleController.currentPrimaryCue?.id == cue.id) {
+        learningController.setPhraseCandidates(const []);
       }
       final candidates = await api!.phraseCandidates(cue.id);
-      if (mounted && currentPrimaryCue?.id == cue.id) {
-        setState(() => currentPhraseCandidates = candidates);
+      if (mounted && subtitleController.currentPrimaryCue?.id == cue.id) {
+        learningController.setPhraseCandidates(candidates);
       }
     } catch (_) {
-      if (mounted && currentPrimaryCue?.id == cue.id) {
-        setState(() => currentPhraseCandidates = const []);
+      if (mounted && subtitleController.currentPrimaryCue?.id == cue.id) {
+        learningController.setPhraseCandidates(const []);
       }
     }
   }
 
   Future<void> _openPhrase(Map<String, dynamic> candidate, Cue cue) async {
-    if (api == null || mediaFingerprint == null) return;
+    if (api == null || playerController.mediaFingerprint == null) return;
     final canonical = candidate['canonical_form'] as String;
     final details = await showPhraseCandidate(
       context: context,
       api: api!,
       candidate: candidate,
       initialStatus:
-          (phraseProfiles[canonical]?['entry']
+          (learningController.phraseProfiles[canonical]?['entry']
                   as Map<String, dynamic>?)?['status']
               as String?,
       source: {
-        'media_id': mediaId,
+        'media_id': playerController.mediaId,
         'sentence_id': cue.id,
         'sentence_text': cue.text,
-        'media_title': mediaTitle ?? '',
-        'media_fingerprint': mediaFingerprint,
+        'media_title': playerController.mediaTitle ?? '',
+        'media_fingerprint': playerController.mediaFingerprint,
         'start_ms': cue.start.inMilliseconds,
         'end_ms': cue.end.inMilliseconds,
       },
     );
     if (details != null && mounted) {
+      learningController.updateSinglePhraseProfile(canonical, details);
       setState(() {
-        phraseProfiles[canonical] = details;
         status = 'Saved phrase "${candidate['display_form']}"';
       });
     }
   }
 
   Future<void> _correctCurrentLemma() async {
-    final token = selectedToken;
+    final token = learningController.selectedToken;
     if (api == null || token?.normalized == null) return;
     final controller = TextEditingController(text: token!.normalized);
     final corrected = await showDialog<String>(
@@ -985,7 +899,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _searchOpenSubtitles({bool? secondary}) async {
     if (api == null) return;
-    if (mediaId == null) {
+    if (playerController.mediaId == null) {
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
@@ -1001,7 +915,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
       return;
     }
-    if (openSubtitlesApiKey.isEmpty) {
+    if (settingsController.openSubtitlesApiKey.isEmpty) {
       final controller = TextEditingController();
       final configured = await showDialog<String>(
         context: context,
@@ -1036,19 +950,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
       controller.dispose();
       if (configured == null || configured.isEmpty) return;
-      setState(() => openSubtitlesApiKey = configured);
-      await _saveSettings();
+      await settingsController.update(
+        settingsController.settings.copyWith(openSubtitlesApiKey: configured),
+      );
     }
     if (!mounted) return;
     final path = await showOpenSubtitlesSearch(
       context: context,
       api: api!,
-      apiKey: openSubtitlesApiKey,
-      initialTitle: mediaTitle ?? '',
-      initialFilename: mediaPath == null
+      apiKey: settingsController.openSubtitlesApiKey,
+      initialTitle: playerController.mediaTitle ?? '',
+      initialFilename: playerController.mediaPath == null
           ? ''
-          : mediaPath!.split(Platform.pathSeparator).last,
-      mediaPath: mediaPath,
+          : playerController.mediaPath!.split(Platform.pathSeparator).last,
+      mediaPath: playerController.mediaPath,
     );
     if (path == null || !mounted) return;
     final destination =
@@ -1075,7 +990,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _markFirstWord(String? wordStatus) async {
-    final cue = currentPrimaryCue;
+    final cue = subtitleController.currentPrimaryCue;
     final service = api;
     if (cue == null || service == null) return;
     final tokens = cue.tokens
@@ -1089,7 +1004,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       wordStatus,
       _sourceFor(token, cue),
     );
-    setState(() => wordProfiles[token.normalized!] = profile);
+    learningController.updateSingleWordProfile(token.normalized!, profile);
     await _refreshDiagnosis();
   }
 
@@ -1108,7 +1023,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _loadWordProfiles() async {
-    final lemmas = primaryTrack?.cues
+    final lemmas = subtitleController.primaryTrack?.cues
         .expand((cue) => cue.tokens)
         .where((token) => token.kind == 'word' && token.normalized != null)
         .map((token) => token.normalized!)
@@ -1116,59 +1031,51 @@ class _PlayerScreenState extends State<PlayerScreen> {
         .toList();
     if (lemmas == null || api == null) return;
     final values = await api!.readWordProfiles(lemmas);
-    setState(() {
-      wordProfiles
-        ..clear()
-        ..addEntries(
-          values.map(
-            (profile) =>
-                MapEntry(profile['normalized_lemma'] as String, profile),
-          ),
-        );
-    });
+    final profiles = Map<String, Map<String, dynamic>>.fromEntries(
+      values.map(
+        (profile) =>
+            MapEntry(profile['normalized_lemma'] as String, profile),
+      ),
+    );
+    learningController.setWordProfiles(profiles);
   }
 
   Future<void> _loadPhraseProfiles() async {
     if (api == null) return;
     final values = await api!.lexicalEntries(kind: 'phrase');
     if (!mounted) return;
-    setState(() {
-      phraseProfiles
-        ..clear()
-        ..addEntries(
-          values.map((details) {
-            final entry = details['entry'] as Map<String, dynamic>;
-            return MapEntry(entry['canonical_form'] as String, details);
-          }),
-        );
-    });
+    final profiles = Map<String, Map<String, dynamic>>.fromEntries(
+      values.map((details) {
+        final entry = details['entry'] as Map<String, dynamic>;
+        return MapEntry(entry['canonical_form'] as String, details);
+      }),
+    );
+    learningController.setPhraseProfiles(profiles);
   }
 
   Future<void> _openWord(SubtitleToken token, Cue cue) async {
     final lemma = token.normalized;
     if (lemma == null || api == null) return;
     try {
-      var profile = wordProfiles[lemma];
+      var profile = learningController.wordProfiles[lemma];
       profile ??= await api!.updateWordProfile(lemma, token.text, null);
       final details = await api!.wordDetails(profile['id'] as String);
       final dictionary = await api!.lookupDictionary(lemma);
       if (!mounted) return;
-      setState(() {
-        wordProfiles[lemma] = profile!;
-        selectedToken = token;
-        selectedCue = cue;
-        selectedWordDetails = details;
-        selectedDictionary = dictionary;
-        sidePanel = 1;
-      });
+      learningController.updateSingleWordProfile(lemma, profile!);
+      learningController.setSelectedToken(token);
+      learningController.setSelectedCue(cue);
+      learningController.selectWord(details);
+      learningController.setSelectedDictionary(dictionary);
+      learningController.selectSidePanel(1);
     } catch (error) {
       if (mounted) setState(() => status = 'Dictionary unavailable: $error');
     }
   }
 
   Future<void> _setSelectedWordStatus(String? selected) async {
-    final token = selectedToken;
-    final cue = selectedCue;
+    final token = learningController.selectedToken;
+    final cue = learningController.selectedCue;
     if (token?.normalized == null || cue == null || api == null) return;
     try {
       final profile = await api!.updateWordProfile(
@@ -1178,9 +1085,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _sourceFor(token, cue),
       );
       final details = await api!.wordDetails(profile['id'] as String);
+      learningController.updateSingleWordProfile(token.normalized!, profile);
+      learningController.selectWord(details);
       setState(() {
-        wordProfiles[token.normalized!] = profile;
-        selectedWordDetails = details;
         status = 'Updated global status for "${token.text}"';
       });
       await _refreshDiagnosis();
@@ -1193,20 +1100,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
     String? definition,
     String? note,
   ) async {
-    final profile = selectedWordDetails?['profile'] as Map<String, dynamic>?;
+    final profile = learningController.selectedWordDetails?['profile'] as Map<String, dynamic>?;
     if (profile == null || api == null) return;
     final details = await api!.updateLearningContent(
       profile['id'] as String,
       userDefinition: definition,
       personalNote: note,
     );
-    if (mounted) setState(() => selectedWordDetails = details);
+    if (mounted) {
+      learningController.selectWord(details);
+    }
   }
 
   Future<void> _observeSelected(bool heard) async {
-    final token = selectedToken;
-    final cue = selectedCue;
-    final profile = selectedWordDetails?['profile'] as Map<String, dynamic>?;
+    final token = learningController.selectedToken;
+    final cue = learningController.selectedCue;
+    final profile = learningController.selectedWordDetails?['profile'] as Map<String, dynamic>?;
     if (token == null || cue == null || profile == null || api == null) return;
     await api!.createObservation(
       wordProfileId: profile['id'] as String,
@@ -1222,16 +1131,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Map<String, dynamic>? _sourceFor(SubtitleToken token, Cue cue) {
-    if (mediaFingerprint == null) return null;
+    if (playerController.mediaFingerprint == null) return null;
     return {
       'language': 'en',
       'normalized_lemma': token.normalized,
-      'media_id': mediaId,
+      'media_id': playerController.mediaId,
       'sentence_id': cue.id,
       'original_form': token.text,
       'sentence_text': cue.text,
-      'media_title': mediaTitle ?? '',
-      'media_fingerprint': mediaFingerprint,
+      'media_title': playerController.mediaTitle ?? '',
+      'media_fingerprint': playerController.mediaFingerprint,
       'start_ms': cue.start.inMilliseconds,
       'end_ms': cue.end.inMilliseconds,
     };
@@ -1253,7 +1162,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (occurrence == null) return;
     final expectedFingerprint =
         occurrence['media_fingerprint_snapshot'] as String;
-    if (expectedFingerprint != mediaFingerprint) {
+    if (expectedFingerprint != playerController.mediaFingerprint) {
       String? sourcePath;
       final linkedMediaId = occurrence['media_id'] as String?;
       if (linkedMediaId != null) {
@@ -1299,11 +1208,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     final end = Duration(milliseconds: occurrence['end_ms_snapshot'] as int);
     setState(() {
-      sourceLoopStart = start;
-      sourceLoopEnd = end;
-      loopCue = false;
       status = 'Looping vocabulary source sentence';
     });
+    playerController.setSourceLoop(start, end);
+    subtitleController.setLoopCue(false);
     await adapter.seek(start);
     await adapter.play();
   }
@@ -1311,7 +1219,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _playOccurrence(Map<String, dynamic> occurrence) async {
     final expectedFingerprint =
         occurrence['media_fingerprint_snapshot'] as String;
-    if (expectedFingerprint != mediaFingerprint) {
+    if (expectedFingerprint != playerController.mediaFingerprint) {
       String? sourcePath;
       final linkedMediaId = occurrence['media_id'] as String?;
       if (linkedMediaId != null) {
@@ -1342,13 +1250,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final start = Duration(
       milliseconds: occurrence['start_ms_snapshot'] as int,
     );
-    setState(() {
-      sourceLoopStart = start;
-      sourceLoopEnd = Duration(
-        milliseconds: occurrence['end_ms_snapshot'] as int,
-      );
-      loopCue = false;
-    });
+    final end = Duration(milliseconds: occurrence['end_ms_snapshot'] as int);
+    playerController.setSourceLoop(start, end);
+    subtitleController.setLoopCue(false);
     await adapter.seek(start);
     await adapter.play();
   }
@@ -1467,8 +1371,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _archiveCurrentMedia() async {
-    if (api == null || mediaId == null) return;
-    await api!.setMediaAvailability(mediaId!, 'archived');
+    if (api == null || playerController.mediaId == null) return;
+    await api!.setMediaAvailability(playerController.mediaId!, 'archived');
     setState(
       () =>
           status = 'Archived current media record; vocabulary assets preserved',
@@ -1476,29 +1380,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _refreshDiagnosis() async {
-    final cue = currentPrimaryCue;
+    final cue = subtitleController.currentPrimaryCue;
     final service = api;
     if (cue == null || service == null) {
-      if (mounted) setState(() => diagnosis = null);
+      if (mounted) learningController.setDiagnosis(null);
       return;
     }
     try {
       final value = await service.diagnose(cue.id);
-      if (mounted && cue.id == currentPrimaryCue?.id) {
-        setState(() => diagnosis = value);
+      if (mounted && cue.id == subtitleController.currentPrimaryCue?.id) {
+        learningController.setDiagnosis(value);
       }
     } catch (_) {
-      if (mounted && cue.id == currentPrimaryCue?.id) {
-        setState(() => diagnosis = null);
+      if (mounted && cue.id == subtitleController.currentPrimaryCue?.id) {
+        learningController.setDiagnosis(null);
       }
     }
   }
 
   Future<void> _seekCue(Cue? cue) async {
     if (cue == null) return;
-    setState(() => currentPrimaryCue = cue);
+    subtitleController.setCurrentPrimaryCue(cue);
     unawaited(_refreshDiagnosis());
-    await adapter.seek(primaryCursor.mediaStart(cue));
+    await adapter.seek(subtitleController.primaryCursor.mediaStart(cue));
   }
 
   void _keepCurrentVisible(Cue? cue) {
@@ -1516,7 +1420,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
-    final currentMediaId = playerController.mediaId ?? mediaId;
+    final currentMediaId = playerController.mediaId;
     final currentPosition = playerController.position;
     if (currentMediaId != null) {
       unawaited(api?.saveProgress(currentMediaId, currentPosition));
@@ -1763,7 +1667,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                   fontFamily: _subtitleFont(
                                     subtitleController.primaryFontFamily,
                                   ),
-                                  baseColor: primaryColor,
+                                  baseColor: settingsController.primaryColor,
                                   onWord: _openWord,
                                   onPhrase: _openPhrase,
                                 ),
@@ -1786,7 +1690,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                       fontFamily: _subtitleFont(
                                         subtitleController.secondaryFontFamily,
                                       ),
-                                      color: secondaryColor,
+                                      color: settingsController.secondaryColor,
                                     ),
                                   ),
                                 ),
@@ -1877,7 +1781,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     currentCue: subtitleController.currentPrimaryCue,
     wordProfiles: learningController.wordProfiles,
     showStyles: subtitleController.statusStylesVisible,
-    baseColor: primaryColor,
+    baseColor: settingsController.primaryColor,
     onWord: _openWord,
     onSeekCue: _seekCue,
   );

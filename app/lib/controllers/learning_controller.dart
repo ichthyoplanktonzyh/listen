@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../models/timeline.dart';
+
 /// Immutable snapshot of learning-related state.
 class LearningState {
   const LearningState({
@@ -8,6 +10,8 @@ class LearningState {
     this.selectedWordDetails,
     this.selectedDictionary,
     this.selectedPronunciation,
+    this.selectedToken,
+    this.selectedCue,
     this.phraseCandidates = const [],
     this.diagnosis,
     this.sidePanel = 0,
@@ -18,6 +22,8 @@ class LearningState {
   final Map<String, dynamic>? selectedWordDetails;
   final Map<String, dynamic>? selectedDictionary;
   final Map<String, dynamic>? selectedPronunciation;
+  final SubtitleToken? selectedToken;
+  final Cue? selectedCue;
   final List<Map<String, dynamic>> phraseCandidates;
   final Map<String, dynamic>? diagnosis;
   final int sidePanel;
@@ -28,6 +34,8 @@ class LearningState {
     Map<String, dynamic>? selectedWordDetails,
     Map<String, dynamic>? selectedDictionary,
     Map<String, dynamic>? selectedPronunciation,
+    SubtitleToken? selectedToken,
+    Cue? selectedCue,
     List<Map<String, dynamic>>? phraseCandidates,
     Map<String, dynamic>? diagnosis,
     int? sidePanel,
@@ -39,6 +47,8 @@ class LearningState {
         selectedDictionary: selectedDictionary ?? this.selectedDictionary,
         selectedPronunciation:
             selectedPronunciation ?? this.selectedPronunciation,
+        selectedToken: selectedToken ?? this.selectedToken,
+        selectedCue: selectedCue ?? this.selectedCue,
         phraseCandidates: phraseCandidates ?? this.phraseCandidates,
         diagnosis: diagnosis ?? this.diagnosis,
         sidePanel: sidePanel ?? this.sidePanel,
@@ -65,6 +75,8 @@ class LearningController extends ChangeNotifier {
   List<Map<String, dynamic>> get phraseCandidates => _state.phraseCandidates;
   Map<String, dynamic>? get diagnosis => _state.diagnosis;
   int get sidePanel => _state.sidePanel;
+  SubtitleToken? get selectedToken => _state.selectedToken;
+  Cue? get selectedCue => _state.selectedCue;
 
   void _update(LearningState Function(LearningState) fn) {
     _state = fn(_state);
@@ -101,6 +113,31 @@ class LearningController extends ChangeNotifier {
 
   void selectSidePanel(int index) =>
       _update((s) => s.copyWith(sidePanel: index));
+
+  void setSelectedToken(SubtitleToken? token) =>
+      _update((s) => s.copyWith(selectedToken: token));
+
+  void setSelectedCue(Cue? cue) =>
+      _update((s) => s.copyWith(selectedCue: cue));
+
+  void updateSingleWordProfile(
+    String lemma,
+    Map<String, dynamic> profile,
+  ) {
+    final profiles = Map<String, Map<String, dynamic>>.from(_state.wordProfiles);
+    profiles[lemma] = profile;
+    _update((s) => s.copyWith(wordProfiles: profiles));
+  }
+
+  void updateSinglePhraseProfile(
+    String canonical,
+    Map<String, dynamic> profile,
+  ) {
+    final profiles =
+        Map<String, Map<String, dynamic>>.from(_state.phraseProfiles);
+    profiles[canonical] = profile;
+    _update((s) => s.copyWith(phraseProfiles: profiles));
+  }
 
   void clearSelection() =>
       _update(

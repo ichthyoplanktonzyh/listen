@@ -202,6 +202,9 @@ class PlayerController extends ChangeNotifier {
   void setMediaFingerprint(String fingerprint) =>
       _update((s) => s.copyWith(mediaFingerprint: fingerprint));
 
+  void setMediaPath(String path) =>
+      _update((s) => s.copyWith(mediaPath: path));
+
   /// Toggle the playing state. Does NOT interact with the adapter directly;
   /// callers must also call [DesktopPlayerAdapter.playOrPause].
   void togglePlayPause() => _update((s) => s.copyWith(playing: !s.playing));
