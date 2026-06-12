@@ -37,7 +37,7 @@ Verified on macOS Apple Silicon on 2026-06-12:
 - `scripts/validate-contracts.sh`: passed.
 - `scripts/build-macos-mvp.sh`: produced
   `dist/LLPlayerNext-macos-arm64.zip`, SHA-256
-  `35ad46e50aee46068241dfc96f95bfe5a565b16ee26f8f7bdd1c954edcd3ce93`.
+  `683765f32f8935e91c5be045c66abb6b49dd71550fd136a2cd55081203a02bc4`.
 
 The package flow clears inherited macOS provenance attributes before signing
 and does not preserve those attributes in the release zip. This prevents dyld
@@ -66,6 +66,16 @@ tests.
 The desktop diagnosis card now exposes pronunciation provider/version,
 degradation reason, reusable pronunciation-cache state, and current word-timing
 source.
+
+## Startup Regression
+
+The apparent blank-window regression was the core-loading screen waiting while
+M1.8 synchronously re-read and hashed the installed 66 MB ECDICT resource.
+Installed resources are still checksum-verified before publication, while
+startup discovery now uses file metadata. Measured sidecar handshake time
+dropped from about 3.25 seconds to 6-11 milliseconds with warm filesystem
+caches. The desktop loading screen now exposes core status, errors, and retry;
+failed handshakes also terminate their sidecar process.
 
 ## Product Boundary
 

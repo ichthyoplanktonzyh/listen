@@ -20,6 +20,9 @@
   invalidation events, and non-blocking track jobs with cancellation and retry.
 - Desktop settings v7, pronunciation diagnostics, API/event contracts, and
   Milestone 1.9 automated verification.
+- Removed the startup stall caused by re-hashing installed learning resources,
+  added an explicit core-starting/error/retry screen, and fixed short-sentence
+  ECDICT phrase scanning.
 
 ## 0.6.0 - acceptance candidate
 

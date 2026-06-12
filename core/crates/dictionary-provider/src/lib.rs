@@ -321,8 +321,8 @@ impl LexicalNormalizationProvider for EcdictProvider {
             .collect::<Vec<_>>();
         let mut values = Vec::new();
         for length in 2..=5 {
-            for start in 0..normalized.len().saturating_sub(length).saturating_add(1) {
-                let phrase = normalized[start..start + length].join(" ");
+            for (start, phrase_words) in normalized.windows(length).enumerate() {
+                let phrase = phrase_words.join(" ");
                 if index.phrases.contains(&phrase) {
                     values.push(PhraseCandidate {
                         canonical_form: phrase.clone(),
@@ -491,5 +491,40 @@ mod tests {
             Some("https://example.test/hello-us.mp3")
         );
         assert_eq!(values[1].audio_url, None);
+    }
+
+    #[test]
+    fn ecdict_phrase_candidates_handle_short_sentences() {
+        let path = fixture_path();
+        std::fs::write(
+            &path,
+            "word,phonetic,definition,translation,pos,collins,oxford,tag,bnc,frq,exchange,detail,audio\n\
+             piece of cake,,easy task,,,,,,,,,,\n",
+        )
+        .unwrap();
+        let provider = EcdictProvider::with_path(path.clone(), "test");
+        let sentence = SubtitleSentence {
+            id: SubtitleSentenceId::parse("short").unwrap(),
+            index: 0,
+            start: TimeMs::new(0),
+            end: TimeMs::new(1000),
+            original_text: "Hello".into(),
+            display_text: "Hello".into(),
+            tokens: vec![SubtitleToken {
+                index: 0,
+                kind: SubtitleTokenKind::Word,
+                text: "Hello".into(),
+                normalized: Some("hello".into()),
+                start_char: 0,
+                end_char: 5,
+            }],
+        };
+        assert!(
+            provider
+                .phrase_candidates(&LanguageCode::parse("en").unwrap(), &sentence)
+                .unwrap()
+                .is_empty()
+        );
+        std::fs::remove_file(path).unwrap();
     }
 }

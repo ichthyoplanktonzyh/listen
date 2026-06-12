@@ -43,16 +43,14 @@ impl M18Coordinator {
     ) -> Self {
         for descriptor in &mut resources {
             let path = resource_dir.join(format!("{}.data", descriptor.id.as_str()));
-            if let Ok(bytes) = std::fs::read(&path) {
-                let checksum = hex::encode(Sha256::digest(&bytes));
-                if descriptor.checksum_sha256 == checksum {
+            if let Ok(metadata) = std::fs::metadata(&path) {
+                if metadata.is_file() && metadata.len() == descriptor.size_bytes {
                     descriptor.local_path = Some(path.to_string_lossy().into_owned());
-                    descriptor.installed_bytes = bytes.len() as u64;
-                    descriptor.size_bytes = bytes.len() as u64;
+                    descriptor.installed_bytes = metadata.len();
                     descriptor.state = LearningResourceState::Installed;
                 } else {
                     descriptor.state = LearningResourceState::Failed;
-                    descriptor.error = Some("checksum mismatch".into());
+                    descriptor.error = Some("installed resource size mismatch".into());
                 }
             }
         }
