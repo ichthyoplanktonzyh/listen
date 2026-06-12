@@ -20,6 +20,11 @@
   invalidation events, and non-blocking track jobs with cancellation and retry.
 - Desktop settings v7, pronunciation diagnostics, API/event contracts, and
   Milestone 1.9 automated verification.
+- Fixed current-word timing loading by reading the API contract fields
+  `timing_source` and `provider_id`.
+- Added background, scale-bounce, and glow current-word styles while keeping
+  word-timing provenance in diagnostics instead of the playback overlay.
+- Confirmed AV1 playback during collaborative functional acceptance.
 - Removed the startup stall caused by re-hashing installed learning resources,
   added an explicit core-starting/error/retry screen, and fixed short-sentence
   ECDICT phrase scanning.

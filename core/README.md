@@ -7,6 +7,12 @@ Clean-room, macOS-first rewrite of a listening-comprehension media player.
 
 **Current release candidate:** Milestone 1.9, version `0.7.0`.
 
+Collaborative M1.9 functional acceptance is complete. Final `v0.7.0` tagging
+waits for a valid local signing identity and independent packaged-app launch
+smoke. When double-clicking a development build is blocked by local signing or
+AMFI, use the standard
+[macOS functional testing fallback](docs/development/macos-functional-testing.md).
+
 Milestone 1.9 adds canonical pronunciation and sentence IPA, deterministic word
 timings with local current-word highlighting, and clearly labeled rule-based
 connected-speech hints. Track-wide speech enhancement jobs run in the

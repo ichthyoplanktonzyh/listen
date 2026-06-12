@@ -51,14 +51,14 @@ boundaries, and nullable controller-state clearing is covered by regression
 tests.
 
 - `flutter analyze`: passed.
-- `flutter test`: passed, 35 tests.
+- `flutter test`: passed, 38 tests after collaborative acceptance fixes.
 - `scripts/verify-m19.sh`: passed after integration.
 - macOS release archive build: passed after integration.
 - Post-integration `scripts/verify-mvp.sh` independent launch on the current
   machine: blocked by the
-  host security configuration. macOS AMFI reports error `-423` for the
-  ad-hoc-signed executable because Developer Mode is disabled and the keychain
-  contains no valid code-signing identities. The earlier M1.9 acceptance
+  host security configuration. Developer Mode is enabled, but the keychain
+  contains no valid code-signing identities and AMFI may terminate newly
+  ad-hoc-signed executables. The earlier M1.9 acceptance
   package passed the independent smoke test before this host policy became
   active. A signed build or explicit Developer Mode enablement is required to
   repeat the final launch smoke test.
@@ -85,6 +85,16 @@ detected in the real audio.
 
 ## Manual Acceptance
 
-The collaborative checklist in `docs/planning/milestone-1.9.md` remains the
-authoritative manual acceptance list. The release candidate must be opened on
-macOS and confirmed by the user before the final `v0.7.0` tag is created.
+Collaborative functional acceptance completed on 2026-06-12 using the standard
+development run fallback. It confirmed AV1 playback, estimated current-word
+sync, playback-state recovery, pronunciation/rule presentation, safe
+degradation, and persistent selectable current-word styles.
+
+The acceptance session found and fixed a desktop/API field mismatch:
+`WordTiming.fromJson` read `source` and `provider` instead of the contract
+fields `timing_source` and `provider_id`.
+
+See `docs/verification/milestone-1.9-acceptance.md`. The remaining release gate
+is independent packaged-app launch smoke after a valid signing
+certificate/private-key pair becomes available. Do not create the final
+`v0.7.0` tag before that gate passes.

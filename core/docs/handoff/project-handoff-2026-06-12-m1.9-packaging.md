@@ -26,9 +26,10 @@ frontend. Important commits:
 - `2368cbc fix: remove blank startup stall`
 - `a2d1609 fix: render packaged desktop startup`
 
-The remaining M1.9 closure blocker is packaged-app execution and manual
-acceptance on this Mac. Do not create the `v0.7.0` tag until packaged smoke and
-manual acceptance pass.
+Collaborative functional acceptance completed on 2026-06-12 through
+`flutter run`. The remaining M1.9 closure blocker is independent packaged-app
+execution on this Mac. Do not create the `v0.7.0` tag until packaged smoke
+passes.
 
 ## 3. White-Screen Fixes Already Committed
 
@@ -160,3 +161,24 @@ Before the signing investigation:
 Current clean package smoke fails immediately with `SIGKILL 9`, empty desktop
 log, and no valid code-signing identity. Treat this as the active blocker, not
 as an application logic regression.
+
+## 9. Collaborative Functional Acceptance Update
+
+- The standard fallback when double-clicking a newly built app is blocked is:
+
+  ```bash
+  cd /Users/shadow/LLPlayerNext
+  export PATH="/opt/homebrew/opt/rustup/bin:$HOME/.local/share/flutter/bin:$PATH"
+  cargo build -p api-http
+  cd apps/desktop
+  flutter run -d macos
+  ```
+
+- This fallback passed collaborative functional acceptance, including AV1
+  playback and estimated current-word sync.
+- Acceptance found and fixed the Flutter word-timing API field mapping.
+- Current-word presentation now supports background highlight, scale bounce,
+  and glow. Underline remains reserved for phrase candidates.
+- See `docs/development/macos-functional-testing.md` and
+  `docs/verification/milestone-1.9-acceptance.md`.
+- The fallback does not replace independent package launch smoke.
