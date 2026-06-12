@@ -103,9 +103,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   OnlineMediaDownload? activeDownload;
   bool dragging = false;
 
-  // ── Transient tracking ──
-  String? _lastPrimaryCueId;
-
   // ── Convenience ──
   AppLocalizations get l => AppLocalizations.of(context);
 
@@ -593,7 +590,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               activeDownload = null;
               status = '${l.text('downloadComplete')}: $path';
             });
-            playerController.setDownloadedMediaPath(path);
+            if (path != null) playerController.setDownloadedMediaPath(path);
             playerController.setDownloadProgress(0);
           },
           onError: (Object error) {
@@ -1062,7 +1059,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final details = await api!.wordDetails(profile['id'] as String);
       final dictionary = await api!.lookupDictionary(lemma);
       if (!mounted) return;
-      learningController.updateSingleWordProfile(lemma, profile!);
+      learningController.updateSingleWordProfile(lemma, profile);
       learningController.setSelectedToken(token);
       learningController.setSelectedCue(cue);
       learningController.selectWord(details);
