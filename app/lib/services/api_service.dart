@@ -57,31 +57,42 @@ class LocalApi {
     }
     final binary = await _findSidecar();
     final process = await Process.start(binary, const []);
-    final lines = process.stdout
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .asBroadcastStream();
-    final line = await lines.first.timeout(const Duration(seconds: 10));
-    final handshake = jsonDecode(line) as Map<String, dynamic>;
-    if (handshake['event'] != 'api.started') {
+    try {
+      final lines = process.stdout
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .asBroadcastStream();
+      final line = await lines.first.timeout(const Duration(seconds: 10));
+      final handshake = jsonDecode(line) as Map<String, dynamic>;
+      if (handshake['event'] != 'api.started') {
+        throw const FormatException('invalid local API handshake');
+      }
+      final logs = Directory(
+        '${Platform.environment['HOME']}/Library/Logs/LLPlayerNext',
+      );
+      await logs.create(recursive: true);
+      final logPath = '${logs.path}/core.log';
+      final sink = File(logPath).openWrite(mode: FileMode.append);
+      lines.listen(sink.writeln);
+      process.stderr.transform(utf8.decoder).listen(sink.write);
+      return LocalApi._(
+        'http://${handshake['address']}',
+        handshake['token'] as String,
+        process,
+        logPath,
+        sink,
+      );
+    } catch (_) {
       process.kill();
-      throw const FormatException('invalid local API handshake');
+      await process.exitCode.timeout(
+        const Duration(seconds: 1),
+        onTimeout: () {
+          process.kill(ProcessSignal.sigkill);
+          return -1;
+        },
+      );
+      rethrow;
     }
-    final logs = Directory(
-      '${Platform.environment['HOME']}/Library/Logs/LLPlayerNext',
-    );
-    await logs.create(recursive: true);
-    final logPath = '${logs.path}/core.log';
-    final sink = File(logPath).openWrite(mode: FileMode.append);
-    lines.listen(sink.writeln);
-    process.stderr.transform(utf8.decoder).listen(sink.write);
-    return LocalApi._(
-      'http://${handshake['address']}',
-      handshake['token'] as String,
-      process,
-      logPath,
-      sink,
-    );
   }
 
   static Future<String> _findSidecar() async {

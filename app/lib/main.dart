@@ -102,6 +102,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String status = 'Starting local core...';
   OnlineMediaDownload? activeDownload;
   bool dragging = false;
+  bool connectingApi = true;
 
   // ── Convenience ──
   AppLocalizations get l => AppLocalizations.of(context);
@@ -219,11 +220,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
   );
 
   Future<void> _connectApi() async {
+    if (api != null) return;
+    if (mounted) {
+      setState(() {
+        connectingApi = true;
+        status = 'Starting local core...';
+      });
+    }
     try {
       final value = await LocalApi.connect();
       if (!mounted) return value.close();
       setState(() {
         api = value;
+        connectingApi = false;
         status = 'Local core connected';
       });
       subscriptions.add(value.events().listen(_onEvent));
@@ -239,7 +248,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       });
       unawaited(_runSmokeIfConfigured());
     } catch (error) {
-      if (mounted) setState(() => status = 'Core unavailable: $error');
+      if (mounted) {
+        setState(() {
+          connectingApi = false;
+          status = 'Core unavailable: $error';
+        });
+      }
     }
   }
 
@@ -1587,7 +1601,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   Widget build(BuildContext context) {
     if (api == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (connectingApi) const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(status, textAlign: TextAlign.center),
+              if (!connectingApi) ...[
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: () => unawaited(_connectApi()),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
     }
     return ListenableBuilder(
       listenable: Listenable.merge([
