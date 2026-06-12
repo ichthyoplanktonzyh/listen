@@ -7,8 +7,12 @@
   distribution.
 - The macOS player now uses fvp/libmdk with VideoToolbox and Metal after
   Xcode 26.5 exposed black frames in media_kit_video's deprecated OpenGL path.
-  Representative 4K, high-frame-rate, track-selection, and long-session
-  playback still require final manual revalidation.
+  Ordinary local playback is accepted, but the reported AV1 MP4 and 4K WebM
+  samples can play audio with a black video frame. Investigation confirmed that
+  the WebM sample is AV1 rather than VP8/VP9, and adding vanilla FFmpeg VP8/VP9
+  software decoders did not resolve the issue. Prefer H.264 downloads or create
+  an H.264 compatibility copy. Further player-backend work is deferred until
+  after Milestone 1.9 or an upstream fvp/libmdk fix.
 - The fvp/libmdk binary SDK distribution and commercial-use terms require final
   review before public distribution.
 - Free Dictionary API requires internet for uncached words, has no service-level

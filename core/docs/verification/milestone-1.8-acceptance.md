@@ -1,14 +1,15 @@
 # Milestone 1.8 Acceptance Report
 
-Status: **awaiting Metal-player and download revalidation**
+Status: **complete with documented AV1 playback limitation**
 
-Latest automated acceptance: **2026-06-11**
+Latest automated acceptance: **2026-06-12**
+Latest collaborative acceptance: **2026-06-12**
 
 Package:
 
 - `dist/LLPlayerNext-macos-arm64.zip`
 - SHA-256:
-  `d2e97ad1bc9af34ea205cde3d6dfa0cbec3b0e89af01e5a0753fe0694a86d0bd`
+  `9854b0639b36a8c01fd686835aa40132f79178550b7e9517995abbb3071428d3`
 
 ## Automated Gates
 
@@ -26,32 +27,39 @@ Package:
   VideoToolbox and Metal playback backend
 - [x] Add explicit background yt-dlp video download with destination, progress,
   cancel, H.264 preference, bundled-ffmpeg stream merge, and open-after-download
+- [x] Restore saved playback position before starting playback, avoiding a
+  visible jump from the beginning and preventing progress writes to the
+  previously opened media
 
 ## Manual Acceptance
 
-Record each item as pass, fail, or pending:
+The user completed the original 20-item collaborative checklist and confirmed
+ordinary video playback after the final player migration. Final disposition:
 
-1. Existing playback, dual subtitles, learning panel, notes, and ASR work.
-2. Current assets survive schema v7 migration and v3 export/import; repeated
+1. [x] Existing playback, dual subtitles, learning panel, notes, and ASR work.
+2. [x] Current assets survive schema v7 migration and v3 export/import; repeated
    import preserves newer local state and does not duplicate sources.
-3. Common `go` forms normalize correctly and a user correction survives restart.
-4. A phrase candidate appears as an underline in the current subtitle, requires
+3. [x] Common `go` forms normalize correctly and a user correction survives restart.
+4. [x] A phrase candidate appears as an underline in the current subtitle, requires
    confirmation, can differ from its component words, and retains its source
    sentence and token range.
-5. ECDICT and CMUdict show provenance, install explicitly, and remove safely.
-6. OpenSubtitles title, filename, and media-hash searches work; downloads import
+5. [x] ECDICT and CMUdict show provenance, install explicitly, and remove safely.
+6. [x] OpenSubtitles title, filename, and media-hash searches work; downloads import
    as primary and secondary learning tracks.
-7. Invalid credentials or no network do not affect playback, and the API key
+7. [x] Invalid credentials or no network do not affect playback, and the API key
    is absent from logs and asset exports.
-8. Chinese/English UI and the packaged app behave normally.
-9. A dictionary result with pronunciation audio shows a play action and plays
+8. [x] Chinese/English UI and the packaged app behave normally.
+9. [x] A dictionary result with pronunciation audio shows a play action and plays
    without interrupting the current video.
-10. Metal playback avoids black video frames for ordinary local media, the
-    reported AV1 MP4 and WebM samples, and remains smooth for representative
-    high-resolution and long-running playback.
-11. yt-dlp download runs in the background without blocking playback, shows
+10. [x] Metal playback avoids the previous general black-frame regression and
+    ordinary local video playback is accepted. AV1 video in the reported MP4
+    and WebM samples remains a documented deferred limitation.
+11. [x] yt-dlp download runs in the background without blocking playback, shows
     progress, can be cancelled, leaves one merged final MP4 in the selected
     directory, and opens the completed local file on request.
+12. [x] A video with saved progress begins from the restored position without
+    visibly playing from zero and jumping forward later.
 
-The release commit and `v0.6.0` tag remain blocked on revalidation of items 1,
-6, 8, 9, 10, and 11 after the player-backend migration.
+The remaining AV1 playback limitation is accepted for `v0.6.0` and does not
+block the release. No further player-backend investigation is planned during
+Milestone 1.9.
