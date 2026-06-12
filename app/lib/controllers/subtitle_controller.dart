@@ -122,6 +122,13 @@ class SubtitleController extends ChangeNotifier {
   String get preset => _state.preset;
   double get primaryFontSize => _state.primaryFontSize;
   double get secondaryFontSize => _state.secondaryFontSize;
+  String get primaryFontFamily => _state.primaryFontFamily;
+  String get secondaryFontFamily => _state.secondaryFontFamily;
+  double get positionX => _state.positionX;
+  double get positionY => _state.positionY;
+  double get backgroundOpacity => _state.backgroundOpacity;
+  Duration get primarySubtitleOffset => _state.primarySubtitleOffset;
+  Duration get secondarySubtitleOffset => _state.secondarySubtitleOffset;
   TimelineCursor get primaryCursor => _state.primaryCursor;
   TimelineCursor get secondaryCursor => _state.secondaryCursor;
 
@@ -213,4 +220,16 @@ class SubtitleController extends ChangeNotifier {
     }
     return (low - 1).clamp(0, cues.length - 1);
   }
+
+  void setPrimarySubtitleOffset(Duration offset) =>
+      _update((s) => s.copyWith(primarySubtitleOffset: offset));
+
+  void setSecondarySubtitleOffset(Duration offset) =>
+      _update((s) => s.copyWith(secondarySubtitleOffset: offset));
+
+  void setCurrentPrimaryCue(Cue? cue) =>
+      _update((s) => s.copyWith(currentPrimaryCue: cue));
+
+  void setCurrentSecondaryCue(Cue? cue) =>
+      _update((s) => s.copyWith(currentSecondaryCue: cue));
 }
