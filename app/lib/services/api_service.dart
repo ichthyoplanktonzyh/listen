@@ -139,6 +139,10 @@ class LocalApi {
           ))
           as Map<String, dynamic>;
 
+  Future<List<Map<String, dynamic>>> pronunciationProviders() async =>
+      ((await _request('GET', '/v1/pronunciation/providers')) as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+
   Future<Map<String, dynamic>> analyzePronunciation(String sentenceId) async =>
       (await _request('POST', '/v1/pronunciation/analyze-sentence', {
             'sentence_id': sentenceId,

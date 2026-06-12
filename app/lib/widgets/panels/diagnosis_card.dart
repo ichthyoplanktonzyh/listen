@@ -8,11 +8,15 @@ class DiagnosisCard extends StatelessWidget {
     required this.diagnosis,
     this.pronunciation,
     this.ruleHintsLevel = 'likely',
+    this.pronunciationProviders = const [],
+    this.timingQuality,
   });
 
   final Map<String, dynamic> diagnosis;
   final Map<String, dynamic>? pronunciation;
   final String ruleHintsLevel;
+  final List<Map<String, dynamic>> pronunciationProviders;
+  final String? timingQuality;
 
   @override
   Widget build(BuildContext context) {
@@ -29,6 +33,28 @@ class DiagnosisCard extends StatelessWidget {
             l.text('currentSentenceDiagnosis'),
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
+          for (final provider in pronunciationProviders)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                '${l.text('pronunciationProvider')}: '
+                '${provider['display_name']} ${provider['version']} · '
+                '${provider['degraded'] == true ? l.text('degraded') : l.text('ready')}'
+                '${provider['diagnostic'] == null ? '' : ' · ${provider['diagnostic']}'}',
+              ),
+            ),
+          if (timingQuality != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text('${l.text('wordTimingSource')}: $timingQuality'),
+            ),
+          if (pronunciation != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                '${l.text('pronunciationCache')}: ${l.text('cacheReusable')}',
+              ),
+            ),
           for (final hint in diagnosis['hints'] as List<dynamic>)
             Padding(
               padding: const EdgeInsets.only(top: 6),

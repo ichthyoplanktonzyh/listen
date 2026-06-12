@@ -42,6 +42,9 @@ void main() {
       ..setCurrentPrimaryCue(cue)
       ..setSpeechEnhancements(
         pronunciationBySentence: const {},
+        pronunciationProviders: const [
+          {'id': 'cmudict', 'version': '1'},
+        ],
         timingsBySentence: const {
           'sentence-1': [
             WordTiming(
@@ -66,6 +69,10 @@ void main() {
       enabled: true,
     );
     expect(controller.currentWordToken, isNull);
+    expect(controller.pronunciationProviders.single['id'], 'cmudict');
+
+    controller.clearSpeechEnhancements();
+    expect(controller.pronunciationProviders, isEmpty);
 
     controller.setPrimaryTrack(null);
     controller.setCurrentPrimaryCue(null);

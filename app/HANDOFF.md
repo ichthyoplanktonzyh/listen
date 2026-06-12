@@ -9,7 +9,7 @@ The refactor branch was merged into the Milestone 1.9 acceptance branch on
   pronunciation, and local current-word highlighting now use the extracted
   controllers and widgets.
 - `SubtitleController` owns sentence pronunciation, word timings, and current
-  word state.
+  word state, plus pronunciation-provider diagnostics.
 - `LearningController` owns selected canonical pronunciation.
 - `SettingsController` exposes all settings-v7 pronunciation controls.
 - Nullable controller state uses explicit nullable copy semantics, fixing
@@ -18,6 +18,9 @@ The refactor branch was merged into the Milestone 1.9 acceptance branch on
   M1.9 file's 3613 lines.
 - `flutter analyze`, 35 Flutter tests, Rust clippy/fmt, contracts, and the full
   M1.9 historical regression suite pass.
+- M1.9 now includes a fixed 18-rule catalog, provider/version-isolated
+  pronunciation caching, cache/provider events, and cancellable/retryable
+  non-blocking speech batch jobs with a 10,000-sentence regression.
 - The macOS release archive builds successfully. Independent launch on the
   current machine is blocked by macOS AMFI because Developer Mode is disabled
   and no code-signing identity is installed; system logs report error `-423`

@@ -28,6 +28,7 @@ class SubtitleState {
     this.backgroundOpacity = 0.72,
     this.pronunciationBySentence = const {},
     this.timingsBySentence = const {},
+    this.pronunciationProviders = const [],
     this.currentWordToken,
   });
 
@@ -52,6 +53,7 @@ class SubtitleState {
   final double backgroundOpacity;
   final Map<String, Map<String, dynamic>> pronunciationBySentence;
   final Map<String, List<WordTiming>> timingsBySentence;
+  final List<Map<String, dynamic>> pronunciationProviders;
   final int? currentWordToken;
 
   SubtitleState copyWith({
@@ -76,6 +78,7 @@ class SubtitleState {
     double? backgroundOpacity,
     Map<String, Map<String, dynamic>>? pronunciationBySentence,
     Map<String, List<WordTiming>>? timingsBySentence,
+    List<Map<String, dynamic>>? pronunciationProviders,
     Object? currentWordToken = _unset,
   }) => SubtitleState(
     primaryTrack: identical(primaryTrack, _unset)
@@ -111,6 +114,8 @@ class SubtitleState {
     pronunciationBySentence:
         pronunciationBySentence ?? this.pronunciationBySentence,
     timingsBySentence: timingsBySentence ?? this.timingsBySentence,
+    pronunciationProviders:
+        pronunciationProviders ?? this.pronunciationProviders,
     currentWordToken: identical(currentWordToken, _unset)
         ? this.currentWordToken
         : currentWordToken as int?,
@@ -157,6 +162,8 @@ class SubtitleController extends ChangeNotifier {
       _state.pronunciationBySentence;
   Map<String, List<WordTiming>> get timingsBySentence =>
       _state.timingsBySentence;
+  List<Map<String, dynamic>> get pronunciationProviders =>
+      _state.pronunciationProviders;
   int? get currentWordToken => _state.currentWordToken;
   Duration get primarySubtitleOffset => _state.primarySubtitleOffset;
   Duration get secondarySubtitleOffset => _state.secondarySubtitleOffset;
@@ -236,10 +243,12 @@ class SubtitleController extends ChangeNotifier {
   void setSpeechEnhancements({
     required Map<String, Map<String, dynamic>> pronunciationBySentence,
     required Map<String, List<WordTiming>> timingsBySentence,
+    required List<Map<String, dynamic>> pronunciationProviders,
   }) => _update(
     (s) => s.copyWith(
       pronunciationBySentence: pronunciationBySentence,
       timingsBySentence: timingsBySentence,
+      pronunciationProviders: pronunciationProviders,
     ),
   );
 
@@ -258,6 +267,7 @@ class SubtitleController extends ChangeNotifier {
     (s) => s.copyWith(
       pronunciationBySentence: const {},
       timingsBySentence: const {},
+      pronunciationProviders: const [],
       currentWordToken: null,
     ),
   );

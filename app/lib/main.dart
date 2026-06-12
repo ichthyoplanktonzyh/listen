@@ -472,7 +472,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final service = api;
     if (service == null) return;
     try {
-      final timings = await service.trackWordTimings(trackId);
+      final values = await Future.wait([
+        service.trackWordTimings(trackId),
+        service.pronunciationProviders(),
+      ]);
+      final timings = values[0];
+      final providers = values[1];
       final grouped = <String, List<WordTiming>>{};
       for (final raw in timings) {
         final value = WordTiming.fromJson(raw);
@@ -495,6 +500,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             (value) => MapEntry(value['sentence_id'] as String, value),
           ),
         ),
+        pronunciationProviders: providers,
       );
       subtitleController.updateCurrentWord(
         playerController.position,
@@ -1998,6 +2004,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
               .currentPrimaryCue!
               .id],
     ruleHintsLevel: settingsController.ruleHintsLevel,
+    pronunciationProviders: subtitleController.pronunciationProviders,
+    timingQuality:
+        subtitleController.currentPrimaryCue == null ||
+            (subtitleController.timingsBySentence[subtitleController
+                        .currentPrimaryCue!
+                        .id] ??
+                    const [])
+                .isEmpty
+        ? null
+        : _timingQuality(subtitleController.currentPrimaryCue!.id),
   );
 
   Widget _controls() => PlaybackControls(
