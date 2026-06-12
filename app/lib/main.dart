@@ -17,6 +17,7 @@ import 'm18_ui.dart';
 import 'models/timeline.dart';
 import 'services/api_service.dart';
 import 'services/external_tools.dart';
+import 'controllers/app_controllers.dart';
 import 'controllers/player_controller.dart';
 import 'controllers/subtitle_controller.dart';
 import 'controllers/learning_controller.dart';
@@ -154,6 +155,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final subtitleController = SubtitleController();
   final learningController = LearningController();
   final settingsController = SettingsController();
+
+  // ── Shadow state ──────────────────────────────────────────────────
+  // These fields are kept for business logic methods that haven't been
+  // migrated to controller calls yet. build() reads from controllers
+  // via ListenableBuilder; these fields are updated in parallel by
+  // setState for backward compat. TODO: migrate business methods to
+  // controllers, then remove these fields.
 
   AppLocalizations get l => AppLocalizations.of(context);
 
@@ -1508,7 +1516,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
-    if (mediaId != null) unawaited(api?.saveProgress(mediaId!, position));
+    final currentMediaId = playerController.mediaId ?? mediaId;
+    final currentPosition = playerController.position;
+    if (currentMediaId != null) {
+      unawaited(api?.saveProgress(currentMediaId, currentPosition));
+    }
     activeDownload?.cancel();
     unawaited(_saveSettings());
     for (final subscription in subscriptions) {
@@ -1518,18 +1530,34 @@ class _PlayerScreenState extends State<PlayerScreen> {
     progressTimer?.cancel();
     unawaited(adapter.dispose());
     unawaited(api?.close());
+    playerController.dispose();
+    subtitleController.dispose();
+    learningController.dispose();
+    settingsController.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([
-      playerController,
-      subtitleController,
-      learningController,
-      settingsController,
-    ]),
-    builder: (context, _) => CallbackShortcuts(
+  Widget build(BuildContext context) {
+    if (api == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        playerController,
+        subtitleController,
+        learningController,
+        settingsController,
+      ]),
+      builder: (context, _) => AppControllers(
+        player: playerController,
+        subtitle: subtitleController,
+        learning: learningController,
+        settings: settingsController,
+        api: api!,
+        child: CallbackShortcuts(
     bindings: {
       const SingleActivator(LogicalKeyboardKey.space): adapter.playOrPause,
       const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
@@ -1633,8 +1661,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ),
       ),
     ),
+      ),
     ),
-  );
+    );
+  }
 
   Widget _playerSurface() => LayoutBuilder(
     builder: (context, constraints) {
