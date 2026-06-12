@@ -3,11 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llplayer_next/local_api.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/main.dart';
 import 'package:llplayer_next/m18_ui.dart';
-import 'package:llplayer_next/timeline.dart';
+import 'package:llplayer_next/models/timeline.dart';
+import 'package:llplayer_next/services/api_service.dart';
 
 Widget localized(Widget child, {Locale locale = const Locale('en')}) =>
     MaterialApp(

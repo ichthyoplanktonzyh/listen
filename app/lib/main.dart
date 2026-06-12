@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:csv/csv.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,14 +10,19 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:fvp/fvp.dart' as fvp;
 import 'package:video_player/video_player.dart';
 
-import 'local_api.dart';
 import 'localization.dart';
-import 'external_tools.dart';
 import 'player_adapter.dart';
 import 'settings.dart';
-import 'timeline.dart';
 import 'transcription_ui.dart';
 import 'm18_ui.dart';
+
+import 'models/timeline.dart';
+import 'services/api_service.dart';
+import 'services/external_tools.dart';
+import 'utils/format_duration.dart';
+import 'utils/subtitle_position.dart';
+import 'utils/subtitle_style.dart';
+import 'utils/word_list_parser.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,81 +36,6 @@ void main() {
     },
   );
   runApp(const LLPlayerNextApp());
-}
-
-double responsiveSubtitleSize({
-  required double width,
-  required double scale,
-  required String preset,
-  required int textLength,
-  bool secondary = false,
-}) {
-  final presetFactor = switch (preset) {
-    'watching' => 0.82,
-    'compact' => 0.7,
-    _ => 1.0,
-  };
-  final base = (width * 0.034).clamp(18.0, 34.0);
-  final targetLength = secondary ? 84 : 72;
-  final minimum = secondary ? 0.78 : 0.72;
-  final lengthFactor = (targetLength / textLength.clamp(1, 1000)).clamp(
-    minimum,
-    1.0,
-  );
-  return base * (secondary ? 0.72 : 1) * scale * presetFactor * lengthFactor;
-}
-
-Offset moveSubtitlePosition({
-  required Offset current,
-  required Offset delta,
-  required Size viewport,
-}) => Offset(
-  (current.dx + delta.dx / viewport.width).clamp(0.0, 1.0),
-  (current.dy + delta.dy / viewport.height).clamp(0.0, 1.0),
-);
-
-List<Map<String, dynamic>> parseExternalWordList(
-  String content, {
-  required bool csv,
-}) {
-  if (!csv) {
-    return const LineSplitter()
-        .convert(content)
-        .where((line) => line.trim().isNotEmpty)
-        .map((line) => <String, dynamic>{'word': line.trim(), 'status': null})
-        .toList(growable: false);
-  }
-  final rows = const CsvToListConverter(
-    shouldParseNumbers: false,
-    eol: '\n',
-  ).convert(content.replaceAll('\r\n', '\n'));
-  if (rows.isEmpty) return const [];
-  final headers = rows.first
-      .map((value) => value.toString().trim().toLowerCase())
-      .toList();
-  final wordIndex = headers.indexOf('word');
-  final statusIndex = headers.indexOf('status');
-  if (wordIndex < 0) {
-    throw const FormatException('CSV must contain a word column');
-  }
-  const statuses = {
-    'unknown_meaning',
-    'known_not_recognized',
-    'known_recognized',
-  };
-  return rows
-      .skip(1)
-      .where((row) => wordIndex < row.length)
-      .map((row) {
-        final importedStatus = statusIndex >= 0 && statusIndex < row.length
-            ? row[statusIndex].toString().trim()
-            : '';
-        return <String, dynamic>{
-          'word': row[wordIndex].toString(),
-          'status': statuses.contains(importedStatus) ? importedStatus : null,
-        };
-      })
-      .toList(growable: false);
 }
 
 class LLPlayerNextApp extends StatelessWidget {
@@ -2235,7 +2164,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       selectedTileColor: Theme.of(
                         context,
                       ).colorScheme.primaryContainer.withValues(alpha: 0.55),
-                      leading: Text(_format(cue.start)),
+                      leading: Text(formatDuration(cue.start)),
                       title: TokenLine(
                         cue: cue,
                         profiles: wordProfiles,
@@ -2281,7 +2210,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         children: [
           Row(
             children: [
-              Text(_format(position)),
+              Text(formatDuration(position)),
               Expanded(
                 child: Slider(
                   value: position.inMilliseconds
@@ -2292,7 +2221,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       adapter.seek(Duration(milliseconds: value.round())),
                 ),
               ),
-              Text(_format(duration)),
+              Text(formatDuration(duration)),
             ],
           ),
           SingleChildScrollView(
@@ -2585,12 +2514,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ),
     ),
   );
-
-  String _format(Duration value) {
-    final minutes = value.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '${value.inHours.toString().padLeft(2, '0')}:$minutes:$seconds';
-  }
 }
 
 class VocabularyScreen extends StatefulWidget {

@@ -3,6 +3,9 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/main.dart';
 import 'package:llplayer_next/localization.dart';
+import 'package:llplayer_next/utils/subtitle_position.dart';
+import 'package:llplayer_next/utils/subtitle_style.dart';
+import 'package:llplayer_next/utils/word_list_parser.dart';
 
 Widget localized(Widget child, {Locale locale = const Locale('en')}) =>
     MaterialApp(
