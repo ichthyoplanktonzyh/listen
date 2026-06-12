@@ -1,9 +1,11 @@
 # Milestone 1.9 / 0.7.0
 
 Collaborative functional acceptance completed on 2026-06-12. Final release
-tagging remains blocked until the current Mac has a valid code-signing
-certificate/private-key pair and the independently extracted package passes
-launch smoke. See `docs/verification/milestone-1.9-acceptance.md`.
+tagging remains blocked until the independently extracted package passes
+launch smoke. The current Mac now has a valid Apple Development
+certificate/private-key pair, but independent distribution requires a
+Developer ID Application identity or another accepted distribution path. See
+`docs/verification/milestone-1.9-acceptance.md`.
 
 ## Highlights
 

@@ -6,8 +6,8 @@
    extracted `LLPlayerNext.app`. Run `scripts/verify-mvp.sh`.
 2. If the newly built app cannot be launched because local signing or AMFI
    rejects it, use the development workflow below for functional testing.
-3. Record the packaged-app gate as blocked until a valid signing identity is
-   available. Development testing does not make that gate pass.
+3. Record the packaged-app gate as blocked until an independently extracted
+   release archive launches. Development testing does not make that gate pass.
 
 ## Development Run Fallback
 
@@ -47,3 +47,10 @@ A usable local development signing setup must report at least one valid
 identity backed by a private key. If it reports `0 valid identities found`,
 continue functional testing with `flutter run` and leave packaged launch
 acceptance open.
+
+An `Apple Development` identity is sufficient for Xcode-managed development
+launches. It is not a standalone distribution identity: copying or extracting
+that signed app outside Xcode's registered development location may still be
+rejected by macOS. For an independently distributed archive, use a
+`Developer ID Application` identity and the release distribution/notarization
+workflow.

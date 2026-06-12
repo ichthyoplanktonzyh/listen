@@ -55,13 +55,15 @@ tests.
 - `scripts/verify-m19.sh`: passed after integration.
 - macOS release archive build: passed after integration.
 - Post-integration `scripts/verify-mvp.sh` independent launch on the current
-  machine: blocked by the
-  host security configuration. Developer Mode is enabled, but the keychain
-  contains no valid code-signing identities and AMFI may terminate newly
-  ad-hoc-signed executables. The earlier M1.9 acceptance
-  package passed the independent smoke test before this host policy became
-  active. A signed build or explicit Developer Mode enablement is required to
-  repeat the final launch smoke test.
+  machine: blocked by the host security configuration. Developer Mode is
+  enabled and the keychain now contains a valid Apple Development identity
+  backed by its private key. Xcode successfully builds and signs with that
+  identity, but a copied Xcode-signed app and the independently extracted
+  package are both terminated by system policy. Apple Development signing is
+  therefore valid for Xcode-managed testing but does not satisfy the
+  independent distribution gate. A Developer ID Application identity or
+  another accepted distribution path is required to repeat the final launch
+  smoke test.
 
 The desktop diagnosis card now exposes pronunciation provider/version,
 degradation reason, reusable pronunciation-cache state, and current word-timing
@@ -95,6 +97,6 @@ The acceptance session found and fixed a desktop/API field mismatch:
 fields `timing_source` and `provider_id`.
 
 See `docs/verification/milestone-1.9-acceptance.md`. The remaining release gate
-is independent packaged-app launch smoke after a valid signing
-certificate/private-key pair becomes available. Do not create the final
-`v0.7.0` tag before that gate passes.
+is independent packaged-app launch smoke. The development certificate/private
+key issue is resolved, but an Apple Development identity does not satisfy that
+distribution gate. Do not create the final `v0.7.0` tag before the gate passes.

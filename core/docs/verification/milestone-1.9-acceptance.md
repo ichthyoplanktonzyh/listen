@@ -14,11 +14,13 @@ Latest collaborative functional acceptance: **2026-06-12**
 - [x] macOS release archive creation and metadata validation
 - [ ] Independent packaged-app launch smoke on the current Mac
 
-The remaining packaged-app gate is blocked by the current Mac reporting
-`0 valid identities found`. Newly ad-hoc-signed release applications may be
-terminated by AMFI before Flutter starts. A valid Apple Development
-certificate/private-key pair is required before repeating the final packaged
-smoke and creating the `v0.7.0` tag.
+The current Mac now reports one valid Apple Development identity backed by its
+private key. Xcode successfully signs with it, confirming that the original
+keychain problem is resolved. However, Apple Development signed apps are still
+terminated by system policy when launched directly or after being copied from
+the Xcode build directory. The remaining packaged-app gate therefore requires
+a Developer ID Application identity or another accepted independent
+distribution path before creating the `v0.7.0` tag.
 
 ## Collaborative Acceptance
 

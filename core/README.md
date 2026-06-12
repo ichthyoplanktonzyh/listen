@@ -8,9 +8,11 @@ Clean-room, macOS-first rewrite of a listening-comprehension media player.
 **Current release candidate:** Milestone 1.9, version `0.7.0`.
 
 Collaborative M1.9 functional acceptance is complete. Final `v0.7.0` tagging
-waits for a valid local signing identity and independent packaged-app launch
-smoke. When double-clicking a development build is blocked by local signing or
-AMFI, use the standard
+waits for independent packaged-app launch smoke. The current Mac now has a
+valid Apple Development identity, but that identity only authorizes
+Xcode-managed development launches; it does not make an independently
+extracted release archive distributable. When double-clicking a development
+build is blocked by local signing or AMFI, use the standard
 [macOS functional testing fallback](docs/development/macos-functional-testing.md).
 
 Milestone 1.9 adds canonical pronunciation and sentence IPA, deterministic word

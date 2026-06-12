@@ -148,6 +148,23 @@ certificate/private-key pair in the login keychain.
 Paid Developer ID is not required for local development signing. It will be
 required later for stable distribution to other Macs.
 
+### 2026-06-12 Late Update
+
+The keychain issue was resolved after creating a new Apple Development
+certificate/private-key pair and installing the required certificate chain:
+
+```text
+1 valid identities found
+```
+
+Xcode successfully builds and signs with the new identity. Independent launch
+testing established that an Apple Development signed app is still terminated
+by system policy when executed directly or copied outside the development
+launch workflow. Do not update the archive script to use Apple Development as
+if it were a distribution identity. The remaining packaged launch gate needs a
+Developer ID Application identity or another accepted independent distribution
+path.
+
 ## 8. Verification History
 
 Before the signing investigation:
