@@ -10,6 +10,7 @@ cd "$root"
 "$cargo_bin" build --release -p api-http
 (
   cd apps/desktop
+  "$flutter_bin" clean
   "$flutter_bin" pub get
   "$flutter_bin" build macos --release
 )
@@ -29,13 +30,19 @@ cp "$root/third_party/runtime/manifest.json" \
 cp "$root/third_party/runtime/THIRD_PARTY_NOTICES.md" \
   "$app/Contents/Resources/runtime/THIRD_PARTY_NOTICES.md"
 "$root/scripts/sanitize-macos-player-framework.sh" "$app"
+
 xattr -cr "$app"
 codesign --force --deep --sign - "$app"
+xattr -cr "$app"
+touch "$app" "$app/Contents"
 
 mkdir -p "$root/dist"
 rm -f "$root/dist/LLPlayerNext-macos-arm64.zip"
-ditto -c -k --keepParent \
-  "$app" "$root/dist/LLPlayerNext-macos-arm64.zip"
+(
+  cd "$(dirname "$app")"
+  COPYFILE_DISABLE=1 /usr/bin/zip -qry -X \
+    "$root/dist/LLPlayerNext-macos-arm64.zip" "$(basename "$app")"
+)
 
 file "$app/Contents/MacOS/LLPlayerNext" "$app/Contents/MacOS/api-http" \
   "$app/Contents/Resources/runtime/whisper-cli" \

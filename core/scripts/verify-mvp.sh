@@ -62,6 +62,9 @@ fi
 if [[ ! -f "$archive" ]]; then
   "$root/scripts/build-macos-mvp.sh"
 fi
+if unzip -Z1 "$archive" | grep -Eq '(^|/)\._|(^|/)\.DS_Store$'; then
+  fail "release archive contains macOS metadata files"
+fi
 mkdir -p "$tmp/package"
 ditto -x -k "$archive" "$tmp/package"
 [[ -x "$app/Contents/MacOS/api-http" ]] ||
