@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llplayer_next/main.dart';
 import 'package:llplayer_next/localization.dart';
+import 'package:llplayer_next/widgets/panels/word_learning_panel.dart';
+import 'package:llplayer_next/widgets/vocabulary/vocabulary_book_view.dart';
+import 'package:llplayer_next/widgets/vocabulary/vocabulary_details_view.dart';
+import 'package:llplayer_next/widgets/vocabulary/vocabulary_transfer_actions.dart';
 import 'package:llplayer_next/utils/subtitle_position.dart';
 import 'package:llplayer_next/utils/subtitle_style.dart';
 import 'package:llplayer_next/utils/word_list_parser.dart';
