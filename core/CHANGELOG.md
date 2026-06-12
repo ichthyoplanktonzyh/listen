@@ -2,6 +2,10 @@
 
 ## 0.7.0 - acceptance candidate
 
+- Integrated the modular Flutter controller/widget architecture while
+  preserving Milestone 1.9 pronunciation and word-sync behavior.
+- Fixed nullable controller state so media, subtitle, selection, diagnosis,
+  and loop state can be cleared without retaining stale values.
 - Provider-neutral pronunciation, phoneme, speech-rule, and word-timing
   contracts with schema v8.
 - Pinned CMUdict canonical en-US pronunciation with deterministic fallback,

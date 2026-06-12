@@ -38,6 +38,25 @@ The package flow clears inherited macOS provenance attributes before signing
 and does not preserve those attributes in the release zip. This prevents dyld
 startup stalls seen when launching directly from the Xcode build directory.
 
+## Frontend Refactor Integration
+
+The modular Flutter frontend branch was merged after the initial M1.9
+acceptance-candidate commit. M1.9 state now follows the controller/widget
+boundaries, and nullable controller-state clearing is covered by regression
+tests.
+
+- `flutter analyze`: passed.
+- `flutter test`: passed, 35 tests.
+- `scripts/verify-m19.sh`: passed after integration.
+- macOS release archive build: passed after integration.
+- Post-integration independent launch on the current machine: blocked by the
+  host security configuration. macOS AMFI reports error `-423` for the
+  ad-hoc-signed executable because Developer Mode is disabled and the keychain
+  contains no valid code-signing identities. The earlier M1.9 acceptance
+  package passed the independent smoke test before this host policy became
+  active. A signed build or explicit Developer Mode enablement is required to
+  repeat the final launch smoke test.
+
 ## Product Boundary
 
 All rule hints are labeled as contextual predictions. No M1.9 result claims a
