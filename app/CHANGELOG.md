@@ -2,6 +2,55 @@
 
 All notable changes to the LLPlayerNext desktop app.
 
+## [Refactor Phase 5] — Controller Wiring
+
+### Summary
+
+Wired Phase 2's 4 `ChangeNotifier` controllers into `main.dart`. The `build()` method now reads all state from controllers via `ListenableBuilder`, while widgets continue using constructor-based dependency injection.
+
+### Architecture
+
+```
+adapter.streams → _PlayerScreenState → controller.setXxx()
+                                         ↓
+                                   build() reads controller getters
+                                         ↓
+                                   Widget(data, callbacks)
+```
+
+### Changes
+
+| Step | Commit | Description |
+|---|---|---|
+| Step 1 | `310f39d` | Add 17 new getters/setters to PlayerController |
+| Step 2 | `c5c5522` | Add 6 getters + 4 setters to SubtitleController |
+| Step 3 | `e8981e5` | Wire controllers in main.dart, bridge adapter streams |
+| Step 4 | `5717ef7` | Refactor _loadSettings/_saveSettings via SettingsController |
+| Step 5 | `9e613b5` | Refactor build() to read from controllers (ListenableBuilder) |
+| Steps 6-8 | `8c91df2` | Mark shadow state, update dispose(), wrap AppControllers |
+
+### What's Done
+- `build()` reads all widget data from controllers, not state fields
+- Adapter streams (position/duration/playing/errors/tracks) bridge to PlayerController
+- `_loadSettings` uses `settingsController.load()`, syncs to subtitle/player controllers
+- `_saveSettings` uses `settingsController.update()` for atomic persist
+- `AppControllers` InheritedWidget wraps the widget tree (available for future use)
+- Widgets still receive data via constructor — no direct controller access
+
+### What Remains (Future Phase)
+- ~55 shadow state fields still present for business method backward compat
+- Business methods (_openMediaPath, _onEvent, _loadWordProfiles, etc.) still write to old fields
+- Need to migrate business methods to use controllers, then remove shadow fields
+
+### Test Results
+```
+29/29 tests passed — 0 failures
+flutter analyze — No issues found!
+flutter build macos --debug — ✓ Built successfully
+```
+
+---
+
 ## [Refactor Phase 3] — Widget Extraction
 
 ### Summary

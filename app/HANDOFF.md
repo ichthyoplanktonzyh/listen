@@ -1,4 +1,4 @@
-# Handoff — Refactor Phases 1–4 Complete
+# Handoff — Refactor Phases 1–5 Complete
 
 **Date**: 2026-06-12
 **Branch**: `worktree-refactor+flutter-frontend`
@@ -6,10 +6,13 @@
 
 ## What Was Done
 
-A 4-phase refactoring of the Flutter desktop app (`apps/desktop/`):
+A 5-phase refactoring of the Flutter desktop app (`apps/desktop/`):
 
 1. **Phase 1** — Extract pure data (`models/`), services (`services/`), and utilities (`utils/`)
-2. **Phase 2** — Create `ChangeNotifier` controller layer (`controllers/`) — NOT yet wired into UI
+2. **Phase 2** — Create `ChangeNotifier` controller layer (`controllers/`)
+3. **Phase 3** — Extract 13 widget files from the 3254-line `main.dart` (→ 1877 lines)
+4. **Phase 4** — Replace `Timer.periodic` position polling with event-driven tracking
+5. **Phase 5** — Wire controllers into `main.dart`'s `build()` method
 3. **Phase 3** — Extract 13 widget files from the 3254-line `main.dart` (→ 1877 lines)
 4. **Phase 4** — Replace `Timer.periodic` position polling with event-driven tracking in `player_adapter.dart`
 
@@ -28,8 +31,8 @@ lib/
 │   ├── subtitle_position.dart
 │   ├── subtitle_style.dart
 │   └── word_list_parser.dart
-├── controllers/ ..................... Phase 2 (NOT WIRED)
-│   ├── app_controllers.dart (InheritedWidget)
+├── controllers/ ..................... Phases 2 & 5 (WIRED in build())
+│   ├── app_controllers.dart (InheritedWidget — now wrapping widget tree)
 │   ├── player_controller.dart
 │   ├── subtitle_controller.dart
 │   ├── learning_controller.dart
@@ -77,14 +80,15 @@ class MyWidget extends StatelessWidget {
 
 ## What's NOT Done (Future Work)
 
-1. **Controller wiring** — The Phase 2 controllers exist but are NOT connected to the UI. `main.dart` still holds all state directly (95+ fields in `_PlayerScreenState`). A future phase should:
-   - Move state into controllers
-   - Wrap the widget tree with `AppControllers` (InheritedWidget)
-   - Have `_PlayerScreenState` listen to controllers instead of holding state
+1. **Business method migration** — `build()` now reads from controllers, but ~55 "shadow state" fields still exist for backward compat. Business methods (`_openMediaPath`, `_onEvent`, `_loadWordProfiles`, etc.) still write to old fields and call `setState`. Next phase should:
+   - Update business methods to write to controllers instead of old fields
+   - Replace all `setState(() => field = value)` with `controller.setXxx(value)`
+   - Remove the ~55 shadow state fields after migration
 
-2. **Further main.dart reduction** — Even at 1877 lines, `main.dart` still has ~95 state fields and all business logic. The goal should be a thin `build()` method that composes widgets, not a state monolith.
+2. **Further main.dart reduction** — After removing shadow fields, main.dart can drop from ~1985 → ~1500 lines.
 
 3. **Widget unit tests** — Extracted widgets can now be tested in isolation with `WidgetTester`, but no widget tests exist yet.
+
 
 ## Merge Instructions
 
