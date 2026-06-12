@@ -132,6 +132,35 @@ class LocalApi {
       (await _request('GET', '/v1/subtitles/${Uri.encodeComponent(trackId)}'))
           as Map<String, dynamic>;
 
+  Future<Map<String, dynamic>> lookupPronunciation(String word) async =>
+      (await _request(
+            'GET',
+            '/v1/pronunciation/lookup?word=${Uri.encodeQueryComponent(word)}',
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> analyzePronunciation(String sentenceId) async =>
+      (await _request('POST', '/v1/pronunciation/analyze-sentence', {
+            'sentence_id': sentenceId,
+          }))
+          as Map<String, dynamic>;
+
+  Future<List<Map<String, dynamic>>> trackPronunciation(String trackId) async =>
+      ((await _request(
+                'GET',
+                '/v1/subtitles/${Uri.encodeComponent(trackId)}/pronunciation',
+              ))
+              as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+
+  Future<List<Map<String, dynamic>>> trackWordTimings(String trackId) async =>
+      ((await _request(
+                'GET',
+                '/v1/subtitles/${Uri.encodeComponent(trackId)}/word-timings',
+              ))
+              as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+
   Future<String> exportSubtitleSrt(String trackId) async {
     final request = await _client.getUrl(
       Uri.parse(

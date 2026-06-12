@@ -40,7 +40,7 @@ void main() {
       'version': 1,
       'subtitle_offset_ms': -125,
     });
-    expect(settings.version, 6);
+    expect(settings.version, 7);
     expect(settings.primarySubtitleOffsetMs, -125);
   });
 
@@ -71,7 +71,25 @@ void main() {
 
   test('falls back safely for an unsupported settings version', () {
     final settings = AppSettings.fromJson({'version': 999, 'rate': 4});
-    expect(settings.version, 6);
+    expect(settings.version, 7);
     expect(settings.rate, 1);
+  });
+
+  test('loads pronunciation and word sync settings v7', () {
+    final settings = AppSettings.fromJson({
+      'version': 7,
+      'pronunciation_visible': false,
+      'word_sync_visible': false,
+      'phoneme_display': 'arpabet',
+      'word_animation_intensity': 0.8,
+      'rule_hints_level': 'all',
+      'precompute_pronunciation': false,
+    });
+    expect(settings.pronunciationVisible, isFalse);
+    expect(settings.wordSyncVisible, isFalse);
+    expect(settings.phonemeDisplay, 'arpabet');
+    expect(settings.wordAnimationIntensity, 0.8);
+    expect(settings.ruleHintsLevel, 'all');
+    expect(settings.precomputePronunciation, isFalse);
   });
 }

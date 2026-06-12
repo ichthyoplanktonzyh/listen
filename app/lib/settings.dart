@@ -3,7 +3,7 @@ import 'dart:io';
 
 class AppSettings {
   const AppSettings({
-    this.version = 6,
+    this.version = 7,
     this.rate = 1,
     this.volume = 100,
     this.primarySubtitleOffsetMs = 0,
@@ -30,6 +30,12 @@ class AppSettings {
     this.transcriptionLanguage = 'auto',
     this.transcriptionDestination = 'primary',
     this.openSubtitlesApiKey = '',
+    this.pronunciationVisible = true,
+    this.wordSyncVisible = true,
+    this.phonemeDisplay = 'ipa',
+    this.wordAnimationIntensity = 0.35,
+    this.ruleHintsLevel = 'likely',
+    this.precomputePronunciation = true,
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
@@ -39,7 +45,8 @@ class AppSettings {
         version != 3 &&
         version != 4 &&
         version != 5 &&
-        version != 6) {
+        version != 6 &&
+        version != 7) {
       return const AppSettings();
     }
     final legacyBottomPadding = _number(
@@ -61,13 +68,13 @@ class AppSettings {
       secondarySubtitlesVisible:
           json['secondary_subtitles_visible'] as bool? ?? true,
       statusStylesVisible: json['status_styles_visible'] as bool? ?? true,
-      primaryFontSize: version == 3 || version == 4 || version == 5 || version == 6
+      primaryFontSize: version! >= 3
           ? _number(json['primary_font_size'], 1, 0.5, 2)
           : (_number(json['primary_font_size'], 24, 12, 72) / 24).clamp(
               0.5,
               2.0,
             ),
-      secondaryFontSize: version == 3 || version == 4 || version == 5 || version == 6
+      secondaryFontSize: version >= 3
           ? _number(json['secondary_font_size'], 1, 0.5, 2)
           : (_number(json['secondary_font_size'], 18, 10, 64) / 18).clamp(
               0.5,
@@ -78,7 +85,7 @@ class AppSettings {
       subtitlePreset: json['subtitle_preset'] as String? ?? 'learning',
       language: json['language'] as String? ?? 'system',
       subtitlePositionX: _number(json['subtitle_position_x'], 0.5, 0, 1),
-      subtitlePositionY: version == 4 || version == 5 || version == 6
+      subtitlePositionY: version >= 4
           ? _number(json['subtitle_position_y'], 0.82, 0, 1)
           : (1 - legacyBottomPadding / 600).clamp(0.05, 0.95),
       subtitleBackgroundOpacity: _number(
@@ -100,6 +107,18 @@ class AppSettings {
       transcriptionDestination:
           json['transcription_destination'] as String? ?? 'primary',
       openSubtitlesApiKey: json['opensubtitles_api_key'] as String? ?? '',
+      pronunciationVisible: json['pronunciation_visible'] as bool? ?? true,
+      wordSyncVisible: json['word_sync_visible'] as bool? ?? true,
+      phonemeDisplay: json['phoneme_display'] as String? ?? 'ipa',
+      wordAnimationIntensity: _number(
+        json['word_animation_intensity'],
+        0.35,
+        0,
+        1,
+      ),
+      ruleHintsLevel: json['rule_hints_level'] as String? ?? 'likely',
+      precomputePronunciation:
+          json['precompute_pronunciation'] as bool? ?? true,
     );
   }
 
@@ -130,14 +149,23 @@ class AppSettings {
   final String transcriptionLanguage;
   final String transcriptionDestination;
   final String openSubtitlesApiKey;
+  final bool pronunciationVisible;
+  final bool wordSyncVisible;
+  final String phonemeDisplay;
+  final double wordAnimationIntensity;
+  final String ruleHintsLevel;
+  final bool precomputePronunciation;
 
   static File get file => File(
-        '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v6.json',
+    '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v7.json',
   );
 
   static Future<AppSettings> load() async {
     for (final candidate in [
       file,
+      File(
+        '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v6.json',
+      ),
       File(
         '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v5.json',
       ),
@@ -196,6 +224,12 @@ class AppSettings {
         'transcription_language': transcriptionLanguage,
         'transcription_destination': transcriptionDestination,
         'opensubtitles_api_key': openSubtitlesApiKey,
+        'pronunciation_visible': pronunciationVisible,
+        'word_sync_visible': wordSyncVisible,
+        'phoneme_display': phonemeDisplay,
+        'word_animation_intensity': wordAnimationIntensity,
+        'rule_hints_level': ruleHintsLevel,
+        'precompute_pronunciation': precomputePronunciation,
       }),
       flush: true,
     );

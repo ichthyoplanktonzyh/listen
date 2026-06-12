@@ -62,6 +62,47 @@ class SubtitleTrack {
   final List<Cue> cues;
 }
 
+class WordTiming {
+  const WordTiming({
+    required this.sentenceId,
+    required this.tokenIndex,
+    required this.start,
+    required this.end,
+    required this.source,
+    required this.provider,
+  });
+
+  factory WordTiming.fromJson(Map<String, dynamic> json) => WordTiming(
+    sentenceId: json['sentence_id'] as String,
+    tokenIndex: json['token_index'] as int,
+    start: Duration(milliseconds: json['start_ms'] as int),
+    end: Duration(milliseconds: json['end_ms'] as int),
+    source: json['source'] as String,
+    provider: json['provider'] as String,
+  );
+
+  final String sentenceId;
+  final int tokenIndex;
+  final Duration start;
+  final Duration end;
+  final String source;
+  final String provider;
+}
+
+int? currentWordTokenIndex(
+  List<WordTiming> timings,
+  Duration mediaPosition, {
+  Duration offset = Duration.zero,
+}) {
+  final position = mediaPosition - offset;
+  for (final timing in timings) {
+    if (position >= timing.start && position < timing.end) {
+      return timing.tokenIndex;
+    }
+  }
+  return null;
+}
+
 class TimelineCursor {
   const TimelineCursor(this.cues, {this.offset = Duration.zero});
 

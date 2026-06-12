@@ -56,4 +56,33 @@ void main() {
       '2099',
     );
   });
+
+  test('selects current word with offset and excludes end boundary', () {
+    const timings = [
+      WordTiming(
+        sentenceId: 'sentence-1',
+        tokenIndex: 2,
+        start: Duration(milliseconds: 100),
+        end: Duration(milliseconds: 300),
+        source: 'estimated',
+        provider: 'deterministic',
+      ),
+    ];
+    expect(
+      currentWordTokenIndex(
+        timings,
+        const Duration(milliseconds: 250),
+        offset: const Duration(milliseconds: 100),
+      ),
+      2,
+    );
+    expect(
+      currentWordTokenIndex(
+        timings,
+        const Duration(milliseconds: 400),
+        offset: const Duration(milliseconds: 100),
+      ),
+      isNull,
+    );
+  });
 }

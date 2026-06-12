@@ -11,14 +11,14 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:fvp/fvp.dart' as fvp;
 import 'package:video_player/video_player.dart';
 
+import 'external_tools.dart';
 import 'local_api.dart';
 import 'localization.dart';
-import 'external_tools.dart';
+import 'm18_ui.dart';
 import 'player_adapter.dart';
 import 'settings.dart';
 import 'timeline.dart';
 import 'transcription_ui.dart';
-import 'm18_ui.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -194,6 +194,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String transcriptionLanguage = 'auto';
   String transcriptionDestination = 'primary';
   String openSubtitlesApiKey = '';
+  bool pronunciationVisible = true;
+  bool wordSyncVisible = true;
+  String phonemeDisplay = 'ipa';
+  double wordAnimationIntensity = 0.35;
+  String ruleHintsLevel = 'likely';
+  bool precomputePronunciation = true;
   OnlineMediaDownload? activeDownload;
   double downloadProgress = 0;
   String? downloadedMediaPath;
@@ -205,8 +211,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final phraseProfiles = <String, Map<String, dynamic>>{};
   List<Map<String, dynamic>> currentPhraseCandidates = const [];
   Map<String, dynamic>? diagnosis;
+  final pronunciationBySentence = <String, Map<String, dynamic>>{};
+  final timingsBySentence = <String, List<WordTiming>>{};
+  int? currentWordToken;
   Map<String, dynamic>? selectedWordDetails;
   Map<String, dynamic>? selectedDictionary;
+  Map<String, dynamic>? selectedPronunciation;
   SubtitleToken? selectedToken;
   Cue? selectedCue;
   int sidePanel = 0;
@@ -291,6 +301,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       transcriptionLanguage = settings.transcriptionLanguage;
       transcriptionDestination = settings.transcriptionDestination;
       openSubtitlesApiKey = settings.openSubtitlesApiKey;
+      pronunciationVisible = settings.pronunciationVisible;
+      wordSyncVisible = settings.wordSyncVisible;
+      phonemeDisplay = settings.phonemeDisplay;
+      wordAnimationIntensity = settings.wordAnimationIntensity;
+      ruleHintsLevel = settings.ruleHintsLevel;
+      precomputePronunciation = settings.precomputePronunciation;
     });
     await adapter.setRate(rate);
     await adapter.setVolume(volume);
@@ -323,6 +339,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     transcriptionLanguage: transcriptionLanguage,
     transcriptionDestination: transcriptionDestination,
     openSubtitlesApiKey: openSubtitlesApiKey,
+    pronunciationVisible: pronunciationVisible,
+    wordSyncVisible: wordSyncVisible,
+    phonemeDisplay: phonemeDisplay,
+    wordAnimationIntensity: wordAnimationIntensity,
+    ruleHintsLevel: ruleHintsLevel,
+    precomputePronunciation: precomputePronunciation,
   ).save();
 
   Future<void> _connectApi() async {
@@ -392,6 +414,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _onPosition(Duration value) {
     final primaryCue = primaryCursor.current(value);
     final secondaryCue = secondaryCursor.current(value);
+    final wordToken = wordSyncVisible && primaryCue != null
+        ? currentWordTokenIndex(
+            timingsBySentence[primaryCue.id] ?? const [],
+            value,
+            offset: primarySubtitleOffset,
+          )
+        : null;
     if (loopCue &&
         currentPrimaryCue != null &&
         value >= primaryCursor.mediaEnd(currentPrimaryCue!)) {
@@ -409,12 +438,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
       setState(() {
         currentPrimaryCue = primaryCue;
         currentSecondaryCue = secondaryCue;
+        currentWordToken = wordToken;
       });
       _keepCurrentVisible(primaryCue);
       unawaited(_refreshDiagnosis());
       unawaited(_loadPhraseCandidates(primaryCue));
+      unawaited(_ensureCurrentPronunciation(primaryCue));
     } else {
-      setState(() => position = value);
+      setState(() {
+        position = value;
+        currentWordToken = wordToken;
+      });
     }
     position = value;
   }
@@ -520,6 +554,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (!secondary) await _loadWordProfiles();
       if (!secondary) await _loadPhraseProfiles();
       if (!secondary) await _loadPhraseCandidates(currentPrimaryCue);
+      if (!secondary) await _loadSpeechEnhancements(primaryTrack!.id);
     } catch (error) {
       setState(() => status = 'Subtitle import failed: $error');
     }
@@ -546,6 +581,57 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (!secondary) await _loadWordProfiles();
     if (!secondary) await _loadPhraseProfiles();
     if (!secondary) await _loadPhraseCandidates(currentPrimaryCue);
+    if (!secondary) await _loadSpeechEnhancements(primaryTrack!.id);
+  }
+
+  Future<void> _loadSpeechEnhancements(String trackId) async {
+    final service = api;
+    if (service == null) return;
+    try {
+      final timings = await service.trackWordTimings(trackId);
+      final grouped = <String, List<WordTiming>>{};
+      for (final raw in timings) {
+        final value = WordTiming.fromJson(raw);
+        grouped.putIfAbsent(value.sentenceId, () => []).add(value);
+      }
+      final analyses = precomputePronunciation
+          ? await service.trackPronunciation(trackId)
+          : currentPrimaryCue == null
+          ? <Map<String, dynamic>>[]
+          : [await service.analyzePronunciation(currentPrimaryCue!.id)];
+      if (!mounted || primaryTrack?.id != trackId) return;
+      setState(() {
+        timingsBySentence
+          ..clear()
+          ..addAll(grouped);
+        pronunciationBySentence.addEntries(
+          analyses.map(
+            (value) => MapEntry(value['sentence_id'] as String, value),
+          ),
+        );
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => status = 'Speech enhancements unavailable: $error');
+      }
+    }
+  }
+
+  Future<void> _ensureCurrentPronunciation(Cue? cue) async {
+    final service = api;
+    if (cue == null ||
+        service == null ||
+        pronunciationBySentence.containsKey(cue.id)) {
+      return;
+    }
+    try {
+      final value = await service.analyzePronunciation(cue.id);
+      if (mounted && currentPrimaryCue?.id == cue.id) {
+        setState(() => pronunciationBySentence[cue.id] = value);
+      }
+    } catch (_) {
+      // Pronunciation is an optional enhancement and must not block playback.
+    }
   }
 
   Future<void> _generateSubtitles({required bool secondary}) async {
@@ -795,6 +881,81 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 Text(
                   l.text('subtitles'),
                   style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                SwitchListTile(
+                  value: pronunciationVisible,
+                  title: Text(l.text('showPronunciation')),
+                  onChanged: (value) {
+                    setState(() => pronunciationVisible = value);
+                    refresh(() {});
+                    unawaited(_saveSettings());
+                  },
+                ),
+                SwitchListTile(
+                  value: wordSyncVisible,
+                  title: Text(l.text('highlightCurrentWord')),
+                  onChanged: (value) {
+                    setState(() => wordSyncVisible = value);
+                    refresh(() {});
+                    unawaited(_saveSettings());
+                  },
+                ),
+                _settingSlider(
+                  l.text('wordHighlightIntensity'),
+                  wordAnimationIntensity,
+                  0,
+                  1,
+                  (value) => setState(() => wordAnimationIntensity = value),
+                  refresh,
+                ),
+                DropdownButtonFormField<String>(
+                  initialValue: phonemeDisplay,
+                  decoration: InputDecoration(
+                    labelText: l.text('pronunciationDisplay'),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'ipa', child: Text('IPA')),
+                    DropdownMenuItem(value: 'arpabet', child: Text('ARPAbet')),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => phonemeDisplay = value);
+                    refresh(() {});
+                    unawaited(_saveSettings());
+                  },
+                ),
+                DropdownButtonFormField<String>(
+                  initialValue: ruleHintsLevel,
+                  decoration: InputDecoration(labelText: l.text('ruleHints')),
+                  items: [
+                    DropdownMenuItem(
+                      value: 'off',
+                      child: Text(l.text('ruleHintsOff')),
+                    ),
+                    DropdownMenuItem(
+                      value: 'likely',
+                      child: Text(l.text('ruleHintsLikely')),
+                    ),
+                    DropdownMenuItem(
+                      value: 'all',
+                      child: Text(l.text('ruleHintsAll')),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => ruleHintsLevel = value);
+                    refresh(() {});
+                    unawaited(_saveSettings());
+                  },
+                ),
+                SwitchListTile(
+                  value: precomputePronunciation,
+                  title: Text(l.text('precomputePronunciation')),
+                  onChanged: (value) {
+                    setState(() => precomputePronunciation = value);
+                    refresh(() {});
+                    unawaited(_saveSettings());
+                  },
                 ),
                 DropdownButtonFormField<String>(
                   initialValue: language,
@@ -1415,6 +1576,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       profile ??= await api!.updateWordProfile(lemma, token.text, null);
       final details = await api!.wordDetails(profile['id'] as String);
       final dictionary = await api!.lookupDictionary(lemma);
+      final pronunciation = await api!.lookupPronunciation(token.text);
       if (!mounted) return;
       setState(() {
         wordProfiles[lemma] = profile!;
@@ -1422,6 +1584,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         selectedCue = cue;
         selectedWordDetails = details;
         selectedDictionary = dictionary;
+        selectedPronunciation = pronunciation;
         sidePanel = 1;
       });
     } catch (error) {
@@ -2110,8 +2273,44 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                   fontSize: primarySize,
                                   fontFamily: _subtitleFont(primaryFontFamily),
                                   baseColor: primaryColor,
+                                  currentTokenIndex: currentWordToken,
+                                  currentWordIntensity: wordAnimationIntensity,
                                   onWord: _openWord,
                                   onPhrase: _openPhrase,
+                                ),
+                              ),
+                            if (pronunciationVisible &&
+                                currentPrimaryCue != null &&
+                                pronunciationBySentence[currentPrimaryCue!
+                                        .id] !=
+                                    null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  _pronunciationText(
+                                    pronunciationBySentence[currentPrimaryCue!
+                                        .id]!,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: primarySize * 0.55,
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                              ),
+                            if (wordSyncVisible &&
+                                currentPrimaryCue != null &&
+                                (timingsBySentence[currentPrimaryCue!.id] ??
+                                        const [])
+                                    .isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  _timingQuality(currentPrimaryCue!.id),
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.white54,
+                                  ),
                                 ),
                               ),
                             if (secondarySubtitlesVisible &&
@@ -2199,6 +2398,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   : WordLearningPanel(
                       details: selectedWordDetails!,
                       dictionary: selectedDictionary,
+                      pronunciation: selectedPronunciation,
                       onStatus: _setSelectedWordStatus,
                       onSave: _saveSelectedLearningContent,
                       onSource: _playOccurrence,
@@ -2260,8 +2460,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     child: ListView(
       shrinkWrap: true,
       children: [
-        const Text(
-          'Current sentence diagnosis',
+        Text(
+          l.text('currentSentenceDiagnosis'),
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         for (final hint in diagnosis!['hints'] as List<dynamic>)
@@ -2269,9 +2469,44 @@ class _PlayerScreenState extends State<PlayerScreen> {
             padding: const EdgeInsets.only(top: 6),
             child: Text('• ${l.diagnosis(hint['kind'] as String)}'),
           ),
+        if (ruleHintsLevel != 'off' &&
+            pronunciationBySentence[currentPrimaryCue?.id]?['rules'] != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Text(
+              l.text('rulePredictionDisclaimer'),
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        if (ruleHintsLevel != 'off')
+          for (final raw
+              in (pronunciationBySentence[currentPrimaryCue?.id]?['rules']
+                      as List<dynamic>? ??
+                  const []))
+            if (ruleHintsLevel == 'all' ||
+                (raw as Map<String, dynamic>)['status'] == 'likely_by_context')
+              Padding(
+                padding: const EdgeInsets.only(top: 5),
+                child: Text(
+                  '• ${raw['rule_family']}: ${raw['reason']} '
+                  '(${((raw['confidence'] as num) * 100).round()}%)',
+                ),
+              ),
       ],
     ),
   );
+
+  String _pronunciationText(Map<String, dynamic> analysis) {
+    if (phonemeDisplay == 'ipa') return analysis['display_ipa'] as String;
+    return ((analysis['phonemes'] as List<dynamic>?) ?? const [])
+        .map((value) => (value as Map<String, dynamic>)['symbol'])
+        .join(' ');
+  }
+
+  String _timingQuality(String sentenceId) {
+    final first = timingsBySentence[sentenceId]!.first;
+    return '${first.source.replaceAll('_', ' ')} · ${first.provider}';
+  }
 
   Widget _controls() => Material(
     color: const Color(0xff11161c),
@@ -2643,6 +2878,9 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     final dictionary = await widget.api.lookupDictionary(
       profile['normalized_lemma'] as String,
     );
+    final pronunciation = await widget.api.lookupPronunciation(
+      profile['display_form'] as String,
+    );
     if (!mounted) return;
     await showDialog<void>(
       context: context,
@@ -2654,6 +2892,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
           child: WordLearningPanel(
             details: details,
             dictionary: dictionary,
+            pronunciation: pronunciation,
             onStatus: (value) async {
               await widget.api.updateWordProfile(
                 profile['normalized_lemma'] as String,
@@ -2872,6 +3111,7 @@ class WordLearningPanel extends StatefulWidget {
     super.key,
     required this.details,
     required this.dictionary,
+    this.pronunciation,
     required this.onStatus,
     required this.onSave,
     required this.onSource,
@@ -2881,6 +3121,7 @@ class WordLearningPanel extends StatefulWidget {
 
   final Map<String, dynamic> details;
   final Map<String, dynamic>? dictionary;
+  final Map<String, dynamic>? pronunciation;
   final ValueChanged<String?> onStatus;
   final Future<void> Function(String?, String?) onSave;
   final ValueChanged<Map<String, dynamic>> onSource;
@@ -2959,6 +3200,24 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
           ],
         ),
         const Divider(),
+        if (widget.pronunciation != null) ...[
+          Text(
+            l.text('pronunciation'),
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          for (final raw in widget.pronunciation!['variants'] as List<dynamic>)
+            ListTile(
+              dense: true,
+              title: Text(
+                (raw as Map<String, dynamic>)['display_ipa'] as String,
+              ),
+              subtitle: Text(
+                '${raw['is_fallback'] == true ? 'deterministic fallback' : 'CMUdict'} · '
+                '${(raw['phonemes'] as List<dynamic>).map((value) => (value as Map<String, dynamic>)['symbol']).join(' ')}',
+              ),
+            ),
+          const Divider(),
+        ],
         Text(
           l.text('dictionary'),
           style: const TextStyle(fontWeight: FontWeight.bold),
@@ -3140,6 +3399,8 @@ class TokenLine extends StatelessWidget {
     this.fontSize = 15,
     this.fontFamily,
     this.baseColor,
+    this.currentTokenIndex,
+    this.currentWordIntensity = 0.35,
   });
 
   final Cue cue;
@@ -3148,6 +3409,8 @@ class TokenLine extends StatelessWidget {
   final double fontSize;
   final String? fontFamily;
   final Color? baseColor;
+  final int? currentTokenIndex;
+  final double currentWordIntensity;
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
   final List<Map<String, dynamic>> phraseCandidates;
   final Map<String, Map<String, dynamic>> phraseProfiles;
@@ -3211,7 +3474,11 @@ class TokenLine extends StatelessWidget {
   InlineSpan _tokenSpan(BuildContext context, SubtitleToken token) {
     final clickable = token.kind == 'word' && token.normalized != null;
     final status = profiles[token.normalized]?['status'] as String?;
-    final style = _style(context, status);
+    final style = _style(
+      context,
+      status,
+      current: token.index == currentTokenIndex,
+    );
     if (!clickable) return TextSpan(text: token.text, style: style);
     return WidgetSpan(
       alignment: PlaceholderAlignment.baseline,
@@ -3230,11 +3497,27 @@ class TokenLine extends StatelessWidget {
     _ => Theme.of(context).colorScheme.primary.withValues(alpha: 0.75),
   };
 
-  TextStyle _style(BuildContext context, String? status) {
+  TextStyle _style(
+    BuildContext context,
+    String? status, {
+    bool current = false,
+  }) {
     final base = TextStyle(
       fontSize: fontSize,
       fontFamily: fontFamily,
-      color: baseColor,
+      color: current
+          ? Color.lerp(
+              baseColor ?? Colors.white,
+              Theme.of(context).colorScheme.primary,
+              currentWordIntensity,
+            )
+          : baseColor,
+      backgroundColor: current
+          ? Theme.of(context).colorScheme.primary.withValues(
+              alpha: 0.18 + currentWordIntensity * 0.2,
+            )
+          : null,
+      fontWeight: current ? FontWeight.w800 : null,
     );
     if (!showStyles || status == null) return base;
     return switch (status) {
