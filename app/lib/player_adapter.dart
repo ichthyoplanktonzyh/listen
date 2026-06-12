@@ -56,7 +56,7 @@ class DesktopPlayerAdapter {
   Stream<PlayerTracks> get tracks => _tracks.stream;
   Duration get currentPosition => _controller?.value.position ?? Duration.zero;
 
-  Future<void> open(String path) async {
+  Future<void> open(String path, {bool play = true}) async {
     final previous = _controller;
     if (previous != null) {
       previous.removeListener(_notify);
@@ -72,7 +72,7 @@ class DesktopPlayerAdapter {
       await next.initialize();
       await next.setPlaybackSpeed(_rate);
       await next.setVolume(_volume / 100);
-      await next.play();
+      if (play) await next.play();
       _notify();
       _publishTracks(next);
     } catch (error) {

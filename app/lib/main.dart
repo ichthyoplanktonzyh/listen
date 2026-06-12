@@ -430,19 +430,34 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _openMediaPath(String path) async {
-    await adapter.open(path);
+    final previousMediaId = mediaId;
+    final previousPosition = position;
+    final previousProgressSave = previousMediaId == null
+        ? Future<void>.value()
+        : api?.saveProgress(previousMediaId, previousPosition) ??
+              Future<void>.value();
     setState(() {
       mediaPath = path;
       mediaId = null;
+      position = Duration.zero;
+      duration = Duration.zero;
       primaryTrack = null;
       secondaryTrack = null;
       currentPrimaryCue = null;
       currentSecondaryCue = null;
       sourceLoopStart = null;
       sourceLoopEnd = null;
-      status = 'Playing ${path.split(Platform.pathSeparator).last}';
+      status = 'Opening ${path.split(Platform.pathSeparator).last}';
     });
     try {
+      await adapter.open(path, play: false);
+    } catch (error) {
+      if (mounted) setState(() => status = 'Playback failed: $error');
+      return;
+    }
+    Object? coreError;
+    try {
+      await previousProgressSave;
       final media = await api?.registerMedia(path);
       if (media != null) {
         final id = media['id'] as String;
@@ -452,10 +467,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
           mediaTitle = media['title'] as String;
           mediaFingerprint = media['fingerprint'] as String;
         });
-        if (saved != null && saved > Duration.zero) await adapter.seek(saved);
+        if (saved != null && saved > Duration.zero) {
+          await adapter.seek(saved);
+          if (mounted) setState(() => position = saved);
+        }
       }
     } catch (error) {
-      setState(() => status = 'Playing locally; core unavailable: $error');
+      coreError = error;
+    }
+    try {
+      await adapter.play();
+      if (mounted) {
+        setState(
+          () => status = coreError == null
+              ? 'Playing ${path.split(Platform.pathSeparator).last}'
+              : 'Playing locally; core unavailable: $coreError',
+        );
+      }
+    } catch (error) {
+      if (mounted) setState(() => status = 'Playback failed: $error');
     }
   }
 
