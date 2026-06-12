@@ -17,6 +17,10 @@ import 'm18_ui.dart';
 import 'models/timeline.dart';
 import 'services/api_service.dart';
 import 'services/external_tools.dart';
+import 'controllers/player_controller.dart';
+import 'controllers/subtitle_controller.dart';
+import 'controllers/learning_controller.dart';
+import 'controllers/settings_controller.dart';
 import 'utils/subtitle_position.dart';
 import 'utils/subtitle_style.dart';
 import 'utils/word_list_parser.dart';
@@ -146,6 +150,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Cue? selectedCue;
   int sidePanel = 0;
 
+  // Phase 5: Controllers (wiring in progress — existing fields still present)
+  final playerController = PlayerController();
+  final subtitleController = SubtitleController();
+  final learningController = LearningController();
+  final settingsController = SettingsController();
+
   AppLocalizations get l => AppLocalizations.of(context);
 
   TimelineCursor get primaryCursor => TimelineCursor(
@@ -170,9 +180,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
     unawaited(_loadSettings());
     subscriptions.addAll([
       adapter.position.listen(_onPosition),
-      adapter.duration.listen((value) => setState(() => duration = value)),
-      adapter.playing.listen((value) => setState(() => playing = value)),
-      adapter.errors.listen((value) => setState(() => status = value)),
+      adapter.duration.listen((value) {
+        setState(() => duration = value);
+        playerController.setDuration(value);
+      }),
+      adapter.playing.listen((value) {
+        setState(() => playing = value);
+        playerController.setPlaying(value);
+      }),
+      adapter.errors.listen((value) {
+        setState(() => status = value);
+        playerController.setStatus(value);
+      }),
       adapter.tracks.listen((value) {
         if (!mounted) return;
         String? defaultId;
@@ -187,6 +206,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
           selectedAudioId = defaultId;
           embeddedSubtitleTracks = value.subtitle;
         });
+        playerController.setAudioTracks(value.audio);
+        playerController.setSelectedAudioId(defaultId);
+        playerController.setEmbeddedSubtitleTracks(value.subtitle);
       }),
     ]);
   }
@@ -325,6 +347,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _onPosition(Duration value) {
+    // Bridge to subtitle controller for cue tracking
+    subtitleController.updatePosition(value);
+
     final primaryCue = primaryCursor.current(value);
     final secondaryCue = secondaryCursor.current(value);
     if (loopCue &&
