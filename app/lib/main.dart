@@ -214,73 +214,90 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _loadSettings() async {
-    final settings = await AppSettings.load();
+    await settingsController.load();
     if (!mounted) return;
+    final s = settingsController.settings;
+    // Sync to subtitle controller
+    subtitleController.setPrimarySubtitleOffset(
+      Duration(milliseconds: s.primarySubtitleOffsetMs),
+    );
+    subtitleController.setSecondarySubtitleOffset(
+      Duration(milliseconds: s.secondarySubtitleOffsetMs),
+    );
+    subtitleController.setVisible(s.subtitlesVisible);
+    subtitleController.setSecondaryVisible(s.secondarySubtitlesVisible);
+    subtitleController.setStatusStylesVisible(s.statusStylesVisible);
+    subtitleController.setPrimaryFontSize(s.primaryFontSize);
+    subtitleController.setSecondaryFontSize(s.secondaryFontSize);
+    subtitleController.setPrimaryFontFamily(s.primaryFontFamily);
+    subtitleController.setSecondaryFontFamily(s.secondaryFontFamily);
+    subtitleController.setPreset(s.subtitlePreset);
+    // Sync to player controller
+    playerController.setRate(s.rate);
+    playerController.setVolume(s.volume);
     setState(() {
-      rate = settings.rate;
-      volume = settings.volume;
-      primarySubtitleOffset = Duration(
-        milliseconds: settings.primarySubtitleOffsetMs,
-      );
-      secondarySubtitleOffset = Duration(
-        milliseconds: settings.secondarySubtitleOffsetMs,
-      );
-      subtitlesVisible = settings.subtitlesVisible;
-      secondarySubtitlesVisible = settings.secondarySubtitlesVisible;
-      statusStylesVisible = settings.statusStylesVisible;
-      primaryFontSize = settings.primaryFontSize;
-      secondaryFontSize = settings.secondaryFontSize;
-      primaryFontFamily = settings.primaryFontFamily;
-      secondaryFontFamily = settings.secondaryFontFamily;
-      subtitlePreset = settings.subtitlePreset;
-      language = settings.language;
+      rate = s.rate;
+      volume = s.volume;
+      primarySubtitleOffset = Duration(milliseconds: s.primarySubtitleOffsetMs);
+      secondarySubtitleOffset = Duration(milliseconds: s.secondarySubtitleOffsetMs);
+      subtitlesVisible = s.subtitlesVisible;
+      secondarySubtitlesVisible = s.secondarySubtitlesVisible;
+      statusStylesVisible = s.statusStylesVisible;
+      primaryFontSize = s.primaryFontSize;
+      secondaryFontSize = s.secondaryFontSize;
+      primaryFontFamily = s.primaryFontFamily;
+      secondaryFontFamily = s.secondaryFontFamily;
+      subtitlePreset = s.subtitlePreset;
+      language = s.language;
       appLanguage.value = language;
-      subtitlePositionX = settings.subtitlePositionX;
-      subtitlePositionY = settings.subtitlePositionY;
-      subtitleBackgroundOpacity = settings.subtitleBackgroundOpacity;
-      primaryColor = Color(settings.primaryColor);
-      secondaryColor = Color(settings.secondaryColor);
-      transcriptWidth = settings.transcriptWidth;
-      ffmpegPath = settings.ffmpegPath;
-      ffprobePath = settings.ffprobePath;
-      ytDlpPath = settings.ytDlpPath;
-      transcriptionQuality = settings.transcriptionQuality;
-      transcriptionLanguage = settings.transcriptionLanguage;
-      transcriptionDestination = settings.transcriptionDestination;
-      openSubtitlesApiKey = settings.openSubtitlesApiKey;
+      subtitlePositionX = s.subtitlePositionX;
+      subtitlePositionY = s.subtitlePositionY;
+      subtitleBackgroundOpacity = s.subtitleBackgroundOpacity;
+      primaryColor = Color(s.primaryColor);
+      secondaryColor = Color(s.secondaryColor);
+      transcriptWidth = s.transcriptWidth;
+      ffmpegPath = s.ffmpegPath;
+      ffprobePath = s.ffprobePath;
+      ytDlpPath = s.ytDlpPath;
+      transcriptionQuality = s.transcriptionQuality;
+      transcriptionLanguage = s.transcriptionLanguage;
+      transcriptionDestination = s.transcriptionDestination;
+      openSubtitlesApiKey = s.openSubtitlesApiKey;
     });
     await adapter.setRate(rate);
     await adapter.setVolume(volume);
   }
 
-  Future<void> _saveSettings() => AppSettings(
-    rate: rate,
-    volume: volume,
-    primarySubtitleOffsetMs: primarySubtitleOffset.inMilliseconds,
-    secondarySubtitleOffsetMs: secondarySubtitleOffset.inMilliseconds,
-    subtitlesVisible: subtitlesVisible,
-    secondarySubtitlesVisible: secondarySubtitlesVisible,
-    statusStylesVisible: statusStylesVisible,
-    primaryFontSize: primaryFontSize,
-    secondaryFontSize: secondaryFontSize,
-    primaryFontFamily: primaryFontFamily,
-    secondaryFontFamily: secondaryFontFamily,
-    subtitlePreset: subtitlePreset,
-    language: language,
-    subtitlePositionX: subtitlePositionX,
-    subtitlePositionY: subtitlePositionY,
-    subtitleBackgroundOpacity: subtitleBackgroundOpacity,
-    primaryColor: primaryColor.toARGB32(),
-    secondaryColor: secondaryColor.toARGB32(),
-    transcriptWidth: transcriptWidth,
-    ffmpegPath: ffmpegPath,
-    ffprobePath: ffprobePath,
-    ytDlpPath: ytDlpPath,
-    transcriptionQuality: transcriptionQuality,
-    transcriptionLanguage: transcriptionLanguage,
-    transcriptionDestination: transcriptionDestination,
-    openSubtitlesApiKey: openSubtitlesApiKey,
-  ).save();
+  Future<void> _saveSettings() => settingsController.update(
+    AppSettings(
+      rate: rate,
+      volume: volume,
+      primarySubtitleOffsetMs: primarySubtitleOffset.inMilliseconds,
+      secondarySubtitleOffsetMs: secondarySubtitleOffset.inMilliseconds,
+      subtitlesVisible: subtitlesVisible,
+      secondarySubtitlesVisible: secondarySubtitlesVisible,
+      statusStylesVisible: statusStylesVisible,
+      primaryFontSize: primaryFontSize,
+      secondaryFontSize: secondaryFontSize,
+      primaryFontFamily: primaryFontFamily,
+      secondaryFontFamily: secondaryFontFamily,
+      subtitlePreset: subtitlePreset,
+      language: language,
+      subtitlePositionX: subtitlePositionX,
+      subtitlePositionY: subtitlePositionY,
+      subtitleBackgroundOpacity: subtitleBackgroundOpacity,
+      primaryColor: primaryColor.toARGB32(),
+      secondaryColor: secondaryColor.toARGB32(),
+      transcriptWidth: transcriptWidth,
+      ffmpegPath: ffmpegPath,
+      ffprobePath: ffprobePath,
+      ytDlpPath: ytDlpPath,
+      transcriptionQuality: transcriptionQuality,
+      transcriptionLanguage: transcriptionLanguage,
+      transcriptionDestination: transcriptionDestination,
+      openSubtitlesApiKey: openSubtitlesApiKey,
+    ),
+  );
 
   Future<void> _connectApi() async {
     try {
