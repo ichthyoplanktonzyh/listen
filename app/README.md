@@ -6,10 +6,16 @@ During development, build the Rust sidecar first and run Flutter from the
 repository root so the client can discover `target/debug/api-http`:
 
 ```sh
+export PATH="/opt/homebrew/opt/rustup/bin:$HOME/.local/share/flutter/bin:$PATH"
 cargo build -p api-http
 cd apps/desktop
 flutter run -d macos
 ```
+
+This is also the standard functional-test fallback when macOS signing or AMFI
+prevents a newly built `.app` from launching. It does not replace packaged-app
+smoke verification. See
+`../../docs/development/macos-functional-testing.md`.
 
 The player adapter, position events, subtitle cursor, seeking, offset, and
 sentence loop all run locally in the client. The loopback sidecar owns subtitle

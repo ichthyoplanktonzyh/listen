@@ -213,6 +213,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       pronunciationVisible: settingsController.pronunciationVisible,
       wordSyncVisible: settingsController.wordSyncVisible,
       phonemeDisplay: settingsController.phonemeDisplay,
+      wordHighlightStyle: settingsController.wordHighlightStyle,
       wordAnimationIntensity: settingsController.wordAnimationIntensity,
       ruleHintsLevel: settingsController.ruleHintsLevel,
       precomputePronunciation: settingsController.precomputePronunciation,
@@ -805,6 +806,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         pronunciationVisible: settingsController.pronunciationVisible,
         wordSyncVisible: settingsController.wordSyncVisible,
         phonemeDisplay: settingsController.phonemeDisplay,
+        wordHighlightStyle: settingsController.wordHighlightStyle,
         wordAnimationIntensity: settingsController.wordAnimationIntensity,
         ruleHintsLevel: settingsController.ruleHintsLevel,
         precomputePronunciation: settingsController.precomputePronunciation,
@@ -898,6 +900,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         onPhonemeDisplayChanged: (v) {
           settingsController.update(
             settingsController.settings.copyWith(phonemeDisplay: v),
+          );
+        },
+        onWordHighlightStyleChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(wordHighlightStyle: v),
           );
         },
         onWordAnimationIntensityChanged: (v) {
@@ -1848,6 +1855,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                   baseColor: settingsController.primaryColor,
                                   currentTokenIndex:
                                       subtitleController.currentWordToken,
+                                  currentWordStyle:
+                                      settingsController.wordHighlightStyle,
                                   currentWordIntensity:
                                       settingsController.wordAnimationIntensity,
                                   onWord: _openWord,
@@ -1874,26 +1883,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                   style: TextStyle(
                                     fontSize: primarySize * 0.55,
                                     color: Colors.white70,
-                                  ),
-                                ),
-                              ),
-                            if (settingsController.wordSyncVisible &&
-                                subtitleController.currentPrimaryCue != null &&
-                                (subtitleController
-                                            .timingsBySentence[subtitleController
-                                            .currentPrimaryCue!
-                                            .id] ??
-                                        const [])
-                                    .isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Text(
-                                  _timingQuality(
-                                    subtitleController.currentPrimaryCue!.id,
-                                  ),
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.white54,
                                   ),
                                 ),
                               ),

@@ -33,6 +33,7 @@ class AppSettings {
     this.pronunciationVisible = true,
     this.wordSyncVisible = true,
     this.phonemeDisplay = 'ipa',
+    this.wordHighlightStyle = 'background',
     this.wordAnimationIntensity = 0.35,
     this.ruleHintsLevel = 'likely',
     this.precomputePronunciation = true,
@@ -110,6 +111,7 @@ class AppSettings {
       pronunciationVisible: json['pronunciation_visible'] as bool? ?? true,
       wordSyncVisible: json['word_sync_visible'] as bool? ?? true,
       phonemeDisplay: json['phoneme_display'] as String? ?? 'ipa',
+      wordHighlightStyle: _wordHighlightStyle(json['word_highlight_style']),
       wordAnimationIntensity: _number(
         json['word_animation_intensity'],
         0.35,
@@ -152,6 +154,7 @@ class AppSettings {
   final bool pronunciationVisible;
   final bool wordSyncVisible;
   final String phonemeDisplay;
+  final String wordHighlightStyle;
   final double wordAnimationIntensity;
   final String ruleHintsLevel;
   final bool precomputePronunciation;
@@ -227,6 +230,7 @@ class AppSettings {
         'pronunciation_visible': pronunciationVisible,
         'word_sync_visible': wordSyncVisible,
         'phoneme_display': phonemeDisplay,
+        'word_highlight_style': wordHighlightStyle,
         'word_animation_intensity': wordAnimationIntensity,
         'rule_hints_level': ruleHintsLevel,
         'precompute_pronunciation': precomputePronunciation,
@@ -265,6 +269,7 @@ class AppSettings {
     bool? pronunciationVisible,
     bool? wordSyncVisible,
     String? phonemeDisplay,
+    String? wordHighlightStyle,
     double? wordAnimationIntensity,
     String? ruleHintsLevel,
     bool? precomputePronunciation,
@@ -304,6 +309,7 @@ class AppSettings {
     pronunciationVisible: pronunciationVisible ?? this.pronunciationVisible,
     wordSyncVisible: wordSyncVisible ?? this.wordSyncVisible,
     phonemeDisplay: phonemeDisplay ?? this.phonemeDisplay,
+    wordHighlightStyle: wordHighlightStyle ?? this.wordHighlightStyle,
     wordAnimationIntensity:
         wordAnimationIntensity ?? this.wordAnimationIntensity,
     ruleHintsLevel: ruleHintsLevel ?? this.ruleHintsLevel,
@@ -317,4 +323,7 @@ class AppSettings {
     double minimum,
     double maximum,
   ) => value is num ? value.toDouble().clamp(minimum, maximum) : fallback;
+
+  static String _wordHighlightStyle(Object? value) =>
+      value == 'bounce' || value == 'glow' ? value as String : 'background';
 }

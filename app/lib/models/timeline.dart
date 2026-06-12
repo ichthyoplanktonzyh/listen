@@ -77,8 +77,8 @@ class WordTiming {
     tokenIndex: json['token_index'] as int,
     start: Duration(milliseconds: json['start_ms'] as int),
     end: Duration(milliseconds: json['end_ms'] as int),
-    source: json['source'] as String,
-    provider: json['provider'] as String,
+    source: json['timing_source'] as String,
+    provider: json['provider_id'] as String,
   );
 
   final String sentenceId;

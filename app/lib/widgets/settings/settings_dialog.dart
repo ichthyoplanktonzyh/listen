@@ -31,6 +31,7 @@ class SettingsDialog extends StatefulWidget {
     required this.pronunciationVisible,
     required this.wordSyncVisible,
     required this.phonemeDisplay,
+    required this.wordHighlightStyle,
     required this.wordAnimationIntensity,
     required this.ruleHintsLevel,
     required this.precomputePronunciation,
@@ -53,6 +54,7 @@ class SettingsDialog extends StatefulWidget {
     required this.onPronunciationVisibleChanged,
     required this.onWordSyncVisibleChanged,
     required this.onPhonemeDisplayChanged,
+    required this.onWordHighlightStyleChanged,
     required this.onWordAnimationIntensityChanged,
     required this.onRuleHintsLevelChanged,
     required this.onPrecomputePronunciationChanged,
@@ -82,6 +84,7 @@ class SettingsDialog extends StatefulWidget {
   final bool pronunciationVisible;
   final bool wordSyncVisible;
   final String phonemeDisplay;
+  final String wordHighlightStyle;
   final double wordAnimationIntensity;
   final String ruleHintsLevel;
   final bool precomputePronunciation;
@@ -106,6 +109,7 @@ class SettingsDialog extends StatefulWidget {
   final ValueChanged<bool> onPronunciationVisibleChanged;
   final ValueChanged<bool> onWordSyncVisibleChanged;
   final ValueChanged<String> onPhonemeDisplayChanged;
+  final ValueChanged<String> onWordHighlightStyleChanged;
   final ValueChanged<double> onWordAnimationIntensityChanged;
   final ValueChanged<String> onRuleHintsLevelChanged;
   final ValueChanged<bool> onPrecomputePronunciationChanged;
@@ -141,6 +145,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late bool pronunciationVisible;
   late bool wordSyncVisible;
   late String phonemeDisplay;
+  late String wordHighlightStyle;
   late double wordAnimationIntensity;
   late String ruleHintsLevel;
   late bool precomputePronunciation;
@@ -182,6 +187,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     pronunciationVisible = widget.pronunciationVisible;
     wordSyncVisible = widget.wordSyncVisible;
     phonemeDisplay = widget.phonemeDisplay;
+    wordHighlightStyle = widget.wordHighlightStyle;
     wordAnimationIntensity = widget.wordAnimationIntensity;
     ruleHintsLevel = widget.ruleHintsLevel;
     precomputePronunciation = widget.precomputePronunciation;
@@ -232,6 +238,32 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 onChanged: (value) {
                   wordSyncVisible = value;
                   widget.onWordSyncVisibleChanged(value);
+                  refresh(() {});
+                },
+              ),
+              DropdownButtonFormField<String>(
+                initialValue: wordHighlightStyle,
+                decoration: InputDecoration(
+                  labelText: l.text('wordHighlightStyle'),
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: 'background',
+                    child: Text(l.text('wordHighlightBackground')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'bounce',
+                    child: Text(l.text('wordHighlightBounce')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'glow',
+                    child: Text(l.text('wordHighlightGlow')),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  wordHighlightStyle = value;
+                  widget.onWordHighlightStyleChanged(value);
                   refresh(() {});
                 },
               ),

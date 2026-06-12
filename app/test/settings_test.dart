@@ -81,6 +81,7 @@ void main() {
       'pronunciation_visible': false,
       'word_sync_visible': false,
       'phoneme_display': 'arpabet',
+      'word_highlight_style': 'glow',
       'word_animation_intensity': 0.8,
       'rule_hints_level': 'all',
       'precompute_pronunciation': false,
@@ -88,6 +89,7 @@ void main() {
     expect(settings.pronunciationVisible, isFalse);
     expect(settings.wordSyncVisible, isFalse);
     expect(settings.phonemeDisplay, 'arpabet');
+    expect(settings.wordHighlightStyle, 'glow');
     expect(settings.wordAnimationIntensity, 0.8);
     expect(settings.ruleHintsLevel, 'all');
     expect(settings.precomputePronunciation, isFalse);
@@ -98,6 +100,7 @@ void main() {
       pronunciationVisible: false,
       wordSyncVisible: false,
       phonemeDisplay: 'arpabet',
+      wordHighlightStyle: 'bounce',
       wordAnimationIntensity: 0.8,
       ruleHintsLevel: 'all',
       precomputePronunciation: false,
@@ -108,8 +111,18 @@ void main() {
     expect(updated.pronunciationVisible, isFalse);
     expect(updated.wordSyncVisible, isTrue);
     expect(updated.phonemeDisplay, 'arpabet');
+    expect(updated.wordHighlightStyle, 'bounce');
     expect(updated.wordAnimationIntensity, 0.8);
     expect(updated.ruleHintsLevel, 'all');
     expect(updated.precomputePronunciation, isFalse);
+  });
+
+  test('falls back from an unsupported word highlight style', () {
+    final settings = AppSettings.fromJson({
+      'version': 7,
+      'word_highlight_style': 'underline',
+    });
+
+    expect(settings.wordHighlightStyle, 'background');
   });
 }

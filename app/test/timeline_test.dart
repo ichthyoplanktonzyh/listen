@@ -85,4 +85,22 @@ void main() {
       isNull,
     );
   });
+
+  test('parses word timing fields from the API contract', () {
+    final timing = WordTiming.fromJson(const {
+      'sentence_id': 'sentence-1',
+      'token_index': 2,
+      'text': 'world',
+      'start_ms': 100,
+      'end_ms': 300,
+      'confidence': 0.35,
+      'timing_source': 'estimated',
+      'provider_id': 'subtitle-weighted-estimator',
+      'provider_version': 'v1',
+    });
+
+    expect(timing.source, 'estimated');
+    expect(timing.provider, 'subtitle-weighted-estimator');
+    expect(timing.tokenIndex, 2);
+  });
 }

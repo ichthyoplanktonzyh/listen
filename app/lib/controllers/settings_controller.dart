@@ -38,6 +38,7 @@ class SettingsController extends ChangeNotifier {
   bool get pronunciationVisible => _settings.pronunciationVisible;
   bool get wordSyncVisible => _settings.wordSyncVisible;
   String get phonemeDisplay => _settings.phonemeDisplay;
+  String get wordHighlightStyle => _settings.wordHighlightStyle;
   double get wordAnimationIntensity => _settings.wordAnimationIntensity;
   String get ruleHintsLevel => _settings.ruleHintsLevel;
   bool get precomputePronunciation => _settings.precomputePronunciation;

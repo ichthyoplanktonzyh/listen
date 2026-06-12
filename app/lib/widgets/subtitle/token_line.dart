@@ -18,6 +18,7 @@ class TokenLine extends StatelessWidget {
     this.fontFamily,
     this.baseColor,
     this.currentTokenIndex,
+    this.currentWordStyle = 'background',
     this.currentWordIntensity = 0.35,
   });
 
@@ -28,6 +29,7 @@ class TokenLine extends StatelessWidget {
   final String? fontFamily;
   final Color? baseColor;
   final int? currentTokenIndex;
+  final String currentWordStyle;
   final double currentWordIntensity;
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
   final List<Map<String, dynamic>> phraseCandidates;
@@ -92,18 +94,23 @@ class TokenLine extends StatelessWidget {
   InlineSpan _tokenSpan(BuildContext context, SubtitleToken token) {
     final clickable = token.kind == 'word' && token.normalized != null;
     final status = profiles[token.normalized]?['status'] as String?;
-    final style = _style(
-      context,
-      status,
-      current: token.index == currentTokenIndex,
-    );
+    final current = token.index == currentTokenIndex;
+    final style = _style(context, status, current: current);
     if (!clickable) return TextSpan(text: token.text, style: style);
     return WidgetSpan(
       alignment: PlaceholderAlignment.baseline,
       baseline: TextBaseline.alphabetic,
       child: InkWell(
         onTap: () => onWord(token, cue),
-        child: Text(token.text, style: style),
+        child: AnimatedScale(
+          scale: current && currentWordStyle == 'bounce'
+              ? 1 + currentWordIntensity * 0.22
+              : 1,
+          alignment: Alignment.bottomCenter,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOutBack,
+          child: Text(token.text, style: style),
+        ),
       ),
     );
   }
@@ -130,12 +137,22 @@ class TokenLine extends StatelessWidget {
               currentWordIntensity,
             )
           : baseColor,
-      backgroundColor: current
+      backgroundColor: current && currentWordStyle == 'background'
           ? Theme.of(context).colorScheme.primary.withValues(
               alpha: 0.18 + currentWordIntensity * 0.2,
             )
           : null,
       fontWeight: current ? FontWeight.w800 : null,
+      shadows: current && currentWordStyle == 'glow'
+          ? [
+              Shadow(
+                color: Theme.of(context).colorScheme.primary.withValues(
+                  alpha: 0.45 + currentWordIntensity * 0.45,
+                ),
+                blurRadius: 4 + currentWordIntensity * 12,
+              ),
+            ]
+          : null,
     );
     if (!showStyles || status == null) return base;
     return switch (status) {
