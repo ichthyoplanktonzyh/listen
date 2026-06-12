@@ -3,6 +3,7 @@ import 'package:llplayer_next/controllers/learning_controller.dart';
 import 'package:llplayer_next/controllers/player_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
 import 'package:llplayer_next/models/timeline.dart';
+import 'package:llplayer_next/player_adapter.dart';
 
 void main() {
   const cue = Cue(
@@ -34,6 +35,20 @@ void main() {
     expect(controller.mediaPath, isNull);
     expect(controller.sourceLoopStart, isNull);
     expect(controller.sourceLoopEnd, isNull);
+  });
+
+  test('player controller exposes strongly typed track lists from startup', () {
+    final controller = PlayerController();
+    const track = PlayerTrack(index: 0, id: 'audio-0');
+
+    expect(controller.audioTracks, isA<List<PlayerTrack>>());
+    expect(controller.embeddedSubtitleTracks, isA<List<PlayerTrack>>());
+
+    controller.setAudioTracks(const [track]);
+    controller.setEmbeddedSubtitleTracks(const [track]);
+
+    expect(controller.audioTracks, const [track]);
+    expect(controller.embeddedSubtitleTracks, const [track]);
   });
 
   test('subtitle controller clears tracks and follows local word timings', () {

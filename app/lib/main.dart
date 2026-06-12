@@ -2061,10 +2061,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     rate: playerController.rate,
     volume: playerController.volume,
     muted: playerController.muted,
-    audioTracks: playerController.audioTracks as List<PlayerTrack>,
+    audioTracks: playerController.audioTracks,
     selectedAudioId: playerController.selectedAudioId,
-    embeddedSubtitleTracks:
-        playerController.embeddedSubtitleTracks as List<PlayerTrack>,
+    embeddedSubtitleTracks: playerController.embeddedSubtitleTracks,
     selectedEmbeddedSubtitleId: playerController.selectedEmbeddedSubtitleId,
     primarySubtitleOffset: subtitleController.primarySubtitleOffset,
     secondarySubtitleOffset: subtitleController.secondarySubtitleOffset,

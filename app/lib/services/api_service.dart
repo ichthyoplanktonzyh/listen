@@ -98,9 +98,9 @@ class LocalApi {
   static Future<String> _findSidecar() async {
     final configured = Platform.environment['LLPLAYERNEXT_API_BINARY'];
     final candidates = <String>[
+      '${File(Platform.resolvedExecutable).parent.path}/api-http',
       '${Directory.current.path}/target/release/api-http',
       '${Directory.current.path}/target/debug/api-http',
-      '${File(Platform.resolvedExecutable).parent.path}/api-http',
     ];
     if (configured != null) candidates.insert(0, configured);
     for (final path in candidates) {

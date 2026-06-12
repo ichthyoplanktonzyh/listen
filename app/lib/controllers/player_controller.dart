@@ -40,9 +40,9 @@ class PlayerState {
   final bool muted;
   final double rate;
   final double volume;
-  final List<dynamic> audioTracks;
+  final List<PlayerTrack> audioTracks;
   final String? selectedAudioId;
-  final List<dynamic> embeddedSubtitleTracks;
+  final List<PlayerTrack> embeddedSubtitleTracks;
   final String? selectedEmbeddedSubtitleId;
   final double downloadProgress;
   final String? downloadedMediaPath;
@@ -61,9 +61,9 @@ class PlayerState {
     bool? muted,
     double? rate,
     double? volume,
-    List<dynamic>? audioTracks,
+    List<PlayerTrack>? audioTracks,
     Object? selectedAudioId = _unset,
-    List<dynamic>? embeddedSubtitleTracks,
+    List<PlayerTrack>? embeddedSubtitleTracks,
     Object? selectedEmbeddedSubtitleId = _unset,
     double? downloadProgress,
     Object? downloadedMediaPath = _unset,
@@ -138,9 +138,9 @@ class PlayerController extends ChangeNotifier {
   String? get downloadedMediaPath => _state.downloadedMediaPath;
   Duration? get sourceLoopStart => _state.sourceLoopStart;
   Duration? get sourceLoopEnd => _state.sourceLoopEnd;
-  List<dynamic> get audioTracks => _state.audioTracks;
+  List<PlayerTrack> get audioTracks => _state.audioTracks;
   String? get selectedAudioId => _state.selectedAudioId;
-  List<dynamic> get embeddedSubtitleTracks => _state.embeddedSubtitleTracks;
+  List<PlayerTrack> get embeddedSubtitleTracks => _state.embeddedSubtitleTracks;
   String? get selectedEmbeddedSubtitleId => _state.selectedEmbeddedSubtitleId;
 
   void _update(PlayerState Function(PlayerState) fn) {
