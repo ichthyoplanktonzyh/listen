@@ -1149,6 +1149,7 @@ name = "speech-analysis"
 version = "0.7.0"
 dependencies = [
  "domain",
+ "serde",
 ]
 
 [[package]]

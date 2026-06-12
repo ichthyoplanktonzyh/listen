@@ -15,8 +15,12 @@ pub enum EventName {
     MediaAvailabilityChanged,
     TranscriptionModelChanged,
     TranscriptionJobChanged,
+    PronunciationAnalysisProgress,
     PronunciationAnalysisCompleted,
+    WordTimingsProgress,
     WordTimingsCompleted,
+    SpeechCacheInvalidated,
+    PronunciationProviderUnavailable,
     PronunciationProviderDegraded,
 }
 

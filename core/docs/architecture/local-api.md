@@ -52,3 +52,8 @@ through HTTP would add latency and couple the domain service to a player.
 analysis, and rule metadata. Track-level pronunciation and word-timing routes
 support lazy or batch generation. Playback-frequency current-word selection
 stays inside the Flutter client after the timing timeline is loaded.
+
+`/v1/speech/jobs` provides non-blocking track-wide pronunciation-analysis and
+word-timing jobs. Jobs report progress, can be cancelled or retried, and write
+only to rebuildable speech caches. Provider unavailable/degraded and cache
+invalidation events use the existing versioned event stream.

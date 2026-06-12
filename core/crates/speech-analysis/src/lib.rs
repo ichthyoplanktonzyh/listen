@@ -7,11 +7,128 @@ use domain::{
     SentencePronunciation, SpeechRuleFinding, SpeechRuleStatus, SubtitleSentence,
     SubtitleTokenKind, TimingSource, WordPronunciation, WordTiming,
 };
+use serde::Serialize;
 
 pub const PROVIDER_ID: &str = "cmudict-deterministic";
 pub const PROVIDER_VERSION: &str = "74790861+fallback-v1";
 pub const ANALYZER_VERSION: &str = "en-us-rules-v1";
 static CMUDICT: OnceLock<HashMap<String, Vec<String>>> = OnceLock::new();
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RuleDefinition {
+    pub rule_id: &'static str,
+    pub rule_family: &'static str,
+    pub description: &'static str,
+    pub condition: &'static str,
+    pub example: &'static str,
+    pub counterexample: &'static str,
+    pub canonical_phonemes: &'static [&'static str],
+    pub suggested_phonemes: &'static [&'static str],
+}
+
+pub fn rule_catalog() -> &'static [RuleDefinition] {
+    static RULES: OnceLock<Vec<RuleDefinition>> = OnceLock::new();
+    RULES.get_or_init(|| {
+        let mut values = [
+            ("a", "A cat", "A-frame"),
+            ("an", "An apple", "Annual report"),
+            ("and", "You and me", "Android phone"),
+            ("are", "We are ready", "Area code"),
+            ("can", "I can go", "Candy store"),
+            ("for", "For a while", "Forest trail"),
+            ("of", "A cup of tea", "Office chair"),
+            ("the", "The book", "Theme song"),
+            ("to", "Go to school", "Today"),
+            ("was", "It was good", "Wasp nest"),
+            ("were", "They were here", "Werewolf story"),
+        ]
+        .into_iter()
+        .map(|(word, example, counterexample)| RuleDefinition {
+            rule_id: Box::leak(format!("weak-{word}").into_boxed_str()),
+            rule_family: "weak_form",
+            description: "A function word may use its unstressed weak form.",
+            condition: "The complete lexical token is a common function word.",
+            example,
+            counterexample,
+            canonical_phonemes: &[],
+            suggested_phonemes: &[],
+        })
+        .collect::<Vec<_>>();
+        values.extend([
+            RuleDefinition {
+                rule_id: "informal-want-to",
+                rule_family: "contraction",
+                description: "Want to may reduce in informal speech.",
+                condition: "The adjacent lexical tokens are want + to.",
+                example: "I want to go",
+                counterexample: "I want tea",
+                canonical_phonemes: &["W AA N T", "T UW"],
+                suggested_phonemes: &["W AA N AH"],
+            },
+            RuleDefinition {
+                rule_id: "informal-going-to",
+                rule_family: "contraction",
+                description: "Going to may reduce in informal speech.",
+                condition: "The adjacent lexical tokens are going + to.",
+                example: "We are going to leave",
+                counterexample: "We are going home",
+                canonical_phonemes: &["G OW IH NG", "T UW"],
+                suggested_phonemes: &["G AH N AH"],
+            },
+            RuleDefinition {
+                rule_id: "assimilation-did-you",
+                rule_family: "assimilation",
+                description: "Did you may assimilate at the /d/ + /j/ boundary.",
+                condition: "The adjacent lexical tokens are did + you.",
+                example: "Did you see it",
+                counterexample: "Did they see it",
+                canonical_phonemes: &["D IH D", "Y UW"],
+                suggested_phonemes: &["D IH D ZH UW"],
+            },
+            RuleDefinition {
+                rule_id: "link-consonant-vowel",
+                rule_family: "linking",
+                description: "A final consonant may link into a following vowel.",
+                condition: "A word ending in a consonant precedes a vowel-initial word.",
+                example: "Pick it up",
+                counterexample: "See it",
+                canonical_phonemes: &[],
+                suggested_phonemes: &[],
+            },
+            RuleDefinition {
+                rule_id: "link-same-consonant",
+                rule_family: "linking",
+                description: "Matching boundary consonants may be held as one boundary.",
+                condition: "Adjacent words share the same boundary consonant letter.",
+                example: "Big game",
+                counterexample: "Big house",
+                canonical_phonemes: &[],
+                suggested_phonemes: &[],
+            },
+            RuleDefinition {
+                rule_id: "possible-t-d-deletion",
+                rule_family: "deletion",
+                description: "Final /t/ or /d/ may weaken before a consonant.",
+                condition: "A t- or d-final word precedes another word.",
+                example: "Last call",
+                counterexample: "Last",
+                canonical_phonemes: &["T", "D"],
+                suggested_phonemes: &[],
+            },
+            RuleDefinition {
+                rule_id: "american-flap-t-d",
+                rule_family: "flapping",
+                description: "Intervocalic /t/ or /d/ may become an American English flap.",
+                condition: "A lexical token contains a vowel + t/d + vowel sequence.",
+                example: "Water",
+                counterexample: "Tree",
+                canonical_phonemes: &["T", "D"],
+                suggested_phonemes: &["DX"],
+            },
+        ]);
+        values
+    })
+}
 
 pub fn provider_info() -> PronunciationProviderInfo {
     let cmudict_available = !cmudict().is_empty();
@@ -202,6 +319,17 @@ fn analyze_rules(sentence: &SubtitleSentence) -> Vec<SpeechRuleFinding> {
                 SpeechRuleStatus::LikelyByContext,
             ));
         }
+        if medial_flap_candidate(word) {
+            values.push(rule(
+                "american-flap-t-d".into(),
+                "flapping",
+                *token_index,
+                *token_index,
+                0.58,
+                "Intervocalic /t/ or /d/ may be realized as an American English flap.",
+                SpeechRuleStatus::PossibleByRule,
+            ));
+        }
         let Some((next_index, next)) = words.get(index + 1) else {
             continue;
         };
@@ -260,17 +388,6 @@ fn analyze_rules(sentence: &SubtitleSentence) -> Vec<SpeechRuleFinding> {
                 SpeechRuleStatus::PossibleByRule,
             ));
         }
-        if medial_flap_candidate(word) {
-            values.push(rule(
-                "american-flap-t-d".into(),
-                "flapping",
-                *token_index,
-                *token_index,
-                0.58,
-                "Intervocalic /t/ or /d/ may be realized as an American English flap.",
-                SpeechRuleStatus::PossibleByRule,
-            ));
-        }
     }
     values
 }
@@ -284,13 +401,32 @@ fn rule(
     reason: &str,
     status: SpeechRuleStatus,
 ) -> SpeechRuleFinding {
+    let definition = rule_catalog()
+        .iter()
+        .find(|definition| definition.rule_id == rule_id);
     SpeechRuleFinding {
         rule_id,
         rule_family: family.into(),
         affected_token_start: start,
         affected_token_end: end,
-        canonical_phonemes: vec![],
-        suggested_phonemes: vec![],
+        canonical_phonemes: definition
+            .map(|value| {
+                value
+                    .canonical_phonemes
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect()
+            })
+            .unwrap_or_default(),
+        suggested_phonemes: definition
+            .map(|value| {
+                value
+                    .suggested_phonemes
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect()
+            })
+            .unwrap_or_default(),
         confidence,
         reason: reason.into(),
         evidence_source: "deterministic_text_rule".into(),
@@ -533,5 +669,61 @@ mod tests {
                 .iter()
                 .all(|value| value.evidence_source == "deterministic_text_rule")
         );
+    }
+
+    #[test]
+    fn rule_catalog_has_fixed_examples_and_counterexamples() {
+        let catalog = rule_catalog();
+        assert!((15..=25).contains(&catalog.len()));
+        let ids = catalog
+            .iter()
+            .map(|definition| definition.rule_id)
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(ids.len(), catalog.len());
+        for definition in catalog {
+            assert!(
+                analyze_rules(&sentence(definition.example))
+                    .iter()
+                    .any(|finding| finding.rule_id == definition.rule_id),
+                "example did not trigger {}",
+                definition.rule_id
+            );
+            assert!(
+                analyze_rules(&sentence(definition.counterexample))
+                    .iter()
+                    .all(|finding| finding.rule_id != definition.rule_id),
+                "counterexample triggered {}",
+                definition.rule_id
+            );
+        }
+    }
+
+    #[test]
+    fn fixed_en_us_baseline_covers_one_hundred_sentences() {
+        let baseline = include_str!("../../../testdata/pronunciation/en-us-baseline.tsv");
+        let rows = baseline
+            .lines()
+            .map(|line| line.split_once('\t').expect("baseline row has category"))
+            .collect::<Vec<_>>();
+        assert_eq!(rows.len(), 100);
+        assert_eq!(
+            rows.iter()
+                .map(|(category, _)| category)
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            10
+        );
+        for (_, text) in rows {
+            let sentence = sentence(text);
+            let analysis = analyze_sentence(&sentence);
+            assert_eq!(analysis.words.len(), sentence.tokens.len());
+            let timings = estimate_word_timings(&sentence);
+            assert_eq!(timings.len(), sentence.tokens.len());
+            assert!(
+                timings
+                    .windows(2)
+                    .all(|pair| pair[0].end_ms <= pair[1].start_ms)
+            );
+        }
     }
 }

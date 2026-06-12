@@ -29,6 +29,22 @@ pub trait SubtitleRepository: Send + Sync {
         &self,
         id: &SubtitleSentenceId,
     ) -> Result<Option<SubtitleSentence>, ApplicationError>;
+    fn save_word_pronunciation(
+        &self,
+        language: &str,
+        accent: &str,
+        pronunciation: &WordPronunciation,
+        provider_id: &str,
+        provider_version: &str,
+    ) -> Result<(), ApplicationError>;
+    fn get_word_pronunciation(
+        &self,
+        language: &str,
+        accent: &str,
+        normalized_text: &str,
+        provider_id: &str,
+        provider_version: &str,
+    ) -> Result<Option<WordPronunciation>, ApplicationError>;
     fn save_pronunciation(&self, analysis: &SentencePronunciation) -> Result<(), ApplicationError>;
     fn get_pronunciation(
         &self,
@@ -717,16 +733,47 @@ impl AppServices {
         vec![speech_analysis::provider_info()]
     }
 
+    pub fn pronunciation_rules(&self) -> serde_json::Value {
+        serde_json::json!({
+            "analyzer_id": "en-us-rules",
+            "version": speech_analysis::ANALYZER_VERSION,
+            "evidence_source": "deterministic_text_rule",
+            "disclaimer": "Rule predictions are contextual possibilities, not detections from the audio.",
+            "rules": speech_analysis::rule_catalog(),
+        })
+    }
+
     pub fn lookup_pronunciation(&self, word: &str) -> Result<WordPronunciation, ApplicationError> {
         require_text(word, "word")?;
-        Ok(speech_analysis::lookup(word, 0))
+        let normalized = normalize_lemma(word);
+        if let Some(value) = self.subtitles.get_word_pronunciation(
+            "en",
+            "en-US",
+            &normalized,
+            speech_analysis::PROVIDER_ID,
+            speech_analysis::PROVIDER_VERSION,
+        )? {
+            return Ok(value);
+        }
+        let value = speech_analysis::lookup(word, 0);
+        self.subtitles.save_word_pronunciation(
+            "en",
+            "en-US",
+            &value,
+            speech_analysis::PROVIDER_ID,
+            speech_analysis::PROVIDER_VERSION,
+        )?;
+        Ok(value)
     }
 
     pub fn analyze_pronunciation(
         &self,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<SentencePronunciation, ApplicationError> {
-        if let Some(value) = self.subtitles.get_pronunciation(sentence_id)? {
+        if let Some(value) = self.subtitles.get_pronunciation(sentence_id)?
+            && value.provider_id == speech_analysis::PROVIDER_ID
+            && value.provider_version == speech_analysis::PROVIDER_VERSION
+        {
             return Ok(value);
         }
         let sentence = self
@@ -738,12 +785,26 @@ impl AppServices {
         Ok(value)
     }
 
+    pub fn pronunciation_cache_state(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<Option<bool>, ApplicationError> {
+        Ok(self.subtitles.get_pronunciation(sentence_id)?.map(|value| {
+            value.provider_id == speech_analysis::PROVIDER_ID
+                && value.provider_version == speech_analysis::PROVIDER_VERSION
+        }))
+    }
+
     pub fn word_timings(
         &self,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<Vec<WordTiming>, ApplicationError> {
         let existing = self.subtitles.get_word_timings(sentence_id)?;
-        if !existing.is_empty() {
+        if let Some(first) = existing.first()
+            && (first.timing_source != TimingSource::Estimated
+                || (first.provider_id == "subtitle-weighted-estimator"
+                    && first.provider_version == "v1"))
+        {
             return Ok(existing);
         }
         let sentence = self
@@ -753,6 +814,18 @@ impl AppServices {
         let values = speech_analysis::estimate_word_timings(&sentence);
         self.subtitles.save_word_timings(sentence_id, &values)?;
         Ok(values)
+    }
+
+    pub fn word_timing_cache_state(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<Option<bool>, ApplicationError> {
+        let values = self.subtitles.get_word_timings(sentence_id)?;
+        Ok(values.first().map(|first| {
+            first.timing_source != TimingSource::Estimated
+                || (first.provider_id == "subtitle-weighted-estimator"
+                    && first.provider_version == "v1")
+        }))
     }
 
     pub fn analyze_pronunciation_track(

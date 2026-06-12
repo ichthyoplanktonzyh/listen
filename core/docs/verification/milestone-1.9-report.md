@@ -7,10 +7,18 @@ hints.
 ## Automated Coverage
 
 - `speech-analysis` tests cover stress, IPA mapping, unknown-word fallback,
-  monotonic bounded timing, and the no-audio-detection rule boundary.
+  monotonic bounded timing, the no-audio-detection rule boundary, and the
+  fixed 18-rule catalog's examples and counterexamples.
+- the fixed 100-sentence en-US baseline covers common and irregular words,
+  names, numbers, abbreviations, punctuation, phrases, unknown words,
+  hyphenation, and contextual rule pairs.
 - persistence tests cover schema v1-v7 migration to v8 and old-data retention.
+- canonical pronunciation cache tests verify provider/version isolation.
 - API and contract tests cover pronunciation providers, sentence analysis,
-  track analysis, word timing generation, rule metadata, and event names.
+  track analysis, word timing generation, fixed rule metadata, cache/provider
+  events, and non-blocking speech jobs with cancellation and retry.
+- an API regression queues a 10,000-sentence pronunciation job without waiting
+  for completion, then cancels and retries it.
 - Flutter tests cover settings v1-v6 migration to v7 and local word selection.
 - `scripts/verify-m19.sh` exercises the integrated local API and historical
   regression suite.
@@ -19,8 +27,8 @@ hints.
 
 Verified on macOS Apple Silicon on 2026-06-12:
 
-- `scripts/verify-m19.sh`: passed, including the M1, M1.5, M1.6, M1.7, and
-  M1.8 historical regressions.
+- `scripts/verify-m19.sh`: passed on the current integrated tree, including the
+  M1, M1.5, M1.6, M1.7, and M1.8 historical regressions.
 - `cargo test --workspace`: passed.
 - `cargo clippy --workspace --all-targets -- -D warnings`: passed.
 - `cargo fmt --check`: passed.
@@ -28,11 +36,8 @@ Verified on macOS Apple Silicon on 2026-06-12:
 - `flutter test`: passed, 31 tests.
 - `scripts/validate-contracts.sh`: passed.
 - `scripts/build-macos-mvp.sh`: produced
-  `dist/LLPlayerNext-macos-arm64.zip`.
-- `scripts/verify-mvp.sh`: passed against the app extracted from the release
-  archive, including schema v8 initialization, video/audio import, dual
-  subtitles, playback progress, restart persistence, bundled runtime checks,
-  and code-signature verification.
+  `dist/LLPlayerNext-macos-arm64.zip`, SHA-256
+  `35ad46e50aee46068241dfc96f95bfe5a565b16ee26f8f7bdd1c954edcd3ce93`.
 
 The package flow clears inherited macOS provenance attributes before signing
 and does not preserve those attributes in the release zip. This prevents dyld
@@ -49,13 +54,18 @@ tests.
 - `flutter test`: passed, 35 tests.
 - `scripts/verify-m19.sh`: passed after integration.
 - macOS release archive build: passed after integration.
-- Post-integration independent launch on the current machine: blocked by the
+- Post-integration `scripts/verify-mvp.sh` independent launch on the current
+  machine: blocked by the
   host security configuration. macOS AMFI reports error `-423` for the
   ad-hoc-signed executable because Developer Mode is disabled and the keychain
   contains no valid code-signing identities. The earlier M1.9 acceptance
   package passed the independent smoke test before this host policy became
   active. A signed build or explicit Developer Mode enablement is required to
   repeat the final launch smoke test.
+
+The desktop diagnosis card now exposes pronunciation provider/version,
+degradation reason, reusable pronunciation-cache state, and current word-timing
+source.
 
 ## Product Boundary
 

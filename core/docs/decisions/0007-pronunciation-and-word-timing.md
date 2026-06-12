@@ -31,6 +31,10 @@ Accepted for Milestone 1.9 / version 0.7.0.
   imports generated SRT segments only. M1.9 therefore does not label generated
   tracks as word-timed; ASR word timestamp ingestion remains an optional future
   provider improvement.
+- `testdata/pronunciation/en-us-baseline.tsv` fixes a 100-sentence en-US
+  baseline covering common and irregular words, proper names, numbers,
+  abbreviations, punctuation, phrases, unknown words, hyphenation, and
+  context-sensitive rule examples.
 
 ## Consequences
 

@@ -8,6 +8,12 @@
 - Explicit timing source, provider, version, confidence, and degradation data.
 - Rule-based weak form, contraction, linking, flapping, deletion, and
   assimilation hints with a prominent no-audio-detection disclaimer.
+- Fixed 18-rule metadata catalog with examples, conditions, counterexamples,
+  and stable IDs.
+- Non-blocking track speech jobs with progress, cancellation, retry, and a
+  10,000-sentence regression.
+- Provider/version-isolated pronunciation caches and visible provider, timing,
+  cache, and degradation diagnostics.
 - Schema v8 and desktop settings v7 migrations.
 
 ## Known Limits

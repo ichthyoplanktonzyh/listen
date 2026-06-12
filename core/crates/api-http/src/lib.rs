@@ -24,8 +24,10 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
 mod m18;
+mod speech_jobs;
 mod transcription;
 use m18::M18Coordinator;
+use speech_jobs::{CreateSpeechBatchJob, SpeechBatchCoordinator};
 use transcription::{CreateJobRequest, TranscriptionCoordinator};
 
 static ERROR_SEQUENCE: AtomicU64 = AtomicU64::new(1);
@@ -37,6 +39,7 @@ pub struct ApiState {
     pub events: broadcast::Sender<EventEnvelope>,
     pub dictionaries: Arc<Vec<Arc<dyn DictionaryProvider>>>,
     pub transcription: Arc<TranscriptionCoordinator>,
+    pub speech_jobs: Arc<SpeechBatchCoordinator>,
     pub m18: Arc<M18Coordinator>,
 }
 
@@ -57,6 +60,10 @@ impl ApiState {
             )
             .expect("transcription coordinator must initialize"),
         );
+        let speech_jobs = Arc::new(SpeechBatchCoordinator::new(
+            services.clone(),
+            events.clone(),
+        ));
         Self {
             services,
             token: token.into(),
@@ -68,6 +75,7 @@ impl ApiState {
                 ),
             ]),
             transcription,
+            speech_jobs,
             m18: Arc::new(M18Coordinator::new()),
         }
     }
@@ -99,6 +107,10 @@ pub fn router(state: ApiState) -> Router {
             "/v1/subtitles/{track_id}/word-timings",
             get(track_word_timings).post(generate_track_word_timings),
         )
+        .route("/v1/speech/jobs", get(speech_jobs).post(create_speech_job))
+        .route("/v1/speech/jobs/{job_id}", get(speech_job))
+        .route("/v1/speech/jobs/{job_id}/cancel", post(cancel_speech_job))
+        .route("/v1/speech/jobs/{job_id}/retry", post(retry_speech_job))
         .route("/v1/word-profiles/batch", post(read_words))
         .route(
             "/v1/media/{media_id}/progress",
@@ -376,7 +388,28 @@ fn srt_time(value: u64) -> String {
 async fn pronunciation_providers(
     State(state): State<ApiState>,
 ) -> Json<Vec<domain::PronunciationProviderInfo>> {
-    Json(state.services.pronunciation_providers())
+    let providers = state.services.pronunciation_providers();
+    for provider in providers.iter().filter(|provider| !provider.available) {
+        let _ = state.events.send(EventEnvelope::v1(
+            EventName::PronunciationProviderUnavailable,
+            serde_json::json!({
+                "provider_id": provider.id,
+                "provider_version": provider.version,
+                "diagnostic": provider.diagnostic,
+            }),
+        ));
+    }
+    for provider in providers.iter().filter(|provider| provider.degraded) {
+        let _ = state.events.send(EventEnvelope::v1(
+            EventName::PronunciationProviderDegraded,
+            serde_json::json!({
+                "provider_id": provider.id,
+                "provider_version": provider.version,
+                "diagnostic": provider.diagnostic,
+            }),
+        ));
+    }
+    Json(providers)
 }
 
 #[derive(Debug, Deserialize)]
@@ -404,9 +437,15 @@ async fn analyze_pronunciation_sentence(
     State(state): State<ApiState>,
     Json(request): Json<SentenceIdRequest>,
 ) -> Result<Json<domain::SentencePronunciation>, ApiError> {
-    let value = state.services.analyze_pronunciation(
-        &SubtitleSentenceId::parse(request.sentence_id).map_err(ApplicationError::from)?,
-    )?;
+    let sentence_id =
+        SubtitleSentenceId::parse(request.sentence_id).map_err(ApplicationError::from)?;
+    if state.services.pronunciation_cache_state(&sentence_id)? == Some(false) {
+        let _ = state.events.send(EventEnvelope::v1(
+            EventName::SpeechCacheInvalidated,
+            serde_json::json!({"kind": "pronunciation_analysis", "sentence_id": sentence_id}),
+        ));
+    }
+    let value = state.services.analyze_pronunciation(&sentence_id)?;
     let _ = state.events.send(EventEnvelope::v1(
         EventName::PronunciationAnalysisCompleted,
         serde_json::json!({"sentence_id": value.sentence_id}),
@@ -418,13 +457,30 @@ async fn track_pronunciation(
     State(state): State<ApiState>,
     Path(track_id): Path<String>,
 ) -> Result<Json<Vec<domain::SentencePronunciation>>, ApiError> {
-    state
+    let parsed_track_id =
+        SubtitleTrackId::parse(track_id.clone()).map_err(ApplicationError::from)?;
+    let total = state
         .services
-        .analyze_pronunciation_track(
-            &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
-        )
-        .map(Json)
-        .map_err(ApiError::from)
+        .read_subtitle_track(&parsed_track_id)?
+        .ok_or(ApplicationError::NotFound("subtitle track"))?
+        .sentences
+        .len();
+    let _ = state.events.send(EventEnvelope::v1(
+        EventName::PronunciationAnalysisProgress,
+        serde_json::json!({"track_id": track_id, "processed": 0, "total": total}),
+    ));
+    let values = state
+        .services
+        .analyze_pronunciation_track(&parsed_track_id)?;
+    let _ = state.events.send(EventEnvelope::v1(
+        EventName::PronunciationAnalysisProgress,
+        serde_json::json!({"track_id": track_id, "processed": total, "total": total}),
+    ));
+    let _ = state.events.send(EventEnvelope::v1(
+        EventName::PronunciationAnalysisCompleted,
+        serde_json::json!({"track_id": track_id, "count": values.len()}),
+    ));
+    Ok(Json(values))
 }
 
 async fn generate_track_pronunciation(
@@ -432,6 +488,58 @@ async fn generate_track_pronunciation(
     Path(track_id): Path<String>,
 ) -> Result<Json<Vec<domain::SentencePronunciation>>, ApiError> {
     track_pronunciation(State(state), Path(track_id)).await
+}
+
+async fn speech_jobs(
+    State(state): State<ApiState>,
+) -> Result<Json<Vec<speech_jobs::SpeechBatchJob>>, ApiError> {
+    state.speech_jobs.list().map(Json).map_err(ApiError::from)
+}
+
+async fn create_speech_job(
+    State(state): State<ApiState>,
+    Json(request): Json<CreateSpeechBatchJob>,
+) -> Result<Json<speech_jobs::SpeechBatchJob>, ApiError> {
+    state
+        .speech_jobs
+        .clone()
+        .create(request)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn speech_job(
+    State(state): State<ApiState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<speech_jobs::SpeechBatchJob>, ApiError> {
+    state
+        .speech_jobs
+        .get(&job_id)?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("speech batch job"))
+}
+
+async fn cancel_speech_job(
+    State(state): State<ApiState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<speech_jobs::SpeechBatchJob>, ApiError> {
+    state
+        .speech_jobs
+        .cancel(&job_id)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn retry_speech_job(
+    State(state): State<ApiState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<speech_jobs::SpeechBatchJob>, ApiError> {
+    state
+        .speech_jobs
+        .clone()
+        .retry(&job_id)
+        .map(Json)
+        .map_err(ApiError::from)
 }
 
 async fn track_word_timings(
@@ -452,12 +560,26 @@ async fn generate_track_word_timings(
 ) -> Result<Json<Vec<domain::WordTiming>>, ApiError> {
     let parsed_track_id =
         SubtitleTrackId::parse(track_id.clone()).map_err(ApplicationError::from)?;
+    let total = state
+        .services
+        .read_subtitle_track(&parsed_track_id)?
+        .ok_or(ApplicationError::NotFound("subtitle track"))?
+        .sentences
+        .len();
+    let _ = state.events.send(EventEnvelope::v1(
+        EventName::WordTimingsProgress,
+        serde_json::json!({"track_id": track_id, "processed": 0, "total": total}),
+    ));
     let values = match request {
         Some(Json(request)) if !request.timings.is_empty() => state
             .services
             .store_word_timings(&parsed_track_id, &request.timings)?,
         _ => state.services.word_timings_for_track(&parsed_track_id)?,
     };
+    let _ = state.events.send(EventEnvelope::v1(
+        EventName::WordTimingsProgress,
+        serde_json::json!({"track_id": track_id, "processed": total, "total": total}),
+    ));
     let _ = state.events.send(EventEnvelope::v1(
         EventName::WordTimingsCompleted,
         serde_json::json!({"track_id": track_id, "count": values.len()}),
@@ -470,14 +592,8 @@ struct WordTimingsRequest {
     timings: Vec<domain::WordTiming>,
 }
 
-async fn pronunciation_rules() -> Json<serde_json::Value> {
-    Json(serde_json::json!({
-        "analyzer_id": "en-us-rules",
-        "version": "v1",
-        "evidence_source": "deterministic_text_rule",
-        "disclaimer": "Rule predictions are contextual possibilities, not detections from the audio.",
-        "families": ["weak_form", "contraction", "linking", "flapping", "deletion", "assimilation"]
-    }))
+async fn pronunciation_rules(State(state): State<ApiState>) -> Json<serde_json::Value> {
+    Json(state.services.pronunciation_rules())
 }
 
 async fn transcription_providers(
@@ -1193,6 +1309,133 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 
+    #[tokio::test]
+    async fn speech_batch_job_queues_ten_thousand_sentences_and_can_cancel_and_retry() {
+        let app = test_app();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/v1/media")
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "path": "/tmp/speech-batch.mp4",
+                            "fingerprint": "speech-batch-media",
+                            "title": "Speech batch",
+                            "kind": "video"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let media: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        let path = std::env::temp_dir().join(format!(
+            "llplayer-speech-batch-{}.srt",
+            application::now_ms()
+        ));
+        let content = (1..=10_000)
+            .map(|index| format!("{index}\n00:00:00,000 --> 00:00:00,999\nHello world {index}\n\n"))
+            .collect::<String>();
+        std::fs::write(&path, content).unwrap();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/v1/media/{}/subtitles",
+                    media["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({"path": path, "language": "en"}).to_string(),
+                ))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let _ = std::fs::remove_file(&path);
+        let track: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/v1/speech/jobs")
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "track_id": track["id"],
+                            "kind": "pronunciation_analysis"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let job: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(job["status"], "queued");
+        assert_eq!(job["total"], 10_000);
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/v1/speech/jobs/{}/cancel",
+                    job["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let cancelled: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(cancelled["status"], "cancelled");
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/v1/speech/jobs/{}/retry",
+                    job["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let retried: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(retried["status"], "queued");
+        assert_eq!(retried["retry_of_job_id"], job["id"]);
+        let response = app
+            .oneshot(
+                Request::post(format!(
+                    "/v1/speech/jobs/{}/cancel",
+                    retried["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
     #[test]
     fn openapi_lists_implemented_routes() {
         let openapi = include_str!("../../../contracts/openapi/v1.yaml");
@@ -1211,6 +1454,7 @@ mod tests {
             "/v1/subtitles/{track_id}/pronunciation",
             "/v1/subtitles/{track_id}/pronunciation-analysis",
             "/v1/subtitles/{track_id}/word-timings",
+            "/v1/speech/jobs",
             "/v1/word-profiles",
             "/v1/word-profiles/batch",
             "/v1/word-observations",

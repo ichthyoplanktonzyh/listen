@@ -851,6 +851,66 @@ impl SubtitleRepository for SqliteRepository {
             .map_err(repo)
     }
 
+    fn save_word_pronunciation(
+        &self,
+        language: &str,
+        accent: &str,
+        pronunciation: &WordPronunciation,
+        provider_id: &str,
+        provider_version: &str,
+    ) -> Result<(), ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "INSERT INTO pronunciation_cache
+                 (language,accent,normalized_text,provider_id,provider_version,
+                  pronunciation_json,updated_at_ms)
+                 VALUES (?1,?2,?3,?4,?5,?6,unixepoch('subsec') * 1000)
+                 ON CONFLICT(language,accent,normalized_text,provider_id,provider_version)
+                 DO UPDATE SET pronunciation_json=excluded.pronunciation_json,
+                   updated_at_ms=excluded.updated_at_ms",
+                params![
+                    language,
+                    accent,
+                    pronunciation.normalized,
+                    provider_id,
+                    provider_version,
+                    json(pronunciation)?,
+                ],
+            )
+            .map(|_| ())
+            .map_err(repo)
+    }
+
+    fn get_word_pronunciation(
+        &self,
+        language: &str,
+        accent: &str,
+        normalized_text: &str,
+        provider_id: &str,
+        provider_version: &str,
+    ) -> Result<Option<WordPronunciation>, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .query_row(
+                "SELECT pronunciation_json FROM pronunciation_cache
+                 WHERE language=?1 AND accent=?2 AND normalized_text=?3
+                   AND provider_id=?4 AND provider_version=?5",
+                params![
+                    language,
+                    accent,
+                    normalized_text,
+                    provider_id,
+                    provider_version
+                ],
+                |row| from_json(&row.get::<_, String>(0)?),
+            )
+            .optional()
+            .map_err(repo)
+    }
+
     fn get_pronunciation(
         &self,
         id: &SubtitleSentenceId,
@@ -1717,6 +1777,35 @@ mod tests {
     fn new_database_migrates_to_latest() {
         let repo = SqliteRepository::in_memory().unwrap();
         assert_eq!(repo.schema_version().unwrap(), MIGRATION_VERSION);
+    }
+
+    #[test]
+    fn pronunciation_cache_isolated_by_provider_version() {
+        let repo = SqliteRepository::in_memory().unwrap();
+        let pronunciation = WordPronunciation {
+            token_index: 0,
+            text: "Hello".into(),
+            normalized: "hello".into(),
+            variants: vec![],
+        };
+        repo.save_word_pronunciation("en", "en-US", &pronunciation, "provider", "v1")
+            .unwrap();
+
+        assert!(
+            repo.get_word_pronunciation("en", "en-US", "hello", "provider", "v1")
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            repo.get_word_pronunciation("en", "en-US", "hello", "provider", "v2")
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            repo.get_word_pronunciation("en", "en-GB", "hello", "provider", "v1")
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

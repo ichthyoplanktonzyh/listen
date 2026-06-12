@@ -97,9 +97,35 @@ export interface PronunciationProviderInfo {
   languages: string[];
   accents: string[];
   phoneme_sets: string[];
+  supports_context: boolean;
+  supports_variants: boolean;
+  supports_stress: boolean;
+  supports_token_mapping: boolean;
   available: boolean;
   degraded: boolean;
   diagnostic: string | null;
+}
+
+export type SpeechBatchKind = "pronunciation_analysis" | "word_timings";
+export type SpeechBatchStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "cancelled"
+  | "failed";
+
+export interface SpeechBatchJob {
+  id: string;
+  track_id: string;
+  kind: SpeechBatchKind;
+  status: SpeechBatchStatus;
+  processed: number;
+  total: number;
+  result_count: number;
+  error: string | null;
+  retry_of_job_id: string | null;
+  created_at_ms: number;
+  updated_at_ms: number;
 }
 
 export interface UpdateWordProfile {
@@ -291,6 +317,33 @@ export class LocalApiV1 {
     return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}/word-timings`, {
       method: "POST",
       body: JSON.stringify({ timings: [] }),
+    });
+  }
+
+  speechBatchJobs(): Promise<SpeechBatchJob[]> {
+    return this.request("/v1/speech/jobs");
+  }
+
+  createSpeechBatchJob(trackId: string, kind: SpeechBatchKind): Promise<SpeechBatchJob> {
+    return this.request("/v1/speech/jobs", {
+      method: "POST",
+      body: JSON.stringify({ track_id: trackId, kind }),
+    });
+  }
+
+  speechBatchJob(jobId: string): Promise<SpeechBatchJob> {
+    return this.request(`/v1/speech/jobs/${encodeURIComponent(jobId)}`);
+  }
+
+  cancelSpeechBatchJob(jobId: string): Promise<SpeechBatchJob> {
+    return this.request(`/v1/speech/jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: "POST",
+    });
+  }
+
+  retrySpeechBatchJob(jobId: string): Promise<SpeechBatchJob> {
+    return this.request(`/v1/speech/jobs/${encodeURIComponent(jobId)}/retry`, {
+      method: "POST",
     });
   }
 

@@ -9,8 +9,10 @@ Clean-room, macOS-first rewrite of a listening-comprehension media player.
 
 Milestone 1.9 adds canonical pronunciation and sentence IPA, deterministic word
 timings with local current-word highlighting, and clearly labeled rule-based
-connected-speech hints. CMUdict remains an explicit optional resource and all
-enhancements degrade safely without blocking playback.
+connected-speech hints. Track-wide speech enhancement jobs run in the
+background and support progress, cancellation, and retry. CMUdict remains an
+explicit optional resource and all enhancements degrade safely without
+blocking playback.
 
 The Milestone 1 MVP targets macOS Apple Silicon and includes the core learning
 loop, dual text subtitles, drag and drop, configurable subtitle presentation,

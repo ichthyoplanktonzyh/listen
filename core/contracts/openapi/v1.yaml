@@ -171,6 +171,30 @@ paths:
       operationId: generateTrackWordTimings
       responses:
         "200": { description: Generated word timings with safe estimated fallback }
+  /v1/speech/jobs:
+    get:
+      operationId: speechBatchJobs
+      responses:
+        "200": { description: In-memory speech enhancement batch jobs }
+    post:
+      operationId: createSpeechBatchJob
+      responses:
+        "200": { description: Queued non-blocking pronunciation or word timing job }
+  /v1/speech/jobs/{job_id}:
+    get:
+      operationId: speechBatchJob
+      responses:
+        "200": { description: Speech enhancement batch job status }
+  /v1/speech/jobs/{job_id}/cancel:
+    post:
+      operationId: cancelSpeechBatchJob
+      responses:
+        "200": { description: Cancelled speech enhancement batch job }
+  /v1/speech/jobs/{job_id}/retry:
+    post:
+      operationId: retrySpeechBatchJob
+      responses:
+        "200": { description: Retried speech enhancement batch job }
   /v1/lexical-entries:
     get:
       operationId: listLexicalEntries

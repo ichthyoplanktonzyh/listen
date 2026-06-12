@@ -14,7 +14,10 @@
   current-word highlighting that remains correct after seek, loop, and rate
   changes.
 - Rule-based weak form, contraction, linking, flapping, deletion, and
-  assimilation hints that explicitly do not claim real-audio detection.
+  assimilation hints from a fixed 18-rule catalog that explicitly does not
+  claim real-audio detection.
+- Provider/version-isolated canonical pronunciation caching, explicit cache
+  invalidation events, and non-blocking track jobs with cancellation and retry.
 - Desktop settings v7, pronunciation diagnostics, API/event contracts, and
   Milestone 1.9 automated verification.
 
