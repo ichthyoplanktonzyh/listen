@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../player_adapter.dart';
+
 /// Immutable snapshot of playback state.
 /// Used by [PlayerController] to notify listeners.
 class PlayerState {
@@ -108,12 +110,23 @@ class PlayerController extends ChangeNotifier {
   // Convenience accessors for common fields
   String? get mediaId => _state.mediaId;
   String? get mediaPath => _state.mediaPath;
+  String? get mediaTitle => _state.mediaTitle;
+  String? get mediaFingerprint => _state.mediaFingerprint;
+  String get status => _state.status;
   bool get playing => _state.playing;
+  bool get muted => _state.muted;
   Duration get position => _state.position;
   Duration get duration => _state.duration;
   double get rate => _state.rate;
   double get volume => _state.volume;
   double get downloadProgress => _state.downloadProgress;
+  String? get downloadedMediaPath => _state.downloadedMediaPath;
+  Duration? get sourceLoopStart => _state.sourceLoopStart;
+  Duration? get sourceLoopEnd => _state.sourceLoopEnd;
+  List<dynamic> get audioTracks => _state.audioTracks;
+  String? get selectedAudioId => _state.selectedAudioId;
+  List<dynamic> get embeddedSubtitleTracks => _state.embeddedSubtitleTracks;
+  String? get selectedEmbeddedSubtitleId => _state.selectedEmbeddedSubtitleId;
 
   void _update(PlayerState Function(PlayerState) fn) {
     _state = fn(_state);
@@ -170,4 +183,26 @@ class PlayerController extends ChangeNotifier {
 
   void setSourceLoop(Duration? start, Duration? end) =>
       _update((s) => s.copyWith(sourceLoopStart: start, sourceLoopEnd: end));
+
+  void setSelectedAudioId(String? id) =>
+      _update((s) => s.copyWith(selectedAudioId: id));
+
+  void setSelectedEmbeddedSubtitleId(String? id) =>
+      _update((s) => s.copyWith(selectedEmbeddedSubtitleId: id));
+
+  void setAudioTracks(List<PlayerTrack> tracks) =>
+      _update((s) => s.copyWith(audioTracks: tracks));
+
+  void setEmbeddedSubtitleTracks(List<PlayerTrack> tracks) =>
+      _update((s) => s.copyWith(embeddedSubtitleTracks: tracks));
+
+  void setMediaTitle(String title) =>
+      _update((s) => s.copyWith(mediaTitle: title));
+
+  void setMediaFingerprint(String fingerprint) =>
+      _update((s) => s.copyWith(mediaFingerprint: fingerprint));
+
+  /// Toggle the playing state. Does NOT interact with the adapter directly;
+  /// callers must also call [DesktopPlayerAdapter.playOrPause].
+  void togglePlayPause() => _update((s) => s.copyWith(playing: !s.playing));
 }
