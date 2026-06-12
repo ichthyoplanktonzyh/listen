@@ -1,5 +1,28 @@
 # Handoff — LLPlayerNext Flutter Desktop 重构 (Phases 1–6)
 
+## M1.9 Integration Status
+
+The refactor branch was merged into the Milestone 1.9 acceptance branch on
+2026-06-12.
+
+- M1.9 pronunciation, sentence IPA, rule hints, settings, canonical word
+  pronunciation, and local current-word highlighting now use the extracted
+  controllers and widgets.
+- `SubtitleController` owns sentence pronunciation, word timings, and current
+  word state.
+- `LearningController` owns selected canonical pronunciation.
+- `SettingsController` exposes all settings-v7 pronunciation controls.
+- Nullable controller state uses explicit nullable copy semantics, fixing
+  stale media, subtitle, loop, selection, and diagnosis state.
+- `main.dart` is 2101 lines after integration, down from the pre-refactor
+  M1.9 file's 3613 lines.
+- `flutter analyze`, 35 Flutter tests, Rust clippy/fmt, contracts, and the full
+  M1.9 historical regression suite pass.
+- The macOS release archive builds successfully. Independent launch on the
+  current machine is blocked by macOS AMFI because Developer Mode is disabled
+  and no code-signing identity is installed; system logs report error `-423`
+  for the ad-hoc-signed executable.
+
 **日期**: 2026-06-12
 **分支**: `worktree-refactor+flutter-frontend`
 **工作树**: `.claude/worktrees/refactor+flutter-frontend/apps/desktop/`

@@ -239,6 +239,20 @@ void main() {
                 },
               ],
             },
+            pronunciation: const {
+              'variants': [
+                {
+                  'display_ipa': 'həˈloʊ',
+                  'is_fallback': false,
+                  'phonemes': [
+                    {'symbol': 'HH'},
+                    {'symbol': 'AH0'},
+                    {'symbol': 'L'},
+                    {'symbol': 'OW1'},
+                  ],
+                },
+              ],
+            },
             onStatus: (_) {},
             onSave: (value, memo) async {
               definition = value;
@@ -251,6 +265,7 @@ void main() {
         ),
       );
       expect(find.text('Provider A'), findsOneWidget);
+      expect(find.text('həˈloʊ'), findsOneWidget);
       expect(find.byTooltip('Play pronunciation'), findsOneWidget);
       await tester.enterText(find.byType(TextField).first, 'greeting');
       await tester.enterText(find.byType(TextField).last, 'remember this');

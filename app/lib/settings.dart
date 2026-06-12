@@ -262,44 +262,54 @@ class AppSettings {
     String? transcriptionLanguage,
     String? transcriptionDestination,
     String? openSubtitlesApiKey,
-  }) =>
-      AppSettings(
-        version: version,
-        rate: rate ?? this.rate,
-        volume: volume ?? this.volume,
-        primarySubtitleOffsetMs:
-            primarySubtitleOffsetMs ?? this.primarySubtitleOffsetMs,
-        secondarySubtitleOffsetMs:
-            secondarySubtitleOffsetMs ?? this.secondarySubtitleOffsetMs,
-        subtitlesVisible: subtitlesVisible ?? this.subtitlesVisible,
-        secondarySubtitlesVisible:
-            secondarySubtitlesVisible ?? this.secondarySubtitlesVisible,
-        statusStylesVisible: statusStylesVisible ?? this.statusStylesVisible,
-        primaryFontSize: primaryFontSize ?? this.primaryFontSize,
-        secondaryFontSize: secondaryFontSize ?? this.secondaryFontSize,
-        primaryFontFamily: primaryFontFamily ?? this.primaryFontFamily,
-        secondaryFontFamily: secondaryFontFamily ?? this.secondaryFontFamily,
-        subtitlePreset: subtitlePreset ?? this.subtitlePreset,
-        language: language ?? this.language,
-        subtitlePositionX: subtitlePositionX ?? this.subtitlePositionX,
-        subtitlePositionY: subtitlePositionY ?? this.subtitlePositionY,
-        subtitleBackgroundOpacity:
-            subtitleBackgroundOpacity ?? this.subtitleBackgroundOpacity,
-        primaryColor: primaryColor ?? this.primaryColor,
-        secondaryColor: secondaryColor ?? this.secondaryColor,
-        transcriptWidth: transcriptWidth ?? this.transcriptWidth,
-        ffmpegPath: ffmpegPath ?? this.ffmpegPath,
-        ffprobePath: ffprobePath ?? this.ffprobePath,
-        ytDlpPath: ytDlpPath ?? this.ytDlpPath,
-        transcriptionQuality:
-            transcriptionQuality ?? this.transcriptionQuality,
-        transcriptionLanguage:
-            transcriptionLanguage ?? this.transcriptionLanguage,
-        transcriptionDestination:
-            transcriptionDestination ?? this.transcriptionDestination,
-        openSubtitlesApiKey:
-            openSubtitlesApiKey ?? this.openSubtitlesApiKey,
-      );
+    bool? pronunciationVisible,
+    bool? wordSyncVisible,
+    String? phonemeDisplay,
+    double? wordAnimationIntensity,
+    String? ruleHintsLevel,
+    bool? precomputePronunciation,
+  }) => AppSettings(
+    version: version,
+    rate: rate ?? this.rate,
+    volume: volume ?? this.volume,
+    primarySubtitleOffsetMs:
+        primarySubtitleOffsetMs ?? this.primarySubtitleOffsetMs,
+    secondarySubtitleOffsetMs:
+        secondarySubtitleOffsetMs ?? this.secondarySubtitleOffsetMs,
+    subtitlesVisible: subtitlesVisible ?? this.subtitlesVisible,
+    secondarySubtitlesVisible:
+        secondarySubtitlesVisible ?? this.secondarySubtitlesVisible,
+    statusStylesVisible: statusStylesVisible ?? this.statusStylesVisible,
+    primaryFontSize: primaryFontSize ?? this.primaryFontSize,
+    secondaryFontSize: secondaryFontSize ?? this.secondaryFontSize,
+    primaryFontFamily: primaryFontFamily ?? this.primaryFontFamily,
+    secondaryFontFamily: secondaryFontFamily ?? this.secondaryFontFamily,
+    subtitlePreset: subtitlePreset ?? this.subtitlePreset,
+    language: language ?? this.language,
+    subtitlePositionX: subtitlePositionX ?? this.subtitlePositionX,
+    subtitlePositionY: subtitlePositionY ?? this.subtitlePositionY,
+    subtitleBackgroundOpacity:
+        subtitleBackgroundOpacity ?? this.subtitleBackgroundOpacity,
+    primaryColor: primaryColor ?? this.primaryColor,
+    secondaryColor: secondaryColor ?? this.secondaryColor,
+    transcriptWidth: transcriptWidth ?? this.transcriptWidth,
+    ffmpegPath: ffmpegPath ?? this.ffmpegPath,
+    ffprobePath: ffprobePath ?? this.ffprobePath,
+    ytDlpPath: ytDlpPath ?? this.ytDlpPath,
+    transcriptionQuality: transcriptionQuality ?? this.transcriptionQuality,
+    transcriptionLanguage: transcriptionLanguage ?? this.transcriptionLanguage,
+    transcriptionDestination:
+        transcriptionDestination ?? this.transcriptionDestination,
+    openSubtitlesApiKey: openSubtitlesApiKey ?? this.openSubtitlesApiKey,
+    pronunciationVisible: pronunciationVisible ?? this.pronunciationVisible,
+    wordSyncVisible: wordSyncVisible ?? this.wordSyncVisible,
+    phonemeDisplay: phonemeDisplay ?? this.phonemeDisplay,
+    wordAnimationIntensity:
+        wordAnimationIntensity ?? this.wordAnimationIntensity,
+    ruleHintsLevel: ruleHintsLevel ?? this.ruleHintsLevel,
+    precomputePronunciation:
+        precomputePronunciation ?? this.precomputePronunciation,
+  );
 
   static double _number(
     Object? value,

@@ -159,10 +159,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
               value: 'embedded',
               child: Text(l.text('importEmbeddedText')),
             ),
-            PopupMenuItem(
-              value: 'settings',
-              child: Text(l.text('settings')),
-            ),
+            PopupMenuItem(value: 'settings', child: Text(l.text('settings'))),
             PopupMenuItem(value: 'logs', child: Text(l.text('exportLogs'))),
             PopupMenuItem(
               value: 'export-vocabulary',

@@ -92,4 +92,24 @@ void main() {
     expect(settings.ruleHintsLevel, 'all');
     expect(settings.precomputePronunciation, isFalse);
   });
+
+  test('copyWith preserves and updates pronunciation settings', () {
+    const settings = AppSettings(
+      pronunciationVisible: false,
+      wordSyncVisible: false,
+      phonemeDisplay: 'arpabet',
+      wordAnimationIntensity: 0.8,
+      ruleHintsLevel: 'all',
+      precomputePronunciation: false,
+    );
+
+    final updated = settings.copyWith(wordSyncVisible: true);
+
+    expect(updated.pronunciationVisible, isFalse);
+    expect(updated.wordSyncVisible, isTrue);
+    expect(updated.phonemeDisplay, 'arpabet');
+    expect(updated.wordAnimationIntensity, 0.8);
+    expect(updated.ruleHintsLevel, 'all');
+    expect(updated.precomputePronunciation, isFalse);
+  });
 }

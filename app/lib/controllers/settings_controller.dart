@@ -35,6 +35,12 @@ class SettingsController extends ChangeNotifier {
   String get transcriptionLanguage => _settings.transcriptionLanguage;
   String get transcriptionDestination => _settings.transcriptionDestination;
   String get openSubtitlesApiKey => _settings.openSubtitlesApiKey;
+  bool get pronunciationVisible => _settings.pronunciationVisible;
+  bool get wordSyncVisible => _settings.wordSyncVisible;
+  String get phonemeDisplay => _settings.phonemeDisplay;
+  double get wordAnimationIntensity => _settings.wordAnimationIntensity;
+  String get ruleHintsLevel => _settings.ruleHintsLevel;
+  bool get precomputePronunciation => _settings.precomputePronunciation;
   Color get primaryColor => Color(_settings.primaryColor);
   Color get secondaryColor => Color(_settings.secondaryColor);
 

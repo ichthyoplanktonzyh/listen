@@ -58,6 +58,9 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     final dictionary = await widget.api.lookupDictionary(
       profile['normalized_lemma'] as String,
     );
+    final pronunciation = await widget.api.lookupPronunciation(
+      profile['display_form'] as String,
+    );
     if (!mounted) return;
     await showDialog<void>(
       context: context,
@@ -69,6 +72,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
           child: WordLearningPanel(
             details: details,
             dictionary: dictionary,
+            pronunciation: pronunciation,
             onStatus: (value) async {
               await widget.api.updateWordProfile(
                 profile['normalized_lemma'] as String,

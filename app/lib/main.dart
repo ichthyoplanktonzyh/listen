@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:fvp/fvp.dart' as fvp;
 import 'localization.dart';
+import 'm18_ui.dart';
 import 'player_adapter.dart';
 import 'settings.dart';
 import 'transcription_ui.dart';
@@ -182,8 +183,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     AppSettings(
       rate: playerController.rate,
       volume: playerController.volume,
-      primarySubtitleOffsetMs: subtitleController.primarySubtitleOffset.inMilliseconds,
-      secondarySubtitleOffsetMs: subtitleController.secondarySubtitleOffset.inMilliseconds,
+      primarySubtitleOffsetMs:
+          subtitleController.primarySubtitleOffset.inMilliseconds,
+      secondarySubtitleOffsetMs:
+          subtitleController.secondarySubtitleOffset.inMilliseconds,
       subtitlesVisible: subtitleController.visible,
       secondarySubtitlesVisible: subtitleController.secondaryVisible,
       statusStylesVisible: subtitleController.statusStylesVisible,
@@ -206,6 +209,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       transcriptionLanguage: settingsController.transcriptionLanguage,
       transcriptionDestination: settingsController.transcriptionDestination,
       openSubtitlesApiKey: settingsController.openSubtitlesApiKey,
+      pronunciationVisible: settingsController.pronunciationVisible,
+      wordSyncVisible: settingsController.wordSyncVisible,
+      phonemeDisplay: settingsController.phonemeDisplay,
+      wordAnimationIntensity: settingsController.wordAnimationIntensity,
+      ruleHintsLevel: settingsController.ruleHintsLevel,
+      precomputePronunciation: settingsController.precomputePronunciation,
     ),
   );
 
@@ -221,7 +230,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       progressTimer = Timer.periodic(const Duration(seconds: 5), (_) {
         if (playerController.mediaId != null) {
           unawaited(
-            api?.saveProgress(playerController.mediaId!, playerController.position),
+            api?.saveProgress(
+              playerController.mediaId!,
+              playerController.position,
+            ),
           );
         }
       });
@@ -280,6 +292,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _onPosition(Duration value) {
     subtitleController.updatePosition(value);
+    subtitleController.updateCurrentWord(
+      value,
+      enabled: settingsController.wordSyncVisible,
+    );
 
     final primaryCue = subtitleController.currentPrimaryCue;
     if (subtitleController.loopCue &&
@@ -301,6 +317,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _keepCurrentVisible(primaryCue);
       unawaited(_refreshDiagnosis());
       unawaited(_loadPhraseCandidates(primaryCue));
+      unawaited(_ensureCurrentPronunciation(primaryCue));
     }
     playerController.setPosition(value);
   }
@@ -325,14 +342,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() {
       status = 'Opening ${path.split(Platform.pathSeparator).last}';
     });
-    playerController.setMediaPath(path);
     playerController.clearMedia();
+    playerController.setMediaPath(path);
     playerController.setPosition(Duration.zero);
     playerController.setDuration(Duration.zero);
     subtitleController.setPrimaryTrack(null);
     subtitleController.setSecondaryTrack(null);
     subtitleController.setCurrentPrimaryCue(null);
     subtitleController.setCurrentSecondaryCue(null);
+    subtitleController.clearSpeechEnhancements();
     playerController.setSourceLoop(null, null);
     try {
       await adapter.open(path, play: false);
@@ -397,6 +415,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           subtitleController.secondaryCursor.current(playerController.position),
         );
       } else {
+        subtitleController.clearSpeechEnhancements();
         subtitleController.setPrimaryTrack(imported);
         subtitleController.setCurrentPrimaryCue(
           subtitleController.primaryCursor.current(playerController.position),
@@ -409,7 +428,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       });
       if (!secondary) await _loadWordProfiles();
       if (!secondary) await _loadPhraseProfiles();
-      if (!secondary) await _loadPhraseCandidates(subtitleController.currentPrimaryCue);
+      if (!secondary) {
+        await _loadPhraseCandidates(subtitleController.currentPrimaryCue);
+      }
+      if (!secondary) await _loadSpeechEnhancements(imported.id);
     } catch (error) {
       setState(() => status = 'Subtitle import failed: $error');
     }
@@ -428,6 +450,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         subtitleController.secondaryCursor.current(playerController.position),
       );
     } else {
+      subtitleController.clearSpeechEnhancements();
       subtitleController.setPrimaryTrack(imported);
       subtitleController.setCurrentPrimaryCue(
         subtitleController.primaryCursor.current(playerController.position),
@@ -439,7 +462,66 @@ class _PlayerScreenState extends State<PlayerScreen> {
     });
     if (!secondary) await _loadWordProfiles();
     if (!secondary) await _loadPhraseProfiles();
-    if (!secondary) await _loadPhraseCandidates(subtitleController.currentPrimaryCue);
+    if (!secondary) {
+      await _loadPhraseCandidates(subtitleController.currentPrimaryCue);
+    }
+    if (!secondary) await _loadSpeechEnhancements(imported.id);
+  }
+
+  Future<void> _loadSpeechEnhancements(String trackId) async {
+    final service = api;
+    if (service == null) return;
+    try {
+      final timings = await service.trackWordTimings(trackId);
+      final grouped = <String, List<WordTiming>>{};
+      for (final raw in timings) {
+        final value = WordTiming.fromJson(raw);
+        grouped.putIfAbsent(value.sentenceId, () => []).add(value);
+      }
+      final analyses = settingsController.precomputePronunciation
+          ? await service.trackPronunciation(trackId)
+          : subtitleController.currentPrimaryCue == null
+          ? <Map<String, dynamic>>[]
+          : [
+              await service.analyzePronunciation(
+                subtitleController.currentPrimaryCue!.id,
+              ),
+            ];
+      if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
+      subtitleController.setSpeechEnhancements(
+        timingsBySentence: grouped,
+        pronunciationBySentence: Map<String, Map<String, dynamic>>.fromEntries(
+          analyses.map(
+            (value) => MapEntry(value['sentence_id'] as String, value),
+          ),
+        ),
+      );
+      subtitleController.updateCurrentWord(
+        playerController.position,
+        enabled: settingsController.wordSyncVisible,
+      );
+    } catch (error) {
+      if (mounted) {
+        setState(() => status = 'Speech enhancements unavailable: $error');
+      }
+    }
+  }
+
+  Future<void> _ensureCurrentPronunciation(Cue? cue) async {
+    final service = api;
+    if (cue == null ||
+        service == null ||
+        subtitleController.pronunciationBySentence.containsKey(cue.id)) {
+      return;
+    }
+    try {
+      final value = await service.analyzePronunciation(cue.id);
+      if (mounted && subtitleController.currentPrimaryCue?.id == cue.id) {
+        subtitleController.setSentencePronunciation(cue.id, value);
+      }
+    } catch (_) {
+      // Pronunciation is optional and must never block playback.
+    }
   }
 
   Future<void> _generateSubtitles({required bool secondary}) async {
@@ -476,7 +558,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         setState(() => status = 'Drop or open media before subtitles');
         return;
       }
-      await _openSubtitlePath(path, secondary: subtitleController.primaryTrack != null);
+      await _openSubtitlePath(
+        path,
+        secondary: subtitleController.primaryTrack != null,
+      );
     }
     if (media.isEmpty && subtitles.isEmpty) {
       setState(() => status = 'Unsupported dropped file type');
@@ -546,10 +631,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     try {
       final resolved = await tools.resolveOnlineMedia(pageUrl);
       await adapter.open(resolved);
-      playerController.setMediaPath(pageUrl);
       playerController.clearMedia();
+      playerController.setMediaPath(pageUrl);
       subtitleController.setPrimaryTrack(null);
       subtitleController.setSecondaryTrack(null);
+      subtitleController.setCurrentPrimaryCue(null);
+      subtitleController.setCurrentSecondaryCue(null);
+      subtitleController.clearSpeechEnhancements();
       subtitleController.setCurrentPrimaryCue(null);
       subtitleController.setCurrentSecondaryCue(null);
       setState(() => status = 'Playing online media');
@@ -610,7 +698,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _importEmbeddedSubtitle() async {
     final path = playerController.mediaPath;
-    if (path == null || !_isMediaPath(path) || playerController.mediaId == null || api == null) {
+    if (path == null ||
+        !_isMediaPath(path) ||
+        playerController.mediaId == null ||
+        api == null) {
       setState(() => status = 'Open a local media file first');
       return;
     }
@@ -691,6 +782,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ffprobePath: settingsController.ffprobePath,
         ytDlpPath: settingsController.ytDlpPath,
         openSubtitlesApiKey: settingsController.openSubtitlesApiKey,
+        pronunciationVisible: settingsController.pronunciationVisible,
+        wordSyncVisible: settingsController.wordSyncVisible,
+        phonemeDisplay: settingsController.phonemeDisplay,
+        wordAnimationIntensity: settingsController.wordAnimationIntensity,
+        ruleHintsLevel: settingsController.ruleHintsLevel,
+        precomputePronunciation: settingsController.precomputePronunciation,
         onLanguageChanged: (v) {
           appLanguage.value = v;
           settingsController.update(
@@ -764,21 +861,56 @@ class _PlayerScreenState extends State<PlayerScreen> {
             settingsController.settings.copyWith(transcriptionDestination: v),
           );
         },
-        onSave: ({
-          required String ffmpegPath,
-          required String ffprobePath,
-          required String ytDlpPath,
-          required String openSubtitlesApiKey,
-        }) async {
-          await settingsController.update(
-            settingsController.settings.copyWith(
-              ffmpegPath: ffmpegPath,
-              ffprobePath: ffprobePath,
-              ytDlpPath: ytDlpPath,
-              openSubtitlesApiKey: openSubtitlesApiKey,
-            ),
+        onPronunciationVisibleChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(pronunciationVisible: v),
           );
         },
+        onWordSyncVisibleChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(wordSyncVisible: v),
+          );
+          subtitleController.updateCurrentWord(
+            playerController.position,
+            enabled: v,
+          );
+        },
+        onPhonemeDisplayChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(phonemeDisplay: v),
+          );
+        },
+        onWordAnimationIntensityChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(wordAnimationIntensity: v),
+          );
+        },
+        onRuleHintsLevelChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(ruleHintsLevel: v),
+          );
+        },
+        onPrecomputePronunciationChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(precomputePronunciation: v),
+          );
+        },
+        onSave:
+            ({
+              required String ffmpegPath,
+              required String ffprobePath,
+              required String ytDlpPath,
+              required String openSubtitlesApiKey,
+            }) async {
+              await settingsController.update(
+                settingsController.settings.copyWith(
+                  ffmpegPath: ffmpegPath,
+                  ffprobePath: ffprobePath,
+                  ytDlpPath: ytDlpPath,
+                  openSubtitlesApiKey: openSubtitlesApiKey,
+                ),
+              );
+            },
       ),
     );
   }
@@ -800,7 +932,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _showCurrentPhraseCandidates() async {
     final cue = subtitleController.currentPrimaryCue;
-    if (api == null || cue == null || playerController.mediaFingerprint == null) return;
+    if (api == null ||
+        cue == null ||
+        playerController.mediaFingerprint == null) {
+      return;
+    }
     await showPhraseCandidates(
       context: context,
       api: api!,
@@ -1029,8 +1165,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final values = await api!.readWordProfiles(lemmas);
     final profiles = Map<String, Map<String, dynamic>>.fromEntries(
       values.map(
-        (profile) =>
-            MapEntry(profile['normalized_lemma'] as String, profile),
+        (profile) => MapEntry(profile['normalized_lemma'] as String, profile),
       ),
     );
     learningController.setWordProfiles(profiles);
@@ -1064,6 +1199,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       learningController.setSelectedCue(cue);
       learningController.selectWord(details);
       learningController.setSelectedDictionary(dictionary);
+      learningController.setSelectedPronunciation(pronunciation);
       learningController.selectSidePanel(1);
     } catch (error) {
       if (mounted) setState(() => status = 'Dictionary unavailable: $error');
@@ -1097,7 +1233,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     String? definition,
     String? note,
   ) async {
-    final profile = learningController.selectedWordDetails?['profile'] as Map<String, dynamic>?;
+    final profile =
+        learningController.selectedWordDetails?['profile']
+            as Map<String, dynamic>?;
     if (profile == null || api == null) return;
     final details = await api!.updateLearningContent(
       profile['id'] as String,
@@ -1112,7 +1250,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _observeSelected(bool heard) async {
     final token = learningController.selectedToken;
     final cue = learningController.selectedCue;
-    final profile = learningController.selectedWordDetails?['profile'] as Map<String, dynamic>?;
+    final profile =
+        learningController.selectedWordDetails?['profile']
+            as Map<String, dynamic>?;
     if (token == null || cue == null || profile == null || api == null) return;
     await api!.createObservation(
       wordProfileId: profile['id'] as String,
@@ -1441,9 +1581,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   Widget build(BuildContext context) {
     if (api == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     return ListenableBuilder(
       listenable: Listenable.merge([
@@ -1459,111 +1597,115 @@ class _PlayerScreenState extends State<PlayerScreen> {
         settings: settingsController,
         api: api!,
         child: CallbackShortcuts(
-    bindings: {
-      const SingleActivator(LogicalKeyboardKey.space): adapter.playOrPause,
-      const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
-          _seekCue(subtitleController.primaryCursor.previous(
-            subtitleController.currentPrimaryCue,
-          )),
-      const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
-          _seekCue(subtitleController.primaryCursor.next(
-            subtitleController.currentPrimaryCue,
-          )),
-      const SingleActivator(LogicalKeyboardKey.keyL): () =>
-          subtitleController.setLoopCue(!subtitleController.loopCue),
-      const SingleActivator(LogicalKeyboardKey.keyH): () =>
-          subtitleController.setVisible(!subtitleController.visible),
-      const SingleActivator(LogicalKeyboardKey.digit1): () =>
-          _markFirstWord('unknown_meaning'),
-      const SingleActivator(LogicalKeyboardKey.digit2): () =>
-          _markFirstWord('known_not_recognized'),
-      const SingleActivator(LogicalKeyboardKey.digit3): () =>
-          _markFirstWord('known_recognized'),
-    },
-    child: Focus(
-      autofocus: true,
-      child: Scaffold(
-        appBar: PlayerAppBar(
-          onOpenVocabulary: _openVocabulary,
-          onOpenMedia: _openMedia,
-          onOpenOnline: _openOnline,
-          onImportPrimarySubtitle: () =>
-              unawaited(_openSubtitle(secondary: false)),
-          onGeneratePrimarySubtitles: () =>
-              unawaited(_generateSubtitles(secondary: false)),
-          onSearchPrimarySubtitles: () =>
-              unawaited(_searchOpenSubtitles(secondary: false)),
-          onImportSecondarySubtitle: () =>
-              unawaited(_openSubtitle(secondary: true)),
-          onGenerateSecondarySubtitles: () =>
-              unawaited(_generateSubtitles(secondary: true)),
-          onSearchSecondarySubtitles: () =>
-              unawaited(_searchOpenSubtitles(secondary: true)),
-          onImportEmbeddedSubtitle: () =>
-              unawaited(_importEmbeddedSubtitle()),
-          onOpenSettings: () => unawaited(_openSettings()),
-          onExportLogs: () => unawaited(_exportLogs()),
-          onExportVocabulary: () => unawaited(_exportVocabulary()),
-          onImportVocabulary: () => unawaited(_importVocabulary()),
-          onImportWordList: () => unawaited(_importWordList()),
-          onArchiveMedia: () => unawaited(_archiveCurrentMedia()),
-          onOpenTranscriptionCenter: () =>
-              unawaited(_openTranscriptionCenter()),
-          onOpenLearningAssets: () =>
-              unawaited(_openLearningAssets()),
-          onOpenLearningResources: () =>
-              unawaited(_openLearningResources()),
-          onShowPhraseCandidates: () =>
-              unawaited(_showCurrentPhraseCandidates()),
-          onCorrectLemma: () => unawaited(_correctCurrentLemma()),
-          onSearchOpenSubtitles: () =>
-              unawaited(_searchOpenSubtitles()),
-        ),
-        body: DropTarget(
-          onDragEntered: (_) => setState(() => dragging = true),
-          onDragExited: (_) => setState(() => dragging = false),
-          onDragDone: (details) {
-            setState(() => dragging = false);
-            unawaited(
-              _handleDrop(details.files.map((file) => file.path).toList()),
-            );
-          },
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              border: dragging
-                  ? Border.all(
-                      color: Theme.of(context).colorScheme.primary,
-                      width: 4,
-                    )
-                  : null,
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.space):
+                adapter.playOrPause,
+            const SingleActivator(LogicalKeyboardKey.arrowLeft): () => _seekCue(
+              subtitleController.primaryCursor.previous(
+                subtitleController.currentPrimaryCue,
+              ),
             ),
-            child: Column(
-              children: [
-                Expanded(
-                  child: Row(
+            const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
+                _seekCue(
+                  subtitleController.primaryCursor.next(
+                    subtitleController.currentPrimaryCue,
+                  ),
+                ),
+            const SingleActivator(LogicalKeyboardKey.keyL): () =>
+                subtitleController.setLoopCue(!subtitleController.loopCue),
+            const SingleActivator(LogicalKeyboardKey.keyH): () =>
+                subtitleController.setVisible(!subtitleController.visible),
+            const SingleActivator(LogicalKeyboardKey.digit1): () =>
+                _markFirstWord('unknown_meaning'),
+            const SingleActivator(LogicalKeyboardKey.digit2): () =>
+                _markFirstWord('known_not_recognized'),
+            const SingleActivator(LogicalKeyboardKey.digit3): () =>
+                _markFirstWord('known_recognized'),
+          },
+          child: Focus(
+            autofocus: true,
+            child: Scaffold(
+              appBar: PlayerAppBar(
+                onOpenVocabulary: _openVocabulary,
+                onOpenMedia: _openMedia,
+                onOpenOnline: _openOnline,
+                onImportPrimarySubtitle: () =>
+                    unawaited(_openSubtitle(secondary: false)),
+                onGeneratePrimarySubtitles: () =>
+                    unawaited(_generateSubtitles(secondary: false)),
+                onSearchPrimarySubtitles: () =>
+                    unawaited(_searchOpenSubtitles(secondary: false)),
+                onImportSecondarySubtitle: () =>
+                    unawaited(_openSubtitle(secondary: true)),
+                onGenerateSecondarySubtitles: () =>
+                    unawaited(_generateSubtitles(secondary: true)),
+                onSearchSecondarySubtitles: () =>
+                    unawaited(_searchOpenSubtitles(secondary: true)),
+                onImportEmbeddedSubtitle: () =>
+                    unawaited(_importEmbeddedSubtitle()),
+                onOpenSettings: () => unawaited(_openSettings()),
+                onExportLogs: () => unawaited(_exportLogs()),
+                onExportVocabulary: () => unawaited(_exportVocabulary()),
+                onImportVocabulary: () => unawaited(_importVocabulary()),
+                onImportWordList: () => unawaited(_importWordList()),
+                onArchiveMedia: () => unawaited(_archiveCurrentMedia()),
+                onOpenTranscriptionCenter: () =>
+                    unawaited(_openTranscriptionCenter()),
+                onOpenLearningAssets: () => unawaited(_openLearningAssets()),
+                onOpenLearningResources: () =>
+                    unawaited(_openLearningResources()),
+                onShowPhraseCandidates: () =>
+                    unawaited(_showCurrentPhraseCandidates()),
+                onCorrectLemma: () => unawaited(_correctCurrentLemma()),
+                onSearchOpenSubtitles: () => unawaited(_searchOpenSubtitles()),
+              ),
+              body: DropTarget(
+                onDragEntered: (_) => setState(() => dragging = true),
+                onDragExited: (_) => setState(() => dragging = false),
+                onDragDone: (details) {
+                  setState(() => dragging = false);
+                  unawaited(
+                    _handleDrop(
+                      details.files.map((file) => file.path).toList(),
+                    ),
+                  );
+                },
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: dragging
+                        ? Border.all(
+                            color: Theme.of(context).colorScheme.primary,
+                            width: 4,
+                          )
+                        : null,
+                  ),
+                  child: Column(
                     children: [
-                      Expanded(flex: 3, child: _playerSurface()),
-                      if (subtitleController.visible ||
-                          learningController.selectedWordDetails != null)
-                        SizedBox(
-                          width: settingsController.transcriptWidth,
-                          child: _sidePanel(),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Expanded(flex: 3, child: _playerSurface()),
+                            if (subtitleController.visible ||
+                                learningController.selectedWordDetails != null)
+                              SizedBox(
+                                width: settingsController.transcriptWidth,
+                                child: _sidePanel(),
+                              ),
+                          ],
                         ),
+                      ),
+                      if (activeDownload != null ||
+                          playerController.downloadedMediaPath != null)
+                        _downloadStatusBar(),
+                      _controls(),
                     ],
                   ),
                 ),
-                if (activeDownload != null ||
-                    playerController.downloadedMediaPath != null)
-                  _downloadStatusBar(),
-                _controls(),
-              ],
+              ),
             ),
           ),
         ),
       ),
-    ),
-      ),
-    ),
     );
   }
 
@@ -1573,15 +1715,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
         width: constraints.maxWidth,
         scale: subtitleController.primaryFontSize,
         preset: subtitleController.preset,
-        textLength:
-            subtitleController.currentPrimaryCue?.text.length ?? 1,
+        textLength: subtitleController.currentPrimaryCue?.text.length ?? 1,
       );
       final secondarySize = responsiveSubtitleSize(
         width: constraints.maxWidth,
         scale: subtitleController.secondaryFontSize,
         preset: subtitleController.preset,
-        textLength:
-            subtitleController.currentSecondaryCue?.text.length ?? 1,
+        textLength: subtitleController.currentSecondaryCue?.text.length ?? 1,
         secondary: true,
       );
       final backgroundFactor = subtitleController.preset == 'watching'
@@ -1631,17 +1771,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(
-                          alpha: subtitleController.backgroundOpacity *
+                          alpha:
+                              subtitleController.backgroundOpacity *
                               backgroundFactor,
                         ),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Padding(
                         padding: EdgeInsets.symmetric(
-                          horizontal:
-                              subtitleController.preset == 'compact' ? 10 : 18,
-                          vertical:
-                              subtitleController.preset == 'compact' ? 6 : 12,
+                          horizontal: subtitleController.preset == 'compact'
+                              ? 10
+                              : 18,
+                          vertical: subtitleController.preset == 'compact'
+                              ? 6
+                              : 12,
                         ),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -1665,8 +1808,55 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                     subtitleController.primaryFontFamily,
                                   ),
                                   baseColor: settingsController.primaryColor,
+                                  currentTokenIndex:
+                                      subtitleController.currentWordToken,
+                                  currentWordIntensity:
+                                      settingsController.wordAnimationIntensity,
                                   onWord: _openWord,
                                   onPhrase: _openPhrase,
+                                ),
+                              ),
+                            if (settingsController.pronunciationVisible &&
+                                subtitleController.currentPrimaryCue != null &&
+                                subtitleController
+                                        .pronunciationBySentence[subtitleController
+                                        .currentPrimaryCue!
+                                        .id] !=
+                                    null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  _pronunciationText(
+                                    subtitleController
+                                        .pronunciationBySentence[subtitleController
+                                        .currentPrimaryCue!
+                                        .id]!,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: primarySize * 0.55,
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                              ),
+                            if (settingsController.wordSyncVisible &&
+                                subtitleController.currentPrimaryCue != null &&
+                                (subtitleController
+                                            .timingsBySentence[subtitleController
+                                            .currentPrimaryCue!
+                                            .id] ??
+                                        const [])
+                                    .isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  _timingQuality(
+                                    subtitleController.currentPrimaryCue!.id,
+                                  ),
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.white54,
+                                  ),
                                 ),
                               ),
                             if (subtitleController.secondaryVisible &&
@@ -1680,7 +1870,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 child: Padding(
                                   padding: const EdgeInsets.only(top: 6),
                                   child: Text(
-                                    subtitleController.currentSecondaryCue!.text,
+                                    subtitleController
+                                        .currentSecondaryCue!
+                                        .text,
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       fontSize: secondarySize,
@@ -1719,6 +1911,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _ => null,
   };
 
+  String _pronunciationText(Map<String, dynamic> analysis) {
+    if (settingsController.phonemeDisplay == 'ipa') {
+      return analysis['display_ipa'] as String;
+    }
+    return ((analysis['phonemes'] as List<dynamic>?) ?? const [])
+        .map((value) => (value as Map<String, dynamic>)['symbol'])
+        .join(' ');
+  }
+
+  String _timingQuality(String sentenceId) {
+    final first = subtitleController.timingsBySentence[sentenceId]!.first;
+    return '${first.source.replaceAll('_', ' ')} · ${first.provider}';
+  }
+
   Widget _sidePanel() => Material(
     color: const Color(0xff151a20),
     child: Column(
@@ -1754,6 +1960,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   : WordLearningPanel(
                       details: learningController.selectedWordDetails!,
                       dictionary: learningController.selectedDictionary,
+                      pronunciation: learningController.selectedPronunciation,
                       onStatus: _setSelectedWordStatus,
                       onSave: _saveSelectedLearningContent,
                       onSource: _playOccurrence,
@@ -1783,8 +1990,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     onSeekCue: _seekCue,
   );
 
-  Widget _diagnosisCard() =>
-      DiagnosisCard(diagnosis: learningController.diagnosis!);
+  Widget _diagnosisCard() => DiagnosisCard(
+    diagnosis: learningController.diagnosis!,
+    pronunciation: subtitleController.currentPrimaryCue == null
+        ? null
+        : subtitleController.pronunciationBySentence[subtitleController
+              .currentPrimaryCue!
+              .id],
+    ruleHintsLevel: settingsController.ruleHintsLevel,
+  );
 
   Widget _controls() => PlaybackControls(
     adapter: adapter,
@@ -1808,17 +2022,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
     secondarySubtitleOffset: subtitleController.secondarySubtitleOffset,
     status: playerController.status,
     onSeek: (value) => adapter.seek(value),
-    onSeekToPreviousCue: () =>
-        _seekCue(subtitleController.primaryCursor.previous(
-          subtitleController.currentPrimaryCue,
-        )),
+    onSeekToPreviousCue: () => _seekCue(
+      subtitleController.primaryCursor.previous(
+        subtitleController.currentPrimaryCue,
+      ),
+    ),
     onSeekToZero: () => adapter.seek(Duration.zero),
     onPlayPause: adapter.playOrPause,
     onStop: adapter.stop,
-    onSeekToNextCue: () =>
-        _seekCue(subtitleController.primaryCursor.next(
-          subtitleController.currentPrimaryCue,
-        )),
+    onSeekToNextCue: () => _seekCue(
+      subtitleController.primaryCursor.next(
+        subtitleController.currentPrimaryCue,
+      ),
+    ),
     onLoopCueChanged: (value) {
       subtitleController.setLoopCue(value);
       if (value) playerController.setSourceLoop(null, null);

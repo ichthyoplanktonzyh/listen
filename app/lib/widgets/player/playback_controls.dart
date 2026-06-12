@@ -188,7 +188,9 @@ class PlaybackControls extends StatelessWidget {
                     DropdownButton<String>(
                       hint: Text(l.text('audioTrack')),
                       value:
-                          audioTracks.any((track) => track.id == selectedAudioId)
+                          audioTracks.any(
+                            (track) => track.id == selectedAudioId,
+                          )
                           ? selectedAudioId
                           : null,
                       items: audioTracks

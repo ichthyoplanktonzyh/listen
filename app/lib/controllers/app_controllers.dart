@@ -33,8 +33,7 @@ class AppControllers extends InheritedWidget {
 
   /// Retrieve the nearest [AppControllers] ancestor.
   static AppControllers of(BuildContext context) {
-    final result =
-        context.dependOnInheritedWidgetOfExactType<AppControllers>();
+    final result = context.dependOnInheritedWidgetOfExactType<AppControllers>();
     assert(result != null, 'No AppControllers found in context');
     return result!;
   }

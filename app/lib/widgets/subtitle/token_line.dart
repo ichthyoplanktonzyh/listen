@@ -17,6 +17,8 @@ class TokenLine extends StatelessWidget {
     this.fontSize = 15,
     this.fontFamily,
     this.baseColor,
+    this.currentTokenIndex,
+    this.currentWordIntensity = 0.35,
   });
 
   final Cue cue;
@@ -25,11 +27,13 @@ class TokenLine extends StatelessWidget {
   final double fontSize;
   final String? fontFamily;
   final Color? baseColor;
+  final int? currentTokenIndex;
+  final double currentWordIntensity;
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
   final List<Map<String, dynamic>> phraseCandidates;
   final Map<String, Map<String, dynamic>> phraseProfiles;
   final Future<void> Function(Map<String, dynamic> candidate, Cue cue)?
-      onPhrase;
+  onPhrase;
 
   @override
   Widget build(BuildContext context) => Text.rich(
@@ -88,7 +92,11 @@ class TokenLine extends StatelessWidget {
   InlineSpan _tokenSpan(BuildContext context, SubtitleToken token) {
     final clickable = token.kind == 'word' && token.normalized != null;
     final status = profiles[token.normalized]?['status'] as String?;
-    final style = _style(context, status);
+    final style = _style(
+      context,
+      status,
+      current: token.index == currentTokenIndex,
+    );
     if (!clickable) return TextSpan(text: token.text, style: style);
     return WidgetSpan(
       alignment: PlaceholderAlignment.baseline,
@@ -107,11 +115,27 @@ class TokenLine extends StatelessWidget {
     _ => Theme.of(context).colorScheme.primary.withValues(alpha: 0.75),
   };
 
-  TextStyle _style(BuildContext context, String? status) {
+  TextStyle _style(
+    BuildContext context,
+    String? status, {
+    bool current = false,
+  }) {
     final base = TextStyle(
       fontSize: fontSize,
       fontFamily: fontFamily,
-      color: baseColor,
+      color: current
+          ? Color.lerp(
+              baseColor ?? Colors.white,
+              Theme.of(context).colorScheme.primary,
+              currentWordIntensity,
+            )
+          : baseColor,
+      backgroundColor: current
+          ? Theme.of(context).colorScheme.primary.withValues(
+              alpha: 0.18 + currentWordIntensity * 0.2,
+            )
+          : null,
+      fontWeight: current ? FontWeight.w800 : null,
     );
     if (!showStyles || status == null) return base;
     return switch (status) {

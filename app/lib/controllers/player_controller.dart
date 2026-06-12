@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 
 import '../player_adapter.dart';
 
+const _unset = Object();
+
 /// Immutable snapshot of playback state.
 /// Used by [PlayerController] to notify listeners.
 class PlayerState {
@@ -48,10 +50,10 @@ class PlayerState {
   final Duration? sourceLoopEnd;
 
   PlayerState copyWith({
-    String? mediaId,
-    String? mediaPath,
-    String? mediaTitle,
-    String? mediaFingerprint,
+    Object? mediaId = _unset,
+    Object? mediaPath = _unset,
+    Object? mediaTitle = _unset,
+    Object? mediaFingerprint = _unset,
     String? status,
     Duration? position,
     Duration? duration,
@@ -60,42 +62,55 @@ class PlayerState {
     double? rate,
     double? volume,
     List<dynamic>? audioTracks,
-    String? selectedAudioId,
+    Object? selectedAudioId = _unset,
     List<dynamic>? embeddedSubtitleTracks,
-    String? selectedEmbeddedSubtitleId,
+    Object? selectedEmbeddedSubtitleId = _unset,
     double? downloadProgress,
-    String? downloadedMediaPath,
-    Duration? sourceLoopStart,
-    Duration? sourceLoopEnd,
-  }) =>
-      PlayerState(
-        mediaId: mediaId ?? this.mediaId,
-        mediaPath: mediaPath ?? this.mediaPath,
-        mediaTitle: mediaTitle ?? this.mediaTitle,
-        mediaFingerprint: mediaFingerprint ?? this.mediaFingerprint,
-        status: status ?? this.status,
-        position: position ?? this.position,
-        duration: duration ?? this.duration,
-        playing: playing ?? this.playing,
-        muted: muted ?? this.muted,
-        rate: rate ?? this.rate,
-        volume: volume ?? this.volume,
-        audioTracks: audioTracks ?? this.audioTracks,
-        selectedAudioId: selectedAudioId ?? this.selectedAudioId,
-        embeddedSubtitleTracks:
-            embeddedSubtitleTracks ?? this.embeddedSubtitleTracks,
-        selectedEmbeddedSubtitleId:
-            selectedEmbeddedSubtitleId ?? this.selectedEmbeddedSubtitleId,
-        downloadProgress: downloadProgress ?? this.downloadProgress,
-        downloadedMediaPath: downloadedMediaPath ?? this.downloadedMediaPath,
-        sourceLoopStart: sourceLoopStart ?? this.sourceLoopStart,
-        sourceLoopEnd: sourceLoopEnd ?? this.sourceLoopEnd,
-      );
+    Object? downloadedMediaPath = _unset,
+    Object? sourceLoopStart = _unset,
+    Object? sourceLoopEnd = _unset,
+  }) => PlayerState(
+    mediaId: identical(mediaId, _unset) ? this.mediaId : mediaId as String?,
+    mediaPath: identical(mediaPath, _unset)
+        ? this.mediaPath
+        : mediaPath as String?,
+    mediaTitle: identical(mediaTitle, _unset)
+        ? this.mediaTitle
+        : mediaTitle as String?,
+    mediaFingerprint: identical(mediaFingerprint, _unset)
+        ? this.mediaFingerprint
+        : mediaFingerprint as String?,
+    status: status ?? this.status,
+    position: position ?? this.position,
+    duration: duration ?? this.duration,
+    playing: playing ?? this.playing,
+    muted: muted ?? this.muted,
+    rate: rate ?? this.rate,
+    volume: volume ?? this.volume,
+    audioTracks: audioTracks ?? this.audioTracks,
+    selectedAudioId: identical(selectedAudioId, _unset)
+        ? this.selectedAudioId
+        : selectedAudioId as String?,
+    embeddedSubtitleTracks:
+        embeddedSubtitleTracks ?? this.embeddedSubtitleTracks,
+    selectedEmbeddedSubtitleId: identical(selectedEmbeddedSubtitleId, _unset)
+        ? this.selectedEmbeddedSubtitleId
+        : selectedEmbeddedSubtitleId as String?,
+    downloadProgress: downloadProgress ?? this.downloadProgress,
+    downloadedMediaPath: identical(downloadedMediaPath, _unset)
+        ? this.downloadedMediaPath
+        : downloadedMediaPath as String?,
+    sourceLoopStart: identical(sourceLoopStart, _unset)
+        ? this.sourceLoopStart
+        : sourceLoopStart as Duration?,
+    sourceLoopEnd: identical(sourceLoopEnd, _unset)
+        ? this.sourceLoopEnd
+        : sourceLoopEnd as Duration?,
+  );
 
-  double get positionFraction =>
-      duration == Duration.zero
-          ? 0.0
-          : position.inMilliseconds / duration.inMilliseconds;
+  double get positionFraction => duration == Duration.zero
+      ? 0.0
+      : position.inMilliseconds / duration.inMilliseconds;
 }
 
 /// Controls media playback state and actions.
@@ -133,8 +148,10 @@ class PlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setPosition(Duration position) => _update((s) => s.copyWith(position: position));
-  void setDuration(Duration duration) => _update((s) => s.copyWith(duration: duration));
+  void setPosition(Duration position) =>
+      _update((s) => s.copyWith(position: position));
+  void setDuration(Duration duration) =>
+      _update((s) => s.copyWith(duration: duration));
   void setPlaying(bool playing) => _update((s) => s.copyWith(playing: playing));
 
   /// Set download progress (0.0–1.0) and reset when complete.
@@ -202,8 +219,7 @@ class PlayerController extends ChangeNotifier {
   void setMediaFingerprint(String fingerprint) =>
       _update((s) => s.copyWith(mediaFingerprint: fingerprint));
 
-  void setMediaPath(String path) =>
-      _update((s) => s.copyWith(mediaPath: path));
+  void setMediaPath(String path) => _update((s) => s.copyWith(mediaPath: path));
 
   /// Toggle the playing state. Does NOT interact with the adapter directly;
   /// callers must also call [DesktopPlayerAdapter.playOrPause].

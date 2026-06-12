@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 
 import '../models/timeline.dart';
 
+const _unset = Object();
+
 /// Immutable snapshot of subtitle-related state.
 class SubtitleState {
   const SubtitleState({
@@ -24,6 +26,9 @@ class SubtitleState {
     this.positionX = 0.5,
     this.positionY = 0.82,
     this.backgroundOpacity = 0.72,
+    this.pronunciationBySentence = const {},
+    this.timingsBySentence = const {},
+    this.currentWordToken,
   });
 
   final SubtitleTrack? primaryTrack;
@@ -45,13 +50,16 @@ class SubtitleState {
   final double positionX;
   final double positionY;
   final double backgroundOpacity;
+  final Map<String, Map<String, dynamic>> pronunciationBySentence;
+  final Map<String, List<WordTiming>> timingsBySentence;
+  final int? currentWordToken;
 
   SubtitleState copyWith({
-    SubtitleTrack? primaryTrack,
-    SubtitleTrack? secondaryTrack,
-    Cue? currentPrimaryCue,
-    Cue? currentSecondaryCue,
-    Cue? selectedCue,
+    Object? primaryTrack = _unset,
+    Object? secondaryTrack = _unset,
+    Object? currentPrimaryCue = _unset,
+    Object? currentSecondaryCue = _unset,
+    Object? selectedCue = _unset,
     Duration? primarySubtitleOffset,
     Duration? secondarySubtitleOffset,
     bool? loopCue,
@@ -66,38 +74,56 @@ class SubtitleState {
     double? positionX,
     double? positionY,
     double? backgroundOpacity,
-  }) =>
-      SubtitleState(
-        primaryTrack: primaryTrack ?? this.primaryTrack,
-        secondaryTrack: secondaryTrack ?? this.secondaryTrack,
-        currentPrimaryCue: currentPrimaryCue ?? this.currentPrimaryCue,
-        currentSecondaryCue: currentSecondaryCue ?? this.currentSecondaryCue,
-        selectedCue: selectedCue ?? this.selectedCue,
-        primarySubtitleOffset:
-            primarySubtitleOffset ?? this.primarySubtitleOffset,
-        secondarySubtitleOffset:
-            secondarySubtitleOffset ?? this.secondarySubtitleOffset,
-        loopCue: loopCue ?? this.loopCue,
-        visible: visible ?? this.visible,
-        secondaryVisible: secondaryVisible ?? this.secondaryVisible,
-        statusStylesVisible: statusStylesVisible ?? this.statusStylesVisible,
-        primaryFontSize: primaryFontSize ?? this.primaryFontSize,
-        secondaryFontSize: secondaryFontSize ?? this.secondaryFontSize,
-        primaryFontFamily: primaryFontFamily ?? this.primaryFontFamily,
-        secondaryFontFamily: secondaryFontFamily ?? this.secondaryFontFamily,
-        preset: preset ?? this.preset,
-        positionX: positionX ?? this.positionX,
-        positionY: positionY ?? this.positionY,
-        backgroundOpacity: backgroundOpacity ?? this.backgroundOpacity,
-      );
+    Map<String, Map<String, dynamic>>? pronunciationBySentence,
+    Map<String, List<WordTiming>>? timingsBySentence,
+    Object? currentWordToken = _unset,
+  }) => SubtitleState(
+    primaryTrack: identical(primaryTrack, _unset)
+        ? this.primaryTrack
+        : primaryTrack as SubtitleTrack?,
+    secondaryTrack: identical(secondaryTrack, _unset)
+        ? this.secondaryTrack
+        : secondaryTrack as SubtitleTrack?,
+    currentPrimaryCue: identical(currentPrimaryCue, _unset)
+        ? this.currentPrimaryCue
+        : currentPrimaryCue as Cue?,
+    currentSecondaryCue: identical(currentSecondaryCue, _unset)
+        ? this.currentSecondaryCue
+        : currentSecondaryCue as Cue?,
+    selectedCue: identical(selectedCue, _unset)
+        ? this.selectedCue
+        : selectedCue as Cue?,
+    primarySubtitleOffset: primarySubtitleOffset ?? this.primarySubtitleOffset,
+    secondarySubtitleOffset:
+        secondarySubtitleOffset ?? this.secondarySubtitleOffset,
+    loopCue: loopCue ?? this.loopCue,
+    visible: visible ?? this.visible,
+    secondaryVisible: secondaryVisible ?? this.secondaryVisible,
+    statusStylesVisible: statusStylesVisible ?? this.statusStylesVisible,
+    primaryFontSize: primaryFontSize ?? this.primaryFontSize,
+    secondaryFontSize: secondaryFontSize ?? this.secondaryFontSize,
+    primaryFontFamily: primaryFontFamily ?? this.primaryFontFamily,
+    secondaryFontFamily: secondaryFontFamily ?? this.secondaryFontFamily,
+    preset: preset ?? this.preset,
+    positionX: positionX ?? this.positionX,
+    positionY: positionY ?? this.positionY,
+    backgroundOpacity: backgroundOpacity ?? this.backgroundOpacity,
+    pronunciationBySentence:
+        pronunciationBySentence ?? this.pronunciationBySentence,
+    timingsBySentence: timingsBySentence ?? this.timingsBySentence,
+    currentWordToken: identical(currentWordToken, _unset)
+        ? this.currentWordToken
+        : currentWordToken as int?,
+  );
 
-  TimelineCursor get primaryCursor =>
-      TimelineCursor(primaryTrack?.cues ?? const [], offset: primarySubtitleOffset);
+  TimelineCursor get primaryCursor => TimelineCursor(
+    primaryTrack?.cues ?? const [],
+    offset: primarySubtitleOffset,
+  );
 
-  TimelineCursor get secondaryCursor =>
-      secondaryTrack != null
-          ? TimelineCursor(secondaryTrack!.cues, offset: secondarySubtitleOffset)
-          : const TimelineCursor([], offset: Duration.zero);
+  TimelineCursor get secondaryCursor => secondaryTrack != null
+      ? TimelineCursor(secondaryTrack!.cues, offset: secondarySubtitleOffset)
+      : const TimelineCursor([], offset: Duration.zero);
 
   Cue? get currentCue => currentPrimaryCue;
 }
@@ -127,6 +153,11 @@ class SubtitleController extends ChangeNotifier {
   double get positionX => _state.positionX;
   double get positionY => _state.positionY;
   double get backgroundOpacity => _state.backgroundOpacity;
+  Map<String, Map<String, dynamic>> get pronunciationBySentence =>
+      _state.pronunciationBySentence;
+  Map<String, List<WordTiming>> get timingsBySentence =>
+      _state.timingsBySentence;
+  int? get currentWordToken => _state.currentWordToken;
   Duration get primarySubtitleOffset => _state.primarySubtitleOffset;
   Duration get secondarySubtitleOffset => _state.secondarySubtitleOffset;
   TimelineCursor get primaryCursor => _state.primaryCursor;
@@ -177,10 +208,14 @@ class SubtitleController extends ChangeNotifier {
       _update((s) => s.copyWith(primaryFontFamily: family));
   void setSecondaryFontFamily(String family) =>
       _update((s) => s.copyWith(secondaryFontFamily: family));
-  void setSelectedCue(Cue? cue) =>
-      _update((s) => s.copyWith(selectedCue: cue));
+  void setSelectedCue(Cue? cue) => _update((s) => s.copyWith(selectedCue: cue));
 
-  void movePosition(double dx, double dy, double viewportWidth, double viewportHeight) {
+  void movePosition(
+    double dx,
+    double dy,
+    double viewportWidth,
+    double viewportHeight,
+  ) {
     _update(
       (s) => s.copyWith(
         positionX: (s.positionX + dx / viewportWidth).clamp(0.0, 1.0),
@@ -197,6 +232,49 @@ class SubtitleController extends ChangeNotifier {
 
   void setBackgroundOpacity(double opacity) =>
       _update((s) => s.copyWith(backgroundOpacity: opacity));
+
+  void setSpeechEnhancements({
+    required Map<String, Map<String, dynamic>> pronunciationBySentence,
+    required Map<String, List<WordTiming>> timingsBySentence,
+  }) => _update(
+    (s) => s.copyWith(
+      pronunciationBySentence: pronunciationBySentence,
+      timingsBySentence: timingsBySentence,
+    ),
+  );
+
+  void setSentencePronunciation(
+    String sentenceId,
+    Map<String, dynamic> pronunciation,
+  ) {
+    final values = Map<String, Map<String, dynamic>>.from(
+      _state.pronunciationBySentence,
+    );
+    values[sentenceId] = pronunciation;
+    _update((s) => s.copyWith(pronunciationBySentence: values));
+  }
+
+  void clearSpeechEnhancements() => _update(
+    (s) => s.copyWith(
+      pronunciationBySentence: const {},
+      timingsBySentence: const {},
+      currentWordToken: null,
+    ),
+  );
+
+  void updateCurrentWord(Duration mediaPosition, {required bool enabled}) {
+    final cue = _state.currentPrimaryCue;
+    final token = enabled && cue != null
+        ? currentWordTokenIndex(
+            _state.timingsBySentence[cue.id] ?? const [],
+            mediaPosition,
+            offset: _state.primarySubtitleOffset,
+          )
+        : null;
+    if (token != _state.currentWordToken) {
+      _update((s) => s.copyWith(currentWordToken: token));
+    }
+  }
 
   /// Seek to the previous cue relative to the current one.
   Cue? previousCue() {

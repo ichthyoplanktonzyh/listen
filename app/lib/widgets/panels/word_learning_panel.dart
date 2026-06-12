@@ -8,6 +8,7 @@ class WordLearningPanel extends StatefulWidget {
     super.key,
     required this.details,
     required this.dictionary,
+    this.pronunciation,
     required this.onStatus,
     required this.onSave,
     required this.onSource,
@@ -17,6 +18,7 @@ class WordLearningPanel extends StatefulWidget {
 
   final Map<String, dynamic> details;
   final Map<String, dynamic>? dictionary;
+  final Map<String, dynamic>? pronunciation;
   final ValueChanged<String?> onStatus;
   final Future<void> Function(String?, String?) onSave;
   final ValueChanged<Map<String, dynamic>> onSource;
@@ -95,6 +97,24 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
           ],
         ),
         const Divider(),
+        if (widget.pronunciation != null) ...[
+          Text(
+            l.text('pronunciation'),
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          for (final raw in widget.pronunciation!['variants'] as List<dynamic>)
+            ListTile(
+              dense: true,
+              title: Text(
+                (raw as Map<String, dynamic>)['display_ipa'] as String,
+              ),
+              subtitle: Text(
+                '${raw['is_fallback'] == true ? 'deterministic fallback' : 'CMUdict'} · '
+                '${(raw['phonemes'] as List<dynamic>).map((value) => (value as Map<String, dynamic>)['symbol']).join(' ')}',
+              ),
+            ),
+          const Divider(),
+        ],
         Text(
           l.text('dictionary'),
           style: const TextStyle(fontWeight: FontWeight.bold),

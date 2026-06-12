@@ -45,19 +45,13 @@ class DownloadStatusBar extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             if (activeDownload != null)
-              TextButton(
-                onPressed: onCancel,
-                child: Text(l.text('cancel')),
-              ),
+              TextButton(onPressed: onCancel, child: Text(l.text('cancel'))),
             if (downloadedMediaPath != null)
               TextButton(
                 onPressed: onOpenMediaPath,
                 child: Text(l.text('openDownloadedVideo')),
               ),
-            IconButton(
-              onPressed: onDismiss,
-              icon: const Icon(Icons.close),
-            ),
+            IconButton(onPressed: onDismiss, icon: const Icon(Icons.close)),
           ],
         ),
       ),

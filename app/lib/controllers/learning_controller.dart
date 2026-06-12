@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 
 import '../models/timeline.dart';
 
+const _unset = Object();
+
 /// Immutable snapshot of learning-related state.
 class LearningState {
   const LearningState({
@@ -31,28 +33,38 @@ class LearningState {
   LearningState copyWith({
     Map<String, Map<String, dynamic>>? wordProfiles,
     Map<String, Map<String, dynamic>>? phraseProfiles,
-    Map<String, dynamic>? selectedWordDetails,
-    Map<String, dynamic>? selectedDictionary,
-    Map<String, dynamic>? selectedPronunciation,
-    SubtitleToken? selectedToken,
-    Cue? selectedCue,
+    Object? selectedWordDetails = _unset,
+    Object? selectedDictionary = _unset,
+    Object? selectedPronunciation = _unset,
+    Object? selectedToken = _unset,
+    Object? selectedCue = _unset,
     List<Map<String, dynamic>>? phraseCandidates,
-    Map<String, dynamic>? diagnosis,
+    Object? diagnosis = _unset,
     int? sidePanel,
-  }) =>
-      LearningState(
-        wordProfiles: wordProfiles ?? this.wordProfiles,
-        phraseProfiles: phraseProfiles ?? this.phraseProfiles,
-        selectedWordDetails: selectedWordDetails ?? this.selectedWordDetails,
-        selectedDictionary: selectedDictionary ?? this.selectedDictionary,
-        selectedPronunciation:
-            selectedPronunciation ?? this.selectedPronunciation,
-        selectedToken: selectedToken ?? this.selectedToken,
-        selectedCue: selectedCue ?? this.selectedCue,
-        phraseCandidates: phraseCandidates ?? this.phraseCandidates,
-        diagnosis: diagnosis ?? this.diagnosis,
-        sidePanel: sidePanel ?? this.sidePanel,
-      );
+  }) => LearningState(
+    wordProfiles: wordProfiles ?? this.wordProfiles,
+    phraseProfiles: phraseProfiles ?? this.phraseProfiles,
+    selectedWordDetails: identical(selectedWordDetails, _unset)
+        ? this.selectedWordDetails
+        : selectedWordDetails as Map<String, dynamic>?,
+    selectedDictionary: identical(selectedDictionary, _unset)
+        ? this.selectedDictionary
+        : selectedDictionary as Map<String, dynamic>?,
+    selectedPronunciation: identical(selectedPronunciation, _unset)
+        ? this.selectedPronunciation
+        : selectedPronunciation as Map<String, dynamic>?,
+    selectedToken: identical(selectedToken, _unset)
+        ? this.selectedToken
+        : selectedToken as SubtitleToken?,
+    selectedCue: identical(selectedCue, _unset)
+        ? this.selectedCue
+        : selectedCue as Cue?,
+    phraseCandidates: phraseCandidates ?? this.phraseCandidates,
+    diagnosis: identical(diagnosis, _unset)
+        ? this.diagnosis
+        : diagnosis as Map<String, dynamic>?,
+    sidePanel: sidePanel ?? this.sidePanel,
+  );
 
   bool get hasDiagnosis => diagnosis != null;
   bool get hasWordSelected => selectedWordDetails != null;
@@ -89,15 +101,14 @@ class LearningController extends ChangeNotifier {
   void setPhraseProfiles(Map<String, Map<String, dynamic>> profiles) =>
       _update((s) => s.copyWith(phraseProfiles: profiles));
 
-  void selectWord(Map<String, dynamic>? details) =>
-      _update(
-        (s) => s.copyWith(
-          selectedWordDetails: details,
-          selectedDictionary: null,
-          selectedPronunciation: null,
-          sidePanel: details != null ? 1 : s.sidePanel,
-        ),
-      );
+  void selectWord(Map<String, dynamic>? details) => _update(
+    (s) => s.copyWith(
+      selectedWordDetails: details,
+      selectedDictionary: null,
+      selectedPronunciation: null,
+      sidePanel: details != null ? 1 : s.sidePanel,
+    ),
+  );
 
   void setSelectedDictionary(Map<String, dynamic>? dict) =>
       _update((s) => s.copyWith(selectedDictionary: dict));
@@ -117,14 +128,12 @@ class LearningController extends ChangeNotifier {
   void setSelectedToken(SubtitleToken? token) =>
       _update((s) => s.copyWith(selectedToken: token));
 
-  void setSelectedCue(Cue? cue) =>
-      _update((s) => s.copyWith(selectedCue: cue));
+  void setSelectedCue(Cue? cue) => _update((s) => s.copyWith(selectedCue: cue));
 
-  void updateSingleWordProfile(
-    String lemma,
-    Map<String, dynamic> profile,
-  ) {
-    final profiles = Map<String, Map<String, dynamic>>.from(_state.wordProfiles);
+  void updateSingleWordProfile(String lemma, Map<String, dynamic> profile) {
+    final profiles = Map<String, Map<String, dynamic>>.from(
+      _state.wordProfiles,
+    );
     profiles[lemma] = profile;
     _update((s) => s.copyWith(wordProfiles: profiles));
   }
@@ -133,32 +142,30 @@ class LearningController extends ChangeNotifier {
     String canonical,
     Map<String, dynamic> profile,
   ) {
-    final profiles =
-        Map<String, Map<String, dynamic>>.from(_state.phraseProfiles);
+    final profiles = Map<String, Map<String, dynamic>>.from(
+      _state.phraseProfiles,
+    );
     profiles[canonical] = profile;
     _update((s) => s.copyWith(phraseProfiles: profiles));
   }
 
-  void clearSelection() =>
-      _update(
-        (s) => s.copyWith(
-          selectedWordDetails: null,
-          selectedDictionary: null,
-          selectedPronunciation: null,
-        ),
-      );
+  void clearSelection() => _update(
+    (s) => s.copyWith(
+      selectedWordDetails: null,
+      selectedDictionary: null,
+      selectedPronunciation: null,
+    ),
+  );
 
   /// Update the status of a word in the local cache.
   void updateWordStatusLocally(String lemma, String? status) {
-    final profiles = Map<String, Map<String, dynamic>>.from(_state.wordProfiles);
+    final profiles = Map<String, Map<String, dynamic>>.from(
+      _state.wordProfiles,
+    );
     if (status == null) {
       profiles.remove(lemma);
     } else {
-      profiles[lemma] = {
-        ...?profiles[lemma],
-        'status': status,
-        'lemma': lemma,
-      };
+      profiles[lemma] = {...?profiles[lemma], 'status': status, 'lemma': lemma};
     }
     _update((s) => s.copyWith(wordProfiles: profiles));
   }

@@ -28,6 +28,12 @@ class SettingsDialog extends StatefulWidget {
     required this.ffprobePath,
     required this.ytDlpPath,
     required this.openSubtitlesApiKey,
+    required this.pronunciationVisible,
+    required this.wordSyncVisible,
+    required this.phonemeDisplay,
+    required this.wordAnimationIntensity,
+    required this.ruleHintsLevel,
+    required this.precomputePronunciation,
     required this.onLanguageChanged,
     required this.onSubtitlePresetChanged,
     required this.onPrimaryFontSizeChanged,
@@ -44,6 +50,12 @@ class SettingsDialog extends StatefulWidget {
     required this.onTranscriptionQualityChanged,
     required this.onTranscriptionLanguageChanged,
     required this.onTranscriptionDestinationChanged,
+    required this.onPronunciationVisibleChanged,
+    required this.onWordSyncVisibleChanged,
+    required this.onPhonemeDisplayChanged,
+    required this.onWordAnimationIntensityChanged,
+    required this.onRuleHintsLevelChanged,
+    required this.onPrecomputePronunciationChanged,
     required this.onSave,
   });
 
@@ -67,6 +79,12 @@ class SettingsDialog extends StatefulWidget {
   final String ffprobePath;
   final String ytDlpPath;
   final String openSubtitlesApiKey;
+  final bool pronunciationVisible;
+  final bool wordSyncVisible;
+  final String phonemeDisplay;
+  final double wordAnimationIntensity;
+  final String ruleHintsLevel;
+  final bool precomputePronunciation;
 
   // Callbacks
   final ValueChanged<String> onLanguageChanged;
@@ -85,12 +103,19 @@ class SettingsDialog extends StatefulWidget {
   final ValueChanged<String> onTranscriptionQualityChanged;
   final ValueChanged<String> onTranscriptionLanguageChanged;
   final ValueChanged<String> onTranscriptionDestinationChanged;
+  final ValueChanged<bool> onPronunciationVisibleChanged;
+  final ValueChanged<bool> onWordSyncVisibleChanged;
+  final ValueChanged<String> onPhonemeDisplayChanged;
+  final ValueChanged<double> onWordAnimationIntensityChanged;
+  final ValueChanged<String> onRuleHintsLevelChanged;
+  final ValueChanged<bool> onPrecomputePronunciationChanged;
   final Future<void> Function({
     required String ffmpegPath,
     required String ffprobePath,
     required String ytDlpPath,
     required String openSubtitlesApiKey,
-  }) onSave;
+  })
+  onSave;
 
   @override
   State<SettingsDialog> createState() => _SettingsDialogState();
@@ -113,6 +138,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late String transcriptionQuality;
   late String transcriptionLanguage;
   late String transcriptionDestination;
+  late bool pronunciationVisible;
+  late bool wordSyncVisible;
+  late String phonemeDisplay;
+  late double wordAnimationIntensity;
+  late String ruleHintsLevel;
+  late bool precomputePronunciation;
 
   late final TextEditingController ffmpegController;
   late final TextEditingController ffprobeController;
@@ -148,6 +179,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
     transcriptionQuality = widget.transcriptionQuality;
     transcriptionLanguage = widget.transcriptionLanguage;
     transcriptionDestination = widget.transcriptionDestination;
+    pronunciationVisible = widget.pronunciationVisible;
+    wordSyncVisible = widget.wordSyncVisible;
+    phonemeDisplay = widget.phonemeDisplay;
+    wordAnimationIntensity = widget.wordAnimationIntensity;
+    ruleHintsLevel = widget.ruleHintsLevel;
+    precomputePronunciation = widget.precomputePronunciation;
     ffmpegController = TextEditingController(text: widget.ffmpegPath);
     ffprobeController = TextEditingController(text: widget.ffprobePath);
     ytDlpController = TextEditingController(text: widget.ytDlpPath);
@@ -180,11 +217,92 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 l.text('subtitles'),
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
+              SwitchListTile(
+                value: pronunciationVisible,
+                title: Text(l.text('showPronunciation')),
+                onChanged: (value) {
+                  pronunciationVisible = value;
+                  widget.onPronunciationVisibleChanged(value);
+                  refresh(() {});
+                },
+              ),
+              SwitchListTile(
+                value: wordSyncVisible,
+                title: Text(l.text('highlightCurrentWord')),
+                onChanged: (value) {
+                  wordSyncVisible = value;
+                  widget.onWordSyncVisibleChanged(value);
+                  refresh(() {});
+                },
+              ),
+              _settingSlider(
+                l.text('wordHighlightIntensity'),
+                wordAnimationIntensity,
+                0,
+                1,
+                (value) {
+                  wordAnimationIntensity = value;
+                  widget.onWordAnimationIntensityChanged(value);
+                },
+                refresh,
+              ),
+              DropdownButtonFormField<String>(
+                initialValue: phonemeDisplay,
+                decoration: InputDecoration(
+                  labelText: l.text('pronunciationDisplay'),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'ipa', child: Text('IPA')),
+                  DropdownMenuItem(value: 'arpabet', child: Text('ARPAbet')),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  phonemeDisplay = value;
+                  widget.onPhonemeDisplayChanged(value);
+                  refresh(() {});
+                },
+              ),
+              DropdownButtonFormField<String>(
+                initialValue: ruleHintsLevel,
+                decoration: InputDecoration(labelText: l.text('ruleHints')),
+                items: [
+                  DropdownMenuItem(
+                    value: 'off',
+                    child: Text(l.text('ruleHintsOff')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'likely',
+                    child: Text(l.text('ruleHintsLikely')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'all',
+                    child: Text(l.text('ruleHintsAll')),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  ruleHintsLevel = value;
+                  widget.onRuleHintsLevelChanged(value);
+                  refresh(() {});
+                },
+              ),
+              SwitchListTile(
+                value: precomputePronunciation,
+                title: Text(l.text('precomputePronunciation')),
+                onChanged: (value) {
+                  precomputePronunciation = value;
+                  widget.onPrecomputePronunciationChanged(value);
+                  refresh(() {});
+                },
+              ),
               DropdownButtonFormField<String>(
                 initialValue: language,
                 decoration: InputDecoration(labelText: l.text('language')),
                 items: [
-                  DropdownMenuItem(value: 'system', child: Text(l.text('system'))),
+                  DropdownMenuItem(
+                    value: 'system',
+                    child: Text(l.text('system')),
+                  ),
                   DropdownMenuItem(value: 'en', child: Text(l.text('english'))),
                   DropdownMenuItem(value: 'zh', child: Text(l.text('chinese'))),
                 ],
@@ -197,11 +315,22 @@ class _SettingsDialogState extends State<SettingsDialog> {
               ),
               DropdownButtonFormField<String>(
                 initialValue: subtitlePreset,
-                decoration: InputDecoration(labelText: l.text('subtitlePreset')),
+                decoration: InputDecoration(
+                  labelText: l.text('subtitlePreset'),
+                ),
                 items: [
-                  DropdownMenuItem(value: 'watching', child: Text(l.text('watching'))),
-                  DropdownMenuItem(value: 'learning', child: Text(l.text('learning'))),
-                  DropdownMenuItem(value: 'compact', child: Text(l.text('compact'))),
+                  DropdownMenuItem(
+                    value: 'watching',
+                    child: Text(l.text('watching')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'learning',
+                    child: Text(l.text('learning')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'compact',
+                    child: Text(l.text('compact')),
+                  ),
                 ],
                 onChanged: (value) {
                   if (value == null) return;
@@ -210,17 +339,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   refresh(() {});
                 },
               ),
-              _settingSlider(
-                l.text('subtitleScale'),
-                primaryFontSize,
-                0.5,
-                2,
-                (v) {
-                  primaryFontSize = v;
-                  widget.onPrimaryFontSizeChanged(v);
-                },
-                refresh,
-              ),
+              _settingSlider(l.text('subtitleScale'), primaryFontSize, 0.5, 2, (
+                v,
+              ) {
+                primaryFontSize = v;
+                widget.onPrimaryFontSizeChanged(v);
+              }, refresh),
               _fontSelector(l.text('primaryFont'), primaryFontFamily, (v) {
                 primaryFontFamily = v;
                 widget.onPrimaryFontFamilyChanged(v);
@@ -321,7 +445,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
               ),
               DropdownButtonFormField<String>(
                 initialValue: transcriptionQuality,
-                decoration: InputDecoration(labelText: l.text('preferredQuality')),
+                decoration: InputDecoration(
+                  labelText: l.text('preferredQuality'),
+                ),
                 items: const [
                   DropdownMenuItem(value: 'fast', child: Text('Fast')),
                   DropdownMenuItem(value: 'balanced', child: Text('Balanced')),
@@ -336,9 +462,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
               ),
               DropdownButtonFormField<String>(
                 initialValue: transcriptionLanguage,
-                decoration: InputDecoration(labelText: l.text('transcriptionLanguage')),
+                decoration: InputDecoration(
+                  labelText: l.text('transcriptionLanguage'),
+                ),
                 items: [
-                  DropdownMenuItem(value: 'auto', child: Text(l.text('automatic'))),
+                  DropdownMenuItem(
+                    value: 'auto',
+                    child: Text(l.text('automatic')),
+                  ),
                   const DropdownMenuItem(value: 'en', child: Text('English')),
                   const DropdownMenuItem(value: 'zh', child: Text('中文')),
                 ],
@@ -351,10 +482,18 @@ class _SettingsDialogState extends State<SettingsDialog> {
               ),
               DropdownButtonFormField<String>(
                 initialValue: transcriptionDestination,
-                decoration: InputDecoration(labelText: l.text('defaultDestination')),
+                decoration: InputDecoration(
+                  labelText: l.text('defaultDestination'),
+                ),
                 items: [
-                  DropdownMenuItem(value: 'primary', child: Text(l.text('primarySubtitle'))),
-                  DropdownMenuItem(value: 'secondary', child: Text(l.text('secondarySubtitle'))),
+                  DropdownMenuItem(
+                    value: 'primary',
+                    child: Text(l.text('primarySubtitle')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'secondary',
+                    child: Text(l.text('secondarySubtitle')),
+                  ),
                 ],
                 onChanged: (value) {
                   if (value == null) return;
@@ -425,24 +564,23 @@ class _SettingsDialogState extends State<SettingsDialog> {
     double max,
     ValueChanged<double> update,
     StateSetter refresh,
-  ) =>
-      Row(
-        children: [
-          SizedBox(width: 160, child: Text(label)),
-          Expanded(
-            child: Slider(
-              value: value.clamp(min, max),
-              min: min,
-              max: max,
-              onChanged: (next) {
-                update(next);
-                refresh(() {});
-              },
-            ),
-          ),
-          SizedBox(width: 56, child: Text(value.toStringAsFixed(1))),
-        ],
-      );
+  ) => Row(
+    children: [
+      SizedBox(width: 160, child: Text(label)),
+      Expanded(
+        child: Slider(
+          value: value.clamp(min, max),
+          min: min,
+          max: max,
+          onChanged: (next) {
+            update(next);
+            refresh(() {});
+          },
+        ),
+      ),
+      SizedBox(width: 56, child: Text(value.toStringAsFixed(1))),
+    ],
+  );
 
   Widget _colorChoices(Color selected, ValueChanged<Color> update) => Wrap(
     spacing: 8,
@@ -475,7 +613,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
       items: [
         DropdownMenuItem(value: 'system', child: Text(l.text('systemFont'))),
         DropdownMenuItem(value: 'serif', child: Text(l.text('serifFont'))),
-        DropdownMenuItem(value: 'monospace', child: Text(l.text('monospaceFont'))),
+        DropdownMenuItem(
+          value: 'monospace',
+          child: Text(l.text('monospaceFont')),
+        ),
       ],
       onChanged: (next) {
         if (next == null) return;
