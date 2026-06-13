@@ -2,7 +2,7 @@
 
 > **Created:** 2026-06-13
 > **Branch:** `feature/asr-word-timestamps`
-> **Status:** P0 complete, P1 complete
+> **Status:** P0 complete, P1 complete, P2 partial
 > **Target:** P0 → P1 → P2 梯度推进
 
 ## 概述
@@ -23,10 +23,11 @@
 
 | 组件 | 文件 | 状态 |
 |------|------|------|
-| 统一测试入口 | `scripts/test.sh` | ✅ 6 种模式 + JSON/CI 输出 |
+| 统一测试入口 | `scripts/test.sh` | ✅ 4 种模式 + strict/JSON/debug/verbose |
 | 共享工具库 | `scripts/lib-testing.sh` | ✅ API 生命周期 + curl + 断言 |
 | 契约验证 | `scripts/validate-contracts.sh` | ✅ Schema + OpenAPI + 示例 |
-| CI | `.github/workflows/ci.yml` | ✅ 3 job (rust-core 3 OS + flutter + coverage) |
+| 基础设施自测 | `scripts/test-infrastructure.sh` | ✅ cleanup + mode + strict + JSON + log retention |
+| CI | `.github/workflows/ci.yml` | ✅ Rust 3 OS + desktop/contracts + coverage/bench + fuzz smoke |
 
 ### Rust 测试分布
 
@@ -60,15 +61,13 @@
 
 | 维度 | 现状 | 目标 |
 |------|------|------|
-| `application` crate 测试 | 0 | ≥ 15 单元测试 |
-| `api-http` 集成测试 | 0 | ≥ 5 HTTP 集成测试 |
-| CI 覆盖率门禁 | 无 | ≥ 50% → 逐步提升 |
-| Fuzz 测试 | 无 | subtitle-core + asr_timing |
-| 冒烟测试子集 | `--quick` 不跑测试 | `--quick` 跑核心单元测试 |
-| 测试数据管理 | testdata 已有但分散 | 统一分类 + README |
+| `api-http` 独立集成测试 | 仍以内嵌 Router 测试为主 | 后续按需要迁移到 `tests/` |
+| CI 覆盖率门禁 | 50% | 逐步提升 |
+| Fuzz 测试 | 3 targets + CI smoke | 积累 corpus、延长定时运行 |
+| 性能回归 | benchmark 可编译 | 建立统计基线与退化策略 |
+| API 兼容性 | 表面回归门 | 增加语义 breaking-change 检测 |
 | Flutter golden 测试 | 无 | P2 |
 | E2E 测试 | 无 | P2 |
-| 性能基准 | 无 | P2 |
 
 ---
 
@@ -146,8 +145,11 @@
 
 使用 `cargo-fuzz`:
 ```bash
-cargo install cargo-fuzz
-cd crates/subtitle-core && cargo fuzz init
+rustup toolchain install nightly --profile minimal
+cargo install cargo-fuzz --locked
+(cd crates/subtitle-core && cargo +nightly fuzz run srt_parse -- -max_total_time=10)
+(cd crates/subtitle-core && cargo +nightly fuzz run vtt_parse -- -max_total_time=10)
+(cd crates/speech-analysis && cargo +nightly fuzz run asr_timing -- -max_total_time=10)
 ```
 
 | Fuzz Target | 输入 | 检查 |
@@ -156,7 +158,10 @@ cd crates/subtitle-core && cargo fuzz init
 | `vtt_parse` | 任意字节序列 | 不 panic、不 OOM |
 | `asr_timing_extract` | 任意 JSON | 不 panic、不 OOM |
 
-**状态:** ✅ done — 3 fuzz targets (srt_parse, vtt_parse, asr_timing)
+**状态:** ✅ done — 3 fuzz targets (srt_parse, vtt_parse, asr_timing)，CI
+使用 nightly Rust 对每个 target 执行 10 秒 smoke run。两个 fuzz manifest
+声明独立 workspace 并提交各自锁文件，`asr_timing` target 已与当前公共函数
+签名同步。
 
 ### P1-3: `--quick` 模式增强
 
@@ -180,6 +185,18 @@ cargo test --workspace --lib  # 只跑单元测试，跳过集成测试
 
 **状态:** ✅ done — 18 测试覆盖 diagnose 所有分支
 
+### P1-5: 测试基础设施自测与生命周期收口
+
+- 新增 `scripts/test-infrastructure.sh`，验证 cleanup、runner 模式、strict
+  参数、JSON 输出和失败日志保留。
+- `setup_test_dir()` 自动注册 EXIT cleanup；所有验证脚本失败或正常退出时
+  都会清理 API、mock 进程和临时目录。
+- M1.7/M1.8 统一使用 `start_api()`，避免重复启动逻辑和孤儿 API 进程。
+- ECDICT 并行测试改用 `tempfile::NamedTempFile`，消除基于时钟文件名碰撞。
+- `.claude/worktrees/` 被忽略，避免本地 worktree 被误纳入提交。
+
+**状态:** ✅ done
+
 ---
 
 ## P2 — 深度覆盖 (下个里程碑)
@@ -198,13 +215,16 @@ cargo test --workspace --lib  # 只跑单元测试，跳过集成测试
 - `subtitle-core`: SRT/VTT 解析 (small + 2k 句)、tokenize、normalize_display
 - `speech-analysis`: ASR timing 提取 (small + 500 segments)、word timing 估算
 
-**状态:** ✅ done — 10 benchmark cases
+**状态:** 🟡 基础设施完成 — 10 benchmark cases，CI 使用
+`cargo bench --workspace --no-run --locked` 防止 benchmark 编译腐化；性能退化
+阈值仍待定义。
 
-### P2-4: API 版本兼容性回归测试
+### P2-4: API 表面回归测试
 - 已添加 `openapi_version_snapshot_and_path_count` 测试
 - 版本快照 (1.0.0)、路径数快照 (51)、schema 存在性、v1 前缀检查
 
-**状态:** ✅ done
+**状态:** 🟡 部分完成 — 能捕获路径数量和关键 schema 名称变化，但不能替代
+字段类型、required 集合等语义 breaking-change 检测。
 
 ### P2-5: Property-based testing
 - 已通过 `proptest` 添加 10 个属性测试
@@ -229,9 +249,13 @@ cargo test --workspace --lib  # 只跑单元测试，跳过集成测试
 | 8 | `diagnosis-core` 测试补充 | P1 | ✅ done | 2026-06-13 |
 | 9 | Flutter golden 测试 | P2 | ⬜ | |
 | 10 | E2E 测试 | P2 | ⬜ | |
-| 11 | 性能基准 | P2 | ✅ done | 2026-06-13 |
-| 12 | API 回归测试 | P2 | ✅ done | 2026-06-13 |
+| 11 | 性能基准与编译门禁 | P2 | 🟡 基础设施完成 | 2026-06-13 |
+| 12 | API 表面回归测试 | P2 | 🟡 部分完成 | 2026-06-13 |
 | 13 | Property-based testing | P2 | ✅ done | 2026-06-13 |
+| 14 | 测试基础设施自测与 cleanup 收口 | P1 | ✅ done | 2026-06-13 |
+| 15 | Fuzz CI smoke | P1 | ✅ done | 2026-06-13 |
+| 16 | Benchmark CI 编译门禁 | P2 | ✅ done | 2026-06-13 |
+| 17 | OpenAPI 语义兼容性检测 | P2 | ⬜ | |
 
 ---
 

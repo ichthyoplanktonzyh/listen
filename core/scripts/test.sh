@@ -3,7 +3,7 @@
 #
 # Usage:
 #   ./scripts/test.sh                      # --full (default)
-#   ./scripts/test.sh --quick              # fmt + clippy + analyze only
+#   ./scripts/test.sh --quick              # fmt + clippy + Rust lib tests + analyze
 #   ./scripts/test.sh --rust               # Rust checks + tests
 #   ./scripts/test.sh --flutter            # Flutter checks + tests
 #   ./scripts/test.sh --full               # Everything + contracts
@@ -12,7 +12,7 @@
 #   --json       Machine-readable JSON output
 #   --verbose    Stream raw output (no capture)
 #   --debug      Print test.sh internal execution steps
-#   --strict     Treat warnings as errors
+#   --strict     Treat warnings as errors and require Cargo.lock
 #
 # Pass-through:
 #   ./scripts/test.sh --rust -- --nocapture --test-threads=1
@@ -72,7 +72,14 @@ done
 cd "$root"
 
 LOG_DIR="$(mktemp -d)"
-trap 'rm -rf "$LOG_DIR"' EXIT
+FAILED=0
+
+cleanup_logs() {
+  if [[ ${FAILED:-0} -eq 0 ]]; then
+    rm -rf "$LOG_DIR"
+  fi
+}
+trap cleanup_logs EXIT
 
 if $DEBUG; then
   echo "[test.sh] MODE=$MODE JSON=$JSON_OUTPUT STRICT=$STRICT" >&2
@@ -111,7 +118,7 @@ extract_errors() {
       # Extract lines with file locations: file:line:col
       grep -n -E '^error(\[.*\])?:|warning(\[.*\])?:' "$log" 2>/dev/null | head -20 || true
       ;;
-    test)
+    test|quick_test)
       # Extract failure lines and FAILED result summaries
       grep -E '^test .* \.\.\. FAILED$' "$log" 2>/dev/null || true
       grep -E '^test result: FAILED' "$log" 2>/dev/null || true
@@ -140,7 +147,7 @@ extract_summary() {
   local type="$1"; local log="$2"
 
   case "$type" in
-    test)
+    test|quick_test)
       # Aggregate test results across all crates
       local passed=0 failed=0
       while IFS= read -r line; do
@@ -184,18 +191,22 @@ run_check() {
       cmd=("$cargo_bin" "fmt" "--check")
       ;;
     clippy)
-      cmd=("$cargo_bin" "clippy" "--workspace" "--all-targets" "--" "-D" "warnings")
+      cmd=("$cargo_bin" "clippy" "--workspace" "--all-targets")
+      $STRICT && cmd+=("--locked" "--" "-D" "warnings")
       ;;
     test)
       cmd=("$cargo_bin" "test" "--workspace")
-      [[ ${#PASSTHROUGH[@]} -gt 0 ]] && cmd+=("${PASSTHROUGH[@]}")
+      $STRICT && cmd+=("--locked")
+      [[ ${#PASSTHROUGH[@]} -gt 0 ]] && cmd+=("--" "${PASSTHROUGH[@]}")
       ;;
     quick_test)
       cmd=("$cargo_bin" "test" "--workspace" "--lib")
-      [[ ${#PASSTHROUGH[@]} -gt 0 ]] && cmd+=("${PASSTHROUGH[@]}")
+      $STRICT && cmd+=("--locked")
+      [[ ${#PASSTHROUGH[@]} -gt 0 ]] && cmd+=("--" "${PASSTHROUGH[@]}")
       ;;
     analyze)
       cmd=("$flutter_bin" "analyze")
+      $STRICT && cmd+=("--fatal-infos" "--fatal-warnings")
       run_dir="$root/apps/desktop"
       ;;
     flutter_test)
@@ -256,9 +267,12 @@ should_run() {
   esac
 }
 
-# Exclude tests in quick mode via type check
+# Include the quick unit-test subset only in quick mode.
 should_run_check() {
   local category="$1"; local type="$2"
+  if [[ "$type" == "quick_test" && "$MODE" != "quick" ]]; then
+    return 1
+  fi
   case "$MODE" in
     quick)
       # Include quick_test (lib unit only), skip full test/flutter_test/contracts
@@ -271,7 +285,7 @@ should_run_check() {
 
 # ── main ──────────────────────────────────────────────────────────────────
 
-PASSED=0; FAILED=0; SKIPPED=0
+PASSED=0; SKIPPED=0
 declare -a RESULTS=()
 
 for entry in "${CHECKS[@]}"; do

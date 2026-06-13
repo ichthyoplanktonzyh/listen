@@ -35,30 +35,34 @@ resolve_cargo() {
 }
 
 resolve_flutter() {
-  flutter_bin="${FLUTTER:-$HOME/.local/share/flutter/bin/flutter}"
+  flutter_bin="${FLUTTER:-$(command -v flutter || true)}"
+  if [[ -z "$flutter_bin" ]]; then
+    flutter_bin="$HOME/.local/share/flutter/bin/flutter"
+  fi
 }
 
 # ── temporary directory ───────────────────────────────────────────────────
 
 setup_test_dir() {
   tmp="${tmp:-$(mktemp -d)}"
+  trap cleanup EXIT
 }
 
 cleanup() {
-  if [[ -n "${api_pid:-}" ]]; then
-    kill -INT "$api_pid" 2>/dev/null || true
-    wait "$api_pid" 2>/dev/null || true
-  fi
+  stop_api
   if [[ -n "${pid:-}" ]]; then
     kill -INT "$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
+    pid=""
   fi
   if [[ -n "${mock_pid:-}" ]]; then
     kill "$mock_pid" 2>/dev/null || true
     wait "$mock_pid" 2>/dev/null || true
+    mock_pid=""
   fi
   if [[ -n "${tmp:-}" ]]; then
     rm -rf "$tmp"
+    tmp=""
   fi
 }
 
@@ -72,9 +76,11 @@ start_api() {
   local log="$1"; shift
   local token="$1"; shift
 
-  # shellcheck disable=SC2068
-  LLPLAYERNEXT_DB="$db" LLPLAYERNEXT_API_TOKEN="$token" $@ \
-    "$cargo_bin" run --quiet -p api-http >"$log" 2>&1 &
+  (
+    trap - INT TERM
+    exec env LLPLAYERNEXT_DB="$db" LLPLAYERNEXT_API_TOKEN="$token" "$@" \
+      "$cargo_bin" run --quiet -p api-http
+  ) >"$log" 2>&1 &
   api_pid=$!
 
   # Wait for "api.started" event in the JSON log.
@@ -106,22 +112,22 @@ process.exit(1)
 #
 # Gracefully stops the running API server (if any) and resets the globals.
 # Uses SIGINT first for graceful shutdown (with api.stopped event),
-# falls back to SIGTERM if the process does not exit within 5s.
+# then escalates to SIGKILL if the process does not exit within 5 seconds.
 stop_api() {
   if [[ -n "${api_pid:-}" ]] && kill -0 "$api_pid" 2>/dev/null; then
     kill -INT "$api_pid" 2>/dev/null || true
-    # Wait up to 5s for graceful exit
+    local state=""
     for _ in $(seq 1 50); do
-      if ! kill -0 "$api_pid" 2>/dev/null; then break; fi
+      state="$(ps -o stat= -p "$api_pid" 2>/dev/null | tr -d '[:space:]' || true)"
+      [[ -z "$state" || "$state" == Z* ]] && break
       sleep 0.1
     done
-    # Force kill if still alive
-    if kill -0 "$api_pid" 2>/dev/null; then
-      kill -9 "$api_pid" 2>/dev/null || true
+    if [[ -n "$state" && "$state" != Z* ]]; then
+      kill -KILL "$api_pid" 2>/dev/null || true
     fi
     wait "$api_pid" 2>/dev/null || true
-    api_pid=""
   fi
+  api_pid=""
 }
 
 # ── curl helper ───────────────────────────────────────────────────────────

@@ -1274,7 +1274,10 @@ fn phrase_candidates(sentence: &SubtitleSentence) -> Vec<PhraseCandidate> {
     let mut values = Vec::new();
     for phrase in PHRASES {
         let parts = phrase.split_whitespace().collect::<Vec<_>>();
-        for start in 0..normalized.len().saturating_sub(parts.len().saturating_sub(1)) {
+        for start in 0..normalized
+            .len()
+            .saturating_sub(parts.len().saturating_sub(1))
+        {
             if normalized[start..start + parts.len()] == parts {
                 values.push(PhraseCandidate {
                     canonical_form: (*phrase).into(),
@@ -1610,7 +1613,11 @@ mod tests {
             index: 0,
             start: TimeMs::new(0),
             end: TimeMs::new(5000),
-            original_text: tokens.iter().map(|t| t.text.as_str()).collect::<Vec<_>>().join(" "),
+            original_text: tokens
+                .iter()
+                .map(|t| t.text.as_str())
+                .collect::<Vec<_>>()
+                .join(" "),
             display_text: tokens
                 .iter()
                 .map(|t| t.text.as_str())
@@ -1643,7 +1650,10 @@ mod tests {
             candidates.iter().any(|c| c.normalized_form == "give up"),
             "should find 'give up' phrase"
         );
-        let give_up = candidates.iter().find(|c| c.normalized_form == "give up").unwrap();
+        let give_up = candidates
+            .iter()
+            .find(|c| c.normalized_form == "give up")
+            .unwrap();
         assert_eq!(give_up.token_start, 0);
         assert_eq!(give_up.token_end, 1);
         assert_eq!(give_up.canonical_form, "give up");
@@ -1662,17 +1672,17 @@ mod tests {
         ]);
         let candidates = phrase_candidates(&sentence);
         assert!(candidates.iter().any(|c| c.normalized_form == "figure out"));
-        let fo = candidates.iter().find(|c| c.normalized_form == "figure out").unwrap();
+        let fo = candidates
+            .iter()
+            .find(|c| c.normalized_form == "figure out")
+            .unwrap();
         assert_eq!(fo.token_start, 3);
         assert_eq!(fo.token_end, 4);
     }
 
     #[test]
     fn phrase_candidates_empty_for_no_match() {
-        let sentence = make_sentence(vec![
-            word_token(0, "hello"),
-            word_token(1, "world"),
-        ]);
+        let sentence = make_sentence(vec![word_token(0, "hello"), word_token(1, "world")]);
         let candidates = phrase_candidates(&sentence);
         assert!(
             !candidates.iter().any(|c| c.normalized_form == "give up"),
@@ -1706,7 +1716,10 @@ mod tests {
             word_token(5, "door"),
         ]);
         let candidates = phrase_candidates(&sentence);
-        let fo = candidates.iter().find(|c| c.normalized_form == "in front of").unwrap();
+        let fo = candidates
+            .iter()
+            .find(|c| c.normalized_form == "in front of")
+            .unwrap();
         assert_eq!(fo.token_start, 1);
         assert_eq!(fo.token_end, 3);
     }

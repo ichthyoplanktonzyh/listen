@@ -1,7 +1,5 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use domain::{
-    SubtitleSentence, SubtitleSentenceId, SubtitleToken, SubtitleTokenKind, TimeMs,
-};
+use domain::{SubtitleSentence, SubtitleSentenceId, SubtitleToken, SubtitleTokenKind, TimeMs};
 use speech_analysis::asr_timing::extract_word_timings_from_json;
 use speech_analysis::estimate_word_timings;
 
@@ -15,7 +13,10 @@ fn asr_fixture_sentences() -> Vec<SubtitleSentence> {
     // Sentences matching sample-output.json: 3 segments
     [
         ("Hello world.", &["Hello", "world", "."] as &[&str]),
-        ("I was playing games.", &["I", "was", "play", "ing", "games", "."]),
+        (
+            "I was playing games.",
+            &["I", "was", "play", "ing", "games", "."],
+        ),
         ("This is what", &["This", "is", "what"]),
     ]
     .into_iter()
@@ -97,9 +98,7 @@ fn bench_extract_word_timings_small(c: &mut Criterion) {
     let json = asr_fixture_bytes();
     let sentences = asr_fixture_sentences();
     c.bench_function("extract_word_timings (small fixture)", |b| {
-        b.iter(|| {
-            extract_word_timings_from_json(black_box(&json), black_box(&sentences))
-        })
+        b.iter(|| extract_word_timings_from_json(black_box(&json), black_box(&sentences)))
     });
 }
 
@@ -108,12 +107,7 @@ fn bench_extract_word_timings_large(c: &mut Criterion) {
     let json_bytes = json.as_bytes();
     let sentences = matching_sentences(500);
     c.bench_function("extract_word_timings (500 segments)", |b| {
-        b.iter(|| {
-            extract_word_timings_from_json(
-                black_box(json_bytes),
-                black_box(&sentences),
-            )
-        })
+        b.iter(|| extract_word_timings_from_json(black_box(json_bytes), black_box(&sentences)))
     });
 }
 

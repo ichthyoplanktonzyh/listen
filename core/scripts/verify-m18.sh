@@ -46,21 +46,9 @@ Never give up.
 That test was a piece of cake.
 SRT
 
-LLPLAYERNEXT_DB="$tmp/m18.sqlite" \
-LLPLAYERNEXT_RESOURCES_DIR="$tmp/resources" \
-LLPLAYERNEXT_API_TOKEN="$token" \
-LLPLAYERNEXT_OPENSUBTITLES_BASE_URL="http://127.0.0.1:$mock_port" \
-  "$cargo_bin" run --quiet -p api-http >"$tmp/api.log" 2>&1 &
-api_pid=$!
-
-for _ in $(seq 1 100); do
-  address="$(node -e 'const fs=require("fs");if(!fs.existsSync(process.argv[1]))process.exit(1);for(const line of fs.readFileSync(process.argv[1],"utf8").split("\n")){try{const v=JSON.parse(line);if(v.event==="api.started"){process.stdout.write(v.address);process.exit(0)}}catch{}}process.exit(1)' "$tmp/api.log" 2>/dev/null || true)"
-  [[ -n "${address:-}" ]] && break
-  sleep 0.1
-done
-[[ -n "${address:-}" ]] || { echo "ERROR: api-http did not start" >&2; exit 1; }
-base="http://$address"
-auth=(-H "Authorization: Bearer $token" -H "Content-Type: application/json")
+start_api "$tmp/m18.sqlite" "$tmp/api.log" "$token" \
+  "LLPLAYERNEXT_RESOURCES_DIR=$tmp/resources" \
+  "LLPLAYERNEXT_OPENSUBTITLES_BASE_URL=http://127.0.0.1:$mock_port"
 
 media="$(api_curl -d '{"path":"/tmp/m18.mp4","fingerprint":"m18","title":"M18","kind":"video"}' "$base/v1/media")"
 media_id="$(json_get "$media" '.id')"

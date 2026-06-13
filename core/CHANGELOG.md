@@ -24,9 +24,10 @@
   validation into a single command with structured pass/fail summary output.
   Supports `--quick`/`--rust`/`--flutter`/`--full` modes, `--json` for
   machine-readable CI/AI output, `--verbose` for raw logs, `--debug` for
-  internal tracing, and `--strict` to treat warnings as errors. Full logs are
-  always preserved to disk; the terminal prints only the summary with key error
-  lines on failure.
+  internal tracing, and `--strict` to require `Cargo.lock`, deny Rust warnings,
+  and make Flutter infos/warnings fatal. Successful-run logs are deleted;
+  failed-run logs remain at the reported path while the terminal prints only
+  the summary and key error lines.
 - Extracted shared test utilities (`scripts/lib-testing.sh`) from the six
   `verify-m*.sh` acceptance scripts: cargo resolution, API lifecycle
   (start/stop/wait), curl helpers, and JSON assertion functions.
@@ -43,7 +44,9 @@
   producing more actionable failure logs.
 - Migrated all 6 `verify-m*.sh` acceptance scripts to source `lib-testing.sh`,
   eliminating duplicated cargo resolution, API lifecycle, cleanup traps, and
-  curl helpers (607 → 533 lines, 12% reduction). Fixed schema drift (v6→v8)
+  curl helpers. `setup_test_dir()` now registers cleanup automatically, API
+  startup restores signal handling for graceful shutdown, and M1.7/M1.8 use
+  the shared environment-aware `start_api()` path. Fixed schema drift (v6→v8)
   in verify-m17 and verify-m18 that accumulated across milestones.
 - Added the project's second Rust integration test suite
   (`crates/persistence-sqlite/tests/persistence_integration_test.rs`) covering
@@ -52,9 +55,8 @@
   25 total for the crate).
 - Added `cargo-llvm-cov` coverage collection to CI (`lcov.info` artifact) for
   tracking coverage trends across PRs.
-- Hardened the dictionary-provider flaky test by ensuring file metadata is
-  synced to disk before constructing the ECDICT provider, preventing rare
-  mtime-granularity cache misses.
+- Fixed the dictionary-provider parallel-test flake by replacing PID/time-based
+  fixture paths with `tempfile::NamedTempFile`; 50 repeated parallel runs pass.
 - Added 42 unit tests to the `application` crate (previously zero coverage)
   covering `require_text`, `clean_optional`, `normalize_american_english` (19
   irregular/suffix rules), `normalize_phrase`, `phrase_candidates` (including
@@ -72,8 +74,10 @@
   under 30s. Quick mode now runs: fmt → clippy → lib unit tests → analyze.
 - Added fuzz testing infrastructure with 3 fuzz targets:
   `crates/subtitle-core/fuzz/` (SRT and WebVTT parsing),
-  `crates/speech-analysis/fuzz/` (ASR timing JSON extraction). Install
-  `cargo-fuzz` and run with `cargo fuzz run <target>`.
+  `crates/speech-analysis/fuzz/` (ASR timing JSON extraction). The manifests
+  are independent workspaces with committed lock files, the ASR target matches
+  the current API, and CI runs every target for a 10-second nightly-Rust smoke
+  test.
 - Rewrote `testdata/README.md` as a comprehensive fixture catalog documenting
   every test data file, its purpose, and which tests consume it.
 - Created `docs/features/testing-milestone.md` as the tracking document for
@@ -86,15 +90,25 @@
 - Added `criterion` performance benchmarks for `subtitle-core` (SRT/VTT parse,
   tokenize, normalize) and `speech-analysis` (ASR timing extraction, word
   timing estimation). 10 benchmark cases in total covering small fixtures and
-  large synthetic inputs (2k sentences, 500 segments).
+  large synthetic inputs (2k sentences, 500 segments). CI compiles all
+  benchmarks with `cargo bench --workspace --no-run --locked`.
 - Added `proptest` property-based testing with 10 property tests across
   `speech-analysis` (timing output count, monotonicity, bounds, start≤end)
   and `subtitle-core` (normalize idempotence, tokenize word normalization,
   SRT/VTT no-panic, SRT draft field validity). Total workspace tests: 132.
-- Added API version compatibility regression test (`openapi_version_snapshot`)
+- Added API surface regression test (`openapi_version_snapshot`)
   in `api-http` that snapshots the OpenAPI 3.1.0 version, 51-path count, 18
-  key schema definitions, and /v1/ prefix convention to catch accidental
-  breaking changes.
+  key schema definitions, and /v1/ prefix convention. Full semantic
+  breaking-change detection remains future work.
+- Added `scripts/test-infrastructure.sh` to test cleanup traps, API process
+  teardown, quick/full mode selection, strict flags, JSON output, and retained
+  failure logs. CI runs this self-test before desktop checks.
+- Prevented quick/full mode duplication: the Rust lib-test subset now runs only
+  in `--quick`, while Rust/full modes execute the complete suite once.
+- Fixed Rust test pass-through handling so arguments after the runner's `--`
+  are forwarded after Cargo's test-harness separator.
+- Added `.claude/worktrees/` to `.gitignore` so local product/refactor worktrees
+  are not accidentally staged.
 
 ## 0.7.0 - 2026-06-13
 

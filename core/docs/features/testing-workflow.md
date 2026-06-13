@@ -24,9 +24,10 @@ cost of ~8,000 tokens. A typical feature implementation runs this loop 3–5
 times, totaling 24,000–40,000 tokens just for verification.
 
 The unified test runner (`scripts/test.sh`) consolidates all checks into a
-single command with structured pass/fail summary output. Full logs are
-persisted to disk; only the summary and key error lines appear on the
-terminal. This reduces per-verification token consumption to ~500 (94% less).
+single command with structured pass/fail summary output. Successful-run logs
+are deleted automatically. If any check fails, the complete logs remain at
+the printed temporary path while the terminal shows a concise error summary.
+This reduces per-verification token consumption to ~500 (94% less).
 
 ## Quick Start
 
@@ -34,7 +35,7 @@ terminal. This reduces per-verification token consumption to ~500 (94% less).
 # Full verification (default)
 ./scripts/test.sh
 
-# Fast pre-commit check (fmt + clippy + analyze, no tests)
+# Fast pre-commit check (fmt + clippy + Rust lib tests + analyze)
 ./scripts/test.sh --quick
 
 # Rust-only checks
@@ -49,8 +50,11 @@ terminal. This reduces per-verification token consumption to ~500 (94% less).
 # Stream raw output for debugging
 ./scripts/test.sh --verbose
 
-# Treat warnings as errors
+# Treat warnings as errors and require the committed Cargo.lock
 ./scripts/test.sh --strict
+
+# Verify cleanup, mode selection, strict flags, JSON output, and log retention
+./scripts/test-infrastructure.sh
 
 # Pass-through arguments to underlying test runners
 ./scripts/test.sh --rust -- --nocapture --test-threads=1
@@ -81,8 +85,9 @@ Key design decisions:
 | Subshell `(cd && cmd)` per check | Each check runs in its own CWD (Rust at repo root, Flutter at `apps/desktop`). No state leaks between checks |
 | `set +e` / `set -e` around command execution | Allows capturing the exit code without `set -e` aborting the script |
 | `||` protection at call site | `run_check ... \|\| rc=$?` prevents `set -e` from triggering on test failures |
-| Full log to disk, summary to terminal | Never discards information. Failures show key lines + path to complete log |
-| `mktemp -d` + `trap cleanup EXIT` | Auto-cleaned temporary log directory, no `.gitignore` changes needed |
+| Failure log retention | Successful-run logs are deleted; failed-run logs remain at the path printed by the runner |
+| `--strict` | CI requires `Cargo.lock`, denies Rust warnings, and makes Flutter infos/warnings fatal |
+| Mode-specific unit subset | `cargo test --workspace --lib` runs only in `--quick`; Rust/full modes run the complete suite once |
 
 ### Check Registry
 
@@ -92,6 +97,7 @@ Checks are defined as a simple data table:
 CHECKS=(
   "cargo fmt|rust|fmt"
   "cargo clippy|rust|clippy"
+  "cargo test (lib)|rust|quick_test"
   "cargo test|rust|test"
   "flutter analyze|flutter|analyze"
   "flutter test|flutter|flutter_test"
@@ -186,9 +192,25 @@ Extracts common boilerplate from the six `verify-m*.sh` acceptance scripts:
 | `assert_contains(haystack, needle, msg)` | Substring assertion |
 | `assert_not_empty(value, msg)` | Non-empty assertion |
 
-The `verify-m*.sh` scripts have not yet been migrated to use this library
-(deferred to avoid scope creep). The library is ready for incremental adoption
-in future milestone verification scripts.
+All six `verify-m*.sh` scripts source this library. `setup_test_dir()` installs
+an EXIT cleanup trap, and `start_api()` restores signal handling before
+launching the server so `stop_api()` can perform a real graceful shutdown.
+M1.7 and M1.8 also use `start_api()` with explicit environment overrides rather
+than maintaining separate lifecycle implementations.
+
+### Infrastructure Self-Test
+
+`scripts/test-infrastructure.sh` tests the testing tools themselves without
+running the product suite. It verifies:
+
+- temporary directories and API processes are cleaned on EXIT;
+- quick mode runs the Rust lib-test subset but Rust mode does not duplicate it;
+- strict mode adds locked dependency and fatal-warning flags;
+- Rust pass-through arguments are separated for the test harness;
+- JSON output parses successfully;
+- failed-run logs still exist at the path reported by the runner.
+
+CI runs this self-test in the macOS desktop job.
 
 ### Test Data: ASR JSON Fixture
 
@@ -230,12 +252,6 @@ AI runs verification explicitly before committing; an automatic hook would
 duplicate work and potentially reject commits the AI is about to fix. Manual
 execution via `./scripts/test.sh --quick` is more flexible.
 
-### Why not migrate all verify-m*.sh scripts to lib-testing.sh now?
-
-The six existing verification scripts are stable and well-tested. Migrating
-them to use the shared library is a pure refactor that carries regression
-risk. The library is available for new scripts and incremental migration.
-
 ### Why `set +e` / `set -e` around each command?
 
 Bash's `set -e` (exit on error) is essential for catching unexpected failures,
@@ -253,12 +269,14 @@ the entire quality suite. The current results:
 |---|---|---|
 | cargo fmt | PASS | All Rust files formatted |
 | cargo clippy | PASS | No warnings with `-D warnings` |
-| cargo test (lib) | PASS | ~117 unit tests (--lib only) |
 | cargo test | PASS | ~133 tests (unit + integration) |
-| cargo bench | PASS | 10 benchmark cases |
+| cargo bench --no-run | PASS | All 10 benchmark cases compile in CI |
+| cargo llvm-cov | PASS | 50% line-coverage floor |
 | flutter analyze | PASS | No issues found |
 | flutter test | PASS | 38 tests |
 | contracts | PASS | Player, event, and OpenAPI contracts valid |
+| infrastructure self-test | PASS | Cleanup, modes, strict flags, JSON, retained failure logs |
+| fuzz smoke | PASS | Three targets passed locally; CI runs each for 10 seconds on nightly Rust |
 
 ## Known Limitations
 
@@ -268,9 +286,15 @@ the entire quality suite. The current results:
 2. **Flutter `pub get` not included**: `test.sh --flutter` runs `analyze` and
    `test` but does not run `flutter pub get`. CI and local development must
    ensure dependencies are fetched before running the test script.
-3. **No parallel execution**: All checks run sequentially. Parallel Rust and
+3. **No parallel execution**: Runner checks execute sequentially. Parallel Rust and
    Flutter checks would save ~5–10 seconds but introduce output interleaving
    issues that would require a more complex runner.
+4. **Benchmark thresholds**: CI compiles benchmarks but does not yet reject
+   statistically significant performance regressions.
+5. **OpenAPI compatibility**: The current test protects the version, path
+   count, selected schema names, and `/v1/` prefix. It is a surface regression
+   gate, not a complete semantic breaking-change detector.
+6. **UI coverage**: Flutter golden and full desktop E2E tests remain pending.
 
 ## Future Work
 
@@ -280,7 +304,8 @@ the entire quality suite. The current results:
   interleaved-but-grouped output.
 - Add Flutter golden tests for subtitle overlay and current-word highlight
   rendering.
-- Add property-based testing (`proptest`) for ASR timing merge algorithms.
+- Add semantic OpenAPI breaking-change detection against a reviewed baseline.
+- Add benchmark baselines and a statistically meaningful regression policy.
 - Expand integration tests to `domain` crate.
 
 ## References

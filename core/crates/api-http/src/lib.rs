@@ -1502,10 +1502,7 @@ mod tests {
         // All paths must be under /v1/.
         for line in openapi.lines() {
             if line.starts_with("  /") && !line.starts_with("  /v1/") {
-                panic!(
-                    "OpenAPI path not under /v1/ prefix: {}",
-                    line.trim()
-                );
+                panic!("OpenAPI path not under /v1/ prefix: {}", line.trim());
             }
         }
 

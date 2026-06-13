@@ -187,9 +187,11 @@ mod tests {
         );
         assert_eq!(result.hints[0].kind, DiagnosisKind::MeaningBarrier);
         assert_eq!(result.hints[0].word_profile_ids.len(), 1);
-        assert!(result.hints[0]
-            .word_profile_ids
-            .contains(&WordProfileId::parse("alpha").unwrap()));
+        assert!(
+            result.hints[0]
+                .word_profile_ids
+                .contains(&WordProfileId::parse("alpha").unwrap())
+        );
     }
 
     #[test]
@@ -219,10 +221,12 @@ mod tests {
             &[profile("alpha", WordStatus::KnownNotRecognized)],
             &[],
         );
-        assert!(result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::RecognitionBarrier));
+        assert!(
+            result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::RecognitionBarrier)
+        );
     }
 
     #[test]
@@ -235,10 +239,12 @@ mod tests {
                 ObservationResult::NotRecognizedInContext,
             )],
         );
-        assert!(result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::RecognitionBarrier));
+        assert!(
+            result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::RecognitionBarrier)
+        );
     }
 
     #[test]
@@ -250,10 +256,12 @@ mod tests {
             &[profile("alpha", WordStatus::KnownRecognized)],
             &[],
         );
-        assert!(!result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::RecognitionBarrier));
+        assert!(
+            !result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::RecognitionBarrier)
+        );
     }
 
     #[test]
@@ -269,10 +277,12 @@ mod tests {
                 ObservationResult::NotRecognizedInContext,
             )],
         );
-        assert!(!result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::RecognitionBarrier));
+        assert!(
+            !result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::RecognitionBarrier)
+        );
     }
 
     // ── InsufficientInformation ─────────────────────────────────────
@@ -280,28 +290,23 @@ mod tests {
     #[test]
     fn unclassified_words_trigger_insufficient_information() {
         let result = diagnose(&sentence(), &[], &[]);
-        assert_eq!(
-            result.hints[0].kind,
-            DiagnosisKind::InsufficientInformation
-        );
+        assert_eq!(result.hints[0].kind, DiagnosisKind::InsufficientInformation);
         assert_eq!(result.unclassified_lemmas.len(), 2);
     }
 
     #[test]
     fn profile_without_status_treated_as_unclassified() {
-        let result = diagnose(
-            &sentence(),
-            &[profile_without_status("alpha")],
-            &[],
-        );
+        let result = diagnose(&sentence(), &[profile_without_status("alpha")], &[]);
         // alpha has a profile but no status → treated as unclassified
         assert!(result.unclassified_lemmas.contains(&"alpha".to_owned()));
         // beta is also unclassified (no profile)
         assert!(result.unclassified_lemmas.contains(&"beta".to_owned()));
-        assert!(result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::InsufficientInformation));
+        assert!(
+            result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::InsufficientInformation)
+        );
     }
 
     #[test]
@@ -313,10 +318,12 @@ mod tests {
         );
         // beta is unclassified → InsufficientInformation
         assert_eq!(result.unclassified_lemmas, vec!["beta"]);
-        assert!(result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::InsufficientInformation));
+        assert!(
+            result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::InsufficientInformation)
+        );
     }
 
     // ── OtherFactors ────────────────────────────────────────────────
@@ -347,14 +354,18 @@ mod tests {
             ],
             &[],
         );
-        assert!(result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::MeaningBarrier));
-        assert!(result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::RecognitionBarrier));
+        assert!(
+            result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::MeaningBarrier)
+        );
+        assert!(
+            result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::RecognitionBarrier)
+        );
     }
 
     // ── Non-word token filtering ────────────────────────────────────
@@ -397,17 +408,17 @@ mod tests {
     fn no_profiles_no_observations_all_unclassified() {
         let result = diagnose(&sentence(), &[], &[]);
         assert_eq!(result.unclassified_lemmas.len(), 2);
-        assert_eq!(
-            result.hints[0].kind,
-            DiagnosisKind::InsufficientInformation
-        );
+        assert_eq!(result.hints[0].kind, DiagnosisKind::InsufficientInformation);
         assert!(result.hints[0].word_profile_ids.is_empty());
     }
 
     #[test]
     fn sentence_id_is_preserved_in_diagnosis() {
         let result = diagnose(&sentence(), &[], &[]);
-        assert_eq!(result.sentence_id, SubtitleSentenceId::parse("sentence").unwrap());
+        assert_eq!(
+            result.sentence_id,
+            SubtitleSentenceId::parse("sentence").unwrap()
+        );
     }
 
     #[test]
@@ -418,14 +429,18 @@ mod tests {
             &[profile("alpha", WordStatus::UnknownMeaning)],
             &[],
         );
-        assert!(result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::MeaningBarrier));
-        assert!(result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::InsufficientInformation));
+        assert!(
+            result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::MeaningBarrier)
+        );
+        assert!(
+            result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::InsufficientInformation)
+        );
     }
 
     #[test]
@@ -437,10 +452,12 @@ mod tests {
             &[profile("alpha", WordStatus::KnownRecognized)],
             &[observation("alpha", ObservationResult::RecognizedInContext)],
         );
-        assert!(!result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::RecognitionBarrier));
+        assert!(
+            !result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::RecognitionBarrier)
+        );
     }
 
     #[test]
@@ -450,11 +467,7 @@ mod tests {
             ("the", SubtitleTokenKind::Word),
             ("the", SubtitleTokenKind::Word),
         ]);
-        let result = diagnose(
-            &sent,
-            &[profile("the", WordStatus::UnknownMeaning)],
-            &[],
-        );
+        let result = diagnose(&sent, &[profile("the", WordStatus::UnknownMeaning)], &[]);
         // Only one MeaningBarrier hint, even though "the" appears twice
         let meaning_count = result
             .hints

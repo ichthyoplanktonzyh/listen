@@ -32,31 +32,12 @@ chmod +x "$tmp/ffmpeg" "$tmp/whisper-cli"
 printf 'model' >"$tmp/model.bin"
 printf 'media' >"$tmp/media.mp4"
 
-# m17 uses python3 for JSON (no node dependency). Keep inline python3 for business logic
-# but let lib handle API lifecycle.
-# We inline start_api here to pass the extra env vars cleanly.
-LLPLAYERNEXT_DB="$tmp/m17.sqlite" \
-LLPLAYERNEXT_SUPPORT_DIR="$tmp/support" \
-LLPLAYERNEXT_API_TOKEN="$token" \
-LLPLAYERNEXT_FFMPEG="$tmp/ffmpeg" \
-LLPLAYERNEXT_WHISPER_CLI="$tmp/whisper-cli" \
-  "$cargo_bin" run --quiet -p api-http >"$tmp/api.log" 2>&1 &
-api_pid=$!
-
-for _ in $(seq 1 100); do
-  address="$(/usr/bin/python3 -c 'import json,sys
-for line in open(sys.argv[1], errors="ignore"):
-  try:
-    value=json.loads(line)
-    if value.get("event")=="api.started":
-      print(value["address"]); break
-  except Exception: pass' "$tmp/api.log")"
-  [[ -n "$address" ]] && break
-  sleep 0.1
-done
-[[ -n "${address:-}" ]] || { echo "ERROR: api-http did not start" >&2; exit 1; }
-base="http://$address"
-auth=(-H "Authorization: Bearer $token" -H "Content-Type: application/json")
+# m17 uses python3 for business JSON parsing, while the shared helper owns
+# API startup, readiness, and cleanup.
+start_api "$tmp/m17.sqlite" "$tmp/api.log" "$token" \
+  "LLPLAYERNEXT_SUPPORT_DIR=$tmp/support" \
+  "LLPLAYERNEXT_FFMPEG=$tmp/ffmpeg" \
+  "LLPLAYERNEXT_WHISPER_CLI=$tmp/whisper-cli"
 
 media="$(api_curl -d '{"path":"'"$tmp/media.mp4"'","fingerprint":"m17-media","title":"M17","kind":"video"}' "$base/v1/media")"
 media_id="$(printf '%s' "$media" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"

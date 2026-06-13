@@ -63,10 +63,16 @@ Prototype-specific commands live in each spike README.
 ## Verification
 
 ```sh
-cargo fmt --check
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-./scripts/validate-contracts.sh
+# Fast local feedback: formatting, lint, Rust lib tests, Flutter analysis
+./scripts/test.sh --quick
+
+# Complete strict quality gate used by CI
+./scripts/test.sh --full --strict
+
+# Test the testing infrastructure itself
+./scripts/test-infrastructure.sh
+
+# Historical milestone acceptance suites
 ./scripts/verify-m1.sh
 ./scripts/verify-m15.sh
 ./scripts/verify-m16.sh
@@ -76,6 +82,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 ./scripts/build-macos-mvp.sh
 ./scripts/verify-mvp.sh
 ```
+
+See `docs/features/testing-workflow.md` for runner modes, retained failure logs,
+coverage, benchmark compilation, fuzz smoke tests, and known limitations.
 
 The local API binds only to loopback and reports its random port and bearer
 token in a structured startup handshake. See `docs/architecture/` for module,

@@ -417,29 +417,26 @@ mod tests {
     use super::*;
     use domain::{SubtitleSentenceId, SubtitleToken, SubtitleTokenKind, TimeMs};
 
-    fn fixture_path() -> PathBuf {
-        std::env::temp_dir().join(format!(
-            "llplayernext-ecdict-{}-{}.csv",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ))
+    fn fixture() -> tempfile::NamedTempFile {
+        tempfile::Builder::new()
+            .prefix("llplayernext-ecdict-")
+            .suffix(".csv")
+            .tempfile()
+            .unwrap()
     }
 
     #[test]
     fn ecdict_normalizes_inflections_and_finds_phrase_entries() {
-        let path = fixture_path();
+        let fixture = fixture();
+        let path = fixture.path().to_path_buf();
         {
-            let file = std::fs::File::create(&path).unwrap();
             use std::io::Write;
-            let mut writer = std::io::BufWriter::new(&file);
+            let mut writer = std::io::BufWriter::new(fixture.as_file());
             writeln!(writer, "word,phonetic,definition,translation,pos,collins,oxford,tag,bnc,frq,exchange,detail,audio").unwrap();
             writeln!(writer, "go,go,move,,,,,,,,\"p:went/gone i:going 3:goes\",,").unwrap();
             writeln!(writer, "piece of cake,,easy task,,,,,,,,,,").unwrap();
             writer.flush().unwrap();
-            file.sync_all().unwrap(); // ensure metadata is persisted before read
+            fixture.as_file().sync_all().unwrap();
         }
         let provider = EcdictProvider::with_path(path.clone(), "fixture-v1");
         let language = LanguageCode::parse("en-US").unwrap();
@@ -476,7 +473,6 @@ mod tests {
         assert_eq!(candidates[0].normalized_form, "piece of cake");
         assert_eq!(candidates[0].token_start, 3);
         assert_eq!(candidates[0].token_end, 5);
-        std::fs::remove_file(path).unwrap();
     }
 
     #[test]
@@ -498,13 +494,16 @@ mod tests {
 
     #[test]
     fn ecdict_phrase_candidates_handle_short_sentences() {
-        let path = fixture_path();
-        std::fs::write(
-            &path,
+        let mut fixture = fixture();
+        let path = fixture.path().to_path_buf();
+        use std::io::Write;
+        write!(
+            fixture,
             "word,phonetic,definition,translation,pos,collins,oxford,tag,bnc,frq,exchange,detail,audio\n\
-             piece of cake,,easy task,,,,,,,,,,\n",
+             piece of cake,,easy task,,,,,,,,,,\n"
         )
         .unwrap();
+        fixture.flush().unwrap();
         let provider = EcdictProvider::with_path(path.clone(), "test");
         let sentence = SubtitleSentence {
             id: SubtitleSentenceId::parse("short").unwrap(),
@@ -528,6 +527,5 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
-        std::fs::remove_file(path).unwrap();
     }
 }
