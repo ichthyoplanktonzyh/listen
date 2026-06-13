@@ -727,4 +727,72 @@ mod tests {
             );
         }
     }
+
+    // ── Property-based tests ───────────────────────────────────────
+
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            /// estimate_word_timings: output count equals word token count.
+            #[test]
+            fn prop_estimate_output_count_matches_words(
+                words in prop::collection::vec("[a-z]{2,12}", 1..50),
+            ) {
+                let text = words.join(" ");
+                let sent = sentence(&text);
+                let word_count = sent.tokens.iter()
+                    .filter(|t| t.kind == SubtitleTokenKind::Word)
+                    .count();
+                let timings = estimate_word_timings(&sent);
+                prop_assert_eq!(timings.len(), word_count);
+            }
+
+            /// estimate_word_timings: every timing has start ≤ end.
+            #[test]
+            fn prop_estimate_timings_start_le_end(
+                words in prop::collection::vec("[a-z]{2,12}", 1..50),
+            ) {
+                let text = words.join(" ");
+                let sent = sentence(&text);
+                let timings = estimate_word_timings(&sent);
+                for t in &timings {
+                    prop_assert!(t.start_ms <= t.end_ms,
+                        "start_ms {} > end_ms {}", t.start_ms, t.end_ms);
+                }
+            }
+
+            /// estimate_word_timings: timings are within sentence boundaries.
+            #[test]
+            fn prop_estimate_timings_within_bounds(
+                words in prop::collection::vec("[a-z]{2,12}", 1..50),
+            ) {
+                let text = words.join(" ");
+                let sent = sentence(&text);
+                let timings = estimate_word_timings(&sent);
+                if timings.is_empty() {
+                    return Ok(());
+                }
+                prop_assert!(timings[0].start_ms >= sent.start.get());
+                prop_assert!(timings.last().unwrap().end_ms <= sent.end.get());
+            }
+
+            /// estimate_word_timings: timings are monotonic.
+            #[test]
+            fn prop_estimate_timings_monotonic(
+                words in prop::collection::vec("[a-z]{2,12}", 1..50),
+            ) {
+                let text = words.join(" ");
+                let sent = sentence(&text);
+                let timings = estimate_word_timings(&sent);
+                for pair in timings.windows(2) {
+                    prop_assert!(pair[0].end_ms <= pair[1].start_ms,
+                        "non-monotonic: {}..{} then {}..{}",
+                        pair[0].start_ms, pair[0].end_ms,
+                        pair[1].start_ms, pair[1].end_ms);
+                }
+            }
+        }
+    }
 }

@@ -87,6 +87,10 @@
   tokenize, normalize) and `speech-analysis` (ASR timing extraction, word
   timing estimation). 10 benchmark cases in total covering small fixtures and
   large synthetic inputs (2k sentences, 500 segments).
+- Added `proptest` property-based testing with 10 property tests across
+  `speech-analysis` (timing output count, monotonicity, bounds, start≤end)
+  and `subtitle-core` (normalize idempotence, tokenize word normalization,
+  SRT/VTT no-panic, SRT draft field validity). Total workspace tests: 132.
 
 ## 0.7.0 - 2026-06-13
 

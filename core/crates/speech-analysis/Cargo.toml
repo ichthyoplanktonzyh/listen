@@ -13,6 +13,7 @@ thiserror.workspace = true
 [dev-dependencies]
 domain = { path = "../domain" }
 criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1"
 
 [[bench]]
 name = "asr_timing_bench"

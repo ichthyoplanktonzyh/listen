@@ -39,9 +39,9 @@
 | `dictionary-provider` | 3 | 0 | 3 | 🟡 |
 | `domain` | 3 | 0 | 3 | 🟡 |
 | `persistence-sqlite` | 19 | 6 | 25 | ✅ 最佳 |
-| `speech-analysis` | 10 | 3 | 13 | ✅ 含 fuzz target |
-| `subtitle-core` | 6 | 0 | 6 | 🟡 含 fuzz targets |
-| **总计** | **~113** | **9** | **~122** | |
+| `speech-analysis` | 14 | 3 | 17 | ✅ 含 proptest |
+| `subtitle-core` | 12 | 0 | 12 | ✅ 含 proptest |
+| **总计** | **~123** | **9** | **~132** | |
 
 ### Flutter 测试分布
 
@@ -205,8 +205,11 @@ cargo test --workspace --lib  # 只跑单元测试，跳过集成测试
 - OpenAPI spec 与实现的自动比对
 
 ### P2-5: Property-based testing
-- `proptest` for ASR timing merge algorithms
-- `proptest` for subtitle parsing
+- 已通过 `proptest` 添加 10 个属性测试
+- `speech-analysis`: estimate_word_timings 输出计数、start≤end、边界、单调性 (4)
+- `subtitle-core`: normalize_display 幂等性、无panic；tokenize 规范化；SRT/VTT 无panic；SRT 解析字段有效性 (6)
+
+**状态:** ✅ done — 10 property-based tests
 
 ---
 
@@ -226,7 +229,7 @@ cargo test --workspace --lib  # 只跑单元测试，跳过集成测试
 | 10 | E2E 测试 | P2 | ⬜ | |
 | 11 | 性能基准 | P2 | ✅ done | 2026-06-13 |
 | 12 | API 回归测试 | P2 | ⬜ | |
-| 13 | Property-based testing | P2 | ⬜ | |
+| 13 | Property-based testing | P2 | ✅ done | 2026-06-13 |
 
 ---
 

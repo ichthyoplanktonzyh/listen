@@ -498,4 +498,75 @@ mod tests {
         assert_eq!(first.id, second.id);
         assert_eq!(first.sentences[0].tokens[0].text, "Hello");
     }
+
+    // ── Property-based tests ───────────────────────────────────────
+
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            /// normalize_display is idempotent: applying it twice yields the
+            /// same result as applying it once.
+            #[test]
+            fn prop_normalize_display_idempotent(s in "\\PC*") {
+                let once = normalize_display(&s);
+                let twice = normalize_display(&once);
+                prop_assert_eq!(&once, &twice);
+            }
+
+            /// normalize_display never panics on any input.
+            #[test]
+            fn prop_normalize_display_no_panic(s in "\\PC*") {
+                let _ = normalize_display(&s);
+            }
+
+            /// tokenize_english: word tokens always have normalized form.
+            #[test]
+            fn prop_tokenize_word_tokens_have_normalized(
+                s in "[a-zA-Z '.,!?-]{0,200}",
+            ) {
+                let tokens = tokenize_english(&s);
+                // Verify round-trip: concatenated texts match original
+                let reconstructed: String = tokens
+                    .iter()
+                    .map(|t| t.text.as_str())
+                    .collect();
+                prop_assert_eq!(&reconstructed, &s,
+                    "tokenization does not round-trip");
+                // Every word token has Some normalized form
+                for token in &tokens {
+                    if token.kind == SubtitleTokenKind::Word {
+                        prop_assert!(token.normalized.is_some(),
+                            "word token {:?} missing normalized form", token.text);
+                    }
+                }
+            }
+
+            /// parse_srt: never panics on any input.
+            #[test]
+            fn prop_parse_srt_no_panic(s in "\\PC*") {
+                let _ = parse_srt(&s);
+            }
+
+            /// parse_webvtt: never panics on any input.
+            #[test]
+            fn prop_parse_webvtt_no_panic(s in "\\PC*") {
+                let _ = parse_webvtt(&s);
+            }
+
+            /// parse_srt: valid SRT draft entries have required fields.
+            #[test]
+            fn prop_parse_srt_sentence_count(
+                s in "[0-9\n:,> \r\na-zA-Z-]{0,500}",
+            ) {
+                if let Ok(drafts) = parse_srt(&s) {
+                    for draft in &drafts {
+                        prop_assert!(!draft.text.is_empty());
+                        prop_assert!(draft.start_ms <= draft.end_ms);
+                    }
+                }
+            }
+        }
+    }
 }
