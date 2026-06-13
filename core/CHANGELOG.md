@@ -79,6 +79,10 @@
 - Created `docs/features/testing-milestone.md` as the tracking document for
   the test system improvement initiative with P0/P1/P2 tiered goals and
   progress tracking.
+- Added 16 unit tests to the `diagnosis-core` crate (2 → 18) covering all
+  `diagnose` function branches: `MeaningBarrier`, `RecognitionBarrier`,
+  `InsufficientInformation`, `OtherFactors`, mixed scenarios, non-word token
+  filtering, `None` status handling, duplicate lemma dedup, and edge cases.
 
 ## 0.7.0 - 2026-06-13
 

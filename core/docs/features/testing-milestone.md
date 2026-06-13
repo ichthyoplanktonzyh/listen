@@ -2,7 +2,7 @@
 
 > **Created:** 2026-06-13
 > **Branch:** `feature/asr-word-timestamps`
-> **Status:** P0 complete, P1 in-progress
+> **Status:** P0 complete, P1 complete
 > **Target:** P0 → P1 → P2 梯度推进
 
 ## 概述
@@ -35,13 +35,13 @@
 | `api-events` | 2 | 0 | 2 | 🟡 |
 | `api-http` | 10 | 0 | 10 | 🟡 已在 lib.rs 中有 HTTP 层测试 |
 | `application` | **42** | 0 | **42** | ✅ P0 完成 |
-| `diagnosis-core` | 2 | 0 | 2 | 🟡 |
+| `diagnosis-core` | 18 | 0 | 18 | ✅ P1 完成 |
 | `dictionary-provider` | 3 | 0 | 3 | 🟡 |
 | `domain` | 3 | 0 | 3 | 🟡 |
 | `persistence-sqlite` | 19 | 6 | 25 | ✅ 最佳 |
 | `speech-analysis` | 10 | 3 | 13 | ✅ 含 fuzz target |
 | `subtitle-core` | 6 | 0 | 6 | 🟡 含 fuzz targets |
-| **总计** | **~97** | **9** | **~106** | |
+| **总计** | **~113** | **9** | **~122** | |
 
 ### Flutter 测试分布
 
@@ -178,7 +178,7 @@ cargo test --workspace --lib  # 只跑单元测试，跳过集成测试
 
 纯逻辑 crate，非常适合增加测试。覆盖 diagnosis 核心算法。
 
-**状态:** ⬜ 待实施 (P1 backlog)
+**状态:** ✅ done — 18 测试覆盖 diagnose 所有分支
 
 ---
 
@@ -219,7 +219,7 @@ cargo test --workspace --lib  # 只跑单元测试，跳过集成测试
 | 5 | `testdata/` 规范化 | P1 | ✅ done | 2026-06-13 |
 | 6 | Fuzz 测试框架 (3 targets) | P1 | ✅ done | 2026-06-13 |
 | 7 | `--quick` 增强 | P1 | ✅ done | 2026-06-13 |
-| 8 | `diagnosis-core` 测试补充 | P1 | ⬜ | |
+| 8 | `diagnosis-core` 测试补充 | P1 | ✅ done | 2026-06-13 |
 | 9 | Flutter golden 测试 | P2 | ⬜ | |
 | 10 | E2E 测试 | P2 | ⬜ | |
 | 11 | 性能基准 | P2 | ⬜ | |
