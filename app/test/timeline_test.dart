@@ -86,6 +86,31 @@ void main() {
     );
   });
 
+  test('selects both words when repeated ASR points are split into intervals', () {
+    const timings = [
+      WordTiming(
+        sentenceId: 'sentence-1',
+        tokenIndex: 5,
+        start: Duration(milliseconds: 4200),
+        end: Duration(milliseconds: 4201),
+        source: 'asr_reported',
+        provider: 'whisper.cpp',
+      ),
+      WordTiming(
+        sentenceId: 'sentence-1',
+        tokenIndex: 6,
+        start: Duration(milliseconds: 4201),
+        end: Duration(milliseconds: 5560),
+        source: 'asr_reported',
+        provider: 'whisper.cpp',
+      ),
+    ];
+
+    expect(currentWordTokenIndex(timings, const Duration(milliseconds: 4200)), 5);
+    expect(currentWordTokenIndex(timings, const Duration(milliseconds: 4201)), 6);
+    expect(currentWordTokenIndex(timings, const Duration(milliseconds: 5559)), 6);
+  });
+
   test('parses word timing fields from the API contract', () {
     final timing = WordTiming.fromJson(const {
       'sentence_id': 'sentence-1',
