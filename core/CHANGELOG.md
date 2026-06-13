@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.1 - 2026-06-13
+
+- Enabled whisper.cpp DTW (Dynamic Time Warping) token-level timestamps during
+  ASR transcription so generated subtitle tracks produce `asr_reported` word
+  timings instead of falling back to the weighted estimator.
+- Added `-ojf` (JSON-full) and `-dtw <preset>` flags to the whisper-cli
+  invocation. The JSON-full output carries per-token `t_dtw` cross-attention
+  alignment timestamps in centiseconds.
+- New `asr_timing` module merges whisper subword tokens into lexical words by
+  leading-whitespace rules and produces `WordTiming` entries with
+  `timing_source = asr_reported`.
+- DTW is enabled only for `whisper`-family models; custom models skip the step.
+- Every stage degrades safely: unavailable `t_dtw` values, segment count
+  mismatches, word count mismatches, boundary violations, and non-monotonic
+  timestamps all fall back to the existing deterministic weighted estimator on a
+  per-sentence basis.
+- The Flutter frontend, database schema, and `timing_priority` logic required
+  zero changes — `AsrReported` (priority 3) already overrides `Estimated`
+  (priority 1) in the existing word-timing pipeline.
+
 ## 0.7.0 - 2026-06-13
 
 - Integrated the modular Flutter controller/widget architecture while
