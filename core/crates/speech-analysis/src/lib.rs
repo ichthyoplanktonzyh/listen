@@ -1,3 +1,4 @@
+pub mod asr_timing;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::OnceLock;

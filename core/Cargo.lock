@@ -29,6 +29,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "speech-analysis",
  "tokio",
  "tower",
 ]
@@ -1150,6 +1151,8 @@ version = "0.7.0"
 dependencies = [
  "domain",
  "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

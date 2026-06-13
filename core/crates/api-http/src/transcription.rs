@@ -459,14 +459,19 @@ impl TranscriptionCoordinator {
         let output = work.join("result");
         let mut whisper_args = vec![
             "-m".into(),
-            model_path,
+            model_path.clone(),
             "-f".into(),
             wav.to_string_lossy().into_owned(),
             "-osrt".into(),
-            "-oj".into(),
+            "-ojf".into(),
             "-of".into(),
             output.to_string_lossy().into_owned(),
         ];
+        let enable_dtw = model.family == "whisper";
+        if enable_dtw {
+            whisper_args.push("-dtw".into());
+            whisper_args.push(model.display_name.clone());
+        }
         whisper_args.extend([
             "-l".into(),
             job.requested_language
@@ -508,6 +513,28 @@ impl TranscriptionCoordinator {
                 job.model_revision
             )),
         })?;
+        // Extract ASR word-level timings from JSON-full output when DTW was enabled.
+        if enable_dtw {
+            let json_path = output.with_extension("json");
+            if let Ok(json_bytes) = tokio::fs::read(&json_path).await
+                && let Ok(track) = self.services.read_subtitle_track(&track.id)
+                && let Some(track) = track
+            {
+                let timings = speech_analysis::asr_timing::extract_word_timings_from_json(
+                    &json_bytes,
+                    &track.sentences,
+                );
+                match timings {
+                    Ok(timings) if !timings.is_empty() => {
+                        let _ = self.services.store_word_timings(&track.id, &timings);
+                    }
+                    _ => {
+                        // Fall back to estimation — this is expected when DTW is
+                        // unavailable for some or all tokens.
+                    }
+                }
+            }
+        }
         self.repository.save_provenance(&SubtitleTrackProvenance {
             track_id: track.id.clone(),
             transcription_job_id: job.id.clone(),
