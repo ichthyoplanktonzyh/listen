@@ -516,22 +516,50 @@ impl TranscriptionCoordinator {
         // Extract ASR word-level timings from JSON-full output when DTW was enabled.
         if enable_dtw {
             let json_path = output.with_extension("json");
-            if let Ok(json_bytes) = tokio::fs::read(&json_path).await
-                && let Ok(track) = self.services.read_subtitle_track(&track.id)
-                && let Some(track) = track
-            {
-                let timings = speech_analysis::asr_timing::extract_word_timings_from_json(
-                    &json_bytes,
-                    &track.sentences,
-                );
-                match timings {
-                    Ok(timings) if !timings.is_empty() => {
-                        let _ = self.services.store_word_timings(&track.id, &timings);
+            match tokio::fs::read(&json_path).await {
+                Ok(json_bytes) => match self.services.read_subtitle_track(&track.id) {
+                    Ok(Some(imported_track)) => {
+                        match speech_analysis::asr_timing::extract_word_timings_from_json(
+                            &json_bytes,
+                            &imported_track.sentences,
+                        ) {
+                            Ok(timings) if !timings.is_empty() => {
+                                if let Err(error) =
+                                    self.services.store_word_timings(&track.id, &timings)
+                                {
+                                    eprintln!(
+                                        "failed to store ASR word timings for track {}: {error}",
+                                        track.id.as_str()
+                                    );
+                                }
+                            }
+                            Ok(_) => {}
+                            Err(error) => {
+                                eprintln!(
+                                    "failed to extract ASR word timings for track {}: {error}",
+                                    track.id.as_str()
+                                );
+                            }
+                        }
                     }
-                    _ => {
-                        // Fall back to estimation — this is expected when DTW is
-                        // unavailable for some or all tokens.
+                    Ok(None) => {
+                        eprintln!(
+                            "cannot extract ASR word timings: imported track {} was not found",
+                            track.id.as_str()
+                        );
                     }
+                    Err(error) => {
+                        eprintln!(
+                            "failed to read imported track {} for ASR word timings: {error}",
+                            track.id.as_str()
+                        );
+                    }
+                },
+                Err(error) => {
+                    eprintln!(
+                        "failed to read whisper JSON-full output {}: {error}",
+                        json_path.display()
+                    );
                 }
             }
         }

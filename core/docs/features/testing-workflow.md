@@ -27,6 +27,8 @@ The unified test runner (`scripts/test.sh`) consolidates all checks into a
 single command with structured pass/fail summary output. Successful-run logs
 are deleted automatically. If any check fails, the complete logs remain at
 the printed temporary path while the terminal shows a concise error summary.
+Human-readable runs print one progress heartbeat before each check so external
+executors do not mistake a quiet compiler/test process for a stalled command.
 This reduces per-verification token consumption to ~500 (94% less).
 
 ## Quick Start
@@ -52,6 +54,9 @@ This reduces per-verification token consumption to ~500 (94% less).
 
 # Treat warnings as errors and require the committed Cargo.lock
 ./scripts/test.sh --strict
+
+# Reduce peak memory and avoid repeated Flutter dependency resolution
+./scripts/test.sh --full --strict --low-memory
 
 # Verify cleanup, mode selection, strict flags, JSON output, and log retention
 ./scripts/test-infrastructure.sh
@@ -86,7 +91,9 @@ Key design decisions:
 | `set +e` / `set -e` around command execution | Allows capturing the exit code without `set -e` aborting the script |
 | `||` protection at call site | `run_check ... \|\| rc=$?` prevents `set -e` from triggering on test failures |
 | Failure log retention | Successful-run logs are deleted; failed-run logs remain at the path printed by the runner |
+| Progress heartbeat | Human-readable runs print the current check before executing it; JSON output stays silent |
 | `--strict` | CI requires `Cargo.lock`, denies Rust warnings, and makes Flutter infos/warnings fatal |
+| `--low-memory` | Sets Cargo/Rust/Rayon concurrency to 1 and runs `flutter test --concurrency=1 --no-pub` after analyze |
 | Mode-specific unit subset | `cargo test --workspace --lib` runs only in `--quick`; Rust/full modes run the complete suite once |
 
 ### Check Registry
@@ -206,6 +213,8 @@ running the product suite. It verifies:
 - temporary directories and API processes are cleaned on EXIT;
 - quick mode runs the Rust lib-test subset but Rust mode does not duplicate it;
 - strict mode adds locked dependency and fatal-warning flags;
+- low-memory mode limits concurrency and reuses Flutter dependencies;
+- exit code 137 is reported explicitly as `SIGKILL` / external resource enforcement;
 - Rust pass-through arguments are separated for the test harness;
 - JSON output parses successfully;
 - failed-run logs still exist at the path reported by the runner.
@@ -214,15 +223,15 @@ CI runs this self-test in the macOS desktop job.
 
 ### Test Data: ASR JSON Fixture
 
-`testdata/asr/sample-output.json` is a hand-crafted whisper.cpp `-ojf` output
-file used by the `speech-analysis` integration tests. It contains three
-segments designed to exercise the extraction pipeline:
+`testdata/asr/sample-output.json` is a compact whisper.cpp `-ojf` output
+fixture used by the `speech-analysis` integration tests. Its structure mirrors
+real bundled-runtime output, including `[_BEG_]` and `[_TT_*]` tokens:
 
 | Segment | Content | Purpose |
 |---|---|---|
-| 1 | "Hello", "world", "." | Normal single-token words; punctuation merge |
-| 2 | "I", "was", "play", "ing", "games", "." | Subword merge ("playing" ← "play"+"ing"); punctuation merge |
-| 3 | "This" (t_dtw=-1), "is", "what" | `t_dtw=-1` filter; word count mismatch fallback |
+| 1 | `[_BEG_]`, "Hello", "world", ".", `[_TT_*]` | Real special-token filtering and normal intervals |
+| 2 | "I", "was", "play", "ing", "games", ".", `[_TT_*]` | Subword merge and sentence-end boundary |
+| 3 | "This" (`t_dtw=-1`), "is", "what", `[_TT_*]` | Unavailable lexical token causes sentence fallback |
 
 ### Integration Tests
 
@@ -289,12 +298,15 @@ the entire quality suite. The current results:
 3. **No parallel execution**: Runner checks execute sequentially. Parallel Rust and
    Flutter checks would save ~5–10 seconds but introduce output interleaving
    issues that would require a more complex runner.
-4. **Benchmark thresholds**: CI compiles benchmarks but does not yet reject
+4. **External SIGKILL**: A host or sandbox can still kill the runner itself
+   before it can print a summary. Use `--low-memory` to reduce peak pressure;
+   child-command exit 137 is diagnosed explicitly.
+5. **Benchmark thresholds**: CI compiles benchmarks but does not yet reject
    statistically significant performance regressions.
-5. **OpenAPI compatibility**: The current test protects the version, path
+6. **OpenAPI compatibility**: The current test protects the version, path
    count, selected schema names, and `/v1/` prefix. It is a surface regression
    gate, not a complete semantic breaking-change detector.
-6. **UI coverage**: Flutter golden and full desktop E2E tests remain pending.
+7. **UI coverage**: Flutter golden and full desktop E2E tests remain pending.
 
 ## Future Work
 

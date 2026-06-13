@@ -35,7 +35,7 @@ testdata/
 
 | File | Size | Used By | Description |
 |------|------|---------|-------------|
-| `asr/sample-output.json` | ~2 KB | `speech-analysis/tests/asr_timing_integration_test.rs` (3 tests) | Hand-crafted whisper `-ojf` output with 3 segments exercising: normal single-token words, subword merge ("playing" ← "play"+"ing"), and `t_dtw=-1` filter fallback |
+| `asr/sample-output.json` | ~2 KB | `speech-analysis/tests/asr_timing_integration_test.rs` | Compact real-structure whisper `-ojf` output exercising special-token filtering, non-empty word intervals, subword merge, and unavailable lexical-token fallback |
 
 ### Subtitle Fixtures
 

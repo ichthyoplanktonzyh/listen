@@ -12,16 +12,18 @@ fn asr_fixture_bytes() -> Vec<u8> {
 fn asr_fixture_sentences() -> Vec<SubtitleSentence> {
     // Sentences matching sample-output.json: 3 segments
     [
-        ("Hello world.", &["Hello", "world", "."] as &[&str]),
+        (0, 4000, "Hello world.", &["Hello", "world", "."] as &[&str]),
         (
+            4000,
+            9000,
             "I was playing games.",
-            &["I", "was", "play", "ing", "games", "."],
+            &["I", "was", "playing", "games", "."],
         ),
-        ("This is what", &["This", "is", "what"]),
+        (9000, 11000, "This is what", &["This", "is", "what"]),
     ]
     .into_iter()
     .enumerate()
-    .map(|(idx, (text, words))| {
+    .map(|(idx, (start_ms, end_ms, text, words))| {
         let tokens: Vec<SubtitleToken> = words
             .iter()
             .enumerate()
@@ -41,8 +43,8 @@ fn asr_fixture_sentences() -> Vec<SubtitleSentence> {
         SubtitleSentence {
             id: SubtitleSentenceId::parse(format!("s{idx}")).unwrap(),
             index: idx as u32,
-            start: TimeMs::new((idx * 1000) as u64),
-            end: TimeMs::new((idx * 1000 + 800) as u64),
+            start: TimeMs::new(start_ms),
+            end: TimeMs::new(end_ms),
             original_text: (*text).into(),
             display_text: (*text).into(),
             tokens,

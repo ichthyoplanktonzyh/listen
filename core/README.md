@@ -69,6 +69,9 @@ Prototype-specific commands live in each spike README.
 # Complete strict quality gate used by CI
 ./scripts/test.sh --full --strict
 
+# Complete strict gate with reduced build/test concurrency
+./scripts/test.sh --full --strict --low-memory
+
 # Test the testing infrastructure itself
 ./scripts/test-infrastructure.sh
 

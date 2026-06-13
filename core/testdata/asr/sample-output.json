@@ -3,9 +3,11 @@
     {
       "text": "Hello world.",
       "tokens": [
+        {"text": "[_BEG_]", "t_dtw": -1},
         {"text": " Hello", "t_dtw": 100},
         {"text": " world", "t_dtw": 250},
-        {"text": ".", "t_dtw": 350}
+        {"text": ".", "t_dtw": 350},
+        {"text": "[_TT_200]", "t_dtw": -1}
       ]
     },
     {
@@ -16,7 +18,8 @@
         {"text": " play", "t_dtw": 580},
         {"text": "ing", "t_dtw": 620},
         {"text": " games", "t_dtw": 700},
-        {"text": ".", "t_dtw": 820}
+        {"text": ".", "t_dtw": 820},
+        {"text": "[_TT_450]", "t_dtw": -1}
       ]
     },
     {
@@ -24,7 +27,8 @@
       "tokens": [
         {"text": " This", "t_dtw": -1},
         {"text": " is", "t_dtw": 900},
-        {"text": " what", "t_dtw": 980}
+        {"text": " what", "t_dtw": 980},
+        {"text": "[_TT_550]", "t_dtw": -1}
       ]
     }
   ]

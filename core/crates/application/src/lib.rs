@@ -800,11 +800,7 @@ impl AppServices {
         sentence_id: &SubtitleSentenceId,
     ) -> Result<Vec<WordTiming>, ApplicationError> {
         let existing = self.subtitles.get_word_timings(sentence_id)?;
-        if let Some(first) = existing.first()
-            && (first.timing_source != TimingSource::Estimated
-                || (first.provider_id == "subtitle-weighted-estimator"
-                    && first.provider_version == "v1"))
-        {
+        if word_timing_cache_is_usable(&existing) {
             return Ok(existing);
         }
         let sentence = self
@@ -821,11 +817,7 @@ impl AppServices {
         sentence_id: &SubtitleSentenceId,
     ) -> Result<Option<bool>, ApplicationError> {
         let values = self.subtitles.get_word_timings(sentence_id)?;
-        Ok(values.first().map(|first| {
-            first.timing_source != TimingSource::Estimated
-                || (first.provider_id == "subtitle-weighted-estimator"
-                    && first.provider_version == "v1")
-        }))
+        Ok(values.first().map(|_| word_timing_cache_is_usable(&values)))
     }
 
     pub fn analyze_pronunciation_track(
@@ -877,7 +869,7 @@ impl AppServices {
             let sentence = sentences
                 .get(&timing.sentence_id)
                 .ok_or(ApplicationError::Validation("word timing sentence"))?;
-            if timing.end_ms < timing.start_ms
+            if timing.end_ms <= timing.start_ms
                 || timing.start_ms < sentence.start.get()
                 || timing.end_ms > sentence.end.get()
                 || !sentence.tokens.iter().any(|token| {
@@ -1055,6 +1047,15 @@ fn timing_priority(source: TimingSource) -> u8 {
         TimingSource::AsrReported => 3,
         TimingSource::UserAdjusted => 4,
     }
+}
+
+fn word_timing_cache_is_usable(values: &[WordTiming]) -> bool {
+    values.first().is_some_and(|first| {
+        (first.timing_source != TimingSource::Estimated
+            || (first.provider_id == "subtitle-weighted-estimator"
+                && first.provider_version == "v1"))
+            && values.iter().all(|value| value.start_ms < value.end_ms)
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -1603,6 +1604,23 @@ mod tests {
         assert!(
             timing_priority(TimingSource::UserAdjusted) > timing_priority(TimingSource::Estimated)
         );
+    }
+
+    #[test]
+    fn zero_length_word_timing_cache_is_not_usable() {
+        let timing = WordTiming {
+            sentence_id: SubtitleSentenceId::from_fingerprint("test", "sentence"),
+            token_index: 0,
+            text: "word".into(),
+            start_ms: 100,
+            end_ms: 100,
+            confidence: None,
+            timing_source: TimingSource::AsrReported,
+            provider_id: "whisper.cpp".into(),
+            provider_version: "dtw-v1".into(),
+        };
+
+        assert!(!word_timing_cache_is_usable(&[timing]));
     }
 
     // ── phrase_candidates ───────────────────────────────────────────────────

@@ -13,6 +13,7 @@
 #   --verbose    Stream raw output (no capture)
 #   --debug      Print test.sh internal execution steps
 #   --strict     Treat warnings as errors and require Cargo.lock
+#   --low-memory Limit build/test concurrency and avoid repeated Flutter pub get
 #
 # Pass-through:
 #   ./scripts/test.sh --rust -- --nocapture --test-threads=1
@@ -50,6 +51,7 @@ JSON_OUTPUT=false
 VERBOSE=false
 DEBUG=false
 STRICT=false
+LOW_MEMORY=false
 PASSTHROUGH=()
 
 while [[ $# -gt 0 ]]; do
@@ -62,6 +64,7 @@ while [[ $# -gt 0 ]]; do
     --verbose) VERBOSE=true;   shift ;;
     --debug)   DEBUG=true;     shift ;;
     --strict)  STRICT=true;    shift ;;
+    --low-memory) LOW_MEMORY=true; shift ;;
     --)        shift; PASSTHROUGH=("$@"); break ;;
     *)         echo "Unknown flag: $1" >&2; exit 2 ;;
   esac
@@ -82,7 +85,7 @@ cleanup_logs() {
 trap cleanup_logs EXIT
 
 if $DEBUG; then
-  echo "[test.sh] MODE=$MODE JSON=$JSON_OUTPUT STRICT=$STRICT" >&2
+  echo "[test.sh] MODE=$MODE JSON=$JSON_OUTPUT STRICT=$STRICT LOW_MEMORY=$LOW_MEMORY" >&2
   echo "[test.sh] LOG_DIR=$LOG_DIR" >&2
   echo "[test.sh] PASSTHROUGH=${PASSTHROUGH[*]:-}" >&2
 fi
@@ -211,6 +214,7 @@ run_check() {
       ;;
     flutter_test)
       cmd=("$flutter_bin" "test")
+      $LOW_MEMORY && cmd+=("--concurrency=1" "--no-pub")
       [[ ${#PASSTHROUGH[@]} -gt 0 ]] && cmd+=("${PASSTHROUGH[@]}")
       run_dir="$root/apps/desktop"
       ;;
@@ -228,11 +232,25 @@ run_check() {
 
   set +e
   if $VERBOSE; then
-    (cd "$run_dir" && "${cmd[@]}" >"$log" 2>&1)
+    if $LOW_MEMORY; then
+      (
+        cd "$run_dir" &&
+          CARGO_BUILD_JOBS=1 RUST_TEST_THREADS=1 RAYON_NUM_THREADS=1 "${cmd[@]}" >"$log" 2>&1
+      )
+    else
+      (cd "$run_dir" && "${cmd[@]}" >"$log" 2>&1)
+    fi
     rc=$?
     cat "$log"
   else
-    (cd "$run_dir" && "${cmd[@]}" >"$log" 2>&1)
+    if $LOW_MEMORY; then
+      (
+        cd "$run_dir" &&
+          CARGO_BUILD_JOBS=1 RUST_TEST_THREADS=1 RAYON_NUM_THREADS=1 "${cmd[@]}" >"$log" 2>&1
+      )
+    else
+      (cd "$run_dir" && "${cmd[@]}" >"$log" 2>&1)
+    fi
     rc=$?
   fi
   set -e
@@ -245,6 +263,10 @@ run_check() {
     SUMMARY="$(extract_summary "$type" "$log")"
   else
     ERROR_LINES="$(extract_errors "$type" "$log")"
+    if [[ $rc -eq 137 ]]; then
+      ERROR_LINES="process exited 137 (SIGKILL); likely external memory/resource enforcement
+${ERROR_LINES}"
+    fi
     if [[ -z "$ERROR_LINES" ]]; then
       # Fallback: last 20 lines of the log
       ERROR_LINES="(no structured errors extracted; showing tail of log)
@@ -310,6 +332,10 @@ for entry in "${CHECKS[@]}"; do
   ERROR_LINES=""
   SUMMARY=""
   DURATION_MS=0
+
+  if ! $JSON_OUTPUT && ! $DEBUG; then
+    printf '  \033[90m→ running %-20s\033[0m\n' "$name"
+  fi
 
   # Run check (protected by || for set -e safety)
   rc=0

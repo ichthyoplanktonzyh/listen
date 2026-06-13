@@ -2,7 +2,7 @@
 
 > **Release:** 0.7.1  
 > **Branch:** `feature/asr-word-timestamps`  
-> **Status:** implemented
+> **Status:** implemented and verified against bundled whisper.cpp v1.7.6
 
 ## Overview
 
@@ -29,8 +29,10 @@ whisper-cli -ojf -dtw <model_preset> audio.wav
   │
   └─ output.json  ──→  asr_timing::extract_word_timings_from_json()
                          ├─  parse WhisperSegment[] + WhisperToken[].t_dtw
-                         ├─  merge subword tokens → words (leading-whitespace split)
-                         ├─  validate word count matches sentence tokens
+                         ├─  ignore special/punctuation/unavailable tokens
+                         ├─  merge lexical subword tokens → words
+                         ├─  validate word text matches sentence tokens
+                         ├─  turn DTW points into non-empty word intervals
                          ├─  validate boundary & monotonicity constraints
                          └─  produce Vec<WordTiming>
                                 │
@@ -70,13 +72,23 @@ Whisper's tokenizer splits some words into subword units (e.g.,
 | Token pattern | Action |
 |---|---|
 | Starts with space or newline | Begins a new word |
-| No leading space | Appends to the current word |
+| No leading space and contains a word character | Appends to the current word |
 | First token in segment | Always begins the first word |
+| Special token (`[_BEG_]`, `[_TT_*]`, `<|...|>`) | Ignored |
+| Punctuation-only token | Ignored |
+| `t_dtw < 0` | Ignored; lexical mismatch makes the sentence fall back |
 
-A word's `start_ms` = first subword's `t_dtw × 10`; `end_ms` = last subword's `t_dtw × 10`.
+A word's `start_ms` is its first lexical subword's `t_dtw × 10`.
+Its `end_ms` is the next word's start, or the subtitle sentence end for the
+final word. This converts whisper's point timestamps into the non-empty,
+half-open intervals required by Flutter's `[start, end)` lookup.
 
-Tokens with `t_dtw == -1` (DTW unavailable) are filtered out. Words
-with all unavailable tokens are discarded.
+Repeated DTW points are separated deterministically by one millisecond. If the
+sentence is too short to create a positive interval for every word, the
+sentence falls back to estimation.
+
+Previously stored zero-length ASR timing rows are treated as an invalid cache
+and automatically replaced by the deterministic estimator when read.
 
 ### DTW Preset Mapping
 
@@ -101,11 +113,11 @@ The extraction fails safely at multiple levels:
 |---|---|
 | JSON unreadable or unparseable | Skip DTW; transcript completes with estimation |
 | Segment count ≠ sentence count | Skip DTW for all sentences |
-| Word count mismatch in a sentence | Fall back to estimation for that sentence |
-| `start_ms ≥ end_ms` per word | Skip that sentence |
+| Word count or normalized text mismatch | Fall back to estimation for that sentence |
+| Cannot construct non-empty intervals | Fall back to estimation for that sentence |
 | Timing outside sentence boundary | Skip that sentence |
 | Non-monotonic word sequence | Skip that sentence |
-| All tokens have `t_dtw == -1` | Skip that sentence |
+| Any unavailable lexical token changes the word mapping | Skip that sentence |
 | Model `family != "whisper"` | DTW flag not passed to whisper-cli |
 
 In all cases, **transcription succeeds** and the track is imported. Missing
@@ -119,10 +131,11 @@ crates/speech-analysis/src/lib.rs            # +pub mod asr_timing
 crates/speech-analysis/Cargo.toml            # +serde_json, +thiserror
 crates/api-http/src/transcription.rs         # -ojf, -dtw flags; extraction call
 crates/api-http/Cargo.toml                   # +speech-analysis dep
+crates/application/src/lib.rs                # reject unusable zero-length timings
 ```
 
-No changes to: `domain`, `application`, `persistence-sqlite`, `subtitle-core`,
-`apps/desktop/`.
+No schema changes are required. The existing `domain`, `persistence-sqlite`,
+and desktop timing models continue to carry the resulting intervals.
 
 ## Design Decisions
 
@@ -156,12 +169,14 @@ passes it through.
 
 ## Verification
 
-- `speech_analysis::asr_timing` has 4 unit tests covering subword merge,
-  continuation token append, t_dtw=-1 filtering, and count mismatch fallback.
+- `speech_analysis::asr_timing` covers subword merge, special-token filtering,
+  repeated DTW points, lexical mismatch, and per-sentence fallback.
+- The integration fixture includes whisper's real `[_BEG_]` / `[_TT_*]`
+  structure, and a regression test uses a reduced bundled-runtime JFK output.
 - The existing M1.9 word-timing API tests (`verify-m19.sh`) pass unchanged,
   confirming `asr_reported` priority and estimation fallback are preserved.
-- Full `cargo test --workspace` (55 Rust + 38 Flutter tests) + `cargo clippy`
-  + `flutter analyze` pass.
+- Full `cargo test --workspace` (137 Rust tests), `cargo clippy`,
+  `flutter analyze`, and 39 Flutter tests pass.
 
 Manual functional testing: open a video, run ASR transcription with a
 whisper-family model, and observe that current-word highlighting tracks
@@ -178,10 +193,9 @@ track.
 3. **Custom models**: DTW is skipped for non-whisper-family models. Custom
    fine-tuned whisper models may work if their alignment heads match the
    stock preset, but this is untested.
-4. **Token alignment precision**: DTW gives subword-level timestamps; word
-   boundaries inherit the precision of the subword merge, which can produce
-   minor (±100ms) shifts at word edges. This is acceptable for current-word
-   highlighting but may need refinement for M2.0 phoneme alignment.
+4. **Token alignment precision**: DTW gives point timestamps. Word intervals
+   end at the next word start (or sentence end), which is appropriate for
+   continuous highlighting but may need refinement for M2.0 phoneme alignment.
 
 ## Future Work (M2.0)
 

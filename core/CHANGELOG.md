@@ -34,11 +34,15 @@
 - Added the project's first Rust integration test
   (`crates/speech-analysis/tests/asr_timing_integration_test.rs`) with a
   real whisper `-ojf` JSON fixture covering subword merge, `t_dtw=-1` filter,
-  and boundary/segment-count mismatch fallback. The crate now has 13 tests
-  (10 unit + 3 integration).
-- Fixed a boundary edge case in `asr_timing` where single-token words (equal
-  `start_t_dtw` and `end_t_dtw`) were incorrectly rejected by the `>=`
-  validation; changed to `>` to accept zero-duration single-token words.
+  special tokens, repeated DTW points, and boundary/segment-count mismatch
+  fallback.
+- Completed the ASR timing fix against real bundled whisper.cpp output:
+  `[_BEG_]` / `[_TT_*]` special tokens and punctuation no longer corrupt the
+  final lexical word, merged words are text-validated before mapping, repeated
+  DTW points become deterministic non-empty intervals, and zero-duration word
+  timings are rejected by the storage contract. Previously stored zero-length
+  timing caches are detected as unusable and automatically fall back to the
+  deterministic estimator.
 - Updated CI to invoke `./scripts/test.sh --rust` and `--flutter` instead of
   individual `cargo`/`flutter` commands, keeping the same check coverage while
   producing more actionable failure logs.
@@ -103,6 +107,14 @@
 - Added `scripts/test-infrastructure.sh` to test cleanup traps, API process
   teardown, quick/full mode selection, strict flags, JSON output, and retained
   failure logs. CI runs this self-test before desktop checks.
+- Added `scripts/test.sh --low-memory` to limit Cargo, Rust-test, Rayon, and
+  Flutter-test concurrency, reuse Flutter dependency resolution, and diagnose
+  child exit code 137 as `SIGKILL` / external resource enforcement. Human
+  output now emits a lightweight progress heartbeat before each check so quiet
+  commands remain visible to external executors.
+- Added a focused ASR word-timestamp handoff documenting the completed
+  real-whisper validation, fallback/storage invariants, verification baseline,
+  and the current environment's direct-script `SIGKILL` limitation.
 - Prevented quick/full mode duplication: the Rust lib-test subset now runs only
   in `--quick`, while Rust/full modes execute the complete suite once.
 - Fixed Rust test pass-through handling so arguments after the runner's `--`
