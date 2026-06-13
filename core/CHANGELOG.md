@@ -19,6 +19,28 @@
 - The Flutter frontend, database schema, and `timing_priority` logic required
   zero changes — `AsrReported` (priority 3) already overrides `Estimated`
   (priority 1) in the existing word-timing pipeline.
+- Established a unified testing workflow (`scripts/test.sh`) that consolidates
+  `cargo fmt`, `clippy`, `test`, `flutter analyze`, `flutter test`, and contract
+  validation into a single command with structured pass/fail summary output.
+  Supports `--quick`/`--rust`/`--flutter`/`--full` modes, `--json` for
+  machine-readable CI/AI output, `--verbose` for raw logs, `--debug` for
+  internal tracing, and `--strict` to treat warnings as errors. Full logs are
+  always preserved to disk; the terminal prints only the summary with key error
+  lines on failure.
+- Extracted shared test utilities (`scripts/lib-testing.sh`) from the six
+  `verify-m*.sh` acceptance scripts: cargo resolution, API lifecycle
+  (start/stop/wait), curl helpers, and JSON assertion functions.
+- Added the project's first Rust integration test
+  (`crates/speech-analysis/tests/asr_timing_integration_test.rs`) with a
+  real whisper `-ojf` JSON fixture covering subword merge, `t_dtw=-1` filter,
+  and boundary/segment-count mismatch fallback. The crate now has 13 tests
+  (10 unit + 3 integration).
+- Fixed a boundary edge case in `asr_timing` where single-token words (equal
+  `start_t_dtw` and `end_t_dtw`) were incorrectly rejected by the `>=`
+  validation; changed to `>` to accept zero-duration single-token words.
+- Updated CI to invoke `./scripts/test.sh --rust` and `--flutter` instead of
+  individual `cargo`/`flutter` commands, keeping the same check coverage while
+  producing more actionable failure logs.
 
 ## 0.7.0 - 2026-06-13
 
