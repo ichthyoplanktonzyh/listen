@@ -79,7 +79,7 @@ fn extract_sentence_word_timings(
         let start_ms = (word.start_t_dtw * 10) as u64;
         let end_ms = (word.end_t_dtw * 10) as u64;
 
-        if start_ms >= end_ms || end_ms < sentence.start.get() || start_ms > sentence.end.get() {
+        if start_ms > end_ms || end_ms < sentence.start.get() || start_ms > sentence.end.get() {
             // Invalid timing — skip this sentence.
             return Ok(vec![]);
         }

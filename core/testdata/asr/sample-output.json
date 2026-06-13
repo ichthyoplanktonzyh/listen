@@ -1,0 +1,31 @@
+{
+  "transcription": [
+    {
+      "text": "Hello world.",
+      "tokens": [
+        {"text": " Hello", "t_dtw": 100},
+        {"text": " world", "t_dtw": 250},
+        {"text": ".", "t_dtw": 350}
+      ]
+    },
+    {
+      "text": "I was playing games.",
+      "tokens": [
+        {"text": " I", "t_dtw": 400},
+        {"text": " was", "t_dtw": 480},
+        {"text": " play", "t_dtw": 580},
+        {"text": "ing", "t_dtw": 620},
+        {"text": " games", "t_dtw": 700},
+        {"text": ".", "t_dtw": 820}
+      ]
+    },
+    {
+      "text": "This is what",
+      "tokens": [
+        {"text": " This", "t_dtw": -1},
+        {"text": " is", "t_dtw": 900},
+        {"text": " what", "t_dtw": 980}
+      ]
+    }
+  ]
+}
