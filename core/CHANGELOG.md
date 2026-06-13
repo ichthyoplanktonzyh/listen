@@ -83,6 +83,10 @@
   `diagnose` function branches: `MeaningBarrier`, `RecognitionBarrier`,
   `InsufficientInformation`, `OtherFactors`, mixed scenarios, non-word token
   filtering, `None` status handling, duplicate lemma dedup, and edge cases.
+- Added `criterion` performance benchmarks for `subtitle-core` (SRT/VTT parse,
+  tokenize, normalize) and `speech-analysis` (ASR timing extraction, word
+  timing estimation). 10 benchmark cases in total covering small fixtures and
+  large synthetic inputs (2k sentences, 500 segments).
 
 ## 0.7.0 - 2026-06-13
 

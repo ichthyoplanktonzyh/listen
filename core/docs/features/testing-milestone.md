@@ -194,9 +194,11 @@ cargo test --workspace --lib  # 只跑单元测试，跳过集成测试
 - 使用 `integration_test` package
 
 ### P2-3: 性能基准 (`cargo bench`)
-- ASR timing 解析性能
-- 字典查询延迟
-- 字幕导入吞吐量
+- 已通过 `criterion` 建立 2 个 crate 的基准测试基础设施
+- `subtitle-core`: SRT/VTT 解析 (small + 2k 句)、tokenize、normalize_display
+- `speech-analysis`: ASR timing 提取 (small + 500 segments)、word timing 估算
+
+**状态:** ✅ done — 10 benchmark cases
 
 ### P2-4: API 版本兼容性回归测试
 - 自动验证 API 向后兼容
@@ -222,7 +224,7 @@ cargo test --workspace --lib  # 只跑单元测试，跳过集成测试
 | 8 | `diagnosis-core` 测试补充 | P1 | ✅ done | 2026-06-13 |
 | 9 | Flutter golden 测试 | P2 | ⬜ | |
 | 10 | E2E 测试 | P2 | ⬜ | |
-| 11 | 性能基准 | P2 | ⬜ | |
+| 11 | 性能基准 | P2 | ✅ done | 2026-06-13 |
 | 12 | API 回归测试 | P2 | ⬜ | |
 | 13 | Property-based testing | P2 | ⬜ | |
 

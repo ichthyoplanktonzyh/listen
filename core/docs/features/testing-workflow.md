@@ -255,6 +255,7 @@ the entire quality suite. The current results:
 | cargo clippy | PASS | No warnings with `-D warnings` |
 | cargo test (lib) | PASS | ~107 unit tests (--lib only) |
 | cargo test | PASS | ~122 tests (unit + integration) |
+| cargo bench | PASS | 10 benchmark cases |
 | flutter analyze | PASS | No issues found |
 | flutter test | PASS | 38 tests |
 | contracts | PASS | Player, event, and OpenAPI contracts valid |
