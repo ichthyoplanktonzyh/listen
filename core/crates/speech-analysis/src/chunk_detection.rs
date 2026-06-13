@@ -84,6 +84,15 @@ pub enum BoundaryMarker {
 
     /// A filled pause (uh, um) occupies this gap.
     Hesitation,
+
+    /// A multi-word lexical/phrasal chunk was detected at this position from
+    /// text-level analysis (COCA n-gram, PHRASE List, or dictionary match).
+    LexicalPhrase {
+        /// The phrase text (original case from the sentence).
+        phrase: String,
+        /// Source identifier: "coca", "phrase_list", "ecdict", "builtin".
+        source: String,
+    },
 }
 
 /// A group of consecutive words that form a single acoustic chunk.
@@ -128,6 +137,37 @@ pub struct ChunkDetectionResult {
     /// Length = max(0, word_count - 1).  Useful for debugging and
     /// visualisation.
     pub raw_gaps_ms: Vec<u64>,
+}
+
+// ---------------------------------------------------------------------------
+// Combined (acoustic + text) types
+// ---------------------------------------------------------------------------
+
+/// Combined chunk detection result merging acoustic and text-level evidence.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CombinedChunkResult {
+    /// Sentence this result corresponds to.
+    pub sentence_id: SubtitleSentenceId,
+    /// Merged chunks with combined confidence.
+    pub chunks: Vec<CombinedChunkGroup>,
+    /// Whether acoustic timing data was available.
+    pub acoustic_available: bool,
+    /// Whether text chunk data was available.
+    pub text_available: bool,
+}
+
+/// A single chunk group with both acoustic and text-level boundary evidence.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CombinedChunkGroup {
+    pub token_start: u32,
+    pub token_end: u32,
+    pub text: String,
+    pub start_ms: Option<u64>,
+    pub end_ms: Option<u64>,
+    pub acoustic_boundary: Option<ChunkBoundary>,
+    pub text_boundary: Option<crate::text_chunk_detection::TextChunkBoundary>,
+    /// Combined confidence in [0.0, 1.0].
+    pub combined_confidence: f32,
 }
 
 // ---------------------------------------------------------------------------
@@ -319,6 +359,132 @@ fn build_chunk(
         start_ms,
         end_ms,
         boundary,
+    }
+}
+
+/// Combine acoustic and text-level chunk detection results for a single
+/// sentence.
+///
+/// Uses the text partition (which covers every word token) as the structural
+/// basis, then overlays acoustic boundary evidence where available.
+///
+/// Confidence logic:
+/// - Acoustic YES + Text YES → `(ac + tc) / 2 + 0.1` (clamped to 1.0)
+/// - Acoustic YES + Text NO  → `ac * 0.8`
+/// - Acoustic NO  + Text YES → `tc * 0.6`
+/// - Neither                  → `0.0`
+pub fn combine_chunks(
+    acoustic: &ChunkDetectionResult,
+    text: &crate::text_chunk_detection::TextChunkDetectionResult,
+) -> CombinedChunkResult {
+    use std::collections::HashMap;
+
+    // Build lookup: left_token_index → ChunkBoundary (acoustic)
+    let acoustic_bounds: HashMap<u32, &ChunkBoundary> = acoustic
+        .boundaries
+        .iter()
+        .map(|b| (b.left_token_index, b))
+        .collect();
+
+    // Build lookup: left_token_index → TextChunkBoundary (from text)
+    let text_bounds: HashMap<u32, &crate::text_chunk_detection::TextChunkBoundary> = text
+        .boundaries
+        .iter()
+        .map(|b| (b.left_token_index, b))
+        .collect();
+
+    let mut combined: Vec<CombinedChunkGroup> = Vec::new();
+
+    for text_chunk in &text.chunks {
+        let ac_bound = acoustic_bounds.get(&text_chunk.token_end).copied().cloned();
+        let tx_bound = text_bounds.get(&text_chunk.token_end).copied().cloned();
+
+        let combined_confidence = match (&ac_bound, &tx_bound) {
+            (Some(ac), Some(tc)) => {
+                // Both detect a boundary — mutual reinforcement.
+                ((ac.confidence + tc.confidence) / 2.0 + 0.1).min(1.0)
+            }
+            (Some(ac), None) => {
+                // Acoustic boundary, no text phrase edge — possible breath/hesitation.
+                ac.confidence * 0.8
+            }
+            (None, Some(tc)) => {
+                // Text phrase edge, no acoustic pause — grammatical chunk.
+                tc.confidence * 0.6
+            }
+            (None, None) => {
+                // No boundary signal from either source.
+                0.0
+            }
+        };
+
+        // Map acoustic timing info if available.
+        let (start_ms, end_ms) = if !acoustic.chunks.is_empty() {
+            // Find the matching acoustic chunk by token range.
+            acoustic
+                .chunks
+                .iter()
+                .find(|ac| {
+                    ac.token_start == text_chunk.token_start
+                        && ac.token_end == text_chunk.token_end
+                })
+                .map(|ac| (Some(ac.start_ms), Some(ac.end_ms)))
+                .unwrap_or((None, None))
+        } else {
+            (None, None)
+        };
+
+        combined.push(CombinedChunkGroup {
+            token_start: text_chunk.token_start,
+            token_end: text_chunk.token_end,
+            text: text_chunk.text.clone(),
+            start_ms,
+            end_ms,
+            acoustic_boundary: ac_bound,
+            text_boundary: tx_bound,
+            combined_confidence,
+        });
+    }
+
+    CombinedChunkResult {
+        sentence_id: acoustic.sentence_id.clone(),
+        chunks: combined,
+        acoustic_available: !acoustic.chunks.is_empty() || !acoustic.boundaries.is_empty(),
+        text_available: !text.chunks.is_empty() || !text.boundaries.is_empty(),
+    }
+}
+
+/// Annotate acoustic boundaries with text-derived [`BoundaryMarker::LexicalPhrase`].
+///
+/// For each acoustic boundary whose `left_token_index` matches a text chunk
+/// boundary that has a `preceding_phrase`, a `LexicalPhrase` marker is pushed
+/// onto the acoustic boundary's marker list.
+pub fn annotate_acoustic_with_text(
+    acoustic: &mut ChunkDetectionResult,
+    text: &crate::text_chunk_detection::TextChunkDetectionResult,
+) {
+    for boundary in &mut acoustic.boundaries {
+        for tb in &text.boundaries {
+            if tb.left_token_index == boundary.left_token_index
+                && let Some(ref phrase) = tb.preceding_phrase
+            {
+                let source = evidence_source_name(&tb.evidence);
+                boundary.markers.push(BoundaryMarker::LexicalPhrase {
+                    phrase: phrase.clone(),
+                    source,
+                });
+            }
+        }
+    }
+}
+
+fn evidence_source_name(evidence: &crate::text_chunk_detection::TextChunkEvidence) -> String {
+    use crate::text_chunk_detection::TextChunkEvidence;
+    match evidence {
+        TextChunkEvidence::Collocation => "coca".into(),
+        TextChunkEvidence::PhraseList => "phrase_list".into(),
+        TextChunkEvidence::DictionaryPhrase => "ecdict".into(),
+        TextChunkEvidence::SingleWord => "default".into(),
     }
 }
 

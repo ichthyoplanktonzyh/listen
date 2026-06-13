@@ -2,6 +2,32 @@
 
 ## 0.7.1 - 2026-06-13
 
+- Implemented text-level (lexical) chunk detection in the `speech-analysis` crate
+  (`text_chunk_detection` module) as a companion to the existing acoustic
+  (gap-based) chunk detection. The text detector partitions entire sentences
+  into contiguous chunks where every word token belongs to exactly one chunk.
+- Three data sources feed the text detector: (1) COCA n-gram collocations
+  (MI ≥ 3.0, ~1K seed entries, compiled into the binary via `include_str!`),
+  (2) PHRASE List (Martinez & Schmitt 2012, 505 pedagogically-selected
+  functional phrases with category labels), and (3) existing ECDICT/built-in
+  phrase candidates forwarded from the application layer.
+- Sliding-window longest-match-first greedy overlap resolution ensures
+  competing multi-word spans (e.g. "a lot of" vs "a lot") are resolved
+  deterministically with longer spans taking priority.
+- Cross-reference support between acoustic and text layers: new
+  `BoundaryMarker::LexicalPhrase` variant, `CombinedChunkResult` type,
+  `combine_chunks()` merging acoustic and text evidence with four-quadrant
+  confidence logic (mutual-reinforcement, acoustic-only discount, text-only
+  discount, no-signal), and `annotate_acoustic_with_text()` for decorating
+  acoustic boundaries with lexical phrase markers.
+- Added `AppServices::detect_text_chunks`, `detect_text_chunks_for_track`,
+  and `detect_combined_sentence_chunks` methods.
+- 18 new unit tests across `text_chunk_detection` covering empty/single-word
+  input, COCA collocation matching, PHRASE List detection, external candidate
+  forwarding, longest-match resolution, case-insensitive matching, partition
+  coverage integrity, boundary count consistency, token order preservation,
+  punctuation filtering, MI→confidence mapping, and source counts.
+
 - Enabled whisper.cpp DTW (Dynamic Time Warping) token-level timestamps during
   ASR transcription so generated subtitle tracks produce `asr_reported` word
   timings instead of falling back to the weighted estimator.

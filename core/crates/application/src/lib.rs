@@ -894,6 +894,81 @@ impl AppServices {
         Ok(detect_chunk_boundaries(&timings, &ChunkDetectionConfig::default()))
     }
 
+    /// Detect text-level chunks for a single sentence.
+    ///
+    /// Uses embedded COCA n-gram, PHRASE List, and external phrase candidates
+    /// (ECDICT + built-in rules) to partition the sentence into lexical chunks.
+    /// Every word token is covered by exactly one chunk.
+    pub fn detect_text_chunks(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<speech_analysis::text_chunk_detection::TextChunkDetectionResult, ApplicationError>
+    {
+        let sentence = self
+            .subtitles
+            .get_sentence(sentence_id)?
+            .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
+        let candidates = self.phrase_candidates(sentence_id)?;
+        Ok(speech_analysis::text_chunk_detection::detect_text_chunks(
+            &sentence,
+            &candidates,
+        ))
+    }
+
+    /// Detect text-level chunks for every sentence in a subtitle track.
+    pub fn detect_text_chunks_for_track(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<
+        std::collections::HashMap<
+            SubtitleSentenceId,
+            speech_analysis::text_chunk_detection::TextChunkDetectionResult,
+        >,
+        ApplicationError,
+    > {
+        let track = self
+            .subtitles
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let mut results = std::collections::HashMap::new();
+        for sentence in track.sentences {
+            let result = self.detect_text_chunks(&sentence.id)?;
+            results.insert(sentence.id.clone(), result);
+        }
+        Ok(results)
+    }
+
+    /// Detect chunks using combined acoustic + text-level evidence.
+    ///
+    /// Uses the text partition as the structural basis and overlays acoustic
+    /// boundary evidence where available. See
+    /// [`speech_analysis::chunk_detection::combine_chunks`] for the combination
+    /// confidence logic.
+    pub fn detect_combined_sentence_chunks(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<speech_analysis::chunk_detection::CombinedChunkResult, ApplicationError>
+    {
+        use speech_analysis::chunk_detection::{
+            combine_chunks, detect_chunk_boundaries, ChunkDetectionConfig,
+        };
+        let sentence = self
+            .subtitles
+            .get_sentence(sentence_id)?
+            .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
+        let timings = self.word_timings(sentence_id)?;
+        let candidates = self.phrase_candidates(sentence_id)?;
+
+        let acoustic =
+            detect_chunk_boundaries(&timings, &ChunkDetectionConfig::default());
+        let text = speech_analysis::text_chunk_detection::detect_text_chunks(
+            &sentence,
+            &candidates,
+        );
+
+        Ok(combine_chunks(&acoustic, &text))
+    }
+
     pub fn store_word_timings(
         &self,
         track_id: &SubtitleTrackId,

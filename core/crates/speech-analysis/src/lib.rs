@@ -1,5 +1,6 @@
 pub mod asr_timing;
 pub mod chunk_detection;
+pub mod text_chunk_detection;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::OnceLock;
