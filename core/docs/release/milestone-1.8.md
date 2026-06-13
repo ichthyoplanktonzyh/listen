@@ -20,15 +20,18 @@
 - Playback progress restoration before playback starts, avoiding a visible
   jump from the beginning.
 
-## Deferred Playback Limitation
+## Playback Limitation At M1.8 Closure
 
-The reported AV1 MP4 and 4K WebM samples can still produce audio with a black
-video frame through the current fvp/libmdk path. The investigation branch
+At M1.8 closure, the reported AV1 MP4 and 4K WebM samples could still produce
+audio with a black video frame through the current fvp/libmdk path. The
+investigation branch
 `fix/webm-vp8-vp9-decoders` is retained as evidence, but its custom FFmpeg
 replacement is not part of this release because it did not fix the actual AV1
 sample and introduced packaging and ABI risk.
 
-Current workaround:
+Milestone 1.9 collaborative acceptance subsequently confirmed that the
+reported AV1 video now displays normally. The following were the M1.8
+workarounds and are retained for historical context:
 
 - Prefer the application's H.264/M4A yt-dlp download selection.
 - For incompatible local AV1 media, create an H.264 compatibility copy.

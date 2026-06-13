@@ -279,6 +279,13 @@ Milestone 1.9 只有在以下条件全部满足后才算完成：
 - 更新 README、Changelog、roadmap、requirements、API 契约和验证报告。
 - 创建收口提交与 `v0.7.0` Git 标签。
 
+### Closure Decision
+
+2026-06-13：用户确认 Milestone 1.9 完全验收。当前 Mac 的独立安装包启动
+smoke 因缺少 Developer ID Application 分发签名而无法执行；该项经明确批准
+延期为后续发布工作，不再阻塞本里程碑与 `v0.7.0` 标签。功能验收采用
+`docs/development/macos-functional-testing.md` 中固化的开发运行流程。
+
 ## Explicit Boundaries
 
 - 不声称检测到了真实音频中的弱读、连读、省音、同化或闪音。
@@ -288,4 +295,3 @@ Milestone 1.9 只有在以下条件全部满足后才算完成：
 - 不实现用户口语录音、发音评分或跟读打分。
 - 不要求 MFA 等重型对齐工具成为默认内置依赖。
 - 不实施 Windows、Linux、移动端或云端发音分析。
-

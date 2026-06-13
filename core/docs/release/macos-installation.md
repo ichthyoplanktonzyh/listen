@@ -5,8 +5,10 @@ The Milestone 1 MVP version is `0.2.0`. Its artifact is
 
 1. Unzip the archive.
 2. Move `LLPlayerNext.app` to `/Applications`.
-3. On first launch, macOS may require Control-clicking the app and choosing
-   Open because the MVP is ad-hoc signed and not notarized.
+3. The current archive is ad-hoc signed and not notarized. On some Macs,
+   Control-clicking the app and choosing Open may work; on the current
+   development Mac, independently extracted builds can be rejected entirely.
+   Use the documented development run workflow for local functional testing.
 4. Use **Open media**, then **Primary subtitle** or **Secondary subtitle**.
 
 Optional enhanced features:

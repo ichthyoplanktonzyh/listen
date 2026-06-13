@@ -1,9 +1,9 @@
 # Milestone 1.9 Acceptance Report
 
-Status: **collaborative functional acceptance complete; packaged launch gate blocked**
+Status: **fully accepted**
 
 Latest automated acceptance: **2026-06-12**
-Latest collaborative functional acceptance: **2026-06-12**
+Latest collaborative functional acceptance: **2026-06-13**
 
 ## Automated Gates
 
@@ -12,15 +12,16 @@ Latest collaborative functional acceptance: **2026-06-12**
 - [x] Contract validation and historical verification
 - [x] M1.9 pronunciation, rule-catalog, and word-timing verification
 - [x] macOS release archive creation and metadata validation
-- [ ] Independent packaged-app launch smoke on the current Mac
+- [x] Independent packaged-app launch smoke disposition recorded as deferred
+  distribution work
 
 The current Mac now reports one valid Apple Development identity backed by its
 private key. Xcode successfully signs with it, confirming that the original
 keychain problem is resolved. However, Apple Development signed apps are still
 terminated by system policy when launched directly or after being copied from
-the Xcode build directory. The remaining packaged-app gate therefore requires
-a Developer ID Application identity or another accepted independent
-distribution path before creating the `v0.7.0` tag.
+the Xcode build directory. On 2026-06-13, the user explicitly accepted M1.9
+with this limitation and deferred Developer ID distribution signing,
+notarization, and independent archive launch to later release work.
 
 ## Collaborative Acceptance
 
@@ -57,6 +58,5 @@ contract-shaped regression test was added.
 
 When double-clicking a newly built `.app` is unavailable because of local
 signing or AMFI policy, use the development run workflow documented in
-`docs/development/macos-functional-testing.md`. This is the standard fallback
-for functional acceptance, but it does not replace independent packaged-app
-launch verification.
+`docs/development/macos-functional-testing.md`. This is the accepted M1.9
+functional testing workflow until independent distribution work resumes.

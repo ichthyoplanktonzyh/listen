@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.0 - acceptance candidate
+## 0.7.0 - 2026-06-13
 
 - Integrated the modular Flutter controller/widget architecture while
   preserving Milestone 1.9 pronunciation and word-sync behavior.
@@ -28,6 +28,8 @@
 - Removed the startup stall caused by re-hashing installed learning resources,
   added an explicit core-starting/error/retry screen, and fixed short-sentence
   ECDICT phrase scanning.
+- Completed collaborative functional acceptance. Independent Developer ID
+  distribution signing and notarization remain deferred release work.
 
 ## 0.6.0 - acceptance candidate
 

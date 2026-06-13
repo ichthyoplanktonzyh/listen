@@ -1,10 +1,10 @@
 # Milestone 1.9 / 0.7.0
 
-Collaborative functional acceptance completed on 2026-06-12. Final release
-tagging remains blocked until the independently extracted package passes
-launch smoke. The current Mac now has a valid Apple Development
-certificate/private-key pair, but independent distribution requires a
-Developer ID Application identity or another accepted distribution path. See
+Collaborative functional acceptance completed on 2026-06-12, and Milestone 1.9
+was fully accepted on 2026-06-13. Independent distribution signing,
+notarization, and extracted-package launch are explicitly deferred release
+work. The current Mac has a valid Apple Development certificate/private-key
+pair for development testing. See
 `docs/verification/milestone-1.9-acceptance.md`.
 
 ## Highlights
@@ -32,5 +32,6 @@ Developer ID Application identity or another accepted distribution path. See
 - Pronunciation fallback is deterministic and safe, but unknown names and
   non-English text may be approximate.
 - Real audio phoneme analysis is deferred to Milestone 2.0.
-- Development `flutter run` functional acceptance passed, but it does not
-  replace the remaining independently packaged-app launch gate.
+- Development `flutter run` functional acceptance passed. Independently
+  distributed archive launch remains unavailable until the later Developer ID
+  signing/notarization work is completed.

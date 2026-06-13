@@ -2,12 +2,13 @@
 
 ## Preferred Order
 
-1. For release acceptance, build the archive, extract it, and launch the
-   extracted `LLPlayerNext.app`. Run `scripts/verify-mvp.sh`.
+1. When independent distribution signing is available, build the archive,
+   extract it, and launch the extracted `LLPlayerNext.app`. Run
+   `scripts/verify-mvp.sh`.
 2. If the newly built app cannot be launched because local signing or AMFI
    rejects it, use the development workflow below for functional testing.
-3. Record the packaged-app gate as blocked until an independently extracted
-   release archive launches. Development testing does not make that gate pass.
+3. Record independent archive launch separately from functional acceptance
+   while Developer ID signing/notarization remains deferred.
 
 ## Development Run Fallback
 

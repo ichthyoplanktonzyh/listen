@@ -62,8 +62,9 @@ tests.
   package are both terminated by system policy. Apple Development signing is
   therefore valid for Xcode-managed testing but does not satisfy the
   independent distribution gate. A Developer ID Application identity or
-  another accepted distribution path is required to repeat the final launch
-  smoke test.
+  another accepted distribution path is required to repeat this launch smoke.
+  On 2026-06-13, this was explicitly deferred from M1.9 closure and recorded as
+  later release work.
 
 The desktop diagnosis card now exposes pronunciation provider/version,
 degradation reason, reusable pronunciation-cache state, and current word-timing
@@ -96,7 +97,7 @@ The acceptance session found and fixed a desktop/API field mismatch:
 `WordTiming.fromJson` read `source` and `provider` instead of the contract
 fields `timing_source` and `provider_id`.
 
-See `docs/verification/milestone-1.9-acceptance.md`. The remaining release gate
-is independent packaged-app launch smoke. The development certificate/private
-key issue is resolved, but an Apple Development identity does not satisfy that
-distribution gate. Do not create the final `v0.7.0` tag before the gate passes.
+See `docs/verification/milestone-1.9-acceptance.md`. The development
+certificate/private-key issue is resolved. The user fully accepted M1.9 on
+2026-06-13 and explicitly deferred independent distribution signing,
+notarization, and extracted-package launch from this milestone.

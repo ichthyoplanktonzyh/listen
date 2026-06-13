@@ -15,7 +15,7 @@
   the macOS signing identity to `-`. It is intentionally not included in the
   packaging commit.
 
-## 2. M1.9 Implementation Status
+## 2. M1.9 Implementation Status At Time Of Handoff
 
 M1.9 is functionally implemented and integrated with the modular Flutter
 frontend. Important commits:
@@ -27,9 +27,9 @@ frontend. Important commits:
 - `a2d1609 fix: render packaged desktop startup`
 
 Collaborative functional acceptance completed on 2026-06-12 through
-`flutter run`. The remaining M1.9 closure blocker is independent packaged-app
-execution on this Mac. Do not create the `v0.7.0` tag until packaged smoke
-passes.
+`flutter run`. At the time of this handoff, independent packaged-app execution
+on this Mac was still treated as the remaining M1.9 closure blocker. Section 10
+records the later decision that superseded this status.
 
 ## 3. White-Screen Fixes Already Committed
 
@@ -199,3 +199,12 @@ as an application logic regression.
 - See `docs/development/macos-functional-testing.md` and
   `docs/verification/milestone-1.9-acceptance.md`.
 - The fallback does not replace independent package launch smoke.
+
+## 10. Final Closure Update: 2026-06-13
+
+The user explicitly accepted Milestone 1.9 as complete. Independent archive
+launch, Developer ID Application signing, and notarization are deferred release
+work and no longer block M1.9 or the `v0.7.0` tag.
+
+This document remains a historical packaging investigation. Continue future
+work from `docs/handoff/project-handoff-2026-06-13-m2.0-start.md`.

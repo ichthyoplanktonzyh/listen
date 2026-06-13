@@ -1,18 +1,16 @@
 # MVP Known Issues
 
 - The release is ad-hoc signed and not notarized; first launch can require
-  Control-click **Open**.
+  Control-click **Open**, and newly built independently extracted apps may be
+  rejected entirely on the current development Mac. Use `flutter run` for
+  functional testing until Developer ID signing/notarization is implemented.
 - The macOS app sandbox remains disabled because the MVP launches a bundled
   sidecar and opens user-selected media. Harden sandboxing before public
   distribution.
-- The macOS player now uses fvp/libmdk with VideoToolbox and Metal after
-  Xcode 26.5 exposed black frames in media_kit_video's deprecated OpenGL path.
-  Ordinary local playback is accepted, but the reported AV1 MP4 and 4K WebM
-  samples can play audio with a black video frame. Investigation confirmed that
-  the WebM sample is AV1 rather than VP8/VP9, and adding vanilla FFmpeg VP8/VP9
-  software decoders did not resolve the issue. Prefer H.264 downloads or create
-  an H.264 compatibility copy. Further player-backend work is deferred until
-  after Milestone 1.9 or an upstream fvp/libmdk fix.
+- The macOS player uses fvp/libmdk with VideoToolbox and Metal after Xcode 26.5
+  exposed black frames in media_kit_video's deprecated OpenGL path. AV1
+  playback was confirmed working during Milestone 1.9 collaborative
+  acceptance.
 - The fvp/libmdk binary SDK distribution and commercial-use terms require final
   review before public distribution.
 - Free Dictionary API requires internet for uncached words, has no service-level
