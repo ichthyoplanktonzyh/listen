@@ -858,6 +858,42 @@ impl AppServices {
         Ok(values)
     }
 
+    /// Detect acoustic chunk boundaries for every sentence in a subtitle track.
+    ///
+    /// Uses gap-based detection on existing word timings. Each sentence is
+    /// processed independently; cross-sentence boundaries are never created.
+    pub fn detect_track_chunks(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<
+        std::collections::HashMap<SubtitleSentenceId, speech_analysis::chunk_detection::ChunkDetectionResult>,
+        ApplicationError,
+    > {
+        use speech_analysis::chunk_detection::{detect_chunk_boundaries, ChunkDetectionConfig};
+        let track = self
+            .subtitles
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let config = ChunkDetectionConfig::default();
+        let mut results = std::collections::HashMap::new();
+        for sentence in track.sentences {
+            let timings = self.word_timings(&sentence.id)?;
+            let result = detect_chunk_boundaries(&timings, &config);
+            results.insert(sentence.id.clone(), result);
+        }
+        Ok(results)
+    }
+
+    /// Detect acoustic chunk boundaries for a single sentence.
+    pub fn detect_sentence_chunks(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<speech_analysis::chunk_detection::ChunkDetectionResult, ApplicationError> {
+        use speech_analysis::chunk_detection::{detect_chunk_boundaries, ChunkDetectionConfig};
+        let timings = self.word_timings(sentence_id)?;
+        Ok(detect_chunk_boundaries(&timings, &ChunkDetectionConfig::default()))
+    }
+
     pub fn store_word_timings(
         &self,
         track_id: &SubtitleTrackId,
