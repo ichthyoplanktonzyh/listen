@@ -1475,4 +1475,65 @@ mod tests {
             assert!(openapi.contains(path), "OpenAPI missing {path}");
         }
     }
+
+    #[test]
+    fn openapi_version_snapshot_and_path_count() {
+        let openapi = include_str!("../../../contracts/openapi/v1.yaml");
+
+        // API version snapshot — bump intentionally, never accidentally.
+        assert!(
+            openapi.contains("version: 1.0.0"),
+            "OpenAPI info.version snapshot changed — update test if intentional"
+        );
+
+        // OpenAPI specification version.
+        assert!(
+            openapi.contains("openapi: 3.1.0"),
+            "OpenAPI spec version snapshot changed"
+        );
+
+        // Count documented paths as a regression gate.
+        let path_count = openapi.lines().filter(|l| l.starts_with("  /v1/")).count();
+        assert_eq!(
+            path_count, 51,
+            "OpenAPI path count changed from 51 — update snapshot if paths were added/removed"
+        );
+
+        // All paths must be under /v1/.
+        for line in openapi.lines() {
+            if line.starts_with("  /") && !line.starts_with("  /v1/") {
+                panic!(
+                    "OpenAPI path not under /v1/ prefix: {}",
+                    line.trim()
+                );
+            }
+        }
+
+        // Key schemas must exist (defines the response contract surface).
+        for schema in [
+            "Health:",
+            "MediaItem:",
+            "RegisterMedia:",
+            "SubtitleTrack:",
+            "SubtitleSentence:",
+            "SubtitleToken:",
+            "LexicalEntry:",
+            "LexicalEntryDetails:",
+            "WordProfile:",
+            "WordObservation:",
+            "WordOccurrence:",
+            "SentenceDiagnosis:",
+            "DictionaryLookup:",
+            "DictionaryLookupBundle:",
+            "VocabularyAssetBundle:",
+            "LearningResource:",
+            "SubtitleSearchResult:",
+            "WordDetails:",
+        ] {
+            assert!(
+                openapi.contains(&format!("    {schema}")),
+                "OpenAPI schema missing: {schema}"
+            );
+        }
+    }
 }

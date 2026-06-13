@@ -33,7 +33,7 @@
 | Crate | 单元测试 | 集成测试 | 总计 | 差距 |
 |-------|----------|----------|------|------|
 | `api-events` | 2 | 0 | 2 | 🟡 |
-| `api-http` | 10 | 0 | 10 | 🟡 已在 lib.rs 中有 HTTP 层测试 |
+| `api-http` | 11 | 0 | 11 | ✅ 含 API 版本快照 |
 | `application` | **42** | 0 | **42** | ✅ P0 完成 |
 | `diagnosis-core` | 18 | 0 | 18 | ✅ P1 完成 |
 | `dictionary-provider` | 3 | 0 | 3 | 🟡 |
@@ -41,7 +41,7 @@
 | `persistence-sqlite` | 19 | 6 | 25 | ✅ 最佳 |
 | `speech-analysis` | 14 | 3 | 17 | ✅ 含 proptest |
 | `subtitle-core` | 12 | 0 | 12 | ✅ 含 proptest |
-| **总计** | **~123** | **9** | **~132** | |
+| **总计** | **~124** | **9** | **~133** | |
 
 ### Flutter 测试分布
 
@@ -201,8 +201,10 @@ cargo test --workspace --lib  # 只跑单元测试，跳过集成测试
 **状态:** ✅ done — 10 benchmark cases
 
 ### P2-4: API 版本兼容性回归测试
-- 自动验证 API 向后兼容
-- OpenAPI spec 与实现的自动比对
+- 已添加 `openapi_version_snapshot_and_path_count` 测试
+- 版本快照 (1.0.0)、路径数快照 (51)、schema 存在性、v1 前缀检查
+
+**状态:** ✅ done
 
 ### P2-5: Property-based testing
 - 已通过 `proptest` 添加 10 个属性测试
@@ -228,7 +230,7 @@ cargo test --workspace --lib  # 只跑单元测试，跳过集成测试
 | 9 | Flutter golden 测试 | P2 | ⬜ | |
 | 10 | E2E 测试 | P2 | ⬜ | |
 | 11 | 性能基准 | P2 | ✅ done | 2026-06-13 |
-| 12 | API 回归测试 | P2 | ⬜ | |
+| 12 | API 回归测试 | P2 | ✅ done | 2026-06-13 |
 | 13 | Property-based testing | P2 | ✅ done | 2026-06-13 |
 
 ---

@@ -91,6 +91,10 @@
   `speech-analysis` (timing output count, monotonicity, bounds, start≤end)
   and `subtitle-core` (normalize idempotence, tokenize word normalization,
   SRT/VTT no-panic, SRT draft field validity). Total workspace tests: 132.
+- Added API version compatibility regression test (`openapi_version_snapshot`)
+  in `api-http` that snapshots the OpenAPI 3.1.0 version, 51-path count, 18
+  key schema definitions, and /v1/ prefix convention to catch accidental
+  breaking changes.
 
 ## 0.7.0 - 2026-06-13
 
