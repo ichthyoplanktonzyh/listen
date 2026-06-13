@@ -41,6 +41,20 @@
 - Updated CI to invoke `./scripts/test.sh --rust` and `--flutter` instead of
   individual `cargo`/`flutter` commands, keeping the same check coverage while
   producing more actionable failure logs.
+- Migrated all 6 `verify-m*.sh` acceptance scripts to source `lib-testing.sh`,
+  eliminating duplicated cargo resolution, API lifecycle, cleanup traps, and
+  curl helpers (607 → 533 lines, 12% reduction). Fixed schema drift (v6→v8)
+  in verify-m17 and verify-m18 that accumulated across milestones.
+- Added the project's second Rust integration test suite
+  (`crates/persistence-sqlite/tests/persistence_integration_test.rs`) covering
+  file persistence across reopen, migration backup creation, concurrent access
+  safety, subtitle import/export, and media availability lifecycle (6 tests,
+  25 total for the crate).
+- Added `cargo-llvm-cov` coverage collection to CI (`lcov.info` artifact) for
+  tracking coverage trends across PRs.
+- Hardened the dictionary-provider flaky test by ensuring file metadata is
+  synced to disk before constructing the ECDICT provider, preventing rare
+  mtime-granularity cache misses.
 
 ## 0.7.0 - 2026-06-13
 

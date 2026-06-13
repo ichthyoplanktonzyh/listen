@@ -1,21 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source "$(dirname "$0")/lib-testing.sh"
 
-root="$(cd "$(dirname "$0")/.." && pwd)"
-cargo_bin="${CARGO:-/opt/homebrew/opt/rustup/bin/cargo}"
-export PATH="$(dirname "$cargo_bin"):$PATH"
-tmp="$(mktemp -d)"
+setup_test_dir
+resolve_cargo
 token="m18-token"
-api_pid=""
-mock_pid=""
 
-cleanup() {
-  [[ -z "$api_pid" ]] || kill "$api_pid" 2>/dev/null || true
-  [[ -z "$mock_pid" ]] || kill "$mock_pid" 2>/dev/null || true
-  rm -rf "$tmp"
-}
-trap cleanup EXIT
-
+# Mock OpenSubtitles HTTP server
 cat >"$tmp/mock.py" <<'PY'
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -44,6 +35,7 @@ mock_pid=$!
 for _ in $(seq 1 50); do [[ -s "$tmp/mock.port" ]] && break; sleep 0.1; done
 mock_port="$(cat "$tmp/mock.port")"
 
+# Phrase SRT fixture
 cat >"$tmp/phrase.srt" <<'SRT'
 1
 00:00:00,000 --> 00:00:02,000
@@ -60,28 +52,38 @@ LLPLAYERNEXT_API_TOKEN="$token" \
 LLPLAYERNEXT_OPENSUBTITLES_BASE_URL="http://127.0.0.1:$mock_port" \
   "$cargo_bin" run --quiet -p api-http >"$tmp/api.log" 2>&1 &
 api_pid=$!
+
 for _ in $(seq 1 100); do
   address="$(node -e 'const fs=require("fs");if(!fs.existsSync(process.argv[1]))process.exit(1);for(const line of fs.readFileSync(process.argv[1],"utf8").split("\n")){try{const v=JSON.parse(line);if(v.event==="api.started"){process.stdout.write(v.address);process.exit(0)}}catch{}}process.exit(1)' "$tmp/api.log" 2>/dev/null || true)"
   [[ -n "${address:-}" ]] && break
   sleep 0.1
 done
+[[ -n "${address:-}" ]] || { echo "ERROR: api-http did not start" >&2; exit 1; }
 base="http://$address"
 auth=(-H "Authorization: Bearer $token" -H "Content-Type: application/json")
 
-media="$(curl -fsS "${auth[@]}" -d '{"path":"/tmp/m18.mp4","fingerprint":"m18","title":"M18","kind":"video"}' "$base/v1/media")"
-media_id="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).id)' "$media")"
-request="$(node -e 'process.stdout.write(JSON.stringify({path:process.argv[1],language:"en"}))' "$tmp/phrase.srt")"
-track="$(curl -fsS "${auth[@]}" -d "$request" "$base/v1/media/$media_id/subtitles")"
-sentence_id="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).sentences[0].id)' "$track")"
-ecdict_sentence_id="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).sentences[1].id)' "$track")"
-candidates="$(curl -fsS "${auth[@]}" "$base/v1/sentences/$sentence_id/phrase-candidates")"
-node -e 'const v=JSON.parse(process.argv[1]);if(v[0].canonical_form!=="give up")process.exit(1)' "$candidates"
+media="$(api_curl -d '{"path":"/tmp/m18.mp4","fingerprint":"m18","title":"M18","kind":"video"}' "$base/v1/media")"
+media_id="$(json_get "$media" '.id')"
 
+request="$(node -e 'process.stdout.write(JSON.stringify({path:process.argv[1],language:"en"}))' "$tmp/phrase.srt")"
+track="$(api_curl -d "$request" "$base/v1/media/$media_id/subtitles")"
+sentence_id="$(json_get "$track" '.sentences[0].id')"
+ecdict_sentence_id="$(json_get "$track" '.sentences[1].id')"
+
+# Phrase candidates from rule-based detection
+candidates="$(api_curl "$base/v1/sentences/$sentence_id/phrase-candidates")"
+json_assert "$candidates" 'v[0].canonical_form==="give up"' "phrase candidate should be 'give up'"
+
+# Create phrase entry
 source="$(node -e 'process.stdout.write(JSON.stringify({language:"en",kind:"phrase",canonical_form:"give up",display_form:"give up",status:"known_not_recognized",source:{sentence_id:process.argv[1],original_form:"give up",sentence_text:"Never give up.",media_title:"M18",media_fingerprint:"m18",start_ms:0,end_ms:2000,token_start:1,token_end:2}}))' "$sentence_id")"
-phrase="$(curl -fsS -X PUT "${auth[@]}" -d "$source" "$base/v1/lexical-entries")"
-node -e 'const v=JSON.parse(process.argv[1]);if(v.entry.kind!=="phrase"||v.occurrences.length!==1)process.exit(1)' "$phrase"
-resources="$(curl -fsS "${auth[@]}" "$base/v1/learning-resources")"
-node -e 'if(JSON.parse(process.argv[1]).length!==2)process.exit(1)' "$resources"
+phrase="$(api_curl -X PUT -d "$source" "$base/v1/lexical-entries")"
+json_assert "$phrase" 'v.entry.kind==="phrase"&&v.occurrences.length===1' "lexical entry should be a phrase with 1 occurrence"
+
+# Learning resources
+resources="$(api_curl "$base/v1/learning-resources")"
+json_assert "$resources" 'v.length===2' "should have 2 learning resources"
+
+# ECDICT resource setup
 ecdict_id="$(node -e 'const v=JSON.parse(process.argv[1]);process.stdout.write(v.find(x=>x.display_name==="ECDICT").id)' "$resources")"
 mkdir -p "$tmp/resources"
 cat >"$tmp/resources/$ecdict_id.data" <<'CSV'
@@ -89,37 +91,55 @@ word,phonetic,definition,translation,pos,collins,oxford,tag,bnc,frq,exchange,det
 go,go,move,,,,,,,,"p:went/gone i:going 3:goes",,
 piece of cake,,easy task,,,,,,,,,,
 CSV
-normalized="$(curl -fsS "${auth[@]}" -d '{"language":"en","value":"went"}' "$base/v1/lexical-normalization")"
-node -e 'const v=JSON.parse(process.argv[1]);if(v.normalized!=="go"||v.provider!=="ecdict")process.exit(1)' "$normalized"
-ecdict_candidates="$(curl -fsS "${auth[@]}" "$base/v1/sentences/$ecdict_sentence_id/phrase-candidates")"
-node -e 'const v=JSON.parse(process.argv[1]);if(!v.some(x=>x.canonical_form==="piece of cake"&&x.reason==="ECDICT phrase entry"))process.exit(1)' "$ecdict_candidates"
-curl -fsS "${auth[@]}" -d '{"language":"en","original":"went","corrected":"walk"}' "$base/v1/lexical-normalization/correct" >/dev/null
-curl -fsS -X PUT "${auth[@]}" -d '{"language":"en","kind":"word","canonical_form":"run","display_form":"run","status":"known_recognized"}' "$base/v1/lexical-entries" >/dev/null
-curl -fsS -X PUT "${auth[@]}" -d '{"language":"en","kind":"word","canonical_form":"jog","display_form":"jog","status":"unknown_meaning"}' "$base/v1/lexical-entries" >/dev/null
+
+# Lemmatization
+normalized="$(api_curl -d '{"language":"en","value":"went"}' "$base/v1/lexical-normalization")"
+json_assert "$normalized" 'v.normalized==="go"&&v.provider==="ecdict"' "ECDICT should normalize 'went' to 'go'"
+
+# ECDICT phrase detection
+ecdict_candidates="$(api_curl "$base/v1/sentences/$ecdict_sentence_id/phrase-candidates")"
+json_assert "$ecdict_candidates" 'v.some(x=>x.canonical_form==="piece of cake"&&x.reason==="ECDICT phrase entry")' "ECDICT should detect 'piece of cake' phrase"
+
+# Correction persistence
+api_curl -d '{"language":"en","original":"went","corrected":"walk"}' "$base/v1/lexical-normalization/correct" >/dev/null
+
+# Conflicting correction
+api_curl -X PUT -d '{"language":"en","kind":"word","canonical_form":"run","display_form":"run","status":"known_recognized"}' "$base/v1/lexical-entries" >/dev/null
+api_curl -X PUT -d '{"language":"en","kind":"word","canonical_form":"jog","display_form":"jog","status":"unknown_meaning"}' "$base/v1/lexical-entries" >/dev/null
 conflict_status="$(curl -sS -o "$tmp/conflict.json" -w '%{http_code}' "${auth[@]}" -d '{"language":"en","original":"run","corrected":"jog"}' "$base/v1/lexical-normalization/correct")"
-[[ "$conflict_status" == "409" ]]
-node -e 'if(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).code!=="asset_conflict")process.exit(1)' "$tmp/conflict.json"
+assert_eq "$conflict_status" "409" "conflicting correction should return 409"
+json_assert "$(cat "$tmp/conflict.json")" 'v.code==="asset_conflict"' "conflict error should have asset_conflict code"
 
+# Subtitle search
 subtitle_key="m18-secret-api-key"
-results="$(curl -fsS "${auth[@]}" -d "{\"api_key\":\"$subtitle_key\",\"language\":\"en\",\"query\":\"M18\"}" "$base/v1/subtitle-search")"
-node -e 'if(JSON.parse(process.argv[1])[0].file_id!==42)process.exit(1)' "$results"
-hash_results="$(curl -fsS "${auth[@]}" -d "{\"provider\":\"opensubtitles\",\"api_key\":\"$subtitle_key\",\"language\":\"en\",\"moviehash\":\"0123456789abcdef\"}" "$base/v1/subtitle-search")"
-node -e 'if(JSON.parse(process.argv[1])[0].source!=="OpenSubtitles")process.exit(1)' "$hash_results"
-auth_status="$(curl -sS -o "$tmp/auth.json" -w '%{http_code}' "${auth[@]}" -d '{"api_key":"invalid","language":"en","query":"M18"}' "$base/v1/subtitle-search")"
-[[ "$auth_status" == "401" ]]
-node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(v.code!=="subtitle_authentication_failed"||v.retryable)process.exit(1)' "$tmp/auth.json"
-limit_status="$(curl -sS -o "$tmp/limit.json" -w '%{http_code}' "${auth[@]}" -d '{"api_key":"limited","language":"en","query":"M18"}' "$base/v1/subtitle-search")"
-[[ "$limit_status" == "429" ]]
-node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(v.code!=="subtitle_rate_limited"||!v.retryable)process.exit(1)' "$tmp/limit.json"
-provider_status="$(curl -sS -o /dev/null -w '%{http_code}' "${auth[@]}" -d "{\"provider\":\"missing\",\"api_key\":\"$subtitle_key\",\"language\":\"en\",\"query\":\"M18\"}" "$base/v1/subtitle-search")"
-[[ "$provider_status" == "404" ]]
-curl -fsS "${auth[@]}" -d "{\"api_key\":\"$subtitle_key\",\"file_id\":42}" "$base/v1/subtitle-search/download" | grep -q Downloaded
+results="$(api_curl -d "{\"api_key\":\"$subtitle_key\",\"language\":\"en\",\"query\":\"M18\"}" "$base/v1/subtitle-search")"
+json_assert "$results" 'v[0].file_id===42' "subtitle search should find file_id 42"
 
-bundle="$(curl -fsS "${auth[@]}" "$base/v1/vocabulary/export")"
-node -e 'const v=JSON.parse(process.argv[1]);if(v.version!==3||v.lexical_entries.length<1)process.exit(1)' "$bundle"
-! grep -Fq "$subtitle_key" "$tmp/api.log"
-[[ "$bundle" != *"$subtitle_key"* ]]
-[[ "$(sqlite3 "$tmp/m18.sqlite" 'PRAGMA user_version;')" == "7" ]]
+hash_results="$(api_curl -d "{\"provider\":\"opensubtitles\",\"api_key\":\"$subtitle_key\",\"language\":\"en\",\"moviehash\":\"0123456789abcdef\"}" "$base/v1/subtitle-search")"
+json_assert "$hash_results" 'v[0].source==="OpenSubtitles"' "hash search should return OpenSubtitles source"
+
+# Error responses
+auth_status="$(curl -sS -o "$tmp/auth.json" -w '%{http_code}' "${auth[@]}" -d '{"api_key":"invalid","language":"en","query":"M18"}' "$base/v1/subtitle-search")"
+assert_eq "$auth_status" "401" "invalid API key should return 401"
+json_assert "$(cat "$tmp/auth.json")" 'v.code==="subtitle_authentication_failed"&&!v.retryable' "auth failure should be non-retryable"
+
+limit_status="$(curl -sS -o "$tmp/limit.json" -w '%{http_code}' "${auth[@]}" -d '{"api_key":"limited","language":"en","query":"M18"}' "$base/v1/subtitle-search")"
+assert_eq "$limit_status" "429" "rate-limited key should return 429"
+json_assert "$(cat "$tmp/limit.json")" 'v.code==="subtitle_rate_limited"&&v.retryable' "rate limit should be retryable"
+
+provider_status="$(curl -sS -o /dev/null -w '%{http_code}' "${auth[@]}" -d "{\"provider\":\"missing\",\"api_key\":\"$subtitle_key\",\"language\":\"en\",\"query\":\"M18\"}" "$base/v1/subtitle-search")"
+assert_eq "$provider_status" "404" "unknown provider should return 404"
+
+# Download
+api_curl -d "{\"api_key\":\"$subtitle_key\",\"file_id\":42}" "$base/v1/subtitle-search/download" | grep -q Downloaded
+
+# Export and secret hygiene (negative assertions: key MUST NOT appear)
+bundle="$(api_curl "$base/v1/vocabulary/export")"
+json_assert "$bundle" 'v.version===3&&v.lexical_entries.length>=1' "export should include lexical entries"
+! grep -Fq "$subtitle_key" "$tmp/api.log" || { echo "FAIL: API log should not contain secret key" >&2; exit 1; }
+[[ "$bundle" != *"$subtitle_key"* ]] || { echo "FAIL: export bundle should not contain secret key" >&2; exit 1; }
+
+assert_eq "$(sqlite3 "$tmp/m18.sqlite" 'PRAGMA user_version;')" "8" "schema version should be at least 8"
 
 echo "Milestone 1.8 lexical assets and subtitle-provider verification passed."
 

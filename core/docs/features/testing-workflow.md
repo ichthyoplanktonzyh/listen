@@ -204,17 +204,14 @@ segments designed to exercise the extraction pipeline:
 
 ### Integration Tests
 
-`crates/speech-analysis/tests/asr_timing_integration_test.rs` is the project's
-first `crates/*/tests/` integration test. Unlike the inline `#[cfg(test)]`
-unit tests in `src/`, this test accesses the crate through its public API
-(`use speech_analysis::asr_timing::...`), verifying the crate as an external
-consumer would.
+Two crates now have `tests/` integration test suites:
 
-| Test | What It Verifies |
-|---|---|
-| `parses_fixture_and_extracts_word_timings` | Full pipeline: JSON parse → subword merge → WordTiming output (8 entries across 3 segments) |
-| `segment_count_mismatch_returns_error` | Top-level segment count mismatch produces `ExtractError::SegmentCountMismatch` |
-| `word_count_mismatch_returns_empty_for_sentence` | Per-sentence word count mismatch returns empty for that sentence, does not block other sentences |
+| Crate | Tests | Coverage |
+|---|---|---|
+| `speech-analysis` | 3 | ASR word timing extraction, segment/word count mismatch fallback |
+| `persistence-sqlite` | 6 | File persistence across reopen, migration backup creation, concurrent access safety, subtitle import/export, media availability lifecycle |
+
+Both use the crate's public API only — testing the crate as an external consumer would.
 
 ## Design Decisions
 
@@ -272,19 +269,17 @@ the entire quality suite. The current results:
 3. **No parallel execution**: All checks run sequentially. Parallel Rust and
    Flutter checks would save ~5–10 seconds but introduce output interleaving
    issues that would require a more complex runner.
-4. **`verify-m*.sh` migration deferred**: The shared library is available but
-   the existing scripts have not been migrated. New milestone scripts should
-   source `lib-testing.sh`.
 
 ## Future Work
 
-- Migrate `verify-m*.sh` scripts to source `lib-testing.sh` incrementally as
-  each script is modified for a new milestone.
-- Add `cargo-llvm-cov` coverage collection to `test.sh --coverage` mode.
 - Add a `--watch` mode using `cargo watch` / `fswatch` for continuous testing
   during development.
 - Consider parallel Rust + Flutter execution in `--full` mode with
   interleaved-but-grouped output.
+- Add Flutter golden tests for subtitle overlay and current-word highlight
+  rendering.
+- Add property-based testing (`proptest`) for ASR timing merge algorithms.
+- Expand integration tests to `api-http` and `domain` crates.
 
 ## References
 

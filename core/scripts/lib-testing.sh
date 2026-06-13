@@ -15,11 +15,22 @@ set -euo pipefail
 # ── project root ──────────────────────────────────────────────────────────
 
 lib_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+root="${root:-$lib_root}"  # backward compat: scripts use $root
 
 # ── tool resolution ───────────────────────────────────────────────────────
 
 resolve_cargo() {
-  cargo_bin="${CARGO:-/opt/homebrew/opt/rustup/bin/cargo}"
+  cargo_bin="${CARGO:-$(command -v cargo || true)}"
+  if [[ -z "$cargo_bin" ]] && [[ -x "/opt/homebrew/opt/rustup/bin/cargo" ]]; then
+    cargo_bin="/opt/homebrew/opt/rustup/bin/cargo"
+  fi
+  if [[ -z "$cargo_bin" ]] && [[ -x "$HOME/.cargo/bin/cargo" ]]; then
+    cargo_bin="$HOME/.cargo/bin/cargo"
+  fi
+  if [[ -z "$cargo_bin" ]]; then
+    echo "ERROR: cargo not found" >&2
+    exit 1
+  fi
   export PATH="$(dirname "$cargo_bin"):$PATH"
 }
 
@@ -30,15 +41,21 @@ resolve_flutter() {
 # ── temporary directory ───────────────────────────────────────────────────
 
 setup_test_dir() {
-  tmp="$(mktemp -d)"
+  tmp="${tmp:-$(mktemp -d)}"
 }
 
 cleanup() {
   if [[ -n "${api_pid:-}" ]]; then
-    kill "$api_pid" 2>/dev/null || true
+    kill -INT "$api_pid" 2>/dev/null || true
+    wait "$api_pid" 2>/dev/null || true
+  fi
+  if [[ -n "${pid:-}" ]]; then
+    kill -INT "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
   fi
   if [[ -n "${mock_pid:-}" ]]; then
     kill "$mock_pid" 2>/dev/null || true
+    wait "$mock_pid" 2>/dev/null || true
   fi
   if [[ -n "${tmp:-}" ]]; then
     rm -rf "$tmp"
@@ -88,9 +105,20 @@ process.exit(1)
 # stop_api
 #
 # Gracefully stops the running API server (if any) and resets the globals.
+# Uses SIGINT first for graceful shutdown (with api.stopped event),
+# falls back to SIGTERM if the process does not exit within 5s.
 stop_api() {
-  if [[ -n "${api_pid:-}" ]]; then
-    kill "$api_pid" 2>/dev/null || true
+  if [[ -n "${api_pid:-}" ]] && kill -0 "$api_pid" 2>/dev/null; then
+    kill -INT "$api_pid" 2>/dev/null || true
+    # Wait up to 5s for graceful exit
+    for _ in $(seq 1 50); do
+      if ! kill -0 "$api_pid" 2>/dev/null; then break; fi
+      sleep 0.1
+    done
+    # Force kill if still alive
+    if kill -0 "$api_pid" 2>/dev/null; then
+      kill -9 "$api_pid" 2>/dev/null || true
+    fi
     wait "$api_pid" 2>/dev/null || true
     api_pid=""
   fi

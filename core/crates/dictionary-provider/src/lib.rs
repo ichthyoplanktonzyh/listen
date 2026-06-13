@@ -431,13 +431,16 @@ mod tests {
     #[test]
     fn ecdict_normalizes_inflections_and_finds_phrase_entries() {
         let path = fixture_path();
-        std::fs::write(
-            &path,
-            "word,phonetic,definition,translation,pos,collins,oxford,tag,bnc,frq,exchange,detail,audio\n\
-             go,go,move,,,,,,,,\"p:went/gone i:going 3:goes\",,\n\
-             piece of cake,,easy task,,,,,,,,,,\n",
-        )
-        .unwrap();
+        {
+            let file = std::fs::File::create(&path).unwrap();
+            use std::io::Write;
+            let mut writer = std::io::BufWriter::new(&file);
+            writeln!(writer, "word,phonetic,definition,translation,pos,collins,oxford,tag,bnc,frq,exchange,detail,audio").unwrap();
+            writeln!(writer, "go,go,move,,,,,,,,\"p:went/gone i:going 3:goes\",,").unwrap();
+            writeln!(writer, "piece of cake,,easy task,,,,,,,,,,").unwrap();
+            writer.flush().unwrap();
+            file.sync_all().unwrap(); // ensure metadata is persisted before read
+        }
         let provider = EcdictProvider::with_path(path.clone(), "fixture-v1");
         let language = LanguageCode::parse("en-US").unwrap();
         assert_eq!(
