@@ -90,6 +90,7 @@ NOW=$(date +%s)
 CHECKS=(
   "cargo fmt|rust|fmt"
   "cargo clippy|rust|clippy"
+  "cargo test (lib)|rust|quick_test"
   "cargo test|rust|test"
   "flutter analyze|flutter|analyze"
   "flutter test|flutter|flutter_test"
@@ -189,6 +190,10 @@ run_check() {
       cmd=("$cargo_bin" "test" "--workspace")
       [[ ${#PASSTHROUGH[@]} -gt 0 ]] && cmd+=("${PASSTHROUGH[@]}")
       ;;
+    quick_test)
+      cmd=("$cargo_bin" "test" "--workspace" "--lib")
+      [[ ${#PASSTHROUGH[@]} -gt 0 ]] && cmd+=("${PASSTHROUGH[@]}")
+      ;;
     analyze)
       cmd=("$flutter_bin" "analyze")
       run_dir="$root/apps/desktop"
@@ -256,6 +261,8 @@ should_run_check() {
   local category="$1"; local type="$2"
   case "$MODE" in
     quick)
+      # Include quick_test (lib unit only), skip full test/flutter_test/contracts
+      [[ "$type" == "quick_test" ]] && return 0
       [[ "$type" != "test" && "$type" != "flutter_test" && "$type" != "contracts" ]] || return 1
       ;;
   esac

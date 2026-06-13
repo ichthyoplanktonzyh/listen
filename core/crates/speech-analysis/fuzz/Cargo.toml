@@ -1,0 +1,19 @@
+[package]
+name = "speech-analysis-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+domain = { path = "../../domain" }
+speech-analysis = { path = ".." }
+
+[[bin]]
+name = "asr_timing"
+path = "fuzz_targets/asr_timing.rs"
+test = false
+doc = false

@@ -253,7 +253,8 @@ the entire quality suite. The current results:
 |---|---|---|
 | cargo fmt | PASS | All Rust files formatted |
 | cargo clippy | PASS | No warnings with `-D warnings` |
-| cargo test | PASS | 58 tests (55 unit + 3 integration) |
+| cargo test (lib) | PASS | ~91 unit tests (--lib only) |
+| cargo test | PASS | ~100 tests (unit + integration) |
 | flutter analyze | PASS | No issues found |
 | flutter test | PASS | 38 tests |
 | contracts | PASS | Player, event, and OpenAPI contracts valid |
@@ -279,7 +280,7 @@ the entire quality suite. The current results:
 - Add Flutter golden tests for subtitle overlay and current-word highlight
   rendering.
 - Add property-based testing (`proptest`) for ASR timing merge algorithms.
-- Expand integration tests to `api-http` and `domain` crates.
+- Expand integration tests to `domain` crate.
 
 ## References
 

@@ -55,6 +55,30 @@
 - Hardened the dictionary-provider flaky test by ensuring file metadata is
   synced to disk before constructing the ECDICT provider, preventing rare
   mtime-granularity cache misses.
+- Added 42 unit tests to the `application` crate (previously zero coverage)
+  covering `require_text`, `clean_optional`, `normalize_american_english` (19
+  irregular/suffix rules), `normalize_phrase`, `phrase_candidates` (including
+  token boundary and non-word-token handling), `lexical_from_word`,
+  `lexical_source_from_word`, and `timing_priority`. Total workspace tests
+  increased from 58 to 100+.
+- Fixed a boundary bug in `phrase_candidates` where sentences shorter than a
+  phrase's word count could trigger an out-of-bounds index panic; corrected
+  the window count formula.
+- Set CI coverage gate at 50% line coverage (`--fail-under-lines 50` in the
+  coverage job) to prevent coverage regressions, with a planned increase to
+  55%+ as test coverage expands.
+- Enhanced `./scripts/test.sh --quick` to include `cargo test --workspace
+  --lib` (unit tests only, excluding integration/doc tests) while remaining
+  under 30s. Quick mode now runs: fmt → clippy → lib unit tests → analyze.
+- Added fuzz testing infrastructure with 3 fuzz targets:
+  `crates/subtitle-core/fuzz/` (SRT and WebVTT parsing),
+  `crates/speech-analysis/fuzz/` (ASR timing JSON extraction). Install
+  `cargo-fuzz` and run with `cargo fuzz run <target>`.
+- Rewrote `testdata/README.md` as a comprehensive fixture catalog documenting
+  every test data file, its purpose, and which tests consume it.
+- Created `docs/features/testing-milestone.md` as the tracking document for
+  the test system improvement initiative with P0/P1/P2 tiered goals and
+  progress tracking.
 
 ## 0.7.0 - 2026-06-13
 
