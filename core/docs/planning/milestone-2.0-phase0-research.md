@@ -24,6 +24,8 @@ For every catalog slot in
 
 Buckeye inputs must remain outside Git. The catalog may record identifiers and
 checksums, but not restricted audio or derived annotations without approval.
+The operational manifest format and review checklist are documented in
+[`m20-evaluation-inputs.md`](../development/m20-evaluation-inputs.md).
 
 ## Benchmark Order
 
@@ -85,6 +87,15 @@ python3 scripts/phonetic-eval.py validate-catalog \
   testdata/phonetic-analysis/evaluation-catalog-v1.tsv
 ```
 
+Validate an external reviewed development-input manifest:
+
+```bash
+python3 scripts/phonetic-eval.py validate-inputs \
+  /absolute/path/to/development-inputs.jsonl \
+  --catalog testdata/phonetic-analysis/evaluation-catalog-v1.tsv \
+  --minimum-cases 10
+```
+
 Score normalized output:
 
 ```bash
@@ -104,13 +115,32 @@ approving anything:
 python3 scripts/phonetic-research-adapter.py check-zipa --variant int8
 ```
 
+Prepare the isolated research environment only after explicitly accepting that
+the model license metadata remains unverified:
+
+```bash
+LLPLAYERNEXT_ACCEPT_UNVERIFIED_ZIPA_MODEL_LICENSE=1 \
+  scripts/setup-zipa-research.sh
+```
+
+The setup script pins Python dependencies, code/model revisions, and checksums,
+and stores everything outside the repository. Its explicit opt-in permits a
+research download only; it does not approve redistribution or product use.
+
 The isolated candidate harness rejects unlicensed audio and candidate output
-without a monotonic per-phone timeline. ZIPA's upstream simplified ONNX
-inference currently prints a phone sequence but not a stable per-phone
-timeline, so it requires a research-only timestamp derivation adapter before it
-can produce scoreable M2.0 output. The harness records wall time, real-time
-factor, observed process RSS, model size, revision, license identifier, and
-failures for successful external-adapter runs.
+without a monotonic per-phone timeline. ZIPA CTC ONNX output exposes
+frame-level `log_probs` and `log_probs_len`, but upstream simplified inference
+discards frame spans while collapsing the sequence. The research harness can
+derive an explicitly experimental linear CTC frame projection; it must be
+calibrated against real audio before the timestamps are treated as stable. The
+harness records wall time, real-time factor, observed process RSS, model size,
+revision, license identifier, and failures for successful external-adapter
+runs.
+
+`scripts/zipa-ctc-onnx-research.py` is the research-only ZIPA CTC runner. It
+preserves CTC frame spans and emits the normalized candidate-adapter shape. It
+is not a release provider, and its linear frame projection remains experimental
+until calibrated on the reviewed development batch.
 
 ## Exit Criteria
 

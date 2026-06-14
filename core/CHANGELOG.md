@@ -44,6 +44,16 @@
   persistence checks.
 - Milestone 2.0 remains incomplete: no real provider has passed the licensed
   evaluation, quality, performance, provenance, and distribution gates.
+- Added an external evaluation-input manifest validator and preparation guide
+  that check catalog membership, immutable audio checksums, explicit license
+  decisions, bounded word/phone timelines, and independent human review before
+  candidate development runs.
+- Separated ZIPA code and model revisions and added a smoke-tested experimental
+  CTC argmax frame-span projection, while retaining an explicit real-audio
+  calibration gate before treating projected timestamps as stable.
+- Added a research-only ZIPA CTC ONNX runner and explicit opt-in environment
+  setup with pinned dependencies, separate code/model revisions, and
+  checksum-verified external downloads.
 
 ## 0.7.1 - 2026-06-13
 

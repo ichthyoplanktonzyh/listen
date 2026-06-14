@@ -65,6 +65,10 @@ testdata/
 | `phonetic-analysis/reference-smoke-v1.jsonl` | `scripts/phonetic-eval.py` | Synthetic scorer reference; not quality evidence. |
 | `phonetic-analysis/prediction-smoke-v1.jsonl` | `scripts/phonetic-eval.py` | Synthetic perfect prediction used to verify metric calculations. |
 | `phonetic-analysis/prediction-smoke-errors-v1.jsonl` | `scripts/phonetic-eval.py` | Synthetic errors used to verify PER and failed release-gate calculations. |
+| `phonetic-analysis/input-manifest-smoke-v1.jsonl` | `scripts/phonetic-eval.py` | Structural external-input manifest smoke fixture; not real audio or benchmark evidence. |
+| `phonetic-analysis/zipa-ctc-frames-smoke-v1.json` | `scripts/phonetic-research-adapter.py` | Synthetic CTC frame IDs and confidence values for experimental timeline projection smoke coverage. |
+| `phonetic-analysis/zipa-tokens-smoke-v1.txt` | `scripts/phonetic-research-adapter.py` | Synthetic token inventory paired with the ZIPA CTC frame projection smoke fixture. |
+| `phonetic-analysis/zipa-research-requirements-v1.txt` | `scripts/setup-zipa-research.sh` | Pinned isolated ZIPA research dependencies; not application runtime dependencies. |
 
 ### Generated Media
 

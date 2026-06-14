@@ -140,11 +140,12 @@ pass or failure without rerunning the killed command independently.
 
 ## Immediate Next Work
 
-1. Populate and independently review at least 10 licensed development cases
-   with human-verified actual-phone references.
-2. Implement and validate a ZIPA timestamp-derivation adapter, because upstream
-   simplified ONNX inference currently emits a phone sequence without a stable
-   per-phone timeline.
+1. Populate and independently review the selected first 10 licensed development
+   cases in `docs/development/m20-first-development-batch.md`, then validate the
+   external manifest with `scripts/phonetic-eval.py validate-inputs`.
+2. Calibrate the implemented experimental ZIPA CTC frame-span projection
+   against licensed real audio; upstream simplified inference exposes logits
+   but discards frame spans while collapsing the phone sequence.
 3. Audit remaining automatic-test requirements in
    `docs/planning/milestone-2.0.md`, especially:
    - model download interruption/checksum/incompatibility/license/space paths
@@ -176,14 +177,24 @@ The latest research check established:
     `d5631c72b46ea4f39d46b4e76f999db16297e66de29c27b27699b341d78abe93`
   - INT8: 70,677,672 bytes, SHA-256
     `8f0505173e4606b4afe041f19477b38d6a72a98a19863562749066dc496e86ae`
-- The host currently lacks `onnxruntime`, `torch`, `lhotse`, `soundfile`, and
-  `librosa`. No performance number was fabricated.
+- A pinned isolated Python 3.11 environment successfully installed
+  `onnxruntime`, `torch`, `lhotse`, `soundfile`, and `librosa`; none is an
+  application dependency.
+- A checksum-verified INT8 research model ran on repository-generated
+  license-clear 10-second audio with RTF `0.187640`, observed child-process
+  peak RSS `556662784` bytes, and model size `70677672` bytes. This is a
+  non-quality execution smoke, not an evaluation-set benchmark.
 - `scripts/phonetic-research-adapter.py` now provides the reproducible isolated
   dependency/artifact check and candidate harness. It requires licensed
   external audio, rejects missing/non-monotonic phone timestamps, emits the
   normalized scorer JSONL shape, and records runtime/resource/failure metadata.
-- ZIPA upstream simplified ONNX inference prints a phone sequence but no stable
-  per-phone timeline. Timestamp derivation remains an explicit research task.
+- `scripts/setup-zipa-research.sh` provides an explicit opt-in, pinned external
+  environment setup, and `scripts/zipa-ctc-onnx-research.py` executes the
+  research-only CTC ONNX model while preserving experimental frame spans.
+- ZIPA CTC ONNX output exposes `log_probs` and `log_probs_len`. The research
+  harness now includes a smoke-tested experimental CTC argmax frame-span
+  projection, but its linear frame-to-time mapping still requires real-audio
+  calibration.
 
 The next safe Phase 0 step is to attach licensed reviewed development inputs
 and implement a ZIPA-specific timestamp derivation adapter behind the isolated

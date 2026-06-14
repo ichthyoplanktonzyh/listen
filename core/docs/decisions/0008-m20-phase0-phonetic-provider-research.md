@@ -24,7 +24,10 @@ Evaluate candidates in this order:
    FP32, FP16, and INT8 ONNX artifacts. It is not eligible for product
    integration until the exact code and model licenses, model revision,
    training-data provenance, phone inventory, and distribution rights are
-   recorded.
+   recorded. Code and model provenance remain separate: the currently inspected
+   GitHub code revision is `f96afe2842868bb1d3cea1efe191806fdcd3c955`, while
+   the model repository revision is
+   `9a8d85ba0d2adcbafe7087b82180d0e65c6f3426`.
 2. **Wav2IPA/Buckeye direction** is the first American conversational-speech
    quality baseline. Buckeye material stays outside the repository and product
    because its access terms restrict use to non-profit research and education.

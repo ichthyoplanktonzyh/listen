@@ -16,7 +16,11 @@ import time
 from pathlib import Path
 
 
-ZIPA_REVISION = "9a8d85ba0d2adcbafe7087b82180d0e65c6f3426"
+ZIPA_CODE_REVISION = "f96afe2842868bb1d3cea1efe191806fdcd3c955"
+ZIPA_CODE_LICENSE_SHA256 = (
+    "8a17e1829b1e8c410ecb6bb3941b87a4e2e0f0ce50bd2ebf19fbb1a71c35746a"
+)
+ZIPA_MODEL_REVISION = "9a8d85ba0d2adcbafe7087b82180d0e65c6f3426"
 ZIPA_DEPENDENCIES = ("onnxruntime", "torch", "lhotse", "soundfile", "librosa")
 ZIPA_ARTIFACTS = {
     "fp32": {
@@ -72,9 +76,32 @@ def check_zipa(args: argparse.Namespace) -> int:
             model_status["actual_size_bytes"] == artifact["size_bytes"]
             and model_status["actual_sha256"] == artifact["sha256"]
         )
+    code_status = {
+        "expected_revision": ZIPA_CODE_REVISION,
+        "expected_license_sha256": ZIPA_CODE_LICENSE_SHA256,
+        "path": str(args.code_dir) if args.code_dir else None,
+        "exists": bool(args.code_dir and args.code_dir.is_dir()),
+    }
+    if code_status["exists"]:
+        revision = subprocess.run(
+            ["git", "-C", str(args.code_dir), "rev-parse", "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        license_path = args.code_dir / "LICENSE"
+        code_status["actual_revision"] = revision
+        code_status["actual_license_sha256"] = (
+            sha256(license_path) if license_path.is_file() else None
+        )
+        code_status["matches_expected"] = (
+            revision == ZIPA_CODE_REVISION
+            and code_status["actual_license_sha256"] == ZIPA_CODE_LICENSE_SHA256
+        )
     result = {
         "candidate": "zipa-small-crctc-300k",
-        "revision": ZIPA_REVISION,
+        "code": code_status,
+        "model_revision": ZIPA_MODEL_REVISION,
         "variant": args.variant,
         "host": {
             "platform": platform.platform(),
@@ -85,16 +112,92 @@ def check_zipa(args: argparse.Namespace) -> int:
         "model": model_status,
         "license_status": "model_license_metadata_not_verified",
         "timeline_status": (
-            "upstream simplified ONNX inference emits a phone sequence but no "
-            "stable per-phone timeline; a research adapter must derive and "
-            "validate timestamps before scoring"
+            "CTC ONNX output exposes frame-level log_probs and log_probs_len, "
+            "but upstream simplified inference discards frame spans. "
+            "Experimental CTC span projection requires real-audio calibration."
         ),
         "ready": all(dependencies.values())
         and bool(model_status.get("matches_expected"))
+        and (not args.code_dir or bool(code_status.get("matches_expected")))
         and args.accept_unverified_model_license,
     }
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result["ready"] else 1
+
+
+def load_tokens(path: Path) -> dict[int, str]:
+    values = {}
+    with path.open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, 1):
+            parts = line.strip().split()
+            if not parts:
+                continue
+            try:
+                token_id = int(parts[-1])
+            except ValueError:
+                raise ValueError(f"{path}:{line_number}: token ID must be an integer")
+            symbol = " ".join(parts[:-1])
+            if not symbol:
+                raise ValueError(f"{path}:{line_number}: token symbol is required")
+            values[token_id] = symbol
+    if not values:
+        raise ValueError("token file is empty")
+    return values
+
+
+def derive_ctc_timeline(args: argparse.Namespace) -> int:
+    value = json.loads(args.frames.read_text(encoding="utf-8"))
+    frame_ids = value.get("frame_ids")
+    confidences = value.get("confidences")
+    if not isinstance(frame_ids, list) or not frame_ids:
+        raise ValueError("frame_ids requires a non-empty list")
+    if not all(isinstance(item, int) for item in frame_ids):
+        raise ValueError("frame_ids must contain integers")
+    if confidences is not None and (
+        not isinstance(confidences, list)
+        or len(confidences) != len(frame_ids)
+        or not all(isinstance(item, (int, float)) for item in confidences)
+    ):
+        raise ValueError("confidences must contain one number per frame")
+    tokens = load_tokens(args.tokens)
+    duration_ms = args.audio_end_ms - args.audio_start_ms
+    if args.audio_start_ms < 0 or duration_ms <= 0:
+        raise ValueError("invalid audio range")
+    phones = []
+    index = 0
+    while index < len(frame_ids):
+        token_id = frame_ids[index]
+        end = index + 1
+        while end < len(frame_ids) and frame_ids[end] == token_id:
+            end += 1
+        if token_id != args.blank_id:
+            if token_id not in tokens:
+                raise ValueError(f"token ID {token_id} is missing from token file")
+            start_ms = round(index * duration_ms / len(frame_ids))
+            end_ms = round(end * duration_ms / len(frame_ids))
+            if start_ms >= end_ms:
+                raise ValueError("projected CTC phone span is empty")
+            phone = {
+                "symbol": tokens[token_id],
+                "start_ms": start_ms,
+                "end_ms": end_ms,
+            }
+            if confidences is not None:
+                phone["confidence"] = round(
+                    sum(confidences[index:end]) / (end - index),
+                    6,
+                )
+            phones.append(phone)
+        index = end
+    result = {
+        "time_base": "relative",
+        "phone_set": args.phone_set,
+        "phones": phones,
+        "timestamp_method": "ctc_argmax_linear_frame_projection_v1_experimental",
+        "model_revision": ZIPA_MODEL_REVISION,
+    }
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
 
 
 def read_adapter_output(path: Path) -> dict:
@@ -269,7 +372,16 @@ def main() -> int:
     check = subparsers.add_parser("check-zipa")
     check.add_argument("--variant", choices=sorted(ZIPA_ARTIFACTS), default="int8")
     check.add_argument("--model", type=Path)
+    check.add_argument("--code-dir", type=Path)
     check.add_argument("--accept-unverified-model-license", action="store_true")
+
+    timeline = subparsers.add_parser("derive-ctc-timeline")
+    timeline.add_argument("--frames", type=Path, required=True)
+    timeline.add_argument("--tokens", type=Path, required=True)
+    timeline.add_argument("--audio-start-ms", type=int, required=True)
+    timeline.add_argument("--audio-end-ms", type=int, required=True)
+    timeline.add_argument("--blank-id", type=int, default=0)
+    timeline.add_argument("--phone-set", required=True)
 
     run = subparsers.add_parser("run")
     run.add_argument("--case-id", required=True)
@@ -287,7 +399,11 @@ def main() -> int:
 
     args = parser.parse_args()
     try:
-        return check_zipa(args) if args.command_name == "check-zipa" else run_candidate(args)
+        if args.command_name == "check-zipa":
+            return check_zipa(args)
+        if args.command_name == "derive-ctc-timeline":
+            return derive_ctc_timeline(args)
+        return run_candidate(args)
     except (json.JSONDecodeError, OSError, RuntimeError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1

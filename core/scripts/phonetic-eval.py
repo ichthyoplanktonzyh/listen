@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import sys
 from collections import Counter
@@ -54,6 +55,133 @@ def index_cases(path: Path) -> dict[str, dict]:
     return cases
 
 
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def require_text(case_id: str, value: object, field: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        fail(f"{case_id}: {field} requires non-empty text")
+    return value.strip()
+
+
+def validate_ranges(
+    case_id: str,
+    ranges: object,
+    field: str,
+    start_ms: int,
+    end_ms: int,
+    *,
+    require_symbol: bool = False,
+) -> int:
+    if not isinstance(ranges, list) or not ranges:
+        fail(f"{case_id}: {field} requires a non-empty list")
+    previous_end = start_ms
+    for index, value in enumerate(ranges):
+        if not isinstance(value, dict):
+            fail(f"{case_id}: {field}[{index}] must be an object")
+        item_start = value.get("start_ms")
+        item_end = value.get("end_ms")
+        if (
+            not isinstance(item_start, int)
+            or not isinstance(item_end, int)
+            or item_start < start_ms
+            or item_end > end_ms
+            or item_start >= item_end
+            or item_start < previous_end
+        ):
+            fail(f"{case_id}: {field}[{index}] has an invalid range")
+        if require_symbol:
+            require_text(case_id, value.get("symbol"), f"{field}[{index}].symbol")
+        previous_end = item_end
+    return len(ranges)
+
+
+def validate_inputs(path: Path, catalog_path: Path | None, minimum_cases: int) -> dict:
+    cases = index_cases(path)
+    if len(cases) < minimum_cases:
+        fail(f"input manifest requires at least {minimum_cases} cases, found {len(cases)}")
+    catalog_ids = None
+    if catalog_path:
+        with catalog_path.open(encoding="utf-8", newline="") as handle:
+            catalog_ids = {row["case_id"] for row in csv.DictReader(handle, delimiter="\t")}
+    redistribution = Counter()
+    phone_sets = Counter()
+    total_words = total_phones = 0
+    for case_id, case in cases.items():
+        if catalog_ids is not None and case_id not in catalog_ids:
+            fail(f"{case_id}: case_id is not present in the fixed catalog")
+        audio_path_value = require_text(case_id, case.get("audio_path"), "audio_path")
+        audio_path = Path(audio_path_value).expanduser()
+        if not audio_path.is_absolute():
+            audio_path = path.parent / audio_path
+        if not audio_path.is_file():
+            fail(f"{case_id}: audio_path does not exist: {audio_path}")
+        expected_sha256 = require_text(
+            case_id, case.get("audio_sha256"), "audio_sha256"
+        ).lower()
+        if len(expected_sha256) != 64 or any(
+            char not in "0123456789abcdef" for char in expected_sha256
+        ):
+            fail(f"{case_id}: audio_sha256 must be a lowercase SHA-256 digest")
+        actual_sha256 = sha256(audio_path)
+        if actual_sha256 != expected_sha256:
+            fail(f"{case_id}: audio checksum mismatch")
+        require_text(case_id, case.get("transcript"), "transcript")
+        source_license = require_text(
+            case_id, case.get("source_license"), "source_license"
+        ).lower()
+        if source_license in {"unknown", "pending", "license_pending", "unverified"}:
+            fail(f"{case_id}: source_license must be verified before evaluation")
+        redistribution_value = case.get("redistribution")
+        if redistribution_value not in {"allowed", "prohibited"}:
+            fail(f"{case_id}: redistribution must be allowed or prohibited")
+        redistribution[redistribution_value] += 1
+        start_ms = case.get("audio_start_ms")
+        end_ms = case.get("audio_end_ms")
+        if (
+            not isinstance(start_ms, int)
+            or not isinstance(end_ms, int)
+            or start_ms < 0
+            or start_ms >= end_ms
+        ):
+            fail(f"{case_id}: invalid audio range")
+        total_words += validate_ranges(
+            case_id, case.get("word_ranges"), "word_ranges", start_ms, end_ms
+        )
+        for index, word in enumerate(case["word_ranges"]):
+            require_text(case_id, word.get("text"), f"word_ranges[{index}].text")
+        total_phones += validate_ranges(
+            case_id,
+            case.get("phones"),
+            "phones",
+            start_ms,
+            end_ms,
+            require_symbol=True,
+        )
+        phone_set = require_text(case_id, case.get("phone_set"), "phone_set")
+        phone_sets[phone_set] += 1
+        annotator = require_text(case_id, case.get("annotator"), "annotator")
+        reviewer = require_text(case_id, case.get("reviewer"), "reviewer")
+        if annotator == reviewer:
+            fail(f"{case_id}: reviewer must be independent from annotator")
+        if case.get("review_status") != "verified":
+            fail(f"{case_id}: review_status must be verified")
+    return {
+        "case_count": len(cases),
+        "word_range_count": total_words,
+        "phone_count": total_phones,
+        "phone_sets": dict(phone_sets),
+        "redistribution": dict(redistribution),
+        "minimum_cases": minimum_cases,
+        "ready_for_candidate_development_run": len(cases) >= 10,
+    }
+
+
 def validate_catalog(path: Path) -> dict:
     with path.open(encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle, delimiter="\t"))
@@ -96,6 +224,45 @@ def validate_catalog(path: Path) -> dict:
             )
         ),
     }
+
+
+def create_input_template(path: Path, case_ids: list[str]) -> list[dict]:
+    with path.open(encoding="utf-8", newline="") as handle:
+        rows = {
+            row["case_id"]: row for row in csv.DictReader(handle, delimiter="\t")
+        }
+    if not case_ids:
+        fail("at least one case ID is required")
+    missing = [case_id for case_id in case_ids if case_id not in rows]
+    if missing:
+        fail(f"case IDs are not present in the fixed catalog: {missing}")
+    return [
+        {
+            "case_id": case_id,
+            "audio_path": "",
+            "audio_sha256": "",
+            "transcript": "",
+            "audio_start_ms": 0,
+            "audio_end_ms": 0,
+            "word_ranges": [],
+            "phone_set": "",
+            "phones": [],
+            "annotator": "",
+            "reviewer": "",
+            "review_status": "draft",
+            "source_license": rows[case_id]["source_license"],
+            "redistribution": rows[case_id]["redistribution"],
+            "source_locator": "",
+            "target_phenomena": [
+                value for value in rows[case_id]["phenomena"].split(",") if value
+            ],
+            "notes": (
+                f"genre={rows[case_id]['genre']}; rate={rows[case_id]['rate']}; "
+                f"recording_quality={rows[case_id]['recording_quality']}"
+            ),
+        }
+        for case_id in case_ids
+    ]
 
 
 def edit_distance(reference: list[str], prediction: list[str]) -> tuple[int, int, int]:
@@ -195,16 +362,33 @@ def main() -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
     catalog_parser = subparsers.add_parser("validate-catalog")
     catalog_parser.add_argument("catalog", type=Path)
+    inputs_parser = subparsers.add_parser("validate-inputs")
+    inputs_parser.add_argument("manifest", type=Path)
+    inputs_parser.add_argument("--catalog", type=Path)
+    inputs_parser.add_argument("--minimum-cases", type=int, default=10)
+    template_parser = subparsers.add_parser("create-input-template")
+    template_parser.add_argument("catalog", type=Path)
+    template_parser.add_argument("--case-ids", required=True)
     score_parser = subparsers.add_parser("score")
     score_parser.add_argument("reference", type=Path)
     score_parser.add_argument("prediction", type=Path)
     args = parser.parse_args()
     try:
-        result = (
-            validate_catalog(args.catalog)
-            if args.command == "validate-catalog"
-            else score(args.reference, args.prediction)
-        )
+        if args.command == "validate-catalog":
+            result = validate_catalog(args.catalog)
+        elif args.command == "validate-inputs":
+            if args.minimum_cases < 1:
+                fail("minimum-cases must be positive")
+            result = validate_inputs(args.manifest, args.catalog, args.minimum_cases)
+        elif args.command == "create-input-template":
+            case_ids = [
+                value.strip() for value in args.case_ids.split(",") if value.strip()
+            ]
+            for value in create_input_template(args.catalog, case_ids):
+                print(json.dumps(value, sort_keys=True))
+            return 0
+        else:
+            result = score(args.reference, args.prediction)
     except (KeyError, OSError, TypeError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1

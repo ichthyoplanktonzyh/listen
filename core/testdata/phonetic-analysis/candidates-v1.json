@@ -10,6 +10,11 @@
       "runtime": "onnxruntime",
       "license": "permissive_claimed_exact_license_pending",
       "license_verified": false,
+      "code_revision": "f96afe2842868bb1d3cea1efe191806fdcd3c955",
+      "code_license": "MIT",
+      "code_license_verified": true,
+      "model_revision": "9a8d85ba0d2adcbafe7087b82180d0e65c6f3426",
+      "model_license_verified": false,
       "distribution_review": "required_before_product_integration",
       "sources": [
         "https://github.com/lingjzhu/zipa",
