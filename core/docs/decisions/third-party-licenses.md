@@ -23,4 +23,8 @@ This is an M0 inventory, not legal advice.
 | CMU Pronouncing Dictionary | Optional canonical en-US pronunciation data | BSD-style CMU license; downloaded explicitly from pinned revision `74790861` and checksum-verified |
 | OpenSubtitles.com REST API | User-initiated subtitle search and download | User supplies an API key; requests obey service authentication, quotas, and terms |
 
+The bundled `llplayer-prosodic-linear@v1` chunk-boundary model is
+project-authored and distributed under MIT. It contains no third-party model
+weights and does not add an external runtime dependency.
+
 No LLPlayer source code is copied into this repository.

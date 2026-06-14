@@ -36,6 +36,21 @@ struct RichAcousticCase {
     expected_chunks: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct LearnedProsodicCorpus {
+    cases: Vec<LearnedProsodicCase>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LearnedProsodicCase {
+    name: String,
+    text: String,
+    durations_ms: Vec<u64>,
+    gaps_ms: Vec<u64>,
+    expected_with_model: Vec<String>,
+    expected_without_model: Vec<String>,
+}
+
 #[test]
 fn v2_golden_corpus_matches_expected_partitions_and_quality_bounds() {
     let corpus: GoldenCorpus =
@@ -145,10 +160,63 @@ fn v3_rich_acoustic_corpus_changes_partitions_and_degrades_to_c2() {
         &ChunkPartitionConfig {
             pre_boundary_lengthening: None,
             filled_pause_hesitation: None,
+            learned_prosodic: None,
             ..ChunkPartitionConfig::default()
         },
     );
     assert_eq!(c2_result.chunks.len(), 1);
+}
+
+#[test]
+fn v4_learned_prosodic_corpus_only_changes_ambiguous_boundaries() {
+    let corpus: LearnedProsodicCorpus = serde_json::from_str(include_str!(
+        "../../../testdata/chunk/v4-learned-prosodic.json"
+    ))
+    .unwrap();
+
+    for case in corpus.cases {
+        let sentence = sentence(&case.name, &case.text);
+        let timings = timings_with_durations(&sentence, &case.durations_ms, &case.gaps_ms);
+        let with_model = partition_sentence(
+            &sentence,
+            &timings,
+            &[],
+            &ChunkPartitionConfig {
+                pre_boundary_lengthening: None,
+                ..ChunkPartitionConfig::default()
+            },
+        );
+        let without_model = partition_sentence(
+            &sentence,
+            &timings,
+            &[],
+            &ChunkPartitionConfig {
+                pre_boundary_lengthening: None,
+                learned_prosodic: None,
+                ..ChunkPartitionConfig::default()
+            },
+        );
+        assert_eq!(
+            with_model
+                .chunks
+                .iter()
+                .map(|chunk| chunk.text.clone())
+                .collect::<Vec<_>>(),
+            case.expected_with_model,
+            "learned case {} with model",
+            case.name
+        );
+        assert_eq!(
+            without_model
+                .chunks
+                .iter()
+                .map(|chunk| chunk.text.clone())
+                .collect::<Vec<_>>(),
+            case.expected_without_model,
+            "learned case {} without model",
+            case.name
+        );
+    }
 }
 
 fn sentence(id: &str, text: &str) -> SubtitleSentence {

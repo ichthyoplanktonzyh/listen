@@ -827,7 +827,7 @@ mod tests {
         let sentence = make_sentence("s1", 0, 5000, &["a", "b", "c", "d", "e"]);
         let result = detect_text_chunks(&sentence, &[]);
         // Every token index 0..4 should appear exactly once.
-        let mut covered = vec![false; 5];
+        let mut covered = [false; 5];
         for chunk in &result.chunks {
             for idx in chunk.token_start..=chunk.token_end {
                 assert!(!covered[idx as usize], "token {idx} covered twice");

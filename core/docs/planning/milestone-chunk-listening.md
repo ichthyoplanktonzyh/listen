@@ -570,9 +570,31 @@ normal playback UI.
 
 ### Completion Gate
 
-- Model/runtime licensing and distribution are acceptable.
-- Model is optional and failure-safe.
-- C1-C3 behavior remains available without the model.
+- [x] Model/runtime licensing and distribution are acceptable.
+- [x] Model is optional and failure-safe.
+- [x] C1-C3 behavior remains available without the model.
+
+### Completed Implementation
+
+- Added `llplayer-prosodic-linear@v1`, a project-authored MIT linear
+  classifier embedded in the speech-analysis crate and executed locally on
+  CPU. It establishes the deployable provider contract without introducing an
+  unverified external model or runtime.
+- Added provider-attributed learned evidence containing probability, bounded
+  score delta, provider ID, model revision, license, and the timing-derived
+  feature snapshot.
+- Integrated learned evidence only for ambiguous rule scores. It cannot
+  override decisive gap/punctuation evidence, undo filled-pause suppression,
+  or bypass the final partitioner.
+- Added failure-safe model loading and feature handling. Disabled, invalid,
+  incomplete, or estimated-timing inputs emit no learned evidence and preserve
+  C1-C3 behavior.
+- Added `GET /v1/chunk/providers`, diagnostic evidence, and the versioned
+  `testdata/chunk/v4-learned-prosodic.json` calibration corpus.
+
+The bundled model is an integration baseline rather than the final answer for
+prosodic quality. Future external, distilled, pitch-aware, or encoder-feature
+providers can replace it behind the same optional evidence contract.
 
 ---
 
@@ -591,15 +613,17 @@ normal playback UI.
    latency demonstrates a real need.
 7. Do not expand phrase datasets before the MVP user loop is complete.
 
-## Immediate Work Queue
+## Post-C4 Work Queue
 
 Execute these tasks next, in order:
 
-1. Implement and test `SentenceChunkPartition` and `partition_sentence()`.
-2. Fix reviewed correctness issues in the current raw detectors.
-3. Add application and track-level HTTP partition APIs.
-4. Add Flutter partition models, loading, and controller state.
-5. Refactor `TokenLine` to render chunk groups while preserving word behavior.
-6. Add local active-chunk tracking and animation.
-7. Add settings, fallback behavior, automated tests, and collaborative MVP
-   acceptance.
+1. Collect a real listening corpus with human-reviewed chunk boundaries and
+   source-aware word timing quality labels.
+2. Measure V2-V4 precision, recall, fragment rate, and user-visible partition
+   changes before retuning thresholds or model coefficients.
+3. Add independent pitch-reset and energy-change providers when reliable local
+   audio features are available.
+4. Evaluate external or distilled prosodic models only when licensing,
+   redistribution, local runtime cost, and fallback behavior are documented.
+5. Iterate on the chunk display experience using playback feedback without
+   changing the stable partition contract.

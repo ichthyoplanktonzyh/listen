@@ -1,6 +1,6 @@
 # Chunk Boundary Diagnostics
 
-Chunk boundary diagnostics explain why the V2 acoustic-first partitioner
+Chunk boundary diagnostics explain why the acoustic-first partitioner
 selected or rejected every possible boundary between adjacent words.
 
 The normal playback UI continues to consume:
@@ -30,6 +30,10 @@ Each sentence response contains:
   pre-boundary lengthening, filled-pause hesitation, readability fit, fragment
   penalties, and length fallback.
 
+V4 learned evidence also reports model probability, bounded score delta,
+provider ID, model revision, and license. It is present only for ambiguous
+rule-based candidates where the optional model is allowed to contribute.
+
 Example:
 
 ```bash
@@ -41,6 +45,7 @@ curl -H "Authorization: Bearer $LLPLAYER_TOKEN" \
 Use the version-controlled calibration fixture at
 `testdata/chunk/v2-golden.json` when changing V2 scores or thresholds. New
 cases should capture an identifiable listening condition and state the expected
-display chunks. C3 cases live in `testdata/chunk/v3-rich-acoustic.json`.
+display chunks. C3 cases live in `testdata/chunk/v3-rich-acoustic.json`, and C4
+learned-provider cases live in `testdata/chunk/v4-learned-prosodic.json`.
 Rich-acoustic analyzers add provider-attributed evidence to candidates rather
 than changing the stable display partition contract.

@@ -47,6 +47,15 @@
 - Added a C3 golden corpus covering no-pause lengthening, ordinary word
   durations, hesitation-gap suppression, and decisive pauses that survive the
   hesitation penalty.
+- Completed C4 with an optional learned prosodic boundary provider and
+  partitioner V4. The bundled project-authored MIT linear model runs locally,
+  emits provider/revision/license-attributed evidence, and can assist only
+  ambiguous rule-based boundaries.
+- Added `GET /v1/chunk/providers` for inspecting learned-provider availability,
+  runtime, and distribution metadata. Model or feature failures emit no
+  evidence, and disabling the provider exactly preserves the C1-C3 pipeline.
+- Added a C4 golden corpus covering learned-model contribution, ordinary
+  delivery, decisive rule boundaries, and model-disabled fallback.
 
 ## 0.7.2 - 2026-06-14
 

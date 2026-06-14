@@ -12,6 +12,9 @@ use domain::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::learned_prosodic_provider::{
+    LearnedProsodicBoundaryEvidence, LearnedProsodicProviderConfig, analyze_with_embedded_model,
+};
 use crate::rich_acoustic_evidence::{
     FilledPauseHesitationConfig, PreBoundaryLengtheningConfig, RichAcousticBoundaryEvidence,
     RichAcousticEvidenceKind, RichAcousticMeasurement, analyze_filled_pause_hesitation,
@@ -20,7 +23,7 @@ use crate::rich_acoustic_evidence::{
 use crate::text_chunk_detection::{TextChunkEvidence, detect_text_chunks};
 
 pub const PARTITIONER_ID: &str = "acoustic-first-rule-partitioner";
-pub const PARTITIONER_VERSION: &str = "v3";
+pub const PARTITIONER_VERSION: &str = "v4";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChunkPartitionConfig {
@@ -37,6 +40,9 @@ pub struct ChunkPartitionConfig {
     pub punctuation_reliability: PunctuationReliability,
     pub pre_boundary_lengthening: Option<PreBoundaryLengtheningConfig>,
     pub filled_pause_hesitation: Option<FilledPauseHesitationConfig>,
+    pub learned_prosodic: Option<LearnedProsodicProviderConfig>,
+    pub learned_ambiguous_min_score: f32,
+    pub learned_ambiguous_max_score: f32,
 }
 
 impl Default for ChunkPartitionConfig {
@@ -55,6 +61,9 @@ impl Default for ChunkPartitionConfig {
             punctuation_reliability: PunctuationReliability::Trusted,
             pre_boundary_lengthening: Some(PreBoundaryLengtheningConfig::default()),
             filled_pause_hesitation: Some(FilledPauseHesitationConfig::default()),
+            learned_prosodic: Some(LearnedProsodicProviderConfig::default()),
+            learned_ambiguous_min_score: -0.5,
+            learned_ambiguous_max_score: 0.7,
         }
     }
 }
@@ -88,6 +97,7 @@ pub enum ChunkTimingQuality {
 pub enum ChunkBoundarySource {
     AcousticGap,
     PreBoundaryLengthening,
+    LearnedProsodicModel,
     StrongPunctuation,
     Punctuation,
     LengthLimit,
@@ -111,6 +121,13 @@ pub enum ChunkBoundaryEvidence {
         score_penalty: f32,
         provider_id: String,
         provider_version: String,
+    },
+    LearnedProsodicModel {
+        probability: f32,
+        score_delta: f32,
+        provider_id: String,
+        model_revision: String,
+        license: String,
     },
     StrongPunctuation {
         text: String,
@@ -203,6 +220,7 @@ pub fn partition_sentence_with_diagnostics(
     config: &ChunkPartitionConfig,
 ) -> SentenceChunkDiagnostics {
     let mut rich_acoustic_evidence = Vec::new();
+    let mut learned_prosodic_evidence = Vec::new();
     if let Some(real_timings) = complete_real_timings(sentence, timings) {
         if let Some(lengthening) = config.pre_boundary_lengthening.as_ref() {
             rich_acoustic_evidence
@@ -212,12 +230,16 @@ pub fn partition_sentence_with_diagnostics(
             rich_acoustic_evidence
                 .extend(analyze_filled_pause_hesitation(&real_timings, hesitation));
         }
+        if let Some(learned) = config.learned_prosodic.as_ref() {
+            learned_prosodic_evidence.extend(analyze_with_embedded_model(&real_timings, learned));
+        }
     }
-    partition_sentence_with_rich_acoustic_evidence(
+    partition_sentence_with_all_evidence(
         sentence,
         timings,
         phrase_candidates,
         &rich_acoustic_evidence,
+        &learned_prosodic_evidence,
         config,
     )
 }
@@ -227,6 +249,32 @@ pub fn partition_sentence_with_rich_acoustic_evidence(
     timings: &[WordTiming],
     phrase_candidates: &[PhraseCandidate],
     rich_acoustic_evidence: &[RichAcousticBoundaryEvidence],
+    config: &ChunkPartitionConfig,
+) -> SentenceChunkDiagnostics {
+    let learned_prosodic_evidence = complete_real_timings(sentence, timings)
+        .and_then(|real_timings| {
+            config
+                .learned_prosodic
+                .as_ref()
+                .map(|learned| analyze_with_embedded_model(&real_timings, learned))
+        })
+        .unwrap_or_default();
+    partition_sentence_with_all_evidence(
+        sentence,
+        timings,
+        phrase_candidates,
+        rich_acoustic_evidence,
+        &learned_prosodic_evidence,
+        config,
+    )
+}
+
+pub fn partition_sentence_with_all_evidence(
+    sentence: &SubtitleSentence,
+    timings: &[WordTiming],
+    phrase_candidates: &[PhraseCandidate],
+    rich_acoustic_evidence: &[RichAcousticBoundaryEvidence],
+    learned_prosodic_evidence: &[LearnedProsodicBoundaryEvidence],
     config: &ChunkPartitionConfig,
 ) -> SentenceChunkDiagnostics {
     let words = sentence
@@ -363,11 +411,40 @@ pub fn partition_sentence_with_rich_acoustic_evidence(
             });
         }
 
+        let has_hesitation_penalty = evidence
+            .iter()
+            .any(|item| matches!(item, ChunkBoundaryEvidence::FilledPauseHesitation { .. }));
+        if !has_hesitation_penalty
+            && score >= config.learned_ambiguous_min_score
+            && score < config.learned_ambiguous_max_score
+            && let Some(learned) = learned_prosodic_evidence.iter().find(|item| {
+                item.sentence_id == sentence.id
+                    && item.left_token_index == left.index
+                    && item.right_token_index == right.index
+            })
+        {
+            let score_delta = if learned.score_delta.is_finite() {
+                learned.score_delta.clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            score += score_delta;
+            evidence.push(ChunkBoundaryEvidence::LearnedProsodicModel {
+                probability: learned.probability,
+                score_delta,
+                provider_id: learned.provider_id.clone(),
+                model_revision: learned.model_revision.clone(),
+                license: learned.license.clone(),
+            });
+            primary_source.get_or_insert(ChunkBoundarySource::LearnedProsodicModel);
+        }
+
         let has_boundary_signal = evidence.iter().any(|item| {
             matches!(
                 item,
                 ChunkBoundaryEvidence::AcousticGap { .. }
                     | ChunkBoundaryEvidence::PreBoundaryLengthening { .. }
+                    | ChunkBoundaryEvidence::LearnedProsodicModel { .. }
                     | ChunkBoundaryEvidence::StrongPunctuation { .. }
                     | ChunkBoundaryEvidence::Punctuation { .. }
             )
@@ -779,7 +856,7 @@ mod tests {
     }
 
     #[test]
-    fn missing_lengthening_features_degrade_to_c2_partition() {
+    fn missing_optional_features_degrade_to_c2_partition() {
         let sentence = words(&["we", "can", "solve", "this", "problem", "today"]);
         let values = timings_with_durations(
             &sentence,
@@ -792,6 +869,7 @@ mod tests {
             &[],
             &ChunkPartitionConfig {
                 pre_boundary_lengthening: None,
+                learned_prosodic: None,
                 ..ChunkPartitionConfig::default()
             },
         );
@@ -810,6 +888,61 @@ mod tests {
         let result = partition_sentence(&sentence, &values, &[], &ChunkPartitionConfig::default());
         assert_eq!(result.timing_quality, ChunkTimingQuality::Synthesized);
         assert_eq!(result.chunks.len(), 1);
+    }
+
+    #[test]
+    fn learned_provider_can_select_ambiguous_boundary() {
+        let sentence = words(&["we", "can", "solve", "this", "problem", "today"]);
+        let values = timings_with_durations(
+            &sentence,
+            &[120, 130, 125, 340, 120, 130],
+            TimingSource::ForcedAligned,
+        );
+        let with_model = partition_sentence(
+            &sentence,
+            &values,
+            &[],
+            &ChunkPartitionConfig {
+                pre_boundary_lengthening: None,
+                ..ChunkPartitionConfig::default()
+            },
+        );
+        let without_model = partition_sentence(
+            &sentence,
+            &values,
+            &[],
+            &ChunkPartitionConfig {
+                pre_boundary_lengthening: None,
+                learned_prosodic: None,
+                ..ChunkPartitionConfig::default()
+            },
+        );
+        assert_eq!(with_model.chunks.len(), 2);
+        assert_eq!(without_model.chunks.len(), 1);
+        assert_eq!(
+            with_model.chunks[0]
+                .boundary_after
+                .as_ref()
+                .unwrap()
+                .primary_source,
+            ChunkBoundarySource::LearnedProsodicModel
+        );
+    }
+
+    #[test]
+    fn learned_provider_does_not_override_decisive_rule_boundary() {
+        let sentence = words(&["we", "can", "solve", "this", "problem", "today"]);
+        let result = partition_sentence(
+            &sentence,
+            &timings(&sentence, Some(2)),
+            &[],
+            &ChunkPartitionConfig::default(),
+        );
+        let boundary = result.chunks[0].boundary_after.as_ref().unwrap();
+        assert_eq!(boundary.primary_source, ChunkBoundarySource::AcousticGap);
+        assert!(!boundary.evidence.iter().any(|evidence| {
+            matches!(evidence, ChunkBoundaryEvidence::LearnedProsodicModel { .. })
+        }));
     }
 
     #[test]

@@ -21,6 +21,9 @@ use domain::{
     SubtitleTrackId, VocabularyAssetBundle, WordProfileId, WordStatus,
 };
 use serde::{Deserialize, Serialize};
+use speech_analysis::learned_prosodic_provider::{
+    LearnedProsodicProviderInfo, embedded_provider_info,
+};
 use tokio::sync::broadcast;
 
 mod m18;
@@ -115,6 +118,7 @@ pub fn router(state: ApiState) -> Router {
             "/v1/subtitles/{track_id}/chunk-diagnostics",
             get(track_chunk_diagnostics),
         )
+        .route("/v1/chunk/providers", get(chunk_providers))
         .route("/v1/speech/jobs", get(speech_jobs).post(create_speech_job))
         .route("/v1/speech/jobs/{job_id}", get(speech_job))
         .route("/v1/speech/jobs/{job_id}/cancel", post(cancel_speech_job))
@@ -585,6 +589,10 @@ async fn track_chunk_diagnostics(
         )
         .map(Json)
         .map_err(ApiError::from)
+}
+
+async fn chunk_providers() -> Json<Vec<LearnedProsodicProviderInfo>> {
+    Json(vec![embedded_provider_info()])
 }
 
 async fn generate_track_word_timings(
@@ -1255,6 +1263,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn chunk_provider_catalog_reports_optional_licensed_model() {
+        let response = test_app()
+            .oneshot(
+                Request::get("/v1/chunk/providers")
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(body[0]["license"], "MIT");
+        assert_eq!(body[0]["optional"], true);
+        assert_eq!(body[0]["available"], true);
+    }
+
+    #[tokio::test]
     async fn media_registration_is_idempotent_over_http() {
         let app = test_app();
         let body = serde_json::json!({
@@ -1530,6 +1558,7 @@ mod tests {
             "/v1/subtitles/{track_id}/word-timings",
             "/v1/subtitles/{track_id}/chunk-partitions",
             "/v1/subtitles/{track_id}/chunk-diagnostics",
+            "/v1/chunk/providers",
             "/v1/speech/jobs",
             "/v1/word-profiles",
             "/v1/word-profiles/batch",
@@ -1571,8 +1600,8 @@ mod tests {
         // Count documented paths as a regression gate.
         let path_count = openapi.lines().filter(|l| l.starts_with("  /v1/")).count();
         assert_eq!(
-            path_count, 53,
-            "OpenAPI path count changed from 53 — update snapshot if paths were added/removed"
+            path_count, 54,
+            "OpenAPI path count changed from 54 — update snapshot if paths were added/removed"
         );
 
         // All paths must be under /v1/.

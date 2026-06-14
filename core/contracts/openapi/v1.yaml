@@ -181,6 +181,11 @@ paths:
       operationId: trackChunkDiagnostics
       responses:
         "200": { description: Developer-facing selected and rejected chunk boundary evidence }
+  /v1/chunk/providers:
+    get:
+      operationId: chunkProviders
+      responses:
+        "200": { description: Optional learned chunk evidence providers, revisions, runtimes, and licenses }
   /v1/speech/jobs:
     get:
       operationId: speechBatchJobs

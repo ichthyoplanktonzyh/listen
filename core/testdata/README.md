@@ -14,7 +14,8 @@ testdata/
 │   └── sample-output.json     # Hand-crafted whisper.cpp -ojf output (3 segments)
 ├── chunk/                     # Chunk partition calibration fixtures
 │   ├── v2-golden.json         # V2 acoustic-first partition golden corpus
-│   └── v3-rich-acoustic.json  # C3 duration and hesitation evidence corpus
+│   ├── v3-rich-acoustic.json  # C3 duration and hesitation evidence corpus
+│   └── v4-learned-prosodic.json # C4 optional learned-provider corpus
 │
 ├── subtitles/                 # Subtitle parsing fixtures
 │   ├── timeline.srt           # SRT with gaps, overlap, punctuation, apostrophe, hyphen
@@ -53,6 +54,7 @@ testdata/
 |------|------|---------|-------------|
 | `chunk/v2-golden.json` | ~3 KB | `speech-analysis/tests/chunk_partition_golden_test.rs` | Acoustic-first V2 calibration cases covering fast speech, hesitation, inferred/trusted punctuation, moderate pauses, fixed expressions, and long subtitles |
 | `chunk/v3-rich-acoustic.json` | ~2 KB | `speech-analysis/tests/chunk_partition_golden_test.rs` | C3 cases proving pre-boundary lengthening can split without a pause, filled-pause evidence can suppress likely hesitation gaps, and missing providers degrade to C2 |
+| `chunk/v4-learned-prosodic.json` | ~2 KB | `speech-analysis/tests/chunk_partition_golden_test.rs` | C4 cases proving the optional learned provider changes ambiguous boundaries, leaves ordinary delivery unchanged, and defers to decisive rule evidence |
 
 ### Pronunciation Fixtures
 

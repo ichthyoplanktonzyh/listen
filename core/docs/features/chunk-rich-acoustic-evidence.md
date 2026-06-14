@@ -59,6 +59,7 @@ The C3 calibration corpus is:
 testdata/chunk/v3-rich-acoustic.json
 ```
 
-Future pitch, energy, breath, alignment, or learned providers should emit the
-same provider-attributed boundary evidence and leave the product-facing
-`SentenceChunkPartition` contract unchanged.
+The C4 learned provider follows the same evidence-first architecture. Future
+pitch, energy, breath, alignment, or learned providers should remain
+provider-attributed and leave the product-facing `SentenceChunkPartition`
+contract unchanged.
