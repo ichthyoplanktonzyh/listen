@@ -80,6 +80,8 @@ void main() {
       'version': 7,
       'pronunciation_visible': false,
       'word_sync_visible': false,
+      'show_chunk_grouping': false,
+      'highlight_current_chunk': false,
       'phoneme_display': 'arpabet',
       'word_highlight_style': 'glow',
       'word_animation_intensity': 0.8,
@@ -88,6 +90,8 @@ void main() {
     });
     expect(settings.pronunciationVisible, isFalse);
     expect(settings.wordSyncVisible, isFalse);
+    expect(settings.showChunkGrouping, isFalse);
+    expect(settings.highlightCurrentChunk, isFalse);
     expect(settings.phonemeDisplay, 'arpabet');
     expect(settings.wordHighlightStyle, 'glow');
     expect(settings.wordAnimationIntensity, 0.8);
@@ -99,6 +103,8 @@ void main() {
     const settings = AppSettings(
       pronunciationVisible: false,
       wordSyncVisible: false,
+      showChunkGrouping: false,
+      highlightCurrentChunk: false,
       phonemeDisplay: 'arpabet',
       wordHighlightStyle: 'bounce',
       wordAnimationIntensity: 0.8,
@@ -110,6 +116,8 @@ void main() {
 
     expect(updated.pronunciationVisible, isFalse);
     expect(updated.wordSyncVisible, isTrue);
+    expect(updated.showChunkGrouping, isFalse);
+    expect(updated.highlightCurrentChunk, isFalse);
     expect(updated.phonemeDisplay, 'arpabet');
     expect(updated.wordHighlightStyle, 'bounce');
     expect(updated.wordAnimationIntensity, 0.8);

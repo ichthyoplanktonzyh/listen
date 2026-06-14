@@ -178,4 +178,76 @@ void main() {
       expect(selectedWords, 0);
     },
   );
+
+  testWidgets('subtitle renders product chunks as separate groups', (
+    tester,
+  ) async {
+    const cue = Cue(
+      id: 'sentence-1',
+      index: 0,
+      start: Duration.zero,
+      end: Duration(seconds: 2),
+      text: 'I think so',
+      tokens: [
+        SubtitleToken(index: 0, kind: 'word', text: 'I', normalized: 'i'),
+        SubtitleToken(
+          index: 1,
+          kind: 'whitespace',
+          text: ' ',
+          normalized: null,
+        ),
+        SubtitleToken(
+          index: 2,
+          kind: 'word',
+          text: 'think',
+          normalized: 'think',
+        ),
+        SubtitleToken(
+          index: 3,
+          kind: 'whitespace',
+          text: ' ',
+          normalized: null,
+        ),
+        SubtitleToken(index: 4, kind: 'word', text: 'so', normalized: 'so'),
+      ],
+    );
+    await tester.pumpWidget(
+      localized(
+        TokenLine(
+          cue: cue,
+          profiles: const {},
+          showStyles: true,
+          chunkPartition: const SentenceChunkPartition(
+            sentenceId: 'sentence-1',
+            chunks: [
+              DisplayChunk(
+                index: 0,
+                tokenStart: 0,
+                tokenEnd: 2,
+                text: 'I think',
+                start: Duration.zero,
+                end: Duration(seconds: 1),
+              ),
+              DisplayChunk(
+                index: 1,
+                tokenStart: 4,
+                tokenEnd: 4,
+                text: 'so',
+                start: Duration(seconds: 1),
+                end: Duration(seconds: 2),
+              ),
+            ],
+            partitionerId: 'test',
+            partitionerVersion: 'v1',
+            timingQuality: 'estimated',
+          ),
+          currentChunkIndex: 1,
+          onWord: (_, _) async {},
+        ),
+      ),
+    );
+
+    expect(find.byType(AnimatedContainer), findsNWidgets(2));
+    expect(find.text('so'), findsOneWidget);
+  });
 }

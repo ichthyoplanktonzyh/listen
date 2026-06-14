@@ -30,6 +30,8 @@ class SettingsDialog extends StatefulWidget {
     required this.openSubtitlesApiKey,
     required this.pronunciationVisible,
     required this.wordSyncVisible,
+    required this.showChunkGrouping,
+    required this.highlightCurrentChunk,
     required this.phonemeDisplay,
     required this.wordHighlightStyle,
     required this.wordAnimationIntensity,
@@ -53,6 +55,8 @@ class SettingsDialog extends StatefulWidget {
     required this.onTranscriptionDestinationChanged,
     required this.onPronunciationVisibleChanged,
     required this.onWordSyncVisibleChanged,
+    required this.onShowChunkGroupingChanged,
+    required this.onHighlightCurrentChunkChanged,
     required this.onPhonemeDisplayChanged,
     required this.onWordHighlightStyleChanged,
     required this.onWordAnimationIntensityChanged,
@@ -83,6 +87,8 @@ class SettingsDialog extends StatefulWidget {
   final String openSubtitlesApiKey;
   final bool pronunciationVisible;
   final bool wordSyncVisible;
+  final bool showChunkGrouping;
+  final bool highlightCurrentChunk;
   final String phonemeDisplay;
   final String wordHighlightStyle;
   final double wordAnimationIntensity;
@@ -108,6 +114,8 @@ class SettingsDialog extends StatefulWidget {
   final ValueChanged<String> onTranscriptionDestinationChanged;
   final ValueChanged<bool> onPronunciationVisibleChanged;
   final ValueChanged<bool> onWordSyncVisibleChanged;
+  final ValueChanged<bool> onShowChunkGroupingChanged;
+  final ValueChanged<bool> onHighlightCurrentChunkChanged;
   final ValueChanged<String> onPhonemeDisplayChanged;
   final ValueChanged<String> onWordHighlightStyleChanged;
   final ValueChanged<double> onWordAnimationIntensityChanged;
@@ -144,6 +152,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late String transcriptionDestination;
   late bool pronunciationVisible;
   late bool wordSyncVisible;
+  late bool showChunkGrouping;
+  late bool highlightCurrentChunk;
   late String phonemeDisplay;
   late String wordHighlightStyle;
   late double wordAnimationIntensity;
@@ -186,6 +196,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
     transcriptionDestination = widget.transcriptionDestination;
     pronunciationVisible = widget.pronunciationVisible;
     wordSyncVisible = widget.wordSyncVisible;
+    showChunkGrouping = widget.showChunkGrouping;
+    highlightCurrentChunk = widget.highlightCurrentChunk;
     phonemeDisplay = widget.phonemeDisplay;
     wordHighlightStyle = widget.wordHighlightStyle;
     wordAnimationIntensity = widget.wordAnimationIntensity;
@@ -240,6 +252,26 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   widget.onWordSyncVisibleChanged(value);
                   refresh(() {});
                 },
+              ),
+              SwitchListTile(
+                value: showChunkGrouping,
+                title: Text(l.text('showChunkGrouping')),
+                onChanged: (value) {
+                  showChunkGrouping = value;
+                  widget.onShowChunkGroupingChanged(value);
+                  refresh(() {});
+                },
+              ),
+              SwitchListTile(
+                value: highlightCurrentChunk,
+                title: Text(l.text('highlightCurrentChunk')),
+                onChanged: showChunkGrouping
+                    ? (value) {
+                        highlightCurrentChunk = value;
+                        widget.onHighlightCurrentChunkChanged(value);
+                        refresh(() {});
+                      }
+                    : null,
               ),
               DropdownButtonFormField<String>(
                 initialValue: wordHighlightStyle,

@@ -32,6 +32,8 @@ class AppSettings {
     this.openSubtitlesApiKey = '',
     this.pronunciationVisible = true,
     this.wordSyncVisible = true,
+    this.showChunkGrouping = true,
+    this.highlightCurrentChunk = true,
     this.phonemeDisplay = 'ipa',
     this.wordHighlightStyle = 'background',
     this.wordAnimationIntensity = 0.35,
@@ -110,6 +112,8 @@ class AppSettings {
       openSubtitlesApiKey: json['opensubtitles_api_key'] as String? ?? '',
       pronunciationVisible: json['pronunciation_visible'] as bool? ?? true,
       wordSyncVisible: json['word_sync_visible'] as bool? ?? true,
+      showChunkGrouping: json['show_chunk_grouping'] as bool? ?? true,
+      highlightCurrentChunk: json['highlight_current_chunk'] as bool? ?? true,
       phonemeDisplay: json['phoneme_display'] as String? ?? 'ipa',
       wordHighlightStyle: _wordHighlightStyle(json['word_highlight_style']),
       wordAnimationIntensity: _number(
@@ -153,6 +157,8 @@ class AppSettings {
   final String openSubtitlesApiKey;
   final bool pronunciationVisible;
   final bool wordSyncVisible;
+  final bool showChunkGrouping;
+  final bool highlightCurrentChunk;
   final String phonemeDisplay;
   final String wordHighlightStyle;
   final double wordAnimationIntensity;
@@ -229,6 +235,8 @@ class AppSettings {
         'opensubtitles_api_key': openSubtitlesApiKey,
         'pronunciation_visible': pronunciationVisible,
         'word_sync_visible': wordSyncVisible,
+        'show_chunk_grouping': showChunkGrouping,
+        'highlight_current_chunk': highlightCurrentChunk,
         'phoneme_display': phonemeDisplay,
         'word_highlight_style': wordHighlightStyle,
         'word_animation_intensity': wordAnimationIntensity,
@@ -268,6 +276,8 @@ class AppSettings {
     String? openSubtitlesApiKey,
     bool? pronunciationVisible,
     bool? wordSyncVisible,
+    bool? showChunkGrouping,
+    bool? highlightCurrentChunk,
     String? phonemeDisplay,
     String? wordHighlightStyle,
     double? wordAnimationIntensity,
@@ -308,6 +318,8 @@ class AppSettings {
     openSubtitlesApiKey: openSubtitlesApiKey ?? this.openSubtitlesApiKey,
     pronunciationVisible: pronunciationVisible ?? this.pronunciationVisible,
     wordSyncVisible: wordSyncVisible ?? this.wordSyncVisible,
+    showChunkGrouping: showChunkGrouping ?? this.showChunkGrouping,
+    highlightCurrentChunk: highlightCurrentChunk ?? this.highlightCurrentChunk,
     phonemeDisplay: phonemeDisplay ?? this.phonemeDisplay,
     wordHighlightStyle: wordHighlightStyle ?? this.wordHighlightStyle,
     wordAnimationIntensity:

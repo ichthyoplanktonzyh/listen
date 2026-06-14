@@ -176,6 +176,16 @@ class LocalApi {
               as List<dynamic>)
           .cast<Map<String, dynamic>>();
 
+  Future<List<Map<String, dynamic>>> trackChunkPartitions(
+    String trackId,
+  ) async =>
+      ((await _request(
+                'GET',
+                '/v1/subtitles/${Uri.encodeComponent(trackId)}/chunk-partitions',
+              ))
+              as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+
   Future<String> exportSubtitleSrt(String trackId) async {
     final request = await _client.getUrl(
       Uri.parse(

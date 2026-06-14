@@ -37,6 +37,8 @@ class SettingsController extends ChangeNotifier {
   String get openSubtitlesApiKey => _settings.openSubtitlesApiKey;
   bool get pronunciationVisible => _settings.pronunciationVisible;
   bool get wordSyncVisible => _settings.wordSyncVisible;
+  bool get showChunkGrouping => _settings.showChunkGrouping;
+  bool get highlightCurrentChunk => _settings.highlightCurrentChunk;
   String get phonemeDisplay => _settings.phonemeDisplay;
   String get wordHighlightStyle => _settings.wordHighlightStyle;
   double get wordAnimationIntensity => _settings.wordAnimationIntensity;

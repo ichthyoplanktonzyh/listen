@@ -18,6 +18,8 @@ class TokenLine extends StatelessWidget {
     this.fontFamily,
     this.baseColor,
     this.currentTokenIndex,
+    this.chunkPartition,
+    this.currentChunkIndex,
     this.currentWordStyle = 'background',
     this.currentWordIntensity = 0.35,
   });
@@ -29,6 +31,8 @@ class TokenLine extends StatelessWidget {
   final String? fontFamily;
   final Color? baseColor;
   final int? currentTokenIndex;
+  final SentenceChunkPartition? chunkPartition;
+  final int? currentChunkIndex;
   final String currentWordStyle;
   final double currentWordIntensity;
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
@@ -44,24 +48,105 @@ class TokenLine extends StatelessWidget {
   );
 
   List<InlineSpan> _spans(BuildContext context) {
-    final candidates = _nonOverlappingPhraseCandidates(phraseCandidates);
+    final partition = chunkPartition;
+    if (partition == null || partition.chunks.isEmpty) {
+      return _spansForTokens(context, cue.tokens);
+    }
+    final spans = <InlineSpan>[];
+    for (var index = 0; index < partition.chunks.length; index += 1) {
+      final chunk = partition.chunks[index];
+      final nextStart = index + 1 < partition.chunks.length
+          ? partition.chunks[index + 1].tokenStart
+          : null;
+      final chunkTokens = cue.tokens
+          .where(
+            (token) =>
+                (index == 0 || token.index >= chunk.tokenStart) &&
+                (nextStart == null || token.index < nextStart),
+          )
+          .toList(growable: false);
+      if (chunkTokens.isEmpty) continue;
+      final active = chunk.index == currentChunkIndex;
+      spans.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: AnimatedScale(
+              scale: active && currentWordStyle == 'bounce'
+                  ? 1 + currentWordIntensity * 0.14
+                  : 1,
+              alignment: Alignment.bottomCenter,
+              duration: const Duration(milliseconds: 140),
+              curve: Curves.easeOutBack,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                decoration: BoxDecoration(
+                  color: active
+                      ? Theme.of(context).colorScheme.primary.withValues(
+                          alpha: 0.12 + currentWordIntensity * 0.16,
+                        )
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(5),
+                  boxShadow: active && currentWordStyle == 'glow'
+                      ? [
+                          BoxShadow(
+                            color: Theme.of(context).colorScheme.primary
+                                .withValues(
+                                  alpha: 0.2 + currentWordIntensity * 0.3,
+                                ),
+                            blurRadius: 4 + currentWordIntensity * 8,
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Text.rich(
+                  TextSpan(children: _spansForTokens(context, chunkTokens)),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return spans;
+  }
+
+  List<InlineSpan> _spansForTokens(
+    BuildContext context,
+    List<SubtitleToken> tokens,
+  ) {
+    if (tokens.isEmpty) return const [];
+    final firstIndex = tokens.first.index;
+    final lastIndex = tokens.last.index;
+    final candidates = _nonOverlappingPhraseCandidates(
+      phraseCandidates
+          .where(
+            (candidate) =>
+                (candidate['token_start'] as int) >= firstIndex &&
+                (candidate['token_end'] as int) <= lastIndex,
+          )
+          .toList(growable: false),
+    );
     final byStart = {
       for (final candidate in candidates)
         candidate['token_start'] as int: candidate,
     };
     final spans = <InlineSpan>[];
     var cursor = 0;
-    while (cursor < cue.tokens.length) {
-      final candidate = byStart[cue.tokens[cursor].index];
+    while (cursor < tokens.length) {
+      final candidate = byStart[tokens[cursor].index];
       if (candidate == null) {
-        spans.add(_tokenSpan(context, cue.tokens[cursor]));
+        spans.add(_tokenSpan(context, tokens[cursor]));
         cursor += 1;
         continue;
       }
       final end = candidate['token_end'] as int;
       final phraseTokens = <SubtitleToken>[];
-      while (cursor < cue.tokens.length && cue.tokens[cursor].index <= end) {
-        phraseTokens.add(cue.tokens[cursor]);
+      while (cursor < tokens.length && tokens[cursor].index <= end) {
+        phraseTokens.add(tokens[cursor]);
         cursor += 1;
       }
       final canonical = candidate['canonical_form'] as String;

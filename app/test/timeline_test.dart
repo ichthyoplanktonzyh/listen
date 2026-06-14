@@ -103,4 +103,42 @@ void main() {
     expect(timing.provider, 'subtitle-weighted-estimator');
     expect(timing.tokenIndex, 2);
   });
+
+  test('parses chunk partition and selects current chunk with offset', () {
+    final partition = SentenceChunkPartition.fromJson(const {
+      'sentence_id': 'sentence-1',
+      'partitioner_id': 'test',
+      'partitioner_version': 'v1',
+      'timing_quality': 'estimated',
+      'chunks': [
+        {
+          'index': 0,
+          'token_start': 0,
+          'token_end': 1,
+          'text': 'hello world',
+          'start_ms': 100,
+          'end_ms': 500,
+          'boundary_after': null,
+        },
+      ],
+    });
+
+    expect(partition.chunks.single.text, 'hello world');
+    expect(
+      currentChunkAtPosition(
+        partition,
+        const Duration(milliseconds: 350),
+        offset: const Duration(milliseconds: 100),
+      ),
+      0,
+    );
+    expect(
+      currentChunkAtPosition(
+        partition,
+        const Duration(milliseconds: 600),
+        offset: const Duration(milliseconds: 100),
+      ),
+      isNull,
+    );
+  });
 }
