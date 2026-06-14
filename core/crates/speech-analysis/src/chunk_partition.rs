@@ -24,7 +24,10 @@ pub struct ChunkPartitionConfig {
     pub user_adjusted_gap_threshold_ms: u64,
     pub moderate_gap_ratio: f32,
     pub boundary_score_threshold: f32,
+    pub minimum_words: usize,
+    pub preferred_min_words: usize,
     pub preferred_max_words: usize,
+    pub soft_max_words: usize,
     pub hard_max_words: usize,
     pub punctuation_reliability: PunctuationReliability,
 }
@@ -37,7 +40,10 @@ impl Default for ChunkPartitionConfig {
             user_adjusted_gap_threshold_ms: 150,
             moderate_gap_ratio: 0.6,
             boundary_score_threshold: 0.7,
+            minimum_words: 2,
+            preferred_min_words: 3,
             preferred_max_words: 5,
+            soft_max_words: 7,
             hard_max_words: 10,
             punctuation_reliability: PunctuationReliability::Trusted,
         }
@@ -80,11 +86,28 @@ pub enum ChunkBoundarySource {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ChunkBoundaryEvidence {
-    AcousticGap { gap_ms: u64 },
-    StrongPunctuation { text: String },
-    Punctuation { text: String },
-    PhraseProtection { text: String },
-    LengthLimit { word_count: usize },
+    AcousticGap {
+        gap_ms: u64,
+    },
+    StrongPunctuation {
+        text: String,
+    },
+    Punctuation {
+        text: String,
+    },
+    PhraseProtection {
+        text: String,
+    },
+    ReadabilityFit {
+        word_count: usize,
+    },
+    FragmentPenalty {
+        word_count: usize,
+        remaining_words: usize,
+    },
+    LengthLimit {
+        word_count: usize,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -239,13 +262,31 @@ pub fn partition_sentence_with_diagnostics(
             .iter()
             .find(|phrase| phrase.token_start <= left.index && phrase.token_end >= right.index)
         {
-            score -= 0.6;
+            score -= 0.8;
             evidence.push(ChunkBoundaryEvidence::PhraseProtection {
                 text: phrase.text.clone(),
             });
         }
 
-        if word_count >= config.hard_max_words {
+        let has_boundary_signal = evidence.iter().any(|item| {
+            matches!(
+                item,
+                ChunkBoundaryEvidence::AcousticGap { .. }
+                    | ChunkBoundaryEvidence::StrongPunctuation { .. }
+                    | ChunkBoundaryEvidence::Punctuation { .. }
+            )
+        });
+        if has_boundary_signal
+            && word_count >= config.preferred_min_words
+            && word_count < config.preferred_max_words
+        {
+            score += 0.25;
+            evidence.push(ChunkBoundaryEvidence::ReadabilityFit { word_count });
+        }
+
+        if word_count >= config.hard_max_words
+            || (word_count >= config.soft_max_words && remaining_words >= config.minimum_words)
+        {
             force_boundary = true;
             score += 1.0;
             evidence.push(ChunkBoundaryEvidence::LengthLimit { word_count });
@@ -268,9 +309,15 @@ pub fn partition_sentence_with_diagnostics(
                     .is_some_and(|threshold| *gap_ms >= threshold)
             )
         });
-        if !force_boundary && !has_strong_acoustic_gap && (word_count == 1 || remaining_words == 1)
+        if !force_boundary
+            && !has_strong_acoustic_gap
+            && (word_count < config.minimum_words || remaining_words < config.minimum_words)
         {
-            score -= 0.35;
+            score -= 1.0;
+            evidence.push(ChunkBoundaryEvidence::FragmentPenalty {
+                word_count,
+                remaining_words,
+            });
         }
 
         let selected = force_boundary || score >= config.boundary_score_threshold;
@@ -744,6 +791,39 @@ mod tests {
                 .filter(|candidate| !candidate.selected)
                 .all(|candidate| candidate.raw_score < candidate.selection_threshold)
         );
+        assert!(diagnostics.candidates.iter().any(|candidate| {
+            candidate
+                .evidence
+                .iter()
+                .any(|evidence| matches!(evidence, ChunkBoundaryEvidence::FragmentPenalty { .. }))
+        }));
+    }
+
+    #[test]
+    fn diagnostics_explain_readability_supported_boundary() {
+        let sentence = words(&["we", "can", "solve", "this", "problem", "together"]);
+        let mut values = timings(&sentence, None);
+        values[4].start_ms = values[3].end_ms + 180;
+        values[4].end_ms = values[4].start_ms + 200;
+        values[5].start_ms = values[4].end_ms + 20;
+        values[5].end_ms = values[5].start_ms + 200;
+        let diagnostics = partition_sentence_with_diagnostics(
+            &sentence,
+            &values,
+            &[],
+            &ChunkPartitionConfig::default(),
+        );
+        let selected = diagnostics
+            .candidates
+            .iter()
+            .find(|candidate| candidate.selected)
+            .unwrap();
+        assert!(selected.evidence.iter().any(|evidence| {
+            matches!(
+                evidence,
+                ChunkBoundaryEvidence::ReadabilityFit { word_count: 4 }
+            )
+        }));
     }
 
     #[test]

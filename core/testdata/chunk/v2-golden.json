@@ -1,0 +1,54 @@
+{
+  "cases": [
+    {
+      "name": "fast_speech_length_fallback",
+      "text": "We should probably finish this before everyone arrives",
+      "gaps_ms": [20, 20, 20, 20, 20, 20, 20],
+      "expected_chunks": ["We should probably finish this", "before everyone arrives"],
+      "asr_generated": true
+    },
+    {
+      "name": "moderate_pause_near_readable_length",
+      "text": "I think we can solve this problem together today",
+      "gaps_ms": [20, 20, 20, 180, 20, 20, 20, 20],
+      "expected_chunks": ["I think we can", "solve this problem together today"],
+      "asr_generated": true
+    },
+    {
+      "name": "hesitation_pause_remains_acoustic",
+      "text": "Well I think we should go now",
+      "gaps_ms": [400, 20, 20, 20, 20, 20],
+      "expected_chunks": ["Well", "I think we should go now"],
+      "asr_generated": true
+    },
+    {
+      "name": "inferred_asr_punctuation_is_not_forced",
+      "text": "We can; try this again today",
+      "gaps_ms": [20, 20, 20, 20, 20],
+      "expected_chunks": ["We can try this again today"],
+      "asr_generated": true
+    },
+    {
+      "name": "trusted_punctuation_is_decisive",
+      "text": "We can; try this again today",
+      "gaps_ms": [20, 20, 20, 20, 20],
+      "expected_chunks": ["We can", "try this again today"],
+      "asr_generated": false
+    },
+    {
+      "name": "fixed_expression_is_protected",
+      "text": "We need to take care of this today",
+      "gaps_ms": [20, 20, 20, 180, 180, 20, 20],
+      "expected_chunks": ["We need to take care of", "this today"],
+      "asr_generated": true,
+      "phrase": "take care of"
+    },
+    {
+      "name": "long_subtitle_has_no_overlong_chunks",
+      "text": "One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen",
+      "gaps_ms": [20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20],
+      "expected_chunks": ["One two three four five", "six seven eight nine ten", "eleven twelve thirteen fourteen fifteen"],
+      "asr_generated": false
+    }
+  ]
+}

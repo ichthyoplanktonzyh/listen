@@ -12,6 +12,8 @@ testdata/
 │
 ├── asr/                       # ASR/transcription fixtures
 │   └── sample-output.json     # Hand-crafted whisper.cpp -ojf output (3 segments)
+├── chunk/                     # Chunk partition calibration fixtures
+│   └── v2-golden.json         # V2 acoustic-first partition golden corpus
 │
 ├── subtitles/                 # Subtitle parsing fixtures
 │   ├── timeline.srt           # SRT with gaps, overlap, punctuation, apostrophe, hyphen
@@ -43,6 +45,12 @@ testdata/
 |------|------|---------|-------------|
 | `subtitles/timeline.srt` | ~400 B | `subtitle-core/src/lib.rs` (6 tests), `persistence-sqlite/src/lib.rs` (17 tests), `persistence-sqlite/tests/persistence_integration_test.rs` (6 tests), `api-http/src/lib.rs` (6 tests) | 4-cue SRT with gaps, overlap, punctuation, apostrophe, hyphen, and line-break scenarios |
 | `subtitles/timeline.vtt` | ~500 B | `subtitle-core/src/lib.rs` (6 tests) | WebVTT equivalent of timeline.srt |
+
+### Chunk Fixtures
+
+| File | Size | Used By | Description |
+|------|------|---------|-------------|
+| `chunk/v2-golden.json` | ~3 KB | `speech-analysis/tests/chunk_partition_golden_test.rs` | Acoustic-first V2 calibration cases covering fast speech, hesitation, inferred/trusted punctuation, moderate pauses, fixed expressions, and long subtitles |
 
 ### Pronunciation Fixtures
 

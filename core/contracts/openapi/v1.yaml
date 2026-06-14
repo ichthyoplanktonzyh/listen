@@ -176,6 +176,11 @@ paths:
       operationId: trackChunkPartitions
       responses:
         "200": { description: Product-facing complete chunk partitions for a subtitle track }
+  /v1/subtitles/{track_id}/chunk-diagnostics:
+    get:
+      operationId: trackChunkDiagnostics
+      responses:
+        "200": { description: Developer-facing selected and rejected chunk boundary evidence }
   /v1/speech/jobs:
     get:
       operationId: speechBatchJobs

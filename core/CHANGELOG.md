@@ -21,6 +21,18 @@
 - Added an initial golden calibration baseline covering ordinary short
   sentences, preferred-length splitting, single-word-tail suppression, and
   decisive acoustic gaps.
+- Completed C2 acoustic-first partition quality. Readability scoring now
+  favors supported boundaries near the preferred chunk length, weak evidence
+  cannot create undersized fragments, soft/hard length limits prevent
+  protected phrases from producing unreadably long chunks, and stronger
+  phrase protection still yields to decisive acoustic gaps.
+- Added a version-controlled V2 golden corpus covering fast speech, hesitation,
+  moderate pauses, ASR-inferred versus trusted punctuation, fixed expressions,
+  and long subtitles. The corpus enforces fragment and overlong-chunk quality
+  bounds.
+- Added `GET /v1/subtitles/{track_id}/chunk-diagnostics` for inspecting selected
+  and rejected candidates using the same source-aware configuration as the
+  product-facing track partition.
 
 ## 0.7.2 - 2026-06-14
 

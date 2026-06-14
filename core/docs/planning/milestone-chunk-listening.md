@@ -390,9 +390,9 @@ Improve the partition mechanism while keeping the C1 user contract unchanged.
 Acoustic evidence becomes the principal boundary signal; text and product rules
 resolve ambiguity and keep the result readable.
 
-### Progress
+### Completed
 
-First V2 scoring slice completed on 2026-06-14:
+C2 completed on 2026-06-14:
 
 - source-specific gap thresholds distinguish ASR-reported, forced-aligned,
   user-adjusted, and estimated timings;
@@ -408,11 +408,19 @@ First V2 scoring slice completed on 2026-06-14:
   scores, thresholds, forcing state, and evidence without changing the product
   API;
 - an initial golden calibration baseline locks expected length and strong-gap
-  behavior.
+  behavior;
+- a version-controlled golden corpus covers fast speech, hesitation, moderate
+  pauses, ASR-inferred versus trusted punctuation, fixed expressions, and long
+  subtitles while enforcing fragment and overlong-chunk bounds;
+- preferred-range scoring selects supported natural boundaries before length
+  fallback, minimum-length penalties suppress weak short fragments, and
+  soft/hard limits prevent overlong chunks;
+- `GET /v1/subtitles/{track_id}/chunk-diagnostics` exposes the structured
+  diagnostics using the same source-aware configuration as product partitions.
 
-Remaining C2 work should calibrate these initial values against a broader
-real-world golden corpus and add a convenient developer-facing inspection
-surface for the structured diagnostics.
+Hesitation gaps remain deliberately visible as acoustic evidence in V2.
+Determining whether a pause is a hesitation, breath, or meaningful boundary
+requires the richer non-gap acoustic evidence scheduled for C3.
 
 ### Scope
 
@@ -452,10 +460,10 @@ not erase a strong acoustic boundary.
 
 ### Completion Gate
 
-- C1 API and Flutter models remain compatible.
-- Partitioner V2 produces visibly fewer single-word fragments and fewer
-  overlong chunks across the golden corpus.
-- Acoustic boundaries can alter the final partition instead of merely
+- [x] C1 API and Flutter models remain compatible.
+- [x] Partitioner V2 produces visibly fewer single-word fragments and no
+  overlong chunks across the golden corpus quality bounds.
+- [x] Acoustic boundaries can alter the final partition instead of merely
   annotating text chunks.
 
 ---

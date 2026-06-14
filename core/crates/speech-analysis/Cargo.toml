@@ -12,6 +12,7 @@ thiserror.workspace = true
 
 [dev-dependencies]
 domain = { path = "../domain" }
+subtitle-core = { path = "../subtitle-core" }
 criterion = { version = "0.5", features = ["html_reports"] }
 proptest = "1"
 

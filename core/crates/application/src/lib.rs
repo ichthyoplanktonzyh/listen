@@ -1039,6 +1039,36 @@ impl AppServices {
             .collect()
     }
 
+    /// Produce developer-facing chunk diagnostics using the same track-source
+    /// configuration as the product-facing partitions.
+    pub fn chunk_diagnostics_for_track(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<speech_analysis::chunk_partition::SentenceChunkDiagnostics>, ApplicationError>
+    {
+        let track = self
+            .subtitles
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let config = chunk_partition_config_for_track_source(&track.source);
+        track
+            .sentences
+            .iter()
+            .map(|sentence| {
+                let timings = self.word_timings(&sentence.id)?;
+                let candidates = self.phrase_candidates(&sentence.id)?;
+                Ok(
+                    speech_analysis::chunk_partition::partition_sentence_with_diagnostics(
+                        sentence,
+                        &timings,
+                        &candidates,
+                        &config,
+                    ),
+                )
+            })
+            .collect()
+    }
+
     pub fn store_word_timings(
         &self,
         track_id: &SubtitleTrackId,
