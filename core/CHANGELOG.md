@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.7.2 - 2026-06-14
+
+- Added the first user-visible chunk listening MVP. Primary subtitle sentences
+  are rendered as complete, non-overlapping chunk groups and the active chunk
+  follows playback using the existing local word-timing timeline.
+- Added the stable `SentenceChunkPartition` display contract and V1
+  acoustic-first rule partitioner. Real timing gaps, punctuation, phrase
+  protection, and deterministic length fallback are resolved into one complete
+  partition while estimated timings are excluded from acoustic evidence.
+- Added `GET /v1/subtitles/{track_id}/chunk-partitions`, application-layer
+  sentence and track partition methods, OpenAPI coverage, and independent
+  fallback so chunk analysis failure never interrupts ordinary subtitles,
+  word highlighting, or pronunciation enhancements.
+- Added desktop chunk grouping and active-chunk highlighting settings. Chunk
+  rendering preserves word clicks, vocabulary styles, and phrase interactions.
+- Hardened text and acoustic chunk detection by rejecting invalid external
+  phrase ranges, preventing phrase matches across punctuation, preserving
+  empty-input sentence identity, and correcting gap-confidence interpolation.
+- Added the staged C0-C4 chunk listening implementation plan. C0-C1 deliver the
+  product loop; later milestones prioritize acoustic boundary quality and keep
+  the display/API contract stable.
+- Verified with workspace Rust tests, strict targeted clippy, Flutter analysis,
+  Flutter tests, and whitespace checks.
+
 ## 0.7.1 - 2026-06-13
 
 - Implemented text-level (lexical) chunk detection in the `speech-analysis` crate

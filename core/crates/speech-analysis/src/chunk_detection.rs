@@ -313,7 +313,7 @@ fn gap_confidence(gap_ms: u64, threshold: u64) -> f32 {
         return 0.0;
     }
     let excess = (gap_ms - threshold) as f32;
-    0.5 + (excess / 500.0).min(0.5)
+    0.5 + (excess / 500.0).min(1.0) * 0.5
 }
 
 /// Compute the effective boundary threshold, potentially lowered by a
@@ -696,5 +696,10 @@ mod tests {
     fn confidence_saturates_at_one() {
         assert!((gap_confidence(750, 250) - 1.0).abs() < f32::EPSILON);
         assert!((gap_confidence(1000, 250) - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn confidence_interpolates_until_threshold_plus_500() {
+        assert!((gap_confidence(500, 250) - 0.75).abs() < f32::EPSILON);
     }
 }

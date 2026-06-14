@@ -171,6 +171,11 @@ paths:
       operationId: generateTrackWordTimings
       responses:
         "200": { description: Generated word timings with safe estimated fallback }
+  /v1/subtitles/{track_id}/chunk-partitions:
+    get:
+      operationId: trackChunkPartitions
+      responses:
+        "200": { description: Product-facing complete chunk partitions for a subtitle track }
   /v1/speech/jobs:
     get:
       operationId: speechBatchJobs

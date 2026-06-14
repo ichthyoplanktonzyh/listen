@@ -156,17 +156,18 @@ git diff --stat Cargo.toml crates/*/Cargo.toml  # should show no changes
 
 ## Next Steps for the Chunk Feature
 
-1. **Replace COCA seed data** with full MI ≥ 3.0 n-gram dataset (~50K entries)
-   from word.info or equivalent.
-2. **Expose HTTP API** (`GET /v1/sentences/{id}/text-chunks`,
-   `GET /v1/sentences/{id}/combined-chunks`).
-3. **Cross-reference with M2.0 forced-alignment timings** when available —
-   ms-level timing precision will significantly improve acoustic boundary
-   detection and therefore the `combine_chunks()` output.
-4. **Flutter UI integration** — display text-level chunk boundaries in the
-   learning subtitle overlay alongside pronunciation/word-timing data.
-5. **Additional data sources** — Multiword Expressions (MWE) databases,
-   Academic Formulas List (AFL), discipline-specific phrase lists.
+The implementation sequence is now defined in
+[`../planning/milestone-chunk-listening.md`](../planning/milestone-chunk-listening.md).
+The first priority is the user-visible MVP: produce one stable sentence
+partition, expose it through a track-level API, render chunk grouping in the
+primary subtitle, and animate the active chunk using the existing local word
+timeline.
+
+Do not expand the COCA seed data, add persistence, or integrate advanced
+acoustic models before the MVP playback experience is complete. After the MVP,
+improve the partition mechanism in acoustic-first stages: source-aware gap
+scoring, punctuation and phrase protection, rich acoustic cues, and finally an
+optional learned prosodic-boundary provider.
 
 ## Relationship to Milestone 2.0
 
@@ -174,7 +175,7 @@ This feature is independent of M2.0 (real-speech phoneme analysis). It operates
 on subtitle text and existing word timings, not on audio signals. However:
 
 - Better word timings from M2.0 (forced alignment) will improve acoustic chunk
-  boundary precision, which in turn improves `combine_chunks()` output.
+  boundary precision, which in turn improves the final sentence partitioner.
 - The chunk detection infrastructure is provider-agnostic — switching from DTW
   to forced-alignment timings requires zero code changes.
 - The `BoundaryMarker` enum already has slots for `PreBoundaryLengthening` and

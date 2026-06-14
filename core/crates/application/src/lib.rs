@@ -878,7 +878,8 @@ impl AppServices {
         let mut results = std::collections::HashMap::new();
         for sentence in track.sentences {
             let timings = self.word_timings(&sentence.id)?;
-            let result = detect_chunk_boundaries(&timings, &config);
+            let mut result = detect_chunk_boundaries(&timings, &config);
+            result.sentence_id = sentence.id.clone();
             results.insert(sentence.id.clone(), result);
         }
         Ok(results)
@@ -891,7 +892,9 @@ impl AppServices {
     ) -> Result<speech_analysis::chunk_detection::ChunkDetectionResult, ApplicationError> {
         use speech_analysis::chunk_detection::{detect_chunk_boundaries, ChunkDetectionConfig};
         let timings = self.word_timings(sentence_id)?;
-        Ok(detect_chunk_boundaries(&timings, &ChunkDetectionConfig::default()))
+        let mut result = detect_chunk_boundaries(&timings, &ChunkDetectionConfig::default());
+        result.sentence_id = sentence_id.clone();
+        Ok(result)
     }
 
     /// Detect text-level chunks for a single sentence.
@@ -967,6 +970,42 @@ impl AppServices {
         );
 
         Ok(combine_chunks(&acoustic, &text))
+    }
+
+    /// Produce the product-facing, complete chunk partition for one sentence.
+    pub fn chunk_partition(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<speech_analysis::chunk_partition::SentenceChunkPartition, ApplicationError> {
+        let sentence = self
+            .subtitles
+            .get_sentence(sentence_id)?
+            .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
+        let timings = self.word_timings(sentence_id)?;
+        let candidates = self.phrase_candidates(sentence_id)?;
+        Ok(speech_analysis::chunk_partition::partition_sentence(
+            &sentence,
+            &timings,
+            &candidates,
+            &speech_analysis::chunk_partition::ChunkPartitionConfig::default(),
+        ))
+    }
+
+    /// Produce product-facing chunk partitions for every sentence in a track.
+    pub fn chunk_partitions_for_track(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<speech_analysis::chunk_partition::SentenceChunkPartition>, ApplicationError>
+    {
+        let track = self
+            .subtitles
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        track
+            .sentences
+            .iter()
+            .map(|sentence| self.chunk_partition(&sentence.id))
+            .collect()
     }
 
     pub fn store_word_timings(

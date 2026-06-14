@@ -107,6 +107,10 @@ pub fn router(state: ApiState) -> Router {
             "/v1/subtitles/{track_id}/word-timings",
             get(track_word_timings).post(generate_track_word_timings),
         )
+        .route(
+            "/v1/subtitles/{track_id}/chunk-partitions",
+            get(track_chunk_partitions),
+        )
         .route("/v1/speech/jobs", get(speech_jobs).post(create_speech_job))
         .route("/v1/speech/jobs/{job_id}", get(speech_job))
         .route("/v1/speech/jobs/{job_id}/cancel", post(cancel_speech_job))
@@ -549,6 +553,19 @@ async fn track_word_timings(
     state
         .services
         .word_timings_for_track(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn track_chunk_partitions(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<Vec<speech_analysis::chunk_partition::SentenceChunkPartition>>, ApiError> {
+    state
+        .services
+        .chunk_partitions_for_track(
+            &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
+        )
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -1298,6 +1315,7 @@ mod tests {
                 .unwrap();
         assert_eq!(track["sentences"].as_array().unwrap().len(), 4);
         let response = app
+            .clone()
             .oneshot(
                 Request::get(format!("/v1/subtitles/{}", track["id"].as_str().unwrap()))
                     .header(AUTHORIZATION, "Bearer secret")
@@ -1307,6 +1325,25 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+
+        let response = app
+            .oneshot(
+                Request::get(format!(
+                    "/v1/subtitles/{}/chunk-partitions",
+                    track["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let partitions: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(partitions.as_array().unwrap().len(), 4);
+        assert!(partitions[0]["chunks"].as_array().is_some_and(|chunks| !chunks.is_empty()));
     }
 
     #[tokio::test]
@@ -1454,6 +1491,7 @@ mod tests {
             "/v1/subtitles/{track_id}/pronunciation",
             "/v1/subtitles/{track_id}/pronunciation-analysis",
             "/v1/subtitles/{track_id}/word-timings",
+            "/v1/subtitles/{track_id}/chunk-partitions",
             "/v1/speech/jobs",
             "/v1/word-profiles",
             "/v1/word-profiles/batch",
@@ -1495,8 +1533,8 @@ mod tests {
         // Count documented paths as a regression gate.
         let path_count = openapi.lines().filter(|l| l.starts_with("  /v1/")).count();
         assert_eq!(
-            path_count, 51,
-            "OpenAPI path count changed from 51 — update snapshot if paths were added/removed"
+            path_count, 52,
+            "OpenAPI path count changed from 52 — update snapshot if paths were added/removed"
         );
 
         // All paths must be under /v1/.

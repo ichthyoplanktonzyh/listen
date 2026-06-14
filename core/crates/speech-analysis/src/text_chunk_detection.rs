@@ -215,6 +215,7 @@ pub fn detect_text_chunks(
     collect_coca_spans(&normalized, &word_tokens, &mut spans);
     collect_phrase_list_spans(&normalized, &word_tokens, &mut spans);
     collect_candidate_spans(phrase_candidates, &word_tokens, &mut spans);
+    spans.retain(|span| valid_span_for_sentence(span, sentence, &word_tokens));
 
     let counts = SourceCounts {
         collocations: spans
@@ -335,6 +336,31 @@ fn collect_candidate_spans(
             },
         });
     }
+}
+
+/// Reject malformed provider candidates and phrases that bridge punctuation.
+fn valid_span_for_sentence(
+    span: &PhraseSpan,
+    sentence: &SubtitleSentence,
+    words: &[&domain::SubtitleToken],
+) -> bool {
+    if span.token_start >= span.token_end {
+        return false;
+    }
+    let Some(start_position) = words.iter().position(|word| word.index == span.token_start) else {
+        return false;
+    };
+    let Some(end_position) = words.iter().position(|word| word.index == span.token_end) else {
+        return false;
+    };
+    if start_position >= end_position {
+        return false;
+    }
+    !sentence.tokens.iter().any(|token| {
+        token.index > span.token_start
+            && token.index < span.token_end
+            && token.kind == SubtitleTokenKind::Punctuation
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -853,6 +879,31 @@ mod tests {
         assert_eq!(result.chunks[0].text, "hello");
         assert_eq!(result.chunks[1].text, "world");
         assert_eq!(result.boundaries.len(), 1);
+    }
+
+    #[test]
+    fn phrase_matching_does_not_bridge_punctuation() {
+        let tokens = vec![
+            ("take", SubtitleTokenKind::Word),
+            (",", SubtitleTokenKind::Punctuation),
+            ("care", SubtitleTokenKind::Word),
+            ("of", SubtitleTokenKind::Word),
+        ];
+        let sentence = make_sentence_with_punct("s1", 0, 2000, tokens);
+        let result = detect_text_chunks(&sentence, &[]);
+        assert!(!result.chunks.iter().any(|chunk| chunk.text == "take care of"));
+    }
+
+    #[test]
+    fn invalid_external_candidate_is_ignored() {
+        let sentence = make_sentence("s1", 0, 2000, &["hello", "world"]);
+        let candidates = vec![candidate("invalid", "invalid", "invalid", 0, u32::MAX)];
+        let result = detect_text_chunks(&sentence, &candidates);
+        assert_eq!(result.chunks.len(), 2);
+        assert!(result
+            .chunks
+            .iter()
+            .all(|chunk| chunk.evidence == TextChunkEvidence::SingleWord));
     }
 
     // -- confidence mapping ----------------------------------------------------
