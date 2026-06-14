@@ -13,7 +13,7 @@ use axum::http::{HeaderMap, Request, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use dictionary_provider::{EcdictProvider, FreeDictionaryProvider};
 use domain::{
@@ -24,9 +24,11 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
 mod m18;
+mod phonetic_analysis;
 mod speech_jobs;
 mod transcription;
 use m18::M18Coordinator;
+use phonetic_analysis::{CreatePhoneticJobRequest, PhoneticAnalysisCoordinator};
 use speech_jobs::{CreateSpeechBatchJob, SpeechBatchCoordinator};
 use transcription::{CreateJobRequest, TranscriptionCoordinator};
 
@@ -39,26 +41,26 @@ pub struct ApiState {
     pub events: broadcast::Sender<EventEnvelope>,
     pub dictionaries: Arc<Vec<Arc<dyn DictionaryProvider>>>,
     pub transcription: Arc<TranscriptionCoordinator>,
+    pub phonetic_analysis: Arc<PhoneticAnalysisCoordinator>,
     pub speech_jobs: Arc<SpeechBatchCoordinator>,
     pub m18: Arc<M18Coordinator>,
 }
 
 impl ApiState {
-    pub fn new(
-        services: AppServices,
-        transcription_repository: Arc<dyn application::TranscriptionRepository>,
-        token: impl Into<Arc<str>>,
-    ) -> Self {
+    pub fn new<R>(services: AppServices, repository: Arc<R>, token: impl Into<Arc<str>>) -> Self
+    where
+        R: application::TranscriptionRepository + application::PhoneticAnalysisRepository + 'static,
+    {
         let (events, _) = broadcast::channel(128);
         let ecdict = Arc::new(EcdictProvider::new());
         let services = services.with_lexical_normalizers(vec![ecdict.clone()]);
         let transcription = Arc::new(
-            TranscriptionCoordinator::new(
-                services.clone(),
-                transcription_repository,
-                events.clone(),
-            )
-            .expect("transcription coordinator must initialize"),
+            TranscriptionCoordinator::new(services.clone(), repository.clone(), events.clone())
+                .expect("transcription coordinator must initialize"),
+        );
+        let phonetic_analysis = Arc::new(
+            PhoneticAnalysisCoordinator::new(services.clone(), repository, events.clone())
+                .expect("phonetic analysis coordinator must initialize"),
         );
         let speech_jobs = Arc::new(SpeechBatchCoordinator::new(
             services.clone(),
@@ -75,6 +77,7 @@ impl ApiState {
                 ),
             ]),
             transcription,
+            phonetic_analysis,
             speech_jobs,
             m18: Arc::new(M18Coordinator::new()),
         }
@@ -191,6 +194,58 @@ pub fn router(state: ApiState) -> Router {
         .route(
             "/v1/transcription/jobs/{job_id}/retry",
             post(retry_transcription_job),
+        )
+        .route(
+            "/v1/phonetic-analysis/providers",
+            get(phonetic_analysis_providers),
+        )
+        .route(
+            "/v1/phonetic-analysis/models",
+            get(phonetic_analysis_models),
+        )
+        .route(
+            "/v1/phonetic-analysis/models/install",
+            post(install_phonetic_analysis_model),
+        )
+        .route(
+            "/v1/phonetic-analysis/models/register-custom",
+            post(register_custom_phonetic_analysis_model),
+        )
+        .route(
+            "/v1/phonetic-analysis/models/{model_id}/cancel-install",
+            post(cancel_phonetic_analysis_model_install),
+        )
+        .route(
+            "/v1/phonetic-analysis/models/{model_id}",
+            delete(delete_phonetic_analysis_model),
+        )
+        .route(
+            "/v1/phonetic-analysis/jobs",
+            get(phonetic_analysis_jobs).post(create_phonetic_analysis_job),
+        )
+        .route(
+            "/v1/phonetic-analysis/jobs/{job_id}",
+            get(phonetic_analysis_job),
+        )
+        .route(
+            "/v1/phonetic-analysis/jobs/{job_id}/cancel",
+            post(cancel_phonetic_analysis_job),
+        )
+        .route(
+            "/v1/phonetic-analysis/jobs/{job_id}/retry",
+            post(retry_phonetic_analysis_job),
+        )
+        .route(
+            "/v1/subtitles/{track_id}/phonetic-analyses",
+            get(track_phonetic_analyses),
+        )
+        .route(
+            "/v1/phonetic-analysis/{analysis_id}/findings",
+            get(phonetic_analysis_findings),
+        )
+        .route(
+            "/v1/phonetic-analysis/findings/{finding_id}/feedback",
+            put(update_phonetic_finding_feedback),
         )
         .route(
             "/v1/sentences/{sentence_id}/diagnosis",
@@ -724,6 +779,173 @@ async fn retry_transcription_job(
         .map_err(ApiError::from)
 }
 
+async fn phonetic_analysis_providers(
+    State(state): State<ApiState>,
+) -> Json<Vec<domain::PhoneticAnalysisProviderInfo>> {
+    Json(state.phonetic_analysis.providers())
+}
+
+async fn phonetic_analysis_models(
+    State(state): State<ApiState>,
+) -> Result<Json<Vec<domain::PhoneticAnalysisModelDescriptor>>, ApiError> {
+    state
+        .phonetic_analysis
+        .models()
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn install_phonetic_analysis_model(
+    State(state): State<ApiState>,
+    Json(request): Json<ModelIdRequest>,
+) -> Result<Json<domain::PhoneticAnalysisModelDescriptor>, ApiError> {
+    state
+        .phonetic_analysis
+        .install_model(
+            &domain::PhoneticAnalysisModelId::parse(request.model_id)
+                .map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn register_custom_phonetic_analysis_model(
+    State(state): State<ApiState>,
+    Json(request): Json<RegisterCustomModelRequest>,
+) -> Result<Json<domain::PhoneticAnalysisModelDescriptor>, ApiError> {
+    state
+        .phonetic_analysis
+        .register_custom_model(request.path)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn cancel_phonetic_analysis_model_install(
+    State(state): State<ApiState>,
+    Path(model_id): Path<String>,
+) -> Result<Json<domain::PhoneticAnalysisModelDescriptor>, ApiError> {
+    state
+        .phonetic_analysis
+        .cancel_model_install(
+            &domain::PhoneticAnalysisModelId::parse(model_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn delete_phonetic_analysis_model(
+    State(state): State<ApiState>,
+    Path(model_id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    state.phonetic_analysis.delete_model(
+        &domain::PhoneticAnalysisModelId::parse(model_id).map_err(ApplicationError::from)?,
+    )?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn phonetic_analysis_jobs(
+    State(state): State<ApiState>,
+) -> Result<Json<Vec<domain::PhoneticAnalysisJob>>, ApiError> {
+    state
+        .phonetic_analysis
+        .jobs()
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn create_phonetic_analysis_job(
+    State(state): State<ApiState>,
+    Json(request): Json<CreatePhoneticJobRequest>,
+) -> Result<Json<domain::PhoneticAnalysisJob>, ApiError> {
+    state
+        .phonetic_analysis
+        .clone()
+        .create_job(request)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn phonetic_analysis_job(
+    State(state): State<ApiState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<domain::PhoneticAnalysisJob>, ApiError> {
+    state
+        .phonetic_analysis
+        .job(&domain::PhoneticAnalysisJobId::parse(job_id).map_err(ApplicationError::from)?)?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("phonetic analysis job"))
+}
+
+async fn cancel_phonetic_analysis_job(
+    State(state): State<ApiState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<domain::PhoneticAnalysisJob>, ApiError> {
+    state
+        .phonetic_analysis
+        .cancel_job(&domain::PhoneticAnalysisJobId::parse(job_id).map_err(ApplicationError::from)?)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn retry_phonetic_analysis_job(
+    State(state): State<ApiState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<domain::PhoneticAnalysisJob>, ApiError> {
+    state
+        .phonetic_analysis
+        .clone()
+        .retry_job(&domain::PhoneticAnalysisJobId::parse(job_id).map_err(ApplicationError::from)?)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn track_phonetic_analyses(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<Vec<domain::PhoneticAnalysis>>, ApiError> {
+    state
+        .phonetic_analysis
+        .analyses(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn phonetic_analysis_findings(
+    State(state): State<ApiState>,
+    Path(analysis_id): Path<String>,
+) -> Result<Json<Vec<domain::PhoneticFinding>>, ApiError> {
+    state
+        .phonetic_analysis
+        .analysis(&domain::PhoneticAnalysisId::parse(analysis_id).map_err(ApplicationError::from)?)?
+        .map(|analysis| Json(analysis.findings))
+        .ok_or_else(|| ApiError::not_found("phonetic analysis"))
+}
+
+#[derive(Debug, Deserialize)]
+struct PhoneticFindingFeedbackRequest {
+    value: domain::PhoneticFindingFeedbackValue,
+    note: Option<String>,
+}
+
+async fn update_phonetic_finding_feedback(
+    State(state): State<ApiState>,
+    Path(finding_id): Path<String>,
+    Json(request): Json<PhoneticFindingFeedbackRequest>,
+) -> Result<Json<domain::PhoneticFindingFeedback>, ApiError> {
+    let feedback = domain::PhoneticFindingFeedback {
+        finding_id: phonetic_analysis::finding_id(finding_id)?,
+        value: request.value,
+        note: request.note,
+        updated_at_ms: application::now_ms(),
+    };
+    let feedback = state.phonetic_analysis.save_feedback(&feedback)?;
+    let _ = state.events.send(EventEnvelope::v1(
+        EventName::PhoneticAnalysisFeedbackChanged,
+        serde_json::to_value(&feedback).expect("phonetic feedback serializes"),
+    ));
+    Ok(Json(feedback))
+}
+
 async fn read_progress(
     State(state): State<ApiState>,
     Path(media_id): Path<String>,
@@ -1202,6 +1424,79 @@ mod tests {
         ))
     }
 
+    async fn setup_phonetic_track(app: &Router, fingerprint: &str) -> serde_json::Value {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/v1/media")
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "path": format!("/tmp/{fingerprint}.mp4"),
+                            "fingerprint": fingerprint,
+                            "title": fingerprint,
+                            "kind": "video"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let media: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        let fixture = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../testdata/subtitles/timeline.srt"
+        );
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/v1/media/{}/subtitles",
+                    media["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({"path": fixture, "language": "en"}).to_string(),
+                ))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+    }
+
+    async fn wait_for_phonetic_job(
+        app: &Router,
+        job_id: &str,
+        expected: &[&str],
+    ) -> serde_json::Value {
+        for _ in 0..100 {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::get(format!("/v1/phonetic-analysis/jobs/{job_id}"))
+                        .header(AUTHORIZATION, "Bearer secret")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let value: serde_json::Value =
+                serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                    .unwrap();
+            if expected.contains(&value["status"].as_str().unwrap()) {
+                return value;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+        }
+        panic!("phonetic analysis job did not reach {expected:?}");
+    }
+
     #[tokio::test]
     async fn health_is_public_and_versioned() {
         let response = test_app()
@@ -1307,6 +1602,329 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn phonetic_analysis_fake_provider_completes_without_audio_detection_claims() {
+        let app = test_app();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/v1/media")
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "path": "/tmp/phonetic.mp4",
+                            "fingerprint": "phonetic-media",
+                            "title": "Phonetic",
+                            "kind": "video"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let media: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        let fixture = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../testdata/subtitles/timeline.srt"
+        );
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/v1/media/{}/subtitles",
+                    media["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({"path": fixture, "language": "en"}).to_string(),
+                ))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let track: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        let job_request = serde_json::json!({
+            "track_id": track["id"],
+            "sentence_id": track["sentences"][0]["id"],
+            "model_id": "research-fixture:deterministic@v1"
+        })
+        .to_string();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/v1/phonetic-analysis/jobs")
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(job_request.clone()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let job: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        let job_id = job["id"].as_str().unwrap();
+        let completed = wait_for_phonetic_job(&app, job_id, &["completed"]).await;
+        assert_eq!(completed["phase_progress"], 100);
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/v1/phonetic-analysis/jobs")
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(job_request))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let repeated: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(repeated["id"], completed["id"]);
+        let response = app
+            .oneshot(
+                Request::get(format!(
+                    "/v1/subtitles/{}/phonetic-analyses",
+                    track["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let analyses: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert!(
+            !analyses[0]["detected_phones"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        let findings = analyses[0]["findings"].as_array().unwrap();
+        assert!(!findings.is_empty());
+        assert!(
+            findings
+                .iter()
+                .all(|finding| finding["status"] != "detected_in_audio")
+        );
+    }
+
+    #[tokio::test]
+    async fn phonetic_model_management_rejects_unapproved_research_fixture() {
+        let app = test_app();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/v1/phonetic-analysis/models/install")
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "model_id": "research-fixture:deterministic@v1"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+
+        let response = app
+            .oneshot(
+                Request::delete(
+                    "/v1/phonetic-analysis/models/research-fixture%3Adeterministic%40v1",
+                )
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn phonetic_fake_provider_supports_partial_cancel_failure_retry_and_feedback() {
+        let app = test_app();
+        let track = setup_phonetic_track(&app, "phonetic-lifecycle").await;
+        let create = |mode: &str| {
+            Request::post("/v1/phonetic-analysis/jobs")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "track_id": track["id"],
+                        "sentence_id": track["sentences"][0]["id"],
+                        "model_id": "research-fixture:deterministic@v1",
+                        "research_mode": mode
+                    })
+                    .to_string(),
+                ))
+                .unwrap()
+        };
+
+        let response = app.clone().oneshot(create("slow")).await.unwrap();
+        let cancellable: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/v1/phonetic-analysis/jobs/{}/cancel",
+                    cancellable["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let cancelled: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(cancelled["status"], "cancelled");
+
+        let response = app.clone().oneshot(create("fail")).await.unwrap();
+        let failing: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        let failed =
+            wait_for_phonetic_job(&app, failing["id"].as_str().unwrap(), &["failed"]).await;
+        assert_eq!(failed["error_code"], "research_fixture_failed");
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/v1/phonetic-analysis/jobs/{}/retry",
+                    failed["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let retried: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(retried["retry_of_job_id"], failed["id"]);
+        wait_for_phonetic_job(&app, retried["id"].as_str().unwrap(), &["failed"]).await;
+
+        let response = app.clone().oneshot(create("partial")).await.unwrap();
+        let partial: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        wait_for_phonetic_job(&app, partial["id"].as_str().unwrap(), &["completed"]).await;
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get(format!(
+                    "/v1/subtitles/{}/phonetic-analyses",
+                    track["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let analyses: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        let analysis = analyses
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|value| value["job_id"] == partial["id"])
+            .unwrap();
+        assert_eq!(analysis["detected_phones"].as_array().unwrap().len(), 1);
+        let finding_id = analysis["findings"][0]["id"].as_str().unwrap();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::put("/v1/phonetic-analysis/findings/missing/feedback")
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(r#"{"value":"confirmed"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let response = app
+            .clone()
+            .oneshot(
+                Request::put(format!(
+                    "/v1/phonetic-analysis/findings/{finding_id}/feedback"
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"value":"confirmed","note":"matches"}"#))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/v1/phonetic-analysis/jobs")
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "track_id": track["id"],
+                            "model_id": "research-fixture:deterministic@v1"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let track_job: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        wait_for_phonetic_job(&app, track_job["id"].as_str().unwrap(), &["completed"]).await;
+        let response = app
+            .oneshot(
+                Request::get(format!(
+                    "/v1/subtitles/{}/phonetic-analyses",
+                    track["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let analyses: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(
+            analyses
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|analysis| analysis["job_id"] == track_job["id"])
+                .count(),
+            track["sentences"].as_array().unwrap().len()
+        );
     }
 
     #[tokio::test]
@@ -1471,6 +2089,16 @@ mod tests {
             "/v1/transcription/providers",
             "/v1/transcription/models",
             "/v1/transcription/jobs",
+            "/v1/phonetic-analysis/providers",
+            "/v1/phonetic-analysis/models",
+            "/v1/phonetic-analysis/models/install",
+            "/v1/phonetic-analysis/models/register-custom",
+            "/v1/phonetic-analysis/models/{model_id}/cancel-install",
+            "/v1/phonetic-analysis/models/{model_id}",
+            "/v1/phonetic-analysis/jobs",
+            "/v1/subtitles/{track_id}/phonetic-analyses",
+            "/v1/phonetic-analysis/{analysis_id}/findings",
+            "/v1/phonetic-analysis/findings/{finding_id}/feedback",
         ] {
             assert!(openapi.contains(path), "OpenAPI missing {path}");
         }
@@ -1495,8 +2123,8 @@ mod tests {
         // Count documented paths as a regression gate.
         let path_count = openapi.lines().filter(|l| l.starts_with("  /v1/")).count();
         assert_eq!(
-            path_count, 51,
-            "OpenAPI path count changed from 51 — update snapshot if paths were added/removed"
+            path_count, 64,
+            "OpenAPI path count changed from 64 — update snapshot if paths were added/removed"
         );
 
         // All paths must be under /v1/.

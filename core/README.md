@@ -3,9 +3,23 @@
 Clean-room, macOS-first rewrite of a listening-comprehension media player.
 
 **New thread / maintainer handoff:** read
-[`docs/handoff/project-handoff-2026-06-13-m2.0-start.md`](docs/handoff/project-handoff-2026-06-13-m2.0-start.md).
+[`docs/handoff/project-handoff-2026-06-14-m2.0-progress.md`](docs/handoff/project-handoff-2026-06-14-m2.0-progress.md).
 
 **Current completed release:** Milestone 1.9, version `0.7.0`.
+
+Milestone 2.0 Phase 0 research is active. A fixed 60-slot real-speech
+evaluation catalog, provider-neutral phonetic scorer, candidate registry, and
+proposed provider-research ADR are available. Provider-neutral schema v9
+contracts, durable jobs, alignment findings, feedback, and an opt-in desktop
+surface are implemented against a deterministic research fixture. That fixture
+is disabled in normal builds and is not a release provider. No real-audio
+phonetic provider has passed the quality and licensing gates, so the product
+does not claim any real result is `detected_in_audio`. See
+[`docs/planning/milestone-2.0-phase0-research.md`](docs/planning/milestone-2.0-phase0-research.md).
+The proposed open-source/commercial and extensible-provider strategy is
+recorded in
+[`ADR 0009`](docs/decisions/0009-open-source-commercial-and-provider-ecosystem.md);
+it does not yet replace the repository's current no-license-granted state.
 
 Collaborative M1.9 functional acceptance is complete. Independent distribution
 signing and notarization are explicitly deferred from M1.9: the current Apple
@@ -78,6 +92,12 @@ Prototype-specific commands live in each spike README.
 # Historical milestone acceptance suites
 ./scripts/verify-m1.sh
 ./scripts/verify-m15.sh
+
+# Milestone 2.0 Phase 0 research-infrastructure checks
+./scripts/verify-m20-phase0.sh
+
+# Milestone 2.0 contracts, schema v9, and fake-provider workflow
+./scripts/verify-m20.sh
 ./scripts/verify-m16.sh
 ./scripts/verify-m17.sh
 ./scripts/verify-m18.sh

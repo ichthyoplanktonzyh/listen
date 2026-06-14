@@ -22,6 +22,10 @@ pub enum EventName {
     SpeechCacheInvalidated,
     PronunciationProviderUnavailable,
     PronunciationProviderDegraded,
+    PhoneticAnalysisModelChanged,
+    PhoneticAnalysisJobChanged,
+    PhoneticAnalysisCompleted,
+    PhoneticAnalysisFeedbackChanged,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -606,6 +606,75 @@ paths:
       operationId: retryTranscriptionJob
       responses:
         "200": { description: Retried transcription job }
+  /v1/phonetic-analysis/providers:
+    get:
+      operationId: phoneticAnalysisProviders
+      responses:
+        "200": { description: Experimental real-audio phonetic provider capabilities }
+  /v1/phonetic-analysis/models:
+    get:
+      operationId: phoneticAnalysisModels
+      responses:
+        "200": { description: Phonetic model catalog, provenance, licensing, and state }
+  /v1/phonetic-analysis/models/install:
+    post:
+      operationId: installPhoneticAnalysisModel
+      responses:
+        "200": { description: Updated phonetic model installation state }
+  /v1/phonetic-analysis/models/register-custom:
+    post:
+      operationId: registerCustomPhoneticAnalysisModel
+      responses:
+        "200": { description: Registered custom phonetic model }
+  /v1/phonetic-analysis/models/{model_id}/cancel-install:
+    post:
+      operationId: cancelPhoneticAnalysisModelInstall
+      responses:
+        "200": { description: Cancelled phonetic model installation }
+  /v1/phonetic-analysis/models/{model_id}:
+    delete:
+      operationId: deletePhoneticAnalysisModel
+      responses:
+        "204": { description: Deleted phonetic model }
+  /v1/phonetic-analysis/jobs:
+    get:
+      operationId: phoneticAnalysisJobs
+      responses:
+        "200": { description: Durable phonetic analysis jobs }
+    post:
+      operationId: createPhoneticAnalysisJob
+      responses:
+        "200": { description: Queued phonetic analysis job }
+  /v1/phonetic-analysis/jobs/{job_id}:
+    get:
+      operationId: phoneticAnalysisJob
+      responses:
+        "200": { description: Durable phonetic analysis job }
+  /v1/phonetic-analysis/jobs/{job_id}/cancel:
+    post:
+      operationId: cancelPhoneticAnalysisJob
+      responses:
+        "200": { description: Cancelled phonetic analysis job }
+  /v1/phonetic-analysis/jobs/{job_id}/retry:
+    post:
+      operationId: retryPhoneticAnalysisJob
+      responses:
+        "200": { description: Retried phonetic analysis job }
+  /v1/subtitles/{track_id}/phonetic-analyses:
+    get:
+      operationId: trackPhoneticAnalyses
+      responses:
+        "200": { description: Versioned detected-phone timelines and analyses }
+  /v1/phonetic-analysis/{analysis_id}/findings:
+    get:
+      operationId: phoneticAnalysisFindings
+      responses:
+        "200": { description: Explainable findings for one phonetic analysis }
+  /v1/phonetic-analysis/findings/{finding_id}/feedback:
+    put:
+      operationId: updatePhoneticFindingFeedback
+      responses:
+        "200": { description: Persisted user feedback for one finding }
 components:
   securitySchemes:
     bearerAuth:
@@ -985,9 +1054,9 @@ components:
         occurrences: { type: array, items: { $ref: "#/components/schemas/WordOccurrence" } }
     VocabularyAssetBundle:
       type: object
-      required: [version, exported_at_ms, profiles, history, occurrences, observations, lexical_entries, lexical_history, lexical_occurrences]
+      required: [version, exported_at_ms, profiles, history, occurrences, observations, lexical_entries, lexical_history, lexical_occurrences, phonetic_finding_feedback]
       properties:
-        version: { enum: [1, 2, 3] }
+        version: { enum: [1, 2, 3, 4] }
         exported_at_ms: { type: integer, minimum: 0 }
         profiles: { type: array, items: { $ref: "#/components/schemas/WordProfile" } }
         history: { type: array, items: { $ref: "#/components/schemas/WordStatusHistory" } }
@@ -996,6 +1065,7 @@ components:
         lexical_entries: { type: array, items: { $ref: "#/components/schemas/LexicalEntry" } }
         lexical_history: { type: array, items: { $ref: "#/components/schemas/LexicalStatusHistory" } }
         lexical_occurrences: { type: array, items: { $ref: "#/components/schemas/LexicalOccurrence" } }
+        phonetic_finding_feedback: { type: array, items: { type: object } }
     DictionaryLookup:
       type: object
       required: [query, lemma, definitions, phonetics, provider, cached_at_ms]

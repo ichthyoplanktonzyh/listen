@@ -430,6 +430,87 @@ export class LocalApiV1 {
     });
   }
 
+  phoneticAnalysisProviders(): Promise<unknown[]> {
+    return this.request("/v1/phonetic-analysis/providers");
+  }
+
+  phoneticAnalysisModels(): Promise<unknown[]> {
+    return this.request("/v1/phonetic-analysis/models");
+  }
+
+  installPhoneticAnalysisModel(modelId: string): Promise<unknown> {
+    return this.request("/v1/phonetic-analysis/models/install", {
+      method: "POST",
+      body: JSON.stringify({ model_id: modelId }),
+    });
+  }
+
+  registerCustomPhoneticAnalysisModel(path: string): Promise<unknown> {
+    return this.request("/v1/phonetic-analysis/models/register-custom", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    });
+  }
+
+  cancelPhoneticAnalysisModelInstall(modelId: string): Promise<unknown> {
+    return this.request(
+      `/v1/phonetic-analysis/models/${encodeURIComponent(modelId)}/cancel-install`,
+      { method: "POST" },
+    );
+  }
+
+  deletePhoneticAnalysisModel(modelId: string): Promise<void> {
+    return this.request(`/v1/phonetic-analysis/models/${encodeURIComponent(modelId)}`, {
+      method: "DELETE",
+    });
+  }
+
+  phoneticAnalysisJobs(): Promise<unknown[]> {
+    return this.request("/v1/phonetic-analysis/jobs");
+  }
+
+  createPhoneticAnalysisJob(input: unknown): Promise<unknown> {
+    return this.request("/v1/phonetic-analysis/jobs", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  phoneticAnalysisJob(jobId: string): Promise<unknown> {
+    return this.request(`/v1/phonetic-analysis/jobs/${encodeURIComponent(jobId)}`);
+  }
+
+  cancelPhoneticAnalysisJob(jobId: string): Promise<unknown> {
+    return this.request(`/v1/phonetic-analysis/jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: "POST",
+    });
+  }
+
+  retryPhoneticAnalysisJob(jobId: string): Promise<unknown> {
+    return this.request(`/v1/phonetic-analysis/jobs/${encodeURIComponent(jobId)}/retry`, {
+      method: "POST",
+    });
+  }
+
+  trackPhoneticAnalyses(trackId: string): Promise<unknown[]> {
+    return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}/phonetic-analyses`);
+  }
+
+  phoneticAnalysisFindings(analysisId: string): Promise<unknown[]> {
+    return this.request(`/v1/phonetic-analysis/${encodeURIComponent(analysisId)}/findings`);
+  }
+
+  updatePhoneticFindingFeedback(
+    findingId: string,
+    value: "confirmed" | "rejected" | "ignored",
+    note: string | null,
+  ): Promise<unknown> {
+    return this.request(
+      `/v1/phonetic-analysis/findings/${encodeURIComponent(findingId)}/feedback`,
+      { method: "PUT", body: JSON.stringify({ value, note }) },
+    );
+  }
+
   readWordProfile(language: string, lemma: string): Promise<WordProfile | null> {
     const query = new URLSearchParams({ language, lemma });
     return this.request(`/v1/word-profiles?${query}`);

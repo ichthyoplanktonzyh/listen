@@ -207,6 +207,59 @@ pub trait TranscriptionRepository: Send + Sync {
     -> Result<(), ApplicationError>;
 }
 
+pub trait PhoneticAnalysisRepository: Send + Sync {
+    fn upsert_phonetic_model(
+        &self,
+        model: &PhoneticAnalysisModelDescriptor,
+    ) -> Result<PhoneticAnalysisModelDescriptor, ApplicationError>;
+    fn list_phonetic_models(
+        &self,
+    ) -> Result<Vec<PhoneticAnalysisModelDescriptor>, ApplicationError>;
+    fn get_phonetic_model(
+        &self,
+        id: &PhoneticAnalysisModelId,
+    ) -> Result<Option<PhoneticAnalysisModelDescriptor>, ApplicationError>;
+    fn delete_phonetic_model(&self, id: &PhoneticAnalysisModelId) -> Result<(), ApplicationError>;
+    fn create_phonetic_job(
+        &self,
+        job: &PhoneticAnalysisJob,
+    ) -> Result<PhoneticAnalysisJob, ApplicationError>;
+    fn update_phonetic_job(
+        &self,
+        job: &PhoneticAnalysisJob,
+    ) -> Result<PhoneticAnalysisJob, ApplicationError>;
+    fn get_phonetic_job(
+        &self,
+        id: &PhoneticAnalysisJobId,
+    ) -> Result<Option<PhoneticAnalysisJob>, ApplicationError>;
+    fn list_phonetic_jobs(&self) -> Result<Vec<PhoneticAnalysisJob>, ApplicationError>;
+    fn find_completed_phonetic_job(
+        &self,
+        input_fingerprint: &str,
+    ) -> Result<Option<PhoneticAnalysisJob>, ApplicationError>;
+    fn interrupt_active_phonetic_jobs(&self, updated_at_ms: u64) -> Result<(), ApplicationError>;
+    fn save_phonetic_analysis(
+        &self,
+        analysis: &PhoneticAnalysis,
+    ) -> Result<PhoneticAnalysis, ApplicationError>;
+    fn get_phonetic_analysis(
+        &self,
+        id: &PhoneticAnalysisId,
+    ) -> Result<Option<PhoneticAnalysis>, ApplicationError>;
+    fn list_track_phonetic_analyses(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<PhoneticAnalysis>, ApplicationError>;
+    fn save_phonetic_feedback(
+        &self,
+        feedback: &PhoneticFindingFeedback,
+    ) -> Result<PhoneticFindingFeedback, ApplicationError>;
+    fn get_phonetic_feedback(
+        &self,
+        finding_id: &PhoneticFindingId,
+    ) -> Result<Option<PhoneticFindingFeedback>, ApplicationError>;
+}
+
 #[async_trait]
 pub trait DictionaryProvider: Send + Sync {
     fn info(&self) -> DictionaryProviderInfo;
@@ -671,7 +724,8 @@ impl AppServices {
         &self,
         bundle: &VocabularyAssetBundle,
     ) -> Result<(), ApplicationError> {
-        if bundle.version != 1 && bundle.version != 2 && bundle.version != 3 {
+        if bundle.version != 1 && bundle.version != 2 && bundle.version != 3 && bundle.version != 4
+        {
             return Err(ApplicationError::Validation(
                 "unsupported asset bundle version",
             ));
@@ -727,6 +781,13 @@ impl AppServices {
         track_id: &SubtitleTrackId,
     ) -> Result<Option<SubtitleTrack>, ApplicationError> {
         self.subtitles.get_track(track_id)
+    }
+
+    pub fn read_sentence(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<Option<SubtitleSentence>, ApplicationError> {
+        self.subtitles.get_sentence(sentence_id)
     }
 
     pub fn pronunciation_providers(&self) -> Vec<PronunciationProviderInfo> {

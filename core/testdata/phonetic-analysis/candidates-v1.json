@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "reviewed_at": "2026-06-14",
+  "release_provider_selected": false,
+  "candidates": [
+    {
+      "id": "zipa-small-crctc-300k",
+      "role": "first_apple_silicon_performance_spike",
+      "status": "eligible_for_research",
+      "runtime": "onnxruntime",
+      "license": "permissive_claimed_exact_license_pending",
+      "license_verified": false,
+      "distribution_review": "required_before_product_integration",
+      "sources": [
+        "https://github.com/lingjzhu/zipa",
+        "https://huggingface.co/anyspeech/zipa-small-crctc-300k"
+      ]
+    },
+    {
+      "id": "wav2ipa-buckeye",
+      "role": "american_conversational_quality_baseline",
+      "status": "research_only_pending_model_license_review",
+      "license": "unknown",
+      "license_verified": false,
+      "dataset_constraint": "Buckeye access is limited to non-profit research and educational use; do not redistribute.",
+      "sources": [
+        "https://buckeyecorpus.osu.edu/",
+        "https://huggingface.co/datasets/phonemetransformers/buckeye"
+      ]
+    },
+    {
+      "id": "wav2vec2-phoneme-compatible-model",
+      "role": "candidate_family",
+      "status": "blocked_until_specific_model_revision_is_named",
+      "license": "model_specific",
+      "license_verified": false,
+      "sources": [
+        "https://huggingface.co/docs/transformers/en/model_doc/wav2vec2_phoneme"
+      ]
+    },
+    {
+      "id": "vosk-kaldi-alignment",
+      "role": "lightweight_asr_and_forced_alignment_baseline",
+      "status": "eligible_for_research_not_yet_a_phone_recognition_candidate",
+      "runtime": "vosk-api-kaldi",
+      "license": "code_and_model_specific_permissive_claims_require_exact_artifact_review",
+      "license_verified": false,
+      "capability_constraint": "Public API primarily exposes text, word timing, and confidence. Phone-level experiments must prove they preserve observed pronunciation variation rather than canonical decoder alignments.",
+      "distribution_review": "Review Vosk API, Kaldi, and the exact selected model independently before product integration.",
+      "sources": [
+        "https://github.com/alphacep/vosk-api",
+        "https://alphacephei.com/vosk/models",
+        "https://kaldi-asr.org/doc/legal.html"
+      ]
+    },
+    {
+      "id": "allosaurus",
+      "role": "research_baseline_only",
+      "status": "not_eligible_for_default_distribution",
+      "license": "GPL-3.0",
+      "license_verified": true,
+      "sources": [
+        "https://github.com/xinjli/allosaurus"
+      ]
+    }
+  ]
+}

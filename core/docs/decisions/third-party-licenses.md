@@ -22,5 +22,6 @@ This is an M0 inventory, not legal advice.
 | ECDICT | Optional offline English dictionary and lemma data | MIT; downloaded explicitly from a pinned source revision and checksum-verified |
 | CMU Pronouncing Dictionary | Optional canonical en-US pronunciation data | BSD-style CMU license; downloaded explicitly from pinned revision `74790861` and checksum-verified |
 | OpenSubtitles.com REST API | User-initiated subtitle search and download | User supplies an API key; requests obey service authentication, quotas, and terms |
+| Vosk API / Kaldi | Proposed Milestone 2.0 lightweight ASR and forced-alignment research baseline | Vosk API and Kaldi publish permissive licenses, but the exact runtime revision and selected model license must be reviewed independently before integration or distribution |
 
 No LLPlayer source code is copied into this repository.

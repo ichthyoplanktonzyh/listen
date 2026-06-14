@@ -1,4 +1,6 @@
 pub mod asr_timing;
+pub mod phonetic_alignment;
+pub mod phonetic_findings;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::OnceLock;

@@ -1,5 +1,50 @@
 # Changelog
 
+## Unreleased
+
+- Started Milestone 2.0 Phase 0 with a fixed 60-slot real-speech evaluation
+  catalog covering news, interview, conversation, speech rate, recording
+  quality, and six target connected-speech phenomena.
+- Added a provider-neutral phonetic evaluation tool that reports Phone Error
+  Rate, detected-phone timeline validity, and subtitle-token association
+  coverage, with success and failure smoke fixtures.
+- Recorded candidate-provider roles, licensing constraints, a concrete Phase 0
+  execution plan, and a proposed ADR that prevents product integration or
+  `detected_in_audio` claims before quality and licensing gates pass.
+- Added Vosk/Kaldi as a lightweight ASR and forced-alignment research baseline,
+  without treating canonical decoder alignment as real detected-phone output.
+- Proposed an AGPL/commercial dual-license direction and a permissive,
+  versioned out-of-process provider SDK boundary while preserving the current
+  no-license-granted repository state until legal and contributor preparation
+  is complete.
+- Added an isolated candidate-research harness that checks the pinned ZIPA
+  dependency/artifact boundary, requires licensed external audio, rejects
+  sequence-only output without phone timestamps, and records reproducibility
+  and performance metadata.
+- Added provider-neutral Milestone 2.0 domain contracts, schema v9 persistence,
+  durable analysis jobs, detected-phone timelines, alignment findings, user
+  feedback, API/events, and explicit model-management rejection paths.
+- Added a deterministic research fixture that is disabled in normal builds,
+  cannot be distributed as a model, never upgrades its low-confidence findings
+  to `detected_in_audio`, and supports repeatable contract verification.
+- Added desktop settings v8, current-sentence experimental analysis triggering,
+  SSE progress refresh, detected-phone highlighting, and clearly labeled
+  audio-detection results that remain hidden by default.
+- Added focused widget coverage for the audio-analysis model/job center and
+  distinct current-sentence and whole-track analysis triggers.
+- Verified detected-phone highlighting across non-monotonic playback position
+  changes and passed the existing packaged macOS build/runtime/signing smoke.
+- Added `scripts/verify-m20.sh`, v8-to-v9 migration coverage, fake-provider
+  idempotency checks, and low-confidence finding safety tests.
+- Passed the complete M2.0 historical headless regression with 150 Rust tests,
+  Flutter analysis, and 45 Flutter tests; the latest Flutter suite contains 46
+  passing tests after the playback-position coverage increment.
+- Passed the packaged macOS release build, bundled-runtime discovery, ad-hoc
+  signing verification, extracted-package launch, video/audio smoke, and
+  persistence checks.
+- Milestone 2.0 remains incomplete: no real provider has passed the licensed
+  evaluation, quality, performance, provenance, and distribution gates.
+
 ## 0.7.1 - 2026-06-13
 
 - Enabled whisper.cpp DTW (Dynamic Time Warping) token-level timestamps during

@@ -19,6 +19,12 @@ testdata/
 │
 ├── pronunciation/             # Pronunciation analysis fixtures
 │   └── en-us-baseline.tsv     # 100-sentence fixed en-US baseline for rule validation
+├── phonetic-analysis/          # M2.0 Phase 0 research catalog and scorer smoke data
+│   ├── evaluation-catalog-v1.tsv
+│   ├── candidates-v1.json
+│   ├── reference-smoke-v1.jsonl
+│   ├── prediction-smoke-v1.jsonl
+│   └── prediction-smoke-errors-v1.jsonl
 │
 └── generated/                 # Synthetic media (gitignored, rebuild with generate.sh)
     ├── SHA256SUMS             # Checksums of generated files
@@ -49,6 +55,16 @@ testdata/
 | File | Size | Used By | Description |
 |------|------|---------|-------------|
 | `pronunciation/en-us-baseline.tsv` | ~10 KB | `speech-analysis/src/lib.rs` (1 test) | 100-sentence baseline mapping words to expected ARPAbet/IPA/stress. Validates the CMUdict lookup + deterministic fallback pipeline |
+
+### Phonetic Analysis Research Fixtures
+
+| File | Used By | Description |
+|------|---------|-------------|
+| `phonetic-analysis/evaluation-catalog-v1.tsv` | `scripts/verify-m20-phase0.sh` | Fixed 60-slot M2.0 evaluation design. Slots remain planned until licensed audio and human-verified actual-phone references exist. |
+| `phonetic-analysis/candidates-v1.json` | Phase 0 research | Candidate status, licensing constraints, and source registry. |
+| `phonetic-analysis/reference-smoke-v1.jsonl` | `scripts/phonetic-eval.py` | Synthetic scorer reference; not quality evidence. |
+| `phonetic-analysis/prediction-smoke-v1.jsonl` | `scripts/phonetic-eval.py` | Synthetic perfect prediction used to verify metric calculations. |
+| `phonetic-analysis/prediction-smoke-errors-v1.jsonl` | `scripts/phonetic-eval.py` | Synthetic errors used to verify PER and failed release-gate calculations. |
 
 ### Generated Media
 

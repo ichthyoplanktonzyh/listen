@@ -3,16 +3,16 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use application::{
-    ApplicationError, DictionaryCacheRepository, MediaRepository, PlaybackProgressRepository,
-    SourceContext, SubtitleRepository, TranscriptionRepository, VocabularyAssetRepository,
-    WordObservationRepository, WordProfileRepository,
+    ApplicationError, DictionaryCacheRepository, MediaRepository, PhoneticAnalysisRepository,
+    PlaybackProgressRepository, SourceContext, SubtitleRepository, TranscriptionRepository,
+    VocabularyAssetRepository, WordObservationRepository, WordProfileRepository,
 };
 use domain::*;
 use rusqlite::{Connection, OptionalExtension, params};
 use sha2::Digest;
 use thiserror::Error;
 
-pub const MIGRATION_VERSION: u32 = 8;
+pub const MIGRATION_VERSION: u32 = 9;
 mod lexical;
 
 pub struct SqliteRepository {
@@ -112,6 +112,12 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         let tx = connection.unchecked_transaction()?;
         tx.execute_batch(include_str!("../migrations/0008_pronunciation.sql"))?;
         tx.pragma_update(None, "user_version", 8)?;
+        tx.commit()?;
+    }
+    if current < 9 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0009_phonetic_analysis.sql"))?;
+        tx.pragma_update(None, "user_version", 9)?;
         tx.commit()?;
     }
     Ok(())
@@ -469,6 +475,318 @@ impl TranscriptionRepository for SqliteRepository {
                 ],
             )
             .map(|_| ())
+            .map_err(repo)
+    }
+}
+
+impl PhoneticAnalysisRepository for SqliteRepository {
+    fn upsert_phonetic_model(
+        &self,
+        model: &PhoneticAnalysisModelDescriptor,
+    ) -> Result<PhoneticAnalysisModelDescriptor, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "INSERT INTO phonetic_analysis_models(id,provider_id,descriptor_json,updated_at_ms)
+                 VALUES (?1,?2,?3,?4)
+                 ON CONFLICT(id) DO UPDATE SET provider_id=excluded.provider_id,
+                   descriptor_json=excluded.descriptor_json,updated_at_ms=excluded.updated_at_ms",
+                params![
+                    model.id.as_str(),
+                    model.provider_id,
+                    json(model)?,
+                    model.updated_at_ms
+                ],
+            )
+            .map_err(repo)?;
+        Ok(model.clone())
+    }
+
+    fn list_phonetic_models(
+        &self,
+    ) -> Result<Vec<PhoneticAnalysisModelDescriptor>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut query = conn
+            .prepare("SELECT descriptor_json FROM phonetic_analysis_models ORDER BY provider_id,id")
+            .map_err(repo)?;
+        query
+            .query_map([], |row| from_json(&row.get::<_, String>(0)?))
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
+    fn get_phonetic_model(
+        &self,
+        id: &PhoneticAnalysisModelId,
+    ) -> Result<Option<PhoneticAnalysisModelDescriptor>, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .query_row(
+                "SELECT descriptor_json FROM phonetic_analysis_models WHERE id=?1",
+                [id.as_str()],
+                |row| from_json(&row.get::<_, String>(0)?),
+            )
+            .optional()
+            .map_err(repo)
+    }
+
+    fn delete_phonetic_model(&self, id: &PhoneticAnalysisModelId) -> Result<(), ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "DELETE FROM phonetic_analysis_models WHERE id=?1",
+                [id.as_str()],
+            )
+            .map(|_| ())
+            .map_err(repo)
+    }
+
+    fn create_phonetic_job(
+        &self,
+        job: &PhoneticAnalysisJob,
+    ) -> Result<PhoneticAnalysisJob, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "INSERT INTO phonetic_analysis_jobs
+                 (id,media_id,track_id,sentence_id,input_fingerprint,status,job_json,updated_at_ms)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+                params![
+                    job.id.as_str(),
+                    job.media_id.as_str(),
+                    job.track_id.as_str(),
+                    job.sentence_id.as_ref().map(SubtitleSentenceId::as_str),
+                    job.input_fingerprint,
+                    json(&job.status)?,
+                    json(job)?,
+                    job.updated_at_ms
+                ],
+            )
+            .map_err(repo)?;
+        Ok(job.clone())
+    }
+
+    fn update_phonetic_job(
+        &self,
+        job: &PhoneticAnalysisJob,
+    ) -> Result<PhoneticAnalysisJob, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "UPDATE phonetic_analysis_jobs SET status=?2,job_json=?3,updated_at_ms=?4
+                 WHERE id=?1",
+                params![
+                    job.id.as_str(),
+                    json(&job.status)?,
+                    json(job)?,
+                    job.updated_at_ms
+                ],
+            )
+            .map_err(repo)?;
+        Ok(job.clone())
+    }
+
+    fn get_phonetic_job(
+        &self,
+        id: &PhoneticAnalysisJobId,
+    ) -> Result<Option<PhoneticAnalysisJob>, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .query_row(
+                "SELECT job_json FROM phonetic_analysis_jobs WHERE id=?1",
+                [id.as_str()],
+                |row| from_json(&row.get::<_, String>(0)?),
+            )
+            .optional()
+            .map_err(repo)
+    }
+
+    fn list_phonetic_jobs(&self) -> Result<Vec<PhoneticAnalysisJob>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut query = conn
+            .prepare("SELECT job_json FROM phonetic_analysis_jobs ORDER BY updated_at_ms DESC")
+            .map_err(repo)?;
+        query
+            .query_map([], |row| from_json(&row.get::<_, String>(0)?))
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
+    fn find_completed_phonetic_job(
+        &self,
+        input_fingerprint: &str,
+    ) -> Result<Option<PhoneticAnalysisJob>, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .query_row(
+                "SELECT job_json FROM phonetic_analysis_jobs
+                 WHERE input_fingerprint=?1 AND status='\"completed\"'
+                 ORDER BY updated_at_ms DESC LIMIT 1",
+                [input_fingerprint],
+                |row| from_json(&row.get::<_, String>(0)?),
+            )
+            .optional()
+            .map_err(repo)
+    }
+
+    fn interrupt_active_phonetic_jobs(&self, updated_at_ms: u64) -> Result<(), ApplicationError> {
+        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let tx = conn.transaction().map_err(repo)?;
+        let active = [
+            PhoneticAnalysisJobStatus::Queued,
+            PhoneticAnalysisJobStatus::Extracting,
+            PhoneticAnalysisJobStatus::RecognizingPhones,
+            PhoneticAnalysisJobStatus::Aligning,
+            PhoneticAnalysisJobStatus::Analyzing,
+        ]
+        .into_iter()
+        .map(|status| json(&status))
+        .collect::<Result<Vec<_>, _>>()?;
+        let mut query = tx
+            .prepare(
+                "SELECT id,job_json FROM phonetic_analysis_jobs
+                 WHERE status IN (?1,?2,?3,?4,?5)",
+            )
+            .map_err(repo)?;
+        let jobs = query
+            .query_map(
+                params![active[0], active[1], active[2], active[3], active[4]],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        from_json(&row.get::<_, String>(1)?)?,
+                    ))
+                },
+            )
+            .map_err(repo)?
+            .collect::<Result<Vec<(String, PhoneticAnalysisJob)>, _>>()
+            .map_err(repo)?;
+        drop(query);
+        for (id, mut job) in jobs {
+            job.status = PhoneticAnalysisJobStatus::Interrupted;
+            job.error_code = Some("interrupted".into());
+            job.error_message =
+                Some("The local service stopped before this analysis completed.".into());
+            job.completed_at_ms = Some(updated_at_ms);
+            job.updated_at_ms = updated_at_ms;
+            tx.execute(
+                "UPDATE phonetic_analysis_jobs SET status=?2,job_json=?3,updated_at_ms=?4
+                 WHERE id=?1",
+                params![id, json(&job.status)?, json(&job)?, updated_at_ms],
+            )
+            .map_err(repo)?;
+        }
+        tx.commit().map_err(repo)
+    }
+
+    fn save_phonetic_analysis(
+        &self,
+        analysis: &PhoneticAnalysis,
+    ) -> Result<PhoneticAnalysis, ApplicationError> {
+        analysis.validate().map_err(ApplicationError::from)?;
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "INSERT INTO phonetic_analyses
+                 (id,job_id,media_id,track_id,sentence_id,provider_id,model_id,analysis_json,created_at_ms)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+                params![
+                    analysis.id.as_str(),
+                    analysis.job_id.as_str(),
+                    analysis.media_id.as_str(),
+                    analysis.track_id.as_str(),
+                    analysis.sentence_id.as_ref().map(SubtitleSentenceId::as_str),
+                    analysis.provider_id,
+                    analysis.model_id.as_str(),
+                    json(analysis)?,
+                    analysis.created_at_ms
+                ],
+            )
+            .map_err(repo)?;
+        Ok(analysis.clone())
+    }
+
+    fn get_phonetic_analysis(
+        &self,
+        id: &PhoneticAnalysisId,
+    ) -> Result<Option<PhoneticAnalysis>, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .query_row(
+                "SELECT analysis_json FROM phonetic_analyses WHERE id=?1",
+                [id.as_str()],
+                |row| from_json(&row.get::<_, String>(0)?),
+            )
+            .optional()
+            .map_err(repo)
+    }
+
+    fn list_track_phonetic_analyses(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<PhoneticAnalysis>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut query = conn
+            .prepare(
+                "SELECT analysis_json FROM phonetic_analyses
+                 WHERE track_id=?1 ORDER BY created_at_ms DESC,rowid DESC",
+            )
+            .map_err(repo)?;
+        query
+            .query_map([track_id.as_str()], |row| {
+                from_json(&row.get::<_, String>(0)?)
+            })
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
+    fn save_phonetic_feedback(
+        &self,
+        feedback: &PhoneticFindingFeedback,
+    ) -> Result<PhoneticFindingFeedback, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "INSERT INTO phonetic_finding_feedback(finding_id,feedback_json,updated_at_ms)
+                 VALUES (?1,?2,?3)
+                 ON CONFLICT(finding_id) DO UPDATE SET
+                   feedback_json=excluded.feedback_json,updated_at_ms=excluded.updated_at_ms",
+                params![
+                    feedback.finding_id.as_str(),
+                    json(feedback)?,
+                    feedback.updated_at_ms
+                ],
+            )
+            .map_err(repo)?;
+        Ok(feedback.clone())
+    }
+
+    fn get_phonetic_feedback(
+        &self,
+        finding_id: &PhoneticFindingId,
+    ) -> Result<Option<PhoneticFindingFeedback>, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .query_row(
+                "SELECT feedback_json FROM phonetic_finding_feedback WHERE finding_id=?1",
+                [finding_id.as_str()],
+                |row| from_json(&row.get::<_, String>(0)?),
+            )
+            .optional()
             .map_err(repo)
     }
 }
@@ -1119,7 +1437,7 @@ impl VocabularyAssetRepository for SqliteRepository {
             self.export_lexical_assets()?;
         let conn = self.connection.lock().expect("sqlite mutex poisoned");
         Ok(VocabularyAssetBundle {
-            version: 3,
+            version: 4,
             exported_at_ms: application::now_ms(),
             profiles: read_all_profiles(&conn)?,
             history: read_all_history(&conn)?,
@@ -1128,6 +1446,7 @@ impl VocabularyAssetRepository for SqliteRepository {
             lexical_entries,
             lexical_history,
             lexical_occurrences,
+            phonetic_finding_feedback: read_all_phonetic_feedback(&conn)?,
         })
     }
 
@@ -1237,6 +1556,23 @@ impl VocabularyAssetRepository for SqliteRepository {
                     observation.original_form,
                     json(&observation.result)?,
                     observation.created_at_ms
+                ],
+            )
+            .map_err(repo)?;
+        }
+        for feedback in &bundle.phonetic_finding_feedback {
+            tx.execute(
+                "INSERT INTO phonetic_finding_feedback(finding_id,feedback_json,updated_at_ms)
+                 VALUES (?1,?2,?3)
+                 ON CONFLICT(finding_id) DO UPDATE SET
+                   feedback_json=CASE
+                     WHEN excluded.updated_at_ms>updated_at_ms THEN excluded.feedback_json
+                     ELSE feedback_json END,
+                   updated_at_ms=MAX(updated_at_ms,excluded.updated_at_ms)",
+                params![
+                    feedback.finding_id.as_str(),
+                    json(feedback)?,
+                    feedback.updated_at_ms
                 ],
             )
             .map_err(repo)?;
@@ -1665,6 +2001,21 @@ fn read_all_observations(conn: &Connection) -> Result<Vec<WordObservation>, Appl
     .map_err(repo)
 }
 
+fn read_all_phonetic_feedback(
+    conn: &Connection,
+) -> Result<Vec<PhoneticFindingFeedback>, ApplicationError> {
+    let mut query = conn
+        .prepare(
+            "SELECT feedback_json FROM phonetic_finding_feedback ORDER BY updated_at_ms,finding_id",
+        )
+        .map_err(repo)?;
+    query
+        .query_map([], |row| from_json(&row.get::<_, String>(0)?))
+        .map_err(repo)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(repo)
+}
+
 #[derive(Debug, Error)]
 pub enum PersistenceError {
     #[error(transparent)]
@@ -2050,6 +2401,61 @@ mod tests {
                 .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
                 .unwrap(),
             MIGRATION_VERSION
+        );
+    }
+
+    #[test]
+    fn upgrades_historical_v8_database_and_adds_phonetic_analysis_assets() {
+        let connection = Connection::open_in_memory().unwrap();
+        for migration in [
+            include_str!("../migrations/0001_media.sql"),
+            include_str!("../migrations/0002_learning.sql"),
+        ] {
+            connection.execute_batch(migration).unwrap();
+        }
+        connection
+            .execute_batch("PRAGMA foreign_keys=OFF;")
+            .unwrap();
+        for migration in [
+            include_str!("../migrations/0003_subtitle_identity.sql"),
+            include_str!("../migrations/0004_vocabulary_assets.sql"),
+        ] {
+            connection.execute_batch(migration).unwrap();
+        }
+        connection.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+        for migration in [
+            include_str!("../migrations/0005_learning_experience.sql"),
+            include_str!("../migrations/0006_transcription.sql"),
+            include_str!("../migrations/0007_lexical_entries.sql"),
+            include_str!("../migrations/0008_pronunciation.sql"),
+        ] {
+            connection.execute_batch(migration).unwrap();
+        }
+        connection.pragma_update(None, "user_version", 8).unwrap();
+
+        migrate(&connection).unwrap();
+
+        assert_eq!(
+            connection
+                .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+                .unwrap(),
+            MIGRATION_VERSION
+        );
+        assert_eq!(
+            connection
+                .query_row("SELECT count(*) FROM phonetic_analysis_jobs", [], |row| {
+                    row.get::<_, u32>(0)
+                })
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            connection
+                .query_row("SELECT count(*) FROM phonetic_analyses", [], |row| {
+                    row.get::<_, u32>(0)
+                })
+                .unwrap(),
+            0
         );
     }
 
@@ -2734,7 +3140,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(details.profile.user_definition.as_deref(), Some("greeting"));
-        assert_eq!(services.export_vocabulary().unwrap().version, 3);
+        assert_eq!(services.export_vocabulary().unwrap().version, 4);
         let second = services
             .import_external_vocabulary(&ExternalVocabularyImport {
                 language: "en".into(),
@@ -2786,5 +3192,198 @@ mod tests {
             Some("dictionary provider failed: offline")
         );
         assert!(bundle.results[1].lookup.is_some());
+    }
+
+    #[test]
+    fn phonetic_models_jobs_analyses_and_feedback_round_trip() {
+        let repo = SqliteRepository::in_memory().unwrap();
+        let media = MediaItem {
+            id: MediaId::from_fingerprint("media", "phonetic"),
+            path: "/tmp/phonetic.wav".into(),
+            fingerprint: "phonetic-media".into(),
+            title: "Phonetic".into(),
+            kind: MediaKind::Audio,
+            duration: Some(TimeMs::new(5_000)),
+            availability: MediaAvailability::Available,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        };
+        MediaRepository::upsert(&repo, &media).unwrap();
+        let sentence_id = SubtitleSentenceId::from_fingerprint("sentence", "phonetic");
+        let track = SubtitleTrack {
+            id: SubtitleTrackId::from_fingerprint("track", "phonetic"),
+            media_id: media.id.clone(),
+            fingerprint: "phonetic-track".into(),
+            language: Some(LanguageCode::parse("en").unwrap()),
+            source: "test".into(),
+            sentences: vec![SubtitleSentence {
+                id: sentence_id.clone(),
+                index: 0,
+                start: TimeMs::new(100),
+                end: TimeMs::new(500),
+                original_text: "Hello".into(),
+                display_text: "Hello".into(),
+                tokens: vec![],
+            }],
+        };
+        repo.save_track(&track).unwrap();
+        let model_id = PhoneticAnalysisModelId::from_fingerprint("model", "fake");
+        let model = PhoneticAnalysisModelDescriptor {
+            id: model_id.clone(),
+            provider_id: "fake".into(),
+            display_name: "Fake".into(),
+            family: "fake".into(),
+            revision: "v1".into(),
+            checksum_sha256: "abc".into(),
+            download_url: None,
+            local_path: None,
+            size_bytes: 0,
+            supported_languages: vec!["en".into()],
+            supported_dialects: vec!["en-US".into()],
+            phone_sets: vec!["arpabet".into()],
+            supports_timestamps: true,
+            expected_sample_rate_hz: 16_000,
+            context_window_ms: None,
+            state: PhoneticModelState::Custom,
+            installed_bytes: 0,
+            error: None,
+            license: "test".into(),
+            training_data_provenance: "synthetic".into(),
+            distribution_allowed: false,
+            application_verified: false,
+            updated_at_ms: 1,
+        };
+        repo.upsert_phonetic_model(&model).unwrap();
+        assert_eq!(repo.get_phonetic_model(&model_id).unwrap(), Some(model));
+
+        let job_id = PhoneticAnalysisJobId::from_fingerprint("job", "fake");
+        let mut job = PhoneticAnalysisJob {
+            id: job_id.clone(),
+            media_id: media.id.clone(),
+            track_id: track.id.clone(),
+            sentence_id: Some(sentence_id.clone()),
+            scope: PhoneticAnalysisScope::Sentence,
+            audio_start_ms: 100,
+            audio_end_ms: 500,
+            provider_id: "fake".into(),
+            provider_version: "v1".into(),
+            runtime_id: "fake".into(),
+            runtime_version: "v1".into(),
+            model_id: model_id.clone(),
+            model_revision: "v1".into(),
+            model_checksum_sha256: "abc".into(),
+            requested_phone_set: "arpabet".into(),
+            settings_json: "{}".into(),
+            input_fingerprint: "input".into(),
+            status: PhoneticAnalysisJobStatus::Queued,
+            phase_progress: 0,
+            error_code: None,
+            error_message: None,
+            retry_of_job_id: None,
+            analysis_id: None,
+            created_at_ms: 1,
+            started_at_ms: None,
+            completed_at_ms: None,
+            updated_at_ms: 1,
+        };
+        repo.create_phonetic_job(&job).unwrap();
+        repo.interrupt_active_phonetic_jobs(2).unwrap();
+        job = repo.get_phonetic_job(&job_id).unwrap().unwrap();
+        assert_eq!(job.status, PhoneticAnalysisJobStatus::Interrupted);
+
+        job.status = PhoneticAnalysisJobStatus::Completed;
+        job.updated_at_ms = 3;
+        let analysis_id = PhoneticAnalysisId::from_fingerprint("analysis", "fake");
+        job.analysis_id = Some(analysis_id.clone());
+        repo.update_phonetic_job(&job).unwrap();
+        let finding_id = PhoneticFindingId::from_fingerprint("finding", "fake");
+        let analysis = PhoneticAnalysis {
+            id: analysis_id.clone(),
+            job_id,
+            media_id: media.id,
+            track_id: track.id.clone(),
+            sentence_id: Some(sentence_id),
+            audio_start_ms: 100,
+            audio_end_ms: 500,
+            provider_id: "fake".into(),
+            provider_version: "v1".into(),
+            model_id,
+            model_revision: "v1".into(),
+            model_checksum_sha256: "abc".into(),
+            phone_set: "arpabet".into(),
+            detected_phones: vec![DetectedPhone {
+                symbol: "HH".into(),
+                phone_set: "arpabet".into(),
+                start_ms: 100,
+                end_ms: 200,
+                confidence: Some(0.9),
+                token_index: Some(0),
+                provider_id: "fake".into(),
+                provider_version: "v1".into(),
+                model_revision: "v1".into(),
+            }],
+            alignments: vec![],
+            findings: vec![PhoneticFinding {
+                id: finding_id.clone(),
+                analysis_id: analysis_id.clone(),
+                finding_type: "weak_form".into(),
+                affected_token_start: 0,
+                affected_token_end: 0,
+                canonical_phones: vec!["HH".into()],
+                detected_phones: vec!["HH".into()],
+                aligned_phone_start: Some(0),
+                aligned_phone_end: Some(0),
+                audio_start_ms: 100,
+                audio_end_ms: 200,
+                confidence: 0.7,
+                evidence: "fake".into(),
+                status: PhoneticFindingStatus::SupportedByAlignment,
+            }],
+            analyzer_version: "v1".into(),
+            created_at_ms: 3,
+        };
+        repo.save_phonetic_analysis(&analysis).unwrap();
+        assert_eq!(
+            repo.list_track_phonetic_analyses(&track.id).unwrap(),
+            vec![analysis.clone()]
+        );
+        repo.delete_phonetic_model(&analysis.model_id).unwrap();
+        assert_eq!(
+            repo.list_track_phonetic_analyses(&track.id).unwrap(),
+            vec![analysis.clone()]
+        );
+        let mut revised_analysis = analysis.clone();
+        revised_analysis.id = PhoneticAnalysisId::from_fingerprint("analysis", "fake-v2");
+        for finding in &mut revised_analysis.findings {
+            finding.id = PhoneticFindingId::from_fingerprint("finding", "fake-v2");
+            finding.analysis_id = revised_analysis.id.clone();
+        }
+        revised_analysis.model_revision = "v2".into();
+        revised_analysis.created_at_ms = 4;
+        repo.save_phonetic_analysis(&revised_analysis).unwrap();
+        let versions = repo.list_track_phonetic_analyses(&track.id).unwrap();
+        assert_eq!(versions.len(), 2);
+        assert!(versions.contains(&analysis));
+        assert!(versions.contains(&revised_analysis));
+        let feedback = PhoneticFindingFeedback {
+            finding_id: finding_id.clone(),
+            value: PhoneticFindingFeedbackValue::Rejected,
+            note: Some("test".into()),
+            updated_at_ms: 4,
+        };
+        repo.save_phonetic_feedback(&feedback).unwrap();
+        assert_eq!(
+            repo.get_phonetic_feedback(&finding_id).unwrap(),
+            Some(feedback.clone())
+        );
+        let bundle = repo.export_assets().unwrap();
+        assert_eq!(bundle.version, 4);
+        assert_eq!(bundle.phonetic_finding_feedback, vec![feedback.clone()]);
+        let restored = SqliteRepository::in_memory().unwrap();
+        restored.import_assets(&bundle).unwrap();
+        assert_eq!(
+            restored.get_phonetic_feedback(&finding_id).unwrap(),
+            Some(feedback)
+        );
     }
 }

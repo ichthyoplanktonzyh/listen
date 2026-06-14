@@ -23,7 +23,11 @@
         "word-timings-completed",
         "speech-cache-invalidated",
         "pronunciation-provider-unavailable",
-        "pronunciation-provider-degraded"
+        "pronunciation-provider-degraded",
+        "phonetic-analysis-model-changed",
+        "phonetic-analysis-job-changed",
+        "phonetic-analysis-completed",
+        "phonetic-analysis-feedback-changed"
       ]
     },
     "payload": { "type": "object" }

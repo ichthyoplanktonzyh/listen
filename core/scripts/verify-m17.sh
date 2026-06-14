@@ -62,7 +62,7 @@ api_curl "$base/v1/subtitles/$track_id/export?format=srt" | grep -q "Generated l
 
 # Verify database state
 assert_eq "$(sqlite3 "$tmp/m17.sqlite" 'SELECT count(*) FROM subtitle_track_provenance;')" "1" "should have 1 provenance record"
-assert_eq "$(sqlite3 "$tmp/m17.sqlite" 'PRAGMA user_version;')" "8" "schema version should be at least 8"
+assert_eq "$(sqlite3 "$tmp/m17.sqlite" 'PRAGMA user_version;')" "9" "schema version should be 9"
 
 # Idempotent job reuse
 same_job="$(api_curl -d '{"media_id":"'"$media_id"'","model_id":"'"$model_id"'","destination":"primary","purpose":"transcribe","language":"en"}' "$base/v1/transcription/jobs")"

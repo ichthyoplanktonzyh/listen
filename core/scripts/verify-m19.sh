@@ -48,7 +48,7 @@ json_assert "$accepted" 'v.every(x=>x.timing_source==="asr_reported")' "accepted
 preserved="$(api_curl "$base/v1/subtitles/$track_id/word-timings")"
 json_assert "$preserved" 'v.every(x=>x.timing_source==="asr_reported")' "preserved timings should remain asr_reported"
 
-assert_eq "$(sqlite3 "$tmp/m19.sqlite" 'PRAGMA user_version;')" "8" "database schema version should be 8"
+assert_eq "$(sqlite3 "$tmp/m19.sqlite" 'PRAGMA user_version;')" "9" "database schema version should be 9"
 
 echo "Milestone 1.9 pronunciation and word-sync API verification passed."
 

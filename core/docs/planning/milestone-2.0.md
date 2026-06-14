@@ -62,6 +62,8 @@ Buckeye Corpus 可用于研究和验证，但在确认许可前不得随应用�
 - Wav2IPA/Buckeye 方向的美式英语模型。
 - ZIPA 小型模型。
 - Wav2Vec2Phoneme 或等价可本地部署模型。
+- Vosk/Kaldi 作为轻量 ASR、词级时间和强制对齐研究基线；除非实验能够证明其
+  phone-level 输出保留真实语流变化，否则不得把规范解码对齐当成实际音素检测。
 - Allosaurus 仅作为研究基线；其 GPL-3.0 约束使其不得默认打包进当前产品。
 
 评估维度：
@@ -94,6 +96,13 @@ Phase 0 输出：
 - 模型与许可证 ADR。
 - 选定 Provider，或明确的“无可发布 Provider”结论。
 - 固定评估集与可重复运行的评估脚本。
+
+当前 Phase 0 执行计划、候选准入状态和研究基础设施见：
+
+- [`milestone-2.0-phase0-research.md`](./milestone-2.0-phase0-research.md)
+- [`ADR 0008`](../decisions/0008-m20-phase0-phonetic-provider-research.md)
+- [`ADR 0009`](../decisions/0009-open-source-commercial-and-provider-ecosystem.md)
+- [`milestone-2.0-phase0-report.md`](../verification/milestone-2.0-phase0-report.md)
 
 ## Core Contracts
 
@@ -353,4 +362,3 @@ Milestone 2.0 只有在以下条件全部满足后才算完成：
 - 不在许可证不明确时分发模型或训练数据。
 - 不要求训练自有模型；只有候选模型未达门槛且另行批准后才进入训练计划。
 - 不实施 Windows、Linux、移动端或云端真实语流分析。
-

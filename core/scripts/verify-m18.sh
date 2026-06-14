@@ -127,7 +127,7 @@ json_assert "$bundle" 'v.version===3&&v.lexical_entries.length>=1' "export shoul
 ! grep -Fq "$subtitle_key" "$tmp/api.log" || { echo "FAIL: API log should not contain secret key" >&2; exit 1; }
 [[ "$bundle" != *"$subtitle_key"* ]] || { echo "FAIL: export bundle should not contain secret key" >&2; exit 1; }
 
-assert_eq "$(sqlite3 "$tmp/m18.sqlite" 'PRAGMA user_version;')" "8" "schema version should be at least 8"
+assert_eq "$(sqlite3 "$tmp/m18.sqlite" 'PRAGMA user_version;')" "9" "schema version should be 9"
 
 echo "Milestone 1.8 lexical assets and subtitle-provider verification passed."
 
