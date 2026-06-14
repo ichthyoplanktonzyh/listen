@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../models/timeline.dart';
 
 class DiagnosisCard extends StatelessWidget {
   const DiagnosisCard({
@@ -10,6 +11,13 @@ class DiagnosisCard extends StatelessWidget {
     this.ruleHintsLevel = 'likely',
     this.pronunciationProviders = const [],
     this.timingQuality,
+    this.phoneticAnalysis,
+    this.currentDetectedPhone,
+    this.onAnalyzePhonetics,
+    this.onAnalyzeTrackPhonetics,
+    this.onLoopDetectedPhone,
+    this.onLoopFinding,
+    this.onFindingFeedback,
   });
 
   final Map<String, dynamic> diagnosis;
@@ -17,6 +25,14 @@ class DiagnosisCard extends StatelessWidget {
   final String ruleHintsLevel;
   final List<Map<String, dynamic>> pronunciationProviders;
   final String? timingQuality;
+  final Map<String, dynamic>? phoneticAnalysis;
+  final DetectedPhone? currentDetectedPhone;
+  final VoidCallback? onAnalyzePhonetics;
+  final VoidCallback? onAnalyzeTrackPhonetics;
+  final ValueChanged<DetectedPhone>? onLoopDetectedPhone;
+  final ValueChanged<Map<String, dynamic>>? onLoopFinding;
+  final void Function(Map<String, dynamic> finding, String value)?
+  onFindingFeedback;
 
   @override
   Widget build(BuildContext context) {
@@ -49,24 +65,77 @@ class DiagnosisCard extends StatelessWidget {
               child: Text('${l.text('wordTimingSource')}: $timingQuality'),
             ),
           if (pronunciation != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                '${l.text('pronunciationCache')}: ${l.text('cacheReusable')}',
-              ),
+            _section(
+              l.text('canonicalPronunciation'),
+              '${l.text('pronunciationCache')}: ${l.text('cacheReusable')}',
             ),
+          if (onAnalyzePhonetics != null)
+            Wrap(
+              spacing: 8,
+              children: [
+                OutlinedButton(
+                  onPressed: onAnalyzePhonetics,
+                  child: Text(l.text('analyzeRealPronunciation')),
+                ),
+                if (onAnalyzeTrackPhonetics != null)
+                  OutlinedButton(
+                    onPressed: onAnalyzeTrackPhonetics,
+                    child: Text(l.text('analyzeSubtitleTrack')),
+                  ),
+              ],
+            ),
+          if (phoneticAnalysis != null) ...[
+            _section(
+              l.text('audioDetectionExperimental'),
+              '${phoneticAnalysis!['provider_id']} · '
+              '${phoneticAnalysis!['model_revision']} · '
+              '${phoneticAnalysis!['phone_set']}',
+            ),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                for (final raw
+                    in phoneticAnalysis!['detected_phones'] as List<dynamic>)
+                  ActionChip(
+                    label: Text(
+                      '${raw['symbol']} '
+                      '${(((raw['confidence'] as num?)?.toDouble() ?? 0) * 100).round()}%',
+                    ),
+                    onPressed: onLoopDetectedPhone == null
+                        ? null
+                        : () => onLoopDetectedPhone!(
+                            DetectedPhone.fromJson(raw as Map<String, dynamic>),
+                          ),
+                  ),
+              ],
+            ),
+            if (currentDetectedPhone != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '${l.text('currentDetectedPhone')}: '
+                  '${currentDetectedPhone!.symbol} '
+                  '(${((currentDetectedPhone!.confidence ?? 0) * 100).round()}%)',
+                ),
+              ),
+            for (final raw in phoneticAnalysis!['findings'] as List<dynamic>)
+              _finding(
+                context,
+                raw as Map<String, dynamic>,
+                onLoopFinding,
+                onFindingFeedback,
+              ),
+          ],
           for (final hint in diagnosis['hints'] as List<dynamic>)
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text('• ${l.diagnosis(hint['kind'] as String)}'),
             ),
           if (ruleHintsLevel != 'off' && pronunciation?['rules'] != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Text(
-                l.text('rulePredictionDisclaimer'),
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
+            _section(
+              l.text('rulePrediction'),
+              l.text('rulePredictionDisclaimer'),
             ),
           if (ruleHintsLevel != 'off')
             for (final raw
@@ -82,6 +151,70 @@ class DiagnosisCard extends StatelessWidget {
                   ),
                 ),
         ],
+      ),
+    );
+  }
+
+  Widget _section(String title, String body) => Padding(
+    padding: const EdgeInsets.only(top: 10),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        Text(body),
+      ],
+    ),
+  );
+
+  Widget _finding(
+    BuildContext context,
+    Map<String, dynamic> finding,
+    ValueChanged<Map<String, dynamic>>? onLoop,
+    void Function(Map<String, dynamic>, String)? onFeedback,
+  ) {
+    final l = AppLocalizations.of(context);
+    final confidence = ((finding['confidence'] as num?)?.toDouble() ?? 0) * 100;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${finding['finding_type']} · ${finding['status']} · '
+              '${confidence.round()}%',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            Text(finding['evidence'] as String? ?? ''),
+            Wrap(
+              spacing: 4,
+              children: [
+                TextButton(
+                  onPressed: onLoop == null ? null : () => onLoop(finding),
+                  child: Text(l.text('loopEvidence')),
+                ),
+                TextButton(
+                  onPressed: onFeedback == null
+                      ? null
+                      : () => onFeedback(finding, 'confirmed'),
+                  child: Text(l.text('feedbackConfirmed')),
+                ),
+                TextButton(
+                  onPressed: onFeedback == null
+                      ? null
+                      : () => onFeedback(finding, 'rejected'),
+                  child: Text(l.text('feedbackRejected')),
+                ),
+                TextButton(
+                  onPressed: onFeedback == null
+                      ? null
+                      : () => onFeedback(finding, 'ignored'),
+                  child: Text(l.text('feedbackIgnored')),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

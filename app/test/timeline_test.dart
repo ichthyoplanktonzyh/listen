@@ -86,30 +86,42 @@ void main() {
     );
   });
 
-  test('selects both words when repeated ASR points are split into intervals', () {
-    const timings = [
-      WordTiming(
-        sentenceId: 'sentence-1',
-        tokenIndex: 5,
-        start: Duration(milliseconds: 4200),
-        end: Duration(milliseconds: 4201),
-        source: 'asr_reported',
-        provider: 'whisper.cpp',
-      ),
-      WordTiming(
-        sentenceId: 'sentence-1',
-        tokenIndex: 6,
-        start: Duration(milliseconds: 4201),
-        end: Duration(milliseconds: 5560),
-        source: 'asr_reported',
-        provider: 'whisper.cpp',
-      ),
-    ];
+  test(
+    'selects both words when repeated ASR points are split into intervals',
+    () {
+      const timings = [
+        WordTiming(
+          sentenceId: 'sentence-1',
+          tokenIndex: 5,
+          start: Duration(milliseconds: 4200),
+          end: Duration(milliseconds: 4201),
+          source: 'asr_reported',
+          provider: 'whisper.cpp',
+        ),
+        WordTiming(
+          sentenceId: 'sentence-1',
+          tokenIndex: 6,
+          start: Duration(milliseconds: 4201),
+          end: Duration(milliseconds: 5560),
+          source: 'asr_reported',
+          provider: 'whisper.cpp',
+        ),
+      ];
 
-    expect(currentWordTokenIndex(timings, const Duration(milliseconds: 4200)), 5);
-    expect(currentWordTokenIndex(timings, const Duration(milliseconds: 4201)), 6);
-    expect(currentWordTokenIndex(timings, const Duration(milliseconds: 5559)), 6);
-  });
+      expect(
+        currentWordTokenIndex(timings, const Duration(milliseconds: 4200)),
+        5,
+      );
+      expect(
+        currentWordTokenIndex(timings, const Duration(milliseconds: 4201)),
+        6,
+      );
+      expect(
+        currentWordTokenIndex(timings, const Duration(milliseconds: 5559)),
+        6,
+      );
+    },
+  );
 
   test('parses word timing fields from the API contract', () {
     final timing = WordTiming.fromJson(const {
@@ -128,4 +140,92 @@ void main() {
     expect(timing.provider, 'subtitle-weighted-estimator');
     expect(timing.tokenIndex, 2);
   });
+
+  test(
+    'selects current detected phone with offset and excludes end boundary',
+    () {
+      const phones = [
+        DetectedPhone(
+          symbol: 'AH',
+          phoneSet: 'arpabet',
+          start: Duration(milliseconds: 100),
+          end: Duration(milliseconds: 200),
+          confidence: 0.8,
+          tokenIndex: 0,
+          provider: 'test',
+          modelRevision: 'v1',
+        ),
+      ];
+      expect(
+        currentDetectedPhoneAt(
+          phones,
+          const Duration(milliseconds: 250),
+          offset: const Duration(milliseconds: 100),
+        )?.symbol,
+        'AH',
+      );
+      expect(
+        currentDetectedPhoneAt(
+          phones,
+          const Duration(milliseconds: 300),
+          offset: const Duration(milliseconds: 100),
+        ),
+        isNull,
+      );
+    },
+  );
+
+  test(
+    'detected phone selection follows seek loop and drag position changes',
+    () {
+      const phones = [
+        DetectedPhone(
+          symbol: 'A',
+          phoneSet: 'test',
+          start: Duration(milliseconds: 100),
+          end: Duration(milliseconds: 200),
+          confidence: 0.8,
+          tokenIndex: 0,
+          provider: 'test',
+          modelRevision: 'v1',
+        ),
+        DetectedPhone(
+          symbol: 'B',
+          phoneSet: 'test',
+          start: Duration(milliseconds: 200),
+          end: Duration(milliseconds: 300),
+          confidence: 0.8,
+          tokenIndex: 0,
+          provider: 'test',
+          modelRevision: 'v1',
+        ),
+      ];
+
+      final positions = [150, 250, 125, 350, 225, 50];
+      final selected = positions
+          .map(
+            (value) => currentDetectedPhoneAt(
+              phones,
+              Duration(milliseconds: value),
+            )?.symbol,
+          )
+          .toList();
+
+      expect(selected, ['A', 'B', 'A', null, 'B', null]);
+    },
+  );
+
+  test(
+    'keeps newest phonetic analysis when sentence has multiple versions',
+    () {
+      final values = latestPhoneticAnalysesBySentence([
+        {'id': 'new', 'sentence_id': 'sentence-1'},
+        {'id': 'old', 'sentence_id': 'sentence-1'},
+        {'id': 'other', 'sentence_id': 'sentence-2'},
+      ]);
+
+      expect(values['sentence-1']?['id'], 'new');
+      expect(values['sentence-2']?['id'], 'other');
+    },
+  );
 }

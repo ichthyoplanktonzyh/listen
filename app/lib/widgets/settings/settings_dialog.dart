@@ -35,6 +35,10 @@ class SettingsDialog extends StatefulWidget {
     required this.wordAnimationIntensity,
     required this.ruleHintsLevel,
     required this.precomputePronunciation,
+    required this.phoneticAnalysisPreference,
+    required this.showExperimentalPhoneticResults,
+    required this.phonemeHighlightVisible,
+    required this.phoneticCachePolicy,
     required this.onLanguageChanged,
     required this.onSubtitlePresetChanged,
     required this.onPrimaryFontSizeChanged,
@@ -58,6 +62,10 @@ class SettingsDialog extends StatefulWidget {
     required this.onWordAnimationIntensityChanged,
     required this.onRuleHintsLevelChanged,
     required this.onPrecomputePronunciationChanged,
+    required this.onPhoneticAnalysisPreferenceChanged,
+    required this.onShowExperimentalPhoneticResultsChanged,
+    required this.onPhonemeHighlightVisibleChanged,
+    required this.onPhoneticCachePolicyChanged,
     required this.onSave,
   });
 
@@ -88,6 +96,10 @@ class SettingsDialog extends StatefulWidget {
   final double wordAnimationIntensity;
   final String ruleHintsLevel;
   final bool precomputePronunciation;
+  final String phoneticAnalysisPreference;
+  final bool showExperimentalPhoneticResults;
+  final bool phonemeHighlightVisible;
+  final String phoneticCachePolicy;
 
   // Callbacks
   final ValueChanged<String> onLanguageChanged;
@@ -113,6 +125,10 @@ class SettingsDialog extends StatefulWidget {
   final ValueChanged<double> onWordAnimationIntensityChanged;
   final ValueChanged<String> onRuleHintsLevelChanged;
   final ValueChanged<bool> onPrecomputePronunciationChanged;
+  final ValueChanged<String> onPhoneticAnalysisPreferenceChanged;
+  final ValueChanged<bool> onShowExperimentalPhoneticResultsChanged;
+  final ValueChanged<bool> onPhonemeHighlightVisibleChanged;
+  final ValueChanged<String> onPhoneticCachePolicyChanged;
   final Future<void> Function({
     required String ffmpegPath,
     required String ffprobePath,
@@ -149,6 +165,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late double wordAnimationIntensity;
   late String ruleHintsLevel;
   late bool precomputePronunciation;
+  late String phoneticAnalysisPreference;
+  late bool showExperimentalPhoneticResults;
+  late bool phonemeHighlightVisible;
+  late String phoneticCachePolicy;
 
   late final TextEditingController ffmpegController;
   late final TextEditingController ffprobeController;
@@ -191,6 +211,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
     wordAnimationIntensity = widget.wordAnimationIntensity;
     ruleHintsLevel = widget.ruleHintsLevel;
     precomputePronunciation = widget.precomputePronunciation;
+    phoneticAnalysisPreference = widget.phoneticAnalysisPreference;
+    showExperimentalPhoneticResults = widget.showExperimentalPhoneticResults;
+    phonemeHighlightVisible = widget.phonemeHighlightVisible;
+    phoneticCachePolicy = widget.phoneticCachePolicy;
     ffmpegController = TextEditingController(text: widget.ffmpegPath);
     ffprobeController = TextEditingController(text: widget.ffprobePath);
     ytDlpController = TextEditingController(text: widget.ytDlpPath);
@@ -324,6 +348,76 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 onChanged: (value) {
                   precomputePronunciation = value;
                   widget.onPrecomputePronunciationChanged(value);
+                  refresh(() {});
+                },
+              ),
+              Text(
+                l.text('phoneticAnalysis'),
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              DropdownButtonFormField<String>(
+                initialValue: phoneticAnalysisPreference,
+                decoration: InputDecoration(
+                  labelText: l.text('phoneticAnalysisPreference'),
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: 'on_demand',
+                    child: Text(l.text('phoneticOnDemand')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'batch',
+                    child: Text(l.text('phoneticBatch')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'off',
+                    child: Text(l.text('disabled')),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  phoneticAnalysisPreference = value;
+                  widget.onPhoneticAnalysisPreferenceChanged(value);
+                  refresh(() {});
+                },
+              ),
+              SwitchListTile(
+                value: showExperimentalPhoneticResults,
+                title: Text(l.text('showExperimentalPhoneticResults')),
+                onChanged: (value) {
+                  showExperimentalPhoneticResults = value;
+                  widget.onShowExperimentalPhoneticResultsChanged(value);
+                  refresh(() {});
+                },
+              ),
+              SwitchListTile(
+                value: phonemeHighlightVisible,
+                title: Text(l.text('phonemeHighlightVisible')),
+                onChanged: (value) {
+                  phonemeHighlightVisible = value;
+                  widget.onPhonemeHighlightVisibleChanged(value);
+                  refresh(() {});
+                },
+              ),
+              DropdownButtonFormField<String>(
+                initialValue: phoneticCachePolicy,
+                decoration: InputDecoration(
+                  labelText: l.text('phoneticCachePolicy'),
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: 'keep_completed',
+                    child: Text(l.text('phoneticCacheKeepCompleted')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'temporary',
+                    child: Text(l.text('phoneticCacheTemporary')),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  phoneticCachePolicy = value;
+                  widget.onPhoneticCachePolicyChanged(value);
                   refresh(() {});
                 },
               ),

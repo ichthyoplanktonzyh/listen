@@ -42,6 +42,11 @@ class SettingsController extends ChangeNotifier {
   double get wordAnimationIntensity => _settings.wordAnimationIntensity;
   String get ruleHintsLevel => _settings.ruleHintsLevel;
   bool get precomputePronunciation => _settings.precomputePronunciation;
+  String get phoneticAnalysisPreference => _settings.phoneticAnalysisPreference;
+  bool get showExperimentalPhoneticResults =>
+      _settings.showExperimentalPhoneticResults;
+  bool get phonemeHighlightVisible => _settings.phonemeHighlightVisible;
+  String get phoneticCachePolicy => _settings.phoneticCachePolicy;
   Color get primaryColor => Color(_settings.primaryColor);
   Color get secondaryColor => Color(_settings.secondaryColor);
 

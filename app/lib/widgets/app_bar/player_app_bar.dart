@@ -22,6 +22,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onImportWordList,
     required this.onArchiveMedia,
     required this.onOpenTranscriptionCenter,
+    required this.onOpenPhoneticAnalysisCenter,
     required this.onOpenLearningAssets,
     required this.onOpenLearningResources,
     required this.onShowPhraseCandidates,
@@ -46,6 +47,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onImportWordList;
   final VoidCallback onArchiveMedia;
   final VoidCallback onOpenTranscriptionCenter;
+  final VoidCallback onOpenPhoneticAnalysisCenter;
   final VoidCallback onOpenLearningAssets;
   final VoidCallback onOpenLearningResources;
   final VoidCallback onShowPhraseCandidates;
@@ -148,6 +150,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
             if (value == 'import-word-list') onImportWordList();
             if (value == 'archive-media') onArchiveMedia();
             if (value == 'transcription') onOpenTranscriptionCenter();
+            if (value == 'phonetic-analysis') onOpenPhoneticAnalysisCenter();
             if (value == 'learning-assets') onOpenLearningAssets();
             if (value == 'learning-resources') onOpenLearningResources();
             if (value == 'phrase-candidates') onShowPhraseCandidates();
@@ -180,6 +183,10 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
             PopupMenuItem(
               value: 'transcription',
               child: Text(l.text('transcriptionCenter')),
+            ),
+            PopupMenuItem(
+              value: 'phonetic-analysis',
+              child: Text(l.text('phoneticAnalysisCenter')),
             ),
             PopupMenuItem(
               value: 'learning-assets',

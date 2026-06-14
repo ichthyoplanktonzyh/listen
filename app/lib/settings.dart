@@ -3,7 +3,7 @@ import 'dart:io';
 
 class AppSettings {
   const AppSettings({
-    this.version = 7,
+    this.version = 8,
     this.rate = 1,
     this.volume = 100,
     this.primarySubtitleOffsetMs = 0,
@@ -37,6 +37,12 @@ class AppSettings {
     this.wordAnimationIntensity = 0.35,
     this.ruleHintsLevel = 'likely',
     this.precomputePronunciation = true,
+    this.phoneticProviderId = '',
+    this.phoneticModelId = '',
+    this.phoneticAnalysisPreference = 'on_demand',
+    this.showExperimentalPhoneticResults = false,
+    this.phonemeHighlightVisible = true,
+    this.phoneticCachePolicy = 'keep_completed',
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
@@ -47,7 +53,8 @@ class AppSettings {
         version != 4 &&
         version != 5 &&
         version != 6 &&
-        version != 7) {
+        version != 7 &&
+        version != 8) {
       return const AppSettings();
     }
     final legacyBottomPadding = _number(
@@ -121,6 +128,16 @@ class AppSettings {
       ruleHintsLevel: json['rule_hints_level'] as String? ?? 'likely',
       precomputePronunciation:
           json['precompute_pronunciation'] as bool? ?? true,
+      phoneticProviderId: json['phonetic_provider_id'] as String? ?? '',
+      phoneticModelId: json['phonetic_model_id'] as String? ?? '',
+      phoneticAnalysisPreference:
+          json['phonetic_analysis_preference'] as String? ?? 'on_demand',
+      showExperimentalPhoneticResults:
+          json['show_experimental_phonetic_results'] as bool? ?? false,
+      phonemeHighlightVisible:
+          json['phoneme_highlight_visible'] as bool? ?? true,
+      phoneticCachePolicy:
+          json['phonetic_cache_policy'] as String? ?? 'keep_completed',
     );
   }
 
@@ -158,14 +175,23 @@ class AppSettings {
   final double wordAnimationIntensity;
   final String ruleHintsLevel;
   final bool precomputePronunciation;
+  final String phoneticProviderId;
+  final String phoneticModelId;
+  final String phoneticAnalysisPreference;
+  final bool showExperimentalPhoneticResults;
+  final bool phonemeHighlightVisible;
+  final String phoneticCachePolicy;
 
   static File get file => File(
-    '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v7.json',
+    '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v8.json',
   );
 
   static Future<AppSettings> load() async {
     for (final candidate in [
       file,
+      File(
+        '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v7.json',
+      ),
       File(
         '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v6.json',
       ),
@@ -234,6 +260,12 @@ class AppSettings {
         'word_animation_intensity': wordAnimationIntensity,
         'rule_hints_level': ruleHintsLevel,
         'precompute_pronunciation': precomputePronunciation,
+        'phonetic_provider_id': phoneticProviderId,
+        'phonetic_model_id': phoneticModelId,
+        'phonetic_analysis_preference': phoneticAnalysisPreference,
+        'show_experimental_phonetic_results': showExperimentalPhoneticResults,
+        'phoneme_highlight_visible': phonemeHighlightVisible,
+        'phonetic_cache_policy': phoneticCachePolicy,
       }),
       flush: true,
     );
@@ -273,6 +305,12 @@ class AppSettings {
     double? wordAnimationIntensity,
     String? ruleHintsLevel,
     bool? precomputePronunciation,
+    String? phoneticProviderId,
+    String? phoneticModelId,
+    String? phoneticAnalysisPreference,
+    bool? showExperimentalPhoneticResults,
+    bool? phonemeHighlightVisible,
+    String? phoneticCachePolicy,
   }) => AppSettings(
     version: version,
     rate: rate ?? this.rate,
@@ -315,6 +353,15 @@ class AppSettings {
     ruleHintsLevel: ruleHintsLevel ?? this.ruleHintsLevel,
     precomputePronunciation:
         precomputePronunciation ?? this.precomputePronunciation,
+    phoneticProviderId: phoneticProviderId ?? this.phoneticProviderId,
+    phoneticModelId: phoneticModelId ?? this.phoneticModelId,
+    phoneticAnalysisPreference:
+        phoneticAnalysisPreference ?? this.phoneticAnalysisPreference,
+    showExperimentalPhoneticResults:
+        showExperimentalPhoneticResults ?? this.showExperimentalPhoneticResults,
+    phonemeHighlightVisible:
+        phonemeHighlightVisible ?? this.phonemeHighlightVisible,
+    phoneticCachePolicy: phoneticCachePolicy ?? this.phoneticCachePolicy,
   );
 
   static double _number(

@@ -89,6 +89,62 @@ class WordTiming {
   final String provider;
 }
 
+class DetectedPhone {
+  const DetectedPhone({
+    required this.symbol,
+    required this.phoneSet,
+    required this.start,
+    required this.end,
+    required this.confidence,
+    required this.tokenIndex,
+    required this.provider,
+    required this.modelRevision,
+  });
+
+  factory DetectedPhone.fromJson(Map<String, dynamic> json) => DetectedPhone(
+    symbol: json['symbol'] as String,
+    phoneSet: json['phone_set'] as String,
+    start: Duration(milliseconds: json['start_ms'] as int),
+    end: Duration(milliseconds: json['end_ms'] as int),
+    confidence: (json['confidence'] as num?)?.toDouble(),
+    tokenIndex: json['token_index'] as int?,
+    provider: json['provider_id'] as String,
+    modelRevision: json['model_revision'] as String,
+  );
+
+  final String symbol;
+  final String phoneSet;
+  final Duration start;
+  final Duration end;
+  final double? confidence;
+  final int? tokenIndex;
+  final String provider;
+  final String modelRevision;
+}
+
+DetectedPhone? currentDetectedPhoneAt(
+  List<DetectedPhone> phones,
+  Duration mediaPosition, {
+  Duration offset = Duration.zero,
+}) {
+  final position = mediaPosition - offset;
+  for (final phone in phones) {
+    if (position >= phone.start && position < phone.end) return phone;
+  }
+  return null;
+}
+
+Map<String, Map<String, dynamic>> latestPhoneticAnalysesBySentence(
+  List<Map<String, dynamic>> analyses,
+) {
+  final values = <String, Map<String, dynamic>>{};
+  for (final analysis in analyses) {
+    final sentenceId = analysis['sentence_id'] as String?;
+    if (sentenceId != null) values.putIfAbsent(sentenceId, () => analysis);
+  }
+  return values;
+}
+
 int? currentWordTokenIndex(
   List<WordTiming> timings,
   Duration mediaPosition, {

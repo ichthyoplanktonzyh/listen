@@ -72,6 +72,22 @@ void main() {
             ),
           ],
         },
+        phoneticAnalysisBySentence: const {
+          'sentence-1': {
+            'detected_phones': [
+              {
+                'symbol': 'HH',
+                'phone_set': 'arpabet',
+                'start_ms': 100,
+                'end_ms': 200,
+                'confidence': 0.5,
+                'token_index': 0,
+                'provider_id': 'test',
+                'model_revision': 'v1',
+              },
+            ],
+          },
+        },
       );
 
     controller.updateCurrentWord(
@@ -85,9 +101,15 @@ void main() {
     );
     expect(controller.currentWordToken, isNull);
     expect(controller.pronunciationProviders.single['id'], 'cmudict');
+    controller.updateCurrentDetectedPhone(
+      const Duration(milliseconds: 150),
+      enabled: true,
+    );
+    expect(controller.currentDetectedPhone?.symbol, 'HH');
 
     controller.clearSpeechEnhancements();
     expect(controller.pronunciationProviders, isEmpty);
+    expect(controller.currentDetectedPhone, isNull);
 
     controller.setPrimaryTrack(null);
     controller.setCurrentPrimaryCue(null);

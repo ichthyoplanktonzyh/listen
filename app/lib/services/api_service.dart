@@ -176,6 +176,41 @@ class LocalApi {
               as List<dynamic>)
           .cast<Map<String, dynamic>>();
 
+  Future<List<Map<String, dynamic>>> trackPhoneticAnalyses(
+    String trackId,
+  ) async =>
+      ((await _request(
+                'GET',
+                '/v1/subtitles/${Uri.encodeComponent(trackId)}/phonetic-analyses',
+              ))
+              as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+
+  Future<List<Map<String, dynamic>>> phoneticAnalysisModels() async =>
+      ((await _request('GET', '/v1/phonetic-analysis/models')) as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+
+  Future<List<Map<String, dynamic>>> phoneticAnalysisProviders() async =>
+      ((await _request('GET', '/v1/phonetic-analysis/providers'))
+              as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+
+  Future<List<Map<String, dynamic>>> phoneticAnalysisJobs() async =>
+      ((await _request('GET', '/v1/phonetic-analysis/jobs')) as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+
+  Future<Map<String, dynamic>> createPhoneticAnalysisJob({
+    required String trackId,
+    required String modelId,
+    String? sentenceId,
+  }) async =>
+      (await _request('POST', '/v1/phonetic-analysis/jobs', {
+            'track_id': trackId,
+            'sentence_id': sentenceId,
+            'model_id': modelId,
+          }))
+          as Map<String, dynamic>;
+
   Future<String> exportSubtitleSrt(String trackId) async {
     final request = await _client.getUrl(
       Uri.parse(
@@ -262,6 +297,32 @@ class LocalApi {
       (await _request(
             'POST',
             '/v1/transcription/jobs/${Uri.encodeComponent(jobId)}/retry',
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> cancelPhoneticAnalysisJob(String jobId) async =>
+      (await _request(
+            'POST',
+            '/v1/phonetic-analysis/jobs/${Uri.encodeComponent(jobId)}/cancel',
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> retryPhoneticAnalysisJob(String jobId) async =>
+      (await _request(
+            'POST',
+            '/v1/phonetic-analysis/jobs/${Uri.encodeComponent(jobId)}/retry',
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> updatePhoneticFindingFeedback({
+    required String findingId,
+    required String value,
+    String? note,
+  }) async =>
+      (await _request(
+            'PUT',
+            '/v1/phonetic-analysis/findings/${Uri.encodeComponent(findingId)}/feedback',
+            {'value': value, 'note': note},
           ))
           as Map<String, dynamic>;
 

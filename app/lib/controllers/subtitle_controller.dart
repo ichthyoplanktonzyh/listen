@@ -30,6 +30,8 @@ class SubtitleState {
     this.timingsBySentence = const {},
     this.pronunciationProviders = const [],
     this.currentWordToken,
+    this.phoneticAnalysisBySentence = const {},
+    this.currentDetectedPhone,
   });
 
   final SubtitleTrack? primaryTrack;
@@ -55,6 +57,8 @@ class SubtitleState {
   final Map<String, List<WordTiming>> timingsBySentence;
   final List<Map<String, dynamic>> pronunciationProviders;
   final int? currentWordToken;
+  final Map<String, Map<String, dynamic>> phoneticAnalysisBySentence;
+  final DetectedPhone? currentDetectedPhone;
 
   SubtitleState copyWith({
     Object? primaryTrack = _unset,
@@ -80,6 +84,8 @@ class SubtitleState {
     Map<String, List<WordTiming>>? timingsBySentence,
     List<Map<String, dynamic>>? pronunciationProviders,
     Object? currentWordToken = _unset,
+    Map<String, Map<String, dynamic>>? phoneticAnalysisBySentence,
+    Object? currentDetectedPhone = _unset,
   }) => SubtitleState(
     primaryTrack: identical(primaryTrack, _unset)
         ? this.primaryTrack
@@ -119,6 +125,11 @@ class SubtitleState {
     currentWordToken: identical(currentWordToken, _unset)
         ? this.currentWordToken
         : currentWordToken as int?,
+    phoneticAnalysisBySentence:
+        phoneticAnalysisBySentence ?? this.phoneticAnalysisBySentence,
+    currentDetectedPhone: identical(currentDetectedPhone, _unset)
+        ? this.currentDetectedPhone
+        : currentDetectedPhone as DetectedPhone?,
   );
 
   TimelineCursor get primaryCursor => TimelineCursor(
@@ -165,6 +176,9 @@ class SubtitleController extends ChangeNotifier {
   List<Map<String, dynamic>> get pronunciationProviders =>
       _state.pronunciationProviders;
   int? get currentWordToken => _state.currentWordToken;
+  Map<String, Map<String, dynamic>> get phoneticAnalysisBySentence =>
+      _state.phoneticAnalysisBySentence;
+  DetectedPhone? get currentDetectedPhone => _state.currentDetectedPhone;
   Duration get primarySubtitleOffset => _state.primarySubtitleOffset;
   Duration get secondarySubtitleOffset => _state.secondarySubtitleOffset;
   TimelineCursor get primaryCursor => _state.primaryCursor;
@@ -244,11 +258,13 @@ class SubtitleController extends ChangeNotifier {
     required Map<String, Map<String, dynamic>> pronunciationBySentence,
     required Map<String, List<WordTiming>> timingsBySentence,
     required List<Map<String, dynamic>> pronunciationProviders,
+    Map<String, Map<String, dynamic>> phoneticAnalysisBySentence = const {},
   }) => _update(
     (s) => s.copyWith(
       pronunciationBySentence: pronunciationBySentence,
       timingsBySentence: timingsBySentence,
       pronunciationProviders: pronunciationProviders,
+      phoneticAnalysisBySentence: phoneticAnalysisBySentence,
     ),
   );
 
@@ -269,6 +285,8 @@ class SubtitleController extends ChangeNotifier {
       timingsBySentence: const {},
       pronunciationProviders: const [],
       currentWordToken: null,
+      phoneticAnalysisBySentence: const {},
+      currentDetectedPhone: null,
     ),
   );
 
@@ -283,6 +301,29 @@ class SubtitleController extends ChangeNotifier {
         : null;
     if (token != _state.currentWordToken) {
       _update((s) => s.copyWith(currentWordToken: token));
+    }
+  }
+
+  void updateCurrentDetectedPhone(
+    Duration mediaPosition, {
+    required bool enabled,
+  }) {
+    final cue = _state.currentPrimaryCue;
+    final raw = !enabled || cue == null
+        ? null
+        : _state.phoneticAnalysisBySentence[cue.id];
+    final phones = ((raw?['detected_phones'] as List<dynamic>?) ?? const [])
+        .map((value) => DetectedPhone.fromJson(value as Map<String, dynamic>))
+        .toList(growable: false);
+    final phone = currentDetectedPhoneAt(
+      phones,
+      mediaPosition,
+      offset: _state.primarySubtitleOffset,
+    );
+    if (phone?.symbol != _state.currentDetectedPhone?.symbol ||
+        phone?.start != _state.currentDetectedPhone?.start ||
+        phone?.end != _state.currentDetectedPhone?.end) {
+      _update((state) => state.copyWith(currentDetectedPhone: phone));
     }
   }
 

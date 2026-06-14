@@ -15,6 +15,7 @@ import 'settings.dart';
 import 'transcription_ui.dart';
 
 import 'models/timeline.dart';
+import 'phonetic_analysis_ui.dart';
 import 'services/api_service.dart';
 import 'services/external_tools.dart';
 import 'controllers/app_controllers.dart';
@@ -217,6 +218,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       wordAnimationIntensity: settingsController.wordAnimationIntensity,
       ruleHintsLevel: settingsController.ruleHintsLevel,
       precomputePronunciation: settingsController.precomputePronunciation,
+      phoneticProviderId: settingsController.settings.phoneticProviderId,
+      phoneticModelId: settingsController.settings.phoneticModelId,
+      phoneticAnalysisPreference: settingsController.phoneticAnalysisPreference,
+      showExperimentalPhoneticResults:
+          settingsController.showExperimentalPhoneticResults,
+      phonemeHighlightVisible: settingsController.phonemeHighlightVisible,
+      phoneticCachePolicy: settingsController.phoneticCachePolicy,
     ),
   );
 
@@ -297,6 +305,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
       return;
     }
+    if (event['event'] == 'phonetic-analysis-job-changed') {
+      final job = event['payload'] as Map<String, dynamic>;
+      if (job['track_id'] == subtitleController.primaryTrack?.id) {
+        if (job['status'] == 'completed') {
+          unawaited(_loadSpeechEnhancements(job['track_id'] as String));
+        }
+        if (mounted) {
+          setState(
+            () => status =
+                'Audio analysis ${job['status']} · ${job['phase_progress'] as int}%',
+          );
+        }
+      }
+      return;
+    }
     if (event['event'] != 'word-profile-changed') return;
     final profile = event['payload'] as Map<String, dynamic>;
     learningController.updateSingleWordProfile(
@@ -310,6 +333,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     subtitleController.updateCurrentWord(
       value,
       enabled: settingsController.wordSyncVisible,
+    );
+    subtitleController.updateCurrentDetectedPhone(
+      value,
+      enabled: settingsController.settings.phonemeHighlightVisible,
     );
 
     final primaryCue = subtitleController.currentPrimaryCue;
@@ -490,9 +517,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final values = await Future.wait([
         service.trackWordTimings(trackId),
         service.pronunciationProviders(),
+        service.trackPhoneticAnalyses(trackId),
       ]);
       final timings = values[0];
       final providers = values[1];
+      final phoneticAnalyses = values[2];
       final grouped = <String, List<WordTiming>>{};
       for (final raw in timings) {
         final value = WordTiming.fromJson(raw);
@@ -516,10 +545,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ),
         ),
         pronunciationProviders: providers,
+        phoneticAnalysisBySentence: latestPhoneticAnalysesBySentence(
+          phoneticAnalyses,
+        ),
       );
       subtitleController.updateCurrentWord(
         playerController.position,
         enabled: settingsController.wordSyncVisible,
+      );
+      subtitleController.updateCurrentDetectedPhone(
+        playerController.position,
+        enabled: settingsController.settings.phonemeHighlightVisible,
       );
     } catch (error) {
       if (mounted) {
@@ -545,6 +581,43 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  Future<void> _analyzePhonetics({required bool wholeTrack}) async {
+    final service = api;
+    final track = subtitleController.primaryTrack;
+    final cue = subtitleController.currentPrimaryCue;
+    if (service == null || track == null || (!wholeTrack && cue == null)) {
+      return;
+    }
+    try {
+      final models = await service.phoneticAnalysisModels();
+      final preferred = settingsController.settings.phoneticModelId;
+      final model = models.cast<Map<String, dynamic>?>().firstWhere(
+        (value) =>
+            value != null &&
+            (value['id'] == preferred ||
+                (preferred.isEmpty &&
+                    (value['state'] == 'installed' ||
+                        value['state'] == 'custom'))),
+        orElse: () => null,
+      );
+      if (model == null) {
+        throw StateError('No compatible phonetic analysis model is available');
+      }
+      final job = await service.createPhoneticAnalysisJob(
+        trackId: track.id,
+        sentenceId: wholeTrack ? null : cue!.id,
+        modelId: model['id'] as String,
+      );
+      if (mounted) {
+        setState(() => status = 'Audio analysis ${job['status']}');
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => status = 'Audio analysis unavailable: $error');
+      }
+    }
+  }
+
   Future<void> _generateSubtitles({required bool secondary}) async {
     if (api == null || playerController.mediaId == null) {
       setState(() => status = 'Open media and connect the local core first');
@@ -567,6 +640,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
         builder: (_) =>
             TranscriptionCenter(api: api!, loadTrack: _loadGeneratedTrack),
       ),
+    );
+  }
+
+  Future<void> _openPhoneticAnalysisCenter() async {
+    if (api == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => PhoneticAnalysisCenter(api: api!)),
     );
   }
 
@@ -810,6 +890,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
         wordAnimationIntensity: settingsController.wordAnimationIntensity,
         ruleHintsLevel: settingsController.ruleHintsLevel,
         precomputePronunciation: settingsController.precomputePronunciation,
+        phoneticAnalysisPreference:
+            settingsController.phoneticAnalysisPreference,
+        showExperimentalPhoneticResults:
+            settingsController.showExperimentalPhoneticResults,
+        phonemeHighlightVisible: settingsController.phonemeHighlightVisible,
+        phoneticCachePolicy: settingsController.phoneticCachePolicy,
         onLanguageChanged: (v) {
           appLanguage.value = v;
           settingsController.update(
@@ -920,6 +1006,32 @@ class _PlayerScreenState extends State<PlayerScreen> {
         onPrecomputePronunciationChanged: (v) {
           settingsController.update(
             settingsController.settings.copyWith(precomputePronunciation: v),
+          );
+        },
+        onPhoneticAnalysisPreferenceChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(phoneticAnalysisPreference: v),
+          );
+        },
+        onShowExperimentalPhoneticResultsChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(
+              showExperimentalPhoneticResults: v,
+            ),
+          );
+        },
+        onPhonemeHighlightVisibleChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(phonemeHighlightVisible: v),
+          );
+          subtitleController.updateCurrentDetectedPhone(
+            playerController.position,
+            enabled: v,
+          );
+        },
+        onPhoneticCachePolicyChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(phoneticCachePolicy: v),
           );
         },
         onSave:
@@ -1421,6 +1533,40 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await adapter.play();
   }
 
+  Future<void> _loopPhoneticRange(int startMs, int endMs, String label) async {
+    final start = Duration(milliseconds: startMs);
+    final end = Duration(milliseconds: endMs);
+    if (start >= end) return;
+    playerController.setSourceLoop(start, end);
+    subtitleController.setLoopCue(false);
+    if (mounted) setState(() => status = label);
+    await adapter.seek(start);
+    await adapter.play();
+  }
+
+  Future<void> _savePhoneticFindingFeedback(
+    Map<String, dynamic> finding,
+    String value,
+  ) async {
+    final service = api;
+    if (service == null) return;
+    try {
+      await service.updatePhoneticFindingFeedback(
+        findingId: finding['id'] as String,
+        value: value,
+      );
+      if (mounted) {
+        setState(() => status = 'Audio finding feedback saved: $value');
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => status = 'Could not save audio finding feedback: $error',
+        );
+      }
+    }
+  }
+
   Future<void> _exportVocabulary() async {
     final service = api;
     if (service == null) return;
@@ -1696,6 +1842,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 onArchiveMedia: () => unawaited(_archiveCurrentMedia()),
                 onOpenTranscriptionCenter: () =>
                     unawaited(_openTranscriptionCenter()),
+                onOpenPhoneticAnalysisCenter: () =>
+                    unawaited(_openPhoneticAnalysisCenter()),
                 onOpenLearningAssets: () => unawaited(_openLearningAssets()),
                 onOpenLearningResources: () =>
                     unawaited(_openLearningResources()),
@@ -2035,6 +2183,37 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 .isEmpty
         ? null
         : _timingQuality(subtitleController.currentPrimaryCue!.id),
+    phoneticAnalysis:
+        !settingsController.showExperimentalPhoneticResults ||
+            subtitleController.currentPrimaryCue == null
+        ? null
+        : subtitleController.phoneticAnalysisBySentence[subtitleController
+              .currentPrimaryCue!
+              .id],
+    currentDetectedPhone: subtitleController.currentDetectedPhone,
+    onAnalyzePhonetics: settingsController.phoneticAnalysisPreference == 'off'
+        ? null
+        : () => unawaited(_analyzePhonetics(wholeTrack: false)),
+    onAnalyzeTrackPhonetics:
+        settingsController.phoneticAnalysisPreference == 'off'
+        ? null
+        : () => unawaited(_analyzePhonetics(wholeTrack: true)),
+    onLoopDetectedPhone: (phone) => unawaited(
+      _loopPhoneticRange(
+        phone.start.inMilliseconds,
+        phone.end.inMilliseconds,
+        'Looping detected phone ${phone.symbol}',
+      ),
+    ),
+    onLoopFinding: (finding) => unawaited(
+      _loopPhoneticRange(
+        (finding['audio_start_ms'] as num).toInt(),
+        (finding['audio_end_ms'] as num).toInt(),
+        'Looping audio finding evidence',
+      ),
+    ),
+    onFindingFeedback: (finding, value) =>
+        unawaited(_savePhoneticFindingFeedback(finding, value)),
   );
 
   Widget _controls() => PlaybackControls(
