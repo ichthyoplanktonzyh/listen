@@ -403,11 +403,16 @@ First V2 scoring slice completed on 2026-06-14:
 - phrase protection blocks ambiguous internal splits but does not erase strong
   acoustic boundaries;
 - weak evidence is penalized when it would create a leading or trailing
-  single-word fragment.
+  single-word fragment;
+- structured diagnostics expose selected and rejected boundary candidates,
+  scores, thresholds, forcing state, and evidence without changing the product
+  API;
+- an initial golden calibration baseline locks expected length and strong-gap
+  behavior.
 
 Remaining C2 work should calibrate these initial values against a broader
-golden corpus and add direct developer inspection tooling for rejected as well
-as selected boundary candidates.
+real-world golden corpus and add a convenient developer-facing inspection
+surface for the structured diagnostics.
 
 ### Scope
 

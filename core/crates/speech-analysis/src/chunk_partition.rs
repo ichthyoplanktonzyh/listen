@@ -116,6 +116,24 @@ pub struct SentenceChunkPartition {
     pub timing_quality: ChunkTimingQuality,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BoundaryDiagnostic {
+    pub left_token_index: u32,
+    pub right_token_index: u32,
+    pub raw_score: f32,
+    pub selection_threshold: f32,
+    pub selected: bool,
+    pub forced: bool,
+    pub primary_source: Option<ChunkBoundarySource>,
+    pub evidence: Vec<ChunkBoundaryEvidence>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SentenceChunkDiagnostics {
+    pub partition: SentenceChunkPartition,
+    pub candidates: Vec<BoundaryDiagnostic>,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct EffectiveTiming {
     start_ms: u64,
@@ -129,18 +147,30 @@ pub fn partition_sentence(
     phrase_candidates: &[PhraseCandidate],
     config: &ChunkPartitionConfig,
 ) -> SentenceChunkPartition {
+    partition_sentence_with_diagnostics(sentence, timings, phrase_candidates, config).partition
+}
+
+pub fn partition_sentence_with_diagnostics(
+    sentence: &SubtitleSentence,
+    timings: &[WordTiming],
+    phrase_candidates: &[PhraseCandidate],
+    config: &ChunkPartitionConfig,
+) -> SentenceChunkDiagnostics {
     let words = sentence
         .tokens
         .iter()
         .filter(|token| token.kind == SubtitleTokenKind::Word)
         .collect::<Vec<_>>();
     if words.is_empty() {
-        return SentenceChunkPartition {
-            sentence_id: sentence.id.clone(),
-            chunks: Vec::new(),
-            partitioner_id: PARTITIONER_ID.into(),
-            partitioner_version: PARTITIONER_VERSION.into(),
-            timing_quality: ChunkTimingQuality::Synthesized,
+        return SentenceChunkDiagnostics {
+            partition: SentenceChunkPartition {
+                sentence_id: sentence.id.clone(),
+                chunks: Vec::new(),
+                partitioner_id: PARTITIONER_ID.into(),
+                partitioner_version: PARTITIONER_VERSION.into(),
+                timing_quality: ChunkTimingQuality::Synthesized,
+            },
+            candidates: Vec::new(),
         };
     }
 
@@ -153,6 +183,7 @@ pub fn partition_sentence(
         .collect::<Vec<_>>();
 
     let mut chunks = Vec::new();
+    let mut diagnostics = Vec::new();
     let mut chunk_start = 0usize;
     for boundary_position in 0..words.len().saturating_sub(1) {
         let left = words[boundary_position];
@@ -242,7 +273,19 @@ pub fn partition_sentence(
             score -= 0.35;
         }
 
-        if force_boundary || score >= config.boundary_score_threshold {
+        let selected = force_boundary || score >= config.boundary_score_threshold;
+        diagnostics.push(BoundaryDiagnostic {
+            left_token_index: left.index,
+            right_token_index: right.index,
+            raw_score: score,
+            selection_threshold: config.boundary_score_threshold,
+            selected,
+            forced: force_boundary,
+            primary_source,
+            evidence: evidence.clone(),
+        });
+
+        if selected {
             let boundary = DisplayChunkBoundary {
                 left_token_index: left.index,
                 right_token_index: right.index,
@@ -271,12 +314,15 @@ pub fn partition_sentence(
         None,
     ));
 
-    SentenceChunkPartition {
-        sentence_id: sentence.id.clone(),
-        chunks,
-        partitioner_id: PARTITIONER_ID.into(),
-        partitioner_version: PARTITIONER_VERSION.into(),
-        timing_quality,
+    SentenceChunkDiagnostics {
+        partition: SentenceChunkPartition {
+            sentence_id: sentence.id.clone(),
+            chunks,
+            partitioner_id: PARTITIONER_ID.into(),
+            partitioner_version: PARTITIONER_VERSION.into(),
+            timing_quality,
+        },
+        candidates: diagnostics,
     }
 }
 
@@ -655,6 +701,100 @@ mod tests {
             &ChunkPartitionConfig::default(),
         );
         assert_ne!(result.chunks[0].text, "well");
+    }
+
+    #[test]
+    fn diagnostics_include_selected_and_rejected_candidates() {
+        let sentence = words(&["we", "can", "try", "again"]);
+        let diagnostics = partition_sentence_with_diagnostics(
+            &sentence,
+            &timings(&sentence, Some(1)),
+            &[],
+            &ChunkPartitionConfig::default(),
+        );
+        assert_eq!(diagnostics.candidates.len(), 3);
+        assert_eq!(
+            diagnostics
+                .candidates
+                .iter()
+                .filter(|candidate| candidate.selected)
+                .count(),
+            1
+        );
+        let selected = diagnostics
+            .candidates
+            .iter()
+            .find(|candidate| candidate.selected)
+            .unwrap();
+        assert_eq!(selected.left_token_index, 1);
+        assert_eq!(
+            selected.primary_source,
+            Some(ChunkBoundarySource::AcousticGap)
+        );
+        assert!(
+            selected
+                .evidence
+                .iter()
+                .any(|evidence| matches!(evidence, ChunkBoundaryEvidence::AcousticGap { .. }))
+        );
+        assert!(
+            diagnostics
+                .candidates
+                .iter()
+                .filter(|candidate| !candidate.selected)
+                .all(|candidate| candidate.raw_score < candidate.selection_threshold)
+        );
+    }
+
+    #[test]
+    fn golden_length_and_gap_scenarios_remain_stable() {
+        let cases = [
+            (
+                &["one", "two", "three", "four"][..],
+                None,
+                vec!["one two three four"],
+            ),
+            (
+                &["one", "two", "three", "four", "five", "six"][..],
+                None,
+                vec!["one two three four five six"],
+            ),
+            (
+                &["one", "two", "three", "four", "five", "six", "seven"][..],
+                None,
+                vec!["one two three four five", "six seven"],
+            ),
+            (
+                &[
+                    "one", "two", "three", "four", "five", "six", "seven", "eight",
+                ][..],
+                None,
+                vec!["one two three four five", "six seven eight"],
+            ),
+            (
+                &["we", "can", "try", "this", "again"][..],
+                Some(1),
+                vec!["we can", "try this again"],
+            ),
+        ];
+
+        for (words_value, gap_after, expected) in cases {
+            let sentence = words(words_value);
+            let result = partition_sentence(
+                &sentence,
+                &timings(&sentence, gap_after),
+                &[],
+                &ChunkPartitionConfig::default(),
+            );
+            assert_eq!(
+                result
+                    .chunks
+                    .iter()
+                    .map(|chunk| chunk.text.as_str())
+                    .collect::<Vec<_>>(),
+                expected
+            );
+        }
     }
 
     #[test]

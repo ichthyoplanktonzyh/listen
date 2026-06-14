@@ -15,6 +15,12 @@
 - Reduced weak-evidence single-word fragments at chunk edges and added
   regression tests for ASR punctuation reliability, timing-source sensitivity,
   phrase protection, and fragment suppression.
+- Added structured sentence chunk diagnostics containing selected and rejected
+  boundary candidates, raw scores, thresholds, forcing state, primary source,
+  and evidence. Product-facing partition responses remain unchanged.
+- Added an initial golden calibration baseline covering ordinary short
+  sentences, preferred-length splitting, single-word-tail suppression, and
+  decisive acoustic gaps.
 
 ## 0.7.2 - 2026-06-14
 

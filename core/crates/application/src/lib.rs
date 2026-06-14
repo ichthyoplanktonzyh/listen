@@ -991,6 +991,27 @@ impl AppServices {
         ))
     }
 
+    /// Produce developer-facing scores for selected and rejected chunk boundaries.
+    pub fn chunk_partition_diagnostics(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<speech_analysis::chunk_partition::SentenceChunkDiagnostics, ApplicationError> {
+        let sentence = self
+            .subtitles
+            .get_sentence(sentence_id)?
+            .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
+        let timings = self.word_timings(sentence_id)?;
+        let candidates = self.phrase_candidates(sentence_id)?;
+        Ok(
+            speech_analysis::chunk_partition::partition_sentence_with_diagnostics(
+                &sentence,
+                &timings,
+                &candidates,
+                &speech_analysis::chunk_partition::ChunkPartitionConfig::default(),
+            ),
+        )
+    }
+
     /// Produce product-facing chunk partitions for every sentence in a track.
     pub fn chunk_partitions_for_track(
         &self,
