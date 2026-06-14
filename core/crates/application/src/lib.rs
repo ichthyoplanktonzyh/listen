@@ -1001,10 +1001,20 @@ impl AppServices {
             .subtitles
             .get_track(track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let config = chunk_partition_config_for_track_source(&track.source);
         track
             .sentences
             .iter()
-            .map(|sentence| self.chunk_partition(&sentence.id))
+            .map(|sentence| {
+                let timings = self.word_timings(&sentence.id)?;
+                let candidates = self.phrase_candidates(&sentence.id)?;
+                Ok(speech_analysis::chunk_partition::partition_sentence(
+                    sentence,
+                    &timings,
+                    &candidates,
+                    &config,
+                ))
+            })
             .collect()
     }
 
@@ -1204,6 +1214,16 @@ fn timing_priority(source: TimingSource) -> u8 {
         TimingSource::ForcedAligned => 2,
         TimingSource::AsrReported => 3,
         TimingSource::UserAdjusted => 4,
+    }
+}
+
+fn chunk_partition_config_for_track_source(
+    source: &str,
+) -> speech_analysis::chunk_partition::ChunkPartitionConfig {
+    if source.starts_with("ASR-") {
+        speech_analysis::chunk_partition::ChunkPartitionConfig::for_asr_generated_subtitle()
+    } else {
+        speech_analysis::chunk_partition::ChunkPartitionConfig::default()
     }
 }
 
@@ -1749,6 +1769,20 @@ mod tests {
         );
         assert!(
             timing_priority(TimingSource::UserAdjusted) > timing_priority(TimingSource::Estimated)
+        );
+    }
+
+    #[test]
+    fn asr_track_source_uses_inferred_punctuation_config() {
+        assert_eq!(
+            chunk_partition_config_for_track_source("ASR-Whisper Large.srt")
+                .punctuation_reliability,
+            speech_analysis::chunk_partition::PunctuationReliability::Inferred
+        );
+        assert_eq!(
+            chunk_partition_config_for_track_source("official-subtitles.srt")
+                .punctuation_reliability,
+            speech_analysis::chunk_partition::PunctuationReliability::Trusted
         );
     }
 

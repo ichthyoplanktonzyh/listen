@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Started C2 acoustic-first partition quality with partitioner V2. Gap scoring
+  now uses source-specific thresholds for ASR-reported, forced-aligned, and
+  user-adjusted timings, while estimated timings remain excluded from acoustic
+  evidence.
+- Added moderate-gap evidence that can combine with punctuation support without
+  overriding phrase protection on its own. Strong acoustic gaps remain able to
+  split inside a text phrase.
+- Treat punctuation from known ASR-generated subtitle tracks as inferred model
+  output instead of a forced boundary. Inferred punctuation must combine with
+  acoustic or product evidence before it changes the display partition.
+- Reduced weak-evidence single-word fragments at chunk edges and added
+  regression tests for ASR punctuation reliability, timing-source sensitivity,
+  phrase protection, and fragment suppression.
+
 ## 0.7.2 - 2026-06-14
 
 - Added the first user-visible chunk listening MVP. Primary subtitle sentences

@@ -15,25 +15,49 @@ use serde::{Deserialize, Serialize};
 use crate::text_chunk_detection::{TextChunkEvidence, detect_text_chunks};
 
 pub const PARTITIONER_ID: &str = "acoustic-first-rule-partitioner";
-pub const PARTITIONER_VERSION: &str = "v1";
+pub const PARTITIONER_VERSION: &str = "v2";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChunkPartitionConfig {
-    pub acoustic_gap_threshold_ms: u64,
+    pub asr_reported_gap_threshold_ms: u64,
+    pub forced_aligned_gap_threshold_ms: u64,
+    pub user_adjusted_gap_threshold_ms: u64,
+    pub moderate_gap_ratio: f32,
     pub boundary_score_threshold: f32,
     pub preferred_max_words: usize,
     pub hard_max_words: usize,
+    pub punctuation_reliability: PunctuationReliability,
 }
 
 impl Default for ChunkPartitionConfig {
     fn default() -> Self {
         Self {
-            acoustic_gap_threshold_ms: 250,
+            asr_reported_gap_threshold_ms: 250,
+            forced_aligned_gap_threshold_ms: 180,
+            user_adjusted_gap_threshold_ms: 150,
+            moderate_gap_ratio: 0.6,
             boundary_score_threshold: 0.7,
             preferred_max_words: 5,
             hard_max_words: 10,
+            punctuation_reliability: PunctuationReliability::Trusted,
         }
     }
+}
+
+impl ChunkPartitionConfig {
+    pub fn for_asr_generated_subtitle() -> Self {
+        Self {
+            punctuation_reliability: PunctuationReliability::Inferred,
+            ..Self::default()
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PunctuationReliability {
+    Trusted,
+    Inferred,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -96,7 +120,7 @@ pub struct SentenceChunkPartition {
 struct EffectiveTiming {
     start_ms: u64,
     end_ms: u64,
-    acoustic: bool,
+    source: Option<TimingSource>,
 }
 
 pub fn partition_sentence(
@@ -138,16 +162,23 @@ pub fn partition_sentence(
         let mut evidence = Vec::new();
         let mut primary_source = None;
         let mut force_boundary = false;
+        let remaining_words = words.len() - boundary_position - 1;
 
-        if effective_timings[boundary_position].acoustic
-            && effective_timings[boundary_position + 1].acoustic
-        {
+        if let Some(gap_threshold_ms) = acoustic_gap_threshold(
+            effective_timings[boundary_position].source,
+            effective_timings[boundary_position + 1].source,
+            config,
+        ) {
             let gap_ms = effective_timings[boundary_position + 1]
                 .start_ms
                 .saturating_sub(effective_timings[boundary_position].end_ms);
-            if gap_ms >= config.acoustic_gap_threshold_ms {
-                let excess = gap_ms.saturating_sub(config.acoustic_gap_threshold_ms) as f32;
+            if gap_ms >= gap_threshold_ms {
+                let excess = gap_ms.saturating_sub(gap_threshold_ms) as f32;
                 score += 1.25 + (excess / 500.0).min(0.5);
+                evidence.push(ChunkBoundaryEvidence::AcousticGap { gap_ms });
+                primary_source = Some(ChunkBoundarySource::AcousticGap);
+            } else if gap_ms as f32 >= gap_threshold_ms as f32 * config.moderate_gap_ratio {
+                score += 0.45 + 0.2 * gap_ms as f32 / gap_threshold_ms as f32;
                 evidence.push(ChunkBoundaryEvidence::AcousticGap { gap_ms });
                 primary_source = Some(ChunkBoundarySource::AcousticGap);
             }
@@ -156,12 +187,18 @@ pub fn partition_sentence(
         if let Some((punctuation, strong)) = punctuation_between(sentence, left.index, right.index)
         {
             if strong {
-                score += 1.1;
-                force_boundary = true;
+                score += match config.punctuation_reliability {
+                    PunctuationReliability::Trusted => 1.1,
+                    PunctuationReliability::Inferred => 0.35,
+                };
+                force_boundary = config.punctuation_reliability == PunctuationReliability::Trusted;
                 evidence.push(ChunkBoundaryEvidence::StrongPunctuation { text: punctuation });
                 primary_source.get_or_insert(ChunkBoundarySource::StrongPunctuation);
             } else {
-                score += 0.45;
+                score += match config.punctuation_reliability {
+                    PunctuationReliability::Trusted => 0.45,
+                    PunctuationReliability::Inferred => 0.15,
+                };
                 evidence.push(ChunkBoundaryEvidence::Punctuation { text: punctuation });
                 primary_source.get_or_insert(ChunkBoundarySource::Punctuation);
             }
@@ -186,6 +223,23 @@ pub fn partition_sentence(
             score += 0.75;
             evidence.push(ChunkBoundaryEvidence::LengthLimit { word_count });
             primary_source.get_or_insert(ChunkBoundarySource::LengthLimit);
+        }
+
+        let has_strong_acoustic_gap = evidence.iter().any(|item| {
+            matches!(
+                item,
+                ChunkBoundaryEvidence::AcousticGap { gap_ms }
+                    if acoustic_gap_threshold(
+                        effective_timings[boundary_position].source,
+                        effective_timings[boundary_position + 1].source,
+                        config,
+                    )
+                    .is_some_and(|threshold| *gap_ms >= threshold)
+            )
+        });
+        if !force_boundary && !has_strong_acoustic_gap && (word_count == 1 || remaining_words == 1)
+        {
+            score -= 0.35;
         }
 
         if force_boundary || score >= config.boundary_score_threshold {
@@ -265,7 +319,8 @@ fn effective_timings(
                     EffectiveTiming {
                         start_ms: timing.start_ms,
                         end_ms: timing.end_ms,
-                        acoustic: timing.timing_source != TimingSource::Estimated,
+                        source: (timing.timing_source != TimingSource::Estimated)
+                            .then_some(timing.timing_source),
                     }
                 })
                 .collect(),
@@ -280,10 +335,26 @@ fn effective_timings(
         .map(|index| EffectiveTiming {
             start_ms: start_ms + duration.saturating_mul(index as u64) / word_count,
             end_ms: start_ms + duration.saturating_mul(index as u64 + 1) / word_count,
-            acoustic: false,
+            source: None,
         })
         .collect();
     (values, ChunkTimingQuality::Synthesized)
+}
+
+fn acoustic_gap_threshold(
+    left: Option<TimingSource>,
+    right: Option<TimingSource>,
+    config: &ChunkPartitionConfig,
+) -> Option<u64> {
+    [left?, right?]
+        .into_iter()
+        .map(|source| match source {
+            TimingSource::AsrReported => config.asr_reported_gap_threshold_ms,
+            TimingSource::ForcedAligned => config.forced_aligned_gap_threshold_ms,
+            TimingSource::UserAdjusted => config.user_adjusted_gap_threshold_ms,
+            TimingSource::Estimated => unreachable!("estimated timings are not acoustic evidence"),
+        })
+        .max()
 }
 
 fn punctuation_between(
@@ -372,6 +443,14 @@ mod tests {
     }
 
     fn timings(sentence: &SubtitleSentence, gap_after: Option<usize>) -> Vec<WordTiming> {
+        timings_with_source(sentence, gap_after, TimingSource::AsrReported)
+    }
+
+    fn timings_with_source(
+        sentence: &SubtitleSentence,
+        gap_after: Option<usize>,
+        source: TimingSource,
+    ) -> Vec<WordTiming> {
         let mut cursor = 0u64;
         sentence
             .tokens
@@ -389,7 +468,7 @@ mod tests {
                     start_ms,
                     end_ms,
                     confidence: None,
-                    timing_source: TimingSource::AsrReported,
+                    timing_source: source,
                     provider_id: "test".into(),
                     provider_version: "v1".into(),
                 }
@@ -460,6 +539,122 @@ mod tests {
                 .primary_source,
             ChunkBoundarySource::StrongPunctuation
         );
+    }
+
+    #[test]
+    fn asr_inferred_punctuation_does_not_force_boundary_without_acoustic_support() {
+        let sentence = sentence(vec![
+            ("well", SubtitleTokenKind::Word),
+            (";", SubtitleTokenKind::Punctuation),
+            ("maybe", SubtitleTokenKind::Word),
+        ]);
+        let result = partition_sentence(
+            &sentence,
+            &timings(&sentence, None),
+            &[],
+            &ChunkPartitionConfig::for_asr_generated_subtitle(),
+        );
+        assert_eq!(result.chunks.len(), 1);
+    }
+
+    #[test]
+    fn asr_inferred_punctuation_combines_with_moderate_acoustic_gap() {
+        let sentence = sentence(vec![
+            ("we", SubtitleTokenKind::Word),
+            ("can", SubtitleTokenKind::Word),
+            (";", SubtitleTokenKind::Punctuation),
+            ("try", SubtitleTokenKind::Word),
+            ("again", SubtitleTokenKind::Word),
+        ]);
+        let mut values = timings(&sentence, None);
+        values[2].start_ms = values[1].end_ms + 180;
+        values[2].end_ms = values[2].start_ms + 200;
+        values[3].start_ms = values[2].end_ms + 20;
+        values[3].end_ms = values[3].start_ms + 200;
+        let result = partition_sentence(
+            &sentence,
+            &values,
+            &[],
+            &ChunkPartitionConfig::for_asr_generated_subtitle(),
+        );
+        assert_eq!(result.chunks.len(), 2);
+        assert_eq!(result.chunks[0].text, "we can");
+        assert_eq!(
+            result.chunks[0]
+                .boundary_after
+                .as_ref()
+                .unwrap()
+                .primary_source,
+            ChunkBoundarySource::AcousticGap
+        );
+    }
+
+    #[test]
+    fn forced_alignment_uses_more_sensitive_gap_threshold() {
+        let sentence = words(&["we", "can", "try", "again"]);
+        let asr_result = partition_sentence(
+            &sentence,
+            &timings(&sentence, Some(1)),
+            &[],
+            &ChunkPartitionConfig {
+                asr_reported_gap_threshold_ms: 450,
+                ..ChunkPartitionConfig::default()
+            },
+        );
+        let aligned_result = partition_sentence(
+            &sentence,
+            &timings_with_source(&sentence, Some(1), TimingSource::ForcedAligned),
+            &[],
+            &ChunkPartitionConfig {
+                asr_reported_gap_threshold_ms: 450,
+                ..ChunkPartitionConfig::default()
+            },
+        );
+        assert_eq!(asr_result.chunks.len(), 1);
+        assert_eq!(aligned_result.chunks.len(), 2);
+    }
+
+    #[test]
+    fn user_adjusted_timing_uses_most_sensitive_gap_threshold() {
+        let sentence = words(&["we", "can", "try", "again"]);
+        let mut values = timings_with_source(&sentence, None, TimingSource::UserAdjusted);
+        values[2].start_ms = values[1].end_ms + 160;
+        values[2].end_ms = values[2].start_ms + 200;
+        values[3].start_ms = values[2].end_ms + 20;
+        values[3].end_ms = values[3].start_ms + 200;
+        let result = partition_sentence(&sentence, &values, &[], &ChunkPartitionConfig::default());
+        assert_eq!(result.chunks.len(), 2);
+    }
+
+    #[test]
+    fn phrase_protection_blocks_moderate_gap_without_other_support() {
+        let sentence = words(&["please", "take", "care", "of", "this"]);
+        let mut values = timings(&sentence, None);
+        values[2].start_ms = values[1].end_ms + 180;
+        values[2].end_ms = values[2].start_ms + 200;
+        values[3].start_ms = values[2].end_ms + 20;
+        values[3].end_ms = values[3].start_ms + 200;
+        let result = partition_sentence(&sentence, &values, &[], &ChunkPartitionConfig::default());
+        assert_eq!(result.chunks.len(), 1);
+    }
+
+    #[test]
+    fn weak_evidence_does_not_create_single_word_fragment() {
+        let sentence = sentence(vec![
+            ("well", SubtitleTokenKind::Word),
+            (",", SubtitleTokenKind::Punctuation),
+            ("we", SubtitleTokenKind::Word),
+            ("can", SubtitleTokenKind::Word),
+            ("try", SubtitleTokenKind::Word),
+            ("again", SubtitleTokenKind::Word),
+        ]);
+        let result = partition_sentence(
+            &sentence,
+            &timings(&sentence, None),
+            &[],
+            &ChunkPartitionConfig::default(),
+        );
+        assert_ne!(result.chunks[0].text, "well");
     }
 
     #[test]

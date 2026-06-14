@@ -390,6 +390,25 @@ Improve the partition mechanism while keeping the C1 user contract unchanged.
 Acoustic evidence becomes the principal boundary signal; text and product rules
 resolve ambiguity and keep the result readable.
 
+### Progress
+
+First V2 scoring slice completed on 2026-06-14:
+
+- source-specific gap thresholds distinguish ASR-reported, forced-aligned,
+  user-adjusted, and estimated timings;
+- moderate acoustic gaps can combine with other evidence while strong acoustic
+  gaps remain independently decisive;
+- punctuation on known ASR-generated tracks is treated as inferred evidence and
+  no longer forces a boundary by itself;
+- phrase protection blocks ambiguous internal splits but does not erase strong
+  acoustic boundaries;
+- weak evidence is penalized when it would create a leading or trailing
+  single-word fragment.
+
+Remaining C2 work should calibrate these initial values against a broader
+golden corpus and add direct developer inspection tooling for rejected as well
+as selected boundary candidates.
+
 ### Scope
 
 - Treat `AsrReported`, `ForcedAligned`, `Estimated`, and `UserAdjusted`
