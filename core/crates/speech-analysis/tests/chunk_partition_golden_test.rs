@@ -22,6 +22,20 @@ struct GoldenCase {
     phrase: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct RichAcousticCorpus {
+    cases: Vec<RichAcousticCase>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RichAcousticCase {
+    name: String,
+    text: String,
+    durations_ms: Vec<u64>,
+    gaps_ms: Vec<u64>,
+    expected_chunks: Vec<String>,
+}
+
 #[test]
 fn v2_golden_corpus_matches_expected_partitions_and_quality_bounds() {
     let corpus: GoldenCorpus =
@@ -95,6 +109,48 @@ fn v2_partitions_real_whisper_fixture_without_overlong_chunks() {
     }
 }
 
+#[test]
+fn v3_rich_acoustic_corpus_changes_partitions_and_degrades_to_c2() {
+    let corpus: RichAcousticCorpus = serde_json::from_str(include_str!(
+        "../../../testdata/chunk/v3-rich-acoustic.json"
+    ))
+    .unwrap();
+
+    for case in corpus.cases {
+        let sentence = sentence(&case.name, &case.text);
+        let timings = timings_with_durations(&sentence, &case.durations_ms, &case.gaps_ms);
+        let result = partition_sentence(&sentence, &timings, &[], &ChunkPartitionConfig::default());
+        assert_eq!(
+            result
+                .chunks
+                .iter()
+                .map(|chunk| chunk.text.clone())
+                .collect::<Vec<_>>(),
+            case.expected_chunks,
+            "rich acoustic case {}",
+            case.name
+        );
+    }
+
+    let sentence = sentence("missing-rich-features", "We can solve this problem today");
+    let timings = timings_with_durations(
+        &sentence,
+        &[120, 130, 125, 360, 120, 130],
+        &[20, 20, 20, 20, 20],
+    );
+    let c2_result = partition_sentence(
+        &sentence,
+        &timings,
+        &[],
+        &ChunkPartitionConfig {
+            pre_boundary_lengthening: None,
+            filled_pause_hesitation: None,
+            ..ChunkPartitionConfig::default()
+        },
+    );
+    assert_eq!(c2_result.chunks.len(), 1);
+}
+
 fn sentence(id: &str, text: &str) -> SubtitleSentence {
     SubtitleSentence {
         id: SubtitleSentenceId::from_fingerprint("chunk-golden", id),
@@ -131,6 +187,42 @@ fn timings(sentence: &SubtitleSentence, gaps_ms: &[u64]) -> Vec<WordTiming> {
                 confidence: None,
                 timing_source: TimingSource::AsrReported,
                 provider_id: "golden".into(),
+                provider_version: "v1".into(),
+            }
+        })
+        .collect()
+}
+
+fn timings_with_durations(
+    sentence: &SubtitleSentence,
+    durations_ms: &[u64],
+    gaps_ms: &[u64],
+) -> Vec<WordTiming> {
+    let words = sentence
+        .tokens
+        .iter()
+        .filter(|token| token.kind == SubtitleTokenKind::Word)
+        .collect::<Vec<_>>();
+    assert_eq!(durations_ms.len(), words.len());
+    assert_eq!(gaps_ms.len(), words.len().saturating_sub(1));
+    let mut cursor = 0u64;
+    words
+        .iter()
+        .zip(durations_ms)
+        .enumerate()
+        .map(|(position, (token, duration))| {
+            let start_ms = cursor;
+            let end_ms = start_ms + duration;
+            cursor = end_ms + gaps_ms.get(position).copied().unwrap_or_default();
+            WordTiming {
+                sentence_id: sentence.id.clone(),
+                token_index: token.index,
+                text: token.text.clone(),
+                start_ms,
+                end_ms,
+                confidence: None,
+                timing_source: TimingSource::ForcedAligned,
+                provider_id: "rich-acoustic-golden".into(),
                 provider_version: "v1".into(),
             }
         })

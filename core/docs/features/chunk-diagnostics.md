@@ -27,7 +27,8 @@ Each sentence response contains:
 - `selected` and `forced`;
 - `primary_source`;
 - `evidence`, including acoustic gaps, punctuation, phrase protection,
-  readability fit, fragment penalties, and length fallback.
+  pre-boundary lengthening, filled-pause hesitation, readability fit, fragment
+  penalties, and length fallback.
 
 Example:
 
@@ -40,5 +41,6 @@ curl -H "Authorization: Bearer $LLPLAYER_TOKEN" \
 Use the version-controlled calibration fixture at
 `testdata/chunk/v2-golden.json` when changing V2 scores or thresholds. New
 cases should capture an identifiable listening condition and state the expected
-display chunks. C3 analyzers should add evidence to candidates rather than
-changing the stable display partition contract.
+display chunks. C3 cases live in `testdata/chunk/v3-rich-acoustic.json`.
+Rich-acoustic analyzers add provider-attributed evidence to candidates rather
+than changing the stable display partition contract.

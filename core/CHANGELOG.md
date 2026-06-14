@@ -33,6 +33,20 @@
 - Added `GET /v1/subtitles/{track_id}/chunk-diagnostics` for inspecting selected
   and rejected candidates using the same source-aware configuration as the
   product-facing track partition.
+- Completed C3 rich acoustic evidence with partitioner V3. An independent
+  pre-boundary-lengthening provider compares real word duration against a
+  robust local baseline and can select meaningful boundaries without a pause.
+- Added a conservative filled-pause hesitation provider that lowers boundary
+  confidence around ASR-recognized `uh`, `um`, `erm`, `hmm`, and `mm` tokens.
+  Ordinary hesitation gaps are suppressed while very large pauses remain
+  eligible boundaries.
+- Rich evidence is provider/version attributed, includes concrete measurement
+  details, appears in existing chunk diagnostics, and is consumed as bounded
+  signed score changes. Estimated timings and disabled/missing providers
+  exactly degrade to C2 behavior.
+- Added a C3 golden corpus covering no-pause lengthening, ordinary word
+  durations, hesitation-gap suppression, and decisive pauses that survive the
+  hesitation penalty.
 
 ## 0.7.2 - 2026-06-14
 

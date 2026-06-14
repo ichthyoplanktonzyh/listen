@@ -1,6 +1,7 @@
 pub mod asr_timing;
 pub mod chunk_detection;
 pub mod chunk_partition;
+pub mod rich_acoustic_evidence;
 pub mod text_chunk_detection;
 use std::collections::HashMap;
 use std::path::PathBuf;

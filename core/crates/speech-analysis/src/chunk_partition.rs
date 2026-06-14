@@ -12,10 +12,15 @@ use domain::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::rich_acoustic_evidence::{
+    FilledPauseHesitationConfig, PreBoundaryLengtheningConfig, RichAcousticBoundaryEvidence,
+    RichAcousticEvidenceKind, RichAcousticMeasurement, analyze_filled_pause_hesitation,
+    analyze_pre_boundary_lengthening,
+};
 use crate::text_chunk_detection::{TextChunkEvidence, detect_text_chunks};
 
 pub const PARTITIONER_ID: &str = "acoustic-first-rule-partitioner";
-pub const PARTITIONER_VERSION: &str = "v2";
+pub const PARTITIONER_VERSION: &str = "v3";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChunkPartitionConfig {
@@ -30,6 +35,8 @@ pub struct ChunkPartitionConfig {
     pub soft_max_words: usize,
     pub hard_max_words: usize,
     pub punctuation_reliability: PunctuationReliability,
+    pub pre_boundary_lengthening: Option<PreBoundaryLengtheningConfig>,
+    pub filled_pause_hesitation: Option<FilledPauseHesitationConfig>,
 }
 
 impl Default for ChunkPartitionConfig {
@@ -46,6 +53,8 @@ impl Default for ChunkPartitionConfig {
             soft_max_words: 7,
             hard_max_words: 10,
             punctuation_reliability: PunctuationReliability::Trusted,
+            pre_boundary_lengthening: Some(PreBoundaryLengtheningConfig::default()),
+            filled_pause_hesitation: Some(FilledPauseHesitationConfig::default()),
         }
     }
 }
@@ -78,6 +87,7 @@ pub enum ChunkTimingQuality {
 #[serde(rename_all = "snake_case")]
 pub enum ChunkBoundarySource {
     AcousticGap,
+    PreBoundaryLengthening,
     StrongPunctuation,
     Punctuation,
     LengthLimit,
@@ -88,6 +98,19 @@ pub enum ChunkBoundarySource {
 pub enum ChunkBoundaryEvidence {
     AcousticGap {
         gap_ms: u64,
+    },
+    PreBoundaryLengthening {
+        word_duration_ms: u64,
+        local_baseline_ms: u64,
+        ratio: f32,
+        provider_id: String,
+        provider_version: String,
+    },
+    FilledPauseHesitation {
+        text: String,
+        score_penalty: f32,
+        provider_id: String,
+        provider_version: String,
     },
     StrongPunctuation {
         text: String,
@@ -179,6 +202,33 @@ pub fn partition_sentence_with_diagnostics(
     phrase_candidates: &[PhraseCandidate],
     config: &ChunkPartitionConfig,
 ) -> SentenceChunkDiagnostics {
+    let mut rich_acoustic_evidence = Vec::new();
+    if let Some(real_timings) = complete_real_timings(sentence, timings) {
+        if let Some(lengthening) = config.pre_boundary_lengthening.as_ref() {
+            rich_acoustic_evidence
+                .extend(analyze_pre_boundary_lengthening(&real_timings, lengthening));
+        }
+        if let Some(hesitation) = config.filled_pause_hesitation.as_ref() {
+            rich_acoustic_evidence
+                .extend(analyze_filled_pause_hesitation(&real_timings, hesitation));
+        }
+    }
+    partition_sentence_with_rich_acoustic_evidence(
+        sentence,
+        timings,
+        phrase_candidates,
+        &rich_acoustic_evidence,
+        config,
+    )
+}
+
+pub fn partition_sentence_with_rich_acoustic_evidence(
+    sentence: &SubtitleSentence,
+    timings: &[WordTiming],
+    phrase_candidates: &[PhraseCandidate],
+    rich_acoustic_evidence: &[RichAcousticBoundaryEvidence],
+    config: &ChunkPartitionConfig,
+) -> SentenceChunkDiagnostics {
     let words = sentence
         .tokens
         .iter()
@@ -238,6 +288,51 @@ pub fn partition_sentence_with_diagnostics(
             }
         }
 
+        for item in rich_acoustic_evidence.iter().filter(|item| {
+            item.sentence_id == sentence.id
+                && item.left_token_index == left.index
+                && item.right_token_index == right.index
+        }) {
+            let score_delta = if item.score_delta.is_finite() {
+                item.score_delta.clamp(-2.0, 2.0)
+            } else {
+                0.0
+            };
+            score += score_delta;
+            match (&item.kind, &item.measurement) {
+                (
+                    RichAcousticEvidenceKind::PreBoundaryLengthening,
+                    RichAcousticMeasurement::PreBoundaryLengthening {
+                        word_duration_ms,
+                        local_baseline_ms,
+                        ratio,
+                        ..
+                    },
+                ) => {
+                    evidence.push(ChunkBoundaryEvidence::PreBoundaryLengthening {
+                        word_duration_ms: *word_duration_ms,
+                        local_baseline_ms: *local_baseline_ms,
+                        ratio: *ratio,
+                        provider_id: item.provider_id.clone(),
+                        provider_version: item.provider_version.clone(),
+                    });
+                    primary_source.get_or_insert(ChunkBoundarySource::PreBoundaryLengthening);
+                }
+                (
+                    RichAcousticEvidenceKind::FilledPauseHesitation,
+                    RichAcousticMeasurement::FilledPauseHesitation { text },
+                ) => {
+                    evidence.push(ChunkBoundaryEvidence::FilledPauseHesitation {
+                        text: text.clone(),
+                        score_penalty: score_delta.abs(),
+                        provider_id: item.provider_id.clone(),
+                        provider_version: item.provider_version.clone(),
+                    });
+                }
+                _ => {}
+            }
+        }
+
         if let Some((punctuation, strong)) = punctuation_between(sentence, left.index, right.index)
         {
             if strong {
@@ -272,6 +367,7 @@ pub fn partition_sentence_with_diagnostics(
             matches!(
                 item,
                 ChunkBoundaryEvidence::AcousticGap { .. }
+                    | ChunkBoundaryEvidence::PreBoundaryLengthening { .. }
                     | ChunkBoundaryEvidence::StrongPunctuation { .. }
                     | ChunkBoundaryEvidence::Punctuation { .. }
             )
@@ -371,6 +467,34 @@ pub fn partition_sentence_with_diagnostics(
         },
         candidates: diagnostics,
     }
+}
+
+fn complete_real_timings(
+    sentence: &SubtitleSentence,
+    timings: &[WordTiming],
+) -> Option<Vec<WordTiming>> {
+    let by_token = timings
+        .iter()
+        .filter(|timing| timing.sentence_id == sentence.id)
+        .map(|timing| (timing.token_index, timing))
+        .collect::<HashMap<_, _>>();
+    let ordered = sentence
+        .tokens
+        .iter()
+        .filter(|token| token.kind == SubtitleTokenKind::Word)
+        .map(|word| by_token.get(&word.index).copied())
+        .collect::<Option<Vec<_>>>()?;
+    if ordered
+        .iter()
+        .any(|timing| timing.timing_source == TimingSource::Estimated)
+        || ordered.iter().any(|timing| timing.start_ms > timing.end_ms)
+        || ordered
+            .windows(2)
+            .any(|pair| pair[0].end_ms > pair[1].start_ms)
+    {
+        return None;
+    }
+    Some(ordered.into_iter().cloned().collect())
 }
 
 fn effective_timings(
@@ -569,6 +693,36 @@ mod tests {
             .collect()
     }
 
+    fn timings_with_durations(
+        sentence: &SubtitleSentence,
+        durations: &[u64],
+        source: TimingSource,
+    ) -> Vec<WordTiming> {
+        let mut cursor = 0u64;
+        sentence
+            .tokens
+            .iter()
+            .filter(|token| token.kind == SubtitleTokenKind::Word)
+            .zip(durations)
+            .map(|(token, duration)| {
+                let start_ms = cursor;
+                let end_ms = start_ms + duration;
+                cursor = end_ms + 20;
+                WordTiming {
+                    sentence_id: sentence.id.clone(),
+                    token_index: token.index,
+                    text: token.text.clone(),
+                    start_ms,
+                    end_ms,
+                    confidence: None,
+                    timing_source: source,
+                    provider_id: "test".into(),
+                    provider_version: "v1".into(),
+                }
+            })
+            .collect()
+    }
+
     #[test]
     fn covers_every_word_once_with_length_fallback() {
         let sentence = words(&["one", "two", "three", "four", "five", "six", "seven"]);
@@ -601,6 +755,96 @@ mod tests {
                 .primary_source,
             ChunkBoundarySource::AcousticGap
         );
+    }
+
+    #[test]
+    fn pre_boundary_lengthening_splits_without_a_gap() {
+        let sentence = words(&["we", "can", "solve", "this", "problem", "today"]);
+        let values = timings_with_durations(
+            &sentence,
+            &[120, 130, 125, 360, 120, 130],
+            TimingSource::ForcedAligned,
+        );
+        let result = partition_sentence(&sentence, &values, &[], &ChunkPartitionConfig::default());
+        assert_eq!(result.chunks.len(), 2);
+        assert_eq!(result.chunks[0].text, "we can solve this");
+        assert_eq!(
+            result.chunks[0]
+                .boundary_after
+                .as_ref()
+                .unwrap()
+                .primary_source,
+            ChunkBoundarySource::PreBoundaryLengthening
+        );
+    }
+
+    #[test]
+    fn missing_lengthening_features_degrade_to_c2_partition() {
+        let sentence = words(&["we", "can", "solve", "this", "problem", "today"]);
+        let values = timings_with_durations(
+            &sentence,
+            &[120, 130, 125, 360, 120, 130],
+            TimingSource::ForcedAligned,
+        );
+        let result = partition_sentence(
+            &sentence,
+            &values,
+            &[],
+            &ChunkPartitionConfig {
+                pre_boundary_lengthening: None,
+                ..ChunkPartitionConfig::default()
+            },
+        );
+        assert_eq!(result.chunks.len(), 1);
+    }
+
+    #[test]
+    fn incomplete_real_timings_do_not_run_rich_providers() {
+        let sentence = words(&["we", "can", "solve", "this", "problem", "today"]);
+        let mut values = timings_with_durations(
+            &sentence,
+            &[120, 130, 125, 360, 120, 130],
+            TimingSource::ForcedAligned,
+        );
+        values.remove(0);
+        let result = partition_sentence(&sentence, &values, &[], &ChunkPartitionConfig::default());
+        assert_eq!(result.timing_quality, ChunkTimingQuality::Synthesized);
+        assert_eq!(result.chunks.len(), 1);
+    }
+
+    #[test]
+    fn filled_pause_hesitation_reduces_false_gap_boundary() {
+        let sentence = words(&["well", "um", "we", "should", "go"]);
+        let values = timings(&sentence, Some(1));
+        let without_hesitation = partition_sentence(
+            &sentence,
+            &values,
+            &[],
+            &ChunkPartitionConfig {
+                filled_pause_hesitation: None,
+                ..ChunkPartitionConfig::default()
+            },
+        );
+        let with_hesitation =
+            partition_sentence(&sentence, &values, &[], &ChunkPartitionConfig::default());
+        assert_eq!(without_hesitation.chunks.len(), 2);
+        assert_eq!(with_hesitation.chunks.len(), 1);
+        let candidate = partition_sentence_with_diagnostics(
+            &sentence,
+            &values,
+            &[],
+            &ChunkPartitionConfig::default(),
+        )
+        .candidates
+        .into_iter()
+        .find(|candidate| candidate.left_token_index == 1)
+        .unwrap();
+        assert!(candidate.evidence.iter().any(|evidence| {
+            matches!(
+                evidence,
+                ChunkBoundaryEvidence::FilledPauseHesitation { .. }
+            )
+        }));
     }
 
     #[test]

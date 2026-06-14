@@ -475,6 +475,31 @@ not erase a strong acoustic boundary.
 Detect meaningful boundaries that do not contain a large pause and reduce false
 boundaries caused by hesitation or breathing.
 
+### Completed
+
+C3 completed on 2026-06-14 with partitioner V3:
+
+- `rich_acoustic_evidence` provides independent, provider-versioned boundary
+  evidence without constructing display chunks;
+- pre-boundary lengthening compares a real word duration with a robust local
+  duration baseline and can create a boundary without an inter-word pause;
+- filled-pause hesitation evidence conservatively lowers scores around
+  ASR-recognized `uh`, `um`, `erm`, `hmm`, and `mm` tokens, reducing ordinary
+  hesitation-gap false positives while retaining very large pauses;
+- evidence carries signed score effects and concrete measurements into the
+  existing chunk diagnostics response;
+- estimated timings, insufficient local context, disabled providers, or
+  missing features emit no rich evidence and reproduce C2 behavior;
+- the C3 golden corpus locks no-pause lengthening, ordinary-duration,
+  hesitation suppression, decisive-pause, and fallback behavior.
+
+The duration provider is only as accurate as its input alignment. Current
+Whisper DTW timings often have coarse or zero-duration words, so they safely
+emit little or no lengthening evidence. Forced-aligned or user-adjusted timings
+are the preferred source. Pitch reset, energy change, and actual breath
+classification remain future provider work rather than being inferred from
+text.
+
 ### Evidence Roadmap
 
 Implement as independent providers or analyzers that emit boundary evidence:
@@ -505,9 +530,9 @@ audio/timings/text
 
 ### Completion Gate
 
-- At least one non-gap acoustic cue influences final partitions.
-- Analysis runs locally without blocking playback.
-- Missing audio features degrade to C2 behavior.
+- [x] At least one non-gap acoustic cue influences final partitions.
+- [x] Analysis runs locally without blocking playback.
+- [x] Missing audio features degrade to C2 behavior.
 
 ---
 
