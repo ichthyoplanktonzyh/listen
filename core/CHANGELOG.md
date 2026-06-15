@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fixed development sidecar discovery: the Flutter desktop app now walks
+  up directory ancestors to find the `api-http` binary (preferring
+  `target/release` over `target/debug`), and the Rust API sidecar walks up
+  from both its own executable path and the current working directory to
+  locate `whisper-cli`, `ffmpeg`, and `ffprobe` inside
+  `third_party/runtime/macos-arm64`. Together these fixes let the app find
+  the full ASR toolchain when launched from anywhere inside the repository
+  tree.
 - Started Milestone 2.0 Phase 0 with a fixed 60-slot real-speech evaluation
   catalog covering news, interview, conversation, speech rate, recording
   quality, and six target connected-speech phenomena.

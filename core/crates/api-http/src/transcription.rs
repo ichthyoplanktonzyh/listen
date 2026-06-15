@@ -725,14 +725,36 @@ fn resolve_tool(env_name: &str, name: &str) -> Option<PathBuf> {
         return Some(path);
     }
     let executable = std::env::current_exe().ok()?;
-    [
-        executable.parent()?.join(name),
-        executable.parent()?.join("../Resources/runtime").join(name),
+    resolve_bundled_tool(name, &executable, &std::env::current_dir().ok()?)
+}
+
+fn resolve_bundled_tool(name: &str, executable: &Path, current_dir: &Path) -> Option<PathBuf> {
+    let executable_parent = executable.parent()?;
+    let mut candidates = vec![
+        executable_parent.join(name),
+        executable_parent.join("../Resources/runtime").join(name),
         PathBuf::from(format!("/opt/homebrew/bin/{name}")),
         PathBuf::from(format!("/usr/local/bin/{name}")),
-    ]
-    .into_iter()
-    .find(|path| path.is_file())
+    ];
+    candidates.extend(runtime_candidates_from(executable_parent, name));
+    candidates.extend(runtime_candidates_from(current_dir, name));
+    candidates.into_iter().find(|path| path.is_file())
+}
+
+fn runtime_candidates_from(start: &Path, name: &str) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    let mut directory = start;
+    loop {
+        candidates.push(directory.join("third_party/runtime/macos-arm64").join(name));
+        let Some(parent) = directory.parent() else {
+            break;
+        };
+        if parent == directory {
+            break;
+        }
+        directory = parent;
+    }
+    candidates
 }
 
 fn file_id(value: &str) -> String {
@@ -760,4 +782,28 @@ fn hash_file(path: &Path) -> Result<String, ApplicationError> {
         digest.update(&buffer[..read]);
     }
     Ok(hex::encode(digest.finalize()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolves_development_runtime_from_repository_root() {
+        let root = std::env::temp_dir().join(format!(
+            "llplayernext-runtime-test-{}",
+            application::now_ms()
+        ));
+        let runtime = root.join("third_party/runtime/macos-arm64");
+        std::fs::create_dir_all(&runtime).unwrap();
+        let whisper = runtime.join("whisper-cli");
+        std::fs::write(&whisper, b"#!/bin/sh\n").unwrap();
+
+        let executable = root.join("target/debug/api-http");
+        let resolved =
+            resolve_bundled_tool("whisper-cli", &executable, &root.join("apps/desktop")).unwrap();
+        assert_eq!(resolved, whisper);
+
+        let _ = std::fs::remove_dir_all(root);
+    }
 }
