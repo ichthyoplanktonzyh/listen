@@ -2,8 +2,9 @@
 
 Formal macOS Apple Silicon desktop client using Flutter and fvp/libmdk.
 
-During development, build the Rust sidecar first and run Flutter from the
-repository root so the client can discover `target/debug/api-http`:
+During development, build the Rust sidecar first and run Flutter from
+`apps/desktop`. The client searches the current directory and development app
+executable ancestors for `target/debug/api-http`:
 
 ```sh
 export PATH="/opt/homebrew/opt/rustup/bin:$HOME/.local/share/flutter/bin:$PATH"
