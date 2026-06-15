@@ -21,6 +21,9 @@ use domain::{
     SubtitleTrackId, VocabularyAssetBundle, WordProfileId, WordStatus,
 };
 use serde::{Deserialize, Serialize};
+use speech_analysis::learned_prosodic_provider::{
+    LearnedProsodicProviderInfo, embedded_provider_info,
+};
 use tokio::sync::broadcast;
 
 mod m18;
@@ -110,6 +113,19 @@ pub fn router(state: ApiState) -> Router {
             "/v1/subtitles/{track_id}/word-timings",
             get(track_word_timings).post(generate_track_word_timings),
         )
+        .route(
+            "/v1/subtitles/{track_id}/word-timing-diagnostics",
+            get(track_word_timing_diagnostics),
+        )
+        .route(
+            "/v1/subtitles/{track_id}/chunk-partitions",
+            get(track_chunk_partitions),
+        )
+        .route(
+            "/v1/subtitles/{track_id}/chunk-diagnostics",
+            get(track_chunk_diagnostics),
+        )
+        .route("/v1/chunk/providers", get(chunk_providers))
         .route("/v1/speech/jobs", get(speech_jobs).post(create_speech_job))
         .route("/v1/speech/jobs/{job_id}", get(speech_job))
         .route("/v1/speech/jobs/{job_id}/cancel", post(cancel_speech_job))
@@ -606,6 +622,49 @@ async fn track_word_timings(
         .word_timings_for_track(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
         .map(Json)
         .map_err(ApiError::from)
+}
+
+async fn track_word_timing_diagnostics(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<Vec<application::SentenceWordTimingDiagnostics>>, ApiError> {
+    state
+        .services
+        .word_timing_diagnostics_for_track(
+            &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn track_chunk_partitions(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<Vec<speech_analysis::chunk_partition::SentenceChunkPartition>>, ApiError> {
+    state
+        .services
+        .chunk_partitions_for_track(
+            &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn track_chunk_diagnostics(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<Vec<speech_analysis::chunk_partition::SentenceChunkDiagnostics>>, ApiError> {
+    state
+        .services
+        .chunk_diagnostics_for_track(
+            &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn chunk_providers() -> Json<Vec<LearnedProsodicProviderInfo>> {
+    Json(vec![embedded_provider_info()])
 }
 
 async fn generate_track_word_timings(
@@ -1516,6 +1575,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn chunk_provider_catalog_reports_optional_licensed_model() {
+        let response = test_app()
+            .oneshot(
+                Request::get("/v1/chunk/providers")
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(body[0]["license"], "MIT");
+        assert_eq!(body[0]["optional"], true);
+        assert_eq!(body[0]["available"], true);
+    }
+
+    #[tokio::test]
     async fn media_registration_is_idempotent_over_http() {
         let app = test_app();
         let body = serde_json::json!({
@@ -1593,6 +1672,7 @@ mod tests {
                 .unwrap();
         assert_eq!(track["sentences"].as_array().unwrap().len(), 4);
         let response = app
+            .clone()
             .oneshot(
                 Request::get(format!("/v1/subtitles/{}", track["id"].as_str().unwrap()))
                     .header(AUTHORIZATION, "Bearer secret")
@@ -1602,6 +1682,65 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get(format!(
+                    "/v1/subtitles/{}/chunk-partitions",
+                    track["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let partitions: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(partitions.as_array().unwrap().len(), 4);
+        assert!(partitions[0]["chunks"].as_array().is_some_and(|chunks| !chunks.is_empty()));
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get(format!(
+                    "/v1/subtitles/{}/word-timing-diagnostics",
+                    track["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let timing_diagnostics: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(timing_diagnostics.as_array().unwrap().len(), 4);
+        assert!(timing_diagnostics[0]["boundaries"].as_array().is_some());
+
+        let response = app
+            .oneshot(
+                Request::get(format!(
+                    "/v1/subtitles/{}/chunk-diagnostics",
+                    track["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let diagnostics: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(diagnostics.as_array().unwrap().len(), 4);
+        assert!(diagnostics[0]["candidates"].as_array().is_some());
     }
 
     #[tokio::test]
@@ -2072,6 +2211,10 @@ mod tests {
             "/v1/subtitles/{track_id}/pronunciation",
             "/v1/subtitles/{track_id}/pronunciation-analysis",
             "/v1/subtitles/{track_id}/word-timings",
+            "/v1/subtitles/{track_id}/word-timing-diagnostics",
+            "/v1/subtitles/{track_id}/chunk-partitions",
+            "/v1/subtitles/{track_id}/chunk-diagnostics",
+            "/v1/chunk/providers",
             "/v1/speech/jobs",
             "/v1/word-profiles",
             "/v1/word-profiles/batch",

@@ -29,12 +29,12 @@ whisper-cli -ojf -dtw <model_preset> audio.wav
   │
   └─ output.json  ──→  asr_timing::extract_word_timings_from_json()
                          ├─  parse WhisperSegment[] + WhisperToken[].t_dtw
-                         ├─  ignore special/punctuation/unavailable tokens
                          ├─  merge lexical subword tokens → words
-                         ├─  validate word text matches sentence tokens
-                         ├─  turn DTW points into non-empty word intervals
+                         ├─  ignore punctuation timestamps
+                         ├─  validate word count matches sentence tokens
                          ├─  validate boundary & monotonicity constraints
-                         └─  produce Vec<WordTiming>
+                         ├─  produce DTW v2 Vec<WordTiming>
+                         └─  refine audible pauses from local PCM WAV
                                 │
                                 └─→  store_word_timings()
                                       │
@@ -72,16 +72,14 @@ Whisper's tokenizer splits some words into subword units (e.g.,
 | Token pattern | Action |
 |---|---|
 | Starts with space or newline | Begins a new word |
-| No leading space and contains a word character | Appends to the current word |
+| No leading space and lexical content | Appends to the current word |
 | First token in segment | Always begins the first word |
-| Special token (`[_BEG_]`, `[_TT_*]`, `<|...|>`) | Ignored |
-| Punctuation-only token | Ignored |
-| `t_dtw < 0` | Ignored; lexical mismatch makes the sentence fall back |
+| Punctuation or special token | Ignored for word edges |
 
-A word's `start_ms` is its first lexical subword's `t_dtw × 10`.
-Its `end_ms` is the next word's start, or the subtitle sentence end for the
-final word. This converts whisper's point timestamps into the non-empty,
-half-open intervals required by Flutter's `[start, end)` lookup.
+A word's `start_ms` is the first lexical subword's `t_dtw × 10`. DTW v2 gives
+the final lexical point a bounded 80ms duration, capped by the next word, so
+single-token words are not zero-duration and punctuation cannot consume a
+following pause.
 
 Repeated DTW points are separated deterministically by one millisecond. If the
 sentence is too short to create a positive interval for every word, the
@@ -123,6 +121,10 @@ The extraction fails safely at multiple levels:
 In all cases, **transcription succeeds** and the track is imported. Missing
 ASR timings simply fall back to the existing weighted estimator.
 
+Tracks generated before DTW v2 are not rewritten automatically. Re-transcribe
+an existing track to receive punctuation-safe DTW edges and local pause
+refinement.
+
 ## Code Layout
 
 ```
@@ -134,8 +136,18 @@ crates/api-http/Cargo.toml                   # +speech-analysis dep
 crates/application/src/lib.rs                # reject unusable zero-length timings
 ```
 
-No schema changes are required. The existing `domain`, `persistence-sqlite`,
-and desktop timing models continue to carry the resulting intervals.
+No persistence schema or Flutter display changes are required.
+
+### Audible-Pause Refinement
+
+During transcription, the existing local WAV is explicit mono PCM16 at 16kHz.
+`local-energy-pause-refiner@v1` searches near each DTW word boundary for at
+least 120ms below -38 dBFS. When a pause lies inside the adjacent word
+interval, only those two word edges move to the pause edges and receive
+`timing_source = forced_aligned`.
+
+The refiner is optional and failure-safe. Unsupported WAV data or missing
+pauses retain DTW v2 timings.
 
 ## Design Decisions
 
@@ -174,15 +186,15 @@ passes it through.
 - The integration fixture includes whisper's real `[_BEG_]` / `[_TT_*]`
   structure, and a regression test uses a reduced bundled-runtime JFK output.
 - The existing M1.9 word-timing API tests (`verify-m19.sh`) pass unchanged,
-  confirming `asr_reported` priority and estimation fallback are preserved.
-- Full `cargo test --workspace` (137 Rust tests), `cargo clippy`,
-  `flutter analyze`, and 39 Flutter tests pass.
+  confirming refined timing priority and estimation fallback are preserved.
+- Full `cargo test --workspace`, strict workspace `cargo clippy`, Flutter
+  analyze/test, and contract validation pass.
 
 Manual functional testing: open a video, run ASR transcription with a
 whisper-family model, and observe that current-word highlighting tracks
 audio more precisely than with an ordinary SRT file. The word-timing
-diagnostic should show `timing_source = asr_reported` for the generated
-track.
+diagnostics show the final gap and whether adjacent words use
+`whisper.cpp@dtw-v2` or `local-energy-pause-refiner@v1`.
 
 ## Known Limitations
 

@@ -88,7 +88,7 @@
 | `phrase_candidates()` | 句子中匹配到的 phrase; 部分匹配; 无匹配 |
 | `lexical_from_word()` | profile → LexicalEntry 映射完整性 |
 | `lexical_source_from_word()` | SourceContext → LexicalSourceContext 映射 |
-| `timing_priority()` | Estimated=1, ForcedAligned=2, AsrReported=3, UserAdjusted=4 |
+| `timing_priority()` | Estimated=1, AsrReported=2, ForcedAligned=3, UserAdjusted=4 |
 
 **状态:** ✅ done — 42 测试，覆盖所有核心纯函数
 

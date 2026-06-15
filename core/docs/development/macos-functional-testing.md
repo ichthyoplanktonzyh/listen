@@ -23,8 +23,8 @@ flutter run -d macos
 ```
 
 The first command builds the Rust local API sidecar. Running Flutter from
-`apps/desktop` then discovers the sidecar at the repository's
-`target/debug/api-http`.
+`apps/desktop` discovers the sidecar by searching the current directory and
+development app executable ancestors for `target/debug/api-http`.
 
 Keep the terminal open while testing:
 

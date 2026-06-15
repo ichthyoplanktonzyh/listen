@@ -12,6 +12,7 @@ This is an M0 inventory, not legal advice.
 | tauri-plugin-libmpv | Tauri libmpv embedding | MPL-2.0 |
 | libmpv-wrapper | Plugin native wrapper | Verify release artifact license before distribution |
 | Rust, Tokio, Axum, Serde | Shared core foundation | Review crate manifests before distribution |
+| hound | Local PCM WAV parsing for audible-pause timing refinement | Apache-2.0 |
 | reqwest/rustls | HTTPS dictionary provider | MIT OR Apache-2.0 |
 | Free Dictionary API | Online definitions and phonetics | API described as free; server GPL-3.0; returned content provenance requires review before commercial distribution |
 | file_selector | Native file selection | BSD-3-Clause |
@@ -23,5 +24,9 @@ This is an M0 inventory, not legal advice.
 | CMU Pronouncing Dictionary | Optional canonical en-US pronunciation data | BSD-style CMU license; downloaded explicitly from pinned revision `74790861` and checksum-verified |
 | OpenSubtitles.com REST API | User-initiated subtitle search and download | User supplies an API key; requests obey service authentication, quotas, and terms |
 | Vosk API / Kaldi | Proposed Milestone 2.0 lightweight ASR and forced-alignment research baseline | Vosk API and Kaldi publish permissive licenses, but the exact runtime revision and selected model license must be reviewed independently before integration or distribution |
+
+The bundled `llplayer-prosodic-linear@v1` chunk-boundary model is
+project-authored and distributed under MIT. It contains no third-party model
+weights and does not add an external runtime dependency.
 
 No LLPlayer source code is copied into this repository.

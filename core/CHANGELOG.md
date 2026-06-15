@@ -54,8 +54,133 @@
 - Added a research-only ZIPA CTC ONNX runner and explicit opt-in environment
   setup with pinned dependencies, separate code/model revisions, and
   checksum-verified external downloads.
+- Started C2 acoustic-first partition quality with partitioner V2. Gap scoring
+  now uses source-specific thresholds for ASR-reported, forced-aligned, and
+  user-adjusted timings, while estimated timings remain excluded from acoustic
+  evidence.
+- Added moderate-gap evidence that can combine with punctuation support without
+  overriding phrase protection on its own. Strong acoustic gaps remain able to
+  split inside a text phrase.
+- Treat punctuation from known ASR-generated subtitle tracks as inferred model
+  output instead of a forced boundary. Inferred punctuation must combine with
+  acoustic or product evidence before it changes the display partition.
+- Reduced weak-evidence single-word fragments at chunk edges and added
+  regression tests for ASR punctuation reliability, timing-source sensitivity,
+  phrase protection, and fragment suppression.
+- Added structured sentence chunk diagnostics containing selected and rejected
+  boundary candidates, raw scores, thresholds, forcing state, primary source,
+  and evidence. Product-facing partition responses remain unchanged.
+- Added an initial golden calibration baseline covering ordinary short
+  sentences, preferred-length splitting, single-word-tail suppression, and
+  decisive acoustic gaps.
+- Completed C2 acoustic-first partition quality. Readability scoring now
+  favors supported boundaries near the preferred chunk length, weak evidence
+  cannot create undersized fragments, soft/hard length limits prevent
+  protected phrases from producing unreadably long chunks, and stronger
+  phrase protection still yields to decisive acoustic gaps.
+- Added a version-controlled V2 golden corpus covering fast speech, hesitation,
+  moderate pauses, ASR-inferred versus trusted punctuation, fixed expressions,
+  and long subtitles. The corpus enforces fragment and overlong-chunk quality
+  bounds.
+- Added `GET /v1/subtitles/{track_id}/chunk-diagnostics` for inspecting selected
+  and rejected candidates using the same source-aware configuration as the
+  product-facing track partition.
+- Completed C3 rich acoustic evidence with partitioner V3. An independent
+  pre-boundary-lengthening provider compares real word duration against a
+  robust local baseline and can select meaningful boundaries without a pause.
+- Added a conservative filled-pause hesitation provider that lowers boundary
+  confidence around ASR-recognized `uh`, `um`, `erm`, `hmm`, and `mm` tokens.
+  Ordinary hesitation gaps are suppressed while very large pauses remain
+  eligible boundaries.
+- Rich evidence is provider/version attributed, includes concrete measurement
+  details, appears in existing chunk diagnostics, and is consumed as bounded
+  signed score changes. Estimated timings and disabled/missing providers
+  exactly degrade to C2 behavior.
+- Added a C3 golden corpus covering no-pause lengthening, ordinary word
+  durations, hesitation-gap suppression, and decisive pauses that survive the
+  hesitation penalty.
+- Completed C4 with an optional learned prosodic boundary provider and
+  partitioner V4. The bundled project-authored MIT linear model runs locally,
+  emits provider/revision/license-attributed evidence, and can assist only
+  ambiguous rule-based boundaries.
+- Added `GET /v1/chunk/providers` for inspecting learned-provider availability,
+  runtime, and distribution metadata. Model or feature failures emit no
+  evidence, and disabling the provider exactly preserves the C1-C3 pipeline.
+- Added a C4 golden corpus covering learned-model contribution, ordinary
+  delivery, decisive rule boundaries, and model-disabled fallback.
+- Changed the default chunk presentation to static rounded capsules with clear
+  visual spacing while preserving word-level highlighting inside each chunk.
+  Current-chunk highlighting is now disabled by default and independently
+  configurable as static background, slow scale bounce, or slow glow.
+- Added an optional spacing-only chunk presentation and migrated existing v7
+  desktop settings to the new static-capsule default.
+- Added the Word Timing Accuracy milestone. Whisper DTW v2 now ignores
+  punctuation timestamps when deriving lexical word edges and gives lexical
+  alignment points a bounded duration so punctuation cannot consume audible
+  pauses.
+- Added optional local PCM energy pause refinement during Whisper
+  transcription. Sustained audible pauses near coarse DTW boundaries restore
+  adjacent word gaps as provider-attributed `ForcedAligned` timings, while
+  missing or unsupported audio safely retains DTW timings.
+- Changed timing precedence so refined forced alignment can replace coarse ASR
+  timing while user-adjusted timing remains authoritative. Added
+  `GET /v1/subtitles/{track_id}/word-timing-diagnostics` for inspecting final
+  gaps and adjacent timing providers.
+- Existing ASR tracks remain unchanged and must be re-transcribed to receive
+  DTW v2 and audible-pause refinement.
+
+## 0.7.2 - 2026-06-14
+
+- Added the first user-visible chunk listening MVP. Primary subtitle sentences
+  are rendered as complete, non-overlapping chunk groups and the active chunk
+  follows playback using the existing local word-timing timeline.
+- Added the stable `SentenceChunkPartition` display contract and V1
+  acoustic-first rule partitioner. Real timing gaps, punctuation, phrase
+  protection, and deterministic length fallback are resolved into one complete
+  partition while estimated timings are excluded from acoustic evidence.
+- Added `GET /v1/subtitles/{track_id}/chunk-partitions`, application-layer
+  sentence and track partition methods, OpenAPI coverage, and independent
+  fallback so chunk analysis failure never interrupts ordinary subtitles,
+  word highlighting, or pronunciation enhancements.
+- Added desktop chunk grouping and active-chunk highlighting settings. Chunk
+  rendering preserves word clicks, vocabulary styles, and phrase interactions.
+- Hardened text and acoustic chunk detection by rejecting invalid external
+  phrase ranges, preventing phrase matches across punctuation, preserving
+  empty-input sentence identity, and correcting gap-confidence interpolation.
+- Added the staged C0-C4 chunk listening implementation plan. C0-C1 deliver the
+  product loop; later milestones prioritize acoustic boundary quality and keep
+  the display/API contract stable.
+- Verified with workspace Rust tests, strict targeted clippy, Flutter analysis,
+  Flutter tests, and whitespace checks.
+>>>>>>> worktree-feature+chunk-listening-comprehension
 
 ## 0.7.1 - 2026-06-13
+
+- Implemented text-level (lexical) chunk detection in the `speech-analysis` crate
+  (`text_chunk_detection` module) as a companion to the existing acoustic
+  (gap-based) chunk detection. The text detector partitions entire sentences
+  into contiguous chunks where every word token belongs to exactly one chunk.
+- Three data sources feed the text detector: (1) COCA n-gram collocations
+  (MI ≥ 3.0, ~1K seed entries, compiled into the binary via `include_str!`),
+  (2) PHRASE List (Martinez & Schmitt 2012, 505 pedagogically-selected
+  functional phrases with category labels), and (3) existing ECDICT/built-in
+  phrase candidates forwarded from the application layer.
+- Sliding-window longest-match-first greedy overlap resolution ensures
+  competing multi-word spans (e.g. "a lot of" vs "a lot") are resolved
+  deterministically with longer spans taking priority.
+- Cross-reference support between acoustic and text layers: new
+  `BoundaryMarker::LexicalPhrase` variant, `CombinedChunkResult` type,
+  `combine_chunks()` merging acoustic and text evidence with four-quadrant
+  confidence logic (mutual-reinforcement, acoustic-only discount, text-only
+  discount, no-signal), and `annotate_acoustic_with_text()` for decorating
+  acoustic boundaries with lexical phrase markers.
+- Added `AppServices::detect_text_chunks`, `detect_text_chunks_for_track`,
+  and `detect_combined_sentence_chunks` methods.
+- 18 new unit tests across `text_chunk_detection` covering empty/single-word
+  input, COCA collocation matching, PHRASE List detection, external candidate
+  forwarding, longest-match resolution, case-insensitive matching, partition
+  coverage integrity, boundary count consistency, token order preservation,
+  punctuation filtering, MI→confidence mapping, and source counts.
 
 - Enabled whisper.cpp DTW (Dynamic Time Warping) token-level timestamps during
   ASR transcription so generated subtitle tracks produce `asr_reported` word

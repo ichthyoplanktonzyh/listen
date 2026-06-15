@@ -1,0 +1,28 @@
+{
+  "cases": [
+    {
+      "name": "model_selects_ambiguous_lengthening",
+      "text": "We can solve this problem today",
+      "durations_ms": [120, 130, 125, 340, 120, 130],
+      "gaps_ms": [20, 20, 20, 20, 20],
+      "expected_with_model": ["We can solve this", "problem today"],
+      "expected_without_model": ["We can solve this problem today"]
+    },
+    {
+      "name": "ordinary_delivery_remains_unsplit",
+      "text": "We can solve this problem today",
+      "durations_ms": [120, 130, 125, 140, 120, 130],
+      "gaps_ms": [20, 20, 20, 20, 20],
+      "expected_with_model": ["We can solve this problem today"],
+      "expected_without_model": ["We can solve this problem today"]
+    },
+    {
+      "name": "decisive_gap_remains_rule_driven",
+      "text": "We can solve this problem today",
+      "durations_ms": [120, 130, 125, 140, 120, 130],
+      "gaps_ms": [20, 20, 20, 900, 20],
+      "expected_with_model": ["We can solve this", "problem today"],
+      "expected_without_model": ["We can solve this", "problem today"]
+    }
+  ]
+}

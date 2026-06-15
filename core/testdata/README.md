@@ -12,6 +12,10 @@ testdata/
 │
 ├── asr/                       # ASR/transcription fixtures
 │   └── sample-output.json     # Hand-crafted whisper.cpp -ojf output (3 segments)
+├── chunk/                     # Chunk partition calibration fixtures
+│   ├── v2-golden.json         # V2 acoustic-first partition golden corpus
+│   ├── v3-rich-acoustic.json  # C3 duration and hesitation evidence corpus
+│   └── v4-learned-prosodic.json # C4 optional learned-provider corpus
 │
 ├── subtitles/                 # Subtitle parsing fixtures
 │   ├── timeline.srt           # SRT with gaps, overlap, punctuation, apostrophe, hyphen
@@ -49,6 +53,14 @@ testdata/
 |------|------|---------|-------------|
 | `subtitles/timeline.srt` | ~400 B | `subtitle-core/src/lib.rs` (6 tests), `persistence-sqlite/src/lib.rs` (17 tests), `persistence-sqlite/tests/persistence_integration_test.rs` (6 tests), `api-http/src/lib.rs` (6 tests) | 4-cue SRT with gaps, overlap, punctuation, apostrophe, hyphen, and line-break scenarios |
 | `subtitles/timeline.vtt` | ~500 B | `subtitle-core/src/lib.rs` (6 tests) | WebVTT equivalent of timeline.srt |
+
+### Chunk Fixtures
+
+| File | Size | Used By | Description |
+|------|------|---------|-------------|
+| `chunk/v2-golden.json` | ~3 KB | `speech-analysis/tests/chunk_partition_golden_test.rs` | Acoustic-first V2 calibration cases covering fast speech, hesitation, inferred/trusted punctuation, moderate pauses, fixed expressions, and long subtitles |
+| `chunk/v3-rich-acoustic.json` | ~2 KB | `speech-analysis/tests/chunk_partition_golden_test.rs` | C3 cases proving pre-boundary lengthening can split without a pause, filled-pause evidence can suppress likely hesitation gaps, and missing providers degrade to C2 |
+| `chunk/v4-learned-prosodic.json` | ~2 KB | `speech-analysis/tests/chunk_partition_golden_test.rs` | C4 cases proving the optional learned provider changes ambiguous boundaries, leaves ordinary delivery unchanged, and defers to decisive rule evidence |
 
 ### Pronunciation Fixtures
 

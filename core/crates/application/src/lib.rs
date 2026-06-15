@@ -3,9 +3,31 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use domain::*;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 const DICTIONARY_CACHE_TTL_MS: u64 = 30 * 24 * 60 * 60 * 1000;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SentenceWordTimingDiagnostics {
+    pub sentence_id: SubtitleSentenceId,
+    pub boundaries: Vec<WordTimingBoundaryDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WordTimingBoundaryDiagnostic {
+    pub left_token_index: u32,
+    pub right_token_index: u32,
+    pub left_end_ms: u64,
+    pub right_start_ms: u64,
+    pub gap_ms: u64,
+    pub left_timing_source: TimingSource,
+    pub right_timing_source: TimingSource,
+    pub left_provider_id: String,
+    pub left_provider_version: String,
+    pub right_provider_id: String,
+    pub right_provider_version: String,
+}
 
 pub trait MediaRepository: Send + Sync {
     fn upsert(&self, media: &MediaItem) -> Result<MediaItem, ApplicationError>;
@@ -911,6 +933,259 @@ impl AppServices {
         Ok(values)
     }
 
+    pub fn word_timing_diagnostics_for_track(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<SentenceWordTimingDiagnostics>, ApplicationError> {
+        let track = self
+            .subtitles
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        track
+            .sentences
+            .iter()
+            .filter_map(|sentence| {
+                let timings = match self.word_timings(&sentence.id) {
+                    Ok(timings) => timings,
+                    Err(error) => return Some(Err(error)),
+                };
+                if timings.is_empty() {
+                    return None;
+                }
+                Some(Ok(SentenceWordTimingDiagnostics {
+                    sentence_id: sentence.id.clone(),
+                    boundaries: timings
+                        .windows(2)
+                        .map(|pair| WordTimingBoundaryDiagnostic {
+                            left_token_index: pair[0].token_index,
+                            right_token_index: pair[1].token_index,
+                            left_end_ms: pair[0].end_ms,
+                            right_start_ms: pair[1].start_ms,
+                            gap_ms: pair[1].start_ms.saturating_sub(pair[0].end_ms),
+                            left_timing_source: pair[0].timing_source,
+                            right_timing_source: pair[1].timing_source,
+                            left_provider_id: pair[0].provider_id.clone(),
+                            left_provider_version: pair[0].provider_version.clone(),
+                            right_provider_id: pair[1].provider_id.clone(),
+                            right_provider_version: pair[1].provider_version.clone(),
+                        })
+                        .collect(),
+                }))
+            })
+            .collect()
+    }
+
+    /// Detect acoustic chunk boundaries for every sentence in a subtitle track.
+    ///
+    /// Uses gap-based detection on existing word timings. Each sentence is
+    /// processed independently; cross-sentence boundaries are never created.
+    pub fn detect_track_chunks(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<
+        std::collections::HashMap<SubtitleSentenceId, speech_analysis::chunk_detection::ChunkDetectionResult>,
+        ApplicationError,
+    > {
+        use speech_analysis::chunk_detection::{detect_chunk_boundaries, ChunkDetectionConfig};
+        let track = self
+            .subtitles
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let config = ChunkDetectionConfig::default();
+        let mut results = std::collections::HashMap::new();
+        for sentence in track.sentences {
+            let timings = self.word_timings(&sentence.id)?;
+            let mut result = detect_chunk_boundaries(&timings, &config);
+            result.sentence_id = sentence.id.clone();
+            results.insert(sentence.id.clone(), result);
+        }
+        Ok(results)
+    }
+
+    /// Detect acoustic chunk boundaries for a single sentence.
+    pub fn detect_sentence_chunks(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<speech_analysis::chunk_detection::ChunkDetectionResult, ApplicationError> {
+        use speech_analysis::chunk_detection::{detect_chunk_boundaries, ChunkDetectionConfig};
+        let timings = self.word_timings(sentence_id)?;
+        let mut result = detect_chunk_boundaries(&timings, &ChunkDetectionConfig::default());
+        result.sentence_id = sentence_id.clone();
+        Ok(result)
+    }
+
+    /// Detect text-level chunks for a single sentence.
+    ///
+    /// Uses embedded COCA n-gram, PHRASE List, and external phrase candidates
+    /// (ECDICT + built-in rules) to partition the sentence into lexical chunks.
+    /// Every word token is covered by exactly one chunk.
+    pub fn detect_text_chunks(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<speech_analysis::text_chunk_detection::TextChunkDetectionResult, ApplicationError>
+    {
+        let sentence = self
+            .subtitles
+            .get_sentence(sentence_id)?
+            .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
+        let candidates = self.phrase_candidates(sentence_id)?;
+        Ok(speech_analysis::text_chunk_detection::detect_text_chunks(
+            &sentence,
+            &candidates,
+        ))
+    }
+
+    /// Detect text-level chunks for every sentence in a subtitle track.
+    pub fn detect_text_chunks_for_track(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<
+        std::collections::HashMap<
+            SubtitleSentenceId,
+            speech_analysis::text_chunk_detection::TextChunkDetectionResult,
+        >,
+        ApplicationError,
+    > {
+        let track = self
+            .subtitles
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let mut results = std::collections::HashMap::new();
+        for sentence in track.sentences {
+            let result = self.detect_text_chunks(&sentence.id)?;
+            results.insert(sentence.id.clone(), result);
+        }
+        Ok(results)
+    }
+
+    /// Detect chunks using combined acoustic + text-level evidence.
+    ///
+    /// Uses the text partition as the structural basis and overlays acoustic
+    /// boundary evidence where available. See
+    /// [`speech_analysis::chunk_detection::combine_chunks`] for the combination
+    /// confidence logic.
+    pub fn detect_combined_sentence_chunks(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<speech_analysis::chunk_detection::CombinedChunkResult, ApplicationError>
+    {
+        use speech_analysis::chunk_detection::{
+            combine_chunks, detect_chunk_boundaries, ChunkDetectionConfig,
+        };
+        let sentence = self
+            .subtitles
+            .get_sentence(sentence_id)?
+            .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
+        let timings = self.word_timings(sentence_id)?;
+        let candidates = self.phrase_candidates(sentence_id)?;
+
+        let acoustic =
+            detect_chunk_boundaries(&timings, &ChunkDetectionConfig::default());
+        let text = speech_analysis::text_chunk_detection::detect_text_chunks(
+            &sentence,
+            &candidates,
+        );
+
+        Ok(combine_chunks(&acoustic, &text))
+    }
+
+    /// Produce the product-facing, complete chunk partition for one sentence.
+    pub fn chunk_partition(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<speech_analysis::chunk_partition::SentenceChunkPartition, ApplicationError> {
+        let sentence = self
+            .subtitles
+            .get_sentence(sentence_id)?
+            .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
+        let timings = self.word_timings(sentence_id)?;
+        let candidates = self.phrase_candidates(sentence_id)?;
+        Ok(speech_analysis::chunk_partition::partition_sentence(
+            &sentence,
+            &timings,
+            &candidates,
+            &speech_analysis::chunk_partition::ChunkPartitionConfig::default(),
+        ))
+    }
+
+    /// Produce developer-facing scores for selected and rejected chunk boundaries.
+    pub fn chunk_partition_diagnostics(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<speech_analysis::chunk_partition::SentenceChunkDiagnostics, ApplicationError> {
+        let sentence = self
+            .subtitles
+            .get_sentence(sentence_id)?
+            .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
+        let timings = self.word_timings(sentence_id)?;
+        let candidates = self.phrase_candidates(sentence_id)?;
+        Ok(
+            speech_analysis::chunk_partition::partition_sentence_with_diagnostics(
+                &sentence,
+                &timings,
+                &candidates,
+                &speech_analysis::chunk_partition::ChunkPartitionConfig::default(),
+            ),
+        )
+    }
+
+    /// Produce product-facing chunk partitions for every sentence in a track.
+    pub fn chunk_partitions_for_track(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<speech_analysis::chunk_partition::SentenceChunkPartition>, ApplicationError>
+    {
+        let track = self
+            .subtitles
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let config = chunk_partition_config_for_track_source(&track.source);
+        track
+            .sentences
+            .iter()
+            .map(|sentence| {
+                let timings = self.word_timings(&sentence.id)?;
+                let candidates = self.phrase_candidates(&sentence.id)?;
+                Ok(speech_analysis::chunk_partition::partition_sentence(
+                    sentence,
+                    &timings,
+                    &candidates,
+                    &config,
+                ))
+            })
+            .collect()
+    }
+
+    /// Produce developer-facing chunk diagnostics using the same track-source
+    /// configuration as the product-facing partitions.
+    pub fn chunk_diagnostics_for_track(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<speech_analysis::chunk_partition::SentenceChunkDiagnostics>, ApplicationError>
+    {
+        let track = self
+            .subtitles
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let config = chunk_partition_config_for_track_source(&track.source);
+        track
+            .sentences
+            .iter()
+            .map(|sentence| {
+                let timings = self.word_timings(&sentence.id)?;
+                let candidates = self.phrase_candidates(&sentence.id)?;
+                Ok(
+                    speech_analysis::chunk_partition::partition_sentence_with_diagnostics(
+                        sentence,
+                        &timings,
+                        &candidates,
+                        &config,
+                    ),
+                )
+            })
+            .collect()
+    }
+
     pub fn store_word_timings(
         &self,
         track_id: &SubtitleTrackId,
@@ -1104,8 +1379,8 @@ impl AppServices {
 fn timing_priority(source: TimingSource) -> u8 {
     match source {
         TimingSource::Estimated => 1,
-        TimingSource::ForcedAligned => 2,
-        TimingSource::AsrReported => 3,
+        TimingSource::AsrReported => 2,
+        TimingSource::ForcedAligned => 3,
         TimingSource::UserAdjusted => 4,
     }
 }
@@ -1117,6 +1392,16 @@ fn word_timing_cache_is_usable(values: &[WordTiming]) -> bool {
                 && first.provider_version == "v1"))
             && values.iter().all(|value| value.start_ms < value.end_ms)
     })
+}
+
+fn chunk_partition_config_for_track_source(
+    source: &str,
+) -> speech_analysis::chunk_partition::ChunkPartitionConfig {
+    if source.starts_with("ASR-") {
+        speech_analysis::chunk_partition::ChunkPartitionConfig::for_asr_generated_subtitle()
+    } else {
+        speech_analysis::chunk_partition::ChunkPartitionConfig::default()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1647,8 +1932,8 @@ mod tests {
     #[test]
     fn timing_priority_ordering() {
         assert_eq!(timing_priority(TimingSource::Estimated), 1);
-        assert_eq!(timing_priority(TimingSource::ForcedAligned), 2);
-        assert_eq!(timing_priority(TimingSource::AsrReported), 3);
+        assert_eq!(timing_priority(TimingSource::AsrReported), 2);
+        assert_eq!(timing_priority(TimingSource::ForcedAligned), 3);
         assert_eq!(timing_priority(TimingSource::UserAdjusted), 4);
     }
 
@@ -1683,6 +1968,27 @@ mod tests {
 
         assert!(!word_timing_cache_is_usable(&[timing]));
     }
+
+    #[test]
+    fn forced_alignment_overrides_coarse_asr_timing() {
+        assert!(
+            timing_priority(TimingSource::ForcedAligned)
+                > timing_priority(TimingSource::AsrReported)
+        );
+    }
+
+    #[test]
+    fn asr_track_source_uses_inferred_punctuation_config() {
+        assert_eq!(
+            chunk_partition_config_for_track_source("ASR-Whisper Large.srt")
+                .punctuation_reliability,
+            speech_analysis::chunk_partition::PunctuationReliability::Inferred
+        );
+        assert_eq!(
+            chunk_partition_config_for_track_source("official-subtitles.srt")
+                .punctuation_reliability,
+            speech_analysis::chunk_partition::PunctuationReliability::Trusted
+        );
 
     // ── phrase_candidates ───────────────────────────────────────────────────
 
