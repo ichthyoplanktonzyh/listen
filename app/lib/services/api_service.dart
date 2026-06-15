@@ -97,11 +97,10 @@ class LocalApi {
 
   static Future<String> _findSidecar() async {
     final configured = Platform.environment['LLPLAYERNEXT_API_BINARY'];
-    final candidates = <String>[
-      '${File(Platform.resolvedExecutable).parent.path}/api-http',
-      '${Directory.current.path}/target/release/api-http',
-      '${Directory.current.path}/target/debug/api-http',
-    ];
+    final executableDirectory = File(Platform.resolvedExecutable).parent;
+    final candidates = <String>['${executableDirectory.path}/api-http'];
+    candidates.addAll(sidecarCandidatesFrom(executableDirectory));
+    candidates.addAll(sidecarCandidatesFrom(Directory.current.absolute));
     if (configured != null) candidates.insert(0, configured);
     for (final path in candidates) {
       if (await File(path).exists()) return path;
@@ -186,6 +185,16 @@ class LocalApi {
               as List<dynamic>)
           .cast<Map<String, dynamic>>();
 
+  Future<List<Map<String, dynamic>>> trackChunkPartitions(
+    String trackId,
+  ) async =>
+      ((await _request(
+                'GET',
+                '/v1/subtitles/${Uri.encodeComponent(trackId)}/chunk-partitions',
+              ))
+              as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+
   Future<List<Map<String, dynamic>>> phoneticAnalysisModels() async =>
       ((await _request('GET', '/v1/phonetic-analysis/models')) as List<dynamic>)
           .cast<Map<String, dynamic>>();
@@ -211,6 +220,8 @@ class LocalApi {
           }))
           as Map<String, dynamic>;
 
+=======
+>>>>>>> worktree-feature+chunk-listening-comprehension
   Future<String> exportSubtitleSrt(String trackId) async {
     final request = await _client.getUrl(
       Uri.parse(
@@ -662,4 +673,17 @@ class LocalApi {
       '.ogg',
     ].any(lower.endsWith);
   }
+}
+
+List<String> sidecarCandidatesFrom(Directory start) {
+  final candidates = <String>[];
+  var directory = start.absolute;
+  while (true) {
+    candidates.add('${directory.path}/target/release/api-http');
+    candidates.add('${directory.path}/target/debug/api-http');
+    final parent = directory.parent;
+    if (parent.path == directory.path) break;
+    directory = parent;
+  }
+  return candidates;
 }

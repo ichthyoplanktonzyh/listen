@@ -28,10 +28,12 @@ class SubtitleState {
     this.backgroundOpacity = 0.72,
     this.pronunciationBySentence = const {},
     this.timingsBySentence = const {},
+    this.chunkPartitionsBySentence = const {},
     this.pronunciationProviders = const [],
     this.currentWordToken,
     this.phoneticAnalysisBySentence = const {},
     this.currentDetectedPhone,
+    this.currentChunkIndex,
   });
 
   final SubtitleTrack? primaryTrack;
@@ -55,10 +57,12 @@ class SubtitleState {
   final double backgroundOpacity;
   final Map<String, Map<String, dynamic>> pronunciationBySentence;
   final Map<String, List<WordTiming>> timingsBySentence;
+  final Map<String, SentenceChunkPartition> chunkPartitionsBySentence;
   final List<Map<String, dynamic>> pronunciationProviders;
   final int? currentWordToken;
   final Map<String, Map<String, dynamic>> phoneticAnalysisBySentence;
   final DetectedPhone? currentDetectedPhone;
+  final int? currentChunkIndex;
 
   SubtitleState copyWith({
     Object? primaryTrack = _unset,
@@ -82,10 +86,12 @@ class SubtitleState {
     double? backgroundOpacity,
     Map<String, Map<String, dynamic>>? pronunciationBySentence,
     Map<String, List<WordTiming>>? timingsBySentence,
+    Map<String, SentenceChunkPartition>? chunkPartitionsBySentence,
     List<Map<String, dynamic>>? pronunciationProviders,
     Object? currentWordToken = _unset,
     Map<String, Map<String, dynamic>>? phoneticAnalysisBySentence,
     Object? currentDetectedPhone = _unset,
+    Object? currentChunkIndex = _unset,
   }) => SubtitleState(
     primaryTrack: identical(primaryTrack, _unset)
         ? this.primaryTrack
@@ -120,6 +126,8 @@ class SubtitleState {
     pronunciationBySentence:
         pronunciationBySentence ?? this.pronunciationBySentence,
     timingsBySentence: timingsBySentence ?? this.timingsBySentence,
+    chunkPartitionsBySentence:
+        chunkPartitionsBySentence ?? this.chunkPartitionsBySentence,
     pronunciationProviders:
         pronunciationProviders ?? this.pronunciationProviders,
     currentWordToken: identical(currentWordToken, _unset)
@@ -130,6 +138,9 @@ class SubtitleState {
     currentDetectedPhone: identical(currentDetectedPhone, _unset)
         ? this.currentDetectedPhone
         : currentDetectedPhone as DetectedPhone?,
+    currentChunkIndex: identical(currentChunkIndex, _unset)
+        ? this.currentChunkIndex
+        : currentChunkIndex as int?,
   );
 
   TimelineCursor get primaryCursor => TimelineCursor(
@@ -173,12 +184,15 @@ class SubtitleController extends ChangeNotifier {
       _state.pronunciationBySentence;
   Map<String, List<WordTiming>> get timingsBySentence =>
       _state.timingsBySentence;
+  Map<String, SentenceChunkPartition> get chunkPartitionsBySentence =>
+      _state.chunkPartitionsBySentence;
   List<Map<String, dynamic>> get pronunciationProviders =>
       _state.pronunciationProviders;
   int? get currentWordToken => _state.currentWordToken;
   Map<String, Map<String, dynamic>> get phoneticAnalysisBySentence =>
       _state.phoneticAnalysisBySentence;
   DetectedPhone? get currentDetectedPhone => _state.currentDetectedPhone;
+  int? get currentChunkIndex => _state.currentChunkIndex;
   Duration get primarySubtitleOffset => _state.primarySubtitleOffset;
   Duration get secondarySubtitleOffset => _state.secondarySubtitleOffset;
   TimelineCursor get primaryCursor => _state.primaryCursor;
@@ -259,10 +273,12 @@ class SubtitleController extends ChangeNotifier {
     required Map<String, List<WordTiming>> timingsBySentence,
     required List<Map<String, dynamic>> pronunciationProviders,
     Map<String, Map<String, dynamic>> phoneticAnalysisBySentence = const {},
+    Map<String, SentenceChunkPartition> chunkPartitionsBySentence = const {},
   }) => _update(
     (s) => s.copyWith(
       pronunciationBySentence: pronunciationBySentence,
       timingsBySentence: timingsBySentence,
+      chunkPartitionsBySentence: chunkPartitionsBySentence,
       pronunciationProviders: pronunciationProviders,
       phoneticAnalysisBySentence: phoneticAnalysisBySentence,
     ),
@@ -283,14 +299,20 @@ class SubtitleController extends ChangeNotifier {
     (s) => s.copyWith(
       pronunciationBySentence: const {},
       timingsBySentence: const {},
+      chunkPartitionsBySentence: const {},
       pronunciationProviders: const [],
       currentWordToken: null,
       phoneticAnalysisBySentence: const {},
       currentDetectedPhone: null,
+      currentChunkIndex: null,
     ),
   );
 
-  void updateCurrentWord(Duration mediaPosition, {required bool enabled}) {
+  void updateCurrentWord(
+    Duration mediaPosition, {
+    required bool enabled,
+    bool? chunkEnabled,
+  }) {
     final cue = _state.currentPrimaryCue;
     final token = enabled && cue != null
         ? currentWordTokenIndex(
@@ -299,8 +321,17 @@ class SubtitleController extends ChangeNotifier {
             offset: _state.primarySubtitleOffset,
           )
         : null;
-    if (token != _state.currentWordToken) {
-      _update((s) => s.copyWith(currentWordToken: token));
+    final chunk = (chunkEnabled ?? enabled) && cue != null
+        ? currentChunkAtPosition(
+            _state.chunkPartitionsBySentence[cue.id],
+            mediaPosition,
+            offset: _state.primarySubtitleOffset,
+          )
+        : null;
+    if (token != _state.currentWordToken || chunk != _state.currentChunkIndex) {
+      _update(
+        (s) => s.copyWith(currentWordToken: token, currentChunkIndex: chunk),
+      );
     }
   }
 

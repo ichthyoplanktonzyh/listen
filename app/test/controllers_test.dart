@@ -88,6 +88,24 @@ void main() {
             ],
           },
         },
+        chunkPartitionsBySentence: const {
+          'sentence-1': SentenceChunkPartition(
+            sentenceId: 'sentence-1',
+            chunks: [
+              DisplayChunk(
+                index: 0,
+                tokenStart: 0,
+                tokenEnd: 0,
+                text: 'Hello',
+                start: Duration(milliseconds: 100),
+                end: Duration(milliseconds: 300),
+              ),
+            ],
+            partitionerId: 'test',
+            partitionerVersion: 'v1',
+            timingQuality: 'estimated',
+          ),
+        },
       );
 
     controller.updateCurrentWord(
@@ -95,11 +113,13 @@ void main() {
       enabled: true,
     );
     expect(controller.currentWordToken, 0);
+    expect(controller.currentChunkIndex, 0);
     controller.updateCurrentWord(
       const Duration(milliseconds: 300),
       enabled: true,
     );
     expect(controller.currentWordToken, isNull);
+    expect(controller.currentChunkIndex, isNull);
     expect(controller.pronunciationProviders.single['id'], 'cmudict');
     controller.updateCurrentDetectedPhone(
       const Duration(milliseconds: 150),
@@ -110,6 +130,7 @@ void main() {
     controller.clearSpeechEnhancements();
     expect(controller.pronunciationProviders, isEmpty);
     expect(controller.currentDetectedPhone, isNull);
+    expect(controller.chunkPartitionsBySentence, isEmpty);
 
     controller.setPrimaryTrack(null);
     controller.setCurrentPrimaryCue(null);

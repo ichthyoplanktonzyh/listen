@@ -145,6 +145,62 @@ Map<String, Map<String, dynamic>> latestPhoneticAnalysesBySentence(
   return values;
 }
 
+class DisplayChunk {
+  const DisplayChunk({
+    required this.index,
+    required this.tokenStart,
+    required this.tokenEnd,
+    required this.text,
+    required this.start,
+    required this.end,
+  });
+
+  factory DisplayChunk.fromJson(Map<String, dynamic> json) => DisplayChunk(
+    index: json['index'] as int,
+    tokenStart: json['token_start'] as int,
+    tokenEnd: json['token_end'] as int,
+    text: json['text'] as String,
+    start: Duration(milliseconds: json['start_ms'] as int),
+    end: Duration(milliseconds: json['end_ms'] as int),
+  );
+
+  final int index;
+  final int tokenStart;
+  final int tokenEnd;
+  final String text;
+  final Duration start;
+  final Duration end;
+}
+
+class SentenceChunkPartition {
+  const SentenceChunkPartition({
+    required this.sentenceId,
+    required this.chunks,
+    required this.partitionerId,
+    required this.partitionerVersion,
+    required this.timingQuality,
+  });
+
+  factory SentenceChunkPartition.fromJson(Map<String, dynamic> json) =>
+      SentenceChunkPartition(
+        sentenceId: json['sentence_id'] as String,
+        chunks: (json['chunks'] as List<dynamic>)
+            .map(
+              (value) => DisplayChunk.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+        partitionerId: json['partitioner_id'] as String,
+        partitionerVersion: json['partitioner_version'] as String,
+        timingQuality: json['timing_quality'] as String,
+      );
+
+  final String sentenceId;
+  final List<DisplayChunk> chunks;
+  final String partitionerId;
+  final String partitionerVersion;
+  final String timingQuality;
+}
+
 int? currentWordTokenIndex(
   List<WordTiming> timings,
   Duration mediaPosition, {
@@ -154,6 +210,21 @@ int? currentWordTokenIndex(
   for (final timing in timings) {
     if (position >= timing.start && position < timing.end) {
       return timing.tokenIndex;
+    }
+  }
+  return null;
+}
+
+int? currentChunkAtPosition(
+  SentenceChunkPartition? partition,
+  Duration mediaPosition, {
+  Duration offset = Duration.zero,
+}) {
+  if (partition == null) return null;
+  final position = mediaPosition - offset;
+  for (final chunk in partition.chunks) {
+    if (position >= chunk.start && position < chunk.end) {
+      return chunk.index;
     }
   }
   return null;

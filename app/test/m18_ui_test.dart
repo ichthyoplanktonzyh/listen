@@ -178,4 +178,151 @@ void main() {
       expect(selectedWords, 0);
     },
   );
+
+  testWidgets('subtitle renders static product chunks as separate capsules', (
+    tester,
+  ) async {
+    const cue = Cue(
+      id: 'sentence-1',
+      index: 0,
+      start: Duration.zero,
+      end: Duration(seconds: 2),
+      text: 'I think so',
+      tokens: [
+        SubtitleToken(index: 0, kind: 'word', text: 'I', normalized: 'i'),
+        SubtitleToken(
+          index: 1,
+          kind: 'whitespace',
+          text: ' ',
+          normalized: null,
+        ),
+        SubtitleToken(
+          index: 2,
+          kind: 'word',
+          text: 'think',
+          normalized: 'think',
+        ),
+        SubtitleToken(
+          index: 3,
+          kind: 'whitespace',
+          text: ' ',
+          normalized: null,
+        ),
+        SubtitleToken(index: 4, kind: 'word', text: 'so', normalized: 'so'),
+      ],
+    );
+    await tester.pumpWidget(
+      localized(
+        TokenLine(
+          cue: cue,
+          profiles: const {},
+          showStyles: true,
+          chunkPartition: const SentenceChunkPartition(
+            sentenceId: 'sentence-1',
+            chunks: [
+              DisplayChunk(
+                index: 0,
+                tokenStart: 0,
+                tokenEnd: 2,
+                text: 'I think',
+                start: Duration.zero,
+                end: Duration(seconds: 1),
+              ),
+              DisplayChunk(
+                index: 1,
+                tokenStart: 4,
+                tokenEnd: 4,
+                text: 'so',
+                start: Duration(seconds: 1),
+                end: Duration(seconds: 2),
+              ),
+            ],
+            partitionerId: 'test',
+            partitionerVersion: 'v1',
+            timingQuality: 'estimated',
+          ),
+          onWord: (_, _) async {},
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('chunk-container-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('chunk-container-1')), findsOneWidget);
+    expect(find.text('so'), findsOneWidget);
+    expect(
+      tester
+          .widget<AnimatedScale>(find.byKey(const ValueKey('chunk-scale-0')))
+          .scale,
+      1,
+    );
+    expect(
+      tester
+          .widget<AnimatedScale>(find.byKey(const ValueKey('chunk-scale-1')))
+          .scale,
+      1,
+    );
+  });
+
+  testWidgets('chunk bounce is optional and independent from word style', (
+    tester,
+  ) async {
+    const cue = Cue(
+      id: 'sentence-1',
+      index: 0,
+      start: Duration.zero,
+      end: Duration(seconds: 2),
+      text: 'I think',
+      tokens: [
+        SubtitleToken(index: 0, kind: 'word', text: 'I', normalized: 'i'),
+        SubtitleToken(
+          index: 1,
+          kind: 'whitespace',
+          text: ' ',
+          normalized: null,
+        ),
+        SubtitleToken(
+          index: 2,
+          kind: 'word',
+          text: 'think',
+          normalized: 'think',
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      localized(
+        TokenLine(
+          cue: cue,
+          profiles: const {},
+          showStyles: true,
+          chunkPartition: const SentenceChunkPartition(
+            sentenceId: 'sentence-1',
+            chunks: [
+              DisplayChunk(
+                index: 0,
+                tokenStart: 0,
+                tokenEnd: 2,
+                text: 'I think',
+                start: Duration.zero,
+                end: Duration(seconds: 2),
+              ),
+            ],
+            partitionerId: 'test',
+            partitionerVersion: 'v1',
+            timingQuality: 'estimated',
+          ),
+          currentChunkIndex: 0,
+          chunkHighlightStyle: 'bounce',
+          currentWordStyle: 'glow',
+          onWord: (_, _) async {},
+        ),
+      ),
+    );
+
+    expect(
+      tester
+          .widget<AnimatedScale>(find.byKey(const ValueKey('chunk-scale-0')))
+          .scale,
+      1.045,
+    );
+  });
 }

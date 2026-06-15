@@ -30,6 +30,10 @@ class SettingsDialog extends StatefulWidget {
     required this.openSubtitlesApiKey,
     required this.pronunciationVisible,
     required this.wordSyncVisible,
+    required this.showChunkGrouping,
+    required this.chunkDisplayStyle,
+    required this.highlightCurrentChunk,
+    required this.chunkHighlightStyle,
     required this.phonemeDisplay,
     required this.wordHighlightStyle,
     required this.wordAnimationIntensity,
@@ -57,6 +61,10 @@ class SettingsDialog extends StatefulWidget {
     required this.onTranscriptionDestinationChanged,
     required this.onPronunciationVisibleChanged,
     required this.onWordSyncVisibleChanged,
+    required this.onShowChunkGroupingChanged,
+    required this.onChunkDisplayStyleChanged,
+    required this.onHighlightCurrentChunkChanged,
+    required this.onChunkHighlightStyleChanged,
     required this.onPhonemeDisplayChanged,
     required this.onWordHighlightStyleChanged,
     required this.onWordAnimationIntensityChanged,
@@ -91,6 +99,10 @@ class SettingsDialog extends StatefulWidget {
   final String openSubtitlesApiKey;
   final bool pronunciationVisible;
   final bool wordSyncVisible;
+  final bool showChunkGrouping;
+  final String chunkDisplayStyle;
+  final bool highlightCurrentChunk;
+  final String chunkHighlightStyle;
   final String phonemeDisplay;
   final String wordHighlightStyle;
   final double wordAnimationIntensity;
@@ -120,6 +132,10 @@ class SettingsDialog extends StatefulWidget {
   final ValueChanged<String> onTranscriptionDestinationChanged;
   final ValueChanged<bool> onPronunciationVisibleChanged;
   final ValueChanged<bool> onWordSyncVisibleChanged;
+  final ValueChanged<bool> onShowChunkGroupingChanged;
+  final ValueChanged<String> onChunkDisplayStyleChanged;
+  final ValueChanged<bool> onHighlightCurrentChunkChanged;
+  final ValueChanged<String> onChunkHighlightStyleChanged;
   final ValueChanged<String> onPhonemeDisplayChanged;
   final ValueChanged<String> onWordHighlightStyleChanged;
   final ValueChanged<double> onWordAnimationIntensityChanged;
@@ -160,6 +176,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late String transcriptionDestination;
   late bool pronunciationVisible;
   late bool wordSyncVisible;
+  late bool showChunkGrouping;
+  late String chunkDisplayStyle;
+  late bool highlightCurrentChunk;
+  late String chunkHighlightStyle;
   late String phonemeDisplay;
   late String wordHighlightStyle;
   late double wordAnimationIntensity;
@@ -206,6 +226,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
     transcriptionDestination = widget.transcriptionDestination;
     pronunciationVisible = widget.pronunciationVisible;
     wordSyncVisible = widget.wordSyncVisible;
+    showChunkGrouping = widget.showChunkGrouping;
+    chunkDisplayStyle = widget.chunkDisplayStyle;
+    highlightCurrentChunk = widget.highlightCurrentChunk;
+    chunkHighlightStyle = widget.chunkHighlightStyle;
     phonemeDisplay = widget.phonemeDisplay;
     wordHighlightStyle = widget.wordHighlightStyle;
     wordAnimationIntensity = widget.wordAnimationIntensity;
@@ -264,6 +288,78 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   widget.onWordSyncVisibleChanged(value);
                   refresh(() {});
                 },
+              ),
+              SwitchListTile(
+                value: showChunkGrouping,
+                title: Text(l.text('showChunkGrouping')),
+                onChanged: (value) {
+                  showChunkGrouping = value;
+                  widget.onShowChunkGroupingChanged(value);
+                  refresh(() {});
+                },
+              ),
+              DropdownButtonFormField<String>(
+                initialValue: chunkDisplayStyle,
+                decoration: InputDecoration(
+                  labelText: l.text('chunkDisplayStyle'),
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: 'capsule',
+                    child: Text(l.text('chunkDisplayCapsule')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'spacing',
+                    child: Text(l.text('chunkDisplaySpacing')),
+                  ),
+                ],
+                onChanged: showChunkGrouping
+                    ? (value) {
+                        if (value == null) return;
+                        chunkDisplayStyle = value;
+                        widget.onChunkDisplayStyleChanged(value);
+                        refresh(() {});
+                      }
+                    : null,
+              ),
+              SwitchListTile(
+                value: highlightCurrentChunk,
+                title: Text(l.text('highlightCurrentChunk')),
+                onChanged: showChunkGrouping
+                    ? (value) {
+                        highlightCurrentChunk = value;
+                        widget.onHighlightCurrentChunkChanged(value);
+                        refresh(() {});
+                      }
+                    : null,
+              ),
+              DropdownButtonFormField<String>(
+                initialValue: chunkHighlightStyle,
+                decoration: InputDecoration(
+                  labelText: l.text('chunkHighlightStyle'),
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: 'background',
+                    child: Text(l.text('chunkHighlightBackground')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'bounce',
+                    child: Text(l.text('chunkHighlightBounce')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'glow',
+                    child: Text(l.text('chunkHighlightGlow')),
+                  ),
+                ],
+                onChanged: showChunkGrouping && highlightCurrentChunk
+                    ? (value) {
+                        if (value == null) return;
+                        chunkHighlightStyle = value;
+                        widget.onChunkHighlightStyleChanged(value);
+                        refresh(() {});
+                      }
+                    : null,
               ),
               DropdownButtonFormField<String>(
                 initialValue: wordHighlightStyle,

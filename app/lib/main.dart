@@ -213,6 +213,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       openSubtitlesApiKey: settingsController.openSubtitlesApiKey,
       pronunciationVisible: settingsController.pronunciationVisible,
       wordSyncVisible: settingsController.wordSyncVisible,
+      showChunkGrouping: settingsController.showChunkGrouping,
+      chunkDisplayStyle: settingsController.chunkDisplayStyle,
+      highlightCurrentChunk: settingsController.highlightCurrentChunk,
+      chunkHighlightStyle: settingsController.chunkHighlightStyle,
       phonemeDisplay: settingsController.phonemeDisplay,
       wordHighlightStyle: settingsController.wordHighlightStyle,
       wordAnimationIntensity: settingsController.wordAnimationIntensity,
@@ -333,6 +337,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     subtitleController.updateCurrentWord(
       value,
       enabled: settingsController.wordSyncVisible,
+      chunkEnabled:
+          settingsController.showChunkGrouping &&
+          settingsController.highlightCurrentChunk,
     );
     subtitleController.updateCurrentDetectedPhone(
       value,
@@ -518,10 +525,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
         service.trackWordTimings(trackId),
         service.pronunciationProviders(),
         service.trackPhoneticAnalyses(trackId),
+        service
+            .trackChunkPartitions(trackId)
+            .catchError((_) => <Map<String, dynamic>>[]),
       ]);
       final timings = values[0];
       final providers = values[1];
       final phoneticAnalyses = values[2];
+      final partitions = values[3];
       final grouped = <String, List<WordTiming>>{};
       for (final raw in timings) {
         final value = WordTiming.fromJson(raw);
@@ -539,6 +550,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
       subtitleController.setSpeechEnhancements(
         timingsBySentence: grouped,
+        chunkPartitionsBySentence:
+            Map<String, SentenceChunkPartition>.fromEntries(
+              partitions.map((raw) {
+                final partition = SentenceChunkPartition.fromJson(raw);
+                return MapEntry(partition.sentenceId, partition);
+              }),
+            ),
         pronunciationBySentence: Map<String, Map<String, dynamic>>.fromEntries(
           analyses.map(
             (value) => MapEntry(value['sentence_id'] as String, value),
@@ -552,6 +570,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       subtitleController.updateCurrentWord(
         playerController.position,
         enabled: settingsController.wordSyncVisible,
+        chunkEnabled:
+            settingsController.showChunkGrouping &&
+            settingsController.highlightCurrentChunk,
       );
       subtitleController.updateCurrentDetectedPhone(
         playerController.position,
@@ -885,6 +906,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         openSubtitlesApiKey: settingsController.openSubtitlesApiKey,
         pronunciationVisible: settingsController.pronunciationVisible,
         wordSyncVisible: settingsController.wordSyncVisible,
+        showChunkGrouping: settingsController.showChunkGrouping,
+        chunkDisplayStyle: settingsController.chunkDisplayStyle,
+        highlightCurrentChunk: settingsController.highlightCurrentChunk,
+        chunkHighlightStyle: settingsController.chunkHighlightStyle,
         phonemeDisplay: settingsController.phonemeDisplay,
         wordHighlightStyle: settingsController.wordHighlightStyle,
         wordAnimationIntensity: settingsController.wordAnimationIntensity,
@@ -981,6 +1006,39 @@ class _PlayerScreenState extends State<PlayerScreen> {
           subtitleController.updateCurrentWord(
             playerController.position,
             enabled: v,
+            chunkEnabled:
+                settingsController.showChunkGrouping &&
+                settingsController.highlightCurrentChunk,
+          );
+        },
+        onShowChunkGroupingChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(showChunkGrouping: v),
+          );
+          subtitleController.updateCurrentWord(
+            playerController.position,
+            enabled: settingsController.wordSyncVisible,
+            chunkEnabled: v && settingsController.highlightCurrentChunk,
+          );
+        },
+        onChunkDisplayStyleChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(chunkDisplayStyle: v),
+          );
+        },
+        onHighlightCurrentChunkChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(highlightCurrentChunk: v),
+          );
+          subtitleController.updateCurrentWord(
+            playerController.position,
+            enabled: settingsController.wordSyncVisible,
+            chunkEnabled: settingsController.showChunkGrouping && v,
+          );
+        },
+        onChunkHighlightStyleChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(chunkHighlightStyle: v),
           );
         },
         onPhonemeDisplayChanged: (v) {
@@ -2003,6 +2061,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                   baseColor: settingsController.primaryColor,
                                   currentTokenIndex:
                                       subtitleController.currentWordToken,
+                                  chunkPartition:
+                                      settingsController.showChunkGrouping
+                                      ? subtitleController
+                                            .chunkPartitionsBySentence[subtitleController
+                                            .currentPrimaryCue!
+                                            .id]
+                                      : null,
+                                  currentChunkIndex:
+                                      settingsController.highlightCurrentChunk
+                                      ? subtitleController.currentChunkIndex
+                                      : null,
+                                  chunkDisplayStyle:
+                                      settingsController.chunkDisplayStyle,
+                                  chunkHighlightStyle:
+                                      settingsController.chunkHighlightStyle,
                                   currentWordStyle:
                                       settingsController.wordHighlightStyle,
                                   currentWordIntensity:
