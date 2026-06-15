@@ -56,6 +56,12 @@
   evidence, and disabling the provider exactly preserves the C1-C3 pipeline.
 - Added a C4 golden corpus covering learned-model contribution, ordinary
   delivery, decisive rule boundaries, and model-disabled fallback.
+- Changed the default chunk presentation to static rounded capsules with clear
+  visual spacing while preserving word-level highlighting inside each chunk.
+  Current-chunk highlighting is now disabled by default and independently
+  configurable as static background, slow scale bounce, or slow glow.
+- Added an optional spacing-only chunk presentation and migrated existing v7
+  desktop settings to the new static-capsule default.
 
 ## 0.7.2 - 2026-06-14
 

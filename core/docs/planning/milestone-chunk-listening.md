@@ -316,10 +316,12 @@ TokenLine
 
 MVP visual behavior:
 
-- subtle extra spacing or divider between chunks;
-- optional low-opacity rounded background for the active chunk;
-- active chunk animation reuses the configured word highlight style and
-  intensity;
+- rounded capsule containers with clear spacing between chunks;
+- static chunk grouping by default while current-word highlighting continues
+  inside each capsule;
+- optional spacing-only grouping;
+- optional current-chunk background, slow scale bounce, or slow glow using a
+  chunk-specific animation style and cadence;
 - no layout jump when the active chunk changes;
 - current word highlight may remain visible inside the active chunk.
 
