@@ -1,6 +1,6 @@
 use domain::{SubtitleSentence, SubtitleSentenceId, SubtitleToken, SubtitleTokenKind, TimeMs};
 use speech_analysis::chunk_detection::{
-    detect_chunk_boundaries, detect_chunk_boundaries_for_track, ChunkDetectionConfig,
+    ChunkDetectionConfig, detect_chunk_boundaries, detect_chunk_boundaries_for_track,
 };
 use speech_analysis::estimate_word_timings;
 
@@ -46,14 +46,21 @@ fn estimated_timings_produce_single_chunk() {
     let config = ChunkDetectionConfig::default();
     let result = detect_chunk_boundaries(&timings, &config);
 
-    assert_eq!(result.chunks.len(), 1, "estimated timings should produce a single chunk");
+    assert_eq!(
+        result.chunks.len(),
+        1,
+        "estimated timings should produce a single chunk"
+    );
     assert_eq!(result.chunks[0].token_start, 0);
     assert_eq!(result.chunks[0].token_end, 4);
     assert_eq!(result.chunks[0].text, "I think that is right");
     assert!(result.boundaries.is_empty());
     // All raw gaps should be small (uniform distribution leaves near-zero gaps)
     for &gap in &result.raw_gaps_ms {
-        assert!(gap < 250, "estimated timings gaps should be well below threshold");
+        assert!(
+            gap < 250,
+            "estimated timings gaps should be well below threshold"
+        );
     }
 }
 
@@ -66,58 +73,107 @@ fn threshold_sensitivity_lower_finds_more_boundaries() {
     let sid = SubtitleSentenceId::parse("s1").unwrap();
     let timings = vec![
         domain::WordTiming {
-            sentence_id: sid.clone(), token_index: 0, text: "w0".into(),
-            start_ms: 0, end_ms: 80, confidence: None,
+            sentence_id: sid.clone(),
+            token_index: 0,
+            text: "w0".into(),
+            start_ms: 0,
+            end_ms: 80,
+            confidence: None,
             timing_source: domain::TimingSource::AsrReported,
-            provider_id: "test".into(), provider_version: "v1".into(),
+            provider_id: "test".into(),
+            provider_version: "v1".into(),
         },
         domain::WordTiming {
-            sentence_id: sid.clone(), token_index: 1, text: "w1".into(),
-            start_ms: 80, end_ms: 160, confidence: None,  // 0ms gap
+            sentence_id: sid.clone(),
+            token_index: 1,
+            text: "w1".into(),
+            start_ms: 80,
+            end_ms: 160,
+            confidence: None, // 0ms gap
             timing_source: domain::TimingSource::AsrReported,
-            provider_id: "test".into(), provider_version: "v1".into(),
+            provider_id: "test".into(),
+            provider_version: "v1".into(),
         },
         domain::WordTiming {
-            sentence_id: sid.clone(), token_index: 2, text: "w2".into(),
-            start_ms: 260, end_ms: 340, confidence: None,  // 100ms gap
+            sentence_id: sid.clone(),
+            token_index: 2,
+            text: "w2".into(),
+            start_ms: 260,
+            end_ms: 340,
+            confidence: None, // 100ms gap
             timing_source: domain::TimingSource::AsrReported,
-            provider_id: "test".into(), provider_version: "v1".into(),
+            provider_id: "test".into(),
+            provider_version: "v1".into(),
         },
         domain::WordTiming {
-            sentence_id: sid.clone(), token_index: 3, text: "w3".into(),
-            start_ms: 540, end_ms: 620, confidence: None,  // 200ms gap
+            sentence_id: sid.clone(),
+            token_index: 3,
+            text: "w3".into(),
+            start_ms: 540,
+            end_ms: 620,
+            confidence: None, // 200ms gap
             timing_source: domain::TimingSource::AsrReported,
-            provider_id: "test".into(), provider_version: "v1".into(),
+            provider_id: "test".into(),
+            provider_version: "v1".into(),
         },
         domain::WordTiming {
-            sentence_id: sid.clone(), token_index: 4, text: "w4".into(),
-            start_ms: 920, end_ms: 1000, confidence: None, // 300ms gap
+            sentence_id: sid.clone(),
+            token_index: 4,
+            text: "w4".into(),
+            start_ms: 920,
+            end_ms: 1000,
+            confidence: None, // 300ms gap
             timing_source: domain::TimingSource::AsrReported,
-            provider_id: "test".into(), provider_version: "v1".into(),
+            provider_id: "test".into(),
+            provider_version: "v1".into(),
         },
     ];
 
     // Very low threshold: should find boundaries at 100ms, 200ms, 300ms gaps.
-    let lo = ChunkDetectionConfig { gap_threshold_ms: 50, ..Default::default() };
+    let lo = ChunkDetectionConfig {
+        gap_threshold_ms: 50,
+        ..Default::default()
+    };
     let r_lo = detect_chunk_boundaries(&timings, &lo);
     // Expected: gaps at [0, 100, 200, 300] → boundaries at 100, 200, 300 → 4 chunks
-    assert_eq!(r_lo.boundaries.len(), 3, "low threshold should detect 3 boundaries");
+    assert_eq!(
+        r_lo.boundaries.len(),
+        3,
+        "low threshold should detect 3 boundaries"
+    );
     assert_eq!(r_lo.chunks.len(), 4);
 
     // Medium threshold: should find boundaries only at 200ms and 300ms.
-    let md = ChunkDetectionConfig { gap_threshold_ms: 150, ..Default::default() };
+    let md = ChunkDetectionConfig {
+        gap_threshold_ms: 150,
+        ..Default::default()
+    };
     let r_md = detect_chunk_boundaries(&timings, &md);
-    assert_eq!(r_md.boundaries.len(), 2, "medium threshold should detect 2 boundaries");
+    assert_eq!(
+        r_md.boundaries.len(),
+        2,
+        "medium threshold should detect 2 boundaries"
+    );
     assert_eq!(r_md.chunks.len(), 3);
 
     // High threshold: should find only the 300ms boundary.
-    let hi = ChunkDetectionConfig { gap_threshold_ms: 250, ..Default::default() };
+    let hi = ChunkDetectionConfig {
+        gap_threshold_ms: 250,
+        ..Default::default()
+    };
     let r_hi = detect_chunk_boundaries(&timings, &hi);
-    assert_eq!(r_hi.boundaries.len(), 1, "high threshold should detect 1 boundary");
+    assert_eq!(
+        r_hi.boundaries.len(),
+        1,
+        "high threshold should detect 1 boundary"
+    );
     assert_eq!(r_hi.chunks.len(), 2);
 
     // Very high: no boundaries.
-    let vh = ChunkDetectionConfig { gap_threshold_ms: 500, ..Default::default() };
+    let vh = ChunkDetectionConfig {
+        gap_threshold_ms: 500,
+        ..Default::default()
+    };
     let r_vh = detect_chunk_boundaries(&timings, &vh);
     assert!(r_vh.boundaries.is_empty());
     assert_eq!(r_vh.chunks.len(), 1);
@@ -132,47 +188,82 @@ fn chunk_text_reconstruction_matches_words() {
     // 7 words with a clear boundary after word 3 (gap=400ms).
     let timings = vec![
         domain::WordTiming {
-            sentence_id: sid.clone(), token_index: 0, text: "I".into(),
-            start_ms: 0, end_ms: 120, confidence: None,
+            sentence_id: sid.clone(),
+            token_index: 0,
+            text: "I".into(),
+            start_ms: 0,
+            end_ms: 120,
+            confidence: None,
             timing_source: domain::TimingSource::AsrReported,
-            provider_id: "test".into(), provider_version: "v1".into(),
+            provider_id: "test".into(),
+            provider_version: "v1".into(),
         },
         domain::WordTiming {
-            sentence_id: sid.clone(), token_index: 1, text: "think".into(),
-            start_ms: 130, end_ms: 300, confidence: None,
+            sentence_id: sid.clone(),
+            token_index: 1,
+            text: "think".into(),
+            start_ms: 130,
+            end_ms: 300,
+            confidence: None,
             timing_source: domain::TimingSource::AsrReported,
-            provider_id: "test".into(), provider_version: "v1".into(),
+            provider_id: "test".into(),
+            provider_version: "v1".into(),
         },
         domain::WordTiming {
-            sentence_id: sid.clone(), token_index: 2, text: "that".into(),
-            start_ms: 310, end_ms: 450, confidence: None,
+            sentence_id: sid.clone(),
+            token_index: 2,
+            text: "that".into(),
+            start_ms: 310,
+            end_ms: 450,
+            confidence: None,
             timing_source: domain::TimingSource::AsrReported,
-            provider_id: "test".into(), provider_version: "v1".into(),
+            provider_id: "test".into(),
+            provider_version: "v1".into(),
         },
         domain::WordTiming {
-            sentence_id: sid.clone(), token_index: 3, text: "it's".into(),
-            start_ms: 460, end_ms: 600, confidence: None,
+            sentence_id: sid.clone(),
+            token_index: 3,
+            text: "it's".into(),
+            start_ms: 460,
+            end_ms: 600,
+            confidence: None,
             timing_source: domain::TimingSource::AsrReported,
-            provider_id: "test".into(), provider_version: "v1".into(),
+            provider_id: "test".into(),
+            provider_version: "v1".into(),
         },
         // 400ms gap — clear prosodic boundary
         domain::WordTiming {
-            sentence_id: sid.clone(), token_index: 4, text: "important".into(),
-            start_ms: 1000, end_ms: 1250, confidence: None,
+            sentence_id: sid.clone(),
+            token_index: 4,
+            text: "important".into(),
+            start_ms: 1000,
+            end_ms: 1250,
+            confidence: None,
             timing_source: domain::TimingSource::AsrReported,
-            provider_id: "test".into(), provider_version: "v1".into(),
+            provider_id: "test".into(),
+            provider_version: "v1".into(),
         },
         domain::WordTiming {
-            sentence_id: sid.clone(), token_index: 5, text: "to".into(),
-            start_ms: 1260, end_ms: 1320, confidence: None,
+            sentence_id: sid.clone(),
+            token_index: 5,
+            text: "to".into(),
+            start_ms: 1260,
+            end_ms: 1320,
+            confidence: None,
             timing_source: domain::TimingSource::AsrReported,
-            provider_id: "test".into(), provider_version: "v1".into(),
+            provider_id: "test".into(),
+            provider_version: "v1".into(),
         },
         domain::WordTiming {
-            sentence_id: sid.clone(), token_index: 6, text: "note".into(),
-            start_ms: 1330, end_ms: 1600, confidence: None,
+            sentence_id: sid.clone(),
+            token_index: 6,
+            text: "note".into(),
+            start_ms: 1330,
+            end_ms: 1600,
+            confidence: None,
             timing_source: domain::TimingSource::AsrReported,
-            provider_id: "test".into(), provider_version: "v1".into(),
+            provider_id: "test".into(),
+            provider_version: "v1".into(),
         },
     ];
 
@@ -214,38 +305,56 @@ fn track_detection_isolates_sentences() {
     // Each sentence has one internal boundary (gap > threshold).
     let t1 = vec![
         domain::WordTiming {
-            sentence_id: sid1.clone(), token_index: 0, text: "a".into(),
-            start_ms: 0, end_ms: 100, confidence: None,
+            sentence_id: sid1.clone(),
+            token_index: 0,
+            text: "a".into(),
+            start_ms: 0,
+            end_ms: 100,
+            confidence: None,
             timing_source: domain::TimingSource::AsrReported,
-            provider_id: "test".into(), provider_version: "v1".into(),
+            provider_id: "test".into(),
+            provider_version: "v1".into(),
         },
         domain::WordTiming {
-            sentence_id: sid1.clone(), token_index: 1, text: "b".into(),
-            start_ms: 400, end_ms: 500, confidence: None,  // 300ms gap
+            sentence_id: sid1.clone(),
+            token_index: 1,
+            text: "b".into(),
+            start_ms: 400,
+            end_ms: 500,
+            confidence: None, // 300ms gap
             timing_source: domain::TimingSource::AsrReported,
-            provider_id: "test".into(), provider_version: "v1".into(),
+            provider_id: "test".into(),
+            provider_version: "v1".into(),
         },
     ];
     let t2 = vec![
         domain::WordTiming {
-            sentence_id: sid2.clone(), token_index: 0, text: "c".into(),
-            start_ms: 0, end_ms: 100, confidence: None,
+            sentence_id: sid2.clone(),
+            token_index: 0,
+            text: "c".into(),
+            start_ms: 0,
+            end_ms: 100,
+            confidence: None,
             timing_source: domain::TimingSource::AsrReported,
-            provider_id: "test".into(), provider_version: "v1".into(),
+            provider_id: "test".into(),
+            provider_version: "v1".into(),
         },
         domain::WordTiming {
-            sentence_id: sid2.clone(), token_index: 1, text: "d".into(),
-            start_ms: 500, end_ms: 600, confidence: None,  // 400ms gap
+            sentence_id: sid2.clone(),
+            token_index: 1,
+            text: "d".into(),
+            start_ms: 500,
+            end_ms: 600,
+            confidence: None, // 400ms gap
             timing_source: domain::TimingSource::AsrReported,
-            provider_id: "test".into(), provider_version: "v1".into(),
+            provider_id: "test".into(),
+            provider_version: "v1".into(),
         },
     ];
 
     let config = ChunkDetectionConfig::default();
-    let results = detect_chunk_boundaries_for_track(
-        &[(sid1.clone(), t1), (sid2.clone(), t2)],
-        &config,
-    );
+    let results =
+        detect_chunk_boundaries_for_track(&[(sid1.clone(), t1), (sid2.clone(), t2)], &config);
 
     assert_eq!(results.len(), 2);
     let r1 = &results[&sid1];
@@ -269,8 +378,7 @@ fn detects_chunks_from_real_asr_timings() {
         "{}/../../testdata/asr/sample-output.json",
         env!("CARGO_MANIFEST_DIR")
     );
-    let json_bytes =
-        std::fs::read(&fixture_path).expect("failed to read ASR JSON fixture");
+    let json_bytes = std::fs::read(&fixture_path).expect("failed to read ASR JSON fixture");
 
     let sentences = vec![
         sentence("s1", 0, 4000, &["Hello", "world"]),
@@ -285,7 +393,11 @@ fn detects_chunks_from_real_asr_timings() {
     let result = detect_chunk_boundaries(&timings, &config);
 
     // Every word should appear in some chunk.
-    let chunk_word_count: usize = result.chunks.iter().map(|c| c.text.split_whitespace().count()).sum();
+    let chunk_word_count: usize = result
+        .chunks
+        .iter()
+        .map(|c| c.text.split_whitespace().count())
+        .sum();
     assert_eq!(chunk_word_count, timings.len());
 
     // Result metadata should be populated.
@@ -301,6 +413,9 @@ fn detects_chunks_from_real_asr_timings() {
     // confidence.
     for b in &result.boundaries {
         assert!(b.gap_ms > 0, "boundary gap should be non-zero");
-        assert!((0.0..=1.0).contains(&b.confidence), "confidence should be in [0,1]");
+        assert!(
+            (0.0..=1.0).contains(&b.confidence),
+            "confidence should be in [0,1]"
+        );
     }
 }

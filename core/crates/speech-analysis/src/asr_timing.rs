@@ -164,11 +164,19 @@ fn merge_tokens_to_words(tokens: &[WhisperToken]) -> Vec<MergedWord> {
 }
 
 impl WhisperToken {
+    fn is_special(&self) -> bool {
+        (self.text.starts_with("[_") && self.text.ends_with("_]"))
+            || self.text.starts_with("[_TT_")
+            || (self.text.starts_with("<|") && self.text.ends_with("|>"))
+    }
+
     fn is_lexical(&self) -> bool {
-        self.text
-            .trim()
-            .chars()
-            .any(|value| value.is_alphanumeric() || value == '\'')
+        !self.is_special()
+            && self
+                .text
+                .trim()
+                .chars()
+                .any(|value| value.is_alphanumeric() || value == '\'')
     }
 
     fn confidence(&self) -> Option<f32> {

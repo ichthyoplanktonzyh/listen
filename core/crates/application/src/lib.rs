@@ -983,10 +983,13 @@ impl AppServices {
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<
-        std::collections::HashMap<SubtitleSentenceId, speech_analysis::chunk_detection::ChunkDetectionResult>,
+        std::collections::HashMap<
+            SubtitleSentenceId,
+            speech_analysis::chunk_detection::ChunkDetectionResult,
+        >,
         ApplicationError,
     > {
-        use speech_analysis::chunk_detection::{detect_chunk_boundaries, ChunkDetectionConfig};
+        use speech_analysis::chunk_detection::{ChunkDetectionConfig, detect_chunk_boundaries};
         let track = self
             .subtitles
             .get_track(track_id)?
@@ -1007,7 +1010,7 @@ impl AppServices {
         &self,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<speech_analysis::chunk_detection::ChunkDetectionResult, ApplicationError> {
-        use speech_analysis::chunk_detection::{detect_chunk_boundaries, ChunkDetectionConfig};
+        use speech_analysis::chunk_detection::{ChunkDetectionConfig, detect_chunk_boundaries};
         let timings = self.word_timings(sentence_id)?;
         let mut result = detect_chunk_boundaries(&timings, &ChunkDetectionConfig::default());
         result.sentence_id = sentence_id.clone();
@@ -1067,10 +1070,9 @@ impl AppServices {
     pub fn detect_combined_sentence_chunks(
         &self,
         sentence_id: &SubtitleSentenceId,
-    ) -> Result<speech_analysis::chunk_detection::CombinedChunkResult, ApplicationError>
-    {
+    ) -> Result<speech_analysis::chunk_detection::CombinedChunkResult, ApplicationError> {
         use speech_analysis::chunk_detection::{
-            combine_chunks, detect_chunk_boundaries, ChunkDetectionConfig,
+            ChunkDetectionConfig, combine_chunks, detect_chunk_boundaries,
         };
         let sentence = self
             .subtitles
@@ -1079,12 +1081,9 @@ impl AppServices {
         let timings = self.word_timings(sentence_id)?;
         let candidates = self.phrase_candidates(sentence_id)?;
 
-        let acoustic =
-            detect_chunk_boundaries(&timings, &ChunkDetectionConfig::default());
-        let text = speech_analysis::text_chunk_detection::detect_text_chunks(
-            &sentence,
-            &candidates,
-        );
+        let acoustic = detect_chunk_boundaries(&timings, &ChunkDetectionConfig::default());
+        let text =
+            speech_analysis::text_chunk_detection::detect_text_chunks(&sentence, &candidates);
 
         Ok(combine_chunks(&acoustic, &text))
     }
@@ -1989,6 +1988,7 @@ mod tests {
                 .punctuation_reliability,
             speech_analysis::chunk_partition::PunctuationReliability::Trusted
         );
+    }
 
     // ── phrase_candidates ───────────────────────────────────────────────────
 

@@ -175,9 +175,7 @@ pub enum PauseRefinementError {
 mod tests {
     use super::*;
     use crate::chunk_partition::{ChunkPartitionConfig, partition_sentence};
-    use domain::{
-        SubtitleSentence, SubtitleSentenceId, SubtitleToken, SubtitleTokenKind, TimeMs,
-    };
+    use domain::{SubtitleSentence, SubtitleSentenceId, SubtitleToken, SubtitleTokenKind, TimeMs};
 
     fn wav_with_pause(start_ms: u64, end_ms: u64, duration_ms: u64) -> Vec<u8> {
         let spec = hound::WavSpec {

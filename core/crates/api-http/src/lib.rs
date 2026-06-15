@@ -1701,7 +1701,11 @@ mod tests {
             serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
                 .unwrap();
         assert_eq!(partitions.as_array().unwrap().len(), 4);
-        assert!(partitions[0]["chunks"].as_array().is_some_and(|chunks| !chunks.is_empty()));
+        assert!(
+            partitions[0]["chunks"]
+                .as_array()
+                .is_some_and(|chunks| !chunks.is_empty())
+        );
 
         let response = app
             .clone()
@@ -2266,8 +2270,8 @@ mod tests {
         // Count documented paths as a regression gate.
         let path_count = openapi.lines().filter(|l| l.starts_with("  /v1/")).count();
         assert_eq!(
-            path_count, 64,
-            "OpenAPI path count changed from 64 — update snapshot if paths were added/removed"
+            path_count, 68,
+            "OpenAPI path count changed from 68 — update snapshot if paths were added/removed"
         );
 
         // All paths must be under /v1/.

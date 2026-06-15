@@ -377,13 +377,11 @@ fn resolve_overlaps(mut spans: Vec<PhraseSpan>) -> Vec<PhraseSpan> {
     spans.sort_by(|a, b| {
         let len_a = a.token_end as i64 - a.token_start as i64;
         let len_b = b.token_end as i64 - b.token_start as i64;
-        len_b
-            .cmp(&len_a)
-            .then_with(|| {
-                b.confidence
-                    .partial_cmp(&a.confidence)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
+        len_b.cmp(&len_a).then_with(|| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
     });
 
     let max_token = spans.iter().map(|s| s.token_end).max().unwrap_or(0) as usize;
@@ -555,7 +553,11 @@ fn evidence_from_source(source: &SpanSource) -> TextChunkEvidence {
 
 /// Join the text of a slice of tokens with spaces.
 fn join_token_text(tokens: &[&domain::SubtitleToken]) -> String {
-    tokens.iter().map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ")
+    tokens
+        .iter()
+        .map(|t| t.text.as_str())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 // ---------------------------------------------------------------------------
@@ -696,7 +698,10 @@ mod tests {
             .chunks
             .iter()
             .find(|c| c.evidence == TextChunkEvidence::Collocation);
-        assert!(collocation_chunk.is_some(), "should find 'bus stop' as collocation");
+        assert!(
+            collocation_chunk.is_some(),
+            "should find 'bus stop' as collocation"
+        );
         let chunk = collocation_chunk.unwrap();
         assert_eq!(chunk.text, "bus stop");
         assert_eq!(chunk.token_start, 1); // "bus"
@@ -716,13 +721,9 @@ mod tests {
     fn phrase_list_entry_detected() {
         // "a couple of" is in both COCA (MI 9.20) and PHRASE List.
         // COCA wins on higher confidence, so evidence is Collocation.
-        let sentence =
-            make_sentence("s1", 0, 4000, &["i", "need", "a", "couple", "of", "those"]);
+        let sentence = make_sentence("s1", 0, 4000, &["i", "need", "a", "couple", "of", "those"]);
         let result = detect_text_chunks(&sentence, &[]);
-        let phrase_chunk = result
-            .chunks
-            .iter()
-            .find(|c| c.text == "a couple of");
+        let phrase_chunk = result.chunks.iter().find(|c| c.text == "a couple of");
         assert!(
             phrase_chunk.is_some(),
             "should find 'a couple of' as a multi-word chunk"
@@ -767,8 +768,7 @@ mod tests {
     fn longest_match_wins() {
         // "a lot of" (3-gram) and "a lot" (2-gram) overlap — longer should win.
         // "a lot of" is in both COCA and PHRASE List; longer span wins.
-        let sentence =
-            make_sentence("s1", 0, 4000, &["there", "is", "a", "lot", "of", "stuff"]);
+        let sentence = make_sentence("s1", 0, 4000, &["there", "is", "a", "lot", "of", "stuff"]);
         let result = detect_text_chunks(&sentence, &[]);
         // Should detect the 3-word phrase "a lot of", not the 2-word "a lot".
         let phrase_chunks: Vec<_> = result
@@ -781,7 +781,10 @@ mod tests {
         assert!(has_three_word, "longer 'a lot of' should be detected");
         // "a lot" alone should not appear as a separate chunk.
         let has_two_word = phrase_chunks.iter().any(|c| c.text == "a lot");
-        assert!(!has_two_word, "shorter 'a lot' should be suppressed by overlap resolution");
+        assert!(
+            !has_two_word,
+            "shorter 'a lot' should be suppressed by overlap resolution"
+        );
     }
 
     #[test]
@@ -803,7 +806,10 @@ mod tests {
         // "pick up" or "pick up the" — depending on COCA entries
         let has_pick_up = phrase_texts.iter().any(|t| t.contains("pick up"));
         let has_bus_stop = phrase_texts.iter().any(|t| t.contains("bus stop"));
-        assert!(has_pick_up || has_bus_stop, "at least one phrase should be detected");
+        assert!(
+            has_pick_up || has_bus_stop,
+            "at least one phrase should be detected"
+        );
     }
 
     // -- case insensitivity ----------------------------------------------------
@@ -891,7 +897,12 @@ mod tests {
         ];
         let sentence = make_sentence_with_punct("s1", 0, 2000, tokens);
         let result = detect_text_chunks(&sentence, &[]);
-        assert!(!result.chunks.iter().any(|chunk| chunk.text == "take care of"));
+        assert!(
+            !result
+                .chunks
+                .iter()
+                .any(|chunk| chunk.text == "take care of")
+        );
     }
 
     #[test]
@@ -900,10 +911,12 @@ mod tests {
         let candidates = vec![candidate("invalid", "invalid", "invalid", 0, u32::MAX)];
         let result = detect_text_chunks(&sentence, &candidates);
         assert_eq!(result.chunks.len(), 2);
-        assert!(result
-            .chunks
-            .iter()
-            .all(|chunk| chunk.evidence == TextChunkEvidence::SingleWord));
+        assert!(
+            result
+                .chunks
+                .iter()
+                .all(|chunk| chunk.evidence == TextChunkEvidence::SingleWord)
+        );
     }
 
     // -- confidence mapping ----------------------------------------------------
@@ -974,18 +987,17 @@ mod tests {
             .chunks
             .iter()
             .any(|c| c.text == "in front of" && c.evidence != TextChunkEvidence::SingleWord);
-        assert!(has_in_front_of, "'in front of' should be detected as a multi-word chunk");
+        assert!(
+            has_in_front_of,
+            "'in front of' should be detected as a multi-word chunk"
+        );
     }
 
     #[test]
     fn take_care_of_detected() {
-        let sentence =
-            make_sentence("s1", 0, 4000, &["please", "take", "care", "of", "her"]);
+        let sentence = make_sentence("s1", 0, 4000, &["please", "take", "care", "of", "her"]);
         let result = detect_text_chunks(&sentence, &[]);
-        let has_take_care_of = result
-            .chunks
-            .iter()
-            .any(|c| c.text == "take care of");
+        let has_take_care_of = result.chunks.iter().any(|c| c.text == "take care of");
         assert!(has_take_care_of, "'take care of' should be detected");
     }
 }

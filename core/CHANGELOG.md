@@ -152,7 +152,6 @@
   the display/API contract stable.
 - Verified with workspace Rust tests, strict targeted clippy, Flutter analysis,
   Flutter tests, and whitespace checks.
->>>>>>> worktree-feature+chunk-listening-comprehension
 
 ## 0.7.1 - 2026-06-13
 

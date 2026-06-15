@@ -190,9 +190,8 @@ pub fn detect_chunk_boundaries(
         .unwrap_or_else(|| {
             // Sentinel id for empty input — callers should guard against this,
             // but we degrade safely.
-            SubtitleSentenceId::parse("empty").unwrap_or_else(|_| {
-                panic!("failed to construct sentinel sentence id")
-            })
+            SubtitleSentenceId::parse("empty")
+                .unwrap_or_else(|_| panic!("failed to construct sentinel sentence id"))
         });
 
     let raw_gaps = compute_raw_gaps(timings);
@@ -240,7 +239,12 @@ pub fn detect_chunk_boundaries(
     let mut chunk_start: usize = 0;
     for boundary in &boundaries {
         let chunk_end = boundary.position as usize;
-        chunks.push(build_chunk(timings, chunk_start, chunk_end, Some(boundary.clone())));
+        chunks.push(build_chunk(
+            timings,
+            chunk_start,
+            chunk_end,
+            Some(boundary.clone()),
+        ));
         chunk_start = boundary.position as usize + 1;
     }
     // Final chunk (or only chunk when there are no boundaries).
@@ -425,8 +429,7 @@ pub fn combine_chunks(
                 .chunks
                 .iter()
                 .find(|ac| {
-                    ac.token_start == text_chunk.token_start
-                        && ac.token_end == text_chunk.token_end
+                    ac.token_start == text_chunk.token_start && ac.token_end == text_chunk.token_end
                 })
                 .map(|ac| (Some(ac.start_ms), Some(ac.end_ms)))
                 .unwrap_or((None, None))

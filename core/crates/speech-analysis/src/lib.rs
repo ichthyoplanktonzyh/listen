@@ -1,10 +1,10 @@
 pub mod asr_timing;
-pub mod phonetic_alignment;
-pub mod phonetic_findings;
 pub mod chunk_detection;
 pub mod chunk_partition;
 pub mod learned_prosodic_provider;
 pub mod pause_refinement;
+pub mod phonetic_alignment;
+pub mod phonetic_findings;
 pub mod rich_acoustic_evidence;
 pub mod text_chunk_detection;
 use std::collections::HashMap;
