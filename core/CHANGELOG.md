@@ -10,6 +10,12 @@
   `third_party/runtime/macos-arm64`. Together these fixes let the app find
   the full ASR toolchain when launched from anywhere inside the repository
   tree.
+- Added `resolve_bundled_tool` and `runtime_candidates_from` to the
+  transcription coordinator so the API sidecar discovers the bundled
+  `whisper-cli` runtime by walking ancestor directories from both
+  `current_exe` and `current_dir`. Flutter's sidecar resolution checks
+  `target/release/api-http` before `target/debug/api-http`, so both
+  profiles must be rebuilt after upgrading the Rust source.
 - Started Milestone 2.0 Phase 0 with a fixed 60-slot real-speech evaluation
   catalog covering news, interview, conversation, speech rate, recording
   quality, and six target connected-speech phenomena.
