@@ -3,7 +3,7 @@ import 'dart:io';
 
 class AppSettings {
   const AppSettings({
-    this.version = 7,
+    this.version = 8,
     this.rate = 1,
     this.volume = 100,
     this.primarySubtitleOffsetMs = 0,
@@ -33,7 +33,9 @@ class AppSettings {
     this.pronunciationVisible = true,
     this.wordSyncVisible = true,
     this.showChunkGrouping = true,
-    this.highlightCurrentChunk = true,
+    this.chunkDisplayStyle = 'capsule',
+    this.highlightCurrentChunk = false,
+    this.chunkHighlightStyle = 'background',
     this.phonemeDisplay = 'ipa',
     this.wordHighlightStyle = 'background',
     this.wordAnimationIntensity = 0.35,
@@ -49,7 +51,8 @@ class AppSettings {
         version != 4 &&
         version != 5 &&
         version != 6 &&
-        version != 7) {
+        version != 7 &&
+        version != 8) {
       return const AppSettings();
     }
     final legacyBottomPadding = _number(
@@ -113,7 +116,11 @@ class AppSettings {
       pronunciationVisible: json['pronunciation_visible'] as bool? ?? true,
       wordSyncVisible: json['word_sync_visible'] as bool? ?? true,
       showChunkGrouping: json['show_chunk_grouping'] as bool? ?? true,
-      highlightCurrentChunk: json['highlight_current_chunk'] as bool? ?? true,
+      chunkDisplayStyle: _chunkDisplayStyle(json['chunk_display_style']),
+      highlightCurrentChunk: version >= 8
+          ? json['highlight_current_chunk'] as bool? ?? false
+          : false,
+      chunkHighlightStyle: _chunkHighlightStyle(json['chunk_highlight_style']),
       phonemeDisplay: json['phoneme_display'] as String? ?? 'ipa',
       wordHighlightStyle: _wordHighlightStyle(json['word_highlight_style']),
       wordAnimationIntensity: _number(
@@ -158,7 +165,9 @@ class AppSettings {
   final bool pronunciationVisible;
   final bool wordSyncVisible;
   final bool showChunkGrouping;
+  final String chunkDisplayStyle;
   final bool highlightCurrentChunk;
+  final String chunkHighlightStyle;
   final String phonemeDisplay;
   final String wordHighlightStyle;
   final double wordAnimationIntensity;
@@ -166,12 +175,15 @@ class AppSettings {
   final bool precomputePronunciation;
 
   static File get file => File(
-    '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v7.json',
+    '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v8.json',
   );
 
   static Future<AppSettings> load() async {
     for (final candidate in [
       file,
+      File(
+        '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v7.json',
+      ),
       File(
         '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v6.json',
       ),
@@ -236,7 +248,9 @@ class AppSettings {
         'pronunciation_visible': pronunciationVisible,
         'word_sync_visible': wordSyncVisible,
         'show_chunk_grouping': showChunkGrouping,
+        'chunk_display_style': chunkDisplayStyle,
         'highlight_current_chunk': highlightCurrentChunk,
+        'chunk_highlight_style': chunkHighlightStyle,
         'phoneme_display': phonemeDisplay,
         'word_highlight_style': wordHighlightStyle,
         'word_animation_intensity': wordAnimationIntensity,
@@ -277,7 +291,9 @@ class AppSettings {
     bool? pronunciationVisible,
     bool? wordSyncVisible,
     bool? showChunkGrouping,
+    String? chunkDisplayStyle,
     bool? highlightCurrentChunk,
+    String? chunkHighlightStyle,
     String? phonemeDisplay,
     String? wordHighlightStyle,
     double? wordAnimationIntensity,
@@ -319,7 +335,9 @@ class AppSettings {
     pronunciationVisible: pronunciationVisible ?? this.pronunciationVisible,
     wordSyncVisible: wordSyncVisible ?? this.wordSyncVisible,
     showChunkGrouping: showChunkGrouping ?? this.showChunkGrouping,
+    chunkDisplayStyle: chunkDisplayStyle ?? this.chunkDisplayStyle,
     highlightCurrentChunk: highlightCurrentChunk ?? this.highlightCurrentChunk,
+    chunkHighlightStyle: chunkHighlightStyle ?? this.chunkHighlightStyle,
     phonemeDisplay: phonemeDisplay ?? this.phonemeDisplay,
     wordHighlightStyle: wordHighlightStyle ?? this.wordHighlightStyle,
     wordAnimationIntensity:
@@ -337,5 +355,11 @@ class AppSettings {
   ) => value is num ? value.toDouble().clamp(minimum, maximum) : fallback;
 
   static String _wordHighlightStyle(Object? value) =>
+      value == 'bounce' || value == 'glow' ? value as String : 'background';
+
+  static String _chunkDisplayStyle(Object? value) =>
+      value == 'spacing' ? value as String : 'capsule';
+
+  static String _chunkHighlightStyle(Object? value) =>
       value == 'bounce' || value == 'glow' ? value as String : 'background';
 }

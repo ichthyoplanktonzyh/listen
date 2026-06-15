@@ -20,6 +20,8 @@ class TokenLine extends StatelessWidget {
     this.currentTokenIndex,
     this.chunkPartition,
     this.currentChunkIndex,
+    this.chunkDisplayStyle = 'capsule',
+    this.chunkHighlightStyle = 'background',
     this.currentWordStyle = 'background',
     this.currentWordIntensity = 0.35,
   });
@@ -33,6 +35,8 @@ class TokenLine extends StatelessWidget {
   final int? currentTokenIndex;
   final SentenceChunkPartition? chunkPartition;
   final int? currentChunkIndex;
+  final String chunkDisplayStyle;
+  final String chunkHighlightStyle;
   final String currentWordStyle;
   final double currentWordIntensity;
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
@@ -67,37 +71,52 @@ class TokenLine extends StatelessWidget {
           .toList(growable: false);
       if (chunkTokens.isEmpty) continue;
       final active = chunk.index == currentChunkIndex;
+      final capsule = chunkDisplayStyle == 'capsule';
       spans.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.baseline,
           baseline: TextBaseline.alphabetic,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 3),
+            padding: EdgeInsets.symmetric(horizontal: capsule ? 5 : 4),
             child: AnimatedScale(
-              scale: active && currentWordStyle == 'bounce'
-                  ? 1 + currentWordIntensity * 0.14
-                  : 1,
+              key: ValueKey('chunk-scale-${chunk.index}'),
+              scale: active && chunkHighlightStyle == 'bounce' ? 1.045 : 1,
               alignment: Alignment.bottomCenter,
-              duration: const Duration(milliseconds: 140),
-              curve: Curves.easeOutBack,
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOutCubic,
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 140),
-                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                key: ValueKey('chunk-container-${chunk.index}'),
+                duration: const Duration(milliseconds: 280),
+                padding: EdgeInsets.symmetric(
+                  horizontal: capsule ? 10 : 2,
+                  vertical: capsule ? 4 : 1,
+                ),
                 decoration: BoxDecoration(
                   color: active
-                      ? Theme.of(context).colorScheme.primary.withValues(
-                          alpha: 0.12 + currentWordIntensity * 0.16,
-                        )
+                      ? Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.18)
+                      : capsule
+                      ? Colors.white.withValues(alpha: 0.08)
                       : Colors.transparent,
-                  borderRadius: BorderRadius.circular(5),
-                  boxShadow: active && currentWordStyle == 'glow'
+                  border: capsule
+                      ? Border.all(
+                          color: active
+                              ? Theme.of(
+                                  context,
+                                ).colorScheme.primary.withValues(alpha: 0.42)
+                              : Colors.white.withValues(alpha: 0.18),
+                        )
+                      : null,
+                  borderRadius: BorderRadius.circular(999),
+                  boxShadow: active && chunkHighlightStyle == 'glow'
                       ? [
                           BoxShadow(
-                            color: Theme.of(context).colorScheme.primary
-                                .withValues(
-                                  alpha: 0.2 + currentWordIntensity * 0.3,
-                                ),
-                            blurRadius: 4 + currentWordIntensity * 8,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: 0.34),
+                            blurRadius: 12,
+                            spreadRadius: 1,
                           ),
                         ]
                       : null,

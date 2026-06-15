@@ -40,7 +40,7 @@ void main() {
       'version': 1,
       'subtitle_offset_ms': -125,
     });
-    expect(settings.version, 7);
+    expect(settings.version, 8);
     expect(settings.primarySubtitleOffsetMs, -125);
   });
 
@@ -71,17 +71,17 @@ void main() {
 
   test('falls back safely for an unsupported settings version', () {
     final settings = AppSettings.fromJson({'version': 999, 'rate': 4});
-    expect(settings.version, 7);
+    expect(settings.version, 8);
     expect(settings.rate, 1);
   });
 
-  test('loads pronunciation and word sync settings v7', () {
+  test('migrates v7 chunk animation to static capsules', () {
     final settings = AppSettings.fromJson({
       'version': 7,
       'pronunciation_visible': false,
       'word_sync_visible': false,
       'show_chunk_grouping': false,
-      'highlight_current_chunk': false,
+      'highlight_current_chunk': true,
       'phoneme_display': 'arpabet',
       'word_highlight_style': 'glow',
       'word_animation_intensity': 0.8,
@@ -91,7 +91,9 @@ void main() {
     expect(settings.pronunciationVisible, isFalse);
     expect(settings.wordSyncVisible, isFalse);
     expect(settings.showChunkGrouping, isFalse);
+    expect(settings.chunkDisplayStyle, 'capsule');
     expect(settings.highlightCurrentChunk, isFalse);
+    expect(settings.chunkHighlightStyle, 'background');
     expect(settings.phonemeDisplay, 'arpabet');
     expect(settings.wordHighlightStyle, 'glow');
     expect(settings.wordAnimationIntensity, 0.8);
@@ -104,7 +106,9 @@ void main() {
       pronunciationVisible: false,
       wordSyncVisible: false,
       showChunkGrouping: false,
+      chunkDisplayStyle: 'spacing',
       highlightCurrentChunk: false,
+      chunkHighlightStyle: 'glow',
       phonemeDisplay: 'arpabet',
       wordHighlightStyle: 'bounce',
       wordAnimationIntensity: 0.8,
@@ -117,7 +121,9 @@ void main() {
     expect(updated.pronunciationVisible, isFalse);
     expect(updated.wordSyncVisible, isTrue);
     expect(updated.showChunkGrouping, isFalse);
+    expect(updated.chunkDisplayStyle, 'spacing');
     expect(updated.highlightCurrentChunk, isFalse);
+    expect(updated.chunkHighlightStyle, 'glow');
     expect(updated.phonemeDisplay, 'arpabet');
     expect(updated.wordHighlightStyle, 'bounce');
     expect(updated.wordAnimationIntensity, 0.8);
@@ -132,5 +138,18 @@ void main() {
     });
 
     expect(settings.wordHighlightStyle, 'background');
+  });
+
+  test('loads independently configured chunk presentation settings v8', () {
+    final settings = AppSettings.fromJson({
+      'version': 8,
+      'chunk_display_style': 'spacing',
+      'highlight_current_chunk': true,
+      'chunk_highlight_style': 'bounce',
+    });
+
+    expect(settings.chunkDisplayStyle, 'spacing');
+    expect(settings.highlightCurrentChunk, isTrue);
+    expect(settings.chunkHighlightStyle, 'bounce');
   });
 }

@@ -213,7 +213,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       pronunciationVisible: settingsController.pronunciationVisible,
       wordSyncVisible: settingsController.wordSyncVisible,
       showChunkGrouping: settingsController.showChunkGrouping,
+      chunkDisplayStyle: settingsController.chunkDisplayStyle,
       highlightCurrentChunk: settingsController.highlightCurrentChunk,
+      chunkHighlightStyle: settingsController.chunkHighlightStyle,
       phonemeDisplay: settingsController.phonemeDisplay,
       wordHighlightStyle: settingsController.wordHighlightStyle,
       wordAnimationIntensity: settingsController.wordAnimationIntensity,
@@ -825,7 +827,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         pronunciationVisible: settingsController.pronunciationVisible,
         wordSyncVisible: settingsController.wordSyncVisible,
         showChunkGrouping: settingsController.showChunkGrouping,
+        chunkDisplayStyle: settingsController.chunkDisplayStyle,
         highlightCurrentChunk: settingsController.highlightCurrentChunk,
+        chunkHighlightStyle: settingsController.chunkHighlightStyle,
         phonemeDisplay: settingsController.phonemeDisplay,
         wordHighlightStyle: settingsController.wordHighlightStyle,
         wordAnimationIntensity: settingsController.wordAnimationIntensity,
@@ -931,6 +935,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
             chunkEnabled: v && settingsController.highlightCurrentChunk,
           );
         },
+        onChunkDisplayStyleChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(chunkDisplayStyle: v),
+          );
+        },
         onHighlightCurrentChunkChanged: (v) {
           settingsController.update(
             settingsController.settings.copyWith(highlightCurrentChunk: v),
@@ -939,6 +948,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
             playerController.position,
             enabled: settingsController.wordSyncVisible,
             chunkEnabled: settingsController.showChunkGrouping && v,
+          );
+        },
+        onChunkHighlightStyleChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(chunkHighlightStyle: v),
           );
         },
         onPhonemeDisplayChanged: (v) {
@@ -1910,6 +1924,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                       settingsController.highlightCurrentChunk
                                       ? subtitleController.currentChunkIndex
                                       : null,
+                                  chunkDisplayStyle:
+                                      settingsController.chunkDisplayStyle,
+                                  chunkHighlightStyle:
+                                      settingsController.chunkHighlightStyle,
                                   currentWordStyle:
                                       settingsController.wordHighlightStyle,
                                   currentWordIntensity:

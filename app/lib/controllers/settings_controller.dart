@@ -38,7 +38,9 @@ class SettingsController extends ChangeNotifier {
   bool get pronunciationVisible => _settings.pronunciationVisible;
   bool get wordSyncVisible => _settings.wordSyncVisible;
   bool get showChunkGrouping => _settings.showChunkGrouping;
+  String get chunkDisplayStyle => _settings.chunkDisplayStyle;
   bool get highlightCurrentChunk => _settings.highlightCurrentChunk;
+  String get chunkHighlightStyle => _settings.chunkHighlightStyle;
   String get phonemeDisplay => _settings.phonemeDisplay;
   String get wordHighlightStyle => _settings.wordHighlightStyle;
   double get wordAnimationIntensity => _settings.wordAnimationIntensity;
