@@ -3,9 +3,31 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use domain::*;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 const DICTIONARY_CACHE_TTL_MS: u64 = 30 * 24 * 60 * 60 * 1000;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SentenceWordTimingDiagnostics {
+    pub sentence_id: SubtitleSentenceId,
+    pub boundaries: Vec<WordTimingBoundaryDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WordTimingBoundaryDiagnostic {
+    pub left_token_index: u32,
+    pub right_token_index: u32,
+    pub left_end_ms: u64,
+    pub right_start_ms: u64,
+    pub gap_ms: u64,
+    pub left_timing_source: TimingSource,
+    pub right_timing_source: TimingSource,
+    pub left_provider_id: String,
+    pub left_provider_version: String,
+    pub right_provider_id: String,
+    pub right_provider_version: String,
+}
 
 pub trait MediaRepository: Send + Sync {
     fn upsert(&self, media: &MediaItem) -> Result<MediaItem, ApplicationError>;
@@ -858,6 +880,48 @@ impl AppServices {
         Ok(values)
     }
 
+    pub fn word_timing_diagnostics_for_track(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<SentenceWordTimingDiagnostics>, ApplicationError> {
+        let track = self
+            .subtitles
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        track
+            .sentences
+            .iter()
+            .filter_map(|sentence| {
+                let timings = match self.word_timings(&sentence.id) {
+                    Ok(timings) => timings,
+                    Err(error) => return Some(Err(error)),
+                };
+                if timings.is_empty() {
+                    return None;
+                }
+                Some(Ok(SentenceWordTimingDiagnostics {
+                    sentence_id: sentence.id.clone(),
+                    boundaries: timings
+                        .windows(2)
+                        .map(|pair| WordTimingBoundaryDiagnostic {
+                            left_token_index: pair[0].token_index,
+                            right_token_index: pair[1].token_index,
+                            left_end_ms: pair[0].end_ms,
+                            right_start_ms: pair[1].start_ms,
+                            gap_ms: pair[1].start_ms.saturating_sub(pair[0].end_ms),
+                            left_timing_source: pair[0].timing_source,
+                            right_timing_source: pair[1].timing_source,
+                            left_provider_id: pair[0].provider_id.clone(),
+                            left_provider_version: pair[0].provider_version.clone(),
+                            right_provider_id: pair[1].provider_id.clone(),
+                            right_provider_version: pair[1].provider_version.clone(),
+                        })
+                        .collect(),
+                }))
+            })
+            .collect()
+    }
+
     /// Detect acoustic chunk boundaries for every sentence in a subtitle track.
     ///
     /// Uses gap-based detection on existing word timings. Each sentence is
@@ -1262,8 +1326,8 @@ impl AppServices {
 fn timing_priority(source: TimingSource) -> u8 {
     match source {
         TimingSource::Estimated => 1,
-        TimingSource::ForcedAligned => 2,
-        TimingSource::AsrReported => 3,
+        TimingSource::AsrReported => 2,
+        TimingSource::ForcedAligned => 3,
         TimingSource::UserAdjusted => 4,
     }
 }
@@ -1803,8 +1867,8 @@ mod tests {
     #[test]
     fn timing_priority_ordering() {
         assert_eq!(timing_priority(TimingSource::Estimated), 1);
-        assert_eq!(timing_priority(TimingSource::ForcedAligned), 2);
-        assert_eq!(timing_priority(TimingSource::AsrReported), 3);
+        assert_eq!(timing_priority(TimingSource::AsrReported), 2);
+        assert_eq!(timing_priority(TimingSource::ForcedAligned), 3);
         assert_eq!(timing_priority(TimingSource::UserAdjusted), 4);
     }
 
@@ -1820,6 +1884,14 @@ mod tests {
         );
         assert!(
             timing_priority(TimingSource::UserAdjusted) > timing_priority(TimingSource::Estimated)
+        );
+    }
+
+    #[test]
+    fn forced_alignment_overrides_coarse_asr_timing() {
+        assert!(
+            timing_priority(TimingSource::ForcedAligned)
+                > timing_priority(TimingSource::AsrReported)
         );
     }
 

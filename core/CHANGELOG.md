@@ -62,6 +62,20 @@
   configurable as static background, slow scale bounce, or slow glow.
 - Added an optional spacing-only chunk presentation and migrated existing v7
   desktop settings to the new static-capsule default.
+- Added the Word Timing Accuracy milestone. Whisper DTW v2 now ignores
+  punctuation timestamps when deriving lexical word edges and gives lexical
+  alignment points a bounded duration so punctuation cannot consume audible
+  pauses.
+- Added optional local PCM energy pause refinement during Whisper
+  transcription. Sustained audible pauses near coarse DTW boundaries restore
+  adjacent word gaps as provider-attributed `ForcedAligned` timings, while
+  missing or unsupported audio safely retains DTW timings.
+- Changed timing precedence so refined forced alignment can replace coarse ASR
+  timing while user-adjusted timing remains authoritative. Added
+  `GET /v1/subtitles/{track_id}/word-timing-diagnostics` for inspecting final
+  gaps and adjacent timing providers.
+- Existing ASR tracks remain unchanged and must be re-transcribed to receive
+  DTW v2 and audible-pause refinement.
 
 ## 0.7.2 - 2026-06-14
 

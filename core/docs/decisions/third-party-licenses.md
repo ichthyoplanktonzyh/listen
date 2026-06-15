@@ -12,6 +12,7 @@ This is an M0 inventory, not legal advice.
 | tauri-plugin-libmpv | Tauri libmpv embedding | MPL-2.0 |
 | libmpv-wrapper | Plugin native wrapper | Verify release artifact license before distribution |
 | Rust, Tokio, Axum, Serde | Shared core foundation | Review crate manifests before distribution |
+| hound | Local PCM WAV parsing for audible-pause timing refinement | Apache-2.0 |
 | reqwest/rustls | HTTPS dictionary provider | MIT OR Apache-2.0 |
 | Free Dictionary API | Online definitions and phonetics | API described as free; server GPL-3.0; returned content provenance requires review before commercial distribution |
 | file_selector | Native file selection | BSD-3-Clause |

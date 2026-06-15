@@ -452,6 +452,8 @@ impl TranscriptionCoordinator {
             "1".into(),
             "-ar".into(),
             "16000".into(),
+            "-c:a".into(),
+            "pcm_s16le".into(),
             wav.to_string_lossy().into_owned(),
         ]);
         self.run_command(&job.id, &ffmpeg, &ffmpeg_args).await?;
@@ -525,7 +527,18 @@ impl TranscriptionCoordinator {
                     &track.sentences,
                 );
                 match timings {
-                    Ok(timings) if !timings.is_empty() => {
+                    Ok(mut timings) if !timings.is_empty() => {
+                        if let Ok(wav_bytes) = tokio::fs::read(&wav).await
+                            && let Ok(refined) =
+                                speech_analysis::pause_refinement::refine_word_timings_from_pcm_wav(
+                                    &wav_bytes,
+                                    &timings,
+                                    &speech_analysis::pause_refinement::PauseRefinementConfig::default(),
+                                )
+                            && !refined.pauses.is_empty()
+                        {
+                            timings = refined.timings;
+                        }
                         let _ = self.services.store_word_timings(&track.id, &timings);
                     }
                     _ => {

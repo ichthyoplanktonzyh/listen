@@ -1,6 +1,8 @@
 use domain::{SubtitleSentence, SubtitleTokenKind, TimingSource, WordTiming};
 use serde::Deserialize;
 
+const DTW_TOKEN_DURATION_MS: u64 = 80;
+
 /// Top-level whisper JSON-full output.
 #[derive(Debug, Deserialize)]
 struct WhisperOutput {
@@ -75,9 +77,15 @@ fn extract_sentence_word_timings(
     }
 
     let mut timings = Vec::with_capacity(words.len());
-    for (word, token) in words.iter().zip(word_tokens.iter()) {
+    for (position, (word, token)) in words.iter().zip(word_tokens.iter()).enumerate() {
         let start_ms = (word.start_t_dtw * 10) as u64;
-        let end_ms = (word.end_t_dtw * 10) as u64;
+        let next_start_ms = words
+            .get(position + 1)
+            .map(|next| (next.start_t_dtw * 10) as u64)
+            .unwrap_or_else(|| sentence.end.get());
+        let end_ms = ((word.end_t_dtw * 10) as u64)
+            .saturating_add(DTW_TOKEN_DURATION_MS)
+            .min(next_start_ms);
 
         if start_ms > end_ms || end_ms < sentence.start.get() || start_ms > sentence.end.get() {
             // Invalid timing — skip this sentence.
@@ -93,7 +101,7 @@ fn extract_sentence_word_timings(
             confidence: word.mean_confidence,
             timing_source: TimingSource::AsrReported,
             provider_id: "whisper.cpp".into(),
-            provider_version: "dtw-v1".into(),
+            provider_version: "dtw-v2".into(),
         });
     }
 
@@ -118,11 +126,15 @@ struct MergedWord {
 ///
 /// A token that starts with whitespace (or is the first token) begins a new word.
 /// Tokens without leading whitespace append to the current word.
-/// Punctuation-only tokens are attached to the current word.
+/// Punctuation-only and special tokens are ignored so they cannot consume an
+/// audible pause after the preceding lexical word.
 fn merge_tokens_to_words(tokens: &[WhisperToken]) -> Vec<MergedWord> {
     let mut words: Vec<MergedWord> = Vec::new();
 
     for token in tokens {
+        if !token.is_lexical() {
+            continue;
+        }
         let is_new_word =
             token.text.starts_with(' ') || token.text.starts_with('\n') || words.is_empty();
 
@@ -152,6 +164,13 @@ fn merge_tokens_to_words(tokens: &[WhisperToken]) -> Vec<MergedWord> {
 }
 
 impl WhisperToken {
+    fn is_lexical(&self) -> bool {
+        self.text
+            .trim()
+            .chars()
+            .any(|value| value.is_alphanumeric() || value == '\'')
+    }
+
     fn confidence(&self) -> Option<f32> {
         None // whisper.cpp DTW tokens don't include per-token confidence
     }
@@ -236,6 +255,28 @@ mod tests {
         assert_eq!(words[0].end_t_dtw, 120); // "ing" end
         assert_eq!(words[1].start_t_dtw, 140);
         assert_eq!(words[1].end_t_dtw, 140);
+    }
+
+    #[test]
+    fn punctuation_does_not_extend_previous_word() {
+        let tokens = vec![
+            WhisperToken {
+                text: " hello".into(),
+                t_dtw: 100,
+            },
+            WhisperToken {
+                text: ",".into(),
+                t_dtw: 180,
+            },
+            WhisperToken {
+                text: " again".into(),
+                t_dtw: 220,
+            },
+        ];
+        let words = merge_tokens_to_words(&tokens);
+        assert_eq!(words.len(), 2);
+        assert_eq!(words[0].end_t_dtw, 100);
+        assert_eq!(words[1].start_t_dtw, 220);
     }
 
     #[test]

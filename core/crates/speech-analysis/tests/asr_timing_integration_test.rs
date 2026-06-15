@@ -60,61 +60,60 @@ fn parses_fixture_and_extracts_word_timings() {
         "should extract 2 + 4 + 2 = 8 word timings"
     );
 
-    // ── Segment 1: "Hello" (t_dtw 100→1000ms), "world" (t_dtw 250→3500ms) ──
-    // Note: "." token (t_dtw=350) is merged into "world", so world.end_ms = 3500
+    // Lexical DTW points receive a bounded 80ms duration. Punctuation does not
+    // extend the previous word because that would consume audible pauses.
     assert_eq!(timings[0].sentence_id, sentences[0].id);
     assert_eq!(timings[0].token_index, 0);
     assert_eq!(timings[0].text, "Hello");
     assert_eq!(timings[0].start_ms, 1000);
-    assert_eq!(timings[0].end_ms, 1000);
+    assert_eq!(timings[0].end_ms, 1080);
 
     assert_eq!(timings[1].sentence_id, sentences[0].id);
     assert_eq!(timings[1].token_index, 1);
     assert_eq!(timings[1].text, "world");
     assert_eq!(timings[1].start_ms, 2500);
-    assert_eq!(timings[1].end_ms, 3500); // "." appended
+    assert_eq!(timings[1].end_ms, 2580);
 
     // ── Segment 2: "I", "was", "playing", "games" ──
-    // Note: "." token (t_dtw=820) is merged into "games", so games.end_ms = 8200
     assert_eq!(timings[2].sentence_id, sentences[1].id);
     assert_eq!(timings[2].token_index, 0);
     assert_eq!(timings[2].text, "I");
     assert_eq!(timings[2].start_ms, 4000);
-    assert_eq!(timings[2].end_ms, 4000);
+    assert_eq!(timings[2].end_ms, 4080);
 
     assert_eq!(timings[3].token_index, 1);
     assert_eq!(timings[3].text, "was");
     assert_eq!(timings[3].start_ms, 4800);
-    assert_eq!(timings[3].end_ms, 4800);
+    assert_eq!(timings[3].end_ms, 4880);
 
     // "playing" = " play" + "ing" → start=5800 (play), end=6200 (ing)
     assert_eq!(timings[4].token_index, 2);
     assert_eq!(timings[4].text, "playing");
     assert_eq!(timings[4].start_ms, 5800);
-    assert_eq!(timings[4].end_ms, 6200);
+    assert_eq!(timings[4].end_ms, 6280);
 
     assert_eq!(timings[5].token_index, 3);
     assert_eq!(timings[5].text, "games");
     assert_eq!(timings[5].start_ms, 7000);
-    assert_eq!(timings[5].end_ms, 8200); // "." appended
+    assert_eq!(timings[5].end_ms, 7080);
 
     // ── Segment 3: "is", "what" (t_dtw=-1 for "This" filtered out) ──
     assert_eq!(timings[6].sentence_id, sentences[2].id);
     assert_eq!(timings[6].token_index, 0);
     assert_eq!(timings[6].text, "is");
     assert_eq!(timings[6].start_ms, 9000);
-    assert_eq!(timings[6].end_ms, 9000);
+    assert_eq!(timings[6].end_ms, 9080);
 
     assert_eq!(timings[7].token_index, 1);
     assert_eq!(timings[7].text, "what");
     assert_eq!(timings[7].start_ms, 9800);
-    assert_eq!(timings[7].end_ms, 9800);
+    assert_eq!(timings[7].end_ms, 9880);
 
     // All timings should be AsrReported
     for t in &timings {
         assert_eq!(t.timing_source, TimingSource::AsrReported);
         assert_eq!(t.provider_id, "whisper.cpp");
-        assert_eq!(t.provider_version, "dtw-v1");
+        assert_eq!(t.provider_version, "dtw-v2");
         assert!(t.start_ms <= t.end_ms);
         assert!(t.confidence.is_none());
     }

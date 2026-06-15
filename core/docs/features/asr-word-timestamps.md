@@ -29,10 +29,12 @@ whisper-cli -ojf -dtw <model_preset> audio.wav
   │
   └─ output.json  ──→  asr_timing::extract_word_timings_from_json()
                          ├─  parse WhisperSegment[] + WhisperToken[].t_dtw
-                         ├─  merge subword tokens → words (leading-whitespace split)
+                         ├─  merge lexical subword tokens → words
+                         ├─  ignore punctuation timestamps
                          ├─  validate word count matches sentence tokens
                          ├─  validate boundary & monotonicity constraints
-                         └─  produce Vec<WordTiming>
+                         ├─  produce DTW v2 Vec<WordTiming>
+                         └─  refine audible pauses from local PCM WAV
                                 │
                                 └─→  store_word_timings()
                                       │
@@ -70,10 +72,14 @@ Whisper's tokenizer splits some words into subword units (e.g.,
 | Token pattern | Action |
 |---|---|
 | Starts with space or newline | Begins a new word |
-| No leading space | Appends to the current word |
+| No leading space and lexical content | Appends to the current word |
 | First token in segment | Always begins the first word |
+| Punctuation or special token | Ignored for word edges |
 
-A word's `start_ms` = first subword's `t_dtw × 10`; `end_ms` = last subword's `t_dtw × 10`.
+A word's `start_ms` is the first lexical subword's `t_dtw × 10`. DTW v2 gives
+the final lexical point a bounded 80ms duration, capped by the next word, so
+single-token words are not zero-duration and punctuation cannot consume a
+following pause.
 
 Tokens with `t_dtw == -1` (DTW unavailable) are filtered out. Words
 with all unavailable tokens are discarded.
@@ -111,6 +117,10 @@ The extraction fails safely at multiple levels:
 In all cases, **transcription succeeds** and the track is imported. Missing
 ASR timings simply fall back to the existing weighted estimator.
 
+Tracks generated before DTW v2 are not rewritten automatically. Re-transcribe
+an existing track to receive punctuation-safe DTW edges and local pause
+refinement.
+
 ## Code Layout
 
 ```
@@ -121,8 +131,18 @@ crates/api-http/src/transcription.rs         # -ojf, -dtw flags; extraction call
 crates/api-http/Cargo.toml                   # +speech-analysis dep
 ```
 
-No changes to: `domain`, `application`, `persistence-sqlite`, `subtitle-core`,
-`apps/desktop/`.
+No persistence schema or Flutter display changes are required.
+
+### Audible-Pause Refinement
+
+During transcription, the existing local WAV is explicit mono PCM16 at 16kHz.
+`local-energy-pause-refiner@v1` searches near each DTW word boundary for at
+least 120ms below -38 dBFS. When a pause lies inside the adjacent word
+interval, only those two word edges move to the pause edges and receive
+`timing_source = forced_aligned`.
+
+The refiner is optional and failure-safe. Unsupported WAV data or missing
+pauses retain DTW v2 timings.
 
 ## Design Decisions
 
@@ -159,15 +179,15 @@ passes it through.
 - `speech_analysis::asr_timing` has 4 unit tests covering subword merge,
   continuation token append, t_dtw=-1 filtering, and count mismatch fallback.
 - The existing M1.9 word-timing API tests (`verify-m19.sh`) pass unchanged,
-  confirming `asr_reported` priority and estimation fallback are preserved.
-- Full `cargo test --workspace` (55 Rust + 38 Flutter tests) + `cargo clippy`
-  + `flutter analyze` pass.
+  confirming refined timing priority and estimation fallback are preserved.
+- Full `cargo test --workspace`, strict workspace `cargo clippy`, Flutter
+  analyze/test, and contract validation pass.
 
 Manual functional testing: open a video, run ASR transcription with a
 whisper-family model, and observe that current-word highlighting tracks
 audio more precisely than with an ordinary SRT file. The word-timing
-diagnostic should show `timing_source = asr_reported` for the generated
-track.
+diagnostics show the final gap and whether adjacent words use
+`whisper.cpp@dtw-v2` or `local-energy-pause-refiner@v1`.
 
 ## Known Limitations
 

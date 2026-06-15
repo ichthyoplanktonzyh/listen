@@ -111,6 +111,10 @@ pub fn router(state: ApiState) -> Router {
             get(track_word_timings).post(generate_track_word_timings),
         )
         .route(
+            "/v1/subtitles/{track_id}/word-timing-diagnostics",
+            get(track_word_timing_diagnostics),
+        )
+        .route(
             "/v1/subtitles/{track_id}/chunk-partitions",
             get(track_chunk_partitions),
         )
@@ -561,6 +565,19 @@ async fn track_word_timings(
     state
         .services
         .word_timings_for_track(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn track_word_timing_diagnostics(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<Vec<application::SentenceWordTimingDiagnostics>>, ApiError> {
+    state
+        .services
+        .word_timing_diagnostics_for_track(
+            &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
+        )
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -1392,6 +1409,26 @@ mod tests {
         assert!(partitions[0]["chunks"].as_array().is_some_and(|chunks| !chunks.is_empty()));
 
         let response = app
+            .clone()
+            .oneshot(
+                Request::get(format!(
+                    "/v1/subtitles/{}/word-timing-diagnostics",
+                    track["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let timing_diagnostics: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(timing_diagnostics.as_array().unwrap().len(), 4);
+        assert!(timing_diagnostics[0]["boundaries"].as_array().is_some());
+
+        let response = app
             .oneshot(
                 Request::get(format!(
                     "/v1/subtitles/{}/chunk-diagnostics",
@@ -1556,6 +1593,7 @@ mod tests {
             "/v1/subtitles/{track_id}/pronunciation",
             "/v1/subtitles/{track_id}/pronunciation-analysis",
             "/v1/subtitles/{track_id}/word-timings",
+            "/v1/subtitles/{track_id}/word-timing-diagnostics",
             "/v1/subtitles/{track_id}/chunk-partitions",
             "/v1/subtitles/{track_id}/chunk-diagnostics",
             "/v1/chunk/providers",
@@ -1600,8 +1638,8 @@ mod tests {
         // Count documented paths as a regression gate.
         let path_count = openapi.lines().filter(|l| l.starts_with("  /v1/")).count();
         assert_eq!(
-            path_count, 54,
-            "OpenAPI path count changed from 54 — update snapshot if paths were added/removed"
+            path_count, 55,
+            "OpenAPI path count changed from 55 — update snapshot if paths were added/removed"
         );
 
         // All paths must be under /v1/.

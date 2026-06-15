@@ -15,6 +15,17 @@ Developers can inspect the matching diagnostic output with:
 GET /v1/subtitles/{track_id}/chunk-diagnostics
 ```
 
+When a listener hears a pause that the partitioner misses, inspect the timing
+input first:
+
+```text
+GET /v1/subtitles/{track_id}/word-timing-diagnostics
+```
+
+It reports every final inter-word gap plus the timing source and provider on
+both sides. This distinguishes a timing/refinement miss from a partition-score
+decision.
+
 The diagnostic endpoint uses the same track-source configuration as the
 product partition. In particular, punctuation from a known ASR-generated track
 is treated as inferred evidence and cannot force a boundary by itself.

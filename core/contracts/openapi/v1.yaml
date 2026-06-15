@@ -171,6 +171,11 @@ paths:
       operationId: generateTrackWordTimings
       responses:
         "200": { description: Generated word timings with safe estimated fallback }
+  /v1/subtitles/{track_id}/word-timing-diagnostics:
+    get:
+      operationId: trackWordTimingDiagnostics
+      responses:
+        "200": { description: Developer-facing inter-word gaps with timing source and provider provenance }
   /v1/subtitles/{track_id}/chunk-partitions:
     get:
       operationId: trackChunkPartitions
