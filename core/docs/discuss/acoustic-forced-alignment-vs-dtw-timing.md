@@ -125,6 +125,52 @@ playback position) is visually distinct.
    refines boundaries; phone-level timestamps from either source feed the
    same `DetectedPhone` structure
 
+## Downstream Impact: Chunk Partitioning Accuracy
+
+Imprecise word timestamps cascade into the chunk partitioning pipeline.
+`chunk_partition.rs` determines chunk boundaries primarily through inter-word
+gap detection:
+
+```rust
+let gap_ms = effective_timings[next].start_ms.saturating_sub(effective_timings[current].end_ms);
+```
+
+The default `asr_reported_gap_threshold_ms` is 250 ms. If the gap between two
+words exceeds this threshold, the position is scored as a candidate boundary
+and may become a chunk split point.
+
+### Error Propagation
+
+Word-level timestamp errors from DTW propagate into gap calculations via two
+sources of uncertainty:
+
+- `current_word.end_ms` — DTW may place the end of a word too early or too late
+- `next_word.start_ms` — DTW may place the start of the next word correspondingly off
+
+The gap is `next.start - current.end`. Both components carry error, so the
+gap estimate suffers from *compounded* uncertainty. A ~50 ms jitter per boundary
+can easily push a real 280 ms pause below 250 ms (missed boundary) or inflate a
+real 200 ms gap to 250+ ms (false boundary).
+
+### Concrete Failure Modes
+
+| DTW error pattern | Gap effect | Chunk consequence |
+|---|---|---|
+| `current.end_ms` too late + `next.start_ms` too early | Gap shrinks | Real pause missed → two chunks incorrectly merged |
+| `current.end_ms` too early + `next.start_ms` too late | Gap widens | False boundary → sentence split mid-phrase |
+| Cumulative drift across sentence | All gaps distorted | Chunk boundaries shift toward sentence end |
+
+### Implications
+
+The chunk listening comprehension feature (`worktree-feature+chunk-listening-comprehension`)
+depends on these boundaries for capsule-based display and playback. Inaccurate
+boundaries degrade the user experience: chunks that are too long overwhelm the
+learner, while chunks cut mid-phrase break syntactic units.
+
+Improving the underlying word timing source (moving from DTW to forced alignment)
+would address both the word-level highlighting inaccuracy AND the chunk boundary
+inaccuracy — since both derive from the same timestamp source.
+
 ## References
 
 - McAuliffe et al., "Montreal Forced Aligner: Trainable Text-Speech Alignment
