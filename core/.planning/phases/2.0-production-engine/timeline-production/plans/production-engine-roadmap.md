@@ -78,7 +78,7 @@ word/phone/chunk timeline；轻量消费端读取已产出的资源并提供稳�
 
 ## Phase 3: Production Pipeline V1
 
-状态：进行中。
+状态：完成（2026-06-18 19:30:22 CST）。
 
 目标：建立个人本地重装生产管线。
 
@@ -95,8 +95,9 @@ word/phone/chunk timeline；轻量消费端读取已产出的资源并提供稳�
 
 - CNN10/NBC 样本可稳定跑完并产出 `.lltimeline.json`。
 - 同一视频可以比较 DTW、WhisperX、MFA/BFA、人工修正版本。
+- 管线输出可追踪的 preprocessing / WhisperX run / production quality artifacts。
 
-当前已完成第一批切片：
+完成内容：
 
 - 生产端独立脚本目录 `scripts/timeline-production/`。
 - `prepare-audio` 用 ffmpeg 抽取 16kHz mono PCM wav。
@@ -104,7 +105,9 @@ word/phone/chunk timeline；轻量消费端读取已产出的资源并提供稳�
 - `run-whisperx` 调用本地 WhisperX venv 或自定义命令，输出 WhisperX JSON。
 - `produce-whisperx` 编排 prepare-media、run-whisperx、from-whisperx-json。
 - `from-whisperx-json` 将外部 WhisperX JSON 转换为 `LLTimeline JSON v1`。
-- contract validation 覆盖 WhisperX sample -> LLTimeline 转换。
+- `report` 为 `.lltimeline.json` 生成 `production-report.json`，记录 word coverage、
+  overlap/gap、confidence、provider 和人工复核准备状态。
+- contract validation 覆盖 WhisperX sample -> LLTimeline 转换和 production report。
 
 ## Phase 4: Evaluation System
 

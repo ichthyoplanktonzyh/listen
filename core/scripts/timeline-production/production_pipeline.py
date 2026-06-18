@@ -110,8 +110,121 @@ def word_token_indexes(tokens: list[dict[str, Any]]) -> list[int]:
     return [token["index"] for token in tokens if token["kind"] == "word"]
 
 
+def load_json(path: Path) -> Any:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def active_word_timeline(document: dict[str, Any]) -> dict[str, Any] | None:
+    timelines = document.get("word_timelines") or []
+    active_id = document.get("active_word_timeline_id")
+    if active_id:
+        for timeline in timelines:
+            if isinstance(timeline, dict) and timeline.get("id") == active_id:
+                return timeline
+    for timeline in timelines:
+        if isinstance(timeline, dict) and timeline.get("status") == "active":
+            return timeline
+    return timelines[0] if timelines and isinstance(timelines[0], dict) else None
+
+
+def word_timing_quality(words: list[dict[str, Any]]) -> dict[str, Any]:
+    by_sentence: dict[str, list[dict[str, Any]]] = {}
+    for word in words:
+        by_sentence.setdefault(str(word.get("sentence_id")), []).append(word)
+    overlap_count = 0
+    large_gap_count = 0
+    max_gap_ms = 0
+    for sentence_words in by_sentence.values():
+        sentence_words.sort(key=lambda word: (int(word.get("start_ms", 0)), int(word.get("end_ms", 0))))
+        for left, right in zip(sentence_words, sentence_words[1:]):
+            gap = int(right.get("start_ms", 0)) - int(left.get("end_ms", 0))
+            if gap < 0:
+                overlap_count += 1
+            elif gap > 750:
+                large_gap_count += 1
+            max_gap_ms = max(max_gap_ms, gap)
+    confidences = [
+        float(word["confidence"])
+        for word in words
+        if isinstance(word.get("confidence"), (int, float))
+    ]
+    provider_ids = sorted({str(word.get("provider_id", "unknown")) for word in words})
+    return {
+        "word_count": len(words),
+        "sentence_count": len(by_sentence),
+        "overlap_count": overlap_count,
+        "large_gap_count": large_gap_count,
+        "max_gap_ms": max_gap_ms,
+        "confidence_count": len(confidences),
+        "average_confidence": round(sum(confidences) / len(confidences), 6) if confidences else None,
+        "provider_ids": provider_ids,
+        "valid": overlap_count == 0,
+    }
+
+
+def build_production_report(document: dict[str, Any], input_path: str | None = None) -> dict[str, Any]:
+    if document.get("schema") != SCHEMA:
+        raise SystemExit(f"unsupported LLTimeline schema: {document.get('schema')!r}")
+    segments = document.get("segments") or []
+    token_word_count = sum(
+        1
+        for segment in segments
+        for token in segment.get("tokens", [])
+        if isinstance(token, dict) and token.get("kind") == "word"
+    )
+    timeline = active_word_timeline(document)
+    words = timeline.get("words", []) if timeline else []
+    quality = word_timing_quality(words)
+    artifacts = document.get("artifacts") or []
+    return {
+        "report_version": 1,
+        "generated_at_ms": now_ms(),
+        "input": input_path,
+        "schema": document["schema"],
+        "media": document.get("metadata", {}).get("media", {}),
+        "active_word_timeline_id": document.get("active_word_timeline_id"),
+        "segment_count": len(segments),
+        "token_word_count": token_word_count,
+        "word_timeline_count": len(document.get("word_timelines") or []),
+        "active_word_count": quality["word_count"],
+        "word_coverage": round(quality["word_count"] / token_word_count, 6) if token_word_count else None,
+        "quality": quality,
+        "artifact_kinds": [
+            artifact.get("kind", "unknown")
+            for artifact in artifacts
+            if isinstance(artifact, dict)
+        ],
+        "human_reviewed": document.get("metadata", {}).get("human_reviewed", False),
+        "ready_for_manual_review": quality["valid"] and quality["word_count"] > 0,
+    }
+
+
+def write_production_report(input_path: Path, output_path: Path) -> dict[str, Any]:
+    document = load_json(input_path)
+    report = build_production_report(document, str(input_path))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return report
+
+
+def report_lltimeline(args: argparse.Namespace) -> int:
+    report = write_production_report(Path(args.input), Path(args.output))
+    print(
+        json.dumps(
+            {
+                "output": args.output,
+                "segments": report["segment_count"],
+                "words": report["active_word_count"],
+                "ready_for_manual_review": report["ready_for_manual_review"],
+            },
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
 def convert_whisperx(args: argparse.Namespace) -> int:
-    source = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    source = load_json(Path(args.input))
     raw_segments = source.get("segments")
     if not isinstance(raw_segments, list) or not raw_segments:
         raise SystemExit("WhisperX JSON must contain a non-empty segments array")
@@ -205,7 +318,7 @@ def convert_whisperx(args: argparse.Namespace) -> int:
         }
     ]
     if args.preprocessing_artifacts:
-        preprocessing = json.loads(Path(args.preprocessing_artifacts).read_text(encoding="utf-8"))
+        preprocessing = load_json(Path(args.preprocessing_artifacts))
         artifacts.append(
             {
                 "kind": "preprocessing",
@@ -503,7 +616,7 @@ def produce_whisperx(args: argparse.Namespace) -> int:
         )
     )
     preprocessing_artifacts = media_dir / "preprocessing-artifacts.json"
-    preprocessing = json.loads(preprocessing_artifacts.read_text(encoding="utf-8"))
+    preprocessing = load_json(preprocessing_artifacts)
     selected_audio = Path(preprocessing["selected_audio_path"])
     whisperx_args = argparse.Namespace(**whisperx_namespace(args, selected_audio, whisperx_dir))
     whisperx_report = run_whisperx_report(whisperx_args)
@@ -526,11 +639,15 @@ def produce_whisperx(args: argparse.Namespace) -> int:
             status=args.status,
         )
     )
+    report_path = output_dir / "production-report.json"
+    report = write_production_report(output, report_path)
     print(
         json.dumps(
             {
                 "output": str(output),
                 "preprocessing_artifacts": str(preprocessing_artifacts),
+                "production_report": str(report_path),
+                "ready_for_manual_review": report["ready_for_manual_review"],
                 "whisperx_json": whisperx_report["whisperx_json"],
             },
             sort_keys=True,
@@ -632,6 +749,11 @@ def parser() -> argparse.ArgumentParser:
     convert.add_argument("--config-hash", default="default")
     convert.add_argument("--status", choices=["candidate", "active", "archived"], default="active")
     convert.set_defaults(func=convert_whisperx)
+
+    report = subcommands.add_parser("report", help="create a production report for an LLTimeline file")
+    report.add_argument("--input", required=True)
+    report.add_argument("--output", required=True)
+    report.set_defaults(func=report_lltimeline)
 
     produce = subcommands.add_parser(
         "produce-whisperx",

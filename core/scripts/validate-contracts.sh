@@ -58,6 +58,12 @@ production_report="$(
 production_validation="$(
   python3 "$root/scripts/lltimeline-resource.py" validate "$production_output"
 )"
+production_quality_report="$tmp/production-report.json"
+production_quality="$(
+  python3 "$root/scripts/timeline-production/production_pipeline.py" report \
+    --input "$production_output" \
+    --output "$production_quality_report"
+)"
 node -e '
 const fs = require("fs");
 const report = JSON.parse(process.argv[1]);
@@ -78,11 +84,14 @@ if (report.active_word_timeline_id !== "timeline-fixture") throw new Error("LLTi
 ' "$lltimeline_report"
 
 node -e '
+const fs = require("fs");
 const prepare = JSON.parse(process.argv[1]);
 const whisperx = JSON.parse(process.argv[2]);
 const produce = JSON.parse(process.argv[3]);
 const production = JSON.parse(process.argv[4]);
 const validation = JSON.parse(process.argv[5]);
+const quality = JSON.parse(process.argv[6]);
+const qualityFile = JSON.parse(fs.readFileSync(process.argv[7], "utf8"));
 if (!prepare.artifacts_path.endsWith("preprocessing-artifacts.json")) throw new Error("prepare-media artifact missing");
 if (prepare.vocal_isolation !== false) throw new Error("prepare-media vocal isolation default failed");
 if (!whisperx.command.includes("whisperx")) throw new Error("run-whisperx dry run command missing");
@@ -94,7 +103,14 @@ if (production.words !== 5) throw new Error("production converter word count fai
 if (validation.schema !== "llplayer.timeline.v1") throw new Error("production LLTimeline schema failed");
 if (validation.segments !== 2) throw new Error("production LLTimeline validation segments failed");
 if (validation.word_timelines !== 1) throw new Error("production LLTimeline validation timelines failed");
-' "$prepare_report" "$whisperx_dry_run" "$produce_dry_run" "$production_report" "$production_validation"
+if (!quality.output.endsWith("production-report.json")) throw new Error("production quality output missing");
+if (quality.segments !== 2) throw new Error("production quality segment count failed");
+if (quality.words !== 5) throw new Error("production quality word count failed");
+if (quality.ready_for_manual_review !== true) throw new Error("production quality readiness failed");
+if (qualityFile.report_version !== 1) throw new Error("production quality report version failed");
+if (qualityFile.word_coverage !== 1) throw new Error("production quality coverage failed");
+if (qualityFile.quality.valid !== true) throw new Error("production quality validity failed");
+' "$prepare_report" "$whisperx_dry_run" "$produce_dry_run" "$production_report" "$production_validation" "$production_quality" "$production_quality_report"
 
 node -e '
 const fs = require("fs");

@@ -1,12 +1,12 @@
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-18 16:30 CST
-> 更新原因：文档系统重构，引入 `.planning/` 体系
+> 最后更新：2026-06-18 19:30 CST
+> 更新原因：Phase 3 生产管线 V1 收尾，转入评估体系建设
 
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
-- **Phase**：Phase 3 — 生产管线 V1（WhisperX）
+- **Phase**：Phase 4 — 客观评估体系
 - **分支**：`feature/forced-alignment-research`
 - **版本**：0.7.0
 
@@ -31,14 +31,15 @@
 - activate / publish / archive 状态机
 - `lltimeline-resource.py` 管理工具
 
-### Phase 3: 生产管线 V1 🔥 进行中
+### Phase 3: 生产管线 V1 ✅
 - WhisperX ASR + 强制对齐集成
 - `produce-whisperx` 端到端命令可用
 - 音频预处理（16kHz mono WAV 提取）
 - 可选人声分离（Demucs）
 - WhisperX JSON → LLTimeline v1 转换
+- `production-report.json` 记录覆盖率、overlap/gap、provider 和人工复核准备状态
 
-### Phase 4: 客观评估体系 ⏳ 下一步
+### Phase 4: 客观评估体系 🔥 当前
 - 弱评估：DTW vs WhisperX vs MFA 比较
 - Gold benchmark：TIMIT/Buckeye + 新闻自建样本
 - 生产质量指标记录
@@ -63,9 +64,9 @@
 
 ## 下一步工作
 
-1. 完善 WhisperX 生产管线（错误恢复、进度报告）
-2. 建立客观评估体系（`evaluate-word-timelines.py` 基础已有）
-3. 创建少量 CNN10 新闻 gold set 样本用于基准测试
+1. 建立客观评估体系（`evaluate-word-timelines.py` 基础已有）
+2. 创建少量 CNN10 新闻 gold set 样本用于基准测试
+3. 将 Phase 3 production report 与 Phase 4 evaluation report 关联
 4. 消费端 `.lltimeline.json` 导入与词级高亮绑定
 
 ## 指标

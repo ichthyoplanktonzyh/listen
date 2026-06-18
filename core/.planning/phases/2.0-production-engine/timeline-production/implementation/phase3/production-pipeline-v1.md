@@ -1,6 +1,6 @@
 # Phase 3 Production Pipeline V1
 
-更新时间：2026-06-18 16:08:50 CST
+更新时间：2026-06-18 19:30:22 CST
 
 Phase 3 的第一步不是把 WhisperX、Demucs、MFA 等重依赖塞进应用，而是建立本地
 生产端的稳定边界：
@@ -12,6 +12,7 @@ media file
   -> run-whisperx
   -> from-whisperx-json
   -> .lltimeline.json
+  -> production-report.json
   -> lltimeline-resource.py import
   -> LLPlayerNext resource store
 ```
@@ -61,18 +62,32 @@ scripts/timeline-production/production_pipeline.py produce-whisperx \
   --media-title "CNN10 sample" \
   --model large-v3 \
   --language en
+
+scripts/timeline-production/production_pipeline.py report \
+  --input output.lltimeline.json \
+  --output production-report.json
 ```
 
 ## Current Boundary
 
-The production pipeline can now invoke WhisperX, but the default development
-contract tests only verify command construction and JSON conversion. A real
-production run still requires the separate timeline-production venv and model
-cache.
+Phase 3 is complete as the first local heavy production pipeline boundary. The
+default development contract tests verify command construction, JSON conversion,
+LLTimeline validation, and production report generation. A real production run
+still requires the separate timeline-production venv and model cache.
+
+`production-report.json` is not the full Phase 4 benchmark report. It is the
+per-run production quality artifact that records whether the generated
+`.lltimeline.json` is structurally ready for manual review:
+
+- word timeline coverage against transcript word tokens;
+- overlap and large-gap diagnostics inside each sentence;
+- confidence availability and average confidence;
+- provider ids and artifact kinds attached to the resource;
+- `ready_for_manual_review` as the handoff flag into correction/evaluation.
 
 Next production steps:
 
 - replace external vocal-isolation command templates with first-class Demucs/UVR presets;
 - add VAD artifacts;
-- add candidate comparison reports;
+- build Phase 4 candidate comparison reports;
 - add chunk timeline generation from the imported word timeline.

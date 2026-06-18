@@ -90,3 +90,16 @@
   WhisperX execution, and LLTimeline conversion.
 - Added dry-run validation so the orchestration plan is covered without
   requiring the heavy WhisperX runtime in default tests.
+
+## 2026-06-18 19:30:22 CST
+
+- Completed Phase 3 Production Pipeline V1.
+- Added `report` to generate `production-report.json` from any
+  `.lltimeline.json` production output.
+- The report records word coverage, overlap/gap diagnostics, confidence
+  availability, provider ids, and whether the resource is ready for manual
+  review.
+- Updated `produce-whisperx` to emit `production-report.json` automatically
+  after LLTimeline conversion.
+- Extended contract validation to cover WhisperX fixture conversion plus the
+  production quality report.
