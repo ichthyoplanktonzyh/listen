@@ -1,6 +1,6 @@
 # Phase 3 Production Pipeline V1
 
-更新时间：2026-06-18 16:06:35 CST
+更新时间：2026-06-18 16:08:50 CST
 
 Phase 3 的第一步不是把 WhisperX、Demucs、MFA 等重依赖塞进应用，而是建立本地
 生产端的稳定边界：
@@ -52,6 +52,15 @@ scripts/timeline-production/production_pipeline.py from-whisperx-json \
   --media-title "CNN10 sample" \
   --media-path /path/to/video.mp4 \
   --preprocessing-artifacts /tmp/llplayer-production/preprocessing-artifacts.json
+
+scripts/timeline-production/production_pipeline.py produce-whisperx \
+  --input input.mp4 \
+  --output-dir /tmp/llplayer-production \
+  --output output.lltimeline.json \
+  --media-fingerprint <fingerprint> \
+  --media-title "CNN10 sample" \
+  --model large-v3 \
+  --language en
 ```
 
 ## Current Boundary

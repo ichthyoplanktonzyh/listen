@@ -82,3 +82,11 @@
   tested without requiring torch/whisperx in the default development shell.
 - Added `whisperx-run-report.json` generation and output JSON discovery for the
   downstream `from-whisperx-json` conversion step.
+
+## 2026-06-18 16:08:50 CST
+
+- Added `produce-whisperx` as a one-command production entrypoint.
+- The command orchestrates media preparation, optional vocal isolation,
+  WhisperX execution, and LLTimeline conversion.
+- Added dry-run validation so the orchestration plan is covered without
+  requiring the heavy WhisperX runtime in default tests.

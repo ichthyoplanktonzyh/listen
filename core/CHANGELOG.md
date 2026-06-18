@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- 2026-06-18 16:08:50 CST: Added the `produce-whisperx` Phase 3 orchestration
+  command to run media preparation, WhisperX execution, and LLTimeline
+  conversion as one production pipeline entrypoint, with dry-run validation.
 - 2026-06-18 16:06:35 CST: Added `run-whisperx` to the Phase 3 production
   pipeline with default/custom WhisperX command support, dry-run contract
   validation, run reports, and JSON output discovery for downstream LLTimeline

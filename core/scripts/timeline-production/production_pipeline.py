@@ -430,13 +430,21 @@ def find_whisperx_json(output_dir: Path, input_path: Path, explicit: str | None)
 
 
 def run_whisperx(args: argparse.Namespace) -> int:
+    report = run_whisperx_report(args)
+    if report.get("dry_run"):
+        print(json.dumps(report, sort_keys=True))
+    else:
+        print(json.dumps({"whisperx_json": report["whisperx_json"], "report_path": report["report_path"]}, sort_keys=True))
+    return 0
+
+
+def run_whisperx_report(args: argparse.Namespace) -> dict[str, Any]:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     command = resolve_whisperx_command(args)
     printable = command if isinstance(command, str) else " ".join(shlex.quote(part) for part in command)
     if args.dry_run:
-        print(json.dumps({"command": printable, "output_dir": str(output_dir)}, sort_keys=True))
-        return 0
+        return {"command": printable, "output_dir": str(output_dir), "dry_run": True}
     started_at = now_ms()
     subprocess.run(command, shell=isinstance(command, str), check=True)
     output_json = find_whisperx_json(output_dir, Path(args.input), args.output_json)
@@ -453,8 +461,101 @@ def run_whisperx(args: argparse.Namespace) -> int:
     }
     report_path = output_dir / "whisperx-run-report.json"
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps({"whisperx_json": str(output_json), "report_path": str(report_path)}, sort_keys=True))
+    report["report_path"] = str(report_path)
+    return report
+
+
+def produce_whisperx(args: argparse.Namespace) -> int:
+    output_dir = Path(args.output_dir)
+    media_dir = output_dir / "media"
+    whisperx_dir = output_dir / "whisperx"
+    output = Path(args.output or output_dir / "timeline.lltimeline.json")
+    media_path = args.media_path or args.input
+    if args.dry_run:
+        selected_audio = media_dir / ("vocals-16k-mono.wav" if args.vocal_isolation_command else "audio-16k-mono.wav")
+        whisperx_args = argparse.Namespace(**whisperx_namespace(args, selected_audio, whisperx_dir))
+        whisperx_report = run_whisperx_report(whisperx_args)
+        print(
+            json.dumps(
+                {
+                    "prepare_media": {
+                        "input": args.input,
+                        "output_dir": str(media_dir),
+                        "vocal_isolation": bool(args.vocal_isolation_command),
+                    },
+                    "run_whisperx": whisperx_report,
+                    "convert": {
+                        "output": str(output),
+                        "media_fingerprint": args.media_fingerprint,
+                        "media_title": args.media_title,
+                    },
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
+
+    prepare_media(
+        argparse.Namespace(
+            input=args.input,
+            output_dir=str(media_dir),
+            vocal_isolation_command=args.vocal_isolation_command,
+        )
+    )
+    preprocessing_artifacts = media_dir / "preprocessing-artifacts.json"
+    preprocessing = json.loads(preprocessing_artifacts.read_text(encoding="utf-8"))
+    selected_audio = Path(preprocessing["selected_audio_path"])
+    whisperx_args = argparse.Namespace(**whisperx_namespace(args, selected_audio, whisperx_dir))
+    whisperx_report = run_whisperx_report(whisperx_args)
+    convert_whisperx(
+        argparse.Namespace(
+            input=whisperx_report["whisperx_json"],
+            output=str(output),
+            media_fingerprint=args.media_fingerprint,
+            media_title=args.media_title,
+            media_path=media_path,
+            media_id=args.media_id,
+            track_id=args.track_id,
+            timeline_id=args.timeline_id,
+            duration_ms=args.duration_ms,
+            preprocessing_artifacts=str(preprocessing_artifacts),
+            language=args.language,
+            algorithm_id=args.algorithm_id,
+            algorithm_version=args.algorithm_version,
+            config_hash=args.config_hash,
+            status=args.status,
+        )
+    )
+    print(
+        json.dumps(
+            {
+                "output": str(output),
+                "preprocessing_artifacts": str(preprocessing_artifacts),
+                "whisperx_json": whisperx_report["whisperx_json"],
+            },
+            sort_keys=True,
+        )
+    )
     return 0
+
+
+def whisperx_namespace(args: argparse.Namespace, selected_audio: Path, whisperx_dir: Path) -> dict[str, Any]:
+    return {
+        "input": str(selected_audio),
+        "output_dir": str(whisperx_dir),
+        "output_json": args.output_json,
+        "model": args.model,
+        "language": args.language,
+        "device": args.device,
+        "compute_type": args.compute_type,
+        "batch_size": args.batch_size,
+        "align_model": args.align_model,
+        "diarize": args.diarize,
+        "hf_token": args.hf_token,
+        "whisperx_bin": args.whisperx_bin,
+        "whisperx_command": args.whisperx_command,
+        "dry_run": args.dry_run,
+    }
 
 
 def doctor(_: argparse.Namespace) -> int:
@@ -531,6 +632,39 @@ def parser() -> argparse.ArgumentParser:
     convert.add_argument("--config-hash", default="default")
     convert.add_argument("--status", choices=["candidate", "active", "archived"], default="active")
     convert.set_defaults(func=convert_whisperx)
+
+    produce = subcommands.add_parser(
+        "produce-whisperx",
+        help="prepare media, run WhisperX, and emit LLTimeline v1",
+    )
+    produce.add_argument("--input", required=True)
+    produce.add_argument("--output-dir", required=True)
+    produce.add_argument("--output")
+    produce.add_argument("--media-fingerprint", required=True)
+    produce.add_argument("--media-title", required=True)
+    produce.add_argument("--media-path")
+    produce.add_argument("--media-id")
+    produce.add_argument("--track-id")
+    produce.add_argument("--timeline-id")
+    produce.add_argument("--duration-ms", type=int)
+    produce.add_argument("--language", default="en")
+    produce.add_argument("--algorithm-id", default="whisperx")
+    produce.add_argument("--algorithm-version", default="large-v3-align")
+    produce.add_argument("--config-hash", default="default")
+    produce.add_argument("--status", choices=["candidate", "active", "archived"], default="active")
+    produce.add_argument("--vocal-isolation-command")
+    produce.add_argument("--output-json")
+    produce.add_argument("--model", default="large-v3")
+    produce.add_argument("--device", default="cpu")
+    produce.add_argument("--compute-type", default="float32")
+    produce.add_argument("--batch-size", type=int, default=16)
+    produce.add_argument("--align-model")
+    produce.add_argument("--diarize", action="store_true")
+    produce.add_argument("--hf-token")
+    produce.add_argument("--whisperx-bin")
+    produce.add_argument("--whisperx-command")
+    produce.add_argument("--dry-run", action="store_true")
+    produce.set_defaults(func=produce_whisperx)
     return root
 
 
