@@ -111,14 +111,15 @@ word/phone/chunk timeline；轻量消费端读取已产出的资源并提供稳�
 
 ## Phase 4: Evaluation System
 
-状态：进行中（2026-06-18 19:37:24 CST 已完成第一批弱评估切片）。
+状态：进行中（2026-06-18 19:47:03 CST 已转向已有高质量 gold benchmark 优先）。
 
 目标：停止靠肉眼猜，建立客观评估。
 
 任务：
 
 1. 弱评估：不同 timeline 之间的偏移、覆盖、overlap/gap、尾词 lag。
-2. Gold benchmark：TIMIT/Buckeye 小样本 + 自建新闻 gold samples。
+2. Gold benchmark：先 TIMIT，再 Buckeye；LibriSpeech alignments 做辅助压力测试；
+   CNN10/NBC 自建新闻 gold samples 后置。
 3. 指标：word boundary MAE/P95、coverage、monotonicity、chunk boundary delta。
 4. 报告：每次 pipeline 运行生成可追踪 evaluation artifact。
 
@@ -138,6 +139,9 @@ word/phone/chunk timeline；轻量消费端读取已产出的资源并提供稳�
 - `testdata/lltimeline/v1-evaluation-candidates.lltimeline.json` 提供 DTW baseline、
   WhisperX candidate、manual gold 三候选 fixture。
 - contract validation 覆盖文档级 timeline 比较和 evaluation fixture schema。
+- `scripts/benchmark-datasets.py timit-to-lltimeline` 可将本地 TIMIT `.WRD/.PHN/.TXT`
+  转为 `LLTimeline JSON v1` benchmark gold。
+- `testdata/benchmark-datasets/timit-smoke/` 提供非真实 TIMIT 的 parser smoke fixture。
 
 ## Phase 5: Manual Correction Studio
 

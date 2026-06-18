@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-06-18 19:47:03 CST: Reordered Phase 4 benchmark work to use existing
+  high-quality gold corpora before CNN10/NBC self-built samples, documented the
+  TIMIT → Buckeye → LibriSpeech alignments → news gold set sequence, added
+  `scripts/benchmark-datasets.py timit-to-lltimeline` for local TIMIT
+  `.WRD/.PHN/.TXT` conversion into `LLTimeline JSON v1`, and covered it with a
+  synthetic TIMIT-style smoke fixture in contract validation.
 - 2026-06-18 19:37:24 CST: Started Phase 4 evaluation work by adding
   document-level `compare-lltimeline` reports for comparing baseline,
   candidate, and gold word timelines inside one `.lltimeline.json`, including

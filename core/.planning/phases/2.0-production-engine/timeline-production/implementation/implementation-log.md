@@ -115,3 +115,17 @@
   candidate, and manual gold timelines.
 - Extended contract validation to cover the document-level evaluation report
   and the new evaluation fixture.
+
+## 2026-06-18 19:47:03 CST
+
+- Reordered Phase 4 gold benchmark work to use existing high-quality corpora
+  before building CNN10/NBC news gold samples.
+- Added `gold-dataset-strategy.md` with the evaluation order: TIMIT first,
+  Buckeye second, LibriSpeech alignments as scale/pressure support, and news
+  gold samples later for domain calibration.
+- Added `scripts/benchmark-datasets.py timit-to-lltimeline` to convert local
+  TIMIT `.WRD/.PHN/.TXT` files into `LLTimeline JSON v1`.
+- Added a synthetic TIMIT-style smoke fixture under
+  `testdata/benchmark-datasets/timit-smoke/`.
+- Extended contract validation to compile the benchmark converter, convert the
+  smoke fixture, and validate the resulting LLTimeline document.

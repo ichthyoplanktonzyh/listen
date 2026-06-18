@@ -1,6 +1,6 @@
 # Benchmark And Metrics
 
-更新时间：2026-06-18 19:37:24 CST
+更新时间：2026-06-18 19:47:03 CST
 
 本文件记录时间轴质量评估方案。Phase 4 的第一批可执行能力已经落到
 `scripts/evaluate-word-timelines.py`，先覆盖弱评估和小型 gold fixture。
@@ -40,11 +40,16 @@
 
 ## Benchmark Sets
 
-- TIMIT：小规模专家对齐样本，用于基础边界误差。
-- Buckeye：自然语流样本，用于真实语速、连读、弱读。
-- News gold set：自建 CNN10/NBC Nightly News 小样本，代表目标生产场景。
+- TIMIT：第一优先级，用于基础 word/phone 边界误差。TIMIT 原始语料不进入 Git。
+- Buckeye：第二优先级，用于自然语流、连读、弱读和真实停顿。需先确认授权和格式样本。
+- LibriSpeech alignments：辅助压力测试和规模回归，不作为最高级人工 gold。
+- News gold set：后续自建 CNN10/NBC Nightly News 小样本，代表目标生产场景。
 - 当前 smoke fixture：`testdata/lltimeline/v1-evaluation-candidates.lltimeline.json`，
   包含 DTW baseline、WhisperX candidate 和 manual gold 三条 word timeline。
+- TIMIT smoke fixture：`testdata/benchmark-datasets/timit-smoke/`，只用于测试本项目
+  parser，不包含真实 TIMIT 数据。
+
+详细数据集顺序见 `gold-dataset-strategy.md`。
 
 ## Evaluation Principle
 

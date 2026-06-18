@@ -6,6 +6,7 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 PYTHONPYCACHEPREFIX="$tmp/pycache" python3 -m py_compile \
+  "$root/scripts/benchmark-datasets.py" \
   "$root/scripts/evaluate-word-timelines.py" \
   "$root/scripts/lltimeline-resource.py" \
   "$root/scripts/timeline-production/production_pipeline.py"
@@ -31,6 +32,16 @@ lltimeline_report="$(
 lltimeline_evaluation_validation="$(
   python3 "$root/scripts/lltimeline-resource.py" validate \
     "$root/testdata/lltimeline/v1-evaluation-candidates.lltimeline.json"
+)"
+timit_output="$tmp/timit-smoke.lltimeline.json"
+timit_report="$(
+  python3 "$root/scripts/benchmark-datasets.py" timit-to-lltimeline \
+    --input-dir "$root/testdata/benchmark-datasets/timit-smoke" \
+    --output "$timit_output" \
+    --media-title "TIMIT Smoke"
+)"
+timit_validation="$(
+  python3 "$root/scripts/lltimeline-resource.py" validate "$timit_output"
 )"
 production_output="$tmp/whisperx-sample.lltimeline.json"
 media_input="$tmp/input.wav"
@@ -98,6 +109,8 @@ if (!lltimelineMd.includes("Gold Metrics")) throw new Error("LLTimeline evaluati
 node -e '
 const report = JSON.parse(process.argv[1]);
 const evaluation = JSON.parse(process.argv[2]);
+const timit = JSON.parse(process.argv[3]);
+const timitValidation = JSON.parse(process.argv[4]);
 if (report.schema !== "llplayer.timeline.v1") throw new Error("LLTimeline schema missing");
 if (report.segments !== 1) throw new Error("LLTimeline segment fixture failed");
 if (report.word_timelines !== 1) throw new Error("LLTimeline word timeline fixture failed");
@@ -105,7 +118,12 @@ if (report.active_word_timeline_id !== "timeline-fixture") throw new Error("LLTi
 if (evaluation.segments !== 2) throw new Error("LLTimeline evaluation fixture segments failed");
 if (evaluation.word_timelines !== 3) throw new Error("LLTimeline evaluation fixture timelines failed");
 if (evaluation.active_word_timeline_id !== "whisperx-candidate") throw new Error("LLTimeline evaluation active timeline failed");
-' "$lltimeline_report" "$lltimeline_evaluation_validation"
+if (timit.segments !== 1) throw new Error("TIMIT converter segment count failed");
+if (timit.words !== 5) throw new Error("TIMIT converter word count failed");
+if (timit.phones !== 10) throw new Error("TIMIT converter phone count failed");
+if (timitValidation.schema !== "llplayer.timeline.v1") throw new Error("TIMIT LLTimeline schema failed");
+if (timitValidation.word_timelines !== 1) throw new Error("TIMIT LLTimeline word timeline failed");
+' "$lltimeline_report" "$lltimeline_evaluation_validation" "$timit_report" "$timit_validation"
 
 node -e '
 const fs = require("fs");

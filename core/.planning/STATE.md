@@ -1,7 +1,7 @@
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-18 19:37 CST
-> 更新原因：Phase 4 评估体系第一批弱评估切片落地
+> 最后更新：2026-06-18 19:47 CST
+> 更新原因：Phase 4 gold benchmark 顺序调整为 TIMIT/Buckeye 优先
 
 ## 当前位置
 
@@ -41,10 +41,12 @@
 
 ### Phase 4: 客观评估体系 🔥 当前
 - 弱评估：DTW vs WhisperX vs MFA 比较
-- Gold benchmark：TIMIT/Buckeye + 新闻自建样本
+- Gold benchmark：TIMIT 优先，Buckeye 第二，LibriSpeech alignments 辅助，新闻自建样本后置
 - 生产质量指标记录
 - `compare-lltimeline` 可比较同一 `.lltimeline.json` 内的 baseline/candidate/gold
   word timeline，并输出 P95、tail lag、coverage、overlap/gap 等指标
+- `benchmark-datasets.py timit-to-lltimeline` 可将本地 TIMIT `.WRD/.PHN/.TXT` 转成
+  `LLTimeline JSON v1` gold resource
 
 ### Phase 5: 人工校对 UI ⏳ 后续
 ### Phase 6: 消费端集成 ⏳ 后续
@@ -66,9 +68,9 @@
 
 ## 下一步工作
 
-1. 创建少量 CNN10 新闻 gold set 样本用于基准测试
-2. 将 Phase 3 production report 与 Phase 4 evaluation report 关联到真实生产运行目录
-3. 扩展评估报告到 chunk boundary delta 和人工修改率
+1. 用本地授权 TIMIT 小样本跑 WhisperX / MMS_FA / MFA 候选并生成 evaluation report
+2. 设计 Buckeye parser，确认授权和格式样本后实现
+3. 将 Phase 3 production report 与 Phase 4 evaluation report 关联到真实生产运行目录
 4. 消费端 `.lltimeline.json` 导入与词级高亮绑定
 
 ## 指标
