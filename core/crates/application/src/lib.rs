@@ -110,6 +110,7 @@ pub trait SubtitleRepository: Send + Sync {
     fn activate_word_timeline(&self, id: &WordTimelineId)
     -> Result<WordTimeline, ApplicationError>;
     fn archive_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError>;
+    fn delete_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError>;
 }
 
 pub trait WordProfileRepository: Send + Sync {
@@ -974,6 +975,17 @@ impl AppServices {
         self.subtitles.list_word_timelines(track_id)
     }
 
+    pub fn summarize_word_timelines(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<WordTimelineSummary>, ApplicationError> {
+        let timelines = self.subtitles.list_word_timelines(track_id)?;
+        Ok(timelines
+            .iter()
+            .map(word_timeline_summary)
+            .collect::<Vec<_>>())
+    }
+
     pub fn get_word_timeline(
         &self,
         id: &WordTimelineId,
@@ -1026,6 +1038,30 @@ impl AppServices {
         id: &WordTimelineId,
     ) -> Result<WordTimeline, ApplicationError> {
         self.subtitles.archive_word_timeline(id)
+    }
+
+    pub fn publish_word_timeline(
+        &self,
+        id: &WordTimelineId,
+    ) -> Result<WordTimeline, ApplicationError> {
+        let mut timeline = self
+            .subtitles
+            .get_word_timeline(id)?
+            .ok_or(ApplicationError::NotFound("word timeline"))?;
+        if timeline.status == TimelineStatus::Archived {
+            return Err(ApplicationError::Validation("archived word timeline"));
+        }
+        mark_word_timeline_published(&mut timeline);
+        timeline.updated_at_ms = now_ms();
+        let timeline = self.subtitles.save_word_timeline(&timeline)?;
+        self.subtitles.activate_word_timeline(&timeline.id)
+    }
+
+    pub fn delete_word_timeline(
+        &self,
+        id: &WordTimelineId,
+    ) -> Result<WordTimeline, ApplicationError> {
+        self.subtitles.delete_word_timeline(id)
     }
 
     pub fn word_timing_diagnostics_for_track(
@@ -1754,6 +1790,97 @@ fn build_word_timeline(
         created_at_ms: now,
         updated_at_ms: now,
     })
+}
+
+fn word_timeline_summary(timeline: &WordTimeline) -> WordTimelineSummary {
+    let mut provider_ids = timeline
+        .words
+        .iter()
+        .map(|word| word.provider_id.clone())
+        .collect::<Vec<_>>();
+    provider_ids.sort();
+    provider_ids.dedup();
+    let mut timing_sources = timeline
+        .words
+        .iter()
+        .map(|word| word.timing_source)
+        .collect::<Vec<_>>();
+    timing_sources.sort();
+    timing_sources.dedup();
+    let confidence_values = timeline
+        .words
+        .iter()
+        .filter_map(|word| word.confidence)
+        .collect::<Vec<_>>();
+    let average_confidence = if confidence_values.is_empty() {
+        None
+    } else {
+        Some(confidence_values.iter().sum::<f32>() / confidence_values.len() as f32)
+    };
+    WordTimelineSummary {
+        id: timeline.id.clone(),
+        track_id: timeline.track_id.clone(),
+        media_id: timeline.media_id.clone(),
+        algorithm_id: timeline.algorithm_id.clone(),
+        algorithm_version: timeline.algorithm_version.clone(),
+        parent_timeline_id: timeline.parent_timeline_id.clone(),
+        created_by: timeline.created_by,
+        status: timeline.status,
+        lifecycle_stage: word_timeline_lifecycle_stage(timeline),
+        word_count: timeline.words.len() as u32,
+        start_ms: timeline.words.iter().map(|word| word.start_ms).min(),
+        end_ms: timeline.words.iter().map(|word| word.end_ms).max(),
+        provider_ids,
+        timing_sources,
+        average_confidence,
+        created_at_ms: timeline.created_at_ms,
+        updated_at_ms: timeline.updated_at_ms,
+        can_activate: timeline.status != TimelineStatus::Archived,
+        can_archive: timeline.status != TimelineStatus::Archived,
+        can_delete: true,
+    }
+}
+
+fn word_timeline_lifecycle_stage(timeline: &WordTimeline) -> WordTimelineLifecycleStage {
+    if timeline
+        .metrics_json
+        .pointer("/lifecycle/published")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+    {
+        WordTimelineLifecycleStage::Published
+    } else if timeline.created_by == TimelineCreator::User
+        || timeline
+            .words
+            .iter()
+            .any(|word| word.timing_source == TimingSource::UserAdjusted)
+    {
+        WordTimelineLifecycleStage::UserAdjusted
+    } else {
+        WordTimelineLifecycleStage::AlgorithmCandidate
+    }
+}
+
+fn mark_word_timeline_published(timeline: &mut WordTimeline) {
+    let now = now_ms();
+    if !timeline.metrics_json.is_object() {
+        timeline.metrics_json = serde_json::json!({});
+    }
+    let root = timeline
+        .metrics_json
+        .as_object_mut()
+        .expect("metrics_json was normalized to object");
+    let lifecycle = root
+        .entry("lifecycle")
+        .or_insert_with(|| serde_json::json!({}));
+    if !lifecycle.is_object() {
+        *lifecycle = serde_json::json!({});
+    }
+    let lifecycle = lifecycle
+        .as_object_mut()
+        .expect("lifecycle was normalized to object");
+    lifecycle.insert("published".into(), serde_json::json!(true));
+    lifecycle.insert("published_at_ms".into(), serde_json::json!(now));
 }
 
 fn lltimeline_segments_from_track(track: &SubtitleTrack) -> Vec<LLTimelineSegment> {

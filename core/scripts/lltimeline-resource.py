@@ -138,6 +138,38 @@ def command_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_summaries(args: argparse.Namespace) -> int:
+    summaries = api_json(
+        args.base_url,
+        args.token,
+        "GET",
+        f"/v1/subtitles/{urllib.parse.quote(args.track_id, safe='')}/word-timelines/summary",
+    )
+    print(json.dumps(summaries, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
+
+
+def command_lifecycle(args: argparse.Namespace) -> int:
+    action_paths = {
+        "publish": (f"/v1/word-timelines/{urllib.parse.quote(args.timeline_id, safe='')}/publish", "POST"),
+        "archive": (f"/v1/word-timelines/{urllib.parse.quote(args.timeline_id, safe='')}/archive", "POST"),
+        "delete": (f"/v1/word-timelines/{urllib.parse.quote(args.timeline_id, safe='')}", "DELETE"),
+    }
+    path, method = action_paths[args.action]
+    timeline = api_json(args.base_url, args.token, method, path)
+    print(
+        json.dumps(
+            {
+                "timeline_id": timeline["id"],
+                "status": timeline["status"],
+                "algorithm_id": timeline["algorithm_id"],
+            },
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     subcommands = root.add_subparsers(dest="command", required=True)
@@ -158,6 +190,19 @@ def parser() -> argparse.ArgumentParser:
     import_.add_argument("--token", default="dev-token")
     import_.add_argument("input")
     import_.set_defaults(func=command_import)
+
+    summaries = subcommands.add_parser("summaries", help="list word timeline resource summaries")
+    summaries.add_argument("--base-url", default="http://127.0.0.1:4317")
+    summaries.add_argument("--token", default="dev-token")
+    summaries.add_argument("--track-id", required=True)
+    summaries.set_defaults(func=command_summaries)
+
+    for action in ("publish", "archive", "delete"):
+        lifecycle = subcommands.add_parser(action, help=f"{action} a word timeline resource")
+        lifecycle.add_argument("--base-url", default="http://127.0.0.1:4317")
+        lifecycle.add_argument("--token", default="dev-token")
+        lifecycle.add_argument("--timeline-id", required=True)
+        lifecycle.set_defaults(func=command_lifecycle, action=action)
     return root
 
 

@@ -32,3 +32,21 @@
 - Extended `scripts/validate-contracts.sh` to compile the LLTimeline utility,
   validate the fixture, and assert OpenAPI/client coverage.
 - Marked Phase 1 complete; Phase 2 now starts with timeline resource lifecycle.
+
+## 2026-06-18 15:53:09 CST
+
+- Added `WordTimelineSummary` and lifecycle stage reporting for algorithm
+  candidate, user-adjusted, and published resources.
+- Added word timeline lifecycle APIs:
+  `GET /v1/subtitles/{track_id}/word-timelines/summary`,
+  `POST /v1/word-timelines/{timeline_id}/publish`, and
+  `DELETE /v1/word-timelines/{timeline_id}`.
+- Changed active timeline archive semantics to archive the resource and clear
+  legacy `word_timings` compatibility cache.
+- Added delete semantics that remove the timeline and clear compatibility cache
+  when the deleted resource was active.
+- Extended OpenAPI, handwritten TS client, contract validation, persistence
+  tests, and HTTP behavior coverage.
+- Extended `scripts/lltimeline-resource.py` with summary, publish, archive, and
+  delete commands.
+- Marked Phase 2 complete; Phase 3 now starts with the production pipeline.

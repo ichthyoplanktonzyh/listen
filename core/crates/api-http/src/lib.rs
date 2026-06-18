@@ -119,13 +119,24 @@ pub fn router(state: ApiState) -> Router {
             get(track_word_timelines).post(create_track_word_timeline),
         )
         .route(
+            "/v1/subtitles/{track_id}/word-timelines/summary",
+            get(track_word_timeline_summaries),
+        )
+        .route(
             "/v1/subtitles/{track_id}/lltimeline/export",
             get(export_track_lltimeline),
         )
-        .route("/v1/word-timelines/{timeline_id}", get(word_timeline))
+        .route(
+            "/v1/word-timelines/{timeline_id}",
+            get(word_timeline).delete(delete_word_timeline),
+        )
         .route(
             "/v1/word-timelines/{timeline_id}/activate",
             post(activate_word_timeline),
+        )
+        .route(
+            "/v1/word-timelines/{timeline_id}/publish",
+            post(publish_word_timeline),
         )
         .route(
             "/v1/word-timelines/{timeline_id}/archive",
@@ -672,6 +683,19 @@ async fn track_word_timelines(
         .map_err(ApiError::from)
 }
 
+async fn track_word_timeline_summaries(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<Vec<domain::WordTimelineSummary>>, ApiError> {
+    state
+        .services
+        .summarize_word_timelines(
+            &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 async fn word_timeline(
     State(state): State<ApiState>,
     Path(timeline_id): Path<String>,
@@ -743,6 +767,19 @@ async fn activate_word_timeline(
         .map_err(ApiError::from)
 }
 
+async fn publish_word_timeline(
+    State(state): State<ApiState>,
+    Path(timeline_id): Path<String>,
+) -> Result<Json<domain::WordTimeline>, ApiError> {
+    state
+        .services
+        .publish_word_timeline(
+            &domain::WordTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 async fn archive_word_timeline(
     State(state): State<ApiState>,
     Path(timeline_id): Path<String>,
@@ -750,6 +787,19 @@ async fn archive_word_timeline(
     state
         .services
         .archive_word_timeline(
+            &domain::WordTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn delete_word_timeline(
+    State(state): State<ApiState>,
+    Path(timeline_id): Path<String>,
+) -> Result<Json<domain::WordTimeline>, ApiError> {
+    state
+        .services
+        .delete_word_timeline(
             &domain::WordTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
         )
         .map(Json)
@@ -1982,6 +2032,7 @@ mod tests {
         assert_eq!(document["chunk_timelines"].as_array().unwrap().len(), 0);
 
         let response = app
+            .clone()
             .oneshot(
                 Request::post("/v1/lltimeline/import")
                     .header(AUTHORIZATION, "Bearer secret")
@@ -1997,6 +2048,63 @@ mod tests {
                 .unwrap();
         assert_eq!(imported_track["id"], track["id"]);
         assert_eq!(imported_track["sentences"].as_array().unwrap().len(), 4);
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get(format!(
+                    "/v1/subtitles/{}/word-timelines/summary",
+                    track["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let summaries: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(summaries.as_array().unwrap().len(), 1);
+        assert_eq!(summaries[0]["status"], "active");
+        assert_eq!(summaries[0]["lifecycle_stage"], "algorithm_candidate");
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/v1/word-timelines/{}/publish",
+                    timeline["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let published: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(
+            published["metrics_json"]["lifecycle"]["published"],
+            serde_json::Value::Bool(true)
+        );
+
+        let response = app
+            .oneshot(
+                Request::delete(format!(
+                    "/v1/word-timelines/{}",
+                    timeline["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[tokio::test]
@@ -2469,9 +2577,11 @@ mod tests {
             "/v1/subtitles/{track_id}/pronunciation-analysis",
             "/v1/subtitles/{track_id}/word-timings",
             "/v1/subtitles/{track_id}/word-timelines",
+            "/v1/subtitles/{track_id}/word-timelines/summary",
             "/v1/subtitles/{track_id}/lltimeline/export",
             "/v1/word-timelines/{timeline_id}",
             "/v1/word-timelines/{timeline_id}/activate",
+            "/v1/word-timelines/{timeline_id}/publish",
             "/v1/word-timelines/{timeline_id}/archive",
             "/v1/word-timelines/{timeline_id}/export",
             "/v1/subtitles/{track_id}/word-timing-diagnostics",
@@ -2530,8 +2640,8 @@ mod tests {
         // Count documented paths as a regression gate.
         let path_count = openapi.lines().filter(|l| l.starts_with("  /v1/")).count();
         assert_eq!(
-            path_count, 76,
-            "OpenAPI path count changed from 76 — update snapshot if paths were added/removed"
+            path_count, 78,
+            "OpenAPI path count changed from 78 — update snapshot if paths were added/removed"
         );
 
         // All paths must be under /v1/.

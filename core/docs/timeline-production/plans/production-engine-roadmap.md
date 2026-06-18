@@ -1,6 +1,6 @@
 # Production Engine Roadmap
 
-更新时间：2026-06-18 15:36:01 CST
+更新时间：2026-06-18 15:53:09 CST
 
 ## Goal
 
@@ -56,6 +56,8 @@ word/phone/chunk timeline；轻量消费端读取已产出的资源并提供稳�
 
 ## Phase 2: Resource Lifecycle
 
+状态：完成。
+
 目标：让一个视频可以拥有多个可管理 timeline 版本。
 
 任务：
@@ -71,6 +73,8 @@ word/phone/chunk timeline；轻量消费端读取已产出的资源并提供稳�
 - 用户可以删除或归档旧 ASR 产物。
 - 同一媒体下多个候选 timeline 可共存。
 - 激活某个 timeline 后，词级高亮和 chunk 划分使用该版本。
+- Summary API 可直接展示 algorithm candidate、user-adjusted、published 的资源状态。
+- 归档或删除 active timeline 会清空 legacy word timing 兼容缓存并安全降级。
 
 ## Phase 3: Production Pipeline V1
 

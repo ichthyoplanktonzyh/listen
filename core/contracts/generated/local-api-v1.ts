@@ -109,6 +109,34 @@ export interface WordTimeline {
   updated_at_ms: number;
 }
 
+export type WordTimelineLifecycleStage =
+  | "algorithm_candidate"
+  | "user_adjusted"
+  | "published";
+
+export interface WordTimelineSummary {
+  id: string;
+  track_id: string;
+  media_id: string;
+  algorithm_id: string;
+  algorithm_version: string;
+  parent_timeline_id: string | null;
+  created_by: TimelineCreator;
+  status: TimelineStatus;
+  lifecycle_stage: WordTimelineLifecycleStage;
+  word_count: number;
+  start_ms: number | null;
+  end_ms: number | null;
+  provider_ids: string[];
+  timing_sources: TimingSource[];
+  average_confidence: number | null;
+  created_at_ms: number;
+  updated_at_ms: number;
+  can_activate: boolean;
+  can_archive: boolean;
+  can_delete: boolean;
+}
+
 export interface CreateWordTimeline {
   algorithm_id?: string | null;
   algorithm_version?: string | null;
@@ -395,6 +423,10 @@ export class LocalApiV1 {
     return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}/word-timelines`);
   }
 
+  trackWordTimelineSummaries(trackId: string): Promise<WordTimelineSummary[]> {
+    return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}/word-timelines/summary`);
+  }
+
   createTrackWordTimeline(
     trackId: string,
     input: CreateWordTimeline,
@@ -419,6 +451,12 @@ export class LocalApiV1 {
     });
   }
 
+  publishWordTimeline(timelineId: string): Promise<WordTimeline> {
+    return this.request(`/v1/word-timelines/${encodeURIComponent(timelineId)}/publish`, {
+      method: "POST",
+    });
+  }
+
   archiveWordTimeline(timelineId: string): Promise<WordTimeline> {
     return this.request(`/v1/word-timelines/${encodeURIComponent(timelineId)}/archive`, {
       method: "POST",
@@ -427,6 +465,12 @@ export class LocalApiV1 {
 
   exportWordTimeline(timelineId: string): Promise<WordTimeline> {
     return this.request(`/v1/word-timelines/${encodeURIComponent(timelineId)}/export`);
+  }
+
+  deleteWordTimeline(timelineId: string): Promise<WordTimeline> {
+    return this.request(`/v1/word-timelines/${encodeURIComponent(timelineId)}`, {
+      method: "DELETE",
+    });
   }
 
   speechBatchJobs(): Promise<SpeechBatchJob[]> {
@@ -536,6 +580,28 @@ export class LocalApiV1 {
     return this.request("/v1/transcription/jobs", {
       method: "POST",
       body: JSON.stringify(input),
+    });
+  }
+
+  transcriptionJob(jobId: string): Promise<unknown> {
+    return this.request(`/v1/transcription/jobs/${encodeURIComponent(jobId)}`);
+  }
+
+  cancelTranscriptionJob(jobId: string): Promise<unknown> {
+    return this.request(`/v1/transcription/jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: "POST",
+    });
+  }
+
+  retryTranscriptionJob(jobId: string): Promise<unknown> {
+    return this.request(`/v1/transcription/jobs/${encodeURIComponent(jobId)}/retry`, {
+      method: "POST",
+    });
+  }
+
+  archiveTranscriptionJob(jobId: string): Promise<unknown> {
+    return this.request(`/v1/transcription/jobs/${encodeURIComponent(jobId)}/archive`, {
+      method: "POST",
     });
   }
 

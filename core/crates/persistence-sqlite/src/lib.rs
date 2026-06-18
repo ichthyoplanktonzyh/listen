@@ -1505,12 +1505,53 @@ impl SubtitleRepository for SqliteRepository {
         let mut timeline = self
             .get_word_timeline(id)?
             .ok_or(ApplicationError::NotFound("word timeline"))?;
-        if timeline.status == TimelineStatus::Active {
-            return Err(ApplicationError::Validation("active word timeline"));
-        }
+        let was_active = timeline.status == TimelineStatus::Active;
         timeline.status = TimelineStatus::Archived;
         timeline.updated_at_ms = application::now_ms();
-        self.save_word_timeline(&timeline)
+        let timeline = self.save_word_timeline(&timeline)?;
+        if was_active {
+            self.connection
+                .lock()
+                .expect("sqlite mutex poisoned")
+                .execute(
+                    "DELETE FROM word_timings
+                     WHERE sentence_id IN (
+                       SELECT id FROM subtitle_sentences WHERE track_id=?1
+                     )",
+                    [timeline.track_id.as_str()],
+                )
+                .map_err(repo)?;
+        }
+        Ok(timeline)
+    }
+
+    fn delete_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError> {
+        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let tx = conn.transaction().map_err(repo)?;
+        let timeline_json = tx
+            .query_row(
+                "SELECT timeline_json FROM word_timeline_runs WHERE id=?1",
+                [id.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(repo)?
+            .ok_or(ApplicationError::NotFound("word timeline"))?;
+        let timeline: WordTimeline = from_json(&timeline_json).map_err(repo)?;
+        tx.execute("DELETE FROM word_timeline_runs WHERE id=?1", [id.as_str()])
+            .map_err(repo)?;
+        if timeline.status == TimelineStatus::Active {
+            tx.execute(
+                "DELETE FROM word_timings
+                 WHERE sentence_id IN (
+                   SELECT id FROM subtitle_sentences WHERE track_id=?1
+                 )",
+                [timeline.track_id.as_str()],
+            )
+            .map_err(repo)?;
+        }
+        tx.commit().map_err(repo)?;
+        Ok(timeline)
     }
 }
 
@@ -2701,6 +2742,55 @@ mod tests {
         assert_eq!(compatibility_timings[0].provider_id, "mms-fa");
         assert_eq!(compatibility_timings[0].start_ms, 150);
         assert_eq!(compatibility_timings[0].end_ms, 260);
+    }
+
+    #[test]
+    fn archiving_active_word_timeline_clears_compatibility_timings() {
+        let repo = SqliteRepository::in_memory().unwrap();
+        MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+        let track = word_timeline_track();
+        let sentence_id = track.sentences[0].id.clone();
+        repo.save_track(&track).unwrap();
+        let timeline = word_timeline(
+            "timeline-archive-active",
+            &track,
+            TimelineStatus::Active,
+            "mms-fa",
+            150,
+            260,
+        );
+        repo.save_word_timeline(&timeline).unwrap();
+        repo.activate_word_timeline(&timeline.id).unwrap();
+
+        let archived = repo.archive_word_timeline(&timeline.id).unwrap();
+        assert_eq!(archived.status, TimelineStatus::Archived);
+        assert!(repo.active_word_timeline(&track.id).unwrap().is_none());
+        assert!(repo.get_word_timings(&sentence_id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn deleting_active_word_timeline_clears_compatibility_timings() {
+        let repo = SqliteRepository::in_memory().unwrap();
+        MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+        let track = word_timeline_track();
+        let sentence_id = track.sentences[0].id.clone();
+        repo.save_track(&track).unwrap();
+        let timeline = word_timeline(
+            "timeline-delete-active",
+            &track,
+            TimelineStatus::Active,
+            "mms-fa",
+            150,
+            260,
+        );
+        repo.save_word_timeline(&timeline).unwrap();
+        repo.activate_word_timeline(&timeline.id).unwrap();
+
+        let deleted = repo.delete_word_timeline(&timeline.id).unwrap();
+        assert_eq!(deleted.id, timeline.id);
+        assert!(repo.get_word_timeline(&timeline.id).unwrap().is_none());
+        assert!(repo.active_word_timeline(&track.id).unwrap().is_none());
+        assert!(repo.get_word_timings(&sentence_id).unwrap().is_empty());
     }
 
     #[test]

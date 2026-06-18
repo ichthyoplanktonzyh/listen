@@ -1,6 +1,6 @@
 # LLTimeline JSON v1 Contract
 
-更新时间：2026-06-18 15:36:01 CST
+更新时间：2026-06-18 15:53:09 CST
 
 `LLTimeline JSON v1` 是生产端与轻量消费端之间的时间轴资源交换格式。
 它以 OpenAI/WhisperX 常见的 segment/word 结构为骨架，增加 LLPlayerNext
@@ -208,6 +208,10 @@ Phase 1 提供 `scripts/lltimeline-resource.py`：
 scripts/lltimeline-resource.py validate testdata/lltimeline/v1-minimal.lltimeline.json
 scripts/lltimeline-resource.py export --base-url http://127.0.0.1:4317 --token dev-token --track-id <track_id> --output out.lltimeline.json
 scripts/lltimeline-resource.py import --base-url http://127.0.0.1:4317 --token dev-token out.lltimeline.json
+scripts/lltimeline-resource.py summaries --base-url http://127.0.0.1:4317 --token dev-token --track-id <track_id>
+scripts/lltimeline-resource.py publish --base-url http://127.0.0.1:4317 --token dev-token --timeline-id <timeline_id>
+scripts/lltimeline-resource.py archive --base-url http://127.0.0.1:4317 --token dev-token --timeline-id <timeline_id>
+scripts/lltimeline-resource.py delete --base-url http://127.0.0.1:4317 --token dev-token --timeline-id <timeline_id>
 ```
 
 该脚本只做轻量文件校验和 local API 调用。生产端重管线后续可以直接输出

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 2026-06-18 15:53:09 CST: Completed Phase 2 resource lifecycle support for
+  word timelines with summary, publish, archive-active, delete, OpenAPI/client
+  coverage, and `lltimeline-resource.py` lifecycle commands; transcription job
+  lifecycle methods are now represented in the handwritten local API client.
 - 2026-06-18 15:36:01 CST: Completed the LLTimeline JSON v1 Phase 1 core by
   adding OpenAPI schemas, handwritten client methods, contract validation, and
   `scripts/lltimeline-resource.py` for validating, importing, and exporting

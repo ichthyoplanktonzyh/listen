@@ -225,6 +225,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WordTimeline"
+  /v1/subtitles/{track_id}/word-timelines/summary:
+    get:
+      operationId: trackWordTimelineSummaries
+      responses:
+        "200":
+          description: Summaries for manageable word timeline resources
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WordTimelineSummary" }
   /v1/subtitles/{track_id}/lltimeline/export:
     get:
       operationId: exportTrackLLTimeline
@@ -245,12 +256,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WordTimeline"
+    delete:
+      operationId: deleteWordTimeline
+      responses:
+        "200":
+          description: Deleted word timeline resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WordTimeline"
   /v1/word-timelines/{timeline_id}/activate:
     post:
       operationId: activateWordTimeline
       responses:
         "200":
           description: Activated word timeline resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WordTimeline"
+  /v1/word-timelines/{timeline_id}/publish:
+    post:
+      operationId: publishWordTimeline
+      responses:
+        "200":
+          description: Marked word timeline as published and activated it
           content:
             application/json:
               schema:
@@ -903,6 +933,8 @@ components:
       enum: [algorithm, user]
     TimelineStatus:
       enum: [candidate, active, archived]
+    WordTimelineLifecycleStage:
+      enum: [algorithm_candidate, user_adjusted, published]
     WordTiming:
       type: object
       required: [sentence_id, token_index, text, start_ms, end_ms, confidence, timing_source, provider_id, provider_version]
@@ -955,6 +987,34 @@ components:
         words:
           type: array
           items: { $ref: "#/components/schemas/WordTiming" }
+    WordTimelineSummary:
+      type: object
+      required: [id, track_id, media_id, algorithm_id, algorithm_version, parent_timeline_id, created_by, status, lifecycle_stage, word_count, start_ms, end_ms, provider_ids, timing_sources, average_confidence, created_at_ms, updated_at_ms, can_activate, can_archive, can_delete]
+      properties:
+        id: { type: string }
+        track_id: { type: string }
+        media_id: { type: string }
+        algorithm_id: { type: string }
+        algorithm_version: { type: string }
+        parent_timeline_id: { type: [string, "null"] }
+        created_by: { $ref: "#/components/schemas/TimelineCreator" }
+        status: { $ref: "#/components/schemas/TimelineStatus" }
+        lifecycle_stage: { $ref: "#/components/schemas/WordTimelineLifecycleStage" }
+        word_count: { type: integer, minimum: 0 }
+        start_ms: { type: [integer, "null"], minimum: 0 }
+        end_ms: { type: [integer, "null"], minimum: 0 }
+        provider_ids:
+          type: array
+          items: { type: string }
+        timing_sources:
+          type: array
+          items: { $ref: "#/components/schemas/TimingSource" }
+        average_confidence: { type: [number, "null"], minimum: 0, maximum: 1 }
+        created_at_ms: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
+        can_activate: { type: boolean }
+        can_archive: { type: boolean }
+        can_delete: { type: boolean }
     LLTimelineDocument:
       type: object
       required: [schema, metadata, segments, word_timelines, active_word_timeline_id, phone_timelines, active_phone_timeline_id, chunk_timelines, active_chunk_timeline_id, artifacts]
