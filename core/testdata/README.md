@@ -82,6 +82,14 @@ testdata/
 | `phonetic-analysis/zipa-tokens-smoke-v1.txt` | `scripts/phonetic-research-adapter.py` | Synthetic token inventory paired with the ZIPA CTC frame projection smoke fixture. |
 | `phonetic-analysis/zipa-research-requirements-v1.txt` | `scripts/setup-zipa-research.sh` | Pinned isolated ZIPA research dependencies; not application runtime dependencies. |
 
+### Word Timeline Evaluation Fixtures
+
+| File | Used By | Description |
+|------|---------|-------------|
+| `word-timelines/baseline-v1.json` | `scripts/evaluate-word-timelines.py` | Synthetic Whisper-DTW-style word timeline used to verify pairwise drift metrics. |
+| `word-timelines/candidate-v1.json` | `scripts/evaluate-word-timelines.py` | Synthetic forced-aligned candidate timeline used to verify weak comparison metrics. |
+| `word-timelines/gold-v1.json` | `scripts/evaluate-word-timelines.py` | Synthetic manual-boundary fixture used to verify gold MAE and threshold accuracy calculations. |
+
 ### Generated Media
 
 Generated files are **not checked into Git** (size: ~2 MB). Run `generate.sh` to recreate them locally. They are used by acceptance (`verify-m*.sh`) and manual QA scripts.

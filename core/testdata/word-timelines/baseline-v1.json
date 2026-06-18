@@ -1,0 +1,38 @@
+{
+  "algorithm_id": "whisper-dtw",
+  "algorithm_version": "v1",
+  "config_hash": "baseline-config",
+  "created_at_ms": 1,
+  "created_by": "algorithm",
+  "id": "baseline-v1",
+  "media_id": "media-1",
+  "metrics_json": {},
+  "parent_timeline_id": null,
+  "status": "active",
+  "track_id": "track-1",
+  "updated_at_ms": 1,
+  "words": [
+    {
+      "confidence": 0.8,
+      "end_ms": 300,
+      "provider_id": "whisper-dtw",
+      "provider_version": "v1",
+      "sentence_id": "sentence-1",
+      "start_ms": 100,
+      "text": "hello",
+      "timing_source": "asr_reported",
+      "token_index": 0
+    },
+    {
+      "confidence": 0.8,
+      "end_ms": 620,
+      "provider_id": "whisper-dtw",
+      "provider_version": "v1",
+      "sentence_id": "sentence-1",
+      "start_ms": 360,
+      "text": "world",
+      "timing_source": "asr_reported",
+      "token_index": 1
+    }
+  ]
+}

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- 2026-06-18 11:28:07 CST: Added a developer-facing word timeline evaluator
+  that compares exported `WordTimeline` JSON files, reports weak DTW-vs-FA
+  drift and anomaly metrics, optionally scores against gold word boundaries,
+  and emits JSON/Markdown reports with smoke fixture coverage in contract
+  validation.
 - 2026-06-18 11:14:42 CST: Started Phase 1 word timeline resources with
   versioned `WordTimeline` domain contracts, SQLite schema v10 persistence,
   activation/archive semantics, active-timeline compatibility sync back to

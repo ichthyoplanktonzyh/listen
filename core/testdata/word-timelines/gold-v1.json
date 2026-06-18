@@ -1,0 +1,18 @@
+{
+  "words": [
+    {
+      "end_ms": 255,
+      "sentence_id": "sentence-1",
+      "start_ms": 145,
+      "text": "hello",
+      "token_index": 0
+    },
+    {
+      "end_ms": 550,
+      "sentence_id": "sentence-1",
+      "start_ms": 305,
+      "text": "world",
+      "token_index": 1
+    }
+  ]
+}

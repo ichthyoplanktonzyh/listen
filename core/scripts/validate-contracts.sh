@@ -2,6 +2,29 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+PYTHONPYCACHEPREFIX="$tmp/pycache" python3 -m py_compile \
+  "$root/scripts/evaluate-word-timelines.py"
+word_report="$(
+  python3 "$root/scripts/evaluate-word-timelines.py" compare \
+    --baseline "$root/testdata/word-timelines/baseline-v1.json" \
+    --candidate "$root/testdata/word-timelines/candidate-v1.json" \
+    --gold "$root/testdata/word-timelines/gold-v1.json" \
+    --markdown-output "$tmp/word-timeline-report.md"
+)"
+node -e '
+const fs = require("fs");
+const report = JSON.parse(process.argv[1]);
+const md = fs.readFileSync(process.argv[2], "utf8");
+if (report.report_version !== 1) throw new Error("word timeline report version missing");
+if (report.weak_metrics.matched_word_count !== 2) throw new Error("word timeline match count failed");
+if (report.weak_metrics.offsets.start_offset_ms.mean !== -5) throw new Error("start offset mean failed");
+if (report.gold_metrics.start_mae_ms !== 5) throw new Error("gold start MAE failed");
+if (!md.includes("Word Timeline Evaluation")) throw new Error("word timeline markdown missing");
+' "$word_report" "$tmp/word-timeline-report.md"
+
 node -e '
 const fs = require("fs");
 const schema = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));

@@ -138,6 +138,13 @@ Compatibility:
 
 ## Phase 2: Objective Timing Evaluation
 
+Status as of 2026-06-18 11:28:07 CST: implementation has started with
+`scripts/evaluate-word-timelines.py`, a file-based developer CLI that compares
+exported `WordTimeline` JSON resources without rerunning transcription. It
+currently reports weak pairwise drift/anomaly metrics, optional gold word
+boundary metrics, JSON output, Markdown output, and smoke fixture coverage via
+contract validation.
+
 ### Evaluation Inputs
 
 Support two modes:
