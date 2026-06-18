@@ -130,8 +130,7 @@ pub fn merge_alignments(
         // if the aligned value is invalid. We store candidates separately so
         // the monotonicity check can reject a candidate without losing the
         // original timing.
-        let mut candidates: Vec<Option<(u64, u64, Option<f32>)>> =
-            vec![None; rows.len()];
+        let mut candidates: Vec<Option<(u64, u64, Option<f32>)>> = vec![None; rows.len()];
         for (word_pos, _) in rows.iter().enumerate() {
             let Some(w) = by_word.get(&(word_pos as u32)) else {
                 continue;
@@ -213,9 +212,7 @@ pub fn count_lexical_words(sentence: &SubtitleSentence) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::{
-        SubtitleSentence, SubtitleSentenceId, SubtitleToken, SubtitleTokenKind, TimeMs,
-    };
+    use domain::{SubtitleSentence, SubtitleSentenceId, SubtitleToken, SubtitleTokenKind, TimeMs};
 
     fn sentence(index: u32, id: &str, start: u64, end: u64, words: &[&str]) -> SubtitleSentence {
         SubtitleSentence {
@@ -440,10 +437,7 @@ mod tests {
         assert_eq!(merge_alignments(&mut timings, &[], &[s.clone()]), 0);
         let empty: Vec<WordTiming> = Vec::new();
         let mut empty_timings = empty.clone();
-        assert_eq!(
-            merge_alignments(&mut empty_timings, &[], &[s.clone()]),
-            0
-        );
+        assert_eq!(merge_alignments(&mut empty_timings, &[], &[s.clone()]), 0);
     }
 
     #[test]

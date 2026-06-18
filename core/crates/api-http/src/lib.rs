@@ -114,6 +114,23 @@ pub fn router(state: ApiState) -> Router {
             get(track_word_timings).post(generate_track_word_timings),
         )
         .route(
+            "/v1/subtitles/{track_id}/word-timelines",
+            get(track_word_timelines).post(create_track_word_timeline),
+        )
+        .route("/v1/word-timelines/{timeline_id}", get(word_timeline))
+        .route(
+            "/v1/word-timelines/{timeline_id}/activate",
+            post(activate_word_timeline),
+        )
+        .route(
+            "/v1/word-timelines/{timeline_id}/archive",
+            post(archive_word_timeline),
+        )
+        .route(
+            "/v1/word-timelines/{timeline_id}/export",
+            get(export_word_timeline),
+        )
+        .route(
             "/v1/subtitles/{track_id}/word-timing-diagnostics",
             get(track_word_timing_diagnostics),
         )
@@ -628,6 +645,88 @@ async fn track_word_timings(
         .map_err(ApiError::from)
 }
 
+async fn track_word_timelines(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<Vec<domain::WordTimeline>>, ApiError> {
+    state
+        .services
+        .list_word_timelines(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn word_timeline(
+    State(state): State<ApiState>,
+    Path(timeline_id): Path<String>,
+) -> Result<Json<domain::WordTimeline>, ApiError> {
+    state
+        .services
+        .get_word_timeline(
+            &domain::WordTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
+        )?
+        .ok_or(ApplicationError::NotFound("word timeline"))
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn export_word_timeline(
+    State(state): State<ApiState>,
+    Path(timeline_id): Path<String>,
+) -> Result<Json<domain::WordTimeline>, ApiError> {
+    word_timeline(State(state), Path(timeline_id)).await
+}
+
+async fn create_track_word_timeline(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+    Json(request): Json<CreateWordTimelineRequest>,
+) -> Result<Json<domain::WordTimeline>, ApiError> {
+    state
+        .services
+        .create_word_timeline(
+            &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
+            application::CreateWordTimeline {
+                algorithm_id: request.algorithm_id,
+                algorithm_version: request.algorithm_version,
+                config_hash: request.config_hash,
+                parent_timeline_id: request.parent_timeline_id,
+                created_by: request.created_by,
+                status: request.status,
+                metrics_json: request.metrics_json,
+                words: request.words,
+            },
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn activate_word_timeline(
+    State(state): State<ApiState>,
+    Path(timeline_id): Path<String>,
+) -> Result<Json<domain::WordTimeline>, ApiError> {
+    state
+        .services
+        .activate_word_timeline(
+            &domain::WordTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn archive_word_timeline(
+    State(state): State<ApiState>,
+    Path(timeline_id): Path<String>,
+) -> Result<Json<domain::WordTimeline>, ApiError> {
+    state
+        .services
+        .archive_word_timeline(
+            &domain::WordTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 async fn track_word_timing_diagnostics(
     State(state): State<ApiState>,
     Path(track_id): Path<String>,
@@ -708,6 +807,18 @@ async fn generate_track_word_timings(
 #[derive(Debug, Deserialize)]
 struct WordTimingsRequest {
     timings: Vec<domain::WordTiming>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateWordTimelineRequest {
+    algorithm_id: Option<String>,
+    algorithm_version: Option<String>,
+    config_hash: Option<String>,
+    parent_timeline_id: Option<domain::WordTimelineId>,
+    created_by: Option<domain::TimelineCreator>,
+    status: Option<domain::TimelineStatus>,
+    metrics_json: Option<serde_json::Value>,
+    words: Vec<domain::WordTiming>,
 }
 
 async fn pronunciation_rules(State(state): State<ApiState>) -> Json<serde_json::Value> {
@@ -2230,6 +2341,11 @@ mod tests {
             "/v1/subtitles/{track_id}/pronunciation",
             "/v1/subtitles/{track_id}/pronunciation-analysis",
             "/v1/subtitles/{track_id}/word-timings",
+            "/v1/subtitles/{track_id}/word-timelines",
+            "/v1/word-timelines/{timeline_id}",
+            "/v1/word-timelines/{timeline_id}/activate",
+            "/v1/word-timelines/{timeline_id}/archive",
+            "/v1/word-timelines/{timeline_id}/export",
             "/v1/subtitles/{track_id}/word-timing-diagnostics",
             "/v1/subtitles/{track_id}/chunk-partitions",
             "/v1/subtitles/{track_id}/chunk-diagnostics",
@@ -2286,8 +2402,8 @@ mod tests {
         // Count documented paths as a regression gate.
         let path_count = openapi.lines().filter(|l| l.starts_with("  /v1/")).count();
         assert_eq!(
-            path_count, 69,
-            "OpenAPI path count changed from 69 — update snapshot if paths were added/removed"
+            path_count, 74,
+            "OpenAPI path count changed from 74 — update snapshot if paths were added/removed"
         );
 
         // All paths must be under /v1/.

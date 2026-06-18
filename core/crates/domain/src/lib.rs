@@ -39,6 +39,7 @@ string_id!(WordStatusHistoryId);
 string_id!(DictionaryEntryId);
 string_id!(TranscriptionJobId);
 string_id!(TranscriptionModelId);
+string_id!(WordTimelineId);
 string_id!(LexicalEntryId);
 string_id!(LexicalOccurrenceId);
 string_id!(LexicalStatusHistoryId);
@@ -252,6 +253,38 @@ pub struct WordTiming {
     pub timing_source: TimingSource,
     pub provider_id: String,
     pub provider_version: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TimelineCreator {
+    Algorithm,
+    User,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TimelineStatus {
+    Candidate,
+    Active,
+    Archived,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WordTimeline {
+    pub id: WordTimelineId,
+    pub track_id: SubtitleTrackId,
+    pub media_id: MediaId,
+    pub algorithm_id: String,
+    pub algorithm_version: String,
+    pub config_hash: String,
+    pub parent_timeline_id: Option<WordTimelineId>,
+    pub created_by: TimelineCreator,
+    pub status: TimelineStatus,
+    pub metrics_json: serde_json::Value,
+    pub words: Vec<WordTiming>,
+    pub created_at_ms: u64,
+    pub updated_at_ms: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

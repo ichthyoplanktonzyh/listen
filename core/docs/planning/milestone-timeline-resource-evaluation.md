@@ -57,6 +57,13 @@ algorithm output or visual impressions.
 
 ## Phase 1: Versioned Word Timeline Resource
 
+Status as of 2026-06-18 11:14:42 CST: implementation has started with the
+domain contract, schema v10 persistence, activation/archive operations, HTTP
+management/export endpoints, and compatibility sync from the active timeline
+back to the legacy `word_timings` table. Remaining work includes desktop
+inspection/editing UI, richer timeline metadata views, and migration/backfill
+tools for existing historical `word_timings`.
+
 ### Domain Model
 
 Add a first-class `WordTimeline` resource:

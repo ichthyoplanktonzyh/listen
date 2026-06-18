@@ -1,7 +1,7 @@
 pub mod asr_timing;
-pub mod forced_align;
 pub mod chunk_detection;
 pub mod chunk_partition;
+pub mod forced_align;
 pub mod learned_prosodic_provider;
 pub mod pause_refinement;
 pub mod phonetic_alignment;

@@ -29,6 +29,18 @@ pub struct WordTimingBoundaryDiagnostic {
     pub right_provider_version: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreateWordTimeline {
+    pub algorithm_id: Option<String>,
+    pub algorithm_version: Option<String>,
+    pub config_hash: Option<String>,
+    pub parent_timeline_id: Option<WordTimelineId>,
+    pub created_by: Option<TimelineCreator>,
+    pub status: Option<TimelineStatus>,
+    pub metrics_json: Option<serde_json::Value>,
+    pub words: Vec<WordTiming>,
+}
+
 pub trait MediaRepository: Send + Sync {
     fn upsert(&self, media: &MediaItem) -> Result<MediaItem, ApplicationError>;
     fn get(&self, id: &MediaId) -> Result<Option<MediaItem>, ApplicationError>;
@@ -81,6 +93,23 @@ pub trait SubtitleRepository: Send + Sync {
         &self,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<Vec<WordTiming>, ApplicationError>;
+    fn save_word_timeline(&self, timeline: &WordTimeline)
+    -> Result<WordTimeline, ApplicationError>;
+    fn list_word_timelines(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<WordTimeline>, ApplicationError>;
+    fn get_word_timeline(
+        &self,
+        id: &WordTimelineId,
+    ) -> Result<Option<WordTimeline>, ApplicationError>;
+    fn active_word_timeline(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<WordTimeline>, ApplicationError>;
+    fn activate_word_timeline(&self, id: &WordTimelineId)
+    -> Result<WordTimeline, ApplicationError>;
+    fn archive_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError>;
 }
 
 pub trait WordProfileRepository: Send + Sync {
@@ -922,6 +951,11 @@ impl AppServices {
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<WordTiming>, ApplicationError> {
+        if let Some(timeline) = self.subtitles.active_word_timeline(track_id)?
+            && !timeline.words.is_empty()
+        {
+            return Ok(timeline.words);
+        }
         let track = self
             .subtitles
             .get_track(track_id)?
@@ -931,6 +965,67 @@ impl AppServices {
             values.extend(self.word_timings(&sentence.id)?);
         }
         Ok(values)
+    }
+
+    pub fn list_word_timelines(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<WordTimeline>, ApplicationError> {
+        self.subtitles.list_word_timelines(track_id)
+    }
+
+    pub fn get_word_timeline(
+        &self,
+        id: &WordTimelineId,
+    ) -> Result<Option<WordTimeline>, ApplicationError> {
+        self.subtitles.get_word_timeline(id)
+    }
+
+    pub fn create_word_timeline(
+        &self,
+        track_id: &SubtitleTrackId,
+        input: CreateWordTimeline,
+    ) -> Result<WordTimeline, ApplicationError> {
+        let track = self
+            .subtitles
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let words = validate_word_timeline_words(&track, &input.words)?;
+        let requested_status = input.status.unwrap_or(TimelineStatus::Candidate);
+        let mut timeline = build_word_timeline(
+            &track,
+            words,
+            input.algorithm_id,
+            input.algorithm_version,
+            input.config_hash,
+            input.parent_timeline_id,
+            input.created_by,
+            requested_status,
+            input.metrics_json,
+        )?;
+        if requested_status == TimelineStatus::Active {
+            timeline.status = TimelineStatus::Candidate;
+        }
+        let timeline = self.subtitles.save_word_timeline(&timeline)?;
+        if requested_status == TimelineStatus::Active {
+            self.subtitles.activate_word_timeline(&timeline.id)
+        } else {
+            Ok(timeline)
+        }
+    }
+
+    pub fn activate_word_timeline(
+        &self,
+        id: &WordTimelineId,
+    ) -> Result<WordTimeline, ApplicationError> {
+        self.subtitles.activate_word_timeline(id)
+    }
+
+    pub fn archive_word_timeline(
+        &self,
+        id: &WordTimelineId,
+    ) -> Result<WordTimeline, ApplicationError> {
+        self.subtitles.archive_word_timeline(id)
     }
 
     pub fn word_timing_diagnostics_for_track(
@@ -1218,6 +1313,7 @@ impl AppServices {
                 .or_default()
                 .push(timing.clone());
         }
+        let mut accepted = Vec::new();
         for (sentence_id, values) in grouped.iter_mut() {
             values.sort_by_key(|value| (value.start_ms, value.end_ms, value.token_index));
             if values
@@ -1235,6 +1331,22 @@ impl AppServices {
                 continue;
             }
             self.subtitles.save_word_timings(sentence_id, values)?;
+            accepted.extend(values.clone());
+        }
+        if !accepted.is_empty() {
+            let timeline = build_word_timeline(
+                &track,
+                accepted,
+                None,
+                None,
+                None,
+                None,
+                None,
+                TimelineStatus::Candidate,
+                None,
+            )?;
+            let timeline = self.subtitles.save_word_timeline(&timeline)?;
+            let _ = self.subtitles.activate_word_timeline(&timeline.id)?;
         }
         Ok(timings.to_vec())
     }
@@ -1384,6 +1496,148 @@ fn timing_priority(source: TimingSource) -> u8 {
     }
 }
 
+fn validate_word_timeline_words(
+    track: &SubtitleTrack,
+    timings: &[WordTiming],
+) -> Result<Vec<WordTiming>, ApplicationError> {
+    if timings.is_empty() {
+        return Err(ApplicationError::Validation("word timeline timings"));
+    }
+    let sentences = track
+        .sentences
+        .iter()
+        .map(|sentence| (sentence.id.clone(), sentence))
+        .collect::<std::collections::HashMap<_, _>>();
+    let sentence_order = track
+        .sentences
+        .iter()
+        .enumerate()
+        .map(|(index, sentence)| (sentence.id.clone(), index))
+        .collect::<std::collections::HashMap<_, _>>();
+    let mut grouped = std::collections::HashMap::<SubtitleSentenceId, Vec<WordTiming>>::new();
+    for timing in timings {
+        let sentence = sentences
+            .get(&timing.sentence_id)
+            .ok_or(ApplicationError::Validation("word timing sentence"))?;
+        if timing.end_ms <= timing.start_ms
+            || timing.start_ms < sentence.start.get()
+            || timing.end_ms > sentence.end.get()
+            || !sentence.tokens.iter().any(|token| {
+                token.index == timing.token_index && token.kind == SubtitleTokenKind::Word
+            })
+        {
+            return Err(ApplicationError::Validation("word timing boundary"));
+        }
+        grouped
+            .entry(timing.sentence_id.clone())
+            .or_default()
+            .push(timing.clone());
+    }
+
+    let mut values = Vec::with_capacity(timings.len());
+    for (sentence_id, mut sentence_timings) in grouped {
+        sentence_timings.sort_by_key(|value| (value.start_ms, value.end_ms, value.token_index));
+        if sentence_timings
+            .windows(2)
+            .any(|pair| pair[0].end_ms > pair[1].start_ms)
+        {
+            return Err(ApplicationError::Validation("word timing monotonicity"));
+        }
+        let order = *sentence_order
+            .get(&sentence_id)
+            .ok_or(ApplicationError::Validation("word timing sentence"))?;
+        values.extend(sentence_timings.into_iter().map(|timing| (order, timing)));
+    }
+    values.sort_by_key(|(sentence_order, timing)| {
+        (
+            *sentence_order,
+            timing.start_ms,
+            timing.end_ms,
+            timing.token_index,
+        )
+    });
+    Ok(values.into_iter().map(|(_, timing)| timing).collect())
+}
+
+fn build_word_timeline(
+    track: &SubtitleTrack,
+    words: Vec<WordTiming>,
+    algorithm_id: Option<String>,
+    algorithm_version: Option<String>,
+    config_hash: Option<String>,
+    parent_timeline_id: Option<WordTimelineId>,
+    created_by: Option<TimelineCreator>,
+    status: TimelineStatus,
+    metrics_json: Option<serde_json::Value>,
+) -> Result<WordTimeline, ApplicationError> {
+    let words = validate_word_timeline_words(track, &words)?;
+    let first = words
+        .first()
+        .ok_or(ApplicationError::Validation("word timeline timings"))?;
+    let default_algorithm_id = match first.timing_source {
+        TimingSource::UserAdjusted => "user-adjusted".to_owned(),
+        _ => first.provider_id.clone(),
+    };
+    let algorithm_id = clean_required(
+        algorithm_id.unwrap_or(default_algorithm_id),
+        "word timeline algorithm",
+    )?;
+    let algorithm_version = clean_required(
+        algorithm_version.unwrap_or_else(|| first.provider_version.clone()),
+        "word timeline algorithm version",
+    )?;
+    let created_by = created_by.unwrap_or_else(|| {
+        if first.timing_source == TimingSource::UserAdjusted {
+            TimelineCreator::User
+        } else {
+            TimelineCreator::Algorithm
+        }
+    });
+    let generated_config_hash = WordTimelineId::from_fingerprint(
+        "word-timeline-config",
+        &format!(
+            "{}:{}:{}:{}:{}",
+            track.id.as_str(),
+            algorithm_id,
+            algorithm_version,
+            first.provider_id,
+            first.provider_version
+        ),
+    )
+    .as_str()
+    .to_owned();
+    let config_hash = clean_required(
+        config_hash.unwrap_or(generated_config_hash),
+        "word timeline config hash",
+    )?;
+    let now = now_ms();
+    let id = WordTimelineId::from_fingerprint(
+        "word-timeline",
+        &format!(
+            "{}:{}:{}:{}:{now}",
+            track.id.as_str(),
+            algorithm_id,
+            algorithm_version,
+            config_hash
+        ),
+    );
+    Ok(WordTimeline {
+        id,
+        track_id: track.id.clone(),
+        media_id: track.media_id.clone(),
+        algorithm_id,
+        algorithm_version,
+        config_hash,
+        parent_timeline_id,
+        created_by,
+        status,
+        metrics_json: metrics_json.unwrap_or_else(|| serde_json::json!({})),
+        words,
+        created_at_ms: now,
+        updated_at_ms: now,
+    })
+}
+
 fn word_timing_cache_is_usable(values: &[WordTiming]) -> bool {
     values.first().is_some_and(|first| {
         (first.timing_source != TimingSource::Estimated
@@ -1513,6 +1767,12 @@ fn require_text(value: &str, field: &'static str) -> Result<(), ApplicationError
         return Err(ApplicationError::Validation(field));
     }
     Ok(())
+}
+
+fn clean_required(value: String, field: &'static str) -> Result<String, ApplicationError> {
+    let value = value.trim().to_owned();
+    require_text(&value, field)?;
+    Ok(value)
 }
 
 fn clean_optional(value: Option<String>) -> Option<String> {

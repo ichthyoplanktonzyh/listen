@@ -448,6 +448,7 @@ version = "0.7.0"
 dependencies = [
  "hex",
  "serde",
+ "serde_json",
  "sha2",
  "thiserror",
 ]

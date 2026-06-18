@@ -171,6 +171,35 @@ paths:
       operationId: generateTrackWordTimings
       responses:
         "200": { description: Generated word timings with safe estimated fallback }
+  /v1/subtitles/{track_id}/word-timelines:
+    get:
+      operationId: trackWordTimelines
+      responses:
+        "200": { description: Versioned word timeline resources for a subtitle track }
+    post:
+      operationId: createTrackWordTimeline
+      responses:
+        "200": { description: Created word timeline resource }
+  /v1/word-timelines/{timeline_id}:
+    get:
+      operationId: wordTimeline
+      responses:
+        "200": { description: Versioned word timeline resource }
+  /v1/word-timelines/{timeline_id}/activate:
+    post:
+      operationId: activateWordTimeline
+      responses:
+        "200": { description: Activated word timeline resource }
+  /v1/word-timelines/{timeline_id}/archive:
+    post:
+      operationId: archiveWordTimeline
+      responses:
+        "200": { description: Archived word timeline resource }
+  /v1/word-timelines/{timeline_id}/export:
+    get:
+      operationId: exportWordTimeline
+      responses:
+        "200": { description: Exportable word timeline resource }
   /v1/subtitles/{track_id}/word-timing-diagnostics:
     get:
       operationId: trackWordTimingDiagnostics
