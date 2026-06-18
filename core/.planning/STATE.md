@@ -1,7 +1,7 @@
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-18 20:15 CST
-> 更新原因：本地 TIMIT full gold intake 已验证
+> 最后更新：2026-06-18 20:23 CST
+> 更新原因：TIMIT TEST 20 MMS_FA 首份真实候选评估完成
 
 ## 当前位置
 
@@ -49,6 +49,8 @@
   `LLTimeline JSON v1` gold resource
 - 本地 TIMIT TEST/TRAIN full 已转换为可验证 LLTimeline gold，输出在
   `~/Library/Caches/LLPlayerNext/research/benchmarks/timit/`
+- TIMIT TEST 20 MMS_FA 首份真实报告已生成：171/171 matched，start MAE 56.38ms，
+  end MAE 33.71ms
 
 ### Phase 5: 人工校对 UI ⏳ 后续
 ### Phase 6: 消费端集成 ⏳ 后续
@@ -70,9 +72,9 @@
 
 ## 下一步工作
 
-1. 用本地授权 TIMIT 小样本跑 WhisperX / MMS_FA / MFA 候选并生成 evaluation report
-2. 设计 Buckeye parser，确认授权和格式样本后实现
-3. 将 Phase 3 production report 与 Phase 4 evaluation report 关联到真实生产运行目录
+1. 用同一 TIMIT TEST 20 bundle 跑 WhisperX 候选并与 MMS_FA 横向比较
+2. 增加 MFA 候选管线或导入器，确认传统 FA 基线
+3. 设计 Buckeye parser，确认授权和格式样本后实现
 4. 消费端 `.lltimeline.json` 导入与词级高亮绑定
 
 ## 指标

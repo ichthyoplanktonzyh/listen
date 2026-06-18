@@ -143,3 +143,17 @@
   leading/trailing apostrophe words.
 - Extended the synthetic TIMIT smoke fixture and contract validation to cover
   overlap repair, skipped word rows, and apostrophe tokenization.
+
+## 2026-06-18 20:23:44 CST
+
+- Added `prepare-alignment-bundle` to build benchmark audio and aligner request
+  files from LLTimeline gold resources.
+- Added `add-alignment-candidate` to append aligned sidecar output as a
+  candidate word timeline.
+- Updated the MMS_FA sidecar for torchaudio 2.9 compatibility: `soundfile`
+  audio-load fallback and list-of-words tokenizer grouping.
+- Ran the first real TIMIT candidate evaluation on TEST 20:
+  MMS_FA matched 171/171 words, start MAE 56.38ms, start P95 128ms, end MAE
+  33.71ms, and end P95 81.5ms.
+- Extended contract validation to cover benchmark bundle generation, candidate
+  timeline import, and document-level evaluation.

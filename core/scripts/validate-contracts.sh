@@ -33,15 +33,70 @@ lltimeline_evaluation_validation="$(
   python3 "$root/scripts/lltimeline-resource.py" validate \
     "$root/testdata/lltimeline/v1-evaluation-candidates.lltimeline.json"
 )"
+timit_fixture="$tmp/timit-smoke"
+mkdir -p "$timit_fixture"
+cp -R "$root/testdata/benchmark-datasets/timit-smoke/." "$timit_fixture/"
+ffmpeg -hide_banner -loglevel error -y \
+  -f lavfi -i sine=frequency=660:duration=1.25 \
+  -ac 1 -ar 16000 -sample_fmt s16 "$timit_fixture/DR1/FAKE0/SX000.WAV"
+ffmpeg -hide_banner -loglevel error -y \
+  -f lavfi -i sine=frequency=880:duration=1.0 \
+  -ac 1 -ar 16000 -sample_fmt s16 "$timit_fixture/DR1/FAKE0/SX001.WAV"
 timit_output="$tmp/timit-smoke.lltimeline.json"
 timit_report="$(
   python3 "$root/scripts/benchmark-datasets.py" timit-to-lltimeline \
-    --input-dir "$root/testdata/benchmark-datasets/timit-smoke" \
+    --input-dir "$timit_fixture" \
     --output "$timit_output" \
     --media-title "TIMIT Smoke"
 )"
 timit_validation="$(
   python3 "$root/scripts/lltimeline-resource.py" validate "$timit_output"
+)"
+timit_bundle_report="$(
+  python3 "$root/scripts/benchmark-datasets.py" prepare-alignment-bundle \
+    --input "$timit_output" \
+    --output-dir "$tmp/timit-bundle"
+)"
+timit_aligned="$tmp/timit-aligned.json"
+node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const timeline = doc.word_timelines[0];
+const bySentence = new Map();
+for (const word of timeline.words) {
+  if (!bySentence.has(word.sentence_id)) bySentence.set(word.sentence_id, []);
+  bySentence.get(word.sentence_id).push(word);
+}
+const timings = [];
+for (const segment of doc.segments) {
+  const words = (bySentence.get(segment.id) || []).sort((a, b) => a.token_index - b.token_index);
+  words.forEach((word, wordIndex) => timings.push({
+    segment_index: segment.index,
+    word_index: wordIndex,
+    text: word.text,
+    start_ms: word.start_ms,
+    end_ms: word.end_ms,
+    score: 1
+  }));
+}
+fs.writeFileSync(process.argv[2], JSON.stringify({timings}, null, 2) + "\n");
+' "$timit_output" "$timit_aligned"
+timit_candidate_output="$tmp/timit-candidate.lltimeline.json"
+timit_candidate_report="$(
+  python3 "$root/scripts/benchmark-datasets.py" add-alignment-candidate \
+    --input "$timit_output" \
+    --aligned-json "$timit_aligned" \
+    --output "$timit_candidate_output" \
+    --timeline-id timit-smoke-candidate
+)"
+timit_candidate_validation="$(
+  python3 "$root/scripts/lltimeline-resource.py" validate "$timit_candidate_output"
+)"
+timit_candidate_evaluation="$(
+  python3 "$root/scripts/evaluate-word-timelines.py" compare-lltimeline \
+    --input "$timit_candidate_output" \
+    --baseline-timeline @active \
+    --candidate-timeline timit-smoke-candidate
 )"
 production_output="$tmp/whisperx-sample.lltimeline.json"
 media_input="$tmp/input.wav"
@@ -113,6 +168,10 @@ const evaluation = JSON.parse(process.argv[2]);
 const timit = JSON.parse(process.argv[3]);
 const timitValidation = JSON.parse(process.argv[4]);
 const timitDocument = JSON.parse(fs.readFileSync(process.argv[5], "utf8"));
+const timitBundle = JSON.parse(process.argv[6]);
+const timitCandidate = JSON.parse(process.argv[7]);
+const timitCandidateValidation = JSON.parse(process.argv[8]);
+const timitCandidateEvaluation = JSON.parse(process.argv[9]);
 const timitManifest = timitDocument.artifacts.find((artifact) => artifact.kind === "benchmark_dataset_manifest").payload;
 if (report.schema !== "llplayer.timeline.v1") throw new Error("LLTimeline schema missing");
 if (report.segments !== 1) throw new Error("LLTimeline segment fixture failed");
@@ -128,7 +187,15 @@ if (timitValidation.schema !== "llplayer.timeline.v1") throw new Error("TIMIT LL
 if (timitValidation.word_timelines !== 1) throw new Error("TIMIT LLTimeline word timeline failed");
 if (timitManifest.boundary_adjustment_count !== 1) throw new Error("TIMIT overlap repair count failed");
 if (timitManifest.skipped_word_row_count !== 1) throw new Error("TIMIT skipped word count failed");
-' "$lltimeline_report" "$lltimeline_evaluation_validation" "$timit_report" "$timit_validation" "$timit_output"
+if (timitBundle.segment_count !== 2) throw new Error("TIMIT bundle segment count failed");
+if (timitBundle.word_count !== 9) throw new Error("TIMIT bundle word count failed");
+if (!fs.existsSync(timitBundle.audio_path)) throw new Error("TIMIT bundle audio missing");
+if (timitCandidate.timeline_id !== "timit-smoke-candidate") throw new Error("TIMIT candidate timeline id failed");
+if (timitCandidate.words !== 9) throw new Error("TIMIT candidate word count failed");
+if (timitCandidateValidation.word_timelines !== 2) throw new Error("TIMIT candidate validation failed");
+if (timitCandidateEvaluation.weak_metrics.matched_word_count !== 9) throw new Error("TIMIT candidate evaluation match failed");
+if (timitCandidateEvaluation.weak_metrics.offsets.start_offset_ms.mean_abs !== 0) throw new Error("TIMIT candidate evaluation offset failed");
+' "$lltimeline_report" "$lltimeline_evaluation_validation" "$timit_report" "$timit_validation" "$timit_output" "$timit_bundle_report" "$timit_candidate_report" "$timit_candidate_validation" "$timit_candidate_evaluation"
 
 node -e '
 const fs = require("fs");

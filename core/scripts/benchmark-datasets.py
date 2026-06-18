@@ -11,6 +11,8 @@ import argparse
 import hashlib
 import json
 import re
+import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -31,6 +33,10 @@ def stable_id(namespace: str, value: str) -> str:
 
 def sample_to_ms(sample: int, sample_rate: int) -> int:
     return int(round(sample * 1000 / sample_rate))
+
+
+def ms_to_seconds(value: int) -> str:
+    return f"{value / 1000:.6f}"
 
 
 def normalize_word(value: str) -> str:
@@ -420,6 +426,277 @@ def timit_to_lltimeline(args: argparse.Namespace) -> int:
     return 0
 
 
+def active_word_timeline(document: dict[str, Any]) -> dict[str, Any]:
+    timelines = document.get("word_timelines") or []
+    active_id = document.get("active_word_timeline_id")
+    for timeline in timelines:
+        if isinstance(timeline, dict) and timeline.get("id") == active_id:
+            return timeline
+    if timelines and isinstance(timelines[0], dict):
+        return timelines[0]
+    raise ValueError("LLTimeline document has no word timelines")
+
+
+def word_text_by_sentence(timeline: dict[str, Any]) -> dict[str, list[str]]:
+    by_sentence: dict[str, list[dict[str, Any]]] = {}
+    for word in timeline.get("words", []):
+        by_sentence.setdefault(str(word.get("sentence_id")), []).append(word)
+    result: dict[str, list[str]] = {}
+    for sentence_id, words in by_sentence.items():
+        words.sort(key=lambda word: int(word.get("token_index", 0)))
+        result[sentence_id] = [str(word.get("text", "")).strip() for word in words if str(word.get("text", "")).strip()]
+    return result
+
+
+def benchmark_manifest(document: dict[str, Any]) -> dict[str, Any]:
+    for artifact in document.get("artifacts", []):
+        if isinstance(artifact, dict) and artifact.get("kind") == "benchmark_dataset_manifest":
+            payload = artifact.get("payload")
+            if isinstance(payload, dict):
+                return payload
+    raise ValueError("LLTimeline document has no benchmark_dataset_manifest artifact")
+
+
+def prepare_alignment_bundle(args: argparse.Namespace) -> int:
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise ValueError("ffmpeg not found")
+    document = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    if document.get("schema") != SCHEMA:
+        raise ValueError("expected LLTimeline JSON v1")
+    manifest = benchmark_manifest(document)
+    input_dir = Path(manifest["input_dir"])
+    utterances = manifest.get("utterances") or []
+    segments = document.get("segments") or []
+    if len(utterances) != len(segments):
+        raise ValueError("utterance manifest and segment count differ")
+
+    output_dir = Path(args.output_dir)
+    clips_dir = output_dir / "clips"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    clips_dir.mkdir(parents=True, exist_ok=True)
+
+    concat_list = output_dir / "concat.txt"
+    concat_lines: list[str] = []
+    silence_path = output_dir / "silence.wav"
+    subprocess.run(
+        [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            f"anullsrc=r={args.sample_rate}:cl=mono",
+            "-t",
+            ms_to_seconds(args.utterance_gap_ms),
+            "-sample_fmt",
+            "s16",
+            str(silence_path),
+        ],
+        check=True,
+    )
+
+    for index, (utterance, segment) in enumerate(zip(utterances, segments)):
+        wav_path = input_dir / utterance["relative_wav_path"]
+        if not wav_path.exists():
+            raise ValueError(f"missing TIMIT wav: {wav_path}")
+        offset_ms = int(utterance["offset_ms"])
+        clip_duration_ms = max(1, int(segment["end_ms"]) - offset_ms)
+        clip_path = clips_dir / f"{index:05d}.wav"
+        subprocess.run(
+            [
+                ffmpeg,
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-i",
+                str(wav_path),
+                "-t",
+                ms_to_seconds(clip_duration_ms),
+                "-ac",
+                "1",
+                "-ar",
+                str(args.sample_rate),
+                "-sample_fmt",
+                "s16",
+                str(clip_path),
+            ],
+            check=True,
+        )
+        concat_lines.append(f"file {json.dumps(str(clip_path))[1:-1]}\n")
+        if index != len(utterances) - 1 and args.utterance_gap_ms > 0:
+            concat_lines.append(f"file {json.dumps(str(silence_path))[1:-1]}\n")
+
+    concat_list.write_text("".join(concat_lines), encoding="utf-8")
+    audio_path = output_dir / "audio-16k-mono.wav"
+    subprocess.run(
+        [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(concat_list),
+            "-ac",
+            "1",
+            "-ar",
+            str(args.sample_rate),
+            "-sample_fmt",
+            "s16",
+            str(audio_path),
+        ],
+        check=True,
+    )
+
+    timeline = active_word_timeline(document)
+    sentence_words = word_text_by_sentence(timeline)
+    align_segments = []
+    for segment in segments:
+        align_segments.append(
+            {
+                "index": int(segment["index"]),
+                "text": segment["text"],
+                "words": sentence_words.get(segment["id"], []),
+                "start_ms": int(segment["start_ms"]),
+                "end_ms": int(segment["end_ms"]),
+            }
+        )
+    request = {
+        "audio_path": str(audio_path),
+        "segments": align_segments,
+    }
+    request_path = output_dir / "alignment-request.json"
+    request_path.write_text(json.dumps(request, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    run_manifest = {
+        "gold_lltimeline": str(Path(args.input)),
+        "audio_path": str(audio_path),
+        "alignment_request": str(request_path),
+        "segment_count": len(align_segments),
+        "word_count": sum(len(segment["words"]) for segment in align_segments),
+        "utterance_gap_ms": args.utterance_gap_ms,
+    }
+    manifest_path = output_dir / "benchmark-run-manifest.json"
+    manifest_path.write_text(json.dumps(run_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(json.dumps(run_manifest, sort_keys=True))
+    return 0
+
+
+def add_alignment_candidate(args: argparse.Namespace) -> int:
+    document = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    if document.get("schema") != SCHEMA:
+        raise ValueError("expected LLTimeline JSON v1")
+    aligned = json.loads(Path(args.aligned_json).read_text(encoding="utf-8"))
+    timings = aligned.get("timings")
+    if not isinstance(timings, list):
+        raise ValueError("aligned JSON must contain a timings array")
+
+    source_timeline = active_word_timeline(document)
+    source_words_by_sentence: dict[str, list[dict[str, Any]]] = {}
+    for word in source_timeline.get("words", []):
+        source_words_by_sentence.setdefault(str(word.get("sentence_id")), []).append(word)
+    for words in source_words_by_sentence.values():
+        words.sort(key=lambda word: int(word.get("token_index", 0)))
+
+    segments_by_index = {int(segment["index"]): segment for segment in document.get("segments", [])}
+    source_words_by_segment: dict[int, list[dict[str, Any]]] = {}
+    for segment in document.get("segments", []):
+        source_words_by_segment[int(segment["index"])] = source_words_by_sentence.get(segment["id"], [])
+
+    by_sentence: dict[str, list[dict[str, Any]]] = {}
+    skipped: list[dict[str, Any]] = []
+    for timing in timings:
+        if not isinstance(timing, dict):
+            continue
+        segment_index = int(timing.get("segment_index", -1))
+        word_index = int(timing.get("word_index", -1))
+        segment = segments_by_index.get(segment_index)
+        source_words = source_words_by_segment.get(segment_index, [])
+        if segment is None or word_index < 0 or word_index >= len(source_words):
+            skipped.append({"segment_index": segment_index, "word_index": word_index, "reason": "source_word_missing"})
+            continue
+        source_word = source_words[word_index]
+        start_ms = max(int(segment["start_ms"]), min(int(timing.get("start_ms", 0)), int(segment["end_ms"])))
+        end_ms = max(start_ms + 1, min(int(timing.get("end_ms", start_ms + 1)), int(segment["end_ms"])))
+        by_sentence.setdefault(segment["id"], []).append(
+            {
+                "sentence_id": segment["id"],
+                "token_index": int(source_word["token_index"]),
+                "text": source_word["text"],
+                "start_ms": start_ms,
+                "end_ms": end_ms,
+                "confidence": timing.get("score"),
+                "timing_source": "forced_aligned",
+                "provider_id": args.algorithm_id,
+                "provider_version": args.algorithm_version,
+            }
+        )
+
+    candidate_words: list[dict[str, Any]] = []
+    boundary_adjustments: list[dict[str, Any]] = []
+    for sentence_id, words in by_sentence.items():
+        words.sort(key=lambda word: int(word["token_index"]))
+        adjusted, adjustments = make_non_overlapping_words(words, sentence_id)
+        candidate_words.extend(adjusted)
+        boundary_adjustments.extend(adjustments)
+
+    created_at = now_ms()
+    timeline_id = args.timeline_id or stable_id(
+        "word-timeline",
+        f"{source_timeline.get('track_id')}:{args.algorithm_id}:{args.algorithm_version}:{Path(args.aligned_json).name}",
+    )
+    document.setdefault("word_timelines", []).append(
+        {
+            "id": timeline_id,
+            "track_id": source_timeline.get("track_id"),
+            "media_id": source_timeline.get("media_id"),
+            "algorithm_id": args.algorithm_id,
+            "algorithm_version": args.algorithm_version,
+            "config_hash": args.config_hash,
+            "parent_timeline_id": source_timeline.get("id"),
+            "created_by": "algorithm",
+            "status": args.status,
+            "metrics_json": {
+                "source": str(args.aligned_json),
+                "word_count": len(candidate_words),
+                "skipped_timings": skipped,
+                "boundary_adjustment_count": len(boundary_adjustments),
+                "boundary_adjustment_samples": boundary_adjustments[:20],
+            },
+            "words": candidate_words,
+            "created_at_ms": created_at,
+            "updated_at_ms": created_at,
+        }
+    )
+    document.setdefault("artifacts", []).append(
+        {
+            "kind": "alignment_candidate_import",
+            "provider_id": args.algorithm_id,
+            "provider_version": args.algorithm_version,
+            "payload": {
+                "aligned_json": str(args.aligned_json),
+                "timeline_id": timeline_id,
+                "word_count": len(candidate_words),
+                "skipped_count": len(skipped),
+                "boundary_adjustment_count": len(boundary_adjustments),
+            },
+        }
+    )
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(json.dumps({"output": str(output), "timeline_id": timeline_id, "words": len(candidate_words)}, sort_keys=True))
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     subcommands = root.add_subparsers(dest="command", required=True)
@@ -438,6 +715,24 @@ def parser() -> argparse.ArgumentParser:
     timit.add_argument("--utterance-gap-ms", type=int, default=1000)
     timit.add_argument("--limit", type=int)
     timit.set_defaults(func=timit_to_lltimeline)
+
+    prepare = subcommands.add_parser("prepare-alignment-bundle", help="create benchmark audio and aligner request from LLTimeline gold")
+    prepare.add_argument("--input", required=True)
+    prepare.add_argument("--output-dir", required=True)
+    prepare.add_argument("--sample-rate", type=int, default=16000)
+    prepare.add_argument("--utterance-gap-ms", type=int, default=1000)
+    prepare.set_defaults(func=prepare_alignment_bundle)
+
+    candidate = subcommands.add_parser("add-alignment-candidate", help="append an aligned word candidate timeline to LLTimeline gold")
+    candidate.add_argument("--input", required=True)
+    candidate.add_argument("--aligned-json", required=True)
+    candidate.add_argument("--output", required=True)
+    candidate.add_argument("--timeline-id")
+    candidate.add_argument("--algorithm-id", default="mms-fa")
+    candidate.add_argument("--algorithm-version", default="torchaudio-mms-fa")
+    candidate.add_argument("--config-hash", default="default")
+    candidate.add_argument("--status", choices=["candidate", "active", "archived"], default="candidate")
+    candidate.set_defaults(func=add_alignment_candidate)
     return root
 
 

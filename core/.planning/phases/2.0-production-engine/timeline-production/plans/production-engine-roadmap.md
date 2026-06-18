@@ -144,6 +144,7 @@ word/phone/chunk timeline；轻量消费端读取已产出的资源并提供稳�
 - `testdata/benchmark-datasets/timit-smoke/` 提供非真实 TIMIT 的 parser smoke fixture。
 - 本地 TIMIT TEST/TRAIN full 已转换并验证，输出保存在
   `~/Library/Caches/LLPlayerNext/research/benchmarks/timit/`。
+- TIMIT TEST 20 已跑通 MMS_FA candidate import 和 evaluation report。
 
 ## Phase 5: Manual Correction Studio
 

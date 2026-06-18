@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- 2026-06-18 20:23:44 CST: Added TIMIT benchmark candidate tooling with
+  `prepare-alignment-bundle` and `add-alignment-candidate`, fixed the MMS_FA
+  sidecar for torchaudio 2.9 audio loading and tokenizer behavior, and produced
+  the first real TIMIT TEST 20 MMS_FA evaluation report: 171/171 matched words,
+  start MAE 56.38ms, start P95 128ms, end MAE 33.71ms, and end P95 81.5ms.
 - 2026-06-18 20:15:11 CST: Validated local TIMIT full gold intake from
   `/Users/shadow/data/lisa/data/timit/raw`, generating local TEST/TRAIN
   LLTimeline gold resources under the research benchmark cache. Hardened the

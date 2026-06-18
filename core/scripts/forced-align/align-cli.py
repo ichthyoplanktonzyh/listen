@@ -42,10 +42,9 @@ Alignment is performed *per segment* using the segment's [start_ms, end_ms]
 window as an anchor into the full audio. This avoids global Viterbi drift on
 long recordings and lets each sentence align independently.
 
-The word-span reconstruction follows the canonical torchaudio forced-alignment
-tutorial: tokenize with a "|" separator between words, run forced_align +
-merge_tokens, then split the per-character token spans back into words at the
-separator positions.
+The word-span reconstruction follows torchaudio 2.9's MMS_FA tokenizer API:
+tokenize a list of words, flatten those per-word token ids for forced_align,
+then split the merged token spans back by each word's token count.
 """
 
 from __future__ import annotations
@@ -53,34 +52,50 @@ from __future__ import annotations
 import json
 import sys
 
+import soundfile as sf
 import torch
 import torchaudio
 import torchaudio.functional as F
 
 _BUNDLE = torchaudio.pipelines.MMS_FA
 _TOKENIZER = _BUNDLE.get_tokenizer()
-_SEPARATOR = "|"
+_SUPPORTED_TOKENS = set(_TOKENIZER.dictionary)
+_SPECIAL_TOKENS = {"-", "*"}
 
 
-def _unflatten(token_indices: list[int], transcript: str) -> list[list[int]]:
-    """Split the flat token-id list into per-word groups using the separator.
+def _load_audio(audio_path: str) -> tuple[torch.Tensor, int]:
+    try:
+        return torchaudio.load(audio_path)  # (C, N)
+    except Exception as torchaudio_exc:
+        try:
+            data, sr = sf.read(audio_path, dtype="float32", always_2d=True)
+        except Exception:
+            raise torchaudio_exc
+        waveform = torch.from_numpy(data.T).contiguous()
+        return waveform, int(sr)
 
-    The tokenizer was applied to `"|".join(words)`, so separator token ids mark
-    word boundaries. Returns a list whose length equals the number of words.
-    """
-    sep_token = _TOKENIZER(_SEPARATOR)[0].item()
-    groups: list[list[int]] = []
-    current: list[int] = []
-    for tok in token_indices:
-        if tok == sep_token:
-            if current:
-                groups.append(current)
-                current = []
-        else:
-            current.append(int(tok))
-    if current:
-        groups.append(current)
-    return groups
+
+def _normalize_word(word: str) -> str:
+    normalized = word.lower().replace("’", "'")
+    return "".join(
+        char
+        for char in normalized
+        if char in _SUPPORTED_TOKENS and char not in _SPECIAL_TOKENS
+    )
+
+
+def _tokenize_words(words: list[str]) -> tuple[list[str], list[list[int]]]:
+    normalized_words: list[str] = []
+    token_groups: list[list[int]] = []
+    for word in words:
+        normalized = _normalize_word(word)
+        if not normalized:
+            continue
+        ids = [int(token) for token in _TOKENIZER([normalized])[0]]
+        if ids:
+            normalized_words.append(word)
+            token_groups.append(ids)
+    return normalized_words, token_groups
 
 
 def _frame_span_to_ms(
@@ -110,7 +125,7 @@ def main() -> int:
         return 2
 
     try:
-        waveform, sr = torchaudio.load(audio_path)  # (C, N)
+        waveform, sr = _load_audio(audio_path)
     except Exception as exc:
         print(f"align-cli: failed to load audio {audio_path}: {exc}", file=sys.stderr)
         return 4
@@ -149,14 +164,12 @@ def main() -> int:
             :, start_frame : min(end_frame, n_frames), :
         ]
 
-        transcript_str = _SEPARATOR.join(words)
-        token_ids = _TOKENIZER(transcript_str)
-        if token_ids.numel() == 0:
+        aligned_words, token_groups = _tokenize_words(words)
+        flat_token_ids = [token for group in token_groups for token in group]
+        if not flat_token_ids:
             continue
 
-        word_groups = _unflatten(token_ids.tolist(), transcript_str)
-        # Build the per-character transcript with separators to map token spans.
-        targets = token_ids.view(1, -1).to(torch.int32)
+        targets = torch.tensor([flat_token_ids], dtype=torch.int32)
         try:
             aligned, scores = F.forced_align(seg_emissions, targets)
             token_spans = F.merge_tokens(aligned[0], scores[0])
@@ -167,38 +180,20 @@ def main() -> int:
             )
             continue
 
-        # Walk the merged token spans, grouping characters into words at the
-        # separator boundaries (matching _unflatten's logic).
-        sep_token = _TOKENIZER(_SEPARATOR)[0].item()
         word_starts: list[int] = []
         word_ends: list[int] = []
         word_scores: list[list[float]] = []
-        cur_start: int | None = None
-        cur_scores: list[float] = []
+        span_cursor = 0
+        for group in token_groups:
+            group_spans = token_spans[span_cursor : span_cursor + len(group)]
+            span_cursor += len(group)
+            if not group_spans:
+                continue
+            word_starts.append(int(group_spans[0].start))
+            word_ends.append(int(group_spans[-1].end))
+            word_scores.append([float(span.score) for span in group_spans])
 
-        for span in token_spans:
-            tok = int(span.token)
-            if tok == sep_token:
-                if cur_start is not None:
-                    word_starts.append(cur_start)
-                    word_ends.append(int(span.start) - 1)
-                    word_scores.append(cur_scores)
-                    cur_start = None
-                    cur_scores = []
-            else:
-                if cur_start is None:
-                    cur_start = int(span.start)
-                    cur_scores = [float(span.score)]
-                else:
-                    cur_scores.append(float(span.score))
-
-        # Flush the trailing word using the last span's end.
-        if cur_start is not None and token_spans:
-            word_starts.append(cur_start)
-            word_ends.append(int(token_spans[-1].end))
-            word_scores.append(cur_scores)
-
-        n_words = min(len(words), len(word_starts))
+        n_words = min(len(aligned_words), len(word_starts))
         for w_idx in range(n_words):
             s_frame = word_starts[w_idx]
             e_frame = word_ends[w_idx]
@@ -216,7 +211,7 @@ def main() -> int:
                 {
                     "segment_index": seg_index,
                     "word_index": w_idx,
-                    "text": words[w_idx],
+                    "text": aligned_words[w_idx],
                     "start_ms": start_ms,
                     "end_ms": end_ms,
                     "score": round(float(score), 4),
