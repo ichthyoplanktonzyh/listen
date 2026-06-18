@@ -125,7 +125,53 @@ cd apps/desktop && flutter test
 | `testdata/phonetic-analysis/` | M2.0 音素评估目录（60 用例） |
 | `testdata/timeline-production/` | WhisperX 样本输出 |
 
-## 7. 关键测试命令
+## 7. 统一测试编排器（`scripts/test.sh`）
+
+项目提供了一个统一的测试入口脚本，覆盖 Rust + Flutter + 契约三层验证。
+
+### 运行模式
+
+| 模式 | 命令 | 覆盖范围 |
+|---|---|---|
+| 全量（默认） | `scripts/test.sh --full` | fmt → clippy → Rust test → Flutter analyze → Flutter test → contracts |
+| 快速 | `scripts/test.sh --quick` | fmt + clippy + Rust **lib 单元测试** + Flutter analyze（跳过集成测试和契约） |
+| 仅 Rust | `scripts/test.sh --rust` | fmt + clippy + Rust test |
+| 仅 Flutter | `scripts/test.sh --flutter` | Flutter analyze + Flutter test |
+
+### 7 项检查清单
+
+| # | 检查项 | 类型 | 命令 |
+|---|---|---|---|
+| 1 | `cargo fmt` | fmt | `cargo fmt --check` |
+| 2 | `cargo clippy` | clippy | `cargo clippy --workspace --all-targets` |
+| 3 | `cargo test (lib)` | quick_test | `cargo test --workspace --lib`（仅 quick 模式） |
+| 4 | `cargo test` | test | `cargo test --workspace`（全量/rust 模式） |
+| 5 | `flutter analyze` | analyze | `flutter analyze` |
+| 6 | `flutter test` | flutter_test | `flutter test` |
+| 7 | `contracts` | contracts | `scripts/validate-contracts.sh` |
+
+### 附加标志
+
+| 标志 | 作用 |
+|---|---|
+| `--json` | 机器可读 JSON 输出（含每项耗时、错误摘要） |
+| `--verbose` | 实时流式输出原始日志 |
+| `--debug` | 打印脚本内部执行步骤 |
+| `--strict` | cargo clippy 将 warning 视为 error，且要求 Cargo.lock 一致 |
+| `--low-memory` | 限制构建/测试并发数，避免重复 `flutter pub get` |
+
+### 透传参数
+
+```bash
+# 将 --nocapture --test-threads=1 传递给 cargo test 和 flutter test
+scripts/test.sh --rust -- --nocapture --test-threads=1
+```
+
+### 失败日志保留
+
+测试失败时，日志文件保留在临时目录中（路径在输出中显示），便于事后排查。全部通过则自动清理。
+
+## 8. 关键测试命令
 
 ```bash
 # Rust 全量
@@ -150,12 +196,13 @@ python scripts/evaluate-word-timelines.py compare \
   testdata/word-timelines/baseline-v1.json \
   testdata/word-timelines/candidate-v1.json
 
-# 全体验证
+# 全体验证（统一入口）
 scripts/test.sh --full
-scripts/validate-contracts.sh
+scripts/test.sh --quick          # 快速检查
+scripts/validate-contracts.sh    # 单独契约验证
 ```
 
-## 8. 测试缺口
+## 9. 测试缺口
 
 | 缺口 | 优先级 | 说明 |
 |---|---|---|

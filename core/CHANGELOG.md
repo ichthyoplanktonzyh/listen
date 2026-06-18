@@ -2,12 +2,19 @@
 
 ## Unreleased
 
+- 2026-06-18 18:00:00 CST: Completed the `.planning/codebase/` documentation system.
+  Renamed `CONVENTIONS.md` → `MAINTENANCE.md` (项目维护规则，与代码约定区分).
+  Created three new codebase files: `STRUCTURE.md` (物理文件布局 + 新代码放哪),
+  `CONCERNS.md` (技术债/已知问题/脆弱区域/测试缺口清单), and `CONVENTIONS.md`
+  (项目级代码约定: crate 依赖规则、错误处理、异步、API 设计、Flutter/Python 模式).
+  Added dedicated section for the unified test runner (`scripts/test.sh`) in TESTING.md.
+  Co-Authored-By: Claude <noreply@anthropic.com>
 - 2026-06-18 17:32:00 CST: Restructured the project documentation system by
   introducing the GSD-inspired `.planning/` directory as the project management
   hub. Moved `prd.md` → `.planning/PROJECT.md`, `roadmap.md` → `.planning/ROADMAP.md`,
   `requirements.md` → `.planning/REQUIREMENTS.md`. Created `.planning/STATE.md`
   as living project memory, `.planning/MILESTONES.md` as completed milestone index,
-  `.planning/CONVENTIONS.md` as maintenance rules, and `.planning/codebase/` with
+  `.planning/MAINTENANCE.md` as maintenance rules, and `.planning/codebase/` with
   ARCHITECTURE / STACK / DATA-MODEL / TESTING architecture skeleton docs.
   Consolidated `docs/discuss/` → `.planning/discuss/`, `docs/handoff/` →
   `.planning/handoff/`, `docs/timeline-production/` → `.planning/phases/2.0-
