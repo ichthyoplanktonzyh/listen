@@ -284,6 +284,7 @@ class LocalApi {
     required bool translate,
     String? language,
     int? audioTrack,
+    bool force = false,
   }) async =>
       (await _request('POST', '/v1/transcription/jobs', {
             'media_id': mediaId,
@@ -292,6 +293,7 @@ class LocalApi {
             'purpose': translate ? 'translate_to_english' : 'transcribe',
             'language': language,
             'audio_track': audioTrack,
+            'force': force,
           }))
           as Map<String, dynamic>;
 
@@ -306,6 +308,13 @@ class LocalApi {
       (await _request(
             'POST',
             '/v1/transcription/jobs/${Uri.encodeComponent(jobId)}/retry',
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> archiveTranscriptionJob(String jobId) async =>
+      (await _request(
+            'POST',
+            '/v1/transcription/jobs/${Uri.encodeComponent(jobId)}/archive',
           ))
           as Map<String, dynamic>;
 

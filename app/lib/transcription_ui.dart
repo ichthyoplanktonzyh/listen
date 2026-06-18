@@ -17,6 +17,7 @@ Future<void> showGenerateSubtitles({
   required bool secondary,
   String preferredQuality = 'balanced',
   String preferredLanguage = 'auto',
+  bool force = false,
 }) async {
   final l = AppLocalizations.of(context);
   final models = await api.transcriptionModels();
@@ -114,6 +115,7 @@ Future<void> showGenerateSubtitles({
                 secondary: secondary,
                 translate: translate,
                 language: language == 'auto' ? null : language,
+                force: force,
               );
               if (context.mounted) Navigator.pop(context);
             },
@@ -351,8 +353,12 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                   if (status == 'failed' || status == 'cancelled')
                     IconButton(
                       tooltip: l.text('retry'),
-                      onPressed: () =>
-                          widget.api.retryTranscriptionJob(job['id'] as String),
+                      onPressed: () async {
+                        await widget.api.retryTranscriptionJob(
+                          job['id'] as String,
+                        );
+                        await _refresh();
+                      },
                       icon: const Icon(Icons.replay),
                     ),
                   if (status == 'completed')
@@ -392,8 +398,20 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                         api: widget.api,
                         mediaId: job['media_id'] as String,
                         secondary: job['destination'] == 'secondary',
+                        force: true,
                       ),
                       icon: const Icon(Icons.auto_fix_high),
+                    ),
+                  if (!active)
+                    IconButton(
+                      tooltip: l.text('archive'),
+                      onPressed: () async {
+                        await widget.api.archiveTranscriptionJob(
+                          job['id'] as String,
+                        );
+                        await _refresh();
+                      },
+                      icon: const Icon(Icons.archive_outlined),
                     ),
                 ],
               ),
