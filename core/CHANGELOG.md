@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-06-18 11:07:27 CST: Added research-mode acoustic forced alignment for Whisper transcription:
+  developers can prepare an isolated torchaudio MMS_FA venv, and transcription
+  will auto-detect it, merge validated per-word aligned timings after DTW, and
+  silently retain DTW timings when the sidecar is unavailable or fails.
+- 2026-06-18 11:07:27 CST: Added transcription job regeneration and archiving support so subtitle timing
+  experiments can rerun with current algorithms while old completed jobs stay
+  queryable by id but hidden from the active job list and reuse lookup.
 - Fixed development sidecar discovery: the Flutter desktop app now walks
   up directory ancestors to find the `api-http` binary (preferring
   `target/release` over `target/debug`), and the Rust API sidecar walks up

@@ -5,9 +5,10 @@ use std::sync::Arc;
 use api_events::{EventEnvelope, EventName};
 use application::{AppServices, ApplicationError, ImportSubtitle, TranscriptionRepository, now_ms};
 use domain::{
-    MediaId, SubtitleTrackProvenance, TranscriptionDestination, TranscriptionJob,
-    TranscriptionJobId, TranscriptionJobStatus, TranscriptionModelDescriptor, TranscriptionModelId,
-    TranscriptionModelState, TranscriptionProviderInfo, TranscriptionPurpose, TranscriptionQuality,
+    MediaId, SubtitleSentence, SubtitleTokenKind, SubtitleTrackProvenance,
+    TranscriptionDestination, TranscriptionJob, TranscriptionJobId, TranscriptionJobStatus,
+    TranscriptionModelDescriptor, TranscriptionModelId, TranscriptionModelState,
+    TranscriptionProviderInfo, TranscriptionPurpose, TranscriptionQuality,
 };
 use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
@@ -32,6 +33,8 @@ pub struct CreateJobRequest {
     pub purpose: TranscriptionPurpose,
     pub language: Option<String>,
     pub audio_track: Option<u32>,
+    #[serde(default)]
+    pub force: bool,
 }
 
 impl TranscriptionCoordinator {
@@ -306,7 +309,9 @@ impl TranscriptionCoordinator {
             model.checksum_sha256,
             settings_json
         )));
-        if let Some(job) = self.repository.find_completed_job(&input_fingerprint)? {
+        if !request.force
+            && let Some(job) = self.repository.find_completed_job(&input_fingerprint)?
+        {
             return Ok(job);
         }
         let created_at_ms = now_ms();
@@ -342,6 +347,7 @@ impl TranscriptionCoordinator {
             started_at_ms: None,
             completed_at_ms: None,
             updated_at_ms: created_at_ms,
+            archived_at_ms: None,
         };
         let job = self.repository.create_job(&job)?;
         self.emit(EventName::TranscriptionJobChanged, &job);
@@ -384,6 +390,7 @@ impl TranscriptionCoordinator {
             purpose: old.purpose,
             language: old.requested_language,
             audio_track: old.audio_track,
+            force: true,
         })?;
         if job.id != old.id && job.status == TranscriptionJobStatus::Queued {
             job.retry_of_job_id = Some(old.id);
@@ -391,6 +398,32 @@ impl TranscriptionCoordinator {
             self.repository.update_job(&job)?;
             self.emit(EventName::TranscriptionJobChanged, &job);
         }
+        Ok(job)
+    }
+
+    pub fn archive_job(
+        &self,
+        id: &TranscriptionJobId,
+    ) -> Result<TranscriptionJob, ApplicationError> {
+        let mut job = self
+            .repository
+            .get_job(id)?
+            .ok_or(ApplicationError::NotFound("transcription job"))?;
+        if matches!(
+            job.status,
+            TranscriptionJobStatus::Queued
+                | TranscriptionJobStatus::Extracting
+                | TranscriptionJobStatus::Transcribing
+                | TranscriptionJobStatus::Importing
+        ) {
+            return Err(ApplicationError::Validation(
+                "active transcription job cannot be archived",
+            ));
+        }
+        job.archived_at_ms = Some(now_ms());
+        job.updated_at_ms = now_ms();
+        self.repository.update_job(&job)?;
+        self.emit(EventName::TranscriptionJobChanged, &job);
         Ok(job)
     }
 
@@ -528,6 +561,7 @@ impl TranscriptionCoordinator {
                 );
                 match timings {
                     Ok(mut timings) if !timings.is_empty() => {
+                        try_apply_forced_alignment(&wav, &track.sentences, &mut timings).await;
                         if let Ok(wav_bytes) = tokio::fs::read(&wav).await
                             && let Ok(refined) =
                                 speech_analysis::pause_refinement::refine_word_timings_from_pcm_wav(
@@ -726,6 +760,142 @@ fn resolve_tool(env_name: &str, name: &str) -> Option<PathBuf> {
     }
     let executable = std::env::current_exe().ok()?;
     resolve_bundled_tool(name, &executable, &std::env::current_dir().ok()?)
+}
+
+#[derive(Debug, serde::Serialize)]
+struct ForcedAlignRequest {
+    audio_path: String,
+    segments: Vec<ForcedAlignSegment>,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct ForcedAlignSegment {
+    index: u32,
+    text: String,
+    words: Vec<String>,
+    start_ms: u64,
+    end_ms: u64,
+}
+
+async fn try_apply_forced_alignment(
+    wav: &Path,
+    sentences: &[SubtitleSentence],
+    timings: &mut [domain::WordTiming],
+) {
+    let Some((python, script)) = resolve_forced_align_sidecar() else {
+        return;
+    };
+    let request = ForcedAlignRequest {
+        audio_path: wav.to_string_lossy().into_owned(),
+        segments: forced_align_segments(sentences),
+    };
+    if request.segments.is_empty() {
+        return;
+    }
+    let Ok(stdin_json) = serde_json::to_vec(&request) else {
+        return;
+    };
+
+    let mut child = match Command::new(&python)
+        .arg(&script)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(_) => return,
+    };
+
+    let Some(mut stdin) = child.stdin.take() else {
+        return;
+    };
+    if stdin.write_all(&stdin_json).await.is_err() || stdin.shutdown().await.is_err() {
+        return;
+    }
+    drop(stdin);
+
+    let Ok(output) = child.wait_with_output().await else {
+        return;
+    };
+    if !output.status.success() {
+        return;
+    }
+    let Ok(aligned) =
+        serde_json::from_slice::<speech_analysis::forced_align::AlignOutput>(&output.stdout)
+    else {
+        return;
+    };
+    let _ = speech_analysis::forced_align::merge_alignments(timings, &aligned.timings, sentences);
+}
+
+fn forced_align_segments(sentences: &[SubtitleSentence]) -> Vec<ForcedAlignSegment> {
+    sentences
+        .iter()
+        .filter_map(|sentence| {
+            let words = sentence
+                .tokens
+                .iter()
+                .filter(|token| token.kind == SubtitleTokenKind::Word)
+                .map(|token| token.text.clone())
+                .collect::<Vec<_>>();
+            if words.is_empty() {
+                return None;
+            }
+            Some(ForcedAlignSegment {
+                index: sentence.index,
+                text: sentence.display_text.clone(),
+                words,
+                start_ms: sentence.start.get(),
+                end_ms: sentence.end.get(),
+            })
+        })
+        .collect()
+}
+
+fn resolve_forced_align_sidecar() -> Option<(PathBuf, PathBuf)> {
+    let research_root = std::env::var_os("LLPLAYERNEXT_FA_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(std::env::var_os("HOME").expect("HOME is required"))
+                .join("Library/Caches/LLPlayerNext/research/forced-align")
+        });
+    let python = research_root.join("venv/bin/python");
+    if !python.is_file() {
+        return None;
+    }
+    let script = resolve_forced_align_script()?;
+    Some((python, script))
+}
+
+fn resolve_forced_align_script() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("LLPLAYERNEXT_FA_SCRIPT")
+        .map(PathBuf::from)
+        .filter(|path| path.is_file())
+    {
+        return Some(path);
+    }
+    let mut roots = Vec::new();
+    if let Ok(current_dir) = std::env::current_dir() {
+        roots.push(current_dir);
+    }
+    if let Ok(executable) = std::env::current_exe()
+        && let Some(parent) = executable.parent()
+    {
+        roots.push(parent.to_path_buf());
+    }
+    for root in roots {
+        let mut directory = Some(root.as_path());
+        while let Some(path) = directory {
+            let candidate = path.join("scripts/forced-align/align-cli.py");
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+            directory = path.parent();
+        }
+    }
+    None
 }
 
 fn resolve_bundled_tool(name: &str, executable: &Path, current_dir: &Path) -> Option<PathBuf> {

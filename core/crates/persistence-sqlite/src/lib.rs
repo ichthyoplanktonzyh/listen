@@ -305,7 +305,9 @@ impl TranscriptionRepository for SqliteRepository {
             .prepare("SELECT descriptor_json FROM transcription_models ORDER BY provider_id,id")
             .map_err(repo)?;
         query
-            .query_map([], |row| from_json(&row.get::<_, String>(0)?))
+            .query_map([], |row| {
+                from_json::<TranscriptionModelDescriptor>(&row.get::<_, String>(0)?)
+            })
             .map_err(repo)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(repo)
@@ -398,9 +400,16 @@ impl TranscriptionRepository for SqliteRepository {
             .prepare("SELECT job_json FROM transcription_jobs ORDER BY updated_at_ms DESC")
             .map_err(repo)?;
         query
-            .query_map([], |row| from_json(&row.get::<_, String>(0)?))
+            .query_map([], |row| {
+                from_json::<TranscriptionJob>(&row.get::<_, String>(0)?)
+            })
             .map_err(repo)?
             .collect::<Result<Vec<_>, _>>()
+            .map(|jobs| {
+                jobs.into_iter()
+                    .filter(|job| job.archived_at_ms.is_none())
+                    .collect()
+            })
             .map_err(repo)
     }
 
@@ -416,9 +425,10 @@ impl TranscriptionRepository for SqliteRepository {
                  WHERE input_fingerprint=?1 AND status='\"completed\"'
                  ORDER BY updated_at_ms DESC LIMIT 1",
                 [input_fingerprint],
-                |row| from_json(&row.get::<_, String>(0)?),
+                |row| from_json::<TranscriptionJob>(&row.get::<_, String>(0)?),
             )
             .optional()
+            .map(|job| job.filter(|job| job.archived_at_ms.is_none()))
             .map_err(repo)
     }
 
@@ -2063,6 +2073,59 @@ mod tests {
 
     struct FailingDictionary;
 
+    fn transcription_job(
+        id: &str,
+        input_fingerprint: &str,
+        status: TranscriptionJobStatus,
+        updated_at_ms: u64,
+    ) -> TranscriptionJob {
+        TranscriptionJob {
+            id: TranscriptionJobId::parse(id).unwrap(),
+            media_id: MediaId::parse("media-1").unwrap(),
+            media_title: "Media".into(),
+            media_fingerprint: "media-fp".into(),
+            provider_id: "test-provider".into(),
+            provider_version: "v1".into(),
+            runtime_id: "test-runtime".into(),
+            runtime_version: "v1".into(),
+            model_id: TranscriptionModelId::parse("model-1").unwrap(),
+            model_revision: "rev-1".into(),
+            model_checksum_sha256: "checksum".into(),
+            destination: TranscriptionDestination::Primary,
+            purpose: TranscriptionPurpose::Transcribe,
+            requested_language: Some("en".into()),
+            detected_language: Some("en".into()),
+            audio_track: None,
+            settings_json: "{}".into(),
+            input_fingerprint: input_fingerprint.into(),
+            status,
+            phase_progress: 100,
+            error_code: None,
+            error_message: None,
+            retry_of_job_id: None,
+            generated_track_id: Some(SubtitleTrackId::parse("track-1").unwrap()),
+            created_at_ms: 1,
+            started_at_ms: Some(2),
+            completed_at_ms: Some(3),
+            updated_at_ms,
+            archived_at_ms: None,
+        }
+    }
+
+    fn transcription_media() -> MediaItem {
+        MediaItem {
+            id: MediaId::parse("media-1").unwrap(),
+            path: "/tmp/media.mp4".into(),
+            fingerprint: "media-fp".into(),
+            title: "Media".into(),
+            kind: MediaKind::Video,
+            duration: Some(TimeMs::new(1_000)),
+            availability: MediaAvailability::Available,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        }
+    }
+
     #[async_trait]
     impl DictionaryProvider for FakeDictionary {
         fn info(&self) -> DictionaryProviderInfo {
@@ -2288,6 +2351,38 @@ mod tests {
                     .get::<_, u32>(0))
                 .unwrap(),
             0
+        );
+    }
+
+    #[test]
+    fn archived_transcription_jobs_are_hidden_from_list_and_reuse() {
+        let repo = SqliteRepository::in_memory().unwrap();
+        MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+        let mut job =
+            transcription_job("job-1", "same-input", TranscriptionJobStatus::Completed, 10);
+        repo.create_job(&job).unwrap();
+
+        assert_eq!(repo.list_jobs().unwrap().len(), 1);
+        assert_eq!(
+            repo.find_completed_job("same-input")
+                .unwrap()
+                .expect("completed job should be reusable")
+                .id,
+            job.id
+        );
+
+        job.archived_at_ms = Some(20);
+        job.updated_at_ms = 20;
+        repo.update_job(&job).unwrap();
+
+        assert!(repo.list_jobs().unwrap().is_empty());
+        assert!(repo.find_completed_job("same-input").unwrap().is_none());
+        assert_eq!(
+            repo.get_job(&job.id)
+                .unwrap()
+                .expect("archive should not delete job")
+                .archived_at_ms,
+            Some(20)
         );
     }
 

@@ -1,6 +1,7 @@
 # Forced alignment research venv dependencies.
 # Uses torchaudio's built-in MMS_FA pipeline (multilingual CTC forced aligner).
-# Torch is CPU-only on macOS arm64 for the research environment.
-torch==2.12.0
-torchaudio==2.12.0
+# Keep torch and torchaudio on the same release train; torchaudio 2.12 is not
+# published yet, while torch 2.12 exists.
+torch==2.9.1
+torchaudio==2.9.1
 soundfile==0.14.0

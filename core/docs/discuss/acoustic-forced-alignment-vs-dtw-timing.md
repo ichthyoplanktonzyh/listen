@@ -125,6 +125,31 @@ playback position) is visually distinct.
    refines boundaries; phone-level timestamps from either source feed the
    same `DetectedPhone` structure
 
+## Research-Mode Implementation
+
+The first implementation has landed as a Python sidecar rather than a bundled
+product dependency. `scripts/forced-align/setup-venv.sh` prepares an isolated
+torchaudio environment under
+`~/Library/Caches/LLPlayerNext/research/forced-align/`, and
+`scripts/forced-align/align-cli.py` runs torchaudio's MMS_FA CTC aligner through
+a JSON stdin/stdout protocol.
+
+The transcription coordinator auto-detects this sidecar after Whisper DTW word
+timing extraction and before local pause refinement. Missing venv, missing
+script, Python failure, malformed JSON, or implausible aligned spans all degrade
+back to the original DTW timing. Valid aligned words are merged per word and
+stored with `timing_source = forced_aligned`.
+
+This keeps the app bundle pure native while allowing real-video validation of
+the core acoustic hypothesis. If the sidecar proves consistently better for
+word highlighting and chunk boundaries, the production follow-up should replace
+the Python/torch prototype with a license-cleared native or ONNX-based aligner.
+
+Follow-up resource-system discussion lives in
+[`word-phone-timeline-resource-system.md`](word-phone-timeline-resource-system.md).
+The corresponding implementation plan is
+[`../planning/milestone-timeline-resource-evaluation.md`](../planning/milestone-timeline-resource-evaluation.md).
+
 ## Downstream Impact: Chunk Partitioning Accuracy
 
 Imprecise word timestamps cascade into the chunk partitioning pipeline.

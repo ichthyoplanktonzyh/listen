@@ -893,6 +893,8 @@ pub struct TranscriptionJob {
     pub started_at_ms: Option<u64>,
     pub completed_at_ms: Option<u64>,
     pub updated_at_ms: u64,
+    #[serde(default)]
+    pub archived_at_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

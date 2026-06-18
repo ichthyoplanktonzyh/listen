@@ -212,6 +212,10 @@ pub fn router(state: ApiState) -> Router {
             post(retry_transcription_job),
         )
         .route(
+            "/v1/transcription/jobs/{job_id}/archive",
+            post(archive_transcription_job),
+        )
+        .route(
             "/v1/phonetic-analysis/providers",
             get(phonetic_analysis_providers),
         )
@@ -834,6 +838,17 @@ async fn retry_transcription_job(
         .transcription
         .clone()
         .retry_job(&domain::TranscriptionJobId::parse(job_id).map_err(ApplicationError::from)?)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn archive_transcription_job(
+    State(state): State<ApiState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<domain::TranscriptionJob>, ApiError> {
+    state
+        .transcription
+        .archive_job(&domain::TranscriptionJobId::parse(job_id).map_err(ApplicationError::from)?)
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -2236,6 +2251,7 @@ mod tests {
             "/v1/transcription/providers",
             "/v1/transcription/models",
             "/v1/transcription/jobs",
+            "/v1/transcription/jobs/{job_id}/archive",
             "/v1/phonetic-analysis/providers",
             "/v1/phonetic-analysis/models",
             "/v1/phonetic-analysis/models/install",
@@ -2270,8 +2286,8 @@ mod tests {
         // Count documented paths as a regression gate.
         let path_count = openapi.lines().filter(|l| l.starts_with("  /v1/")).count();
         assert_eq!(
-            path_count, 68,
-            "OpenAPI path count changed from 68 — update snapshot if paths were added/removed"
+            path_count, 69,
+            "OpenAPI path count changed from 69 — update snapshot if paths were added/removed"
         );
 
         // All paths must be under /v1/.

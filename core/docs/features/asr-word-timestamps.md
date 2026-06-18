@@ -34,6 +34,7 @@ whisper-cli -ojf -dtw <model_preset> audio.wav
                          ├─  validate word count matches sentence tokens
                          ├─  validate boundary & monotonicity constraints
                          ├─  produce DTW v2 Vec<WordTiming>
+                         ├─  optionally merge research forced alignment
                          └─  refine audible pauses from local PCM WAV
                                 │
                                 └─→  store_word_timings()
@@ -124,6 +125,14 @@ ASR timings simply fall back to the existing weighted estimator.
 Tracks generated before DTW v2 are not rewritten automatically. Re-transcribe
 an existing track to receive punctuation-safe DTW edges and local pause
 refinement.
+
+### Research Forced Alignment
+
+When the local research venv exists, transcription can optionally run the
+torchaudio MMS_FA sidecar between DTW extraction and pause refinement. The
+sidecar is documented in [Forced Alignment Research Mode](forced-alignment.md).
+It is not bundled with the app; missing or failed sidecar execution preserves
+the DTW v2 timing vector unchanged.
 
 ## Code Layout
 

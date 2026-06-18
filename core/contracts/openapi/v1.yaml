@@ -626,6 +626,11 @@ paths:
       operationId: retryTranscriptionJob
       responses:
         "200": { description: Retried transcription job }
+  /v1/transcription/jobs/{job_id}/archive:
+    post:
+      operationId: archiveTranscriptionJob
+      responses:
+        "200": { description: Archived transcription job }
   /v1/phonetic-analysis/providers:
     get:
       operationId: phoneticAnalysisProviders
