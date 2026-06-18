@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 2026-06-18 16:06:35 CST: Added `run-whisperx` to the Phase 3 production
+  pipeline with default/custom WhisperX command support, dry-run contract
+  validation, run reports, and JSON output discovery for downstream LLTimeline
+  conversion.
 - 2026-06-18 16:02:53 CST: Extended the Phase 3 production pipeline with
   `prepare-media`, preprocessing artifacts, optional external vocal isolation
   command support, and LLTimeline artifact embedding for preprocessing reports.

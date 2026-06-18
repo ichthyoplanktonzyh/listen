@@ -31,6 +31,13 @@ prepare_report="$(
     --input "$media_input" \
     --output-dir "$media_out"
 )"
+whisperx_dry_run="$(
+  python3 "$root/scripts/timeline-production/production_pipeline.py" run-whisperx \
+    --input "$media_out/audio-16k-mono.wav" \
+    --output-dir "$tmp/whisperx" \
+    --whisperx-command 'whisperx {input} --model {model} --output_dir {output_dir} --output_format json --language {language}' \
+    --dry-run
+)"
 production_report="$(
   python3 "$root/scripts/timeline-production/production_pipeline.py" from-whisperx-json \
     --input "$root/testdata/timeline-production/whisperx-sample.json" \
@@ -63,16 +70,19 @@ if (report.active_word_timeline_id !== "timeline-fixture") throw new Error("LLTi
 
 node -e '
 const prepare = JSON.parse(process.argv[1]);
-const production = JSON.parse(process.argv[2]);
-const validation = JSON.parse(process.argv[3]);
+const whisperx = JSON.parse(process.argv[2]);
+const production = JSON.parse(process.argv[3]);
+const validation = JSON.parse(process.argv[4]);
 if (!prepare.artifacts_path.endsWith("preprocessing-artifacts.json")) throw new Error("prepare-media artifact missing");
 if (prepare.vocal_isolation !== false) throw new Error("prepare-media vocal isolation default failed");
+if (!whisperx.command.includes("whisperx")) throw new Error("run-whisperx dry run command missing");
+if (!whisperx.command.includes("--output_format json")) throw new Error("run-whisperx output format missing");
 if (production.segments !== 2) throw new Error("production converter segment count failed");
 if (production.words !== 5) throw new Error("production converter word count failed");
 if (validation.schema !== "llplayer.timeline.v1") throw new Error("production LLTimeline schema failed");
 if (validation.segments !== 2) throw new Error("production LLTimeline validation segments failed");
 if (validation.word_timelines !== 1) throw new Error("production LLTimeline validation timelines failed");
-' "$prepare_report" "$production_report" "$production_validation"
+' "$prepare_report" "$whisperx_dry_run" "$production_report" "$production_validation"
 
 node -e '
 const fs = require("fs");

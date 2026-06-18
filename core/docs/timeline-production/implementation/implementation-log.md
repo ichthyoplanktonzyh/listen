@@ -72,3 +72,13 @@
 - Added preprocessing artifact embedding to `from-whisperx-json`.
 - Extended contract validation to smoke-test `prepare-media` and verify the
   generated LLTimeline remains valid when preprocessing artifacts are attached.
+
+## 2026-06-18 16:06:35 CST
+
+- Added `run-whisperx` to execute WhisperX on prepared audio.
+- Supported default WhisperX CLI resolution, `--whisperx-bin`, and custom
+  `--whisperx-command` templates.
+- Added `--dry-run` coverage to contract validation so command generation is
+  tested without requiring torch/whisperx in the default development shell.
+- Added `whisperx-run-report.json` generation and output JSON discovery for the
+  downstream `from-whisperx-json` conversion step.

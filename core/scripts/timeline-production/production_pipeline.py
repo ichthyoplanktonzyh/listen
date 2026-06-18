@@ -14,6 +14,7 @@ import importlib.util
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -365,6 +366,97 @@ def prepare_media(args: argparse.Namespace) -> int:
     return 0
 
 
+def resolve_whisperx_command(args: argparse.Namespace) -> list[str] | str:
+    if args.whisperx_command:
+        return args.whisperx_command.format(
+            input=args.input,
+            output_dir=args.output_dir,
+            model=args.model,
+            language=args.language or "",
+            device=args.device,
+            compute_type=args.compute_type,
+            batch_size=args.batch_size,
+        )
+    executable = args.whisperx_bin or shutil.which("whisperx")
+    if executable:
+        command = [executable]
+    elif importlib.util.find_spec("whisperx") is not None:
+        command = [sys.executable, "-m", "whisperx"]
+    else:
+        raise SystemExit(
+            "whisperx not found; install the timeline-production venv or pass --whisperx-command"
+        )
+    command.extend(
+        [
+            args.input,
+            "--model",
+            args.model,
+            "--output_dir",
+            args.output_dir,
+            "--output_format",
+            "json",
+            "--device",
+            args.device,
+            "--compute_type",
+            args.compute_type,
+            "--batch_size",
+            str(args.batch_size),
+        ]
+    )
+    if args.language:
+        command.extend(["--language", args.language])
+    if args.align_model:
+        command.extend(["--align_model", args.align_model])
+    if args.diarize:
+        command.append("--diarize")
+    if args.hf_token:
+        command.extend(["--hf_token", args.hf_token])
+    return command
+
+
+def find_whisperx_json(output_dir: Path, input_path: Path, explicit: str | None) -> Path:
+    if explicit:
+        output = Path(explicit)
+        if not output.exists():
+            raise SystemExit(f"expected WhisperX JSON was not created: {output}")
+        return output
+    preferred = output_dir / f"{input_path.stem}.json"
+    if preferred.exists():
+        return preferred
+    json_files = sorted(output_dir.glob("*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+    if not json_files:
+        raise SystemExit(f"no WhisperX JSON found in {output_dir}")
+    return json_files[0]
+
+
+def run_whisperx(args: argparse.Namespace) -> int:
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    command = resolve_whisperx_command(args)
+    printable = command if isinstance(command, str) else " ".join(shlex.quote(part) for part in command)
+    if args.dry_run:
+        print(json.dumps({"command": printable, "output_dir": str(output_dir)}, sort_keys=True))
+        return 0
+    started_at = now_ms()
+    subprocess.run(command, shell=isinstance(command, str), check=True)
+    output_json = find_whisperx_json(output_dir, Path(args.input), args.output_json)
+    report = {
+        "input": args.input,
+        "whisperx_json": str(output_json),
+        "output_dir": str(output_dir),
+        "model": args.model,
+        "language": args.language,
+        "device": args.device,
+        "compute_type": args.compute_type,
+        "started_at_ms": started_at,
+        "completed_at_ms": now_ms(),
+    }
+    report_path = output_dir / "whisperx-run-report.json"
+    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(json.dumps({"whisperx_json": str(output_json), "report_path": str(report_path)}, sort_keys=True))
+    return 0
+
+
 def doctor(_: argparse.Namespace) -> int:
     checks = {
         "ffmpeg": shutil.which("ffmpeg") is not None,
@@ -401,6 +493,26 @@ def parser() -> argparse.ArgumentParser:
         help="shell command template; use {input}, {output}, and {output_dir}",
     )
     media.set_defaults(func=prepare_media)
+
+    whisperx = subcommands.add_parser("run-whisperx", help="run WhisperX on prepared audio")
+    whisperx.add_argument("--input", required=True)
+    whisperx.add_argument("--output-dir", required=True)
+    whisperx.add_argument("--output-json")
+    whisperx.add_argument("--model", default="large-v3")
+    whisperx.add_argument("--language", default="en")
+    whisperx.add_argument("--device", default="cpu")
+    whisperx.add_argument("--compute-type", default="float32")
+    whisperx.add_argument("--batch-size", type=int, default=16)
+    whisperx.add_argument("--align-model")
+    whisperx.add_argument("--diarize", action="store_true")
+    whisperx.add_argument("--hf-token")
+    whisperx.add_argument("--whisperx-bin")
+    whisperx.add_argument(
+        "--whisperx-command",
+        help="shell command template; use {input}, {output_dir}, {model}, {language}, {device}, {compute_type}, {batch_size}",
+    )
+    whisperx.add_argument("--dry-run", action="store_true")
+    whisperx.set_defaults(func=run_whisperx)
 
     convert = subcommands.add_parser("from-whisperx-json", help="convert WhisperX JSON to LLTimeline v1")
     convert.add_argument("--input", required=True)

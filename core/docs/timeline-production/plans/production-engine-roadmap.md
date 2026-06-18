@@ -1,6 +1,6 @@
 # Production Engine Roadmap
 
-更新时间：2026-06-18 16:02:53 CST
+更新时间：2026-06-18 16:06:35 CST
 
 ## Goal
 
@@ -101,6 +101,7 @@ word/phone/chunk timeline；轻量消费端读取已产出的资源并提供稳�
 - 生产端独立脚本目录 `scripts/timeline-production/`。
 - `prepare-audio` 用 ffmpeg 抽取 16kHz mono PCM wav。
 - `prepare-media` 生成预处理 artifact，并支持外部人声分离命令输出 vocals wav。
+- `run-whisperx` 调用本地 WhisperX venv 或自定义命令，输出 WhisperX JSON。
 - `from-whisperx-json` 将外部 WhisperX JSON 转换为 `LLTimeline JSON v1`。
 - contract validation 覆盖 WhisperX sample -> LLTimeline 转换。
 

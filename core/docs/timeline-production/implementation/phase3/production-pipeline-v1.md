@@ -1,6 +1,6 @@
 # Phase 3 Production Pipeline V1
 
-更新时间：2026-06-18 16:02:53 CST
+更新时间：2026-06-18 16:06:35 CST
 
 Phase 3 的第一步不是把 WhisperX、Demucs、MFA 等重依赖塞进应用，而是建立本地
 生产端的稳定边界：
@@ -9,7 +9,7 @@ Phase 3 的第一步不是把 WhisperX、Demucs、MFA 等重依赖塞进应用�
 media file
   -> prepare-media
   -> optional external vocal isolation
-  -> external heavy ASR/alignment, for example WhisperX
+  -> run-whisperx
   -> from-whisperx-json
   -> .lltimeline.json
   -> lltimeline-resource.py import
@@ -37,8 +37,16 @@ scripts/timeline-production/production_pipeline.py prepare-media \
   --output-dir /tmp/llplayer-production \
   --vocal-isolation-command 'my-isolator --input {input} --output {output}'
 
+scripts/timeline-production/production_pipeline.py run-whisperx \
+  --input /tmp/llplayer-production/vocals-16k-mono.wav \
+  --output-dir /tmp/llplayer-production/whisperx \
+  --model large-v3 \
+  --language en \
+  --device cpu \
+  --compute-type float32
+
 scripts/timeline-production/production_pipeline.py from-whisperx-json \
-  --input whisperx.json \
+  --input /tmp/llplayer-production/whisperx/vocals-16k-mono.json \
   --output output.lltimeline.json \
   --media-fingerprint <fingerprint> \
   --media-title "CNN10 sample" \
@@ -48,13 +56,13 @@ scripts/timeline-production/production_pipeline.py from-whisperx-json \
 
 ## Current Boundary
 
-The first implementation consumes WhisperX JSON rather than invoking WhisperX
-directly. This keeps the exchange contract stable while allowing the heavy
-pipeline to evolve independently.
+The production pipeline can now invoke WhisperX, but the default development
+contract tests only verify command construction and JSON conversion. A real
+production run still requires the separate timeline-production venv and model
+cache.
 
 Next production steps:
 
-- add a `run-whisperx` command once the local venv and model cache are stable;
 - replace external vocal-isolation command templates with first-class Demucs/UVR presets;
 - add VAD artifacts;
 - add candidate comparison reports;
