@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- 2026-06-18 11:40:04 CST: Transcription now preserves staged word timeline
+  candidates from a single ASR run: raw Whisper DTW, MMS forced-alignment merge
+  when available, and pause-refined final timings. The final stage is activated
+  while prior candidates remain exportable for objective comparison without
+  rerunning transcription.
 - 2026-06-18 11:28:07 CST: Added a developer-facing word timeline evaluator
   that compares exported `WordTimeline` JSON files, reports weak DTW-vs-FA
   drift and anomaly metrics, optionally scores against gold word boundaries,

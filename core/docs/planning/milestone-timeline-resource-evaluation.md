@@ -145,6 +145,13 @@ currently reports weak pairwise drift/anomaly metrics, optional gold word
 boundary metrics, JSON output, Markdown output, and smoke fixture coverage via
 contract validation.
 
+Status as of 2026-06-18 11:40:04 CST: the transcription pipeline now preserves
+multiple timeline candidates during a single run. Whisper DTW is saved first,
+MMS_FA merged timings are saved when the sidecar upgrades at least one word,
+and local pause-refined timings are saved and activated when pause evidence is
+found. This makes DTW-vs-FA-vs-final comparison possible from exported
+resources without rerunning ASR.
+
 ### Evaluation Inputs
 
 Support two modes:
