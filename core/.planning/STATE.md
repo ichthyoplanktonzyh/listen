@@ -1,7 +1,7 @@
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-18 19:30 CST
-> 更新原因：Phase 3 生产管线 V1 收尾，转入评估体系建设
+> 最后更新：2026-06-18 19:37 CST
+> 更新原因：Phase 4 评估体系第一批弱评估切片落地
 
 ## 当前位置
 
@@ -43,6 +43,8 @@
 - 弱评估：DTW vs WhisperX vs MFA 比较
 - Gold benchmark：TIMIT/Buckeye + 新闻自建样本
 - 生产质量指标记录
+- `compare-lltimeline` 可比较同一 `.lltimeline.json` 内的 baseline/candidate/gold
+  word timeline，并输出 P95、tail lag、coverage、overlap/gap 等指标
 
 ### Phase 5: 人工校对 UI ⏳ 后续
 ### Phase 6: 消费端集成 ⏳ 后续
@@ -64,9 +66,9 @@
 
 ## 下一步工作
 
-1. 建立客观评估体系（`evaluate-word-timelines.py` 基础已有）
-2. 创建少量 CNN10 新闻 gold set 样本用于基准测试
-3. 将 Phase 3 production report 与 Phase 4 evaluation report 关联
+1. 创建少量 CNN10 新闻 gold set 样本用于基准测试
+2. 将 Phase 3 production report 与 Phase 4 evaluation report 关联到真实生产运行目录
+3. 扩展评估报告到 chunk boundary delta 和人工修改率
 4. 消费端 `.lltimeline.json` 导入与词级高亮绑定
 
 ## 指标

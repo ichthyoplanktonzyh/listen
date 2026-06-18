@@ -115,6 +115,7 @@ def stats(values: list[int]) -> dict[str, Any]:
             "median": None,
             "mean_abs": None,
             "median_abs": None,
+            "p95_abs": None,
             "max_abs": None,
         }
     absolute = [abs(value) for value in values]
@@ -124,8 +125,22 @@ def stats(values: list[int]) -> dict[str, Any]:
         "median": round_float(statistics.median(values)),
         "mean_abs": round_float(statistics.fmean(absolute)),
         "median_abs": round_float(statistics.median(absolute)),
+        "p95_abs": percentile(absolute, 95),
         "max_abs": max(absolute),
     }
+
+
+def percentile(values: list[int], percentile_value: int) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return round_float(float(ordered[0]))
+    rank = (len(ordered) - 1) * percentile_value / 100
+    lower = int(rank)
+    upper = min(lower + 1, len(ordered) - 1)
+    weight = rank - lower
+    return round_float(ordered[lower] * (1 - weight) + ordered[upper] * weight)
 
 
 def timeline_validity(words: list[dict[str, Any]]) -> dict[str, Any]:
@@ -207,6 +222,25 @@ def offset_metrics(pairs: list[tuple[dict[str, Any], dict[str, Any]]]) -> dict[s
         "duration_delta_ms": stats(duration_deltas),
         "lead_lag_bias_start_ms": stats(start_offsets)["mean"],
         "lead_lag_bias_end_ms": stats(end_offsets)["mean"],
+        "tail_lag_ms": tail_lag_metrics(pairs),
+    }
+
+
+def tail_lag_metrics(pairs: list[tuple[dict[str, Any], dict[str, Any]]]) -> dict[str, Any]:
+    last_pairs_by_sentence: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
+    for base, candidate in pairs:
+        sentence_id = base["sentence_id"]
+        previous = last_pairs_by_sentence.get(sentence_id)
+        if previous is None or base["token_index"] > previous[0]["token_index"]:
+            last_pairs_by_sentence[sentence_id] = (base, candidate)
+    end_offsets = [
+        candidate["end_ms"] - base["end_ms"]
+        for base, candidate in last_pairs_by_sentence.values()
+    ]
+    return {
+        **stats(end_offsets),
+        "positive_lag_count": sum(offset > 0 for offset in end_offsets),
+        "sentence_count": len(end_offsets),
     }
 
 
@@ -274,14 +308,16 @@ def markdown_report(report: dict[str, Any]) -> str:
     weak = report["weak_metrics"]
     start = weak["offsets"]["start_offset_ms"]
     end = weak["offsets"]["end_offset_ms"]
+    tail = weak["offsets"]["tail_lag_ms"]
     lines = [
         "# Word Timeline Evaluation",
         "",
         f"- Baseline: `{report['baseline']['id']}` ({report['baseline']['algorithm_id']} {report['baseline']['algorithm_version']})",
         f"- Candidate: `{report['candidate']['id']}` ({report['candidate']['algorithm_id']} {report['candidate']['algorithm_version']})",
         f"- Matched words: {weak['matched_word_count']}",
-        f"- Start mean offset: {start['mean']} ms; median abs: {start['median_abs']} ms",
-        f"- End mean offset: {end['mean']} ms; median abs: {end['median_abs']} ms",
+        f"- Start mean offset: {start['mean']} ms; median abs: {start['median_abs']} ms; P95 abs: {start['p95_abs']} ms",
+        f"- End mean offset: {end['mean']} ms; median abs: {end['median_abs']} ms; P95 abs: {end['p95_abs']} ms",
+        f"- Tail lag mean: {tail['mean']} ms; P95 abs: {tail['p95_abs']} ms",
         f"- Candidate overlaps: {weak['candidate_validity']['overlap_count']}",
         f"- Suspicious words: {len(weak['suspicious_words'])}",
     ]
@@ -310,9 +346,17 @@ def markdown_report(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def compare(args: argparse.Namespace) -> dict[str, Any]:
-    baseline_value = read_json(args.baseline)
-    candidate_value = read_json(args.candidate)
+def build_compare_report(
+    baseline_value: Any,
+    candidate_value: Any,
+    *,
+    baseline_path: Path,
+    candidate_path: Path,
+    suspicious_threshold_ms: int,
+    gold_value: Any | None = None,
+    source_document: dict[str, Any] | None = None,
+    production_report: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     baseline_words = timeline_words(baseline_value, "baseline")
     candidate_words = timeline_words(candidate_value, "candidate")
     pairs = matched_pairs(
@@ -340,19 +384,92 @@ def compare(args: argparse.Namespace) -> dict[str, Any]:
             "baseline": confidence_summary(baseline_words),
             "candidate": confidence_summary(candidate_words),
         },
-        "suspicious_words": suspicious_words(pairs, args.suspicious_threshold_ms),
+        "suspicious_words": suspicious_words(pairs, suspicious_threshold_ms),
     }
     report = {
         "report_version": 1,
-        "baseline": timeline_meta(baseline_value, args.baseline, baseline_words),
-        "candidate": timeline_meta(candidate_value, args.candidate, candidate_words),
+        "baseline": timeline_meta(baseline_value, baseline_path, baseline_words),
+        "candidate": timeline_meta(candidate_value, candidate_path, candidate_words),
         "weak_metrics": weak,
     }
-    if args.gold:
-        gold_value = read_json(args.gold)
+    if source_document:
+        report["source_document"] = source_document
+    if production_report:
+        report["production_report"] = production_report
+    if gold_value:
         gold_words = timeline_words(gold_value, "gold")
         report["gold_metrics"] = gold_metrics(gold_words, candidate_words)
     return report
+
+
+def compare(args: argparse.Namespace) -> dict[str, Any]:
+    baseline_value = read_json(args.baseline)
+    candidate_value = read_json(args.candidate)
+    gold_value = read_json(args.gold) if args.gold else None
+    return build_compare_report(
+        baseline_value,
+        candidate_value,
+        baseline_path=args.baseline,
+        candidate_path=args.candidate,
+        suspicious_threshold_ms=args.suspicious_threshold_ms,
+        gold_value=gold_value,
+    )
+
+
+def select_word_timeline(document: dict[str, Any], timeline_id: str, label: str) -> dict[str, Any]:
+    timelines = document.get("word_timelines")
+    if not isinstance(timelines, list) or not timelines:
+        fail(f"{label}: LLTimeline document has no word_timelines")
+    if timeline_id == "@active":
+        active_id = document.get("active_word_timeline_id")
+        if not active_id:
+            fail(f"{label}: LLTimeline document has no active_word_timeline_id")
+        timeline_id = active_id
+    for timeline in timelines:
+        if isinstance(timeline, dict) and timeline.get("id") == timeline_id:
+            return timeline
+    fail(f"{label}: word timeline {timeline_id!r} not found")
+
+
+def compact_production_report(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        fail("production report must be an object")
+    return {
+        "report_version": value.get("report_version"),
+        "input": value.get("input"),
+        "word_coverage": value.get("word_coverage"),
+        "ready_for_manual_review": value.get("ready_for_manual_review"),
+        "quality": value.get("quality", {}),
+    }
+
+
+def compare_lltimeline(args: argparse.Namespace) -> dict[str, Any]:
+    document = read_json(args.input)
+    if not isinstance(document, dict) or document.get("schema") != "llplayer.timeline.v1":
+        fail(f"{args.input}: expected LLTimeline JSON v1 document")
+    baseline = select_word_timeline(document, args.baseline_timeline, "baseline")
+    candidate = select_word_timeline(document, args.candidate_timeline, "candidate")
+    gold = select_word_timeline(document, args.gold_timeline, "gold") if args.gold_timeline else None
+    production_report = compact_production_report(read_json(args.production_report)) if args.production_report else None
+    media = document.get("metadata", {}).get("media", {})
+    return build_compare_report(
+        baseline,
+        candidate,
+        baseline_path=Path(f"{args.input}#{baseline.get('id', 'baseline')}"),
+        candidate_path=Path(f"{args.input}#{candidate.get('id', 'candidate')}"),
+        suspicious_threshold_ms=args.suspicious_threshold_ms,
+        gold_value=gold,
+        source_document={
+            "input": str(args.input),
+            "schema": document.get("schema"),
+            "media_id": media.get("id"),
+            "media_title": media.get("title"),
+            "baseline_timeline_id": baseline.get("id"),
+            "candidate_timeline_id": candidate.get("id"),
+            "gold_timeline_id": gold.get("id") if gold else None,
+        },
+        production_report=production_report,
+    )
 
 
 def main() -> int:
@@ -365,10 +482,21 @@ def main() -> int:
     compare_parser.add_argument("--json-output", type=Path)
     compare_parser.add_argument("--markdown-output", type=Path)
     compare_parser.add_argument("--suspicious-threshold-ms", type=int, default=200)
+    document_parser = subparsers.add_parser("compare-lltimeline")
+    document_parser.add_argument("--input", type=Path, required=True)
+    document_parser.add_argument("--baseline-timeline", required=True)
+    document_parser.add_argument("--candidate-timeline", required=True)
+    document_parser.add_argument("--gold-timeline")
+    document_parser.add_argument("--production-report", type=Path)
+    document_parser.add_argument("--json-output", type=Path)
+    document_parser.add_argument("--markdown-output", type=Path)
+    document_parser.add_argument("--suspicious-threshold-ms", type=int, default=200)
     args = parser.parse_args()
     try:
         if args.command == "compare":
             report = compare(args)
+        elif args.command == "compare-lltimeline":
+            report = compare_lltimeline(args)
         else:
             fail(f"unknown command {args.command}")
         encoded = json.dumps(report, indent=2, sort_keys=True)

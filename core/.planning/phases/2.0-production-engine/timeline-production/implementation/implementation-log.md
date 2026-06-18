@@ -103,3 +103,15 @@
   after LLTimeline conversion.
 - Extended contract validation to cover WhisperX fixture conversion plus the
   production quality report.
+
+## 2026-06-18 19:37:24 CST
+
+- Started Phase 4 Evaluation System implementation.
+- Added `compare-lltimeline` to compare baseline/candidate/gold word timelines
+  directly inside one `.lltimeline.json` resource.
+- Extended evaluation reports with P95 absolute offsets and sentence-tail lag
+  metrics for the fast-speech highlight-lag problem.
+- Added a multi-candidate LLTimeline fixture with DTW baseline, WhisperX
+  candidate, and manual gold timelines.
+- Extended contract validation to cover the document-level evaluation report
+  and the new evaluation fixture.

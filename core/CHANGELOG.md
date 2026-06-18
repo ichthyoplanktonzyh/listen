@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-06-18 19:37:24 CST: Started Phase 4 evaluation work by adding
+  document-level `compare-lltimeline` reports for comparing baseline,
+  candidate, and gold word timelines inside one `.lltimeline.json`, including
+  P95 boundary offsets, sentence-tail lag metrics, a multi-candidate LLTimeline
+  fixture, contract validation coverage, and updated `.planning/` evaluation
+  docs.
 - 2026-06-18 19:30:22 CST: Completed Phase 3 Production Pipeline V1 by adding
   `production-report.json` generation for LLTimeline outputs, automatic report
   emission from `produce-whisperx`, contract validation for production quality

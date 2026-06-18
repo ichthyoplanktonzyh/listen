@@ -111,6 +111,8 @@ word/phone/chunk timeline；轻量消费端读取已产出的资源并提供稳�
 
 ## Phase 4: Evaluation System
 
+状态：进行中（2026-06-18 19:37:24 CST 已完成第一批弱评估切片）。
+
 目标：停止靠肉眼猜，建立客观评估。
 
 任务：
@@ -124,6 +126,18 @@ word/phone/chunk timeline；轻量消费端读取已产出的资源并提供稳�
 
 - 每次算法变更都有可比报告。
 - 生产端能解释“为什么这个版本更好”。
+
+当前已完成第一批切片：
+
+- `evaluate-word-timelines.py compare` 已支持独立 word timeline JSON 弱评估和 gold
+  对比。
+- `evaluate-word-timelines.py compare-lltimeline` 可直接从 `.lltimeline.json` 内选择
+  baseline/candidate/gold word timeline 生成比较报告。
+- 评估指标包含 coverage、start/end/duration offset、P95、tail lag、overlap/gap、
+  provider mix、confidence 和 suspicious words。
+- `testdata/lltimeline/v1-evaluation-candidates.lltimeline.json` 提供 DTW baseline、
+  WhisperX candidate、manual gold 三候选 fixture。
+- contract validation 覆盖文档级 timeline 比较和 evaluation fixture schema。
 
 ## Phase 5: Manual Correction Studio
 

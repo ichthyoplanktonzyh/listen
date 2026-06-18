@@ -16,9 +16,21 @@ word_report="$(
     --gold "$root/testdata/word-timelines/gold-v1.json" \
     --markdown-output "$tmp/word-timeline-report.md"
 )"
+lltimeline_evaluation_report="$(
+  python3 "$root/scripts/evaluate-word-timelines.py" compare-lltimeline \
+    --input "$root/testdata/lltimeline/v1-evaluation-candidates.lltimeline.json" \
+    --baseline-timeline dtw-baseline \
+    --candidate-timeline whisperx-candidate \
+    --gold-timeline manual-gold \
+    --markdown-output "$tmp/lltimeline-evaluation-report.md"
+)"
 lltimeline_report="$(
   python3 "$root/scripts/lltimeline-resource.py" validate \
     "$root/testdata/lltimeline/v1-minimal.lltimeline.json"
+)"
+lltimeline_evaluation_validation="$(
+  python3 "$root/scripts/lltimeline-resource.py" validate \
+    "$root/testdata/lltimeline/v1-evaluation-candidates.lltimeline.json"
 )"
 production_output="$tmp/whisperx-sample.lltimeline.json"
 media_input="$tmp/input.wav"
@@ -68,20 +80,32 @@ node -e '
 const fs = require("fs");
 const report = JSON.parse(process.argv[1]);
 const md = fs.readFileSync(process.argv[2], "utf8");
+const lltimelineReport = JSON.parse(process.argv[3]);
+const lltimelineMd = fs.readFileSync(process.argv[4], "utf8");
 if (report.report_version !== 1) throw new Error("word timeline report version missing");
 if (report.weak_metrics.matched_word_count !== 2) throw new Error("word timeline match count failed");
 if (report.weak_metrics.offsets.start_offset_ms.mean !== -5) throw new Error("start offset mean failed");
 if (report.gold_metrics.start_mae_ms !== 5) throw new Error("gold start MAE failed");
 if (!md.includes("Word Timeline Evaluation")) throw new Error("word timeline markdown missing");
-' "$word_report" "$tmp/word-timeline-report.md"
+if (lltimelineReport.source_document.baseline_timeline_id !== "dtw-baseline") throw new Error("LLTimeline baseline id missing");
+if (lltimelineReport.source_document.candidate_timeline_id !== "whisperx-candidate") throw new Error("LLTimeline candidate id missing");
+if (lltimelineReport.gold_metrics.coverage !== 1) throw new Error("LLTimeline gold coverage failed");
+if (lltimelineReport.weak_metrics.offsets.tail_lag_ms.sentence_count !== 2) throw new Error("LLTimeline tail lag metric failed");
+if (lltimelineReport.weak_metrics.offsets.end_offset_ms.p95_abs !== 182) throw new Error("LLTimeline p95 metric failed");
+if (!lltimelineMd.includes("Gold Metrics")) throw new Error("LLTimeline evaluation markdown missing");
+' "$word_report" "$tmp/word-timeline-report.md" "$lltimeline_evaluation_report" "$tmp/lltimeline-evaluation-report.md"
 
 node -e '
 const report = JSON.parse(process.argv[1]);
+const evaluation = JSON.parse(process.argv[2]);
 if (report.schema !== "llplayer.timeline.v1") throw new Error("LLTimeline schema missing");
 if (report.segments !== 1) throw new Error("LLTimeline segment fixture failed");
 if (report.word_timelines !== 1) throw new Error("LLTimeline word timeline fixture failed");
 if (report.active_word_timeline_id !== "timeline-fixture") throw new Error("LLTimeline active timeline fixture failed");
-' "$lltimeline_report"
+if (evaluation.segments !== 2) throw new Error("LLTimeline evaluation fixture segments failed");
+if (evaluation.word_timelines !== 3) throw new Error("LLTimeline evaluation fixture timelines failed");
+if (evaluation.active_word_timeline_id !== "whisperx-candidate") throw new Error("LLTimeline evaluation active timeline failed");
+' "$lltimeline_report" "$lltimeline_evaluation_validation"
 
 node -e '
 const fs = require("fs");
