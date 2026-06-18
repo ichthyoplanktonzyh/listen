@@ -1,6 +1,6 @@
 # Production Engine Roadmap
 
-更新时间：2026-06-18 15:53:09 CST
+更新时间：2026-06-18 15:57:18 CST
 
 ## Goal
 
@@ -78,6 +78,8 @@ word/phone/chunk timeline；轻量消费端读取已产出的资源并提供稳�
 
 ## Phase 3: Production Pipeline V1
 
+状态：进行中。
+
 目标：建立个人本地重装生产管线。
 
 任务：
@@ -93,6 +95,13 @@ word/phone/chunk timeline；轻量消费端读取已产出的资源并提供稳�
 
 - CNN10/NBC 样本可稳定跑完并产出 `.lltimeline.json`。
 - 同一视频可以比较 DTW、WhisperX、MFA/BFA、人工修正版本。
+
+当前已完成第一批切片：
+
+- 生产端独立脚本目录 `scripts/timeline-production/`。
+- `prepare-audio` 用 ffmpeg 抽取 16kHz mono PCM wav。
+- `from-whisperx-json` 将外部 WhisperX JSON 转换为 `LLTimeline JSON v1`。
+- contract validation 覆盖 WhisperX sample -> LLTimeline 转换。
 
 ## Phase 4: Evaluation System
 

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 2026-06-18 15:57:18 CST: Started Phase 3 production pipeline work with a
+  research-only timeline-production script set, ffmpeg audio preparation,
+  WhisperX JSON to `LLTimeline JSON v1` conversion, a sample WhisperX fixture,
+  and contract validation coverage for the conversion bridge.
 - 2026-06-18 15:53:09 CST: Completed Phase 2 resource lifecycle support for
   word timelines with summary, publish, archive-active, delete, OpenAPI/client
   coverage, and `lltimeline-resource.py` lifecycle commands; transcription job

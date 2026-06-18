@@ -1,6 +1,6 @@
 # Timeline Production System
 
-更新时间：2026-06-18 15:53:09 CST
+更新时间：2026-06-18 15:57:18 CST
 
 本目录收纳“本地重装生产引擎 + 轻量消费端时间轴资源读取”路线下的长期文档。
 后续所有与精准词/音素时间轴、生产端数据管线、评估体系、人工校正和
@@ -40,3 +40,6 @@ Phase 1 和 Phase 2 已完成。当前阶段转入 Production Pipeline V1：
 1. 建立本地重装生产端脚本/管线结构。
 2. 接入 Whisper Large-v3 / WhisperX 等候选生成器。
 3. 将生产端输出统一落到 `.lltimeline.json` 和 timeline resources。
+
+Phase 3 已开始：当前已落地外部 WhisperX JSON 到 `.lltimeline.json` 的转换桥和
+ffmpeg 音频准备入口。

@@ -1,0 +1,6 @@
+# Heavy production-engine dependencies. Install only in the research/production
+# venv, never in the app bundle.
+torch
+torchaudio
+whisperx
+soundfile

@@ -7,7 +7,8 @@ trap 'rm -rf "$tmp"' EXIT
 
 PYTHONPYCACHEPREFIX="$tmp/pycache" python3 -m py_compile \
   "$root/scripts/evaluate-word-timelines.py" \
-  "$root/scripts/lltimeline-resource.py"
+  "$root/scripts/lltimeline-resource.py" \
+  "$root/scripts/timeline-production/production_pipeline.py"
 word_report="$(
   python3 "$root/scripts/evaluate-word-timelines.py" compare \
     --baseline "$root/testdata/word-timelines/baseline-v1.json" \
@@ -18,6 +19,17 @@ word_report="$(
 lltimeline_report="$(
   python3 "$root/scripts/lltimeline-resource.py" validate \
     "$root/testdata/lltimeline/v1-minimal.lltimeline.json"
+)"
+production_output="$tmp/whisperx-sample.lltimeline.json"
+production_report="$(
+  python3 "$root/scripts/timeline-production/production_pipeline.py" from-whisperx-json \
+    --input "$root/testdata/timeline-production/whisperx-sample.json" \
+    --output "$production_output" \
+    --media-fingerprint "timeline-production-smoke" \
+    --media-title "Timeline Production Smoke"
+)"
+production_validation="$(
+  python3 "$root/scripts/lltimeline-resource.py" validate "$production_output"
 )"
 node -e '
 const fs = require("fs");
@@ -37,6 +49,16 @@ if (report.segments !== 1) throw new Error("LLTimeline segment fixture failed");
 if (report.word_timelines !== 1) throw new Error("LLTimeline word timeline fixture failed");
 if (report.active_word_timeline_id !== "timeline-fixture") throw new Error("LLTimeline active timeline fixture failed");
 ' "$lltimeline_report"
+
+node -e '
+const production = JSON.parse(process.argv[1]);
+const validation = JSON.parse(process.argv[2]);
+if (production.segments !== 2) throw new Error("production converter segment count failed");
+if (production.words !== 5) throw new Error("production converter word count failed");
+if (validation.schema !== "llplayer.timeline.v1") throw new Error("production LLTimeline schema failed");
+if (validation.segments !== 2) throw new Error("production LLTimeline validation segments failed");
+if (validation.word_timelines !== 1) throw new Error("production LLTimeline validation timelines failed");
+' "$production_report" "$production_validation"
 
 node -e '
 const fs = require("fs");

@@ -50,3 +50,14 @@
 - Extended `scripts/lltimeline-resource.py` with summary, publish, archive, and
   delete commands.
 - Marked Phase 2 complete; Phase 3 now starts with the production pipeline.
+
+## 2026-06-18 15:57:18 CST
+
+- Started Phase 3 with `scripts/timeline-production/` as the research-only
+  local production sidecar directory.
+- Added `production_pipeline.py` with `doctor`, `prepare-audio`, and
+  `from-whisperx-json` commands.
+- Added a research venv setup script and heavy dependency requirements file.
+- Added `testdata/timeline-production/whisperx-sample.json`.
+- Extended contract validation to convert the WhisperX fixture into
+  `LLTimeline JSON v1` and validate the generated resource.
