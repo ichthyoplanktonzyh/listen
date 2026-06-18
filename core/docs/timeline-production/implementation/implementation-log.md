@@ -61,3 +61,14 @@
 - Added `testdata/timeline-production/whisperx-sample.json`.
 - Extended contract validation to convert the WhisperX fixture into
   `LLTimeline JSON v1` and validate the generated resource.
+
+## 2026-06-18 16:02:53 CST
+
+- Added `prepare-media` to produce normalized raw audio plus
+  `preprocessing-artifacts.json`.
+- Added optional external vocal-isolation command support via
+  `--vocal-isolation-command`, with `{input}`, `{output}`, and `{output_dir}`
+  placeholders.
+- Added preprocessing artifact embedding to `from-whisperx-json`.
+- Extended contract validation to smoke-test `prepare-media` and verify the
+  generated LLTimeline remains valid when preprocessing artifacts are attached.

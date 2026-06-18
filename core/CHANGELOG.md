@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- 2026-06-18 16:02:53 CST: Extended the Phase 3 production pipeline with
+  `prepare-media`, preprocessing artifacts, optional external vocal isolation
+  command support, and LLTimeline artifact embedding for preprocessing reports.
 - 2026-06-18 15:57:18 CST: Started Phase 3 production pipeline work with a
   research-only timeline-production script set, ffmpeg audio preparation,
   WhisperX JSON to `LLTimeline JSON v1` conversion, a sample WhisperX fixture,

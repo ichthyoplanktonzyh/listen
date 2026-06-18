@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -31,6 +32,14 @@ def now_ms() -> int:
 
 def stable_id(namespace: str, value: str) -> str:
     return hashlib.sha256(f"{namespace}:{value}".encode("utf-8")).hexdigest()
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def ms(value: float | int | None) -> int | None:
@@ -183,6 +192,27 @@ def convert_whisperx(args: argparse.Namespace) -> int:
         raise SystemExit("no valid WhisperX segments were converted")
     if not timings:
         raise SystemExit("no valid WhisperX word timings were converted")
+    artifacts = [
+        {
+            "kind": "alignment_diagnostics",
+            "provider_id": args.algorithm_id,
+            "provider_version": args.algorithm_version,
+            "payload": {
+                "input": str(args.input),
+                "skipped_words": skipped_words,
+            },
+        }
+    ]
+    if args.preprocessing_artifacts:
+        preprocessing = json.loads(Path(args.preprocessing_artifacts).read_text(encoding="utf-8"))
+        artifacts.append(
+            {
+                "kind": "preprocessing",
+                "provider_id": "llplayernext-production-pipeline",
+                "provider_version": "phase3-v1",
+                "payload": preprocessing,
+            }
+        )
 
     document = {
         "schema": SCHEMA,
@@ -238,17 +268,7 @@ def convert_whisperx(args: argparse.Namespace) -> int:
         "active_phone_timeline_id": None,
         "chunk_timelines": [],
         "active_chunk_timeline_id": None,
-        "artifacts": [
-            {
-                "kind": "alignment_diagnostics",
-                "provider_id": args.algorithm_id,
-                "provider_version": args.algorithm_version,
-                "payload": {
-                    "input": str(args.input),
-                    "skipped_words": skipped_words,
-                },
-            }
-        ],
+        "artifacts": artifacts,
     }
     output = json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     Path(args.output).write_text(output, encoding="utf-8")
@@ -256,18 +276,18 @@ def convert_whisperx(args: argparse.Namespace) -> int:
     return 0
 
 
-def prepare_audio(args: argparse.Namespace) -> int:
+def extract_audio(input_path: str, output: Path) -> None:
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise SystemExit("ffmpeg not found")
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output = output_dir / "audio-16k-mono.wav"
     command = [
         ffmpeg,
+        "-hide_banner",
+        "-loglevel",
+        "error",
         "-y",
         "-i",
-        args.input,
+        input_path,
         "-vn",
         "-ac",
         "1",
@@ -278,7 +298,70 @@ def prepare_audio(args: argparse.Namespace) -> int:
         str(output),
     ]
     subprocess.run(command, check=True)
+
+
+def prepare_audio(args: argparse.Namespace) -> int:
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output = output_dir / "audio-16k-mono.wav"
+    extract_audio(args.input, output)
     print(json.dumps({"audio_path": str(output)}, sort_keys=True))
+    return 0
+
+
+def prepare_media(args: argparse.Namespace) -> int:
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    raw_audio = output_dir / "audio-16k-mono.wav"
+    vocals_audio = output_dir / "vocals-16k-mono.wav"
+    started_at = now_ms()
+    extract_audio(args.input, raw_audio)
+
+    isolation: dict[str, Any] = {"enabled": False}
+    selected_audio = raw_audio
+    if args.vocal_isolation_command:
+        command = args.vocal_isolation_command.format(
+            input=str(raw_audio),
+            output=str(vocals_audio),
+            output_dir=str(output_dir),
+        )
+        subprocess.run(command, shell=True, check=True)
+        if not vocals_audio.exists():
+            raise SystemExit(f"vocal isolation command did not create {vocals_audio}")
+        selected_audio = vocals_audio
+        isolation = {
+            "enabled": True,
+            "command": args.vocal_isolation_command,
+            "output_path": str(vocals_audio),
+            "sha256": file_sha256(vocals_audio),
+        }
+
+    artifacts = {
+        "input_path": args.input,
+        "started_at_ms": started_at,
+        "completed_at_ms": now_ms(),
+        "raw_audio": {
+            "path": str(raw_audio),
+            "sample_rate_hz": 16000,
+            "channels": 1,
+            "sample_format": "s16",
+            "sha256": file_sha256(raw_audio),
+        },
+        "selected_audio_path": str(selected_audio),
+        "vocal_isolation": isolation,
+    }
+    artifact_path = output_dir / "preprocessing-artifacts.json"
+    artifact_path.write_text(json.dumps(artifacts, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(
+        json.dumps(
+            {
+                "audio_path": str(selected_audio),
+                "artifacts_path": str(artifact_path),
+                "vocal_isolation": isolation["enabled"],
+            },
+            sort_keys=True,
+        )
+    )
     return 0
 
 
@@ -288,6 +371,8 @@ def doctor(_: argparse.Namespace) -> int:
         "python": True,
         "whisperx": importlib.util.find_spec("whisperx") is not None,
         "torch": importlib.util.find_spec("torch") is not None,
+        "demucs": importlib.util.find_spec("demucs") is not None,
+        "uvr_env": "UVR_MODELS_DIR" in os.environ,
     }
     print(json.dumps(checks, sort_keys=True))
     return 0 if checks["ffmpeg"] else 1
@@ -305,6 +390,18 @@ def parser() -> argparse.ArgumentParser:
     audio.add_argument("--output-dir", required=True)
     audio.set_defaults(func=prepare_audio)
 
+    media = subcommands.add_parser(
+        "prepare-media",
+        help="extract normalized audio and optionally run external vocal isolation",
+    )
+    media.add_argument("--input", required=True)
+    media.add_argument("--output-dir", required=True)
+    media.add_argument(
+        "--vocal-isolation-command",
+        help="shell command template; use {input}, {output}, and {output_dir}",
+    )
+    media.set_defaults(func=prepare_media)
+
     convert = subcommands.add_parser("from-whisperx-json", help="convert WhisperX JSON to LLTimeline v1")
     convert.add_argument("--input", required=True)
     convert.add_argument("--output", required=True)
@@ -315,6 +412,7 @@ def parser() -> argparse.ArgumentParser:
     convert.add_argument("--track-id")
     convert.add_argument("--timeline-id")
     convert.add_argument("--duration-ms", type=int)
+    convert.add_argument("--preprocessing-artifacts")
     convert.add_argument("--language", default="en")
     convert.add_argument("--algorithm-id", default="whisperx")
     convert.add_argument("--algorithm-version", default="large-v3-align")

@@ -21,12 +21,23 @@ lltimeline_report="$(
     "$root/testdata/lltimeline/v1-minimal.lltimeline.json"
 )"
 production_output="$tmp/whisperx-sample.lltimeline.json"
+media_input="$tmp/input.wav"
+media_out="$tmp/media"
+ffmpeg -hide_banner -loglevel error -y \
+  -f lavfi -i sine=frequency=440:duration=0.25 \
+  -ac 1 -ar 16000 -sample_fmt s16 "$media_input"
+prepare_report="$(
+  python3 "$root/scripts/timeline-production/production_pipeline.py" prepare-media \
+    --input "$media_input" \
+    --output-dir "$media_out"
+)"
 production_report="$(
   python3 "$root/scripts/timeline-production/production_pipeline.py" from-whisperx-json \
     --input "$root/testdata/timeline-production/whisperx-sample.json" \
     --output "$production_output" \
     --media-fingerprint "timeline-production-smoke" \
-    --media-title "Timeline Production Smoke"
+    --media-title "Timeline Production Smoke" \
+    --preprocessing-artifacts "$media_out/preprocessing-artifacts.json"
 )"
 production_validation="$(
   python3 "$root/scripts/lltimeline-resource.py" validate "$production_output"
@@ -51,14 +62,17 @@ if (report.active_word_timeline_id !== "timeline-fixture") throw new Error("LLTi
 ' "$lltimeline_report"
 
 node -e '
-const production = JSON.parse(process.argv[1]);
-const validation = JSON.parse(process.argv[2]);
+const prepare = JSON.parse(process.argv[1]);
+const production = JSON.parse(process.argv[2]);
+const validation = JSON.parse(process.argv[3]);
+if (!prepare.artifacts_path.endsWith("preprocessing-artifacts.json")) throw new Error("prepare-media artifact missing");
+if (prepare.vocal_isolation !== false) throw new Error("prepare-media vocal isolation default failed");
 if (production.segments !== 2) throw new Error("production converter segment count failed");
 if (production.words !== 5) throw new Error("production converter word count failed");
 if (validation.schema !== "llplayer.timeline.v1") throw new Error("production LLTimeline schema failed");
 if (validation.segments !== 2) throw new Error("production LLTimeline validation segments failed");
 if (validation.word_timelines !== 1) throw new Error("production LLTimeline validation timelines failed");
-' "$production_report" "$production_validation"
+' "$prepare_report" "$production_report" "$production_validation"
 
 node -e '
 const fs = require("fs");
