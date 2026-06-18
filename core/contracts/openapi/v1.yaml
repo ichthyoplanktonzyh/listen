@@ -180,6 +180,11 @@ paths:
       operationId: createTrackWordTimeline
       responses:
         "200": { description: Created word timeline resource }
+  /v1/subtitles/{track_id}/lltimeline/export:
+    get:
+      operationId: exportTrackLLTimeline
+      responses:
+        "200": { description: Exportable LLTimeline JSON v1 resource document }
   /v1/word-timelines/{timeline_id}:
     get:
       operationId: wordTimeline

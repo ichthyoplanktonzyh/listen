@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- 2026-06-18 15:11:06 CST: Added the `docs/timeline-production/` documentation
+  structure and started Phase 1 of the production-engine route with
+  `LLTimeline JSON v1` domain contracts plus an HTTP export endpoint that wraps
+  subtitle segments and active/candidate `WordTimeline` resources into a
+  resource document.
 - 2026-06-18 14:50:26 CST: Reframed the product definition around two
   coordinated tracks: a local heavy production engine for high-precision
   WordTimeline/PhoneTimeline/ChunkTimeline generation, evaluation, correction,

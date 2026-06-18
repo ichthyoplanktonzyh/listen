@@ -117,6 +117,10 @@ pub fn router(state: ApiState) -> Router {
             "/v1/subtitles/{track_id}/word-timelines",
             get(track_word_timelines).post(create_track_word_timeline),
         )
+        .route(
+            "/v1/subtitles/{track_id}/lltimeline/export",
+            get(export_track_lltimeline),
+        )
         .route("/v1/word-timelines/{timeline_id}", get(word_timeline))
         .route(
             "/v1/word-timelines/{timeline_id}/activate",
@@ -696,6 +700,19 @@ async fn create_track_word_timeline(
                 metrics_json: request.metrics_json,
                 words: request.words,
             },
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn export_track_lltimeline(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<domain::LLTimelineDocument>, ApiError> {
+    state
+        .services
+        .export_lltimeline_document(
+            &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
         )
         .map(Json)
         .map_err(ApiError::from)
@@ -1874,6 +1891,85 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn exports_lltimeline_document_with_active_word_timeline() {
+        let app = test_app();
+        let track = setup_phonetic_track(&app, "lltimeline-media").await;
+        let sentence = &track["sentences"][0];
+        let token = sentence["tokens"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|token| token["kind"] == "word")
+            .expect("fixture has a word token");
+        let start_ms = sentence["start"].as_u64().unwrap() + 10;
+        let end_ms = start_ms + 120;
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/v1/subtitles/{}/word-timelines",
+                    track["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "algorithm_id": "test-aligner",
+                        "algorithm_version": "v1",
+                        "config_hash": "test-config",
+                        "status": "active",
+                        "words": [{
+                            "sentence_id": sentence["id"],
+                            "token_index": token["index"],
+                            "text": token["text"],
+                            "start_ms": start_ms,
+                            "end_ms": end_ms,
+                            "confidence": 0.95,
+                            "timing_source": "forced_aligned",
+                            "provider_id": "test-aligner",
+                            "provider_version": "v1"
+                        }]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let timeline: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+
+        let response = app
+            .oneshot(
+                Request::get(format!(
+                    "/v1/subtitles/{}/lltimeline/export",
+                    track["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let document: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(document["schema"], domain::LLTIMELINE_SCHEMA_V1);
+        assert_eq!(
+            document["metadata"]["media"]["fingerprint"],
+            "lltimeline-media"
+        );
+        assert_eq!(document["segments"].as_array().unwrap().len(), 4);
+        assert_eq!(document["word_timelines"].as_array().unwrap().len(), 1);
+        assert_eq!(document["active_word_timeline_id"], timeline["id"]);
+        assert_eq!(document["phone_timelines"].as_array().unwrap().len(), 0);
+        assert_eq!(document["chunk_timelines"].as_array().unwrap().len(), 0);
+    }
+
+    #[tokio::test]
     async fn phonetic_analysis_fake_provider_completes_without_audio_detection_claims() {
         let app = test_app();
         let response = app
@@ -2342,6 +2438,7 @@ mod tests {
             "/v1/subtitles/{track_id}/pronunciation-analysis",
             "/v1/subtitles/{track_id}/word-timings",
             "/v1/subtitles/{track_id}/word-timelines",
+            "/v1/subtitles/{track_id}/lltimeline/export",
             "/v1/word-timelines/{timeline_id}",
             "/v1/word-timelines/{timeline_id}/activate",
             "/v1/word-timelines/{timeline_id}/archive",
@@ -2402,8 +2499,8 @@ mod tests {
         // Count documented paths as a regression gate.
         let path_count = openapi.lines().filter(|l| l.starts_with("  /v1/")).count();
         assert_eq!(
-            path_count, 74,
-            "OpenAPI path count changed from 74 — update snapshot if paths were added/removed"
+            path_count, 75,
+            "OpenAPI path count changed from 75 — update snapshot if paths were added/removed"
         );
 
         // All paths must be under /v1/.

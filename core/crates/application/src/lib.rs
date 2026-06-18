@@ -1070,6 +1070,61 @@ impl AppServices {
             .collect()
     }
 
+    pub fn export_lltimeline_document(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<LLTimelineDocument, ApplicationError> {
+        let track = self
+            .subtitles
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let media = self
+            .media
+            .get(&track.media_id)?
+            .ok_or(ApplicationError::NotFound("media item"))?;
+        let word_timelines = self.subtitles.list_word_timelines(track_id)?;
+        let active_word_timeline_id = word_timelines
+            .iter()
+            .find(|timeline| timeline.status == TimelineStatus::Active)
+            .map(|timeline| timeline.id.clone());
+        Ok(LLTimelineDocument {
+            schema: LLTIMELINE_SCHEMA_V1.to_owned(),
+            metadata: LLTimelineMetadata {
+                created_at_ms: now_ms(),
+                generator: LLTimelineGenerator {
+                    id: "llplayernext".into(),
+                    version: env!("CARGO_PKG_VERSION").into(),
+                    mode: "production_engine".into(),
+                },
+                media: LLTimelineMedia {
+                    id: media.id,
+                    fingerprint: media.fingerprint,
+                    path: Some(media.path),
+                    title: media.title,
+                    duration_ms: media.duration.map(TimeMs::get),
+                },
+                language: track.language.clone(),
+                human_reviewed: word_timelines.iter().any(|timeline| {
+                    timeline.status == TimelineStatus::Active
+                        && timeline.created_by == TimelineCreator::User
+                }),
+                extra: serde_json::json!({
+                    "track_id": track.id.as_str(),
+                    "track_fingerprint": track.fingerprint.as_str(),
+                    "track_source": track.source.as_str(),
+                }),
+            },
+            segments: lltimeline_segments_from_track(&track),
+            word_timelines,
+            active_word_timeline_id,
+            phone_timelines: Vec::new(),
+            active_phone_timeline_id: None,
+            chunk_timelines: Vec::new(),
+            active_chunk_timeline_id: None,
+            artifacts: Vec::new(),
+        })
+    }
+
     /// Detect acoustic chunk boundaries for every sentence in a subtitle track.
     ///
     /// Uses gap-based detection on existing word timings. Each sentence is
@@ -1636,6 +1691,33 @@ fn build_word_timeline(
         created_at_ms: now,
         updated_at_ms: now,
     })
+}
+
+fn lltimeline_segments_from_track(track: &SubtitleTrack) -> Vec<LLTimelineSegment> {
+    track
+        .sentences
+        .iter()
+        .map(|sentence| LLTimelineSegment {
+            id: sentence.id.clone(),
+            index: sentence.index,
+            start_ms: sentence.start.get(),
+            end_ms: sentence.end.get(),
+            text: sentence.original_text.clone(),
+            display_text: sentence.display_text.clone(),
+            tokens: sentence
+                .tokens
+                .iter()
+                .map(|token| LLTimelineToken {
+                    index: token.index,
+                    kind: token.kind,
+                    text: token.text.clone(),
+                    normalized: token.normalized.clone(),
+                    start_char: token.start_char,
+                    end_char: token.end_char,
+                })
+                .collect(),
+        })
+        .collect()
 }
 
 fn word_timing_cache_is_usable(values: &[WordTiming]) -> bool {

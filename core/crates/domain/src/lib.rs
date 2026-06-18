@@ -40,6 +40,7 @@ string_id!(DictionaryEntryId);
 string_id!(TranscriptionJobId);
 string_id!(TranscriptionModelId);
 string_id!(WordTimelineId);
+string_id!(LLTimelineId);
 string_id!(LexicalEntryId);
 string_id!(LexicalOccurrenceId);
 string_id!(LexicalStatusHistoryId);
@@ -285,6 +286,129 @@ pub struct WordTimeline {
     pub words: Vec<WordTiming>,
     pub created_at_ms: u64,
     pub updated_at_ms: u64,
+}
+
+pub const LLTIMELINE_SCHEMA_V1: &str = "llplayer.timeline.v1";
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LLTimelineDocument {
+    pub schema: String,
+    pub metadata: LLTimelineMetadata,
+    pub segments: Vec<LLTimelineSegment>,
+    #[serde(default)]
+    pub word_timelines: Vec<WordTimeline>,
+    pub active_word_timeline_id: Option<WordTimelineId>,
+    #[serde(default)]
+    pub phone_timelines: Vec<LLTimelinePhoneTimeline>,
+    pub active_phone_timeline_id: Option<LLTimelineId>,
+    #[serde(default)]
+    pub chunk_timelines: Vec<LLTimelineChunkTimeline>,
+    pub active_chunk_timeline_id: Option<LLTimelineId>,
+    #[serde(default)]
+    pub artifacts: Vec<LLTimelineArtifact>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LLTimelineMetadata {
+    pub created_at_ms: u64,
+    pub generator: LLTimelineGenerator,
+    pub media: LLTimelineMedia,
+    pub language: Option<LanguageCode>,
+    pub human_reviewed: bool,
+    #[serde(default)]
+    pub extra: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LLTimelineGenerator {
+    pub id: String,
+    pub version: String,
+    pub mode: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LLTimelineMedia {
+    pub id: MediaId,
+    pub fingerprint: String,
+    pub path: Option<String>,
+    pub title: String,
+    pub duration_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LLTimelineSegment {
+    pub id: SubtitleSentenceId,
+    pub index: u32,
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub text: String,
+    pub display_text: String,
+    pub tokens: Vec<LLTimelineToken>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LLTimelineToken {
+    pub index: u32,
+    pub kind: SubtitleTokenKind,
+    pub text: String,
+    pub normalized: Option<String>,
+    pub start_char: u32,
+    pub end_char: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LLTimelinePhoneTimeline {
+    pub id: LLTimelineId,
+    pub word_timeline_id: Option<WordTimelineId>,
+    pub provider_id: String,
+    pub provider_version: String,
+    #[serde(default)]
+    pub phones: Vec<Phoneme>,
+    #[serde(default)]
+    pub metrics_json: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LLTimelineChunkTimeline {
+    pub id: LLTimelineId,
+    pub word_timeline_id: Option<WordTimelineId>,
+    pub algorithm_id: String,
+    pub algorithm_version: String,
+    pub created_by: TimelineCreator,
+    pub status: TimelineStatus,
+    #[serde(default)]
+    pub chunks: Vec<LLTimelineChunk>,
+    #[serde(default)]
+    pub metrics_json: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LLTimelineChunk {
+    pub index: u32,
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub text: String,
+    #[serde(default)]
+    pub sentence_ids: Vec<SubtitleSentenceId>,
+    #[serde(default)]
+    pub word_refs: Vec<LLTimelineWordRef>,
+    #[serde(default)]
+    pub evidence: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LLTimelineWordRef {
+    pub sentence_id: SubtitleSentenceId,
+    pub token_index: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LLTimelineArtifact {
+    pub kind: String,
+    pub provider_id: Option<String>,
+    pub provider_version: Option<String>,
+    #[serde(default)]
+    pub payload: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
