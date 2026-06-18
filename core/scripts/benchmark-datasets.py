@@ -18,7 +18,7 @@ from typing import Any
 
 
 SCHEMA = "llplayer.timeline.v1"
-WORD_RE = re.compile(r"[A-Za-z0-9]+(?:['’][A-Za-z0-9]+)?")
+WORD_RE = re.compile(r"['’]?[A-Za-z0-9]+(?:['’][A-Za-z0-9]+)*(?:['’])?")
 
 
 def now_ms() -> int:
@@ -89,10 +89,6 @@ def append_non_word_tokens(
     return index
 
 
-def word_token_indexes(tokens: list[dict[str, Any]]) -> list[int]:
-    return [token["index"] for token in tokens if token["kind"] == "word"]
-
-
 def parse_boundary_file(path: Path, label: str) -> list[tuple[int, int, str]]:
     rows: list[tuple[int, int, str]] = []
     for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
@@ -115,6 +111,72 @@ def parse_boundary_file(path: Path, label: str) -> list[tuple[int, int, str]]:
     return rows
 
 
+def parse_word_boundary_file(path: Path) -> tuple[list[tuple[int, int, str]], list[dict[str, Any]]]:
+    rows: list[tuple[int, int, str]] = []
+    skipped: list[dict[str, Any]] = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        parts = stripped.split(maxsplit=2)
+        if len(parts) != 3:
+            raise ValueError(f"{path}:{line_number}: expected '<start_sample> <end_sample> <word>'")
+        try:
+            start = int(parts[0])
+            end = int(parts[1])
+        except ValueError as error:
+            raise ValueError(f"{path}:{line_number}: boundary samples must be integers") from error
+        word = parts[2].strip()
+        if end <= start:
+            skipped.append(
+                {
+                    "path": str(path),
+                    "line": line_number,
+                    "word": word,
+                    "start_sample": start,
+                    "end_sample": end,
+                    "reason": "non_positive_duration",
+                }
+            )
+            continue
+        rows.append((start, end, word))
+    if not rows:
+        raise ValueError(f"{path}: no valid word rows found")
+    return rows, skipped
+
+
+def map_words_to_token_indexes(
+    words: list[tuple[int, int, str]],
+    tokens: list[dict[str, Any]],
+    utterance_id: str,
+) -> tuple[list[int | None], list[dict[str, Any]]]:
+    word_tokens = [token for token in tokens if token["kind"] == "word"]
+    indexes: list[int | None] = []
+    skipped: list[dict[str, Any]] = []
+    cursor = 0
+    for row_index, (_, _, word) in enumerate(words):
+        normalized = normalize_word(word)
+        match = None
+        for candidate_cursor in range(cursor, len(word_tokens)):
+            if word_tokens[candidate_cursor]["normalized"] == normalized:
+                match = candidate_cursor
+                break
+        if match is None:
+            skipped.append(
+                {
+                    "utterance": utterance_id,
+                    "word_row_index": row_index,
+                    "word": word,
+                    "reason": "not_found_in_transcript",
+                }
+            )
+            indexes.append(None)
+            continue
+        indexes.append(word_tokens[match]["index"])
+        cursor = match + 1
+    return indexes, skipped
+
+
 def read_timit_text(txt_path: Path | None, words: list[tuple[int, int, str]]) -> str:
     if txt_path and txt_path.exists():
         line = txt_path.read_text(encoding="utf-8").strip()
@@ -122,6 +184,39 @@ def read_timit_text(txt_path: Path | None, words: list[tuple[int, int, str]]) ->
         if len(parts) == 3:
             return parts[2].strip()
     return " ".join(word for _, _, word in words)
+
+
+def make_non_overlapping_words(
+    rows: list[dict[str, Any]],
+    utterance_id: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    adjusted = [dict(row) for row in rows]
+    adjustments: list[dict[str, Any]] = []
+    for index in range(1, len(adjusted)):
+        previous = adjusted[index - 1]
+        current = adjusted[index]
+        if current["start_ms"] >= previous["end_ms"]:
+            continue
+        boundary = int(round((previous["end_ms"] + current["start_ms"]) / 2))
+        boundary = max(previous["start_ms"] + 1, min(boundary, current["end_ms"] - 1))
+        if boundary <= previous["start_ms"] or boundary >= current["end_ms"]:
+            raise ValueError(
+                f"{utterance_id}: cannot repair overlapping words "
+                f"{previous['text']!r}/{current['text']!r}"
+            )
+        adjustments.append(
+            {
+                "utterance": utterance_id,
+                "left_word": previous["text"],
+                "right_word": current["text"],
+                "left_original_end_ms": previous["end_ms"],
+                "right_original_start_ms": current["start_ms"],
+                "adjusted_boundary_ms": boundary,
+            }
+        )
+        previous["end_ms"] = boundary
+        current["start_ms"] = boundary
+    return adjusted, adjustments
 
 
 def sibling(path: Path, suffix: str) -> Path | None:
@@ -152,18 +247,21 @@ def timit_to_lltimeline(args: argparse.Namespace) -> int:
     words_out: list[dict[str, Any]] = []
     phones_out: list[dict[str, Any]] = []
     utterances: list[dict[str, Any]] = []
+    boundary_adjustments: list[dict[str, Any]] = []
+    skipped_word_rows: list[dict[str, Any]] = []
     cursor_ms = 0
 
     for utterance_index, wrd_path in enumerate(wrd_files):
-        words = parse_boundary_file(wrd_path, "word")
+        utterance_id = str(wrd_path.relative_to(input_dir))
+        words, skipped_words = parse_word_boundary_file(wrd_path)
+        skipped_word_rows.extend(skipped_words)
         txt_path = sibling(wrd_path, ".TXT")
         phn_path = sibling(wrd_path, ".PHN")
         wav_path = sibling(wrd_path, ".WAV")
         text = read_timit_text(txt_path, words)
         tokens = tokenize(text)
-        token_indexes = word_token_indexes(tokens)
-        if len(token_indexes) < len(words):
-            raise ValueError(f"{wrd_path}: text token count is smaller than .WRD word count")
+        token_indexes, unmapped_words = map_words_to_token_indexes(words, tokens, utterance_id)
+        skipped_word_rows.extend(unmapped_words)
         utterance_start = min(start for start, _, _ in words)
         utterance_end = max(end for _, end, _ in words)
         segment_start_ms = cursor_ms + sample_to_ms(utterance_start, args.sample_rate)
@@ -180,11 +278,15 @@ def timit_to_lltimeline(args: argparse.Namespace) -> int:
                 "tokens": tokens,
             }
         )
+        utterance_words = []
         for word_index, (start, end, word) in enumerate(words):
-            words_out.append(
+            token_index = token_indexes[word_index]
+            if token_index is None:
+                continue
+            utterance_words.append(
                 {
                     "sentence_id": sentence_id,
-                    "token_index": token_indexes[word_index],
+                    "token_index": token_index,
                     "text": word,
                     "start_ms": cursor_ms + sample_to_ms(start, args.sample_rate),
                     "end_ms": cursor_ms + sample_to_ms(end, args.sample_rate),
@@ -194,6 +296,9 @@ def timit_to_lltimeline(args: argparse.Namespace) -> int:
                     "provider_version": "ldc93s1-word",
                 }
             )
+        adjusted_words, adjustments = make_non_overlapping_words(utterance_words, utterance_id)
+        words_out.extend(adjusted_words)
+        boundary_adjustments.extend(adjustments)
         if phn_path and phn_path.exists():
             for phone_index, (start, end, phone) in enumerate(parse_boundary_file(phn_path, "phone")):
                 phones_out.append(
@@ -280,6 +385,10 @@ def timit_to_lltimeline(args: argparse.Namespace) -> int:
                     "dataset": "TIMIT",
                     "input_dir": str(input_dir),
                     "utterances": utterances,
+                    "boundary_adjustment_count": len(boundary_adjustments),
+                    "boundary_adjustment_samples": boundary_adjustments[:20],
+                    "skipped_word_row_count": len(skipped_word_rows),
+                    "skipped_word_row_samples": skipped_word_rows[:20],
                     "license_note": "TIMIT is restricted; keep source corpus outside Git and distribution artifacts.",
                 },
             }

@@ -111,7 +111,7 @@ word/phone/chunk timeline；轻量消费端读取已产出的资源并提供稳�
 
 ## Phase 4: Evaluation System
 
-状态：进行中（2026-06-18 19:47:03 CST 已转向已有高质量 gold benchmark 优先）。
+状态：进行中（2026-06-18 20:15:11 CST 已完成本地 TIMIT full gold intake）。
 
 目标：停止靠肉眼猜，建立客观评估。
 
@@ -142,6 +142,8 @@ word/phone/chunk timeline；轻量消费端读取已产出的资源并提供稳�
 - `scripts/benchmark-datasets.py timit-to-lltimeline` 可将本地 TIMIT `.WRD/.PHN/.TXT`
   转为 `LLTimeline JSON v1` benchmark gold。
 - `testdata/benchmark-datasets/timit-smoke/` 提供非真实 TIMIT 的 parser smoke fixture。
+- 本地 TIMIT TEST/TRAIN full 已转换并验证，输出保存在
+  `~/Library/Caches/LLPlayerNext/research/benchmarks/timit/`。
 
 ## Phase 5: Manual Correction Studio
 

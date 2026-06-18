@@ -1,7 +1,7 @@
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-18 19:47 CST
-> 更新原因：Phase 4 gold benchmark 顺序调整为 TIMIT/Buckeye 优先
+> 最后更新：2026-06-18 20:15 CST
+> 更新原因：本地 TIMIT full gold intake 已验证
 
 ## 当前位置
 
@@ -47,6 +47,8 @@
   word timeline，并输出 P95、tail lag、coverage、overlap/gap 等指标
 - `benchmark-datasets.py timit-to-lltimeline` 可将本地 TIMIT `.WRD/.PHN/.TXT` 转成
   `LLTimeline JSON v1` gold resource
+- 本地 TIMIT TEST/TRAIN full 已转换为可验证 LLTimeline gold，输出在
+  `~/Library/Caches/LLPlayerNext/research/benchmarks/timit/`
 
 ### Phase 5: 人工校对 UI ⏳ 后续
 ### Phase 6: 消费端集成 ⏳ 后续

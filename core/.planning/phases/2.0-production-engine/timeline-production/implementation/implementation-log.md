@@ -129,3 +129,17 @@
   `testdata/benchmark-datasets/timit-smoke/`.
 - Extended contract validation to compile the benchmark converter, convert the
   smoke fixture, and validate the resulting LLTimeline document.
+
+## 2026-06-18 20:15:11 CST
+
+- Validated the converter against the local authorized TIMIT corpus at
+  `/Users/shadow/data/lisa/data/timit/raw`.
+- Converted TIMIT TEST full into local LLTimeline gold: 1680 utterances,
+  14552 word timings, and 64145 phone timings.
+- Converted TIMIT TRAIN full into local LLTimeline gold: 4620 utterances,
+  39825 word timings, and 177080 phone timings.
+- Added converter handling for real TIMIT quirks: overlapping adjacent word
+  rows, non-positive-duration word rows, transcript-unmapped word rows, and
+  leading/trailing apostrophe words.
+- Extended the synthetic TIMIT smoke fixture and contract validation to cover
+  overlap repair, skipped word rows, and apostrophe tokenization.

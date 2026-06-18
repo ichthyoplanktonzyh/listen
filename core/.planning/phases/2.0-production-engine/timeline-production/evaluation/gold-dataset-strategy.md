@@ -1,6 +1,6 @@
 # Gold Dataset Strategy
 
-更新时间：2026-06-18 19:47:03 CST
+更新时间：2026-06-18 20:15:11 CST
 
 Phase 4 的评估路线先使用已有高质量 benchmark，不直接进入 CNN10/NBC gold set。
 原因很简单：CNN10/NBC 当前没有可信的词级标准答案；如果先用它们评估，只会把
@@ -33,6 +33,25 @@ Phase 4 的评估路线先使用已有高质量 benchmark，不直接进入 CNN1
 - 通过 `scripts/benchmark-datasets.py timit-to-lltimeline` 转成
   `.lltimeline.json`。
 - 原始 `.WAV/.WRD/.PHN/.TXT` 只留在本地；仓库只保留 smoke fixture 和转换器。
+
+当前本地验证结果：
+
+- 数据位置：`/Users/shadow/data/lisa/data/timit/raw`。
+- TEST full：1680 utterances、14552 word timings、64145 phone timings。
+- TRAIN full：4620 utterances、39825 word timings、177080 phone timings。
+- 输出位置：`~/Library/Caches/LLPlayerNext/research/benchmarks/timit/`。
+- TEST full 清洗：232 个相邻 word overlap 修正、1 个非正时长 word row 跳过。
+- TRAIN full 清洗：637 个相邻 word overlap 修正、9 个非正时长或 transcript
+  不匹配 word row 跳过。
+
+TIMIT 真实 `.WRD` 存在少量相邻词重叠、零长词、以及 `.WRD/.TXT` 不完全一致的
+情况。转换器会：
+
+- 用相邻词原始 end/start 的中点修复 overlap，保证 LLTimeline word timing
+  可被播放器和 validator 消费；
+- 跳过非正时长 word row；
+- 跳过无法映射到 transcript token 的 word row；
+- 将修正和跳过样本写入 `benchmark_dataset_manifest` artifact。
 
 ### 2. Buckeye：第二优先级
 
@@ -84,10 +103,9 @@ Phase 4 的评估路线先使用已有高质量 benchmark，不直接进入 CNN1
 
 ## Immediate Phase 4 Tasks
 
-1. 完成 TIMIT `.WRD/.PHN/.TXT` → `LLTimeline JSON v1` 转换器。
-2. 用 TIMIT 小样本跑 WhisperX / MMS_FA / MFA 候选，输出统一 evaluation report。
-3. 增加 Buckeye parser 设计文档，确认授权和格式样本后再实现。
-4. 暂缓 CNN10/NBC gold set，只保留后续领域校准位置。
+1. 用 TIMIT 小样本跑 WhisperX / MMS_FA / MFA 候选，输出统一 evaluation report。
+2. 增加 Buckeye parser 设计文档，确认授权和格式样本后再实现。
+3. 暂缓 CNN10/NBC gold set，只保留后续领域校准位置。
 
 ## Licensing Boundary
 

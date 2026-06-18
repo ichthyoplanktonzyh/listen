@@ -107,10 +107,13 @@ if (!lltimelineMd.includes("Gold Metrics")) throw new Error("LLTimeline evaluati
 ' "$word_report" "$tmp/word-timeline-report.md" "$lltimeline_evaluation_report" "$tmp/lltimeline-evaluation-report.md"
 
 node -e '
+const fs = require("fs");
 const report = JSON.parse(process.argv[1]);
 const evaluation = JSON.parse(process.argv[2]);
 const timit = JSON.parse(process.argv[3]);
 const timitValidation = JSON.parse(process.argv[4]);
+const timitDocument = JSON.parse(fs.readFileSync(process.argv[5], "utf8"));
+const timitManifest = timitDocument.artifacts.find((artifact) => artifact.kind === "benchmark_dataset_manifest").payload;
 if (report.schema !== "llplayer.timeline.v1") throw new Error("LLTimeline schema missing");
 if (report.segments !== 1) throw new Error("LLTimeline segment fixture failed");
 if (report.word_timelines !== 1) throw new Error("LLTimeline word timeline fixture failed");
@@ -118,12 +121,14 @@ if (report.active_word_timeline_id !== "timeline-fixture") throw new Error("LLTi
 if (evaluation.segments !== 2) throw new Error("LLTimeline evaluation fixture segments failed");
 if (evaluation.word_timelines !== 3) throw new Error("LLTimeline evaluation fixture timelines failed");
 if (evaluation.active_word_timeline_id !== "whisperx-candidate") throw new Error("LLTimeline evaluation active timeline failed");
-if (timit.segments !== 1) throw new Error("TIMIT converter segment count failed");
-if (timit.words !== 5) throw new Error("TIMIT converter word count failed");
-if (timit.phones !== 10) throw new Error("TIMIT converter phone count failed");
+if (timit.segments !== 2) throw new Error("TIMIT converter segment count failed");
+if (timit.words !== 9) throw new Error("TIMIT converter word count failed");
+if (timit.phones !== 15) throw new Error("TIMIT converter phone count failed");
 if (timitValidation.schema !== "llplayer.timeline.v1") throw new Error("TIMIT LLTimeline schema failed");
 if (timitValidation.word_timelines !== 1) throw new Error("TIMIT LLTimeline word timeline failed");
-' "$lltimeline_report" "$lltimeline_evaluation_validation" "$timit_report" "$timit_validation"
+if (timitManifest.boundary_adjustment_count !== 1) throw new Error("TIMIT overlap repair count failed");
+if (timitManifest.skipped_word_row_count !== 1) throw new Error("TIMIT skipped word count failed");
+' "$lltimeline_report" "$lltimeline_evaluation_validation" "$timit_report" "$timit_validation" "$timit_output"
 
 node -e '
 const fs = require("fs");

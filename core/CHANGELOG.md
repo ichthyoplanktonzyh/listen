@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-06-18 20:15:11 CST: Validated local TIMIT full gold intake from
+  `/Users/shadow/data/lisa/data/timit/raw`, generating local TEST/TRAIN
+  LLTimeline gold resources under the research benchmark cache. Hardened the
+  TIMIT converter for overlapping word rows, non-positive-duration rows,
+  transcript-unmapped words, and leading/trailing apostrophe tokens, with
+  smoke-test and contract validation coverage.
 - 2026-06-18 19:47:03 CST: Reordered Phase 4 benchmark work to use existing
   high-quality gold corpora before CNN10/NBC self-built samples, documented the
   TIMIT → Buckeye → LibriSpeech alignments → news gold set sequence, added
