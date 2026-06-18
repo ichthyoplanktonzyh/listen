@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- 2026-06-18 17:32:00 CST: Restructured the project documentation system by
+  introducing the GSD-inspired `.planning/` directory as the project management
+  hub. Moved `prd.md` → `.planning/PROJECT.md`, `roadmap.md` → `.planning/ROADMAP.md`,
+  `requirements.md` → `.planning/REQUIREMENTS.md`. Created `.planning/STATE.md`
+  as living project memory, `.planning/MILESTONES.md` as completed milestone index,
+  `.planning/CONVENTIONS.md` as maintenance rules, and `.planning/codebase/` with
+  ARCHITECTURE / STACK / DATA-MODEL / TESTING architecture skeleton docs.
+  Consolidated `docs/discuss/` → `.planning/discuss/`, `docs/handoff/` →
+  `.planning/handoff/`, `docs/timeline-production/` → `.planning/phases/2.0-
+  production-engine/timeline-production/` (long-term subsystem). Migrated M2.0
+  planning and feature docs from `docs/planning/`, `docs/features/`, and
+  `docs/development/` into the 2.0-production-engine phase directory with
+  upstream design notes in a dedicated `design-notes/` subdirectory. Frozen
+  M1.x documents remain in `docs/` with index links from MILESTONES.md.
+  Co-Authored-By: Claude <noreply@anthropic.com>
 - 2026-06-18 16:08:50 CST: Added the `produce-whisperx` Phase 3 orchestration
   command to run media preparation, WhisperX execution, and LLTimeline
   conversion as one production pipeline entrypoint, with dry-run validation.
