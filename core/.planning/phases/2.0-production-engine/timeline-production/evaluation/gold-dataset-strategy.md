@@ -1,6 +1,6 @@
 # Gold Dataset Strategy
 
-更新时间：2026-06-18 20:23:44 CST
+更新时间：2026-06-18 20:45:41 CST
 
 Phase 4 的评估路线先使用已有高质量 benchmark，不直接进入 CNN10/NBC gold set。
 原因很简单：CNN10/NBC 当前没有可信的词级标准答案；如果先用它们评估，只会把
@@ -53,20 +53,31 @@ TIMIT 真实 `.WRD` 存在少量相邻词重叠、零长词、以及 `.WRD/.TXT`
 - 跳过无法映射到 transcript token 的 word row；
 - 将修正和跳过样本写入 `benchmark_dataset_manifest` artifact。
 
-第一份真实候选报告：
+第一批真实候选报告：
 
 - 运行目录：`~/Library/Caches/LLPlayerNext/research/benchmarks/timit/runs/test-20/`。
 - Gold：`timit-test-20-gold.lltimeline.json`。
-- Candidate：MMS_FA via `scripts/forced-align/align-cli.py`。
+- MMS_FA candidate：via `scripts/forced-align/align-cli.py`。
 - Matched words：171/171。
 - Start MAE：56.38ms；Start P95：128ms。
 - End MAE：33.71ms；End P95：81.5ms。
 - Tail lag mean：-37.05ms；Tail lag P95：86.2ms。
 - Candidate overlaps：0。
 - Suspicious words：6。
+- WhisperX known-transcript alignment candidate：via
+  `scripts/timeline-production/whisperx-align-request.py` using the English
+  wav2vec2 alignment model.
+- Matched words：171/171。
+- Start MAE：65.50ms；Start P95：141.5ms。
+- End MAE：45.02ms；End P95：151ms。
+- Tail lag mean：-142.55ms；Tail lag P95：285.95ms。
+- Candidate overlaps：0。
+- Suspicious words：14。
 
-这份报告说明 MMS_FA 在 TIMIT 朗读小样本上能稳定输出完整候选，但起始边界仍有
-明显偏移，需要继续引入 WhisperX/MFA 对照。
+这批报告说明 MMS_FA 和 WhisperX known-transcript alignment 都能稳定输出完整
+候选，但两者都有系统性边界偏移。当前小样本上 MMS_FA 优于单独调用 WhisperX 的
+English wav2vec2 aligner；WhisperX 的完整 ASR/VAD/align CLI 流程和 MFA 仍需继续
+对照，不能只凭这一组小样本做最终技术路线裁决。
 
 ### 2. Buckeye：第二优先级
 
@@ -118,10 +129,12 @@ TIMIT 真实 `.WRD` 存在少量相邻词重叠、零长词、以及 `.WRD/.TXT`
 
 ## Immediate Phase 4 Tasks
 
-1. 用同一 TIMIT TEST 20 bundle 跑 WhisperX 候选，和 MMS_FA 横向比较。
+1. 用同一 TIMIT TEST 20 bundle 跑完整 WhisperX CLI 流程，观察 ASR+VAD+align
+   是否不同于 known-transcript alignment。
 2. 增加 MFA 候选管线或导入器，确认传统 GMM-HMM FA 是否显著优于 MMS_FA。
-3. 增加 Buckeye parser 设计文档，确认授权和格式样本后再实现。
-4. 暂缓 CNN10/NBC gold set，只保留后续领域校准位置。
+3. 扩展到 TIMIT TEST full，确认小样本结论是否稳定。
+4. 增加 Buckeye parser 设计文档，确认授权和格式样本后再实现。
+5. 暂缓 CNN10/NBC gold set，只保留后续领域校准位置。
 
 ## Licensing Boundary
 

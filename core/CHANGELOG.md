@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-06-18 20:45:41 CST: Fixed the timeline-production research venv setup
+  to install with `uv pip`, downloaded and smoke-loaded the WhisperX
+  `large-v3` ASR stack plus the English wav2vec2 alignment model, added
+  `scripts/timeline-production/whisperx-align-request.py` for known-transcript
+  benchmark alignment, and produced the first TIMIT TEST 20 WhisperX alignment
+  report: 171/171 matched words, start MAE 65.50ms, start P95 141.5ms, end MAE
+  45.02ms, end P95 151ms, and tail lag mean -142.55ms.
 - 2026-06-18 20:23:44 CST: Added TIMIT benchmark candidate tooling with
   `prepare-alignment-bundle` and `add-alignment-candidate`, fixed the MMS_FA
   sidecar for torchaudio 2.9 audio loading and tokenizer behavior, and produced

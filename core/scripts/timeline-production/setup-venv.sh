@@ -16,7 +16,7 @@ fi
 
 mkdir -p "$target_dir"
 uv venv --python python3.11 "$target_dir/venv"
-"$target_dir/venv/bin/python" -m pip install -r "$script_dir/requirements.txt"
+uv pip install --python "$target_dir/venv/bin/python" -r "$script_dir/requirements.txt"
 
 cat <<EOF
 Timeline production venv ready:

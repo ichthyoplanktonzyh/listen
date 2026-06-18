@@ -9,7 +9,8 @@ PYTHONPYCACHEPREFIX="$tmp/pycache" python3 -m py_compile \
   "$root/scripts/benchmark-datasets.py" \
   "$root/scripts/evaluate-word-timelines.py" \
   "$root/scripts/lltimeline-resource.py" \
-  "$root/scripts/timeline-production/production_pipeline.py"
+  "$root/scripts/timeline-production/production_pipeline.py" \
+  "$root/scripts/timeline-production/whisperx-align-request.py"
 word_report="$(
   python3 "$root/scripts/evaluate-word-timelines.py" compare \
     --baseline "$root/testdata/word-timelines/baseline-v1.json" \

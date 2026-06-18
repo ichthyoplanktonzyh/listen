@@ -157,3 +157,22 @@
   33.71ms, and end P95 81.5ms.
 - Extended contract validation to cover benchmark bundle generation, candidate
   timeline import, and document-level evaluation.
+
+## 2026-06-18 20:45:41 CST
+
+- Fixed `scripts/timeline-production/setup-venv.sh` to install dependencies
+  with `uv pip install`, because the uv-created research venv does not
+  guarantee `python -m pip` is available.
+- Downloaded and smoke-loaded the local timeline-production WhisperX stack:
+  `Systran/faster-whisper-large-v3` for ASR and torchaudio's English
+  `wav2vec2_fairseq_base_ls960_asr_ls960.pth` alignment model.
+- Added `scripts/timeline-production/whisperx-align-request.py` to run
+  WhisperX known-transcript alignment against an existing benchmark
+  `alignment-request.json`, emitting the same `timings[]` shape consumed by
+  `add-alignment-candidate`.
+- Ran the first TIMIT TEST 20 WhisperX known-transcript alignment evaluation:
+  171/171 matched words, start MAE 65.50ms, start P95 141.5ms, end MAE
+  45.02ms, end P95 151ms, and tail lag mean -142.55ms.
+- Recorded that this first WhisperX alignment-only result is weaker than the
+  MMS_FA TEST 20 result, so Phase 4 should next compare full WhisperX CLI,
+  MFA, and larger TIMIT samples before choosing the production aligner.
