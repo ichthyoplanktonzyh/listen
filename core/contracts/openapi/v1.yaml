@@ -43,8 +43,19 @@ paths:
   /v1/lltimeline/import:
     post:
       operationId: importLLTimeline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LLTimelineDocument"
       responses:
-        "200": { description: Imported LLTimeline JSON v1 resource document }
+        "200":
+          description: Imported LLTimeline JSON v1 resource document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubtitleTrack"
   /v1/media/{media_id}:
     parameters:
       - $ref: "#/components/parameters/MediaId"
@@ -171,45 +182,99 @@ paths:
     get:
       operationId: trackWordTimings
       responses:
-        "200": { description: Word timings with source and provider provenance }
+        "200":
+          description: Word timings with source and provider provenance
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WordTiming" }
     post:
       operationId: generateTrackWordTimings
       responses:
-        "200": { description: Generated word timings with safe estimated fallback }
+        "200":
+          description: Generated word timings with safe estimated fallback
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WordTiming" }
   /v1/subtitles/{track_id}/word-timelines:
     get:
       operationId: trackWordTimelines
       responses:
-        "200": { description: Versioned word timeline resources for a subtitle track }
+        "200":
+          description: Versioned word timeline resources for a subtitle track
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WordTimeline" }
     post:
       operationId: createTrackWordTimeline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWordTimeline"
       responses:
-        "200": { description: Created word timeline resource }
+        "200":
+          description: Created word timeline resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WordTimeline"
   /v1/subtitles/{track_id}/lltimeline/export:
     get:
       operationId: exportTrackLLTimeline
       responses:
-        "200": { description: Exportable LLTimeline JSON v1 resource document }
+        "200":
+          description: Exportable LLTimeline JSON v1 resource document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLTimelineDocument"
   /v1/word-timelines/{timeline_id}:
     get:
       operationId: wordTimeline
       responses:
-        "200": { description: Versioned word timeline resource }
+        "200":
+          description: Versioned word timeline resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WordTimeline"
   /v1/word-timelines/{timeline_id}/activate:
     post:
       operationId: activateWordTimeline
       responses:
-        "200": { description: Activated word timeline resource }
+        "200":
+          description: Activated word timeline resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WordTimeline"
   /v1/word-timelines/{timeline_id}/archive:
     post:
       operationId: archiveWordTimeline
       responses:
-        "200": { description: Archived word timeline resource }
+        "200":
+          description: Archived word timeline resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WordTimeline"
   /v1/word-timelines/{timeline_id}/export:
     get:
       operationId: exportWordTimeline
       responses:
-        "200": { description: Exportable word timeline resource }
+        "200":
+          description: Exportable word timeline resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WordTimeline"
   /v1/subtitles/{track_id}/word-timing-diagnostics:
     get:
       operationId: trackWordTimingDiagnostics
@@ -832,6 +897,170 @@ components:
         sentences:
           type: array
           items: { $ref: "#/components/schemas/SubtitleSentence" }
+    TimingSource:
+      enum: [asr_reported, forced_aligned, estimated, user_adjusted]
+    TimelineCreator:
+      enum: [algorithm, user]
+    TimelineStatus:
+      enum: [candidate, active, archived]
+    WordTiming:
+      type: object
+      required: [sentence_id, token_index, text, start_ms, end_ms, confidence, timing_source, provider_id, provider_version]
+      properties:
+        sentence_id: { type: string }
+        token_index: { type: integer, minimum: 0 }
+        text: { type: string }
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        confidence: { type: [number, "null"], minimum: 0, maximum: 1 }
+        timing_source: { $ref: "#/components/schemas/TimingSource" }
+        provider_id: { type: string }
+        provider_version: { type: string }
+    WordTimeline:
+      type: object
+      required: [id, track_id, media_id, algorithm_id, algorithm_version, config_hash, parent_timeline_id, created_by, status, metrics_json, words, created_at_ms, updated_at_ms]
+      properties:
+        id: { type: string }
+        track_id: { type: string }
+        media_id: { type: string }
+        algorithm_id: { type: string }
+        algorithm_version: { type: string }
+        config_hash: { type: string }
+        parent_timeline_id: { type: [string, "null"] }
+        created_by: { $ref: "#/components/schemas/TimelineCreator" }
+        status: { $ref: "#/components/schemas/TimelineStatus" }
+        metrics_json: { type: object, additionalProperties: true }
+        words:
+          type: array
+          items: { $ref: "#/components/schemas/WordTiming" }
+        created_at_ms: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
+    CreateWordTimeline:
+      type: object
+      required: [words]
+      properties:
+        algorithm_id: { type: [string, "null"] }
+        algorithm_version: { type: [string, "null"] }
+        config_hash: { type: [string, "null"] }
+        parent_timeline_id: { type: [string, "null"] }
+        created_by:
+          anyOf:
+            - $ref: "#/components/schemas/TimelineCreator"
+            - type: "null"
+        status:
+          anyOf:
+            - $ref: "#/components/schemas/TimelineStatus"
+            - type: "null"
+        metrics_json: { type: [object, "null"], additionalProperties: true }
+        words:
+          type: array
+          items: { $ref: "#/components/schemas/WordTiming" }
+    LLTimelineDocument:
+      type: object
+      required: [schema, metadata, segments, word_timelines, active_word_timeline_id, phone_timelines, active_phone_timeline_id, chunk_timelines, active_chunk_timeline_id, artifacts]
+      properties:
+        schema: { const: llplayer.timeline.v1 }
+        metadata: { $ref: "#/components/schemas/LLTimelineMetadata" }
+        segments:
+          type: array
+          items: { $ref: "#/components/schemas/LLTimelineSegment" }
+        word_timelines:
+          type: array
+          items: { $ref: "#/components/schemas/WordTimeline" }
+        active_word_timeline_id: { type: [string, "null"] }
+        phone_timelines:
+          type: array
+          items: { type: object, additionalProperties: true }
+        active_phone_timeline_id: { type: [string, "null"] }
+        chunk_timelines:
+          type: array
+          items: { $ref: "#/components/schemas/LLTimelineChunkTimeline" }
+        active_chunk_timeline_id: { type: [string, "null"] }
+        artifacts:
+          type: array
+          items: { $ref: "#/components/schemas/LLTimelineArtifact" }
+    LLTimelineMetadata:
+      type: object
+      required: [created_at_ms, generator, media, language, human_reviewed, extra]
+      properties:
+        created_at_ms: { type: integer, minimum: 0 }
+        generator: { $ref: "#/components/schemas/LLTimelineGenerator" }
+        media: { $ref: "#/components/schemas/LLTimelineMedia" }
+        language: { type: [string, "null"] }
+        human_reviewed: { type: boolean }
+        extra: { type: object, additionalProperties: true }
+    LLTimelineGenerator:
+      type: object
+      required: [id, version, mode]
+      properties:
+        id: { type: string }
+        version: { type: string }
+        mode: { type: string }
+    LLTimelineMedia:
+      type: object
+      required: [id, fingerprint, path, title, duration_ms]
+      properties:
+        id: { type: string }
+        fingerprint: { type: string }
+        path: { type: [string, "null"] }
+        title: { type: string }
+        duration_ms: { type: [integer, "null"], minimum: 0 }
+    LLTimelineSegment:
+      type: object
+      required: [id, index, start_ms, end_ms, text, display_text, tokens]
+      properties:
+        id: { type: string }
+        index: { type: integer, minimum: 0 }
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        text: { type: string }
+        display_text: { type: string }
+        tokens:
+          type: array
+          items: { $ref: "#/components/schemas/SubtitleToken" }
+    LLTimelineChunkTimeline:
+      type: object
+      required: [id, word_timeline_id, algorithm_id, algorithm_version, created_by, status, chunks, metrics_json]
+      properties:
+        id: { type: string }
+        word_timeline_id: { type: [string, "null"] }
+        algorithm_id: { type: string }
+        algorithm_version: { type: string }
+        created_by: { $ref: "#/components/schemas/TimelineCreator" }
+        status: { $ref: "#/components/schemas/TimelineStatus" }
+        chunks:
+          type: array
+          items: { $ref: "#/components/schemas/LLTimelineChunk" }
+        metrics_json: { type: object, additionalProperties: true }
+    LLTimelineChunk:
+      type: object
+      required: [index, start_ms, end_ms, text, sentence_ids, word_refs, evidence]
+      properties:
+        index: { type: integer, minimum: 0 }
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        text: { type: string }
+        sentence_ids:
+          type: array
+          items: { type: string }
+        word_refs:
+          type: array
+          items: { $ref: "#/components/schemas/LLTimelineWordRef" }
+        evidence: { type: object, additionalProperties: true }
+    LLTimelineWordRef:
+      type: object
+      required: [sentence_id, token_index]
+      properties:
+        sentence_id: { type: string }
+        token_index: { type: integer, minimum: 0 }
+    LLTimelineArtifact:
+      type: object
+      required: [kind, provider_id, provider_version, payload]
+      properties:
+        kind: { type: string }
+        provider_id: { type: [string, "null"] }
+        provider_version: { type: [string, "null"] }
+        payload: { type: object, additionalProperties: true }
     WordStatus:
       enum: [unknown_meaning, known_not_recognized, known_recognized]
     LexicalSource:

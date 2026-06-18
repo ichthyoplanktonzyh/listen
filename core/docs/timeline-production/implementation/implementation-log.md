@@ -20,3 +20,15 @@
   round-trip.
 - Added `testdata/lltimeline/v1-minimal.lltimeline.json` as the first stable
   contract fixture and a domain deserialization smoke test.
+
+## 2026-06-18 15:36:01 CST
+
+- Added OpenAPI schemas for `WordTiming`, `WordTimeline`, `CreateWordTimeline`,
+  and `LLTimelineDocument`.
+- Added handwritten local API client methods for word timeline lifecycle and
+  LLTimeline import/export.
+- Added `scripts/lltimeline-resource.py` for local file validation plus API
+  import/export.
+- Extended `scripts/validate-contracts.sh` to compile the LLTimeline utility,
+  validate the fixture, and assert OpenAPI/client coverage.
+- Marked Phase 1 complete; Phase 2 now starts with timeline resource lifecycle.

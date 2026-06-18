@@ -1,6 +1,6 @@
 # Production Engine Roadmap
 
-更新时间：2026-06-18 15:11:06 CST
+更新时间：2026-06-18 15:36:01 CST
 
 ## Goal
 
@@ -17,7 +17,7 @@ word/phone/chunk timeline；轻量消费端读取已产出的资源并提供稳�
 
 ## Phase 0: Documentation And Boundaries
 
-状态：进行中。
+状态：完成。
 
 交付：
 
@@ -33,6 +33,8 @@ word/phone/chunk timeline；轻量消费端读取已产出的资源并提供稳�
 
 ## Phase 1: LLTimeline JSON v1 Core
 
+状态：完成。
+
 目标：把时间轴资源包变成代码里的稳定对象。
 
 任务：
@@ -40,13 +42,15 @@ word/phone/chunk timeline；轻量消费端读取已产出的资源并提供稳�
 1. 新增 Rust domain contract：`LLTimelineDocument`、metadata、segments、
    word timeline refs、phone/chunk/artifact 扩展位。
 2. 从现有 subtitle track 和 active/candidate `WordTimeline` 导出 `.lltimeline.json`。
-3. 增加 API 导出入口。
+3. 增加 API 导入/导出入口。
 4. 增加最小 contract tests，确保 schema、metadata、segments、word timeline 可序列化。
 5. 增加 fixture，为后续导入、消费端读取、benchmark 提供样本。
+6. 增加开发者文件工具，用于验证、导入、导出 `.lltimeline.json`。
 
 验收：
 
 - 现有 ASR 生成的 active word timeline 能被导出成 `llplayer.timeline.v1`。
+- v1 document 可以导入回现有 media/subtitle/word timeline persistence。
 - 没有 phone/chunk 时仍是合法 v1 document。
 - 旧 word timing API 不受影响。
 
@@ -135,4 +139,3 @@ word/phone/chunk timeline；轻量消费端读取已产出的资源并提供稳�
 
 - 没有重模型环境也能获得精准高亮和 chunk 播放。
 - 资源版本不兼容时有明确错误或降级提示。
-

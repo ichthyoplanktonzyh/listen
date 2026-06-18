@@ -90,6 +90,70 @@ export interface WordTiming {
   provider_version: string;
 }
 
+export type TimelineCreator = "algorithm" | "user";
+export type TimelineStatus = "candidate" | "active" | "archived";
+
+export interface WordTimeline {
+  id: string;
+  track_id: string;
+  media_id: string;
+  algorithm_id: string;
+  algorithm_version: string;
+  config_hash: string;
+  parent_timeline_id: string | null;
+  created_by: TimelineCreator;
+  status: TimelineStatus;
+  metrics_json: unknown;
+  words: WordTiming[];
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
+export interface CreateWordTimeline {
+  algorithm_id?: string | null;
+  algorithm_version?: string | null;
+  config_hash?: string | null;
+  parent_timeline_id?: string | null;
+  created_by?: TimelineCreator | null;
+  status?: TimelineStatus | null;
+  metrics_json?: unknown | null;
+  words: WordTiming[];
+}
+
+export interface LLTimelineDocument {
+  schema: "llplayer.timeline.v1";
+  metadata: {
+    created_at_ms: number;
+    generator: { id: string; version: string; mode: string };
+    media: {
+      id: string;
+      fingerprint: string;
+      path: string | null;
+      title: string;
+      duration_ms: number | null;
+    };
+    language: string | null;
+    human_reviewed: boolean;
+    extra: unknown;
+  };
+  segments: Array<{
+    id: string;
+    index: number;
+    start_ms: number;
+    end_ms: number;
+    text: string;
+    display_text: string;
+    tokens: SubtitleToken[];
+  }>;
+  word_timelines: WordTimeline[];
+  active_word_timeline_id: string | null;
+  phone_timelines: unknown[];
+  active_phone_timeline_id: string | null;
+  chunk_timelines: unknown[];
+  active_chunk_timeline_id: string | null;
+  artifacts: unknown[];
+}
+
 export interface PronunciationProviderInfo {
   id: string;
   display_name: string;
@@ -251,6 +315,13 @@ export class LocalApiV1 {
     return this.request("/v1/media", { method: "POST", body: JSON.stringify(input) });
   }
 
+  importLLTimeline(document: LLTimelineDocument): Promise<SubtitleTrack> {
+    return this.request("/v1/lltimeline/import", {
+      method: "POST",
+      body: JSON.stringify(document),
+    });
+  }
+
   readMedia(mediaId: string): Promise<MediaItem> {
     return this.request(`/v1/media/${encodeURIComponent(mediaId)}`);
   }
@@ -318,6 +389,44 @@ export class LocalApiV1 {
       method: "POST",
       body: JSON.stringify({ timings: [] }),
     });
+  }
+
+  trackWordTimelines(trackId: string): Promise<WordTimeline[]> {
+    return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}/word-timelines`);
+  }
+
+  createTrackWordTimeline(
+    trackId: string,
+    input: CreateWordTimeline,
+  ): Promise<WordTimeline> {
+    return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}/word-timelines`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  exportTrackLLTimeline(trackId: string): Promise<LLTimelineDocument> {
+    return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}/lltimeline/export`);
+  }
+
+  wordTimeline(timelineId: string): Promise<WordTimeline> {
+    return this.request(`/v1/word-timelines/${encodeURIComponent(timelineId)}`);
+  }
+
+  activateWordTimeline(timelineId: string): Promise<WordTimeline> {
+    return this.request(`/v1/word-timelines/${encodeURIComponent(timelineId)}/activate`, {
+      method: "POST",
+    });
+  }
+
+  archiveWordTimeline(timelineId: string): Promise<WordTimeline> {
+    return this.request(`/v1/word-timelines/${encodeURIComponent(timelineId)}/archive`, {
+      method: "POST",
+    });
+  }
+
+  exportWordTimeline(timelineId: string): Promise<WordTimeline> {
+    return this.request(`/v1/word-timelines/${encodeURIComponent(timelineId)}/export`);
   }
 
   speechBatchJobs(): Promise<SpeechBatchJob[]> {

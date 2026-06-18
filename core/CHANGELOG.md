@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 2026-06-18 15:36:01 CST: Completed the LLTimeline JSON v1 Phase 1 core by
+  adding OpenAPI schemas, handwritten client methods, contract validation, and
+  `scripts/lltimeline-resource.py` for validating, importing, and exporting
+  `.lltimeline.json` files through the local API.
 - 2026-06-18 15:21:41 CST: Added LLTimeline JSON v1 import support with
   `POST /v1/lltimeline/import`, round-trip HTTP coverage, and a minimal
   `.lltimeline.json` contract fixture that deserializes through the domain

@@ -1,6 +1,6 @@
 # Timeline Production System
 
-更新时间：2026-06-18 15:11:06 CST
+更新时间：2026-06-18 15:36:01 CST
 
 本目录收纳“本地重装生产引擎 + 轻量消费端时间轴资源读取”路线下的长期文档。
 后续所有与精准词/音素时间轴、生产端数据管线、评估体系、人工校正和
@@ -35,9 +35,8 @@ docs/timeline-production/
 
 ## Current Focus
 
-当前阶段先做三件事：
+Phase 1 已完成。当前阶段转入 Resource Lifecycle：
 
-1. 定义 `LLTimeline JSON v1`，把时间轴资源变成稳定交换契约。
-2. 让现有 ASR/DTW/FA 结果先能导出为 `.lltimeline.json`，作为旧管线接入新资源层的桥。
-3. 再逐步接入生产端重管线、评估体系和人工校正 UI。
-
+1. 让一个媒体拥有多个可管理 timeline 版本。
+2. 补齐删除/归档/激活/导入后的 active resource 语义。
+3. 为生产端重管线、评估体系和人工校正 UI 准备稳定资源生命周期。
