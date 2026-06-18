@@ -9,10 +9,23 @@
 - 参考产品与代码库：LLPlayer
 - 需求明细与验收映射：`requirements.md`
 - 实施阶段与交付计划：`roadmap.md`
+- 产品定义更新：2026-06-18 14:50:26 CST，将项目拆分为“本地重装生产引擎”
+  与“轻量消费端”两条协同路线
 
 ## 2. 产品愿景
 
-构建一个以听力理解诊断为核心的跨平台媒体播放器。
+构建一套面向英语听力学习内容生产与消费的本地优先系统。
+
+从 2026-06-18 起，项目明确具有两个身份：
+
+1. **本地重装生产引擎**：面向项目开发者本人，在本机使用最强可用的
+   ASR、强制对齐、VAD、人声分离、说话人切换、规则处理和人工校对能力，
+   为 CNN10、NBC Nightly News 等新闻类材料生产高精度词级/音素级时间轴、
+   ChunkTimeline 和可发布学习视频资源。
+2. **轻量消费端 LLPlayerNext**：面向分发版和最终学习使用，稳定读取生产端
+   产出的标准时间轴 JSON 文件，进行卡拉 OK 式词级高亮、chunk 播放、字幕学习、
+   词汇状态和诊断。消费端不需要内置最重的 ASR/FA 模型，也不以最高精度生成
+   时间轴为目标。
 
 用户播放视频或音频时，播放器不仅显示字幕，还会根据用户对每个单词的实际掌握情况进行区分，帮助用户回答：
 
@@ -30,7 +43,14 @@ LLPlayer 桌面学习体验：
 7. 同时显示主、副文本字幕，并将主字幕用于学习交互。
 8. 支持拖放、内嵌文本字幕学习化、字幕外观设置和可选 `yt-dlp` 在线播放。
 
-产品暂不追求商业化、多人使用、云同步、复杂复习调度或真实语流分析。
+Milestone 1 已完成轻量消费端的播放器和学习基础。后续主线转为：
+
+1. 先把本地生产引擎做成可以生成、评估、校对和导出精准时间轴资源的工具链。
+2. 再让轻量消费端稳定消费这些资源，并保持无资源时的普通字幕学习能力。
+3. 最后基于生产出的 CNN10、NBC 等学习视频和 `.lltimeline.json` 资源，支持发布到
+   B 站、YouTube 等平台或随媒体文件分发给消费端。
+
+产品仍暂不追求多人账号、云同步、复杂复习调度、订阅支付或远程服务化生产。
 
 ## 3. 背景与现状
 
@@ -65,6 +85,19 @@ LLPlayer 已经实现并验证了大量语言学习播放器所需行为，包�
 
 ## 4. 产品定位
 
+### 4.0 双身份边界
+
+本项目后续所有功能必须先判断属于哪条路线：
+
+| 路线 | 目标 | 可接受依赖 | 输出 |
+|---|---|---|---|
+| 本地重装生产引擎 | 生成尽可能准确、可评估、可人工修正的时间轴资源 | Python、GPU、Whisper Large-v3、WhisperX、MFA/BFA、Demucs/UVR、pyannote 等研究或重模型依赖 | `.lltimeline.json`、评估报告、校对后的 ChunkTimeline、发布用学习视频 |
+| 轻量消费端 | 稳定消费生产资源并提供学习交互 | Rust/Flutter/native runtime、SQLite、轻量本地资源 | 播放、高亮、chunk 学习、词汇状态、诊断 |
+
+消费端可以保留普通 ASR 或估算时间戳作为降级能力，但不得为了追求生产级精度而引入
+大型 Python/PyTorch/MFA/WhisperX 运行时。生产端可以使用任何本地可控技术，只要产出
+的资源格式稳定、可验证、可追溯、可被消费端读取。
+
 ### 4.1 核心价值
 
 用户没有听懂一句话时，常见原因包括：
@@ -80,7 +113,9 @@ MVP 首先通过用户主动维护的词汇听力状态，区分：
 - 声音识别障碍。
 - 暂时无法通过词汇状态解释的整句理解障碍。
 
-词典音标用于帮助用户建立拼写与标准发音的联系。真实语流分析属于未来研究范围，不进入 MVP。
+词典音标用于帮助用户建立拼写与标准发音的联系。真实语流分析、词级强制对齐、
+音素级时间轴和 chunk 精修不属于 Milestone 1 MVP；它们从 Milestone 2 起进入
+“生产引擎优先、消费端读取资源”的路线。
 
 ### 4.2 目标用户
 
@@ -189,7 +224,45 @@ React/Tauri 原型未通过可交互视频覆盖层要求，不作为 Milestone 
 
 客户端不得在每次播放位置变化时调用后端 API 查询当前字幕。共享核心应一次性提供标准化字幕时间轴，客户端在本地完成高频同步。
 
+### 5.5 生产端与消费端架构边界
+
+后续架构分为两层：
+
+```text
+Production Engine (local, heavy)
+  ├── audio preprocessing: vocal isolation / normalization / VAD
+  ├── ASR: Whisper Large-v3 or stronger local model
+  ├── alignment: WhisperX / MFA / future BFA
+  ├── candidate timelines: DTW / WhisperX / MFA / pause-refined / user-adjusted
+  ├── chunk generation: VAD gap + speaker change + punctuation + semantic rules
+  ├── evaluation: weak comparison + gold benchmark
+  └── export: LLTimeline JSON v1 + reports
+
+LLPlayerNext Consumer (light)
+  ├── media playback
+  ├── import SubtitleTrack and LLTimeline JSON
+  ├── karaoke word/phone highlighting
+  ├── chunk playback
+  ├── vocabulary and diagnosis
+  └── optional local correction of imported resources
+```
+
+生产端生成资源，消费端读取资源。消费端不承担生产端的最重模型职责。
+
 ## 6. 核心用户流程
+
+### 6.0 生产并发布新闻学习内容
+
+1. 用户导入一条 CNN10、NBC Nightly News 或类似新闻视频。
+2. 生产端抽取音频，并可选分离纯净人声、归一化响度、运行 VAD。
+3. 生产端使用 Whisper Large-v3 或更强 ASR 生成带标点 transcript。
+4. 生产端使用 WhisperX、MFA 或后续 BFA 将 transcript 与音频强制对齐。
+5. 系统保存多个候选 `WordTimeline` / `PhoneTimeline`，并生成候选 `ChunkTimeline`。
+6. 用户在本地播放器中预览词跳动和 chunk，手动拖拽修正词边界或合并/拆分 chunk。
+7. 系统导出最终 `.lltimeline.json`、评估报告和可发布学习视频资源。
+8. 用户将视频发布到 B 站/YouTube，或将媒体文件与 `.lltimeline.json` 提供给消费端。
+
+该流程以生产质量为最高目标，可以使用重模型和人工校对。
 
 ### 6.1 打开并学习本地内容
 
@@ -440,6 +513,28 @@ MVP 必须本地保存：
 
 该结果默认动态计算，不要求永久保存。
 
+### 10.8 LLTimeline JSON
+
+生产端和消费端之间的数据交换格式。它应以 OpenAI/WhisperX 的 segment/word 结构为
+兼容骨架，并增加 LLPlayerNext 所需元数据：
+
+- `schema`: 例如 `llplayer.timeline.v1`。
+- `metadata`: 媒体指纹、生成时间、ASR/aligner/VAD/chunk 算法版本、人声分离配置、
+  是否人工校对、校对者、许可证和发布信息。
+- `segments`: transcript/cue 级文本和时间范围。
+- `words`: 词级时间轴，包含 `type`、speaker、confidence、source、provider/version。
+- `phonemes`: 可挂在 word 下或作为独立 phone timeline，用于未来音素级高亮。
+- `chunks`: 基于 word/phone timeline 生成或人工修正后的学习 chunk。
+- `artifacts`: 可选记录 whisper/WhisperX/MFA 原始输出、评估报告和校验摘要。
+
+`word.type` 至少应支持：
+
+```text
+word | silence | breath | noise | music | speaker_change
+```
+
+其中 silence、breath、speaker_change 对 chunk 划分具有一等证据价值。
+
 ## 11. API 与事件概念
 
 详细接口要求见 `requirements.md`。MVP 需要覆盖以下领域能力：
@@ -503,6 +598,8 @@ dictionary-entry.updated
 11. 通过拖放打开本地媒体与字幕。
 12. 将支持的内嵌文本字幕转换为学习字幕。
 13. 在安装 `yt-dlp` 时打开合法、受支持的在线视频 URL。
+14. 导入生产端产出的 `.lltimeline.json` 后，消费端可按精准词级时间轴高亮并播放 chunk。
+15. 生产端可为一个新闻视频导出含 metadata、word timeline、chunk timeline 和评估摘要的资源文件。
 
 ### 12.2 质量成功标准
 
@@ -585,14 +682,14 @@ Milestone 1.5 将可变状态词汇表确立为产品的核心持久化资产：
 
 ### 15.3 Milestone 2 候选范围
 
-Milestone 1.5 完成后，按优先级考虑：
+Milestone 2 的主线不再是“先做移动端或普通 ASR 增强”，而是围绕生产端/消费端资源闭环：
 
-1. Windows 与 Linux 桌面适配。
-2. OpenSubtitles 搜索与下载。
-3. 位图字幕显示、OCR 和学习交互。
-4. Android 和 iOS 技术验证。
-5. Whisper 转写与翻译。
-6. 更完整的词典、复习和真实语流分析能力。
+1. 定义并实现 `LLTimeline JSON v1` 导入/导出。
+2. 建立本地重装生产引擎管线：预处理、Whisper Large-v3/WhisperX/MFA 候选、
+   timeline evaluation、人工校对、ChunkTimeline 生成。
+3. 让轻量消费端稳定读取 `.lltimeline.json`，驱动词级高亮和 chunk 播放。
+4. 建立 TIMIT/Buckeye 小样本与自建新闻 gold set 的 benchmark。
+5. 在生产出真实新闻学习视频后，再评估 Windows/Linux、移动端和在线内容增强优先级。
 
 ### 15.4 Milestone 1.6：桌面学习体验与词汇初始化强化
 

@@ -3,7 +3,9 @@
 > Milestone 1、1.5、1.6、1.7、1.8 与 1.9 状态：已完成。Milestone 1.9
 > 发音与词级同步基础已通过完整协同功能验收；独立分发签名与公证作为后续发布
 > 工作保留，不阻塞 `0.7.0` 收口；
-> M7 移动端验证、Windows/Linux 和其他延期能力进入 Milestone 2。
+> 2026-06-18 路线更新：Milestone 2 主线调整为“本地重装生产引擎 +
+> 轻量消费端资源读取”。M7 移动端验证、Windows/Linux 和其他延期能力
+> 暂缓到生产资源闭环之后重新排序。
 > 完成报告见 `docs/release/milestone-1.md`。
 
 ## 1. 路线图目标
@@ -34,6 +36,20 @@
 Milestone 1。Milestone 1 已包含可选 `yt-dlp` 在线播放；Milestone 1.7
 已增加本地 ASR 整段字幕生成。
 
+从 Milestone 2 开始，路线图主轴变为：
+
+```text
+LLTimeline JSON v1
+  ↓
+本地重装生产引擎生成精准 WordTimeline / PhoneTimeline / ChunkTimeline
+  ↓
+客观评估 + 人工校对
+  ↓
+导出可发布、可消费的时间轴资源
+  ↓
+轻量消费端读取资源并播放学习
+```
+
 ## 2. 当前上下文快照
 
 ### 2.1 已确认的产品决策
@@ -51,10 +67,14 @@ Milestone 1。Milestone 1 已包含可选 `yt-dlp` 在线播放；Milestone 1.7
 - LLPlayer 用于参考行为、边界案例和测试，不直接作为跨平台内核。
 - MVP 不实现真实语流分析。
 - Milestone 1 以 macOS MVP 0.2.0 结束。
-- M0-M6 与 M8 是 Milestone 1 内部实施阶段；M7 延后至 Milestone 2。
+- M0-M6 与 M8 是 Milestone 1 内部实施阶段；M7 延后到生产资源闭环稳定后重新排序。
 - Milestone 1.5 聚焦词汇状态、状态历史和来源原句快照的长期存续。
 - 用户选择是全局词汇状态的权威来源，系统诊断不得静默修改状态。
 - Milestone 1.9 只提供规范发音和规则型语流候选，不声称检测真实音频语流。
+- Milestone 2 的首要目标是生产端生成高精度时间轴资源，而不是把重模型打包进消费端。
+- 轻量消费端的核心职责是读取 `.lltimeline.json`、执行高亮/chunk 播放和学习交互。
+- 生产端可以使用 Python、GPU、Whisper Large-v3、WhisperX、MFA/BFA、VAD、人声分离和人工校对。
+- CNN10、NBC Nightly News 等新闻类内容是首批生产管线优化对象。
 
 ### 2.2 MVP 核心闭环
 
@@ -1047,9 +1067,12 @@ Repository 接口位于领域或应用层，SQLite 实现位于持久化层。
 
 单人开发建议投入 2 至 4 周。
 
-## 13. Milestone 2 候选阶段 M7：移动端技术验证
+## 13. 延期候选阶段 M7：移动端技术验证
 
 ### 13.1 目标
+
+2026-06-18 路线调整后，M7 不再是 Milestone 2 的首要候选。它保留为
+`.lltimeline.json` 资源格式、生产引擎和轻量消费端资源读取稳定后的后续验证阶段。
 
 在不启动完整移动产品开发的前提下，证明桌面阶段建立的核心与契约可以支撑 Android 和 iOS。
 
@@ -1141,44 +1164,63 @@ M8 退出条件。
 - 合法、受支持的在线视频 URL 可经 `yt-dlp` 解析播放。
 - 外部工具缺失时，本地播放器核心流程仍然可用。
 
-### 14.1 Milestone 2 候选：移动正式客户端
+### 14.1 Milestone 2 主线：LLTimeline JSON v1
 
-- Android 与 iOS 独立 UI。
-- 文件导入与分享入口。
-- 移动生命周期和后台行为。
-- 触控字幕交互。
-- 移动端性能与电量优化。
+- 定义 `llplayer.timeline.v1` 交换格式，兼容 OpenAI/WhisperX segment/word 骨架。
+- 增加 metadata 头部：媒体指纹、ASR/aligner/VAD/chunk 算法版本、人声分离配置、
+  是否人工校对、生成时间、校验摘要和发布信息。
+- `words` 支持 `type`：`word`、`silence`、`breath`、`noise`、`music`、`speaker_change`。
+- `words` 支持 speaker、confidence、source、provider/version、可选 phonemes。
+- `chunks` 支持 algorithm candidate、user-adjusted、active/archived 状态。
+- 消费端导入 `.lltimeline.json` 后无需运行 ASR/FA 即可驱动词级高亮和 chunk 播放。
 
-### 14.2 Whisper 转写
+### 14.2 Milestone 2 主线：本地重装生产引擎
 
-- 先作为独立后台任务。
-- 输出仍转换为标准 `SubtitleTrack`。
-- 不让 ASR 特性污染字幕和播放器核心。
-- 后续评估桌面本地运行和移动端运行成本。
+- 预处理：抽取音频、响度归一、人声分离、VAD、可选说话人切换。
+- ASR：优先使用 Whisper Large-v3 或更强本地模型生成高准确 transcript。
+- 强制对齐：WhisperX 作为首个实用候选，MFA/BFA 作为英语新闻类参考或增强候选。
+- Timeline：保留 DTW、WhisperX、MFA/BFA、pause-refined、user-adjusted 多个候选。
+- Chunk：结合 VAD 停顿、speaker change、标点、语义和 150ms 级 gap 阈值生成候选。
+- 人工校对：在本地播放器中预览词跳动和 chunk，支持拖拽边界、合并/拆分 chunk。
+- 输出：导出 `.lltimeline.json`、评估报告、可发布学习视频资源。
 
-### 14.3 在线内容增强
+### 14.3 Milestone 2 主线：客观评估与 Benchmark
+
+- 弱评估：比较 DTW / WhisperX / MFA / final timeline 的偏移、覆盖、异常 gap、尾词 lag。
+- Gold 评估：使用少量 TIMIT、Buckeye 高质样本验证词/音素边界误差。
+- 新闻 gold set：为 CNN10/NBC Nightly News 自建少量人工校对样本。
+- 生产抽检：每个发布视频记录评估摘要和人工修改率。
+- 关键指标：词高亮偏移、快语速滞后、句尾拖尾、chunk 修改率、用户可接受度。
+
+### 14.4 后续候选：移动正式客户端
+
+- 在 `.lltimeline.json` 资源格式稳定后再推进 Android 与 iOS 独立 UI。
+- 移动端优先消费已有资源，不承担重模型生产。
+- 文件导入、分享入口、移动生命周期、触控字幕交互和电量优化仍是后续重点。
+
+### 14.5 在线内容增强
 
 - Milestone 1 已支持合法直接媒体 URL 与基础 `yt-dlp` 解析。
 - 后续评估登录、Cookie、更新机制和平台政策。
 - 内容获取与播放器、字幕核心保持适配器边界。
 
-### 14.4 词典与音标增强
+### 14.6 词典与音标增强
 
 - 多 Provider。
 - 标准发音播放。
 - 句子逐词音标层。
 - 用户编辑词义和音标。
 
-### 14.5 听力复习
+### 14.7 听力复习
 
 - 汇总上下文未听出记录。
 - 返回原句循环复听。
 - 简单复习队列。
 - 在真实使用验证后再考虑复杂记忆算法。
 
-### 14.6 真实语流分析研究
+### 14.8 真实语流分析研究
 
-只有在基础播放器、字幕、词典和状态系统稳定后推进：
+真实语流分析不再作为消费端内置重功能推进，而是优先在生产端产生可验证资源：
 
 - 词级时间对齐。
 - 音素级对齐。
@@ -1187,7 +1229,7 @@ M8 退出条件。
 - 置信度和人工抽样验证。
 - 防止错误结果误导用户的产品机制。
 
-### 14.7 Milestone 1.6：桌面学习体验与词汇初始化强化
+### 14.9 Milestone 1.6：桌面学习体验与词汇初始化强化
 
 > 状态：已完成。2026-06-10 发布 0.4.0；验证见
 > `docs/verification/milestone-1.6-report.md`。
@@ -1198,7 +1240,7 @@ M8 退出条件。
 - 统一词汇学习面板、用户释义和个人笔记。
 - Provider 无关的多来源词典聚合接口与 UI。
 
-### 14.8 Milestone 1.7：本地 Whisper 字幕生成
+### 14.10 Milestone 1.7：本地 Whisper 字幕生成
 
 > 状态：已完成。2026-06-10 发布 0.5.0；验证见
 > `docs/verification/v0.5.0-report.md`。详细设计见 `docs/planning/milestone-1.7.md`。
@@ -1233,8 +1275,9 @@ flowchart TD
     MS1 --> M15["Milestone 1.5 词汇学习资产强化"]
     M15 --> M16["Milestone 1.6 桌面学习体验"]
     M16 --> M17["Milestone 1.7 本地 Whisper 字幕生成"]
-    M17 --> M7["Milestone 2 候选：M7 移动端验证"]
-    M7 --> FUTURE["移动正式客户端与后续能力"]
+    M17 --> M2P["Milestone 2 生产引擎与时间轴资源"]
+    M2P --> M2C["轻量消费端资源读取"]
+    M2C --> FUTURE["移动正式客户端与后续能力"]
 ```
 
 ## 16. 需求阶段映射
@@ -1251,6 +1294,8 @@ flowchart TD
 | M7 | ARCH-010、UI-012、MOB-001 至 MOB-008 |
 | M8 | PLAY-014、SUB-015、ENH-001 至 ENH-005 |
 | M1.5 | WORD-011 至 WORD-018、API-014 至 API-017、DATA-012 至 DATA-016、UI-013 至 UI-015、TEST-015 至 TEST-018 |
+| M2-PROD | LLT-001 至 LLT-006、PROD-001 至 PROD-007、EVAL-001 至 EVAL-004 |
+| M2-CONSUME | LLT-007、CONSUME-001 至 CONSUME-004 |
 
 ## 17. 风险登记册
 

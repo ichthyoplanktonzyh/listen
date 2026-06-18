@@ -40,10 +40,13 @@
 | M7 | 移动端技术验证 |
 | M8 | LLPlayer 核心体验增强 |
 | M1.9 | 发音与词级同步基础 |
+| M2-PROD | 本地重装生产引擎与精准时间轴资源 |
+| M2-CONSUME | 轻量消费端时间轴资源读取 |
 | FUTURE | MVP 后研究与增强 |
 
 M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强化也已
-完成。M7 和 FUTURE 需求进入 Milestone 2 或后续里程碑。
+完成。2026-06-18 起，M2-PROD 与 M2-CONSUME 是 Milestone 2 主线；M7
+和其他 FUTURE 需求在生产资源闭环稳定后重新排序。
 
 ### 2.3 关键术语
 
@@ -59,6 +62,12 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | 来源快照 | 用户主动记录词汇时保存的原句、媒体标题与时间范围持久化副本 |
 | 动态词汇本 | 按当前全局状态查询得到的词汇集合，不复制词汇 Profile |
 | 当前句诊断 | 根据当前字幕句中的词汇状态生成的可解释诊断线索 |
+| 本地重装生产引擎 | 面向项目开发者本人、可使用 Python/GPU/重模型/人工校对的高精度时间轴生产管线 |
+| 轻量消费端 | 分发版 LLPlayerNext，重点读取生产端资源并提供播放、高亮、chunk 学习和词汇诊断 |
+| LLTimeline JSON | 生产端与消费端之间的版本化时间轴交换文件，包含 metadata、segments、words、phonemes、chunks 和 artifacts |
+| WordTimeline | 可复用、可评估、可人工修正的词级时间轴资源 |
+| PhoneTimeline | 可选音素级时间轴资源，可由 MFA/BFA 或其他 aligner 生成 |
+| ChunkTimeline | 基于 word/phone timeline 生成或人工修正的学习 chunk 资源 |
 
 ## 3. 需求总览映射
 
@@ -78,6 +87,8 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | 性能、可靠性与隐私 | NFR-001 至 NFR-018 | 后续持续加固 |
 | 测试与可观测性 | TEST-001 至 TEST-014 | TEST-015 至 TEST-018 及后续持续扩展 |
 | 移动端准备 | 无强制发布项 | MOB-001 至 MOB-009 |
+| 生产端精准时间轴 | 无强制 Milestone 1 发布项 | LLT-001 至 LLT-007、PROD-001 至 PROD-007、EVAL-001 至 EVAL-004 |
+| 轻量消费端资源读取 | 无强制 Milestone 1 发布项 | CONSUME-001 至 CONSUME-004 |
 
 ## 4. 平台需求
 
@@ -1953,6 +1964,255 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 - 需求：发音、词级同步或规则分析失败不得影响播放器、字幕或词汇状态。
 - 验收标准：关闭增强后行为与 0.6.0 一致，设置和可重建缓存可持久化。
 
+## 18.3 Milestone 2 生产引擎与时间轴资源需求
+
+### LLT-001：LLTimeline JSON v1 Schema
+
+- 优先级：P0
+- 阶段：M2-PROD
+- 需求：定义版本化 `llplayer.timeline.v1` 交换格式，兼容 OpenAI/WhisperX 的
+  segment/word 骨架，并扩展 LLPlayerNext 所需 metadata、words、phonemes、
+  chunks 和 artifacts。
+- 验收标准：
+  - Schema 明确声明版本和兼容策略。
+  - 同一个文件可以被生产端导出、消费端导入并通过 contract test。
+  - 不兼容字段变化必须提升 schema 版本。
+- 依赖：ARCH-008、DATA-004。
+
+### LLT-002：生成元数据与可追溯性
+
+- 优先级：P0
+- 阶段：M2-PROD
+- 需求：LLTimeline metadata 必须记录媒体指纹、生成时间、ASR/aligner/VAD/chunk
+  算法版本、人声分离配置、是否人工校对、校对者、许可证/来源信息和校验摘要。
+- 验收标准：
+  - 每个导出文件可追溯到生成管线配置。
+  - 人工校对状态不得默认为已校对。
+  - 缺少关键 provenance 时消费端必须明确提示。
+- 依赖：LLT-001。
+
+### LLT-003：词级时间轴交换
+
+- 优先级：P0
+- 阶段：M2-PROD
+- 需求：LLTimeline words 必须支持 `start_ms`、`end_ms`、text、normalized、
+  confidence、source、provider/version、speaker 和 `type`。
+- 验收标准：
+  - `type` 至少支持 `word`、`silence`、`breath`、`noise`、`music`、`speaker_change`。
+  - word ranges 必须单调、非负、可校验。
+  - silence/breath/speaker_change 可作为 chunk 划分证据。
+- 依赖：LLT-001、PRON-002。
+
+### LLT-004：音素级时间轴扩展
+
+- 优先级：P1
+- 阶段：M2-PROD
+- 需求：LLTimeline 支持将 phonemes 挂载在 word 下或作为独立 PhoneTimeline，
+  以便 MFA/BFA 或后续 aligner 输出音素级高亮数据。
+- 验收标准：
+  - phoneme 包含 symbol、phone_set、start/end、confidence 和 provider/version。
+  - 没有 phoneme 数据时消费端仍能正常读取 word/chunk。
+- 依赖：LLT-001、PROD-004。
+
+### LLT-005：ChunkTimeline 交换
+
+- 优先级：P0
+- 阶段：M2-PROD
+- 需求：LLTimeline 必须能携带 algorithm candidate 和 user-adjusted chunk timeline。
+- 验收标准：
+  - chunk 包含开始/结束词、时间范围、source、algorithm/config、状态和可选诊断。
+  - 人工修正 chunk 优先级高于算法候选。
+  - 消费端可直接按 active chunk timeline 播放。
+- 依赖：LLT-003、PROD-005。
+
+### LLT-006：导入导出兼容性测试
+
+- 优先级：P0
+- 阶段：M2-PROD
+- 需求：LLTimeline 示例文件和 contract test 必须覆盖正常词、静音、呼吸、
+  speaker change、phoneme 可选缺失、chunk 读取和 metadata 校验。
+- 验收标准：
+  - `scripts/test.sh --full` 覆盖 LLTimeline schema smoke。
+  - 错误文件产生明确验证失败原因。
+- 依赖：LLT-001 至 LLT-005、TEST-008。
+
+### LLT-007：消费端导入 LLTimeline
+
+- 优先级：P0
+- 阶段：M2-CONSUME
+- 需求：轻量消费端必须能导入 `.lltimeline.json`，并将 active WordTimeline /
+  ChunkTimeline 与媒体播放绑定。
+- 验收标准：
+  - 导入后词级高亮使用文件中的 active word timeline。
+  - 导入后 chunk 播放使用文件中的 active chunk timeline。
+  - 缺少 timeline 或版本不兼容时具有明确降级或错误提示。
+- 依赖：LLT-001、CONSUME-001。
+
+### PROD-001：新闻类生产输入
+
+- 优先级：P0
+- 阶段：M2-PROD
+- 需求：生产端首先优化 CNN10、NBC Nightly News 等新闻类视频的本地导入、
+  处理、预览和导出流程。
+- 验收标准：
+  - 至少一条新闻视频可以完成端到端生产流程。
+  - 输入处理保留原视频时间基准，任何音频预处理偏移必须可校准。
+- 依赖：PLAY-001、DATA-001。
+
+### PROD-002：音频预处理
+
+- 优先级：P0
+- 阶段：M2-PROD
+- 需求：生产端支持抽取音频、响度归一、人声分离、VAD 和可选说话人切换标记。
+- 验收标准：
+  - 预处理产物保留与原媒体的时间映射。
+  - 人声分离不得无记录地引入系统性时间偏移。
+  - VAD 和 speaker change 可进入 LLTimeline metadata/artifacts。
+- 依赖：LLT-002、PROD-001。
+
+### PROD-003：高准确率 ASR Transcript
+
+- 优先级：P0
+- 阶段：M2-PROD
+- 需求：生产端支持 Whisper Large-v3 或更强 ASR 生成带标点 transcript，并保存原始输出。
+- 验收标准：
+  - ASR 输出可转换为 SubtitleTrack/segments。
+  - 原始输出进入 artifacts 或可复现路径。
+  - ASR 模型和参数进入 metadata。
+- 依赖：LLT-002。
+
+### PROD-004：强制对齐候选
+
+- 优先级：P0
+- 阶段：M2-PROD
+- 需求：生产端至少支持 WhisperX 词级强制对齐候选，并为英语新闻类材料评估 MFA/BFA
+  作为参考或增强候选。
+- 验收标准：
+  - 对齐输出保存为 candidate WordTimeline。
+  - 每个候选具有 provider/version/config_hash。
+  - 对齐失败不得破坏已有 transcript 或其他候选。
+- 依赖：LLT-003、EVAL-001。
+
+### PROD-005：候选 ChunkTimeline 生成
+
+- 优先级：P0
+- 阶段：M2-PROD
+- 需求：结合 VAD 停顿、speaker change、标点、语义规则和可配置 gap 阈值生成
+  候选 ChunkTimeline。
+- 验收标准：
+  - 默认新闻类 gap 阈值可下调到 150ms 级别并记录 config。
+  - chunk 诊断能解释每个边界的主要证据。
+  - 算法候选不覆盖人工修正结果。
+- 依赖：LLT-005、PROD-002、PROD-004。
+
+### PROD-006：人工校对 UI
+
+- 优先级：P0
+- 阶段：M2-PROD
+- 需求：生产端提供本地预览和校对入口，允许用户修正词边界、合并/拆分 chunk、
+  选择 active timeline 并保存 user-adjusted 资源。
+- 验收标准：
+  - 人工修改后的资源可导出并优先于算法候选。
+  - 修改操作保留 parent timeline 和审计 metadata。
+  - 校对过程不要求消费端具备重模型。
+- 依赖：LLT-003、LLT-005、CONSUME-001。
+
+### PROD-007：发布资源导出
+
+- 优先级：P0
+- 阶段：M2-PROD
+- 需求：生产端导出最终 `.lltimeline.json`、评估报告和可用于 B 站/YouTube 发布的
+  学习视频辅助资源。
+- 验收标准：
+  - 导出的 JSON 可被消费端读取。
+  - 导出包包含校验摘要和生成报告。
+  - 发布资源不强制包含受限版权原始音视频。
+- 依赖：LLT-001 至 LLT-006、PROD-006。
+
+### CONSUME-001：轻量消费端不内置重模型
+
+- 优先级：P0
+- 阶段：M2-CONSUME
+- 需求：分发版消费端不得依赖 Python/PyTorch/WhisperX/MFA 等重型生产运行时才能完成
+  词级高亮和 chunk 播放。
+- 验收标准：
+  - 无生产运行时环境时仍可读取 `.lltimeline.json`。
+  - 缺失生产运行时不影响普通播放器和学习流程。
+- 依赖：LLT-007。
+
+### CONSUME-002：资源驱动词级高亮
+
+- 优先级：P0
+- 阶段：M2-CONSUME
+- 需求：消费端使用导入的 active WordTimeline 驱动卡拉 OK 式词级高亮。
+- 验收标准：
+  - 快速跳转、拖动、倍速后当前词可立即恢复。
+  - 无 active WordTimeline 时安全回退到估算或句级高亮。
+- 依赖：LLT-007、PRON-002。
+
+### CONSUME-003：资源驱动 Chunk 播放
+
+- 优先级：P0
+- 阶段：M2-CONSUME
+- 需求：消费端使用导入的 active ChunkTimeline 提供 chunk 列表、跳转和循环。
+- 验收标准：
+  - chunk 边界来自资源文件而非消费端重新推断。
+  - 无 chunk timeline 时可使用现有 on-demand partition 作为降级。
+- 依赖：LLT-005、LLT-007。
+
+### CONSUME-004：消费端资源校验与降级
+
+- 优先级：P0
+- 阶段：M2-CONSUME
+- 需求：消费端导入 LLTimeline 时必须验证 schema、媒体指纹、时间单调性和版本兼容性。
+- 验收标准：
+  - 不匹配媒体指纹时要求用户确认或拒绝导入。
+  - 不兼容版本产生明确错误。
+  - 部分缺失 phoneme/chunk 不阻断 word timeline 使用。
+- 依赖：LLT-001、LLT-007。
+
+### EVAL-001：弱评估报告
+
+- 优先级：P0
+- 阶段：M2-PROD
+- 需求：系统能比较两个或多个 WordTimeline，输出偏移分布、覆盖、overlap/gap 异常、
+  provider mix、confidence 分布和 suspicious words。
+- 验收标准：
+  - DTW vs WhisperX/MFA/final 可不重新转录直接比较。
+  - 报告可导出 JSON 和 Markdown。
+- 依赖：LLT-003。
+
+### EVAL-002：Gold Benchmark
+
+- 优先级：P0
+- 阶段：M2-PROD
+- 需求：建立 TIMIT、Buckeye 小样本和自建新闻 gold set，用专家或人工校对边界评估
+  word/phone timeline。
+- 验收标准：
+  - 输出 start/end MAE、median absolute error、25/50/100/200ms 命中率和 lead/lag bias。
+  - 标准语料和新闻 gold set 分开报告，不混为一谈。
+- 依赖：EVAL-001、PROD-004。
+
+### EVAL-003：生产质量指标
+
+- 优先级：P0
+- 阶段：M2-PROD
+- 需求：每个发布视频记录词高亮偏移、快语速滞后、句尾拖尾、chunk 修改率和人工校对量。
+- 验收标准：
+  - 质量报告随导出资源保存。
+  - 人工修改率下降可作为管线改进证据。
+- 依赖：PROD-006、PROD-007。
+
+### EVAL-004：生产/消费端回归测试
+
+- 优先级：P0
+- 阶段：M2-PROD
+- 需求：LLTimeline fixture、导入导出、评估报告和消费端读取必须进入自动化测试体系。
+- 验收标准：
+  - `scripts/test.sh --full` 或等价命令覆盖核心格式和评估 smoke。
+  - 回归 fixture 可以提交，用于比较算法改动前后质量。
+- 依赖：LLT-006、CONSUME-004。
+
 ## 19. MVP 发布追踪矩阵
 
 | 发布能力 | 必须满足的需求 |
@@ -1970,3 +2230,5 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | LLPlayer 核心体验增强 | ENH-001 至 ENH-008 |
 | 质量门槛 | NFR-001 至 NFR-018、TEST-001 至 TEST-014 |
 | Milestone 1.5 词汇学习资产 | WORD-011 至 WORD-018、API-014 至 API-017、DATA-012 至 DATA-016、UI-013 至 UI-015、TEST-015 至 TEST-018 |
+| Milestone 2 生产引擎 | LLT-001 至 LLT-006、PROD-001 至 PROD-007、EVAL-001 至 EVAL-004 |
+| Milestone 2 轻量消费端 | LLT-007、CONSUME-001 至 CONSUME-004 |

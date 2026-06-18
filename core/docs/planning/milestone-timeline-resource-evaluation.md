@@ -7,6 +7,14 @@ so word highlighting, phone highlighting, and chunk partitioning are driven by
 measurable, reusable, and human-correctable timing data rather than ad hoc
 algorithm output or visual impressions.
 
+Product-direction update as of 2026-06-18 14:50:26 CST: this milestone now
+serves a two-track product definition. The local production engine may use
+heavy Python/GPU tools such as Whisper Large-v3, WhisperX, MFA/BFA, VAD, vocal
+isolation, and manual correction to produce high-precision timeline resources.
+The lightweight LLPlayerNext consumer should primarily read those exported
+resources and must not require the heavy production runtime for normal playback,
+word highlighting, or chunk listening.
+
 ## Non-Goals
 
 - Do not choose a final production aligner before evaluation exists.
@@ -22,6 +30,8 @@ algorithm output or visual impressions.
 - `WordTimeline` is the reusable word-level timing resource.
 - `PhoneTimeline` is the future phone-level timing resource.
 - `ChunkTimeline` is the reusable chunk partition resource.
+- `LLTimeline JSON v1` is the production-to-consumer exchange format.
+- Production can be heavy; consumption must remain light.
 - Algorithm output is a candidate resource, not ground truth.
 - User-adjusted resources have higher precedence than algorithm resources.
 - Evaluation reports must be reproducible from stored inputs and artifacts.

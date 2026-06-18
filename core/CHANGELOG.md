@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-06-18 14:50:26 CST: Reframed the product definition around two
+  coordinated tracks: a local heavy production engine for high-precision
+  WordTimeline/PhoneTimeline/ChunkTimeline generation, evaluation, correction,
+  and `.lltimeline.json` export; and a lightweight LLPlayerNext consumer that
+  reads those resources for word highlighting and chunk playback without
+  bundling heavy ASR/FA runtimes.
 - 2026-06-18 11:40:04 CST: Transcription now preserves staged word timeline
   candidates from a single ASR run: raw Whisper DTW, MMS forced-alignment merge
   when available, and pause-refined final timings. The final stage is activated
