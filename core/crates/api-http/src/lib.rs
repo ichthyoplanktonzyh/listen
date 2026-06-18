@@ -90,6 +90,7 @@ impl ApiState {
 pub fn router(state: ApiState) -> Router {
     let protected = Router::new()
         .route("/v1/media", post(register_media))
+        .route("/v1/lltimeline/import", post(import_lltimeline))
         .route("/v1/media/{media_id}", get(read_media))
         .route("/v1/media/{media_id}/subtitles", post(import_subtitle))
         .route("/v1/subtitles/{track_id}", get(read_subtitle))
@@ -415,6 +416,17 @@ async fn import_subtitle(
             language: request.language,
             identity_salt: None,
         })
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn import_lltimeline(
+    State(state): State<ApiState>,
+    Json(document): Json<domain::LLTimelineDocument>,
+) -> Result<Json<domain::SubtitleTrack>, ApiError> {
+    state
+        .services
+        .import_lltimeline_document(document)
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -1942,6 +1954,7 @@ mod tests {
                 .unwrap();
 
         let response = app
+            .clone()
             .oneshot(
                 Request::get(format!(
                     "/v1/subtitles/{}/lltimeline/export",
@@ -1967,6 +1980,23 @@ mod tests {
         assert_eq!(document["active_word_timeline_id"], timeline["id"]);
         assert_eq!(document["phone_timelines"].as_array().unwrap().len(), 0);
         assert_eq!(document["chunk_timelines"].as_array().unwrap().len(), 0);
+
+        let response = app
+            .oneshot(
+                Request::post("/v1/lltimeline/import")
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(document.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let imported_track: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(imported_track["id"], track["id"]);
+        assert_eq!(imported_track["sentences"].as_array().unwrap().len(), 4);
     }
 
     #[tokio::test]
@@ -2425,6 +2455,7 @@ mod tests {
         for path in [
             "/v1/health",
             "/v1/media",
+            "/v1/lltimeline/import",
             "/v1/media/{media_id}",
             "/v1/media/{media_id}/subtitles",
             "/v1/media/{media_id}/progress",
@@ -2499,8 +2530,8 @@ mod tests {
         // Count documented paths as a regression gate.
         let path_count = openapi.lines().filter(|l| l.starts_with("  /v1/")).count();
         assert_eq!(
-            path_count, 75,
-            "OpenAPI path count changed from 75 — update snapshot if paths were added/removed"
+            path_count, 76,
+            "OpenAPI path count changed from 76 — update snapshot if paths were added/removed"
         );
 
         // All paths must be under /v1/.

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 2026-06-18 15:21:41 CST: Added LLTimeline JSON v1 import support with
+  `POST /v1/lltimeline/import`, round-trip HTTP coverage, and a minimal
+  `.lltimeline.json` contract fixture that deserializes through the domain
+  model.
 - 2026-06-18 15:11:06 CST: Added the `docs/timeline-production/` documentation
   structure and started Phase 1 of the production-engine route with
   `LLTimeline JSON v1` domain contracts plus an HTTP export endpoint that wraps

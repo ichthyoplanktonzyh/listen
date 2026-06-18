@@ -11,3 +11,12 @@
   subtitle segments and `WordTimeline` resources as a v1 document.
 - Added an HTTP behavior test that creates an active word timeline and verifies
   the exported LLTimeline document.
+
+## 2026-06-18 15:21:41 CST
+
+- Added `POST /v1/lltimeline/import` to import a v1 document into existing
+  media, subtitle, and word timeline persistence.
+- Extended HTTP coverage to export a document and import it back as a basic
+  round-trip.
+- Added `testdata/lltimeline/v1-minimal.lltimeline.json` as the first stable
+  contract fixture and a domain deserialization smoke test.

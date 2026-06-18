@@ -191,11 +191,11 @@ Artifacts 用于保存生产和评估副产物：
 
 ## v1 Implementation Slice
 
-第一批代码只实现：
+第一批代码实现：
 
 - Rust domain contract。
 - 从现有 subtitle track + active/candidate `WordTimeline` 导出 LLTimeline document。
+- 将 LLTimeline document 导入为 media、subtitle track 和 word timeline resources。
 - `phone_timelines`、`chunk_timelines`、`artifacts` 为空数组。
 
 这样现有 ASR 管线可以先成为新资源系统的一个 candidate generator。
-

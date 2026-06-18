@@ -40,6 +40,11 @@ paths:
                 $ref: "#/components/schemas/MediaItem"
         default:
           $ref: "#/components/responses/Error"
+  /v1/lltimeline/import:
+    post:
+      operationId: importLLTimeline
+      responses:
+        "200": { description: Imported LLTimeline JSON v1 resource document }
   /v1/media/{media_id}:
     parameters:
       - $ref: "#/components/parameters/MediaId"

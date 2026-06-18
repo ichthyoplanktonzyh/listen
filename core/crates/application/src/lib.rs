@@ -1125,6 +1125,69 @@ impl AppServices {
         })
     }
 
+    pub fn import_lltimeline_document(
+        &self,
+        document: LLTimelineDocument,
+    ) -> Result<SubtitleTrack, ApplicationError> {
+        if document.schema != LLTIMELINE_SCHEMA_V1 {
+            return Err(ApplicationError::Validation("lltimeline schema"));
+        }
+        require_text(&document.metadata.media.fingerprint, "media fingerprint")?;
+        require_text(&document.metadata.media.title, "media title")?;
+        let now = now_ms();
+        let media =
+            MediaItem {
+                id: document.metadata.media.id.clone(),
+                path: document.metadata.media.path.clone().unwrap_or_else(|| {
+                    format!("lltimeline://{}", document.metadata.media.id.as_str())
+                }),
+                fingerprint: document.metadata.media.fingerprint.clone(),
+                title: document.metadata.media.title.clone(),
+                kind: MediaKind::Video,
+                duration: document.metadata.media.duration_ms.map(TimeMs::new),
+                availability: MediaAvailability::Available,
+                created_at_ms: now,
+                updated_at_ms: now,
+            };
+        self.media.upsert(&media)?;
+
+        let track_id = lltimeline_track_id(&document)?;
+        let fingerprint = lltimeline_track_fingerprint(&document);
+        let source = document
+            .metadata
+            .extra
+            .get("track_source")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("lltimeline-json-v1")
+            .to_owned();
+        let track = SubtitleTrack {
+            id: track_id,
+            media_id: media.id.clone(),
+            fingerprint,
+            language: document.metadata.language.clone(),
+            source,
+            sentences: lltimeline_segments_to_sentences(&document.segments)?,
+        };
+        self.subtitles.save_track(&track)?;
+
+        for mut timeline in document.word_timelines {
+            if timeline.media_id != track.media_id || timeline.track_id != track.id {
+                return Err(ApplicationError::Validation("lltimeline word timeline"));
+            }
+            if document.active_word_timeline_id.as_ref() == Some(&timeline.id)
+                && timeline.status == TimelineStatus::Active
+            {
+                timeline.status = TimelineStatus::Candidate;
+            }
+            self.subtitles.save_word_timeline(&timeline)?;
+        }
+        if let Some(active_id) = document.active_word_timeline_id {
+            self.subtitles.activate_word_timeline(&active_id)?;
+        }
+
+        Ok(track)
+    }
+
     /// Detect acoustic chunk boundaries for every sentence in a subtitle track.
     ///
     /// Uses gap-based detection on existing word timings. Each sentence is
@@ -1718,6 +1781,79 @@ fn lltimeline_segments_from_track(track: &SubtitleTrack) -> Vec<LLTimelineSegmen
                 .collect(),
         })
         .collect()
+}
+
+fn lltimeline_track_id(document: &LLTimelineDocument) -> Result<SubtitleTrackId, ApplicationError> {
+    if let Some(track_id) = document
+        .metadata
+        .extra
+        .get("track_id")
+        .and_then(serde_json::Value::as_str)
+    {
+        return SubtitleTrackId::parse(track_id.to_owned()).map_err(ApplicationError::from);
+    }
+    Ok(SubtitleTrackId::from_fingerprint(
+        "subtitle-track",
+        &format!(
+            "{}:{}",
+            document.metadata.media.id.as_str(),
+            lltimeline_track_fingerprint(document)
+        ),
+    ))
+}
+
+fn lltimeline_track_fingerprint(document: &LLTimelineDocument) -> String {
+    document
+        .metadata
+        .extra
+        .get("track_fingerprint")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| {
+            LLTimelineId::from_fingerprint(
+                "lltimeline-track-fingerprint",
+                &serde_json::to_string(&document.segments).unwrap_or_default(),
+            )
+            .as_str()
+            .to_owned()
+        })
+}
+
+fn lltimeline_segments_to_sentences(
+    segments: &[LLTimelineSegment],
+) -> Result<Vec<SubtitleSentence>, ApplicationError> {
+    if segments.is_empty() {
+        return Err(ApplicationError::Validation("lltimeline segments"));
+    }
+    let mut sentences = Vec::with_capacity(segments.len());
+    for segment in segments {
+        if segment.end_ms <= segment.start_ms {
+            return Err(ApplicationError::Validation("lltimeline segment boundary"));
+        }
+        sentences.push(SubtitleSentence {
+            id: segment.id.clone(),
+            index: segment.index,
+            start: TimeMs::new(segment.start_ms),
+            end: TimeMs::new(segment.end_ms),
+            original_text: segment.text.clone(),
+            display_text: segment.display_text.clone(),
+            tokens: segment
+                .tokens
+                .iter()
+                .map(|token| SubtitleToken {
+                    index: token.index,
+                    kind: token.kind,
+                    text: token.text.clone(),
+                    normalized: token.normalized.clone(),
+                    start_char: token.start_char,
+                    end_char: token.end_char,
+                })
+                .collect(),
+        });
+    }
+    sentences.sort_by_key(|sentence| (sentence.start, sentence.end, sentence.index));
+    Ok(sentences)
 }
 
 fn word_timing_cache_is_usable(values: &[WordTiming]) -> bool {

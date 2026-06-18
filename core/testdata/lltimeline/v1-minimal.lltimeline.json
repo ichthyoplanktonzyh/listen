@@ -1,0 +1,115 @@
+{
+  "schema": "llplayer.timeline.v1",
+  "metadata": {
+    "created_at_ms": 1781776901000,
+    "generator": {
+      "id": "llplayernext-test",
+      "version": "0.7.0",
+      "mode": "production_engine"
+    },
+    "media": {
+      "id": "media-fixture",
+      "fingerprint": "fixture-media-fingerprint",
+      "path": null,
+      "title": "LLTimeline Fixture",
+      "duration_ms": 2500
+    },
+    "language": "en",
+    "human_reviewed": false,
+    "extra": {
+      "track_id": "track-fixture",
+      "track_fingerprint": "fixture-track-fingerprint",
+      "track_source": "fixture.lltimeline.json"
+    }
+  },
+  "segments": [
+    {
+      "id": "sentence-fixture-0",
+      "index": 0,
+      "start_ms": 1000,
+      "end_ms": 2200,
+      "text": "Hello world.",
+      "display_text": "Hello world.",
+      "tokens": [
+        {
+          "index": 0,
+          "kind": "word",
+          "text": "Hello",
+          "normalized": "hello",
+          "start_char": 0,
+          "end_char": 5
+        },
+        {
+          "index": 1,
+          "kind": "whitespace",
+          "text": " ",
+          "normalized": null,
+          "start_char": 5,
+          "end_char": 6
+        },
+        {
+          "index": 2,
+          "kind": "word",
+          "text": "world",
+          "normalized": "world",
+          "start_char": 6,
+          "end_char": 11
+        },
+        {
+          "index": 3,
+          "kind": "punctuation",
+          "text": ".",
+          "normalized": null,
+          "start_char": 11,
+          "end_char": 12
+        }
+      ]
+    }
+  ],
+  "word_timelines": [
+    {
+      "id": "timeline-fixture",
+      "track_id": "track-fixture",
+      "media_id": "media-fixture",
+      "algorithm_id": "fixture-aligner",
+      "algorithm_version": "v1",
+      "config_hash": "fixture-config",
+      "parent_timeline_id": null,
+      "created_by": "algorithm",
+      "status": "active",
+      "metrics_json": {},
+      "words": [
+        {
+          "sentence_id": "sentence-fixture-0",
+          "token_index": 0,
+          "text": "Hello",
+          "start_ms": 1040,
+          "end_ms": 1300,
+          "confidence": 0.97,
+          "timing_source": "forced_aligned",
+          "provider_id": "fixture-aligner",
+          "provider_version": "v1"
+        },
+        {
+          "sentence_id": "sentence-fixture-0",
+          "token_index": 2,
+          "text": "world",
+          "start_ms": 1320,
+          "end_ms": 1680,
+          "confidence": 0.96,
+          "timing_source": "forced_aligned",
+          "provider_id": "fixture-aligner",
+          "provider_version": "v1"
+        }
+      ],
+      "created_at_ms": 1781776901000,
+      "updated_at_ms": 1781776901000
+    }
+  ],
+  "active_word_timeline_id": "timeline-fixture",
+  "phone_timelines": [],
+  "active_phone_timeline_id": null,
+  "chunk_timelines": [],
+  "active_chunk_timeline_id": null,
+  "artifacts": []
+}

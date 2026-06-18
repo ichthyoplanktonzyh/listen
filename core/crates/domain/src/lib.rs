@@ -1172,6 +1172,21 @@ mod tests {
     }
 
     #[test]
+    fn lltimeline_v1_fixture_deserializes() {
+        let document: LLTimelineDocument = serde_json::from_str(include_str!(
+            "../../../testdata/lltimeline/v1-minimal.lltimeline.json"
+        ))
+        .unwrap();
+        assert_eq!(document.schema, LLTIMELINE_SCHEMA_V1);
+        assert_eq!(document.segments.len(), 1);
+        assert_eq!(document.word_timelines.len(), 1);
+        assert_eq!(
+            document.active_word_timeline_id,
+            Some(WordTimelineId::parse("timeline-fixture").unwrap())
+        );
+    }
+
+    #[test]
     fn phonetic_analysis_requires_monotonic_bounded_phones() {
         let mut analysis = phonetic_analysis();
         assert_eq!(analysis.validate(), Ok(()));
