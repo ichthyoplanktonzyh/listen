@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- 2026-06-19 CST: Added a standalone Tkinter GUI wrapper for the local
+  LLTimeline production pipeline at
+  `scripts/timeline-production/production_pipeline_gui.py`, covering media
+  selection, output paths, SHA256 fingerprinting, WhisperX/post-aligner options,
+  dry-run command preview, live logs, cancellation, and output-folder access.
 - 2026-06-19 CST: Completed Phase 2.2 app timeline resource UI alignment. Added
   LLTimeline resource metadata/artifact persistence (`lltimeline_resources`),
   import/export artifact round-trip coverage, Flutter LLTimeline client methods,
