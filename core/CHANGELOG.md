@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 2026-06-20 00:11:42 CST: Fixed the timeline production GUI save dialog crash
+  on macOS/Python 3.13 by removing the multi-pattern Tk file type filter from
+  the LLTimeline output picker and using the current output path as the initial
+  save location.
 - 2026-06-19 23:59:47 CST: Fixed timeline production GUI/CLI WhisperX discovery by
   auto-detecting the default timeline-production venv under
   `~/Library/Caches/LLPlayerNext/research/timeline-production/venv/bin/whisperx`;

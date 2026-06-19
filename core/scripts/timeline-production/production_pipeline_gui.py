@@ -202,11 +202,17 @@ class TimelineProductionGui(Tk):
             self.output_path.set(str(Path(path) / f"{input_path.stem}.lltimeline.json"))
 
     def _browse_output_file(self) -> None:
-        path = filedialog.asksaveasfilename(
-            title="Save LLTimeline",
-            defaultextension=".json",
-            filetypes=[("LLTimeline JSON", "*.lltimeline.json *.json"), ("All files", "*")],
-        )
+        current = Path(self.output_path.get()).expanduser() if self.output_path.get().strip() else None
+        initial_dir = current.parent if current and str(current.parent) != "." else None
+        initial_file = current.name if current else "timeline.lltimeline.json"
+        options = {
+            "title": "Save LLTimeline",
+            "defaultextension": ".lltimeline.json",
+            "initialfile": initial_file,
+        }
+        if initial_dir:
+            options["initialdir"] = str(initial_dir)
+        path = filedialog.asksaveasfilename(**options)
         if path:
             self.output_path.set(path)
 
