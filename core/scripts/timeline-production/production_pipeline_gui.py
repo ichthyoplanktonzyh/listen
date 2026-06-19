@@ -1,23 +1,34 @@
 #!/usr/bin/env python3
-"""Small Tk GUI for the local LLTimeline production pipeline."""
+"""Local browser GUI for the LLTimeline production pipeline."""
 
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import os
-import queue
 import shlex
 import subprocess
 import sys
 import threading
+import time
+import webbrowser
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from tkinter import BooleanVar, IntVar, StringVar, Tk, filedialog, messagebox, ttk
-from tkinter.scrolledtext import ScrolledText
+from typing import Any
+from urllib.parse import urlparse
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PIPELINE = Path(__file__).with_name("production_pipeline.py")
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def default_whisperx_bin() -> Path:
@@ -30,226 +41,81 @@ def default_whisperx_bin() -> Path:
     return production_root / "venv" / "bin" / "whisperx"
 
 
-def file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def default_output_dir(input_path: Path) -> Path:
-    stem = input_path.stem or "timeline-production"
-    return REPO_ROOT / ".tmp" / "timeline-production-gui" / stem
+    return REPO_ROOT / ".tmp" / "timeline-production-gui" / (input_path.stem or "media")
 
 
-class TimelineProductionGui(Tk):
+def default_output_path(input_path: Path, output_dir: Path) -> Path:
+    return output_dir / f"{input_path.stem or 'timeline'}.lltimeline.json"
+
+
+def quote_command(command: list[str]) -> str:
+    return " ".join(shlex.quote(part) for part in command)
+
+
+def applescript(script: str) -> str:
+    result = subprocess.run(
+        ["osascript", "-e", script],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return result.stdout.strip()
+
+
+def choose_media_file() -> str:
+    return applescript(
+        'POSIX path of (choose file with prompt "Select media file" '
+        'of type {"mp4", "mkv", "mov", "webm", "m4a", "mp3", "wav", "flac"})'
+    )
+
+
+def choose_folder(prompt: str) -> str:
+    escaped = prompt.replace('"', '\\"')
+    return applescript(f'POSIX path of (choose folder with prompt "{escaped}")')
+
+
+class PipelineState:
     def __init__(self) -> None:
-        super().__init__()
-        self.title("LLTimeline Production")
-        self.geometry("980x760")
-        self.minsize(860, 620)
-
-        self.input_path = StringVar()
-        self.output_dir = StringVar()
-        self.output_path = StringVar()
-        self.media_title = StringVar()
-        self.media_fingerprint = StringVar()
-        self.language = StringVar(value="en")
-        self.model = StringVar(value="large-v3")
-        self.device = StringVar(value="cpu")
-        self.compute_type = StringVar(value="float32")
-        self.batch_size = IntVar(value=16)
-        self.post_aligner = StringVar(value="auto")
-        self.whisperx_bin = StringVar()
-        self.whisperx_command = StringVar()
-        self.vocal_isolation_command = StringVar()
-        self.dry_run = BooleanVar(value=False)
-
+        self.lock = threading.Lock()
+        self.logs: list[str] = []
         self.process: subprocess.Popen[str] | None = None
-        self.events: queue.Queue[tuple[str, str | int | None]] = queue.Queue()
-        self._build_ui()
-        detected_whisperx = default_whisperx_bin()
-        if detected_whisperx.exists():
-            self.whisperx_bin.set(str(detected_whisperx))
-            self.status.set("Detected timeline-production WhisperX venv")
-        else:
-            self.status.set("WhisperX not detected; run setup-venv.sh or fill WhisperX command")
-        self.after(100, self._poll_events)
+        self.running = False
+        self.exit_code: int | None = None
+        self.last_command: list[str] = []
+        detected = default_whisperx_bin()
+        self.detected_whisperx = str(detected) if detected.exists() else ""
 
-    def _build_ui(self) -> None:
-        root = ttk.Frame(self, padding=12)
-        root.pack(fill="both", expand=True)
-        root.columnconfigure(0, weight=1)
-        root.rowconfigure(2, weight=1)
+    def append_log(self, text: str) -> None:
+        with self.lock:
+            self.logs.append(text)
+            if len(self.logs) > 4000:
+                self.logs = self.logs[-4000:]
 
-        form = ttk.LabelFrame(root, text="Pipeline input", padding=10)
-        form.grid(row=0, column=0, sticky="ew")
-        form.columnconfigure(1, weight=1)
+    def snapshot(self) -> dict[str, Any]:
+        with self.lock:
+            return {
+                "running": self.running,
+                "exit_code": self.exit_code,
+                "log": "".join(self.logs),
+                "last_command": quote_command(self.last_command) if self.last_command else "",
+                "detected_whisperx": self.detected_whisperx,
+            }
 
-        self._file_row(form, 0, "Media file", self.input_path, self._browse_input)
-        self._file_row(form, 1, "Output dir", self.output_dir, self._browse_output_dir)
-        self._file_row(form, 2, "LLTimeline output", self.output_path, self._browse_output_file)
-        self._entry_row(form, 3, "Media title", self.media_title)
-        self._entry_row(form, 4, "Media fingerprint", self.media_fingerprint)
-        ttk.Button(form, text="Compute SHA256", command=self._compute_fingerprint).grid(
-            row=4, column=3, sticky="ew", padx=(8, 0)
-        )
+    def start(self, command: list[str]) -> None:
+        with self.lock:
+            if self.running:
+                raise RuntimeError("pipeline is already running")
+            self.logs = ["$ " + quote_command(command) + "\n\n"]
+            self.last_command = command
+            self.exit_code = None
+            self.running = True
+        threading.Thread(target=self._run, args=(command,), daemon=True).start()
 
-        options = ttk.LabelFrame(root, text="Options", padding=10)
-        options.grid(row=1, column=0, sticky="ew", pady=(10, 10))
-        for column in range(6):
-            options.columnconfigure(column, weight=1)
-        self._combo(options, 0, 0, "Post-aligner", self.post_aligner, ("auto", "mfa", "mms-fa", "none"))
-        self._combo(options, 0, 2, "Device", self.device, ("cpu", "cuda", "mps"))
-        self._combo(options, 0, 4, "Compute type", self.compute_type, ("float32", "float16", "int8"))
-        self._entry_row(options, 1, "Language", self.language, column_span=1)
-        self._entry_row(options, 1, "Model", self.model, label_column=2, value_column=3, column_span=1)
-        ttk.Label(options, text="Batch size").grid(row=1, column=4, sticky="w", padx=(8, 6), pady=4)
-        ttk.Spinbox(options, from_=1, to=128, textvariable=self.batch_size, width=8).grid(
-            row=1, column=5, sticky="ew", pady=4
-        )
-        self._entry_row(options, 2, "WhisperX bin", self.whisperx_bin, column_span=5)
-        self._entry_row(options, 3, "WhisperX command", self.whisperx_command, column_span=5)
-        self._entry_row(options, 4, "Vocal isolation command", self.vocal_isolation_command, column_span=5)
-        ttk.Checkbutton(options, text="Dry run only", variable=self.dry_run).grid(
-            row=5, column=0, sticky="w", pady=(6, 0)
-        )
-
-        log_frame = ttk.LabelFrame(root, text="Run log", padding=10)
-        log_frame.grid(row=2, column=0, sticky="nsew")
-        log_frame.rowconfigure(0, weight=1)
-        log_frame.columnconfigure(0, weight=1)
-        self.log = ScrolledText(log_frame, height=20, wrap="word")
-        self.log.grid(row=0, column=0, sticky="nsew")
-
-        actions = ttk.Frame(root)
-        actions.grid(row=3, column=0, sticky="ew", pady=(10, 0))
-        actions.columnconfigure(0, weight=1)
-        self.status = StringVar(value="Ready")
-        ttk.Label(actions, textvariable=self.status).grid(row=0, column=0, sticky="w")
-        self.copy_button = ttk.Button(actions, text="Copy command", command=self._copy_command)
-        self.copy_button.grid(row=0, column=1, padx=(8, 0))
-        ttk.Button(actions, text="Open output folder", command=self._open_output_folder).grid(
-            row=0, column=2, padx=(8, 0)
-        )
-        self.cancel_button = ttk.Button(actions, text="Cancel", command=self._cancel, state="disabled")
-        self.cancel_button.grid(row=0, column=3, padx=(8, 0))
-        self.run_button = ttk.Button(actions, text="Run", command=self._run)
-        self.run_button.grid(row=0, column=4, padx=(8, 0))
-
-    def _file_row(self, parent: ttk.Frame, row: int, label: str, variable: StringVar, command) -> None:
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=(0, 6), pady=4)
-        ttk.Entry(parent, textvariable=variable).grid(row=row, column=1, columnspan=2, sticky="ew", pady=4)
-        ttk.Button(parent, text="Browse", command=command).grid(row=row, column=3, sticky="ew", padx=(8, 0))
-
-    def _entry_row(
-        self,
-        parent: ttk.Frame,
-        row: int,
-        label: str,
-        variable: StringVar,
-        *,
-        label_column: int = 0,
-        value_column: int = 1,
-        column_span: int = 2,
-    ) -> None:
-        ttk.Label(parent, text=label).grid(row=row, column=label_column, sticky="w", padx=(0, 6), pady=4)
-        ttk.Entry(parent, textvariable=variable).grid(
-            row=row, column=value_column, columnspan=column_span, sticky="ew", pady=4
-        )
-
-    def _combo(
-        self,
-        parent: ttk.Frame,
-        row: int,
-        column: int,
-        label: str,
-        variable: StringVar,
-        values: tuple[str, ...],
-    ) -> None:
-        ttk.Label(parent, text=label).grid(row=row, column=column, sticky="w", padx=(0, 6), pady=4)
-        ttk.Combobox(parent, textvariable=variable, values=values, state="readonly").grid(
-            row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=4
-        )
-
-    def _browse_input(self) -> None:
-        path = filedialog.askopenfilename(
-            title="Select media",
-            filetypes=[
-                ("Media", "*.mp4 *.mkv *.mov *.webm *.m4a *.mp3 *.wav *.flac"),
-                ("All files", "*"),
-            ],
-        )
-        if not path:
-            return
-        media = Path(path)
-        self.input_path.set(str(media))
-        if not self.media_title.get().strip():
-            self.media_title.set(media.stem)
-        if not self.output_dir.get().strip():
-            output_dir = default_output_dir(media)
-            self.output_dir.set(str(output_dir))
-            self.output_path.set(str(output_dir / f"{media.stem}.lltimeline.json"))
-
-    def _browse_output_dir(self) -> None:
-        path = filedialog.askdirectory(title="Select output directory")
-        if not path:
-            return
-        self.output_dir.set(path)
-        input_path = Path(self.input_path.get()) if self.input_path.get().strip() else None
-        if input_path and not self.output_path.get().strip():
-            self.output_path.set(str(Path(path) / f"{input_path.stem}.lltimeline.json"))
-
-    def _browse_output_file(self) -> None:
-        current = Path(self.output_path.get()).expanduser() if self.output_path.get().strip() else None
-        initial_dir = current.parent if current and str(current.parent) != "." else None
-        initial_file = current.name if current else "timeline.lltimeline.json"
-        options = {
-            "title": "Save LLTimeline",
-            "defaultextension": ".lltimeline.json",
-            "initialfile": initial_file,
-        }
-        if initial_dir:
-            options["initialdir"] = str(initial_dir)
-        path = filedialog.asksaveasfilename(**options)
-        if path:
-            self.output_path.set(path)
-
-    def _compute_fingerprint(self) -> None:
+    def _run(self, command: list[str]) -> None:
         try:
-            path = self._require_path(self.input_path.get(), "media file")
-        except ValueError as error:
-            messagebox.showerror("Missing input", str(error))
-            return
-        self.status.set("Computing media fingerprint...")
-        self._append_log(f"Computing SHA256 for {path}\n")
-        threading.Thread(target=self._fingerprint_worker, args=(path,), daemon=True).start()
-
-    def _fingerprint_worker(self, path: Path) -> None:
-        try:
-            self.events.put(("fingerprint", file_sha256(path)))
-        except Exception as error:  # pragma: no cover - surfaced in GUI
-            self.events.put(("error", f"Fingerprint failed: {error}"))
-
-    def _run(self) -> None:
-        try:
-            command = self._command()
-        except ValueError as error:
-            messagebox.showerror("Cannot run", str(error))
-            return
-        output_dir = Path(self.output_dir.get()).expanduser()
-        output_dir.mkdir(parents=True, exist_ok=True)
-        self.log.delete("1.0", "end")
-        self._append_log("$ " + " ".join(_quote(part) for part in command) + "\n\n")
-        self.run_button.configure(state="disabled")
-        self.cancel_button.configure(state="normal")
-        self.status.set("Running...")
-        threading.Thread(target=self._run_worker, args=(command,), daemon=True).start()
-
-    def _run_worker(self, command: list[str]) -> None:
-        try:
-            self.process = subprocess.Popen(
+            process = subprocess.Popen(
                 command,
                 cwd=REPO_ROOT,
                 stdout=subprocess.PIPE,
@@ -257,159 +123,340 @@ class TimelineProductionGui(Tk):
                 text=True,
                 bufsize=1,
             )
-            assert self.process.stdout is not None
-            for line in self.process.stdout:
-                self.events.put(("log", line))
-            self.events.put(("done", self.process.wait()))
-        except Exception as error:  # pragma: no cover - surfaced in GUI
-            self.events.put(("error", f"Run failed: {error}"))
+            with self.lock:
+                self.process = process
+            assert process.stdout is not None
+            for line in process.stdout:
+                self.append_log(line)
+            code = process.wait()
+        except Exception as error:  # pragma: no cover - surfaced through browser UI
+            self.append_log(f"Run failed: {error}\n")
+            code = -1
+        finally:
+            with self.lock:
+                self.process = None
+                self.running = False
+                self.exit_code = code
+            self.append_log(f"\nProcess exited with code {code}\n")
 
-    def _cancel(self) -> None:
-        if self.process and self.process.poll() is None:
-            self.process.terminate()
-            self.status.set("Cancelling...")
+    def cancel(self) -> None:
+        with self.lock:
+            process = self.process
+        if process and process.poll() is None:
+            process.terminate()
 
-    def _copy_command(self) -> None:
-        try:
-            command = self._command()
-        except ValueError as error:
-            messagebox.showerror("Cannot build command", str(error))
-            return
-        text = " ".join(_quote(part) for part in command)
-        self.clipboard_clear()
-        self.clipboard_append(text)
-        self.status.set("Command copied")
 
-    def _open_output_folder(self) -> None:
-        path = Path(self.output_dir.get() or ".").expanduser()
-        path.mkdir(parents=True, exist_ok=True)
-        if sys.platform == "darwin":
-            subprocess.Popen(["open", str(path)])
-        elif os.name == "nt":
-            os.startfile(path)  # type: ignore[attr-defined]
+STATE = PipelineState()
+
+
+def build_command(payload: dict[str, Any]) -> list[str]:
+    input_path = Path(require_text(payload, "input_path", "media file")).expanduser()
+    output_dir = Path(require_text(payload, "output_dir", "output directory")).expanduser()
+    output_path = Path(require_text(payload, "output_path", "LLTimeline output")).expanduser()
+    media_title = require_text(payload, "media_title", "media title")
+    fingerprint = str(payload.get("media_fingerprint") or "").strip() or file_sha256(input_path)
+    command = [
+        sys.executable,
+        str(PIPELINE),
+        "produce-whisperx",
+        "--input",
+        str(input_path),
+        "--output-dir",
+        str(output_dir),
+        "--output",
+        str(output_path),
+        "--media-fingerprint",
+        fingerprint,
+        "--media-title",
+        media_title,
+        "--media-path",
+        str(input_path),
+        "--language",
+        str(payload.get("language") or "en").strip() or "en",
+        "--model",
+        str(payload.get("model") or "large-v3").strip() or "large-v3",
+        "--device",
+        str(payload.get("device") or "cpu").strip() or "cpu",
+        "--compute-type",
+        str(payload.get("compute_type") or "float32").strip() or "float32",
+        "--batch-size",
+        str(int(payload.get("batch_size") or 16)),
+        "--post-aligner",
+        str(payload.get("post_aligner") or "auto").strip() or "auto",
+    ]
+    append_optional(command, "--whisperx-bin", payload.get("whisperx_bin"))
+    append_optional(command, "--whisperx-command", payload.get("whisperx_command"))
+    append_optional(command, "--vocal-isolation-command", payload.get("vocal_isolation_command"))
+    if bool(payload.get("dry_run")):
+        command.append("--dry-run")
+    return command
+
+
+def require_text(payload: dict[str, Any], key: str, label: str) -> str:
+    value = str(payload.get(key) or "").strip()
+    if not value:
+        raise ValueError(f"{label} is required")
+    return value
+
+
+def append_optional(command: list[str], flag: str, value: Any) -> None:
+    text = str(value or "").strip()
+    if text:
+        command.extend([flag, text])
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "LLTimelineProductionGUI/1.0"
+
+    def do_GET(self) -> None:
+        path = urlparse(self.path).path
+        if path == "/":
+            self.send_html(INDEX_HTML)
+        elif path == "/state":
+            self.send_json(STATE.snapshot())
         else:
-            subprocess.Popen(["xdg-open", str(path)])
+            self.send_error(404)
 
-    def _command(self) -> list[str]:
-        input_path = self._require_path(self.input_path.get(), "media file")
-        output_dir = self._require_text(self.output_dir.get(), "output directory")
-        output_path = self._require_text(self.output_path.get(), "LLTimeline output")
-        title = self._require_text(self.media_title.get(), "media title")
-        fingerprint = self.media_fingerprint.get().strip() or file_sha256(input_path)
-        if not self.media_fingerprint.get().strip():
-            self.media_fingerprint.set(fingerprint)
-        command = [
-            sys.executable,
-            str(PIPELINE),
-            "produce-whisperx",
-            "--input",
-            str(input_path),
-            "--output-dir",
-            output_dir,
-            "--output",
-            output_path,
-            "--media-fingerprint",
-            fingerprint,
-            "--media-title",
-            title,
-            "--media-path",
-            str(input_path),
-            "--language",
-            self.language.get().strip() or "en",
-            "--model",
-            self.model.get().strip() or "large-v3",
-            "--device",
-            self.device.get().strip() or "cpu",
-            "--compute-type",
-            self.compute_type.get().strip() or "float32",
-            "--batch-size",
-            str(self.batch_size.get()),
-            "--post-aligner",
-            self.post_aligner.get().strip() or "auto",
-        ]
-        self._append_optional(command, "--whisperx-bin", self.whisperx_bin.get())
-        self._append_optional(command, "--whisperx-command", self.whisperx_command.get())
-        self._append_optional(command, "--vocal-isolation-command", self.vocal_isolation_command.get())
-        if self.dry_run.get():
-            command.append("--dry-run")
-        return command
+    def do_POST(self) -> None:
+        path = urlparse(self.path).path
+        try:
+            if path == "/browse":
+                self.send_json(self.handle_browse(self.read_json()))
+            elif path == "/fingerprint":
+                payload = self.read_json()
+                media = Path(require_text(payload, "input_path", "media file")).expanduser()
+                self.send_json({"fingerprint": file_sha256(media)})
+            elif path == "/command":
+                self.send_json({"command": quote_command(build_command(self.read_json()))})
+            elif path == "/run":
+                command = build_command(self.read_json())
+                Path(command[command.index("--output-dir") + 1]).mkdir(parents=True, exist_ok=True)
+                STATE.start(command)
+                self.send_json({"ok": True})
+            elif path == "/cancel":
+                STATE.cancel()
+                self.send_json({"ok": True})
+            else:
+                self.send_error(404)
+        except subprocess.CalledProcessError as error:
+            self.send_json({"error": error.stderr.strip() or str(error)}, status=400)
+        except Exception as error:
+            self.send_json({"error": str(error)}, status=400)
 
-    def _poll_events(self) -> None:
-        while True:
-            try:
-                kind, payload = self.events.get_nowait()
-            except queue.Empty:
-                break
-            if kind == "log":
-                self._append_log(str(payload))
-            elif kind == "fingerprint":
-                self.media_fingerprint.set(str(payload))
-                self.status.set("Fingerprint ready")
-                self._append_log(f"SHA256: {payload}\n")
-            elif kind == "done":
-                code = int(payload)
-                self.process = None
-                self.run_button.configure(state="normal")
-                self.cancel_button.configure(state="disabled")
-                self.status.set("Completed" if code == 0 else f"Failed with exit code {code}")
-                self._append_log(f"\nProcess exited with code {code}\n")
-                self._summarize_last_json()
-            elif kind == "error":
-                self.process = None
-                self.run_button.configure(state="normal")
-                self.cancel_button.configure(state="disabled")
-                self.status.set("Error")
-                self._append_log(str(payload) + "\n")
-        self.after(100, self._poll_events)
+    def handle_browse(self, payload: dict[str, Any]) -> dict[str, Any]:
+        kind = payload.get("kind")
+        if kind == "media":
+            media = Path(choose_media_file())
+            output_dir = default_output_dir(media)
+            return {
+                "path": str(media),
+                "media_title": media.stem,
+                "output_dir": str(output_dir),
+                "output_path": str(default_output_path(media, output_dir)),
+            }
+        if kind == "output_dir":
+            return {"path": choose_folder("Select output directory").rstrip("/")}
+        if kind == "output_path_dir":
+            folder = Path(choose_folder("Select LLTimeline output folder").rstrip("/"))
+            current = Path(str(payload.get("output_path") or "timeline.lltimeline.json"))
+            filename = current.name if current.name else "timeline.lltimeline.json"
+            return {"path": str(folder / filename)}
+        raise ValueError("unknown browse kind")
 
-    def _summarize_last_json(self) -> None:
-        for line in reversed(self.log.get("1.0", "end").splitlines()):
-            line = line.strip()
-            if not line.startswith("{"):
-                continue
-            try:
-                payload = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(payload, dict):
-                output = payload.get("output")
-                ready = payload.get("ready_for_manual_review")
-                if output:
-                    self._append_log(f"LLTimeline output: {output}\n")
-                if ready is not None:
-                    self._append_log(f"Ready for manual review: {ready}\n")
-            return
+    def read_json(self) -> dict[str, Any]:
+        length = int(self.headers.get("content-length") or 0)
+        if length == 0:
+            return {}
+        return json.loads(self.rfile.read(length).decode("utf-8"))
 
-    def _append_log(self, text: str) -> None:
-        self.log.insert("end", text)
-        self.log.see("end")
+    def send_json(self, payload: dict[str, Any], status: int = 200) -> None:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("content-type", "application/json; charset=utf-8")
+        self.send_header("content-length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
-    def _require_path(self, value: str, label: str) -> Path:
-        text = self._require_text(value, label)
-        path = Path(text).expanduser()
-        if not path.exists():
-            raise ValueError(f"{label} does not exist: {path}")
-        return path
+    def send_html(self, body: str) -> None:
+        data = body.encode("utf-8")
+        self.send_response(200)
+        self.send_header("content-type", "text/html; charset=utf-8")
+        self.send_header("content-length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
-    def _require_text(self, value: str, label: str) -> str:
-        text = value.strip()
-        if not text:
-            raise ValueError(f"{label} is required")
-        return text
-
-    def _append_optional(self, command: list[str], flag: str, value: str) -> None:
-        text = value.strip()
-        if text:
-            command.extend([flag, text])
+    def log_message(self, format: str, *args: Any) -> None:
+        return
 
 
-def _quote(value: str) -> str:
-    return shlex.quote(value)
+INDEX_HTML = r"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>LLTimeline Production</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { margin: 0; background: #10151b; color: #e6edf3; }
+    main { max-width: 1120px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 22px; margin: 0 0 16px; }
+    section { border: 1px solid #26313c; border-radius: 8px; padding: 16px; margin-bottom: 14px; background: #151c24; }
+    .grid { display: grid; grid-template-columns: 160px 1fr auto; gap: 10px; align-items: center; }
+    .options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    label { color: #aebccd; font-size: 13px; }
+    input, select { width: 100%; box-sizing: border-box; background: #0d1117; color: #e6edf3; border: 1px solid #344252; border-radius: 6px; padding: 8px; }
+    button { background: #2b7cff; color: white; border: 0; border-radius: 6px; padding: 8px 12px; cursor: pointer; }
+    button.secondary { background: #26313c; }
+    button.danger { background: #a63d40; }
+    button:disabled { opacity: 0.45; cursor: default; }
+    .actions { display: flex; gap: 10px; align-items: center; justify-content: flex-end; }
+    .status { margin-right: auto; color: #aebccd; }
+    pre { min-height: 260px; max-height: 420px; overflow: auto; background: #070a0f; border: 1px solid #26313c; border-radius: 8px; padding: 12px; white-space: pre-wrap; }
+    .hint { color: #8fa1b3; font-size: 13px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>LLTimeline Production</h1>
+  <section>
+    <div class="grid">
+      <label>Media file</label><input id="input_path"><button onclick="browseMedia()">Browse</button>
+      <label>Output dir</label><input id="output_dir"><button onclick="browseOutputDir()">Browse</button>
+      <label>LLTimeline output</label><input id="output_path"><button onclick="browseOutputPathDir()">Choose folder</button>
+      <label>Media title</label><input id="media_title"><span></span>
+      <label>Media fingerprint</label><input id="media_fingerprint"><button onclick="computeFingerprint()">Compute SHA256</button>
+    </div>
+    <div class="hint">The output path is editable. The button chooses the folder and keeps the filename from this field.</div>
+  </section>
+  <section class="options">
+    <label>Post-aligner<select id="post_aligner"><option>auto</option><option>mfa</option><option>mms-fa</option><option>none</option></select></label>
+    <label>Device<select id="device"><option>cpu</option><option>cuda</option><option>mps</option></select></label>
+    <label>Compute type<select id="compute_type"><option>float32</option><option>float16</option><option>int8</option></select></label>
+    <label>Batch size<input id="batch_size" type="number" min="1" max="128" value="16"></label>
+    <label>Language<input id="language" value="en"></label>
+    <label>Model<input id="model" value="large-v3"></label>
+    <label>WhisperX bin<input id="whisperx_bin"></label>
+    <label>Dry run<input id="dry_run" type="checkbox"></label>
+    <label style="grid-column: 1 / span 2;">WhisperX command<input id="whisperx_command"></label>
+    <label style="grid-column: 3 / span 2;">Vocal isolation command<input id="vocal_isolation_command"></label>
+  </section>
+  <section>
+    <div class="actions">
+      <span id="status" class="status">Ready</span>
+      <button class="secondary" onclick="copyCommand()">Copy command</button>
+      <button class="secondary" onclick="previewCommand()">Preview command</button>
+      <button id="cancel" class="danger" onclick="cancelRun()" disabled>Cancel</button>
+      <button id="run" onclick="runPipeline()">Run</button>
+    </div>
+    <pre id="log"></pre>
+  </section>
+</main>
+<script>
+const ids = ["input_path","output_dir","output_path","media_title","media_fingerprint","language","model","device","compute_type","batch_size","post_aligner","whisperx_bin","whisperx_command","vocal_isolation_command","dry_run"];
+const $ = (id) => document.getElementById(id);
+
+function payload() {
+  const value = {};
+  for (const id of ids) {
+    const el = $(id);
+    value[id] = el.type === "checkbox" ? el.checked : el.value;
+  }
+  return value;
+}
+
+async function post(path, body = {}) {
+  const response = await fetch(path, {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body)});
+  const data = await response.json();
+  if (!response.ok || data.error) throw new Error(data.error || response.statusText);
+  return data;
+}
+
+async function browseMedia() {
+  try {
+    const data = await post("/browse", {kind: "media"});
+    $("input_path").value = data.path;
+    if (!$("media_title").value) $("media_title").value = data.media_title;
+    if (!$("output_dir").value) $("output_dir").value = data.output_dir;
+    if (!$("output_path").value) $("output_path").value = data.output_path;
+  } catch (error) { alert(error.message); }
+}
+
+async function browseOutputDir() {
+  try {
+    const data = await post("/browse", {kind: "output_dir"});
+    $("output_dir").value = data.path;
+  } catch (error) { alert(error.message); }
+}
+
+async function browseOutputPathDir() {
+  try {
+    const data = await post("/browse", {kind: "output_path_dir", output_path: $("output_path").value});
+    $("output_path").value = data.path;
+  } catch (error) { alert(error.message); }
+}
+
+async function computeFingerprint() {
+  $("status").textContent = "Computing fingerprint...";
+  try {
+    const data = await post("/fingerprint", payload());
+    $("media_fingerprint").value = data.fingerprint;
+    $("status").textContent = "Fingerprint ready";
+  } catch (error) { $("status").textContent = "Error"; alert(error.message); }
+}
+
+async function previewCommand() {
+  try {
+    const data = await post("/command", payload());
+    $("log").textContent = "$ " + data.command + "\n";
+  } catch (error) { alert(error.message); }
+}
+
+async function copyCommand() {
+  const data = await post("/command", payload());
+  await navigator.clipboard.writeText(data.command);
+  $("status").textContent = "Command copied";
+}
+
+async function runPipeline() {
+  try {
+    await post("/run", payload());
+    $("status").textContent = "Running...";
+  } catch (error) { alert(error.message); }
+}
+
+async function cancelRun() {
+  await post("/cancel", {});
+  $("status").textContent = "Cancelling...";
+}
+
+async function poll() {
+  const response = await fetch("/state");
+  const data = await response.json();
+  $("log").textContent = data.log || "";
+  $("run").disabled = data.running;
+  $("cancel").disabled = !data.running;
+  if (data.running) $("status").textContent = "Running...";
+  else if (data.exit_code !== null) $("status").textContent = data.exit_code === 0 ? "Completed" : "Failed: " + data.exit_code;
+  if (!$("whisperx_bin").value && data.detected_whisperx) $("whisperx_bin").value = data.detected_whisperx;
+  setTimeout(poll, 900);
+}
+poll();
+</script>
+</body>
+</html>
+"""
 
 
 def main() -> int:
-    app = TimelineProductionGui()
-    app.mainloop()
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    host, port = server.server_address
+    url = f"http://{host}:{port}/"
+    print(f"LLTimeline production GUI: {url}")
+    threading.Timer(0.25, lambda: webbrowser.open(url)).start()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        STATE.cancel()
+        return 130
     return 0
 
 
