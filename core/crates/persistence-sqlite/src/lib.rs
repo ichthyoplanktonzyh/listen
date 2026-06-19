@@ -12,7 +12,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use sha2::Digest;
 use thiserror::Error;
 
-pub const MIGRATION_VERSION: u32 = 10;
+pub const MIGRATION_VERSION: u32 = 11;
 mod lexical;
 
 pub struct SqliteRepository {
@@ -124,6 +124,12 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         let tx = connection.unchecked_transaction()?;
         tx.execute_batch(include_str!("../migrations/0010_word_timelines.sql"))?;
         tx.pragma_update(None, "user_version", 10)?;
+        tx.commit()?;
+    }
+    if current < 11 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0011_lltimeline_resources.sql"))?;
+        tx.pragma_update(None, "user_version", 11)?;
         tx.commit()?;
     }
     Ok(())
@@ -1133,6 +1139,51 @@ impl SubtitleRepository for SqliteRepository {
             .map(|id| self.get_track(&id))
             .transpose()
             .map(Option::flatten)
+    }
+
+    fn save_lltimeline_resource(
+        &self,
+        track_id: &SubtitleTrackId,
+        metadata: &LLTimelineMetadata,
+        artifacts: &[LLTimelineArtifact],
+    ) -> Result<(), ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "INSERT INTO lltimeline_resources
+                 (track_id,metadata_json,artifacts_json,updated_at_ms)
+                 VALUES (?1,?2,?3,unixepoch('subsec') * 1000)
+                 ON CONFLICT(track_id) DO UPDATE SET
+                   metadata_json=excluded.metadata_json,
+                   artifacts_json=excluded.artifacts_json,
+                   updated_at_ms=excluded.updated_at_ms",
+                params![track_id.as_str(), json(metadata)?, json(artifacts)?],
+            )
+            .map(|_| ())
+            .map_err(repo)
+    }
+
+    fn get_lltimeline_resource(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<(LLTimelineMetadata, Vec<LLTimelineArtifact>)>, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .query_row(
+                "SELECT metadata_json, artifacts_json FROM lltimeline_resources
+                 WHERE track_id=?1",
+                [track_id.as_str()],
+                |row| {
+                    Ok((
+                        from_json(&row.get::<_, String>(0)?)?,
+                        from_json(&row.get::<_, String>(1)?)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(repo)
     }
 
     fn get_sentence(
@@ -2285,7 +2336,7 @@ pub enum PersistenceError {
     Io(#[from] std::io::Error),
 }
 
-fn json<T: serde::Serialize>(value: &T) -> Result<String, ApplicationError> {
+fn json<T: serde::Serialize + ?Sized>(value: &T) -> Result<String, ApplicationError> {
     serde_json::to_string(value).map_err(|e| ApplicationError::Repository(e.to_string()))
 }
 
@@ -2794,6 +2845,50 @@ mod tests {
     }
 
     #[test]
+    fn lltimeline_resource_metadata_and_artifacts_round_trip() {
+        let repo = SqliteRepository::in_memory().unwrap();
+        MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+        let track = word_timeline_track();
+        repo.save_track(&track).unwrap();
+        let metadata = LLTimelineMetadata {
+            created_at_ms: 42,
+            generator: LLTimelineGenerator {
+                id: "fixture-production-engine".into(),
+                version: "v2".into(),
+                mode: "production_engine".into(),
+            },
+            media: LLTimelineMedia {
+                id: track.media_id.clone(),
+                fingerprint: "media-fingerprint".into(),
+                path: None,
+                title: "Fixture".into(),
+                duration_ms: Some(1200),
+            },
+            language: track.language.clone(),
+            human_reviewed: true,
+            extra: serde_json::json!({"track_source": "fixture.lltimeline.json"}),
+        };
+        let artifacts = vec![LLTimelineArtifact {
+            kind: "production_report".into(),
+            provider_id: Some("fixture-production-engine".into()),
+            provider_version: Some("v2".into()),
+            payload: serde_json::json!({"readiness": "ready"}),
+        }];
+
+        repo.save_lltimeline_resource(&track.id, &metadata, &artifacts)
+            .unwrap();
+
+        let (saved_metadata, saved_artifacts) = repo
+            .get_lltimeline_resource(&track.id)
+            .unwrap()
+            .expect("resource metadata should be saved");
+        assert_eq!(saved_metadata.generator.id, "fixture-production-engine");
+        assert!(saved_metadata.human_reviewed);
+        assert_eq!(saved_artifacts.len(), 1);
+        assert_eq!(saved_artifacts[0].kind, "production_report");
+    }
+
+    #[test]
     fn upgrades_historical_v6_database_and_migrates_words_to_lexical_entries() {
         let connection = Connection::open_in_memory().unwrap();
         connection
@@ -3002,6 +3097,63 @@ mod tests {
         assert_eq!(
             connection
                 .query_row("SELECT count(*) FROM word_timeline_runs", [], |row| {
+                    row.get::<_, u32>(0)
+                })
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            connection
+                .query_row("SELECT count(*) FROM lltimeline_resources", [], |row| {
+                    row.get::<_, u32>(0)
+                })
+                .unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn upgrades_historical_v10_database_and_adds_lltimeline_resources() {
+        let connection = Connection::open_in_memory().unwrap();
+        for migration in [
+            include_str!("../migrations/0001_media.sql"),
+            include_str!("../migrations/0002_learning.sql"),
+        ] {
+            connection.execute_batch(migration).unwrap();
+        }
+        connection
+            .execute_batch("PRAGMA foreign_keys=OFF;")
+            .unwrap();
+        for migration in [
+            include_str!("../migrations/0003_subtitle_identity.sql"),
+            include_str!("../migrations/0004_vocabulary_assets.sql"),
+        ] {
+            connection.execute_batch(migration).unwrap();
+        }
+        connection.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+        for migration in [
+            include_str!("../migrations/0005_learning_experience.sql"),
+            include_str!("../migrations/0006_transcription.sql"),
+            include_str!("../migrations/0007_lexical_entries.sql"),
+            include_str!("../migrations/0008_pronunciation.sql"),
+            include_str!("../migrations/0009_phonetic_analysis.sql"),
+            include_str!("../migrations/0010_word_timelines.sql"),
+        ] {
+            connection.execute_batch(migration).unwrap();
+        }
+        connection.pragma_update(None, "user_version", 10).unwrap();
+
+        migrate(&connection).unwrap();
+
+        assert_eq!(
+            connection
+                .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+                .unwrap(),
+            MIGRATION_VERSION
+        );
+        assert_eq!(
+            connection
+                .query_row("SELECT count(*) FROM lltimeline_resources", [], |row| {
                     row.get::<_, u32>(0)
                 })
                 .unwrap(),

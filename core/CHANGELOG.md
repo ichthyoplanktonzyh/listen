@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-06-19 CST: Completed Phase 2.2 app timeline resource UI alignment. Added
+  LLTimeline resource metadata/artifact persistence (`lltimeline_resources`),
+  import/export artifact round-trip coverage, Flutter LLTimeline client methods,
+  timeline resource controller state, and a Transcript-panel Timeline Resource
+  Summary UI for import, active/candidate WordTimeline visibility, production
+  readiness/artifacts, candidate activation, and a Phase 2.3 manual-review
+  entry placeholder. Verified active WordTimeline playback binding remains on
+  `trackWordTimings()` with legacy fallback.
 - 2026-06-19 16:20:39 CST: Added the Phase 2.2 start handoff document at
   `.planning/handoff/project-handoff-2026-06-19-phase-2.2-start.md`, summarizing
   the completed Phase 2.1 hardening work, verified commands, remaining

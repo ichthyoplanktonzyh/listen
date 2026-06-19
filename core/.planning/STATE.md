@@ -62,13 +62,19 @@
 - persistence/application 巨型文件拆分、monotonicity 消融转为独立后续架构债，
   不阻塞 Phase 2.2。
 
-### Phase 2.2: App Timeline Resource UI Alignment ⏳ 待启动
+### Phase 2.2: App Timeline Resource UI Alignment ✅ 已完成
 - 目标：让 app 端能导入、展示、选择、激活和消费 `.lltimeline.json` 里的
   WordTimeline 资源。
 - 当前生产端资源策略：
   `WhisperX -> optional post-aligner auto|mfa|mms-fa|none -> LLTimeline JSON`。
 - `auto` / `mfa` 按 MFA -> MMS_FA -> WhisperX 原始时间轴降级。
-- 下一步先做资源可见性和 active timeline 切换，再进入人工校正与 chunk 生成。
+- app 端已新增 Timeline Resource Summary，可导入 `.lltimeline.json`、展示
+  active/candidate WordTimeline、生产 artifacts 和 readiness，并激活候选 timeline。
+- LLTimeline metadata/artifacts 已持久化，导入后 export 可保留 production report /
+  post-alignment artifacts。
+- 播放器词级高亮继续通过 `trackWordTimings()`，后端优先返回 active WordTimeline，
+  无资源时回落 legacy word timings。
+- 人工复核入口占位已就绪，完整编辑器进入 Phase 2.3。
 
 ### Phase 2.3: 人工校对 UI ⏳ 后续
 ### Phase 2.4: ChunkTimeline 生成与消费 ⏳ 后续
@@ -94,11 +100,10 @@
 
 ## 下一步工作
 
-1. 启动 Phase 2.2：审计 app 端 `.lltimeline.json` import/export、WordTimeline summary、activate
-   和播放器高亮绑定。
-2. 设计并实现 Timeline Resource Summary UI。
-3. 支持 WordTimeline 候选列表和 active timeline 切换。
-4. 验证播放器词级高亮使用 active WordTimeline，且无资源时旧路径正常降级。
+1. 启动 Phase 2.3：实现人工校对/校正编辑器。
+2. 将人工调整保存为 `user_adjusted` WordTimeline，并支持导出为新的
+   `.lltimeline.json` resource revision。
+3. 之后进入 Phase 2.4：ChunkTimeline 生成、选择、激活和播放消费 UI。
 
 ## 指标
 

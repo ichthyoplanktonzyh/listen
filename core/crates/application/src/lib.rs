@@ -151,6 +151,16 @@ pub trait SubtitleRepository: Send + Sync {
     -> Result<WordTimeline, ApplicationError>;
     fn archive_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError>;
     fn delete_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError>;
+    fn save_lltimeline_resource(
+        &self,
+        track_id: &SubtitleTrackId,
+        metadata: &LLTimelineMetadata,
+        artifacts: &[LLTimelineArtifact],
+    ) -> Result<(), ApplicationError>;
+    fn get_lltimeline_resource(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<(LLTimelineMetadata, Vec<LLTimelineArtifact>)>, ApplicationError>;
 }
 
 pub trait WordProfileRepository: Send + Sync {
@@ -1163,33 +1173,57 @@ impl AppServices {
             .iter()
             .find(|timeline| timeline.status == TimelineStatus::Active)
             .map(|timeline| timeline.id.clone());
-        Ok(LLTimelineDocument {
-            schema: LLTIMELINE_SCHEMA_V1.to_owned(),
-            metadata: LLTimelineMetadata {
-                created_at_ms: now_ms(),
-                generator: LLTimelineGenerator {
-                    id: "llplayernext".into(),
-                    version: env!("CARGO_PKG_VERSION").into(),
-                    mode: "production_engine".into(),
-                },
-                media: LLTimelineMedia {
-                    id: media.id,
-                    fingerprint: media.fingerprint,
-                    path: Some(media.path),
-                    title: media.title,
-                    duration_ms: media.duration.map(TimeMs::get),
-                },
-                language: track.language.clone(),
-                human_reviewed: word_timelines.iter().any(|timeline| {
+        let persisted_resource = self.subtitles.get_lltimeline_resource(track_id)?;
+        let (metadata, artifacts) = if let Some((mut metadata, artifacts)) = persisted_resource {
+            metadata.media = LLTimelineMedia {
+                id: media.id,
+                fingerprint: media.fingerprint,
+                path: Some(media.path),
+                title: media.title,
+                duration_ms: media.duration.map(TimeMs::get),
+            };
+            metadata.language = track.language.clone();
+            metadata.human_reviewed = metadata.human_reviewed
+                || word_timelines.iter().any(|timeline| {
                     timeline.status == TimelineStatus::Active
                         && timeline.created_by == TimelineCreator::User
-                }),
-                extra: serde_json::json!({
-                    "track_id": track.id.as_str(),
-                    "track_fingerprint": track.fingerprint.as_str(),
-                    "track_source": track.source.as_str(),
-                }),
-            },
+                });
+            metadata.extra = merge_lltimeline_track_extra(
+                metadata.extra,
+                &track.id,
+                &track.fingerprint,
+                &track.source,
+            );
+            (metadata, artifacts)
+        } else {
+            (
+                LLTimelineMetadata {
+                    created_at_ms: now_ms(),
+                    generator: LLTimelineGenerator {
+                        id: "llplayernext".into(),
+                        version: env!("CARGO_PKG_VERSION").into(),
+                        mode: "production_engine".into(),
+                    },
+                    media: LLTimelineMedia {
+                        id: media.id,
+                        fingerprint: media.fingerprint,
+                        path: Some(media.path),
+                        title: media.title,
+                        duration_ms: media.duration.map(TimeMs::get),
+                    },
+                    language: track.language.clone(),
+                    human_reviewed: word_timelines.iter().any(|timeline| {
+                        timeline.status == TimelineStatus::Active
+                            && timeline.created_by == TimelineCreator::User
+                    }),
+                    extra: lltimeline_track_extra(&track.id, &track.fingerprint, &track.source),
+                },
+                Vec::new(),
+            )
+        };
+        Ok(LLTimelineDocument {
+            schema: LLTIMELINE_SCHEMA_V1.to_owned(),
+            metadata,
             segments: lltimeline_segments_from_track(&track),
             word_timelines,
             active_word_timeline_id,
@@ -1197,7 +1231,7 @@ impl AppServices {
             active_phone_timeline_id: None,
             chunk_timelines: Vec::new(),
             active_chunk_timeline_id: None,
-            artifacts: Vec::new(),
+            artifacts,
         })
     }
 
@@ -1245,6 +1279,11 @@ impl AppServices {
             sentences: lltimeline_segments_to_sentences(&document.segments)?,
         };
         self.subtitles.save_track(&track)?;
+        self.subtitles.save_lltimeline_resource(
+            &track.id,
+            &document.metadata,
+            &document.artifacts,
+        )?;
 
         for mut timeline in document.word_timelines {
             if timeline.media_id != track.media_id || timeline.track_id != track.id {
@@ -2255,6 +2294,34 @@ fn lltimeline_segments_from_track(track: &SubtitleTrack) -> Vec<LLTimelineSegmen
                 .collect(),
         })
         .collect()
+}
+
+fn lltimeline_track_extra(
+    track_id: &SubtitleTrackId,
+    track_fingerprint: &str,
+    track_source: &str,
+) -> serde_json::Value {
+    serde_json::json!({
+        "track_id": track_id.as_str(),
+        "track_fingerprint": track_fingerprint,
+        "track_source": track_source,
+    })
+}
+
+fn merge_lltimeline_track_extra(
+    extra: serde_json::Value,
+    track_id: &SubtitleTrackId,
+    track_fingerprint: &str,
+    track_source: &str,
+) -> serde_json::Value {
+    let mut merged = extra.as_object().cloned().unwrap_or_default();
+    merged.insert("track_id".into(), serde_json::json!(track_id.as_str()));
+    merged.insert(
+        "track_fingerprint".into(),
+        serde_json::json!(track_fingerprint),
+    );
+    merged.insert("track_source".into(), serde_json::json!(track_source));
+    serde_json::Value::Object(merged)
 }
 
 fn lltimeline_track_id(document: &LLTimelineDocument) -> Result<SubtitleTrackId, ApplicationError> {

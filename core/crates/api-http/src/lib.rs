@@ -2016,7 +2016,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let document: serde_json::Value =
+        let mut document: serde_json::Value =
             serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
                 .unwrap();
         assert_eq!(document["schema"], domain::LLTIMELINE_SCHEMA_V1);
@@ -2029,6 +2029,22 @@ mod tests {
         assert_eq!(document["active_word_timeline_id"], timeline["id"]);
         assert_eq!(document["phone_timelines"].as_array().unwrap().len(), 0);
         assert_eq!(document["chunk_timelines"].as_array().unwrap().len(), 0);
+        document["metadata"]["generator"] = serde_json::json!({
+            "id": "fixture-production-engine",
+            "version": "v2",
+            "mode": "production_engine"
+        });
+        document["artifacts"] = serde_json::json!([
+            {
+                "kind": "production_report",
+                "provider_id": "fixture-production-engine",
+                "provider_version": "v2",
+                "payload": {
+                    "readiness": "ready",
+                    "post_alignment": "mfa"
+                }
+            }
+        ]);
 
         let response = app
             .clone()
@@ -2068,6 +2084,32 @@ mod tests {
         assert_eq!(summaries.as_array().unwrap().len(), 1);
         assert_eq!(summaries[0]["status"], "active");
         assert_eq!(summaries[0]["lifecycle_stage"], "algorithm_candidate");
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get(format!(
+                    "/v1/subtitles/{}/lltimeline/export",
+                    track["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let exported_after_import: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(
+            exported_after_import["metadata"]["generator"]["id"],
+            "fixture-production-engine"
+        );
+        assert_eq!(
+            exported_after_import["artifacts"][0]["kind"],
+            "production_report"
+        );
 
         let response = app
             .clone()
