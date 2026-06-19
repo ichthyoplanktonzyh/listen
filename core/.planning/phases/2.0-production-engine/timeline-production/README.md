@@ -1,6 +1,6 @@
 # Timeline Production System
 
-更新时间：2026-06-18 19:47:03 CST
+更新时间：2026-06-19 15:51:14 CST
 
 本目录收纳“本地重装生产引擎 + 轻量消费端时间轴资源读取”路线下的长期文档。
 后续所有与精准词/音素时间轴、生产端数据管线、评估体系、人工校正和
@@ -36,13 +36,22 @@ LLPlayerNext 后续围绕两个协同身份推进：
 
 ## Current Focus
 
-Phase 1、Phase 2 和 Phase 3 已完成。当前阶段转入客观评估体系：
+Phase 1、Phase 2 和 Phase 3 的基础能力已完成。客观评估体系已经证明 MFA
+`english_us_arpa + align-one` 是当前高质量 transcript 条件下最强的已观测词边界
+对齐器；继续扩大实验暂时暂停。本目录进入长期研究和生产脚本维护状态。下一阶段
+将启动 app 端时间轴资源 UI 对齐，规划见：
 
-1. 比较不同 WordTimeline 候选的边界偏移、覆盖率、overlap/gap 和尾词 lag。
-2. 优先接入 TIMIT/Buckeye 等已有高质量 benchmark，CNN10/NBC 自建 gold set 后置。
-3. 将 `production-report.json` 与后续 evaluation artifact 关联起来。
+- [`Phase 2.2 Context`](../2.2-app-timeline-resource-ui/2.2-CONTEXT.md)
+- [`Phase 2.2 Plan`](../2.2-app-timeline-resource-ui/2.2-PLAN.md)
 
-Phase 3 已收尾：已落地外部 WhisperX JSON 到 `.lltimeline.json` 的转换桥、
-ffmpeg 音频准备入口、预处理 artifact、可插拔外部人声分离命令、
-`run-whisperx`/`produce-whisperx` 重模型调用和一键编排入口，以及面向人工复核
-入口的 `production-report.json`。
+当前 production pipeline 的阶段性收口形态：
+
+1. `produce-whisperx` 继续作为一键入口，负责媒体准备、WhisperX 转录和
+   `.lltimeline.json` 输出。
+2. `--post-aligner auto|mfa|mms-fa|none` 将对齐阶段做成可插拔策略；
+   `auto` 和 `mfa` 默认按 MFA -> MMS_FA -> WhisperX 原始时间轴降级。
+3. `apply-mfa-alignment` / `apply-mms-fa-alignment` 支持对已有
+   `.lltimeline.json` 和音频单独追加对齐时间轴。
+4. `production-report.json` 继续作为进入人工复核前的质量入口。
+5. 下一步开始和 app 端 UI 对齐：资源导入、WordTimeline 选择/激活、人工校正入口、
+   chunk timeline 生成与消费端高亮/播放体验。

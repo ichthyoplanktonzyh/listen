@@ -1,6 +1,6 @@
 # LLPlayerNext — 代码库问题清单
 
-> 最后更新：2026-06-18
+> 最后更新：2026-06-19
 > 记录已知的技术债、脆弱区域和需要关注的问题。**每条必须包含文件路径。**
 
 ---
@@ -13,6 +13,14 @@
 - **问题**：HTTP handler 直接调用 `speech_analysis::asr_timing`、`forced_align`、`pause_refinement` 等模块，跳过了 `application` 编排层
 - **影响**：修改语音分析模块可能直接破坏 HTTP API；无法在 `application` 层统一缓存/错误处理/日志
 - **修复思路**：所有语音分析调用通过 `AppServices` trait 方法间接访问；在 `application` 层增加编排逻辑
+- **当前状态**：M2.1 已处理 `crates/api-http/src/transcription.rs` 的
+  `asr_timing` / `forced_align` / `pause_refinement` 编排耦合，转录 word timeline
+  精炼已下沉到 `AppServices::refine_transcription_word_timelines`；也已处理
+  `crates/api-http/src/phonetic_analysis.rs` 的 research fixture phone alignment /
+  finding 生成耦合，改由 `AppServices::build_research_fixture_phonetic_analysis` 构造。
+  `crates/api-http/src/lib.rs` 的 chunk partition 返回类型和 learned prosodic provider
+  装配也已改为通过 application 暴露的类型/方法访问；`crates/api-http/src` 不再直接
+  引用 `speech_analysis`。
 
 ### `speech-analysis` 职责过重
 
@@ -27,6 +35,8 @@
 - **问题**：三个核心 crate 的所有逻辑堆在单个 lib.rs 中
 - **影响**：代码导航困难；合并冲突概率高；难以独立测试子模块
 - **修复思路**：按表/用例/路由组拆分为独立模块文件，`lib.rs` 只做 re-export
+- **当前状态**：M2.1 scope cut 后转为独立重构阶段；避免在 app UI 对齐前进行
+  大规模机械拆分。
 
 ### Flutter sidecar 路径查找脆弱
 

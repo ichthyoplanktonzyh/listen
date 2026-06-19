@@ -219,3 +219,45 @@
 - Updated the Phase 4 conclusion: MFA is now the best observed word-boundary
   aligner under a high-quality transcript/utterance-anchor condition; the next
   realistic production test is WhisperX transcript + MFA.
+
+## 2026-06-19 15:41:28 CST
+
+- Paused further benchmark expansion and recorded the deferred aligner research
+  directions in `research/deferred-aligner-directions.md`: Qwen3-ForcedAligner,
+  BFA/easytranscriber/CTC, and MMS_FA remain later candidates, while the current
+  production mainline is WhisperX transcript generation plus MFA `align-one`
+  post-alignment.
+- Extended `scripts/timeline-production/production_pipeline.py` with MFA
+  post-alignment orchestration:
+  `produce-whisperx --post-aligner mfa` now plans/runs the existing MFA sidecar
+  after WhisperX conversion, appends an MFA WordTimeline, and preserves the
+  WhisperX timeline as a candidate fallback.
+- Added `apply-mfa-alignment` so an existing `.lltimeline.json` and its prepared
+  audio can receive an MFA WordTimeline without rerunning WhisperX.
+- Updated production dry-run contract validation to cover both the one-command
+  MFA post-aligner plan and the standalone MFA application command.
+
+## 2026-06-19 15:51:14 CST
+
+- Generalized the production post-alignment stage into a selectable degradation
+  strategy: `produce-whisperx --post-aligner auto|mfa|mms-fa|none`.
+- `auto` and `mfa` now plan/run MFA first, then MMS_FA, and finally preserve the
+  original WhisperX WordTimeline if every post-aligner fails. Each failed
+  aligner attempt records a `post_alignment_failure` artifact in the
+  `.lltimeline.json` resource.
+- Added `apply-mms-fa-alignment` for appending a torchaudio MMS_FA WordTimeline
+  to an existing `.lltimeline.json`, matching the existing MFA standalone path.
+- Updated `doctor` and contract dry-runs so the local production environment
+  exposes both the MFA runtime and MMS_FA research venv path.
+
+## 2026-06-19 15:55:21 CST
+
+- Marked the timeline-production and aligner-evaluation work as temporarily
+  closed for the current push. It remains a long-running research and production
+  maintenance area rather than the active implementation phase.
+- Prepared Phase 2.2 under `.planning/phases/2.2-app-timeline-resource-ui/` to
+  align the app UI with reusable LLTimeline resources: import visibility,
+  WordTimeline candidate summaries, active timeline selection, playback binding,
+  and a later manual-review entry point.
+- Updated project state so Phase 2.2 is ready to start after Phase 2.1 closes,
+  without continuing benchmark expansion first.

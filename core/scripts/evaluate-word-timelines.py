@@ -232,12 +232,14 @@ def offset_metrics(pairs: list[tuple[dict[str, Any], dict[str, Any]]]) -> dict[s
         (candidate["end_ms"] - candidate["start_ms"]) - (base["end_ms"] - base["start_ms"])
         for base, candidate in pairs
     ]
+    start_stats = stats(start_offsets)
+    end_stats = stats(end_offsets)
     return {
-        "start_offset_ms": stats(start_offsets),
-        "end_offset_ms": stats(end_offsets),
+        "start_offset_ms": start_stats,
+        "end_offset_ms": end_stats,
         "duration_delta_ms": stats(duration_deltas),
-        "lead_lag_bias_start_ms": stats(start_offsets)["mean"],
-        "lead_lag_bias_end_ms": stats(end_offsets)["mean"],
+        "lead_lag_bias_start_ms": start_stats["mean"],
+        "lead_lag_bias_end_ms": end_stats["mean"],
         "tail_lag_ms": tail_lag_metrics(pairs),
     }
 
@@ -301,6 +303,8 @@ def gold_metrics(
     )
     start_errors = [candidate["start_ms"] - gold["start_ms"] for gold, candidate in pairs]
     end_errors = [candidate["end_ms"] - gold["end_ms"] for gold, candidate in pairs]
+    start_stats = stats(start_errors)
+    end_stats = stats(end_errors)
 
     def accuracy(errors: list[int], threshold: int) -> float:
         return round_float(sum(abs(value) <= threshold for value in errors) / len(errors)) if errors else 0.0
@@ -309,12 +313,12 @@ def gold_metrics(
         "gold_word_count": len(gold_words),
         "matched_word_count": len(pairs),
         "coverage": round_float(len(pairs) / len(gold_words)) if gold_words else 0.0,
-        "start_mae_ms": stats(start_errors)["mean_abs"],
-        "start_median_abs_error_ms": stats(start_errors)["median_abs"],
-        "end_mae_ms": stats(end_errors)["mean_abs"],
-        "end_median_abs_error_ms": stats(end_errors)["median_abs"],
-        "lead_bias_start_ms": stats(start_errors)["mean"],
-        "lead_bias_end_ms": stats(end_errors)["mean"],
+        "start_mae_ms": start_stats["mean_abs"],
+        "start_median_abs_error_ms": start_stats["median_abs"],
+        "end_mae_ms": end_stats["mean_abs"],
+        "end_median_abs_error_ms": end_stats["median_abs"],
+        "lead_bias_start_ms": start_stats["mean"],
+        "lead_bias_end_ms": end_stats["mean"],
         "onset_accuracy": {f"within_{threshold}_ms": accuracy(start_errors, threshold) for threshold in THRESHOLDS_MS},
         "offset_accuracy": {f"within_{threshold}_ms": accuracy(end_errors, threshold) for threshold in THRESHOLDS_MS},
     }

@@ -25,10 +25,11 @@ SCRIPT_ROOT = Path(__file__).resolve().parents[1]
 if str(SCRIPT_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_ROOT))
 
-from lltimeline_common import tokenize, word_token_indexes
+from lltimeline_common import tokenize, word_key, word_token_indexes
 
 
 SCHEMA = "llplayer.timeline.v1"
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def now_ms() -> int:
@@ -68,6 +69,40 @@ def active_word_timeline(document: dict[str, Any]) -> dict[str, Any] | None:
         if isinstance(timeline, dict) and timeline.get("status") == "active":
             return timeline
     return timelines[0] if timelines and isinstance(timelines[0], dict) else None
+
+
+def default_mfa_bin() -> str:
+    research_root = Path(
+        os.environ.get(
+            "LLPLAYERNEXT_MFA_DIR",
+            str(Path.home() / "Library/Caches/LLPlayerNext/research/mfa"),
+        )
+    )
+    candidate = research_root / "env" / "bin" / "mfa"
+    return str(candidate) if candidate.exists() else "mfa"
+
+
+def default_mfa_root_dir() -> str:
+    if "LLPLAYERNEXT_MFA_ROOT_DIR" in os.environ:
+        return os.environ["LLPLAYERNEXT_MFA_ROOT_DIR"]
+    research_root = Path(
+        os.environ.get(
+            "LLPLAYERNEXT_MFA_DIR",
+            str(Path.home() / "Library/Caches/LLPlayerNext/research/mfa"),
+        )
+    )
+    return str(research_root / "root")
+
+
+def default_mms_fa_python() -> str:
+    research_root = Path(
+        os.environ.get(
+            "LLPLAYERNEXT_FA_DIR",
+            str(Path.home() / "Library/Caches/LLPlayerNext/research/forced-align"),
+        )
+    )
+    candidate = research_root / "venv" / "bin" / "python"
+    return str(candidate) if candidate.exists() else sys.executable
 
 
 def word_timing_quality(words: list[dict[str, Any]]) -> dict[str, Any]:
@@ -148,6 +183,207 @@ def write_production_report(input_path: Path, output_path: Path) -> dict[str, An
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return report
+
+
+def build_mfa_alignment_request(
+    document: dict[str, Any],
+    audio_path: Path,
+    output_path: Path,
+) -> dict[str, Any]:
+    segments = []
+    for segment in document.get("segments") or []:
+        if not isinstance(segment, dict):
+            continue
+        words = [
+            str(token.get("text") or "").strip()
+            for token in segment.get("tokens", [])
+            if isinstance(token, dict) and token.get("kind") == "word" and str(token.get("text") or "").strip()
+        ]
+        if not words:
+            continue
+        segments.append(
+            {
+                "index": int(segment["index"]),
+                "text": str(segment.get("text") or "").strip(),
+                "words": words,
+                "start_ms": int(segment["start_ms"]),
+                "end_ms": int(segment["end_ms"]),
+            }
+        )
+    if not segments:
+        raise SystemExit("no word-bearing LLTimeline segments available for MFA")
+    request = {
+        "audio_path": str(audio_path),
+        "segments": segments,
+    }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(request, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return request
+
+
+def segment_word_keys(document: dict[str, Any]) -> dict[tuple[int, int], tuple[str, int, str]]:
+    keys: dict[tuple[int, int], tuple[str, int, str]] = {}
+    for segment in document.get("segments") or []:
+        if not isinstance(segment, dict):
+            continue
+        token_indexes = word_token_indexes(segment.get("tokens", []))
+        for word_index, token_index in enumerate(token_indexes):
+            token = next(
+                (
+                    item
+                    for item in segment.get("tokens", [])
+                    if isinstance(item, dict) and int(item.get("index", -1)) == int(token_index)
+                ),
+                None,
+            )
+            text = str(token.get("text") if isinstance(token, dict) else "").strip()
+            keys[(int(segment["index"]), word_index)] = (str(segment["id"]), int(token_index), text)
+    return keys
+
+
+def timeline_word_map(timeline: dict[str, Any]) -> dict[tuple[str, int], dict[str, Any]]:
+    return {
+        word_key(word): dict(word)
+        for word in timeline.get("words", [])
+        if isinstance(word, dict) and "sentence_id" in word and "token_index" in word
+    }
+
+
+def sorted_timeline_words(document: dict[str, Any], words: dict[tuple[str, int], dict[str, Any]]) -> list[dict[str, Any]]:
+    ordered: list[dict[str, Any]] = []
+    for segment in sorted(document.get("segments") or [], key=lambda item: int(item.get("index", 0))):
+        for token_index in word_token_indexes(segment.get("tokens", [])):
+            word = words.get((str(segment["id"]), int(token_index)))
+            if word:
+                ordered.append(word)
+    return ordered
+
+
+def add_aligned_word_timeline(
+    document: dict[str, Any],
+    aligned: dict[str, Any],
+    *,
+    algorithm_id: str,
+    algorithm_version: str,
+    config_hash: str,
+    status: str,
+) -> dict[str, Any]:
+    parent = active_word_timeline(document)
+    if not parent:
+        raise SystemExit("cannot add aligned timeline without an active source word timeline")
+
+    created_at = now_ms()
+    media = document.get("metadata", {}).get("media", {})
+    media_id = str(parent.get("media_id") or media.get("id") or stable_id("media", "unknown"))
+    track_id = str(parent.get("track_id") or document.get("metadata", {}).get("extra", {}).get("track_id") or media_id)
+    timeline_id = stable_id(
+        "word-timeline",
+        f"{track_id}:{algorithm_id}:{algorithm_version}:{config_hash}:{parent.get('id')}",
+    )
+
+    segment_keys = segment_word_keys(document)
+    merged_words = timeline_word_map(parent)
+    replaced = 0
+    skipped = []
+
+    for row in aligned.get("timings", []):
+        if not isinstance(row, dict):
+            continue
+        segment_index = int(row.get("segment_index", -1))
+        word_index = int(row.get("word_index", -1))
+        key = segment_keys.get((segment_index, word_index))
+        if not key:
+            skipped.append({"segment_index": segment_index, "word_index": word_index, "reason": "word_key_missing"})
+            continue
+        sentence_id, token_index, token_text = key
+        if row.get("skipped"):
+            skipped.append({"segment_index": segment_index, "word_index": word_index, "reason": "aligner_skipped"})
+            continue
+        start_ms = row.get("start_ms")
+        end_ms = row.get("end_ms")
+        if not isinstance(start_ms, int) or not isinstance(end_ms, int) or end_ms <= start_ms:
+            skipped.append({"segment_index": segment_index, "word_index": word_index, "reason": "invalid_timing"})
+            continue
+        merged_words[(sentence_id, token_index)] = {
+            "sentence_id": sentence_id,
+            "token_index": token_index,
+            "text": str(row.get("text") or token_text),
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+            "confidence": row.get("score"),
+            "timing_source": "forced_aligned",
+            "provider_id": aligned.get("provider_id", algorithm_id),
+            "provider_version": aligned.get("provider_version", algorithm_version),
+        }
+        replaced += 1
+
+    words = sorted_timeline_words(document, merged_words)
+    timeline = {
+        "id": timeline_id,
+        "track_id": track_id,
+        "media_id": media_id,
+        "algorithm_id": algorithm_id,
+        "algorithm_version": algorithm_version,
+        "config_hash": config_hash,
+        "parent_timeline_id": parent.get("id"),
+        "created_by": "algorithm",
+        "status": status,
+        "metrics_json": {
+            "source": "post_alignment",
+            "provider_id": aligned.get("provider_id", algorithm_id),
+            "provider_version": aligned.get("provider_version", algorithm_version),
+            "source_timeline_id": parent.get("id"),
+            "input_word_count": len(parent.get("words", [])),
+            "aligned_timing_count": len(aligned.get("timings", [])),
+            "replaced_word_count": replaced,
+            "fallback_word_count": max(0, len(words) - replaced),
+            "skipped": skipped,
+            "diagnostics": aligned.get("diagnostics", {}),
+        },
+        "words": words,
+        "created_at_ms": created_at,
+        "updated_at_ms": created_at,
+    }
+    document.setdefault("word_timelines", []).append(timeline)
+    if status == "active":
+        if parent.get("status") == "active":
+            parent["status"] = "candidate"
+        document["active_word_timeline_id"] = timeline_id
+    document.setdefault("artifacts", []).append(
+        {
+            "kind": "post_alignment",
+            "provider_id": algorithm_id,
+            "provider_version": algorithm_version,
+            "payload": {
+                "timeline_id": timeline_id,
+                "source_timeline_id": parent.get("id"),
+                "replaced_word_count": replaced,
+                "fallback_word_count": max(0, len(words) - replaced),
+            },
+        }
+    )
+    return timeline
+
+
+def record_post_alignment_failure(
+    document_path: Path,
+    *,
+    aligner: str,
+    error: str,
+) -> None:
+    document = load_json(document_path)
+    document.setdefault("artifacts", []).append(
+        {
+            "kind": "post_alignment_failure",
+            "provider_id": aligner,
+            "provider_version": "fallback-chain-v1",
+            "payload": {
+                "error": error,
+                "recorded_at_ms": now_ms(),
+            },
+        }
+    )
+    document_path.write_text(json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def report_lltimeline(args: argparse.Namespace) -> int:
@@ -521,6 +757,223 @@ def run_whisperx_report(args: argparse.Namespace) -> dict[str, Any]:
     return report
 
 
+def run_mfa_post_alignment(args: argparse.Namespace, document_path: Path, audio_path: Path, output_dir: Path) -> dict[str, Any]:
+    request_path = output_dir / "mfa-alignment-request.json"
+    aligned_path = output_dir / "mfa-aligned.json"
+    work_dir = output_dir / "mfa-work"
+    mfa_script = Path(args.mfa_align_cli or REPO_ROOT / "scripts" / "forced-align" / "mfa-align-cli.py")
+    command = [
+        sys.executable,
+        str(mfa_script),
+        "--input",
+        str(request_path),
+        "--work-dir",
+        str(work_dir),
+        "--output",
+        str(aligned_path),
+        "--mfa-bin",
+        args.mfa_bin or default_mfa_bin(),
+        "--mfa-root-dir",
+        args.mfa_root_dir or default_mfa_root_dir(),
+        "--dictionary",
+        args.mfa_dictionary,
+        "--acoustic-model",
+        args.mfa_acoustic_model,
+        "--strategy",
+        args.mfa_strategy,
+        "--jobs",
+        str(args.mfa_jobs),
+    ]
+    if args.mfa_quiet:
+        command.append("--quiet")
+    if args.dry_run:
+        return {
+            "aligner": "mfa",
+            "dry_run": True,
+            "command": " ".join(shlex.quote(part) for part in command),
+            "request_path": str(request_path),
+            "aligned_path": str(aligned_path),
+            "work_dir": str(work_dir),
+        }
+    document = load_json(document_path)
+    build_mfa_alignment_request(document, audio_path, request_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    subprocess.run(command, check=True)
+    aligned = load_json(aligned_path)
+    timeline = add_aligned_word_timeline(
+        document,
+        aligned,
+        algorithm_id=args.post_algorithm_id,
+        algorithm_version=args.post_algorithm_version,
+        config_hash=args.post_config_hash,
+        status=args.post_status,
+    )
+    document_path.write_text(json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return {
+        "aligner": "mfa",
+        "request_path": str(request_path),
+        "aligned_path": str(aligned_path),
+        "timeline_id": timeline["id"],
+        "word_count": len(timeline["words"]),
+        "replaced_word_count": timeline["metrics_json"]["replaced_word_count"],
+        "fallback_word_count": timeline["metrics_json"]["fallback_word_count"],
+    }
+
+
+def run_mms_fa_post_alignment(args: argparse.Namespace, document_path: Path, audio_path: Path, output_dir: Path) -> dict[str, Any]:
+    request_path = output_dir / "mms-fa-alignment-request.json"
+    aligned_path = output_dir / "mms-fa-aligned.json"
+    align_script = Path(args.mms_fa_align_cli or REPO_ROOT / "scripts" / "forced-align" / "align-cli.py")
+    command = [
+        args.mms_fa_python or default_mms_fa_python(),
+        str(align_script),
+    ]
+    if args.dry_run:
+        return {
+            "aligner": "mms-fa",
+            "dry_run": True,
+            "command": " ".join(shlex.quote(part) for part in command),
+            "request_path": str(request_path),
+            "aligned_path": str(aligned_path),
+        }
+    document = load_json(document_path)
+    request = build_mfa_alignment_request(document, audio_path, request_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    completed = subprocess.run(
+        command,
+        input=json.dumps(request),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    aligned = json.loads(completed.stdout)
+    aligned["provider_id"] = "torchaudio-ctc-forced-aligner"
+    aligned["provider_version"] = "mms-fa-v1"
+    aligned_path.write_text(json.dumps(aligned, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    timeline = add_aligned_word_timeline(
+        document,
+        aligned,
+        algorithm_id="whisperx-transcript-mms-fa",
+        algorithm_version="large-v3-mms-fa-v1",
+        config_hash=args.post_config_hash,
+        status=args.post_status,
+    )
+    document_path.write_text(json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return {
+        "aligner": "mms-fa",
+        "request_path": str(request_path),
+        "aligned_path": str(aligned_path),
+        "timeline_id": timeline["id"],
+        "word_count": len(timeline["words"]),
+        "replaced_word_count": timeline["metrics_json"]["replaced_word_count"],
+        "fallback_word_count": timeline["metrics_json"]["fallback_word_count"],
+    }
+
+
+def post_aligner_chain(args: argparse.Namespace) -> list[str]:
+    if args.post_aligner == "none":
+        return []
+    if args.post_aligner == "auto":
+        return ["mfa", "mms-fa"]
+    if args.post_aligner == "mfa" and args.post_aligner_fallback:
+        return ["mfa", "mms-fa"]
+    return [args.post_aligner]
+
+
+def run_single_post_aligner(
+    aligner: str,
+    args: argparse.Namespace,
+    document_path: Path,
+    audio_path: Path,
+    output_dir: Path,
+) -> dict[str, Any]:
+    if aligner == "mfa":
+        return run_mfa_post_alignment(argparse.Namespace(**mfa_namespace(args), dry_run=args.dry_run), document_path, audio_path, output_dir / "mfa")
+    if aligner == "mms-fa":
+        return run_mms_fa_post_alignment(
+            argparse.Namespace(**mms_fa_namespace(args), dry_run=args.dry_run),
+            document_path,
+            audio_path,
+            output_dir / "mms-fa",
+        )
+    raise SystemExit(f"unsupported post aligner: {aligner}")
+
+
+def run_post_alignment_chain(
+    args: argparse.Namespace,
+    document_path: Path,
+    audio_path: Path,
+    output_dir: Path,
+) -> dict[str, Any] | None:
+    chain = post_aligner_chain(args)
+    if not chain:
+        return None
+    if args.dry_run:
+        return {
+            "policy": "ordered-fallback",
+            "chain": chain,
+            "plans": [
+                run_single_post_aligner(aligner, args, document_path, audio_path, output_dir)
+                for aligner in chain
+            ],
+        }
+    failures = []
+    for aligner in chain:
+        try:
+            report = run_single_post_aligner(aligner, args, document_path, audio_path, output_dir)
+            report["policy"] = "ordered-fallback"
+            report["attempted_aligners"] = chain
+            report["failures"] = failures
+            return report
+        except Exception as error:  # noqa: BLE001 - production fallback must preserve the WhisperX resource.
+            failures.append({"aligner": aligner, "error": str(error)})
+            record_post_alignment_failure(document_path, aligner=aligner, error=str(error))
+            if not args.post_aligner_fallback:
+                raise
+    return {
+        "policy": "ordered-fallback",
+        "attempted_aligners": chain,
+        "degraded_to": "whisperx",
+        "failures": failures,
+    }
+
+
+def apply_mfa_alignment(args: argparse.Namespace) -> int:
+    report = run_mfa_post_alignment(
+        args,
+        Path(args.input),
+        Path(args.audio),
+        Path(args.output_dir),
+    )
+    if args.dry_run:
+        print(json.dumps(report, sort_keys=True))
+    else:
+        quality_path = Path(args.output_dir) / "production-report.json"
+        quality = write_production_report(Path(args.input), quality_path)
+        report["production_report"] = str(quality_path)
+        report["ready_for_manual_review"] = quality["ready_for_manual_review"]
+        print(json.dumps(report, sort_keys=True))
+    return 0
+
+
+def apply_mms_fa_alignment(args: argparse.Namespace) -> int:
+    report = run_mms_fa_post_alignment(
+        argparse.Namespace(**mms_fa_namespace(args), dry_run=args.dry_run),
+        Path(args.input),
+        Path(args.audio),
+        Path(args.output_dir),
+    )
+    if args.dry_run:
+        print(json.dumps(report, sort_keys=True))
+    else:
+        quality_path = Path(args.output_dir) / "production-report.json"
+        quality = write_production_report(Path(args.input), quality_path)
+        report["production_report"] = str(quality_path)
+        report["ready_for_manual_review"] = quality["ready_for_manual_review"]
+        print(json.dumps(report, sort_keys=True))
+    return 0
+
+
 def produce_whisperx(args: argparse.Namespace) -> int:
     output_dir = Path(args.output_dir)
     media_dir = output_dir / "media"
@@ -531,24 +984,23 @@ def produce_whisperx(args: argparse.Namespace) -> int:
         selected_audio = media_dir / ("vocals-16k-mono.wav" if args.vocal_isolation_command else "audio-16k-mono.wav")
         whisperx_args = argparse.Namespace(**whisperx_namespace(args, selected_audio, whisperx_dir))
         whisperx_report = run_whisperx_report(whisperx_args)
-        print(
-            json.dumps(
-                {
-                    "prepare_media": {
-                        "input": args.input,
-                        "output_dir": str(media_dir),
-                        "vocal_isolation": bool(args.vocal_isolation_command),
-                    },
-                    "run_whisperx": whisperx_report,
-                    "convert": {
-                        "output": str(output),
-                        "media_fingerprint": args.media_fingerprint,
-                        "media_title": args.media_title,
-                    },
-                },
-                sort_keys=True,
-            )
-        )
+        plan = {
+            "prepare_media": {
+                "input": args.input,
+                "output_dir": str(media_dir),
+                "vocal_isolation": bool(args.vocal_isolation_command),
+            },
+            "run_whisperx": whisperx_report,
+            "convert": {
+                "output": str(output),
+                "media_fingerprint": args.media_fingerprint,
+                "media_title": args.media_title,
+            },
+        }
+        post_alignment_plan = run_post_alignment_chain(args, output, selected_audio, output_dir)
+        if post_alignment_plan:
+            plan["post_align"] = post_alignment_plan
+        print(json.dumps(plan, sort_keys=True))
         return 0
 
     prepare_media(
@@ -582,20 +1034,19 @@ def produce_whisperx(args: argparse.Namespace) -> int:
             status=args.status,
         )
     )
+    post_alignment_report = run_post_alignment_chain(args, output, selected_audio, output_dir)
     report_path = output_dir / "production-report.json"
     report = write_production_report(output, report_path)
-    print(
-        json.dumps(
-            {
-                "output": str(output),
-                "preprocessing_artifacts": str(preprocessing_artifacts),
-                "production_report": str(report_path),
-                "ready_for_manual_review": report["ready_for_manual_review"],
-                "whisperx_json": whisperx_report["whisperx_json"],
-            },
-            sort_keys=True,
-        )
-    )
+    payload = {
+        "output": str(output),
+        "preprocessing_artifacts": str(preprocessing_artifacts),
+        "production_report": str(report_path),
+        "ready_for_manual_review": report["ready_for_manual_review"],
+        "whisperx_json": whisperx_report["whisperx_json"],
+    }
+    if post_alignment_report:
+        payload["post_alignment"] = post_alignment_report
+    print(json.dumps(payload, sort_keys=True))
     return 0
 
 
@@ -618,13 +1069,67 @@ def whisperx_namespace(args: argparse.Namespace, selected_audio: Path, whisperx_
     }
 
 
+def mfa_namespace(args: argparse.Namespace) -> dict[str, Any]:
+    return {
+        "mfa_align_cli": args.mfa_align_cli,
+        "mfa_bin": args.mfa_bin,
+        "mfa_root_dir": args.mfa_root_dir,
+        "mfa_dictionary": args.mfa_dictionary,
+        "mfa_acoustic_model": args.mfa_acoustic_model,
+        "mfa_strategy": args.mfa_strategy,
+        "mfa_jobs": args.mfa_jobs,
+        "mfa_quiet": args.mfa_quiet,
+        "post_algorithm_id": args.post_algorithm_id,
+        "post_algorithm_version": args.post_algorithm_version,
+        "post_config_hash": args.post_config_hash,
+        "post_status": args.post_status,
+    }
+
+
+def mms_fa_namespace(args: argparse.Namespace) -> dict[str, Any]:
+    return {
+        "mms_fa_align_cli": args.mms_fa_align_cli,
+        "mms_fa_python": args.mms_fa_python,
+        "post_config_hash": args.post_config_hash,
+        "post_status": args.post_status,
+    }
+
+
+def add_mfa_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--mfa-align-cli", help="path to scripts/forced-align/mfa-align-cli.py")
+    parser.add_argument("--mfa-bin", help="path to the MFA executable")
+    parser.add_argument("--mfa-root-dir", help="MFA_ROOT_DIR containing downloaded/extracted models")
+    parser.add_argument("--mfa-dictionary", default="english_us_arpa")
+    parser.add_argument("--mfa-acoustic-model", default="english_us_arpa")
+    parser.add_argument("--mfa-strategy", choices=["align", "align-one"], default="align-one")
+    parser.add_argument("--mfa-jobs", type=int, default=4)
+    parser.add_argument("--mfa-quiet", action="store_true")
+    parser.add_argument("--post-algorithm-id", default="whisperx-transcript-mfa")
+    parser.add_argument("--post-algorithm-version", default="large-v3-mfa-arpa-align-one")
+    parser.add_argument("--post-config-hash", default="default")
+    parser.add_argument("--post-status", choices=["candidate", "active", "archived"], default="active")
+
+
+def add_mms_fa_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--mms-fa-align-cli", help="path to scripts/forced-align/align-cli.py")
+    parser.add_argument("--mms-fa-python", help="path to the MMS_FA research venv Python")
+
+
 def doctor(_: argparse.Namespace) -> int:
+    mfa_bin = default_mfa_bin()
+    mms_fa_python = default_mms_fa_python()
     checks = {
         "ffmpeg": shutil.which("ffmpeg") is not None,
         "python": True,
         "whisperx": importlib.util.find_spec("whisperx") is not None,
         "torch": importlib.util.find_spec("torch") is not None,
+        "torchaudio": importlib.util.find_spec("torchaudio") is not None,
         "demucs": importlib.util.find_spec("demucs") is not None,
+        "mfa": Path(mfa_bin).exists() or shutil.which(mfa_bin) is not None,
+        "mfa_bin": mfa_bin,
+        "mfa_root_dir": default_mfa_root_dir(),
+        "mms_fa_python": mms_fa_python,
+        "mms_fa_python_exists": Path(mms_fa_python).exists(),
         "uvr_env": "UVR_MODELS_DIR" in os.environ,
     }
     print(json.dumps(checks, sort_keys=True))
@@ -698,6 +1203,30 @@ def parser() -> argparse.ArgumentParser:
     report.add_argument("--output", required=True)
     report.set_defaults(func=report_lltimeline)
 
+    mfa = subcommands.add_parser(
+        "apply-mfa-alignment",
+        help="append an MFA post-aligned WordTimeline to an existing LLTimeline file",
+    )
+    mfa.add_argument("--input", required=True, help="LLTimeline JSON file to update in place")
+    mfa.add_argument("--audio", required=True, help="16k mono audio used by the LLTimeline")
+    mfa.add_argument("--output-dir", required=True)
+    mfa.add_argument("--dry-run", action="store_true")
+    add_mfa_options(mfa)
+    mfa.set_defaults(func=apply_mfa_alignment)
+
+    mms_fa = subcommands.add_parser(
+        "apply-mms-fa-alignment",
+        help="append an MMS_FA post-aligned WordTimeline to an existing LLTimeline file",
+    )
+    mms_fa.add_argument("--input", required=True, help="LLTimeline JSON file to update in place")
+    mms_fa.add_argument("--audio", required=True, help="16k mono audio used by the LLTimeline")
+    mms_fa.add_argument("--output-dir", required=True)
+    mms_fa.add_argument("--post-config-hash", default="default")
+    mms_fa.add_argument("--post-status", choices=["candidate", "active", "archived"], default="active")
+    mms_fa.add_argument("--dry-run", action="store_true")
+    add_mms_fa_options(mms_fa)
+    mms_fa.set_defaults(func=apply_mms_fa_alignment)
+
     produce = subcommands.add_parser(
         "produce-whisperx",
         help="prepare media, run WhisperX, and emit LLTimeline v1",
@@ -728,6 +1257,21 @@ def parser() -> argparse.ArgumentParser:
     produce.add_argument("--hf-token")
     produce.add_argument("--whisperx-bin")
     produce.add_argument("--whisperx-command")
+    produce.add_argument(
+        "--post-aligner",
+        choices=["none", "auto", "mfa", "mms-fa"],
+        default="none",
+        help="optional post-ASR aligner; auto/mfa degrade from MFA to MMS_FA, then keep WhisperX",
+    )
+    produce.add_argument(
+        "--no-post-aligner-fallback",
+        dest="post_aligner_fallback",
+        action="store_false",
+        help="fail instead of trying the next post-aligner when the selected aligner fails",
+    )
+    produce.set_defaults(post_aligner_fallback=True)
+    add_mfa_options(produce)
+    add_mms_fa_options(produce)
     produce.add_argument("--dry-run", action="store_true")
     produce.set_defaults(func=produce_whisperx)
     return root

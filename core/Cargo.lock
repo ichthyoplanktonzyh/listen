@@ -67,6 +67,7 @@ dependencies = [
  "speech-analysis",
  "subtitle-core",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]

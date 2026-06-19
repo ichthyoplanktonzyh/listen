@@ -131,6 +131,30 @@ produce_dry_run="$(
     --whisperx-command 'whisperx {input} --model {model} --output_dir {output_dir} --output_format json --language {language}' \
     --dry-run
 )"
+produce_mfa_dry_run="$(
+  python3 "$root/scripts/timeline-production/production_pipeline.py" produce-whisperx \
+    --input "$media_input" \
+    --output-dir "$tmp/produce-mfa" \
+    --media-fingerprint "timeline-production-smoke" \
+    --media-title "Timeline Production Smoke" \
+    --whisperx-command 'whisperx {input} --model {model} --output_dir {output_dir} --output_format json --language {language}' \
+    --post-aligner mfa \
+    --dry-run
+)"
+apply_mfa_dry_run="$(
+  python3 "$root/scripts/timeline-production/production_pipeline.py" apply-mfa-alignment \
+    --input "$production_output" \
+    --audio "$media_out/audio-16k-mono.wav" \
+    --output-dir "$tmp/apply-mfa" \
+    --dry-run
+)"
+apply_mms_fa_dry_run="$(
+  python3 "$root/scripts/timeline-production/production_pipeline.py" apply-mms-fa-alignment \
+    --input "$production_output" \
+    --audio "$media_out/audio-16k-mono.wav" \
+    --output-dir "$tmp/apply-mms-fa" \
+    --dry-run
+)"
 production_report="$(
   python3 "$root/scripts/timeline-production/production_pipeline.py" from-whisperx-json \
     --input "$root/testdata/timeline-production/whisperx-sample.json" \
@@ -208,16 +232,27 @@ const fs = require("fs");
 const prepare = JSON.parse(process.argv[1]);
 const whisperx = JSON.parse(process.argv[2]);
 const produce = JSON.parse(process.argv[3]);
-const production = JSON.parse(process.argv[4]);
-const validation = JSON.parse(process.argv[5]);
-const quality = JSON.parse(process.argv[6]);
-const qualityFile = JSON.parse(fs.readFileSync(process.argv[7], "utf8"));
+const produceMfa = JSON.parse(process.argv[4]);
+const applyMfa = JSON.parse(process.argv[5]);
+const applyMmsFa = JSON.parse(process.argv[6]);
+const production = JSON.parse(process.argv[7]);
+const validation = JSON.parse(process.argv[8]);
+const quality = JSON.parse(process.argv[9]);
+const qualityFile = JSON.parse(fs.readFileSync(process.argv[10], "utf8"));
 if (!prepare.artifacts_path.endsWith("preprocessing-artifacts.json")) throw new Error("prepare-media artifact missing");
 if (prepare.vocal_isolation !== false) throw new Error("prepare-media vocal isolation default failed");
 if (!whisperx.command.includes("whisperx")) throw new Error("run-whisperx dry run command missing");
 if (!whisperx.command.includes("--output_format json")) throw new Error("run-whisperx output format missing");
 if (!produce.run_whisperx.command.includes("whisperx")) throw new Error("produce-whisperx dry run command missing");
 if (produce.convert.media_fingerprint !== "timeline-production-smoke") throw new Error("produce-whisperx convert plan failed");
+if (produceMfa.post_align.policy !== "ordered-fallback") throw new Error("produce-whisperx MFA fallback policy missing");
+if (produceMfa.post_align.chain.join(",") !== "mfa,mms-fa") throw new Error("produce-whisperx MFA fallback chain failed");
+if (!produceMfa.post_align.plans[0].command.includes("mfa-align-cli.py")) throw new Error("produce-whisperx MFA dry run command missing");
+if (!produceMfa.post_align.plans[0].command.includes("--strategy align-one")) throw new Error("produce-whisperx MFA strategy missing");
+if (!produceMfa.post_align.plans[1].command.includes("align-cli.py")) throw new Error("produce-whisperx MMS_FA fallback command missing");
+if (!applyMfa.command.includes("mfa-align-cli.py")) throw new Error("apply-mfa dry run command missing");
+if (!applyMfa.command.includes("english_us_arpa")) throw new Error("apply-mfa default ARPA model missing");
+if (!applyMmsFa.command.includes("align-cli.py")) throw new Error("apply-mms-fa dry run command missing");
 if (production.segments !== 2) throw new Error("production converter segment count failed");
 if (production.words !== 5) throw new Error("production converter word count failed");
 if (validation.schema !== "llplayer.timeline.v1") throw new Error("production LLTimeline schema failed");
@@ -230,7 +265,7 @@ if (quality.ready_for_manual_review !== true) throw new Error("production qualit
 if (qualityFile.report_version !== 1) throw new Error("production quality report version failed");
 if (qualityFile.word_coverage !== 1) throw new Error("production quality coverage failed");
 if (qualityFile.quality.valid !== true) throw new Error("production quality validity failed");
-' "$prepare_report" "$whisperx_dry_run" "$produce_dry_run" "$production_report" "$production_validation" "$production_quality" "$production_quality_report"
+' "$prepare_report" "$whisperx_dry_run" "$produce_dry_run" "$produce_mfa_dry_run" "$apply_mfa_dry_run" "$apply_mms_fa_dry_run" "$production_report" "$production_validation" "$production_quality" "$production_quality_report"
 
 node -e '
 const fs = require("fs");

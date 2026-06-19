@@ -2,6 +2,64 @@
 
 ## Unreleased
 
+- 2026-06-19 16:20:39 CST: Added the Phase 2.2 start handoff document at
+  `.planning/handoff/project-handoff-2026-06-19-phase-2.2-start.md`, summarizing
+  the completed Phase 2.1 hardening work, verified commands, remaining
+  non-blocking architecture debt, and the recommended Phase 2.2 audit-first
+  entry path for LLTimeline resource UI alignment.
+- 2026-06-19 16:10:34 CST: Completed the Phase 2.1 application orchestration
+  debt fix for transcription word timelines. Added
+  `AppServices::refine_transcription_word_timelines` with a
+  `ForcedAlignSidecar` input and `WordTimelinePipelineResult`, moving
+  DTW extraction, MMS_FA sidecar invocation, forced-alignment merge,
+  pause-refinement, WordTimeline snapshot creation, activation, and legacy
+  fallback storage out of `api-http`. `crates/api-http/src/transcription.rs`
+  now only reads the generated Whisper JSON, resolves the optional sidecar, and
+  calls application orchestration. Updated Phase 2.1 and CONCERNS docs to mark
+  this architecture debt handled while keeping mega-file splitting and
+  monotonicity ablation as later standalone work.
+- 2026-06-19 16:10:34 CST: Also moved the phonetic research fixture's canonical
+  phone alignment and finding construction out of
+  `crates/api-http/src/phonetic_analysis.rs` into
+  `AppServices::build_research_fixture_phonetic_analysis`, so the HTTP
+  coordinator keeps job state, queueing, repository writes, and events while
+  application owns the speech-analysis composition.
+- 2026-06-19 16:10:34 CST: Removed the remaining direct `speech_analysis`
+  references from `crates/api-http/src/lib.rs` by exposing chunk partition
+  response types and learned prosodic provider catalog access through the
+  application layer.
+- 2026-06-19 16:01:48 CST: Closed Phase 2.1 with a documented scope cut after
+  completing the current hardening work: P0 word-index placeholders, P1 shared
+  tokenizer/evaluation guardrails, production post-aligner fallback, and P3
+  evaluation-stat de-duplication. Deferred the application orchestration
+  extraction, application/persistence mega-file split, and forced-align
+  monotonicity ablation into explicit architecture debt so Phase 2.2 can start
+  without a risky broad refactor. Updated `.planning/STATE.md`,
+  `.planning/codebase/CONCERNS.md`, and Phase 2.1 docs accordingly.
+- 2026-06-19 15:55:21 CST: Marked the timeline-production / aligner-evaluation
+  phase as temporarily closed and moved it into long-running research and
+  production-script maintenance. Prepared Phase 2.2 planning docs for app-side
+  `.lltimeline.json` resource UI alignment, covering resource import visibility,
+  WordTimeline candidate summaries, active timeline selection, playback binding,
+  and a later manual-review entry point.
+- 2026-06-19 15:51:14 CST: Generalized the timeline-production post-alignment
+  stage into a selectable degradation strategy. `produce-whisperx` now accepts
+  `--post-aligner auto|mfa|mms-fa|none`; `auto` and `mfa` try MFA first, fall
+  back to MMS_FA, and preserve the original WhisperX WordTimeline if all
+  post-aligners fail, recording `post_alignment_failure` artifacts in the
+  reusable `.lltimeline.json` resource. Added `apply-mms-fa-alignment`,
+  extended `doctor` with MMS_FA runtime visibility, and updated contract
+  dry-runs for the ordered fallback chain.
+- 2026-06-19 15:41:28 CST: Paused further aligner benchmark expansion and
+  documented deferred Qwen3-ForcedAligner, BFA/easytranscriber/CTC, and MMS_FA
+  research directions under the timeline-production research docs. Advanced the
+  current production mainline by adding MFA post-alignment orchestration to
+  `scripts/timeline-production/production_pipeline.py`: `produce-whisperx` now
+  supports `--post-aligner mfa`, appending an MFA `align-one` WordTimeline while
+  preserving the WhisperX timeline as a candidate fallback, and
+  `apply-mfa-alignment` can append MFA timings to an existing `.lltimeline.json`
+  without rerunning WhisperX. Extended contract dry-runs for both production
+  MFA entrypoints.
 - 2026-06-19 15:19:15 CST: Completed the first MFA English US ARPA
   `align-one` TIMIT TEST 100 evaluation: 881/881 matched words, start MAE
   14.46ms, start P95 48.0ms, end MAE 18.20ms, end P95 53.0ms, tail mean abs

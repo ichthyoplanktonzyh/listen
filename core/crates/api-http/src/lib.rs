@@ -21,9 +21,6 @@ use domain::{
     SubtitleTrackId, VocabularyAssetBundle, WordProfileId, WordStatus,
 };
 use serde::{Deserialize, Serialize};
-use speech_analysis::learned_prosodic_provider::{
-    LearnedProsodicProviderInfo, embedded_provider_info,
-};
 use tokio::sync::broadcast;
 
 mod m18;
@@ -822,7 +819,7 @@ async fn track_word_timing_diagnostics(
 async fn track_chunk_partitions(
     State(state): State<ApiState>,
     Path(track_id): Path<String>,
-) -> Result<Json<Vec<speech_analysis::chunk_partition::SentenceChunkPartition>>, ApiError> {
+) -> Result<Json<Vec<application::SentenceChunkPartition>>, ApiError> {
     state
         .services
         .chunk_partitions_for_track(
@@ -835,7 +832,7 @@ async fn track_chunk_partitions(
 async fn track_chunk_diagnostics(
     State(state): State<ApiState>,
     Path(track_id): Path<String>,
-) -> Result<Json<Vec<speech_analysis::chunk_partition::SentenceChunkDiagnostics>>, ApiError> {
+) -> Result<Json<Vec<application::SentenceChunkDiagnostics>>, ApiError> {
     state
         .services
         .chunk_diagnostics_for_track(
@@ -845,8 +842,10 @@ async fn track_chunk_diagnostics(
         .map_err(ApiError::from)
 }
 
-async fn chunk_providers() -> Json<Vec<LearnedProsodicProviderInfo>> {
-    Json(vec![embedded_provider_info()])
+async fn chunk_providers(
+    State(state): State<ApiState>,
+) -> Json<Vec<application::LearnedProsodicProviderInfo>> {
+    Json(state.services.learned_prosodic_providers())
 }
 
 async fn generate_track_word_timings(

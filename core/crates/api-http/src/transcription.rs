@@ -4,15 +4,13 @@ use std::sync::Arc;
 
 use api_events::{EventEnvelope, EventName};
 use application::{
-    AppServices, ApplicationError, CreateWordTimeline, ImportSubtitle, TranscriptionRepository,
+    AppServices, ApplicationError, ForcedAlignSidecar, ImportSubtitle, TranscriptionRepository,
     now_ms,
 };
 use domain::{
-    MediaId, SubtitleSentence, SubtitleTokenKind, SubtitleTrackId, SubtitleTrackProvenance,
-    TimelineStatus, TranscriptionDestination, TranscriptionJob, TranscriptionJobId,
-    TranscriptionJobStatus, TranscriptionModelDescriptor, TranscriptionModelId,
+    MediaId, SubtitleTrackProvenance, TranscriptionDestination, TranscriptionJob,
+    TranscriptionJobId, TranscriptionJobStatus, TranscriptionModelDescriptor, TranscriptionModelId,
     TranscriptionModelState, TranscriptionProviderInfo, TranscriptionPurpose, TranscriptionQuality,
-    WordTimelineId,
 };
 use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
@@ -559,71 +557,15 @@ impl TranscriptionCoordinator {
                 && let Ok(track) = self.services.read_subtitle_track(&track.id)
                 && let Some(track) = track
             {
-                let timings = speech_analysis::asr_timing::extract_word_timings_from_json(
-                    &json_bytes,
-                    &track.sentences,
-                );
-                match timings {
-                    Ok(mut timings) if !timings.is_empty() => {
-                        let mut parent_timeline_id = save_word_timeline_snapshot(
-                            &self.services,
-                            &track.id,
-                            &timings,
-                            "whisper-dtw",
-                            "dtw-v2",
-                            "whisper-json-full-dtw-v2",
-                            TimelineStatus::Candidate,
-                            None,
-                        );
-                        let upgraded =
-                            try_apply_forced_alignment(&wav, &track.sentences, &mut timings).await;
-                        if upgraded > 0 {
-                            if let Some(timeline_id) = save_word_timeline_snapshot(
-                                &self.services,
-                                &track.id,
-                                &timings,
-                                speech_analysis::forced_align::PROVIDER_ID,
-                                speech_analysis::forced_align::PROVIDER_VERSION,
-                                "mms-fa-v1-whisper-segment-window",
-                                TimelineStatus::Candidate,
-                                parent_timeline_id.as_ref(),
-                            ) {
-                                parent_timeline_id = Some(timeline_id);
-                            }
-                        }
-                        let mut final_timeline_id = parent_timeline_id.clone();
-                        if let Ok(wav_bytes) = tokio::fs::read(&wav).await
-                            && let Ok(refined) =
-                                speech_analysis::pause_refinement::refine_word_timings_from_pcm_wav(
-                                    &wav_bytes,
-                                    &timings,
-                                    &speech_analysis::pause_refinement::PauseRefinementConfig::default(),
-                                )
-                            && !refined.pauses.is_empty()
-                        {
-                            timings = refined.timings;
-                            final_timeline_id = save_word_timeline_snapshot(
-                                &self.services,
-                                &track.id,
-                                &timings,
-                                speech_analysis::pause_refinement::PROVIDER_ID,
-                                speech_analysis::pause_refinement::PROVIDER_VERSION,
-                                "pause-refinement-default-v1",
-                                TimelineStatus::Active,
-                                parent_timeline_id.as_ref(),
-                            );
-                        }
-                        if let Some(timeline_id) = final_timeline_id {
-                            let _ = self.services.activate_word_timeline(&timeline_id);
-                        } else {
-                            let _ = self.services.store_word_timings(&track.id, &timings);
-                        }
-                    }
-                    _ => {
-                        // Fall back to estimation — this is expected when DTW is
-                        // unavailable for some or all tokens.
-                    }
-                }
+                let _ = self
+                    .services
+                    .refine_transcription_word_timelines(
+                        &track.id,
+                        &json_bytes,
+                        &wav,
+                        resolve_forced_align_sidecar(),
+                    )
+                    .await;
             }
         }
         self.repository.save_provenance(&SubtitleTrackProvenance {
@@ -806,127 +748,7 @@ fn resolve_tool(env_name: &str, name: &str) -> Option<PathBuf> {
     resolve_bundled_tool(name, &executable, &std::env::current_dir().ok()?)
 }
 
-#[derive(Debug, serde::Serialize)]
-struct ForcedAlignRequest {
-    audio_path: String,
-    segments: Vec<ForcedAlignSegment>,
-}
-
-#[derive(Debug, serde::Serialize)]
-struct ForcedAlignSegment {
-    index: u32,
-    text: String,
-    words: Vec<String>,
-    start_ms: u64,
-    end_ms: u64,
-}
-
-async fn try_apply_forced_alignment(
-    wav: &Path,
-    sentences: &[SubtitleSentence],
-    timings: &mut [domain::WordTiming],
-) -> usize {
-    let Some((python, script)) = resolve_forced_align_sidecar() else {
-        return 0;
-    };
-    let request = ForcedAlignRequest {
-        audio_path: wav.to_string_lossy().into_owned(),
-        segments: forced_align_segments(sentences),
-    };
-    if request.segments.is_empty() {
-        return 0;
-    }
-    let Ok(stdin_json) = serde_json::to_vec(&request) else {
-        return 0;
-    };
-
-    let mut child = match Command::new(&python)
-        .arg(&script)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .kill_on_drop(true)
-        .spawn()
-    {
-        Ok(child) => child,
-        Err(_) => return 0,
-    };
-
-    let Some(mut stdin) = child.stdin.take() else {
-        return 0;
-    };
-    if stdin.write_all(&stdin_json).await.is_err() || stdin.shutdown().await.is_err() {
-        return 0;
-    }
-    drop(stdin);
-
-    let Ok(output) = child.wait_with_output().await else {
-        return 0;
-    };
-    if !output.status.success() {
-        return 0;
-    }
-    let Ok(aligned) =
-        serde_json::from_slice::<speech_analysis::forced_align::AlignOutput>(&output.stdout)
-    else {
-        return 0;
-    };
-    speech_analysis::forced_align::merge_alignments(timings, &aligned.timings, sentences)
-}
-
-fn save_word_timeline_snapshot(
-    services: &AppServices,
-    track_id: &SubtitleTrackId,
-    timings: &[domain::WordTiming],
-    algorithm_id: &str,
-    algorithm_version: &str,
-    config_hash: &str,
-    status: TimelineStatus,
-    parent_timeline_id: Option<&WordTimelineId>,
-) -> Option<WordTimelineId> {
-    services
-        .create_word_timeline(
-            track_id,
-            CreateWordTimeline {
-                algorithm_id: Some(algorithm_id.into()),
-                algorithm_version: Some(algorithm_version.into()),
-                config_hash: Some(config_hash.into()),
-                parent_timeline_id: parent_timeline_id.cloned(),
-                created_by: Some(domain::TimelineCreator::Algorithm),
-                status: Some(status),
-                metrics_json: None,
-                words: timings.to_vec(),
-            },
-        )
-        .ok()
-        .map(|timeline| timeline.id)
-}
-
-fn forced_align_segments(sentences: &[SubtitleSentence]) -> Vec<ForcedAlignSegment> {
-    sentences
-        .iter()
-        .filter_map(|sentence| {
-            let words = sentence
-                .tokens
-                .iter()
-                .filter(|token| token.kind == SubtitleTokenKind::Word)
-                .map(|token| token.text.clone())
-                .collect::<Vec<_>>();
-            if words.is_empty() {
-                return None;
-            }
-            Some(ForcedAlignSegment {
-                index: sentence.index,
-                text: sentence.display_text.clone(),
-                words,
-                start_ms: sentence.start.get(),
-                end_ms: sentence.end.get(),
-            })
-        })
-        .collect()
-}
-
-fn resolve_forced_align_sidecar() -> Option<(PathBuf, PathBuf)> {
+fn resolve_forced_align_sidecar() -> Option<ForcedAlignSidecar> {
     let research_root = std::env::var_os("LLPLAYERNEXT_FA_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
@@ -938,7 +760,7 @@ fn resolve_forced_align_sidecar() -> Option<(PathBuf, PathBuf)> {
         return None;
     }
     let script = resolve_forced_align_script()?;
-    Some((python, script))
+    Some(ForcedAlignSidecar { python, script })
 }
 
 fn resolve_forced_align_script() -> Option<PathBuf> {

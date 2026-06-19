@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -5,6 +7,8 @@ use async_trait::async_trait;
 use domain::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio::io::AsyncWriteExt;
+use tokio::process::Command;
 
 const DICTIONARY_CACHE_TTL_MS: u64 = 30 * 24 * 60 * 60 * 1000;
 
@@ -29,6 +33,11 @@ pub struct WordTimingBoundaryDiagnostic {
     pub right_provider_version: String,
 }
 
+pub type SentenceChunkPartition = speech_analysis::chunk_partition::SentenceChunkPartition;
+pub type SentenceChunkDiagnostics = speech_analysis::chunk_partition::SentenceChunkDiagnostics;
+pub type LearnedProsodicProviderInfo =
+    speech_analysis::learned_prosodic_provider::LearnedProsodicProviderInfo;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateWordTimeline {
     pub algorithm_id: Option<String>,
@@ -39,6 +48,37 @@ pub struct CreateWordTimeline {
     pub status: Option<TimelineStatus>,
     pub metrics_json: Option<serde_json::Value>,
     pub words: Vec<WordTiming>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForcedAlignSidecar {
+    pub python: PathBuf,
+    pub script: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WordTimelinePipelineResult {
+    pub extracted_word_count: usize,
+    pub forced_aligned_word_count: usize,
+    pub dtw_timeline_id: Option<WordTimelineId>,
+    pub forced_aligned_timeline_id: Option<WordTimelineId>,
+    pub final_timeline_id: Option<WordTimelineId>,
+    pub stored_legacy_word_timings: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct ForcedAlignRequest {
+    audio_path: String,
+    segments: Vec<ForcedAlignSegment>,
+}
+
+#[derive(Debug, Serialize)]
+struct ForcedAlignSegment {
+    index: u32,
+    text: String,
+    words: Vec<String>,
+    start_ms: u64,
+    end_ms: u64,
 }
 
 pub trait MediaRepository: Send + Sync {
@@ -1381,8 +1421,7 @@ impl AppServices {
     pub fn chunk_partitions_for_track(
         &self,
         track_id: &SubtitleTrackId,
-    ) -> Result<Vec<speech_analysis::chunk_partition::SentenceChunkPartition>, ApplicationError>
-    {
+    ) -> Result<Vec<SentenceChunkPartition>, ApplicationError> {
         let track = self
             .subtitles
             .get_track(track_id)?
@@ -1409,8 +1448,7 @@ impl AppServices {
     pub fn chunk_diagnostics_for_track(
         &self,
         track_id: &SubtitleTrackId,
-    ) -> Result<Vec<speech_analysis::chunk_partition::SentenceChunkDiagnostics>, ApplicationError>
-    {
+    ) -> Result<Vec<SentenceChunkDiagnostics>, ApplicationError> {
         let track = self
             .subtitles
             .get_track(track_id)?
@@ -1503,6 +1541,263 @@ impl AppServices {
             let _ = self.subtitles.activate_word_timeline(&timeline.id)?;
         }
         Ok(timings.to_vec())
+    }
+
+    pub fn learned_prosodic_providers(&self) -> Vec<LearnedProsodicProviderInfo> {
+        vec![speech_analysis::learned_prosodic_provider::embedded_provider_info()]
+    }
+
+    pub async fn refine_transcription_word_timelines(
+        &self,
+        track_id: &SubtitleTrackId,
+        whisper_json_bytes: &[u8],
+        audio_wav_path: &Path,
+        forced_align_sidecar: Option<ForcedAlignSidecar>,
+    ) -> Result<Option<WordTimelinePipelineResult>, ApplicationError> {
+        let track = self
+            .subtitles
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let mut timings = match speech_analysis::asr_timing::extract_word_timings_from_json(
+            whisper_json_bytes,
+            &track.sentences,
+        ) {
+            Ok(timings) if !timings.is_empty() => timings,
+            _ => return Ok(None),
+        };
+
+        let dtw_timeline_id = save_word_timeline_snapshot(
+            self,
+            &track.id,
+            &timings,
+            "whisper-dtw",
+            "dtw-v2",
+            "whisper-json-full-dtw-v2",
+            TimelineStatus::Candidate,
+            None,
+        );
+        let mut parent_timeline_id = dtw_timeline_id.clone();
+
+        let forced_aligned_word_count = if let Some(sidecar) = forced_align_sidecar {
+            self.try_apply_forced_alignment(
+                audio_wav_path,
+                &track.sentences,
+                &mut timings,
+                &sidecar,
+            )
+            .await
+        } else {
+            0
+        };
+
+        let mut forced_aligned_timeline_id = None;
+        if forced_aligned_word_count > 0
+            && let Some(timeline_id) = save_word_timeline_snapshot(
+                self,
+                &track.id,
+                &timings,
+                speech_analysis::forced_align::PROVIDER_ID,
+                speech_analysis::forced_align::PROVIDER_VERSION,
+                "mms-fa-v1-whisper-segment-window",
+                TimelineStatus::Candidate,
+                parent_timeline_id.as_ref(),
+            )
+        {
+            parent_timeline_id = Some(timeline_id.clone());
+            forced_aligned_timeline_id = Some(timeline_id);
+        }
+
+        let mut final_timeline_id = parent_timeline_id.clone();
+        if let Ok(wav_bytes) = tokio::fs::read(audio_wav_path).await
+            && let Ok(refined) = speech_analysis::pause_refinement::refine_word_timings_from_pcm_wav(
+                &wav_bytes,
+                &timings,
+                &speech_analysis::pause_refinement::PauseRefinementConfig::default(),
+            )
+            && !refined.pauses.is_empty()
+        {
+            timings = refined.timings;
+            final_timeline_id = save_word_timeline_snapshot(
+                self,
+                &track.id,
+                &timings,
+                speech_analysis::pause_refinement::PROVIDER_ID,
+                speech_analysis::pause_refinement::PROVIDER_VERSION,
+                "pause-refinement-default-v1",
+                TimelineStatus::Active,
+                parent_timeline_id.as_ref(),
+            );
+        }
+
+        let stored_legacy_word_timings = if let Some(timeline_id) = final_timeline_id.as_ref() {
+            let _ = self.activate_word_timeline(timeline_id);
+            false
+        } else {
+            let _ = self.store_word_timings(&track.id, &timings);
+            true
+        };
+
+        Ok(Some(WordTimelinePipelineResult {
+            extracted_word_count: timings.len(),
+            forced_aligned_word_count,
+            dtw_timeline_id,
+            forced_aligned_timeline_id,
+            final_timeline_id,
+            stored_legacy_word_timings,
+        }))
+    }
+
+    async fn try_apply_forced_alignment(
+        &self,
+        wav: &Path,
+        sentences: &[SubtitleSentence],
+        timings: &mut [WordTiming],
+        sidecar: &ForcedAlignSidecar,
+    ) -> usize {
+        let request = ForcedAlignRequest {
+            audio_path: wav.to_string_lossy().into_owned(),
+            segments: forced_align_segments(sentences),
+        };
+        if request.segments.is_empty() {
+            return 0;
+        }
+        let Ok(stdin_json) = serde_json::to_vec(&request) else {
+            return 0;
+        };
+
+        let mut child = match Command::new(&sidecar.python)
+            .arg(&sidecar.script)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(_) => return 0,
+        };
+
+        let Some(mut stdin) = child.stdin.take() else {
+            return 0;
+        };
+        if stdin.write_all(&stdin_json).await.is_err() || stdin.shutdown().await.is_err() {
+            return 0;
+        }
+        drop(stdin);
+
+        let Ok(output) = child.wait_with_output().await else {
+            return 0;
+        };
+        if !output.status.success() {
+            return 0;
+        }
+        let Ok(aligned) =
+            serde_json::from_slice::<speech_analysis::forced_align::AlignOutput>(&output.stdout)
+        else {
+            return 0;
+        };
+        speech_analysis::forced_align::merge_alignments(timings, &aligned.timings, sentences)
+    }
+
+    pub fn build_research_fixture_phonetic_analysis(
+        &self,
+        job: &PhoneticAnalysisJob,
+        sentence: Option<&SubtitleSentence>,
+        partial: bool,
+    ) -> Result<PhoneticAnalysis, ApplicationError> {
+        let words = sentence
+            .into_iter()
+            .flat_map(|value| value.tokens.iter())
+            .filter(|token| token.kind == SubtitleTokenKind::Word)
+            .collect::<Vec<_>>();
+        let duration = job.audio_end_ms - job.audio_start_ms;
+        let width = duration / words.len().max(1) as u64;
+        let mut phones = Vec::new();
+        for (index, word) in words.iter().enumerate() {
+            let start = job.audio_start_ms + width * index as u64;
+            let end = if index + 1 == words.len() {
+                job.audio_end_ms
+            } else {
+                start + width
+            };
+            phones.push(DetectedPhone {
+                symbol: word
+                    .normalized
+                    .as_deref()
+                    .and_then(|value| value.chars().next())
+                    .unwrap_or('?')
+                    .to_ascii_uppercase()
+                    .to_string(),
+                phone_set: "research_fixture_symbols".into(),
+                start_ms: start,
+                end_ms: end,
+                confidence: Some(0.5),
+                token_index: Some(word.index),
+                provider_id: "research-fixture".into(),
+                provider_version: "v1".into(),
+                model_revision: job.model_revision.clone(),
+            });
+        }
+        if partial && phones.len() > 1 {
+            phones.pop();
+        }
+        let id = PhoneticAnalysisId::from_fingerprint(
+            "phonetic-analysis",
+            &format!(
+                "{}:{}:{}:{}:{}",
+                job.id.as_str(),
+                job.input_fingerprint,
+                job.sentence_id
+                    .as_ref()
+                    .map(SubtitleSentenceId::as_str)
+                    .unwrap_or("track"),
+                job.audio_start_ms,
+                job.audio_end_ms
+            ),
+        );
+        let canonical = sentence
+            .map(speech_analysis::analyze_sentence)
+            .into_iter()
+            .flat_map(|analysis| analysis.phonemes)
+            .filter_map(|phone| {
+                phone.token_index.map(|token_index| {
+                    speech_analysis::phonetic_alignment::CanonicalPhone {
+                        symbol: phone.symbol,
+                        token_index,
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        let alignments = speech_analysis::phonetic_alignment::align_phones(&canonical, &phones);
+        let findings = speech_analysis::phonetic_findings::findings_from_alignments(
+            &id,
+            job.audio_start_ms,
+            job.audio_end_ms,
+            &alignments,
+            &phones,
+        );
+        let analysis = PhoneticAnalysis {
+            id,
+            job_id: job.id.clone(),
+            media_id: job.media_id.clone(),
+            track_id: job.track_id.clone(),
+            sentence_id: job.sentence_id.clone(),
+            audio_start_ms: job.audio_start_ms,
+            audio_end_ms: job.audio_end_ms,
+            provider_id: "research-fixture".into(),
+            provider_version: "v1".into(),
+            model_id: job.model_id.clone(),
+            model_revision: job.model_revision.clone(),
+            model_checksum_sha256: job.model_checksum_sha256.clone(),
+            phone_set: "research_fixture_symbols".into(),
+            detected_phones: phones,
+            alignments,
+            findings,
+            analyzer_version: "research-fixture-v1".into(),
+            created_at_ms: now_ms(),
+        };
+        analysis.validate().map_err(ApplicationError::from)?;
+        Ok(analysis)
     }
 
     pub async fn lookup_dictionary(
@@ -1790,6 +2085,58 @@ fn build_word_timeline(
         created_at_ms: now,
         updated_at_ms: now,
     })
+}
+
+fn save_word_timeline_snapshot(
+    services: &AppServices,
+    track_id: &SubtitleTrackId,
+    timings: &[WordTiming],
+    algorithm_id: &str,
+    algorithm_version: &str,
+    config_hash: &str,
+    status: TimelineStatus,
+    parent_timeline_id: Option<&WordTimelineId>,
+) -> Option<WordTimelineId> {
+    services
+        .create_word_timeline(
+            track_id,
+            CreateWordTimeline {
+                algorithm_id: Some(algorithm_id.into()),
+                algorithm_version: Some(algorithm_version.into()),
+                config_hash: Some(config_hash.into()),
+                parent_timeline_id: parent_timeline_id.cloned(),
+                created_by: Some(TimelineCreator::Algorithm),
+                status: Some(status),
+                metrics_json: None,
+                words: timings.to_vec(),
+            },
+        )
+        .ok()
+        .map(|timeline| timeline.id)
+}
+
+fn forced_align_segments(sentences: &[SubtitleSentence]) -> Vec<ForcedAlignSegment> {
+    sentences
+        .iter()
+        .filter_map(|sentence| {
+            let words = sentence
+                .tokens
+                .iter()
+                .filter(|token| token.kind == SubtitleTokenKind::Word)
+                .map(|token| token.text.clone())
+                .collect::<Vec<_>>();
+            if words.is_empty() {
+                return None;
+            }
+            Some(ForcedAlignSegment {
+                index: sentence.index,
+                text: sentence.display_text.clone(),
+                words,
+                start_ms: sentence.start.get(),
+                end_ms: sentence.end.get(),
+            })
+        })
+        .collect()
 }
 
 fn word_timeline_summary(timeline: &WordTimeline) -> WordTimelineSummary {
