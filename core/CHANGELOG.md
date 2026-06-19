@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-06-19 10:54:54 CST: Implemented the M2.1 P0 forced-alignment
+  `word_index` contract fix: `align-cli.py` now emits `skipped: true`
+  placeholders using unfiltered word indexes, `forced_align::merge_alignments`
+  treats placeholders as per-word DTW fallback, contract tests cover CJK and
+  punctuation skip cases, and ADR 0011 / M2.1 planning docs now match the
+  existing top-level `timings[]` sidecar JSON shape.
 - 2026-06-18 20:45:41 CST: Fixed the timeline-production research venv setup
   to install with `uv pip`, downloaded and smoke-loaded the WhisperX
   `large-v3` ASR stack plus the English wav2vec2 alignment model, added

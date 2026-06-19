@@ -2,9 +2,9 @@
 
 ## Status
 
-Proposed for implementation in `2.1-alignment-pipeline-hardening`.
+Accepted and implemented in `2.1-alignment-pipeline-hardening`.
 
-Not yet implemented. This ADR records the intended contract fix for the
+This ADR records the contract fix for the
 `word_index` misalignment bug documented in
 [`2.1-PLAN.md`](../../.planning/phases/2.1-alignment-pipeline-hardening/2.1-PLAN.md)
 (P0). It supersedes the implicit, buggy indexing assumption inherited from
@@ -54,15 +54,10 @@ the Python sidecar emit a placeholder for every skipped word.
 
 ```json
 {
-  "segments": [
-    {
-      "segment_index": 0,
-      "words": [
-        {"word_index": 0, "word": "hello", "start_ms": 100, "end_ms": 300},
-        {"word_index": 1, "skipped": true},
-        {"word_index": 2, "word": "world", "start_ms": 400, "end_ms": 600}
-      ]
-    }
+  "timings": [
+    {"segment_index": 0, "word_index": 0, "text": "hello", "start_ms": 100, "end_ms": 300},
+    {"segment_index": 0, "word_index": 1, "skipped": true},
+    {"segment_index": 0, "word_index": 2, "text": "world", "start_ms": 400, "end_ms": 600}
   ]
 }
 ```
@@ -71,8 +66,8 @@ the Python sidecar emit a placeholder for every skipped word.
   segment, **before** any normalization filtering. It is identical to the
   enumerate index of the `WordTiming` rows sorted by `token_index`.
 - A skipped word (normalized to empty) is emitted as
-  `{"word_index": k, "skipped": true}` and **does not** include `word`,
-  `start_ms`, or `end_ms`.
+  `{"segment_index": s, "word_index": k, "skipped": true}` and **does not**
+  include `text`, `start_ms`, or `end_ms`.
 - `align-cli.py` no longer uses a filtered counter; the original word-list index
   is carried through.
 

@@ -34,6 +34,11 @@ Output (stdout, one JSON object):
           "start_ms": 120,
           "end_ms": 480,
           "score": 0.95
+        },
+        {
+          "segment_index": 0,
+          "word_index": 1,
+          "skipped": true
         }
       ]
     }
@@ -84,18 +89,22 @@ def _normalize_word(word: str) -> str:
     )
 
 
-def _tokenize_words(words: list[str]) -> tuple[list[str], list[list[int]]]:
-    normalized_words: list[str] = []
+def _tokenize_words(words: list[str]) -> tuple[list[tuple[int, str]], list[list[int]], list[int]]:
+    alignable_words: list[tuple[int, str]] = []
     token_groups: list[list[int]] = []
-    for word in words:
+    skipped_word_indexes: list[int] = []
+    for word_index, word in enumerate(words):
         normalized = _normalize_word(word)
         if not normalized:
+            skipped_word_indexes.append(word_index)
             continue
         ids = [int(token) for token in _TOKENIZER([normalized])[0]]
         if ids:
-            normalized_words.append(word)
+            alignable_words.append((word_index, word))
             token_groups.append(ids)
-    return normalized_words, token_groups
+        else:
+            skipped_word_indexes.append(word_index)
+    return alignable_words, token_groups, skipped_word_indexes
 
 
 def _frame_span_to_ms(
@@ -164,9 +173,19 @@ def main() -> int:
             :, start_frame : min(end_frame, n_frames), :
         ]
 
-        aligned_words, token_groups = _tokenize_words(words)
+        segment_timings: list[dict] = []
+        alignable_words, token_groups, skipped_word_indexes = _tokenize_words(words)
+        for word_index in skipped_word_indexes:
+            segment_timings.append(
+                {
+                    "segment_index": seg_index,
+                    "word_index": word_index,
+                    "skipped": True,
+                }
+            )
         flat_token_ids = [token for group in token_groups for token in group]
         if not flat_token_ids:
+            timings.extend(sorted(segment_timings, key=lambda row: row["word_index"]))
             continue
 
         targets = torch.tensor([flat_token_ids], dtype=torch.int32)
@@ -178,45 +197,39 @@ def main() -> int:
                 f"align-cli: alignment failed for segment {seg_index}: {exc}",
                 file=sys.stderr,
             )
+            timings.extend(sorted(segment_timings, key=lambda row: row["word_index"]))
             continue
 
-        word_starts: list[int] = []
-        word_ends: list[int] = []
-        word_scores: list[list[float]] = []
         span_cursor = 0
-        for group in token_groups:
+        for (word_index, word), group in zip(alignable_words, token_groups):
             group_spans = token_spans[span_cursor : span_cursor + len(group)]
             span_cursor += len(group)
             if not group_spans:
                 continue
-            word_starts.append(int(group_spans[0].start))
-            word_ends.append(int(group_spans[-1].end))
-            word_scores.append([float(span.score) for span in group_spans])
-
-        n_words = min(len(aligned_words), len(word_starts))
-        for w_idx in range(n_words):
-            s_frame = word_starts[w_idx]
-            e_frame = word_ends[w_idx]
+            s_frame = int(group_spans[0].start)
+            e_frame = int(group_spans[-1].end)
             if e_frame < s_frame:
                 e_frame = s_frame
+            word_scores = [float(span.score) for span in group_spans]
             score = (
-                sum(word_scores[w_idx]) / len(word_scores[w_idx])
-                if word_scores[w_idx]
+                sum(word_scores) / len(word_scores)
+                if word_scores
                 else 0.0
             )
             start_ms, end_ms = _frame_span_to_ms(
                 frame_ratio_ms, s_frame, e_frame, seg_start_ms, seg_end_ms
             )
-            timings.append(
+            segment_timings.append(
                 {
                     "segment_index": seg_index,
-                    "word_index": w_idx,
-                    "text": aligned_words[w_idx],
+                    "word_index": word_index,
+                    "text": word,
                     "start_ms": start_ms,
                     "end_ms": end_ms,
                     "score": round(float(score), 4),
                 }
             )
+        timings.extend(sorted(segment_timings, key=lambda row: row["word_index"]))
 
     json.dump({"timings": timings}, sys.stdout)
     sys.stdout.write("\n")

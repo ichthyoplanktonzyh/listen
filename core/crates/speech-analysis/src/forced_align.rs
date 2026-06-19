@@ -27,14 +27,20 @@ pub const PROVIDER_VERSION: &str = "mms-fa-v1";
 ///
 /// `segment_index` matches `SubtitleSentence.index` (whisper segment order),
 /// and `word_index` is the 0-based position among lexical word tokens in that
-/// segment — the same indexing scheme used by `asr_timing::extract_word_timings`.
+/// segment before any sidecar-side normalization filtering. Entries with
+/// `skipped = true` intentionally carry no timing and keep the DTW fallback.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct AlignedWord {
     pub segment_index: u32,
     pub word_index: u32,
+    #[serde(default)]
+    pub skipped: bool,
+    #[serde(default)]
     #[allow(dead_code)]
     pub text: String,
+    #[serde(default)]
     pub start_ms: u64,
+    #[serde(default)]
     pub end_ms: u64,
     pub score: Option<f32>,
 }
@@ -135,6 +141,9 @@ pub fn merge_alignments(
             let Some(w) = by_word.get(&(word_pos as u32)) else {
                 continue;
             };
+            if w.skipped {
+                continue;
+            }
             if !is_plausible(w.start_ms, w.end_ms, ctx) {
                 continue;
             }
@@ -268,6 +277,7 @@ mod tests {
             AlignedWord {
                 segment_index: 0,
                 word_index: 0,
+                skipped: false,
                 text: "hello".into(),
                 start_ms: 120,
                 end_ms: 480,
@@ -276,6 +286,7 @@ mod tests {
             AlignedWord {
                 segment_index: 0,
                 word_index: 1,
+                skipped: false,
                 text: "world".into(),
                 start_ms: 600,
                 end_ms: 980,
@@ -294,6 +305,56 @@ mod tests {
     }
 
     #[test]
+    fn skipped_placeholder_preserves_unfiltered_word_indexes() {
+        let s = sentence(0, "s1", 0, 3000, &["hello", "東京", "world"]);
+        let mut timings = vec![
+            dtw_timing(&s.id, 0, "hello", 0, 1000),
+            dtw_timing(&s.id, 1, "東京", 1000, 2000),
+            dtw_timing(&s.id, 2, "world", 2000, 3000),
+        ];
+        let aligned = vec![
+            AlignedWord {
+                segment_index: 0,
+                word_index: 0,
+                skipped: false,
+                text: "hello".into(),
+                start_ms: 100,
+                end_ms: 500,
+                score: Some(0.9),
+            },
+            AlignedWord {
+                segment_index: 0,
+                word_index: 1,
+                skipped: true,
+                text: String::new(),
+                start_ms: 0,
+                end_ms: 0,
+                score: None,
+            },
+            AlignedWord {
+                segment_index: 0,
+                word_index: 2,
+                skipped: false,
+                text: "world".into(),
+                start_ms: 2100,
+                end_ms: 2600,
+                score: Some(0.8),
+            },
+        ];
+
+        let upgraded = merge_alignments(&mut timings, &aligned, &[s]);
+
+        assert_eq!(upgraded, 2);
+        assert_eq!(timings[0].start_ms, 100);
+        assert_eq!(timings[0].timing_source, TimingSource::ForcedAligned);
+        assert_eq!(timings[1].start_ms, 1000);
+        assert_eq!(timings[1].timing_source, TimingSource::AsrReported);
+        assert_eq!(timings[2].start_ms, 2100);
+        assert_eq!(timings[2].text, "world");
+        assert_eq!(timings[2].timing_source, TimingSource::ForcedAligned);
+    }
+
+    #[test]
     fn rejects_aligned_word_outside_sentence_window() {
         let s = sentence(0, "s1", 1000, 3000, &["hello", "world"]);
         let mut timings = vec![
@@ -304,6 +365,7 @@ mod tests {
         let aligned = vec![AlignedWord {
             segment_index: 0,
             word_index: 0,
+            skipped: false,
             text: "hello".into(),
             start_ms: 500,
             end_ms: 900,
@@ -322,6 +384,7 @@ mod tests {
         let aligned = vec![AlignedWord {
             segment_index: 0,
             word_index: 0,
+            skipped: false,
             text: "hello".into(),
             start_ms: 500,
             end_ms: 500,
@@ -346,6 +409,7 @@ mod tests {
             AlignedWord {
                 segment_index: 0,
                 word_index: 0,
+                skipped: false,
                 text: "a".into(),
                 start_ms: 100,
                 end_ms: 900,
@@ -354,6 +418,7 @@ mod tests {
             AlignedWord {
                 segment_index: 0,
                 word_index: 1,
+                skipped: false,
                 text: "b".into(),
                 start_ms: 200, // before a.end (900)
                 end_ms: 800,
@@ -362,6 +427,7 @@ mod tests {
             AlignedWord {
                 segment_index: 0,
                 word_index: 2,
+                skipped: false,
                 text: "c".into(),
                 start_ms: 1100,
                 end_ms: 2000,
@@ -383,6 +449,7 @@ mod tests {
             AlignedWord {
                 segment_index: 99, // no such segment
                 word_index: 0,
+                skipped: false,
                 text: "ghost".into(),
                 start_ms: 100,
                 end_ms: 200,
@@ -391,6 +458,7 @@ mod tests {
             AlignedWord {
                 segment_index: 0,
                 word_index: 0,
+                skipped: false,
                 text: "hello".into(),
                 start_ms: 100,
                 end_ms: 500,
@@ -414,6 +482,7 @@ mod tests {
             AlignedWord {
                 segment_index: 0,
                 word_index: 0,
+                skipped: false,
                 text: "one".into(),
                 start_ms: 50,
                 end_ms: 400,
@@ -442,12 +511,15 @@ mod tests {
 
     #[test]
     fn deserializes_sidecar_output() {
-        let json = br#"{"timings":[{"segment_index":0,"word_index":0,"text":"hi","start_ms":10,"end_ms":90,"score":0.88}]}"#;
+        let json = br#"{"timings":[{"segment_index":0,"word_index":0,"text":"hi","start_ms":10,"end_ms":90,"score":0.88},{"segment_index":0,"word_index":1,"skipped":true}]}"#;
         let out: AlignOutput = serde_json::from_slice(json).unwrap();
-        assert_eq!(out.timings.len(), 1);
+        assert_eq!(out.timings.len(), 2);
         assert_eq!(out.timings[0].segment_index, 0);
+        assert!(!out.timings[0].skipped);
         assert_eq!(out.timings[0].start_ms, 10);
         assert_eq!(out.timings[0].score, Some(0.88));
+        assert!(out.timings[1].skipped);
+        assert_eq!(out.timings[1].start_ms, 0);
     }
 
     #[test]
