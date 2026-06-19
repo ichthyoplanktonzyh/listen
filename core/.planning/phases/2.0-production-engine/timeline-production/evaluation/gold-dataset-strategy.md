@@ -1,6 +1,6 @@
 # Gold Dataset Strategy
 
-更新时间：2026-06-18 20:45:41 CST
+更新时间：2026-06-19 11:44:19 CST
 
 Phase 4 的评估路线先使用已有高质量 benchmark，不直接进入 CNN10/NBC gold set。
 原因很简单：CNN10/NBC 当前没有可信的词级标准答案；如果先用它们评估，只会把
@@ -79,6 +79,19 @@ TIMIT 真实 `.WRD` 存在少量相邻词重叠、零长词、以及 `.WRD/.TXT`
 English wav2vec2 aligner；WhisperX 的完整 ASR/VAD/align CLI 流程和 MFA 仍需继续
 对照，不能只凭这一组小样本做最终技术路线裁决。
 
+TIMIT TEST 100 扩样报告：
+
+| Candidate | Matched | Start MAE | Start P95 | End MAE | End P95 | Tail mean abs | Tail P95 | Text mismatch |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| MMS_FA + TIMIT transcript | 881/881 | 47.53ms | 101.0ms | 27.16ms | 74.0ms | 32.15ms | 111.05ms | 0 |
+| WhisperX CLI | 876/881 | 56.81ms | 117.0ms | 31.06ms | 88.5ms | 57.06ms | 159.15ms | 15 |
+| WhisperX CLI + MMS_FA post-align | 876/881 | 49.53ms | 110.25ms | 33.22ms | 105.25ms | 66.50ms | 187.25ms | 15 |
+
+TEST 100 说明：MMS_FA 在给定高质量 transcript/utterance anchor 时仍然最好。
+WhisperX CLI 后再跑 MMS_FA 可改善 start 边界，但 end/tail 变差，并且文本/token
+覆盖问题仍由 WhisperX transcript 决定。生产端下一条重路线应验证
+WhisperX transcript + MFA，而不是只继续调 MMS_FA post-pass。
+
 ### 2. Buckeye：第二优先级
 
 用途：
@@ -129,10 +142,9 @@ English wav2vec2 aligner；WhisperX 的完整 ASR/VAD/align CLI 流程和 MFA �
 
 ## Immediate Phase 4 Tasks
 
-1. 用同一 TIMIT TEST 20 bundle 跑完整 WhisperX CLI 流程，观察 ASR+VAD+align
-   是否不同于 known-transcript alignment。
-2. 增加 MFA 候选管线或导入器，确认传统 GMM-HMM FA 是否显著优于 MMS_FA。
-3. 扩展到 TIMIT TEST full，确认小样本结论是否稳定。
+1. 完成 MFA research sidecar 的本机安装与模型下载。
+2. 用 TIMIT TEST 100 跑 MFA + TIMIT transcript，确认 MFA 上限表现。
+3. 用 TIMIT TEST 100 跑 WhisperX transcript + MFA，验证真实生产端重路线。
 4. 增加 Buckeye parser 设计文档，确认授权和格式样本后再实现。
 5. 暂缓 CNN10/NBC gold set，只保留后续领域校准位置。
 

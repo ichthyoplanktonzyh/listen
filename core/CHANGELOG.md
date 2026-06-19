@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-06-19 11:44:19 CST: Expanded the TIMIT TEST 100 alignment benchmark
+  comparison across MMS_FA + TIMIT transcript, full WhisperX CLI, and
+  WhisperX CLI + MMS_FA post-alignment; documented that MMS_FA remains the best
+  current upper-bound route with a high-quality transcript, while the WhisperX
+  CLI + MMS_FA post-pass improves start timing but regresses end/tail timing.
+  Added the research-only MFA sidecar scaffold (`setup-mfa-research.sh`,
+  `mfa-align-cli.py`) plus TextGrid parser contract coverage, with MFA
+  installation and real runs still pending because this machine does not yet
+  have `mfa`, `conda`, `mamba`, or `micromamba` available.
 - 2026-06-19 11:00:47 CST: Implemented the M2.1 P1 tokenizer/evaluation
   guardrail: added shared `scripts/lltimeline_common.py`, moved benchmark,
   production, and evaluation tooling onto the same word normalization/token

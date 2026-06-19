@@ -176,3 +176,22 @@
 - Recorded that this first WhisperX alignment-only result is weaker than the
   MMS_FA TEST 20 result, so Phase 4 should next compare full WhisperX CLI,
   MFA, and larger TIMIT samples before choosing the production aligner.
+
+## 2026-06-19 11:44:19 CST
+
+- Expanded the benchmark comparison to TIMIT TEST 100:
+  MMS_FA + TIMIT transcript matched 881/881 words with start MAE 47.53ms,
+  end MAE 27.16ms, and tail mean abs 32.15ms.
+- Ran full WhisperX CLI on the same TEST 100 bundle:
+  876/881 matched words, start MAE 56.81ms, end MAE 31.06ms, tail mean abs
+  57.06ms, and 15 normalized text mismatches.
+- Ran a hybrid WhisperX CLI + MMS_FA post-align experiment:
+  start MAE improved to 49.53ms, but end MAE regressed to 33.22ms and tail
+  mean abs regressed to 66.50ms after repairing 24 word overlaps.
+- Added the MFA research sidecar scaffold:
+  `scripts/forced-align/setup-mfa-research.sh` prepares a research-only Conda
+  environment and downloads MFA models, while
+  `scripts/forced-align/mfa-align-cli.py` bridges `alignment-request.json` to
+  MFA corpus/TextGrid output and back to top-level `timings[]` JSON.
+- Added TextGrid parser contract coverage for MFA output without requiring MFA
+  to be installed in default contract validation.
