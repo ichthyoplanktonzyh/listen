@@ -195,3 +195,27 @@
   MFA corpus/TextGrid output and back to top-level `timings[]` JSON.
 - Added TextGrid parser contract coverage for MFA output without requiring MFA
   to be installed in default contract validation.
+
+## 2026-06-19 15:19:15 CST
+
+- Installed the local research-only MFA runtime through Homebrew `micromamba`
+  and created the isolated MFA 3.3.9 environment under
+  `~/Library/Caches/LLPlayerNext/research/mfa/env`.
+- Downloaded MFA `english_mfa` and `english_us_arpa` dictionary/acoustic model
+  files into the research cache.
+- Confirmed that batch `mfa align` can complete first-pass alignment on TIMIT
+  TEST 100, but fails during MFA's SQLite interval collection/export path with
+  empty `word_intervals.csv` / `phone_intervals.csv` and missing
+  `word_interval_temp`.
+- Added the parallel `align-one` strategy to `mfa-align-cli.py`:
+  each segment runs through MFA `align_one`, the sidecar resolves saved
+  dictionary files and pre-extracted acoustic model directories before launch,
+  and each child process receives an isolated `MFA_ROOT_DIR` to avoid MFA model
+  cache and command-history write races.
+- Ran MFA English US ARPA `align-one` against TIMIT TEST 100:
+  881/881 matched words, start MAE 14.46ms, start P95 48.0ms, end MAE 18.20ms,
+  end P95 53.0ms, tail mean abs 34.12ms, tail P95 112.05ms, 0 normalized text
+  mismatches, and 5 suspicious words.
+- Updated the Phase 4 conclusion: MFA is now the best observed word-boundary
+  aligner under a high-quality transcript/utterance-anchor condition; the next
+  realistic production test is WhisperX transcript + MFA.

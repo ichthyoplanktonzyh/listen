@@ -1,6 +1,6 @@
 # Gold Dataset Strategy
 
-更新时间：2026-06-19 11:44:19 CST
+更新时间：2026-06-19 15:19:15 CST
 
 Phase 4 的评估路线先使用已有高质量 benchmark，不直接进入 CNN10/NBC gold set。
 原因很简单：CNN10/NBC 当前没有可信的词级标准答案；如果先用它们评估，只会把
@@ -86,11 +86,26 @@ TIMIT TEST 100 扩样报告：
 | MMS_FA + TIMIT transcript | 881/881 | 47.53ms | 101.0ms | 27.16ms | 74.0ms | 32.15ms | 111.05ms | 0 |
 | WhisperX CLI | 876/881 | 56.81ms | 117.0ms | 31.06ms | 88.5ms | 57.06ms | 159.15ms | 15 |
 | WhisperX CLI + MMS_FA post-align | 876/881 | 49.53ms | 110.25ms | 33.22ms | 105.25ms | 66.50ms | 187.25ms | 15 |
+| MFA English US ARPA align-one + TIMIT transcript | 881/881 | 14.46ms | 48.0ms | 18.20ms | 53.0ms | 34.12ms | 112.05ms | 0 |
 
-TEST 100 说明：MMS_FA 在给定高质量 transcript/utterance anchor 时仍然最好。
-WhisperX CLI 后再跑 MMS_FA 可改善 start 边界，但 end/tail 变差，并且文本/token
-覆盖问题仍由 WhisperX transcript 决定。生产端下一条重路线应验证
+TEST 100 说明：MFA English US ARPA 在给定高质量 transcript/utterance anchor
+时已经是当前最强词边界路线，start/end MAE 和 P95 都显著优于 MMS_FA、完整
+WhisperX CLI、以及 WhisperX CLI + MMS_FA post-pass。MMS_FA 的 sentence tail
+mean abs 仍略好，但差距很小；chunk 切分后续需要结合 pause/VAD/speaker turn
+另行评估。WhisperX CLI 后再跑 MMS_FA 可改善 start 边界，但 end/tail 变差，
+并且文本/token 覆盖问题仍由 WhisperX transcript 决定。生产端下一条重路线应验证
 WhisperX transcript + MFA，而不是只继续调 MMS_FA post-pass。
+
+MFA 实测注意事项：
+
+- `mfa align` 批量模式在本机 MFA 3.3.9 / Python 3.14 环境中能完成 first-pass
+  alignment，但 SQLite interval collection/export 阶段生成空 interval CSV，
+  随后因缺少 `word_interval_temp` 失败。
+- `mfa align_one` 单文件模式可稳定导出 words/phones TextGrid。当前 sidecar 用
+  parallel `align-one` 策略绕过批量数据库导出路径。
+- parallel `align-one` 必须传入已解析的 `.dict` 文件和预解压 acoustic model
+  目录，并给每个子进程隔离 `MFA_ROOT_DIR`，否则 MFA 会并发写模型缓存或
+  `command_history.yaml`。
 
 ### 2. Buckeye：第二优先级
 
@@ -142,9 +157,9 @@ WhisperX transcript + MFA，而不是只继续调 MMS_FA post-pass。
 
 ## Immediate Phase 4 Tasks
 
-1. 完成 MFA research sidecar 的本机安装与模型下载。
-2. 用 TIMIT TEST 100 跑 MFA + TIMIT transcript，确认 MFA 上限表现。
-3. 用 TIMIT TEST 100 跑 WhisperX transcript + MFA，验证真实生产端重路线。
+1. 已完成：MFA research sidecar 的本机安装与模型下载。
+2. 已完成：TIMIT TEST 100 的 MFA + TIMIT transcript 上限验证。
+3. 下一步：用 TIMIT TEST 100 跑 WhisperX transcript + MFA，验证真实生产端重路线。
 4. 增加 Buckeye parser 设计文档，确认授权和格式样本后再实现。
 5. 暂缓 CNN10/NBC gold set，只保留后续领域校准位置。
 

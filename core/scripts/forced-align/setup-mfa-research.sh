@@ -8,10 +8,13 @@ set -euo pipefail
 
 research_root="${LLPLAYERNEXT_MFA_DIR:-$HOME/Library/Caches/LLPlayerNext/research/mfa}"
 env_prefix="${LLPLAYERNEXT_MFA_ENV:-$research_root/env}"
+mfa_root="${LLPLAYERNEXT_MFA_ROOT_DIR:-$research_root/root}"
 dictionary_model="${LLPLAYERNEXT_MFA_DICTIONARY:-english_mfa}"
 acoustic_model="${LLPLAYERNEXT_MFA_ACOUSTIC:-english_mfa}"
 
 mkdir -p "$research_root"
+mkdir -p "$mfa_root"
+export MFA_ROOT_DIR="$mfa_root"
 
 if [[ -x "$env_prefix/bin/mfa" ]]; then
   mfa_bin="$env_prefix/bin/mfa"
@@ -49,6 +52,9 @@ fi
 cat <<EOF
 MFA research environment ready:
   $env_prefix
+
+MFA root:
+  $mfa_root
 
 Models:
   dictionary: $dictionary_model

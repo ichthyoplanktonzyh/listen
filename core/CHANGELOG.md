@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- 2026-06-19 15:19:15 CST: Completed the first MFA English US ARPA
+  `align-one` TIMIT TEST 100 evaluation: 881/881 matched words, start MAE
+  14.46ms, start P95 48.0ms, end MAE 18.20ms, end P95 53.0ms, tail mean abs
+  34.12ms, tail P95 112.05ms, and no text mismatches. Updated Phase 4 docs to
+  mark MFA as the strongest observed word-boundary aligner under a high-quality
+  transcript/utterance-anchor condition, with WhisperX transcript + MFA as the
+  next realistic production-route test.
+- 2026-06-19 14:43:16 CST: Installed the local research-only MFA runtime via
+  Homebrew `micromamba`, created the isolated MFA 3.3.9 environment under
+  `~/Library/Caches/LLPlayerNext/research/mfa/env`, and updated the MFA setup
+  and alignment sidecar scripts to force `MFA_ROOT_DIR` into the same research
+  cache and prepend the MFA environment's `bin` directory to subprocess `PATH`
+  so model files, MFA temporary defaults, and OpenFST/Kaldi binary resolution do
+  not spill into `~/Documents/MFA` or the user's shell profile. Added a
+  parallel `align-one` MFA sidecar strategy after batch `mfa align` reached
+  successful first-pass alignment on TIMIT TEST 100 but failed in MFA's SQLite
+  interval collection/export path with empty interval CSVs; `align-one` now
+  resolves saved dictionaries and pre-extracted acoustic model directories
+  before launching parallel jobs and gives each MFA child process an isolated
+  `MFA_ROOT_DIR` to avoid concurrent model-cache extraction and
+  command-history YAML writes.
 - 2026-06-19 11:44:19 CST: Expanded the TIMIT TEST 100 alignment benchmark
   comparison across MMS_FA + TIMIT transcript, full WhisperX CLI, and
   WhisperX CLI + MMS_FA post-alignment; documented that MMS_FA remains the best
