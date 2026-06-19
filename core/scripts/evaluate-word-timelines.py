@@ -11,6 +11,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+from lltimeline_common import normalize_word, word_key
+
 
 THRESHOLDS_MS = (25, 50, 100, 200)
 
@@ -63,7 +65,7 @@ def timeline_words(value: Any, label: str) -> list[dict[str, Any]]:
                 "sentence_id": sentence_id,
                 "token_index": token_index,
                 "text": text,
-                "normalized_text": text.strip().casefold(),
+                "normalized_text": normalize_word(text),
                 "start_ms": start_ms,
                 "end_ms": end_ms,
             }
@@ -87,10 +89,6 @@ def timeline_meta(value: Any, path: Path, words: list[dict[str, Any]]) -> dict[s
         "status": value.get("status", "unknown"),
         "word_count": len(words),
     }
-
-
-def word_key(word: dict[str, Any]) -> tuple[str, int]:
-    return (word["sentence_id"], word["token_index"])
 
 
 def index_words(words: list[dict[str, Any]], label: str) -> dict[tuple[str, int], dict[str, Any]]:
@@ -209,6 +207,24 @@ def matched_pairs(
     return pairs
 
 
+def text_mismatches(pairs: list[tuple[dict[str, Any], dict[str, Any]]]) -> list[dict[str, Any]]:
+    mismatches: list[dict[str, Any]] = []
+    for reference, prediction in pairs:
+        if reference["normalized_text"] == prediction["normalized_text"]:
+            continue
+        mismatches.append(
+            {
+                "sentence_id": reference["sentence_id"],
+                "token_index": reference["token_index"],
+                "reference_text": reference["text"],
+                "candidate_text": prediction["text"],
+                "reference_normalized": reference["normalized_text"],
+                "candidate_normalized": prediction["normalized_text"],
+            }
+        )
+    return mismatches
+
+
 def offset_metrics(pairs: list[tuple[dict[str, Any], dict[str, Any]]]) -> dict[str, Any]:
     start_offsets = [candidate["start_ms"] - base["start_ms"] for base, candidate in pairs]
     end_offsets = [candidate["end_ms"] - base["end_ms"] for base, candidate in pairs]
@@ -319,8 +335,16 @@ def markdown_report(report: dict[str, Any]) -> str:
         f"- End mean offset: {end['mean']} ms; median abs: {end['median_abs']} ms; P95 abs: {end['p95_abs']} ms",
         f"- Tail lag mean: {tail['mean']} ms; P95 abs: {tail['p95_abs']} ms",
         f"- Candidate overlaps: {weak['candidate_validity']['overlap_count']}",
+        f"- Text mismatches: {weak['text_mismatch_count']} ({weak['text_mismatch_rate']})",
         f"- Suspicious words: {len(weak['suspicious_words'])}",
     ]
+    if weak["text_mismatch_samples"]:
+        lines.extend(["", "## Text Mismatches", ""])
+        for word in weak["text_mismatch_samples"][:20]:
+            lines.append(
+                f"- {word['sentence_id']}:{word['token_index']} "
+                f"`{word['reference_text']}` -> `{word['candidate_text']}`"
+            )
     if "gold_metrics" in report:
         gold = report["gold_metrics"]
         lines.extend(
@@ -367,10 +391,14 @@ def build_compare_report(
     )
     if not pairs:
         fail("baseline and candidate have no matching sentence_id/token_index word keys")
+    mismatches = text_mismatches(pairs)
     weak = {
         "baseline_word_count": len(baseline_words),
         "candidate_word_count": len(candidate_words),
         "matched_word_count": len(pairs),
+        "text_mismatch_count": len(mismatches),
+        "text_mismatch_rate": round_float(len(mismatches) / len(pairs)),
+        "text_mismatch_samples": mismatches[:20],
         "baseline_coverage": round_float(len(pairs) / len(baseline_words)),
         "candidate_coverage": round_float(len(pairs) / len(candidate_words)),
         "offsets": offset_metrics(pairs),

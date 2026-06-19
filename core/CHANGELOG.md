@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-06-19 11:00:47 CST: Implemented the M2.1 P1 tokenizer/evaluation
+  guardrail: added shared `scripts/lltimeline_common.py`, moved benchmark,
+  production, and evaluation tooling onto the same word normalization/token
+  helpers, added regression coverage for multi-apostrophe words, and extended
+  word timeline comparison reports with normalized text mismatch counts, rates,
+  and samples.
 - 2026-06-19 10:54:54 CST: Implemented the M2.1 P0 forced-alignment
   `word_index` contract fix: `align-cli.py` now emits `skipped: true`
   placeholders using unfiltered word indexes, `forced_align::merge_alignments`

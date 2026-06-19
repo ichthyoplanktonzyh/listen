@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 *.log
+*.pyc
 *.sqlite
 *.sqlite3
 .dart_tool/
@@ -13,6 +14,7 @@
 .turbo/
 .tmp/
 .vscode/
+__pycache__/
 .claude/worktrees/
 build/
 dist/
