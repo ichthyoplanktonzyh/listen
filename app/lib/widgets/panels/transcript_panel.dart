@@ -4,6 +4,7 @@ import '../../localization.dart';
 import '../../models/timeline.dart';
 import '../../utils/format_duration.dart';
 import '../subtitle/token_line.dart';
+import 'timeline_resource_summary_panel.dart';
 
 class TranscriptPanel extends StatelessWidget {
   const TranscriptPanel({
@@ -17,6 +18,13 @@ class TranscriptPanel extends StatelessWidget {
     required this.baseColor,
     required this.onWord,
     required this.onSeekCue,
+    required this.timelineDocument,
+    required this.wordTimelineSummaries,
+    required this.timelineResourceError,
+    required this.onImportLLTimeline,
+    required this.onRefreshTimelineResource,
+    required this.onActivateWordTimeline,
+    required this.onManualReviewTimeline,
   });
 
   final SubtitleTrack? track;
@@ -28,6 +36,13 @@ class TranscriptPanel extends StatelessWidget {
   final Color baseColor;
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
   final Future<void> Function(Cue? cue) onSeekCue;
+  final LLTimelineDocument? timelineDocument;
+  final List<WordTimelineSummary> wordTimelineSummaries;
+  final String? timelineResourceError;
+  final Future<void> Function() onImportLLTimeline;
+  final Future<void> Function() onRefreshTimelineResource;
+  final Future<void> Function(String timelineId) onActivateWordTimeline;
+  final Future<void> Function() onManualReviewTimeline;
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +53,15 @@ class TranscriptPanel extends StatelessWidget {
           ? Center(child: Text(l.text('importSubtitleHint')))
           : Column(
               children: [
+                TimelineResourceSummaryPanel(
+                  document: timelineDocument,
+                  summaries: wordTimelineSummaries,
+                  error: timelineResourceError,
+                  onImport: onImportLLTimeline,
+                  onRefresh: onRefreshTimelineResource,
+                  onActivate: onActivateWordTimeline,
+                  onManualReview: onManualReviewTimeline,
+                ),
                 Expanded(
                   child: ListView.builder(
                     controller: scrollController,

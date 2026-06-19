@@ -30,6 +30,9 @@ class SubtitleState {
     this.timingsBySentence = const {},
     this.chunkPartitionsBySentence = const {},
     this.pronunciationProviders = const [],
+    this.wordTimelineSummaries = const [],
+    this.llTimelineDocument,
+    this.timelineResourceError,
     this.currentWordToken,
     this.phoneticAnalysisBySentence = const {},
     this.currentDetectedPhone,
@@ -59,6 +62,9 @@ class SubtitleState {
   final Map<String, List<WordTiming>> timingsBySentence;
   final Map<String, SentenceChunkPartition> chunkPartitionsBySentence;
   final List<Map<String, dynamic>> pronunciationProviders;
+  final List<WordTimelineSummary> wordTimelineSummaries;
+  final LLTimelineDocument? llTimelineDocument;
+  final String? timelineResourceError;
   final int? currentWordToken;
   final Map<String, Map<String, dynamic>> phoneticAnalysisBySentence;
   final DetectedPhone? currentDetectedPhone;
@@ -88,6 +94,9 @@ class SubtitleState {
     Map<String, List<WordTiming>>? timingsBySentence,
     Map<String, SentenceChunkPartition>? chunkPartitionsBySentence,
     List<Map<String, dynamic>>? pronunciationProviders,
+    List<WordTimelineSummary>? wordTimelineSummaries,
+    Object? llTimelineDocument = _unset,
+    Object? timelineResourceError = _unset,
     Object? currentWordToken = _unset,
     Map<String, Map<String, dynamic>>? phoneticAnalysisBySentence,
     Object? currentDetectedPhone = _unset,
@@ -130,6 +139,13 @@ class SubtitleState {
         chunkPartitionsBySentence ?? this.chunkPartitionsBySentence,
     pronunciationProviders:
         pronunciationProviders ?? this.pronunciationProviders,
+    wordTimelineSummaries: wordTimelineSummaries ?? this.wordTimelineSummaries,
+    llTimelineDocument: identical(llTimelineDocument, _unset)
+        ? this.llTimelineDocument
+        : llTimelineDocument as LLTimelineDocument?,
+    timelineResourceError: identical(timelineResourceError, _unset)
+        ? this.timelineResourceError
+        : timelineResourceError as String?,
     currentWordToken: identical(currentWordToken, _unset)
         ? this.currentWordToken
         : currentWordToken as int?,
@@ -188,6 +204,10 @@ class SubtitleController extends ChangeNotifier {
       _state.chunkPartitionsBySentence;
   List<Map<String, dynamic>> get pronunciationProviders =>
       _state.pronunciationProviders;
+  List<WordTimelineSummary> get wordTimelineSummaries =>
+      _state.wordTimelineSummaries;
+  LLTimelineDocument? get llTimelineDocument => _state.llTimelineDocument;
+  String? get timelineResourceError => _state.timelineResourceError;
   int? get currentWordToken => _state.currentWordToken;
   Map<String, Map<String, dynamic>> get phoneticAnalysisBySentence =>
       _state.phoneticAnalysisBySentence;
@@ -301,10 +321,41 @@ class SubtitleController extends ChangeNotifier {
       timingsBySentence: const {},
       chunkPartitionsBySentence: const {},
       pronunciationProviders: const [],
+      wordTimelineSummaries: const [],
+      llTimelineDocument: null,
+      timelineResourceError: null,
       currentWordToken: null,
       phoneticAnalysisBySentence: const {},
       currentDetectedPhone: null,
       currentChunkIndex: null,
+    ),
+  );
+
+  void setTimelineResource({
+    required List<WordTimelineSummary> summaries,
+    required LLTimelineDocument? document,
+    String? error,
+  }) => _update(
+    (s) => s.copyWith(
+      wordTimelineSummaries: summaries,
+      llTimelineDocument: document,
+      timelineResourceError: error,
+    ),
+  );
+
+  void setTimelineResourceError(String error) => _update(
+    (s) => s.copyWith(
+      wordTimelineSummaries: const [],
+      llTimelineDocument: null,
+      timelineResourceError: error,
+    ),
+  );
+
+  void clearTimelineResource() => _update(
+    (s) => s.copyWith(
+      wordTimelineSummaries: const [],
+      llTimelineDocument: null,
+      timelineResourceError: null,
     ),
   );
 

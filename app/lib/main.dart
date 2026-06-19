@@ -284,6 +284,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _onEvent(Map<String, dynamic> event) {
     if (event['event'] == 'service-started') {
       unawaited(_loadWordProfiles());
+      final trackId = subtitleController.primaryTrack?.id;
+      if (trackId != null) unawaited(_loadTimelineResource(trackId));
       return;
     }
     if (event['event'] == 'transcription-job-changed') {
@@ -486,6 +488,47 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  Future<void> _openLLTimelineResource() async {
+    final service = api;
+    if (service == null) {
+      setState(() => status = 'Open media and connect the local core first');
+      return;
+    }
+    const group = XTypeGroup(label: 'LLTimeline', extensions: ['json']);
+    final file = await openFile(acceptedTypeGroups: [group]);
+    if (file == null) return;
+    try {
+      setState(() => status = 'Importing LLTimeline resource...');
+      final decoded = jsonDecode(await File(file.path).readAsString());
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('LLTimeline JSON must be an object');
+      }
+      final value = await service.importLLTimeline(decoded);
+      await adapter.disableNativeSubtitles();
+      final imported = SubtitleTrack.fromJson(value);
+      subtitleController.clearSpeechEnhancements();
+      subtitleController.setPrimaryTrack(imported);
+      subtitleController.setCurrentPrimaryCue(
+        subtitleController.primaryCursor.current(playerController.position),
+      );
+      subtitleController.setTimelineResource(
+        summaries: const [],
+        document: LLTimelineDocument.fromJson(decoded),
+      );
+      setState(() {
+        status =
+            'Imported LLTimeline resource: '
+            '${file.path.split(Platform.pathSeparator).last}';
+      });
+      await _loadWordProfiles();
+      await _loadPhraseProfiles();
+      await _loadPhraseCandidates(subtitleController.currentPrimaryCue);
+      await _loadSpeechEnhancements(imported.id);
+    } catch (error) {
+      setState(() => status = 'LLTimeline import failed: $error');
+    }
+  }
+
   Future<void> _loadGeneratedTrack(
     Map<String, dynamic> value,
     bool secondary,
@@ -520,6 +563,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _loadSpeechEnhancements(String trackId) async {
     final service = api;
     if (service == null) return;
+    await _loadTimelineResource(trackId);
     try {
       final values = await Future.wait([
         service.trackWordTimings(trackId),
@@ -583,6 +627,68 @@ class _PlayerScreenState extends State<PlayerScreen> {
         setState(() => status = 'Speech enhancements unavailable: $error');
       }
     }
+  }
+
+  Future<void> _loadTimelineResource(String trackId) async {
+    final service = api;
+    if (service == null) return;
+    try {
+      final values = await Future.wait([
+        service.trackWordTimelineSummaries(trackId),
+        service.exportTrackLLTimeline(trackId),
+      ]);
+      if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
+      final summaries = values[0] as List<Map<String, dynamic>>;
+      final exportedDocument = LLTimelineDocument.fromJson(
+        values[1] as Map<String, dynamic>,
+      );
+      final previousDocument = subtitleController.llTimelineDocument;
+      final document =
+          exportedDocument.artifacts.isEmpty &&
+              previousDocument?.artifacts.isNotEmpty == true
+          ? previousDocument
+          : exportedDocument;
+      subtitleController.setTimelineResource(
+        summaries: summaries
+            .map((raw) => WordTimelineSummary.fromJson(raw))
+            .toList(growable: false),
+        document: document,
+      );
+    } catch (error) {
+      if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
+      subtitleController.setTimelineResourceError(
+        'Timeline resource unavailable: $error',
+      );
+    }
+  }
+
+  Future<void> _refreshTimelineResource() async {
+    final trackId = subtitleController.primaryTrack?.id;
+    if (trackId == null) return;
+    await _loadTimelineResource(trackId);
+    if (mounted) setState(() => status = 'Timeline resource refreshed');
+  }
+
+  Future<void> _activateWordTimeline(String timelineId) async {
+    final service = api;
+    final trackId = subtitleController.primaryTrack?.id;
+    if (service == null || trackId == null) return;
+    try {
+      setState(() => status = 'Activating WordTimeline...');
+      await service.activateWordTimeline(timelineId);
+      if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
+      await _loadSpeechEnhancements(trackId);
+      if (mounted) setState(() => status = 'WordTimeline activated');
+    } catch (error) {
+      if (mounted) {
+        setState(() => status = 'WordTimeline activation failed: $error');
+      }
+    }
+  }
+
+  Future<void> _openManualReviewTimeline() async {
+    if (!mounted) return;
+    setState(() => status = l.text('manualReviewQueued'));
   }
 
   Future<void> _ensureCurrentPronunciation(Cue? cue) async {
@@ -2236,6 +2342,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     baseColor: settingsController.primaryColor,
     onWord: _openWord,
     onSeekCue: _seekCue,
+    timelineDocument: subtitleController.llTimelineDocument,
+    wordTimelineSummaries: subtitleController.wordTimelineSummaries,
+    timelineResourceError: subtitleController.timelineResourceError,
+    onImportLLTimeline: _openLLTimelineResource,
+    onRefreshTimelineResource: _refreshTimelineResource,
+    onActivateWordTimeline: _activateWordTimeline,
+    onManualReviewTimeline: _openManualReviewTimeline,
   );
 
   Widget _diagnosisCard() => DiagnosisCard(

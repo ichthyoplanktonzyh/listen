@@ -89,6 +89,179 @@ class WordTiming {
   final String provider;
 }
 
+class WordTimelineSummary {
+  const WordTimelineSummary({
+    required this.id,
+    required this.trackId,
+    required this.mediaId,
+    required this.algorithmId,
+    required this.algorithmVersion,
+    required this.createdBy,
+    required this.status,
+    required this.lifecycleStage,
+    required this.wordCount,
+    required this.providerIds,
+    required this.timingSources,
+    required this.canActivate,
+    required this.canArchive,
+    required this.canDelete,
+    this.parentTimelineId,
+    this.start,
+    this.end,
+    this.averageConfidence,
+  });
+
+  factory WordTimelineSummary.fromJson(Map<String, dynamic> json) =>
+      WordTimelineSummary(
+        id: json['id'] as String,
+        trackId: json['track_id'] as String,
+        mediaId: json['media_id'] as String,
+        algorithmId: json['algorithm_id'] as String,
+        algorithmVersion: json['algorithm_version'] as String,
+        parentTimelineId: json['parent_timeline_id'] as String?,
+        createdBy: json['created_by'] as String,
+        status: json['status'] as String,
+        lifecycleStage: json['lifecycle_stage'] as String,
+        wordCount: json['word_count'] as int,
+        start: _durationFromNullableMs(json['start_ms'] as int?),
+        end: _durationFromNullableMs(json['end_ms'] as int?),
+        providerIds: (json['provider_ids'] as List<dynamic>)
+            .cast<String>()
+            .toList(growable: false),
+        timingSources: (json['timing_sources'] as List<dynamic>)
+            .cast<String>()
+            .toList(growable: false),
+        averageConfidence: (json['average_confidence'] as num?)?.toDouble(),
+        canActivate: json['can_activate'] as bool,
+        canArchive: json['can_archive'] as bool,
+        canDelete: json['can_delete'] as bool,
+      );
+
+  final String id;
+  final String trackId;
+  final String mediaId;
+  final String algorithmId;
+  final String algorithmVersion;
+  final String? parentTimelineId;
+  final String createdBy;
+  final String status;
+  final String lifecycleStage;
+  final int wordCount;
+  final Duration? start;
+  final Duration? end;
+  final List<String> providerIds;
+  final List<String> timingSources;
+  final double? averageConfidence;
+  final bool canActivate;
+  final bool canArchive;
+  final bool canDelete;
+
+  bool get isActive => status == 'active';
+  bool get humanReviewed =>
+      createdBy == 'user' || lifecycleStage == 'user_adjusted';
+}
+
+class LLTimelineDocument {
+  const LLTimelineDocument({
+    required this.schema,
+    required this.metadata,
+    required this.activeWordTimelineId,
+    required this.artifacts,
+  });
+
+  factory LLTimelineDocument.fromJson(Map<String, dynamic> json) =>
+      LLTimelineDocument(
+        schema: json['schema'] as String,
+        metadata: LLTimelineMetadata.fromJson(
+          json['metadata'] as Map<String, dynamic>,
+        ),
+        activeWordTimelineId: json['active_word_timeline_id'] as String?,
+        artifacts: ((json['artifacts'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) =>
+                  LLTimelineArtifact.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+      );
+
+  final String schema;
+  final LLTimelineMetadata metadata;
+  final String? activeWordTimelineId;
+  final List<LLTimelineArtifact> artifacts;
+
+  bool get importedResource =>
+      metadata.trackSource == 'lltimeline-json-v1' ||
+      artifacts.isNotEmpty ||
+      activeWordTimelineId != null;
+}
+
+class LLTimelineMetadata {
+  const LLTimelineMetadata({
+    required this.createdAt,
+    required this.generatorId,
+    required this.generatorVersion,
+    required this.generatorMode,
+    required this.mediaTitle,
+    required this.mediaFingerprint,
+    required this.humanReviewed,
+    required this.extra,
+    this.language,
+  });
+
+  factory LLTimelineMetadata.fromJson(Map<String, dynamic> json) {
+    final generator = json['generator'] as Map<String, dynamic>;
+    final media = json['media'] as Map<String, dynamic>;
+    return LLTimelineMetadata(
+      createdAt: Duration(milliseconds: json['created_at_ms'] as int),
+      generatorId: generator['id'] as String,
+      generatorVersion: generator['version'] as String,
+      generatorMode: generator['mode'] as String,
+      mediaTitle: media['title'] as String,
+      mediaFingerprint: media['fingerprint'] as String,
+      language: json['language'] as String?,
+      humanReviewed: json['human_reviewed'] as bool,
+      extra: (json['extra'] as Map<String, dynamic>?) ?? const {},
+    );
+  }
+
+  final Duration createdAt;
+  final String generatorId;
+  final String generatorVersion;
+  final String generatorMode;
+  final String mediaTitle;
+  final String mediaFingerprint;
+  final String? language;
+  final bool humanReviewed;
+  final Map<String, dynamic> extra;
+
+  String? get trackSource => extra['track_source'] as String?;
+}
+
+class LLTimelineArtifact {
+  const LLTimelineArtifact({
+    required this.kind,
+    required this.payload,
+    this.providerId,
+    this.providerVersion,
+  });
+
+  factory LLTimelineArtifact.fromJson(Map<String, dynamic> json) =>
+      LLTimelineArtifact(
+        kind: json['kind'] as String,
+        providerId: json['provider_id'] as String?,
+        providerVersion: json['provider_version'] as String?,
+        payload: (json['payload'] as Map<String, dynamic>?) ?? const {},
+      );
+
+  final String kind;
+  final String? providerId;
+  final String? providerVersion;
+  final Map<String, dynamic> payload;
+}
+
+Duration? _durationFromNullableMs(int? value) =>
+    value == null ? null : Duration(milliseconds: value);
+
 class DetectedPhone {
   const DetectedPhone({
     required this.symbol,

@@ -138,6 +138,12 @@ class LocalApi {
           }))
           as Map<String, dynamic>;
 
+  Future<Map<String, dynamic>> importLLTimeline(
+    Map<String, dynamic> document,
+  ) async =>
+      (await _request('POST', '/v1/lltimeline/import', document))
+          as Map<String, dynamic>;
+
   Future<Map<String, dynamic>> readSubtitle(String trackId) async =>
       (await _request('GET', '/v1/subtitles/${Uri.encodeComponent(trackId)}'))
           as Map<String, dynamic>;
@@ -174,6 +180,30 @@ class LocalApi {
               ))
               as List<dynamic>)
           .cast<Map<String, dynamic>>();
+
+  Future<List<Map<String, dynamic>>> trackWordTimelineSummaries(
+    String trackId,
+  ) async =>
+      ((await _request(
+                'GET',
+                '/v1/subtitles/${Uri.encodeComponent(trackId)}/word-timelines/summary',
+              ))
+              as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+
+  Future<Map<String, dynamic>> exportTrackLLTimeline(String trackId) async =>
+      (await _request(
+            'GET',
+            '/v1/subtitles/${Uri.encodeComponent(trackId)}/lltimeline/export',
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> activateWordTimeline(String timelineId) async =>
+      (await _request(
+            'POST',
+            '/v1/word-timelines/${Uri.encodeComponent(timelineId)}/activate',
+          ))
+          as Map<String, dynamic>;
 
   Future<List<Map<String, dynamic>>> trackPhoneticAnalyses(
     String trackId,
