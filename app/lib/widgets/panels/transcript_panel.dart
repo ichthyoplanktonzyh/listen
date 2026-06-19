@@ -49,21 +49,21 @@ class TranscriptPanel extends StatelessWidget {
     final l = AppLocalizations.of(context);
     return Material(
       color: const Color(0xff151a20),
-      child: track == null
-          ? Center(child: Text(l.text('importSubtitleHint')))
-          : Column(
-              children: [
-                TimelineResourceSummaryPanel(
-                  document: timelineDocument,
-                  summaries: wordTimelineSummaries,
-                  error: timelineResourceError,
-                  onImport: onImportLLTimeline,
-                  onRefresh: onRefreshTimelineResource,
-                  onActivate: onActivateWordTimeline,
-                  onManualReview: onManualReviewTimeline,
-                ),
-                Expanded(
-                  child: ListView.builder(
+      child: Column(
+        children: [
+          TimelineResourceSummaryPanel(
+            document: timelineDocument,
+            summaries: wordTimelineSummaries,
+            error: timelineResourceError,
+            onImport: onImportLLTimeline,
+            onRefresh: onRefreshTimelineResource,
+            onActivate: onActivateWordTimeline,
+            onManualReview: onManualReviewTimeline,
+          ),
+          Expanded(
+            child: track == null
+                ? Center(child: Text(l.text('importSubtitleHint')))
+                : ListView.builder(
                     controller: scrollController,
                     itemExtent: itemExtent,
                     itemCount: track!.cues.length,
@@ -87,9 +87,9 @@ class TranscriptPanel extends StatelessWidget {
                       );
                     },
                   ),
-                ),
-              ],
-            ),
+          ),
+        ],
+      ),
     );
   }
 }
