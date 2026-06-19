@@ -2,16 +2,16 @@
 
 ## Unreleased
 
-- 2026-06-19 CST: Fixed timeline production GUI/CLI WhisperX discovery by
+- 2026-06-19 23:59:47 CST: Fixed timeline production GUI/CLI WhisperX discovery by
   auto-detecting the default timeline-production venv under
   `~/Library/Caches/LLPlayerNext/research/timeline-production/venv/bin/whisperx`;
   the GUI now pre-fills this path when present.
-- 2026-06-19 CST: Added a standalone Tkinter GUI wrapper for the local
+- 2026-06-19 23:28:09 CST: Added a standalone Tkinter GUI wrapper for the local
   LLTimeline production pipeline at
   `scripts/timeline-production/production_pipeline_gui.py`, covering media
   selection, output paths, SHA256 fingerprinting, WhisperX/post-aligner options,
   dry-run command preview, live logs, cancellation, and output-folder access.
-- 2026-06-19 CST: Completed Phase 2.2 app timeline resource UI alignment. Added
+- 2026-06-19 23:18:55 CST: Completed Phase 2.2 app timeline resource UI alignment. Added
   LLTimeline resource metadata/artifact persistence (`lltimeline_resources`),
   import/export artifact round-trip coverage, Flutter LLTimeline client methods,
   timeline resource controller state, and a Transcript-panel Timeline Resource
