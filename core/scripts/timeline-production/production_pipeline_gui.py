@@ -20,6 +20,16 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PIPELINE = Path(__file__).with_name("production_pipeline.py")
 
 
+def default_whisperx_bin() -> Path:
+    production_root = Path(
+        os.environ.get(
+            "LLPLAYERNEXT_TIMELINE_PRODUCTION_DIR",
+            str(Path.home() / "Library/Caches/LLPlayerNext/research/timeline-production"),
+        )
+    )
+    return production_root / "venv" / "bin" / "whisperx"
+
+
 def file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -59,6 +69,12 @@ class TimelineProductionGui(Tk):
         self.process: subprocess.Popen[str] | None = None
         self.events: queue.Queue[tuple[str, str | int | None]] = queue.Queue()
         self._build_ui()
+        detected_whisperx = default_whisperx_bin()
+        if detected_whisperx.exists():
+            self.whisperx_bin.set(str(detected_whisperx))
+            self.status.set("Detected timeline-production WhisperX venv")
+        else:
+            self.status.set("WhisperX not detected; run setup-venv.sh or fill WhisperX command")
         self.after(100, self._poll_events)
 
     def _build_ui(self) -> None:

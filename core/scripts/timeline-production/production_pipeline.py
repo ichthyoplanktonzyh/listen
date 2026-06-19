@@ -94,6 +94,17 @@ def default_mfa_root_dir() -> str:
     return str(research_root / "root")
 
 
+def default_whisperx_bin() -> str | None:
+    production_root = Path(
+        os.environ.get(
+            "LLPLAYERNEXT_TIMELINE_PRODUCTION_DIR",
+            str(Path.home() / "Library/Caches/LLPlayerNext/research/timeline-production"),
+        )
+    )
+    candidate = production_root / "venv" / "bin" / "whisperx"
+    return str(candidate) if candidate.exists() else None
+
+
 def default_mms_fa_python() -> str:
     research_root = Path(
         os.environ.get(
@@ -669,7 +680,7 @@ def resolve_whisperx_command(args: argparse.Namespace) -> list[str] | str:
             compute_type=args.compute_type,
             batch_size=args.batch_size,
         )
-    executable = args.whisperx_bin or shutil.which("whisperx")
+    executable = args.whisperx_bin or shutil.which("whisperx") or default_whisperx_bin()
     if executable:
         command = [executable]
     elif importlib.util.find_spec("whisperx") is not None:

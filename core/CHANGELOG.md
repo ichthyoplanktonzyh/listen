@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 2026-06-19 CST: Fixed timeline production GUI/CLI WhisperX discovery by
+  auto-detecting the default timeline-production venv under
+  `~/Library/Caches/LLPlayerNext/research/timeline-production/venv/bin/whisperx`;
+  the GUI now pre-fills this path when present.
 - 2026-06-19 CST: Added a standalone Tkinter GUI wrapper for the local
   LLTimeline production pipeline at
   `scripts/timeline-production/production_pipeline_gui.py`, covering media
