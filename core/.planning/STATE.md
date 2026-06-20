@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-06-20T14:13:38.000Z"
+last_updated: "2026-06-20T15:40:00.000Z"
 progress:
   total_phases: 10
   completed_phases: 0
@@ -14,8 +14,8 @@ progress:
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-20 22:13 CST
-> 更新原因：Phase 2.2 字幕资源生命周期与消费端闭环正式收口
+> 最后更新：2026-06-20 23:40 CST
+> 更新原因：Phase 2.6 多语言学习基础规划
 
 ## 当前位置
 
@@ -132,7 +132,83 @@ progress:
   - `.planning/phases/2.3-manual-timeline-review-ui/2.3-PLAN.md`
   - `.planning/phases/2.3-manual-timeline-review-ui/2.3-RESEARCH.md` (2026-06-20 调研完成)
 
-### Phase 2.4: ChunkTimeline 生成与消费 ⏳ 后续
+### Phase 2.3.5: Rust 巨型单文件拆分 ⏳ 已规划
+
+- 目标：在 Phase 2.3 人工校对闭环之后、Phase 2.4 ChunkTimeline 之前，集中处理
+  `persistence-sqlite`、`application`、`api-http` 的巨型 `lib.rs` 技术债。
+- 当前文件体量：
+  - `crates/persistence-sqlite/src/lib.rs`：约 4164 行。
+  - `crates/application/src/lib.rs`：约 3375 行。
+  - `crates/api-http/src/lib.rs`：约 3182 行。
+  - `crates/domain/src/lib.rs`：约 1317 行，暂不作为首要拆分对象。
+- 阶段原则：只做 mechanical decomposition，不改业务行为、不改 API contract、不改
+  SQLite schema、不新增产品能力。
+- 推荐顺序：
+  1. `persistence-sqlite` 按 repository / 表域拆分。
+  2. `application` 先拆 error / repository traits / provider traits / DTO / util，再按
+     use case 域拆分。
+  3. `api-http` 按 route group 继续拆 handler。
+- 规划文档：
+  - `.planning/phases/2.3.5-rust-module-decomposition/2.3.5-CONTEXT.md`
+  - `.planning/phases/2.3.5-rust-module-decomposition/2.3.5-PLAN.md`
+
+### Phase 2.4: ChunkTimeline 生成与消费 ⏳ 已规划
+
+- 目标：把 chunk 从临时算法结果升级为可管理、可激活、可导出、可播放消费的
+  ChunkTimeline 资源。
+- 阶段第一优先级不是继续调算法，而是打通 ChunkTimeline 资源契约：
+  `active WordTimeline -> ChunkTimeline candidates -> active ChunkTimeline -> player consumption`。
+- 第一版 provider 采用 acoustic-first + semantic-assisted 策略：
+  - 非 estimated WordTimeline 的 gap / duration evidence。
+  - 标点、短语、语义边界启发式。
+  - chunk 长度和学习可用性约束。
+  - estimated timing 降级为 approximate / text-only，不声称精确声学边界。
+- UI 目标：字幕资源管理中可见 ChunkTimeline candidates，并支持生成、激活、归档、
+  删除、导出；播放器支持当前 chunk 高亮、点击跳转、chunk 循环、Prev/Next chunk 和
+  渐进展开训练。
+- 规划文档：
+  - `.planning/phases/2.4-chunktimeline-generation-consumption/2.4-CONTEXT.md`
+  - `.planning/phases/2.4-chunktimeline-generation-consumption/2.4-PLAN.md`
+
+### Phase 2.5: Sound Pattern / PhoneTimeline ⏳ 已规划
+
+- 目标：把真实声音模式从“文字字幕的附属解释”升级为一等学习对象，让用户可以从
+  sound pattern 直接建立到文字、chunk 和意义的映射。
+- 产品动机：听力理解不只是 `audio -> words -> meaning`，更接近
+  `audio -> sound patterns -> chunks / phrase patterns -> meaning`；word/text 是解释层
+  和对齐层，不是唯一入口。
+- 阶段第一优先级是 provider benchmark + PhoneTimeline 资源契约，而不是先做音标 UI：
+  - 评估 MFA phone alignment、Wav2IPA/Wav2Vec2Phoneme、ZIPA、Allosaurus baseline。
+  - 验证候选是否保留弱读、省音、闪音、缩约，而不是规范化回字典发音。
+  - 定义 PhoneTimeline candidate / active / archived 生命周期。
+  - 将 completed phonetic analysis 转换为可管理、可导入导出、可播放消费的
+    PhoneTimeline resource。
+- UI 目标：Sound Pattern View 显示 detected audio、canonical pronunciation 和 rule
+  prediction 三层；支持 current phone 高亮、点击循环、finding 证据展开和用户反馈。
+- 规划文档：
+  - `.planning/phases/2.5-sound-pattern-phonetictimeline/2.5-CONTEXT.md`
+  - `.planning/phases/2.5-sound-pattern-phonetictimeline/2.5-PLAN.md`
+
+### Phase 2.6: 多语言学习基础 ⏳ 已规划
+
+- 目标：将 LLPlayerNext 从“英语优先学习播放器”扩展为“语言能力可插拔的学习播放器
+  底座”，首批真实验收语言为 English + Chinese。
+- 阶段定位：延后到 2.3 / 2.3.5 / 2.4 / 2.5 之后，不打断当前资源主线。
+- 当前判断：
+  - 播放、字幕资源、时间轴资源、SQLite、来源快照等底座具备多语言扩展性。
+  - 逐词学习、词汇状态、字典、lemma、发音和诊断仍明显英语优先。
+  - 汉语是第二语言基线，用于迫使 tokenizer、LexicalUnit、拼音/声调和诊断模型从
+    英语假设中解耦。
+- 核心工作：
+  - 定义 language capability matrix。
+  - 引入 language-aware tokenizer。
+  - 从英语 `lemma` 扩展为语言相关 `LexicalUnit`。
+  - 清理 Flutter/API client 中的 `language=en` 硬编码。
+  - 接入汉语最小词典 / 拼音 provider。
+  - 建立英语 + 汉语双语言回归测试。
+- 规划文档：
+  - `.planning/phases/2.6-multilingual-learning-foundation/2.6-CONTEXT.md`
+  - `.planning/phases/2.6-multilingual-learning-foundation/2.6-PLAN.md`
 
 ### 强制对齐研究 🧭 长期推进
 
@@ -153,6 +229,13 @@ progress:
 5. **Phase 2.2 收口边界**：字幕资源生命周期和 LLTimeline 消费闭环已完成；chunk
    语义质量、ChunkTimeline 资源化、chunk 候选选择和人工修正进入后续 Phase 2.4 /
    chunk 专项阶段，不再塞回 Phase 2.2。
+6. **Sound Pattern 产品原则**：真实发声模式是听力学习的一等对象；PhoneTimeline /
+   phonetic findings 的目标不是装饰性 IPA，而是帮助用户从真实声音模式直接建立到
+   chunk、文字和意义的映射。
+7. **Phase 2.3.5 架构关口**：Rust 巨型单文件拆分作为 2.3 与 2.4 之间的独立技术债
+   阶段处理，避免 ChunkTimeline / PhoneTimeline 新能力继续堆入数千行 `lib.rs`。
+8. **多语言策略**：产品长期支持主要语言，但不承诺世界所有语言；首批扩展验收语言
+   为英语和汉语，先建立语言能力矩阵、语言感知 tokenizer 和 LexicalUnit 模型。
 
 ## 当前阻塞项
 
@@ -163,7 +246,11 @@ progress:
 1. Phase 2.3 Step 1：审计 user-adjusted WordTimeline 的 API / persistence 约定。
 2. 实现句子级 Word Timing Inspector。
 3. 保存并激活 user-adjusted timeline，验证高亮刷新和 LLTimeline export。
-4. 之后进入 Phase 2.4：ChunkTimeline 生成、选择、激活和播放消费 UI。
+4. 进入 Phase 2.3.5：Rust 巨型单文件拆分，保持行为不变。
+5. 之后进入 Phase 2.4：ChunkTimeline 生成、选择、激活和播放消费 UI。
+6. Phase 2.5 作为后续独立阶段：PhoneTimeline provider benchmark、资源契约和
+   Sound Pattern View。
+7. Phase 2.6 延后执行：多语言学习基础，先以英语 + 汉语建立扩展范式。
 
 ## 指标
 
