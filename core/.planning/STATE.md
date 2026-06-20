@@ -130,6 +130,7 @@ progress:
 - 规划文档：
   - `.planning/phases/2.3-manual-timeline-review-ui/2.3-CONTEXT.md`
   - `.planning/phases/2.3-manual-timeline-review-ui/2.3-PLAN.md`
+  - `.planning/phases/2.3-manual-timeline-review-ui/2.3-ACCEPTANCE.md`
   - `.planning/phases/2.3-manual-timeline-review-ui/2.3-RESEARCH.md` (2026-06-20 调研完成)
 
 ### Phase 2.3.5: Rust 巨型单文件拆分 ⏳ 已规划
