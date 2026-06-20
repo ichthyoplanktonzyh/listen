@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 2026-06-20 08:39:01 CST: Hardened the MFA `align-one` sidecar so a single
+  segment `mfa align_one` subprocess failure is recorded as a per-segment
+  diagnostic/skipped timing instead of crashing the whole run, while still
+  failing fast when every segment fails so production fallback can engage.
 - 2026-06-20 00:34:23 CST: Created Phase 2.3 manual timeline review UI
   planning docs, defining the sentence-level Word Timing Inspector approach,
   user-adjusted WordTimeline save/activate/export flow, playback verification

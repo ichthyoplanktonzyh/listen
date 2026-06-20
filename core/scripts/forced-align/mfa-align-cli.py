@@ -219,7 +219,7 @@ def run_mfa(args: argparse.Namespace, corpus_dir: Path, output_dir: Path, temp_d
 
 def run_mfa_align_one(
     args: argparse.Namespace, prepared: list[dict[str, Any]], corpus_dir: Path, output_dir: Path, temp_dir: Path
-) -> None:
+) -> list[dict[str, Any]]:
     mfa_bin = args.mfa_bin or shutil.which("mfa")
     if not mfa_bin:
         raise SystemExit("mfa not found; run scripts/forced-align/setup-mfa-research.sh first")
@@ -234,7 +234,7 @@ def run_mfa_align_one(
     dictionary = resolve_dictionary_path(args.dictionary, mfa_root_dir)
     acoustic_model = resolve_acoustic_model_path(args.acoustic_model, mfa_root_dir)
 
-    def align_segment(segment: dict[str, Any]) -> None:
+    def align_segment(segment: dict[str, Any]) -> dict[str, Any] | None:
         basename = segment["basename"]
         segment_temp_dir = temp_dir / basename
         segment_root_dir = temp_dir / "mfa-roots" / basename
@@ -260,13 +260,29 @@ def run_mfa_align_one(
         ]
         if args.quiet:
             command.append("--quiet")
-        subprocess.run(command, check=True, env=segment_env)
+        try:
+            subprocess.run(command, check=True, env=segment_env)
+        except subprocess.CalledProcessError as error:
+            return {
+                "segment_index": segment["segment_index"],
+                "basename": basename,
+                "reason": "mfa_align_one_failed",
+                "returncode": error.returncode,
+                "command": command,
+            }
+        return None
 
     max_workers = max(1, int(args.jobs))
+    failures: list[dict[str, Any]] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(align_segment, segment) for segment in prepared]
         for future in concurrent.futures.as_completed(futures):
-            future.result()
+            failure = future.result()
+            if failure:
+                failures.append(failure)
+    if len(failures) == len(prepared):
+        raise SystemExit("MFA align-one failed for all segments")
+    return sorted(failures, key=lambda failure: int(failure["segment_index"]))
 
 
 def parse_textgrid(path: Path) -> list[dict[str, Any]]:
@@ -303,15 +319,24 @@ def interval_words(intervals: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def timings_from_textgrids(prepared: list[dict[str, Any]], output_dir: Path) -> dict[str, Any]:
+def timings_from_textgrids(
+    prepared: list[dict[str, Any]],
+    output_dir: Path,
+    align_one_failures: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     timings: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
+    align_one_failures = align_one_failures or []
+    align_one_failures_by_basename = {
+        str(failure.get("basename")): failure for failure in align_one_failures
+    }
     textgrid_paths = {path.stem: path for path in output_dir.rglob("*.TextGrid")}
     textgrid_paths.update({path.stem: path for path in output_dir.rglob("*.textgrid")})
 
     for segment in prepared:
         path = textgrid_paths.get(segment["basename"])
         if not path:
+            failure = align_one_failures_by_basename.get(segment["basename"])
             for word_index, _word in enumerate(segment["words"]):
                 timings.append(
                     {
@@ -320,7 +345,13 @@ def timings_from_textgrids(prepared: list[dict[str, Any]], output_dir: Path) -> 
                         "skipped": True,
                     }
                 )
-            skipped.append({"segment_index": segment["segment_index"], "reason": "textgrid_missing"})
+            skipped_row = {
+                "segment_index": segment["segment_index"],
+                "reason": failure["reason"] if failure else "textgrid_missing",
+            }
+            if failure and "returncode" in failure:
+                skipped_row["returncode"] = failure["returncode"]
+            skipped.append(skipped_row)
             continue
 
         aligned_words = interval_words(parse_textgrid(path))
@@ -361,13 +392,16 @@ def timings_from_textgrids(prepared: list[dict[str, Any]], output_dir: Path) -> 
                     "score": None,
                 }
             )
+    diagnostics: dict[str, Any] = {
+        "skipped": skipped,
+    }
+    if align_one_failures:
+        diagnostics["align_one_failures"] = align_one_failures
     return {
         "provider_id": "montreal-forced-aligner",
         "provider_version": "mfa-research-v1",
         "timings": sorted(timings, key=lambda row: (row["segment_index"], row["word_index"])),
-        "diagnostics": {
-            "skipped": skipped,
-        },
+        "diagnostics": diagnostics,
     }
 
 
@@ -406,11 +440,12 @@ def main() -> int:
     prepared = prepare_corpus(request, corpus_dir)
     if not prepared:
         raise SystemExit("no valid segments to align")
+    align_one_failures: list[dict[str, Any]] = []
     if not args.skip_run and args.strategy == "align":
         run_mfa(args, corpus_dir, output_dir, temp_dir)
     elif not args.skip_run:
-        run_mfa_align_one(args, prepared, corpus_dir, output_dir, temp_dir)
-    result = timings_from_textgrids(prepared, output_dir)
+        align_one_failures = run_mfa_align_one(args, prepared, corpus_dir, output_dir, temp_dir)
+    result = timings_from_textgrids(prepared, output_dir, align_one_failures=align_one_failures)
     payload = json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     if args.output:
         output = Path(args.output)
