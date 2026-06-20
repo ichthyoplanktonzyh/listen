@@ -1,12 +1,12 @@
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-19 16:10 CST
-> 更新原因：Phase 2.1 application 编排下沉完成，Phase 2.2 保持待启动
+> 最后更新：2026-06-20 00:34 CST
+> 更新原因：Phase 2.3 人工校对 UI 文档启动
 
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
-- **Phase**：Phase 2.1 — 对齐管线加固（阶段性结束，准备进入 2.2）
+- **Phase**：Phase 2.3 — 人工校对 UI（文档已创建，准备实现）
 - **分支**：`feature/forced-alignment-research`
 - **版本**：0.7.0
 
@@ -17,7 +17,7 @@
 | 路线 | 目标 | 当前状态 |
 |---|---|---|
 | 本地重装生产引擎 | 生成精准 WordTimeline / ChunkTimeline / LLTimeline JSON | ✅ 阶段性收口，转长期研究 |
-| 轻量消费端 LLPlayerNext | 稳定读取 `.lltimeline.json` 并播放学习 | ⏳ Phase 2.2 待启动 |
+| 轻量消费端 LLPlayerNext | 稳定读取 `.lltimeline.json` 并播放学习 | ✅ Phase 2.2 完成，⏳ Phase 2.3 启动 |
 
 ## 当前 Phase 状态
 
@@ -76,7 +76,18 @@
   无资源时回落 legacy word timings。
 - 人工复核入口占位已就绪，完整编辑器进入 Phase 2.3。
 
-### Phase 2.3: 人工校对 UI ⏳ 后续
+### Phase 2.3: 人工校对 UI ⏳ 已启动
+- 目标：完成 app 端人工校正闭环。
+- 初版不做完整 waveform editor，先做句子级 Word Timing Inspector。
+- 从 Timeline Resource Summary 的 Manual Review 入口进入。
+- 用户可查看当前句 word timings，微调 start/end，试听句子/词片段。
+- 保存时创建 `created_by=user` / `timing_source=user_adjusted` WordTimeline，
+  不覆盖 production candidate。
+- 保存后自动激活 user-adjusted timeline，并刷新播放器高亮。
+- 规划文档：
+  - `.planning/phases/2.3-manual-timeline-review-ui/2.3-CONTEXT.md`
+  - `.planning/phases/2.3-manual-timeline-review-ui/2.3-PLAN.md`
+
 ### Phase 2.4: ChunkTimeline 生成与消费 ⏳ 后续
 
 ### 强制对齐研究 🧭 长期推进
@@ -100,10 +111,10 @@
 
 ## 下一步工作
 
-1. 启动 Phase 2.3：实现人工校对/校正编辑器。
-2. 将人工调整保存为 `user_adjusted` WordTimeline，并支持导出为新的
-   `.lltimeline.json` resource revision。
-3. 之后进入 Phase 2.4：ChunkTimeline 生成、选择、激活和播放消费 UI。
+1. Phase 2.3 Step 1：审计 user-adjusted WordTimeline 的 API / persistence 约定。
+2. 实现句子级 Word Timing Inspector。
+3. 保存并激活 user-adjusted timeline，验证高亮刷新和 LLTimeline export。
+4. 之后进入 Phase 2.4：ChunkTimeline 生成、选择、激活和播放消费 UI。
 
 ## 指标
 

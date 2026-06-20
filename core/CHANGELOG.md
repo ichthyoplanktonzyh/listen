@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 2026-06-20 00:34:23 CST: Created Phase 2.3 manual timeline review UI
+  planning docs, defining the sentence-level Word Timing Inspector approach,
+  user-adjusted WordTimeline save/activate/export flow, playback verification
+  controls, and Phase 2.4 handoff boundary.
 - 2026-06-20 00:18:59 CST: Replaced the timeline production Tkinter GUI with a
   local browser-based GUI backed by Python's standard-library HTTP server,
   using macOS `osascript` only for folder/media selection and avoiding Tk file
