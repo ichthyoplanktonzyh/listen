@@ -15,8 +15,8 @@ void main() {
     expect(candidates, contains('/tmp/LLPlayerNext/target/debug/api-http'));
     expect(candidates, contains('/tmp/LLPlayerNext/target/release/api-http'));
     expect(
-      candidates.indexOf('/tmp/LLPlayerNext/target/release/api-http'),
-      lessThan(candidates.indexOf('/tmp/LLPlayerNext/target/debug/api-http')),
+      candidates.indexOf('/tmp/LLPlayerNext/target/debug/api-http'),
+      lessThan(candidates.indexOf('/tmp/LLPlayerNext/target/release/api-http')),
     );
   });
 }

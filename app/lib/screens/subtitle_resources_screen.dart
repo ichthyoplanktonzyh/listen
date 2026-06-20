@@ -1,0 +1,84 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../controllers/player_controller.dart';
+import '../controllers/subtitle_controller.dart';
+import '../localization.dart';
+import '../models/timeline.dart';
+import '../widgets/panels/subtitle_resource_manager_panel.dart';
+
+class SubtitleResourcesScreen extends StatefulWidget {
+  const SubtitleResourcesScreen({
+    super.key,
+    required this.playerController,
+    required this.subtitleController,
+    required this.onImportSubtitle,
+    required this.onImportLLTimeline,
+    required this.onRefreshResources,
+    required this.onActivateSubtitle,
+    required this.onArchiveSubtitle,
+    required this.onRestoreSubtitle,
+    required this.onDeleteSubtitle,
+    required this.onExportSubtitle,
+    required this.onActivateWordTimeline,
+    required this.onManualReviewTimeline,
+  });
+
+  final PlayerController playerController;
+  final SubtitleController subtitleController;
+  final Future<void> Function() onImportSubtitle;
+  final Future<void> Function() onImportLLTimeline;
+  final Future<void> Function() onRefreshResources;
+  final Future<void> Function(SubtitleTrack track) onActivateSubtitle;
+  final Future<void> Function(SubtitleTrack track) onArchiveSubtitle;
+  final Future<void> Function(SubtitleTrack track) onRestoreSubtitle;
+  final Future<void> Function(SubtitleTrack track) onDeleteSubtitle;
+  final Future<void> Function(SubtitleTrack track) onExportSubtitle;
+  final Future<void> Function(String timelineId) onActivateWordTimeline;
+  final Future<void> Function() onManualReviewTimeline;
+
+  @override
+  State<SubtitleResourcesScreen> createState() =>
+      _SubtitleResourcesScreenState();
+}
+
+class _SubtitleResourcesScreenState extends State<SubtitleResourcesScreen> {
+  @override
+  void initState() {
+    super.initState();
+    unawaited(widget.onRefreshResources());
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([
+      widget.playerController,
+      widget.subtitleController,
+    ]),
+    builder: (context, _) => Scaffold(
+      appBar: AppBar(
+        title: Text(AppLocalizations.of(context).text('subtitleResources')),
+      ),
+      body: SubtitleResourceManagerPanel(
+        mediaId: widget.playerController.mediaId,
+        resources: widget.subtitleController.subtitleResources,
+        capabilities: widget.subtitleController.subtitleResourceCapabilities,
+        activeTrack: widget.subtitleController.primaryTrack,
+        timelineDocument: widget.subtitleController.llTimelineDocument,
+        wordTimelineSummaries: widget.subtitleController.wordTimelineSummaries,
+        timelineResourceError: widget.subtitleController.timelineResourceError,
+        onImportSubtitle: widget.onImportSubtitle,
+        onImportLLTimeline: widget.onImportLLTimeline,
+        onRefreshResources: widget.onRefreshResources,
+        onActivateSubtitle: widget.onActivateSubtitle,
+        onArchiveSubtitle: widget.onArchiveSubtitle,
+        onRestoreSubtitle: widget.onRestoreSubtitle,
+        onDeleteSubtitle: widget.onDeleteSubtitle,
+        onExportSubtitle: widget.onExportSubtitle,
+        onActivateWordTimeline: widget.onActivateWordTimeline,
+        onManualReviewTimeline: widget.onManualReviewTimeline,
+      ),
+    ),
+  );
+}

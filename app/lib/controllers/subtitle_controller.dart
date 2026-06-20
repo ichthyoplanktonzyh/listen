@@ -31,6 +31,7 @@ class SubtitleState {
     this.chunkPartitionsBySentence = const {},
     this.pronunciationProviders = const [],
     this.subtitleResources = const [],
+    this.subtitleResourceCapabilities = const {},
     this.wordTimelineSummaries = const [],
     this.llTimelineDocument,
     this.timelineResourceError,
@@ -64,6 +65,7 @@ class SubtitleState {
   final Map<String, SentenceChunkPartition> chunkPartitionsBySentence;
   final List<Map<String, dynamic>> pronunciationProviders;
   final List<SubtitleTrack> subtitleResources;
+  final Map<String, SubtitleResourceCapabilities> subtitleResourceCapabilities;
   final List<WordTimelineSummary> wordTimelineSummaries;
   final LLTimelineDocument? llTimelineDocument;
   final String? timelineResourceError;
@@ -97,6 +99,7 @@ class SubtitleState {
     Map<String, SentenceChunkPartition>? chunkPartitionsBySentence,
     List<Map<String, dynamic>>? pronunciationProviders,
     List<SubtitleTrack>? subtitleResources,
+    Map<String, SubtitleResourceCapabilities>? subtitleResourceCapabilities,
     List<WordTimelineSummary>? wordTimelineSummaries,
     Object? llTimelineDocument = _unset,
     Object? timelineResourceError = _unset,
@@ -143,6 +146,8 @@ class SubtitleState {
     pronunciationProviders:
         pronunciationProviders ?? this.pronunciationProviders,
     subtitleResources: subtitleResources ?? this.subtitleResources,
+    subtitleResourceCapabilities:
+        subtitleResourceCapabilities ?? this.subtitleResourceCapabilities,
     wordTimelineSummaries: wordTimelineSummaries ?? this.wordTimelineSummaries,
     llTimelineDocument: identical(llTimelineDocument, _unset)
         ? this.llTimelineDocument
@@ -209,6 +214,8 @@ class SubtitleController extends ChangeNotifier {
   List<Map<String, dynamic>> get pronunciationProviders =>
       _state.pronunciationProviders;
   List<SubtitleTrack> get subtitleResources => _state.subtitleResources;
+  Map<String, SubtitleResourceCapabilities> get subtitleResourceCapabilities =>
+      _state.subtitleResourceCapabilities;
   List<WordTimelineSummary> get wordTimelineSummaries =>
       _state.wordTimelineSummaries;
   LLTimelineDocument? get llTimelineDocument => _state.llTimelineDocument;
@@ -311,6 +318,10 @@ class SubtitleController extends ChangeNotifier {
 
   void setSubtitleResources(List<SubtitleTrack> resources) =>
       _update((s) => s.copyWith(subtitleResources: resources));
+
+  void setSubtitleResourceCapabilities(
+    Map<String, SubtitleResourceCapabilities> capabilities,
+  ) => _update((s) => s.copyWith(subtitleResourceCapabilities: capabilities));
 
   void setSentencePronunciation(
     String sentenceId,

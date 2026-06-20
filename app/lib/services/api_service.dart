@@ -753,8 +753,8 @@ List<String> sidecarCandidatesFrom(Directory start) {
   final candidates = <String>[];
   var directory = start.absolute;
   while (true) {
-    candidates.add('${directory.path}/target/release/api-http');
     candidates.add('${directory.path}/target/debug/api-http');
+    candidates.add('${directory.path}/target/release/api-http');
     final parent = directory.parent;
     if (parent.path == directory.path) break;
     directory = parent;

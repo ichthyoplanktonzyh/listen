@@ -138,6 +138,37 @@ void main() {
     expect(controller.currentPrimaryCue, isNull);
   });
 
+  test('subtitle controller stores resource capabilities separately', () {
+    final controller = SubtitleController()
+      ..setSubtitleResources(const [track])
+      ..setSubtitleResourceCapabilities(const {
+        'track-1': SubtitleResourceCapabilities(
+          sentenceTiming: true,
+          wordTiming: true,
+          chunkTiming: false,
+          phoneTiming: false,
+          sentenceCount: 1,
+          wordTimingCount: 1,
+        ),
+      });
+
+    expect(controller.subtitleResources.single.id, 'track-1');
+    expect(
+      controller.subtitleResourceCapabilities['track-1']?.wordTiming,
+      true,
+    );
+    expect(
+      controller.subtitleResourceCapabilities['track-1']?.chunkTiming,
+      false,
+    );
+
+    controller.setSubtitleResources(const []);
+    expect(
+      controller.subtitleResourceCapabilities['track-1']?.wordTiming,
+      true,
+    );
+  });
+
   test(
     'subtitle controller keeps timeline resource data when marking error',
     () {

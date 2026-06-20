@@ -5,6 +5,7 @@ import '../../localization.dart';
 class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
   const PlayerAppBar({
     super.key,
+    required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
     required this.onOpenMedia,
     required this.onOpenOnline,
@@ -30,6 +31,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onSearchOpenSubtitles,
   });
 
+  final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
   final VoidCallback onOpenMedia;
   final VoidCallback onOpenOnline;
@@ -63,6 +65,11 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
     return AppBar(
       title: const Text('LLPlayerNext'),
       actions: [
+        TextButton.icon(
+          onPressed: onOpenSubtitleResources,
+          icon: const Icon(Icons.inventory_2_outlined),
+          label: Text(l.text('subtitleResources')),
+        ),
         TextButton.icon(
           onPressed: onOpenVocabulary,
           icon: const Icon(Icons.menu_book_outlined),

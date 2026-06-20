@@ -27,6 +27,7 @@ import 'utils/subtitle_style.dart';
 import 'utils/word_list_parser.dart';
 import 'widgets/subtitle/token_line.dart';
 import 'widgets/panels/word_learning_panel.dart';
+import 'screens/subtitle_resources_screen.dart';
 import 'screens/vocabulary_screen.dart';
 import 'widgets/panels/diagnosis_card.dart';
 import 'widgets/panels/subtitle_resource_manager_panel.dart';
@@ -403,6 +404,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     subtitleController.setCurrentPrimaryCue(null);
     subtitleController.setCurrentSecondaryCue(null);
     subtitleController.setSubtitleResources(const []);
+    subtitleController.setSubtitleResourceCapabilities(const {});
     subtitleController.clearSpeechEnhancements();
     playerController.setSourceLoop(null, null);
     try {
@@ -538,6 +540,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         error: subtitleController.timelineResourceError,
       );
       await _loadSubtitleResources(updateStatus: false);
+      learningController.selectSidePanel(1);
     } catch (error) {
       setState(() => status = 'LLTimeline import failed: $error');
     }
@@ -628,68 +631,92 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final service = api;
     if (service == null) return;
     await _loadTimelineResource(trackId);
-    try {
-      final values = await Future.wait([
-        service.trackWordTimings(trackId),
-        service.pronunciationProviders(),
-        service.trackPhoneticAnalyses(trackId),
-        service
-            .trackChunkPartitions(trackId)
-            .catchError((_) => <Map<String, dynamic>>[]),
-      ]);
-      final timings = values[0];
-      final providers = values[1];
-      final phoneticAnalyses = values[2];
-      final partitions = values[3];
-      final grouped = <String, List<WordTiming>>{};
-      for (final raw in timings) {
-        final value = WordTiming.fromJson(raw);
-        grouped.putIfAbsent(value.sentenceId, () => []).add(value);
-      }
-      final analyses = settingsController.precomputePronunciation
-          ? await service.trackPronunciation(trackId)
-          : subtitleController.currentPrimaryCue == null
-          ? <Map<String, dynamic>>[]
-          : [
-              await service.analyzePronunciation(
-                subtitleController.currentPrimaryCue!.id,
-              ),
-            ];
-      if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
-      subtitleController.setSpeechEnhancements(
-        timingsBySentence: grouped,
-        chunkPartitionsBySentence:
-            Map<String, SentenceChunkPartition>.fromEntries(
-              partitions.map((raw) {
-                final partition = SentenceChunkPartition.fromJson(raw);
-                return MapEntry(partition.sentenceId, partition);
-              }),
-            ),
-        pronunciationBySentence: Map<String, Map<String, dynamic>>.fromEntries(
-          analyses.map(
-            (value) => MapEntry(value['sentence_id'] as String, value),
+    final errors = <String>[];
+    final timings = await _loadOptionalResourceCapability(
+      () => service.trackWordTimings(trackId),
+      'word timing',
+      errors,
+    );
+    final providers = await _loadOptionalResourceCapability(
+      service.pronunciationProviders,
+      'pronunciation provider',
+      errors,
+    );
+    final phoneticAnalyses = await _loadOptionalResourceCapability(
+      () => service.trackPhoneticAnalyses(trackId),
+      'phone',
+      errors,
+    );
+    final partitions = await _loadOptionalResourceCapability(
+      () => service.trackChunkPartitions(trackId),
+      'chunk',
+      errors,
+    );
+    final grouped = <String, List<WordTiming>>{};
+    for (final raw in timings) {
+      final value = WordTiming.fromJson(raw);
+      grouped.putIfAbsent(value.sentenceId, () => []).add(value);
+    }
+    final analyses = await _loadPronunciationEnhancements(
+      service,
+      trackId,
+      errors,
+    );
+    if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
+    subtitleController.setSpeechEnhancements(
+      timingsBySentence: grouped,
+      chunkPartitionsBySentence:
+          Map<String, SentenceChunkPartition>.fromEntries(
+            partitions.map((raw) {
+              final partition = SentenceChunkPartition.fromJson(raw);
+              return MapEntry(partition.sentenceId, partition);
+            }),
           ),
+      pronunciationBySentence: Map<String, Map<String, dynamic>>.fromEntries(
+        analyses.map(
+          (value) => MapEntry(value['sentence_id'] as String, value),
         ),
-        pronunciationProviders: providers,
-        phoneticAnalysisBySentence: latestPhoneticAnalysesBySentence(
-          phoneticAnalyses,
-        ),
+      ),
+      pronunciationProviders: providers,
+      phoneticAnalysisBySentence: latestPhoneticAnalysesBySentence(
+        phoneticAnalyses,
+      ),
+    );
+    subtitleController.updateCurrentWord(
+      playerController.position,
+      enabled: settingsController.wordSyncVisible,
+      chunkEnabled:
+          settingsController.showChunkGrouping &&
+          settingsController.highlightCurrentChunk,
+    );
+    subtitleController.updateCurrentDetectedPhone(
+      playerController.position,
+      enabled: settingsController.settings.phonemeHighlightVisible,
+    );
+    if (errors.isNotEmpty && mounted) {
+      setState(
+        () => status =
+            'Speech enhancements partially unavailable: '
+            '${errors.join('; ')}',
       );
-      subtitleController.updateCurrentWord(
-        playerController.position,
-        enabled: settingsController.wordSyncVisible,
-        chunkEnabled:
-            settingsController.showChunkGrouping &&
-            settingsController.highlightCurrentChunk,
-      );
-      subtitleController.updateCurrentDetectedPhone(
-        playerController.position,
-        enabled: settingsController.settings.phonemeHighlightVisible,
-      );
-    } catch (error) {
-      if (mounted) {
-        setState(() => status = 'Speech enhancements unavailable: $error');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _loadPronunciationEnhancements(
+    LocalApi service,
+    String trackId,
+    List<String> errors,
+  ) async {
+    try {
+      if (settingsController.precomputePronunciation) {
+        return await service.trackPronunciation(trackId);
       }
+      final cue = subtitleController.currentPrimaryCue;
+      if (cue == null) return const [];
+      return [await service.analyzePronunciation(cue.id)];
+    } catch (error) {
+      errors.add('pronunciation: $error');
+      return const [];
     }
   }
 
@@ -755,22 +782,82 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final mediaId = playerController.mediaId;
     if (service == null || mediaId == null) {
       subtitleController.setSubtitleResources(const []);
+      subtitleController.setSubtitleResourceCapabilities(const {});
       return;
     }
     try {
       final values = await service.mediaSubtitles(mediaId);
-      if (!mounted || playerController.mediaId != mediaId) return;
-      subtitleController.setSubtitleResources(
-        values
-            .map((raw) => SubtitleTrack.fromJson(raw))
-            .toList(growable: false),
+      final tracks = values
+          .map((raw) => SubtitleTrack.fromJson(raw))
+          .toList(growable: false);
+      final capabilities = await _loadSubtitleResourceCapabilities(
+        service,
+        tracks,
       );
+      if (!mounted || playerController.mediaId != mediaId) return;
+      subtitleController.setSubtitleResources(tracks);
+      subtitleController.setSubtitleResourceCapabilities(capabilities);
       if (updateStatus) setState(() => status = 'Subtitle resources refreshed');
     } catch (error) {
       if (mounted && updateStatus) {
         setState(() => status = 'Subtitle resources unavailable: $error');
       }
     }
+  }
+
+  Future<Map<String, SubtitleResourceCapabilities>>
+  _loadSubtitleResourceCapabilities(
+    LocalApi service,
+    List<SubtitleTrack> tracks,
+  ) async {
+    final entries = await Future.wait(
+      tracks.map((track) async {
+        final errors = <String>[];
+        final wordTimings = await _loadOptionalResourceCapability(
+          () => service.trackWordTimings(track.id),
+          'word',
+          errors,
+        );
+        final phoneticAnalyses = await _loadOptionalResourceCapability(
+          () => service.trackPhoneticAnalyses(track.id),
+          'phone',
+          errors,
+        );
+        return MapEntry(
+          track.id,
+          SubtitleResourceCapabilities.fromCounts(
+            sentenceCount: track.cues.length,
+            wordTimingCount: wordTimings.length,
+            chunkCount: wordTimings.isEmpty ? 0 : track.cues.length,
+            phoneCount: _resourcePhoneCount(phoneticAnalyses),
+            error: errors.isEmpty ? null : errors.join('; '),
+          ),
+        );
+      }),
+    );
+    return Map<String, SubtitleResourceCapabilities>.fromEntries(entries);
+  }
+
+  Future<List<Map<String, dynamic>>> _loadOptionalResourceCapability(
+    Future<List<Map<String, dynamic>>> Function() loader,
+    String label,
+    List<String> errors,
+  ) async {
+    try {
+      return await loader();
+    } catch (error) {
+      errors.add('$label: $error');
+      return const [];
+    }
+  }
+
+  int _resourcePhoneCount(List<Map<String, dynamic>> analyses) {
+    var count = 0;
+    for (final analysis in analyses) {
+      final phones = analysis['detected_phones'];
+      if (phones is List<dynamic>) count += phones.length;
+    }
+    return count;
   }
 
   Future<void> _refreshSubtitleResources() async {
@@ -1859,6 +1946,31 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await adapter.play();
   }
 
+  Future<void> _openSubtitleResources() async {
+    if (api == null) return;
+    await _loadSubtitleResources(updateStatus: false);
+    if (!mounted) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SubtitleResourcesScreen(
+          playerController: playerController,
+          subtitleController: subtitleController,
+          onImportSubtitle: () => _openSubtitle(secondary: false),
+          onImportLLTimeline: _openLLTimelineResource,
+          onRefreshResources: _refreshSubtitleResources,
+          onActivateSubtitle: _activateSubtitleResource,
+          onArchiveSubtitle: _archiveSubtitleResource,
+          onRestoreSubtitle: _restoreSubtitleResource,
+          onDeleteSubtitle: _deleteSubtitleResource,
+          onExportSubtitle: _exportSubtitleResource,
+          onActivateWordTimeline: _activateWordTimeline,
+          onManualReviewTimeline: _openManualReviewTimeline,
+        ),
+      ),
+    );
+  }
+
   Future<void> _playOccurrence(Map<String, dynamic> occurrence) async {
     final expectedFingerprint =
         occurrence['media_fingerprint_snapshot'] as String;
@@ -2184,6 +2296,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
             autofocus: true,
             child: Scaffold(
               appBar: PlayerAppBar(
+                onOpenSubtitleResources: () =>
+                    unawaited(_openSubtitleResources()),
                 onOpenVocabulary: _openVocabulary,
                 onOpenMedia: _openMedia,
                 onOpenOnline: _openOnline,
@@ -2558,6 +2672,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Widget _subtitleResources() => SubtitleResourceManagerPanel(
     mediaId: playerController.mediaId,
     resources: subtitleController.subtitleResources,
+    capabilities: subtitleController.subtitleResourceCapabilities,
     activeTrack: subtitleController.primaryTrack,
     timelineDocument: subtitleController.llTimelineDocument,
     wordTimelineSummaries: subtitleController.wordTimelineSummaries,

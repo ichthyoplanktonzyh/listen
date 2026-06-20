@@ -9,6 +9,7 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
     super.key,
     required this.mediaId,
     required this.resources,
+    required this.capabilities,
     required this.activeTrack,
     required this.timelineDocument,
     required this.wordTimelineSummaries,
@@ -27,6 +28,7 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
 
   final String? mediaId;
   final List<SubtitleTrack> resources;
+  final Map<String, SubtitleResourceCapabilities> capabilities;
   final SubtitleTrack? activeTrack;
   final LLTimelineDocument? timelineDocument;
   final List<WordTimelineSummary> wordTimelineSummaries;
@@ -101,6 +103,14 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
                       final active = resource.id == activeTrack?.id;
                       return _SubtitleResourceTile(
                         resource: resource,
+                        capabilities:
+                            capabilities[resource.id] ??
+                            SubtitleResourceCapabilities.fromCounts(
+                              sentenceCount: resource.cues.length,
+                              wordTimingCount: 0,
+                              chunkCount: 0,
+                              phoneCount: 0,
+                            ),
                         active: active,
                         onActivate: () => onActivateSubtitle(resource),
                         onArchive: () => onArchiveSubtitle(resource),
@@ -130,6 +140,7 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
 class _SubtitleResourceTile extends StatelessWidget {
   const _SubtitleResourceTile({
     required this.resource,
+    required this.capabilities,
     required this.active,
     required this.onActivate,
     required this.onArchive,
@@ -139,6 +150,7 @@ class _SubtitleResourceTile extends StatelessWidget {
   });
 
   final SubtitleTrack resource;
+  final SubtitleResourceCapabilities capabilities;
   final bool active;
   final Future<void> Function() onActivate;
   final Future<void> Function() onArchive;
@@ -182,12 +194,47 @@ class _SubtitleResourceTile extends StatelessWidget {
                     [
                       resource.source,
                       resource.status,
-                      '${resource.cues.length} ${l.text('cues')}',
+                      '${capabilities.sentenceCount} ${l.text('cues')}',
                       resource.id,
                     ].join(' · '),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      _CapabilityChip(
+                        label: l.text('sentenceTiming'),
+                        active: capabilities.sentenceTiming,
+                        count: capabilities.sentenceCount,
+                      ),
+                      _CapabilityChip(
+                        label: l.text('wordTiming'),
+                        active: capabilities.wordTiming,
+                        count: capabilities.wordTimingCount,
+                      ),
+                      _CapabilityChip(
+                        label: l.text('chunkTiming'),
+                        active: capabilities.chunkTiming,
+                        count: capabilities.chunkCount,
+                      ),
+                      _CapabilityChip(
+                        label: l.text('phoneTiming'),
+                        active: capabilities.phoneTiming,
+                        count: capabilities.phoneCount,
+                      ),
+                      if (capabilities.error != null)
+                        Tooltip(
+                          message: capabilities.error!,
+                          child: _CapabilityChip(
+                            label: l.text('resourcePartial'),
+                            active: false,
+                          ),
+                        ),
+                    ],
                   ),
                 ],
               ),
@@ -254,5 +301,41 @@ class _SubtitleResourceTile extends StatelessWidget {
     final first = resource.cues.isEmpty ? null : resource.cues.first.text;
     if (first == null || first.trim().isEmpty) return resource.source;
     return first.trim();
+  }
+}
+
+class _CapabilityChip extends StatelessWidget {
+  const _CapabilityChip({
+    required this.label,
+    required this.active,
+    this.count,
+  });
+
+  final String label;
+  final bool active;
+  final int? count;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active ? const Color(0xff6dd6c3) : const Color(0xff778391);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: active ? const Color(0xff12322f) : const Color(0xff202933),
+        border: Border.all(
+          color: active ? const Color(0xff2f9e82) : const Color(0xff34414f),
+        ),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        child: Text(
+          count == null ? label : '$label $count',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: color,
+            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
   }
 }

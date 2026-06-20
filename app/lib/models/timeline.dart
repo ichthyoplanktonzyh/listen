@@ -79,6 +79,58 @@ class SubtitleTrack {
   bool get archived => status == 'archived';
 }
 
+class SubtitleResourceCapabilities {
+  const SubtitleResourceCapabilities({
+    required this.sentenceTiming,
+    required this.wordTiming,
+    required this.chunkTiming,
+    required this.phoneTiming,
+    this.sentenceCount = 0,
+    this.wordTimingCount = 0,
+    this.chunkCount = 0,
+    this.phoneCount = 0,
+    this.error,
+  });
+
+  factory SubtitleResourceCapabilities.fromCounts({
+    required int sentenceCount,
+    required int wordTimingCount,
+    required int chunkCount,
+    required int phoneCount,
+    String? error,
+  }) => SubtitleResourceCapabilities(
+    sentenceTiming: sentenceCount > 0,
+    wordTiming: wordTimingCount > 0,
+    chunkTiming: chunkCount > 0,
+    phoneTiming: phoneCount > 0,
+    sentenceCount: sentenceCount,
+    wordTimingCount: wordTimingCount,
+    chunkCount: chunkCount,
+    phoneCount: phoneCount,
+    error: error,
+  );
+
+  static const empty = SubtitleResourceCapabilities(
+    sentenceTiming: false,
+    wordTiming: false,
+    chunkTiming: false,
+    phoneTiming: false,
+  );
+
+  final bool sentenceTiming;
+  final bool wordTiming;
+  final bool chunkTiming;
+  final bool phoneTiming;
+  final int sentenceCount;
+  final int wordTimingCount;
+  final int chunkCount;
+  final int phoneCount;
+  final String? error;
+
+  bool get hasAnyTiming =>
+      sentenceTiming || wordTiming || chunkTiming || phoneTiming;
+}
+
 class WordTiming {
   const WordTiming({
     required this.sentenceId,
