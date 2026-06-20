@@ -97,7 +97,12 @@ pub fn router(state: ApiState) -> Router {
             "/v1/media/{media_id}/subtitles",
             get(media_subtitles).post(import_subtitle),
         )
-        .route("/v1/subtitles/{track_id}", get(read_subtitle))
+        .route(
+            "/v1/subtitles/{track_id}",
+            get(read_subtitle).delete(delete_subtitle),
+        )
+        .route("/v1/subtitles/{track_id}/archive", post(archive_subtitle))
+        .route("/v1/subtitles/{track_id}/restore", post(restore_subtitle))
         .route("/v1/subtitles/{track_id}/export", get(export_subtitle))
         .route("/v1/pronunciation/providers", get(pronunciation_providers))
         .route("/v1/pronunciation/lookup", get(pronunciation_lookup))
@@ -487,6 +492,39 @@ async fn read_subtitle(
     state
         .services
         .read_subtitle_track(&track_id)?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("subtitle track"))
+}
+
+async fn archive_subtitle(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<domain::SubtitleTrack>, ApiError> {
+    state
+        .services
+        .archive_subtitle_track(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn restore_subtitle(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<domain::SubtitleTrack>, ApiError> {
+    state
+        .services
+        .restore_subtitle_track(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn delete_subtitle(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<domain::SubtitleTrack>, ApiError> {
+    state
+        .services
+        .delete_subtitle_track(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("subtitle track"))
 }
@@ -1915,6 +1953,7 @@ mod tests {
             serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
                 .unwrap();
         assert_eq!(track["sentences"].as_array().unwrap().len(), 4);
+        assert_eq!(track["status"], "available");
         let response = app
             .clone()
             .oneshot(
@@ -1972,6 +2011,7 @@ mod tests {
         assert!(timing_diagnostics[0]["boundaries"].as_array().is_some());
 
         let response = app
+            .clone()
             .oneshot(
                 Request::get(format!(
                     "/v1/subtitles/{}/chunk-diagnostics",
@@ -1989,6 +2029,73 @@ mod tests {
                 .unwrap();
         assert_eq!(diagnostics.as_array().unwrap().len(), 4);
         assert!(diagnostics[0]["candidates"].as_array().is_some());
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/v1/subtitles/{}/archive",
+                    track["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let archived: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(archived["status"], "archived");
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/v1/subtitles/{}/restore",
+                    track["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let restored: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(restored["status"], "available");
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::delete(format!("/v1/subtitles/{}", track["id"].as_str().unwrap()))
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let response = app
+            .oneshot(
+                Request::get(format!(
+                    "/v1/media/{}/subtitles",
+                    media["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let resources: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert!(resources.as_array().unwrap().is_empty());
     }
 
     #[tokio::test]
@@ -2880,8 +2987,8 @@ mod tests {
         // Count documented paths as a regression gate.
         let path_count = openapi.lines().filter(|l| l.starts_with("  /v1/")).count();
         assert_eq!(
-            path_count, 79,
-            "OpenAPI path count changed from 79 — update snapshot if paths were added/removed"
+            path_count, 81,
+            "OpenAPI path count changed from 81 — update snapshot if paths were added/removed"
         );
 
         // All paths must be under /v1/.

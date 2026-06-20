@@ -173,6 +173,51 @@ paths:
                 $ref: "#/components/schemas/SubtitleTrack"
         default:
           $ref: "#/components/responses/Error"
+    delete:
+      operationId: deleteSubtitle
+      responses:
+        "200":
+          description: Deleted subtitle resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubtitleTrack"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/subtitles/{track_id}/archive:
+    parameters:
+      - name: track_id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: archiveSubtitle
+      responses:
+        "200":
+          description: Archived subtitle resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubtitleTrack"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/subtitles/{track_id}/restore:
+    parameters:
+      - name: track_id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: restoreSubtitle
+      responses:
+        "200":
+          description: Restored subtitle resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubtitleTrack"
+        default:
+          $ref: "#/components/responses/Error"
   /v1/subtitles/{track_id}/export:
     get:
       operationId: exportSubtitle
@@ -952,13 +997,14 @@ components:
           items: { $ref: "#/components/schemas/SubtitleToken" }
     SubtitleTrack:
       type: object
-      required: [id, media_id, fingerprint, language, source, sentences]
+      required: [id, media_id, fingerprint, language, source, status, sentences]
       properties:
         id: { type: string }
         media_id: { type: string }
         fingerprint: { type: string }
         language: { type: [string, "null"] }
         source: { type: string }
+        status: { enum: [available, archived] }
         sentences:
           type: array
           items: { $ref: "#/components/schemas/SubtitleSentence" }

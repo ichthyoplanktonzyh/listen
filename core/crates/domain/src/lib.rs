@@ -100,6 +100,17 @@ pub enum MediaAvailability {
     Archived,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SubtitleTrackStatus {
+    Available,
+    Archived,
+}
+
+fn default_subtitle_track_status() -> SubtitleTrackStatus {
+    SubtitleTrackStatus::Available
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MediaItem {
     pub id: MediaId,
@@ -120,6 +131,8 @@ pub struct SubtitleTrack {
     pub fingerprint: String,
     pub language: Option<LanguageCode>,
     pub source: String,
+    #[serde(default = "default_subtitle_track_status")]
+    pub status: SubtitleTrackStatus,
     pub sentences: Vec<SubtitleSentence>,
 }
 

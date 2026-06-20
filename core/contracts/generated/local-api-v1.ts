@@ -69,6 +69,7 @@ export interface SubtitleTrack {
   fingerprint: string;
   language: string | null;
   source: string;
+  status: "available" | "archived";
   sentences: SubtitleSentence[];
 }
 
@@ -392,6 +393,24 @@ export class LocalApiV1 {
 
   readSubtitle(trackId: string): Promise<SubtitleTrack> {
     return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}`);
+  }
+
+  archiveSubtitle(trackId: string): Promise<SubtitleTrack> {
+    return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}/archive`, {
+      method: "POST",
+    });
+  }
+
+  restoreSubtitle(trackId: string): Promise<SubtitleTrack> {
+    return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}/restore`, {
+      method: "POST",
+    });
+  }
+
+  deleteSubtitle(trackId: string): Promise<SubtitleTrack> {
+    return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}`, {
+      method: "DELETE",
+    });
   }
 
   exportSubtitle(trackId: string): Promise<string> {

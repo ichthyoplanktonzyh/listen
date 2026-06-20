@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-06-20 10:14:20 CST: Added the first full subtitle-resource lifecycle
+  management pass. `SubtitleTrack` resources now carry `available|archived`
+  status with SQLite migration `0012_subtitle_resource_lifecycle`; the local API
+  can archive, restore, delete, export, and list resources; and the Subtitle
+  Resources panel exposes archive/restore/delete/export actions while preventing
+  archived resources from being activated.
 - 2026-06-20 10:05:16 CST: Reworked Phase 2.2 app-side subtitle resource
   handling so subtitles and `.lltimeline.json` files behave as attachable,
   visible resources for the current media. Added current-media LLTimeline

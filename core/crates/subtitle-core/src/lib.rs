@@ -1,6 +1,6 @@
 use domain::{
     LanguageCode, MediaId, SubtitleSentence, SubtitleSentenceId, SubtitleToken, SubtitleTokenKind,
-    SubtitleTrack, SubtitleTrackId, TimeMs, normalize_lemma,
+    SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, TimeMs, normalize_lemma,
 };
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -86,6 +86,7 @@ pub fn import(input: ImportSubtitle) -> Result<SubtitleTrack, SubtitleError> {
         fingerprint,
         language: input.language,
         source: input.source_name,
+        status: SubtitleTrackStatus::Available,
         sentences,
     })
 }

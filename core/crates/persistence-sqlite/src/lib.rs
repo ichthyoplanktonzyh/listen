@@ -12,7 +12,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use sha2::Digest;
 use thiserror::Error;
 
-pub const MIGRATION_VERSION: u32 = 11;
+pub const MIGRATION_VERSION: u32 = 12;
 mod lexical;
 
 pub struct SqliteRepository {
@@ -130,6 +130,14 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         let tx = connection.unchecked_transaction()?;
         tx.execute_batch(include_str!("../migrations/0011_lltimeline_resources.sql"))?;
         tx.pragma_update(None, "user_version", 11)?;
+        tx.commit()?;
+    }
+    if current < 12 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!(
+            "../migrations/0012_subtitle_resource_lifecycle.sql"
+        ))?;
+        tx.pragma_update(None, "user_version", 12)?;
         tx.commit()?;
     }
     Ok(())
@@ -1008,16 +1016,17 @@ impl SubtitleRepository for SqliteRepository {
         let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
         let tx = conn.transaction().map_err(repo)?;
         tx.execute(
-            "INSERT INTO subtitle_tracks(id, media_id, fingerprint, language, source)
-             VALUES (?1, ?2, ?3, ?4, ?5)
+            "INSERT INTO subtitle_tracks(id, media_id, fingerprint, language, source, status)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT(media_id, fingerprint) DO UPDATE SET
-               language=excluded.language, source=excluded.source",
+               language=excluded.language, source=excluded.source, status=excluded.status",
             params![
                 track.id.as_str(),
                 track.media_id.as_str(),
                 track.fingerprint,
                 track.language.as_ref().map(LanguageCode::as_str),
-                track.source
+                track.source,
+                json(&track.status)?
             ],
         )
         .map_err(repo)?;
@@ -1073,7 +1082,7 @@ impl SubtitleRepository for SqliteRepository {
         let conn = self.connection.lock().expect("sqlite mutex poisoned");
         let mut track = conn
             .query_row(
-                "SELECT id, media_id, fingerprint, language, source FROM subtitle_tracks WHERE id=?1",
+                "SELECT id, media_id, fingerprint, language, source, status FROM subtitle_tracks WHERE id=?1",
                 [id.as_str()],
                 |r| {
                     Ok(SubtitleTrack {
@@ -1086,6 +1095,7 @@ impl SubtitleRepository for SqliteRepository {
                             .transpose()
                             .map_err(domain_sql)?,
                         source: r.get(4)?,
+                        status: from_json(&r.get::<_, String>(5)?)?,
                         sentences: vec![],
                     })
                 },
@@ -1140,6 +1150,43 @@ impl SubtitleRepository for SqliteRepository {
             .map(|id| id.and_then(|id| self.get_track(&id)))
             .collect::<Result<Vec<_>, _>>()
             .map(|tracks| tracks.into_iter().flatten().collect())
+    }
+
+    fn set_track_status(
+        &self,
+        id: &SubtitleTrackId,
+        status: SubtitleTrackStatus,
+    ) -> Result<SubtitleTrack, ApplicationError> {
+        let updated = self
+            .connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "UPDATE subtitle_tracks SET status=?2 WHERE id=?1",
+                params![id.as_str(), json(&status)?],
+            )
+            .map_err(repo)?;
+        if updated == 0 {
+            return Err(ApplicationError::NotFound("subtitle track"));
+        }
+        self.get_track(id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))
+    }
+
+    fn delete_track(
+        &self,
+        id: &SubtitleTrackId,
+    ) -> Result<Option<SubtitleTrack>, ApplicationError> {
+        let existing = self.get_track(id)?;
+        if existing.is_none() {
+            return Ok(None);
+        }
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute("DELETE FROM subtitle_tracks WHERE id=?1", [id.as_str()])
+            .map_err(repo)?;
+        Ok(existing)
     }
 
     fn get_by_media_fingerprint(
@@ -2459,6 +2506,7 @@ mod tests {
             fingerprint: "track-fp".into(),
             language: Some(LanguageCode::parse("en").unwrap()),
             source: "test".into(),
+            status: SubtitleTrackStatus::Available,
             sentences: vec![SubtitleSentence {
                 id: SubtitleSentenceId::parse("sentence-1").unwrap(),
                 index: 0,
@@ -3472,6 +3520,7 @@ mod tests {
             fingerprint: "t".into(),
             language: Some(LanguageCode::parse("en").unwrap()),
             source: "external".into(),
+            status: SubtitleTrackStatus::Available,
             sentences: vec![SubtitleSentence {
                 id: SubtitleSentenceId::from_fingerprint("sentence", "s"),
                 index: 0,
@@ -3941,6 +3990,7 @@ mod tests {
             fingerprint: "phonetic-track".into(),
             language: Some(LanguageCode::parse("en").unwrap()),
             source: "test".into(),
+            status: SubtitleTrackStatus::Available,
             sentences: vec![SubtitleSentence {
                 id: sentence_id.clone(),
                 index: 0,

@@ -99,6 +99,13 @@ pub trait SubtitleRepository: Send + Sync {
         &self,
         media_id: &MediaId,
     ) -> Result<Vec<SubtitleTrack>, ApplicationError>;
+    fn set_track_status(
+        &self,
+        id: &SubtitleTrackId,
+        status: SubtitleTrackStatus,
+    ) -> Result<SubtitleTrack, ApplicationError>;
+    fn delete_track(&self, id: &SubtitleTrackId)
+    -> Result<Option<SubtitleTrack>, ApplicationError>;
     fn get_by_media_fingerprint(
         &self,
         media_id: &MediaId,
@@ -645,6 +652,29 @@ impl AppServices {
             return Err(ApplicationError::NotFound("media item"));
         }
         self.subtitles.list_tracks_for_media(media_id)
+    }
+
+    pub fn archive_subtitle_track(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<SubtitleTrack, ApplicationError> {
+        self.subtitles
+            .set_track_status(track_id, SubtitleTrackStatus::Archived)
+    }
+
+    pub fn restore_subtitle_track(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<SubtitleTrack, ApplicationError> {
+        self.subtitles
+            .set_track_status(track_id, SubtitleTrackStatus::Available)
+    }
+
+    pub fn delete_subtitle_track(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<SubtitleTrack>, ApplicationError> {
+        self.subtitles.delete_track(track_id)
     }
 
     pub fn read_progress(&self, media_id: &MediaId) -> Result<Option<TimeMs>, ApplicationError> {
@@ -1291,6 +1321,7 @@ impl AppServices {
             fingerprint,
             language: document.metadata.language.clone(),
             source,
+            status: SubtitleTrackStatus::Available,
             sentences: lltimeline_segments_to_sentences(&document.segments)?,
         };
         self.subtitles.save_track(&track)?;
