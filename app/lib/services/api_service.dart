@@ -164,6 +164,27 @@ class LocalApi {
       (await _request('GET', '/v1/subtitles/${Uri.encodeComponent(trackId)}'))
           as Map<String, dynamic>;
 
+  Future<Map<String, dynamic>> archiveSubtitle(String trackId) async =>
+      (await _request(
+            'POST',
+            '/v1/subtitles/${Uri.encodeComponent(trackId)}/archive',
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> restoreSubtitle(String trackId) async =>
+      (await _request(
+            'POST',
+            '/v1/subtitles/${Uri.encodeComponent(trackId)}/restore',
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> deleteSubtitle(String trackId) async =>
+      (await _request(
+            'DELETE',
+            '/v1/subtitles/${Uri.encodeComponent(trackId)}',
+          ))
+          as Map<String, dynamic>;
+
   Future<Map<String, dynamic>> lookupPronunciation(String word) async =>
       (await _request(
             'GET',

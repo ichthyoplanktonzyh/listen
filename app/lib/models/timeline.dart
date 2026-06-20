@@ -55,6 +55,7 @@ class SubtitleTrack {
     this.mediaId,
     this.fingerprint,
     this.source = 'subtitle',
+    this.status = 'available',
   });
 
   factory SubtitleTrack.fromJson(Map<String, dynamic> json) => SubtitleTrack(
@@ -62,6 +63,7 @@ class SubtitleTrack {
     mediaId: json['media_id'] as String?,
     fingerprint: json['fingerprint'] as String?,
     source: json['source'] as String? ?? 'subtitle',
+    status: json['status'] as String? ?? 'available',
     cues: (json['sentences'] as List<dynamic>)
         .map((value) => Cue.fromJson(value as Map<String, dynamic>))
         .toList(growable: false),
@@ -71,7 +73,10 @@ class SubtitleTrack {
   final String? mediaId;
   final String? fingerprint;
   final String source;
+  final String status;
   final List<Cue> cues;
+
+  bool get archived => status == 'archived';
 }
 
 class WordTiming {

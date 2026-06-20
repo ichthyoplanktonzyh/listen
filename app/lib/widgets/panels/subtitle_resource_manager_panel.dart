@@ -17,6 +17,10 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
     required this.onImportLLTimeline,
     required this.onRefreshResources,
     required this.onActivateSubtitle,
+    required this.onArchiveSubtitle,
+    required this.onRestoreSubtitle,
+    required this.onDeleteSubtitle,
+    required this.onExportSubtitle,
     required this.onActivateWordTimeline,
     required this.onManualReviewTimeline,
   });
@@ -31,6 +35,10 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
   final Future<void> Function() onImportLLTimeline;
   final Future<void> Function() onRefreshResources;
   final Future<void> Function(SubtitleTrack track) onActivateSubtitle;
+  final Future<void> Function(SubtitleTrack track) onArchiveSubtitle;
+  final Future<void> Function(SubtitleTrack track) onRestoreSubtitle;
+  final Future<void> Function(SubtitleTrack track) onDeleteSubtitle;
+  final Future<void> Function(SubtitleTrack track) onExportSubtitle;
   final Future<void> Function(String timelineId) onActivateWordTimeline;
   final Future<void> Function() onManualReviewTimeline;
 
@@ -95,6 +103,10 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
                         resource: resource,
                         active: active,
                         onActivate: () => onActivateSubtitle(resource),
+                        onArchive: () => onArchiveSubtitle(resource),
+                        onRestore: () => onRestoreSubtitle(resource),
+                        onDelete: () => onDeleteSubtitle(resource),
+                        onExport: () => onExportSubtitle(resource),
                       );
                     },
                   ),
@@ -120,11 +132,19 @@ class _SubtitleResourceTile extends StatelessWidget {
     required this.resource,
     required this.active,
     required this.onActivate,
+    required this.onArchive,
+    required this.onRestore,
+    required this.onDelete,
+    required this.onExport,
   });
 
   final SubtitleTrack resource;
   final bool active;
   final Future<void> Function() onActivate;
+  final Future<void> Function() onArchive;
+  final Future<void> Function() onRestore;
+  final Future<void> Function() onDelete;
+  final Future<void> Function() onExport;
 
   @override
   Widget build(BuildContext context) {
@@ -161,6 +181,7 @@ class _SubtitleResourceTile extends StatelessWidget {
                   Text(
                     [
                       resource.source,
+                      resource.status,
                       '${resource.cues.length} ${l.text('cues')}',
                       resource.id,
                     ].join(' · '),
@@ -181,8 +202,47 @@ class _SubtitleResourceTile extends StatelessWidget {
                       ? Icons.radio_button_checked
                       : Icons.play_circle_outline,
                 ),
-                onPressed: active ? null : onActivate,
+                onPressed: active || resource.archived ? null : onActivate,
               ),
+            ),
+            PopupMenuButton<String>(
+              tooltip: l.text('resourceActions'),
+              onSelected: (value) {
+                switch (value) {
+                  case 'export':
+                    onExport();
+                    break;
+                  case 'archive':
+                    onArchive();
+                    break;
+                  case 'restore':
+                    onRestore();
+                    break;
+                  case 'delete':
+                    onDelete();
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'export',
+                  child: Text(l.text('exportSubtitle')),
+                ),
+                if (resource.archived)
+                  PopupMenuItem(
+                    value: 'restore',
+                    child: Text(l.text('restoreResource')),
+                  )
+                else
+                  PopupMenuItem(
+                    value: 'archive',
+                    child: Text(l.text('archiveResource')),
+                  ),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Text(l.text('deleteResource')),
+                ),
+              ],
             ),
           ],
         ),

@@ -792,6 +792,86 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  Future<void> _archiveSubtitleResource(SubtitleTrack track) async {
+    final service = api;
+    if (service == null) return;
+    try {
+      await service.archiveSubtitle(track.id);
+      if (subtitleController.primaryTrack?.id == track.id) {
+        subtitleController.setPrimaryTrack(null);
+        subtitleController.setCurrentPrimaryCue(null);
+        subtitleController.clearSpeechEnhancements();
+      }
+      await _loadSubtitleResources(updateStatus: false);
+      if (mounted) setState(() => status = 'Archived subtitle resource');
+    } catch (error) {
+      if (mounted) setState(() => status = 'Subtitle archive failed: $error');
+    }
+  }
+
+  Future<void> _restoreSubtitleResource(SubtitleTrack track) async {
+    final service = api;
+    if (service == null) return;
+    try {
+      await service.restoreSubtitle(track.id);
+      await _loadSubtitleResources(updateStatus: false);
+      if (mounted) setState(() => status = 'Restored subtitle resource');
+    } catch (error) {
+      if (mounted) setState(() => status = 'Subtitle restore failed: $error');
+    }
+  }
+
+  Future<void> _deleteSubtitleResource(SubtitleTrack track) async {
+    final service = api;
+    if (service == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l.text('deleteResource')),
+        content: Text(l.text('deleteSubtitleResourceBody')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l.text('cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l.text('deleteResource')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await service.deleteSubtitle(track.id);
+      if (subtitleController.primaryTrack?.id == track.id) {
+        subtitleController.setPrimaryTrack(null);
+        subtitleController.setCurrentPrimaryCue(null);
+        subtitleController.clearSpeechEnhancements();
+      }
+      await _loadSubtitleResources(updateStatus: false);
+      if (mounted) setState(() => status = 'Deleted subtitle resource');
+    } catch (error) {
+      if (mounted) setState(() => status = 'Subtitle delete failed: $error');
+    }
+  }
+
+  Future<void> _exportSubtitleResource(SubtitleTrack track) async {
+    final service = api;
+    if (service == null) return;
+    try {
+      final location = await getSaveLocation(
+        suggestedName: '${track.source}-${track.id}.srt',
+      );
+      if (location == null) return;
+      final srt = await service.exportSubtitleSrt(track.id);
+      await File(location.path).writeAsString(srt);
+      if (mounted) setState(() => status = 'Exported subtitle resource');
+    } catch (error) {
+      if (mounted) setState(() => status = 'Subtitle export failed: $error');
+    }
+  }
+
   Future<void> _activateWordTimeline(String timelineId) async {
     final service = api;
     final trackId = subtitleController.primaryTrack?.id;
@@ -2486,6 +2566,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     onImportLLTimeline: _openLLTimelineResource,
     onRefreshResources: _refreshSubtitleResources,
     onActivateSubtitle: _activateSubtitleResource,
+    onArchiveSubtitle: _archiveSubtitleResource,
+    onRestoreSubtitle: _restoreSubtitleResource,
+    onDeleteSubtitle: _deleteSubtitleResource,
+    onExportSubtitle: _exportSubtitleResource,
     onActivateWordTimeline: _activateWordTimeline,
     onManualReviewTimeline: _openManualReviewTimeline,
   );

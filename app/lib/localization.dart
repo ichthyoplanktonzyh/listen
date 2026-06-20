@@ -126,6 +126,13 @@ class AppLocalizations {
       'noSubtitleResources': 'No subtitle resources yet',
       'activeSubtitle': 'Active subtitle',
       'activateSubtitle': 'Activate subtitle',
+      'resourceActions': 'Resource actions',
+      'archiveResource': 'Archive resource',
+      'restoreResource': 'Restore resource',
+      'deleteResource': 'Delete resource',
+      'exportSubtitle': 'Export subtitle',
+      'deleteSubtitleResourceBody':
+          'Delete this subtitle resource and its attached timelines from the local library?',
       'cues': 'cues',
       'timelineFingerprintMismatch': 'Timeline media mismatch',
       'timelineFingerprintMismatchBody':
@@ -369,6 +376,12 @@ class AppLocalizations {
       'noSubtitleResources': '暂无字幕资源',
       'activeSubtitle': '当前字幕',
       'activateSubtitle': '激活字幕',
+      'resourceActions': '资源操作',
+      'archiveResource': '归档资源',
+      'restoreResource': '恢复资源',
+      'deleteResource': '删除资源',
+      'exportSubtitle': '导出字幕',
+      'deleteSubtitleResourceBody': '从本地资源库删除这个字幕资源及其关联时间轴？',
       'cues': '句',
       'timelineFingerprintMismatch': '时间轴媒体不匹配',
       'timelineFingerprintMismatchBody':
