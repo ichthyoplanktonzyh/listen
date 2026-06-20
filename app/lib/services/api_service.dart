@@ -138,10 +138,26 @@ class LocalApi {
           }))
           as Map<String, dynamic>;
 
+  Future<List<Map<String, dynamic>>> mediaSubtitles(String mediaId) async =>
+      ((await _request('GET', '/v1/media/$mediaId/subtitles')) as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+
   Future<Map<String, dynamic>> importLLTimeline(
     Map<String, dynamic> document,
   ) async =>
       (await _request('POST', '/v1/lltimeline/import', document))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> importLLTimelineForMedia(
+    String mediaId,
+    Map<String, dynamic> document, {
+    bool allowMismatch = false,
+  }) async =>
+      (await _request(
+            'POST',
+            '/v1/media/$mediaId/lltimeline/import?allow_mismatch=$allowMismatch',
+            document,
+          ))
           as Map<String, dynamic>;
 
   Future<Map<String, dynamic>> readSubtitle(String trackId) async =>

@@ -30,6 +30,7 @@ class SubtitleState {
     this.timingsBySentence = const {},
     this.chunkPartitionsBySentence = const {},
     this.pronunciationProviders = const [],
+    this.subtitleResources = const [],
     this.wordTimelineSummaries = const [],
     this.llTimelineDocument,
     this.timelineResourceError,
@@ -62,6 +63,7 @@ class SubtitleState {
   final Map<String, List<WordTiming>> timingsBySentence;
   final Map<String, SentenceChunkPartition> chunkPartitionsBySentence;
   final List<Map<String, dynamic>> pronunciationProviders;
+  final List<SubtitleTrack> subtitleResources;
   final List<WordTimelineSummary> wordTimelineSummaries;
   final LLTimelineDocument? llTimelineDocument;
   final String? timelineResourceError;
@@ -94,6 +96,7 @@ class SubtitleState {
     Map<String, List<WordTiming>>? timingsBySentence,
     Map<String, SentenceChunkPartition>? chunkPartitionsBySentence,
     List<Map<String, dynamic>>? pronunciationProviders,
+    List<SubtitleTrack>? subtitleResources,
     List<WordTimelineSummary>? wordTimelineSummaries,
     Object? llTimelineDocument = _unset,
     Object? timelineResourceError = _unset,
@@ -139,6 +142,7 @@ class SubtitleState {
         chunkPartitionsBySentence ?? this.chunkPartitionsBySentence,
     pronunciationProviders:
         pronunciationProviders ?? this.pronunciationProviders,
+    subtitleResources: subtitleResources ?? this.subtitleResources,
     wordTimelineSummaries: wordTimelineSummaries ?? this.wordTimelineSummaries,
     llTimelineDocument: identical(llTimelineDocument, _unset)
         ? this.llTimelineDocument
@@ -204,6 +208,7 @@ class SubtitleController extends ChangeNotifier {
       _state.chunkPartitionsBySentence;
   List<Map<String, dynamic>> get pronunciationProviders =>
       _state.pronunciationProviders;
+  List<SubtitleTrack> get subtitleResources => _state.subtitleResources;
   List<WordTimelineSummary> get wordTimelineSummaries =>
       _state.wordTimelineSummaries;
   LLTimelineDocument? get llTimelineDocument => _state.llTimelineDocument;
@@ -303,6 +308,9 @@ class SubtitleController extends ChangeNotifier {
       phoneticAnalysisBySentence: phoneticAnalysisBySentence,
     ),
   );
+
+  void setSubtitleResources(List<SubtitleTrack> resources) =>
+      _update((s) => s.copyWith(subtitleResources: resources));
 
   void setSentencePronunciation(
     String sentenceId,

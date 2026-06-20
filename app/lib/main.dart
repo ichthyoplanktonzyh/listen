@@ -29,6 +29,7 @@ import 'widgets/subtitle/token_line.dart';
 import 'widgets/panels/word_learning_panel.dart';
 import 'screens/vocabulary_screen.dart';
 import 'widgets/panels/diagnosis_card.dart';
+import 'widgets/panels/subtitle_resource_manager_panel.dart';
 import 'widgets/panels/transcript_panel.dart';
 import 'widgets/player/download_status_bar.dart';
 import 'widgets/app_bar/player_app_bar.dart';
@@ -401,6 +402,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     subtitleController.setSecondaryTrack(null);
     subtitleController.setCurrentPrimaryCue(null);
     subtitleController.setCurrentSecondaryCue(null);
+    subtitleController.setSubtitleResources(const []);
     subtitleController.clearSpeechEnhancements();
     playerController.setSourceLoop(null, null);
     try {
@@ -426,6 +428,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           await adapter.seek(saved);
           playerController.setPosition(saved);
         }
+        await _loadSubtitleResources(updateStatus: false);
       }
     } catch (error) {
       coreError = error;
@@ -466,23 +469,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
           subtitleController.secondaryCursor.current(playerController.position),
         );
       } else {
-        subtitleController.clearSpeechEnhancements();
-        subtitleController.setPrimaryTrack(imported);
-        subtitleController.setCurrentPrimaryCue(
-          subtitleController.primaryCursor.current(playerController.position),
+        await _usePrimarySubtitleTrack(
+          imported,
+          nextStatus:
+              'Loaded primary subtitle: '
+              '${path.split(Platform.pathSeparator).last}',
         );
       }
-      setState(() {
-        status =
-            'Loaded ${secondary ? 'secondary' : 'primary'} subtitle: '
-            '${path.split(Platform.pathSeparator).last}';
-      });
-      if (!secondary) await _loadWordProfiles();
-      if (!secondary) await _loadPhraseProfiles();
-      if (!secondary) {
-        await _loadPhraseCandidates(subtitleController.currentPrimaryCue);
+      if (secondary) {
+        setState(() {
+          status =
+              'Loaded secondary subtitle: '
+              '${path.split(Platform.pathSeparator).last}';
+        });
       }
-      if (!secondary) await _loadSpeechEnhancements(imported.id);
+      await _loadSubtitleResources(updateStatus: false);
     } catch (error) {
       setState(() => status = 'Subtitle import failed: $error');
     }
@@ -490,7 +491,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _openLLTimelineResource() async {
     final service = api;
-    if (service == null) {
+    final mediaId = playerController.mediaId;
+    if (service == null || mediaId == null) {
       setState(() => status = 'Open media and connect the local core first');
       return;
     }
@@ -503,30 +505,99 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (decoded is! Map<String, dynamic>) {
         throw const FormatException('LLTimeline JSON must be an object');
       }
-      final value = await service.importLLTimeline(decoded);
-      await adapter.disableNativeSubtitles();
+      final resourceFingerprint = _llTimelineMediaFingerprint(decoded);
+      final currentFingerprint = playerController.mediaFingerprint;
+      var allowMismatch = false;
+      if (resourceFingerprint != null &&
+          currentFingerprint != null &&
+          resourceFingerprint != currentFingerprint) {
+        allowMismatch = await _confirmLLTimelineMismatch(
+          resourceFingerprint: resourceFingerprint,
+          currentFingerprint: currentFingerprint,
+        );
+        if (!allowMismatch) {
+          if (mounted) setState(() => status = 'LLTimeline import cancelled');
+          return;
+        }
+      }
+      final value = await service.importLLTimelineForMedia(
+        mediaId,
+        decoded,
+        allowMismatch: allowMismatch,
+      );
       final imported = SubtitleTrack.fromJson(value);
-      subtitleController.clearSpeechEnhancements();
-      subtitleController.setPrimaryTrack(imported);
-      subtitleController.setCurrentPrimaryCue(
-        subtitleController.primaryCursor.current(playerController.position),
+      await _usePrimarySubtitleTrack(
+        imported,
+        nextStatus:
+            'Imported LLTimeline resource: '
+            '${file.path.split(Platform.pathSeparator).last}',
       );
       subtitleController.setTimelineResource(
-        summaries: const [],
+        summaries: subtitleController.wordTimelineSummaries,
         document: LLTimelineDocument.fromJson(decoded),
+        error: subtitleController.timelineResourceError,
       );
-      setState(() {
-        status =
-            'Imported LLTimeline resource: '
-            '${file.path.split(Platform.pathSeparator).last}';
-      });
-      await _loadWordProfiles();
-      await _loadPhraseProfiles();
-      await _loadPhraseCandidates(subtitleController.currentPrimaryCue);
-      await _loadSpeechEnhancements(imported.id);
+      await _loadSubtitleResources(updateStatus: false);
     } catch (error) {
       setState(() => status = 'LLTimeline import failed: $error');
     }
+  }
+
+  Future<void> _usePrimarySubtitleTrack(
+    SubtitleTrack track, {
+    required String nextStatus,
+  }) async {
+    await adapter.disableNativeSubtitles();
+    if (!mounted) return;
+    subtitleController.clearSpeechEnhancements();
+    subtitleController.setPrimaryTrack(track);
+    subtitleController.setCurrentPrimaryCue(
+      subtitleController.primaryCursor.current(playerController.position),
+    );
+    setState(() => status = nextStatus);
+    await _loadWordProfiles();
+    await _loadPhraseProfiles();
+    await _loadPhraseCandidates(subtitleController.currentPrimaryCue);
+    await _loadSpeechEnhancements(track.id);
+  }
+
+  String? _llTimelineMediaFingerprint(Map<String, dynamic> document) {
+    final metadata = document['metadata'];
+    if (metadata is! Map<String, dynamic>) return null;
+    final media = metadata['media'];
+    if (media is! Map<String, dynamic>) return null;
+    final fingerprint = media['fingerprint'];
+    return fingerprint is String && fingerprint.trim().isNotEmpty
+        ? fingerprint
+        : null;
+  }
+
+  Future<bool> _confirmLLTimelineMismatch({
+    required String resourceFingerprint,
+    required String currentFingerprint,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l.text('timelineFingerprintMismatch')),
+        content: Text(
+          '${l.text('timelineFingerprintMismatchBody')}\n\n'
+          'Current: $currentFingerprint\n'
+          'Resource: $resourceFingerprint',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l.text('cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l.text('attachAnyway')),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
   }
 
   Future<void> _loadGeneratedTrack(
@@ -541,23 +612,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
       subtitleController.setCurrentSecondaryCue(
         subtitleController.secondaryCursor.current(playerController.position),
       );
+      setState(() {
+        status = 'Loaded generated secondary subtitle';
+      });
     } else {
-      subtitleController.clearSpeechEnhancements();
-      subtitleController.setPrimaryTrack(imported);
-      subtitleController.setCurrentPrimaryCue(
-        subtitleController.primaryCursor.current(playerController.position),
+      await _usePrimarySubtitleTrack(
+        imported,
+        nextStatus: 'Loaded generated primary subtitle',
       );
     }
-    setState(() {
-      status =
-          'Loaded generated ${secondary ? 'secondary' : 'primary'} subtitle';
-    });
-    if (!secondary) await _loadWordProfiles();
-    if (!secondary) await _loadPhraseProfiles();
-    if (!secondary) {
-      await _loadPhraseCandidates(subtitleController.currentPrimaryCue);
-    }
-    if (!secondary) await _loadSpeechEnhancements(imported.id);
+    await _loadSubtitleResources(updateStatus: false);
   }
 
   Future<void> _loadSpeechEnhancements(String trackId) async {
@@ -684,6 +748,48 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (trackId == null) return;
     await _loadTimelineResource(trackId);
     if (mounted) setState(() => status = 'Timeline resource refreshed');
+  }
+
+  Future<void> _loadSubtitleResources({bool updateStatus = true}) async {
+    final service = api;
+    final mediaId = playerController.mediaId;
+    if (service == null || mediaId == null) {
+      subtitleController.setSubtitleResources(const []);
+      return;
+    }
+    try {
+      final values = await service.mediaSubtitles(mediaId);
+      if (!mounted || playerController.mediaId != mediaId) return;
+      subtitleController.setSubtitleResources(
+        values
+            .map((raw) => SubtitleTrack.fromJson(raw))
+            .toList(growable: false),
+      );
+      if (updateStatus) setState(() => status = 'Subtitle resources refreshed');
+    } catch (error) {
+      if (mounted && updateStatus) {
+        setState(() => status = 'Subtitle resources unavailable: $error');
+      }
+    }
+  }
+
+  Future<void> _refreshSubtitleResources() async {
+    await _loadSubtitleResources();
+    await _refreshTimelineResource();
+  }
+
+  Future<void> _activateSubtitleResource(SubtitleTrack track) async {
+    try {
+      await _usePrimarySubtitleTrack(
+        track,
+        nextStatus: 'Activated subtitle resource',
+      );
+      await _loadSubtitleResources(updateStatus: false);
+    } catch (error) {
+      if (mounted) {
+        setState(() => status = 'Subtitle activation failed: $error');
+      }
+    }
   }
 
   Future<void> _activateWordTimeline(String timelineId) async {
@@ -2060,7 +2166,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           children: [
                             Expanded(flex: 3, child: _playerSurface()),
                             if (subtitleController.visible ||
-                                learningController.selectedWordDetails != null)
+                                learningController.selectedWordDetails !=
+                                    null ||
+                                learningController.sidePanel == 1)
                               SizedBox(
                                 width: settingsController.transcriptWidth,
                                 child: _sidePanel(),
@@ -2309,11 +2417,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
             ButtonSegment(
               value: 1,
+              icon: const Icon(Icons.inventory_2_outlined),
+              label: Text(l.text('subtitleResources')),
+            ),
+            ButtonSegment(
+              value: 2,
               icon: const Icon(Icons.menu_book),
               label: Text(l.text('wordLearning')),
             ),
             ButtonSegment(
-              value: 2,
+              value: 3,
               icon: const Icon(Icons.analytics_outlined),
               label: Text(l.text('diagnosis')),
             ),
@@ -2325,7 +2438,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ),
         Expanded(
           child: switch (learningController.sidePanel) {
-            1 =>
+            1 => _subtitleResources(),
+            2 =>
               learningController.selectedWordDetails == null
                   ? Center(child: Text(l.text('noWordSelected')))
                   : WordLearningPanel(
@@ -2338,7 +2452,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       onHeard: () => _observeSelected(true),
                       onNotHeard: () => _observeSelected(false),
                     ),
-            2 =>
+            3 =>
               learningController.diagnosis == null
                   ? Center(child: Text(l.text('diagnosis')))
                   : _diagnosisCard(),
@@ -2359,11 +2473,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
     baseColor: settingsController.primaryColor,
     onWord: _openWord,
     onSeekCue: _seekCue,
+  );
+
+  Widget _subtitleResources() => SubtitleResourceManagerPanel(
+    mediaId: playerController.mediaId,
+    resources: subtitleController.subtitleResources,
+    activeTrack: subtitleController.primaryTrack,
     timelineDocument: subtitleController.llTimelineDocument,
     wordTimelineSummaries: subtitleController.wordTimelineSummaries,
     timelineResourceError: subtitleController.timelineResourceError,
+    onImportSubtitle: () async => _openSubtitle(secondary: false),
     onImportLLTimeline: _openLLTimelineResource,
-    onRefreshTimelineResource: _refreshTimelineResource,
+    onRefreshResources: _refreshSubtitleResources,
+    onActivateSubtitle: _activateSubtitleResource,
     onActivateWordTimeline: _activateWordTimeline,
     onManualReviewTimeline: _openManualReviewTimeline,
   );

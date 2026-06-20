@@ -49,16 +49,28 @@ class Cue {
 }
 
 class SubtitleTrack {
-  const SubtitleTrack({required this.id, required this.cues});
+  const SubtitleTrack({
+    required this.id,
+    required this.cues,
+    this.mediaId,
+    this.fingerprint,
+    this.source = 'subtitle',
+  });
 
   factory SubtitleTrack.fromJson(Map<String, dynamic> json) => SubtitleTrack(
     id: json['id'] as String,
+    mediaId: json['media_id'] as String?,
+    fingerprint: json['fingerprint'] as String?,
+    source: json['source'] as String? ?? 'subtitle',
     cues: (json['sentences'] as List<dynamic>)
         .map((value) => Cue.fromJson(value as Map<String, dynamic>))
         .toList(growable: false),
   );
 
   final String id;
+  final String? mediaId;
+  final String? fingerprint;
+  final String source;
   final List<Cue> cues;
 }
 
