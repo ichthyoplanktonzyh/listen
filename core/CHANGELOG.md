@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- 2026-06-20 21:08:52 CST: Added subtitle-resource consumption capability
+  visibility in the standalone Subtitle Resources panel. Each resource now
+  reports sentence, word, chunk, and phone timing availability with counts;
+  resource refresh probes capabilities independently so partial failures do not
+  hide usable subtitles; and opening a new media clears stale resource
+  capability state before reloading.
+- 2026-06-20 21:08:52 CST: Hardened active subtitle-resource consumption after
+  LLTimeline import by loading word timings, chunk partitions, phone analyses,
+  and pronunciation independently. Resource-list capability refresh no longer
+  triggers full-track chunk partition generation, so importing a large
+  `.lltimeline.json` is not blocked by panel capability probing.
+- 2026-06-20 21:36:31 CST: Promoted subtitle resources to a top-level desktop
+  entry, opening a dedicated management page like the vocabulary book instead
+  of relying on the right-side transcript panel. LLTimeline import now refreshes
+  visible resources after success, and current-media imports reuse an existing
+  same-media/same-subtitle fingerprint track id so repeated or previously
+  imported `.lltimeline.json` resources remain visible and consumable.
+- 2026-06-20 21:46:04 CST: Fixed the desktop development sidecar selection trap
+  where a stale `target/release/api-http` was preferred over the freshly built
+  debug sidecar, leaving real user databases at schema v9 without
+  `word_timeline_runs`, `lltimeline_resources`, or subtitle lifecycle status.
+  Rebuilt the release sidecar, migrated the local database to schema v12, and
+  verified the desktop sample MP4 plus `baseline.lltimeline.json` imports as a
+  visible subtitle resource with 1,755 word timings.
 - 2026-06-20 10:14:20 CST: Added the first full subtitle-resource lifecycle
   management pass. `SubtitleTrack` resources now carry `available|archived`
   status with SQLite migration `0012_subtitle_resource_lifecycle`; the local API

@@ -2455,6 +2455,160 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn imports_lltimeline_for_current_media_with_existing_resource_fingerprint() {
+        let app = test_app();
+        let source_track = setup_phonetic_track(&app, "existing-source-media").await;
+        let sentence = &source_track["sentences"][0];
+        let token = sentence["tokens"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|token| token["kind"] == "word")
+            .expect("fixture has a word token");
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/v1/subtitles/{}/word-timelines",
+                    source_track["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "algorithm_id": "exchange-aligner",
+                        "algorithm_version": "v1",
+                        "config_hash": "test-config",
+                        "status": "active",
+                        "words": [{
+                            "sentence_id": sentence["id"],
+                            "token_index": token["index"],
+                            "text": token["text"],
+                            "start_ms": sentence["start"].as_u64().unwrap() + 10,
+                            "end_ms": sentence["start"].as_u64().unwrap() + 130,
+                            "confidence": 0.95,
+                            "timing_source": "forced_aligned",
+                            "provider_id": "exchange-aligner",
+                            "provider_version": "v1"
+                        }]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get(format!(
+                    "/v1/subtitles/{}/lltimeline/export",
+                    source_track["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let mut document: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/v1/media")
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "path": "/tmp/existing-target-media.mp4",
+                            "fingerprint": "existing-target-media",
+                            "title": "existing-target-media",
+                            "kind": "video"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let target_media: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+
+        let external_track_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        document["metadata"]["media"] = serde_json::json!({
+            "id": target_media["id"],
+            "fingerprint": target_media["fingerprint"],
+            "path": target_media["path"],
+            "title": target_media["title"],
+            "duration_ms": null
+        });
+        document["metadata"]["extra"]["track_id"] = serde_json::json!(external_track_id);
+        let mut sentence_ids = std::collections::HashMap::new();
+        for (index, segment) in document["segments"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .enumerate()
+        {
+            let original = segment["id"].as_str().unwrap().to_owned();
+            let external = format!("{:064x}", index + 1);
+            segment["id"] = serde_json::json!(external);
+            sentence_ids.insert(original, external);
+        }
+        for timeline in document["word_timelines"].as_array_mut().unwrap() {
+            timeline["media_id"] = target_media["id"].clone();
+            timeline["track_id"] = serde_json::json!(external_track_id);
+            for word in timeline["words"].as_array_mut().unwrap() {
+                let original = word["sentence_id"].as_str().unwrap();
+                word["sentence_id"] = serde_json::json!(sentence_ids[original]);
+            }
+        }
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/v1/lltimeline/import")
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(document.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let imported_once: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(imported_once["id"], external_track_id);
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/v1/media/{}/lltimeline/import",
+                    target_media["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(document.to_string()))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let imported_again: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(imported_again["id"], external_track_id);
+    }
+
+    #[tokio::test]
     async fn phonetic_analysis_fake_provider_completes_without_audio_detection_claims() {
         let app = test_app();
         let response = app

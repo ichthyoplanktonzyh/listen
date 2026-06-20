@@ -1367,10 +1367,16 @@ impl AppServices {
             return Err(ApplicationError::Validation("lltimeline media fingerprint"));
         }
         let track_fingerprint = lltimeline_track_fingerprint(&document);
-        let track_id = SubtitleTrackId::from_fingerprint(
-            "subtitle-track",
-            &format!("{}:{}", media.id.as_str(), track_fingerprint),
-        );
+        let track_id = self
+            .subtitles
+            .get_by_media_fingerprint(&media.id, &track_fingerprint)?
+            .map(|track| track.id)
+            .unwrap_or_else(|| {
+                SubtitleTrackId::from_fingerprint(
+                    "subtitle-track",
+                    &format!("{}:{}", media.id.as_str(), track_fingerprint),
+                )
+            });
         let source = document
             .metadata
             .extra
