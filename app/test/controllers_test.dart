@@ -138,6 +138,57 @@ void main() {
     expect(controller.currentPrimaryCue, isNull);
   });
 
+  test(
+    'subtitle controller keeps timeline resource data when marking error',
+    () {
+      const document = LLTimelineDocument(
+        schema: 'llplayer.timeline.v1',
+        metadata: LLTimelineMetadata(
+          createdAt: Duration(milliseconds: 1),
+          generatorId: 'fixture-generator',
+          generatorVersion: 'v1',
+          generatorMode: 'production_engine',
+          mediaTitle: 'Fixture',
+          mediaFingerprint: 'fingerprint',
+          humanReviewed: false,
+          extra: {'track_source': 'lltimeline-json-v1'},
+        ),
+        activeWordTimelineId: 'timeline-active',
+        artifacts: [
+          LLTimelineArtifact(kind: 'alignment_diagnostics', payload: {}),
+        ],
+      );
+      const summaries = [
+        WordTimelineSummary(
+          id: 'timeline-active',
+          trackId: 'track-1',
+          mediaId: 'media-1',
+          algorithmId: 'whisperx',
+          algorithmVersion: '1.0',
+          createdBy: 'algorithm',
+          status: 'active',
+          lifecycleStage: 'algorithm_candidate',
+          wordCount: 12,
+          providerIds: ['whisperx'],
+          timingSources: ['forced_aligned'],
+          canActivate: true,
+          canArchive: true,
+          canDelete: true,
+        ),
+      ];
+      final controller = SubtitleController()
+        ..setTimelineResource(summaries: summaries, document: document)
+        ..setTimelineResourceError('Timeline resource refresh warning');
+
+      expect(controller.llTimelineDocument, same(document));
+      expect(controller.wordTimelineSummaries, same(summaries));
+      expect(
+        controller.timelineResourceError,
+        'Timeline resource refresh warning',
+      );
+    },
+  );
+
   test('learning controller clears pronunciation and diagnosis', () {
     final controller = LearningController()
       ..selectWord(const {'profile': {}})

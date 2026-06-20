@@ -632,34 +632,51 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _loadTimelineResource(String trackId) async {
     final service = api;
     if (service == null) return;
+    final errors = <String>[];
+    final previousSummaries = subtitleController.wordTimelineSummaries;
+    final previousDocument = subtitleController.llTimelineDocument;
+
+    late List<WordTimelineSummary> summaries;
+    LLTimelineDocument? document;
+
     try {
-      final values = await Future.wait([
-        service.trackWordTimelineSummaries(trackId),
-        service.exportTrackLLTimeline(trackId),
-      ]);
-      if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
-      final summaries = values[0] as List<Map<String, dynamic>>;
-      final exportedDocument = LLTimelineDocument.fromJson(
-        values[1] as Map<String, dynamic>,
-      );
-      final previousDocument = subtitleController.llTimelineDocument;
-      final document =
+      final values = await service.trackWordTimelineSummaries(trackId);
+      summaries = values
+          .map((raw) => WordTimelineSummary.fromJson(raw))
+          .toList(growable: false);
+    } catch (error) {
+      errors.add('summary: $error');
+      summaries = previousSummaries;
+    }
+
+    try {
+      final value = await service.exportTrackLLTimeline(trackId);
+      final exportedDocument = LLTimelineDocument.fromJson(value);
+      document =
           exportedDocument.artifacts.isEmpty &&
               previousDocument?.artifacts.isNotEmpty == true
           ? previousDocument
           : exportedDocument;
-      subtitleController.setTimelineResource(
-        summaries: summaries
-            .map((raw) => WordTimelineSummary.fromJson(raw))
-            .toList(growable: false),
-        document: document,
-      );
     } catch (error) {
-      if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
-      subtitleController.setTimelineResourceError(
-        'Timeline resource unavailable: $error',
-      );
+      errors.add('export: $error');
+      document = previousDocument;
     }
+
+    if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
+    final hasTimelineData = summaries.isNotEmpty || document != null;
+    if (!hasTimelineData && errors.length == 2) {
+      subtitleController.setTimelineResourceError(
+        'Timeline resource unavailable: ${errors.join('; ')}',
+      );
+      return;
+    }
+    subtitleController.setTimelineResource(
+      summaries: summaries,
+      document: document,
+      error: errors.isEmpty
+          ? null
+          : 'Timeline resource refresh warning: ${errors.join('; ')}',
+    );
   }
 
   Future<void> _refreshTimelineResource() async {

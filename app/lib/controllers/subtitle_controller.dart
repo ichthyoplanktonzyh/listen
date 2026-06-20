@@ -343,13 +343,8 @@ class SubtitleController extends ChangeNotifier {
     ),
   );
 
-  void setTimelineResourceError(String error) => _update(
-    (s) => s.copyWith(
-      wordTimelineSummaries: const [],
-      llTimelineDocument: null,
-      timelineResourceError: error,
-    ),
-  );
+  void setTimelineResourceError(String error) =>
+      _update((s) => s.copyWith(timelineResourceError: error));
 
   void clearTimelineResource() => _update(
     (s) => s.copyWith(
