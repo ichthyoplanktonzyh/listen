@@ -1119,6 +1119,29 @@ impl SubtitleRepository for SqliteRepository {
         Ok(track)
     }
 
+    fn list_tracks_for_media(
+        &self,
+        media_id: &MediaId,
+    ) -> Result<Vec<SubtitleTrack>, ApplicationError> {
+        let ids = {
+            let conn = self.connection.lock().expect("sqlite mutex poisoned");
+            let mut query = conn
+                .prepare("SELECT id FROM subtitle_tracks WHERE media_id=?1 ORDER BY rowid DESC")
+                .map_err(repo)?;
+            query
+                .query_map([media_id.as_str()], |row| row.get::<_, String>(0))
+                .map_err(repo)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(repo)?
+        };
+        ids.into_iter()
+            .map(SubtitleTrackId::parse)
+            .map(|id| id.map_err(ApplicationError::from))
+            .map(|id| id.and_then(|id| self.get_track(&id)))
+            .collect::<Result<Vec<_>, _>>()
+            .map(|tracks| tracks.into_iter().flatten().collect())
+    }
+
     fn get_by_media_fingerprint(
         &self,
         media_id: &MediaId,

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -94,6 +95,10 @@ pub trait MediaRepository: Send + Sync {
 pub trait SubtitleRepository: Send + Sync {
     fn save_track(&self, track: &SubtitleTrack) -> Result<(), ApplicationError>;
     fn get_track(&self, id: &SubtitleTrackId) -> Result<Option<SubtitleTrack>, ApplicationError>;
+    fn list_tracks_for_media(
+        &self,
+        media_id: &MediaId,
+    ) -> Result<Vec<SubtitleTrack>, ApplicationError>;
     fn get_by_media_fingerprint(
         &self,
         media_id: &MediaId,
@@ -630,6 +635,16 @@ impl AppServices {
 
     pub fn read_media(&self, media_id: &MediaId) -> Result<Option<MediaItem>, ApplicationError> {
         self.media.get(media_id)
+    }
+
+    pub fn subtitle_tracks_for_media(
+        &self,
+        media_id: &MediaId,
+    ) -> Result<Vec<SubtitleTrack>, ApplicationError> {
+        if self.media.get(media_id)?.is_none() {
+            return Err(ApplicationError::NotFound("media item"));
+        }
+        self.subtitles.list_tracks_for_media(media_id)
     }
 
     pub fn read_progress(&self, media_id: &MediaId) -> Result<Option<TimeMs>, ApplicationError> {
@@ -1301,6 +1316,85 @@ impl AppServices {
         }
 
         Ok(track)
+    }
+
+    pub fn import_lltimeline_document_for_media(
+        &self,
+        media_id: &MediaId,
+        mut document: LLTimelineDocument,
+        allow_mismatch: bool,
+    ) -> Result<SubtitleTrack, ApplicationError> {
+        if document.schema != LLTIMELINE_SCHEMA_V1 {
+            return Err(ApplicationError::Validation("lltimeline schema"));
+        }
+        require_text(&document.metadata.media.fingerprint, "media fingerprint")?;
+        let media = self
+            .media
+            .get(media_id)?
+            .ok_or(ApplicationError::NotFound("media item"))?;
+        if document.metadata.media.fingerprint != media.fingerprint && !allow_mismatch {
+            return Err(ApplicationError::Validation("lltimeline media fingerprint"));
+        }
+        let track_fingerprint = lltimeline_track_fingerprint(&document);
+        let track_id = SubtitleTrackId::from_fingerprint(
+            "subtitle-track",
+            &format!("{}:{}", media.id.as_str(), track_fingerprint),
+        );
+        let source = document
+            .metadata
+            .extra
+            .get("track_source")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("lltimeline-json-v1")
+            .to_owned();
+        let original_media = document.metadata.media.clone();
+        let mut extra = document
+            .metadata
+            .extra
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
+        extra.insert(
+            "origin_media_id".into(),
+            serde_json::json!(original_media.id.as_str()),
+        );
+        extra.insert(
+            "origin_media_fingerprint".into(),
+            serde_json::json!(original_media.fingerprint.clone()),
+        );
+        if let Some(path) = original_media.path.clone() {
+            extra.insert("origin_media_path".into(), serde_json::json!(path));
+        }
+        extra.insert(
+            "origin_media_title".into(),
+            serde_json::json!(original_media.title),
+        );
+        if original_media.fingerprint != media.fingerprint {
+            extra.insert(
+                "attached_with_media_mismatch".into(),
+                serde_json::json!(true),
+            );
+        }
+        document.metadata.extra = serde_json::Value::Object(extra);
+        document.metadata.media = LLTimelineMedia {
+            id: media.id.clone(),
+            fingerprint: media.fingerprint.clone(),
+            path: Some(media.path.clone()),
+            title: media.title.clone(),
+            duration_ms: media.duration.map(TimeMs::get),
+        };
+        document.metadata.extra = merge_lltimeline_track_extra(
+            document.metadata.extra,
+            &track_id,
+            &track_fingerprint,
+            &source,
+        );
+        remap_lltimeline_sentence_ids(&mut document, &track_id);
+        for timeline in &mut document.word_timelines {
+            timeline.media_id = media.id.clone();
+            timeline.track_id = track_id.clone();
+        }
+        self.import_lltimeline_document(document)
     }
 
     /// Detect acoustic chunk boundaries for every sentence in a subtitle track.
@@ -2359,6 +2453,69 @@ fn lltimeline_track_fingerprint(document: &LLTimelineDocument) -> String {
             .as_str()
             .to_owned()
         })
+}
+
+fn remap_lltimeline_sentence_ids(document: &mut LLTimelineDocument, track_id: &SubtitleTrackId) {
+    let mut sentence_ids = HashMap::new();
+    for segment in &mut document.segments {
+        let original = segment.id.clone();
+        let remapped = SubtitleSentenceId::from_fingerprint(
+            "subtitle-sentence",
+            &format!("{}:{}", track_id.as_str(), original.as_str()),
+        );
+        segment.id = remapped.clone();
+        sentence_ids.insert(original, remapped);
+    }
+    for timeline in &mut document.word_timelines {
+        for word in &mut timeline.words {
+            if let Some(sentence_id) = sentence_ids.get(&word.sentence_id) {
+                word.sentence_id = sentence_id.clone();
+            }
+        }
+    }
+    for chunk_timeline in &mut document.chunk_timelines {
+        for chunk in &mut chunk_timeline.chunks {
+            chunk.sentence_ids = chunk
+                .sentence_ids
+                .iter()
+                .filter_map(|sentence_id| sentence_ids.get(sentence_id).cloned())
+                .collect();
+            for word_ref in &mut chunk.word_refs {
+                if let Some(sentence_id) = sentence_ids.get(&word_ref.sentence_id) {
+                    word_ref.sentence_id = sentence_id.clone();
+                }
+            }
+        }
+    }
+    let mut word_timeline_ids = HashMap::new();
+    for timeline in &mut document.word_timelines {
+        let original = timeline.id.clone();
+        let remapped = WordTimelineId::from_fingerprint(
+            "word-timeline",
+            &format!("{}:{}", track_id.as_str(), original.as_str()),
+        );
+        timeline.id = remapped.clone();
+        word_timeline_ids.insert(original, remapped);
+    }
+    if let Some(active_id) = document.active_word_timeline_id.as_mut()
+        && let Some(remapped) = word_timeline_ids.get(active_id)
+    {
+        *active_id = remapped.clone();
+    }
+    for timeline in &mut document.word_timelines {
+        if let Some(parent_id) = timeline.parent_timeline_id.as_mut()
+            && let Some(remapped) = word_timeline_ids.get(parent_id)
+        {
+            *parent_id = remapped.clone();
+        }
+    }
+    for chunk_timeline in &mut document.chunk_timelines {
+        if let Some(word_timeline_id) = chunk_timeline.word_timeline_id.as_mut()
+            && let Some(remapped) = word_timeline_ids.get(word_timeline_id)
+        {
+            *word_timeline_id = remapped.clone();
+        }
+    }
 }
 
 fn lltimeline_segments_to_sentences(

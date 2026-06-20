@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-06-20 10:05:16 CST: Reworked Phase 2.2 app-side subtitle resource
+  handling so subtitles and `.lltimeline.json` files behave as attachable,
+  visible resources for the current media. Added current-media LLTimeline
+  import with fingerprint mismatch confirmation, remapped imported track /
+  sentence / WordTimeline identifiers for exchange-safe attachment, exposed
+  media subtitle-resource listing APIs, and moved Timeline Resource Summary out
+  of the Transcript panel into a standalone Subtitle Resources side panel that
+  can import, list, activate, and refresh subtitle resources.
 - 2026-06-20 08:39:01 CST: Hardened the MFA `align-one` sidecar so a single
   segment `mfa align_one` subprocess failure is recorded as a per-segment
   diagnostic/skipped timing instead of crashing the whole run, while still

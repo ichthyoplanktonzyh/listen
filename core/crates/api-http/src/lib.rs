@@ -89,7 +89,14 @@ pub fn router(state: ApiState) -> Router {
         .route("/v1/media", post(register_media))
         .route("/v1/lltimeline/import", post(import_lltimeline))
         .route("/v1/media/{media_id}", get(read_media))
-        .route("/v1/media/{media_id}/subtitles", post(import_subtitle))
+        .route(
+            "/v1/media/{media_id}/lltimeline/import",
+            post(import_lltimeline_for_media),
+        )
+        .route(
+            "/v1/media/{media_id}/subtitles",
+            get(media_subtitles).post(import_subtitle),
+        )
         .route("/v1/subtitles/{track_id}", get(read_subtitle))
         .route("/v1/subtitles/{track_id}/export", get(export_subtitle))
         .route("/v1/pronunciation/providers", get(pronunciation_providers))
@@ -396,6 +403,11 @@ struct ImportSubtitleRequest {
     language: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ImportLLTimelineForMediaQuery {
+    allow_mismatch: Option<bool>,
+}
+
 async fn import_subtitle(
     State(state): State<ApiState>,
     Path(media_id): Path<String>,
@@ -435,6 +447,34 @@ async fn import_lltimeline(
     state
         .services
         .import_lltimeline_document(document)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn import_lltimeline_for_media(
+    State(state): State<ApiState>,
+    Path(media_id): Path<String>,
+    Query(query): Query<ImportLLTimelineForMediaQuery>,
+    Json(document): Json<domain::LLTimelineDocument>,
+) -> Result<Json<domain::SubtitleTrack>, ApiError> {
+    state
+        .services
+        .import_lltimeline_document_for_media(
+            &MediaId::parse(media_id).map_err(ApplicationError::from)?,
+            document,
+            query.allow_mismatch.unwrap_or(false),
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+async fn media_subtitles(
+    State(state): State<ApiState>,
+    Path(media_id): Path<String>,
+) -> Result<Json<Vec<domain::SubtitleTrack>>, ApiError> {
+    state
+        .services
+        .subtitle_tracks_for_media(&MediaId::parse(media_id).map_err(ApplicationError::from)?)
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -2149,6 +2189,165 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn imports_lltimeline_for_current_media_with_user_confirmed_mismatch() {
+        let app = test_app();
+        let source_track = setup_phonetic_track(&app, "source-media").await;
+        let sentence = &source_track["sentences"][0];
+        let token = sentence["tokens"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|token| token["kind"] == "word")
+            .expect("fixture has a word token");
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/v1/subtitles/{}/word-timelines",
+                    source_track["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "algorithm_id": "exchange-aligner",
+                        "algorithm_version": "v1",
+                        "config_hash": "test-config",
+                        "status": "active",
+                        "words": [{
+                            "sentence_id": sentence["id"],
+                            "token_index": token["index"],
+                            "text": token["text"],
+                            "start_ms": sentence["start"].as_u64().unwrap() + 10,
+                            "end_ms": sentence["start"].as_u64().unwrap() + 130,
+                            "confidence": 0.95,
+                            "timing_source": "forced_aligned",
+                            "provider_id": "exchange-aligner",
+                            "provider_version": "v1"
+                        }]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get(format!(
+                    "/v1/subtitles/{}/lltimeline/export",
+                    source_track["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let document: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/v1/media")
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "path": "/tmp/target-media.mp4",
+                            "fingerprint": "target-media",
+                            "title": "target-media",
+                            "kind": "video"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let target_media: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/v1/media/{}/lltimeline/import",
+                    target_media["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(document.to_string()))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/v1/media/{}/lltimeline/import?allow_mismatch=true",
+                    target_media["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(document.to_string()))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let imported_track: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(imported_track["media_id"], target_media["id"]);
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get(format!(
+                    "/v1/media/{}/subtitles",
+                    target_media["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let resources: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(resources.as_array().unwrap().len(), 1);
+        assert_eq!(resources[0]["id"], imported_track["id"]);
+
+        let response = app
+            .oneshot(
+                Request::get(format!(
+                    "/v1/subtitles/{}/word-timings",
+                    imported_track["id"].as_str().unwrap()
+                ))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let timings: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(timings.as_array().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
     async fn phonetic_analysis_fake_provider_completes_without_audio_detection_claims() {
         let app = test_app();
         let response = app
@@ -2681,8 +2880,8 @@ mod tests {
         // Count documented paths as a regression gate.
         let path_count = openapi.lines().filter(|l| l.starts_with("  /v1/")).count();
         assert_eq!(
-            path_count, 78,
-            "OpenAPI path count changed from 78 — update snapshot if paths were added/removed"
+            path_count, 79,
+            "OpenAPI path count changed from 79 — update snapshot if paths were added/removed"
         );
 
         // All paths must be under /v1/.

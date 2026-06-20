@@ -104,6 +104,16 @@ paths:
   /v1/media/{media_id}/subtitles:
     parameters:
       - $ref: "#/components/parameters/MediaId"
+    get:
+      operationId: mediaSubtitles
+      responses:
+        "200":
+          description: Subtitle resources associated with a media item
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SubtitleTrack" }
     post:
       operationId: importSubtitle
       requestBody:
@@ -115,6 +125,31 @@ paths:
       responses:
         "200":
           description: Complete normalized subtitle timeline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubtitleTrack"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/media/{media_id}/lltimeline/import:
+    parameters:
+      - $ref: "#/components/parameters/MediaId"
+      - name: allow_mismatch
+        in: query
+        required: false
+        schema: { type: boolean }
+        description: Allow user-confirmed attachment when the resource media fingerprint differs.
+    post:
+      operationId: importLLTimelineForMedia
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LLTimelineDocument"
+      responses:
+        "200":
+          description: Imported and attached LLTimeline JSON v1 resource document
           content:
             application/json:
               schema:

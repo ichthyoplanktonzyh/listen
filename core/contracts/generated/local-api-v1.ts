@@ -350,6 +350,20 @@ export class LocalApiV1 {
     });
   }
 
+  importLLTimelineForMedia(
+    mediaId: string,
+    document: LLTimelineDocument,
+    allowMismatch = false,
+  ): Promise<SubtitleTrack> {
+    return this.request(
+      `/v1/media/${encodeURIComponent(mediaId)}/lltimeline/import?allow_mismatch=${allowMismatch}`,
+      {
+        method: "POST",
+        body: JSON.stringify(document),
+      },
+    );
+  }
+
   readMedia(mediaId: string): Promise<MediaItem> {
     return this.request(`/v1/media/${encodeURIComponent(mediaId)}`);
   }
@@ -370,6 +384,10 @@ export class LocalApiV1 {
       method: "POST",
       body: JSON.stringify({ path, language }),
     });
+  }
+
+  mediaSubtitles(mediaId: string): Promise<SubtitleTrack[]> {
+    return this.request(`/v1/media/${encodeURIComponent(mediaId)}/subtitles`);
   }
 
   readSubtitle(trackId: string): Promise<SubtitleTrack> {
