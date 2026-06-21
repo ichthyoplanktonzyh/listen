@@ -106,7 +106,7 @@ class LearningController extends ChangeNotifier {
       selectedWordDetails: details,
       selectedDictionary: null,
       selectedPronunciation: null,
-      sidePanel: details != null ? 1 : s.sidePanel,
+      sidePanel: details != null ? 2 : s.sidePanel,
     ),
   );
 

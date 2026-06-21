@@ -169,6 +169,16 @@ void main() {
     );
   });
 
+  test('selecting a word opens the word learning side panel', () {
+    final controller = LearningController()
+      ..selectSidePanel(1)
+      ..selectWord(const {
+        'profile': {'lemma': 'hello'},
+      });
+
+    expect(controller.sidePanel, 2);
+  });
+
   test(
     'subtitle controller keeps timeline resource data when marking error',
     () {

@@ -55,6 +55,7 @@ void main() {
           onRestoreSubtitle: (_) async {},
           onDeleteSubtitle: (_) async {},
           onExportSubtitle: (_) async {},
+          onExportLLTimeline: (_) async {},
           onActivateWordTimeline: (_) async {},
           onManualReviewTimeline: () async {},
         ),

@@ -138,7 +138,46 @@ void main() {
 
     expect(timing.source, 'estimated');
     expect(timing.provider, 'subtitle-weighted-estimator');
+    expect(timing.text, 'world');
+    expect(timing.confidence, 0.35);
+    expect(timing.providerVersion, 'v1');
     expect(timing.tokenIndex, 2);
+    expect(timing.toJson()['start_ms'], 100);
+    expect(timing.toJson()['end_ms'], 300);
+  });
+
+  test('parses complete word timeline resources', () {
+    final timeline = WordTimeline.fromJson(const {
+      'id': 'timeline-1',
+      'track_id': 'track-1',
+      'media_id': 'media-1',
+      'algorithm_id': 'mfa',
+      'algorithm_version': '2.0',
+      'config_hash': 'hash',
+      'parent_timeline_id': null,
+      'created_by': 'algorithm',
+      'status': 'active',
+      'metrics_json': {},
+      'created_at_ms': 10,
+      'updated_at_ms': 20,
+      'words': [
+        {
+          'sentence_id': 'sentence-1',
+          'token_index': 0,
+          'text': 'Hello',
+          'start_ms': 100,
+          'end_ms': 250,
+          'confidence': null,
+          'timing_source': 'forced_aligned',
+          'provider_id': 'mfa',
+          'provider_version': '2.0',
+        },
+      ],
+    });
+
+    expect(timeline.id, 'timeline-1');
+    expect(timeline.words.single.start, const Duration(milliseconds: 100));
+    expect(timeline.words.single.providerVersion, '2.0');
   });
 
   test(

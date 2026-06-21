@@ -136,6 +136,8 @@ class AppLocalizations {
       'restoreResource': 'Restore resource',
       'deleteResource': 'Delete resource',
       'exportSubtitle': 'Export subtitle',
+      'exportSubtitleFormat': 'Export subtitle format',
+      'exportLLTimelineJson': 'Export LLTimeline JSON',
       'deleteSubtitleResourceBody':
           'Delete this subtitle resource and its attached timelines from the local library?',
       'cues': 'cues',
@@ -391,6 +393,8 @@ class AppLocalizations {
       'restoreResource': '恢复资源',
       'deleteResource': '删除资源',
       'exportSubtitle': '导出字幕',
+      'exportSubtitleFormat': '选择导出字幕格式',
+      'exportLLTimelineJson': '导出 LLTimeline JSON',
       'deleteSubtitleResourceBody': '从本地资源库删除这个字幕资源及其关联时间轴？',
       'cues': '句',
       'timelineFingerprintMismatch': '时间轴媒体不匹配',

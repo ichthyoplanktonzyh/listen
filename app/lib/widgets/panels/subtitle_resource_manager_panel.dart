@@ -22,6 +22,7 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
     required this.onRestoreSubtitle,
     required this.onDeleteSubtitle,
     required this.onExportSubtitle,
+    required this.onExportLLTimeline,
     required this.onActivateWordTimeline,
     required this.onManualReviewTimeline,
   });
@@ -41,6 +42,7 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
   final Future<void> Function(SubtitleTrack track) onRestoreSubtitle;
   final Future<void> Function(SubtitleTrack track) onDeleteSubtitle;
   final Future<void> Function(SubtitleTrack track) onExportSubtitle;
+  final Future<void> Function(SubtitleTrack track) onExportLLTimeline;
   final Future<void> Function(String timelineId) onActivateWordTimeline;
   final Future<void> Function() onManualReviewTimeline;
 
@@ -130,6 +132,9 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
             onRefresh: onRefreshResources,
             onActivate: onActivateWordTimeline,
             onManualReview: onManualReviewTimeline,
+            onExportLLTimeline: activeTrack == null
+                ? null
+                : () => onExportLLTimeline(activeTrack!),
           ),
         ],
       ),

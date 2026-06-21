@@ -11,6 +11,7 @@ void main() {
   ) async {
     String? activated;
     var reviewRuns = 0;
+    var exports = 0;
     await tester.pumpWidget(
       _Harness(
         child: TimelineResourceSummaryPanel(
@@ -72,6 +73,7 @@ void main() {
           onRefresh: () async {},
           onActivate: (timelineId) async => activated = timelineId,
           onManualReview: () async => reviewRuns++,
+          onExportLLTimeline: () async => exports++,
         ),
       ),
     );
@@ -88,6 +90,9 @@ void main() {
     await tester.tap(find.byIcon(Icons.rate_review_outlined));
     await tester.pump();
     expect(reviewRuns, 1);
+    await tester.tap(find.byIcon(Icons.file_download_outlined));
+    await tester.pump();
+    expect(exports, 1);
   });
 
   testWidgets('timeline resource summary shows legacy fallback', (
@@ -103,6 +108,7 @@ void main() {
           onRefresh: () async {},
           onActivate: (_) async {},
           onManualReview: () async {},
+          onExportLLTimeline: () async {},
         ),
       ),
     );

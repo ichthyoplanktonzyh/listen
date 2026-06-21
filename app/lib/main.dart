@@ -19,6 +19,7 @@ import 'phonetic_analysis_ui.dart';
 import 'services/api_service.dart';
 import 'services/external_tools.dart';
 import 'controllers/app_controllers.dart';
+import 'controllers/manual_review_controller.dart';
 import 'controllers/player_controller.dart';
 import 'controllers/subtitle_controller.dart';
 import 'controllers/learning_controller.dart';
@@ -30,6 +31,7 @@ import 'widgets/panels/word_learning_panel.dart';
 import 'screens/subtitle_resources_screen.dart';
 import 'screens/vocabulary_screen.dart';
 import 'widgets/panels/diagnosis_card.dart';
+import 'widgets/panels/manual_timeline_review_dialog.dart';
 import 'widgets/panels/subtitle_resource_manager_panel.dart';
 import 'widgets/panels/transcript_panel.dart';
 import 'widgets/player/download_status_bar.dart';
@@ -946,16 +948,63 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _exportSubtitleResource(SubtitleTrack track) async {
     final service = api;
     if (service == null) return;
+    final format = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(l.text('exportSubtitleFormat')),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'srt'),
+            child: ListTile(
+              leading: const Icon(Icons.subtitles_outlined),
+              title: Text(l.text('exportSrt')),
+              subtitle: const Text('.srt'),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'lltimeline'),
+            child: ListTile(
+              leading: const Icon(Icons.timeline),
+              title: Text(l.text('exportLLTimelineJson')),
+              subtitle: const Text('.lltimeline.json'),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (format == null) return;
     try {
-      final location = await getSaveLocation(
-        suggestedName: '${track.source}-${track.id}.srt',
-      );
-      if (location == null) return;
-      final srt = await service.exportSubtitleSrt(track.id);
-      await File(location.path).writeAsString(srt);
-      if (mounted) setState(() => status = 'Exported subtitle resource');
+      if (format == 'lltimeline') {
+        await _exportLLTimelineResource(track);
+      } else {
+        final location = await getSaveLocation(
+          suggestedName: '${track.source}-${track.id}.srt',
+        );
+        if (location == null) return;
+        final srt = await service.exportSubtitleSrt(track.id);
+        await File(location.path).writeAsString(srt);
+        if (mounted) setState(() => status = 'Exported SRT subtitle resource');
+      }
     } catch (error) {
       if (mounted) setState(() => status = 'Subtitle export failed: $error');
+    }
+  }
+
+  Future<void> _exportLLTimelineResource(SubtitleTrack track) async {
+    final service = api;
+    if (service == null) return;
+    try {
+      final location = await getSaveLocation(
+        suggestedName: '${track.source}-${track.id}.lltimeline.json',
+      );
+      if (location == null) return;
+      final document = await service.exportTrackLLTimeline(track.id);
+      await File(
+        location.path,
+      ).writeAsString(const JsonEncoder.withIndent('  ').convert(document));
+      if (mounted) setState(() => status = 'Exported LLTimeline resource');
+    } catch (error) {
+      if (mounted) setState(() => status = 'LLTimeline export failed: $error');
     }
   }
 
@@ -977,8 +1026,92 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _openManualReviewTimeline() async {
-    if (!mounted) return;
-    setState(() => status = l.text('manualReviewQueued'));
+    final service = api;
+    final track = subtitleController.primaryTrack;
+    if (service == null || track == null) return;
+    try {
+      setState(() => status = 'Loading manual review timeline...');
+      await _loadTimelineResource(track.id);
+      final active = subtitleController.wordTimelineSummaries
+          .where((summary) => summary.isActive)
+          .firstOrNull;
+      final activeTimelineId =
+          active?.id ??
+          subtitleController.llTimelineDocument?.activeWordTimelineId;
+      if (activeTimelineId == null) {
+        if (mounted) {
+          setState(() => status = 'No active WordTimeline to review');
+        }
+        return;
+      }
+      final timeline = WordTimeline.fromJson(
+        await service.wordTimeline(activeTimelineId),
+      );
+      final initialCue = _manualReviewInitialCue(track, timeline);
+      if (initialCue == null) {
+        if (mounted) setState(() => status = 'No sentence words to review');
+        return;
+      }
+      final draft = ManualReviewDraft(
+        track: track,
+        sourceTimeline: timeline,
+        words: timeline.words,
+        initialCue: initialCue,
+      );
+      if (!mounted) return;
+      final previousLoopStart = playerController.sourceLoopStart;
+      final previousLoopEnd = playerController.sourceLoopEnd;
+      try {
+        await showDialog<void>(
+          context: context,
+          builder: (_) => ManualTimelineReviewDialog(
+            draft: draft,
+            onPlayRange: _playManualReviewRange,
+            onSave: _saveManualReviewDraft,
+          ),
+        );
+      } finally {
+        playerController.setSourceLoop(previousLoopStart, previousLoopEnd);
+      }
+      if (mounted && status == 'Loading manual review timeline...') {
+        setState(() => status = 'Manual review closed');
+      }
+    } catch (error) {
+      if (mounted) setState(() => status = 'Manual review failed: $error');
+    }
+  }
+
+  Cue? _manualReviewInitialCue(SubtitleTrack track, WordTimeline timeline) {
+    final sentenceIds = timeline.words.map((word) => word.sentenceId).toSet();
+    final current = subtitleController.currentPrimaryCue;
+    if (current != null && sentenceIds.contains(current.id)) return current;
+    for (final cue in track.cues) {
+      if (sentenceIds.contains(cue.id)) return cue;
+    }
+    return null;
+  }
+
+  Future<void> _playManualReviewRange(Duration start, Duration end) async {
+    if (end <= start) return;
+    playerController.setSourceLoop(start, end);
+    subtitleController.setLoopCue(false);
+    await adapter.seek(start);
+    await adapter.play();
+  }
+
+  Future<void> _saveManualReviewDraft(ManualReviewDraft draft) async {
+    final service = api;
+    final trackId = subtitleController.primaryTrack?.id;
+    if (service == null || trackId == null) return;
+    final errors = draft.validateAll();
+    if (errors.isNotEmpty) {
+      throw StateError(errors.join('; '));
+    }
+    setState(() => status = 'Saving manual review timeline...');
+    await service.createTrackWordTimeline(trackId, draft.createPayload());
+    if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
+    await _loadSpeechEnhancements(trackId);
+    if (mounted) setState(() => status = 'Manual review timeline saved');
   }
 
   Future<void> _ensureCurrentPronunciation(Cue? cue) async {
@@ -1793,7 +1926,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       learningController.selectWord(details);
       learningController.setSelectedDictionary(dictionary);
       learningController.setSelectedPronunciation(pronunciation);
-      learningController.selectSidePanel(1);
+      learningController.selectSidePanel(2);
     } catch (error) {
       if (mounted) setState(() => status = 'Dictionary unavailable: $error');
     }
@@ -1964,6 +2097,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           onRestoreSubtitle: _restoreSubtitleResource,
           onDeleteSubtitle: _deleteSubtitleResource,
           onExportSubtitle: _exportSubtitleResource,
+          onExportLLTimeline: _exportLLTimelineResource,
           onActivateWordTimeline: _activateWordTimeline,
           onManualReviewTimeline: _openManualReviewTimeline,
         ),
@@ -2685,6 +2819,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     onRestoreSubtitle: _restoreSubtitleResource,
     onDeleteSubtitle: _deleteSubtitleResource,
     onExportSubtitle: _exportSubtitleResource,
+    onExportLLTimeline: _exportLLTimelineResource,
     onActivateWordTimeline: _activateWordTimeline,
     onManualReviewTimeline: _openManualReviewTimeline,
   );

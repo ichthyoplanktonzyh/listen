@@ -139,23 +139,115 @@ class WordTiming {
     required this.end,
     required this.source,
     required this.provider,
+    this.text = '',
+    this.confidence,
+    this.providerVersion = '',
   });
 
   factory WordTiming.fromJson(Map<String, dynamic> json) => WordTiming(
     sentenceId: json['sentence_id'] as String,
     tokenIndex: json['token_index'] as int,
+    text: json['text'] as String? ?? '',
     start: Duration(milliseconds: json['start_ms'] as int),
     end: Duration(milliseconds: json['end_ms'] as int),
+    confidence: (json['confidence'] as num?)?.toDouble(),
     source: json['timing_source'] as String,
     provider: json['provider_id'] as String,
+    providerVersion: json['provider_version'] as String? ?? '',
   );
 
   final String sentenceId;
   final int tokenIndex;
+  final String text;
   final Duration start;
   final Duration end;
+  final double? confidence;
   final String source;
   final String provider;
+  final String providerVersion;
+
+  WordTiming copyWith({
+    Duration? start,
+    Duration? end,
+    String? source,
+    String? provider,
+    String? providerVersion,
+    double? confidence,
+  }) => WordTiming(
+    sentenceId: sentenceId,
+    tokenIndex: tokenIndex,
+    text: text,
+    start: start ?? this.start,
+    end: end ?? this.end,
+    confidence: confidence ?? this.confidence,
+    source: source ?? this.source,
+    provider: provider ?? this.provider,
+    providerVersion: providerVersion ?? this.providerVersion,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'sentence_id': sentenceId,
+    'token_index': tokenIndex,
+    'text': text,
+    'start_ms': start.inMilliseconds,
+    'end_ms': end.inMilliseconds,
+    'confidence': confidence,
+    'timing_source': source,
+    'provider_id': provider,
+    'provider_version': providerVersion,
+  };
+}
+
+class WordTimeline {
+  const WordTimeline({
+    required this.id,
+    required this.trackId,
+    required this.mediaId,
+    required this.algorithmId,
+    required this.algorithmVersion,
+    required this.configHash,
+    required this.createdBy,
+    required this.status,
+    required this.metricsJson,
+    required this.words,
+    required this.createdAt,
+    required this.updatedAt,
+    this.parentTimelineId,
+  });
+
+  factory WordTimeline.fromJson(Map<String, dynamic> json) => WordTimeline(
+    id: json['id'] as String,
+    trackId: json['track_id'] as String,
+    mediaId: json['media_id'] as String,
+    algorithmId: json['algorithm_id'] as String,
+    algorithmVersion: json['algorithm_version'] as String,
+    configHash: json['config_hash'] as String,
+    parentTimelineId: json['parent_timeline_id'] as String?,
+    createdBy: json['created_by'] as String,
+    status: json['status'] as String,
+    metricsJson: Map<String, dynamic>.from(
+      (json['metrics_json'] as Map?) ?? const {},
+    ),
+    words: (json['words'] as List<dynamic>)
+        .map((value) => WordTiming.fromJson(value as Map<String, dynamic>))
+        .toList(growable: false),
+    createdAt: Duration(milliseconds: json['created_at_ms'] as int),
+    updatedAt: Duration(milliseconds: json['updated_at_ms'] as int),
+  );
+
+  final String id;
+  final String trackId;
+  final String mediaId;
+  final String algorithmId;
+  final String algorithmVersion;
+  final String configHash;
+  final String? parentTimelineId;
+  final String createdBy;
+  final String status;
+  final Map<String, dynamic> metricsJson;
+  final List<WordTiming> words;
+  final Duration createdAt;
+  final Duration updatedAt;
 }
 
 class WordTimelineSummary {

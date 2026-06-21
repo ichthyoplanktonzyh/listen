@@ -228,6 +228,24 @@ class LocalApi {
               as List<dynamic>)
           .cast<Map<String, dynamic>>();
 
+  Future<Map<String, dynamic>> wordTimeline(String timelineId) async =>
+      (await _request(
+            'GET',
+            '/v1/word-timelines/${Uri.encodeComponent(timelineId)}',
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> createTrackWordTimeline(
+    String trackId,
+    Map<String, dynamic> payload,
+  ) async =>
+      (await _request(
+            'POST',
+            '/v1/subtitles/${Uri.encodeComponent(trackId)}/word-timelines',
+            payload,
+          ))
+          as Map<String, dynamic>;
+
   Future<Map<String, dynamic>> exportTrackLLTimeline(String trackId) async =>
       (await _request(
             'GET',

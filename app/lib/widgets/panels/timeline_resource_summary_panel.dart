@@ -14,6 +14,7 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
     required this.onRefresh,
     required this.onActivate,
     required this.onManualReview,
+    required this.onExportLLTimeline,
   });
 
   final LLTimelineDocument? document;
@@ -23,6 +24,7 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
   final Future<void> Function() onRefresh;
   final Future<void> Function(String timelineId) onActivate;
   final Future<void> Function() onManualReview;
+  final Future<void> Function()? onExportLLTimeline;
 
   @override
   Widget build(BuildContext context) {
@@ -65,13 +67,6 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                   child: IconButton(
                     icon: const Icon(Icons.refresh),
                     onPressed: onRefresh,
-                  ),
-                ),
-                Tooltip(
-                  message: l.text('manualReview'),
-                  child: IconButton(
-                    icon: const Icon(Icons.rate_review_outlined),
-                    onPressed: hasResource ? onManualReview : null,
                   ),
                 ),
               ],
@@ -128,6 +123,23 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
             ],
             const SizedBox(height: 10),
             _ActiveTimelineLine(active: active),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.tonalIcon(
+                  icon: const Icon(Icons.rate_review_outlined),
+                  label: Text(l.text('manualReview')),
+                  onPressed: hasResource ? onManualReview : null,
+                ),
+                FilledButton.tonalIcon(
+                  icon: const Icon(Icons.file_download_outlined),
+                  label: Text(l.text('exportLLTimelineJson')),
+                  onPressed: hasResource ? onExportLLTimeline : null,
+                ),
+              ],
+            ),
             const SizedBox(height: 8),
             SizedBox(
               height: summaries.isEmpty ? 34 : 74,

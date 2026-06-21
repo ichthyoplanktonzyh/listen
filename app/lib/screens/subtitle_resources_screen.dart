@@ -21,6 +21,7 @@ class SubtitleResourcesScreen extends StatefulWidget {
     required this.onRestoreSubtitle,
     required this.onDeleteSubtitle,
     required this.onExportSubtitle,
+    required this.onExportLLTimeline,
     required this.onActivateWordTimeline,
     required this.onManualReviewTimeline,
   });
@@ -35,6 +36,7 @@ class SubtitleResourcesScreen extends StatefulWidget {
   final Future<void> Function(SubtitleTrack track) onRestoreSubtitle;
   final Future<void> Function(SubtitleTrack track) onDeleteSubtitle;
   final Future<void> Function(SubtitleTrack track) onExportSubtitle;
+  final Future<void> Function(SubtitleTrack track) onExportLLTimeline;
   final Future<void> Function(String timelineId) onActivateWordTimeline;
   final Future<void> Function() onManualReviewTimeline;
 
@@ -76,6 +78,7 @@ class _SubtitleResourcesScreenState extends State<SubtitleResourcesScreen> {
         onRestoreSubtitle: widget.onRestoreSubtitle,
         onDeleteSubtitle: widget.onDeleteSubtitle,
         onExportSubtitle: widget.onExportSubtitle,
+        onExportLLTimeline: widget.onExportLLTimeline,
         onActivateWordTimeline: widget.onActivateWordTimeline,
         onManualReviewTimeline: widget.onManualReviewTimeline,
       ),
