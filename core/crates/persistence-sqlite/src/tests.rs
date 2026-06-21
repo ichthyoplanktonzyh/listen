@@ -134,6 +134,43 @@ fn word_timeline(
     }
 }
 
+fn chunk_timeline(
+    id: &str,
+    track: &SubtitleTrack,
+    parent: &WordTimeline,
+    status: TimelineStatus,
+) -> ChunkTimeline {
+    ChunkTimeline {
+        id: ChunkTimelineId::parse(id).unwrap(),
+        track_id: track.id.clone(),
+        media_id: track.media_id.clone(),
+        parent_word_timeline_id: Some(parent.id.clone()),
+        provider_id: "acoustic-first-rule-partitioner".into(),
+        provider_version: "v4".into(),
+        algorithm: "acoustic_semantic_v1".into(),
+        precision: ChunkTimelinePrecision::Precise,
+        created_by: TimelineCreator::Algorithm,
+        status,
+        metrics_json: serde_json::json!({}),
+        chunks: vec![ChunkTimelineChunk {
+            id: ChunkId::parse(format!("{id}-chunk-1")).unwrap(),
+            sentence_id: track.sentences[0].id.clone(),
+            chunk_index: 0,
+            start_word_index: 0,
+            end_word_index: 0,
+            start_ms: 150,
+            end_ms: 260,
+            text: "hello".into(),
+            boundary_sources: vec![ChunkBoundarySource::Pause],
+            confidence: 0.9,
+            warnings: Vec::new(),
+            evidence_json: serde_json::json!({}),
+        }],
+        created_at_ms: 1,
+        updated_at_ms: 1,
+    }
+}
+
 #[async_trait]
 impl DictionaryProvider for FakeDictionary {
     fn info(&self) -> DictionaryProviderInfo {
@@ -484,6 +521,74 @@ fn deleting_active_word_timeline_clears_compatibility_timings() {
     assert!(repo.get_word_timeline(&timeline.id).unwrap().is_none());
     assert!(repo.active_word_timeline(&track.id).unwrap().is_none());
     assert!(repo.get_word_timings(&sentence_id).unwrap().is_empty());
+}
+
+#[test]
+fn activating_chunk_timeline_updates_active_resource() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let track = word_timeline_track();
+    repo.save_track(&track).unwrap();
+    let parent = word_timeline(
+        "timeline-parent",
+        &track,
+        TimelineStatus::Active,
+        "mms-fa",
+        150,
+        260,
+    );
+    repo.save_word_timeline(&parent).unwrap();
+    let older = chunk_timeline("chunk-timeline-1", &track, &parent, TimelineStatus::Active);
+    let newer = chunk_timeline(
+        "chunk-timeline-2",
+        &track,
+        &parent,
+        TimelineStatus::Candidate,
+    );
+    repo.save_chunk_timeline(&older).unwrap();
+    repo.save_chunk_timeline(&newer).unwrap();
+
+    let active = repo.activate_chunk_timeline(&newer.id).unwrap();
+    assert_eq!(active.status, TimelineStatus::Active);
+    assert_eq!(
+        repo.active_chunk_timeline(&track.id).unwrap().unwrap().id,
+        newer.id
+    );
+    assert_eq!(
+        repo.get_chunk_timeline(&older.id).unwrap().unwrap().status,
+        TimelineStatus::Candidate
+    );
+    assert_eq!(repo.list_chunk_timelines(&track.id).unwrap().len(), 2);
+}
+
+#[test]
+fn archiving_and_deleting_chunk_timeline_updates_repository() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let track = word_timeline_track();
+    repo.save_track(&track).unwrap();
+    let parent = word_timeline(
+        "timeline-parent-delete",
+        &track,
+        TimelineStatus::Active,
+        "mms-fa",
+        150,
+        260,
+    );
+    repo.save_word_timeline(&parent).unwrap();
+    let timeline = chunk_timeline(
+        "chunk-timeline-delete",
+        &track,
+        &parent,
+        TimelineStatus::Candidate,
+    );
+    repo.save_chunk_timeline(&timeline).unwrap();
+
+    let archived = repo.archive_chunk_timeline(&timeline.id).unwrap();
+    assert_eq!(archived.status, TimelineStatus::Archived);
+    let deleted = repo.delete_chunk_timeline(&timeline.id).unwrap();
+    assert_eq!(deleted.id, timeline.id);
+    assert!(repo.get_chunk_timeline(&timeline.id).unwrap().is_none());
 }
 
 #[test]

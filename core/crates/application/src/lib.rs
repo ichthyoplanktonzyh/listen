@@ -507,15 +507,8 @@ pub(crate) fn remap_lltimeline_sentence_ids(
     }
     for chunk_timeline in &mut document.chunk_timelines {
         for chunk in &mut chunk_timeline.chunks {
-            chunk.sentence_ids = chunk
-                .sentence_ids
-                .iter()
-                .filter_map(|sentence_id| sentence_ids.get(sentence_id).cloned())
-                .collect();
-            for word_ref in &mut chunk.word_refs {
-                if let Some(sentence_id) = sentence_ids.get(&word_ref.sentence_id) {
-                    word_ref.sentence_id = sentence_id.clone();
-                }
+            if let Some(sentence_id) = sentence_ids.get(&chunk.sentence_id) {
+                chunk.sentence_id = sentence_id.clone();
             }
         }
     }
@@ -542,11 +535,37 @@ pub(crate) fn remap_lltimeline_sentence_ids(
         }
     }
     for chunk_timeline in &mut document.chunk_timelines {
-        if let Some(word_timeline_id) = chunk_timeline.word_timeline_id.as_mut()
+        if let Some(word_timeline_id) = chunk_timeline.parent_word_timeline_id.as_mut()
             && let Some(remapped) = word_timeline_ids.get(word_timeline_id)
         {
             *word_timeline_id = remapped.clone();
         }
+    }
+    let mut chunk_timeline_ids = HashMap::new();
+    for timeline in &mut document.chunk_timelines {
+        let original = timeline.id.clone();
+        let remapped = ChunkTimelineId::from_fingerprint(
+            "chunk-timeline",
+            &format!("{}:{}", track_id.as_str(), original.as_str()),
+        );
+        timeline.id = remapped.clone();
+        chunk_timeline_ids.insert(original, remapped.clone());
+        for chunk in &mut timeline.chunks {
+            chunk.id = ChunkId::from_fingerprint(
+                "chunk",
+                &format!(
+                    "{}:{}:{}",
+                    remapped.as_str(),
+                    chunk.sentence_id.as_str(),
+                    chunk.chunk_index
+                ),
+            );
+        }
+    }
+    if let Some(active_id) = document.active_chunk_timeline_id.as_mut()
+        && let Some(remapped) = chunk_timeline_ids.get(active_id)
+    {
+        *active_id = remapped.clone();
     }
 }
 

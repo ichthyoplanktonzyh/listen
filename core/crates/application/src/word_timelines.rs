@@ -156,6 +156,11 @@ impl AppServices {
             .iter()
             .find(|timeline| timeline.status == TimelineStatus::Active)
             .map(|timeline| timeline.id.clone());
+        let chunk_timelines = self.subtitles.list_chunk_timelines(track_id)?;
+        let active_chunk_timeline_id = chunk_timelines
+            .iter()
+            .find(|timeline| timeline.status == TimelineStatus::Active)
+            .map(|timeline| timeline.id.clone());
         let persisted_resource = self.subtitles.get_lltimeline_resource(track_id)?;
         let (metadata, artifacts) = if let Some((mut metadata, artifacts)) = persisted_resource {
             metadata.media = LLTimelineMedia {
@@ -212,8 +217,8 @@ impl AppServices {
             active_word_timeline_id,
             phone_timelines: Vec::new(),
             active_phone_timeline_id: None,
-            chunk_timelines: Vec::new(),
-            active_chunk_timeline_id: None,
+            chunk_timelines,
+            active_chunk_timeline_id,
             artifacts,
         })
     }
@@ -282,6 +287,21 @@ impl AppServices {
         }
         if let Some(active_id) = document.active_word_timeline_id {
             self.subtitles.activate_word_timeline(&active_id)?;
+        }
+
+        for mut timeline in document.chunk_timelines {
+            if timeline.media_id != track.media_id || timeline.track_id != track.id {
+                return Err(ApplicationError::Validation("lltimeline chunk timeline"));
+            }
+            if document.active_chunk_timeline_id.as_ref() == Some(&timeline.id)
+                && timeline.status == TimelineStatus::Active
+            {
+                timeline.status = TimelineStatus::Candidate;
+            }
+            self.subtitles.save_chunk_timeline(&timeline)?;
+        }
+        if let Some(active_id) = document.active_chunk_timeline_id {
+            self.subtitles.activate_chunk_timeline(&active_id)?;
         }
 
         Ok(track)
@@ -366,6 +386,10 @@ impl AppServices {
         );
         remap_lltimeline_sentence_ids(&mut document, &track_id);
         for timeline in &mut document.word_timelines {
+            timeline.media_id = media.id.clone();
+            timeline.track_id = track_id.clone();
+        }
+        for timeline in &mut document.chunk_timelines {
             timeline.media_id = media.id.clone();
             timeline.track_id = track_id.clone();
         }

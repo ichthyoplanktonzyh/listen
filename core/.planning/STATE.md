@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-06-21T05:02:17.000Z"
+last_updated: "2026-06-21T06:45:00.000Z"
 progress:
   total_phases: 10
   completed_phases: 0
@@ -14,13 +14,13 @@ progress:
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-21 13:02 CST
-> 更新原因：Phase 2.3.5 Rust 巨型单文件拆分完成，代码库结构文档同步
+> 最后更新：2026-06-21 14:45 CST
+> 更新原因：Phase 2.4 ChunkTimeline 生成、管理和播放消费闭环完成
 
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
-- **Phase**：Phase 2.3.5 Rust 巨型单文件拆分完成；准备进入 Phase 2.4 ChunkTimeline
+- **Phase**：Phase 2.4 ChunkTimeline 生成与消费完成；准备进入 Phase 2.5 Sound Pattern / PhoneTimeline
 - **分支**：`feature/forced-alignment-research`
 - **版本**：0.7.0
 
@@ -112,7 +112,8 @@ progress:
   - LLTimeline 可挂载到当前媒体；fingerprint mismatch 由用户确认后允许强制挂载。
   - active WordTimeline 驱动词级高亮，chunk / phone / pronunciation 独立降级。
   - 真实本地数据库已迁移到 schema v12，包含 `word_timeline_runs`、
-    `lltimeline_resources` 和 `subtitle_tracks.status`。
+    `lltimeline_resources` 和 `subtitle_tracks.status`；Phase 2.4 后端变更将 schema
+    提升到 v13，新增 `chunk_timeline_runs`。
   - 已修正开发环境 stale release sidecar 优先的问题，避免旧 core 阻塞数据库迁移。
   - 收口文档：
     `.planning/phases/2.2-app-timeline-resource-ui/subtitle-resource-semantics-and-lifecycle.md`
@@ -176,7 +177,7 @@ progress:
   - `.planning/phases/2.3.5-rust-module-decomposition/2.3.5-PLAN.md`
   - `.planning/phases/2.3.5-rust-module-decomposition/2.3.5-CLOSEOUT.md`
 
-### Phase 2.4: ChunkTimeline 生成与消费 ⏳ 已规划
+### Phase 2.4: ChunkTimeline 生成与消费 ✅ 已完成
 
 - 目标：把 chunk 从临时算法结果升级为可管理、可激活、可导出、可播放消费的
   ChunkTimeline 资源。
@@ -190,9 +191,29 @@ progress:
 - UI 目标：字幕资源管理中可见 ChunkTimeline candidates，并支持生成、激活、归档、
   删除、导出；播放器支持当前 chunk 高亮、点击跳转、chunk 循环、Prev/Next chunk 和
   渐进展开训练。
+- 2026-06-21 完成内容：
+  - `domain` 新增 `ChunkTimeline`、`ChunkTimelineChunk`、`ChunkTimelineSummary`、
+    `ChunkTimelinePrecision` 和 `ChunkBoundarySource`。
+  - SQLite schema v13 新增 `chunk_timeline_runs`，支持 candidate / active / archived
+    生命周期与 active 唯一性。
+  - `application` 已能从 active WordTimeline 生成 `acoustic_semantic_v1`
+    ChunkTimeline candidate/active；estimated timing 标记为 approximate。
+  - `api-http` 新增 ChunkTimeline list / summary / generate / get / activate / archive /
+    delete / export 路由。
+  - LLTimeline export/import 已保留 ChunkTimeline candidates 和 active id。
+  - OpenAPI contract 已同步 ChunkTimeline schema 与路由。
+  - Flutter API client/model 已接入 ChunkTimeline，并优先消费 active ChunkTimeline；
+    无 active resource 时保留旧 `chunk-partitions` 降级路径。
+  - 字幕资源管理 UI 已展示 ChunkTimeline candidates，并支持生成、激活、归档、删除、
+    导出完整 LLTimeline。
+  - 播放器已消费 active ChunkTimeline：当前 chunk 高亮、点击 chunk 跳转、
+    Prev/Next chunk、Loop chunk、Expand chunk 和原有 Loop sentence 组成渐进训练路径。
+  - 自动化验证：`cargo test --workspace --quiet`、`flutter analyze`、`flutter test`、
+    `./scripts/validate-contracts.sh` 通过。
 - 规划文档：
   - `.planning/phases/2.4-chunktimeline-generation-consumption/2.4-CONTEXT.md`
   - `.planning/phases/2.4-chunktimeline-generation-consumption/2.4-PLAN.md`
+  - `.planning/phases/2.4-chunktimeline-generation-consumption/2.4-CLOSEOUT.md`
 
 ### Phase 2.5: Sound Pattern / PhoneTimeline ⏳ 已规划
 
@@ -269,12 +290,9 @@ progress:
 ## 下一步工作
 
 1. Phase 2.3：用真实媒体完成 Manual Timeline Review 手动 QA，并决定是否正式收口。
-2. Phase 2.4：ChunkTimeline 生成、选择、激活和播放消费 UI。
-3. Phase 2.4 期间保持 Phase 2.3.5 模块边界：新增 use case / route / repository
-   进入对应模块。
-4. Phase 2.5 作为后续独立阶段：PhoneTimeline provider benchmark、资源契约和
+2. Phase 2.5 作为后续独立阶段：PhoneTimeline provider benchmark、资源契约和
    Sound Pattern View。
-5. Phase 2.6 延后执行：多语言学习基础，先以英语 + 汉语建立扩展范式。
+3. Phase 2.6 延后执行：多语言学习基础，先以英语 + 汉语建立扩展范式。
 
 ## 指标
 

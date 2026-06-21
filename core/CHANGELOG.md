@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-06-21 21:16:48 CST: Completed Phase 2.4 ChunkTimeline generation and
+  consumption. Chunk boundaries are now persisted as first-class
+  `ChunkTimeline` resources with SQLite schema v13, active/candidate/archive
+  lifecycle APIs, LLTimeline import/export round-tripping, and OpenAPI
+  coverage. The desktop app now lists ChunkTimeline candidates in Subtitle
+  Resources, can generate/activate/archive/delete them, prioritizes the active
+  ChunkTimeline for playback, and adds chunk navigation, click-to-seek, loop
+  current chunk, and expanded chunk practice controls. Updated Phase 2.4
+  closeout docs. Verified with `cargo test --workspace --quiet`,
+  `flutter analyze`, `flutter test`, `./scripts/validate-contracts.sh`, and
+  `git diff --check`.
 - 2026-06-21 10:19:08 CST: Implemented the first Phase 2.3 manual
   WordTimeline review pass in the desktop app. Manual Review now opens a
   sentence-level inspector backed by a full cloned WordTimeline draft, supports

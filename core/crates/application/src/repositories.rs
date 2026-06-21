@@ -83,6 +83,34 @@ pub trait SubtitleRepository: Send + Sync {
     -> Result<WordTimeline, ApplicationError>;
     fn archive_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError>;
     fn delete_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError>;
+    fn save_chunk_timeline(
+        &self,
+        timeline: &ChunkTimeline,
+    ) -> Result<ChunkTimeline, ApplicationError>;
+    fn list_chunk_timelines(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<ChunkTimeline>, ApplicationError>;
+    fn get_chunk_timeline(
+        &self,
+        id: &ChunkTimelineId,
+    ) -> Result<Option<ChunkTimeline>, ApplicationError>;
+    fn active_chunk_timeline(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<ChunkTimeline>, ApplicationError>;
+    fn activate_chunk_timeline(
+        &self,
+        id: &ChunkTimelineId,
+    ) -> Result<ChunkTimeline, ApplicationError>;
+    fn archive_chunk_timeline(
+        &self,
+        id: &ChunkTimelineId,
+    ) -> Result<ChunkTimeline, ApplicationError>;
+    fn delete_chunk_timeline(
+        &self,
+        id: &ChunkTimelineId,
+    ) -> Result<ChunkTimeline, ApplicationError>;
     fn save_lltimeline_resource(
         &self,
         track_id: &SubtitleTrackId,

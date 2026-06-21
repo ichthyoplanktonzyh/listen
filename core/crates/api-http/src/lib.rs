@@ -177,6 +177,30 @@ pub fn router(state: ApiState) -> Router {
             get(track_chunk_diagnostics),
         )
         .route("/v1/chunk/providers", get(chunk_providers))
+        .route(
+            "/v1/subtitles/{track_id}/chunk-timelines",
+            get(track_chunk_timelines).post(generate_chunk_timeline),
+        )
+        .route(
+            "/v1/subtitles/{track_id}/chunk-timelines/summary",
+            get(track_chunk_timeline_summaries),
+        )
+        .route(
+            "/v1/chunk-timelines/{timeline_id}",
+            get(chunk_timeline).delete(delete_chunk_timeline),
+        )
+        .route(
+            "/v1/chunk-timelines/{timeline_id}/activate",
+            post(activate_chunk_timeline),
+        )
+        .route(
+            "/v1/chunk-timelines/{timeline_id}/archive",
+            post(archive_chunk_timeline),
+        )
+        .route(
+            "/v1/chunk-timelines/{timeline_id}/export",
+            get(export_chunk_timeline),
+        )
         .route("/v1/speech/jobs", get(speech_jobs).post(create_speech_job))
         .route("/v1/speech/jobs/{job_id}", get(speech_job))
         .route("/v1/speech/jobs/{job_id}/cancel", post(cancel_speech_job))

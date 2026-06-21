@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 use super::PersistenceError;
 
-pub const MIGRATION_VERSION: u32 = 12;
+pub const MIGRATION_VERSION: u32 = 13;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -83,6 +83,12 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
             "../migrations/0012_subtitle_resource_lifecycle.sql"
         ))?;
         tx.pragma_update(None, "user_version", 12)?;
+        tx.commit()?;
+    }
+    if current < 13 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0013_chunk_timelines.sql"))?;
+        tx.pragma_update(None, "user_version", 13)?;
         tx.commit()?;
     }
     Ok(())

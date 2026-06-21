@@ -190,6 +190,106 @@ pub(crate) async fn chunk_providers(
     Json(state.services.learned_prosodic_providers())
 }
 
+pub(crate) async fn track_chunk_timelines(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<Vec<domain::ChunkTimeline>>, ApiError> {
+    state
+        .services
+        .list_chunk_timelines(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn track_chunk_timeline_summaries(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<Vec<domain::ChunkTimelineSummary>>, ApiError> {
+    state
+        .services
+        .summarize_chunk_timelines(
+            &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn chunk_timeline(
+    State(state): State<ApiState>,
+    Path(timeline_id): Path<String>,
+) -> Result<Json<domain::ChunkTimeline>, ApiError> {
+    state
+        .services
+        .get_chunk_timeline(
+            &domain::ChunkTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
+        )?
+        .ok_or(ApplicationError::NotFound("chunk timeline"))
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn export_chunk_timeline(
+    State(state): State<ApiState>,
+    Path(timeline_id): Path<String>,
+) -> Result<Json<domain::ChunkTimeline>, ApiError> {
+    chunk_timeline(State(state), Path(timeline_id)).await
+}
+
+pub(crate) async fn generate_chunk_timeline(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+    request: Option<Json<GenerateChunkTimelineRequest>>,
+) -> Result<Json<domain::ChunkTimeline>, ApiError> {
+    let status = request.and_then(|Json(request)| request.status);
+    state
+        .services
+        .generate_chunk_timeline(
+            &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
+            status,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn activate_chunk_timeline(
+    State(state): State<ApiState>,
+    Path(timeline_id): Path<String>,
+) -> Result<Json<domain::ChunkTimeline>, ApiError> {
+    state
+        .services
+        .activate_chunk_timeline(
+            &domain::ChunkTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn archive_chunk_timeline(
+    State(state): State<ApiState>,
+    Path(timeline_id): Path<String>,
+) -> Result<Json<domain::ChunkTimeline>, ApiError> {
+    state
+        .services
+        .archive_chunk_timeline(
+            &domain::ChunkTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn delete_chunk_timeline(
+    State(state): State<ApiState>,
+    Path(timeline_id): Path<String>,
+) -> Result<Json<domain::ChunkTimeline>, ApiError> {
+    state
+        .services
+        .delete_chunk_timeline(
+            &domain::ChunkTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 pub(crate) async fn generate_track_word_timings(
     State(state): State<ApiState>,
     Path(track_id): Path<String>,
@@ -239,4 +339,9 @@ pub(crate) struct CreateWordTimelineRequest {
     status: Option<domain::TimelineStatus>,
     metrics_json: Option<serde_json::Value>,
     words: Vec<domain::WordTiming>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct GenerateChunkTimelineRequest {
+    status: Option<domain::TimelineStatus>,
 }

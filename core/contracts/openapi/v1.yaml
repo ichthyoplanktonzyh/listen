@@ -405,6 +405,92 @@ paths:
       operationId: chunkProviders
       responses:
         "200": { description: Optional learned chunk evidence providers, revisions, runtimes, and licenses }
+  /v1/subtitles/{track_id}/chunk-timelines:
+    get:
+      operationId: trackChunkTimelines
+      responses:
+        "200":
+          description: Versioned chunk timeline resources for a subtitle track
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ChunkTimeline" }
+    post:
+      operationId: generateChunkTimeline
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateChunkTimeline"
+      responses:
+        "200":
+          description: Generated chunk timeline candidate from the active word timeline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChunkTimeline"
+  /v1/subtitles/{track_id}/chunk-timelines/summary:
+    get:
+      operationId: trackChunkTimelineSummaries
+      responses:
+        "200":
+          description: Summaries for manageable chunk timeline resources
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ChunkTimelineSummary" }
+  /v1/chunk-timelines/{timeline_id}:
+    get:
+      operationId: chunkTimeline
+      responses:
+        "200":
+          description: Versioned chunk timeline resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChunkTimeline"
+    delete:
+      operationId: deleteChunkTimeline
+      responses:
+        "200":
+          description: Deleted chunk timeline resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChunkTimeline"
+  /v1/chunk-timelines/{timeline_id}/activate:
+    post:
+      operationId: activateChunkTimeline
+      responses:
+        "200":
+          description: Activated chunk timeline resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChunkTimeline"
+  /v1/chunk-timelines/{timeline_id}/archive:
+    post:
+      operationId: archiveChunkTimeline
+      responses:
+        "200":
+          description: Archived chunk timeline resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChunkTimeline"
+  /v1/chunk-timelines/{timeline_id}/export:
+    get:
+      operationId: exportChunkTimeline
+      responses:
+        "200":
+          description: Exportable chunk timeline resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChunkTimeline"
   /v1/speech/jobs:
     get:
       operationId: speechBatchJobs
@@ -1115,7 +1201,7 @@ components:
         active_phone_timeline_id: { type: [string, "null"] }
         chunk_timelines:
           type: array
-          items: { $ref: "#/components/schemas/LLTimelineChunkTimeline" }
+          items: { $ref: "#/components/schemas/ChunkTimeline" }
         active_chunk_timeline_id: { type: [string, "null"] }
         artifacts:
           type: array
@@ -1159,35 +1245,82 @@ components:
         tokens:
           type: array
           items: { $ref: "#/components/schemas/SubtitleToken" }
-    LLTimelineChunkTimeline:
+    GenerateChunkTimeline:
       type: object
-      required: [id, word_timeline_id, algorithm_id, algorithm_version, created_by, status, chunks, metrics_json]
+      properties:
+        status:
+          anyOf:
+            - $ref: "#/components/schemas/TimelineStatus"
+            - type: "null"
+    ChunkTimelinePrecision:
+      type: string
+      enum: [precise, approximate, text_only]
+    ChunkBoundarySource:
+      type: string
+      enum: [pause, punctuation, semantic, lengthening, learned, user, length_limit]
+    ChunkTimeline:
+      type: object
+      required: [id, track_id, media_id, parent_word_timeline_id, provider_id, provider_version, algorithm, precision, created_by, status, metrics_json, chunks, created_at_ms, updated_at_ms]
       properties:
         id: { type: string }
-        word_timeline_id: { type: [string, "null"] }
-        algorithm_id: { type: string }
-        algorithm_version: { type: string }
+        track_id: { type: string }
+        media_id: { type: string }
+        parent_word_timeline_id: { type: [string, "null"] }
+        provider_id: { type: string }
+        provider_version: { type: string }
+        algorithm: { type: string }
+        precision: { $ref: "#/components/schemas/ChunkTimelinePrecision" }
         created_by: { $ref: "#/components/schemas/TimelineCreator" }
         status: { $ref: "#/components/schemas/TimelineStatus" }
+        metrics_json: { type: object, additionalProperties: true }
         chunks:
           type: array
-          items: { $ref: "#/components/schemas/LLTimelineChunk" }
-        metrics_json: { type: object, additionalProperties: true }
-    LLTimelineChunk:
+          items: { $ref: "#/components/schemas/ChunkTimelineChunk" }
+        created_at_ms: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
+    ChunkTimelineSummary:
       type: object
-      required: [index, start_ms, end_ms, text, sentence_ids, word_refs, evidence]
+      required: [id, track_id, media_id, parent_word_timeline_id, provider_id, provider_version, algorithm, precision, created_by, status, chunk_count, start_ms, end_ms, average_confidence, created_at_ms, updated_at_ms, can_activate, can_archive, can_delete]
       properties:
-        index: { type: integer, minimum: 0 }
+        id: { type: string }
+        track_id: { type: string }
+        media_id: { type: string }
+        parent_word_timeline_id: { type: [string, "null"] }
+        provider_id: { type: string }
+        provider_version: { type: string }
+        algorithm: { type: string }
+        precision: { $ref: "#/components/schemas/ChunkTimelinePrecision" }
+        created_by: { $ref: "#/components/schemas/TimelineCreator" }
+        status: { $ref: "#/components/schemas/TimelineStatus" }
+        chunk_count: { type: integer, minimum: 0 }
+        start_ms: { type: [integer, "null"], minimum: 0 }
+        end_ms: { type: [integer, "null"], minimum: 0 }
+        average_confidence: { type: [number, "null"], minimum: 0, maximum: 1 }
+        created_at_ms: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
+        can_activate: { type: boolean }
+        can_archive: { type: boolean }
+        can_delete: { type: boolean }
+    ChunkTimelineChunk:
+      type: object
+      required: [id, sentence_id, chunk_index, start_word_index, end_word_index, start_ms, end_ms, text, boundary_sources, confidence, warnings, evidence_json]
+      properties:
+        id: { type: string }
+        sentence_id: { type: string }
+        chunk_index: { type: integer, minimum: 0 }
+        start_word_index: { type: integer, minimum: 0 }
+        end_word_index: { type: integer, minimum: 0 }
         start_ms: { type: integer, minimum: 0 }
         end_ms: { type: integer, minimum: 0 }
         text: { type: string }
-        sentence_ids:
+        boundary_sources:
+          type: array
+          items: { $ref: "#/components/schemas/ChunkBoundarySource" }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        warnings:
           type: array
           items: { type: string }
-        word_refs:
-          type: array
-          items: { $ref: "#/components/schemas/LLTimelineWordRef" }
-        evidence: { type: object, additionalProperties: true }
+        evidence_json: { type: object, additionalProperties: true }
     LLTimelineWordRef:
       type: object
       required: [sentence_id, token_index]

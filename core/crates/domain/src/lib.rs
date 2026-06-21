@@ -40,6 +40,8 @@ string_id!(DictionaryEntryId);
 string_id!(TranscriptionJobId);
 string_id!(TranscriptionModelId);
 string_id!(WordTimelineId);
+string_id!(ChunkTimelineId);
+string_id!(ChunkId);
 string_id!(LLTimelineId);
 string_id!(LexicalEntryId);
 string_id!(LexicalOccurrenceId);
@@ -333,6 +335,87 @@ pub struct WordTimelineSummary {
     pub can_delete: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChunkTimelinePrecision {
+    Precise,
+    Approximate,
+    TextOnly,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChunkBoundarySource {
+    Pause,
+    Punctuation,
+    Semantic,
+    Lengthening,
+    Learned,
+    User,
+    LengthLimit,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ChunkTimeline {
+    pub id: ChunkTimelineId,
+    pub track_id: SubtitleTrackId,
+    pub media_id: MediaId,
+    pub parent_word_timeline_id: Option<WordTimelineId>,
+    pub provider_id: String,
+    pub provider_version: String,
+    pub algorithm: String,
+    pub precision: ChunkTimelinePrecision,
+    pub created_by: TimelineCreator,
+    pub status: TimelineStatus,
+    #[serde(default)]
+    pub metrics_json: serde_json::Value,
+    pub chunks: Vec<ChunkTimelineChunk>,
+    pub created_at_ms: u64,
+    pub updated_at_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ChunkTimelineChunk {
+    pub id: ChunkId,
+    pub sentence_id: SubtitleSentenceId,
+    pub chunk_index: u32,
+    pub start_word_index: u32,
+    pub end_word_index: u32,
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub text: String,
+    #[serde(default)]
+    pub boundary_sources: Vec<ChunkBoundarySource>,
+    pub confidence: f32,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    #[serde(default)]
+    pub evidence_json: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ChunkTimelineSummary {
+    pub id: ChunkTimelineId,
+    pub track_id: SubtitleTrackId,
+    pub media_id: MediaId,
+    pub parent_word_timeline_id: Option<WordTimelineId>,
+    pub provider_id: String,
+    pub provider_version: String,
+    pub algorithm: String,
+    pub precision: ChunkTimelinePrecision,
+    pub created_by: TimelineCreator,
+    pub status: TimelineStatus,
+    pub chunk_count: u32,
+    pub start_ms: Option<u64>,
+    pub end_ms: Option<u64>,
+    pub average_confidence: Option<f32>,
+    pub created_at_ms: u64,
+    pub updated_at_ms: u64,
+    pub can_activate: bool,
+    pub can_archive: bool,
+    pub can_delete: bool,
+}
+
 pub const LLTIMELINE_SCHEMA_V1: &str = "llplayer.timeline.v1";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -347,8 +430,8 @@ pub struct LLTimelineDocument {
     pub phone_timelines: Vec<LLTimelinePhoneTimeline>,
     pub active_phone_timeline_id: Option<LLTimelineId>,
     #[serde(default)]
-    pub chunk_timelines: Vec<LLTimelineChunkTimeline>,
-    pub active_chunk_timeline_id: Option<LLTimelineId>,
+    pub chunk_timelines: Vec<ChunkTimeline>,
+    pub active_chunk_timeline_id: Option<ChunkTimelineId>,
     #[serde(default)]
     pub artifacts: Vec<LLTimelineArtifact>,
 }
@@ -413,33 +496,8 @@ pub struct LLTimelinePhoneTimeline {
     pub metrics_json: serde_json::Value,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct LLTimelineChunkTimeline {
-    pub id: LLTimelineId,
-    pub word_timeline_id: Option<WordTimelineId>,
-    pub algorithm_id: String,
-    pub algorithm_version: String,
-    pub created_by: TimelineCreator,
-    pub status: TimelineStatus,
-    #[serde(default)]
-    pub chunks: Vec<LLTimelineChunk>,
-    #[serde(default)]
-    pub metrics_json: serde_json::Value,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct LLTimelineChunk {
-    pub index: u32,
-    pub start_ms: u64,
-    pub end_ms: u64,
-    pub text: String,
-    #[serde(default)]
-    pub sentence_ids: Vec<SubtitleSentenceId>,
-    #[serde(default)]
-    pub word_refs: Vec<LLTimelineWordRef>,
-    #[serde(default)]
-    pub evidence: serde_json::Value,
-}
+pub type LLTimelineChunkTimeline = ChunkTimeline;
+pub type LLTimelineChunk = ChunkTimelineChunk;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LLTimelineWordRef {

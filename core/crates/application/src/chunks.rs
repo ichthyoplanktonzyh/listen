@@ -1,6 +1,148 @@
 use crate::*;
 
 impl AppServices {
+    pub fn list_chunk_timelines(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<ChunkTimeline>, ApplicationError> {
+        self.subtitles.list_chunk_timelines(track_id)
+    }
+
+    pub fn summarize_chunk_timelines(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<ChunkTimelineSummary>, ApplicationError> {
+        let timelines = self.subtitles.list_chunk_timelines(track_id)?;
+        Ok(timelines.iter().map(chunk_timeline_summary).collect())
+    }
+
+    pub fn get_chunk_timeline(
+        &self,
+        id: &ChunkTimelineId,
+    ) -> Result<Option<ChunkTimeline>, ApplicationError> {
+        self.subtitles.get_chunk_timeline(id)
+    }
+
+    pub fn generate_chunk_timeline(
+        &self,
+        track_id: &SubtitleTrackId,
+        requested_status: Option<TimelineStatus>,
+    ) -> Result<ChunkTimeline, ApplicationError> {
+        let requested_status = requested_status.unwrap_or(TimelineStatus::Candidate);
+        let track = self
+            .subtitles
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let word_timeline = self
+            .subtitles
+            .active_word_timeline(track_id)?
+            .ok_or(ApplicationError::NotFound("active word timeline"))?;
+        let mut grouped = std::collections::HashMap::<SubtitleSentenceId, Vec<WordTiming>>::new();
+        for word in &word_timeline.words {
+            grouped
+                .entry(word.sentence_id.clone())
+                .or_default()
+                .push(word.clone());
+        }
+        let config = chunk_partition_config_for_track_source(&track.source);
+        let mut chunks = Vec::new();
+        let mut timing_sources = Vec::new();
+        for sentence in &track.sentences {
+            let mut timings = grouped.remove(&sentence.id).unwrap_or_default();
+            timings.sort_by_key(|timing| (timing.start_ms, timing.end_ms, timing.token_index));
+            timing_sources.extend(timings.iter().map(|timing| timing.timing_source));
+            let candidates = self.phrase_candidates(&sentence.id)?;
+            let partition = speech_analysis::chunk_partition::partition_sentence(
+                sentence,
+                &timings,
+                &candidates,
+                &config,
+            );
+            for chunk in partition.chunks {
+                let chunk_index = chunks.len() as u32;
+                chunks.push(chunk_timeline_chunk(
+                    &track,
+                    &word_timeline,
+                    sentence,
+                    chunk_index,
+                    &chunk,
+                ));
+            }
+        }
+        if chunks.is_empty() {
+            return Err(ApplicationError::Validation("chunk timeline chunks"));
+        }
+        let precision = if timing_sources
+            .iter()
+            .all(|source| *source == TimingSource::Estimated)
+        {
+            ChunkTimelinePrecision::Approximate
+        } else {
+            ChunkTimelinePrecision::Precise
+        };
+        let now = now_ms();
+        let provider_id = speech_analysis::chunk_partition::PARTITIONER_ID.to_owned();
+        let provider_version = speech_analysis::chunk_partition::PARTITIONER_VERSION.to_owned();
+        let algorithm = "acoustic_semantic_v1".to_owned();
+        let fingerprint = format!(
+            "{}:{}:{}:{}",
+            track.id.as_str(),
+            word_timeline.id.as_str(),
+            provider_version,
+            serde_json::to_string(&chunks).unwrap_or_default()
+        );
+        let mut timeline = ChunkTimeline {
+            id: ChunkTimelineId::from_fingerprint("chunk-timeline", &fingerprint),
+            track_id: track.id.clone(),
+            media_id: track.media_id.clone(),
+            parent_word_timeline_id: Some(word_timeline.id.clone()),
+            provider_id,
+            provider_version,
+            algorithm,
+            precision,
+            created_by: TimelineCreator::Algorithm,
+            status: requested_status,
+            metrics_json: serde_json::json!({
+                "parent_word_timeline_id": word_timeline.id.as_str(),
+                "word_timing_sources": timing_sources.iter().map(|source| serde_json::json!(source)).collect::<Vec<_>>(),
+                "partitioner_config": config,
+            }),
+            chunks,
+            created_at_ms: now,
+            updated_at_ms: now,
+        };
+        if requested_status == TimelineStatus::Active {
+            timeline.status = TimelineStatus::Candidate;
+        }
+        let timeline = self.subtitles.save_chunk_timeline(&timeline)?;
+        if requested_status == TimelineStatus::Active {
+            self.subtitles.activate_chunk_timeline(&timeline.id)
+        } else {
+            Ok(timeline)
+        }
+    }
+
+    pub fn activate_chunk_timeline(
+        &self,
+        id: &ChunkTimelineId,
+    ) -> Result<ChunkTimeline, ApplicationError> {
+        self.subtitles.activate_chunk_timeline(id)
+    }
+
+    pub fn archive_chunk_timeline(
+        &self,
+        id: &ChunkTimelineId,
+    ) -> Result<ChunkTimeline, ApplicationError> {
+        self.subtitles.archive_chunk_timeline(id)
+    }
+
+    pub fn delete_chunk_timeline(
+        &self,
+        id: &ChunkTimelineId,
+    ) -> Result<ChunkTimeline, ApplicationError> {
+        self.subtitles.delete_chunk_timeline(id)
+    }
+
     /// Detect acoustic chunk boundaries for every sentence in a subtitle track.
     ///
     /// Uses gap-based detection on existing word timings. Each sentence is
@@ -282,5 +424,108 @@ impl AppServices {
 
     pub fn learned_prosodic_providers(&self) -> Vec<LearnedProsodicProviderInfo> {
         vec![speech_analysis::learned_prosodic_provider::embedded_provider_info()]
+    }
+}
+
+fn chunk_timeline_summary(timeline: &ChunkTimeline) -> ChunkTimelineSummary {
+    let confidence_values = timeline
+        .chunks
+        .iter()
+        .map(|chunk| chunk.confidence)
+        .collect::<Vec<_>>();
+    let average_confidence = if confidence_values.is_empty() {
+        None
+    } else {
+        Some(confidence_values.iter().sum::<f32>() / confidence_values.len() as f32)
+    };
+    ChunkTimelineSummary {
+        id: timeline.id.clone(),
+        track_id: timeline.track_id.clone(),
+        media_id: timeline.media_id.clone(),
+        parent_word_timeline_id: timeline.parent_word_timeline_id.clone(),
+        provider_id: timeline.provider_id.clone(),
+        provider_version: timeline.provider_version.clone(),
+        algorithm: timeline.algorithm.clone(),
+        precision: timeline.precision,
+        created_by: timeline.created_by,
+        status: timeline.status,
+        chunk_count: timeline.chunks.len() as u32,
+        start_ms: timeline.chunks.iter().map(|chunk| chunk.start_ms).min(),
+        end_ms: timeline.chunks.iter().map(|chunk| chunk.end_ms).max(),
+        average_confidence,
+        created_at_ms: timeline.created_at_ms,
+        updated_at_ms: timeline.updated_at_ms,
+        can_activate: timeline.status != TimelineStatus::Archived,
+        can_archive: timeline.status != TimelineStatus::Archived,
+        can_delete: true,
+    }
+}
+
+fn chunk_timeline_chunk(
+    track: &SubtitleTrack,
+    word_timeline: &WordTimeline,
+    sentence: &SubtitleSentence,
+    chunk_index: u32,
+    chunk: &speech_analysis::chunk_partition::DisplayChunk,
+) -> ChunkTimelineChunk {
+    let boundary_sources = chunk
+        .boundary_after
+        .as_ref()
+        .map(|boundary| vec![chunk_boundary_source(boundary.primary_source)])
+        .unwrap_or_default();
+    let confidence = chunk
+        .boundary_after
+        .as_ref()
+        .map(|boundary| boundary.score.clamp(0.0, 1.0))
+        .unwrap_or(1.0);
+    let id = ChunkId::from_fingerprint(
+        "chunk",
+        &format!(
+            "{}:{}:{}:{}:{}",
+            track.id.as_str(),
+            word_timeline.id.as_str(),
+            sentence.id.as_str(),
+            chunk.token_start,
+            chunk.token_end
+        ),
+    );
+    ChunkTimelineChunk {
+        id,
+        sentence_id: sentence.id.clone(),
+        chunk_index,
+        start_word_index: chunk.token_start,
+        end_word_index: chunk.token_end,
+        start_ms: chunk.start_ms,
+        end_ms: chunk.end_ms,
+        text: chunk.text.clone(),
+        boundary_sources,
+        confidence,
+        warnings: Vec::new(),
+        evidence_json: serde_json::json!({
+            "boundary_after": chunk.boundary_after,
+        }),
+    }
+}
+
+fn chunk_boundary_source(
+    source: speech_analysis::chunk_partition::ChunkBoundarySource,
+) -> ChunkBoundarySource {
+    match source {
+        speech_analysis::chunk_partition::ChunkBoundarySource::AcousticGap => {
+            ChunkBoundarySource::Pause
+        }
+        speech_analysis::chunk_partition::ChunkBoundarySource::PreBoundaryLengthening => {
+            ChunkBoundarySource::Lengthening
+        }
+        speech_analysis::chunk_partition::ChunkBoundarySource::LearnedProsodicModel => {
+            ChunkBoundarySource::Learned
+        }
+        speech_analysis::chunk_partition::ChunkBoundarySource::StrongPunctuation
+        | speech_analysis::chunk_partition::ChunkBoundarySource::Punctuation => {
+            ChunkBoundarySource::Punctuation
+        }
+        speech_analysis::chunk_partition::ChunkBoundarySource::LengthLimit => {
+            ChunkBoundarySource::LengthLimit
+        }
     }
 }
