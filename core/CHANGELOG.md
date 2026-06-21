@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- 2026-06-21 02:55:00 CST: Hardened the timeline-production browser GUI so it
+  cancels cleanly and previews without blocking. `cancel()` now signals the
+  whole process group (`start_new_session` + `os.killpg` SIGTERM, escalating to
+  SIGKILL after a 3s grace) instead of orphaning the whisperx/MFA worker, and
+  reports a real exit code (130 on cancel) so the UI no longer sticks on
+  "Running..." Command preview no longer synchronously SHA256-hashes multi-GB
+  media (instant placeholder for preview; real hash computed only on `/run`);
+  previewed commands survive `poll()` until the next run; and `main()` forces
+  line-buffered stdout so the server URL appears even under pipe redirection.
+  Added `test_production_pipeline_gui_contract.py` (10 tests) covering the
+  process-group cancel, fingerprint resolution, placeholder, and stdout
+  behavior. Verified end-to-end against the Brooklyn middle-school sample:
+  whisperx baseline + `from-whisperx-json` convert and MMS-FA post-alignment
+  both produce a valid `llplayer.timeline.v1` `.lltimeline.json`.
 - 2026-06-20 21:08:52 CST: Added subtitle-resource consumption capability
   visibility in the standalone Subtitle Resources panel. Each resource now
   reports sentence, word, chunk, and phone timing availability with counts;

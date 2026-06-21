@@ -8,6 +8,7 @@ import html
 import json
 import os
 import shlex
+import signal
 import subprocess
 import sys
 import threading
@@ -53,6 +54,18 @@ def quote_command(command: list[str]) -> str:
     return " ".join(shlex.quote(part) for part in command)
 
 
+def _force_kill_group(pgid: int, process: subprocess.Popen[str]) -> None:
+    """Escalate to SIGKILL for the whole process group if still alive."""
+    try:
+        if process.poll() is None:
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+    except Exception:
+        pass
+
+
 def applescript(script: str) -> str:
     result = subprocess.run(
         ["osascript", "-e", script],
@@ -84,6 +97,7 @@ class PipelineState:
         self.running = False
         self.exit_code: int | None = None
         self.last_command: list[str] = []
+        self.cancelled = False
         detected = default_whisperx_bin()
         self.detected_whisperx = str(detected) if detected.exists() else ""
 
@@ -115,6 +129,9 @@ class PipelineState:
 
     def _run(self, command: list[str]) -> None:
         try:
+            # start_new_session puts the pipeline and every descendant (whisperx,
+            # ffmpeg, MFA, ...) into one process group so cancel() can reap them
+            # all instead of orphaning the heavy worker.
             process = subprocess.Popen(
                 command,
                 cwd=REPO_ROOT,
@@ -122,9 +139,11 @@ class PipelineState:
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
+                start_new_session=True,
             )
             with self.lock:
                 self.process = process
+                self.cancelled = False
             assert process.stdout is not None
             for line in process.stdout:
                 self.append_log(line)
@@ -136,25 +155,60 @@ class PipelineState:
             with self.lock:
                 self.process = None
                 self.running = False
+                if self.cancelled and code is None:
+                    code = 130  # cancelled, mirror SIGINT exit convention
                 self.exit_code = code
             self.append_log(f"\nProcess exited with code {code}\n")
 
-    def cancel(self) -> None:
+    def cancel(self) -> bool:
+        """Terminate the pipeline and all of its child processes.
+
+        Returns True if a running process was signalled.
+        """
         with self.lock:
             process = self.process
-        if process and process.poll() is None:
-            process.terminate()
+            if not process or process.poll() is not None or not self.running:
+                return False
+            self.cancelled = True
+            pgid = process.pid
+        try:
+            # SIGTERM the whole process group first (graceful), then escalate to
+            # SIGKILL after a short grace period so stubborn workers (whisperx on
+            # CPU/GPU) cannot keep burning resources after the GUI reports cancel.
+            os.killpg(pgid, signal.SIGTERM)
+        except ProcessLookupError:
+            return False
+        except Exception:
+            try:
+                process.terminate()
+            except Exception:
+                pass
+            return True
+
+        # Wait briefly for graceful shutdown; force-kill the group if still alive.
+        threading.Timer(
+            3.0,
+            lambda: _force_kill_group(pgid, process),
+        ).start()
+        return True
 
 
 STATE = PipelineState()
 
 
-def build_command(payload: dict[str, Any]) -> list[str]:
+def build_command(payload: dict[str, Any], *, resolve_fingerprint: bool = False) -> list[str]:
     input_path = Path(require_text(payload, "input_path", "media file")).expanduser()
     output_dir = Path(require_text(payload, "output_dir", "output directory")).expanduser()
     output_path = Path(require_text(payload, "output_path", "LLTimeline output")).expanduser()
     media_title = require_text(payload, "media_title", "media title")
-    fingerprint = str(payload.get("media_fingerprint") or "").strip() or file_sha256(input_path)
+    fingerprint = str(payload.get("media_fingerprint") or "").strip()
+    if resolve_fingerprint and not fingerprint:
+        # Real production run: the SHA256 is written into the LLTimeline output,
+        # so compute the true value (acceptable cost; the run is long anyway).
+        fingerprint = file_sha256(input_path)
+    elif not fingerprint:
+        # Preview only: never block the HTTP worker hashing a multi-GB file.
+        fingerprint = _placeholder_fingerprint(input_path)
     command = [
         sys.executable,
         str(PIPELINE),
@@ -190,6 +244,18 @@ def build_command(payload: dict[str, Any]) -> list[str]:
     if bool(payload.get("dry_run")):
         command.append("--dry-run")
     return command
+
+
+def _placeholder_fingerprint(input_path: Path) -> str:
+    """Cheap, never-blocking placeholder for previewing commands.
+
+    Previewing the command should be instant even for multi-GB media. Computing
+    the real SHA256 here would block the HTTP worker for seconds; the real
+    fingerprint is computed once via the explicit /fingerprint endpoint (or by
+    the pipeline itself at production time), so for preview we substitute a
+    stable 64-hex placeholder derived from the path.
+    """
+    return "preview" + hashlib.sha256(str(input_path).encode("utf-8")).hexdigest()[:57]
 
 
 def require_text(payload: dict[str, Any], key: str, label: str) -> str:
@@ -229,8 +295,9 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/command":
                 self.send_json({"command": quote_command(build_command(self.read_json()))})
             elif path == "/run":
-                command = build_command(self.read_json())
-                Path(command[command.index("--output-dir") + 1]).mkdir(parents=True, exist_ok=True)
+                command = build_command(self.read_json(), resolve_fingerprint=True)
+                output_dir = next(command[i + 1] for i, flag in enumerate(command) if flag == "--output-dir")
+                Path(output_dir).mkdir(parents=True, exist_ok=True)
                 STATE.start(command)
                 self.send_json({"ok": True})
             elif path == "/cancel":
@@ -403,10 +470,14 @@ async function computeFingerprint() {
   } catch (error) { $("status").textContent = "Error"; alert(error.message); }
 }
 
+let previewing = false;
+
 async function previewCommand() {
   try {
     const data = await post("/command", payload());
+    previewing = true;
     $("log").textContent = "$ " + data.command + "\n";
+    $("status").textContent = "Preview";
   } catch (error) { alert(error.message); }
 }
 
@@ -431,7 +502,13 @@ async function cancelRun() {
 async function poll() {
   const response = await fetch("/state");
   const data = await response.json();
-  $("log").textContent = data.log || "";
+  // A fresh preview should survive until the next run: while the user is
+  // inspecting a preview (not running), keep it on screen instead of letting
+  // the stale server log overwrite it every 900ms.
+  if (data.running || !previewing) {
+    $("log").textContent = data.log || "";
+  }
+  if (data.running) previewing = false;
   $("run").disabled = data.running;
   $("cancel").disabled = !data.running;
   if (data.running) $("status").textContent = "Running...";
@@ -447,10 +524,17 @@ poll();
 
 
 def main() -> int:
+    # Ensure the URL line is flushed immediately even when stdout is redirected
+    # to a pipe/file (block buffering would otherwise hide the port).
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
+        except Exception:
+            pass
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     host, port = server.server_address
     url = f"http://{host}:{port}/"
-    print(f"LLTimeline production GUI: {url}")
+    print(f"LLTimeline production GUI: {url}", flush=True)
     threading.Timer(0.25, lambda: webbrowser.open(url)).start()
     try:
         server.serve_forever()
