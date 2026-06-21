@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-06-20T15:40:00.000Z"
+last_updated: "2026-06-21T03:02:30.000Z"
 progress:
   total_phases: 10
   completed_phases: 0
@@ -14,13 +14,13 @@ progress:
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-20 23:40 CST
-> 更新原因：Phase 2.6 多语言学习基础规划
+> 最后更新：2026-06-21 11:02 CST
+> 更新原因：Phase 2.3 人工校对 UI 第一版实现、试听 loop 修正与 LLTimeline JSON 导出入口补齐
 
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
-- **Phase**：Phase 2.2 已正式收口；下一步进入 Phase 2.3 人工校对 UI
+- **Phase**：Phase 2.3 人工校对 UI 第一版实现完成；待真实媒体手动 QA 后收口
 - **分支**：`feature/forced-alignment-research`
 - **版本**：0.7.0
 
@@ -31,7 +31,7 @@ progress:
 | 路线 | 目标 | 当前状态 |
 |---|---|---|
 | 本地重装生产引擎 | 生成精准 WordTimeline / ChunkTimeline / LLTimeline JSON | ✅ 阶段性收口，转长期研究 |
-| 轻量消费端 LLPlayerNext | 稳定读取 `.lltimeline.json` 并播放学习 | ✅ Phase 2.2 正式收口，⏳ Phase 2.3 准备实现 |
+| 轻量消费端 LLPlayerNext | 稳定读取 `.lltimeline.json` 并播放学习 | ⏳ Phase 2.3 第一版实现完成，待真实媒体 QA |
 
 ## 当前 Phase 状态
 
@@ -117,7 +117,7 @@ progress:
   - 收口文档：
     `.planning/phases/2.2-app-timeline-resource-ui/subtitle-resource-semantics-and-lifecycle.md`
 
-### Phase 2.3: 人工校对 UI ⏳ 已启动
+### Phase 2.3: 人工校对 UI ⏳ 第一版实现完成，待手动 QA
 
 - 目标：完成 app 端人工校正闭环。
 - 初版不做完整 waveform editor，先做句子级 Word Timing Inspector。
@@ -127,10 +127,27 @@ progress:
   不覆盖 production candidate。
 
 - 保存后自动激活 user-adjusted timeline，并刷新播放器高亮。
+- 2026-06-21 第一版实现完成：
+  - Flutter client 支持读取完整 WordTimeline 和创建 user-adjusted WordTimeline。
+  - WordTiming / WordTimeline 模型支持完整 contract 解析和毫秒级保存 payload。
+  - 新增 ManualReviewDraft，负责完整 timeline draft、dirty tracking、校验和保存
+    payload。
+  - 新增句子级 ManualTimelineReviewDialog，支持 Prev/Next、毫秒输入、±10/±50ms
+    微调、播放当前句/词、Reset sentence 和 Save revision。
+  - 保存后通过现有 `status=active` create path 自动激活，并刷新 summaries 与
+    `trackWordTimings()`。
+  - Manual Review 入口已调整为带文字按钮；点击字幕单词会打开 Word Learning 面板。
+  - Manual Review 试听退出后会恢复进入前的 source loop，避免残留循环当前句。
+  - 字幕资源导出入口已支持选择 SRT 或 LLTimeline JSON。
+  - Timeline Resource Summary 已新增直接导出 LLTimeline JSON 的入口，便于从
+    manual/original WordTimeline 版本视图直接导出完整资源。
+  - 自动化验证：`flutter analyze`、`flutter test` 通过。
+  - 仍需真实媒体手动 QA 后再最终收口。
 - 规划文档：
   - `.planning/phases/2.3-manual-timeline-review-ui/2.3-CONTEXT.md`
   - `.planning/phases/2.3-manual-timeline-review-ui/2.3-PLAN.md`
   - `.planning/phases/2.3-manual-timeline-review-ui/2.3-ACCEPTANCE.md`
+  - `.planning/phases/2.3-manual-timeline-review-ui/2.3-CLOSEOUT.md`
   - `.planning/phases/2.3-manual-timeline-review-ui/2.3-RESEARCH.md` (2026-06-20 调研完成)
 
 ### Phase 2.3.5: Rust 巨型单文件拆分 ⏳ 已规划

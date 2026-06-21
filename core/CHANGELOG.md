@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- 2026-06-21 10:19:08 CST: Implemented the first Phase 2.3 manual
+  WordTimeline review pass in the desktop app. Manual Review now opens a
+  sentence-level inspector backed by a full cloned WordTimeline draft, supports
+  integer-millisecond start/end editing with ±10ms/±50ms controls, plays the
+  current sentence or word using draft boundaries, and saves a full
+  `created_by=user` / `status=active` user-adjusted WordTimeline revision.
+  Added complete Flutter WordTimeline read/create client methods, millisecond
+  payload serialization, draft validation/dirty tracking, and focused tests.
+  Verified with `flutter analyze` and `flutter test` (59 tests passed).
+- 2026-06-21 10:31:53 CST: Made Phase 2.3 Manual Review discoverable as a
+  labeled button in the Timeline Resource Summary instead of an icon-only
+  action, and fixed word-click navigation so selecting a subtitle word opens the
+  Word Learning side panel rather than the Subtitle Resources panel. Verified
+  with `flutter analyze` and `flutter test` (60 tests passed).
+- 2026-06-21 10:39:53 CST: Fixed Manual Review playback verification leaking
+  its temporary source loop after closing the dialog. The review flow now
+  restores the previous source loop state when the inspector exits, so using
+  Play sentence / Play word no longer leaves normal playback looping the review
+  segment. Verified with `flutter analyze` and `flutter test` (60 tests passed).
+- 2026-06-21 10:51:01 CST: Reworked subtitle resource export so the existing
+  Export action asks for an output format. Users can now choose SRT or
+  LLTimeline JSON from the same export flow; LLTimeline export writes the full
+  `.lltimeline.json` document via `GET /v1/subtitles/{track_id}/lltimeline/export`.
+  Verified with `flutter analyze` and `flutter test` (60 tests passed).
+- 2026-06-21 11:02:30 CST: Added a direct Export LLTimeline JSON action to the
+  Timeline Resource Summary so users can export the full resource from the same
+  area that shows active/manual WordTimeline versions. The button reuses the
+  same track-level `.lltimeline.json` export path and is covered by widget
+  tests. Verified with `flutter analyze` and `flutter test` (60 tests passed).
 - 2026-06-21 02:55:00 CST: Hardened the timeline-production browser GUI so it
   cancels cleanly and previews without blocking. `cancel()` now signals the
   whole process group (`start_new_session` + `os.killpg` SIGTERM, escalating to
