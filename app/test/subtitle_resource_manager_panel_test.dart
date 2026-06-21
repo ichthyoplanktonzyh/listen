@@ -46,6 +46,7 @@ void main() {
           activeTrack: null,
           timelineDocument: null,
           wordTimelineSummaries: const [],
+          chunkTimelineSummaries: const [],
           timelineResourceError: null,
           onImportSubtitle: () async {},
           onImportLLTimeline: () async {},
@@ -58,6 +59,10 @@ void main() {
           onExportLLTimeline: (_) async {},
           onActivateWordTimeline: (_) async {},
           onManualReviewTimeline: () async {},
+          onGenerateChunkTimeline: () async {},
+          onActivateChunkTimeline: (_) async {},
+          onArchiveChunkTimeline: (_) async {},
+          onDeleteChunkTimeline: (_) async {},
         ),
       ),
     );

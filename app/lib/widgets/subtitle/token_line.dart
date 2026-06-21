@@ -11,6 +11,7 @@ class TokenLine extends StatelessWidget {
     required this.profiles,
     required this.showStyles,
     required this.onWord,
+    this.onChunk,
     this.phraseCandidates = const [],
     this.phraseProfiles = const {},
     this.onPhrase,
@@ -40,6 +41,7 @@ class TokenLine extends StatelessWidget {
   final String currentWordStyle;
   final double currentWordIntensity;
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
+  final Future<void> Function(DisplayChunk chunk)? onChunk;
   final List<Map<String, dynamic>> phraseCandidates;
   final Map<String, Map<String, dynamic>> phraseProfiles;
   final Future<void> Function(Map<String, dynamic> candidate, Cue cue)?
@@ -84,45 +86,48 @@ class TokenLine extends StatelessWidget {
               alignment: Alignment.bottomCenter,
               duration: const Duration(milliseconds: 280),
               curve: Curves.easeOutCubic,
-              child: AnimatedContainer(
-                key: ValueKey('chunk-container-${chunk.index}'),
-                duration: const Duration(milliseconds: 280),
-                padding: EdgeInsets.symmetric(
-                  horizontal: capsule ? 10 : 2,
-                  vertical: capsule ? 4 : 1,
-                ),
-                decoration: BoxDecoration(
-                  color: active
-                      ? Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.18)
-                      : capsule
-                      ? Colors.white.withValues(alpha: 0.08)
-                      : Colors.transparent,
-                  border: capsule
-                      ? Border.all(
-                          color: active
-                              ? Theme.of(
-                                  context,
-                                ).colorScheme.primary.withValues(alpha: 0.42)
-                              : Colors.white.withValues(alpha: 0.18),
-                        )
-                      : null,
-                  borderRadius: BorderRadius.circular(999),
-                  boxShadow: active && chunkHighlightStyle == 'glow'
-                      ? [
-                          BoxShadow(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: 0.34),
-                            blurRadius: 12,
-                            spreadRadius: 1,
-                          ),
-                        ]
-                      : null,
-                ),
-                child: Text.rich(
-                  TextSpan(children: _spansForTokens(context, chunkTokens)),
+              child: GestureDetector(
+                onTap: onChunk == null ? null : () => onChunk!(chunk),
+                child: AnimatedContainer(
+                  key: ValueKey('chunk-container-${chunk.index}'),
+                  duration: const Duration(milliseconds: 280),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: capsule ? 10 : 2,
+                    vertical: capsule ? 4 : 1,
+                  ),
+                  decoration: BoxDecoration(
+                    color: active
+                        ? Theme.of(
+                            context,
+                          ).colorScheme.primary.withValues(alpha: 0.18)
+                        : capsule
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.transparent,
+                    border: capsule
+                        ? Border.all(
+                            color: active
+                                ? Theme.of(
+                                    context,
+                                  ).colorScheme.primary.withValues(alpha: 0.42)
+                                : Colors.white.withValues(alpha: 0.18),
+                          )
+                        : null,
+                    borderRadius: BorderRadius.circular(999),
+                    boxShadow: active && chunkHighlightStyle == 'glow'
+                        ? [
+                            BoxShadow(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.34),
+                              blurRadius: 12,
+                              spreadRadius: 1,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Text.rich(
+                    TextSpan(children: _spansForTokens(context, chunkTokens)),
+                  ),
                 ),
               ),
             ),

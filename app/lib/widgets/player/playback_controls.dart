@@ -32,6 +32,12 @@ class PlaybackControls extends StatelessWidget {
     required this.onPlayPause,
     required this.onStop,
     required this.onSeekToNextCue,
+    required this.chunkControlsEnabled,
+    required this.chunkLoopActive,
+    required this.onSeekToPreviousChunk,
+    required this.onSeekToNextChunk,
+    required this.onLoopCurrentChunk,
+    required this.onLoopExpandedChunk,
     required this.onLoopCueChanged,
     required this.onStopSourceLoop,
     required this.onStatusStylesChanged,
@@ -65,6 +71,8 @@ class PlaybackControls extends StatelessWidget {
   final Duration primarySubtitleOffset;
   final Duration secondarySubtitleOffset;
   final String status;
+  final bool chunkControlsEnabled;
+  final bool chunkLoopActive;
 
   final ValueChanged<Duration> onSeek;
   final VoidCallback onSeekToPreviousCue;
@@ -72,6 +80,10 @@ class PlaybackControls extends StatelessWidget {
   final VoidCallback onPlayPause;
   final VoidCallback onStop;
   final VoidCallback onSeekToNextCue;
+  final VoidCallback onSeekToPreviousChunk;
+  final VoidCallback onSeekToNextChunk;
+  final VoidCallback onLoopCurrentChunk;
+  final VoidCallback onLoopExpandedChunk;
   final ValueChanged<bool> onLoopCueChanged;
   final VoidCallback onStopSourceLoop;
   final ValueChanged<bool> onStatusStylesChanged;
@@ -143,6 +155,32 @@ class PlaybackControls extends StatelessWidget {
                     label: Text(l.text('loopSentence')),
                     selected: loopCue,
                     onSelected: onLoopCueChanged,
+                  ),
+                  IconButton(
+                    tooltip: l.text('previousChunk'),
+                    onPressed: chunkControlsEnabled
+                        ? onSeekToPreviousChunk
+                        : null,
+                    icon: const Icon(Icons.keyboard_double_arrow_left),
+                  ),
+                  IconButton(
+                    tooltip: l.text('nextChunk'),
+                    onPressed: chunkControlsEnabled ? onSeekToNextChunk : null,
+                    icon: const Icon(Icons.keyboard_double_arrow_right),
+                  ),
+                  FilterChip(
+                    label: Text(l.text('loopChunk')),
+                    selected: chunkLoopActive,
+                    onSelected: chunkControlsEnabled
+                        ? (_) => onLoopCurrentChunk()
+                        : null,
+                  ),
+                  TextButton.icon(
+                    onPressed: chunkControlsEnabled
+                        ? onLoopExpandedChunk
+                        : null,
+                    icon: const Icon(Icons.unfold_more),
+                    label: Text(l.text('expandChunk')),
                   ),
                   if (sourceLoopStart != null)
                     TextButton(

@@ -322,11 +322,197 @@ class WordTimelineSummary {
       createdBy == 'user' || lifecycleStage == 'user_adjusted';
 }
 
+class ChunkTimelineChunk {
+  const ChunkTimelineChunk({
+    required this.id,
+    required this.sentenceId,
+    required this.chunkIndex,
+    required this.startWordIndex,
+    required this.endWordIndex,
+    required this.start,
+    required this.end,
+    required this.text,
+    required this.boundarySources,
+    required this.confidence,
+    required this.warnings,
+    required this.evidenceJson,
+  });
+
+  factory ChunkTimelineChunk.fromJson(Map<String, dynamic> json) =>
+      ChunkTimelineChunk(
+        id: json['id'] as String,
+        sentenceId: json['sentence_id'] as String,
+        chunkIndex: json['chunk_index'] as int,
+        startWordIndex: json['start_word_index'] as int,
+        endWordIndex: json['end_word_index'] as int,
+        start: Duration(milliseconds: json['start_ms'] as int),
+        end: Duration(milliseconds: json['end_ms'] as int),
+        text: json['text'] as String,
+        boundarySources:
+            ((json['boundary_sources'] as List<dynamic>?) ?? const [])
+                .cast<String>()
+                .toList(growable: false),
+        confidence: (json['confidence'] as num).toDouble(),
+        warnings: ((json['warnings'] as List<dynamic>?) ?? const [])
+            .cast<String>()
+            .toList(growable: false),
+        evidenceJson: Map<String, dynamic>.from(
+          (json['evidence_json'] as Map?) ?? const {},
+        ),
+      );
+
+  final String id;
+  final String sentenceId;
+  final int chunkIndex;
+  final int startWordIndex;
+  final int endWordIndex;
+  final Duration start;
+  final Duration end;
+  final String text;
+  final List<String> boundarySources;
+  final double confidence;
+  final List<String> warnings;
+  final Map<String, dynamic> evidenceJson;
+
+  DisplayChunk toDisplayChunk({required int sentenceLocalIndex}) =>
+      DisplayChunk(
+        index: sentenceLocalIndex,
+        tokenStart: startWordIndex,
+        tokenEnd: endWordIndex,
+        text: text,
+        start: start,
+        end: end,
+      );
+}
+
+class ChunkTimeline {
+  const ChunkTimeline({
+    required this.id,
+    required this.trackId,
+    required this.mediaId,
+    required this.providerId,
+    required this.providerVersion,
+    required this.algorithm,
+    required this.precision,
+    required this.createdBy,
+    required this.status,
+    required this.metricsJson,
+    required this.chunks,
+    required this.createdAt,
+    required this.updatedAt,
+    this.parentWordTimelineId,
+  });
+
+  factory ChunkTimeline.fromJson(Map<String, dynamic> json) => ChunkTimeline(
+    id: json['id'] as String,
+    trackId: json['track_id'] as String,
+    mediaId: json['media_id'] as String,
+    parentWordTimelineId: json['parent_word_timeline_id'] as String?,
+    providerId: json['provider_id'] as String,
+    providerVersion: json['provider_version'] as String,
+    algorithm: json['algorithm'] as String,
+    precision: json['precision'] as String,
+    createdBy: json['created_by'] as String,
+    status: json['status'] as String,
+    metricsJson: Map<String, dynamic>.from(
+      (json['metrics_json'] as Map?) ?? const {},
+    ),
+    chunks: (json['chunks'] as List<dynamic>)
+        .map(
+          (value) => ChunkTimelineChunk.fromJson(value as Map<String, dynamic>),
+        )
+        .toList(growable: false),
+    createdAt: Duration(milliseconds: json['created_at_ms'] as int),
+    updatedAt: Duration(milliseconds: json['updated_at_ms'] as int),
+  );
+
+  final String id;
+  final String trackId;
+  final String mediaId;
+  final String? parentWordTimelineId;
+  final String providerId;
+  final String providerVersion;
+  final String algorithm;
+  final String precision;
+  final String createdBy;
+  final String status;
+  final Map<String, dynamic> metricsJson;
+  final List<ChunkTimelineChunk> chunks;
+  final Duration createdAt;
+  final Duration updatedAt;
+
+  bool get isActive => status == 'active';
+}
+
+class ChunkTimelineSummary {
+  const ChunkTimelineSummary({
+    required this.id,
+    required this.trackId,
+    required this.mediaId,
+    required this.providerId,
+    required this.providerVersion,
+    required this.algorithm,
+    required this.precision,
+    required this.createdBy,
+    required this.status,
+    required this.chunkCount,
+    required this.canActivate,
+    required this.canArchive,
+    required this.canDelete,
+    this.parentWordTimelineId,
+    this.start,
+    this.end,
+    this.averageConfidence,
+  });
+
+  factory ChunkTimelineSummary.fromJson(Map<String, dynamic> json) =>
+      ChunkTimelineSummary(
+        id: json['id'] as String,
+        trackId: json['track_id'] as String,
+        mediaId: json['media_id'] as String,
+        parentWordTimelineId: json['parent_word_timeline_id'] as String?,
+        providerId: json['provider_id'] as String,
+        providerVersion: json['provider_version'] as String,
+        algorithm: json['algorithm'] as String,
+        precision: json['precision'] as String,
+        createdBy: json['created_by'] as String,
+        status: json['status'] as String,
+        chunkCount: json['chunk_count'] as int,
+        start: _durationFromNullableMs(json['start_ms'] as int?),
+        end: _durationFromNullableMs(json['end_ms'] as int?),
+        averageConfidence: (json['average_confidence'] as num?)?.toDouble(),
+        canActivate: json['can_activate'] as bool,
+        canArchive: json['can_archive'] as bool,
+        canDelete: json['can_delete'] as bool,
+      );
+
+  final String id;
+  final String trackId;
+  final String mediaId;
+  final String? parentWordTimelineId;
+  final String providerId;
+  final String providerVersion;
+  final String algorithm;
+  final String precision;
+  final String createdBy;
+  final String status;
+  final int chunkCount;
+  final Duration? start;
+  final Duration? end;
+  final double? averageConfidence;
+  final bool canActivate;
+  final bool canArchive;
+  final bool canDelete;
+
+  bool get isActive => status == 'active';
+}
+
 class LLTimelineDocument {
   const LLTimelineDocument({
     required this.schema,
     required this.metadata,
     required this.activeWordTimelineId,
+    required this.activeChunkTimelineId,
     required this.artifacts,
   });
 
@@ -337,6 +523,7 @@ class LLTimelineDocument {
           json['metadata'] as Map<String, dynamic>,
         ),
         activeWordTimelineId: json['active_word_timeline_id'] as String?,
+        activeChunkTimelineId: json['active_chunk_timeline_id'] as String?,
         artifacts: ((json['artifacts'] as List<dynamic>?) ?? const [])
             .map(
               (value) =>
@@ -348,12 +535,14 @@ class LLTimelineDocument {
   final String schema;
   final LLTimelineMetadata metadata;
   final String? activeWordTimelineId;
+  final String? activeChunkTimelineId;
   final List<LLTimelineArtifact> artifacts;
 
   bool get importedResource =>
       metadata.trackSource == 'lltimeline-json-v1' ||
       artifacts.isNotEmpty ||
-      activeWordTimelineId != null;
+      activeWordTimelineId != null ||
+      activeChunkTimelineId != null;
 }
 
 class LLTimelineMetadata {
@@ -490,9 +679,9 @@ class DisplayChunk {
   });
 
   factory DisplayChunk.fromJson(Map<String, dynamic> json) => DisplayChunk(
-    index: json['index'] as int,
-    tokenStart: json['token_start'] as int,
-    tokenEnd: json['token_end'] as int,
+    index: json['index'] as int? ?? json['chunk_index'] as int,
+    tokenStart: json['token_start'] as int? ?? json['start_word_index'] as int,
+    tokenEnd: json['token_end'] as int? ?? json['end_word_index'] as int,
     text: json['text'] as String,
     start: Duration(milliseconds: json['start_ms'] as int),
     end: Duration(milliseconds: json['end_ms'] as int),
@@ -533,6 +722,34 @@ class SentenceChunkPartition {
   final String partitionerId;
   final String partitionerVersion;
   final String timingQuality;
+}
+
+Map<String, SentenceChunkPartition> chunkPartitionsFromTimeline(
+  ChunkTimeline timeline,
+) {
+  final grouped = <String, List<ChunkTimelineChunk>>{};
+  for (final chunk in timeline.chunks) {
+    grouped.putIfAbsent(chunk.sentenceId, () => []).add(chunk);
+  }
+  return Map<String, SentenceChunkPartition>.fromEntries(
+    grouped.entries.map((entry) {
+      final chunks = [...entry.value]
+        ..sort((a, b) => a.chunkIndex.compareTo(b.chunkIndex));
+      return MapEntry(
+        entry.key,
+        SentenceChunkPartition(
+          sentenceId: entry.key,
+          chunks: [
+            for (var index = 0; index < chunks.length; index += 1)
+              chunks[index].toDisplayChunk(sentenceLocalIndex: index),
+          ],
+          partitionerId: timeline.providerId,
+          partitionerVersion: timeline.providerVersion,
+          timingQuality: timeline.precision,
+        ),
+      );
+    }),
+  );
 }
 
 int? currentWordTokenIndex(

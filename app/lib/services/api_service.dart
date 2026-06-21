@@ -260,6 +260,55 @@ class LocalApi {
           ))
           as Map<String, dynamic>;
 
+  Future<List<Map<String, dynamic>>> trackChunkTimelineSummaries(
+    String trackId,
+  ) async =>
+      ((await _request(
+                'GET',
+                '/v1/subtitles/${Uri.encodeComponent(trackId)}/chunk-timelines/summary',
+              ))
+              as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+
+  Future<Map<String, dynamic>> chunkTimeline(String timelineId) async =>
+      (await _request(
+            'GET',
+            '/v1/chunk-timelines/${Uri.encodeComponent(timelineId)}',
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> generateChunkTimeline(
+    String trackId, {
+    String status = 'candidate',
+  }) async =>
+      (await _request(
+            'POST',
+            '/v1/subtitles/${Uri.encodeComponent(trackId)}/chunk-timelines',
+            {'status': status},
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> activateChunkTimeline(String timelineId) async =>
+      (await _request(
+            'POST',
+            '/v1/chunk-timelines/${Uri.encodeComponent(timelineId)}/activate',
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> archiveChunkTimeline(String timelineId) async =>
+      (await _request(
+            'POST',
+            '/v1/chunk-timelines/${Uri.encodeComponent(timelineId)}/archive',
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> deleteChunkTimeline(String timelineId) async =>
+      (await _request(
+            'DELETE',
+            '/v1/chunk-timelines/${Uri.encodeComponent(timelineId)}',
+          ))
+          as Map<String, dynamic>;
+
   Future<List<Map<String, dynamic>>> trackPhoneticAnalyses(
     String trackId,
   ) async =>

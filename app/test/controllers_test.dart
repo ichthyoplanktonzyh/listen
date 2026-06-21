@@ -195,6 +195,7 @@ void main() {
           extra: {'track_source': 'lltimeline-json-v1'},
         ),
         activeWordTimelineId: 'timeline-active',
+        activeChunkTimelineId: null,
         artifacts: [
           LLTimelineArtifact(kind: 'alignment_diagnostics', payload: {}),
         ],
@@ -218,7 +219,11 @@ void main() {
         ),
       ];
       final controller = SubtitleController()
-        ..setTimelineResource(summaries: summaries, document: document)
+        ..setTimelineResource(
+          summaries: summaries,
+          chunkSummaries: const [],
+          document: document,
+        )
         ..setTimelineResourceError('Timeline resource refresh warning');
 
       expect(controller.llTimelineDocument, same(document));

@@ -538,6 +538,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
       subtitleController.setTimelineResource(
         summaries: subtitleController.wordTimelineSummaries,
+        chunkSummaries: subtitleController.chunkTimelineSummaries,
         document: LLTimelineDocument.fromJson(decoded),
         error: subtitleController.timelineResourceError,
       );
@@ -649,11 +650,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       'phone',
       errors,
     );
-    final partitions = await _loadOptionalResourceCapability(
-      () => service.trackChunkPartitions(trackId),
-      'chunk',
-      errors,
-    );
+    final partitions = await _loadChunkPartitions(service, trackId, errors);
     final grouped = <String, List<WordTiming>>{};
     for (final raw in timings) {
       final value = WordTiming.fromJson(raw);
@@ -667,13 +664,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
     subtitleController.setSpeechEnhancements(
       timingsBySentence: grouped,
-      chunkPartitionsBySentence:
-          Map<String, SentenceChunkPartition>.fromEntries(
-            partitions.map((raw) {
-              final partition = SentenceChunkPartition.fromJson(raw);
-              return MapEntry(partition.sentenceId, partition);
-            }),
-          ),
+      chunkPartitionsBySentence: partitions,
       pronunciationBySentence: Map<String, Map<String, dynamic>>.fromEntries(
         analyses.map(
           (value) => MapEntry(value['sentence_id'] as String, value),
@@ -722,14 +713,46 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  Future<Map<String, SentenceChunkPartition>> _loadChunkPartitions(
+    LocalApi service,
+    String trackId,
+    List<String> errors,
+  ) async {
+    final active = subtitleController.chunkTimelineSummaries
+        .where((summary) => summary.isActive)
+        .firstOrNull;
+    if (active != null) {
+      try {
+        return chunkPartitionsFromTimeline(
+          ChunkTimeline.fromJson(await service.chunkTimeline(active.id)),
+        );
+      } catch (error) {
+        errors.add('chunk timeline: $error');
+      }
+    }
+    final partitions = await _loadOptionalResourceCapability(
+      () => service.trackChunkPartitions(trackId),
+      'chunk',
+      errors,
+    );
+    return Map<String, SentenceChunkPartition>.fromEntries(
+      partitions.map((raw) {
+        final partition = SentenceChunkPartition.fromJson(raw);
+        return MapEntry(partition.sentenceId, partition);
+      }),
+    );
+  }
+
   Future<void> _loadTimelineResource(String trackId) async {
     final service = api;
     if (service == null) return;
     final errors = <String>[];
     final previousSummaries = subtitleController.wordTimelineSummaries;
+    final previousChunkSummaries = subtitleController.chunkTimelineSummaries;
     final previousDocument = subtitleController.llTimelineDocument;
 
     late List<WordTimelineSummary> summaries;
+    late List<ChunkTimelineSummary> chunkSummaries;
     LLTimelineDocument? document;
 
     try {
@@ -740,6 +763,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } catch (error) {
       errors.add('summary: $error');
       summaries = previousSummaries;
+    }
+
+    try {
+      final values = await service.trackChunkTimelineSummaries(trackId);
+      chunkSummaries = values
+          .map((raw) => ChunkTimelineSummary.fromJson(raw))
+          .toList(growable: false);
+    } catch (error) {
+      errors.add('chunk summary: $error');
+      chunkSummaries = previousChunkSummaries;
     }
 
     try {
@@ -756,8 +789,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
     if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
-    final hasTimelineData = summaries.isNotEmpty || document != null;
-    if (!hasTimelineData && errors.length == 2) {
+    final hasTimelineData =
+        summaries.isNotEmpty || chunkSummaries.isNotEmpty || document != null;
+    if (!hasTimelineData && errors.length == 3) {
       subtitleController.setTimelineResourceError(
         'Timeline resource unavailable: ${errors.join('; ')}',
       );
@@ -765,6 +799,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     subtitleController.setTimelineResource(
       summaries: summaries,
+      chunkSummaries: chunkSummaries,
       document: document,
       error: errors.isEmpty
           ? null
@@ -825,12 +860,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
           'phone',
           errors,
         );
+        final chunkSummaries = await _loadOptionalResourceCapability(
+          () => service.trackChunkTimelineSummaries(track.id),
+          'chunk timeline',
+          errors,
+        );
         return MapEntry(
           track.id,
           SubtitleResourceCapabilities.fromCounts(
             sentenceCount: track.cues.length,
             wordTimingCount: wordTimings.length,
-            chunkCount: wordTimings.isEmpty ? 0 : track.cues.length,
+            chunkCount: chunkSummaries.fold<int>(
+              0,
+              (total, raw) => total + (raw['chunk_count'] as int? ?? 0),
+            ),
             phoneCount: _resourcePhoneCount(phoneticAnalyses),
             error: errors.isEmpty ? null : errors.join('; '),
           ),
@@ -1021,6 +1064,76 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } catch (error) {
       if (mounted) {
         setState(() => status = 'WordTimeline activation failed: $error');
+      }
+    }
+  }
+
+  Future<void> _generateChunkTimeline() async {
+    final service = api;
+    final trackId = subtitleController.primaryTrack?.id;
+    if (service == null || trackId == null) return;
+    try {
+      setState(() => status = 'Generating ChunkTimeline...');
+      await service.generateChunkTimeline(trackId, status: 'active');
+      if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
+      await _loadSpeechEnhancements(trackId);
+      await _loadSubtitleResources(updateStatus: false);
+      if (mounted) setState(() => status = 'ChunkTimeline generated');
+    } catch (error) {
+      if (mounted) {
+        setState(() => status = 'ChunkTimeline generation failed: $error');
+      }
+    }
+  }
+
+  Future<void> _activateChunkTimeline(String timelineId) async {
+    final service = api;
+    final trackId = subtitleController.primaryTrack?.id;
+    if (service == null || trackId == null) return;
+    try {
+      setState(() => status = 'Activating ChunkTimeline...');
+      await service.activateChunkTimeline(timelineId);
+      if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
+      await _loadSpeechEnhancements(trackId);
+      await _loadSubtitleResources(updateStatus: false);
+      if (mounted) setState(() => status = 'ChunkTimeline activated');
+    } catch (error) {
+      if (mounted) {
+        setState(() => status = 'ChunkTimeline activation failed: $error');
+      }
+    }
+  }
+
+  Future<void> _archiveChunkTimeline(String timelineId) async {
+    final service = api;
+    final trackId = subtitleController.primaryTrack?.id;
+    if (service == null || trackId == null) return;
+    try {
+      await service.archiveChunkTimeline(timelineId);
+      if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
+      await _loadSpeechEnhancements(trackId);
+      await _loadSubtitleResources(updateStatus: false);
+      if (mounted) setState(() => status = 'ChunkTimeline archived');
+    } catch (error) {
+      if (mounted) {
+        setState(() => status = 'ChunkTimeline archive failed: $error');
+      }
+    }
+  }
+
+  Future<void> _deleteChunkTimeline(String timelineId) async {
+    final service = api;
+    final trackId = subtitleController.primaryTrack?.id;
+    if (service == null || trackId == null) return;
+    try {
+      await service.deleteChunkTimeline(timelineId);
+      if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
+      await _loadSpeechEnhancements(trackId);
+      await _loadSubtitleResources(updateStatus: false);
+      if (mounted) setState(() => status = 'ChunkTimeline deleted');
+    } catch (error) {
+      if (mounted) {
+        setState(() => status = 'ChunkTimeline delete failed: $error');
       }
     }
   }
@@ -2100,6 +2213,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
           onExportLLTimeline: _exportLLTimelineResource,
           onActivateWordTimeline: _activateWordTimeline,
           onManualReviewTimeline: _openManualReviewTimeline,
+          onGenerateChunkTimeline: _generateChunkTimeline,
+          onActivateChunkTimeline: _activateChunkTimeline,
+          onArchiveChunkTimeline: _archiveChunkTimeline,
+          onDeleteChunkTimeline: _deleteChunkTimeline,
         ),
       ),
     );
@@ -2641,6 +2758,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                       settingsController.wordAnimationIntensity,
                                   onWord: _openWord,
                                   onPhrase: _openPhrase,
+                                  onChunk: _seekChunk,
                                 ),
                               ),
                             if (settingsController.pronunciationVisible &&
@@ -2810,6 +2928,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     activeTrack: subtitleController.primaryTrack,
     timelineDocument: subtitleController.llTimelineDocument,
     wordTimelineSummaries: subtitleController.wordTimelineSummaries,
+    chunkTimelineSummaries: subtitleController.chunkTimelineSummaries,
     timelineResourceError: subtitleController.timelineResourceError,
     onImportSubtitle: () async => _openSubtitle(secondary: false),
     onImportLLTimeline: _openLLTimelineResource,
@@ -2822,6 +2941,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     onExportLLTimeline: _exportLLTimelineResource,
     onActivateWordTimeline: _activateWordTimeline,
     onManualReviewTimeline: _openManualReviewTimeline,
+    onGenerateChunkTimeline: _generateChunkTimeline,
+    onActivateChunkTimeline: _activateChunkTimeline,
+    onArchiveChunkTimeline: _archiveChunkTimeline,
+    onDeleteChunkTimeline: _deleteChunkTimeline,
   );
 
   Widget _diagnosisCard() => DiagnosisCard(
@@ -2909,6 +3032,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
         subtitleController.currentPrimaryCue,
       ),
     ),
+    chunkControlsEnabled: _currentChunkRef() != null,
+    chunkLoopActive:
+        playerController.sourceLoopStart != null &&
+        _currentChunkRef()?.start == playerController.sourceLoopStart,
+    onSeekToPreviousChunk: () => _seekAdjacentChunk(-1),
+    onSeekToNextChunk: () => _seekAdjacentChunk(1),
+    onLoopCurrentChunk: _loopCurrentChunk,
+    onLoopExpandedChunk: _loopExpandedChunk,
     onLoopCueChanged: (value) {
       subtitleController.setLoopCue(value);
       if (value) playerController.setSourceLoop(null, null);
@@ -2959,6 +3090,107 @@ class _PlayerScreenState extends State<PlayerScreen> {
     },
   );
 
+  _ChunkRef? _currentChunkRef() {
+    final cue = subtitleController.currentPrimaryCue;
+    if (cue == null) return null;
+    final partition = subtitleController.chunkPartitionsBySentence[cue.id];
+    if (partition == null || partition.chunks.isEmpty) return null;
+    final index =
+        subtitleController.currentChunkIndex ??
+        currentChunkAtPosition(
+          partition,
+          playerController.position,
+          offset: subtitleController.primarySubtitleOffset,
+        );
+    if (index == null) return null;
+    for (final chunk in partition.chunks) {
+      if (chunk.index == index) return _ChunkRef(cue, chunk, partition);
+    }
+    return null;
+  }
+
+  _ChunkRef? _chunkRefAt(Cue cue, int chunkIndex) {
+    final partition = subtitleController.chunkPartitionsBySentence[cue.id];
+    if (partition == null || partition.chunks.isEmpty) return null;
+    if (chunkIndex < 0 || chunkIndex >= partition.chunks.length) return null;
+    return _ChunkRef(cue, partition.chunks[chunkIndex], partition);
+  }
+
+  Future<void> _seekChunk(DisplayChunk chunk) async {
+    final start = _mediaTime(chunk.start);
+    await adapter.seek(start);
+    playerController.setPosition(start);
+  }
+
+  Future<void> _seekAdjacentChunk(int delta) async {
+    final current = _currentChunkRef();
+    final cue = current?.cue ?? subtitleController.currentPrimaryCue;
+    if (cue == null) return;
+    final localIndex = current == null
+        ? 0
+        : current.partition.chunks.indexWhere(
+            (chunk) => chunk.index == current.chunk.index,
+          );
+    var target = _chunkRefAt(cue, localIndex + delta);
+    if (target == null && delta < 0) {
+      final previousCue = subtitleController.primaryCursor.previous(cue);
+      final previousPartition = previousCue == null
+          ? null
+          : subtitleController.chunkPartitionsBySentence[previousCue.id];
+      if (previousCue != null &&
+          previousPartition != null &&
+          previousPartition.chunks.isNotEmpty) {
+        target = _ChunkRef(
+          previousCue,
+          previousPartition.chunks.last,
+          previousPartition,
+        );
+      }
+    }
+    if (target == null && delta > 0) {
+      final nextCue = subtitleController.primaryCursor.next(cue);
+      target = nextCue == null ? null : _chunkRefAt(nextCue, 0);
+    }
+    if (target == null) return;
+    await _seekChunk(target.chunk);
+  }
+
+  Future<void> _loopCurrentChunk() async {
+    final current = _currentChunkRef();
+    if (current == null) return;
+    final start = _mediaTime(current.chunk.start);
+    final end = _mediaTime(current.chunk.end);
+    if (end <= start) return;
+    playerController.setSourceLoop(start, end);
+    subtitleController.setLoopCue(false);
+    await adapter.seek(start);
+    await adapter.play();
+  }
+
+  Future<void> _loopExpandedChunk() async {
+    final current = _currentChunkRef();
+    if (current == null) return;
+    final localIndex = current.partition.chunks.indexWhere(
+      (chunk) => chunk.index == current.chunk.index,
+    );
+    final next =
+        localIndex >= 0 && localIndex + 1 < current.partition.chunks.length
+        ? current.partition.chunks[localIndex + 1]
+        : null;
+    final start = _mediaTime(current.chunk.start);
+    final end = _mediaTime(next?.end ?? current.cue.end);
+    if (end <= start) return;
+    playerController.setSourceLoop(start, end);
+    subtitleController.setLoopCue(false);
+    await adapter.seek(start);
+    await adapter.play();
+  }
+
+  Duration _mediaTime(Duration subtitleTime) {
+    final value = subtitleTime + subtitleController.primarySubtitleOffset;
+    return value.isNegative ? Duration.zero : value;
+  }
+
   Widget _downloadStatusBar() => DownloadStatusBar(
     activeDownload: activeDownload,
     downloadProgress: playerController.downloadProgress,
@@ -2975,4 +3207,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       activeDownload = null;
     }),
   );
+}
+
+class _ChunkRef {
+  const _ChunkRef(this.cue, this.chunk, this.partition);
+
+  final Cue cue;
+  final DisplayChunk chunk;
+  final SentenceChunkPartition partition;
+
+  Duration get start => chunk.start;
 }

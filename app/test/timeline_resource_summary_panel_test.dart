@@ -28,6 +28,7 @@ void main() {
               extra: {'track_source': 'lltimeline-json-v1'},
             ),
             activeWordTimelineId: 'timeline-active',
+            activeChunkTimelineId: 'chunk-active',
             artifacts: [
               LLTimelineArtifact(kind: 'production_report', payload: {}),
             ],
@@ -68,11 +69,32 @@ void main() {
               canDelete: true,
             ),
           ],
+          chunkSummaries: const [
+            ChunkTimelineSummary(
+              id: 'chunk-active',
+              trackId: 'track-1',
+              mediaId: 'media-1',
+              providerId: 'partitioner',
+              providerVersion: 'v4',
+              algorithm: 'acoustic_semantic_v1',
+              precision: 'precise',
+              createdBy: 'algorithm',
+              status: 'active',
+              chunkCount: 4,
+              canActivate: true,
+              canArchive: true,
+              canDelete: true,
+            ),
+          ],
           error: null,
           onImport: () async {},
           onRefresh: () async {},
           onActivate: (timelineId) async => activated = timelineId,
           onManualReview: () async => reviewRuns++,
+          onGenerateChunkTimeline: () async {},
+          onActivateChunkTimeline: (_) async {},
+          onArchiveChunkTimeline: (_) async {},
+          onDeleteChunkTimeline: (_) async {},
           onExportLLTimeline: () async => exports++,
         ),
       ),
@@ -82,6 +104,7 @@ void main() {
     expect(find.text('Production report ready'), findsOneWidget);
     expect(find.textContaining('whisperx 1.0'), findsWidgets);
     expect(find.textContaining('mfa 2.0'), findsOneWidget);
+    expect(find.textContaining('acoustic_semantic_v1'), findsWidgets);
 
     await tester.tap(find.byIcon(Icons.play_circle_outline));
     await tester.pump();
@@ -103,11 +126,16 @@ void main() {
         child: TimelineResourceSummaryPanel(
           document: null,
           summaries: const [],
+          chunkSummaries: const [],
           error: null,
           onImport: () async {},
           onRefresh: () async {},
           onActivate: (_) async {},
           onManualReview: () async {},
+          onGenerateChunkTimeline: () async {},
+          onActivateChunkTimeline: (_) async {},
+          onArchiveChunkTimeline: (_) async {},
+          onDeleteChunkTimeline: (_) async {},
           onExportLLTimeline: () async {},
         ),
       ),

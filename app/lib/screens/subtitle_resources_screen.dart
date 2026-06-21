@@ -24,6 +24,10 @@ class SubtitleResourcesScreen extends StatefulWidget {
     required this.onExportLLTimeline,
     required this.onActivateWordTimeline,
     required this.onManualReviewTimeline,
+    required this.onGenerateChunkTimeline,
+    required this.onActivateChunkTimeline,
+    required this.onArchiveChunkTimeline,
+    required this.onDeleteChunkTimeline,
   });
 
   final PlayerController playerController;
@@ -39,6 +43,10 @@ class SubtitleResourcesScreen extends StatefulWidget {
   final Future<void> Function(SubtitleTrack track) onExportLLTimeline;
   final Future<void> Function(String timelineId) onActivateWordTimeline;
   final Future<void> Function() onManualReviewTimeline;
+  final Future<void> Function() onGenerateChunkTimeline;
+  final Future<void> Function(String timelineId) onActivateChunkTimeline;
+  final Future<void> Function(String timelineId) onArchiveChunkTimeline;
+  final Future<void> Function(String timelineId) onDeleteChunkTimeline;
 
   @override
   State<SubtitleResourcesScreen> createState() =>
@@ -69,6 +77,8 @@ class _SubtitleResourcesScreenState extends State<SubtitleResourcesScreen> {
         activeTrack: widget.subtitleController.primaryTrack,
         timelineDocument: widget.subtitleController.llTimelineDocument,
         wordTimelineSummaries: widget.subtitleController.wordTimelineSummaries,
+        chunkTimelineSummaries:
+            widget.subtitleController.chunkTimelineSummaries,
         timelineResourceError: widget.subtitleController.timelineResourceError,
         onImportSubtitle: widget.onImportSubtitle,
         onImportLLTimeline: widget.onImportLLTimeline,
@@ -81,6 +91,10 @@ class _SubtitleResourcesScreenState extends State<SubtitleResourcesScreen> {
         onExportLLTimeline: widget.onExportLLTimeline,
         onActivateWordTimeline: widget.onActivateWordTimeline,
         onManualReviewTimeline: widget.onManualReviewTimeline,
+        onGenerateChunkTimeline: widget.onGenerateChunkTimeline,
+        onActivateChunkTimeline: widget.onActivateChunkTimeline,
+        onArchiveChunkTimeline: widget.onArchiveChunkTimeline,
+        onDeleteChunkTimeline: widget.onDeleteChunkTimeline,
       ),
     ),
   );

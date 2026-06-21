@@ -305,4 +305,50 @@ void main() {
       isNull,
     );
   });
+
+  test('parses chunk timeline resources into sentence partitions', () {
+    final timeline = ChunkTimeline.fromJson(const {
+      'id': 'chunk-timeline-1',
+      'track_id': 'track-1',
+      'media_id': 'media-1',
+      'parent_word_timeline_id': 'word-timeline-1',
+      'provider_id': 'acoustic-first-rule-partitioner',
+      'provider_version': 'v4',
+      'algorithm': 'acoustic_semantic_v1',
+      'precision': 'precise',
+      'created_by': 'algorithm',
+      'status': 'active',
+      'metrics_json': {},
+      'chunks': [
+        {
+          'id': 'chunk-1',
+          'sentence_id': 'sentence-1',
+          'chunk_index': 0,
+          'start_word_index': 0,
+          'end_word_index': 1,
+          'start_ms': 100,
+          'end_ms': 500,
+          'text': 'hello world',
+          'boundary_sources': ['pause'],
+          'confidence': 0.92,
+          'warnings': [],
+          'evidence_json': {},
+        },
+      ],
+      'created_at_ms': 1,
+      'updated_at_ms': 2,
+    });
+
+    final partitions = chunkPartitionsFromTimeline(timeline);
+    expect(partitions['sentence-1']?.partitionerId, timeline.providerId);
+    expect(partitions['sentence-1']?.timingQuality, 'precise');
+    expect(partitions['sentence-1']?.chunks.single.tokenEnd, 1);
+    expect(
+      currentChunkAtPosition(
+        partitions['sentence-1'],
+        const Duration(milliseconds: 200),
+      ),
+      0,
+    );
+  });
 }

@@ -13,6 +13,7 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
     required this.activeTrack,
     required this.timelineDocument,
     required this.wordTimelineSummaries,
+    required this.chunkTimelineSummaries,
     required this.timelineResourceError,
     required this.onImportSubtitle,
     required this.onImportLLTimeline,
@@ -25,6 +26,10 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
     required this.onExportLLTimeline,
     required this.onActivateWordTimeline,
     required this.onManualReviewTimeline,
+    required this.onGenerateChunkTimeline,
+    required this.onActivateChunkTimeline,
+    required this.onArchiveChunkTimeline,
+    required this.onDeleteChunkTimeline,
   });
 
   final String? mediaId;
@@ -33,6 +38,7 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
   final SubtitleTrack? activeTrack;
   final LLTimelineDocument? timelineDocument;
   final List<WordTimelineSummary> wordTimelineSummaries;
+  final List<ChunkTimelineSummary> chunkTimelineSummaries;
   final String? timelineResourceError;
   final Future<void> Function() onImportSubtitle;
   final Future<void> Function() onImportLLTimeline;
@@ -45,6 +51,10 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
   final Future<void> Function(SubtitleTrack track) onExportLLTimeline;
   final Future<void> Function(String timelineId) onActivateWordTimeline;
   final Future<void> Function() onManualReviewTimeline;
+  final Future<void> Function() onGenerateChunkTimeline;
+  final Future<void> Function(String timelineId) onActivateChunkTimeline;
+  final Future<void> Function(String timelineId) onArchiveChunkTimeline;
+  final Future<void> Function(String timelineId) onDeleteChunkTimeline;
 
   @override
   Widget build(BuildContext context) {
@@ -127,11 +137,16 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
           TimelineResourceSummaryPanel(
             document: timelineDocument,
             summaries: wordTimelineSummaries,
+            chunkSummaries: chunkTimelineSummaries,
             error: timelineResourceError,
             onImport: onImportLLTimeline,
             onRefresh: onRefreshResources,
             onActivate: onActivateWordTimeline,
             onManualReview: onManualReviewTimeline,
+            onGenerateChunkTimeline: onGenerateChunkTimeline,
+            onActivateChunkTimeline: onActivateChunkTimeline,
+            onArchiveChunkTimeline: onArchiveChunkTimeline,
+            onDeleteChunkTimeline: onDeleteChunkTimeline,
             onExportLLTimeline: activeTrack == null
                 ? null
                 : () => onExportLLTimeline(activeTrack!),

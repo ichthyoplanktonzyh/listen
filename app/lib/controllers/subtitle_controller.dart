@@ -33,6 +33,7 @@ class SubtitleState {
     this.subtitleResources = const [],
     this.subtitleResourceCapabilities = const {},
     this.wordTimelineSummaries = const [],
+    this.chunkTimelineSummaries = const [],
     this.llTimelineDocument,
     this.timelineResourceError,
     this.currentWordToken,
@@ -67,6 +68,7 @@ class SubtitleState {
   final List<SubtitleTrack> subtitleResources;
   final Map<String, SubtitleResourceCapabilities> subtitleResourceCapabilities;
   final List<WordTimelineSummary> wordTimelineSummaries;
+  final List<ChunkTimelineSummary> chunkTimelineSummaries;
   final LLTimelineDocument? llTimelineDocument;
   final String? timelineResourceError;
   final int? currentWordToken;
@@ -101,6 +103,7 @@ class SubtitleState {
     List<SubtitleTrack>? subtitleResources,
     Map<String, SubtitleResourceCapabilities>? subtitleResourceCapabilities,
     List<WordTimelineSummary>? wordTimelineSummaries,
+    List<ChunkTimelineSummary>? chunkTimelineSummaries,
     Object? llTimelineDocument = _unset,
     Object? timelineResourceError = _unset,
     Object? currentWordToken = _unset,
@@ -149,6 +152,8 @@ class SubtitleState {
     subtitleResourceCapabilities:
         subtitleResourceCapabilities ?? this.subtitleResourceCapabilities,
     wordTimelineSummaries: wordTimelineSummaries ?? this.wordTimelineSummaries,
+    chunkTimelineSummaries:
+        chunkTimelineSummaries ?? this.chunkTimelineSummaries,
     llTimelineDocument: identical(llTimelineDocument, _unset)
         ? this.llTimelineDocument
         : llTimelineDocument as LLTimelineDocument?,
@@ -218,6 +223,8 @@ class SubtitleController extends ChangeNotifier {
       _state.subtitleResourceCapabilities;
   List<WordTimelineSummary> get wordTimelineSummaries =>
       _state.wordTimelineSummaries;
+  List<ChunkTimelineSummary> get chunkTimelineSummaries =>
+      _state.chunkTimelineSummaries;
   LLTimelineDocument? get llTimelineDocument => _state.llTimelineDocument;
   String? get timelineResourceError => _state.timelineResourceError;
   int? get currentWordToken => _state.currentWordToken;
@@ -341,6 +348,7 @@ class SubtitleController extends ChangeNotifier {
       chunkPartitionsBySentence: const {},
       pronunciationProviders: const [],
       wordTimelineSummaries: const [],
+      chunkTimelineSummaries: const [],
       llTimelineDocument: null,
       timelineResourceError: null,
       currentWordToken: null,
@@ -352,11 +360,13 @@ class SubtitleController extends ChangeNotifier {
 
   void setTimelineResource({
     required List<WordTimelineSummary> summaries,
+    required List<ChunkTimelineSummary> chunkSummaries,
     required LLTimelineDocument? document,
     String? error,
   }) => _update(
     (s) => s.copyWith(
       wordTimelineSummaries: summaries,
+      chunkTimelineSummaries: chunkSummaries,
       llTimelineDocument: document,
       timelineResourceError: error,
     ),
@@ -368,6 +378,7 @@ class SubtitleController extends ChangeNotifier {
   void clearTimelineResource() => _update(
     (s) => s.copyWith(
       wordTimelineSummaries: const [],
+      chunkTimelineSummaries: const [],
       llTimelineDocument: null,
       timelineResourceError: null,
     ),
