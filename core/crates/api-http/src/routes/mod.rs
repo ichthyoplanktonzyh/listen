@@ -1,0 +1,8 @@
+pub(crate) mod dictionary;
+pub(crate) mod media;
+pub(crate) mod phonetic_analysis;
+pub(crate) mod pronunciation;
+pub(crate) mod speech;
+pub(crate) mod timelines;
+pub(crate) mod transcription;
+pub(crate) mod vocabulary;

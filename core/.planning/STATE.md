@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-06-21T03:02:30.000Z"
+last_updated: "2026-06-21T05:02:17.000Z"
 progress:
   total_phases: 10
   completed_phases: 0
@@ -14,13 +14,13 @@ progress:
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-21 11:02 CST
-> 更新原因：Phase 2.3 人工校对 UI 第一版实现、试听 loop 修正与 LLTimeline JSON 导出入口补齐
+> 最后更新：2026-06-21 13:02 CST
+> 更新原因：Phase 2.3.5 Rust 巨型单文件拆分完成，代码库结构文档同步
 
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
-- **Phase**：Phase 2.3 人工校对 UI 第一版实现完成；待真实媒体手动 QA 后收口
+- **Phase**：Phase 2.3.5 Rust 巨型单文件拆分完成；准备进入 Phase 2.4 ChunkTimeline
 - **分支**：`feature/forced-alignment-research`
 - **版本**：0.7.0
 
@@ -150,25 +150,31 @@ progress:
   - `.planning/phases/2.3-manual-timeline-review-ui/2.3-CLOSEOUT.md`
   - `.planning/phases/2.3-manual-timeline-review-ui/2.3-RESEARCH.md` (2026-06-20 调研完成)
 
-### Phase 2.3.5: Rust 巨型单文件拆分 ⏳ 已规划
+### Phase 2.3.5: Rust 巨型单文件拆分 ✅ 已完成
 
 - 目标：在 Phase 2.3 人工校对闭环之后、Phase 2.4 ChunkTimeline 之前，集中处理
   `persistence-sqlite`、`application`、`api-http` 的巨型 `lib.rs` 技术债。
-- 当前文件体量：
-  - `crates/persistence-sqlite/src/lib.rs`：约 4164 行。
-  - `crates/application/src/lib.rs`：约 3375 行。
-  - `crates/api-http/src/lib.rs`：约 3182 行。
-  - `crates/domain/src/lib.rs`：约 1317 行，暂不作为首要拆分对象。
 - 阶段原则：只做 mechanical decomposition，不改业务行为、不改 API contract、不改
   SQLite schema、不新增产品能力。
-- 推荐顺序：
-  1. `persistence-sqlite` 按 repository / 表域拆分。
-  2. `application` 先拆 error / repository traits / provider traits / DTO / util，再按
-     use case 域拆分。
-  3. `api-http` 按 route group 继续拆 handler。
+- 完成内容：
+  - `persistence-sqlite` 已按 connection / migrations / support / repository 表域拆分；
+    root `lib.rs` 保留 module declarations、re-export 和 tests module。
+  - `application` 已拆出 DTO、error、repository/provider traits、util 和 use case 模块；
+    root `lib.rs` 保留 `AppServices` 装配、re-export 和共享 timeline helper。
+  - `api-http` 已按 `routes/` route group 拆分 handler；root `lib.rs` 保留 router 装配、
+    auth、SSE、错误响应和 coordinator 状态。
+  - `api-http` 对 `speech-analysis` 的 Cargo 直接依赖已移除，HTTP 层通过
+    `application` 编排访问语音分析能力。
+- 收口体量：
+  - `crates/persistence-sqlite/src/lib.rs`：约 19 行。
+  - `crates/application/src/lib.rs`：约 609 行。
+  - `crates/api-http/src/lib.rs`：约 496 行。
+  - `crates/domain/src/lib.rs`：约 1317 行，暂不作为 Phase 2.4 前置项。
+- 自动化验证：`cargo test --workspace --quiet` 通过。
 - 规划文档：
   - `.planning/phases/2.3.5-rust-module-decomposition/2.3.5-CONTEXT.md`
   - `.planning/phases/2.3.5-rust-module-decomposition/2.3.5-PLAN.md`
+  - `.planning/phases/2.3.5-rust-module-decomposition/2.3.5-CLOSEOUT.md`
 
 ### Phase 2.4: ChunkTimeline 生成与消费 ⏳ 已规划
 
@@ -250,8 +256,9 @@ progress:
 6. **Sound Pattern 产品原则**：真实发声模式是听力学习的一等对象；PhoneTimeline /
    phonetic findings 的目标不是装饰性 IPA，而是帮助用户从真实声音模式直接建立到
    chunk、文字和意义的映射。
-7. **Phase 2.3.5 架构关口**：Rust 巨型单文件拆分作为 2.3 与 2.4 之间的独立技术债
-   阶段处理，避免 ChunkTimeline / PhoneTimeline 新能力继续堆入数千行 `lib.rs`。
+7. **Phase 2.3.5 架构关口已通过**：Rust 巨型单文件拆分已完成，后续
+   ChunkTimeline / PhoneTimeline 新能力应进入对应 module，而不是继续堆入 root
+   `lib.rs`。
 8. **多语言策略**：产品长期支持主要语言，但不承诺世界所有语言；首批扩展验收语言
    为英语和汉语，先建立语言能力矩阵、语言感知 tokenizer 和 LexicalUnit 模型。
 
@@ -261,14 +268,13 @@ progress:
 
 ## 下一步工作
 
-1. Phase 2.3 Step 1：审计 user-adjusted WordTimeline 的 API / persistence 约定。
-2. 实现句子级 Word Timing Inspector。
-3. 保存并激活 user-adjusted timeline，验证高亮刷新和 LLTimeline export。
-4. 进入 Phase 2.3.5：Rust 巨型单文件拆分，保持行为不变。
-5. 之后进入 Phase 2.4：ChunkTimeline 生成、选择、激活和播放消费 UI。
-6. Phase 2.5 作为后续独立阶段：PhoneTimeline provider benchmark、资源契约和
+1. Phase 2.3：用真实媒体完成 Manual Timeline Review 手动 QA，并决定是否正式收口。
+2. Phase 2.4：ChunkTimeline 生成、选择、激活和播放消费 UI。
+3. Phase 2.4 期间保持 Phase 2.3.5 模块边界：新增 use case / route / repository
+   进入对应模块。
+4. Phase 2.5 作为后续独立阶段：PhoneTimeline provider benchmark、资源契约和
    Sound Pattern View。
-7. Phase 2.6 延后执行：多语言学习基础，先以英语 + 汉语建立扩展范式。
+5. Phase 2.6 延后执行：多语言学习基础，先以英语 + 汉语建立扩展范式。
 
 ## 指标
 

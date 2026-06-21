@@ -98,9 +98,11 @@ pub fn router(state: ApiState) -> Router {
         .with_state(state)
 }
 
-// 具体 handler 按功能拆分到独立文件
-// crates/api-http/src/transcription.rs
-// crates/api-http/src/phonetic_analysis.rs
+// 具体 handler 按功能拆分到 routes/
+// crates/api-http/src/routes/transcription.rs
+// crates/api-http/src/routes/phonetic_analysis.rs
+// crates/api-http/src/routes/timelines.rs
+// crates/api-http/src/routes/vocabulary.rs
 // crates/api-http/src/m18.rs
 // crates/api-http/src/speech_jobs.rs
 ```

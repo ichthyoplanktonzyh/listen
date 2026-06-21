@@ -1,26 +1,26 @@
 # LLPlayerNext — 代码库问题清单
 
-> 最后更新：2026-06-19
+> 最后更新：2026-06-21
 > 记录已知的技术债、脆弱区域和需要关注的问题。**每条必须包含文件路径。**
 
 ---
 
 ## 1. 技术债
 
-### `api-http` 直接耦合 `speech-analysis`
+### `api-http` 直接耦合 `speech-analysis` ✅ 已处理
 
-- **文件**：`crates/api-http/src/transcription.rs`, `crates/api-http/src/phonetic_analysis.rs`, `crates/api-http/src/speech_jobs.rs`
+- **文件**：`crates/api-http/src/routes/transcription.rs`, `crates/api-http/src/routes/phonetic_analysis.rs`, `crates/api-http/src/routes/speech.rs`, `crates/api-http/Cargo.toml`
 - **问题**：HTTP handler 直接调用 `speech_analysis::asr_timing`、`forced_align`、`pause_refinement` 等模块，跳过了 `application` 编排层
 - **影响**：修改语音分析模块可能直接破坏 HTTP API；无法在 `application` 层统一缓存/错误处理/日志
 - **修复思路**：所有语音分析调用通过 `AppServices` trait 方法间接访问；在 `application` 层增加编排逻辑
-- **当前状态**：M2.1 已处理 `crates/api-http/src/transcription.rs` 的
+- **当前状态**：M2.1 / Phase 2.3.5 已处理 `crates/api-http/src/routes/transcription.rs` 的
   `asr_timing` / `forced_align` / `pause_refinement` 编排耦合，转录 word timeline
   精炼已下沉到 `AppServices::refine_transcription_word_timelines`；也已处理
-  `crates/api-http/src/phonetic_analysis.rs` 的 research fixture phone alignment /
+  `crates/api-http/src/routes/phonetic_analysis.rs` 的 research fixture phone alignment /
   finding 生成耦合，改由 `AppServices::build_research_fixture_phonetic_analysis` 构造。
-  `crates/api-http/src/lib.rs` 的 chunk partition 返回类型和 learned prosodic provider
+  `crates/api-http/src/routes/timelines.rs` 的 chunk partition 返回类型和 learned prosodic provider
   装配也已改为通过 application 暴露的类型/方法访问；`crates/api-http/src` 不再直接
-  引用 `speech_analysis`。
+  引用 `speech_analysis`，`api-http` 的 Cargo 直接依赖也已移除。
 
 ### `speech-analysis` 职责过重
 
@@ -29,14 +29,13 @@
 - **影响**：模块间隐式耦合；新贡献者难以定位代码；测试运行慢
 - **修复思路**：M2.0 稳定后考虑拆分为 `acoustic-analysis` + `phonetic-analysis` + `chunk-engine`
 
-### 巨型单文件 crate
+### Rust 模块边界回归风险
 
-- **文件**：`crates/persistence-sqlite/src/lib.rs`（~3940 行）、`crates/application/src/lib.rs`（~2770 行）、`crates/api-http/src/lib.rs`（~2680 行）
-- **问题**：三个核心 crate 的所有逻辑堆在单个 lib.rs 中
-- **影响**：代码导航困难；合并冲突概率高；难以独立测试子模块
-- **修复思路**：按表/用例/路由组拆分为独立模块文件，`lib.rs` 只做 re-export
-- **当前状态**：M2.1 scope cut 后转为独立重构阶段；避免在 app UI 对齐前进行
-  大规模机械拆分。
+- **文件**：`crates/persistence-sqlite/src/lib.rs`、`crates/application/src/lib.rs`、`crates/api-http/src/lib.rs`、`crates/api-http/src/routes/`
+- **问题**：Phase 2.3.5 已完成三个核心 crate 的 mechanical decomposition；后续新增功能如果继续堆回 root `lib.rs`，会重新形成导航和合并冲突风险。
+- **影响**：ChunkTimeline / PhoneTimeline 等后续阶段需要跨 API、application、persistence 修改，模块边界回归会放大变更成本。
+- **安全修改方式**：新增 repository 逻辑进入 `persistence-sqlite/src/<domain>.rs`；新增 use case 进入 `application/src/<use_case>.rs`；新增 HTTP handler 进入 `api-http/src/routes/<route_group>.rs`；`lib.rs` 只保留装配、re-export 和必要共享 glue。
+- **当前状态**：`persistence-sqlite/src/lib.rs` 约 19 行、`application/src/lib.rs` 约 609 行、`api-http/src/lib.rs` 约 496 行；`domain/src/lib.rs` 仍约 1317 行，但暂不阻塞 Phase 2.4。
 
 ### Flutter sidecar 路径查找脆弱
 
@@ -58,7 +57,7 @@
 
 ### Persistence 迁移链
 
-- **文件**：`crates/persistence-sqlite/src/lib.rs`
+- **文件**：`crates/persistence-sqlite/src/migrations.rs`, `crates/persistence-sqlite/src/*.rs`
 - **脆弱原因**：10 个迁移版本线性依赖，任一迁移 bug 可导致数据库损坏
 - **常见故障**：迁移失败后无自动回滚；预迁移备份是手动操作
 - **安全修改方式**：新增迁移前在副本数据库上验证；不修改已有迁移
@@ -112,10 +111,10 @@
 | 操作 | 预估耗时 | 文件 | 改进方向 |
 |---|---|---|---|
 | WhisperX 全量转录（30min 音频） | 5-15 分钟 | `production_pipeline.py` | GPU 加速已启用，CPU 回退慢 |
-| 数据库全量迁移（M1.0→M1.9） | ~5 秒 | `persistence-sqlite/src/lib.rs` | 可接受；大数据量后考虑增量迁移 |
+| 数据库全量迁移（M1.0→M1.9） | ~5 秒 | `persistence-sqlite/src/migrations.rs` | 可接受；大数据量后考虑增量迁移 |
 | Flutter 首次加载字幕 | ~500ms | `subtitle_controller.dart` | 大文件（>5000 句）后考虑虚拟滚动 |
 
 ---
 
-*清单更新：2026-06-18*
+*清单更新：2026-06-21*
 *问题解决后删除对应条目，新发现问题随时追加*

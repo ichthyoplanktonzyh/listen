@@ -1,0 +1,80 @@
+use std::sync::Arc;
+
+use crate::*;
+
+impl AppServices {
+    pub async fn lookup_dictionary(
+        &self,
+        providers: &[Arc<dyn DictionaryProvider>],
+        language: &str,
+        lemma: &str,
+    ) -> Result<DictionaryLookupBundle, ApplicationError> {
+        let language = LanguageCode::parse(language.to_owned())?;
+        let normalized_lemma = normalize_lemma(lemma);
+        require_text(&normalized_lemma, "lemma")?;
+        let mut results = Vec::with_capacity(providers.len());
+        for provider in providers {
+            let info = provider.info();
+            if !info
+                .supported_languages
+                .iter()
+                .any(|value| value == language.as_str())
+            {
+                continue;
+            }
+            if let Some(entry) = self
+                .dictionary
+                .get(&language, &normalized_lemma, &info.id)?
+                .filter(|entry| {
+                    now_ms().saturating_sub(entry.cached_at_ms) < DICTIONARY_CACHE_TTL_MS
+                })
+            {
+                let lookup = serde_json::from_str(&entry.payload_json)
+                    .map_err(|error| ApplicationError::Repository(error.to_string()))?;
+                results.push(DictionaryProviderResult {
+                    provider: info,
+                    lookup: Some(lookup),
+                    error: None,
+                });
+                continue;
+            }
+            match provider.lookup(&language, &normalized_lemma).await {
+                Ok(Some(mut lookup)) => {
+                    lookup.cached_at_ms = now_ms();
+                    self.dictionary.put(&DictionaryEntry {
+                        id: DictionaryEntryId::from_fingerprint(
+                            "dictionary",
+                            &format!("{}:{normalized_lemma}:{}", language.as_str(), info.id),
+                        ),
+                        language: language.clone(),
+                        normalized_lemma: normalized_lemma.clone(),
+                        provider: info.id.clone(),
+                        payload_json: serde_json::to_string(&lookup)
+                            .map_err(|error| ApplicationError::Repository(error.to_string()))?,
+                        cached_at_ms: lookup.cached_at_ms,
+                    })?;
+                    results.push(DictionaryProviderResult {
+                        provider: info,
+                        lookup: Some(lookup),
+                        error: None,
+                    });
+                }
+                Ok(None) => results.push(DictionaryProviderResult {
+                    provider: info,
+                    lookup: None,
+                    error: None,
+                }),
+                Err(error) => results.push(DictionaryProviderResult {
+                    provider: info,
+                    lookup: None,
+                    error: Some(error.to_string()),
+                }),
+            }
+        }
+        Ok(DictionaryLookupBundle {
+            query: lemma.to_owned(),
+            normalized_lemma,
+            results,
+        })
+    }
+}

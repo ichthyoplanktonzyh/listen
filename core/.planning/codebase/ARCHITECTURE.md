@@ -1,6 +1,6 @@
 # LLPlayerNext — 系统架构
 
-> 最后更新：2026-06-18
+> 最后更新：2026-06-21
 > 基于 `feature/forced-alignment-research` 分支
 
 ## 1. 架构全景
@@ -45,13 +45,13 @@ api-http (二进制)
   │   ├── diagnosis-core ──────┤
   │   ├── subtitle-core ───────┤
   │   └── speech-analysis ─────┤
-  ├── speech-analysis (直接) ──┤  ← ⚠️ 待修复：应只通过application
   ├── dictionary-provider ─────┤
   ├── persistence-sqlite ──────┤
   ├── api-events ──────────────┘
   └── domain (直接)
 
 依赖方向：domain ← 领域crates ← application ← api-http/persistence
+api-http 不直接依赖 speech-analysis；语音分析编排通过 application 暴露。
 ```
 
 ## 3. 各 Crate 职责
@@ -94,6 +94,7 @@ api-http (二进制)
 - Repository trait 定义：Media / Subtitle / WordProfile / VocabularyAsset / Transcription / PhoneticAnalysis / DictionaryCache / PlaybackProgress / LexicalEntry
 - Provider trait 定义：DictionaryProvider / LexicalNormalizationProvider
 - `AppServices` 中央编排器：媒体登记、字幕导入、发音分析、词级时间估算、WordTimeline CRUD、LLTimeline 导入导出、词汇资产 CRUD、字典查询缓存、chunk 检测、诊断
+- 源码按 `dto` / `repositories` / `providers` / `error` / use case 模块拆分，root `lib.rs` 只保留 `AppServices` 装配、re-export 和共享 helper
 
 ### `dictionary-provider` — 字典数据源
 - `FreeDictionaryProvider`：HTTP 调用 `api.dictionaryapi.dev`
@@ -101,8 +102,8 @@ api-http (二进制)
 - 词形还原（went → go）+ 短语检测
 
 ### `persistence-sqlite` — SQLite 持久化
-- 10 个迁移文件（0001 ~ 0010）
-- 实现所有 Repository trait 接口
+- `migrations.rs` 管理 schema 版本和迁移 SQL
+- 按 repository / 表域实现所有 Repository trait 接口
 - 自动迁移 + 预迁移备份
 - 词级时间轴资源管理（activation/deactivation/archival）
 - 词汇资产导入导出
@@ -110,6 +111,7 @@ api-http (二进制)
 ### `api-http` — HTTP API 二进制
 - Axum 本地 HTTP 服务（loopback 绑定 + Bearer token 认证）
 - ~78 路由，按领域分组：media / subtitles / pronunciation / word-timings / chunking / vocabulary / dictionary / transcription / phonetic-analysis / speech-batch / learning-resources / lexical-entries / diagnosis
+- HTTP handler 位于 `api-http/src/routes/`；root `lib.rs` 负责 router 装配、认证、SSE 和错误响应
 - SSE 事件流（`/v1/events`）
 - 协调器：TranscriptionCoordinator / PhoneticAnalysisCoordinator / SpeechBatchCoordinator
 
@@ -155,8 +157,6 @@ SRT/VTT 文件 → Flutter 选择文件 → HTTP POST /v1/media/{id}/subtitles
 
 ## 6. 已知架构债务
 
-1. **`api-http` 直接耦合 `speech-analysis`**：transcription.rs 和 phonetic_analysis.rs 中的 handler 直接调用 `speech_analysis::asr_timing`、`forced_align`、`pause_refinement` 等模块。应该通过 `application` 层编排。
+1. **`speech-analysis` 职责过重**：10 个模块覆盖 ASR 后处理、对齐、chunk、音素分析四个不同关注点。M2 稳定后建议拆分。
 
-2. **`speech-analysis` 职责过重**：10 个模块覆盖 ASR 后处理、对齐、chunk、音素分析四个不同关注点。M2 稳定后建议拆分。
-
-3. **Flutter 搜索 Rust binary 路径脆弱**：从 CWD 向上遍历找 `target/release/api-http`，生产发布包应固化路径。
+2. **Flutter 搜索 Rust binary 路径脆弱**：从 CWD 向上遍历找 `target/release/api-http`，生产发布包应固化路径。

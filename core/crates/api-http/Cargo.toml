@@ -7,7 +7,6 @@ rust-version.workspace = true
 [dependencies]
 application = { path = "../application" }
 api-events = { path = "../api-events" }
-speech-analysis = { path = "../speech-analysis" }
 async-stream.workspace = true
 async-trait.workspace = true
 futures-core.workspace = true
