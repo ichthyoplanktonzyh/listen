@@ -12,11 +12,13 @@ class VocabularyScreen extends StatefulWidget {
   const VocabularyScreen({
     super.key,
     required this.api,
+    required this.language,
     required this.onExport,
     required this.onImport,
   });
 
   final LocalApi api;
+  final String language;
   final Future<void> Function() onExport;
   final Future<void> Function() onImport;
 
@@ -43,7 +45,11 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
 
   Future<void> _load() async {
     setState(() => loading = true);
-    final values = await widget.api.listVocabulary(status, search: search);
+    final values = await widget.api.listVocabulary(
+      status,
+      language: widget.language,
+      search: search,
+    );
     if (mounted) {
       setState(() {
         words = values;
@@ -57,6 +63,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     final details = await widget.api.wordDetails(profile['id'] as String);
     final dictionary = await widget.api.lookupDictionary(
       profile['normalized_lemma'] as String,
+      language: widget.language,
     );
     final pronunciation = await widget.api.lookupPronunciation(
       profile['display_form'] as String,
@@ -78,6 +85,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                 profile['normalized_lemma'] as String,
                 profile['display_form'] as String,
                 value,
+                language: widget.language,
               );
               if (context.mounted) Navigator.pop(context);
               await _load();

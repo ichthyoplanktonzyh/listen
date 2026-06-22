@@ -6,9 +6,14 @@ import 'services/api_service.dart';
 import 'localization.dart';
 
 class LearningAssetsScreen extends StatefulWidget {
-  const LearningAssetsScreen({super.key, required this.api});
+  const LearningAssetsScreen({
+    super.key,
+    required this.api,
+    required this.language,
+  });
 
   final LocalApi api;
+  final String language;
 
   @override
   State<LearningAssetsScreen> createState() => _LearningAssetsScreenState();
@@ -28,6 +33,7 @@ class _LearningAssetsScreenState extends State<LearningAssetsScreen> {
 
   Future<void> _refresh() async {
     final next = await widget.api.lexicalEntries(
+      language: widget.language,
       kind: kind,
       status: status,
       search: search,
@@ -374,7 +380,8 @@ Future<void> showPhraseCandidates({
                               trailing: FilledButton(
                                 onPressed: () async {
                                   await api.upsertLexicalEntry({
-                                    'language': 'en',
+                                    'language':
+                                        source['language'] as String? ?? 'en',
                                     'kind': 'phrase',
                                     'canonical_form':
                                         candidate['canonical_form'],
@@ -458,7 +465,7 @@ Future<Map<String, dynamic>?> showPhraseCandidate({
           FilledButton(
             onPressed: () async {
               saved = await api.upsertLexicalEntry({
-                'language': 'en',
+                'language': source['language'] as String? ?? 'en',
                 'kind': 'phrase',
                 'canonical_form': candidate['canonical_form'],
                 'display_form': candidate['display_form'],

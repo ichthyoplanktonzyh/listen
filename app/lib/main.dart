@@ -1847,7 +1847,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _openLearningAssets() async {
     if (api == null) return;
     final occurrence = await Navigator.of(context).push<Map<String, dynamic>>(
-      MaterialPageRoute(builder: (_) => LearningAssetsScreen(api: api!)),
+      MaterialPageRoute(
+        builder: (_) =>
+            LearningAssetsScreen(api: api!, language: _learningLanguage),
+      ),
     );
     if (occurrence != null) await _playOccurrence(occurrence);
   }
@@ -1871,6 +1874,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       api: api!,
       sentenceId: cue.id,
       source: {
+        'language': _learningLanguage,
         'media_id': playerController.mediaId,
         'sentence_id': cue.id,
         'sentence_text': cue.text,
@@ -1914,6 +1918,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   as Map<String, dynamic>?)?['status']
               as String?,
       source: {
+        'language': _learningLanguage,
         'media_id': playerController.mediaId,
         'sentence_id': cue.id,
         'sentence_text': cue.text,
@@ -1954,7 +1959,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     controller.dispose();
     if (corrected == null || corrected.isEmpty) return;
-    await api!.correctLemma(token.normalized!, corrected);
+    await api!.correctLemma(
+      token.normalized!,
+      corrected,
+      language: _learningLanguage,
+    );
     if (mounted) setState(() => status = l.text('lemmaCorrectionSaved'));
   }
 
@@ -2063,7 +2072,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       token.normalized!,
       token.text,
       wordStatus,
-      _sourceFor(token, cue),
+      language: _learningLanguage,
+      source: _sourceFor(token, cue),
     );
     learningController.updateSingleWordProfile(token.normalized!, profile);
     await _refreshDiagnosis();
@@ -2091,7 +2101,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         .toSet()
         .toList();
     if (lemmas == null || api == null) return;
-    final values = await api!.readWordProfiles(lemmas);
+    final values = await api!.readWordProfiles(
+      lemmas,
+      language: _learningLanguage,
+    );
     final profiles = Map<String, Map<String, dynamic>>.fromEntries(
       values.map(
         (profile) => MapEntry(profile['normalized_lemma'] as String, profile),
@@ -2102,7 +2115,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _loadPhraseProfiles() async {
     if (api == null) return;
-    final values = await api!.lexicalEntries(kind: 'phrase');
+    final values = await api!.lexicalEntries(
+      kind: 'phrase',
+      language: _learningLanguage,
+    );
     if (!mounted) return;
     final profiles = Map<String, Map<String, dynamic>>.fromEntries(
       values.map((details) {
@@ -2118,9 +2134,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (lemma == null || api == null) return;
     try {
       var profile = learningController.wordProfiles[lemma];
-      profile ??= await api!.updateWordProfile(lemma, token.text, null);
+      profile ??= await api!.updateWordProfile(
+        lemma,
+        token.text,
+        null,
+        language: _learningLanguage,
+      );
       final details = await api!.wordDetails(profile['id'] as String);
-      final dictionary = await api!.lookupDictionary(lemma);
+      final dictionary = await api!.lookupDictionary(
+        lemma,
+        language: _learningLanguage,
+      );
       final pronunciation = await api!.lookupPronunciation(token.text);
       if (!mounted) return;
       learningController.updateSingleWordProfile(lemma, profile);
@@ -2144,7 +2168,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         token!.normalized!,
         token.text,
         selected,
-        _sourceFor(token, cue),
+        language: _learningLanguage,
+        source: _sourceFor(token, cue),
       );
       final details = await api!.wordDetails(profile['id'] as String);
       learningController.updateSingleWordProfile(token.normalized!, profile);
@@ -2196,10 +2221,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await _refreshDiagnosis();
   }
 
+  /// Resolves the learning language for vocabulary, dictionary, source-snapshot
+  /// and diagnosis queries. Priority (Phase 2.6 Step 4): the active primary
+  /// subtitle track's language, then a safe `en` fallback that the UI can still
+  /// change. User-selected and media-metadata sources are reserved for a later
+  /// refinement and intentionally not wired yet.
+  String get _learningLanguage =>
+      subtitleController.primaryTrack?.language ?? 'en';
+
   Map<String, dynamic>? _sourceFor(SubtitleToken token, Cue cue) {
     if (playerController.mediaFingerprint == null) return null;
     return {
-      'language': 'en',
+      'language': _learningLanguage,
       'normalized_lemma': token.normalized,
       'media_id': playerController.mediaId,
       'sentence_id': cue.id,
@@ -2220,6 +2253,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       MaterialPageRoute(
         builder: (_) => VocabularyScreen(
           api: service,
+          language: _learningLanguage,
           onExport: _exportVocabulary,
           onImport: _importVocabulary,
         ),
@@ -2496,6 +2530,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (confirmed != true) return;
     final result = await service.importExternalVocabulary(
       entries,
+      language: _learningLanguage,
       defaultStatus: defaultStatus,
       overwriteExisting: overwrite,
     );

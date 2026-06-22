@@ -54,6 +54,7 @@ class SubtitleTrack {
     required this.cues,
     this.mediaId,
     this.fingerprint,
+    this.language,
     this.source = 'subtitle',
     this.status = 'available',
   });
@@ -62,6 +63,7 @@ class SubtitleTrack {
     id: json['id'] as String,
     mediaId: json['media_id'] as String?,
     fingerprint: json['fingerprint'] as String?,
+    language: json['language'] as String?,
     source: json['source'] as String? ?? 'subtitle',
     status: json['status'] as String? ?? 'available',
     cues: (json['sentences'] as List<dynamic>)
@@ -72,6 +74,11 @@ class SubtitleTrack {
   final String id;
   final String? mediaId;
   final String? fingerprint;
+
+  /// Learning language of this track (e.g. `en`, `zh`), resolved by the core at
+  /// import time. Drives which language the vocabulary/dictionary/diagnosis
+  /// queries run under; null when the core could not resolve one.
+  final String? language;
   final String source;
   final String status;
   final List<Cue> cues;

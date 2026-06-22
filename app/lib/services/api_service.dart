@@ -128,13 +128,17 @@ class LocalApi {
       (await _request('GET', '/v1/media/${Uri.encodeComponent(mediaId)}'))
           as Map<String, dynamic>;
 
+  /// Imports a subtitle file. When [language] is null the core detects the
+  /// learning language from the subtitle script (so a Chinese subtitle is
+  /// segmented as Chinese), instead of assuming English.
   Future<Map<String, dynamic>> importSubtitle(
     String mediaId,
-    String path,
-  ) async =>
+    String path, {
+    String? language,
+  }) async =>
       (await _request('POST', '/v1/media/$mediaId/subtitles', {
             'path': path,
-            'language': 'en',
+            'language': ?language,
           }))
           as Map<String, dynamic>;
 
@@ -517,11 +521,12 @@ class LocalApi {
           as Map<String, dynamic>;
 
   Future<List<Map<String, dynamic>>> readWordProfiles(
-    List<String> lemmas,
-  ) async {
+    List<String> lemmas, {
+    required String language,
+  }) async {
     final values =
         await _request('POST', '/v1/word-profiles/batch', {
-              'language': 'en',
+              'language': language,
               'lemmas': lemmas,
             })
             as List<dynamic>;
@@ -531,11 +536,12 @@ class LocalApi {
   Future<Map<String, dynamic>> updateWordProfile(
     String lemma,
     String displayForm,
-    String? status, [
+    String? status, {
+    required String language,
     Map<String, dynamic>? source,
-  ]) async =>
+  }) async =>
       (await _request('PUT', '/v1/word-profiles', {
-            'language': 'en',
+            'language': language,
             'lemma': lemma,
             'display_form': displayForm,
             'status': status,
@@ -573,12 +579,13 @@ class LocalApi {
 
   Future<List<Map<String, dynamic>>> listVocabulary(
     String status, {
+    required String language,
     String search = '',
   }) async {
     final values =
         await _request(
               'GET',
-              '/v1/vocabulary?language=en&status=$status&search=${Uri.encodeQueryComponent(search)}&limit=200&offset=0',
+              '/v1/vocabulary?language=${Uri.encodeQueryComponent(language)}&status=$status&search=${Uri.encodeQueryComponent(search)}&limit=200&offset=0',
             )
             as List<dynamic>;
     return values.cast<Map<String, dynamic>>();
@@ -601,11 +608,12 @@ class LocalApi {
 
   Future<Map<String, dynamic>> importExternalVocabulary(
     List<Map<String, dynamic>> entries, {
+    required String language,
     String? defaultStatus,
     bool overwriteExisting = false,
   }) async =>
       (await _request('POST', '/v1/vocabulary/import-external', {
-            'language': 'en',
+            'language': language,
             'entries': entries,
             'default_status': defaultStatus,
             'overwrite_existing': overwriteExisting,
@@ -625,10 +633,13 @@ class LocalApi {
     });
   }
 
-  Future<Map<String, dynamic>> lookupDictionary(String lemma) async =>
+  Future<Map<String, dynamic>> lookupDictionary(
+    String lemma, {
+    required String language,
+  }) async =>
       (await _request(
             'GET',
-            '/v1/dictionary?language=en&lemma=${Uri.encodeQueryComponent(lemma)}',
+            '/v1/dictionary?language=${Uri.encodeQueryComponent(language)}&lemma=${Uri.encodeQueryComponent(lemma)}',
           ))
           as Map<String, dynamic>;
 
@@ -640,12 +651,13 @@ class LocalApi {
           as Map<String, dynamic>;
 
   Future<List<Map<String, dynamic>>> lexicalEntries({
+    required String language,
     String? kind,
     String? status,
     String search = '',
   }) async {
     final query = <String, String>{
-      'language': 'en',
+      'language': language,
       'search': search,
       'limit': '200',
       'offset': '0',
@@ -667,19 +679,23 @@ class LocalApi {
       (await _request('PUT', '/v1/lexical-entries', value))
           as Map<String, dynamic>;
 
-  Future<Map<String, dynamic>> normalizeLexical(String value) async =>
+  Future<Map<String, dynamic>> normalizeLexical(
+    String value, {
+    required String language,
+  }) async =>
       (await _request('POST', '/v1/lexical-normalization', {
-            'language': 'en',
+            'language': language,
             'value': value,
           }))
           as Map<String, dynamic>;
 
   Future<Map<String, dynamic>> correctLemma(
     String original,
-    String corrected,
-  ) async =>
+    String corrected, {
+    required String language,
+  }) async =>
       (await _request('POST', '/v1/lexical-normalization/correct', {
-            'language': 'en',
+            'language': language,
             'original': original,
             'corrected': corrected,
           }))
