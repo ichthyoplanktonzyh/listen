@@ -13,6 +13,7 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
     required this.activeTrack,
     required this.timelineDocument,
     required this.wordTimelineSummaries,
+    required this.phoneTimelineSummaries,
     required this.chunkTimelineSummaries,
     required this.timelineResourceError,
     required this.onImportSubtitle,
@@ -26,6 +27,9 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
     required this.onExportLLTimeline,
     required this.onActivateWordTimeline,
     required this.onManualReviewTimeline,
+    required this.onActivatePhoneTimeline,
+    required this.onArchivePhoneTimeline,
+    required this.onDeletePhoneTimeline,
     required this.onGenerateChunkTimeline,
     required this.onActivateChunkTimeline,
     required this.onArchiveChunkTimeline,
@@ -38,6 +42,7 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
   final SubtitleTrack? activeTrack;
   final LLTimelineDocument? timelineDocument;
   final List<WordTimelineSummary> wordTimelineSummaries;
+  final List<PhoneTimelineSummary> phoneTimelineSummaries;
   final List<ChunkTimelineSummary> chunkTimelineSummaries;
   final String? timelineResourceError;
   final Future<void> Function() onImportSubtitle;
@@ -51,6 +56,9 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
   final Future<void> Function(SubtitleTrack track) onExportLLTimeline;
   final Future<void> Function(String timelineId) onActivateWordTimeline;
   final Future<void> Function() onManualReviewTimeline;
+  final Future<void> Function(String timelineId) onActivatePhoneTimeline;
+  final Future<void> Function(String timelineId) onArchivePhoneTimeline;
+  final Future<void> Function(String timelineId) onDeletePhoneTimeline;
   final Future<void> Function() onGenerateChunkTimeline;
   final Future<void> Function(String timelineId) onActivateChunkTimeline;
   final Future<void> Function(String timelineId) onArchiveChunkTimeline;
@@ -137,12 +145,16 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
           TimelineResourceSummaryPanel(
             document: timelineDocument,
             summaries: wordTimelineSummaries,
+            phoneSummaries: phoneTimelineSummaries,
             chunkSummaries: chunkTimelineSummaries,
             error: timelineResourceError,
             onImport: onImportLLTimeline,
             onRefresh: onRefreshResources,
             onActivate: onActivateWordTimeline,
             onManualReview: onManualReviewTimeline,
+            onActivatePhoneTimeline: onActivatePhoneTimeline,
+            onArchivePhoneTimeline: onArchivePhoneTimeline,
+            onDeletePhoneTimeline: onDeletePhoneTimeline,
             onGenerateChunkTimeline: onGenerateChunkTimeline,
             onActivateChunkTimeline: onActivateChunkTimeline,
             onArchiveChunkTimeline: onArchiveChunkTimeline,

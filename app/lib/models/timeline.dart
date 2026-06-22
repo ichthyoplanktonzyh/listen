@@ -507,11 +507,184 @@ class ChunkTimelineSummary {
   bool get isActive => status == 'active';
 }
 
+class PhoneTimeline {
+  const PhoneTimeline({
+    required this.id,
+    required this.trackId,
+    required this.mediaId,
+    required this.providerId,
+    required this.providerVersion,
+    required this.phoneSet,
+    required this.precision,
+    required this.createdBy,
+    required this.status,
+    required this.metricsJson,
+    required this.phones,
+    required this.alignments,
+    required this.findings,
+    required this.createdAt,
+    required this.updatedAt,
+    this.sentenceId,
+    this.parentWordTimelineId,
+    this.parentPhoneticAnalysisId,
+    this.modelId,
+    this.modelRevision,
+  });
+
+  factory PhoneTimeline.fromJson(Map<String, dynamic> json) => PhoneTimeline(
+    id: json['id'] as String,
+    trackId: json['track_id'] as String,
+    mediaId: json['media_id'] as String,
+    sentenceId: json['sentence_id'] as String?,
+    parentWordTimelineId: json['parent_word_timeline_id'] as String?,
+    parentPhoneticAnalysisId: json['parent_phonetic_analysis_id'] as String?,
+    providerId: json['provider_id'] as String,
+    providerVersion: json['provider_version'] as String,
+    modelId: json['model_id'] as String?,
+    modelRevision: json['model_revision'] as String?,
+    phoneSet: json['phone_set'] as String,
+    precision: json['precision'] as String,
+    createdBy: json['created_by'] as String,
+    status: json['status'] as String,
+    metricsJson: Map<String, dynamic>.from(
+      (json['metrics_json'] as Map?) ?? const {},
+    ),
+    phones: ((json['phones'] as List<dynamic>?) ?? const [])
+        .map((value) => DetectedPhone.fromJson(value as Map<String, dynamic>))
+        .toList(growable: false),
+    alignments: ((json['alignments'] as List<dynamic>?) ?? const [])
+        .cast<Map<String, dynamic>>()
+        .toList(growable: false),
+    findings: ((json['findings'] as List<dynamic>?) ?? const [])
+        .cast<Map<String, dynamic>>()
+        .toList(growable: false),
+    createdAt: Duration(milliseconds: json['created_at_ms'] as int),
+    updatedAt: Duration(milliseconds: json['updated_at_ms'] as int),
+  );
+
+  final String id;
+  final String trackId;
+  final String mediaId;
+  final String? sentenceId;
+  final String? parentWordTimelineId;
+  final String? parentPhoneticAnalysisId;
+  final String providerId;
+  final String providerVersion;
+  final String? modelId;
+  final String? modelRevision;
+  final String phoneSet;
+  final String precision;
+  final String createdBy;
+  final String status;
+  final Map<String, dynamic> metricsJson;
+  final List<DetectedPhone> phones;
+  final List<Map<String, dynamic>> alignments;
+  final List<Map<String, dynamic>> findings;
+  final Duration createdAt;
+  final Duration updatedAt;
+
+  bool get isActive => status == 'active';
+
+  Map<String, dynamic> toSoundPatternJson() => {
+    'id': id,
+    'sentence_id': sentenceId,
+    'provider_id': providerId,
+    'provider_version': providerVersion,
+    'model_revision': modelRevision ?? providerVersion,
+    'phone_set': phoneSet,
+    'precision': precision,
+    'metrics_json': metricsJson,
+    'detected_phones': phones.map((value) => value.toJson()).toList(),
+    'alignments': alignments,
+    'findings': findings,
+  };
+}
+
+class PhoneTimelineSummary {
+  const PhoneTimelineSummary({
+    required this.id,
+    required this.trackId,
+    required this.mediaId,
+    required this.providerId,
+    required this.providerVersion,
+    required this.phoneSet,
+    required this.precision,
+    required this.createdBy,
+    required this.status,
+    required this.phoneCount,
+    required this.findingCount,
+    required this.canActivate,
+    required this.canArchive,
+    required this.canDelete,
+    this.sentenceId,
+    this.parentWordTimelineId,
+    this.parentPhoneticAnalysisId,
+    this.modelId,
+    this.modelRevision,
+    this.start,
+    this.end,
+    this.averageConfidence,
+  });
+
+  factory PhoneTimelineSummary.fromJson(Map<String, dynamic> json) =>
+      PhoneTimelineSummary(
+        id: json['id'] as String,
+        trackId: json['track_id'] as String,
+        mediaId: json['media_id'] as String,
+        sentenceId: json['sentence_id'] as String?,
+        parentWordTimelineId: json['parent_word_timeline_id'] as String?,
+        parentPhoneticAnalysisId:
+            json['parent_phonetic_analysis_id'] as String?,
+        providerId: json['provider_id'] as String,
+        providerVersion: json['provider_version'] as String,
+        modelId: json['model_id'] as String?,
+        modelRevision: json['model_revision'] as String?,
+        phoneSet: json['phone_set'] as String,
+        precision: json['precision'] as String,
+        createdBy: json['created_by'] as String,
+        status: json['status'] as String,
+        phoneCount: json['phone_count'] as int,
+        findingCount: json['finding_count'] as int,
+        start: _durationFromNullableMs(json['start_ms'] as int?),
+        end: _durationFromNullableMs(json['end_ms'] as int?),
+        averageConfidence: (json['average_confidence'] as num?)?.toDouble(),
+        canActivate: json['can_activate'] as bool,
+        canArchive: json['can_archive'] as bool,
+        canDelete: json['can_delete'] as bool,
+      );
+
+  final String id;
+  final String trackId;
+  final String mediaId;
+  final String? sentenceId;
+  final String? parentWordTimelineId;
+  final String? parentPhoneticAnalysisId;
+  final String providerId;
+  final String providerVersion;
+  final String? modelId;
+  final String? modelRevision;
+  final String phoneSet;
+  final String precision;
+  final String createdBy;
+  final String status;
+  final int phoneCount;
+  final int findingCount;
+  final Duration? start;
+  final Duration? end;
+  final double? averageConfidence;
+  final bool canActivate;
+  final bool canArchive;
+  final bool canDelete;
+
+  bool get isActive => status == 'active';
+}
+
 class LLTimelineDocument {
   const LLTimelineDocument({
     required this.schema,
     required this.metadata,
     required this.activeWordTimelineId,
+    required this.activePhoneTimelineId,
     required this.activeChunkTimelineId,
     required this.artifacts,
   });
@@ -523,6 +696,7 @@ class LLTimelineDocument {
           json['metadata'] as Map<String, dynamic>,
         ),
         activeWordTimelineId: json['active_word_timeline_id'] as String?,
+        activePhoneTimelineId: json['active_phone_timeline_id'] as String?,
         activeChunkTimelineId: json['active_chunk_timeline_id'] as String?,
         artifacts: ((json['artifacts'] as List<dynamic>?) ?? const [])
             .map(
@@ -535,6 +709,7 @@ class LLTimelineDocument {
   final String schema;
   final LLTimelineMetadata metadata;
   final String? activeWordTimelineId;
+  final String? activePhoneTimelineId;
   final String? activeChunkTimelineId;
   final List<LLTimelineArtifact> artifacts;
 
@@ -542,6 +717,7 @@ class LLTimelineDocument {
       metadata.trackSource == 'lltimeline-json-v1' ||
       artifacts.isNotEmpty ||
       activeWordTimelineId != null ||
+      activePhoneTimelineId != null ||
       activeChunkTimelineId != null;
 }
 
@@ -634,6 +810,17 @@ class DetectedPhone {
     provider: json['provider_id'] as String,
     modelRevision: json['model_revision'] as String,
   );
+
+  Map<String, dynamic> toJson() => {
+    'symbol': symbol,
+    'phone_set': phoneSet,
+    'start_ms': start.inMilliseconds,
+    'end_ms': end.inMilliseconds,
+    'confidence': confidence,
+    'token_index': tokenIndex,
+    'provider_id': provider,
+    'model_revision': modelRevision,
+  };
 
   final String symbol;
   final String phoneSet;

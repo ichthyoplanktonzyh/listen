@@ -9,12 +9,16 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
     super.key,
     required this.document,
     required this.summaries,
+    required this.phoneSummaries,
     required this.chunkSummaries,
     required this.error,
     required this.onImport,
     required this.onRefresh,
     required this.onActivate,
     required this.onManualReview,
+    required this.onActivatePhoneTimeline,
+    required this.onArchivePhoneTimeline,
+    required this.onDeletePhoneTimeline,
     required this.onGenerateChunkTimeline,
     required this.onActivateChunkTimeline,
     required this.onArchiveChunkTimeline,
@@ -24,12 +28,16 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
 
   final LLTimelineDocument? document;
   final List<WordTimelineSummary> summaries;
+  final List<PhoneTimelineSummary> phoneSummaries;
   final List<ChunkTimelineSummary> chunkSummaries;
   final String? error;
   final Future<void> Function() onImport;
   final Future<void> Function() onRefresh;
   final Future<void> Function(String timelineId) onActivate;
   final Future<void> Function() onManualReview;
+  final Future<void> Function(String timelineId) onActivatePhoneTimeline;
+  final Future<void> Function(String timelineId) onArchivePhoneTimeline;
+  final Future<void> Function(String timelineId) onDeletePhoneTimeline;
   final Future<void> Function() onGenerateChunkTimeline;
   final Future<void> Function(String timelineId) onActivateChunkTimeline;
   final Future<void> Function(String timelineId) onArchiveChunkTimeline;
@@ -40,12 +48,16 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final active = summaries.where((value) => value.isActive).firstOrNull;
+    final activePhone = phoneSummaries
+        .where((value) => value.isActive)
+        .firstOrNull;
     final activeChunk = chunkSummaries
         .where((value) => value.isActive)
         .firstOrNull;
     final hasResource =
         document?.importedResource == true ||
         summaries.isNotEmpty ||
+        phoneSummaries.isNotEmpty ||
         chunkSummaries.isNotEmpty;
     final artifacts = document?.artifacts ?? const <LLTimelineArtifact>[];
     return DecoratedBox(
@@ -139,6 +151,8 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
             const SizedBox(height: 10),
             _ActiveTimelineLine(active: active),
             const SizedBox(height: 6),
+            _ActivePhoneLine(active: activePhone),
+            const SizedBox(height: 6),
             _ActiveChunkLine(active: activeChunk),
             const SizedBox(height: 8),
             Wrap(
@@ -161,6 +175,29 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                   onPressed: hasResource ? onExportLLTimeline : null,
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: phoneSummaries.isEmpty ? 34 : 74,
+              child: phoneSummaries.isEmpty
+                  ? Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        l.text('noPhoneTimelineCandidates'),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    )
+                  : ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: phoneSummaries.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 8),
+                      itemBuilder: (context, index) => _PhoneCandidateTile(
+                        summary: phoneSummaries[index],
+                        onActivate: onActivatePhoneTimeline,
+                        onArchive: onArchivePhoneTimeline,
+                        onDelete: onDeletePhoneTimeline,
+                      ),
+                    ),
             ),
             const SizedBox(height: 8),
             SizedBox(
@@ -308,6 +345,40 @@ class _ActiveChunkLine extends StatelessWidget {
   }
 }
 
+class _ActivePhoneLine extends StatelessWidget {
+  const _ActivePhoneLine({required this.active});
+
+  final PhoneTimelineSummary? active;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final text = active == null
+        ? l.text('activePhoneTimelineMissing')
+        : '${active!.providerId} · ${active!.phoneCount} ${l.text('phones')} · ${active!.precision}';
+    return Row(
+      children: [
+        Icon(
+          active == null ? Icons.hearing_outlined : Icons.graphic_eq,
+          size: 16,
+          color: active == null
+              ? const Color(0xff8fa1b3)
+              : const Color(0xff6dd6c3),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _CandidateTile extends StatelessWidget {
   const _CandidateTile({required this.summary, required this.onActivate});
 
@@ -390,6 +461,109 @@ class _CandidateTile extends StatelessWidget {
                       ? () => onActivate(summary.id)
                       : null,
                 ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PhoneCandidateTile extends StatelessWidget {
+  const _PhoneCandidateTile({
+    required this.summary,
+    required this.onActivate,
+    required this.onArchive,
+    required this.onDelete,
+  });
+
+  final PhoneTimelineSummary summary;
+  final Future<void> Function(String timelineId) onActivate;
+  final Future<void> Function(String timelineId) onArchive;
+  final Future<void> Function(String timelineId) onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final confidence = summary.averageConfidence == null
+        ? null
+        : '${(summary.averageConfidence! * 100).round()}%';
+    return ConstrainedBox(
+      constraints: const BoxConstraints.tightFor(width: 250, height: 74),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: summary.isActive
+              ? const Color(0xff18332f)
+              : const Color(0xff171f28),
+          border: Border.all(
+            color: summary.isActive
+                ? const Color(0xff38b88f)
+                : const Color(0xff2b3642),
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              Icon(
+                summary.isActive ? Icons.check_circle : Icons.graphic_eq,
+                size: 18,
+                color: summary.isActive
+                    ? const Color(0xff6dd6c3)
+                    : const Color(0xff8fa1b3),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      summary.providerId,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      [
+                        '${summary.phoneCount} ${l.text('phones')}',
+                        summary.precision,
+                        ?confidence,
+                      ].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuButton<String>(
+                tooltip: l.text('resourceActions'),
+                onSelected: (value) {
+                  if (value == 'activate') onActivate(summary.id);
+                  if (value == 'archive') onArchive(summary.id);
+                  if (value == 'delete') onDelete(summary.id);
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'activate',
+                    enabled: summary.canActivate && !summary.isActive,
+                    child: Text(l.text('activateTimeline')),
+                  ),
+                  PopupMenuItem(
+                    value: 'archive',
+                    enabled: summary.canArchive,
+                    child: Text(l.text('archive')),
+                  ),
+                  PopupMenuItem(
+                    value: 'delete',
+                    enabled: summary.canDelete,
+                    child: Text(l.text('delete')),
+                  ),
+                ],
               ),
             ],
           ),

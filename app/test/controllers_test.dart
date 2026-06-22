@@ -195,6 +195,7 @@ void main() {
           extra: {'track_source': 'lltimeline-json-v1'},
         ),
         activeWordTimelineId: 'timeline-active',
+        activePhoneTimelineId: null,
         activeChunkTimelineId: null,
         artifacts: [
           LLTimelineArtifact(kind: 'alignment_diagnostics', payload: {}),
@@ -221,6 +222,7 @@ void main() {
       final controller = SubtitleController()
         ..setTimelineResource(
           summaries: summaries,
+          phoneSummaries: const [],
           chunkSummaries: const [],
           document: document,
         )

@@ -538,6 +538,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
       subtitleController.setTimelineResource(
         summaries: subtitleController.wordTimelineSummaries,
+        phoneSummaries: subtitleController.phoneTimelineSummaries,
         chunkSummaries: subtitleController.chunkTimelineSummaries,
         document: LLTimelineDocument.fromJson(decoded),
         error: subtitleController.timelineResourceError,
@@ -645,9 +646,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       'pronunciation provider',
       errors,
     );
-    final phoneticAnalyses = await _loadOptionalResourceCapability(
-      () => service.trackPhoneticAnalyses(trackId),
-      'phone',
+    final soundPatterns = await _loadSoundPatternAnalyses(
+      service,
+      trackId,
       errors,
     );
     final partitions = await _loadChunkPartitions(service, trackId, errors);
@@ -671,9 +672,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ),
       ),
       pronunciationProviders: providers,
-      phoneticAnalysisBySentence: latestPhoneticAnalysesBySentence(
-        phoneticAnalyses,
-      ),
+      phoneticAnalysisBySentence: soundPatterns,
     );
     subtitleController.updateCurrentWord(
       playerController.position,
@@ -693,6 +692,35 @@ class _PlayerScreenState extends State<PlayerScreen> {
             '${errors.join('; ')}',
       );
     }
+  }
+
+  Future<Map<String, Map<String, dynamic>>> _loadSoundPatternAnalyses(
+    LocalApi service,
+    String trackId,
+    List<String> errors,
+  ) async {
+    final active = subtitleController.phoneTimelineSummaries
+        .where((summary) => summary.isActive)
+        .firstOrNull;
+    if (active != null) {
+      try {
+        final timeline = PhoneTimeline.fromJson(
+          await service.phoneTimeline(active.id),
+        );
+        final sentenceId = timeline.sentenceId;
+        if (sentenceId != null) {
+          return {sentenceId: timeline.toSoundPatternJson()};
+        }
+      } catch (error) {
+        errors.add('phone timeline: $error');
+      }
+    }
+    final phoneticAnalyses = await _loadOptionalResourceCapability(
+      () => service.trackPhoneticAnalyses(trackId),
+      'phone',
+      errors,
+    );
+    return latestPhoneticAnalysesBySentence(phoneticAnalyses);
   }
 
   Future<List<Map<String, dynamic>>> _loadPronunciationEnhancements(
@@ -748,10 +776,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (service == null) return;
     final errors = <String>[];
     final previousSummaries = subtitleController.wordTimelineSummaries;
+    final previousPhoneSummaries = subtitleController.phoneTimelineSummaries;
     final previousChunkSummaries = subtitleController.chunkTimelineSummaries;
     final previousDocument = subtitleController.llTimelineDocument;
 
     late List<WordTimelineSummary> summaries;
+    late List<PhoneTimelineSummary> phoneSummaries;
     late List<ChunkTimelineSummary> chunkSummaries;
     LLTimelineDocument? document;
 
@@ -763,6 +793,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } catch (error) {
       errors.add('summary: $error');
       summaries = previousSummaries;
+    }
+
+    try {
+      final values = await service.trackPhoneTimelineSummaries(trackId);
+      phoneSummaries = values
+          .map((raw) => PhoneTimelineSummary.fromJson(raw))
+          .toList(growable: false);
+    } catch (error) {
+      errors.add('phone summary: $error');
+      phoneSummaries = previousPhoneSummaries;
     }
 
     try {
@@ -790,8 +830,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
     final hasTimelineData =
-        summaries.isNotEmpty || chunkSummaries.isNotEmpty || document != null;
-    if (!hasTimelineData && errors.length == 3) {
+        summaries.isNotEmpty ||
+        phoneSummaries.isNotEmpty ||
+        chunkSummaries.isNotEmpty ||
+        document != null;
+    if (!hasTimelineData && errors.length == 4) {
       subtitleController.setTimelineResourceError(
         'Timeline resource unavailable: ${errors.join('; ')}',
       );
@@ -799,6 +842,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     subtitleController.setTimelineResource(
       summaries: summaries,
+      phoneSummaries: phoneSummaries,
       chunkSummaries: chunkSummaries,
       document: document,
       error: errors.isEmpty
@@ -855,9 +899,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
           'word',
           errors,
         );
-        final phoneticAnalyses = await _loadOptionalResourceCapability(
-          () => service.trackPhoneticAnalyses(track.id),
-          'phone',
+        final phoneSummaries = await _loadOptionalResourceCapability(
+          () => service.trackPhoneTimelineSummaries(track.id),
+          'phone timeline',
           errors,
         );
         final chunkSummaries = await _loadOptionalResourceCapability(
@@ -874,7 +918,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
               0,
               (total, raw) => total + (raw['chunk_count'] as int? ?? 0),
             ),
-            phoneCount: _resourcePhoneCount(phoneticAnalyses),
+            phoneCount: phoneSummaries.fold<int>(
+              0,
+              (total, raw) => total + (raw['phone_count'] as int? ?? 0),
+            ),
             error: errors.isEmpty ? null : errors.join('; '),
           ),
         );
@@ -894,15 +941,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
       errors.add('$label: $error');
       return const [];
     }
-  }
-
-  int _resourcePhoneCount(List<Map<String, dynamic>> analyses) {
-    var count = 0;
-    for (final analysis in analyses) {
-      final phones = analysis['detected_phones'];
-      if (phones is List<dynamic>) count += phones.length;
-    }
-    return count;
   }
 
   Future<void> _refreshSubtitleResources() async {
@@ -1134,6 +1172,58 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } catch (error) {
       if (mounted) {
         setState(() => status = 'ChunkTimeline delete failed: $error');
+      }
+    }
+  }
+
+  Future<void> _activatePhoneTimeline(String timelineId) async {
+    final service = api;
+    final trackId = subtitleController.primaryTrack?.id;
+    if (service == null || trackId == null) return;
+    try {
+      setState(() => status = 'Activating PhoneTimeline...');
+      await service.activatePhoneTimeline(timelineId);
+      if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
+      await _loadSpeechEnhancements(trackId);
+      await _loadSubtitleResources(updateStatus: false);
+      if (mounted) setState(() => status = 'PhoneTimeline activated');
+    } catch (error) {
+      if (mounted) {
+        setState(() => status = 'PhoneTimeline activation failed: $error');
+      }
+    }
+  }
+
+  Future<void> _archivePhoneTimeline(String timelineId) async {
+    final service = api;
+    final trackId = subtitleController.primaryTrack?.id;
+    if (service == null || trackId == null) return;
+    try {
+      await service.archivePhoneTimeline(timelineId);
+      if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
+      await _loadSpeechEnhancements(trackId);
+      await _loadSubtitleResources(updateStatus: false);
+      if (mounted) setState(() => status = 'PhoneTimeline archived');
+    } catch (error) {
+      if (mounted) {
+        setState(() => status = 'PhoneTimeline archive failed: $error');
+      }
+    }
+  }
+
+  Future<void> _deletePhoneTimeline(String timelineId) async {
+    final service = api;
+    final trackId = subtitleController.primaryTrack?.id;
+    if (service == null || trackId == null) return;
+    try {
+      await service.deletePhoneTimeline(timelineId);
+      if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
+      await _loadSpeechEnhancements(trackId);
+      await _loadSubtitleResources(updateStatus: false);
+      if (mounted) setState(() => status = 'PhoneTimeline deleted');
+    } catch (error) {
+      if (mounted) {
+        setState(() => status = 'PhoneTimeline delete failed: $error');
       }
     }
   }
@@ -2213,6 +2303,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
           onExportLLTimeline: _exportLLTimelineResource,
           onActivateWordTimeline: _activateWordTimeline,
           onManualReviewTimeline: _openManualReviewTimeline,
+          onActivatePhoneTimeline: _activatePhoneTimeline,
+          onArchivePhoneTimeline: _archivePhoneTimeline,
+          onDeletePhoneTimeline: _deletePhoneTimeline,
           onGenerateChunkTimeline: _generateChunkTimeline,
           onActivateChunkTimeline: _activateChunkTimeline,
           onArchiveChunkTimeline: _archiveChunkTimeline,
@@ -2928,6 +3021,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     activeTrack: subtitleController.primaryTrack,
     timelineDocument: subtitleController.llTimelineDocument,
     wordTimelineSummaries: subtitleController.wordTimelineSummaries,
+    phoneTimelineSummaries: subtitleController.phoneTimelineSummaries,
     chunkTimelineSummaries: subtitleController.chunkTimelineSummaries,
     timelineResourceError: subtitleController.timelineResourceError,
     onImportSubtitle: () async => _openSubtitle(secondary: false),
@@ -2941,6 +3035,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     onExportLLTimeline: _exportLLTimelineResource,
     onActivateWordTimeline: _activateWordTimeline,
     onManualReviewTimeline: _openManualReviewTimeline,
+    onActivatePhoneTimeline: _activatePhoneTimeline,
+    onArchivePhoneTimeline: _archivePhoneTimeline,
+    onDeletePhoneTimeline: _deletePhoneTimeline,
     onGenerateChunkTimeline: _generateChunkTimeline,
     onActivateChunkTimeline: _activateChunkTimeline,
     onArchiveChunkTimeline: _archiveChunkTimeline,

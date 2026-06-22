@@ -309,6 +309,44 @@ class LocalApi {
           ))
           as Map<String, dynamic>;
 
+  Future<List<Map<String, dynamic>>> trackPhoneTimelineSummaries(
+    String trackId,
+  ) async =>
+      ((await _request(
+                'GET',
+                '/v1/subtitles/${Uri.encodeComponent(trackId)}/phone-timelines/summary',
+              ))
+              as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+
+  Future<Map<String, dynamic>> phoneTimeline(String timelineId) async =>
+      (await _request(
+            'GET',
+            '/v1/phone-timelines/${Uri.encodeComponent(timelineId)}',
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> activatePhoneTimeline(String timelineId) async =>
+      (await _request(
+            'POST',
+            '/v1/phone-timelines/${Uri.encodeComponent(timelineId)}/activate',
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> archivePhoneTimeline(String timelineId) async =>
+      (await _request(
+            'POST',
+            '/v1/phone-timelines/${Uri.encodeComponent(timelineId)}/archive',
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> deletePhoneTimeline(String timelineId) async =>
+      (await _request(
+            'DELETE',
+            '/v1/phone-timelines/${Uri.encodeComponent(timelineId)}',
+          ))
+          as Map<String, dynamic>;
+
   Future<List<Map<String, dynamic>>> trackPhoneticAnalyses(
     String trackId,
   ) async =>

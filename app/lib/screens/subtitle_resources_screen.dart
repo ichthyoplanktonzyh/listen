@@ -24,6 +24,9 @@ class SubtitleResourcesScreen extends StatefulWidget {
     required this.onExportLLTimeline,
     required this.onActivateWordTimeline,
     required this.onManualReviewTimeline,
+    required this.onActivatePhoneTimeline,
+    required this.onArchivePhoneTimeline,
+    required this.onDeletePhoneTimeline,
     required this.onGenerateChunkTimeline,
     required this.onActivateChunkTimeline,
     required this.onArchiveChunkTimeline,
@@ -43,6 +46,9 @@ class SubtitleResourcesScreen extends StatefulWidget {
   final Future<void> Function(SubtitleTrack track) onExportLLTimeline;
   final Future<void> Function(String timelineId) onActivateWordTimeline;
   final Future<void> Function() onManualReviewTimeline;
+  final Future<void> Function(String timelineId) onActivatePhoneTimeline;
+  final Future<void> Function(String timelineId) onArchivePhoneTimeline;
+  final Future<void> Function(String timelineId) onDeletePhoneTimeline;
   final Future<void> Function() onGenerateChunkTimeline;
   final Future<void> Function(String timelineId) onActivateChunkTimeline;
   final Future<void> Function(String timelineId) onArchiveChunkTimeline;
@@ -77,6 +83,8 @@ class _SubtitleResourcesScreenState extends State<SubtitleResourcesScreen> {
         activeTrack: widget.subtitleController.primaryTrack,
         timelineDocument: widget.subtitleController.llTimelineDocument,
         wordTimelineSummaries: widget.subtitleController.wordTimelineSummaries,
+        phoneTimelineSummaries:
+            widget.subtitleController.phoneTimelineSummaries,
         chunkTimelineSummaries:
             widget.subtitleController.chunkTimelineSummaries,
         timelineResourceError: widget.subtitleController.timelineResourceError,
@@ -91,6 +99,9 @@ class _SubtitleResourcesScreenState extends State<SubtitleResourcesScreen> {
         onExportLLTimeline: widget.onExportLLTimeline,
         onActivateWordTimeline: widget.onActivateWordTimeline,
         onManualReviewTimeline: widget.onManualReviewTimeline,
+        onActivatePhoneTimeline: widget.onActivatePhoneTimeline,
+        onArchivePhoneTimeline: widget.onArchivePhoneTimeline,
+        onDeletePhoneTimeline: widget.onDeletePhoneTimeline,
         onGenerateChunkTimeline: widget.onGenerateChunkTimeline,
         onActivateChunkTimeline: widget.onActivateChunkTimeline,
         onArchiveChunkTimeline: widget.onArchiveChunkTimeline,

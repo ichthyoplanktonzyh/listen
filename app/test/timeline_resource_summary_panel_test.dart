@@ -28,6 +28,7 @@ void main() {
               extra: {'track_source': 'lltimeline-json-v1'},
             ),
             activeWordTimelineId: 'timeline-active',
+            activePhoneTimelineId: 'phone-active',
             activeChunkTimelineId: 'chunk-active',
             artifacts: [
               LLTimelineArtifact(kind: 'production_report', payload: {}),
@@ -69,6 +70,25 @@ void main() {
               canDelete: true,
             ),
           ],
+          phoneSummaries: const [
+            PhoneTimelineSummary(
+              id: 'phone-active',
+              trackId: 'track-1',
+              mediaId: 'media-1',
+              providerId: 'research-fixture',
+              providerVersion: 'v1',
+              phoneSet: 'research_fixture_symbols',
+              precision: 'approximate',
+              createdBy: 'algorithm',
+              status: 'active',
+              phoneCount: 8,
+              findingCount: 2,
+              averageConfidence: 0.5,
+              canActivate: false,
+              canArchive: true,
+              canDelete: false,
+            ),
+          ],
           chunkSummaries: const [
             ChunkTimelineSummary(
               id: 'chunk-active',
@@ -91,6 +111,9 @@ void main() {
           onRefresh: () async {},
           onActivate: (timelineId) async => activated = timelineId,
           onManualReview: () async => reviewRuns++,
+          onActivatePhoneTimeline: (_) async {},
+          onArchivePhoneTimeline: (_) async {},
+          onDeletePhoneTimeline: (_) async {},
           onGenerateChunkTimeline: () async {},
           onActivateChunkTimeline: (_) async {},
           onArchiveChunkTimeline: (_) async {},
@@ -104,6 +127,7 @@ void main() {
     expect(find.text('Production report ready'), findsOneWidget);
     expect(find.textContaining('whisperx 1.0'), findsWidgets);
     expect(find.textContaining('mfa 2.0'), findsOneWidget);
+    expect(find.textContaining('research-fixture'), findsWidgets);
     expect(find.textContaining('acoustic_semantic_v1'), findsWidgets);
 
     await tester.tap(find.byIcon(Icons.play_circle_outline));
@@ -126,12 +150,16 @@ void main() {
         child: TimelineResourceSummaryPanel(
           document: null,
           summaries: const [],
+          phoneSummaries: const [],
           chunkSummaries: const [],
           error: null,
           onImport: () async {},
           onRefresh: () async {},
           onActivate: (_) async {},
           onManualReview: () async {},
+          onActivatePhoneTimeline: (_) async {},
+          onArchivePhoneTimeline: (_) async {},
+          onDeletePhoneTimeline: (_) async {},
           onGenerateChunkTimeline: () async {},
           onActivateChunkTimeline: (_) async {},
           onArchiveChunkTimeline: (_) async {},
