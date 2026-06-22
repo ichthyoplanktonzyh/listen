@@ -75,7 +75,7 @@ pub fn import(input: ImportSubtitle) -> Result<SubtitleTrack, SubtitleError> {
                 start: TimeMs::new(cue.start_ms),
                 end: TimeMs::new(cue.end_ms),
                 original_text: cue.text,
-                tokens: tokenize_english(&display_text),
+                tokens: tokenize(input.language.as_ref(), &display_text),
                 display_text,
             }
         })
@@ -320,6 +320,180 @@ fn is_inner_word_mark(chars: &[char], index: usize) -> bool {
 
 fn continues_word(chars: &[char], index: usize) -> bool {
     chars[index].is_alphanumeric() || is_inner_word_mark(chars, index)
+}
+
+/// A language-specific tokenizer producing `SubtitleToken`s that preserve the
+/// original character ranges. Per ADR 0012 the concrete tokenizer is selected
+/// from the learning language's profile, so adding a language is a provider
+/// choice rather than a special-case branch.
+pub trait Tokenizer {
+    fn tokenize(&self, text: &str) -> Vec<SubtitleToken>;
+}
+
+/// Default whitespace/Latin tokenizer — the English regression baseline.
+pub struct WhitespaceTokenizer;
+
+impl Tokenizer for WhitespaceTokenizer {
+    fn tokenize(&self, text: &str) -> Vec<SubtitleToken> {
+        tokenize_english(text)
+    }
+}
+
+/// Mandarin tokenizer.
+///
+/// With the default `jieba` feature this uses jieba-rs word segmentation; with
+/// `--no-default-features` it falls back to character-level segmentation (the
+/// `zh` profile's declared fallback). Both preserve the original character span
+/// of every segment and cover whitespace, punctuation and mixed CJK/Latin/number
+/// runs. The concrete segmenter sits behind the `Tokenizer` trait, so swapping
+/// it never touches the call site.
+pub struct ChineseTokenizer {
+    #[cfg(feature = "jieba")]
+    jieba: jieba_rs::Jieba,
+}
+
+impl ChineseTokenizer {
+    pub fn new() -> Self {
+        Self {
+            #[cfg(feature = "jieba")]
+            jieba: jieba_rs::Jieba::new(),
+        }
+    }
+
+    /// Split text into contiguous substrings whose concatenation is the input.
+    fn segments<'t>(&self, text: &'t str) -> Vec<&'t str> {
+        #[cfg(feature = "jieba")]
+        {
+            self.jieba.cut(text, true)
+        }
+        #[cfg(not(feature = "jieba"))]
+        {
+            char_level_segments(text)
+        }
+    }
+}
+
+impl Default for ChineseTokenizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Tokenizer for ChineseTokenizer {
+    fn tokenize(&self, text: &str) -> Vec<SubtitleToken> {
+        let mut tokens = Vec::new();
+        let mut char_pos: u32 = 0;
+        for segment in self.segments(text) {
+            let seg_len = segment.chars().count() as u32;
+            let start = char_pos;
+            char_pos += seg_len;
+            if seg_len == 0 {
+                continue;
+            }
+            let kind = segment_kind(segment);
+            let normalized = (kind == SubtitleTokenKind::Word).then(|| normalize_lemma(segment));
+            tokens.push(SubtitleToken {
+                index: tokens.len() as u32,
+                kind,
+                text: segment.to_string(),
+                normalized,
+                start_char: start,
+                end_char: char_pos,
+            });
+        }
+        tokens
+    }
+}
+
+/// Character-level Chinese segmentation fallback (used with
+/// `--no-default-features`). CJK ideographs and standalone marks are emitted per
+/// character; Latin/number and whitespace runs are grouped so embedded English
+/// words stay whole. Output substrings concatenate back to the original text.
+#[cfg(not(feature = "jieba"))]
+fn char_level_segments(text: &str) -> Vec<&str> {
+    #[derive(PartialEq)]
+    enum Class {
+        Han,
+        Wordish,
+        Whitespace,
+        Mark,
+    }
+
+    fn class_of(ch: char) -> Class {
+        if ('\u{3400}'..='\u{9fff}').contains(&ch) || ('\u{f900}'..='\u{faff}').contains(&ch) {
+            Class::Han
+        } else if ch.is_whitespace() {
+            Class::Whitespace
+        } else if ch.is_alphanumeric() {
+            Class::Wordish
+        } else {
+            Class::Mark
+        }
+    }
+
+    let mut segments = Vec::new();
+    let mut iter = text.char_indices().peekable();
+    while let Some((start, ch)) = iter.next() {
+        let class = class_of(ch);
+        let mut end = start + ch.len_utf8();
+        // Only Latin/number and whitespace runs are grouped; Han ideographs and
+        // marks stay one character per segment.
+        if class == Class::Wordish || class == Class::Whitespace {
+            while let Some(&(next_start, next_ch)) = iter.peek() {
+                if class_of(next_ch) == class {
+                    end = next_start + next_ch.len_utf8();
+                    iter.next();
+                } else {
+                    break;
+                }
+            }
+        }
+        segments.push(&text[start..end]);
+    }
+    segments
+}
+
+fn segment_kind(segment: &str) -> SubtitleTokenKind {
+    if segment.chars().all(char::is_whitespace) {
+        SubtitleTokenKind::Whitespace
+    } else if segment.chars().all(is_punctuation_char) {
+        SubtitleTokenKind::Punctuation
+    } else if segment.chars().any(|ch| ch.is_alphanumeric()) {
+        SubtitleTokenKind::Word
+    } else {
+        SubtitleTokenKind::Other
+    }
+}
+
+fn is_punctuation_char(ch: char) -> bool {
+    ch.is_ascii_punctuation()
+        || matches!(
+            ch,
+            '…' | '“' | '”' | '‘' | '’' | '—' | '–'
+                | '，' | '。' | '！' | '？' | '、' | '；' | '：'
+                | '（' | '）' | '《' | '》' | '「' | '」' | '【' | '】'
+        )
+}
+
+/// Tokenize subtitle display text using the tokenization strategy declared by
+/// the learning language's profile. English/whitespace languages keep the
+/// existing baseline; `zh.word_segmentation` routes to the Chinese tokenizer
+/// (jieba word segmentation by default, character-level with
+/// `--no-default-features`). An unknown or absent language degrades cleanly to
+/// whitespace tokenization.
+pub fn tokenize(language: Option<&LanguageCode>, text: &str) -> Vec<SubtitleToken> {
+    let strategy = language
+        .map(domain::profile_for)
+        .map(|profile| profile.tokenization);
+    match strategy.as_deref() {
+        Some("zh.word_segmentation") => chinese_tokenizer().tokenize(text),
+        _ => tokenize_english(text),
+    }
+}
+
+fn chinese_tokenizer() -> &'static ChineseTokenizer {
+    static INSTANCE: std::sync::OnceLock<ChineseTokenizer> = std::sync::OnceLock::new();
+    INSTANCE.get_or_init(ChineseTokenizer::new)
 }
 
 pub struct Timeline<'a> {
@@ -569,5 +743,78 @@ mod tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod language_tokenize_tests {
+    use super::*;
+
+    fn lang(code: &str) -> LanguageCode {
+        LanguageCode::parse(code).unwrap()
+    }
+
+    fn is_han(ch: char) -> bool {
+        ('\u{4e00}'..='\u{9fff}').contains(&ch)
+    }
+
+    fn word_texts(tokens: &[SubtitleToken]) -> Vec<String> {
+        tokens
+            .iter()
+            .filter(|token| token.kind == SubtitleTokenKind::Word)
+            .map(|token| token.text.clone())
+            .collect()
+    }
+
+    #[test]
+    fn chinese_is_segmented_not_one_word_token() {
+        let tokens = tokenize(Some(&lang("zh")), "我想喝咖啡");
+        let words = word_texts(&tokens);
+        assert!(words.len() > 1, "expected multiple word tokens, got {words:?}");
+        let rebuilt: String = tokens.iter().map(|token| token.text.as_str()).collect();
+        assert_eq!(rebuilt, "我想喝咖啡");
+        for token in &tokens {
+            if token.kind == SubtitleTokenKind::Word {
+                assert!(token.normalized.is_some());
+            }
+        }
+    }
+
+    #[test]
+    fn mixed_chinese_english_splits_into_units_and_word() {
+        let tokens = tokenize(Some(&lang("zh")), "我想喝 coffee");
+        let words = word_texts(&tokens);
+        assert!(words.iter().any(|word| word == "coffee"), "got {words:?}");
+        assert!(
+            words.iter().any(|word| word.chars().any(is_han)),
+            "got {words:?}"
+        );
+        let rebuilt: String = tokens.iter().map(|token| token.text.as_str()).collect();
+        assert_eq!(rebuilt, "我想喝 coffee");
+    }
+
+    #[test]
+    fn char_ranges_are_contiguous_and_cover_text() {
+        let text = "我想喝 coffee。";
+        let tokens = tokenize(Some(&lang("zh")), text);
+        let mut expected = 0u32;
+        for token in &tokens {
+            assert_eq!(token.start_char, expected);
+            expected = token.end_char;
+        }
+        assert_eq!(expected as usize, text.chars().count());
+    }
+
+    #[test]
+    fn english_and_default_keep_baseline() {
+        let text = "I can't re-enter 42";
+        assert_eq!(tokenize(Some(&lang("en")), text), tokenize_english(text));
+        assert_eq!(tokenize(None, text), tokenize_english(text));
+    }
+
+    #[test]
+    fn unknown_language_degrades_to_whitespace() {
+        let text = "hello world";
+        assert_eq!(tokenize(Some(&lang("xx")), text), tokenize_english(text));
     }
 }

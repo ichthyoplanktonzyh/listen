@@ -9,6 +9,14 @@ domain = { path = "../domain" }
 sha2.workspace = true
 hex.workspace = true
 thiserror.workspace = true
+jieba-rs = { version = "0.7", optional = true }
+
+[features]
+# jieba word segmentation is on by default. Disable with `--no-default-features`
+# to fall back to character-level Chinese segmentation (the `zh` profile's
+# declared fallback) for builds without the jieba dictionary dependency.
+default = ["jieba"]
+jieba = ["dep:jieba-rs"]
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

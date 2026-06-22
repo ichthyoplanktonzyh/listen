@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- 2026-06-22 16:00:04 CST: Implemented the Phase 2.6 language-aware
+  tokenization foundation (steps 1-2 of the multilingual learning phase).
+  Added a `LanguageLearningProfile` capability matrix in `domain`
+  (`language_profile.rs`) with open namespaced-string `kind` fields (per ADR
+  0012 R0), English/Chinese/degraded profiles, and a `profile_for` resolver
+  that maps regional variants to their base language and degrades unknown
+  languages cleanly; the global `WordStatus` enum is left untouched as the
+  language invariant. Replaced the single `tokenize_english` call path in
+  `subtitle-core` with a `Tokenizer` trait and a profile-driven
+  `tokenize(language, text)` dispatch: English keeps the existing baseline,
+  unknown/absent languages degrade to whitespace, and `zh.word_segmentation`
+  routes to a Chinese tokenizer. Chinese tokenization uses jieba-rs 0.7.4 word
+  segmentation by default (`jieba` feature), with a character-level fallback
+  under `--no-default-features`; both preserve original character spans and
+  handle mixed CJK/Latin/number runs. Verified with the full workspace test
+  suite (255 tests), the no-default-features fallback path, and clippy; the
+  English tokenization path is unchanged. jieba-rs is now pinned in Cargo.lock.
 - 2026-06-22 11:59:40 CST: Documented the multilingual listening-learning
   product direction across the strategic docs after the Phase 2.5.5 validation,
   following the `.planning/MAINTENANCE.md` rules. Updated PROJECT.md (vision is
