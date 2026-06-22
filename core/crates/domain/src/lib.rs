@@ -5,6 +5,9 @@ use thiserror::Error;
 mod language_profile;
 pub use language_profile::{profile_for, CapabilitySupport, LanguageLearningProfile};
 
+mod lexical_unit;
+pub use lexical_unit::{baseline_normalized_key, LexicalUnit};
+
 macro_rules! string_id {
     ($name:ident) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

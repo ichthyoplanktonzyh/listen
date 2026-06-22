@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-06-22 16:06:45 CST: Added the Phase 2.6 LexicalUnit model (step 3) in
+  `domain` (`lexical_unit.rs`): a language-relative vocabulary learning object
+  whose identity is two orthogonal axes — granularity
+  (core.char/word/phrase/morpheme) x normalization
+  (core.surface/lemma/citation/root) — plus an opaque normalized_key with no
+  substring/affix assumption (ADR 0012 R2). Word-granularity identity stays
+  `language:normalized_key` so existing English WordProfile ids remain readable;
+  non-word granularities namespace the key so Chinese characters never pollute
+  Chinese words or English lemmas. English normalizes to a lowercased lemma,
+  Chinese keeps the surface form (no lemma assumed), and a
+  baseline_normalized_key helper leaves real citation/root normalization to
+  per-language providers. Verified with new domain tests and clippy.
 - 2026-06-22 16:00:04 CST: Implemented the Phase 2.6 language-aware
   tokenization foundation (steps 1-2 of the multilingual learning phase).
   Added a `LanguageLearningProfile` capability matrix in `domain`

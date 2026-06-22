@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-06-22T08:00:00.000Z"
+last_updated: "2026-06-22T08:10:00.000Z"
 progress:
   total_phases: 10
   completed_phases: 0
@@ -15,12 +15,12 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-22 CST
-> 更新原因：Phase 2.6 Step 1-2 语言感知分词地基（profile + jieba tokenizer）落地
+> 更新原因：Phase 2.6 Step 3 LexicalUnit（粒度×归一）落地
 
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
-- **Phase**：Phase 2.6 进行中（Step 1-2：语言 profile + jieba 语言感知分词 已完成并通过测试）
+- **Phase**：Phase 2.6 进行中（Step 1-3：profile + jieba 分词 + LexicalUnit 已完成并通过测试）
 - **分支**：`feature/forced-alignment-research`
 - **版本**：0.7.0
 
@@ -289,7 +289,7 @@ progress:
   - `.planning/phases/2.5.5-language-learning-abstraction-validation/2.5.5-FALSIFICATION.md`
   - `.planning/phases/2.5.5-language-learning-abstraction-validation/2.5.5-CLOSEOUT.md`
 
-### Phase 2.6: 多语言学习基础 🚧 进行中（Step 1-2 完成）
+### Phase 2.6: 多语言学习基础 🚧 进行中（Step 1-3 完成）
 
 - 目标：将 LLPlayerNext 从“英语优先学习播放器”扩展为“语言能力可插拔的学习播放器
   底座”，首批真实验收语言为 English + Chinese。
@@ -313,8 +313,9 @@ progress:
   - ✅ Step 2：`subtitle-core` 的 `Tokenizer` trait + profile 驱动 `tokenize(language, text)`；
     汉语默认 jieba-rs 0.7.4 词分词，`--no-default-features` 走字级 fallback；英语回归基线不变。
     全 workspace 255 测试通过、clippy 干净。
-  - ⏳ Step 3-7：LexicalUnit（粒度×归一）、去 `language=en`、汉语词典/拼音 provider、
-    汉语面板/诊断、双语回归。
+  - ✅ Step 3：`domain/lexical_unit.rs` 的 `LexicalUnit`（粒度×归一两轴 + 不透明 key；
+    英语身份 `en:going` 向后兼容；汉语字/词 namespaced 不污染；不假设 lemma）。
+  - ⏳ Step 4-7：去 `language=en` 硬编码、汉语词典/拼音 provider、汉语面板/诊断、双语回归。
 - 规划文档：
   - `.planning/phases/2.6-multilingual-learning-foundation/2.6-CONTEXT.md`
   - `.planning/phases/2.6-multilingual-learning-foundation/2.6-PLAN.md`
@@ -367,8 +368,8 @@ progress:
    Wav2IPA / MFA phone alignment benchmark；通过 gate 前不进入默认 product path。
 3. Phase 2.5.5：语言学习抽象校验 ✅ 已收口（SLA 映射、invariant/variant 边界、L1 seam、
    ja/ar 证伪、回灌 2.6 均完成）。
-4. Phase 2.6：多语言学习基础——Step 1-2（profile + jieba 分词）✅ 完成；下一步 Step 3
-   LexicalUnit（粒度×归一），续做 Step 4-7。
+4. Phase 2.6：多语言学习基础——Step 1-3（profile + jieba 分词 + LexicalUnit）✅ 完成；
+   下一步 Step 4 去 `language=en` 硬编码，续做 Step 5-7。
 
 ## 指标
 
