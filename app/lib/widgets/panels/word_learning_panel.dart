@@ -68,6 +68,18 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
     final l = AppLocalizations.of(context);
     final results =
         (widget.dictionary?['results'] as List<dynamic>? ?? const []);
+    // Only IPA-bearing variants are worth a section. Languages without an IPA
+    // pronunciation provider (e.g. Chinese, whose pinyin arrives via the
+    // dictionary phonetics below) yield empty variants, so the section hides
+    // instead of showing a blank row.
+    final pronunciationVariants = [
+      for (final raw in (widget.pronunciation?['variants'] as List<dynamic>? ??
+          const []))
+        if (((raw as Map<String, dynamic>)['display_ipa'] as String?)
+                ?.isNotEmpty ??
+            false)
+          raw,
+    ];
     final occurrences = widget.details['occurrences'] as List<dynamic>;
     final history = widget.details['history'] as List<dynamic>;
     return ListView(
@@ -97,16 +109,16 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
           ],
         ),
         const Divider(),
-        if (widget.pronunciation != null) ...[
+        if (pronunciationVariants.isNotEmpty) ...[
           Text(
             l.text('pronunciation'),
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-          for (final raw in widget.pronunciation!['variants'] as List<dynamic>)
+          for (final raw in pronunciationVariants)
             ListTile(
               dense: true,
               title: Text(
-                (raw as Map<String, dynamic>)['display_ipa'] as String,
+                raw['display_ipa'] as String,
               ),
               subtitle: Text(
                 '${raw['is_fallback'] == true ? 'deterministic fallback' : 'CMUdict'} · '
