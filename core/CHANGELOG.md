@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-06-22 09:15:00 CST: Switched the MFA default strategy from `align-one`
+  to batch `align`. The `align-one` strategy spawned a separate `mfa
+  align_one` process per segment, incurring ~11 s of model-loading overhead
+  each time; for 115 segments this meant 210 s total. Batch `align` loads the
+  model once and aligns all segments in a single process (58 s, 3.6× faster)
+  with identical output. The original reason for `align-one` was an MFA 3.3.9
+  SQLite export bug (empty interval CSVs); re-testing confirmed the bug is no
+  longer present. `align-one` is kept as `--mfa-strategy align-one` fallback.
 - 2026-06-21 21:16:48 CST: Completed Phase 2.4 ChunkTimeline generation and
   consumption. Chunk boundaries are now persisted as first-class
   `ChunkTimeline` resources with SQLite schema v13, active/candidate/archive
