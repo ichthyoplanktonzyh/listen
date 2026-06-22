@@ -63,11 +63,55 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
     super.dispose();
   }
 
+  /// Per-character pinyin breakdown for a multi-character Han word, aligning each
+  /// character with its pinyin syllable (one Han character is one syllable). This
+  /// makes the 字 → 拼音/声调 mapping explicit and is derived purely from the
+  /// dictionary phonetic — no extra lookups. Empty for non-Han or single-character
+  /// words, or when the syllable count does not match the character count.
+  List<({String character, String pinyin})> _hanCharacterBreakdown() {
+    final word = profile['display_form'] as String;
+    final characters = word.runes.map(String.fromCharCode).toList();
+    if (characters.length < 2 || !characters.every(_isHan)) return const [];
+    final pinyin = _firstChinesePinyin();
+    if (pinyin == null) return const [];
+    final syllables = pinyin
+        .split(RegExp(r'\s+'))
+        .where((value) => value.isNotEmpty)
+        .toList();
+    if (syllables.length != characters.length) return const [];
+    return [
+      for (var index = 0; index < characters.length; index += 1)
+        (character: characters[index], pinyin: syllables[index]),
+    ];
+  }
+
+  String? _firstChinesePinyin() {
+    for (final raw
+        in (widget.dictionary?['results'] as List<dynamic>? ?? const [])) {
+      final lookup = (raw as Map<String, dynamic>)['lookup'] as Map?;
+      for (final phonetic in (lookup?['phonetics'] as List<dynamic>? ?? const [])) {
+        final map = phonetic as Map<String, dynamic>;
+        final text = (map['text'] as String?)?.trim() ?? '';
+        if (map['region'] == 'zh' && text.isNotEmpty) return text;
+      }
+    }
+    return null;
+  }
+
+  bool _isHan(String value) {
+    if (value.isEmpty) return false;
+    final code = value.runes.first;
+    return (code >= 0x4e00 && code <= 0x9fff) ||
+        (code >= 0x3400 && code <= 0x4dbf) ||
+        (code >= 0xf900 && code <= 0xfaff);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final results =
         (widget.dictionary?['results'] as List<dynamic>? ?? const []);
+    final characterBreakdown = _hanCharacterBreakdown();
     // Only IPA-bearing variants are worth a section. Languages without an IPA
     // pronunciation provider (e.g. Chinese, whose pinyin arrives via the
     // dictionary phonetics below) yield empty variants, so the section hides
@@ -109,6 +153,36 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
           ],
         ),
         const Divider(),
+        if (characterBreakdown.isNotEmpty) ...[
+          Text(
+            l.text('characters'),
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Wrap(
+              spacing: 14,
+              runSpacing: 6,
+              children: [
+                for (final entry in characterBreakdown)
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        entry.character,
+                        style: const TextStyle(fontSize: 22),
+                      ),
+                      Text(
+                        entry.pinyin,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+          const Divider(),
+        ],
         if (pronunciationVariants.isNotEmpty) ...[
           Text(
             l.text('pronunciation'),

@@ -280,6 +280,54 @@ void main() {
     },
   );
 
+  testWidgets('word learning panel breaks a Han word into per-character pinyin', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      localized(
+        WordLearningPanel(
+          details: const {
+            'profile': {
+              'display_form': '咖啡',
+              'status': 'unknown_meaning',
+              'user_definition': null,
+              'personal_note': null,
+            },
+            'occurrences': [],
+            'history': [],
+          },
+          dictionary: const {
+            'results': [
+              {
+                'provider': {'display_name': 'CC-CEDICT'},
+                'lookup': {
+                  'phonetics': [
+                    {'text': 'kā fēi', 'region': 'zh', 'audio_url': null},
+                  ],
+                  'definitions': [
+                    {'text': 'coffee', 'part_of_speech': null},
+                  ],
+                },
+                'error': null,
+              },
+            ],
+          },
+          onStatus: (_) {},
+          onSave: (_, _) async {},
+          onSource: (_) {},
+          onHeard: () {},
+          onNotHeard: () {},
+        ),
+      ),
+    );
+    // The word's characters are aligned with their pinyin syllables (字 → 拼音).
+    expect(find.text('Characters'), findsOneWidget);
+    expect(find.text('咖'), findsOneWidget);
+    expect(find.text('啡'), findsOneWidget);
+    expect(find.text('kā'), findsOneWidget);
+    expect(find.text('fēi'), findsOneWidget);
+  });
+
   testWidgets('localization renders simplified Chinese labels', (tester) async {
     await tester.pumpWidget(
       localized(const Text('placeholder'), locale: const Locale('zh')),

@@ -128,9 +128,33 @@ class DiagnosisCard extends StatelessWidget {
               ),
           ],
           for (final hint in diagnosis['hints'] as List<dynamic>)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text('• ${l.diagnosis(hint['kind'] as String)}'),
+            Builder(
+              builder: (context) {
+                final map = hint as Map<String, dynamic>;
+                final reasons = (map['reasons'] as List<dynamic>? ?? const [])
+                    .cast<String>();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('• ${l.diagnosis(map['kind'] as String)}'),
+                      if (reasons.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 12, top: 2),
+                          child: Text(
+                            '${l.text('possibleListeningFactors')} '
+                            '${reasons.map(l.diagnosisReason).join(' · ')}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xffaab4c0),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
             ),
           if (ruleHintsLevel != 'off' && pronunciation?['rules'] != null)
             _section(

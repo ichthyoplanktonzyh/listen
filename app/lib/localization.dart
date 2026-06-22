@@ -24,6 +24,15 @@ class AppLocalizations {
   String status(String? value) => text(value ?? 'clear');
   String diagnosis(String kind) => text('diagnosis_$kind');
 
+  /// Localized label for a per-language diagnosis reason (e.g. `tone_confusion`).
+  /// Unknown reasons degrade to their raw name so a new language's reason never
+  /// breaks rendering.
+  String diagnosisReason(String name) {
+    final key = 'diagnosis_reason_$name';
+    final localized = text(key);
+    return localized == key ? name : localized;
+  }
+
   static const delegate = _AppLocalizationsDelegate();
 
   static const _values = <String, Map<String, String>>{
@@ -275,6 +284,19 @@ class AppLocalizations {
           'Classify the remaining words before drawing a conclusion.',
       'diagnosis_other_factors':
           'Vocabulary does not fully explain the listening difficulty.',
+      'characters': 'Characters',
+      'possibleListeningFactors': 'Factors to consider (not detected):',
+      'diagnosis_reason_tone_confusion': 'tone confusion',
+      'diagnosis_reason_word_boundary': 'word boundary',
+      'diagnosis_reason_homophone': 'homophone',
+      'diagnosis_reason_neutral_tone': 'neutral tone',
+      'diagnosis_reason_tone_sandhi': 'tone sandhi',
+      'diagnosis_reason_weak_form': 'weak form',
+      'diagnosis_reason_linking': 'linking',
+      'diagnosis_reason_elision': 'elision',
+      'diagnosis_reason_assimilation': 'assimilation',
+      'diagnosis_reason_fuzzy_boundary': 'fuzzy boundary',
+      'diagnosis_reason_reduced_form': 'reduced form',
       'timelineResource': 'Timeline resource',
       'importLLTimeline': 'Import LLTimeline',
       'refresh': 'Refresh',
@@ -532,6 +554,19 @@ class AppLocalizations {
       'diagnosis_recognition_barrier': '已认识的词汇在本句中没有被听出。',
       'diagnosis_insufficient_information': '请先判断剩余词汇，再形成结论。',
       'diagnosis_other_factors': '词汇状态不能完全解释当前听力困难。',
+      'characters': '字',
+      'possibleListeningFactors': '可能涉及的听辨因素（非检测结果）：',
+      'diagnosis_reason_tone_confusion': '声调混淆',
+      'diagnosis_reason_word_boundary': '词边界切分',
+      'diagnosis_reason_homophone': '同音词',
+      'diagnosis_reason_neutral_tone': '轻声',
+      'diagnosis_reason_tone_sandhi': '变调',
+      'diagnosis_reason_weak_form': '弱读',
+      'diagnosis_reason_linking': '连读',
+      'diagnosis_reason_elision': '省音',
+      'diagnosis_reason_assimilation': '同化',
+      'diagnosis_reason_fuzzy_boundary': '边界模糊',
+      'diagnosis_reason_reduced_form': '弱化形式',
       'timelineResource': '时间轴资源',
       'importLLTimeline': '导入 LLTimeline',
       'refresh': '刷新',

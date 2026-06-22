@@ -37,6 +37,48 @@ void main() {
     expect(trackRuns, 1);
   });
 
+  testWidgets('recognition barrier renders per-language listening factors', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: DiagnosisCard(
+            diagnosis: const {
+              'hints': [
+                {
+                  'kind': 'recognition_barrier',
+                  'message': 'Known words were not recognized.',
+                  'word_profile_ids': ['p1'],
+                  'reasons': ['tone_confusion', 'word_boundary'],
+                },
+                {
+                  'kind': 'meaning_barrier',
+                  'message': 'Unknown vocabulary.',
+                  'word_profile_ids': ['p2'],
+                  'reasons': <dynamic>[],
+                },
+              ],
+            },
+          ),
+        ),
+      ),
+    );
+
+    // The recognition barrier surfaces the language's listening factors,
+    // localized and clearly framed as possibilities (not detections).
+    expect(find.textContaining('Factors to consider'), findsOneWidget);
+    expect(find.textContaining('tone confusion'), findsOneWidget);
+    expect(find.textContaining('word boundary'), findsOneWidget);
+  });
+
   testWidgets('audio findings expose evidence loop and feedback actions', (
     tester,
   ) async {
