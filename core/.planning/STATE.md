@@ -15,12 +15,13 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-22 CST
-> 更新原因：Phase 2.6 Step 3 LexicalUnit（粒度×归一）落地
+> 更新原因：Phase 2.6 Step 4 去 `language=en` 硬编码（学习语言来自 active 字幕轨）落地
 
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
-- **Phase**：Phase 2.6 进行中（Step 1-3：profile + jieba 分词 + LexicalUnit 已完成并通过测试）
+- **Phase**：Phase 2.6 进行中（Step 1-4：profile + jieba 分词 + LexicalUnit + 去 `language=en`
+  硬编码 已完成并通过测试）
 - **分支**：`feature/forced-alignment-research`
 - **版本**：0.7.0
 
@@ -315,7 +316,12 @@ progress:
     全 workspace 255 测试通过、clippy 干净。
   - ✅ Step 3：`domain/lexical_unit.rs` 的 `LexicalUnit`（粒度×归一两轴 + 不透明 key；
     英语身份 `en:going` 向后兼容；汉语字/词 namespaced 不污染；不假设 lemma）。
-  - ⏳ Step 4-7：去 `language=en` 硬编码、汉语词典/拼音 provider、汉语面板/诊断、双语回归。
+  - ✅ Step 4：去 `language=en` 硬编码。`subtitle_core::import` 在未声明语言时按脚本检测
+    （含汉字→zh，否则 en）用于分词与存储 `track.language`；Flutter `SubtitleTrack` 读取
+    `language`，`_learningLanguage` 解析器（active 字幕轨语言→`en` fallback）串到所有
+    word-profile/vocab/dict/phrase 调用与 `_sourceFor`。英语回归基线不变。全 workspace 272
+    测试 + flutter analyze/test + validate-contracts 通过。
+  - ⏳ Step 5-7：汉语词典/拼音 provider、汉语面板/诊断、双语回归。
 - 规划文档：
   - `.planning/phases/2.6-multilingual-learning-foundation/2.6-CONTEXT.md`
   - `.planning/phases/2.6-multilingual-learning-foundation/2.6-PLAN.md`
@@ -368,8 +374,8 @@ progress:
    Wav2IPA / MFA phone alignment benchmark；通过 gate 前不进入默认 product path。
 3. Phase 2.5.5：语言学习抽象校验 ✅ 已收口（SLA 映射、invariant/variant 边界、L1 seam、
    ja/ar 证伪、回灌 2.6 均完成）。
-4. Phase 2.6：多语言学习基础——Step 1-3（profile + jieba 分词 + LexicalUnit）✅ 完成；
-   下一步 Step 4 去 `language=en` 硬编码，续做 Step 5-7。
+4. Phase 2.6：多语言学习基础——Step 1-4（profile + jieba 分词 + LexicalUnit + 去
+   `language=en` 硬编码）✅ 完成；下一步 Step 5 汉语词典/拼音 provider，续做 Step 6-7。
 
 ## 指标
 

@@ -55,6 +55,14 @@ pub fn import(input: ImportSubtitle) -> Result<SubtitleTrack, SubtitleError> {
         SubtitleFormat::WebVtt => parse_webvtt(&text)?,
     };
     cues.sort_by_key(|cue| (cue.start_ms, cue.end_ms));
+    // Resolve the learning language for tokenization and storage. A caller-
+    // declared language always wins; otherwise we detect it from the subtitle's
+    // own script so a Chinese subtitle is segmented with the Chinese tokenizer
+    // instead of the whitespace baseline (Phase 2.6 Step 4).
+    let language = input
+        .language
+        .clone()
+        .unwrap_or_else(|| detect_language(cues.iter().map(|cue| cue.text.as_str())));
     let sentences = cues
         .into_iter()
         .enumerate()
@@ -75,7 +83,7 @@ pub fn import(input: ImportSubtitle) -> Result<SubtitleTrack, SubtitleError> {
                 start: TimeMs::new(cue.start_ms),
                 end: TimeMs::new(cue.end_ms),
                 original_text: cue.text,
-                tokens: tokenize(input.language.as_ref(), &display_text),
+                tokens: tokenize(Some(&language), &display_text),
                 display_text,
             }
         })
@@ -84,7 +92,7 @@ pub fn import(input: ImportSubtitle) -> Result<SubtitleTrack, SubtitleError> {
         id: track_id,
         media_id: input.media_id,
         fingerprint,
-        language: input.language,
+        language: Some(language),
         source: input.source_name,
         status: SubtitleTrackStatus::Available,
         sentences,
@@ -496,6 +504,31 @@ fn chinese_tokenizer() -> &'static ChineseTokenizer {
     INSTANCE.get_or_init(ChineseTokenizer::new)
 }
 
+/// Detect the learning language from subtitle text when the caller did not
+/// declare one. This is a deliberately small script heuristic for the Phase 2.6
+/// English + Chinese acceptance set: any Han ideograph routes to Chinese (so the
+/// Chinese segmenter and `zh` vocabulary identity apply), and everything else
+/// stays on the English/whitespace baseline. Per ADR 0012 an undetected script
+/// degrades cleanly to English rather than failing; a richer provider-based
+/// language identifier can replace this without changing callers.
+fn detect_language<'a>(texts: impl IntoIterator<Item = &'a str>) -> LanguageCode {
+    let code = if texts.into_iter().flat_map(str::chars).any(is_han) {
+        "zh"
+    } else {
+        "en"
+    };
+    LanguageCode::parse(code).expect("detection codes are valid")
+}
+
+fn is_han(value: char) -> bool {
+    matches!(value,
+        '\u{3400}'..='\u{4dbf}'      // CJK Unified Ideographs Extension A
+        | '\u{4e00}'..='\u{9fff}'    // CJK Unified Ideographs
+        | '\u{f900}'..='\u{faff}'    // CJK Compatibility Ideographs
+        | '\u{20000}'..='\u{2a6df}'  // CJK Unified Ideographs Extension B
+    )
+}
+
 pub struct Timeline<'a> {
     sentences: &'a [SubtitleSentence],
     offset_ms: i64,
@@ -816,5 +849,54 @@ mod language_tokenize_tests {
     fn unknown_language_degrades_to_whitespace() {
         let text = "hello world";
         assert_eq!(tokenize(Some(&lang("xx")), text), tokenize_english(text));
+    }
+}
+
+#[cfg(test)]
+mod import_language_detection_tests {
+    use super::*;
+
+    fn import_srt(body: &str, language: Option<&str>) -> SubtitleTrack {
+        import(ImportSubtitle {
+            media_id: MediaId::parse("media").unwrap(),
+            source_name: "a.srt".into(),
+            content: format!("1\n00:00:00,000 --> 00:00:01,000\n{body}\n")
+                .into_bytes(),
+            language: language.map(|code| LanguageCode::parse(code).unwrap()),
+            identity_salt: None,
+        })
+        .unwrap()
+    }
+
+    fn word_count(track: &SubtitleTrack) -> usize {
+        track.sentences[0]
+            .tokens
+            .iter()
+            .filter(|token| token.kind == SubtitleTokenKind::Word)
+            .count()
+    }
+
+    #[test]
+    fn undeclared_chinese_subtitle_detects_zh_and_segments() {
+        let track = import_srt("我想喝咖啡", None);
+        assert_eq!(track.language.as_ref().map(LanguageCode::as_str), Some("zh"));
+        assert!(word_count(&track) > 1, "expected Chinese segmentation");
+    }
+
+    #[test]
+    fn undeclared_english_subtitle_detects_en_baseline() {
+        let track = import_srt("I can't re-enter", None);
+        assert_eq!(track.language.as_ref().map(LanguageCode::as_str), Some("en"));
+        let tokens = &track.sentences[0].tokens;
+        assert_eq!(*tokens, tokenize_english("I can't re-enter"));
+    }
+
+    #[test]
+    fn declared_language_overrides_detection() {
+        // A caller-declared language wins even when the script suggests otherwise,
+        // so an explicit en keeps the whitespace baseline on Han text.
+        let track = import_srt("我想喝咖啡", Some("en"));
+        assert_eq!(track.language.as_ref().map(LanguageCode::as_str), Some("en"));
+        assert_eq!(word_count(&track), 1, "en tokenizer treats Han run as one word");
     }
 }
