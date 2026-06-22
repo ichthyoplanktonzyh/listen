@@ -154,9 +154,33 @@ SRT/VTT 文件 → Flutter 选择文件 → HTTP POST /v1/media/{id}/subtitles
 | 消费端 vs 生产端 | 消费端不依赖 Python/PyTorch/WhisperX 运行时 |
 | LLTimeline 契约 | Schema 版本化（`llplayer.timeline.v1`），不兼容变化升版本 |
 | 词汇资产 vs 媒体 | 媒体/字幕删除不级联删除词汇学习资产（外键置空） |
+| 学习语言 vs 界面语言 | 学习语言来自字幕轨/用户选择，与 UI 语言独立；语言能力经 profile/provider，未知干净降级（Phase 2.6，ADR 0012） |
 
 ## 6. 已知架构债务
 
 1. **`speech-analysis` 职责过重**：10 个模块覆盖 ASR 后处理、对齐、chunk、音素分析四个不同关注点。M2 稳定后建议拆分。
 
 2. **Flutter 搜索 Rust binary 路径脆弱**：从 CWD 向上遍历找 `target/release/api-http`，生产发布包应固化路径。
+
+## 7. 多语言架构方向（Phase 2.6，规划中）
+
+> 当前代码英语优先（`subtitle-core` 英语 token 化、`language=en` 客户端硬编码、词汇
+> 单位 ≈ 英语 lemma）。Phase 2.6 在 Phase 2.5.5 已校验的抽象上扩展英语 + 汉语。
+> 决策见 `docs/decisions/0012-multilingual-learning-abstraction.md`。
+
+预期触及的 crate / 边界（不改 LLTimeline 契约、不引入重型 runtime）：
+
+- `subtitle-core`：`tokenize_english()` → 语言感知 token 化（英语保留回归基线，汉语
+  分词 + 字级 fallback + 中英混排）。
+- `domain` / `application`：WordProfile 词汇单位泛化为 LexicalUnit（粒度 × 归一，
+  `NormalizedKey` 不透明）；新增 LanguageLearningProfile / capability matrix；ListeningUnit
+  为现有 Word/Chunk/Phone 时间轴资源之上的视图，不新建表。
+- `application` Provider trait：新增语言感知 tokenizer / lexical normalizer、汉语
+  dictionary + 拼音 provider；kind taxonomy 为开放 namespaced string，未知干净降级。
+- `diagnosis-core`：诊断**理由** taxonomy 按 profile 扩展（状态枚举保持语言无关）；
+  签名为母语（L1）维度预留位置，v1 不读取。
+- Flutter 客户端：去除 `language=en` 硬编码，学习语言来自 active 字幕轨/用户选择；
+  汉语最小学习面板。
+
+架构不变量：全局词汇状态枚举语言无关、跨语言复用；新增主流语言主要是 provider + profile
+工作，不需回改既有语言代码与既有 kind 枚举。

@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-06-22T04:00:00.000Z"
+last_updated: "2026-06-22T04:15:00.000Z"
 progress:
   total_phases: 10
   completed_phases: 0
@@ -15,7 +15,7 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-22 CST
-> 更新原因：Phase 2.5.5 语言学习抽象校验收口
+> 更新原因：多语言产品方向写入战略文档（PROJECT / REQUIREMENTS / ROADMAP / ADR 0012）
 
 ## 当前位置
 
@@ -343,6 +343,10 @@ progress:
    SLA 校验抽象、并用 Japanese/Arabic 做类型学证伪；确认“L2 听力难度被 L1 过滤”，诊断模型
    预留 L1 seam；唯一语言不变量是理解轴（词义×声音），其余结构走 profile/provider；不大包
    大揽，架构只对 top-15 学习语言封顶有效。
+10. **产品方向文档化**（2026-06-22）：多语言听力学习确立为产品方向并写入战略文档——
+    PROJECT.md（§2 愿景 / §4.4 原则 / §10.9 概念 / §15.5 里程碑）、REQUIREMENTS.md
+    LANG-001..010、ROADMAP.md §14.11、codebase ARCHITECTURE/DATA-MODEL 多语言方向节、
+    ADR 0012。英语行为为回归基线，下一步进入 Phase 2.6 实现。
 
 ## 当前阻塞项
 

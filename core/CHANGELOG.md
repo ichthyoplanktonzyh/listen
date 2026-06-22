@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- 2026-06-22 11:59:40 CST: Documented the multilingual listening-learning
+  product direction across the strategic docs after the Phase 2.5.5 validation,
+  following the `.planning/MAINTENANCE.md` rules. Updated PROJECT.md (vision is
+  now multilingual and listening-first; new §4.4 principles, §10.9 concepts, and
+  §15.5 Milestone 2 multilingual direction). Added REQUIREMENTS.md section 18.4
+  with LANG-001..LANG-010 (capability matrix/profile, language-aware
+  tokenization, LexicalUnit granularity×normalization, ListeningUnit view plus
+  listening-anchored observation, `language=en` removal, Chinese
+  dictionary/pinyin provider, Chinese learning panel/diagnosis, comprehension-axis
+  invariant with per-profile diagnosis reasons, L1 seam, open kind taxonomy) and
+  a release-matrix row; noted TXT-001 is generalized by LANG-002. Added
+  ROADMAP.md §14.11 multilingual workstream under Milestone 2. Recorded the
+  architecture decision as ADR 0012 and added forward-looking multilingual
+  sections to codebase/ARCHITECTURE.md and codebase/DATA-MODEL.md. No code
+  changed; English behavior remains the regression baseline.
 - 2026-06-22 11:45:56 CST: Added Phase 2.5.5 Language Learning Abstraction
   Validation as a design/validation phase inserted before Phase 2.6
   (Multilingual Learning Foundation), mirroring the earlier 2.3.5-before-2.4

@@ -108,3 +108,34 @@ sentence. It also adds durable `speech_rule_confirmations` reserved for explicit
 user confirmations. Every analysis row records provider/version; every word
 timing records its source. These caches are separate from vocabulary asset
 export and can be deleted and regenerated without losing learning data.
+
+# Multilingual Direction (Phase 2.6)
+
+The identity and learning-semantics rules above are English-first. Phase 2.6
+generalizes them for multilingual learning (English + Chinese first) on the
+abstraction validated in Phase 2.5.5. See
+`docs/decisions/0012-multilingual-learning-abstraction.md`.
+
+- **Comprehension axis is the language invariant.** The global vocabulary status
+  enum stays language-agnostic and reusable; the durable vocabulary asset does
+  not fork per language. The diagnosis *reason* taxonomy becomes per-profile.
+- **Word profile identity generalizes.** `sha256("word-profile:" + language + ":"
+  + normalized lemma)` becomes language + granularity + opaque normalized key,
+  where granularity is char/word/phrase/morpheme and the normalized key is the
+  opaque output of a per-language normalizer (no substring/affix assumption;
+  Arabic roots are non-concatenative). Existing English word profiles remain
+  readable. Persisted Chinese identity uses a single canonical granularity
+  (word), with character level only as fallback.
+- **ListeningUnit is a view, not a table.** The sound side stays owned by the
+  existing `word_timeline` / `chunk_timeline` / `phone_timeline` resources; no new
+  persisted ListeningUnit store is added in 2.6. A listening observation may
+  anchor to a ListeningUnit (e.g. a tone/pitch minimal pair), not only a lexical
+  unit.
+- **L1 seam.** Diagnosis reserves a nullable learner-L1 dimension; v1 does not
+  read it and adds no schema column for it.
+- **Open kind taxonomies.** Language/unit kinds are namespaced strings with clean
+  degradation, not closed enums, so adding a language does not require a schema or
+  enum migration of existing kinds.
+
+No SQLite schema change is implied by this direction note itself; concrete schema
+deltas are defined in the Phase 2.6 plan.

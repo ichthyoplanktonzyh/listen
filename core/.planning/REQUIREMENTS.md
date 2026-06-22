@@ -565,6 +565,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - token 重组后保留显示文本。
   - 常见缩写、撇号和连字符具有明确测试。
 - 依赖：SUB-004。
+- 注：多语言方向下本需求由 LANG-002（语言感知 token 化）泛化；英语行为作为回归基线保留。
 
 ### TXT-002：可点击单词识别
 
@@ -2213,6 +2214,123 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - 回归 fixture 可以提交，用于比较算法改动前后质量。
 - 依赖：LLT-006、CONSUME-004。
 
+## 18.4 Milestone 2 多语言学习基础需求
+
+> 方向与抽象决策见 `docs/decisions/0012-multilingual-learning-abstraction.md` 与
+> `.planning/phases/2.6-multilingual-learning-foundation/`。首批实现语言为英语 + 汉语，
+> 架构对主流 top-15 学习语言封顶有效。英语行为作为回归基线不得回退。
+
+### LANG-001：语言能力矩阵与 Profile
+
+- 优先级：P0
+- 阶段：M2-LANG
+- 需求：每种学习语言通过 LanguageLearningProfile 声明能力（分词、词汇单位、听觉单位、
+  发音、韵律、形态、诊断规则、时间轴能力）。UI 和 API 可查询当前学习语言支持哪些能力。
+- 验收标准：
+  - 不支持的能力显示为 unavailable / degraded，而不是失败。
+  - 能力矩阵可表达 en/zh 及 es/fr/de/ru/ja/ar 等校验语言，不要求本阶段实现完整功能。
+- 依赖：ARCH-001。
+
+### LANG-002：语言感知 token 化
+
+- 优先级：P0
+- 阶段：M2-LANG
+- 需求：token 化按语言进行，替换单一英语 token 化路径。英语保留现有行为；汉语支持分词与
+  字级 fallback；支持中英文数字标点混排。
+- 验收标准：
+  - `我想喝咖啡` 不再被整句作为一个 word token。
+  - `我想喝 coffee` 稳定拆为中文单位 + 英文 word。
+  - token 重组后保留原始显示文本。
+- 依赖：TXT-001（泛化）、LANG-001。
+
+### LANG-003：LexicalUnit 词汇学习单位
+
+- 优先级：P0
+- 阶段：M2-LANG
+- 需求：词汇学习单位从英语 lemma 泛化为 LexicalUnit，身份由粒度（字/词/短语/词素）×
+  归一形态（表层/lemma/citation/词根）决定；`NormalizedKey` 为归一器不透明输出，不假设
+  子串/去缀。
+- 验收标准：
+  - 词汇状态不再假设所有语言都有 lemma。
+  - 旧英语 WordProfile 可继续读取。
+  - 汉语词/字不污染英语词汇状态；持久身份用单一 canonical 粒度（词），字级仅 fallback。
+- 依赖：WORD-006、WORD-007、LANG-002。
+
+### LANG-004：ListeningUnit 视图与听觉锚定观察
+
+- 优先级：P1
+- 阶段：M2-LANG
+- 需求：ListeningUnit 作为现有 Word/Chunk/Phone 时间轴资源之上的视图，不新建持久表；
+  听力观察可锚定到 ListeningUnit（如声调/音高最小对立），不只锚定 LexicalUnit。
+- 验收标准：
+  - 文档与模型命名区分 Token / LexicalUnit / ListeningUnit。
+  - 声调“听不出”类观察有归宿，不被迫挂到某个词上。
+- 依赖：LANG-001、PRON-002。
+
+### LANG-005：去除学习语言硬编码
+
+- 优先级：P0
+- 阶段：M2-LANG
+- 需求：清理客户端与应用服务中的 `language=en` 硬编码。学习语言来源优先级：当前 active
+  字幕轨语言 > 用户手动选择 > 媒体/资源 metadata > 安全 fallback `en`（UI 可改）。
+- 验收标准：
+  - 同一 UI 可打开英语和汉语字幕，按不同语言查询词汇状态。
+  - 来源快照不再固定写入 `language: en`。
+- 依赖：SUB-005、WORD-007。
+
+### LANG-006：汉语词典与拼音 Provider
+
+- 优先级：P0
+- 阶段：M2-LANG
+- 需求：接入最小汉语 provider：中文词/字查询、拼音、声调、基础释义，可选 HSK/频率/词性。
+- 验收标准：
+  - 点击中文 token 显示拼音和释义。
+  - provider 缺失时不影响字幕播放和词汇状态。
+- 依赖：DICT-001、LANG-002。
+
+### LANG-007：汉语学习面板与诊断
+
+- 优先级：P1
+- 阶段：M2-LANG
+- 需求：为汉语提供最小学习面板（字/词、拼音、声调、释义、来源原句、状态切换）与初版诊断
+  （不认识、认识但没听出、词边界、声调/轻声、同音上下文）。
+- 验收标准：
+  - 闭环成立：打开中文媒体 → 导入中文字幕 → 点击词 → 看拼音/释义 → 标记状态 → 来源复听。
+  - 面板解释音节/声调到词义的映射，不简化为英文式 lemma 查询。
+- 依赖：LANG-003、LANG-006、DIAG-001。
+
+### LANG-008：理解轴不变量与按语言诊断理由
+
+- 优先级：P0
+- 阶段：M2-LANG
+- 需求：全局词汇状态枚举保持语言无关、跨语言复用；诊断**理由** taxonomy 按 profile 扩展
+  （en: weak_form/liaison；zh: tone_confusion/word_boundary/homophone）。
+- 验收标准：
+  - 中文不需要独立全局状态枚举。
+  - 新增语言只扩展诊断理由，不改动状态枚举与既有语言代码。
+- 依赖：WORD-001、DIAG-001。
+
+### LANG-009：母语（L1）诊断 seam
+
+- 优先级：P2
+- 阶段：M2-LANG
+- 需求：诊断签名为母语维度预留位置 `(L1, L2_unit, status, context)`；v1 的 L1 可空、
+  规则不读取、不落 schema。
+- 验收标准：
+  - 诊断模型形状能容纳 L1，但 v1 行为与无 L1 时一致。
+- 依赖：LANG-008。
+
+### LANG-010：开放 kind taxonomy 与干净降级
+
+- 优先级：P0
+- 阶段：M2-LANG
+- 需求：分词/词汇单位/听觉单位/韵律/形态等 kind 用 namespaced string（`core.*` +
+  `<lang>.*`），未知 kind 干净降级，不使用穷举 enum + 穷举 match。
+- 验收标准：
+  - 未知语言/未知 kind 不导致崩溃或阻断播放与状态。
+  - 新增语言不需回改既有枚举与 match。
+- 依赖：LANG-001。
+
 ## 19. MVP 发布追踪矩阵
 
 | 发布能力 | 必须满足的需求 |
@@ -2232,3 +2350,4 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | Milestone 1.5 词汇学习资产 | WORD-011 至 WORD-018、API-014 至 API-017、DATA-012 至 DATA-016、UI-013 至 UI-015、TEST-015 至 TEST-018 |
 | Milestone 2 生产引擎 | LLT-001 至 LLT-006、PROD-001 至 PROD-007、EVAL-001 至 EVAL-004 |
 | Milestone 2 轻量消费端 | LLT-007、CONSUME-001 至 CONSUME-004 |
+| Milestone 2 多语言学习基础 | LANG-001 至 LANG-010 |
