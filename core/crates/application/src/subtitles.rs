@@ -40,4 +40,17 @@ impl AppServices {
     ) -> Result<Option<SubtitleSentence>, ApplicationError> {
         self.subtitles.get_sentence(sentence_id)
     }
+
+    /// Resolve the learning language for a sentence from its subtitle track,
+    /// falling back to English when the track declares none. This keeps
+    /// diagnosis and phrase detection language-aware instead of assuming `en`.
+    pub(crate) fn sentence_language(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<LanguageCode, ApplicationError> {
+        match self.subtitles.sentence_track_language(sentence_id)? {
+            Some(language) => Ok(language),
+            None => Ok(LanguageCode::parse("en")?),
+        }
+    }
 }

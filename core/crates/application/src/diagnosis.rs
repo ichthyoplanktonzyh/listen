@@ -14,7 +14,8 @@ impl AppServices {
             .iter()
             .filter_map(|token| token.normalized.clone())
             .collect::<Vec<_>>();
-        let profiles = self.read_word_profiles("en", &lemmas)?;
+        let language = self.sentence_language(sentence_id)?;
+        let profiles = self.read_word_profiles(language.as_str(), &lemmas)?;
         let observations = self.observations.list_by_sentence(sentence_id)?;
         Ok(diagnosis_core::diagnose(
             &sentence,

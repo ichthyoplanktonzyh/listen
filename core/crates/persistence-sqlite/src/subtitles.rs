@@ -277,6 +277,28 @@ impl SubtitleRepository for SqliteRepository {
             .map_err(repo)
     }
 
+    fn sentence_track_language(
+        &self,
+        id: &SubtitleSentenceId,
+    ) -> Result<Option<LanguageCode>, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .query_row(
+                "SELECT t.language FROM subtitle_sentences s
+                 JOIN subtitle_tracks t ON t.id = s.track_id
+                 WHERE s.id = ?1",
+                [id.as_str()],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()
+            .map_err(repo)?
+            .flatten()
+            .map(LanguageCode::parse)
+            .transpose()
+            .map_err(ApplicationError::from)
+    }
+
     fn save_pronunciation(&self, analysis: &SentencePronunciation) -> Result<(), ApplicationError> {
         self.connection
             .lock()

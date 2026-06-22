@@ -35,6 +35,13 @@ pub trait SubtitleRepository: Send + Sync {
         &self,
         id: &SubtitleSentenceId,
     ) -> Result<Option<SubtitleSentence>, ApplicationError>;
+    /// Learning language of the track a sentence belongs to, used to resolve the
+    /// language for diagnosis and phrase detection instead of assuming English.
+    /// `None` when the sentence is unknown or its track declares no language.
+    fn sentence_track_language(
+        &self,
+        id: &SubtitleSentenceId,
+    ) -> Result<Option<LanguageCode>, ApplicationError>;
     fn save_word_pronunciation(
         &self,
         language: &str,

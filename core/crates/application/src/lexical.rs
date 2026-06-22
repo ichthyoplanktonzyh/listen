@@ -150,7 +150,7 @@ impl AppServices {
             .subtitles
             .get_sentence(sentence_id)?
             .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
-        let language = LanguageCode::parse("en")?;
+        let language = self.sentence_language(sentence_id)?;
         let mut candidates = Vec::new();
         for provider in self.lexical_normalizers.iter() {
             candidates.extend(

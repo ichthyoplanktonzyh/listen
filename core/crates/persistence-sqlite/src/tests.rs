@@ -1435,6 +1435,86 @@ async fn dictionary_lookup_routes_by_learning_language() {
 }
 
 #[test]
+fn diagnosis_reads_word_profiles_in_the_track_language() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
+    let media = services
+        .register_media(RegisterMedia {
+            path: "/tmp/zh.mp4".into(),
+            fingerprint: "zh-media".into(),
+            title: "ZH".into(),
+            kind: MediaKind::Video,
+            duration_ms: Some(5000),
+        })
+        .unwrap();
+    let track = services
+        .import_subtitle(ImportSubtitle {
+            media_id: media.id.clone(),
+            source_name: "zh.srt".into(),
+            content: "1\n00:00:00,000 --> 00:00:02,000\n我想喝咖啡\n"
+                .as_bytes()
+                .to_vec(),
+            language: None,
+            identity_salt: None,
+        })
+        .unwrap();
+    // The import detects Chinese, and the new repository method resolves a
+    // sentence back to that track language.
+    assert_eq!(
+        track.language.as_ref().map(LanguageCode::as_str),
+        Some("zh")
+    );
+    let sentence = &track.sentences[0];
+    assert_eq!(
+        repo.sentence_track_language(&sentence.id)
+            .unwrap()
+            .as_ref()
+            .map(LanguageCode::as_str),
+        Some("zh")
+    );
+
+    // "我" is a single token under both jieba and the char-level fallback. Give
+    // it an UnknownMeaning status in zh, and a *different* status in en for the
+    // same surface, to prove diagnosis reads zh and the en profile never leaks.
+    let zh_profile = services
+        .update_word_profile(UpdateWordProfile {
+            language: "zh".into(),
+            lemma: "我".into(),
+            display_form: "我".into(),
+            status: Some(WordStatus::UnknownMeaning),
+            source: None,
+        })
+        .unwrap();
+    services
+        .update_word_profile(UpdateWordProfile {
+            language: "en".into(),
+            lemma: "我".into(),
+            display_form: "我".into(),
+            status: Some(WordStatus::KnownRecognized),
+            source: None,
+        })
+        .unwrap();
+
+    let diagnosis = services.diagnose_sentence(&sentence.id).unwrap();
+    assert!(!diagnosis.unclassified_lemmas.contains(&"我".to_string()));
+    let meaning = diagnosis
+        .hints
+        .iter()
+        .find(|hint| hint.kind == DiagnosisKind::MeaningBarrier)
+        .expect("zh UnknownMeaning status surfaces a meaning barrier");
+    assert!(meaning.word_profile_ids.contains(&zh_profile.id));
+}
+
+#[test]
 fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = AppServices::new(
