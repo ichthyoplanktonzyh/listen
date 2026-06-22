@@ -1112,11 +1112,15 @@ def add_mfa_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--mfa-root-dir", help="MFA_ROOT_DIR containing downloaded/extracted models")
     parser.add_argument("--mfa-dictionary", default="english_us_arpa")
     parser.add_argument("--mfa-acoustic-model", default="english_us_arpa")
-    parser.add_argument("--mfa-strategy", choices=["align", "align-one"], default="align-one")
+    parser.add_argument("--mfa-strategy", choices=["align", "align-one"], default="align",
+                        help="MFA alignment strategy: 'align' loads the acoustic model once and "
+                        "aligns all segments in batch (fast); 'align-one' spawns a separate MFA "
+                        "process per segment (slower due to per-segment model loading, but kept "
+                        "as a fallback if the batch path encounters export errors)")
     parser.add_argument("--mfa-jobs", type=int, default=4)
     parser.add_argument("--mfa-quiet", action="store_true")
     parser.add_argument("--post-algorithm-id", default="whisperx-transcript-mfa")
-    parser.add_argument("--post-algorithm-version", default="large-v3-mfa-arpa-align-one")
+    parser.add_argument("--post-algorithm-version", default="large-v3-mfa-arpa-align")
     parser.add_argument("--post-config-hash", default="default")
     parser.add_argument("--post-status", choices=["candidate", "active", "archived"], default="active")
 
