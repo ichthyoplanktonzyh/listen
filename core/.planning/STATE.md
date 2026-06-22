@@ -15,13 +15,13 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-22 CST
-> 更新原因：Phase 2.6 Step 5 汉语词典/拼音 provider（点中文 token 出拼音+释义）落地
+> 更新原因：Phase 2.6 Step 6 汉语面板（逐字拼音）+ 语言感知诊断（听辨因素）落地
 
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
-- **Phase**：Phase 2.6 进行中（Step 1-5：profile + jieba 分词 + LexicalUnit + 去 `language=en`
-  硬编码 + 汉语词典/拼音 provider 已完成并通过测试）
+- **Phase**：Phase 2.6 进行中（Step 1-6：profile + jieba 分词 + LexicalUnit + 去 `language=en`
+  硬编码 + CC-CEDICT 词典 + 汉语面板/语言感知诊断 已完成并通过测试）
 - **分支**：`feature/forced-alignment-research`
 - **版本**：0.7.0
 
@@ -329,7 +329,12 @@ progress:
   - ✅ 补 Step 4 遗漏的后端硬编码：`diagnose_sentence` / `phrase_candidates` 原写死 `en`，现按句子
     所属轨语言查 profile（新增 `sentence_track_language` 仓储方法 + `sentence_language` 助手）。
     修复前中文句子诊断读的是英语 profile、忽略用户中文状态。
-  - ⏳ Step 6-7：汉语面板/诊断、双语回归。
+  - ✅ Step 6：汉语面板 + 语言感知诊断。诊断在 application 层给 recognition barrier 叠加该语言
+    profile 的听辨因素（zh: 声调/词边界/同音/轻声/变调；en: 弱读/连读…），namespaced、按 profile、
+    明确标注为"可能因素非检测"（中文无音频分析，ADR 0012 延后）；`DiagnosisHint` 新增 `reasons`，
+    `diagnosis-core` 保持语言无关。词面板新增汉字逐字拼音分解（字→拼音/声调，从词典拼音对齐、零额外
+    查询、按脚本非语言门控）；诊断卡渲染 reason，未知 reason 干净降级。英语诊断回归基线不变。
+  - ⏳ Step 7：双语回归 fixtures + 收口文档。
 - 规划文档：
   - `.planning/phases/2.6-multilingual-learning-foundation/2.6-CONTEXT.md`
   - `.planning/phases/2.6-multilingual-learning-foundation/2.6-PLAN.md`
@@ -382,9 +387,9 @@ progress:
    Wav2IPA / MFA phone alignment benchmark；通过 gate 前不进入默认 product path。
 3. Phase 2.5.5：语言学习抽象校验 ✅ 已收口（SLA 映射、invariant/variant 边界、L1 seam、
    ja/ar 证伪、回灌 2.6 均完成）。
-4. Phase 2.6：多语言学习基础——Step 1-5（profile + jieba 分词 + LexicalUnit + 去
-   `language=en` 硬编码 + 汉语词典/拼音 provider）✅ 完成；下一步 Step 6 汉语面板/诊断，
-   续做 Step 7 双语回归。
+4. Phase 2.6：多语言学习基础——Step 1-6（profile + jieba 分词 + LexicalUnit + 去
+   `language=en` 硬编码 + CC-CEDICT 词典 + 汉语面板/语言感知诊断）✅ 完成；下一步 Step 7
+   双语回归 fixtures + 收口文档。
 
 ## 指标
 

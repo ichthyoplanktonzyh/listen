@@ -1515,6 +1515,68 @@ fn diagnosis_reads_word_profiles_in_the_track_language() {
 }
 
 #[test]
+fn recognition_barrier_carries_the_language_listening_reasons() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
+    let media = services
+        .register_media(RegisterMedia {
+            path: "/tmp/zh.mp4".into(),
+            fingerprint: "zh-reasons".into(),
+            title: "ZH".into(),
+            kind: MediaKind::Video,
+            duration_ms: Some(5000),
+        })
+        .unwrap();
+    let track = services
+        .import_subtitle(ImportSubtitle {
+            media_id: media.id,
+            source_name: "zh.srt".into(),
+            content: "1\n00:00:00,000 --> 00:00:02,000\n我想喝咖啡\n"
+                .as_bytes()
+                .to_vec(),
+            language: None,
+            identity_salt: None,
+        })
+        .unwrap();
+    let sentence = &track.sentences[0];
+    // KnownNotRecognized -> the word is known but was not heard -> recognition barrier.
+    services
+        .update_word_profile(UpdateWordProfile {
+            language: "zh".into(),
+            lemma: "我".into(),
+            display_form: "我".into(),
+            status: Some(WordStatus::KnownNotRecognized),
+            source: None,
+        })
+        .unwrap();
+
+    let diagnosis = services.diagnose_sentence(&sentence.id).unwrap();
+    let recognition = diagnosis
+        .hints
+        .iter()
+        .find(|hint| hint.kind == DiagnosisKind::RecognitionBarrier)
+        .expect("KnownNotRecognized surfaces a recognition barrier");
+    // The Chinese profile's listening factors are attached as possibilities.
+    assert!(recognition.reasons.contains(&"tone_confusion".to_string()));
+    assert!(recognition.reasons.contains(&"word_boundary".to_string()));
+    // Reasons only decorate the recognition barrier, not other hint kinds.
+    for hint in &diagnosis.hints {
+        if hint.kind != DiagnosisKind::RecognitionBarrier {
+            assert!(hint.reasons.is_empty());
+        }
+    }
+}
+
+#[test]
 fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = AppServices::new(

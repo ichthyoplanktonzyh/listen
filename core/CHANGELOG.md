@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- 2026-06-22 21:49:03 CST: Added the Phase 2.6 Chinese learning panel and
+  language-aware diagnosis (step 6). Sentence diagnosis now layers the learning
+  language's listening factors onto the recognition barrier as namespaced,
+  per-profile *possibilities* (zh: tone_confusion/word_boundary/homophone/
+  neutral_tone/tone_sandhi; en: weak_form/linking/...), explicitly framed as
+  factors to consider rather than detections from audio — there is no Chinese
+  audio analysis yet (deferred per ADR 0012). The decoration lives in the
+  application layer (`diagnose_sentence`), keeping `diagnosis-core` language-
+  agnostic; a new `reasons` field on `DiagnosisHint` carries them. The word panel
+  gained a per-character breakdown for multi-character Han words, aligning each
+  character with its pinyin syllable (字 → 拼音/声调) — derived from the dictionary
+  phonetic with no extra lookups and gated on script, not language. The diagnosis
+  card renders reasons localized with a clean fallback for unknown reasons.
+  Verified with new application and widget tests; English diagnosis stays the
+  regression baseline.
+
 - 2026-06-22 21:09:21 CST: Integrated CC-CEDICT as the real Chinese dictionary
   source, replacing the 25-word built-in stub with the full ~120k-entry community
   dictionary while keeping the seed as an offline fallback. `ChineseDictionaryProvider`

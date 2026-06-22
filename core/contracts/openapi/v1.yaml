@@ -1916,6 +1916,10 @@ components:
               word_profile_ids:
                 type: array
                 items: { type: string }
+              reasons:
+                type: array
+                description: Per-language listening-factor possibilities (not audio detections); empty except on a recognition barrier.
+                items: { type: string }
         unclassified_lemmas:
           type: array
           items: { type: string }

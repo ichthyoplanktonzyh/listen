@@ -1,65 +1,62 @@
-# Continue Here — Phase 2.6 Step 6
+# Continue Here — Phase 2.6 Step 7
 
 > 最后更新：2026-06-22 CST
 > 单一接续入口（历史 handoff 见同目录 dated 文件，不必读）。
 
 ## 现在在哪
 
-Phase 2.6（多语言学习基础，English + Chinese）进行中，**Step 1-5 已完成、已测试**，
-Step 5 + 两处补强**待提交**（见下）。下一步是 **Step 6**。
+Phase 2.6（多语言学习基础，English + Chinese）进行中，**Step 1-6 已完成、已测试**，
+Step 6 **待提交**（见下）。下一步是 **Step 7（双语回归 + 收口）**——Phase 2.6 最后一步。
 
 | 提交 | 内容 |
 |---|---|
-| （未提交） | CC-CEDICT 真实词典接入 |
-| （未提交） | 修 diagnosis/phrase 后端 `language=en` 硬编码 |
-| `860a7df` | Step 5：汉语词典 provider（点中文 token 出拼音+释义） |
-| `8133ab9` | 清理：删除死代码 `normalizeLexical` |
+| （未提交） | Step 6：汉语面板（逐字拼音）+ 语言感知诊断 |
+| `832642f` | CC-CEDICT 真实词典接入 |
+| `655919a` | 修 diagnosis/phrase 后端 `language=en` 硬编码 |
+| `860a7df` | Step 5：汉语词典 provider |
 | `c7634dd` | Step 4：去 `language=en` 硬编码 + import 语言检测 |
-| `9c63464` | Step 3：LexicalUnit（粒度×归一、不透明 key） |
 
-## Step 5 + 补强已完成（2026-06-22）
+## Step 6 已完成（2026-06-22）
 
-汉语词典走既有 provider 接口接入，点中文 token 出拼音 + 释义；并补掉 Step 4 漏的后端硬编码。
+汉语学习面板 + 语言感知诊断。落点：
 
-- **真实词典 CC-CEDICT**：`ChineseDictionaryProvider` 读安装的 CC-CEDICT `.u8`（约 12 万词条，
-  缓存加载，镜像 ECDICT loader），解析 `繁 简 [pin1 yin1] /释义/` 并把数字拼音转调号（`u:`→`ü`、
-  轻声、大写专名、a/e/ou/末元音规则），简繁双查；25 词种子降为离线兜底。注册进学习资源目录
-  （`m18.rs` catalog，钉死镜像 commit + 真实 SHA-256，CC-BY-SA 4.0），像 ECDICT 一样可安装。
-  已用真实 118k 词条文件冒烟验证（你好/咖啡/量子力学/中国/行 等）。**已知局限**：多音词取第一条。
-- **后端 `language=en` 硬编码已修**：`diagnose_sentence` / `phrase_candidates` 原写死 `en`，
-  现经 `sentence_language`（→ 新仓储方法 `sentence_track_language`，JOIN `subtitle_tracks.language`，
-  默认 `en`）按句子所属轨语言查 profile。已加测试证明中文诊断读 zh profile、en 不泄漏。
-- **provider 注册/派发/拼音载体/面板**：同前——`dictionaries` vec 注册、`lookup_dictionary` 按
-  `supported_languages` 派发、拼音走 `DictionaryLookup.phonetics`、`WordLearningPanel` 隐藏空 IPA 区。
+- **诊断听辨因素（possibilities，非检测）**：`application::diagnose_sentence` 给 recognition barrier
+  叠加该语言 profile 的 `diagnosis_reasons`（zh: tone_confusion/word_boundary/homophone/neutral_tone/
+  tone_sandhi；en: weak_form/linking/…）。`diagnosis-core` 保持语言无关（reason 在 application 层叠），
+  `DiagnosisHint` 新增 `reasons`（serde default）。**中文无音频分析（ADR 0012 延后），所以是"可考虑
+  因素"而非检测**——UI 明确标注"非检测结果"。profile 驱动，英语也受益、无 `if zh`。
+- **词面板逐字拼音分解**：多字 Han 词把每个字与拼音音节对齐（字→拼音/声调），纯从词典拼音切分、
+  零额外查询、按脚本（多字 Han）门控而非语言。空 IPA 区仍隐藏。
+- **client**：`diagnosis_card` 渲染 reason（`l.diagnosisReason()`，未知 reason 回落原名，干净降级）；
+  localization 加 en/zh reason 标签 + `字`/`possibleListeningFactors`。OpenAPI `DiagnosisHint` 加 `reasons`。
+- 测试：application `recognition_barrier_carries_the_language_listening_reasons`；widget `diagnosis_card`
+  reason 渲染 + `word_learning_panel` 逐字拼音。
 
-Exit criteria 已满足：点中文 token → 词典区显示拼音 + 释义（装了 CC-CEDICT 即全量、否则种子兜底）；
-未命中干净降级、不影响播放/词汇状态；中文诊断读对语言。
+Exit criteria 已满足：学汉语闭环成立（导入中文字幕→点词→逐字拼音+释义→标记状态→来源复听）；面板讲
+音节/声调→词义，非英文式 lemma 查询；诊断给中文听辨因素。
 
-可改进（非阻塞）：`_openWord` 仍会对中文调英语 `lookupPronunciation` 并缓存空结果（已被面板隐藏、
-英汉缓存不冲突，无害）。CC-CEDICT 装载依赖第三方镜像仓库存续（钉死 commit→文件不可变；仓库若被删
-则安装 404、provider 回落种子，干净降级）。多音词只显示第一条读音。
+**未做（刻意，非过度工程）**：中文专属音频/声调检测（production-engine 范畴，ADR 延后）；逐字"义"
+（只做了逐字"音"，逐字释义需 N 次查询）；能力矩阵 API 暴露给 client（面板的脚本门控暂够用）。
+未跑活体 UI 点选（后端 SQLite 集成测 + client widget 测 + 契约校验已覆盖各环节）。
 
-## 下一步：Step 6 — Chinese Learning Panel And Diagnosis
+## 下一步：Step 7 — Tests And Closeout（Phase 2.6 收尾）
 
-为汉语定义最小学习体验（见 `2.6-PLAN.md` Step 6）：
+见 `2.6-PLAN.md` Step 7。新增双语 fixtures 与回归，并写收口文档：
 
-- 面板：字/词、拼音、声调、释义、来源原句、状态切换。
-- 诊断初版 reason（per-profile，**非新增状态枚举**——状态枚举语言无关、复用）：不认识词/字、
-  认识但没听出、词边界切分困难、声调/轻声、同音上下文。诊断 reason taxonomy 用开放 namespaced
-  string（`zh.tone_confusion` / `zh.word_boundary` / `zh.homophone` 等，见 ADR 0012 §5 / R0）。
+- fixtures：英语既有 + 中文简单字幕 + 中英混排字幕。
+- 测试：tokenizer contract、词汇语言隔离、dictionary provider 语言路由、source snapshot 语言正确、
+  中文 token click 的 UI smoke。（多数已有零散覆盖，Step 7 收敛成显式回归集 + 收口。）
+- 文档：更新 ROADMAP / REQUIREMENTS / STATE，写 `2.6-CLOSEOUT.md`。
 
-Exit criteria：外国人学汉语基础路径成立（打开中文媒体→导入中文字幕→点词→看拼音/释义→标记状态→
-来源复听）；面板解释音节/声调到词义映射，不简化为英文式 lemma 查询。
+Exit criteria：英语全回归通过；汉语最小学习闭环通过；文档更新。
 
 起手定位：
 ```sh
-grep -rn "diagnose\|diagnosis" crates/application/src/diagnosis.rs crates/api-http/src/routes/dictionary.rs
-grep -rn "profile_for\|diagnosis_rules\|reason" crates/domain/src/language_profile.rs
+ls .planning/phases/2.6-multilingual-learning-foundation/   # 看是否已有 CLOSEOUT 模板（参考 2.5 收口）
+grep -rn "zh\|chinese\|咖啡" apps/desktop/test crates/*/src/tests.rs   # 盘点已有双语测试
 ```
-关键文件：`crates/application/src/diagnosis.rs`、`crates/domain/src/language_profile.rs`（zh profile 的
-`diagnosis_rules`/`sound_features`）、client `WordLearningPanel` + 诊断展示、`_refreshDiagnosis`。
-注意 zh profile 已声明 `pronunciation: zh.pinyin`、`sound_features: [zh.tone, zh.neutral_tone,
-zh.tone_sandhi, zh.erhua]`、`diagnosis_rules` 含 tone_confusion/word_boundary/homophone 等。
+关键：把分散在 subtitle-core/dictionary-provider/persistence-sqlite/flutter 的中文测试梳理成 Phase 2.6
+回归清单；按 2.5 的 CLOSEOUT 体例收口。
 
 ## 已就位的地基（Step 4 直接用，别重造）
 

@@ -5,6 +5,11 @@ use domain::{
     SubtitleTokenKind, WordObservation, WordProfile, WordStatus,
 };
 
+/// Diagnose why a sentence may be hard to understand from the learner's
+/// vocabulary state. The hint kinds (meaning vs recognition barrier) sit on the
+/// comprehension axis and are language-agnostic. Per-language listening *reasons*
+/// are layered on by the caller (see `AppServices::diagnose_sentence`), keeping
+/// this core free of language-specific knowledge.
 pub fn diagnose(
     sentence: &SubtitleSentence,
     profiles: &[WordProfile],
@@ -51,6 +56,7 @@ pub fn diagnose(
             message: "Some words may block understanding because their meanings are unknown."
                 .into(),
             word_profile_ids: meaning,
+            reasons: Vec::new(),
         });
     }
     if !recognition.is_empty() {
@@ -58,6 +64,8 @@ pub fn diagnose(
             kind: DiagnosisKind::RecognitionBarrier,
             message: "Some known words may not yet be recognized reliably in speech.".into(),
             word_profile_ids: recognition,
+            // Language reasons are layered on by the caller; empty here.
+            reasons: Vec::new(),
         });
     }
     if !unclassified.is_empty() {
@@ -65,12 +73,14 @@ pub fn diagnose(
             kind: DiagnosisKind::InsufficientInformation,
             message: "Classify the remaining words before drawing a firm conclusion.".into(),
             word_profile_ids: vec![],
+            reasons: Vec::new(),
         });
     } else if hints.is_empty() && !lemmas.is_empty() {
         hints.push(DiagnosisHint {
             kind: DiagnosisKind::OtherFactors,
             message: "Vocabulary does not explain the difficulty; consider grammar, speed, context, or attention.".into(),
             word_profile_ids: vec![],
+            reasons: Vec::new(),
         });
     }
     SentenceDiagnosis {
