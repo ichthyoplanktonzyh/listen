@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-06-21T06:45:00.000Z"
+last_updated: "2026-06-22T01:04:00.000Z"
 progress:
   total_phases: 10
   completed_phases: 0
@@ -14,13 +14,13 @@ progress:
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-21 14:45 CST
-> 更新原因：Phase 2.4 ChunkTimeline 生成、管理和播放消费闭环完成
+> 最后更新：2026-06-22 09:04 CST
+> 更新原因：Phase 2.5 Sound Pattern / PhoneTimeline 收口
 
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
-- **Phase**：Phase 2.4 ChunkTimeline 生成与消费完成；准备进入 Phase 2.5 Sound Pattern / PhoneTimeline
+- **Phase**：Phase 2.5 Sound Pattern / PhoneTimeline 已完成；准备进入 Phase 2.6 或后续 provider research
 - **分支**：`feature/forced-alignment-research`
 - **版本**：0.7.0
 
@@ -215,7 +215,7 @@ progress:
   - `.planning/phases/2.4-chunktimeline-generation-consumption/2.4-PLAN.md`
   - `.planning/phases/2.4-chunktimeline-generation-consumption/2.4-CLOSEOUT.md`
 
-### Phase 2.5: Sound Pattern / PhoneTimeline ⏳ 已规划
+### Phase 2.5: Sound Pattern / PhoneTimeline ✅ 已完成
 
 - 目标：把真实声音模式从“文字字幕的附属解释”升级为一等学习对象，让用户可以从
   sound pattern 直接建立到文字、chunk 和意义的映射。
@@ -230,9 +230,27 @@ progress:
     PhoneTimeline resource。
 - UI 目标：Sound Pattern View 显示 detected audio、canonical pronunciation 和 rule
   prediction 三层；支持 current phone 高亮、点击循环、finding 证据展开和用户反馈。
+- 2026-06-21 首块实现：
+  - `PhoneTimeline` 升级为一等资源模型，支持 candidate / active / archived 生命周期。
+  - SQLite 新增 `phone_timeline_runs`，LLTimeline export/import 开始保留
+    PhoneTimeline candidates 和 active id。
+  - completed `PhoneticAnalysis` 会桥接生成 PhoneTimeline candidate。
+  - 新增 PhoneTimeline list / summary / get / activate / archive / delete / export API。
+  - `research-fixture` 桥接结果标记为 `approximate`，保持 synthetic / 非真实检测语义。
+  - TIMIT benchmark dataset phone timeline 输出迁移到新资源契约。
+- 2026-06-22 收口：
+  - app 端 `LocalApi`、timeline models、`SubtitleController` 和 Timeline Resource Summary
+    已接入 PhoneTimeline。
+  - 资源面板可展示 PhoneTimeline candidates，并支持激活、归档、删除。
+  - 播放/诊断侧优先消费 active PhoneTimeline；无 active resource 时回退旧
+    `phonetic-analyses`。
+  - `2.5-BENCHMARK.md` 明确 provider gate：当前 no release provider selected。
+  - `scripts/verify-m20-phase0.sh` research infrastructure 验证通过。
 - 规划文档：
   - `.planning/phases/2.5-sound-pattern-phonetictimeline/2.5-CONTEXT.md`
   - `.planning/phases/2.5-sound-pattern-phonetictimeline/2.5-PLAN.md`
+  - `.planning/phases/2.5-sound-pattern-phonetictimeline/2.5-BENCHMARK.md`
+  - `.planning/phases/2.5-sound-pattern-phonetictimeline/2.5-CLOSEOUT.md`
 
 ### Phase 2.6: 多语言学习基础 ⏳ 已规划
 
@@ -290,9 +308,9 @@ progress:
 ## 下一步工作
 
 1. Phase 2.3：用真实媒体完成 Manual Timeline Review 手动 QA，并决定是否正式收口。
-2. Phase 2.5 作为后续独立阶段：PhoneTimeline provider benchmark、资源契约和
-   Sound Pattern View。
-3. Phase 2.6 延后执行：多语言学习基础，先以英语 + 汉语建立扩展范式。
+2. 后续 provider research：填充 licensed reviewed development cases，复跑 ZIPA /
+   Wav2IPA / MFA phone alignment benchmark；通过 gate 前不进入默认 product path。
+3. Phase 2.6：多语言学习基础，以英语 + 汉语建立扩展范式。
 
 ## 指标
 

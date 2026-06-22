@@ -250,16 +250,18 @@ def timit_to_lltimeline(args: argparse.Namespace) -> int:
         words_out.extend(adjusted_words)
         boundary_adjustments.extend(adjustments)
         if phn_path and phn_path.exists():
-            for phone_index, (start, end, phone) in enumerate(parse_boundary_file(phn_path, "phone")):
+            for start, end, phone in parse_boundary_file(phn_path, "phone"):
                 phones_out.append(
                     {
-                        "sentence_id": sentence_id,
-                        "phone_index": phone_index,
-                        "label": phone,
+                        "symbol": phone,
+                        "phone_set": "timit_phone",
                         "start_ms": cursor_ms + sample_to_ms(start, args.sample_rate),
                         "end_ms": cursor_ms + sample_to_ms(end, args.sample_rate),
+                        "confidence": 1.0,
+                        "token_index": None,
                         "provider_id": "timit",
                         "provider_version": "ldc93s1-phone",
+                        "model_revision": "ldc93s1-phone",
                     }
                 )
         utterances.append(
@@ -350,13 +352,25 @@ def timit_to_lltimeline(args: argparse.Namespace) -> int:
                 "id": phone_timeline_id,
                 "track_id": track_id,
                 "media_id": media_id,
-                "algorithm_id": "timit-human-gold",
-                "algorithm_version": "ldc93s1-phone",
-                "config_hash": f"sample-rate-{args.sample_rate}",
-                "parent_timeline_id": None,
+                "sentence_id": None,
+                "parent_word_timeline_id": word_timeline_id,
+                "parent_phonetic_analysis_id": None,
+                "provider_id": "timit",
+                "provider_version": "ldc93s1-phone",
+                "model_id": None,
+                "model_revision": "ldc93s1-phone",
+                "phone_set": "timit_phone",
+                "precision": "aligned",
                 "created_by": "user",
-                "status": "published",
+                "status": "active",
+                "metrics_json": {
+                    "dataset": "TIMIT",
+                    "phone_count": len(phones_out),
+                    "sample_rate_hz": args.sample_rate,
+                },
                 "phones": phones_out,
+                "alignments": [],
+                "findings": [],
                 "created_at_ms": created_at,
                 "updated_at_ms": created_at,
             }

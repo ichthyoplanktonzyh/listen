@@ -161,6 +161,11 @@ impl AppServices {
             .iter()
             .find(|timeline| timeline.status == TimelineStatus::Active)
             .map(|timeline| timeline.id.clone());
+        let phone_timelines = self.subtitles.list_phone_timelines(track_id)?;
+        let active_phone_timeline_id = phone_timelines
+            .iter()
+            .find(|timeline| timeline.status == TimelineStatus::Active)
+            .map(|timeline| timeline.id.clone());
         let persisted_resource = self.subtitles.get_lltimeline_resource(track_id)?;
         let (metadata, artifacts) = if let Some((mut metadata, artifacts)) = persisted_resource {
             metadata.media = LLTimelineMedia {
@@ -215,8 +220,8 @@ impl AppServices {
             segments: lltimeline_segments_from_track(&track),
             word_timelines,
             active_word_timeline_id,
-            phone_timelines: Vec::new(),
-            active_phone_timeline_id: None,
+            phone_timelines,
+            active_phone_timeline_id,
             chunk_timelines,
             active_chunk_timeline_id,
             artifacts,
@@ -287,6 +292,21 @@ impl AppServices {
         }
         if let Some(active_id) = document.active_word_timeline_id {
             self.subtitles.activate_word_timeline(&active_id)?;
+        }
+
+        for mut timeline in document.phone_timelines {
+            if timeline.media_id != track.media_id || timeline.track_id != track.id {
+                return Err(ApplicationError::Validation("lltimeline phone timeline"));
+            }
+            if document.active_phone_timeline_id.as_ref() == Some(&timeline.id)
+                && timeline.status == TimelineStatus::Active
+            {
+                timeline.status = TimelineStatus::Candidate;
+            }
+            self.subtitles.save_phone_timeline(&timeline)?;
+        }
+        if let Some(active_id) = document.active_phone_timeline_id {
+            self.subtitles.activate_phone_timeline(&active_id)?;
         }
 
         for mut timeline in document.chunk_timelines {
@@ -390,6 +410,10 @@ impl AppServices {
             timeline.track_id = track_id.clone();
         }
         for timeline in &mut document.chunk_timelines {
+            timeline.media_id = media.id.clone();
+            timeline.track_id = track_id.clone();
+        }
+        for timeline in &mut document.phone_timelines {
             timeline.media_id = media.id.clone();
             timeline.track_id = track_id.clone();
         }

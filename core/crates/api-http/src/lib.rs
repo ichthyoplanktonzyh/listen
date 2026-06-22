@@ -201,6 +201,30 @@ pub fn router(state: ApiState) -> Router {
             "/v1/chunk-timelines/{timeline_id}/export",
             get(export_chunk_timeline),
         )
+        .route(
+            "/v1/subtitles/{track_id}/phone-timelines",
+            get(track_phone_timelines),
+        )
+        .route(
+            "/v1/subtitles/{track_id}/phone-timelines/summary",
+            get(track_phone_timeline_summaries),
+        )
+        .route(
+            "/v1/phone-timelines/{timeline_id}",
+            get(phone_timeline).delete(delete_phone_timeline),
+        )
+        .route(
+            "/v1/phone-timelines/{timeline_id}/activate",
+            post(activate_phone_timeline),
+        )
+        .route(
+            "/v1/phone-timelines/{timeline_id}/archive",
+            post(archive_phone_timeline),
+        )
+        .route(
+            "/v1/phone-timelines/{timeline_id}/export",
+            get(export_phone_timeline),
+        )
         .route("/v1/speech/jobs", get(speech_jobs).post(create_speech_job))
         .route("/v1/speech/jobs/{job_id}", get(speech_job))
         .route("/v1/speech/jobs/{job_id}/cancel", post(cancel_speech_job))

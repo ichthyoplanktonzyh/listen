@@ -325,6 +325,7 @@ async fn imports_and_reads_complete_subtitle_timeline() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let response = app
+        .clone()
         .oneshot(
             Request::get(format!(
                 "/v1/media/{}/subtitles",
@@ -562,6 +563,7 @@ async fn exports_lltimeline_document_with_active_word_timeline() {
     );
 
     let response = app
+        .clone()
         .oneshot(
             Request::delete(format!(
                 "/v1/word-timelines/{}",
@@ -964,6 +966,7 @@ async fn phonetic_analysis_fake_provider_completes_without_audio_detection_claim
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(repeated["id"], completed["id"]);
     let response = app
+        .clone()
         .oneshot(
             Request::get(format!(
                 "/v1/subtitles/{}/phonetic-analyses",
@@ -989,6 +992,77 @@ async fn phonetic_analysis_fake_provider_completes_without_audio_detection_claim
         findings
             .iter()
             .all(|finding| finding["status"] != "detected_in_audio")
+    );
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/v1/subtitles/{}/phone-timelines/summary",
+                track["id"].as_str().unwrap()
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let phone_timeline_summaries: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(phone_timeline_summaries.as_array().unwrap().len(), 1);
+    assert_eq!(phone_timeline_summaries[0]["status"], "candidate");
+    assert_eq!(phone_timeline_summaries[0]["precision"], "approximate");
+    assert_eq!(
+        phone_timeline_summaries[0]["parent_phonetic_analysis_id"],
+        analyses[0]["id"]
+    );
+    assert_eq!(
+        phone_timeline_summaries[0]["sentence_id"],
+        analyses[0]["sentence_id"]
+    );
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post(format!(
+                "/v1/phone-timelines/{}/activate",
+                phone_timeline_summaries[0]["id"].as_str().unwrap()
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let active_phone_timeline: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(active_phone_timeline["status"], "active");
+    assert!(
+        !active_phone_timeline["phones"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+
+    let response = app
+        .oneshot(
+            Request::get(format!(
+                "/v1/subtitles/{}/lltimeline/export",
+                track["id"].as_str().unwrap()
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let document: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(document["phone_timelines"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        document["active_phone_timeline_id"],
+        active_phone_timeline["id"]
     );
 }
 
@@ -1346,6 +1420,12 @@ fn openapi_lists_implemented_routes() {
         "/v1/chunk-timelines/{timeline_id}/activate",
         "/v1/chunk-timelines/{timeline_id}/archive",
         "/v1/chunk-timelines/{timeline_id}/export",
+        "/v1/subtitles/{track_id}/phone-timelines",
+        "/v1/subtitles/{track_id}/phone-timelines/summary",
+        "/v1/phone-timelines/{timeline_id}",
+        "/v1/phone-timelines/{timeline_id}/activate",
+        "/v1/phone-timelines/{timeline_id}/archive",
+        "/v1/phone-timelines/{timeline_id}/export",
         "/v1/speech/jobs",
         "/v1/word-profiles",
         "/v1/word-profiles/batch",
@@ -1398,8 +1478,8 @@ fn openapi_version_snapshot_and_path_count() {
     // Count documented paths as a regression gate.
     let path_count = openapi.lines().filter(|l| l.starts_with("  /v1/")).count();
     assert_eq!(
-        path_count, 87,
-        "OpenAPI path count changed from 87 — update snapshot if paths were added/removed"
+        path_count, 93,
+        "OpenAPI path count changed from 93 — update snapshot if paths were added/removed"
     );
 
     // All paths must be under /v1/.

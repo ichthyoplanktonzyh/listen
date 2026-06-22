@@ -290,6 +290,90 @@ pub(crate) async fn delete_chunk_timeline(
         .map_err(ApiError::from)
 }
 
+pub(crate) async fn track_phone_timelines(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<Vec<domain::PhoneTimeline>>, ApiError> {
+    state
+        .services
+        .list_phone_timelines(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn track_phone_timeline_summaries(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<Vec<domain::PhoneTimelineSummary>>, ApiError> {
+    state
+        .services
+        .summarize_phone_timelines(
+            &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn phone_timeline(
+    State(state): State<ApiState>,
+    Path(timeline_id): Path<String>,
+) -> Result<Json<domain::PhoneTimeline>, ApiError> {
+    state
+        .services
+        .get_phone_timeline(
+            &domain::PhoneTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
+        )?
+        .ok_or(ApplicationError::NotFound("phone timeline"))
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn export_phone_timeline(
+    State(state): State<ApiState>,
+    Path(timeline_id): Path<String>,
+) -> Result<Json<domain::PhoneTimeline>, ApiError> {
+    phone_timeline(State(state), Path(timeline_id)).await
+}
+
+pub(crate) async fn activate_phone_timeline(
+    State(state): State<ApiState>,
+    Path(timeline_id): Path<String>,
+) -> Result<Json<domain::PhoneTimeline>, ApiError> {
+    state
+        .services
+        .activate_phone_timeline(
+            &domain::PhoneTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn archive_phone_timeline(
+    State(state): State<ApiState>,
+    Path(timeline_id): Path<String>,
+) -> Result<Json<domain::PhoneTimeline>, ApiError> {
+    state
+        .services
+        .archive_phone_timeline(
+            &domain::PhoneTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn delete_phone_timeline(
+    State(state): State<ApiState>,
+    Path(timeline_id): Path<String>,
+) -> Result<Json<domain::PhoneTimeline>, ApiError> {
+    state
+        .services
+        .delete_phone_timeline(
+            &domain::PhoneTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 pub(crate) async fn generate_track_word_timings(
     State(state): State<ApiState>,
     Path(track_id): Path<String>,

@@ -111,6 +111,34 @@ pub trait SubtitleRepository: Send + Sync {
         &self,
         id: &ChunkTimelineId,
     ) -> Result<ChunkTimeline, ApplicationError>;
+    fn save_phone_timeline(
+        &self,
+        timeline: &PhoneTimeline,
+    ) -> Result<PhoneTimeline, ApplicationError>;
+    fn list_phone_timelines(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<PhoneTimeline>, ApplicationError>;
+    fn get_phone_timeline(
+        &self,
+        id: &PhoneTimelineId,
+    ) -> Result<Option<PhoneTimeline>, ApplicationError>;
+    fn active_phone_timeline(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<PhoneTimeline>, ApplicationError>;
+    fn activate_phone_timeline(
+        &self,
+        id: &PhoneTimelineId,
+    ) -> Result<PhoneTimeline, ApplicationError>;
+    fn archive_phone_timeline(
+        &self,
+        id: &PhoneTimelineId,
+    ) -> Result<PhoneTimeline, ApplicationError>;
+    fn delete_phone_timeline(
+        &self,
+        id: &PhoneTimelineId,
+    ) -> Result<PhoneTimeline, ApplicationError>;
     fn save_lltimeline_resource(
         &self,
         track_id: &SubtitleTrackId,

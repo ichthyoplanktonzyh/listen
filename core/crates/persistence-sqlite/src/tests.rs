@@ -171,6 +171,48 @@ fn chunk_timeline(
     }
 }
 
+fn phone_timeline(
+    id: &str,
+    track: &SubtitleTrack,
+    parent: &WordTimeline,
+    status: TimelineStatus,
+) -> PhoneTimeline {
+    PhoneTimeline {
+        id: PhoneTimelineId::parse(id).unwrap(),
+        track_id: track.id.clone(),
+        media_id: track.media_id.clone(),
+        sentence_id: Some(track.sentences[0].id.clone()),
+        parent_word_timeline_id: Some(parent.id.clone()),
+        parent_phonetic_analysis_id: None,
+        provider_id: "research-fixture".into(),
+        provider_version: "v1".into(),
+        model_id: Some(
+            PhoneticAnalysisModelId::parse("research-fixture:deterministic@v1").unwrap(),
+        ),
+        model_revision: Some("v1".into()),
+        phone_set: "research_fixture_symbols".into(),
+        precision: PhoneTimelinePrecision::Approximate,
+        created_by: TimelineCreator::Algorithm,
+        status,
+        metrics_json: serde_json::json!({ "synthetic": true }),
+        phones: vec![DetectedPhone {
+            symbol: "H".into(),
+            phone_set: "research_fixture_symbols".into(),
+            start_ms: 150,
+            end_ms: 260,
+            confidence: Some(0.5),
+            token_index: Some(0),
+            provider_id: "research-fixture".into(),
+            provider_version: "v1".into(),
+            model_revision: "v1".into(),
+        }],
+        alignments: Vec::new(),
+        findings: Vec::new(),
+        created_at_ms: 1,
+        updated_at_ms: 1,
+    }
+}
+
 #[async_trait]
 impl DictionaryProvider for FakeDictionary {
     fn info(&self) -> DictionaryProviderInfo {
@@ -589,6 +631,74 @@ fn archiving_and_deleting_chunk_timeline_updates_repository() {
     let deleted = repo.delete_chunk_timeline(&timeline.id).unwrap();
     assert_eq!(deleted.id, timeline.id);
     assert!(repo.get_chunk_timeline(&timeline.id).unwrap().is_none());
+}
+
+#[test]
+fn activating_phone_timeline_updates_active_resource() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let track = word_timeline_track();
+    repo.save_track(&track).unwrap();
+    let parent = word_timeline(
+        "timeline-parent-phone",
+        &track,
+        TimelineStatus::Active,
+        "mms-fa",
+        150,
+        260,
+    );
+    repo.save_word_timeline(&parent).unwrap();
+    let older = phone_timeline("phone-timeline-1", &track, &parent, TimelineStatus::Active);
+    let newer = phone_timeline(
+        "phone-timeline-2",
+        &track,
+        &parent,
+        TimelineStatus::Candidate,
+    );
+    repo.save_phone_timeline(&older).unwrap();
+    repo.save_phone_timeline(&newer).unwrap();
+
+    let active = repo.activate_phone_timeline(&newer.id).unwrap();
+    assert_eq!(active.status, TimelineStatus::Active);
+    assert_eq!(
+        repo.active_phone_timeline(&track.id).unwrap().unwrap().id,
+        newer.id
+    );
+    assert_eq!(
+        repo.get_phone_timeline(&older.id).unwrap().unwrap().status,
+        TimelineStatus::Candidate
+    );
+    assert_eq!(repo.list_phone_timelines(&track.id).unwrap().len(), 2);
+}
+
+#[test]
+fn archiving_and_deleting_phone_timeline_updates_repository() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let track = word_timeline_track();
+    repo.save_track(&track).unwrap();
+    let parent = word_timeline(
+        "timeline-parent-phone-delete",
+        &track,
+        TimelineStatus::Active,
+        "mms-fa",
+        150,
+        260,
+    );
+    repo.save_word_timeline(&parent).unwrap();
+    let timeline = phone_timeline(
+        "phone-timeline-delete",
+        &track,
+        &parent,
+        TimelineStatus::Candidate,
+    );
+    repo.save_phone_timeline(&timeline).unwrap();
+
+    let archived = repo.archive_phone_timeline(&timeline.id).unwrap();
+    assert_eq!(archived.status, TimelineStatus::Archived);
+    let deleted = repo.delete_phone_timeline(&timeline.id).unwrap();
+    assert_eq!(deleted.id, timeline.id);
+    assert!(repo.get_phone_timeline(&timeline.id).unwrap().is_none());
 }
 
 #[test]

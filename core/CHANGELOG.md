@@ -10,6 +10,17 @@
   with identical output. The original reason for `align-one` was an MFA 3.3.9
   SQLite export bug (empty interval CSVs); re-testing confirmed the bug is no
   longer present. `align-one` is kept as `--mfa-strategy align-one` fallback.
+- 2026-06-22 09:04:00 CST: Completed Phase 2.5 Sound Pattern /
+  PhoneTimeline. PhoneTimeline is now a first-class resource with SQLite schema
+  v14, candidate/active/archive lifecycle APIs, LLTimeline import/export
+  round-tripping, OpenAPI coverage, and desktop resource management. Completed
+  phonetic analyses now bridge to PhoneTimeline candidates; the desktop app can
+  show, activate, archive, delete, and consume active PhoneTimeline resources
+  for current-phone highlighting and diagnostic sound-pattern display, while
+  falling back to legacy phonetic analyses when no active resource exists.
+  Added the Phase 2.5 provider benchmark gate and recorded the no-release
+  provider decision: research fixtures and candidate models stay out of the
+  default product path until benchmark, provenance, and license gates pass.
 - 2026-06-21 21:16:48 CST: Completed Phase 2.4 ChunkTimeline generation and
   consumption. Chunk boundaries are now persisted as first-class
   `ChunkTimeline` resources with SQLite schema v13, active/candidate/archive

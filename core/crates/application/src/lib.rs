@@ -12,6 +12,7 @@ mod error;
 mod learning;
 mod lexical;
 mod media;
+mod phones;
 mod phonetic_fixture;
 mod pronunciation;
 mod providers;
@@ -540,6 +541,33 @@ pub(crate) fn remap_lltimeline_sentence_ids(
         {
             *word_timeline_id = remapped.clone();
         }
+    }
+    for phone_timeline in &mut document.phone_timelines {
+        if let Some(sentence_id) = phone_timeline.sentence_id.as_mut()
+            && let Some(remapped) = sentence_ids.get(sentence_id)
+        {
+            *sentence_id = remapped.clone();
+        }
+        if let Some(word_timeline_id) = phone_timeline.parent_word_timeline_id.as_mut()
+            && let Some(remapped) = word_timeline_ids.get(word_timeline_id)
+        {
+            *word_timeline_id = remapped.clone();
+        }
+    }
+    let mut phone_timeline_ids = HashMap::new();
+    for timeline in &mut document.phone_timelines {
+        let original = timeline.id.clone();
+        let remapped = PhoneTimelineId::from_fingerprint(
+            "phone-timeline",
+            &format!("{}:{}", track_id.as_str(), original.as_str()),
+        );
+        timeline.id = remapped.clone();
+        phone_timeline_ids.insert(original, remapped);
+    }
+    if let Some(active_id) = document.active_phone_timeline_id.as_mut()
+        && let Some(remapped) = phone_timeline_ids.get(active_id)
+    {
+        *active_id = remapped.clone();
     }
     let mut chunk_timeline_ids = HashMap::new();
     for timeline in &mut document.chunk_timelines {

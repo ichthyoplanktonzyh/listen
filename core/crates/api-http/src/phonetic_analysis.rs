@@ -6,7 +6,7 @@ use domain::{
     PhoneticAnalysis, PhoneticAnalysisId, PhoneticAnalysisJob, PhoneticAnalysisJobId,
     PhoneticAnalysisJobStatus, PhoneticAnalysisModelDescriptor, PhoneticAnalysisModelId,
     PhoneticAnalysisProviderInfo, PhoneticAnalysisScope, PhoneticFindingFeedback,
-    PhoneticFindingId, PhoneticModelState, SubtitleSentenceId, SubtitleTrackId,
+    PhoneticFindingId, PhoneticModelState, SubtitleSentenceId, SubtitleTrackId, TimelineStatus,
 };
 use tokio::sync::{Semaphore, broadcast};
 
@@ -432,8 +432,13 @@ impl PhoneticAnalysisCoordinator {
                 job_research_mode(&job).as_deref() == Some("partial"),
             )?]
         };
+        let mut phone_timeline_ids = Vec::new();
         for analysis in &analyses {
             self.repository.save_phonetic_analysis(analysis)?;
+            let timeline = self
+                .services
+                .create_phone_timeline_from_analysis(analysis, Some(TimelineStatus::Candidate))?;
+            phone_timeline_ids.push(timeline.id);
         }
         let _ = self.events.send(EventEnvelope::v1(
             EventName::PhoneticAnalysisCompleted,
@@ -441,6 +446,7 @@ impl PhoneticAnalysisCoordinator {
                 "job_id": job.id.as_str(),
                 "track_id": job.track_id.as_str(),
                 "analysis_ids": analyses.iter().map(|analysis| analysis.id.as_str()).collect::<Vec<_>>(),
+                "phone_timeline_ids": phone_timeline_ids.iter().map(|timeline_id| timeline_id.as_str()).collect::<Vec<_>>(),
             }),
         ));
         job.status = PhoneticAnalysisJobStatus::Completed;

@@ -149,6 +149,107 @@ export interface CreateWordTimeline {
   words: WordTiming[];
 }
 
+export type PhoneTimelinePrecision = "detected" | "aligned" | "approximate";
+export type PhoneAlignmentKind =
+  | "match"
+  | "substitution"
+  | "insertion"
+  | "deletion"
+  | "merge";
+export type PhoneticFindingStatus =
+  | "uncertain"
+  | "supported_by_alignment"
+  | "detected_in_audio";
+
+export interface DetectedPhone {
+  symbol: string;
+  phone_set: string;
+  start_ms: number;
+  end_ms: number;
+  confidence: number | null;
+  token_index: number | null;
+  provider_id: string;
+  provider_version: string;
+  model_revision: string;
+}
+
+export interface PhoneAlignment {
+  kind: PhoneAlignmentKind;
+  token_start: number | null;
+  token_end: number | null;
+  canonical_phones: string[];
+  detected_phone_start: number | null;
+  detected_phone_end: number | null;
+  confidence: number;
+}
+
+export interface PhoneticFinding {
+  id: string;
+  analysis_id: string;
+  finding_type: string;
+  affected_token_start: number;
+  affected_token_end: number;
+  canonical_phones: string[];
+  detected_phones: string[];
+  aligned_phone_start: number | null;
+  aligned_phone_end: number | null;
+  audio_start_ms: number;
+  audio_end_ms: number;
+  confidence: number;
+  evidence: string;
+  status: PhoneticFindingStatus;
+}
+
+export interface PhoneTimeline {
+  id: string;
+  track_id: string;
+  media_id: string;
+  sentence_id: string | null;
+  parent_word_timeline_id: string | null;
+  parent_phonetic_analysis_id: string | null;
+  provider_id: string;
+  provider_version: string;
+  model_id: string | null;
+  model_revision: string | null;
+  phone_set: string;
+  precision: PhoneTimelinePrecision;
+  created_by: TimelineCreator;
+  status: TimelineStatus;
+  metrics_json: unknown;
+  phones: DetectedPhone[];
+  alignments: PhoneAlignment[];
+  findings: PhoneticFinding[];
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
+export interface PhoneTimelineSummary {
+  id: string;
+  track_id: string;
+  media_id: string;
+  sentence_id: string | null;
+  parent_word_timeline_id: string | null;
+  parent_phonetic_analysis_id: string | null;
+  provider_id: string;
+  provider_version: string;
+  model_id: string | null;
+  model_revision: string | null;
+  phone_set: string;
+  precision: PhoneTimelinePrecision;
+  created_by: TimelineCreator;
+  status: TimelineStatus;
+  phone_count: number;
+  finding_count: number;
+  start_ms: number | null;
+  end_ms: number | null;
+  average_confidence: number | null;
+  created_at_ms: number;
+  updated_at_ms: number;
+  can_activate: boolean;
+  can_archive: boolean;
+  can_delete: boolean;
+}
+
 export interface LLTimelineDocument {
   schema: "llplayer.timeline.v1";
   metadata: {
@@ -176,7 +277,7 @@ export interface LLTimelineDocument {
   }>;
   word_timelines: WordTimeline[];
   active_word_timeline_id: string | null;
-  phone_timelines: unknown[];
+  phone_timelines: PhoneTimeline[];
   active_phone_timeline_id: string | null;
   chunk_timelines: unknown[];
   active_chunk_timeline_id: string | null;
@@ -506,6 +607,40 @@ export class LocalApiV1 {
 
   deleteWordTimeline(timelineId: string): Promise<WordTimeline> {
     return this.request(`/v1/word-timelines/${encodeURIComponent(timelineId)}`, {
+      method: "DELETE",
+    });
+  }
+
+  trackPhoneTimelines(trackId: string): Promise<PhoneTimeline[]> {
+    return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}/phone-timelines`);
+  }
+
+  trackPhoneTimelineSummaries(trackId: string): Promise<PhoneTimelineSummary[]> {
+    return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}/phone-timelines/summary`);
+  }
+
+  phoneTimeline(timelineId: string): Promise<PhoneTimeline> {
+    return this.request(`/v1/phone-timelines/${encodeURIComponent(timelineId)}`);
+  }
+
+  activatePhoneTimeline(timelineId: string): Promise<PhoneTimeline> {
+    return this.request(`/v1/phone-timelines/${encodeURIComponent(timelineId)}/activate`, {
+      method: "POST",
+    });
+  }
+
+  archivePhoneTimeline(timelineId: string): Promise<PhoneTimeline> {
+    return this.request(`/v1/phone-timelines/${encodeURIComponent(timelineId)}/archive`, {
+      method: "POST",
+    });
+  }
+
+  exportPhoneTimeline(timelineId: string): Promise<PhoneTimeline> {
+    return this.request(`/v1/phone-timelines/${encodeURIComponent(timelineId)}/export`);
+  }
+
+  deletePhoneTimeline(timelineId: string): Promise<PhoneTimeline> {
+    return this.request(`/v1/phone-timelines/${encodeURIComponent(timelineId)}`, {
       method: "DELETE",
     });
   }
