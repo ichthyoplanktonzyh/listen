@@ -679,16 +679,6 @@ class LocalApi {
       (await _request('PUT', '/v1/lexical-entries', value))
           as Map<String, dynamic>;
 
-  Future<Map<String, dynamic>> normalizeLexical(
-    String value, {
-    required String language,
-  }) async =>
-      (await _request('POST', '/v1/lexical-normalization', {
-            'language': language,
-            'value': value,
-          }))
-          as Map<String, dynamic>;
-
   Future<Map<String, dynamic>> correctLemma(
     String original,
     String corrected, {
