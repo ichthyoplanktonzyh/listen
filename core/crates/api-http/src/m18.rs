@@ -415,6 +415,15 @@ fn resource_catalog() -> Vec<LearningResourceDescriptor> {
             "81917843c7f44ce2b094ac63873c2c7a4cf802040792c455ba3ca406891c3d22",
             3_618_488,
         ),
+        (
+            "cc-cedict",
+            "CC-CEDICT",
+            "61e2794c",
+            "https://raw.githubusercontent.com/ueda-keisuke/CC-CEDICT-MeCab/61e2794c475313adf241b739fcde8acb4520c1ea/cedict_ts.u8",
+            "CC-BY-SA 4.0",
+            "09ec3a583100088c4f7db2d65643bb9134df5174a4bca7592f50fe2bc5686957",
+            9_151_648,
+        ),
     ]
     .into_iter()
     .map(|(id, name, version, url, license, checksum, size)| LearningResourceDescriptor {

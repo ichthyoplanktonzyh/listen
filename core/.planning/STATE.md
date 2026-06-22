@@ -321,11 +321,14 @@ progress:
     `language`，`_learningLanguage` 解析器（active 字幕轨语言→`en` fallback）串到所有
     word-profile/vocab/dict/phrase 调用与 `_sourceFor`。英语回归基线不变。全 workspace 272
     测试 + flutter analyze/test + validate-contracts 通过。
-  - ✅ Step 5：汉语词典/拼音 provider。`dictionary-provider` 新增内置 `ChineseDictionaryProvider`
-    （`supported_languages: ["zh"]`，种子词表带声调拼音 + 释义），注册进 api-http 词典栈；
-    既有 `lookup_dictionary` 按 `supported_languages` 派发，点中文 token 即出拼音+释义，英语
-    provider 被跳过，未命中干净降级。拼音走词典 phonetics；`WordLearningPanel` 在无实义 IPA
-    变体时隐藏发音区（中文无 IPA provider）。种子表是 CC-CEDICT 级正式源的占位。
+  - ✅ Step 5：汉语词典/拼音 provider。`ChineseDictionaryProvider`（`supported_languages: ["zh"]`）
+    接入 **CC-CEDICT**（约 12 万词条，读安装的 `.u8`、数字拼音转调号、简繁双查），25 词种子作离线
+    兜底；CC-CEDICT 以钉死 commit + 校验和注册进学习资源目录（CC-BY-SA 4.0），像 ECDICT 一样可安装。
+    注册进 api-http 词典栈，既有 `lookup_dictionary` 按 `supported_languages` 派发，英语 provider
+    被跳过、未命中干净降级。拼音走词典 phonetics；`WordLearningPanel` 在无实义 IPA 变体时隐藏发音区。
+  - ✅ 补 Step 4 遗漏的后端硬编码：`diagnose_sentence` / `phrase_candidates` 原写死 `en`，现按句子
+    所属轨语言查 profile（新增 `sentence_track_language` 仓储方法 + `sentence_language` 助手）。
+    修复前中文句子诊断读的是英语 profile、忽略用户中文状态。
   - ⏳ Step 6-7：汉语面板/诊断、双语回归。
 - 规划文档：
   - `.planning/phases/2.6-multilingual-learning-foundation/2.6-CONTEXT.md`

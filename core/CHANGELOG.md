@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- 2026-06-22 21:09:21 CST: Integrated CC-CEDICT as the real Chinese dictionary
+  source, replacing the 25-word built-in stub with the full ~120k-entry community
+  dictionary while keeping the seed as an offline fallback. `ChineseDictionaryProvider`
+  now reads an installed CC-CEDICT `.u8` file (cached, mirroring the ECDICT loader),
+  parsing `Traditional Simplified [pin1 yin1] /glosses/` and converting tone-numbered
+  pinyin to tone marks (handling `u:`→`ü`, neutral tone, capitalized proper nouns, and
+  the standard a/e/ou/last-vowel placement); both simplified and traditional headwords
+  resolve. Registered CC-CEDICT in the learning-resource catalog with a pinned mirror
+  commit and verified SHA-256 (CC-BY-SA 4.0), so it installs like ECDICT/CMUdict.
+  Known limitation: words with multiple readings keep the first entry. Verified with
+  new parser/tone tests and a throwaway smoke check against the real 118k-entry file.
+- 2026-06-22 21:00:00 CST: Fixed two backend `language=en` hardcodes that Step 4
+  (client-scoped) missed, so Chinese diagnosis and phrase detection use the sentence's
+  actual track language. Added a `sentence_track_language` repository method (joining
+  `subtitle_sentences` to `subtitle_tracks`) and a `sentence_language` application
+  helper (track language, else `en`); `diagnose_sentence` and `phrase_candidates` now
+  resolve through it instead of assuming English. Previously a Chinese sentence's
+  diagnosis read English word profiles and ignored the user's Chinese statuses. Added a
+  test proving zh diagnosis reads zh profiles and en does not leak.
 - 2026-06-22 20:20:02 CST: Added the Phase 2.6 Chinese dictionary and
   pronunciation provider (step 5). Introduced a built-in `ChineseDictionaryProvider`
   in `dictionary-provider` (`supported_languages: ["zh"]`) seeded with common

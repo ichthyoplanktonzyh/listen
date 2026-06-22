@@ -6,33 +6,38 @@
 ## 现在在哪
 
 Phase 2.6（多语言学习基础，English + Chinese）进行中，**Step 1-5 已完成、已测试**，
-Step 5 改动**待提交**（见下）。下一步是 **Step 6**。
+Step 5 + 两处补强**待提交**（见下）。下一步是 **Step 6**。
 
 | 提交 | 内容 |
 |---|---|
-| （未提交） | Step 5：汉语词典/拼音 provider（点中文 token 出拼音+释义） |
+| （未提交） | CC-CEDICT 真实词典接入 |
+| （未提交） | 修 diagnosis/phrase 后端 `language=en` 硬编码 |
+| `860a7df` | Step 5：汉语词典 provider（点中文 token 出拼音+释义） |
 | `8133ab9` | 清理：删除死代码 `normalizeLexical` |
 | `c7634dd` | Step 4：去 `language=en` 硬编码 + import 语言检测 |
 | `9c63464` | Step 3：LexicalUnit（粒度×归一、不透明 key） |
-| `369d462` | Step 1-2：语言 profile + jieba 语言感知分词 |
 
-## Step 5 已完成（2026-06-22）
+## Step 5 + 补强已完成（2026-06-22）
 
-汉语词典走既有 provider 接口接入，点中文 token 出拼音 + 释义。落点：
+汉语词典走既有 provider 接口接入，点中文 token 出拼音 + 释义；并补掉 Step 4 漏的后端硬编码。
 
-- **`dictionary-provider`**：新增内置 `ChineseDictionaryProvider`（`supported_languages: ["zh"]`，
-  约 25 词种子表，声调拼音 + 英文 gloss）。`lookup` 委托同步 `resolve`（无需 async runtime 即可测）。
-- **注册**：`api-http` `ApiState::new` 的 `dictionaries` vec 加入该 provider。既有
-  `application::lookup_dictionary` 已按 `supported_languages` 派发——加 `zh` provider 即可，无特例分支。
-- **拼音载体**：拼音放进 `DictionaryLookup.phonetics`（`zh` 词典条目自带拼音），client 既有词典区已渲染。
-- **`WordLearningPanel`**：发音(IPA)区改为"有实义变体才显示"——中文无 IPA provider（空变体）时隐藏，
-  英语不变。
+- **真实词典 CC-CEDICT**：`ChineseDictionaryProvider` 读安装的 CC-CEDICT `.u8`（约 12 万词条，
+  缓存加载，镜像 ECDICT loader），解析 `繁 简 [pin1 yin1] /释义/` 并把数字拼音转调号（`u:`→`ü`、
+  轻声、大写专名、a/e/ou/末元音规则），简繁双查；25 词种子降为离线兜底。注册进学习资源目录
+  （`m18.rs` catalog，钉死镜像 commit + 真实 SHA-256，CC-BY-SA 4.0），像 ECDICT 一样可安装。
+  已用真实 118k 词条文件冒烟验证（你好/咖啡/量子力学/中国/行 等）。**已知局限**：多音词取第一条。
+- **后端 `language=en` 硬编码已修**：`diagnose_sentence` / `phrase_candidates` 原写死 `en`，
+  现经 `sentence_language`（→ 新仓储方法 `sentence_track_language`，JOIN `subtitle_tracks.language`，
+  默认 `en`）按句子所属轨语言查 profile。已加测试证明中文诊断读 zh profile、en 不泄漏。
+- **provider 注册/派发/拼音载体/面板**：同前——`dictionaries` vec 注册、`lookup_dictionary` 按
+  `supported_languages` 派发、拼音走 `DictionaryLookup.phonetics`、`WordLearningPanel` 隐藏空 IPA 区。
 
-Exit criteria 已满足：点中文 token（种子词内）→ 词典区显示拼音 + 释义；未命中干净降级、不影响播放/词汇状态。
+Exit criteria 已满足：点中文 token → 词典区显示拼音 + 释义（装了 CC-CEDICT 即全量、否则种子兜底）；
+未命中干净降级、不影响播放/词汇状态；中文诊断读对语言。
 
-可改进（非阻塞）：`_openWord` 仍会对中文调用英语 `lookupPronunciation` 并缓存空结果（已被面板隐藏、
-英汉缓存不冲突，无害）。若 Step 6 要在专门发音区显示拼音，可把 `lookup_pronunciation` 改为 profile
-驱动（`profile_for(lang).pronunciation`）。种子词表是 CC-CEDICT 级正式源的占位。
+可改进（非阻塞）：`_openWord` 仍会对中文调英语 `lookupPronunciation` 并缓存空结果（已被面板隐藏、
+英汉缓存不冲突，无害）。CC-CEDICT 装载依赖第三方镜像仓库存续（钉死 commit→文件不可变；仓库若被删
+则安装 404、provider 回落种子，干净降级）。多音词只显示第一条读音。
 
 ## 下一步：Step 6 — Chinese Learning Panel And Diagnosis
 
