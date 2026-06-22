@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- 2026-06-22 11:45:56 CST: Added Phase 2.5.5 Language Learning Abstraction
+  Validation as a design/validation phase inserted before Phase 2.6
+  (Multilingual Learning Foundation), mirroring the earlier 2.3.5-before-2.4
+  pattern. Validated the multilingual learning abstraction against real
+  second-language-acquisition research rather than engineering aesthetics:
+  the meaning-vs-sound diagnosis axis maps to Field's decoding-vs-meaning
+  listening model, language-specific listening units to Cutler's
+  cross-linguistic segmentation (English stress, French syllable, Japanese
+  mora, Mandarin syllable/tone), the LexicalUnit to Nation's word family,
+  chunks to Wray's formulaic language, lexical competition to the
+  Marslen-Wilson cohort model, and L1 filtering of L2 perception to Best
+  (PAM) and Flege (SLM). Locked the comprehension axis as the single language
+  invariant: the global vocabulary status enum stays language-agnostic and
+  reusable, while diagnosis reason taxonomy becomes per-profile and
+  extensible. Added an L1->L2 diagnosis seam (nullable, unused in v1, no
+  schema change). Ran a typological falsification with Japanese and Arabic
+  that forced three abstraction revisions: R0 `kind` taxonomies must be open
+  namespaced strings with clean degradation instead of exhaustive enums
+  (Japanese mora, Arabic templatic morphology fall outside the original
+  closed sets); R1 listening observations must be able to anchor to a
+  `ListeningUnit`, not only a `LexicalUnit`, so tone/pitch minimal-pair
+  failures have a home; R2 `normalized_key` must be provider-opaque because
+  Arabic non-concatenative roots (k-t-b) are not surface substrings. Scoped
+  the architecture to the top-15 learning languages with typological
+  clustering and flagged Hindi's abugida as the next writing-system probe.
+  Fed the validated foundation back into Phase 2.6 as seven implementation
+  constraints and resolved two of its open questions. No production code
+  changed; deliverables are design docs (SLA foundation, falsification,
+  closeout) plus updates to STATE and the Phase 2.6 plan.
 - 2026-06-22 10:30:00 CST: Updated `validate-contracts.sh` MFA strategy
   assertion from `--strategy align-one` to `--strategy align` to match the new
   batch-align default. All 16 Python tests and the full contract validation

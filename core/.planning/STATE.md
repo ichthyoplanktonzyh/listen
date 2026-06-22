@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-06-22T01:04:00.000Z"
+last_updated: "2026-06-22T04:00:00.000Z"
 progress:
   total_phases: 10
   completed_phases: 0
@@ -14,13 +14,13 @@ progress:
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-22 09:04 CST
-> 更新原因：Phase 2.5 Sound Pattern / PhoneTimeline 收口
+> 最后更新：2026-06-22 CST
+> 更新原因：Phase 2.5.5 语言学习抽象校验收口
 
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
-- **Phase**：Phase 2.5 Sound Pattern / PhoneTimeline 已完成；准备进入 Phase 2.6 或后续 provider research
+- **Phase**：Phase 2.5.5 语言学习抽象校验已完成；可正式进入 Phase 2.6
 - **分支**：`feature/forced-alignment-research`
 - **版本**：0.7.0
 
@@ -252,11 +252,49 @@ progress:
   - `.planning/phases/2.5-sound-pattern-phonetictimeline/2.5-BENCHMARK.md`
   - `.planning/phases/2.5-sound-pattern-phonetictimeline/2.5-CLOSEOUT.md`
 
-### Phase 2.6: 多语言学习基础 ⏳ 已规划
+### Phase 2.5.5: 语言学习抽象校验 ✅ 已完成
+
+- 目标：在 Phase 2.6 写多语言代码之前，校验语言学习抽象（1）立得住真实二语习得 SLA，
+  （2）能扩展到主流学习语言 top-15 而不打特例分支；并锁定 invariant/variant 边界、
+  L1 -> L2 诊断 seam 和两个扩展性 seam。
+- 定位：与 Phase 2.3.5 同类的插入式前置加固 phase，交付设计文档而非生产代码。
+- 触发动机：2.6 评审中确认 listening-first、Token/LexicalUnit/ListeningUnit 三分、
+  validation-beyond-en/zh，并新确认“L2 听力难度被 L1 过滤”这一直接命中诊断核心的 SLA
+  事实——它会改变诊断模型形状，必须在 2.6 写诊断前定下来。
+- 核心工作：
+  - SLA Foundation Mapping：每个抽象元素映射到真实听力/词汇研究依据
+    （Field / Cutler / Nation / Wray / Best / Flege / Marslen-Wilson）。
+  - 锁定唯一不变量为“理解轴”（词义×声音）；全局状态枚举语言无关、诊断 reason 按 profile
+    可扩展。
+  - L1 -> L2 诊断 seam：可空 L1 维度，只留 seam、不实现规则。
+  - 开放 kind taxonomy + Token/LexicalUnit/ListeningUnit 单位间 N:M alignment 两个 seam
+    规格化；LexicalUnit 粒度轴与归一形态轴拆分。
+  - Japanese + Arabic 纸面证伪（mora/pitch、非线性词根-词型形态）。
+  - top-15 学习语言 envelope 与类型学聚类。
+- 2026-06-22 收口结论：
+  - 主干 **SLA-grounded**（Field 诊断轴 / Cutler 跨语言切分 / Nation word family /
+    Wray 语块 / Best·Flege L1 过滤 / Marslen-Wilson 候选竞争），非凭空想象。
+  - 锁定唯一不变量＝理解轴；全局状态枚举语言无关、复用；诊断 reason 按 profile 可扩展。
+  - Japanese + Arabic 逐字段证伪通过，逼出三条真实修订：
+    - R0 开放 kind taxonomy 是硬约束（禁止穷举 enum）。
+    - R1 听力 observation 可锚定 ListeningUnit（不止 LexicalUnit）。
+    - R2 `normalized_key` provider-opaque（阿拉伯语非线性词根）。
+  - L1 seam 已留（诊断签名 `(L1, L2_unit, status)`，v1 不读、不落 schema）。
+  - 已回灌 2.6：新增 Validated Foundation 七条约束，两项 Open Question 标记解决。
+  - 残留：hi（abugida 书写轴）列为下一个书写轴探针。
+- 规划与交付文档：
+  - `.planning/phases/2.5.5-language-learning-abstraction-validation/2.5.5-CONTEXT.md`
+  - `.planning/phases/2.5.5-language-learning-abstraction-validation/2.5.5-PLAN.md`
+  - `.planning/phases/2.5.5-language-learning-abstraction-validation/2.5.5-SLA-FOUNDATION.md`
+  - `.planning/phases/2.5.5-language-learning-abstraction-validation/2.5.5-FALSIFICATION.md`
+  - `.planning/phases/2.5.5-language-learning-abstraction-validation/2.5.5-CLOSEOUT.md`
+
+### Phase 2.6: 多语言学习基础 ⏳ 已规划（待 Phase 2.5.5 收口后进入）
 
 - 目标：将 LLPlayerNext 从“英语优先学习播放器”扩展为“语言能力可插拔的学习播放器
   底座”，首批真实验收语言为 English + Chinese。
-- 阶段定位：延后到 2.3 / 2.3.5 / 2.4 / 2.5 之后，不打断当前资源主线。
+- 阶段定位：延后到 2.3 / 2.3.5 / 2.4 / 2.5 之后，不打断当前资源主线；并以 Phase 2.5.5
+  校验过的抽象为输入，须在 2.5.5 收口后进入。
 - 当前判断：
   - 播放、字幕资源、时间轴资源、SQLite、来源快照等底座具备多语言扩展性。
   - 逐词学习、词汇状态、字典、lemma、发音和诊断仍明显英语优先。
@@ -272,6 +310,7 @@ progress:
 - 规划文档：
   - `.planning/phases/2.6-multilingual-learning-foundation/2.6-CONTEXT.md`
   - `.planning/phases/2.6-multilingual-learning-foundation/2.6-PLAN.md`
+  - `.planning/phases/2.6-multilingual-learning-foundation/2.6-LANGUAGE-LISTENING-MODEL.md`
 
 ### 强制对齐研究 🧭 长期推进
 
@@ -300,6 +339,10 @@ progress:
    `lib.rs`。
 8. **多语言策略**：产品长期支持主要语言，但不承诺世界所有语言；首批扩展验收语言
    为英语和汉语，先建立语言能力矩阵、语言感知 tokenizer 和 LexicalUnit 模型。
+9. **多语言抽象先校验后实现**（2026-06-22）：在 Phase 2.6 之前插入 Phase 2.5.5，先用真实
+   SLA 校验抽象、并用 Japanese/Arabic 做类型学证伪；确认“L2 听力难度被 L1 过滤”，诊断模型
+   预留 L1 seam；唯一语言不变量是理解轴（词义×声音），其余结构走 profile/provider；不大包
+   大揽，架构只对 top-15 学习语言封顶有效。
 
 ## 当前阻塞项
 
@@ -310,7 +353,9 @@ progress:
 1. Phase 2.3：用真实媒体完成 Manual Timeline Review 手动 QA，并决定是否正式收口。
 2. 后续 provider research：填充 licensed reviewed development cases，复跑 ZIPA /
    Wav2IPA / MFA phone alignment benchmark；通过 gate 前不进入默认 product path。
-3. Phase 2.6：多语言学习基础，以英语 + 汉语建立扩展范式。
+3. Phase 2.5.5：语言学习抽象校验 ✅ 已收口（SLA 映射、invariant/variant 边界、L1 seam、
+   ja/ar 证伪、回灌 2.6 均完成）。
+4. Phase 2.6：多语言学习基础——在已校验、已证伪的抽象上实现 English + Chinese（可进入）。
 
 ## 指标
 
