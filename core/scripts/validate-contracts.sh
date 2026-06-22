@@ -248,7 +248,7 @@ if (produce.convert.media_fingerprint !== "timeline-production-smoke") throw new
 if (produceMfa.post_align.policy !== "ordered-fallback") throw new Error("produce-whisperx MFA fallback policy missing");
 if (produceMfa.post_align.chain.join(",") !== "mfa,mms-fa") throw new Error("produce-whisperx MFA fallback chain failed");
 if (!produceMfa.post_align.plans[0].command.includes("mfa-align-cli.py")) throw new Error("produce-whisperx MFA dry run command missing");
-if (!produceMfa.post_align.plans[0].command.includes("--strategy align-one")) throw new Error("produce-whisperx MFA strategy missing");
+if (!produceMfa.post_align.plans[0].command.includes("--strategy align")) throw new Error("produce-whisperx MFA strategy missing");
 if (!produceMfa.post_align.plans[1].command.includes("align-cli.py")) throw new Error("produce-whisperx MMS_FA fallback command missing");
 if (!applyMfa.command.includes("mfa-align-cli.py")) throw new Error("apply-mfa dry run command missing");
 if (!applyMfa.command.includes("english_us_arpa")) throw new Error("apply-mfa default ARPA model missing");

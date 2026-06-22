@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 2026-06-22 10:30:00 CST: Updated `validate-contracts.sh` MFA strategy
+  assertion from `--strategy align-one` to `--strategy align` to match the new
+  batch-align default. All 16 Python tests and the full contract validation
+  suite now pass with the updated defaults.
 - 2026-06-22 09:15:00 CST: Switched the MFA default strategy from `align-one`
   to batch `align`. The `align-one` strategy spawned a separate `mfa
   align_one` process per segment, incurring ~11 s of model-loading overhead
