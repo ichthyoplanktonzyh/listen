@@ -15,13 +15,13 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-22 CST
-> 更新原因：Phase 2.6 Step 4 去 `language=en` 硬编码（学习语言来自 active 字幕轨）落地
+> 更新原因：Phase 2.6 Step 5 汉语词典/拼音 provider（点中文 token 出拼音+释义）落地
 
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
-- **Phase**：Phase 2.6 进行中（Step 1-4：profile + jieba 分词 + LexicalUnit + 去 `language=en`
-  硬编码 已完成并通过测试）
+- **Phase**：Phase 2.6 进行中（Step 1-5：profile + jieba 分词 + LexicalUnit + 去 `language=en`
+  硬编码 + 汉语词典/拼音 provider 已完成并通过测试）
 - **分支**：`feature/forced-alignment-research`
 - **版本**：0.7.0
 
@@ -321,7 +321,12 @@ progress:
     `language`，`_learningLanguage` 解析器（active 字幕轨语言→`en` fallback）串到所有
     word-profile/vocab/dict/phrase 调用与 `_sourceFor`。英语回归基线不变。全 workspace 272
     测试 + flutter analyze/test + validate-contracts 通过。
-  - ⏳ Step 5-7：汉语词典/拼音 provider、汉语面板/诊断、双语回归。
+  - ✅ Step 5：汉语词典/拼音 provider。`dictionary-provider` 新增内置 `ChineseDictionaryProvider`
+    （`supported_languages: ["zh"]`，种子词表带声调拼音 + 释义），注册进 api-http 词典栈；
+    既有 `lookup_dictionary` 按 `supported_languages` 派发，点中文 token 即出拼音+释义，英语
+    provider 被跳过，未命中干净降级。拼音走词典 phonetics；`WordLearningPanel` 在无实义 IPA
+    变体时隐藏发音区（中文无 IPA provider）。种子表是 CC-CEDICT 级正式源的占位。
+  - ⏳ Step 6-7：汉语面板/诊断、双语回归。
 - 规划文档：
   - `.planning/phases/2.6-multilingual-learning-foundation/2.6-CONTEXT.md`
   - `.planning/phases/2.6-multilingual-learning-foundation/2.6-PLAN.md`
@@ -374,8 +379,9 @@ progress:
    Wav2IPA / MFA phone alignment benchmark；通过 gate 前不进入默认 product path。
 3. Phase 2.5.5：语言学习抽象校验 ✅ 已收口（SLA 映射、invariant/variant 边界、L1 seam、
    ja/ar 证伪、回灌 2.6 均完成）。
-4. Phase 2.6：多语言学习基础——Step 1-4（profile + jieba 分词 + LexicalUnit + 去
-   `language=en` 硬编码）✅ 完成；下一步 Step 5 汉语词典/拼音 provider，续做 Step 6-7。
+4. Phase 2.6：多语言学习基础——Step 1-5（profile + jieba 分词 + LexicalUnit + 去
+   `language=en` 硬编码 + 汉语词典/拼音 provider）✅ 完成；下一步 Step 6 汉语面板/诊断，
+   续做 Step 7 双语回归。
 
 ## 指标
 

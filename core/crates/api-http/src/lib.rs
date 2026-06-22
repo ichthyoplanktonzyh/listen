@@ -15,7 +15,7 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
-use dictionary_provider::{EcdictProvider, FreeDictionaryProvider};
+use dictionary_provider::{ChineseDictionaryProvider, EcdictProvider, FreeDictionaryProvider};
 use domain::{
     LanguageCode, MediaAvailability, MediaId, MediaKind, ObservationResult, SubtitleSentenceId,
     SubtitleTrackId, VocabularyAssetBundle, WordProfileId, WordStatus,
@@ -81,6 +81,7 @@ impl ApiState {
             events,
             dictionaries: Arc::new(vec![
                 ecdict,
+                Arc::new(ChineseDictionaryProvider::new()),
                 Arc::new(
                     FreeDictionaryProvider::new().expect("dictionary HTTP client must initialize"),
                 ),

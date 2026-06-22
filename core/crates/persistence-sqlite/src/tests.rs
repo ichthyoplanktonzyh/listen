@@ -17,6 +17,10 @@ struct FakeDictionary {
 
 struct FailingDictionary;
 
+struct FakeChineseDictionary {
+    calls: AtomicUsize,
+}
+
 fn transcription_job(
     id: &str,
     input_fingerprint: &str,
@@ -271,6 +275,44 @@ impl DictionaryProvider for FailingDictionary {
         _lemma: &str,
     ) -> Result<Option<DictionaryLookup>, DictionaryProviderError> {
         Err(DictionaryProviderError("offline".into()))
+    }
+}
+
+#[async_trait]
+impl DictionaryProvider for FakeChineseDictionary {
+    fn info(&self) -> DictionaryProviderInfo {
+        DictionaryProviderInfo {
+            id: "fake-zh".into(),
+            display_name: "Fake Chinese".into(),
+            supported_languages: vec!["zh".into()],
+            provides_definitions: true,
+            provides_phonetics: true,
+            provides_audio: false,
+            offline: true,
+        }
+    }
+
+    async fn lookup(
+        &self,
+        _language: &LanguageCode,
+        lemma: &str,
+    ) -> Result<Option<DictionaryLookup>, DictionaryProviderError> {
+        self.calls.fetch_add(1, Ordering::Relaxed);
+        Ok(Some(DictionaryLookup {
+            query: lemma.into(),
+            lemma: lemma.into(),
+            definitions: vec![DictionaryDefinition {
+                part_of_speech: None,
+                text: "coffee".into(),
+            }],
+            phonetics: vec![DictionaryPhonetic {
+                text: "kā fēi".into(),
+                region: Some("zh".into()),
+                audio_url: None,
+            }],
+            provider: self.info().id,
+            cached_at_ms: 0,
+        }))
     }
 }
 
@@ -1345,6 +1387,51 @@ async fn dictionary_lookup_uses_persistent_cache() {
         .lookup_dictionary(&providers, "en", "hello")
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn dictionary_lookup_routes_by_learning_language() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo,
+    );
+    let english = Arc::new(FakeDictionary {
+        calls: AtomicUsize::new(0),
+    });
+    let chinese = Arc::new(FakeChineseDictionary {
+        calls: AtomicUsize::new(0),
+    });
+    let providers: Vec<Arc<dyn DictionaryProvider>> =
+        vec![english.clone(), chinese.clone()];
+
+    // A Chinese query only reaches the zh provider; the en provider is skipped
+    // by supported_languages, so en and zh dictionaries never cross-talk.
+    let bundle = services
+        .lookup_dictionary(&providers, "zh", "咖啡")
+        .await
+        .unwrap();
+    assert_eq!(bundle.results.len(), 1);
+    assert_eq!(bundle.results[0].provider.id, "fake-zh");
+    let lookup = bundle.results[0].lookup.as_ref().expect("zh lookup present");
+    assert_eq!(lookup.phonetics[0].text, "kā fēi");
+    assert_eq!(english.calls.load(Ordering::Relaxed), 0);
+    assert_eq!(chinese.calls.load(Ordering::Relaxed), 1);
+
+    // An English query only reaches the en provider.
+    let bundle = services
+        .lookup_dictionary(&providers, "en", "hello")
+        .await
+        .unwrap();
+    assert_eq!(bundle.results.len(), 1);
+    assert_eq!(bundle.results[0].provider.id, "fake");
+    assert_eq!(chinese.calls.load(Ordering::Relaxed), 1);
 }
 
 #[test]

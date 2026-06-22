@@ -1,56 +1,60 @@
-# Continue Here — Phase 2.6 Step 5
+# Continue Here — Phase 2.6 Step 6
 
 > 最后更新：2026-06-22 CST
 > 单一接续入口（历史 handoff 见同目录 dated 文件，不必读）。
 
 ## 现在在哪
 
-Phase 2.6（多语言学习基础，English + Chinese）进行中，**Step 1-4 已完成、已测试**，
-工作区有 Step 4 改动**待提交**（见下）。下一步是 **Step 5**。
+Phase 2.6（多语言学习基础，English + Chinese）进行中，**Step 1-5 已完成、已测试**，
+Step 5 改动**待提交**（见下）。下一步是 **Step 6**。
 
 | 提交 | 内容 |
 |---|---|
-| （未提交） | Step 4：去 `language=en` 硬编码 + import 语言检测 |
+| （未提交） | Step 5：汉语词典/拼音 provider（点中文 token 出拼音+释义） |
+| `8133ab9` | 清理：删除死代码 `normalizeLexical` |
+| `c7634dd` | Step 4：去 `language=en` 硬编码 + import 语言检测 |
 | `9c63464` | Step 3：LexicalUnit（粒度×归一、不透明 key） |
 | `369d462` | Step 1-2：语言 profile + jieba 语言感知分词 |
-| `9bdc599` | 多语言产品方向写入战略文档 + ADR 0012 |
-| `74bb943` | Phase 2.5.5 语言学习抽象校验 |
 
-## Step 4 已完成（2026-06-22）
+## Step 5 已完成（2026-06-22）
 
-去除了学习语言硬编码，改为来自 active 字幕轨语言。落点：
+汉语词典走既有 provider 接口接入，点中文 token 出拼音 + 释义。落点：
 
-- **后端 `subtitle_core::import`**：caller 未声明语言时按脚本检测（含汉字→`zh`，否则 `en`），
-  用于分词与存储 `track.language`；声明的语言优先。English 回归基线不变。
-  （`crates/subtitle-core/src/lib.rs` `detect_language` + 3 个 import 检测测试）
-- **Flutter `SubtitleTrack` 模型**：新增 `language` 字段（后端早已序列化，之前 client 没读）。
-- **`api_service.dart`**：`readWordProfiles / updateWordProfile / listVocabulary /
-  importExternalVocabulary / lexicalEntries / lookupDictionary / normalizeLexical /
-  correctLemma` 改为必填 `language` 命名参；`importSubtitle` 改为可选 `language`（null→后端检测）。
-- **`main.dart`**：新增 `_learningLanguage` 解析器（`primaryTrack?.language ?? 'en'`），
-  串到所有 word-profile/vocab/dict/phrase 调用与 `_sourceFor`；`VocabularyScreen` /
-  `LearningAssetsScreen` 接收 `language`。`m18_ui` 短语 upsert 从 `source['language']` 取语言。
+- **`dictionary-provider`**：新增内置 `ChineseDictionaryProvider`（`supported_languages: ["zh"]`，
+  约 25 词种子表，声调拼音 + 英文 gloss）。`lookup` 委托同步 `resolve`（无需 async runtime 即可测）。
+- **注册**：`api-http` `ApiState::new` 的 `dictionaries` vec 加入该 provider。既有
+  `application::lookup_dictionary` 已按 `supported_languages` 派发——加 `zh` provider 即可，无特例分支。
+- **拼音载体**：拼音放进 `DictionaryLookup.phonetics`（`zh` 词典条目自带拼音），client 既有词典区已渲染。
+- **`WordLearningPanel`**：发音(IPA)区改为"有实义变体才显示"——中文无 IPA provider（空变体）时隐藏，
+  英语不变。
 
-Exit criteria 已满足：同一 UI 打开汉语字幕→jieba 分词、`track.language=zh`、按 zh 查询词汇/字典；
-英语仍走 en；`_sourceFor` 不再固定写 `language: en`。
+Exit criteria 已满足：点中文 token（种子词内）→ 词典区显示拼音 + 释义；未命中干净降级、不影响播放/词汇状态。
 
-仍未做（属 Step 4 计划但本阶段不强求的 P2/P3 来源）：用户手动语言覆盖 UI、媒体 metadata 来源——
-已在 `_learningLanguage` 注释处留 seam。
+可改进（非阻塞）：`_openWord` 仍会对中文调用英语 `lookupPronunciation` 并缓存空结果（已被面板隐藏、
+英汉缓存不冲突，无害）。若 Step 6 要在专门发音区显示拼音，可把 `lookup_pronunciation` 改为 profile
+驱动（`profile_for(lang).pronunciation`）。种子词表是 CC-CEDICT 级正式源的占位。
 
-## 下一步：Step 5 — Chinese Dictionary And Pronunciation Provider
+## 下一步：Step 6 — Chinese Learning Panel And Diagnosis
 
-接入最小汉语 provider（见 `2.6-PLAN.md` Step 5）：中文词/字查询、拼音、声调、基础释义，
-可选 HSK/频率/词性。数据先用本地小 fixture，许可证后续定。
+为汉语定义最小学习体验（见 `2.6-PLAN.md` Step 6）：
 
-Exit criteria：点击中文 token 能显示拼音和释义；provider 缺失时不影响字幕播放与词汇状态。
+- 面板：字/词、拼音、声调、释义、来源原句、状态切换。
+- 诊断初版 reason（per-profile，**非新增状态枚举**——状态枚举语言无关、复用）：不认识词/字、
+  认识但没听出、词边界切分困难、声调/轻声、同音上下文。诊断 reason taxonomy 用开放 namespaced
+  string（`zh.tone_confusion` / `zh.word_boundary` / `zh.homophone` 等，见 ADR 0012 §5 / R0）。
+
+Exit criteria：外国人学汉语基础路径成立（打开中文媒体→导入中文字幕→点词→看拼音/释义→标记状态→
+来源复听）；面板解释音节/声调到词义映射，不简化为英文式 lemma 查询。
 
 起手定位：
 ```sh
-grep -rn "dictionary\|pronunciation" crates/api-http/src/routes/*.rs
-ls crates/dictionary-provider/src 2>/dev/null; grep -rn "Provider" crates/application/src/dictionary.rs crates/application/src/pronunciation.rs
+grep -rn "diagnose\|diagnosis" crates/application/src/diagnosis.rs crates/api-http/src/routes/dictionary.rs
+grep -rn "profile_for\|diagnosis_rules\|reason" crates/domain/src/language_profile.rs
 ```
-关键文件：`crates/dictionary-provider`、`crates/application/src/{dictionary,pronunciation}.rs`、
-`crates/api-http/src/routes/{dictionary,pronunciation}.rs`，client `WordLearningPanel`。
+关键文件：`crates/application/src/diagnosis.rs`、`crates/domain/src/language_profile.rs`（zh profile 的
+`diagnosis_rules`/`sound_features`）、client `WordLearningPanel` + 诊断展示、`_refreshDiagnosis`。
+注意 zh profile 已声明 `pronunciation: zh.pinyin`、`sound_features: [zh.tone, zh.neutral_tone,
+zh.tone_sandhi, zh.erhua]`、`diagnosis_rules` 含 tone_confusion/word_boundary/homophone 等。
 
 ## 已就位的地基（Step 4 直接用，别重造）
 

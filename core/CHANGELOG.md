@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- 2026-06-22 20:20:02 CST: Added the Phase 2.6 Chinese dictionary and
+  pronunciation provider (step 5). Introduced a built-in `ChineseDictionaryProvider`
+  in `dictionary-provider` (`supported_languages: ["zh"]`) seeded with common
+  words/characters, each carrying tone-marked pinyin (the `zh` profile's
+  `zh.pinyin`/`zh.tone`) and a short gloss, and registered it in the api-http
+  dictionary stack. The existing `lookup_dictionary` dispatch already routes by
+  `supported_languages`, so clicking a Chinese token now shows pinyin + meaning
+  while English providers are skipped; unknown words degrade to no result without
+  affecting playback or word status. Pinyin is delivered through the dictionary
+  phonetics, and the word-learning panel now hides the IPA pronunciation section
+  when no variant has real content (Chinese has no IPA provider). Seed data is a
+  placeholder for a licensed CC-CEDICT-scale source behind the same interface.
+  Verified with new provider, language-routing, and Flutter checks.
+- 2026-06-22 17:30:00 CST: Removed the Phase 2.6 `language=en` hardcoding (step 4)
+  so the learning language comes from the active subtitle track instead of a
+  constant. `subtitle_core::import` now detects the language from the subtitle
+  script when the caller does not declare one (Han -> zh, else en) and uses it for
+  both tokenization and the stored `track.language`; a declared language still
+  wins and English tokenization stays the regression baseline. The Flutter
+  `SubtitleTrack` model reads the language the core already serialized, and a
+  `_learningLanguage` resolver (active primary track language, `en` fallback)
+  threads it through the vocabulary, dictionary, word-profile, source-snapshot and
+  phrase paths and `_sourceFor`. The `LocalApi` vocabulary/dictionary/lexical
+  methods take a required language; also dropped the dead `normalizeLexical`
+  client wrapper. Verified with workspace tests, flutter analyze/test and
+  validate-contracts.
 - 2026-06-22 16:06:45 CST: Added the Phase 2.6 LexicalUnit model (step 3) in
   `domain` (`lexical_unit.rs`): a language-relative vocabulary learning object
   whose identity is two orthogonal axes — granularity

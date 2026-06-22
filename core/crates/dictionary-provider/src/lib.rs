@@ -244,6 +244,114 @@ impl DictionaryProvider for EcdictProvider {
     }
 }
 
+/// Minimal built-in Mandarin dictionary for the Phase 2.6 English + Chinese
+/// acceptance set. Each entry carries tone-marked pinyin (the `zh` profile
+/// declares `zh.pinyin` + `zh.tone`) and a short gloss, so clicking a Chinese
+/// token shows pronunciation and meaning out of the box without installing a
+/// resource. It plugs in behind the same `DictionaryProvider` interface as the
+/// English providers and is selected purely by `supported_languages`, so a
+/// licensed CC-CEDICT-scale source can replace this seed set later without
+/// touching any call site. Lookups are exact on the (already normalized) lemma;
+/// an unknown word returns `None`, which the dispatcher degrades cleanly.
+pub struct ChineseDictionaryProvider {
+    entries: HashMap<&'static str, (&'static str, &'static str)>,
+}
+
+/// `(word, tone_marked_pinyin, gloss)`. Covers the tokenizer fixtures
+/// (我/想/喝/咖啡, plus mixed-sentence neighbours) and common greetings so the
+/// click-to-meaning path is demonstrable and testable.
+const CHINESE_DICTIONARY_SEED: &[(&str, &str, &str)] = &[
+    ("我", "wǒ", "I; me"),
+    ("我们", "wǒ men", "we; us"),
+    ("你", "nǐ", "you"),
+    ("好", "hǎo", "good; well"),
+    ("你好", "nǐ hǎo", "hello"),
+    ("想", "xiǎng", "to want; to think"),
+    ("喝", "hē", "to drink"),
+    ("咖啡", "kā fēi", "coffee"),
+    ("茶", "chá", "tea"),
+    ("水", "shuǐ", "water"),
+    ("谢谢", "xiè xie", "thanks; thank you"),
+    ("再见", "zài jiàn", "goodbye"),
+    ("是", "shì", "to be; is/are"),
+    ("不", "bù", "not; no"),
+    ("吃", "chī", "to eat"),
+    ("饭", "fàn", "cooked rice; meal"),
+    ("说", "shuō", "to speak; to say"),
+    ("听", "tīng", "to listen"),
+    ("看", "kàn", "to look; to watch; to read"),
+    ("中文", "zhōng wén", "Chinese (language)"),
+    ("学习", "xué xí", "to study; to learn"),
+    ("老师", "lǎo shī", "teacher"),
+    ("朋友", "péng you", "friend"),
+    ("今天", "jīn tiān", "today"),
+    ("电影", "diàn yǐng", "film; movie"),
+];
+
+impl ChineseDictionaryProvider {
+    pub fn new() -> Self {
+        Self {
+            entries: CHINESE_DICTIONARY_SEED
+                .iter()
+                .map(|(word, pinyin, gloss)| (*word, (*pinyin, *gloss)))
+                .collect(),
+        }
+    }
+}
+
+impl Default for ChineseDictionaryProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ChineseDictionaryProvider {
+    /// Synchronous lookup core (the table is in memory, so the trait's async
+    /// `lookup` just wraps this). Kept separate so it is testable without an
+    /// async runtime.
+    fn resolve(&self, lemma: &str) -> Option<DictionaryLookup> {
+        let (pinyin, gloss) = self.entries.get(lemma)?;
+        Some(DictionaryLookup {
+            query: lemma.to_owned(),
+            lemma: lemma.to_owned(),
+            definitions: vec![DictionaryDefinition {
+                part_of_speech: None,
+                text: (*gloss).to_owned(),
+            }],
+            phonetics: vec![DictionaryPhonetic {
+                text: (*pinyin).to_owned(),
+                region: Some("zh".into()),
+                audio_url: None,
+            }],
+            provider: "chinese-builtin".into(),
+            cached_at_ms: 0,
+        })
+    }
+}
+
+#[async_trait]
+impl DictionaryProvider for ChineseDictionaryProvider {
+    fn info(&self) -> DictionaryProviderInfo {
+        DictionaryProviderInfo {
+            id: "chinese-builtin".into(),
+            display_name: "Chinese (built-in)".into(),
+            supported_languages: vec!["zh".into()],
+            provides_definitions: true,
+            provides_phonetics: true,
+            provides_audio: false,
+            offline: true,
+        }
+    }
+
+    async fn lookup(
+        &self,
+        _language: &LanguageCode,
+        lemma: &str,
+    ) -> Result<Option<DictionaryLookup>, DictionaryProviderError> {
+        Ok(self.resolve(lemma))
+    }
+}
+
 fn parse_free_dictionary_phonetics(entry: &serde_json::Value) -> Vec<DictionaryPhonetic> {
     entry["phonetics"]
         .as_array()
@@ -473,6 +581,30 @@ mod tests {
         assert_eq!(candidates[0].normalized_form, "piece of cake");
         assert_eq!(candidates[0].token_start, 3);
         assert_eq!(candidates[0].token_end, 5);
+    }
+
+    #[test]
+    fn chinese_provider_returns_pinyin_and_gloss_for_known_words() {
+        let provider = ChineseDictionaryProvider::new();
+        let info = provider.info();
+        assert_eq!(info.supported_languages, vec!["zh".to_string()]);
+        assert!(info.offline);
+
+        let lookup = provider.resolve("咖啡").expect("known word resolves");
+        assert_eq!(lookup.provider, "chinese-builtin");
+        assert_eq!(lookup.phonetics.len(), 1);
+        assert_eq!(lookup.phonetics[0].text, "kā fēi");
+        assert_eq!(lookup.phonetics[0].region.as_deref(), Some("zh"));
+        assert_eq!(lookup.definitions.len(), 1);
+        assert_eq!(lookup.definitions[0].text, "coffee");
+
+        // Single characters that also stand alone resolve too (char-granularity).
+        assert_eq!(
+            provider.resolve("好").expect("char resolves").phonetics[0].text,
+            "hǎo"
+        );
+        // Unknown words degrade to None rather than failing.
+        assert!(provider.resolve("量子力学").is_none());
     }
 
     #[test]
