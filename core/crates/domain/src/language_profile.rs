@@ -145,6 +145,42 @@ impl LanguageLearningProfile {
         }
     }
 
+    /// Japanese profile — a second non-English target whose only purpose here is
+    /// to keep the dispatch layer honest: it shares the Han script with Chinese,
+    /// so it falsifies any script-based shortcut. Tokenization declares the
+    /// language-neutral `core.char` baseline (one unit per kanji/kana) until a
+    /// morphological-analysis provider lands; pronunciation and dictionary
+    /// providers are intentionally empty (no kana-reading / JMdict provider yet),
+    /// so unsupported capabilities degrade cleanly rather than borrowing Chinese.
+    pub fn japanese(language: LanguageCode) -> Self {
+        Self {
+            language,
+            display_name: "Japanese".to_string(),
+            script: "japanese".to_string(),
+            tokenization: "core.char".to_string(),
+            lexical_granularities: strings(&["core.word", "core.char", "core.morpheme"]),
+            lexical_normalization: "core.surface".to_string(),
+            listening_units: strings(&["core.syllable", "ja.mora", "core.word", "core.phrase"]),
+            pronunciation: "core.none".to_string(),
+            sound_features: strings(&["ja.pitch_accent", "ja.mora", "ja.long_vowel", "ja.gemination"]),
+            rhythm_prosody: "ja.mora_timed".to_string(),
+            morphology: "ja.agglutinative".to_string(),
+            dictionary_providers: Vec::new(),
+            diagnosis_reasons: strings(&[
+                "pitch_accent",
+                "mora_boundary",
+                "long_vowel",
+                "gemination",
+                "word_boundary",
+            ]),
+            // Non-English audio -> listening-unit production is deferred
+            // (ADR 0012 Future Path); declare these unsupported, not faked.
+            word_timeline: CapabilitySupport::Unsupported,
+            chunk_timeline: CapabilitySupport::Unsupported,
+            phone_timeline: CapabilitySupport::Unsupported,
+        }
+    }
+
     /// A minimal degraded profile for a language with no declared support.
     /// Tokenization falls back to whitespace, units to surface words, sound
     /// capabilities to none, and timelines to unsupported — so an unknown
@@ -196,6 +232,7 @@ pub fn profile_for(language: &LanguageCode) -> LanguageLearningProfile {
     match primary {
         "en" => LanguageLearningProfile::english(language.clone()),
         "zh" => LanguageLearningProfile::chinese(language.clone()),
+        "ja" => LanguageLearningProfile::japanese(language.clone()),
         _ => LanguageLearningProfile::degraded(language.clone()),
     }
 }
@@ -228,6 +265,27 @@ mod tests {
         assert!(profile.has_sound_feature("zh.tone"));
         assert!(profile.supports_listening_unit("zh.tone_syllable"));
         assert_eq!(profile.pronunciation, "zh.pinyin");
+    }
+
+    #[test]
+    fn japanese_profile_shares_han_script_but_borrows_nothing_from_chinese() {
+        let profile = profile_for(&lang("ja"));
+        assert_eq!(profile.display_name, "Japanese");
+        // Character baseline tokenization, not Chinese word segmentation.
+        assert_eq!(profile.tokenization, "core.char");
+        // No Chinese pronunciation / dictionary is borrowed; both degrade cleanly.
+        assert_eq!(profile.pronunciation, "core.none");
+        assert!(profile.dictionary_providers.is_empty());
+        // Japanese declares its own listening axis (mora) and reasons.
+        assert!(profile.supports_listening_unit("ja.mora"));
+        assert!(profile.has_sound_feature("ja.pitch_accent"));
+        assert!(profile
+            .diagnosis_reasons
+            .contains(&"pitch_accent".to_string()));
+        // It must not inherit Chinese tone reasons.
+        assert!(!profile
+            .diagnosis_reasons
+            .contains(&"tone_confusion".to_string()));
     }
 
     #[test]

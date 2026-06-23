@@ -10,7 +10,15 @@ impl AppServices {
         lemma: &str,
     ) -> Result<DictionaryLookupBundle, ApplicationError> {
         let language = LanguageCode::parse(language.to_owned())?;
-        let normalized_lemma = normalize_lemma(lemma);
+        // Normalize the query with the learning language's declared normalization
+        // rather than a hardcoded English lemma fold, so a surface-form language
+        // (e.g. Chinese) is not silently lowercased. For caseless scripts this is
+        // identical to `normalize_lemma`; the difference only surfaces once a
+        // case-bearing non-lemma language is added.
+        let normalized_lemma = domain::baseline_normalized_key(
+            &domain::profile_for(&language).lexical_normalization,
+            lemma,
+        );
         require_text(&normalized_lemma, "lemma")?;
         let mut results = Vec::with_capacity(providers.len());
         for provider in providers {

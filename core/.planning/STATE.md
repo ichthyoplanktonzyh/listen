@@ -14,8 +14,9 @@ progress:
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-22 CST
-> 更新原因：Phase 2.6 Step 7 双语回归收敛 + 收口（2.6-CLOSEOUT），Phase 2.6 全部完成
+> 最后更新：2026-06-23 CST
+> 更新原因：Phase 2.6 后续「第三语言证伪 spike」——日语证伪派遣层并加固（tokenizer 注册表 +
+> 语言识别 seam + 能力门控面板 + profile 归一 + ja 守卫 profile），en/zh 回归基线不变
 
 ## 当前位置
 
@@ -344,6 +345,29 @@ progress:
   - `.planning/phases/2.6-multilingual-learning-foundation/2.6-PLAN.md`
   - `.planning/phases/2.6-multilingual-learning-foundation/2.6-LANGUAGE-LISTENING-MODEL.md`
 
+#### Phase 2.6 后续：派遣层证伪与加固（第三语言 spike，2026-06-23）✅
+
+- 用日语（与中文**共享 Han 脚本**的远端样本）实测 ROADMAP §14.11 退出条件「加语言=只加
+  provider+profile，不动既有代码」。**实验证伪：数据模型层成立，行为派遣层不成立**——日语未声明
+  时被脚本启发判成 zh、`tokenize()` 写死 match 让日语塌成 1 个 token、逐字拼音按 Han 脚本（非语言）
+  门控。根因：zh 是唯一非英语样本且与抽象同期共同设计，n=1 时脚本捷径无法与真正语言派发区分。
+- 已加固使主张成真（en/zh 回归基线不变）：
+  - `subtitle-core`：新增 `tokenizer_for(strategy)` 注册表（strategy→tokenizer 单一注册点，
+    `profile_for` 的 tokenizer 类比）+ 始终可用的 `CharacterTokenizer`（`core.char`）；`tokenize()`
+    出口按 profile 声明的 `lexical_normalization` 重算 word 归一（zh/ja=surface 不再被静默小写）。
+  - `subtitle-core`：`detect_language` 加 kana→ja 语言识别 seam（kana 中文绝不出现），declared 优先，
+    Han→zh 不回退。
+  - `application/dictionary.rs`：词典查询归一改走 profile（与 tokenizer 一致）。
+  - Flutter 词面板：逐字拼音改按学习语言门控（`profile['language']`），删 Han 脚本门控 `_isHan`。
+  - `domain`：新增 `LanguageLearningProfile::japanese` / `profile_for("ja")`，仅作证伪守卫 fixture
+    （`core.char` 基线、无 dict/pronunciation provider 干净降级、声明 `ja.mora`/`pitch_accent` 自身轴）。
+- 范围纪律：identity 归一在仓储边界（约 6 处 `normalize_lemma`）对 en/zh/ja 行为等价（无大小写），
+  **刻意不重构**（零行为、动 identity 模型的 churn），仅记为潜在 seam（未来「带大小写非 lemma」语言才咬）。
+- 验证：workspace 284 + subtitle-core no-default-features 24 + flutter 64 + analyze/clippy/contracts 全通过。
+- 收口文档：`.planning/phases/2.6-multilingual-learning-foundation/2.6-DISPATCH-FALSIFICATION-AND-FIX.md`。
+- 残留 seam（刻意延后）：真日语形态分词(lindera/vibrato)+JMdict+kana 读音 provider；纯 kanji 无 kana 行
+  仍判 zh（需真 language-id provider）；能力矩阵暴露 client（Open Question）；identity 边界 profile 化。
+
 ### 强制对齐研究 🧭 长期推进
 
 - torchaudio MMS_FA sidecar（`scripts/forced-align/align-cli.py`）。
@@ -394,6 +418,11 @@ progress:
 4. Phase 2.6：多语言学习基础 ✅ **已收口**（Step 1-7：profile + jieba 分词 + LexicalUnit + 去
    `language=en` 硬编码 + CC-CEDICT 词典 + 汉语面板/语言感知诊断 + 双语回归）。收口文档
    `2.6-CLOSEOUT.md`。首批验收语言 en + zh；非英语音频生产、L1/听觉锚定 seam 属后续。
+5. Phase 2.6 后续「第三语言证伪 spike」✅ **已完成**（2026-06-23）：日语实测证伪派遣层并加固
+   （tokenizer 注册表 + kana 语言识别 seam + 能力门控面板 + profile 归一 + ja 守卫 profile），
+   使「加语言=只加 provider+profile」对复用既有策略的语言成真。文档
+   `2.6-DISPATCH-FALSIFICATION-AND-FIX.md`。残留 seam：真日语形态分词/JMdict/读音 provider、纯 kanji
+   无 kana 检测、能力矩阵暴露 client、identity 边界 profile 化——均刻意延后。
 
 ## 指标
 

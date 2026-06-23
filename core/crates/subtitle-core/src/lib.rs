@@ -389,35 +389,59 @@ impl Default for ChineseTokenizer {
 
 impl Tokenizer for ChineseTokenizer {
     fn tokenize(&self, text: &str) -> Vec<SubtitleToken> {
-        let mut tokens = Vec::new();
-        let mut char_pos: u32 = 0;
-        for segment in self.segments(text) {
-            let seg_len = segment.chars().count() as u32;
-            let start = char_pos;
-            char_pos += seg_len;
-            if seg_len == 0 {
-                continue;
-            }
-            let kind = segment_kind(segment);
-            let normalized = (kind == SubtitleTokenKind::Word).then(|| normalize_lemma(segment));
-            tokens.push(SubtitleToken {
-                index: tokens.len() as u32,
-                kind,
-                text: segment.to_string(),
-                normalized,
-                start_char: start,
-                end_char: char_pos,
-            });
-        }
-        tokens
+        build_segment_tokens(self.segments(text))
     }
 }
 
-/// Character-level Chinese segmentation fallback (used with
-/// `--no-default-features`). CJK ideographs and standalone marks are emitted per
-/// character; Latin/number and whitespace runs are grouped so embedded English
-/// words stay whole. Output substrings concatenate back to the original text.
-#[cfg(not(feature = "jieba"))]
+/// Build `SubtitleToken`s from contiguous segments whose concatenation is the
+/// original text, preserving each segment's character span. Shared by the Chinese
+/// word segmenter and the `core.char` character tokenizer. The word-token
+/// `normalized` set here is only a placeholder: the profile-aware [`tokenize`]
+/// entry point re-derives it from the learning language's declared normalization,
+/// so segmenters never bake in an English lemma assumption.
+fn build_segment_tokens<'t>(segments: impl IntoIterator<Item = &'t str>) -> Vec<SubtitleToken> {
+    let mut tokens = Vec::new();
+    let mut char_pos: u32 = 0;
+    for segment in segments {
+        let seg_len = segment.chars().count() as u32;
+        let start = char_pos;
+        char_pos += seg_len;
+        if seg_len == 0 {
+            continue;
+        }
+        let kind = segment_kind(segment);
+        let normalized = (kind == SubtitleTokenKind::Word).then(|| normalize_lemma(segment));
+        tokens.push(SubtitleToken {
+            index: tokens.len() as u32,
+            kind,
+            text: segment.to_string(),
+            normalized,
+            start_char: start,
+            end_char: char_pos,
+        });
+    }
+    tokens
+}
+
+/// Character-level tokenizer for the `core.char` strategy (e.g. the Japanese
+/// baseline until a morphological-analysis provider lands). One unit per CJK
+/// ideograph / mark; Latin/number/kana runs are grouped. Selecting it is a
+/// profile choice — a language that declares `core.char` reuses this with no new
+/// code, which is the whole point of routing tokenization through the profile.
+pub struct CharacterTokenizer;
+
+impl Tokenizer for CharacterTokenizer {
+    fn tokenize(&self, text: &str) -> Vec<SubtitleToken> {
+        build_segment_tokens(char_level_segments(text))
+    }
+}
+
+/// Character-level segmentation. CJK ideographs and standalone marks (including
+/// Japanese kana, which fall outside the Han range) are emitted per character;
+/// Latin/number and whitespace runs are grouped so embedded words stay whole.
+/// Output substrings concatenate back to the original text. This backs both the
+/// `core.char` tokenizer (e.g. the Japanese baseline) and the Chinese
+/// `--no-default-features` word-segmentation fallback.
 fn char_level_segments(text: &str) -> Vec<&str> {
     #[derive(PartialEq)]
     enum Class {
@@ -483,20 +507,51 @@ fn is_punctuation_char(ch: char) -> bool {
         )
 }
 
-/// Tokenize subtitle display text using the tokenization strategy declared by
-/// the learning language's profile. English/whitespace languages keep the
-/// existing baseline; `zh.word_segmentation` routes to the Chinese tokenizer
-/// (jieba word segmentation by default, character-level with
-/// `--no-default-features`). An unknown or absent language degrades cleanly to
-/// whitespace tokenization.
+/// Tokenize subtitle display text with the tokenizer declared by the learning
+/// language's profile, then re-derive each word token's normalized key from the
+/// profile's declared normalization. Selection goes through [`tokenizer_for`] (a
+/// strategy -> tokenizer registry), so a new language is a profile + provider
+/// choice, never a branch here; an unknown or absent language degrades cleanly to
+/// the whitespace baseline. Normalization is applied at this single profile-aware
+/// seam rather than inside each segmenter, so English keeps lemma folding while
+/// surface-form languages (Chinese, Japanese) are not silently lowercased.
 pub fn tokenize(language: Option<&LanguageCode>, text: &str) -> Vec<SubtitleToken> {
-    let strategy = language
-        .map(domain::profile_for)
-        .map(|profile| profile.tokenization);
-    match strategy.as_deref() {
-        Some("zh.word_segmentation") => chinese_tokenizer().tokenize(text),
-        _ => tokenize_english(text),
+    let profile = language.map(domain::profile_for);
+    let strategy = profile
+        .as_ref()
+        .map(|profile| profile.tokenization.as_str())
+        .unwrap_or("core.whitespace");
+    let mut tokens = tokenizer_for(strategy).tokenize(text);
+    if let Some(profile) = profile.as_ref() {
+        for token in &mut tokens {
+            if token.kind == SubtitleTokenKind::Word {
+                token.normalized = Some(domain::baseline_normalized_key(
+                    &profile.lexical_normalization,
+                    &token.text,
+                ));
+            }
+        }
     }
+    tokens
+}
+
+/// Resolve the tokenizer for a profile's declared tokenization strategy. This is
+/// the single strategy -> tokenizer registration point — the tokenizer analog of
+/// `domain::profile_for` and dictionary-provider registration. A language that
+/// reuses a declared strategy (`core.whitespace`, `zh.word_segmentation`,
+/// `core.char`) needs no edit here; an unknown strategy degrades cleanly to the
+/// whitespace baseline instead of silently collapsing space-less text.
+fn tokenizer_for(strategy: &str) -> &'static dyn Tokenizer {
+    match strategy {
+        "zh.word_segmentation" => chinese_tokenizer(),
+        "core.char" => character_tokenizer(),
+        _ => whitespace_tokenizer(),
+    }
+}
+
+fn whitespace_tokenizer() -> &'static WhitespaceTokenizer {
+    static INSTANCE: std::sync::OnceLock<WhitespaceTokenizer> = std::sync::OnceLock::new();
+    INSTANCE.get_or_init(|| WhitespaceTokenizer)
 }
 
 fn chinese_tokenizer() -> &'static ChineseTokenizer {
@@ -504,20 +559,42 @@ fn chinese_tokenizer() -> &'static ChineseTokenizer {
     INSTANCE.get_or_init(ChineseTokenizer::new)
 }
 
+fn character_tokenizer() -> &'static CharacterTokenizer {
+    static INSTANCE: std::sync::OnceLock<CharacterTokenizer> = std::sync::OnceLock::new();
+    INSTANCE.get_or_init(|| CharacterTokenizer)
+}
+
 /// Detect the learning language from subtitle text when the caller did not
-/// declare one. This is a deliberately small script heuristic for the Phase 2.6
-/// English + Chinese acceptance set: any Han ideograph routes to Chinese (so the
-/// Chinese segmenter and `zh` vocabulary identity apply), and everything else
-/// stays on the English/whitespace baseline. Per ADR 0012 an undetected script
-/// degrades cleanly to English rather than failing; a richer provider-based
+/// declare one. This is the built-in language-identification seam, kept
+/// deliberately small for the current acceptance set: kana settles Japanese
+/// first (kana is unique to Japanese and disambiguates it from Chinese, which
+/// shares the Han script), then any remaining Han routes to Chinese, and
+/// everything else stays on the English/whitespace baseline. Han alone cannot
+/// tell `zh` from `ja`, so script presence is not sufficient — a kana-bearing
+/// line is Japanese even though it also contains kanji. Per ADR 0012 an
+/// undetected script degrades cleanly to English; a richer provider-based
 /// language identifier can replace this without changing callers.
 fn detect_language<'a>(texts: impl IntoIterator<Item = &'a str>) -> LanguageCode {
-    let code = if texts.into_iter().flat_map(str::chars).any(is_han) {
-        "zh"
-    } else {
-        "en"
-    };
+    let mut has_han = false;
+    for ch in texts.into_iter().flat_map(str::chars) {
+        if is_kana(ch) {
+            return LanguageCode::parse("ja").expect("detection codes are valid");
+        }
+        has_han |= is_han(ch);
+    }
+    let code = if has_han { "zh" } else { "en" };
     LanguageCode::parse(code).expect("detection codes are valid")
+}
+
+/// Kana code points (hiragana, katakana, and their phonetic / halfwidth blocks).
+/// Kana never appears in Chinese, so its presence is a reliable Japanese signal.
+fn is_kana(value: char) -> bool {
+    matches!(value,
+        '\u{3040}'..='\u{309f}'      // Hiragana
+        | '\u{30a0}'..='\u{30ff}'    // Katakana
+        | '\u{31f0}'..='\u{31ff}'    // Katakana Phonetic Extensions
+        | '\u{ff66}'..='\u{ff9f}'    // Halfwidth Katakana
+    )
 }
 
 fn is_han(value: char) -> bool {
@@ -850,6 +927,39 @@ mod language_tokenize_tests {
         let text = "hello world";
         assert_eq!(tokenize(Some(&lang("xx")), text), tokenize_english(text));
     }
+
+    #[test]
+    fn japanese_segments_via_core_char_registry_not_one_token() {
+        // ja declares `core.char`; the registry routes it to the character
+        // tokenizer with no dispatch edit, so a space-less sentence becomes many
+        // tokens instead of collapsing to one (the originally falsified behavior).
+        let tokens = tokenize(Some(&lang("ja")), "私は学生です");
+        let words = word_texts(&tokens);
+        assert!(words.len() > 1, "expected multiple tokens, got {words:?}");
+        let rebuilt: String = tokens.iter().map(|token| token.text.as_str()).collect();
+        assert_eq!(rebuilt, "私は学生です");
+    }
+
+    #[test]
+    fn surface_language_normalization_keeps_case_via_profile() {
+        // Chinese declares core.surface normalization; an embedded Latin word must
+        // not be silently lowercased the way the hardcoded English lemma fold was.
+        let tokens = tokenize(Some(&lang("zh")), "我看 Netflix");
+        let netflix = tokens.iter().find(|token| token.text == "Netflix");
+        assert_eq!(
+            netflix.and_then(|token| token.normalized.as_deref()),
+            Some("Netflix"),
+            "zh surface normalization should preserve case; tokens={tokens:?}"
+        );
+        // English still lemma-folds (lowercases) per its own profile.
+        let en = tokenize(Some(&lang("en")), "Netflix");
+        assert_eq!(
+            en.iter()
+                .find(|token| token.text == "Netflix")
+                .and_then(|token| token.normalized.as_deref()),
+            Some("netflix")
+        );
+    }
 }
 
 #[cfg(test)]
@@ -898,5 +1008,23 @@ mod import_language_detection_tests {
         let track = import_srt("我想喝咖啡", Some("en"));
         assert_eq!(track.language.as_ref().map(LanguageCode::as_str), Some("en"));
         assert_eq!(word_count(&track), 1, "en tokenizer treats Han run as one word");
+    }
+
+    #[test]
+    fn undeclared_japanese_detects_ja_not_zh_and_segments() {
+        // Kana (は/で/す) disambiguates Japanese from Chinese even though the line
+        // also contains kanji, so detection must not misroute it to zh — the
+        // central falsification this dispatch fix closes.
+        let track = import_srt("私は学生です", None);
+        assert_eq!(track.language.as_ref().map(LanguageCode::as_str), Some("ja"));
+        assert!(word_count(&track) > 1, "expected Japanese segmentation");
+    }
+
+    #[test]
+    fn undeclared_kanji_only_line_without_kana_still_detects_zh() {
+        // Han with no kana stays Chinese: the kana signal adds Japanese without
+        // regressing the existing Chinese detection baseline.
+        let track = import_srt("我想喝咖啡", None);
+        assert_eq!(track.language.as_ref().map(LanguageCode::as_str), Some("zh"));
     }
 }
