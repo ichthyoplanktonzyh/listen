@@ -113,7 +113,7 @@ X.X-feature-name/
 ## 六、日常维护 checklist
 
 ### 每次提交
-- [ ] `CHANGELOG.md` 增量更新，精确时间戳
+- [ ] `CHANGELOG.md` 增量更新，精确时间戳,到分钟。
 
 ### 每次 phase 完成
 - [ ] 撰写 `X.X-SUMMARY.md`

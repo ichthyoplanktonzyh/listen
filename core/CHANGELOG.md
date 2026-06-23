@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- 2026-06-23 15:28 CST: Promoted Japanese from a guard fixture to a real language
+  (lindera morphological tokenization + JMdict/EDICT2 dictionary), empirically
+  validating the dispatch-layer fix from the earlier falsification spike. Added
+  `JapaneseTokenizer` with lindera 4.0 + embedded IPADIC behind an opt-in
+  `lindera` feature (default off — not vendored offline; offline/default builds
+  use character-level fallback). Added `JapaneseDictionaryProvider` reading
+  EDICT2 line format with a 15-word seed fallback, registered in the api-http
+  dictionary stack. The ja profile now declares `ja.morphological` tokenization,
+  `jmdict` dictionary, and `ja.kana` pronunciation — all routed by profile and
+  provider with zero edits to dispatch core, `detect_language`, per-char gating,
+  or diagnosis. This empirically confirms ROADMAP §14.11: adding a real
+  Han-script-sharing language required only profile + provider + registration.
+  Surfaced a deferred seam: `core.surface` normalization does not unify Japanese
+  inflections (食べる/食べた) because Fix 4 re-derives the normalized key from
+  surface text, discarding lindera's base form — base-form unification needs
+  the provider-supplied opaque key to flow through `tokenize()`. Updated
+  maintenance checklist to require minute-precision changelog timestamps.
+  Verified: workspace 286 tests, `--features lindera` morphological proof,
+  `--no-default-features` 24 tests, flutter 64, clippy clean, contracts pass;
+  en/zh regression baseline unchanged.
+
 - 2026-06-23 09:07:10 CST: Closed out Phase 2.6 (step 7). Consolidated the
   bilingual regression into an explicit set and added a crown-jewel capstone test
   proving English and Chinese vocabularies and their source snapshots stay

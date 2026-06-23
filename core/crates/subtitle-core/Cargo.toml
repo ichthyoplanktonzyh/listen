@@ -10,13 +10,19 @@ sha2.workspace = true
 hex.workspace = true
 thiserror.workspace = true
 jieba-rs = { version = "0.7", optional = true }
+lindera = { version = "4", optional = true, features = ["embed-ipadic"] }
 
 [features]
 # jieba word segmentation is on by default. Disable with `--no-default-features`
 # to fall back to character-level Chinese segmentation (the `zh` profile's
 # declared fallback) for builds without the jieba dictionary dependency.
+#
+# `lindera` is opt-in (off by default): it embeds the IPADIC dictionary, which is
+# not vendored offline, so default/offline builds use the Japanese character-level
+# fallback. Release builds enable it for real morphological segmentation.
 default = ["jieba"]
 jieba = ["dep:jieba-rs"]
+lindera = ["dep:lindera"]
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

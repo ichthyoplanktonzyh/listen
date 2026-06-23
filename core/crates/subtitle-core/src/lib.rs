@@ -436,6 +436,93 @@ impl Tokenizer for CharacterTokenizer {
     }
 }
 
+/// Japanese tokenizer for the `ja.morphological` strategy.
+///
+/// Real morphological analysis (lindera surface morphemes) lands behind a
+/// `lindera` feature; until then — and on the offline/no-default build — it
+/// degrades to character-level segmentation (one unit per kanji/kana) rather than
+/// collapsing a space-less sentence to one token. This mirrors how the Chinese
+/// tokenizer degrades from jieba to characters. The analyzer sits behind the
+/// `Tokenizer` trait, so promoting Japanese from the guard fixture to a real
+/// language was a profile + provider choice, never a dispatch edit — which is the
+/// property this exercise validates. Tokens are surface forms (surface identity);
+/// base-form (辞書形) unification is a deferred normalization seam.
+pub struct JapaneseTokenizer {
+    #[cfg(feature = "lindera")]
+    segmenter: lindera::segmenter::Segmenter,
+}
+
+impl JapaneseTokenizer {
+    pub fn new() -> Self {
+        Self {
+            #[cfg(feature = "lindera")]
+            segmenter: build_lindera_segmenter(),
+        }
+    }
+
+    /// Split into contiguous substrings whose concatenation is the input. With
+    /// the `lindera` feature this is morphological; otherwise character-level.
+    fn segments<'t>(&self, text: &'t str) -> Vec<&'t str> {
+        #[cfg(feature = "lindera")]
+        {
+            lindera_segments(&self.segmenter, text)
+        }
+        #[cfg(not(feature = "lindera"))]
+        {
+            char_level_segments(text)
+        }
+    }
+}
+
+impl Default for JapaneseTokenizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Tokenizer for JapaneseTokenizer {
+    fn tokenize(&self, text: &str) -> Vec<SubtitleToken> {
+        build_segment_tokens(self.segments(text))
+    }
+}
+
+#[cfg(feature = "lindera")]
+fn build_lindera_segmenter() -> lindera::segmenter::Segmenter {
+    use lindera::dictionary::{load_embedded_dictionary, DictionaryKind};
+    use lindera::mode::Mode;
+    use lindera::segmenter::Segmenter;
+    let dictionary = load_embedded_dictionary(DictionaryKind::IPADIC)
+        .expect("embedded IPADIC dictionary must load");
+    Segmenter::new(Mode::Normal, dictionary, None)
+}
+
+/// Reconstruct contiguous segments from lindera token byte offsets so the output
+/// concatenates back to the original text, covering any inter-token gaps (e.g.
+/// spaces around embedded Latin). Falls back to character-level on analyzer error.
+#[cfg(feature = "lindera")]
+fn lindera_segments<'t>(segmenter: &lindera::segmenter::Segmenter, text: &'t str) -> Vec<&'t str> {
+    let tokens = match segmenter.segment(std::borrow::Cow::Borrowed(text)) {
+        Ok(tokens) => tokens,
+        Err(_) => return char_level_segments(text),
+    };
+    let mut segments = Vec::new();
+    let mut cursor = 0usize;
+    for token in &tokens {
+        let (start, end) = (token.byte_start, token.byte_end);
+        if start > cursor {
+            segments.push(&text[cursor..start]);
+        }
+        if end > start {
+            segments.push(&text[start..end]);
+        }
+        cursor = cursor.max(end);
+    }
+    if cursor < text.len() {
+        segments.push(&text[cursor..]);
+    }
+    segments
+}
+
 /// Character-level segmentation. CJK ideographs and standalone marks (including
 /// Japanese kana, which fall outside the Han range) are emitted per character;
 /// Latin/number and whitespace runs are grouped so embedded words stay whole.
@@ -544,6 +631,7 @@ pub fn tokenize(language: Option<&LanguageCode>, text: &str) -> Vec<SubtitleToke
 fn tokenizer_for(strategy: &str) -> &'static dyn Tokenizer {
     match strategy {
         "zh.word_segmentation" => chinese_tokenizer(),
+        "ja.morphological" => japanese_tokenizer(),
         "core.char" => character_tokenizer(),
         _ => whitespace_tokenizer(),
     }
@@ -562,6 +650,11 @@ fn chinese_tokenizer() -> &'static ChineseTokenizer {
 fn character_tokenizer() -> &'static CharacterTokenizer {
     static INSTANCE: std::sync::OnceLock<CharacterTokenizer> = std::sync::OnceLock::new();
     INSTANCE.get_or_init(|| CharacterTokenizer)
+}
+
+fn japanese_tokenizer() -> &'static JapaneseTokenizer {
+    static INSTANCE: std::sync::OnceLock<JapaneseTokenizer> = std::sync::OnceLock::new();
+    INSTANCE.get_or_init(JapaneseTokenizer::new)
 }
 
 /// Detect the learning language from subtitle text when the caller did not
@@ -929,13 +1022,31 @@ mod language_tokenize_tests {
     }
 
     #[test]
-    fn japanese_segments_via_core_char_registry_not_one_token() {
-        // ja declares `core.char`; the registry routes it to the character
-        // tokenizer with no dispatch edit, so a space-less sentence becomes many
-        // tokens instead of collapsing to one (the originally falsified behavior).
+    fn japanese_segments_via_morphological_registry_not_one_token() {
+        // ja declares `ja.morphological`; the registry routes it to the Japanese
+        // tokenizer (lindera under the `lindera` feature, character-level fallback
+        // offline) with no edit to `tokenize` itself, so a space-less sentence
+        // becomes many tokens instead of collapsing to one (the falsified path).
         let tokens = tokenize(Some(&lang("ja")), "私は学生です");
         let words = word_texts(&tokens);
         assert!(words.len() > 1, "expected multiple tokens, got {words:?}");
+        let rebuilt: String = tokens.iter().map(|token| token.text.as_str()).collect();
+        assert_eq!(rebuilt, "私は学生です");
+    }
+
+    #[cfg(feature = "lindera")]
+    #[test]
+    fn japanese_lindera_segments_morphologically() {
+        // With the real lindera analyzer, 学生 (student) is a single morpheme that
+        // character-level segmentation would split into 学 / 生. This proves the
+        // `lindera` feature actually drives `ja.morphological`, not the fallback,
+        // and that token byte offsets reconstruct the original text exactly.
+        let tokens = tokenize(Some(&lang("ja")), "私は学生です");
+        let words = word_texts(&tokens);
+        assert!(
+            words.iter().any(|word| word == "学生"),
+            "expected 学生 as one morpheme, got {words:?}"
+        );
         let rebuilt: String = tokens.iter().map(|token| token.text.as_str()).collect();
         assert_eq!(rebuilt, "私は学生です");
     }

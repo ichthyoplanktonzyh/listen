@@ -15,8 +15,8 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-23 CST
-> 更新原因：Phase 2.6 后续「第三语言证伪 spike」——日语证伪派遣层并加固（tokenizer 注册表 +
-> 语言识别 seam + 能力门控面板 + profile 归一 + ja 守卫 profile），en/zh 回归基线不变
+> 更新原因：Phase 2.6 后续——(1) 日语证伪派遣层并加固；(2) 真日语（lindera 形态分词 + JMdict）经验
+> 验证「加语言=只加 provider+profile」对真语言成立，并浮出 surface 身份不归并活用的下一个 seam
 
 ## 当前位置
 
@@ -365,8 +365,29 @@ progress:
   **刻意不重构**（零行为、动 identity 模型的 churn），仅记为潜在 seam（未来「带大小写非 lemma」语言才咬）。
 - 验证：workspace 284 + subtitle-core no-default-features 24 + flutter 64 + analyze/clippy/contracts 全通过。
 - 收口文档：`.planning/phases/2.6-multilingual-learning-foundation/2.6-DISPATCH-FALSIFICATION-AND-FIX.md`。
-- 残留 seam（刻意延后）：真日语形态分词(lindera/vibrato)+JMdict+kana 读音 provider；纯 kanji 无 kana 行
-  仍判 zh（需真 language-id provider）；能力矩阵暴露 client（Open Question）；identity 边界 profile 化。
+- 残留 seam（刻意延后）：纯 kanji 无 kana 行仍判 zh（需真 language-id provider）；能力矩阵暴露 client
+  （Open Question）；identity 边界 profile 化。
+
+#### Phase 2.6 后续：真日语（经验验证派遣修复，2026-06-23）✅
+
+- 把 ja 从守卫桩升级为**真语言**，以经验验证上面那次派遣修复真成立（桩证明不了）。
+  - `subtitle-core`：`JapaneseTokenizer` = **lindera 4.0 + 内嵌 IPADIC** 形态分词，放 `lindera` feature
+    后（**默认关**，lindera 未离线缓存，开会破离线构建；默认/离线走字级 fallback）。
+  - `dictionary-provider`：`JapaneseDictionaryProvider` 走 **JMdict/EDICT2** 行格式 + 15 词 seed，镜像
+    CC-CEDICT；按 kanji/kana 双查。
+  - `domain`：ja profile `tokenization`→`ja.morphological`、`dictionary_providers`→`[jmdict]`、
+    `pronunciation`→`ja.kana`（`lexical_normalization` 仍 `core.surface`）。
+  - 注册：`tokenizer_for` 加 `ja.morphological` 一臂 + api-http 词典栈加一行。
+- **验证结果**：加这门真·共享 Han 脚本的形态语言**只动 profile+provider+注册点，没碰 `tokenize()` 核心/
+  `detect_language`/逐字门控/诊断**——ROADMAP §14.11「加语言=只加 provider+profile」对真语言**经验成立**。
+- **浮出 seam（mini-证伪）**：日语活用（食べる/食べた）在 `core.surface` 身份下**不归并**；lindera 能给
+  base form，但 Fix 4 从 surface 重算归一、丢弃 tokenizer lemma。归并需 provider 供归一 key 流过
+  `tokenize()`（`LexicalUnit::new` 已支持不透明 key）——下一个 seam，surface-first 接受 v1 不归并。
+- 验证：workspace 286 + `--features lindera`（形态证明：学生为单词素）+ no-default-features 24 + flutter 64
+  + clippy/contracts 通过。
+- 收口文档：`.planning/phases/2.6-multilingual-learning-foundation/2.6-REAL-JAPANESE-VALIDATION.md`。
+- 残留：base-form 归并 seam；EDICT2 可下载资源注册（钉死+sha256，像 CC-CEDICT；seed+安装路径已就位）；
+  纯 kanji 无 kana 检测；日语声学侧（独立 production program）。
 
 ### 强制对齐研究 🧭 长期推进
 

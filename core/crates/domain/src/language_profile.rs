@@ -145,27 +145,28 @@ impl LanguageLearningProfile {
         }
     }
 
-    /// Japanese profile — a second non-English target whose only purpose here is
-    /// to keep the dispatch layer honest: it shares the Han script with Chinese,
-    /// so it falsifies any script-based shortcut. Tokenization declares the
-    /// language-neutral `core.char` baseline (one unit per kanji/kana) until a
-    /// morphological-analysis provider lands; pronunciation and dictionary
-    /// providers are intentionally empty (no kana-reading / JMdict provider yet),
-    /// so unsupported capabilities degrade cleanly rather than borrowing Chinese.
+    /// Japanese profile — the real second non-English language. It shares the Han
+    /// script with Chinese, which is exactly why it validates the dispatch layer:
+    /// tokenization (`ja.morphological` — lindera with a character-level fallback),
+    /// the JMdict dictionary provider, kana pronunciation and `ja.*` diagnosis
+    /// reasons are all selected by profile + provider, touching no dispatcher
+    /// branch. `lexical_normalization` stays `core.surface`: Japanese inflection is
+    /// not yet unified to a base form (a deferred normalization seam), so
+    /// conjugations are distinct surface units.
     pub fn japanese(language: LanguageCode) -> Self {
         Self {
             language,
             display_name: "Japanese".to_string(),
             script: "japanese".to_string(),
-            tokenization: "core.char".to_string(),
+            tokenization: "ja.morphological".to_string(),
             lexical_granularities: strings(&["core.word", "core.char", "core.morpheme"]),
             lexical_normalization: "core.surface".to_string(),
             listening_units: strings(&["core.syllable", "ja.mora", "core.word", "core.phrase"]),
-            pronunciation: "core.none".to_string(),
+            pronunciation: "ja.kana".to_string(),
             sound_features: strings(&["ja.pitch_accent", "ja.mora", "ja.long_vowel", "ja.gemination"]),
             rhythm_prosody: "ja.mora_timed".to_string(),
             morphology: "ja.agglutinative".to_string(),
-            dictionary_providers: Vec::new(),
+            dictionary_providers: strings(&["jmdict"]),
             diagnosis_reasons: strings(&[
                 "pitch_accent",
                 "mora_boundary",
@@ -268,14 +269,17 @@ mod tests {
     }
 
     #[test]
-    fn japanese_profile_shares_han_script_but_borrows_nothing_from_chinese() {
+    fn japanese_profile_is_real_language_and_borrows_nothing_from_chinese() {
         let profile = profile_for(&lang("ja"));
         assert_eq!(profile.display_name, "Japanese");
-        // Character baseline tokenization, not Chinese word segmentation.
-        assert_eq!(profile.tokenization, "core.char");
-        // No Chinese pronunciation / dictionary is borrowed; both degrade cleanly.
-        assert_eq!(profile.pronunciation, "core.none");
-        assert!(profile.dictionary_providers.is_empty());
+        // Morphological tokenization + JMdict + kana pronunciation, all its own —
+        // selected by profile/provider, sharing the Han script with zh but no code.
+        assert_eq!(profile.tokenization, "ja.morphological");
+        assert_eq!(profile.pronunciation, "ja.kana");
+        assert_eq!(profile.dictionary_providers, vec!["jmdict".to_string()]);
+        // It must not borrow Chinese pinyin or CC-CEDICT.
+        assert_ne!(profile.pronunciation, "zh.pinyin");
+        assert!(!profile.dictionary_providers.contains(&"cedict".to_string()));
         // Japanese declares its own listening axis (mora) and reasons.
         assert!(profile.supports_listening_unit("ja.mora"));
         assert!(profile.has_sound_feature("ja.pitch_accent"));
