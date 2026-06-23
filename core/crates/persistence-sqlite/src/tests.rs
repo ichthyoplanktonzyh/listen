@@ -249,6 +249,7 @@ impl DictionaryProvider for FakeDictionary {
                 region: None,
                 audio_url: None,
             }],
+            character_breakdowns: vec![],
             provider: self.info().id,
             cached_at_ms: 0,
         }))
@@ -310,6 +311,7 @@ impl DictionaryProvider for FakeChineseDictionary {
                 region: Some("zh".into()),
                 audio_url: None,
             }],
+            character_breakdowns: vec![],
             provider: self.info().id,
             cached_at_ms: 0,
         }))

@@ -9,8 +9,9 @@ use application::{
 };
 use async_trait::async_trait;
 use domain::{
-    DictionaryDefinition, DictionaryLookup, DictionaryPhonetic, DictionaryProviderInfo,
-    LanguageCode, PhraseCandidate, SubtitleSentence, SubtitleTokenKind, normalize_lemma,
+    CharacterBreakdown, DictionaryDefinition, DictionaryLookup, DictionaryPhonetic,
+    DictionaryProviderInfo, LanguageCode, PhraseCandidate, SubtitleSentence, SubtitleTokenKind,
+    normalize_lemma,
 };
 
 pub struct FreeDictionaryProvider {
@@ -109,6 +110,7 @@ impl DictionaryProvider for FreeDictionaryProvider {
             lemma: entry["word"].as_str().unwrap_or(lemma).to_owned(),
             definitions,
             phonetics,
+            character_breakdowns: vec![],
             provider: self.info().id,
             cached_at_ms: 0,
         }))
@@ -238,6 +240,7 @@ impl DictionaryProvider for EcdictProvider {
                 })
                 .into_iter()
                 .collect(),
+            character_breakdowns: vec![],
             provider: "ecdict".into(),
             cached_at_ms: 0,
         }))
@@ -348,13 +351,51 @@ impl ChineseDictionaryProvider {
     /// Synchronous lookup core, kept separate from the async trait method so it
     /// is testable without a runtime. Prefers installed CC-CEDICT, then the seed.
     fn resolve(&self, lemma: &str) -> Option<DictionaryLookup> {
-        if let Some(index) = self.load_index()
+        let (pinyin, definition) = if let Some(index) = self.load_index()
             && let Some(entry) = index.entries.get(lemma)
         {
-            return Some(chinese_lookup(lemma, &entry.pinyin, &entry.definition));
+            (entry.pinyin.clone(), entry.definition.clone())
+        } else {
+            let (p, g) = self.seed.get(lemma)?;
+            (p.to_string(), g.to_string())
+        };
+        let mut lookup = chinese_lookup(lemma, &pinyin, &definition);
+        let chars: Vec<String> = lemma.chars().map(|ch| ch.to_string()).collect();
+        if chars.len() >= 2 {
+            let syllables: Vec<&str> = pinyin.split_whitespace().collect();
+            let index = self.load_index();
+            let breakdowns: Vec<CharacterBreakdown> = chars
+                .iter()
+                .enumerate()
+                .map(|(i, ch)| {
+                    let char_pinyin = syllables
+                        .get(i)
+                        .copied()
+                        .unwrap_or("")
+                        .to_owned();
+                    let meaning = self.resolve_single_char(ch, index.as_deref());
+                    CharacterBreakdown {
+                        character: ch.clone(),
+                        phonetic: char_pinyin,
+                        meaning,
+                    }
+                })
+                .collect();
+            lookup.character_breakdowns = breakdowns;
         }
-        let (pinyin, gloss) = self.seed.get(lemma)?;
-        Some(chinese_lookup(lemma, pinyin, gloss))
+        Some(lookup)
+    }
+
+    fn resolve_single_char(&self, ch: &str, index: Option<&CedictIndex>) -> String {
+        if let Some(index) = index
+            && let Some(entry) = index.entries.get(ch)
+        {
+            return entry.definition.clone();
+        }
+        self.seed
+            .get(ch)
+            .map(|(_, gloss)| gloss.to_string())
+            .unwrap_or_default()
     }
 }
 
@@ -377,6 +418,7 @@ fn chinese_lookup(lemma: &str, pinyin: &str, definition: &str) -> DictionaryLook
             region: Some("zh".into()),
             audio_url: None,
         }],
+        character_breakdowns: vec![],
         provider: "cc-cedict".into(),
         cached_at_ms: 0,
     }
@@ -529,6 +571,7 @@ fn japanese_lookup(lemma: &str, reading: &str, definition: &str) -> DictionaryLo
             })
             .into_iter()
             .collect(),
+        character_breakdowns: vec![],
         provider: "jmdict".into(),
         cached_at_ms: 0,
     }

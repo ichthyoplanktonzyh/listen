@@ -27,6 +27,14 @@ impl AppServices {
         Ok(track)
     }
 
+    pub fn update_track_language(
+        &self,
+        track_id: &SubtitleTrackId,
+        language: &LanguageCode,
+    ) -> Result<SubtitleTrack, ApplicationError> {
+        self.subtitles.set_track_language(track_id, language)
+    }
+
     pub fn read_subtitle_track(
         &self,
         track_id: &SubtitleTrackId,

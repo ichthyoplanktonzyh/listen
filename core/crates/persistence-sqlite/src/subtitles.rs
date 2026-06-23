@@ -166,6 +166,27 @@ impl SubtitleRepository for SqliteRepository {
             .ok_or(ApplicationError::NotFound("subtitle track"))
     }
 
+    fn set_track_language(
+        &self,
+        id: &SubtitleTrackId,
+        language: &LanguageCode,
+    ) -> Result<SubtitleTrack, ApplicationError> {
+        let updated = self
+            .connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "UPDATE subtitle_tracks SET language=?2 WHERE id=?1",
+                params![id.as_str(), language.as_str()],
+            )
+            .map_err(repo)?;
+        if updated == 0 {
+            return Err(ApplicationError::NotFound("subtitle track"));
+        }
+        self.get_track(id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))
+    }
+
     fn delete_track(
         &self,
         id: &SubtitleTrackId,

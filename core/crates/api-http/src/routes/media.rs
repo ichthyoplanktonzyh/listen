@@ -81,6 +81,25 @@ pub(crate) async fn import_subtitle(
         .map_err(ApiError::from)
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpdateTrackLanguageRequest {
+    language: String,
+}
+
+pub(crate) async fn update_track_language(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+    Json(request): Json<UpdateTrackLanguageRequest>,
+) -> Result<Json<domain::SubtitleTrack>, ApiError> {
+    let track_id = SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?;
+    let language = LanguageCode::parse(request.language).map_err(ApplicationError::from)?;
+    state
+        .services
+        .update_track_language(&track_id, &language)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 pub(crate) async fn import_lltimeline(
     State(state): State<ApiState>,
     Json(document): Json<domain::LLTimelineDocument>,

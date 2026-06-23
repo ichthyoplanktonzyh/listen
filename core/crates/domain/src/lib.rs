@@ -3,7 +3,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 mod language_profile;
-pub use language_profile::{profile_for, CapabilitySupport, LanguageLearningProfile};
+pub use language_profile::{available_languages, profile_for, CapabilitySupport, LanguageLearningProfile};
 
 mod lexical_unit;
 pub use lexical_unit::{baseline_normalized_key, LexicalUnit};
@@ -1052,11 +1052,20 @@ pub struct DictionaryPhonetic {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CharacterBreakdown {
+    pub character: String,
+    pub phonetic: String,
+    pub meaning: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DictionaryLookup {
     pub query: String,
     pub lemma: String,
     pub definitions: Vec<DictionaryDefinition>,
     pub phonetics: Vec<DictionaryPhonetic>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub character_breakdowns: Vec<CharacterBreakdown>,
     pub provider: String,
     pub cached_at_ms: u64,
 }

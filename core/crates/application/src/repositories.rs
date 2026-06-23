@@ -24,6 +24,11 @@ pub trait SubtitleRepository: Send + Sync {
         id: &SubtitleTrackId,
         status: SubtitleTrackStatus,
     ) -> Result<SubtitleTrack, ApplicationError>;
+    fn set_track_language(
+        &self,
+        id: &SubtitleTrackId,
+        language: &LanguageCode,
+    ) -> Result<SubtitleTrack, ApplicationError>;
     fn delete_track(&self, id: &SubtitleTrackId)
     -> Result<Option<SubtitleTrack>, ApplicationError>;
     fn get_by_media_fingerprint(

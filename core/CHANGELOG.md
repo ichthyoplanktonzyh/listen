@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- 2026-06-23 CST: Phase 2.6 extension — capability matrix API, language selection
+  UI, and per-character meaning breakdown. Three user-visible features:
+  (1) **Capability matrix API**: `GET /v1/languages` lists supported languages,
+  `GET /v1/languages/{code}/profile` returns the full `LanguageLearningProfile`
+  (tokenization, dictionary, pronunciation capabilities). Flutter API service
+  wired with `listLanguages()` and `lookupLanguageProfile()`.
+  (2) **Language selection UI**: `PATCH /v1/subtitles/{track_id}/language` lets
+  users override auto-detected language on a subtitle track. Backend follows the
+  `set_track_status` pattern (trait → sqlite UPDATE → return updated track).
+  `_LanguageChip` widget in the subtitle resource tile shows current language with
+  a popup menu; changing language refreshes word/phrase profiles for the active
+  track.
+  (3) **Per-character meaning**: `DictionaryLookup` extended with
+  `character_breakdowns: Vec<CharacterBreakdown>` (character + phonetic + meaning).
+  `ChineseDictionaryProvider::resolve()` splits multi-character words and does
+  per-char CC-CEDICT/seed lookups to populate meanings. Word learning panel reads
+  backend breakdowns first, falls back to client-side syllable splitting. Meaning
+  row renders below pinyin in small text. Gate changed from hardcoded
+  `profile['language'] == 'zh'` to profile-driven
+  `pronunciation == 'zh.pinyin'`. `character_breakdowns` uses
+  `skip_serializing_if = "Vec::is_empty"` for backward compatibility with cached
+  dictionary entries. Verified: workspace 250 tests, flutter 64, contracts pass,
+  no-default-features clean, en/zh/ja regression baseline unchanged.
+
 - 2026-06-23 15:28 CST: Promoted Japanese from a guard fixture to a real language
   (lindera morphological tokenization + JMdict/EDICT2 dictionary), empirically
   validating the dispatch-layer fix from the earlier falsification spike. Added

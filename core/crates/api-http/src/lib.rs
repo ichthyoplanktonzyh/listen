@@ -33,6 +33,7 @@ mod transcription;
 use m18::M18Coordinator;
 use phonetic_analysis::{CreatePhoneticJobRequest, PhoneticAnalysisCoordinator};
 use routes::dictionary::*;
+use routes::language::*;
 use routes::media::*;
 use routes::phonetic_analysis::*;
 use routes::pronunciation::*;
@@ -116,6 +117,10 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/v1/subtitles/{track_id}/archive", post(archive_subtitle))
         .route("/v1/subtitles/{track_id}/restore", post(restore_subtitle))
+        .route(
+            "/v1/subtitles/{track_id}/language",
+            axum::routing::patch(update_track_language),
+        )
         .route("/v1/subtitles/{track_id}/export", get(export_subtitle))
         .route("/v1/pronunciation/providers", get(pronunciation_providers))
         .route("/v1/pronunciation/lookup", get(pronunciation_lookup))
@@ -283,6 +288,8 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/v1/events", get(events))
         .route("/v1/dictionary", get(dictionary_lookup))
+        .route("/v1/languages", get(list_languages))
+        .route("/v1/languages/{code}/profile", get(language_profile))
         .route("/v1/transcription/providers", get(transcription_providers))
         .route("/v1/transcription/models", get(transcription_models))
         .route(

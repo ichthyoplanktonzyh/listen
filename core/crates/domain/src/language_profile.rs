@@ -218,6 +218,11 @@ impl LanguageLearningProfile {
     }
 }
 
+/// Language codes with a declared (non-degraded) profile.
+pub fn available_languages() -> &'static [&'static str] {
+    &["en", "zh", "ja"]
+}
+
 /// Resolve the built-in profile for a language code, falling back to a clean
 /// degraded profile for any language without declared support.
 ///
