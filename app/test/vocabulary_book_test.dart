@@ -313,6 +313,7 @@ void main() {
               },
             ],
           },
+          languageProfile: const {'pronunciation': 'zh.pinyin'},
           onStatus: (_) {},
           onSave: (_, _) async {},
           onSource: (_) {},

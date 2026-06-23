@@ -633,6 +633,23 @@ class LocalApi {
     });
   }
 
+  Future<List<String>> listLanguages() async =>
+      ((await _request('GET', '/v1/languages')) as List<dynamic>)
+          .cast<String>();
+
+  Future<Map<String, dynamic>> lookupLanguageProfile(String code) async =>
+      (await _request(
+            'GET',
+            '/v1/languages/${Uri.encodeComponent(code)}/profile',
+          ))
+          as Map<String, dynamic>;
+
+  Future<void> updateTrackLanguage(String trackId, String language) async {
+    await _request('PATCH', '/v1/subtitles/$trackId/language', {
+      'language': language,
+    });
+  }
+
   Future<Map<String, dynamic>> lookupDictionary(
     String lemma, {
     required String language,

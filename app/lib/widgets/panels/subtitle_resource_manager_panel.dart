@@ -24,6 +24,8 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
     required this.onRestoreSubtitle,
     required this.onDeleteSubtitle,
     required this.onExportSubtitle,
+    required this.onLanguageChanged,
+    required this.availableLanguages,
     required this.onExportLLTimeline,
     required this.onActivateWordTimeline,
     required this.onManualReviewTimeline,
@@ -53,6 +55,8 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
   final Future<void> Function(SubtitleTrack track) onRestoreSubtitle;
   final Future<void> Function(SubtitleTrack track) onDeleteSubtitle;
   final Future<void> Function(SubtitleTrack track) onExportSubtitle;
+  final Future<void> Function(SubtitleTrack track, String language) onLanguageChanged;
+  final List<String> availableLanguages;
   final Future<void> Function(SubtitleTrack track) onExportLLTimeline;
   final Future<void> Function(String timelineId) onActivateWordTimeline;
   final Future<void> Function() onManualReviewTimeline;
@@ -137,6 +141,9 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
                         onRestore: () => onRestoreSubtitle(resource),
                         onDelete: () => onDeleteSubtitle(resource),
                         onExport: () => onExportSubtitle(resource),
+                        onLanguageChanged: (language) =>
+                            onLanguageChanged(resource, language),
+                        availableLanguages: availableLanguages,
                       );
                     },
                   ),
@@ -179,6 +186,8 @@ class _SubtitleResourceTile extends StatelessWidget {
     required this.onRestore,
     required this.onDelete,
     required this.onExport,
+    required this.onLanguageChanged,
+    required this.availableLanguages,
   });
 
   final SubtitleTrack resource;
@@ -189,6 +198,8 @@ class _SubtitleResourceTile extends StatelessWidget {
   final Future<void> Function() onRestore;
   final Future<void> Function() onDelete;
   final Future<void> Function() onExport;
+  final Future<void> Function(String language) onLanguageChanged;
+  final List<String> availableLanguages;
 
   @override
   Widget build(BuildContext context) {
@@ -238,6 +249,11 @@ class _SubtitleResourceTile extends StatelessWidget {
                     spacing: 6,
                     runSpacing: 4,
                     children: [
+                      _LanguageChip(
+                        language: resource.language,
+                        availableLanguages: availableLanguages,
+                        onChanged: onLanguageChanged,
+                      ),
                       _CapabilityChip(
                         label: l.text('sentenceTiming'),
                         active: capabilities.sentenceTiming,
@@ -365,6 +381,73 @@ class _CapabilityChip extends StatelessWidget {
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
             color: color,
             fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LanguageChip extends StatelessWidget {
+  const _LanguageChip({
+    required this.language,
+    required this.availableLanguages,
+    required this.onChanged,
+  });
+
+  final String? language;
+  final List<String> availableLanguages;
+  final Future<void> Function(String language) onChanged;
+
+  static const _displayNames = {
+    'en': 'English',
+    'zh': '中文',
+    'ja': '日本語',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final label = language ?? '?';
+    return PopupMenuButton<String>(
+      tooltip: 'Language',
+      onSelected: onChanged,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(),
+      position: PopupMenuPosition.under,
+      itemBuilder: (context) => [
+        for (final code in availableLanguages)
+          PopupMenuItem(
+            value: code,
+            child: Text(
+              '${_displayNames[code] ?? code} ($code)',
+              style: TextStyle(
+                fontWeight:
+                    code == language ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+      ],
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xff1a2535),
+          border: Border.all(color: const Color(0xff3a7bd5)),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.language, size: 12, color: Color(0xff6da8e8)),
+              const SizedBox(width: 3),
+              Text(
+                label,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: const Color(0xff6da8e8),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
         ),
       ),

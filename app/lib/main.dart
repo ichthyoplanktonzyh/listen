@@ -253,6 +253,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
         status = 'Local core connected';
       });
       subscriptions.add(value.events().listen(_onEvent));
+      value.listLanguages().then(
+        (languages) {
+          if (mounted) learningController.availableLanguages = languages;
+        },
+        onError: (_) {},
+      );
       progressTimer = Timer.periodic(const Duration(seconds: 5), (_) {
         if (playerController.mediaId != null) {
           unawaited(
@@ -1068,6 +1074,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     } catch (error) {
       if (mounted) setState(() => status = 'Subtitle export failed: $error');
+    }
+  }
+
+  Future<void> _changeTrackLanguage(SubtitleTrack track, String language) async {
+    final service = api;
+    if (service == null) return;
+    try {
+      await service.updateTrackLanguage(track.id, language);
+      await _loadSubtitleResources(updateStatus: false);
+      if (subtitleController.primaryTrack?.id == track.id) {
+        final updated = subtitleController.subtitleResources
+            .where((t) => t.id == track.id)
+            .firstOrNull;
+        if (updated != null) {
+          subtitleController.setPrimaryTrack(updated);
+        }
+        await _loadWordProfiles();
+        await _loadPhraseProfiles();
+      }
+      if (mounted) setState(() => status = 'Language set to $language');
+    } catch (error) {
+      if (mounted) {
+        setState(() => status = 'Failed to update language: $error');
+      }
     }
   }
 
@@ -2153,6 +2183,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       learningController.selectWord(details);
       learningController.setSelectedDictionary(dictionary);
       learningController.setSelectedPronunciation(pronunciation);
+      if (api != null) {
+        await learningController.loadLanguageProfile(
+          _learningLanguage,
+          api!.lookupLanguageProfile,
+        );
+      }
       learningController.selectSidePanel(2);
     } catch (error) {
       if (mounted) setState(() => status = 'Dictionary unavailable: $error');
@@ -2334,6 +2370,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           onRestoreSubtitle: _restoreSubtitleResource,
           onDeleteSubtitle: _deleteSubtitleResource,
           onExportSubtitle: _exportSubtitleResource,
+          onLanguageChanged: _changeTrackLanguage,
+          availableLanguages: learningController.availableLanguages,
           onExportLLTimeline: _exportLLTimelineResource,
           onActivateWordTimeline: _activateWordTimeline,
           onManualReviewTimeline: _openManualReviewTimeline,
@@ -3020,6 +3058,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       details: learningController.selectedWordDetails!,
                       dictionary: learningController.selectedDictionary,
                       pronunciation: learningController.selectedPronunciation,
+                      languageProfile: learningController.currentLanguageProfile,
                       onStatus: _setSelectedWordStatus,
                       onSave: _saveSelectedLearningContent,
                       onSource: _playOccurrence,
@@ -3067,6 +3106,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     onRestoreSubtitle: _restoreSubtitleResource,
     onDeleteSubtitle: _deleteSubtitleResource,
     onExportSubtitle: _exportSubtitleResource,
+    onLanguageChanged: _changeTrackLanguage,
+    availableLanguages: learningController.availableLanguages,
     onExportLLTimeline: _exportLLTimelineResource,
     onActivateWordTimeline: _activateWordTimeline,
     onManualReviewTimeline: _openManualReviewTimeline,

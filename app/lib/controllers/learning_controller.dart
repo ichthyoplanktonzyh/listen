@@ -74,8 +74,18 @@ class LearningState {
 /// phrase candidates, and sentence diagnosis.
 class LearningController extends ChangeNotifier {
   LearningState _state = const LearningState();
+  List<String> _availableLanguages = const ['en', 'zh', 'ja'];
+  final Map<String, Map<String, dynamic>> _languageProfiles = {};
+  Map<String, dynamic>? _currentLanguageProfile;
 
   LearningState get state => _state;
+  List<String> get availableLanguages => _availableLanguages;
+  Map<String, dynamic>? get currentLanguageProfile => _currentLanguageProfile;
+
+  set availableLanguages(List<String> value) {
+    _availableLanguages = value;
+    notifyListeners();
+  }
 
   // Convenience accessors
   Map<String, Map<String, dynamic>> get wordProfiles => _state.wordProfiles;
@@ -115,6 +125,21 @@ class LearningController extends ChangeNotifier {
 
   void setSelectedPronunciation(Map<String, dynamic>? pron) =>
       _update((s) => s.copyWith(selectedPronunciation: pron));
+
+  Future<void> loadLanguageProfile(
+    String languageCode,
+    Future<Map<String, dynamic>> Function(String) fetcher,
+  ) async {
+    if (_languageProfiles.containsKey(languageCode)) {
+      _currentLanguageProfile = _languageProfiles[languageCode];
+      notifyListeners();
+      return;
+    }
+    final profile = await fetcher(languageCode);
+    _languageProfiles[languageCode] = profile;
+    _currentLanguageProfile = profile;
+    notifyListeners();
+  }
 
   void setPhraseCandidates(List<Map<String, dynamic>> candidates) =>
       _update((s) => s.copyWith(phraseCandidates: candidates));

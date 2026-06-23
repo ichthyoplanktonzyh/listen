@@ -57,6 +57,8 @@ void main() {
           onRestoreSubtitle: (_) async {},
           onDeleteSubtitle: (_) async {},
           onExportSubtitle: (_) async {},
+          onLanguageChanged: (_, _) async {},
+          availableLanguages: const ['en', 'zh', 'ja'],
           onExportLLTimeline: (_) async {},
           onActivateWordTimeline: (_) async {},
           onManualReviewTimeline: () async {},
