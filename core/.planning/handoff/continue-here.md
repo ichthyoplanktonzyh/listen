@@ -7,11 +7,11 @@
 
 **Phase 2.6（多语言学习基础，English + Chinese）已全部完成并收口**（Step 1-7）。
 收口文档：`.planning/phases/2.6-multilingual-learning-foundation/2.6-CLOSEOUT.md`。
-Step 7 **待提交**（见下）。下一步由你定（候选见末尾）。
+**全部已提交、工作区干净。** 下一步由你定（候选见末尾）。
 
 | 提交 | 内容 |
 |---|---|
-| （未提交） | Step 7：双语回归收敛 + 收口（CLOSEOUT/STATE/ROADMAP/REQUIREMENTS） |
+| `9a0dd38` | Step 7：双语回归收敛 + 收口（CLOSEOUT/STATE/ROADMAP/REQUIREMENTS） |
 | `9278fc8` | Step 6：汉语面板（逐字拼音）+ 语言感知诊断 |
 | `832642f` | CC-CEDICT 真实词典接入 |
 | `655919a` | 修 diagnosis/phrase 后端 `language=en` 硬编码 |
