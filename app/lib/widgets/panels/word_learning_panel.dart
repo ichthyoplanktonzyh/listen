@@ -63,15 +63,19 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
     super.dispose();
   }
 
-  /// Per-character pinyin breakdown for a multi-character Han word, aligning each
-  /// character with its pinyin syllable (one Han character is one syllable). This
-  /// makes the 字 → 拼音/声调 mapping explicit and is derived purely from the
-  /// dictionary phonetic — no extra lookups. Empty for non-Han or single-character
-  /// words, or when the syllable count does not match the character count.
+  /// Per-character pinyin breakdown for a multi-character Chinese word, aligning
+  /// each character with its pinyin syllable (one Han character is one syllable).
+  /// Gated on the learning language being Chinese — the pinyin pronunciation
+  /// system — not on the Han script: Japanese kanji are Han too, so a script gate
+  /// mis-fires on Japanese. A per-character capability surfaced from the language
+  /// profile would generalize this beyond a `zh` check; that capability-matrix
+  /// exposure to the client is a tracked Open Question. Empty for non-Chinese,
+  /// single-character words, or when syllable and character counts disagree.
   List<({String character, String pinyin})> _hanCharacterBreakdown() {
+    if (profile['language'] != 'zh') return const [];
     final word = profile['display_form'] as String;
     final characters = word.runes.map(String.fromCharCode).toList();
-    if (characters.length < 2 || !characters.every(_isHan)) return const [];
+    if (characters.length < 2) return const [];
     final pinyin = _firstChinesePinyin();
     if (pinyin == null) return const [];
     final syllables = pinyin
@@ -96,14 +100,6 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
       }
     }
     return null;
-  }
-
-  bool _isHan(String value) {
-    if (value.isEmpty) return false;
-    final code = value.runes.first;
-    return (code >= 0x4e00 && code <= 0x9fff) ||
-        (code >= 0x3400 && code <= 0x4dbf) ||
-        (code >= 0xf900 && code <= 0xfaff);
   }
 
   @override

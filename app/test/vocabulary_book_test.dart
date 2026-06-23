@@ -288,6 +288,7 @@ void main() {
         WordLearningPanel(
           details: const {
             'profile': {
+              'language': 'zh',
               'display_form': '咖啡',
               'status': 'unknown_meaning',
               'user_definition': null,
@@ -326,6 +327,56 @@ void main() {
     expect(find.text('啡'), findsOneWidget);
     expect(find.text('kā'), findsOneWidget);
     expect(find.text('fēi'), findsOneWidget);
+  });
+
+  testWidgets('per-character pinyin does not fire for a Japanese kanji word', (
+    tester,
+  ) async {
+    // 学生 is written in kanji (Han script) and even resolves in CC-CEDICT, so the
+    // old Han-script gate would have rendered Chinese pinyin under a Japanese
+    // word. The language gate must suppress it — this is the falsification guard.
+    await tester.pumpWidget(
+      localized(
+        WordLearningPanel(
+          details: const {
+            'profile': {
+              'language': 'ja',
+              'display_form': '学生',
+              'status': 'unknown_meaning',
+              'user_definition': null,
+              'personal_note': null,
+            },
+            'occurrences': [],
+            'history': [],
+          },
+          dictionary: const {
+            'results': [
+              {
+                'provider': {'display_name': 'CC-CEDICT'},
+                'lookup': {
+                  'phonetics': [
+                    {'text': 'xué shēng', 'region': 'zh', 'audio_url': null},
+                  ],
+                  'definitions': [
+                    {'text': 'student', 'part_of_speech': null},
+                  ],
+                },
+                'error': null,
+              },
+            ],
+          },
+          onStatus: (_) {},
+          onSave: (_, _) async {},
+          onSource: (_) {},
+          onHeard: () {},
+          onNotHeard: () {},
+        ),
+      ),
+    );
+    // No per-character breakdown: the feature follows the pinyin pronunciation
+    // system (Chinese), not the Han script that Japanese kanji share.
+    expect(find.text('Characters'), findsNothing);
+    expect(find.text('xué'), findsNothing);
   });
 
   testWidgets('localization renders simplified Chinese labels', (tester) async {
