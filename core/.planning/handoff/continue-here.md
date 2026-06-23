@@ -39,14 +39,17 @@
 4. **Phase 2.6 延伸**（若要继续多语言）：逐字"义"、学习语言用户手动选择 UI、能力矩阵 API 暴露、
    第三个语言（如 es/ja）压力测试抽象。
 
-## 已就位的地基（Step 4 直接用，别重造）
+## 已就位的地基（多语言扩展时复用、别重造）
 
 - 语言 profile：`domain::profile_for(&LanguageCode) -> LanguageLearningProfile`
   （`crates/domain/src/language_profile.rs`）。未知语言干净降级。
 - 语言感知分词：`subtitle_core::tokenize(language: Option<&LanguageCode>, text)`
   + `Tokenizer` trait（`crates/subtitle-core/src/lib.rs`）。`import()` 已按字幕轨语言分词。
 - 词汇单位：`domain::LexicalUnit`（`crates/domain/src/lexical_unit.rs`），`identity()` 对英语
-  word 粒度向后兼容旧 `WordProfileId`。Step 4/后续创建非英语词汇状态时用它的 identity。
+  word 粒度向后兼容旧 `WordProfileId`；创建非英语词汇状态时用它的 identity。
+- 词典 provider：`DictionaryProvider` trait 按 `supported_languages` 派发（`crates/application/
+  src/dictionary.rs`）；加语言 = 加 provider + profile，不动既有语言代码。
+- 诊断：`diagnose_sentence` 按句子所属轨语言查 profile 并叠加该语言 `diagnosis_reasons`。
 
 ## 必须遵守的已锁定不变量（ADR 0012 / 2.5.5）
 
@@ -62,7 +65,7 @@
 - **cargo 不在 PATH**：`export PATH="$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH"`。
 - **沙箱默认无 crates.io**：拉新依赖需 `dangerouslyDisableSandbox`。jieba-rs 0.7.4 已在 Cargo.lock +
   缓存，故 `--offline` 构建可用。中文默认走 jieba；`--no-default-features` 走字级 fallback。
-- **flutter 在** `$HOME/.local/share/flutter/bin/flutter`（已确认存在），Step 4 UI 改动可验证。
+- **flutter 在** `$HOME/.local/share/flutter/bin/flutter`（已确认存在），可 analyze/test。
 
 ## 验证命令
 
@@ -78,5 +81,7 @@ $HOME/.local/share/flutter/bin/flutter test
 ## 冷启动阅读顺序
 
 1. `.planning/STATE.md`（当前位置 / 实现进度 / 下一步）
-2. `.planning/phases/2.6-multilingual-learning-foundation/2.6-PLAN.md`（Step 4 细节 + Validated Foundation）
+2. `.planning/phases/2.6-multilingual-learning-foundation/2.6-CLOSEOUT.md`（Phase 2.6 已完成什么、
+   留了哪些 seam、后续）
 3. `docs/decisions/0012-multilingual-learning-abstraction.md`（不变量与约束）
+4. （仅多语言扩展才需）`.../2.6-PLAN.md`（各 Step 细节 + Validated Foundation）
