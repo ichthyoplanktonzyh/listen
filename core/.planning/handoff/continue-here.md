@@ -1,62 +1,43 @@
-# Continue Here — Phase 2.6 Step 7
+# Continue Here — Phase 2.6 已收口
 
-> 最后更新：2026-06-22 CST
+> 最后更新：2026-06-23 CST
 > 单一接续入口（历史 handoff 见同目录 dated 文件，不必读）。
 
 ## 现在在哪
 
-Phase 2.6（多语言学习基础，English + Chinese）进行中，**Step 1-6 已完成、已测试**，
-Step 6 **待提交**（见下）。下一步是 **Step 7（双语回归 + 收口）**——Phase 2.6 最后一步。
+**Phase 2.6（多语言学习基础，English + Chinese）已全部完成并收口**（Step 1-7）。
+收口文档：`.planning/phases/2.6-multilingual-learning-foundation/2.6-CLOSEOUT.md`。
+Step 7 **待提交**（见下）。下一步由你定（候选见末尾）。
 
 | 提交 | 内容 |
 |---|---|
-| （未提交） | Step 6：汉语面板（逐字拼音）+ 语言感知诊断 |
+| （未提交） | Step 7：双语回归收敛 + 收口（CLOSEOUT/STATE/ROADMAP/REQUIREMENTS） |
+| `9278fc8` | Step 6：汉语面板（逐字拼音）+ 语言感知诊断 |
 | `832642f` | CC-CEDICT 真实词典接入 |
 | `655919a` | 修 diagnosis/phrase 后端 `language=en` 硬编码 |
 | `860a7df` | Step 5：汉语词典 provider |
 | `c7634dd` | Step 4：去 `language=en` 硬编码 + import 语言检测 |
 
-## Step 6 已完成（2026-06-22）
+## Phase 2.6 收口要点（2026-06-23）
 
-汉语学习面板 + 语言感知诊断。落点：
+- **Step 6**：诊断在 application 层给 recognition barrier 叠加该语言 profile 的听辨因素
+  （zh: 声调/词边界/同音/轻声/变调；en: 弱读/连读…），**明确标注"可考虑因素非检测"**（中文无
+  音频分析，ADR 延后）；`DiagnosisHint` 加 `reasons`，`diagnosis-core` 保持语言无关。词面板加
+  汉字逐字拼音分解（字→拼音/声调，零额外查询、按脚本门控）。
+- **Step 7**：双语回归收敛为显式集 + 新增英汉词汇/来源快照**隔离 capstone**；写 `2.6-CLOSEOUT.md`，
+  STATE/ROADMAP/REQUIREMENTS 标记 Phase 2.6 完成。
+- 验证：workspace 279 + flutter 63 + contracts 全通过；英语回归基线不变。
+- **仅留设计 seam**：LANG-004（听觉锚定观察）、LANG-009（L1 诊断 seam）；非英语音频→听觉单位
+  生产属后续独立 production-engine program。
 
-- **诊断听辨因素（possibilities，非检测）**：`application::diagnose_sentence` 给 recognition barrier
-  叠加该语言 profile 的 `diagnosis_reasons`（zh: tone_confusion/word_boundary/homophone/neutral_tone/
-  tone_sandhi；en: weak_form/linking/…）。`diagnosis-core` 保持语言无关（reason 在 application 层叠），
-  `DiagnosisHint` 新增 `reasons`（serde default）。**中文无音频分析（ADR 0012 延后），所以是"可考虑
-  因素"而非检测**——UI 明确标注"非检测结果"。profile 驱动，英语也受益、无 `if zh`。
-- **词面板逐字拼音分解**：多字 Han 词把每个字与拼音音节对齐（字→拼音/声调），纯从词典拼音切分、
-  零额外查询、按脚本（多字 Han）门控而非语言。空 IPA 区仍隐藏。
-- **client**：`diagnosis_card` 渲染 reason（`l.diagnosisReason()`，未知 reason 回落原名，干净降级）；
-  localization 加 en/zh reason 标签 + `字`/`possibleListeningFactors`。OpenAPI `DiagnosisHint` 加 `reasons`。
-- 测试：application `recognition_barrier_carries_the_language_listening_reasons`；widget `diagnosis_card`
-  reason 渲染 + `word_learning_panel` 逐字拼音。
+## 下一步候选（Phase 2.6 之外，由你定）
 
-Exit criteria 已满足：学汉语闭环成立（导入中文字幕→点词→逐字拼音+释义→标记状态→来源复听）；面板讲
-音节/声调→词义，非英文式 lemma 查询；诊断给中文听辨因素。
-
-**未做（刻意，非过度工程）**：中文专属音频/声调检测（production-engine 范畴，ADR 延后）；逐字"义"
-（只做了逐字"音"，逐字释义需 N 次查询）；能力矩阵 API 暴露给 client（面板的脚本门控暂够用）。
-未跑活体 UI 点选（后端 SQLite 集成测 + client widget 测 + 契约校验已覆盖各环节）。
-
-## 下一步：Step 7 — Tests And Closeout（Phase 2.6 收尾）
-
-见 `2.6-PLAN.md` Step 7。新增双语 fixtures 与回归，并写收口文档：
-
-- fixtures：英语既有 + 中文简单字幕 + 中英混排字幕。
-- 测试：tokenizer contract、词汇语言隔离、dictionary provider 语言路由、source snapshot 语言正确、
-  中文 token click 的 UI smoke。（多数已有零散覆盖，Step 7 收敛成显式回归集 + 收口。）
-- 文档：更新 ROADMAP / REQUIREMENTS / STATE，写 `2.6-CLOSEOUT.md`。
-
-Exit criteria：英语全回归通过；汉语最小学习闭环通过；文档更新。
-
-起手定位：
-```sh
-ls .planning/phases/2.6-multilingual-learning-foundation/   # 看是否已有 CLOSEOUT 模板（参考 2.5 收口）
-grep -rn "zh\|chinese\|咖啡" apps/desktop/test crates/*/src/tests.rs   # 盘点已有双语测试
-```
-关键：把分散在 subtitle-core/dictionary-provider/persistence-sqlite/flutter 的中文测试梳理成 Phase 2.6
-回归清单；按 2.5 的 CLOSEOUT 体例收口。
+1. **Phase 2.3 真实媒体手动 QA**：用真实媒体跑 Manual Timeline Review 闭环，决定是否正式收口。
+2. **中文学习活体验证**：起 app 用真实中文视频 + 字幕手点一遍（导入→点词→逐字拼音/释义→标状态→
+   来源复听→诊断听辨因素），确认端到端体验（本阶段各环节已分别测试，未串起来手验）。
+3. **provider research**：填充 licensed reviewed development cases，复跑 ZIPA/Wav2IPA/MFA benchmark。
+4. **Phase 2.6 延伸**（若要继续多语言）：逐字"义"、学习语言用户手动选择 UI、能力矩阵 API 暴露、
+   第三个语言（如 es/ja）压力测试抽象。
 
 ## 已就位的地基（Step 4 直接用，别重造）
 

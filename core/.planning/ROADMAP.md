@@ -1260,7 +1260,8 @@ M8 退出条件。
 
 ### 14.11 Milestone 2 工作流：多语言学习基础
 
-> 状态：Phase 2.5.5 抽象校验已收口；Phase 2.6 实现待进入。
+> 状态：Phase 2.5.5 抽象校验已收口；**Phase 2.6 实现已收口**（en + zh，2026-06-22，
+> 见 `.planning/phases/2.6-multilingual-learning-foundation/2.6-CLOSEOUT.md`）。
 > 决策见 `docs/decisions/0012-multilingual-learning-abstraction.md`。
 
 与 14.1–14.3 生产引擎主线并行的独立工作流，把产品从英语优先扩展为语言能力可插拔的
@@ -1269,10 +1270,12 @@ M8 退出条件。
 - **Phase 2.5.5 语言学习抽象校验**（已完成）：用真实二语习得研究校验抽象，用日语、
   阿拉伯语做类型学证伪，锁定理解轴不变量、能力矩阵 + provider、母语过滤诊断、开放
   taxonomy、听觉单位为视图等决策。
-- **Phase 2.6 多语言学习基础**（待进入）：语言能力矩阵 / profile、语言感知 tokenizer、
-  LexicalUnit（粒度 × 归一）、去除 `language=en` 硬编码、汉语词典/拼音 provider、汉语
-  最小学习面板与诊断、英语 + 汉语双语言回归测试。
-- 覆盖需求：LANG-001 至 LANG-010。
+- **Phase 2.6 多语言学习基础**（已完成）：语言能力矩阵 / profile、语言感知 tokenizer、
+  LexicalUnit（粒度 × 归一）、去除 `language=en` 硬编码、汉语词典/拼音 provider（CC-CEDICT）、
+  汉语最小学习面板（逐字拼音）与语言感知诊断（听辨因素，possibilities 非检测）、英语 + 汉语
+  双语言回归测试。
+- 覆盖需求：LANG-001/002/003/005/006/007/008/010 已实现；LANG-004（听觉锚定观察）、
+  LANG-009（L1 seam）按设计仅留 seam，待真实声音侧落地后实现。
 - 与生产引擎边界：本工作流主要在消费端（分词、词汇、词典、诊断、UI）；非英语音频 →
   听觉单位的生产管线（中文 ASR/FA/声调）是后续独立生产端 program，不在 2.6 承诺内。
 

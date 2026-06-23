@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- 2026-06-23 09:07:10 CST: Closed out Phase 2.6 (step 7). Consolidated the
+  bilingual regression into an explicit set and added a crown-jewel capstone test
+  proving English and Chinese vocabularies and their source snapshots stay
+  language-isolated (a Chinese word never appears in the English vocabulary and
+  vice versa). Wrote `2.6-CLOSEOUT.md` and updated STATE / ROADMAP / REQUIREMENTS
+  to mark Phase 2.6 complete for the English + Chinese acceptance set. LANG-001/
+  002/003/005/006/007/008/010 are implemented; LANG-004 (auditory-anchored
+  observation) and LANG-009 (L1 diagnosis seam) remain reserved seams by design,
+  as does non-English audio → listening-unit production (a separate future
+  program). English behavior stayed the regression baseline throughout. Verified
+  with the full workspace suite (279 tests), flutter analyze/test (63), and
+  validate-contracts.
+
 - 2026-06-22 21:49:03 CST: Added the Phase 2.6 Chinese learning panel and
   language-aware diagnosis (step 6). Sentence diagnosis now layers the learning
   language's listening factors onto the recognition barrier as namespaced,

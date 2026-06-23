@@ -15,13 +15,13 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-22 CST
-> 更新原因：Phase 2.6 Step 6 汉语面板（逐字拼音）+ 语言感知诊断（听辨因素）落地
+> 更新原因：Phase 2.6 Step 7 双语回归收敛 + 收口（2.6-CLOSEOUT），Phase 2.6 全部完成
 
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
-- **Phase**：Phase 2.6 进行中（Step 1-6：profile + jieba 分词 + LexicalUnit + 去 `language=en`
-  硬编码 + CC-CEDICT 词典 + 汉语面板/语言感知诊断 已完成并通过测试）
+- **Phase**：Phase 2.6 ✅ 完成（Step 1-7：profile + jieba 分词 + LexicalUnit + 去 `language=en`
+  硬编码 + CC-CEDICT 词典 + 汉语面板/语言感知诊断 + 双语回归收口；首批验收语言 en + zh）
 - **分支**：`feature/forced-alignment-research`
 - **版本**：0.7.0
 
@@ -290,7 +290,7 @@ progress:
   - `.planning/phases/2.5.5-language-learning-abstraction-validation/2.5.5-FALSIFICATION.md`
   - `.planning/phases/2.5.5-language-learning-abstraction-validation/2.5.5-CLOSEOUT.md`
 
-### Phase 2.6: 多语言学习基础 🚧 进行中（Step 1-3 完成）
+### Phase 2.6: 多语言学习基础 ✅ 完成（Step 1-7，en + zh）
 
 - 目标：将 LLPlayerNext 从“英语优先学习播放器”扩展为“语言能力可插拔的学习播放器
   底座”，首批真实验收语言为 English + Chinese。
@@ -334,7 +334,11 @@ progress:
     明确标注为"可能因素非检测"（中文无音频分析，ADR 0012 延后）；`DiagnosisHint` 新增 `reasons`，
     `diagnosis-core` 保持语言无关。词面板新增汉字逐字拼音分解（字→拼音/声调，从词典拼音对齐、零额外
     查询、按脚本非语言门控）；诊断卡渲染 reason，未知 reason 干净降级。英语诊断回归基线不变。
-  - ⏳ Step 7：双语回归 fixtures + 收口文档。
+  - ✅ Step 7：双语回归收敛为显式集（tokenizer/混排/检测、词典语言路由、诊断按轨语言、听辨因素、
+    英汉词汇+来源快照隔离 capstone、CC-CEDICT 解析/调号、诊断卡+面板 widget）+ 收口文档
+    `2.6-CLOSEOUT.md`。全 workspace 279 + flutter 63 + contracts 通过。
+- 收口：`.planning/phases/2.6-multilingual-learning-foundation/2.6-CLOSEOUT.md`。仅留设计 seam
+  LANG-004（听觉锚定观察）/ LANG-009（L1）；非英语音频生产属后续 production-engine program。
 - 规划文档：
   - `.planning/phases/2.6-multilingual-learning-foundation/2.6-CONTEXT.md`
   - `.planning/phases/2.6-multilingual-learning-foundation/2.6-PLAN.md`
@@ -387,9 +391,9 @@ progress:
    Wav2IPA / MFA phone alignment benchmark；通过 gate 前不进入默认 product path。
 3. Phase 2.5.5：语言学习抽象校验 ✅ 已收口（SLA 映射、invariant/variant 边界、L1 seam、
    ja/ar 证伪、回灌 2.6 均完成）。
-4. Phase 2.6：多语言学习基础——Step 1-6（profile + jieba 分词 + LexicalUnit + 去
-   `language=en` 硬编码 + CC-CEDICT 词典 + 汉语面板/语言感知诊断）✅ 完成；下一步 Step 7
-   双语回归 fixtures + 收口文档。
+4. Phase 2.6：多语言学习基础 ✅ **已收口**（Step 1-7：profile + jieba 分词 + LexicalUnit + 去
+   `language=en` 硬编码 + CC-CEDICT 词典 + 汉语面板/语言感知诊断 + 双语回归）。收口文档
+   `2.6-CLOSEOUT.md`。首批验收语言 en + zh；非英语音频生产、L1/听觉锚定 seam 属后续。
 
 ## 指标
 

@@ -2219,6 +2219,10 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 > 方向与抽象决策见 `docs/decisions/0012-multilingual-learning-abstraction.md` 与
 > `.planning/phases/2.6-multilingual-learning-foundation/`。首批实现语言为英语 + 汉语，
 > 架构对主流 top-15 学习语言封顶有效。英语行为作为回归基线不得回退。
+>
+> 实现状态（Phase 2.6 收口 2026-06-22，见 `2.6-CLOSEOUT.md`）：LANG-001/002/003/005/006/
+> 007/008/010 已实现并通过 en + zh 回归；LANG-004（听觉锚定观察）与 LANG-009（L1 诊断 seam）
+> 按设计 v1 仅留 seam，待真实声音侧与 L1×L2 对比难度表落地后实现。
 
 ### LANG-001：语言能力矩阵与 Profile
 

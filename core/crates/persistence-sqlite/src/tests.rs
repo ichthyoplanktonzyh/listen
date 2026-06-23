@@ -1576,6 +1576,87 @@ fn recognition_barrier_carries_the_language_listening_reasons() {
     }
 }
 
+/// Phase 2.6 bilingual regression capstone: the crown-jewel vocabulary asset
+/// stays language-isolated. A Chinese word and an English word, with their own
+/// source snapshots, never cross between the two languages' vocabularies.
+#[test]
+fn english_and_chinese_vocabulary_and_sources_stay_isolated() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
+    let chinese = services
+        .update_word_profile(UpdateWordProfile {
+            language: "zh".into(),
+            lemma: "咖啡".into(),
+            display_form: "咖啡".into(),
+            status: Some(WordStatus::UnknownMeaning),
+            source: Some(SourceContext {
+                language: LanguageCode::parse("zh").unwrap(),
+                normalized_lemma: "咖啡".into(),
+                media_id: None,
+                sentence_id: None,
+                original_form: "咖啡".into(),
+                sentence_text: "我想喝咖啡".into(),
+                media_title: "ZH".into(),
+                media_fingerprint: "zh-fp".into(),
+                start_ms: 0,
+                end_ms: 1000,
+            }),
+        })
+        .unwrap();
+    services
+        .update_word_profile(UpdateWordProfile {
+            language: "en".into(),
+            lemma: "coffee".into(),
+            display_form: "coffee".into(),
+            status: Some(WordStatus::KnownRecognized),
+            source: Some(SourceContext {
+                language: LanguageCode::parse("en").unwrap(),
+                normalized_lemma: "coffee".into(),
+                media_id: None,
+                sentence_id: None,
+                original_form: "coffee".into(),
+                sentence_text: "I drink coffee".into(),
+                media_title: "EN".into(),
+                media_fingerprint: "en-fp".into(),
+                start_ms: 0,
+                end_ms: 1000,
+            }),
+        })
+        .unwrap();
+
+    // A word exists only under its own language; it never leaks across.
+    assert!(services.read_word_profile("zh", "咖啡").unwrap().is_some());
+    assert!(services.read_word_profile("en", "咖啡").unwrap().is_none());
+    assert!(services.read_word_profile("en", "coffee").unwrap().is_some());
+    assert!(services.read_word_profile("zh", "coffee").unwrap().is_none());
+
+    // Vocabulary lists are isolated by language.
+    let zh_vocab = services
+        .list_vocabulary("zh", WordStatus::UnknownMeaning, "", 200, 0)
+        .unwrap();
+    assert!(zh_vocab.iter().any(|d| d.profile.normalized_lemma == "咖啡"));
+    assert!(zh_vocab.iter().all(|d| d.profile.normalized_lemma != "coffee"));
+    let en_vocab = services
+        .list_vocabulary("en", WordStatus::KnownRecognized, "", 200, 0)
+        .unwrap();
+    assert!(en_vocab.iter().any(|d| d.profile.normalized_lemma == "coffee"));
+    assert!(en_vocab.iter().all(|d| d.profile.normalized_lemma != "咖啡"));
+
+    // The Chinese source snapshot is captured under the Chinese profile.
+    let details = services.word_details(&chinese.id).unwrap().unwrap();
+    assert_eq!(details.occurrences.len(), 1);
+    assert_eq!(details.occurrences[0].sentence_text_snapshot, "我想喝咖啡");
+}
+
 #[test]
 fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
