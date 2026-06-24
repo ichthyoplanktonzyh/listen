@@ -15,8 +15,8 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-24 CST
-> 更新原因：Phase 2.9 完成——生产管线多语言解耦 + 可插拔模型架构。aligner 插件注册表、
-> CJK 分词、语言传播、Rust chunk/pipeline 语言支持全部就绪。
+> 更新原因：Phase 2.9 收口——生产管线多语言解耦 + 可插拔模型架构 + mlx-whisper ASR +
+> jieba 词级分词。中文端到端验证通过，mlx-whisper 质量与 WhisperX 持平、速度快 7.5 倍。
 
 ## 当前位置
 
@@ -413,12 +413,35 @@ progress:
 - 验证：294 测试全通过，clippy 无新增错误。
 - 收口文档：`.planning/phases/2.8-token-timing-alignment/2.8-CLOSEOUT.md`
 
-### Phase 2.9: Production Multilingual Decoupling 📋 已规划
+### Phase 2.9: Production Multilingual Decoupling ✅ 已完成
 
 - 目标：解耦生产管线对英语的强绑定，让非英语语言走通完整生产链路。
-- 5 个绑定点：管线语言传播、强制对齐语言降级、发音分析 provider 化、文本 chunk
-  语言感知、中文端到端验证。
-- 计划文档：`.planning/phases/2.9-production-multilingual-decoupling/`
+- Rust 侧（55cbfae）：`AlignerRegistry` 可插拔对齐器注册表、管线语言传播、CJK 分词
+  传播、语言感知 chunk/timing、非英语强制对齐干净降级。
+- Python 侧（e1ffcd0）：mlx-whisper ASR 集成（Apple GPU 加速，质量持平 WhisperX、
+  速度快 7.5x）、`--asr whisperx|mlx-whisper` 双 ASR 切换、jieba 词级中文分词（不拆字）、
+  `align_asr_words_to_tokens()` ASR-to-token M:N 字符位置对齐。
+- 中文端到端验证：181 segments / 956 words（jieba 词级）/ avg_confidence 0.954。
+  MMS_FA 对中文全跳过（字典 a-z only），ASR timestamps 即最终 timing。
+- 验证：Python 14/14 + cargo test + clippy 全通过；英语回归基线不变。
+- 收口文档：`.planning/phases/2.9-production-multilingual-decoupling/2.9-CLOSEOUT.md`
+
+### Phase 2.10: English Real Speech Analysis 📋 已规划
+
+- 目标：选出 phone-level provider，让英语语流分析从"文本预测"升级为"音频检测"。
+- 候选：MFA phone alignment、ZIPA、Wav2IPA、Allosaurus。
+- 6 步：provider benchmark → 选型决策 → provider 集成 → 语流 finding 升级 →
+  app 消费验证 → 测试回归。
+- 质量门禁：Phase 2.5 定义的 7 条入口标准。
+- 规划文档：`.planning/phases/2.10-english-real-speech-analysis/`
+
+### Phase 2.11: Architecture Seam Consolidation 📋 已规划
+
+- 目标：落地多语言扩展中预留的设计 seam，消除 client 脚本硬编码。
+- 6 步：能力矩阵 API（独立）→ 学习语言来源（独立）→ domain 拆分（独立）→
+  L1 诊断 seam（依赖 2.10）→ 听觉锚定准备（依赖 2.10）→ identity profile 化（低优先）。
+- 与 Phase 2.10 部分并行：Step 1–3 不依赖 2.10。
+- 规划文档：`.planning/phases/2.11-architecture-seam-consolidation/`
 
 ### 强制对齐研究 🧭 长期推进
 
@@ -462,26 +485,11 @@ progress:
 
 ## 下一步工作
 
-1. Phase 2.3：用真实媒体完成 Manual Timeline Review 手动 QA，并决定是否正式收口。
-2. 后续 provider research：填充 licensed reviewed development cases，复跑 ZIPA /
-   Wav2IPA / MFA phone alignment benchmark；通过 gate 前不进入默认 product path。
-3. Phase 2.5.5：语言学习抽象校验 ✅ 已收口（SLA 映射、invariant/variant 边界、L1 seam、
-   ja/ar 证伪、回灌 2.6 均完成）。
-4. Phase 2.6：多语言学习基础 ✅ **已收口**（Step 1-7：profile + jieba 分词 + LexicalUnit + 去
-   `language=en` 硬编码 + CC-CEDICT 词典 + 汉语面板/语言感知诊断 + 双语回归）。收口文档
-   `2.6-CLOSEOUT.md`。首批验收语言 en + zh；非英语音频生产、L1/听觉锚定 seam 属后续。
-5. Phase 2.6 后续「第三语言证伪 spike」✅ **已完成**（2026-06-23）：日语实测证伪派遣层并加固
-   （tokenizer 注册表 + kana 语言识别 seam + 能力门控面板 + profile 归一 + ja 守卫 profile），
-   使「加语言=只加 provider+profile」对复用既有策略的语言成真。文档
-   `2.6-DISPATCH-FALSIFICATION-AND-FIX.md`。残留 seam：真日语形态分词/JMdict/读音 provider、纯 kanji
-   无 kana 检测、能力矩阵暴露 client、identity 边界 profile 化——均刻意延后。
-6. Phase 2.7 ✅ **已完成**（2026-06-24）：pronunciation provider dispatch + 语言无关
-   timing/chunk。中文拼音 + 词跳动 + chunk 全部验证通过。
-7. Phase 2.8 ✅ **已完成**（2026-06-24）：token timing alignment — whisper BPE → app
-   token 字符级对齐 + 韵律感知估算 fallback。294 测试通过。收口文档
-   `2.8-CLOSEOUT.md`。残留：真实中文/英文视频手动 QA。
-8. Phase 2.9 **待开始**：production multilingual decoupling — 解耦生产管线英语绑定，
-   让中文走通完整生产链路。计划文档已就位。
+1. **Phase 2.10**：English Real Speech Analysis — provider benchmark + 选型 + 集成，
+   让英语语流分析从文本预测升级为音频检测。
+2. **Phase 2.11 Step 1–3**（可与 2.10 并行）：能力矩阵 API + 学习语言来源 + domain 拆分。
+3. **Phase 2.11 Step 4–5**（依赖 2.10）：L1 诊断 seam + 听觉锚定准备。
+4. Phase 2.3 正式收口（手动 QA 已通过，待写 closeout）。
 
 ## 指标
 
