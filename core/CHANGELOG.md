@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+- 2026-06-24 CST: Phase 2.9 planning — Production engine multilingual decoupling.
+  Created CONTEXT and PLAN docs identifying 5 English binding points in the
+  production pipeline: language propagation, forced alignment language-aware
+  degradation, pronunciation analysis provider-ization, text chunk language
+  dispatch, and Chinese end-to-end validation. Consumer-side is now
+  language-agnostic (Phase 2.6-2.8); this phase targets the production side.
+  Updated STATE to reflect Phase 2.8 completion and Phase 2.9 planning.
+
+- 2026-06-24 CST: Phase 2.8 — Token timing alignment + rhythm-aware estimation.
+  (1) **Character-level time alignment**: `asr_timing.rs` rewritten to perform
+  character-level time interpolation (`align_words_to_tokens`) when whisper BPE
+  word count mismatches app tokenizer word count (common for CJK where BPE merges
+  characters differently from jieba/lindera). English 1:1 direct path unchanged
+  (`extract_direct`). New `TimingSource::AsrAligned` variant for interpolated
+  timings. `MergedWord` now carries `text` for alignment computation.
+  (2) **Rhythm-aware estimation fallback**: `estimate_word_timings_with_rhythm`
+  selects strategy from `LanguageLearningProfile.rhythm_prosody`: `CharWeight`
+  for stress-timed (en, clamped char count, `v1`), `SyllableEqual` for
+  syllable-timed (zh, equal CJK char weight, `v2-syllable`), `MoraCount` for
+  mora-timed (ja, kana/kanji mora counting with small-kana exclusion,
+  `v2-mora`). `pronunciation.rs` wired to pass profile rhythm.
+  (3) **Public alignment API**: `align_timings_to_tokens` exposed for lltimeline
+  import and future re-tokenize scenarios. `word_timing_cache_is_usable` updated
+  to accept `v2-*` provider versions.
+  (4) **Match arm updates**: `AsrAligned` added to `chunk_partition.rs`
+  `acoustic_gap_threshold` (same threshold as `AsrReported`) and
+  `application/lib.rs` `timing_priority` (priority 2, same as `AsrReported`).
+  Verified: 294 workspace tests pass (7 new: Chinese BPE alignment, English
+  direct mapping regression, character time distribution, public alignment API,
+  syllable-timed equal weight, mora counting, default rhythm regression),
+  clippy clean.
+
 - 2026-06-24 CST: Phase 2.7 — Pronunciation provider dispatch + language-agnostic
   timing/chunk. (1) **PronunciationProvider trait**: new dispatch trait in
   `providers.rs` with `analyze_sentence`, `lookup_word`, `rule_catalog` methods.
