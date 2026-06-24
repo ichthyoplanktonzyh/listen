@@ -260,6 +260,7 @@ pub struct SentencePronunciation {
 #[serde(rename_all = "snake_case")]
 pub enum TimingSource {
     AsrReported,
+    AsrAligned,
     ForcedAligned,
     Estimated,
     UserAdjusted,

@@ -113,6 +113,7 @@ pub(crate) fn timing_priority(source: TimingSource) -> u8 {
     match source {
         TimingSource::Estimated => 1,
         TimingSource::AsrReported => 2,
+        TimingSource::AsrAligned => 2,
         TimingSource::ForcedAligned => 3,
         TimingSource::UserAdjusted => 4,
     }
@@ -649,7 +650,7 @@ pub(crate) fn word_timing_cache_is_usable(values: &[WordTiming]) -> bool {
     values.first().is_some_and(|first| {
         (first.timing_source != TimingSource::Estimated
             || (first.provider_id == "subtitle-weighted-estimator"
-                && first.provider_version == "v1"))
+                && first.provider_version.starts_with("v")))
             && values.iter().all(|value| value.start_ms < value.end_ms)
     })
 }

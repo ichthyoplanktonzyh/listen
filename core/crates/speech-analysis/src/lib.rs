@@ -263,6 +263,13 @@ pub fn analyze_sentence(sentence: &SubtitleSentence) -> SentencePronunciation {
 }
 
 pub fn estimate_word_timings(sentence: &SubtitleSentence) -> Vec<WordTiming> {
+    estimate_word_timings_with_rhythm(sentence, None)
+}
+
+pub fn estimate_word_timings_with_rhythm(
+    sentence: &SubtitleSentence,
+    rhythm_prosody: Option<&str>,
+) -> Vec<WordTiming> {
     let words = sentence
         .tokens
         .iter()
@@ -273,9 +280,10 @@ pub fn estimate_word_timings(sentence: &SubtitleSentence) -> Vec<WordTiming> {
     }
     let start = sentence.start.get();
     let duration = sentence.end.get().saturating_sub(start);
+    let strategy = EstimationStrategy::from_rhythm(rhythm_prosody);
     let weights = words
         .iter()
-        .map(|token| (token.text.chars().count() as u64).clamp(2, 12))
+        .map(|token| strategy.weight(&token.text))
         .collect::<Vec<_>>();
     let total = weights.iter().sum::<u64>().max(1);
     let mut cursor = start;
@@ -295,15 +303,102 @@ pub fn estimate_word_timings(sentence: &SubtitleSentence) -> Vec<WordTiming> {
                 text: token.text.clone(),
                 start_ms: cursor,
                 end_ms: end.max(cursor),
-                confidence: Some(0.35),
+                confidence: Some(strategy.confidence()),
                 timing_source: TimingSource::Estimated,
                 provider_id: "subtitle-weighted-estimator".into(),
-                provider_version: "v1".into(),
+                provider_version: strategy.version().into(),
             };
             cursor = end;
             value
         })
         .collect()
+}
+
+enum EstimationStrategy {
+    CharWeight,
+    SyllableEqual,
+    MoraCount,
+}
+
+impl EstimationStrategy {
+    fn from_rhythm(rhythm_prosody: Option<&str>) -> Self {
+        match rhythm_prosody {
+            Some(r) if r.contains("syllable") => Self::SyllableEqual,
+            Some(r) if r.contains("mora") => Self::MoraCount,
+            _ => Self::CharWeight,
+        }
+    }
+
+    fn weight(&self, text: &str) -> u64 {
+        match self {
+            Self::CharWeight => (text.chars().count() as u64).clamp(2, 12),
+            Self::SyllableEqual => {
+                // Each CJK character ≈ one syllable ≈ equal duration.
+                // For mixed text, non-CJK chars get char-weighted fallback.
+                let chars: Vec<char> = text.chars().collect();
+                if chars.iter().all(|c| is_cjk(*c)) {
+                    (chars.len() as u64).max(1)
+                } else {
+                    (chars.len() as u64).clamp(2, 12)
+                }
+            }
+            Self::MoraCount => {
+                // Japanese mora: each kana = 1 mora, kanji ≈ 2 mora (approximation),
+                // small kana (っ、ゃ、ゅ、ょ etc.) don't count as separate mora.
+                let count: u64 = text
+                    .chars()
+                    .map(|c| {
+                        if is_small_kana(c) {
+                            0
+                        } else if is_kana_char(c) {
+                            1
+                        } else if is_cjk(c) {
+                            2
+                        } else {
+                            1
+                        }
+                    })
+                    .sum();
+                count.max(1)
+            }
+        }
+    }
+
+    fn confidence(&self) -> f32 {
+        match self {
+            Self::CharWeight => 0.35,
+            Self::SyllableEqual => 0.40,
+            Self::MoraCount => 0.38,
+        }
+    }
+
+    fn version(&self) -> &'static str {
+        match self {
+            Self::CharWeight => "v1",
+            Self::SyllableEqual => "v2-syllable",
+            Self::MoraCount => "v2-mora",
+        }
+    }
+}
+
+fn is_cjk(c: char) -> bool {
+    matches!(c,
+        '\u{4E00}'..='\u{9FFF}' |
+        '\u{3400}'..='\u{4DBF}' |
+        '\u{20000}'..='\u{2A6DF}' |
+        '\u{F900}'..='\u{FAFF}'
+    )
+}
+
+fn is_kana_char(c: char) -> bool {
+    matches!(c, '\u{3040}'..='\u{309F}' | '\u{30A0}'..='\u{30FF}')
+}
+
+fn is_small_kana(c: char) -> bool {
+    matches!(c,
+        'っ' | 'ッ' | 'ゃ' | 'ャ' | 'ゅ' | 'ュ' | 'ょ' | 'ョ' |
+        'ぁ' | 'ァ' | 'ぃ' | 'ィ' | 'ぅ' | 'ゥ' | 'ぇ' | 'ェ' | 'ぉ' | 'ォ'
+    )
 }
 
 fn analyze_rules(sentence: &SubtitleSentence) -> Vec<SpeechRuleFinding> {
@@ -802,6 +897,72 @@ mod tests {
                         pair[1].start_ms, pair[1].end_ms);
                 }
             }
+        }
+    }
+
+    fn chinese_sentence(words: &[&str]) -> SubtitleSentence {
+        let full_text = words.join("");
+        let mut offset = 0u32;
+        SubtitleSentence {
+            id: SubtitleSentenceId::parse("s").unwrap(),
+            index: 0,
+            start: TimeMs::new(0),
+            end: TimeMs::new(6000),
+            original_text: full_text.clone(),
+            display_text: full_text,
+            tokens: words
+                .iter()
+                .enumerate()
+                .map(|(i, text)| {
+                    let start = offset;
+                    let len = text.chars().count() as u32;
+                    offset += len;
+                    SubtitleToken {
+                        index: i as u32,
+                        kind: SubtitleTokenKind::Word,
+                        text: text.to_string(),
+                        normalized: Some(text.to_string()),
+                        start_char: start,
+                        end_char: start + len,
+                    }
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn syllable_timed_gives_equal_weight_to_cjk_chars() {
+        let sentence = chinese_sentence(&["因为", "我", "不", "知道"]);
+        let timings = estimate_word_timings_with_rhythm(
+            &sentence,
+            Some("zh.syllable_tone"),
+        );
+        assert_eq!(timings.len(), 4);
+        // "因为" (2 chars) should get 2x the duration of "我" (1 char)
+        let d0 = timings[0].end_ms - timings[0].start_ms;
+        let d1 = timings[1].end_ms - timings[1].start_ms;
+        assert_eq!(d0, d1 * 2);
+        assert_eq!(timings[0].provider_version, "v2-syllable");
+    }
+
+    #[test]
+    fn mora_timed_counts_kana() {
+        let strategy = EstimationStrategy::MoraCount;
+        assert_eq!(strategy.weight("たべる"), 3);
+        assert_eq!(strategy.weight("きょう"), 2); // ょ is small kana
+        assert_eq!(strategy.weight("がっこう"), 3); // っ is small kana
+    }
+
+    #[test]
+    fn default_rhythm_is_char_weight() {
+        let sentence = sentence("hello world");
+        let t1 = estimate_word_timings(&sentence);
+        let t2 = estimate_word_timings_with_rhythm(&sentence, None);
+        assert_eq!(t1.len(), t2.len());
+        for (a, b) in t1.iter().zip(t2.iter()) {
+            assert_eq!(a.start_ms, b.start_ms);
+            assert_eq!(a.end_ms, b.end_ms);
+            assert_eq!(a.provider_version, "v1");
         }
     }
 }

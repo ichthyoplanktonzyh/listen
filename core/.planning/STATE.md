@@ -15,14 +15,14 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-24 CST
-> 更新原因：Phase 2.7 完成——pronunciation provider dispatch，中文拼音显示 + 词跳动 + chunk
-> 高亮全部验证通过。Phase 2.8 (token timing alignment) 已规划待实施。
+> 更新原因：Phase 2.8 完成——token timing alignment（whisper BPE→app token 字符级
+> 对齐 + 韵律感知估算 fallback）。294 测试全通过。
 
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
-- **Phase**：Phase 2.7 ✅ 完成（PronunciationProvider trait dispatch + 中文拼音 + 语言无关
-  timing/chunk），Phase 2.8 Token Timing Alignment 待开始
+- **Phase**：Phase 2.8 ✅ 完成（Token Timing Alignment — whisper BPE→app token 字符级
+  对齐 + 韵律感知估算 fallback）
 - **分支**：`feature/forced-alignment-research`
 - **版本**：0.7.0
 
@@ -401,10 +401,17 @@ progress:
 - 用户验证：中文拼音 ✅ 词级跳动 ✅ chunk 高亮 ✅ 英文回归正常 ✅
 - 遗留 gap 移至 Phase 2.8：whisper BPE → app token 时间对齐、韵律感知估算权重。
 
-### Phase 2.8: Token Timing Alignment 📋 已规划
+### Phase 2.8: Token Timing Alignment ✅ 完成（2026-06-24）
 
-- 目标：whisper BPE token 时间戳对齐到 app tokenizer token 边界，韵律感知估算 fallback。
-- 计划文档：`.planning/phases/2.8-token-timing-alignment/`
+- 字符级时间对齐：whisper BPE 合并词数与 app tokenizer 词数不匹配时，自动执行字符级
+  时间插值（`align_words_to_tokens`），而非丢弃回退估算。英语 1:1 直接映射不变。
+- 新增 `TimingSource::AsrAligned`，表示 ASR 数据经字符级插值。
+- 韵律感知估算 fallback：`estimate_word_timings_with_rhythm` 根据 profile 的
+  `rhythm_prosody` 选择策略——`CharWeight`（stress-timed 英语）、`SyllableEqual`
+  （syllable-timed 中文）、`MoraCount`（mora-timed 日语）。
+- `align_timings_to_tokens` 公开 API 供 lltimeline 导入和外部 re-tokenize 场景使用。
+- 验证：294 测试全通过，clippy 无新增错误。
+- 收口文档：`.planning/phases/2.8-token-timing-alignment/2.8-CLOSEOUT.md`
 
 ### 强制对齐研究 🧭 长期推进
 
@@ -463,8 +470,9 @@ progress:
    无 kana 检测、能力矩阵暴露 client、identity 边界 profile 化——均刻意延后。
 6. Phase 2.7 ✅ **已完成**（2026-06-24）：pronunciation provider dispatch + 语言无关
    timing/chunk。中文拼音 + 词跳动 + chunk 全部验证通过。
-7. Phase 2.8 **待开始**：token timing alignment — whisper BPE → app token 时间对齐 +
-   韵律感知估算 fallback。计划文档已就位。
+7. Phase 2.8 ✅ **已完成**（2026-06-24）：token timing alignment — whisper BPE → app
+   token 字符级对齐 + 韵律感知估算 fallback。294 测试通过。收口文档
+   `2.8-CLOSEOUT.md`。残留：真实中文/英文视频手动 QA。
 
 ## 指标
 

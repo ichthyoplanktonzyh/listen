@@ -134,7 +134,10 @@ impl AppServices {
             .subtitles
             .get_sentence(sentence_id)?
             .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
-        let values = speech_analysis::estimate_word_timings(&sentence);
+        let values = speech_analysis::estimate_word_timings_with_rhythm(
+            &sentence,
+            Some(profile.rhythm_prosody.as_str()),
+        );
         self.subtitles.save_word_timings(sentence_id, &values)?;
         Ok(values)
     }

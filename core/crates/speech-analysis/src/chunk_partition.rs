@@ -643,7 +643,7 @@ fn acoustic_gap_threshold(
     [left?, right?]
         .into_iter()
         .map(|source| match source {
-            TimingSource::AsrReported => config.asr_reported_gap_threshold_ms,
+            TimingSource::AsrReported | TimingSource::AsrAligned => config.asr_reported_gap_threshold_ms,
             TimingSource::ForcedAligned => config.forced_aligned_gap_threshold_ms,
             TimingSource::UserAdjusted => config.user_adjusted_gap_threshold_ms,
             TimingSource::Estimated => unreachable!("estimated timings are not acoustic evidence"),
