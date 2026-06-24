@@ -21,8 +21,8 @@ progress:
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
-- **Phase**：Phase 2.8 ✅ 完成（Token Timing Alignment — whisper BPE→app token 字符级
-  对齐 + 韵律感知估算 fallback）
+- **Phase**：Phase 2.8 ✅ 完成（Token Timing Alignment），Phase 2.9 Production
+  Multilingual Decoupling 待开始
 - **分支**：`feature/forced-alignment-research`
 - **版本**：0.7.0
 
@@ -413,6 +413,13 @@ progress:
 - 验证：294 测试全通过，clippy 无新增错误。
 - 收口文档：`.planning/phases/2.8-token-timing-alignment/2.8-CLOSEOUT.md`
 
+### Phase 2.9: Production Multilingual Decoupling 📋 已规划
+
+- 目标：解耦生产管线对英语的强绑定，让非英语语言走通完整生产链路。
+- 5 个绑定点：管线语言传播、强制对齐语言降级、发音分析 provider 化、文本 chunk
+  语言感知、中文端到端验证。
+- 计划文档：`.planning/phases/2.9-production-multilingual-decoupling/`
+
 ### 强制对齐研究 🧭 长期推进
 
 - torchaudio MMS_FA sidecar（`scripts/forced-align/align-cli.py`）。
@@ -473,6 +480,8 @@ progress:
 7. Phase 2.8 ✅ **已完成**（2026-06-24）：token timing alignment — whisper BPE → app
    token 字符级对齐 + 韵律感知估算 fallback。294 测试通过。收口文档
    `2.8-CLOSEOUT.md`。残留：真实中文/英文视频手动 QA。
+8. Phase 2.9 **待开始**：production multilingual decoupling — 解耦生产管线英语绑定，
+   让中文走通完整生产链路。计划文档已就位。
 
 ## 指标
 
