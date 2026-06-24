@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-06-24 CST: Phase 2.9 closeout + Phase 2.10/2.11 planning.
+  (1) **Phase 2.9 收口**: 生产管线多语言解耦完成。2.9-CLOSEOUT.md 记录 Rust 侧
+  (AlignerRegistry/语言传播/CJK 分词) + Python 侧 (mlx-whisper/jieba/M:N 对齐)
+  全部交付、中文端到端验证结果和设计决策。
+  (2) **残留项总览**: 新增 `.planning/DEFERRED-ITEMS.md`，汇总 Phase 2.1–2.9 全部
+  残留/延后项，按 P1(英语语流+架构)/P2(小项)/P3(中文/日语) 分级。
+  (3) **Phase 2.10 规划**: English Real Speech Analysis — 选出 phone-level provider，
+  让英语语流分析从文本预测升级为音频检测。候选 MFA/ZIPA/Wav2IPA/Allosaurus。
+  (4) **Phase 2.11 规划**: Architecture Seam Consolidation — 能力矩阵 API、学习语言
+  来源、domain 拆分、L1 诊断 seam、听觉锚定准备。Step 1–3 可与 2.10 并行。
+
 - 2026-06-24 CST: Chinese word-level tokenization + mlx-whisper ASR integration.
   (1) **jieba word segmentation**: `tokenize()` in `lltimeline_common.py` now uses
   jieba for Chinese word segmentation instead of character-level splitting. "今天"

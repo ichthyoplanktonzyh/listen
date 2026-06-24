@@ -21,8 +21,8 @@ progress:
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
-- **Phase**：Phase 2.9 ✅ 完成（Production Multilingual Decoupling + Pluggable
-  Model Architecture）
+- **Phase**：Phase 2.10 📋 已规划（English Real Speech Analysis）+
+  Phase 2.11 📋 已规划（Architecture Seam Consolidation）
 - **分支**：`feature/forced-alignment-research`
 - **版本**：0.7.0
 
