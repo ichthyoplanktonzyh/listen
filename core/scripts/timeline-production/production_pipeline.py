@@ -781,7 +781,19 @@ def run_single_post_aligner(
     config = _aligner_config_from_args(args)
     aligner_dir = output_dir / aligner_name
 
+    dry_run = getattr(args, "dry_run", False)
     request_path = aligner_dir / "alignment-request.json"
+
+    if dry_run:
+        return plugin.align(
+            request_path=request_path,
+            audio_path=audio_path,
+            output_dir=aligner_dir,
+            language=language,
+            dry_run=True,
+            config=config,
+        )
+
     document = load_json(document_path)
     build_mfa_alignment_request(document, audio_path, request_path)
 
@@ -790,12 +802,9 @@ def run_single_post_aligner(
         audio_path=audio_path,
         output_dir=aligner_dir,
         language=language,
-        dry_run=getattr(args, "dry_run", False),
+        dry_run=False,
         config=config,
     )
-
-    if result.get("dry_run"):
-        return result
 
     aligned = result.get("aligned")
     if not aligned:
