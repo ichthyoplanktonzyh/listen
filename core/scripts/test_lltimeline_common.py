@@ -25,28 +25,29 @@ class LLTimelineCommonTest(unittest.TestCase):
 
 
 class CJKTokenizeTest(unittest.TestCase):
-    def test_chinese_characters_are_words(self) -> None:
+    def test_chinese_segmented_as_words(self) -> None:
         tokens = tokenize("你好世界")
         words = [t for t in tokens if t["kind"] == "word"]
-        self.assertEqual([w["text"] for w in words], ["你", "好", "世", "界"])
+        self.assertEqual([w["text"] for w in words], ["你好", "世界"])
 
     def test_chinese_with_punctuation(self) -> None:
         tokens = tokenize("你好，世界！")
         words = [t for t in tokens if t["kind"] == "word"]
-        self.assertEqual([w["text"] for w in words], ["你", "好", "世", "界"])
+        self.assertEqual([w["text"] for w in words], ["你好", "世界"])
         puncts = [t for t in tokens if t["kind"] == "punctuation"]
         self.assertGreaterEqual(len(puncts), 2)
 
     def test_chinese_normalized_preserves_surface(self) -> None:
         tokens = tokenize("学习")
         words = [t for t in tokens if t["kind"] == "word"]
-        self.assertEqual(words[0]["normalized"], "学")
-        self.assertEqual(words[1]["normalized"], "习")
+        self.assertEqual(len(words), 1)
+        self.assertEqual(words[0]["text"], "学习")
+        self.assertEqual(words[0]["normalized"], "学习")
 
     def test_mixed_chinese_english(self) -> None:
         tokens = tokenize("Hello你好World")
         words = [t for t in tokens if t["kind"] == "word"]
-        self.assertEqual([w["text"] for w in words], ["Hello", "你", "好", "World"])
+        self.assertEqual([w["text"] for w in words], ["Hello", "你好", "World"])
 
     def test_japanese_hiragana(self) -> None:
         tokens = tokenize("たべる")
@@ -71,7 +72,7 @@ class CJKTokenizeTest(unittest.TestCase):
             self.assertEqual(text[t["start_char"]:t["end_char"]], t["text"])
 
     def test_normalize_word_cjk_no_lowercase(self) -> None:
-        self.assertEqual(normalize_word("学"), "学")
+        self.assertEqual(normalize_word("学习"), "学习")
 
     def test_empty_string(self) -> None:
         self.assertEqual(tokenize(""), [])

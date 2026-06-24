@@ -28,7 +28,7 @@ if str(SCRIPT_ROOT) not in sys.path:
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from lltimeline_common import tokenize, word_key, word_token_indexes
+from lltimeline_common import align_asr_words_to_tokens, tokenize, word_key, word_token_indexes
 
 from aligners import all_aligners, available_aligners, get_aligner
 
@@ -426,24 +426,21 @@ def convert_whisperx(args: argparse.Namespace) -> int:
         if not isinstance(words, list):
             skipped_words.append({"segment_index": segment_index, "reason": "invalid_words"})
             continue
-        for word_index, word in enumerate(words):
-            if word_index >= len(token_indexes) or not isinstance(word, dict):
+        aligned = align_asr_words_to_tokens(words, tokens)
+        for tok_i, mapped in enumerate(aligned):
+            if mapped is None:
                 skipped_words.append(
-                    {
-                        "segment_index": segment_index,
-                        "word_index": word_index,
-                        "reason": "token_missing",
-                    }
+                    {"segment_index": segment_index, "token_index": token_indexes[tok_i], "reason": "no_asr_match"}
                 )
                 continue
-            word_start_ms = ms(word.get("start"))
-            word_end_ms = ms(word.get("end"))
+            word_start_ms = ms(mapped.get("start"))
+            word_end_ms = ms(mapped.get("end"))
             if word_start_ms is None or word_end_ms is None or word_end_ms <= word_start_ms:
                 skipped_words.append(
                     {
                         "segment_index": segment_index,
-                        "word_index": word_index,
-                        "word": word.get("word"),
+                        "token_index": token_indexes[tok_i],
+                        "word": mapped.get("word"),
                         "reason": "timing_missing",
                     }
                 )
@@ -451,11 +448,11 @@ def convert_whisperx(args: argparse.Namespace) -> int:
             timings.append(
                 {
                     "sentence_id": sentence_id,
-                    "token_index": token_indexes[word_index],
-                    "text": str(word.get("word") or "").strip(),
+                    "token_index": token_indexes[tok_i],
+                    "text": str(mapped.get("word") or "").strip(),
                     "start_ms": word_start_ms,
                     "end_ms": word_end_ms,
-                    "confidence": word.get("score"),
+                    "confidence": mapped.get("score"),
                     "timing_source": "forced_aligned",
                     "provider_id": args.algorithm_id,
                     "provider_version": args.algorithm_version,
@@ -687,6 +684,33 @@ def resolve_whisperx_command(args: argparse.Namespace) -> list[str] | str:
     return command
 
 
+def resolve_mlx_whisper_command(args: argparse.Namespace) -> list[str]:
+    mlx_python = getattr(args, "mlx_whisper_python", None) or default_mlx_whisper_python()
+    script = Path(__file__).with_name("mlx-whisper-transcribe.py")
+    command = [
+        mlx_python,
+        str(script),
+        "--input", args.input,
+        "--output-dir", args.output_dir,
+        "--model", getattr(args, "mlx_whisper_model", None) or "mlx-community/whisper-large-v3-mlx",
+        "--language", args.language or "en",
+        "--verbose",
+    ]
+    if getattr(args, "output_json", None):
+        command.extend(["--output-json", args.output_json])
+    return command
+
+
+def default_mlx_whisper_python() -> str:
+    candidate = Path(
+        os.environ.get(
+            "LLPLAYERNEXT_MLX_WHISPER_DIR",
+            str(Path.home() / "Library/Caches/LLPlayerNext/research/mlx-whisper"),
+        )
+    ) / "venv" / "bin" / "python3"
+    return str(candidate) if candidate.exists() else sys.executable
+
+
 def find_whisperx_json(output_dir: Path, input_path: Path, explicit: str | None) -> Path:
     if explicit:
         output = Path(explicit)
@@ -714,25 +738,31 @@ def run_whisperx(args: argparse.Namespace) -> int:
 def run_whisperx_report(args: argparse.Namespace) -> dict[str, Any]:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    command = resolve_whisperx_command(args)
+    asr = getattr(args, "asr", "whisperx")
+    if asr == "mlx-whisper":
+        command = resolve_mlx_whisper_command(args)
+    else:
+        command = resolve_whisperx_command(args)
     printable = command if isinstance(command, str) else " ".join(shlex.quote(part) for part in command)
     if args.dry_run:
-        return {"command": printable, "output_dir": str(output_dir), "dry_run": True}
+        return {"command": printable, "output_dir": str(output_dir), "asr": asr, "dry_run": True}
     started_at = now_ms()
     subprocess.run(command, shell=isinstance(command, str), check=True)
-    output_json = find_whisperx_json(output_dir, Path(args.input), args.output_json)
+    output_json = find_whisperx_json(output_dir, Path(args.input), getattr(args, "output_json", None))
     report = {
         "input": args.input,
         "whisperx_json": str(output_json),
         "output_dir": str(output_dir),
+        "asr": asr,
         "model": args.model,
         "language": args.language,
-        "device": args.device,
-        "compute_type": args.compute_type,
         "started_at_ms": started_at,
         "completed_at_ms": now_ms(),
     }
-    report_path = output_dir / "whisperx-run-report.json"
+    if asr != "mlx-whisper":
+        report["device"] = args.device
+        report["compute_type"] = args.compute_type
+    report_path = output_dir / "asr-run-report.json"
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     report["report_path"] = str(report_path)
     return report
@@ -995,6 +1025,9 @@ def whisperx_namespace(args: argparse.Namespace, selected_audio: Path, whisperx_
         "hf_token": args.hf_token,
         "whisperx_bin": args.whisperx_bin,
         "whisperx_command": args.whisperx_command,
+        "asr": getattr(args, "asr", "whisperx"),
+        "mlx_whisper_python": getattr(args, "mlx_whisper_python", None),
+        "mlx_whisper_model": getattr(args, "mlx_whisper_model", None),
         "dry_run": args.dry_run,
     }
 
@@ -1169,6 +1202,10 @@ def parser() -> argparse.ArgumentParser:
     produce.add_argument("--align-model")
     produce.add_argument("--diarize", action="store_true")
     produce.add_argument("--hf-token")
+    produce.add_argument("--asr", choices=["whisperx", "mlx-whisper"], default="whisperx",
+                         help="ASR engine: whisperx (CPU/CUDA) or mlx-whisper (Apple GPU)")
+    produce.add_argument("--mlx-whisper-python", help="path to the mlx-whisper venv Python")
+    produce.add_argument("--mlx-whisper-model", default="mlx-community/whisper-large-v3-mlx")
     produce.add_argument("--whisperx-bin")
     produce.add_argument("--whisperx-command")
     produce.add_argument(

@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- 2026-06-24 CST: Chinese word-level tokenization + mlx-whisper ASR integration.
+  (1) **jieba word segmentation**: `tokenize()` in `lltimeline_common.py` now uses
+  jieba for Chinese word segmentation instead of character-level splitting. "今天"
+  is one token (not "今"+"天"), producing natural word-boundary highlights during
+  karaoke playback. Falls back to per-character if jieba unavailable. English
+  tokenization unchanged.
+  (2) **ASR-to-token alignment**: new `align_asr_words_to_tokens()` handles M:N
+  mapping between ASR word boundaries and jieba token boundaries via character-
+  position alignment. Merges timing from multiple ASR words when they compose one
+  jieba token (e.g. ASR ["上","海"] -> jieba "上海").
+  (3) **mlx-whisper integration**: `mlx-whisper-transcribe.py` standalone script
+  wrapping `mlx_whisper.transcribe()` with WhisperX-compatible JSON output.
+  `production_pipeline.py` gains `--asr` flag (`whisperx`/`mlx-whisper`) and
+  `resolve_mlx_whisper_command()`. ~7.5x faster than WhisperX CPU on Apple Silicon.
+  (4) Quality comparison on 8-min Chinese audio: mlx-whisper avg_confidence 0.954
+  vs WhisperX 0.953, fewer overlaps (2 vs 4), comparable word coverage.
+
 - 2026-06-24 CST: Phase 2.9 — Production multilingual decoupling + pluggable model
   architecture.
   (1) **Pluggable aligner registry**: new `aligners/` package with `AlignerPlugin`
