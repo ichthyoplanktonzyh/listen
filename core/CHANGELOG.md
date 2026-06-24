@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- 2026-06-24 CST: Phase 2.7 — Pronunciation provider dispatch + language-agnostic
+  timing/chunk. (1) **PronunciationProvider trait**: new dispatch trait in
+  `providers.rs` with `analyze_sentence`, `lookup_word`, `rule_catalog` methods.
+  `EnglishPronunciationProvider` wraps `speech_analysis` crate;
+  `ChinesePronunciationProvider` produces pinyin from CC-CEDICT with per-character
+  fallback. Providers registered in `ApiState::new`, dispatched by
+  `sentence_language()` match against `info().languages`. (2) **pronunciation.rs
+  rewrite**: `analyze_pronunciation`, `lookup_pronunciation`, `pronunciation_rules`
+  all route through registered providers. Cache validation keyed on provider
+  id/version. `analyze_pronunciation_track` uses `filter_map(.ok())` to skip
+  sentences that fail (e.g. punctuation-only). API routes `/v1/pronunciation/lookup`
+  and `/v1/pronunciation/rules` accept `language` query parameter (default "en").
+  (3) **Chinese pinyin display**: Chinese subtitles now show tone-marked pinyin
+  below the subtitle line via existing `display_ipa` rendering path — no Flutter
+  code change needed. (4) **Timing/chunk language-agnostic**: `estimate_word_timings`
+  (character-weighted time distribution) and acoustic chunk detection (gap-based)
+  confirmed as language-agnostic algorithms. Chinese profile upgraded from
+  `Unsupported` to `Supported` for `word_timeline` and `chunk_timeline`. Only
+  `detect_text_chunks` (COCA n-gram / PHRASE List) remains English-gated.
+  (5) **phonetic_fixture.rs**: non-English skips canonical phone alignment
+  (empty canonical list). Verified: 286 workspace tests pass, user confirmed
+  Chinese pinyin + word tracking + chunk highlight working, English regression clean.
+
 - 2026-06-23 CST: Phase 2.6 extension — capability matrix API, language selection
   UI, and per-character meaning breakdown. Three user-visible features:
   (1) **Capability matrix API**: `GET /v1/languages` lists supported languages,

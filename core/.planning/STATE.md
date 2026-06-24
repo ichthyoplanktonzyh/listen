@@ -14,15 +14,15 @@ progress:
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-23 CST
-> 更新原因：Phase 2.6 后续——(1) 日语证伪派遣层并加固；(2) 真日语（lindera 形态分词 + JMdict）经验
-> 验证「加语言=只加 provider+profile」对真语言成立，并浮出 surface 身份不归并活用的下一个 seam
+> 最后更新：2026-06-24 CST
+> 更新原因：Phase 2.7 完成——pronunciation provider dispatch，中文拼音显示 + 词跳动 + chunk
+> 高亮全部验证通过。Phase 2.8 (token timing alignment) 已规划待实施。
 
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
-- **Phase**：Phase 2.6 ✅ 完成（Step 1-7：profile + jieba 分词 + LexicalUnit + 去 `language=en`
-  硬编码 + CC-CEDICT 词典 + 汉语面板/语言感知诊断 + 双语回归收口；首批验收语言 en + zh）
+- **Phase**：Phase 2.7 ✅ 完成（PronunciationProvider trait dispatch + 中文拼音 + 语言无关
+  timing/chunk），Phase 2.8 Token Timing Alignment 待开始
 - **分支**：`feature/forced-alignment-research`
 - **版本**：0.7.0
 
@@ -389,6 +389,23 @@ progress:
 - 残留：base-form 归并 seam；EDICT2 可下载资源注册（钉死+sha256，像 CC-CEDICT；seed+安装路径已就位）；
   纯 kanji 无 kana 检测；日语声学侧（独立 production program）。
 
+### Phase 2.7: Pronunciation Provider Dispatch ✅ 完成（2026-06-24）
+
+- `PronunciationProvider` trait 派发：`EnglishPronunciationProvider`（包装 speech_analysis）
+  和 `ChinesePronunciationProvider`（CC-CEDICT 拼音）。发音标注、词发音查询、语流规则
+  三层体验通过 trait dispatch 实现语言无关消费。
+- 中文拼音：字幕下方显示声调拼音，通过已有 `display_ipa` 渲染路径，Flutter 无需改动。
+- Timing/chunk 验证为语言无关算法：`estimate_word_timings`（字符权重）和声学 chunk 检测
+  （gap-based）对所有已分词语言适用。中文 profile 升级为 `word_timeline: Supported`、
+  `chunk_timeline: Supported`。仅 `detect_text_chunks`（COCA/PHRASE）保留英语门控。
+- 用户验证：中文拼音 ✅ 词级跳动 ✅ chunk 高亮 ✅ 英文回归正常 ✅
+- 遗留 gap 移至 Phase 2.8：whisper BPE → app token 时间对齐、韵律感知估算权重。
+
+### Phase 2.8: Token Timing Alignment 📋 已规划
+
+- 目标：whisper BPE token 时间戳对齐到 app tokenizer token 边界，韵律感知估算 fallback。
+- 计划文档：`.planning/phases/2.8-token-timing-alignment/`
+
 ### 强制对齐研究 🧭 长期推进
 
 - torchaudio MMS_FA sidecar（`scripts/forced-align/align-cli.py`）。
@@ -444,6 +461,10 @@ progress:
    使「加语言=只加 provider+profile」对复用既有策略的语言成真。文档
    `2.6-DISPATCH-FALSIFICATION-AND-FIX.md`。残留 seam：真日语形态分词/JMdict/读音 provider、纯 kanji
    无 kana 检测、能力矩阵暴露 client、identity 边界 profile 化——均刻意延后。
+6. Phase 2.7 ✅ **已完成**（2026-06-24）：pronunciation provider dispatch + 语言无关
+   timing/chunk。中文拼音 + 词跳动 + chunk 全部验证通过。
+7. Phase 2.8 **待开始**：token timing alignment — whisper BPE → app token 时间对齐 +
+   韵律感知估算 fallback。计划文档已就位。
 
 ## 指标
 
