@@ -41,6 +41,8 @@ const DICTIONARY_CACHE_TTL_MS: u64 = 30 * 24 * 60 * 60 * 1000;
 pub(crate) struct ForcedAlignRequest {
     pub(crate) audio_path: String,
     pub(crate) segments: Vec<ForcedAlignSegment>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) language: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

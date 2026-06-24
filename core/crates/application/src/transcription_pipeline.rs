@@ -12,6 +12,7 @@ impl AppServices {
         whisper_json_bytes: &[u8],
         audio_wav_path: &Path,
         forced_align_sidecar: Option<ForcedAlignSidecar>,
+        language: Option<&str>,
     ) -> Result<Option<WordTimelinePipelineResult>, ApplicationError> {
         let track = self
             .subtitles
@@ -43,6 +44,7 @@ impl AppServices {
                 &track.sentences,
                 &mut timings,
                 &sidecar,
+                language,
             )
             .await
         } else {
@@ -112,10 +114,12 @@ impl AppServices {
         sentences: &[SubtitleSentence],
         timings: &mut [WordTiming],
         sidecar: &ForcedAlignSidecar,
+        language: Option<&str>,
     ) -> usize {
         let request = ForcedAlignRequest {
             audio_path: wav.to_string_lossy().into_owned(),
             segments: forced_align_segments(sentences),
+            language: language.map(|s| s.to_owned()),
         };
         if request.segments.is_empty() {
             return 0;

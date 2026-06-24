@@ -356,6 +356,15 @@ class Handler(BaseHTTPRequestHandler):
         return
 
 
+def _aligner_options_html() -> str:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    try:
+        from aligners import all_aligners
+        return "".join(f'<option>{a["name"]}</option>' for a in all_aligners())
+    except Exception:
+        return "<option>mfa</option><option>mms-fa</option>"
+
+
 INDEX_HTML = r"""<!doctype html>
 <html lang="en">
 <head>
@@ -395,7 +404,7 @@ INDEX_HTML = r"""<!doctype html>
     <div class="hint">The output path is editable. The button chooses the folder and keeps the filename from this field.</div>
   </section>
   <section class="options">
-    <label>Post-aligner<select id="post_aligner"><option>auto</option><option>mfa</option><option>mms-fa</option><option>none</option></select></label>
+    <label>Post-aligner<select id="post_aligner"><option>auto</option>""" + _aligner_options_html() + r"""<option>none</option></select></label>
     <label>Device<select id="device"><option>cpu</option><option>cuda</option><option>mps</option></select></label>
     <label>Compute type<select id="compute_type"><option>float32</option><option>float16</option><option>int8</option></select></label>
     <label>Batch size<input id="batch_size" type="number" min="1" max="128" value="16"></label>

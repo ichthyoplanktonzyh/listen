@@ -669,10 +669,27 @@ fn punctuation_between(
     if punctuation.is_empty() {
         return None;
     }
-    let strong = punctuation
-        .chars()
-        .any(|value| matches!(value, '.' | '?' | '!' | ';' | ':'));
+    let strong = punctuation.chars().any(|value| {
+        matches!(
+            value,
+            '.' | '?' | '!' | ';' | ':' | '\u{3002}' | '\u{FF1F}' | '\u{FF01}' | '\u{FF1B}'
+                | '\u{FF1A}'
+        )
+    });
     Some((punctuation, strong))
+}
+
+fn is_cjk_char(ch: char) -> bool {
+    matches!(ch,
+        '\u{4E00}'..='\u{9FFF}'
+        | '\u{3400}'..='\u{4DBF}'
+        | '\u{20000}'..='\u{2A6DF}'
+        | '\u{F900}'..='\u{FAFF}'
+        | '\u{3040}'..='\u{309F}'
+        | '\u{30A0}'..='\u{30FF}'
+        | '\u{31F0}'..='\u{31FF}'
+        | '\u{FF66}'..='\u{FF9D}'
+    )
 }
 
 fn build_chunk(
@@ -683,15 +700,19 @@ fn build_chunk(
     timings: &[EffectiveTiming],
     boundary_after: Option<DisplayChunkBoundary>,
 ) -> DisplayChunk {
+    let texts: Vec<&str> = words[start..=end]
+        .iter()
+        .map(|word| word.text.as_str())
+        .collect();
+    let all_cjk = texts
+        .iter()
+        .all(|t| t.chars().all(|ch| is_cjk_char(ch)));
+    let separator = if all_cjk { "" } else { " " };
     DisplayChunk {
         index: index as u32,
         token_start: words[start].index,
         token_end: words[end].index,
-        text: words[start..=end]
-            .iter()
-            .map(|word| word.text.as_str())
-            .collect::<Vec<_>>()
-            .join(" "),
+        text: texts.join(separator),
         start_ms: timings[start].start_ms,
         end_ms: timings[end].end_ms,
         boundary_after,

@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- 2026-06-24 CST: Phase 2.9 — Production multilingual decoupling + pluggable model
+  architecture.
+  (1) **Pluggable aligner registry**: new `aligners/` package with `AlignerPlugin`
+  base class, `MfaAligner` and `MmsFaAligner` plugins extracted from
+  `production_pipeline.py`. Registry provides `register()`, `get_aligner()`,
+  `available_aligners(language)`, `all_aligners()`. Adding a new aligner (e.g.
+  Qwen3-ForcedAligner) requires one plugin file + one `register()` call.
+  `production_pipeline.py` dispatch rewritten to use registry — no more if/elif.
+  New `list-aligners` subcommand; `doctor` now reports registered aligner status.
+  (2) **CJK tokenizer**: `lltimeline_common.py` tokenizer extended to emit each
+  CJK character (Chinese, Japanese hiragana/katakana) as an individual word token.
+  English tokenization unchanged. 11 new tests for CJK + regression.
+  (3) **Language propagation**: `--language` parameter flows through entire
+  production chain. `post_aligner_chain()` filters aligners by language: Chinese
+  skips MFA (English-only) and uses MMS_FA directly. `apply-mfa-alignment` and
+  `apply-mms-fa-alignment` subcommands accept `--language`.
+  (4) **CJK chunk partition (Rust)**: `chunk_partition.rs` strong punctuation
+  detection extended with CJK sentence-final punctuation (U+3002, U+FF1F, etc.).
+  `build_chunk` text joining uses no separator for all-CJK chunks. `is_cjk_char`
+  helper covers CJK Unified Ideographs, hiragana, katakana.
+  (5) **Rust pipeline language propagation**: `ForcedAlignRequest` gains optional
+  `language` field. `refine_transcription_word_timelines()` accepts and propagates
+  language from `detected_language` through to the forced-align sidecar.
+  (6) **GUI**: post-aligner dropdown dynamically populated from aligner registry.
+  Verified: all 24 Python tests pass, all 294+ Rust workspace tests pass, clippy
+  clean (no new warnings).
+
 - 2026-06-24 CST: Phase 2.9 planning — Production engine multilingual decoupling.
   Created CONTEXT and PLAN docs identifying 5 English binding points in the
   production pipeline: language propagation, forced alignment language-aware

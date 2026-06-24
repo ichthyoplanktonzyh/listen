@@ -564,6 +564,7 @@ impl TranscriptionCoordinator {
                         &json_bytes,
                         &wav,
                         resolve_forced_align_sidecar(),
+                        job.detected_language.as_deref(),
                     )
                     .await;
             }

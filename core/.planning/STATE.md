@@ -15,14 +15,14 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-24 CST
-> 更新原因：Phase 2.8 完成——token timing alignment（whisper BPE→app token 字符级
-> 对齐 + 韵律感知估算 fallback）。294 测试全通过。
+> 更新原因：Phase 2.9 完成——生产管线多语言解耦 + 可插拔模型架构。aligner 插件注册表、
+> CJK 分词、语言传播、Rust chunk/pipeline 语言支持全部就绪。
 
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
-- **Phase**：Phase 2.8 ✅ 完成（Token Timing Alignment），Phase 2.9 Production
-  Multilingual Decoupling 待开始
+- **Phase**：Phase 2.9 ✅ 完成（Production Multilingual Decoupling + Pluggable
+  Model Architecture）
 - **分支**：`feature/forced-alignment-research`
 - **版本**：0.7.0
 
