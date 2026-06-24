@@ -1,7 +1,20 @@
 use crate::*;
 
-pub(crate) async fn pronunciation_rules(State(state): State<ApiState>) -> Json<serde_json::Value> {
-    Json(state.services.pronunciation_rules())
+#[derive(Debug, Deserialize)]
+pub(crate) struct PronunciationRulesQuery {
+    #[serde(default = "default_language")]
+    language: String,
+}
+
+fn default_language() -> String {
+    "en".into()
+}
+
+pub(crate) async fn pronunciation_rules(
+    State(state): State<ApiState>,
+    Query(query): Query<PronunciationRulesQuery>,
+) -> Json<serde_json::Value> {
+    Json(state.services.pronunciation_rules(&query.language))
 }
 
 pub(crate) async fn transcription_providers(

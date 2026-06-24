@@ -4,8 +4,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use api_events::{EventEnvelope, EventName};
 use application::{
-    AppServices, ApplicationError, CreateWordObservation, DictionaryProvider, ImportSubtitle,
-    RegisterMedia, SourceContext, UpdateWordProfile,
+    AppServices, ApplicationError, CreateWordObservation, DictionaryProvider,
+    EnglishPronunciationProvider, ImportSubtitle, RegisterMedia, SourceContext, UpdateWordProfile,
 };
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
@@ -16,7 +16,8 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use dictionary_provider::{
-    ChineseDictionaryProvider, EcdictProvider, FreeDictionaryProvider, JapaneseDictionaryProvider,
+    ChineseDictionaryProvider, ChinesePronunciationProvider, EcdictProvider,
+    FreeDictionaryProvider, JapaneseDictionaryProvider,
 };
 use domain::{
     LanguageCode, MediaAvailability, MediaId, MediaKind, ObservationResult, SubtitleSentenceId,
@@ -65,7 +66,12 @@ impl ApiState {
     {
         let (events, _) = broadcast::channel(128);
         let ecdict = Arc::new(EcdictProvider::new());
-        let services = services.with_lexical_normalizers(vec![ecdict.clone()]);
+        let services = services
+            .with_lexical_normalizers(vec![ecdict.clone()])
+            .with_pronunciation_providers(vec![
+                Arc::new(EnglishPronunciationProvider),
+                Arc::new(ChinesePronunciationProvider::new()),
+            ]);
         let transcription = Arc::new(
             TranscriptionCoordinator::new(services.clone(), repository.clone(), events.clone())
                 .expect("transcription coordinator must initialize"),

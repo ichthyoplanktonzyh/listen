@@ -34,3 +34,12 @@ pub trait LexicalNormalizationProvider: Send + Sync {
 #[derive(Debug, Error)]
 #[error("lexical normalization provider failed: {0}")]
 pub struct LexicalNormalizationProviderError(pub String);
+
+pub trait PronunciationProvider: Send + Sync {
+    fn info(&self) -> PronunciationProviderInfo;
+    fn analyze_sentence(&self, sentence: &SubtitleSentence) -> Option<SentencePronunciation>;
+    fn lookup_word(&self, word: &str, token_index: u32) -> Option<WordPronunciation>;
+    fn rule_catalog(&self) -> serde_json::Value {
+        serde_json::json!([])
+    }
+}

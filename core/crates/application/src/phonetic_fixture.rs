@@ -57,19 +57,29 @@ impl AppServices {
                 job.audio_end_ms
             ),
         );
-        let canonical = sentence
-            .map(speech_analysis::analyze_sentence)
-            .into_iter()
-            .flat_map(|analysis| analysis.phonemes)
-            .filter_map(|phone| {
-                phone.token_index.map(|token_index| {
-                    speech_analysis::phonetic_alignment::CanonicalPhone {
-                        symbol: phone.symbol,
-                        token_index,
-                    }
+        let is_english = job
+            .sentence_id
+            .as_ref()
+            .and_then(|sid| self.sentence_language(sid).ok())
+            .map(|lang| lang.as_str().starts_with("en"))
+            .unwrap_or(true);
+        let canonical = if is_english {
+            sentence
+                .map(speech_analysis::analyze_sentence)
+                .into_iter()
+                .flat_map(|analysis| analysis.phonemes)
+                .filter_map(|phone| {
+                    phone.token_index.map(|token_index| {
+                        speech_analysis::phonetic_alignment::CanonicalPhone {
+                            symbol: phone.symbol,
+                            token_index,
+                        }
+                    })
                 })
-            })
-            .collect::<Vec<_>>();
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
         let alignments = speech_analysis::phonetic_alignment::align_phones(&canonical, &phones);
         let findings = speech_analysis::phonetic_findings::findings_from_alignments(
             &id,

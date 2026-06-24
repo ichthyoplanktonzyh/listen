@@ -5,13 +5,14 @@ use std::time::{Duration, SystemTime};
 
 use application::{
     DictionaryProvider, DictionaryProviderError, LexicalNormalizationProvider,
-    LexicalNormalizationProviderError,
+    LexicalNormalizationProviderError, PronunciationProvider,
 };
 use async_trait::async_trait;
 use domain::{
     CharacterBreakdown, DictionaryDefinition, DictionaryLookup, DictionaryPhonetic,
-    DictionaryProviderInfo, LanguageCode, PhraseCandidate, SubtitleSentence, SubtitleTokenKind,
-    normalize_lemma,
+    DictionaryProviderInfo, LanguageCode, Phoneme, PhraseCandidate, PronunciationProviderInfo,
+    PronunciationVariant, SentencePronunciation, SubtitleSentence, SubtitleTokenKind,
+    WordPronunciation, normalize_lemma,
 };
 
 pub struct FreeDictionaryProvider {
@@ -444,6 +445,187 @@ impl DictionaryProvider for ChineseDictionaryProvider {
         lemma: &str,
     ) -> Result<Option<DictionaryLookup>, DictionaryProviderError> {
         Ok(self.resolve(lemma))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Chinese Pronunciation Provider (Pinyin from CC-CEDICT)
+// ---------------------------------------------------------------------------
+
+pub struct ChinesePronunciationProvider {
+    seed: HashMap<&'static str, (&'static str, &'static str)>,
+    path: PathBuf,
+    index: Mutex<Option<(ResourceSignature, Arc<CedictIndex>)>>,
+}
+
+const CHINESE_PRONUNCIATION_PROVIDER_ID: &str = "cedict-pinyin";
+const CHINESE_PRONUNCIATION_PROVIDER_VERSION: &str = "1.0";
+
+impl ChinesePronunciationProvider {
+    pub fn new() -> Self {
+        let id = domain::LearningResourceId::from_fingerprint("learning-resource", "cc-cedict");
+        let path = std::env::var_os("LLPLAYERNEXT_RESOURCES_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
+                    .join("Library/Application Support/LLPlayerNext/resources/learning")
+            })
+            .join(format!("{}.data", id.as_str()));
+        Self {
+            seed: CHINESE_DICTIONARY_SEED
+                .iter()
+                .map(|(word, pinyin, gloss)| (*word, (*pinyin, *gloss)))
+                .collect(),
+            path,
+            index: Mutex::new(None),
+        }
+    }
+
+    fn load_index(&self) -> Option<Arc<CedictIndex>> {
+        let metadata = std::fs::metadata(&self.path).ok()?;
+        let signature = ResourceSignature {
+            len: metadata.len(),
+            modified: metadata.modified().ok(),
+        };
+        let mut cached = self.index.lock().expect("CC-CEDICT index mutex poisoned");
+        if let Some((cached_signature, index)) = cached.as_ref()
+            && *cached_signature == signature
+        {
+            return Some(index.clone());
+        }
+        let index = Arc::new(read_cedict_index(&self.path).ok()?);
+        *cached = Some((signature, index.clone()));
+        Some(index)
+    }
+
+    fn lookup_pinyin(&self, word: &str) -> Option<String> {
+        if let Some(index) = self.load_index() {
+            if let Some(entry) = index.entries.get(word) {
+                return Some(entry.pinyin.clone());
+            }
+        }
+        self.seed.get(word).map(|(pinyin, _)| pinyin.to_string())
+    }
+
+    fn lookup_pinyin_single_char(&self, ch: &str) -> Option<String> {
+        if let Some(index) = self.load_index() {
+            if let Some(entry) = index.entries.get(ch) {
+                return Some(entry.pinyin.clone());
+            }
+        }
+        self.seed.get(ch).map(|(pinyin, _)| pinyin.to_string())
+    }
+
+    fn word_pronunciation(&self, word: &str, token_index: u32) -> WordPronunciation {
+        let pinyin = self.lookup_pinyin(word).unwrap_or_else(|| {
+            word.chars()
+                .filter_map(|ch| self.lookup_pinyin_single_char(&ch.to_string()))
+                .collect::<Vec<_>>()
+                .join(" ")
+        });
+        let syllables: Vec<&str> = pinyin.split_whitespace().collect();
+        let phonemes: Vec<Phoneme> = syllables
+            .iter()
+            .enumerate()
+            .map(|(i, syllable)| Phoneme {
+                symbol: syllable.to_string(),
+                phoneme_set: "pinyin".into(),
+                display_ipa: syllable.to_string(),
+                stress: None,
+                syllable_index: Some(i as u32),
+                token_index: Some(token_index),
+                start_ms: None,
+                end_ms: None,
+                confidence: None,
+            })
+            .collect();
+        let display_ipa = pinyin.clone();
+        WordPronunciation {
+            token_index,
+            text: word.to_owned(),
+            normalized: word.to_owned(),
+            variants: vec![PronunciationVariant {
+                phonemes,
+                display_ipa,
+                is_fallback: pinyin.is_empty(),
+            }],
+        }
+    }
+}
+
+impl Default for ChinesePronunciationProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PronunciationProvider for ChinesePronunciationProvider {
+    fn info(&self) -> PronunciationProviderInfo {
+        PronunciationProviderInfo {
+            id: CHINESE_PRONUNCIATION_PROVIDER_ID.into(),
+            display_name: "CC-CEDICT Pinyin".into(),
+            version: CHINESE_PRONUNCIATION_PROVIDER_VERSION.into(),
+            languages: vec!["zh".into()],
+            accents: vec!["zh-CN".into()],
+            phoneme_sets: vec!["pinyin".into()],
+            supports_context: false,
+            supports_variants: false,
+            supports_stress: false,
+            supports_token_mapping: true,
+            available: true,
+            degraded: false,
+            diagnostic: None,
+        }
+    }
+
+    fn analyze_sentence(&self, sentence: &SubtitleSentence) -> Option<SentencePronunciation> {
+        let words: Vec<WordPronunciation> = sentence
+            .tokens
+            .iter()
+            .filter(|token| token.kind == SubtitleTokenKind::Word)
+            .map(|token| self.word_pronunciation(&token.text, token.index))
+            .collect();
+        let phonemes: Vec<Phoneme> = words
+            .iter()
+            .flat_map(|word| {
+                word.variants
+                    .first()
+                    .into_iter()
+                    .flat_map(|v| v.phonemes.clone())
+            })
+            .collect();
+        let display_ipa = words
+            .iter()
+            .filter_map(|word| word.variants.first())
+            .map(|v| v.display_ipa.as_str())
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+        Some(SentencePronunciation {
+            sentence_id: sentence.id.clone(),
+            language: "zh".into(),
+            accent: "zh-CN".into(),
+            provider_id: CHINESE_PRONUNCIATION_PROVIDER_ID.into(),
+            provider_version: CHINESE_PRONUNCIATION_PROVIDER_VERSION.into(),
+            phoneme_set: "pinyin".into(),
+            display_ipa,
+            words,
+            phonemes,
+            rules: vec![],
+        })
+    }
+
+    fn lookup_word(&self, word: &str, token_index: u32) -> Option<WordPronunciation> {
+        let pronunciation = self.word_pronunciation(word, token_index);
+        if pronunciation
+            .variants
+            .first()
+            .is_some_and(|v| !v.display_ipa.is_empty())
+        {
+            Some(pronunciation)
+        } else {
+            None
+        }
     }
 }
 

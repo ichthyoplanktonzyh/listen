@@ -137,10 +137,8 @@ impl LanguageLearningProfile {
                 "neutral_tone",
                 "tone_sandhi",
             ]),
-            // Non-English audio -> listening-unit production is deferred
-            // (ADR 0012 Future Path); declare these unsupported, not faked.
-            word_timeline: CapabilitySupport::Unsupported,
-            chunk_timeline: CapabilitySupport::Unsupported,
+            word_timeline: CapabilitySupport::Supported,
+            chunk_timeline: CapabilitySupport::Supported,
             phone_timeline: CapabilitySupport::Unsupported,
         }
     }

@@ -30,6 +30,12 @@ pub(crate) async fn pronunciation_providers(
 #[derive(Debug, Deserialize)]
 pub(crate) struct PronunciationLookupQuery {
     word: String,
+    #[serde(default = "default_en")]
+    language: String,
+}
+
+fn default_en() -> String {
+    "en".into()
 }
 
 pub(crate) async fn pronunciation_lookup(
@@ -38,7 +44,7 @@ pub(crate) async fn pronunciation_lookup(
 ) -> Result<Json<domain::WordPronunciation>, ApiError> {
     state
         .services
-        .lookup_pronunciation(&query.word)
+        .lookup_pronunciation(&query.language, &query.word)
         .map(Json)
         .map_err(ApiError::from)
 }

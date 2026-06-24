@@ -15,6 +15,7 @@ mod media;
 mod phones;
 mod phonetic_fixture;
 mod pronunciation;
+mod pronunciation_providers;
 mod providers;
 mod repositories;
 mod subtitles;
@@ -25,6 +26,7 @@ mod word_timelines;
 
 pub use dto::*;
 pub use error::ApplicationError;
+pub use pronunciation_providers::*;
 pub use providers::*;
 pub use repositories::*;
 pub use util::now_ms;
@@ -61,6 +63,7 @@ pub struct AppServices {
     pub(crate) vocabulary: Arc<dyn VocabularyAssetRepository>,
     pub(crate) lexical: Arc<dyn LexicalEntryRepository>,
     pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
+    pub(crate) pronunciation_providers: Arc<Vec<Arc<dyn PronunciationProvider>>>,
 }
 
 impl AppServices {
@@ -85,6 +88,7 @@ impl AppServices {
             vocabulary,
             lexical,
             lexical_normalizers: Arc::new(Vec::new()),
+            pronunciation_providers: Arc::new(Vec::new()),
         }
     }
 
@@ -93,6 +97,14 @@ impl AppServices {
         providers: Vec<Arc<dyn LexicalNormalizationProvider>>,
     ) -> Self {
         self.lexical_normalizers = Arc::new(providers);
+        self
+    }
+
+    pub fn with_pronunciation_providers(
+        mut self,
+        providers: Vec<Arc<dyn PronunciationProvider>>,
+    ) -> Self {
+        self.pronunciation_providers = Arc::new(providers);
         self
     }
 }

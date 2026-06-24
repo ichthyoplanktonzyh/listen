@@ -1,6 +1,24 @@
 use crate::*;
 
+fn track_supports_text_chunks(track: &SubtitleTrack) -> bool {
+    let language = track
+        .language
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|| LanguageCode::parse("en").expect("en is valid"));
+    let profile = domain::profile_for(&language);
+    profile.chunk_timeline != CapabilitySupport::Unsupported
+}
+
 impl AppServices {
+    fn sentence_supports_text_chunks(&self, sentence_id: &SubtitleSentenceId) -> bool {
+        let language = self
+            .sentence_language(sentence_id)
+            .unwrap_or_else(|_| LanguageCode::parse("en").expect("en is valid"));
+        let profile = domain::profile_for(&language);
+        profile.chunk_timeline != CapabilitySupport::Unsupported
+    }
+
     pub fn list_chunk_timelines(
         &self,
         track_id: &SubtitleTrackId,
@@ -195,6 +213,14 @@ impl AppServices {
         sentence_id: &SubtitleSentenceId,
     ) -> Result<speech_analysis::text_chunk_detection::TextChunkDetectionResult, ApplicationError>
     {
+        if !self.sentence_supports_text_chunks(sentence_id) {
+            return Ok(speech_analysis::text_chunk_detection::TextChunkDetectionResult {
+                sentence_id: sentence_id.clone(),
+                chunks: vec![],
+                boundaries: vec![],
+                source_counts: Default::default(),
+            });
+        }
         let sentence = self
             .subtitles
             .get_sentence(sentence_id)?
@@ -221,6 +247,9 @@ impl AppServices {
             .subtitles
             .get_track(track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        if !track_supports_text_chunks(&track) {
+            return Ok(std::collections::HashMap::new());
+        }
         let mut results = std::collections::HashMap::new();
         for sentence in track.sentences {
             let result = self.detect_text_chunks(&sentence.id)?;
