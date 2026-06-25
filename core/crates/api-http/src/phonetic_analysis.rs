@@ -49,6 +49,7 @@ impl PhoneticAnalysisCoordinator {
         value.repository.interrupt_active_phonetic_jobs(now_ms())?;
         value.seed_research_model()?;
         value.seed_ctc_model()?;
+        value.reset_stale_installs()?;
         Ok(value)
     }
 
@@ -695,6 +696,28 @@ impl PhoneticAnalysisCoordinator {
                     application_verified: true,
                     updated_at_ms: now_ms(),
                 })?;
+        }
+        Ok(())
+    }
+
+    fn reset_stale_installs(&self) -> Result<(), ApplicationError> {
+        for mut model in self.repository.list_phonetic_models()? {
+            if model.state == PhoneticModelState::Installing {
+                let installed = model
+                    .local_path
+                    .as_deref()
+                    .map(|p| std::path::Path::new(p).join("config.json").is_file())
+                    .unwrap_or(false);
+                model.state = if installed {
+                    PhoneticModelState::Custom
+                } else {
+                    PhoneticModelState::Downloadable
+                };
+                model.error = Some("reset: interrupted by restart".into());
+                model.installed_bytes = 0;
+                model.updated_at_ms = now_ms();
+                self.repository.upsert_phonetic_model(&model)?;
+            }
         }
         Ok(())
     }
