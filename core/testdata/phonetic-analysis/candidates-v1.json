@@ -1,12 +1,16 @@
 {
   "version": 1,
-  "reviewed_at": "2026-06-14",
+  "reviewed_at": "2026-06-25",
+  "revised_at": "2026-06-25",
+  "revision_reason": "slplab and l2-arctic invalidated: L2 pronunciation assessment models, not native connected speech phone recognizers. Two new candidates added for benchmarking.",
   "release_provider_selected": false,
+  "research_summary": "Phase 2.10 benchmark revised: slplab W2V2 (Korean L2 model) and l2-arctic invalidated due to training target mismatch. Remaining viable candidates: MFA (canonical boundary only, PER=33.8%) and ZIPA (IPA identity, PER=50.0% with mapping loss). Two new candidates pending benchmark: fb/wav2vec2-lv-60-espeak-cv-ft (multilingual phoneme, CommonVoice-trained) and vitouphy/wav2vec2-xls-r-300m-timit-phoneme (TIMIT fine-tuned). No provider selected.",
+  "benchmark_reference": ".planning/phases/2.10-english-real-speech-analysis/2.10-BENCHMARK.md",
   "candidates": [
     {
       "id": "zipa-small-crctc-300k",
-      "role": "first_apple_silicon_performance_spike",
-      "status": "eligible_for_research",
+      "role": "phone_identity_provider",
+      "status": "best_research_candidate_pending_license_review",
       "runtime": "onnxruntime",
       "license": "permissive_claimed_exact_license_pending",
       "license_verified": false,
@@ -16,15 +20,96 @@
       "model_revision": "9a8d85ba0d2adcbafe7087b82180d0e65c6f3426",
       "model_license_verified": false,
       "distribution_review": "required_before_product_integration",
+      "benchmark": {
+        "per": 0.5,
+        "phone_count": 374,
+        "reference_phone_count": 302,
+        "timeline_valid_ratio": 1.0,
+        "rtf_estimate": 0.85,
+        "model_size_mb": 67.5,
+        "deletions": 0,
+        "insertions": 72,
+        "substitutions": 79,
+        "limitations": "IPA→TIMIT phone mapping imperfect (IPA symbol set >> TIMIT 39 phones); license metadata not verified"
+      },
       "sources": [
         "https://github.com/lingjzhu/zipa",
         "https://huggingface.co/anyspeech/zipa-small-crctc-300k"
       ]
     },
     {
+      "id": "mfa-english-us-arpa",
+      "role": "canonical_phone_boundary_provider",
+      "status": "eligible_for_boundary_not_for_identity",
+      "runtime": "kaldi-mfa",
+      "license": "MIT",
+      "license_verified": true,
+      "code_revision": "mfa-3.3.9",
+      "model_license_verified": true,
+      "distribution_review": "allowed",
+      "benchmark": {
+        "per": 0.338,
+        "phone_count": 331,
+        "reference_phone_count": 302,
+        "timeline_valid_ratio": 0.1,
+        "limitations": "Canonical alignment only; cannot detect real weak forms/flapping/deletion. Value is in high-precision phone boundaries, not phone identity."
+      },
+      "sources": [
+        "https://montreal-forced-aligner.readthedocs.io/"
+      ]
+    },
+    {
+      "id": "fb-wav2vec2-lv-60-espeak-cv-ft",
+      "role": "native_speech_phone_recognition_candidate",
+      "status": "pending_benchmark",
+      "runtime": "transformers-pytorch",
+      "license": "Apache-2.0",
+      "license_verified": true,
+      "model_size_mb": 1260,
+      "notes": "Facebook official model. wav2vec2-large-lv60 fine-tuned on CommonVoice for multilingual phoneme recognition. IPA output. Trained on native speaker speech (CommonVoice + LibriVox), not L2 assessment. Research paper: 'Simple and Effective Zero-shot Cross-lingual Phoneme Recognition' (Xu, Baevski, Auli).",
+      "sources": [
+        "https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft"
+      ]
+    },
+    {
+      "id": "vitouphy-wav2vec2-xls-r-300m-timit-phoneme",
+      "role": "timit_native_phone_recognition_candidate",
+      "status": "pending_benchmark",
+      "runtime": "transformers-pytorch",
+      "license": "Apache-2.0",
+      "license_verified": false,
+      "model_size_mb": 1200,
+      "notes": "XLS-R 300M fine-tuned directly on TIMIT (80/10/10 split). Outputs TIMIT phone set natively (no mapping needed). Reported PER ~8% on TIMIT test. Risk: may overfit to TIMIT read speech and degrade on natural connected speech.",
+      "sources": [
+        "https://huggingface.co/vitouphy/wav2vec2-xls-r-300m-timit-phoneme"
+      ]
+    },
+    {
+      "id": "slplab-wav2vec2-large-robust-L2-english-phoneme-recognition",
+      "role": "INVALIDATED",
+      "status": "invalidated_training_target_mismatch",
+      "invalidation_reason": "Model designed for Korean L2 English pronunciation assessment (mispronunciation detection), NOT native English connected speech phone recognition. Low PER on TIMIT (31.5%) is coincidental: TIMIT read speech overlaps with L2 model training distribution. In real connected speech, would likely misclassify native weak forms as pronunciation errors.",
+      "invalidated_at": "2026-06-25",
+      "benchmark": {
+        "per": 0.315,
+        "note": "PER retained for reference only, not used for selection"
+      }
+    },
+    {
+      "id": "l2-arctic-wav2vec2-large-xlsr-53-phoneme",
+      "role": "INVALIDATED",
+      "status": "invalidated_training_target_mismatch",
+      "invalidation_reason": "Fine-tuned on L2-Arctic (non-native English learner speech). Same fundamental issue as slplab: L2 pronunciation assessment model, not native connected speech recognizer. PER=97% confirms output space completely mismatched with TIMIT native annotations.",
+      "invalidated_at": "2026-06-25",
+      "benchmark": {
+        "per": 0.97,
+        "note": "PER retained for reference only"
+      }
+    },
+    {
       "id": "wav2ipa-buckeye",
       "role": "american_conversational_quality_baseline",
-      "status": "research_only_pending_model_license_review",
+      "status": "not_benchmarked_buckeye_corpus_not_available",
       "license": "unknown",
       "license_verified": false,
       "dataset_constraint": "Buckeye access is limited to non-profit research and educational use; do not redistribute.",
@@ -34,39 +119,12 @@
       ]
     },
     {
-      "id": "wav2vec2-phoneme-compatible-model",
-      "role": "candidate_family",
-      "status": "blocked_until_specific_model_revision_is_named",
-      "license": "model_specific",
-      "license_verified": false,
-      "sources": [
-        "https://huggingface.co/docs/transformers/en/model_doc/wav2vec2_phoneme"
-      ]
-    },
-    {
-      "id": "vosk-kaldi-alignment",
-      "role": "lightweight_asr_and_forced_alignment_baseline",
-      "status": "eligible_for_research_not_yet_a_phone_recognition_candidate",
-      "runtime": "vosk-api-kaldi",
-      "license": "code_and_model_specific_permissive_claims_require_exact_artifact_review",
-      "license_verified": false,
-      "capability_constraint": "Public API primarily exposes text, word timing, and confidence. Phone-level experiments must prove they preserve observed pronunciation variation rather than canonical decoder alignments.",
-      "distribution_review": "Review Vosk API, Kaldi, and the exact selected model independently before product integration.",
-      "sources": [
-        "https://github.com/alphacep/vosk-api",
-        "https://alphacephei.com/vosk/models",
-        "https://kaldi-asr.org/doc/legal.html"
-      ]
-    },
-    {
       "id": "allosaurus",
-      "role": "research_baseline_only",
+      "role": "cross_lingual_baseline",
       "status": "not_eligible_for_default_distribution",
       "license": "GPL-3.0",
       "license_verified": true,
-      "sources": [
-        "https://github.com/xinjli/allosaurus"
-      ]
+      "notes": "GPL-3.0 copyleft license incompatible with default app distribution"
     }
   ]
 }

@@ -425,18 +425,25 @@ progress:
 - 验证：Python 14/14 + cargo test + clippy 全通过；英语回归基线不变。
 - 收口文档：`.planning/phases/2.9-production-multilingual-decoupling/2.9-CLOSEOUT.md`
 
-### Phase 2.10: English Real Speech Analysis ⏳ Step 1 完成，Step 2 选型完成
+### Phase 2.10: English Real Speech Analysis ⏳ Step 1 完成，Step 2 选型修正中
 
 - 目标：选出 phone-level provider，让英语语流分析从"文本预测"升级为"音频检测"。
 - **Step 1 Provider Benchmark ✅**（2026-06-25）：
   - 10 条 TIMIT development cases 评估完成
   - 4 个候选已 benchmark：MFA (PER=33.8%) / ZIPA (PER=50.0%) / slplab W2V2
-    (PER=31.5%, 全场最佳) / l2-arctic (PER=97.0%)
+    (PER=31.5%) / l2-arctic (PER=97.0%)
   - Benchmark 报告：`2.10-BENCHMARK.md`
-- **Step 2 选型决策 ✅**：推荐 slplab/wav2vec2-large-robust-L2-english-phoneme-recognition
-  （PER 最低 31.5%、Apache 2.0、timeline_valid=1.0），ZIPA 作为轻量级备选（许可证待审）。
-  `release_provider_selected: false`（需生产管线集成验证后升级）。
-- Step 3–6：待后续会话执行（provider 集成 → finding 升级 → app 验证 → 回归）。
+- **Step 2 选型决策 — 修正（2026-06-25）**：
+  - ❌ slplab W2V2：**训练目标不匹配**——韩国人学英语 L2 发音评估模型，非母语语流识别。
+    PER 31.5% 是巧合（TIMIT 朗读语体与 L2 训练分布重叠），不可用于 connected speech。
+  - ❌ l2-arctic：同理，L2-Arctic 非母语训练数据，PER=97% 确认输出空间完全不匹配。
+  - ✅ MFA：可用作 **phone boundary provider**（高精度时间边界），但不能做 phone identity。
+  - ⚠️ ZIPA：可用作 **phone identity provider**（IPA 输出真实发音），许可证待验证。
+  - 🆕 待 benchmark：`facebook/wav2vec2-lv-60-espeak-cv-ft`（母语者 CommonVoice 训练，IPA 输出）。
+  - 🆕 待 benchmark：`vitouphy/wav2vec2-xls-r-300m-timit-phoneme`（TIMIT fine-tuned，报告 PER~8%）。
+  - 推荐方案 C（MFA boundary + ZIPA identity 双层），备选方案 E/F 待补充 benchmark。
+  - `release_provider_selected: false`。
+- Step 3–6：待选型确定后执行（provider 集成 → finding 升级 → app 验证 → 回归）。
 - 规划文档：`.planning/phases/2.10-english-real-speech-analysis/`
 
 ### Phase 2.11: Architecture Seam Consolidation ⏳ Steps 1-3 完成
@@ -508,11 +515,13 @@ progress:
 
 ## 下一步工作
 
-1. **Phase 2.10 Step 3**：将 slplab W2V2 集成到生产管线（PhoneAlignmentProvider）。
-2. **Phase 2.10 Step 4**：语流 finding 升级（文本预测 + 音频检测融合）。
-3. **Phase 2.10 Step 5–6**：App 消费验证 + 测试回归。
-4. **Phase 2.11 Step 4–5**（依赖 2.10）：L1 诊断 seam + 听觉锚定准备。
-5. Phase 2.3 正式收口（手动 QA 已通过，待写 closeout）。
+1. **Phase 2.10 补充 benchmark**：在同一 TIMIT dev cases 上评估 fb/wav2vec2-lv-60-espeak-cv-ft
+   和 vitouphy/wav2vec2-xls-r-300m-timit-phoneme。
+2. **Phase 2.10 ZIPA 许可证审查**：正式确认 anyspeech/zipa-small-crctc-300k 模型分发许可。
+3. **Phase 2.10 Step 3**：选型确定后，将最终 provider 集成到生产管线。
+4. **Phase 2.10 Step 4–6**：语流 finding 升级 → App 消费验证 → 测试回归。
+5. **Phase 2.11 Step 4–5**（依赖 2.10）：L1 诊断 seam + 听觉锚定准备。
+6. Phase 2.3 正式收口（手动 QA 已通过，待写 closeout）。
 
 ## 指标
 
