@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../player_adapter.dart';
+import '../state/store.dart';
 
 const _unset = Object();
 
@@ -115,51 +116,63 @@ class PlayerState {
 
 /// Controls media playback state and actions.
 ///
-/// Wraps [DesktopPlayerAdapter] and exposes a [PlayerState] value object
-/// with [ChangeNotifier] for targeted widget rebuilds.
+/// Uses [Store] internally for fine-grained reactive state.
+/// Keeps [ChangeNotifier] for backward compatibility.
 class PlayerController extends ChangeNotifier {
-  PlayerState _state = const PlayerState();
+  final Store<PlayerState> _store;
 
-  PlayerState get state => _state;
+  PlayerController() : _store = Store(const PlayerState());
 
-  // Convenience accessors for common fields
-  String? get mediaId => _state.mediaId;
-  String? get mediaPath => _state.mediaPath;
-  String? get mediaTitle => _state.mediaTitle;
-  String? get mediaFingerprint => _state.mediaFingerprint;
-  String get status => _state.status;
-  bool get playing => _state.playing;
-  bool get muted => _state.muted;
-  Duration get position => _state.position;
-  Duration get duration => _state.duration;
-  double get rate => _state.rate;
-  double get volume => _state.volume;
-  double get downloadProgress => _state.downloadProgress;
-  String? get downloadedMediaPath => _state.downloadedMediaPath;
-  Duration? get sourceLoopStart => _state.sourceLoopStart;
-  Duration? get sourceLoopEnd => _state.sourceLoopEnd;
-  List<PlayerTrack> get audioTracks => _state.audioTracks;
-  String? get selectedAudioId => _state.selectedAudioId;
-  List<PlayerTrack> get embeddedSubtitleTracks => _state.embeddedSubtitleTracks;
-  String? get selectedEmbeddedSubtitleId => _state.selectedEmbeddedSubtitleId;
+  /// The reactive store — allows fine-grained field subscriptions via [Store.select].
+  Store<PlayerState> get store => _store;
 
-  void _update(PlayerState Function(PlayerState) fn) {
-    _state = fn(_state);
-    notifyListeners();
-  }
+  /// The current immutable state snapshot.
+  PlayerState get state => _store.state;
+
+  // ── Convenience accessors ──
+
+  String? get mediaId => _store.state.mediaId;
+  String? get mediaPath => _store.state.mediaPath;
+  String? get mediaTitle => _store.state.mediaTitle;
+  String? get mediaFingerprint => _store.state.mediaFingerprint;
+  String get status => _store.state.status;
+  bool get playing => _store.state.playing;
+  bool get muted => _store.state.muted;
+  Duration get position => _store.state.position;
+  Duration get duration => _store.state.duration;
+  double get rate => _store.state.rate;
+  double get volume => _store.state.volume;
+  double get downloadProgress => _store.state.downloadProgress;
+  String? get downloadedMediaPath => _store.state.downloadedMediaPath;
+  Duration? get sourceLoopStart => _store.state.sourceLoopStart;
+  Duration? get sourceLoopEnd => _store.state.sourceLoopEnd;
+  List<PlayerTrack> get audioTracks => _store.state.audioTracks;
+  String? get selectedAudioId => _store.state.selectedAudioId;
+  List<PlayerTrack> get embeddedSubtitleTracks =>
+      _store.state.embeddedSubtitleTracks;
+  String? get selectedEmbeddedSubtitleId =>
+      _store.state.selectedEmbeddedSubtitleId;
+
+  /// Create a [ValueNotifier] that tracks a specific derived value.
+  /// The notifier only fires when the selected value changes.
+  ValueNotifier<R> select<R>(R Function(PlayerState) selector) =>
+      _store.select(selector);
 
   void setPosition(Duration position) =>
-      _update((s) => s.copyWith(position: position));
+      _store.update((s) => s.copyWith(position: position));
+
   void setDuration(Duration duration) =>
-      _update((s) => s.copyWith(duration: duration));
-  void setPlaying(bool playing) => _update((s) => s.copyWith(playing: playing));
+      _store.update((s) => s.copyWith(duration: duration));
+
+  void setPlaying(bool playing) =>
+      _store.update((s) => s.copyWith(playing: playing));
 
   /// Set download progress (0.0–1.0) and reset when complete.
   void setDownloadProgress(double progress) {
     if (progress >= 1.0) {
-      _update((s) => s.copyWith(downloadProgress: 0.0));
+      _store.update((s) => s.copyWith(downloadProgress: 0.0));
     } else {
-      _update((s) => s.copyWith(downloadProgress: progress));
+      _store.update((s) => s.copyWith(downloadProgress: progress));
     }
   }
 
@@ -170,7 +183,7 @@ class PlayerController extends ChangeNotifier {
     required String title,
     required String fingerprint,
   }) {
-    _update(
+    _store.update(
       (s) => s.copyWith(
         mediaId: id,
         mediaPath: path,
@@ -180,7 +193,7 @@ class PlayerController extends ChangeNotifier {
     );
   }
 
-  void clearMedia() => _update(
+  void clearMedia() => _store.update(
     (s) => s.copyWith(
       mediaId: null,
       mediaPath: null,
@@ -189,39 +202,36 @@ class PlayerController extends ChangeNotifier {
     ),
   );
 
-  void setMuted(bool muted) => _update((s) => s.copyWith(muted: muted));
-  void setRate(double rate) => _update((s) => s.copyWith(rate: rate));
-  void setVolume(double volume) => _update((s) => s.copyWith(volume: volume));
+  void setMuted(bool muted) =>
+      _store.update((s) => s.copyWith(muted: muted));
 
-  void setStatus(String status) => _update((s) => s.copyWith(status: status));
+  void setRate(double rate) =>
+      _store.update((s) => s.copyWith(rate: rate));
+
+  void setVolume(double volume) =>
+      _store.update((s) => s.copyWith(volume: volume));
+
+  void setStatus(String status) =>
+      _store.update((s) => s.copyWith(status: status));
 
   void setDownloadedMediaPath(String path) =>
-      _update((s) => s.copyWith(downloadedMediaPath: path));
-
-  void setSourceLoop(Duration? start, Duration? end) =>
-      _update((s) => s.copyWith(sourceLoopStart: start, sourceLoopEnd: end));
-
-  void setSelectedAudioId(String? id) =>
-      _update((s) => s.copyWith(selectedAudioId: id));
-
-  void setSelectedEmbeddedSubtitleId(String? id) =>
-      _update((s) => s.copyWith(selectedEmbeddedSubtitleId: id));
+      _store.update((s) => s.copyWith(downloadedMediaPath: path));
 
   void setAudioTracks(List<PlayerTrack> tracks) =>
-      _update((s) => s.copyWith(audioTracks: tracks));
+      _store.update((s) => s.copyWith(audioTracks: tracks));
+
+  void setSelectedAudioId(String? id) =>
+      _store.update((s) => s.copyWith(selectedAudioId: id));
 
   void setEmbeddedSubtitleTracks(List<PlayerTrack> tracks) =>
-      _update((s) => s.copyWith(embeddedSubtitleTracks: tracks));
+      _store.update((s) => s.copyWith(embeddedSubtitleTracks: tracks));
 
-  void setMediaTitle(String title) =>
-      _update((s) => s.copyWith(mediaTitle: title));
+  void setSelectedEmbeddedSubtitleId(String? id) =>
+      _store.update((s) => s.copyWith(selectedEmbeddedSubtitleId: id));
 
-  void setMediaFingerprint(String fingerprint) =>
-      _update((s) => s.copyWith(mediaFingerprint: fingerprint));
+  void setSourceLoop(Duration? start, Duration? end) =>
+      _store.update((s) => s.copyWith(sourceLoopStart: start, sourceLoopEnd: end));
 
-  void setMediaPath(String path) => _update((s) => s.copyWith(mediaPath: path));
-
-  /// Toggle the playing state. Does NOT interact with the adapter directly;
-  /// callers must also call [DesktopPlayerAdapter.playOrPause].
-  void togglePlayPause() => _update((s) => s.copyWith(playing: !s.playing));
+  void setMediaPath(String path) =>
+      _store.update((s) => s.copyWith(mediaPath: path));
 }

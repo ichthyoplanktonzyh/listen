@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/timeline.dart';
+import '../state/store.dart';
 
 const _unset = Object();
 
@@ -191,76 +192,83 @@ class SubtitleState {
 }
 
 /// Controls subtitle display, timing, and appearance.
+///
+/// Uses [Store] internally for fine-grained reactive state.
 class SubtitleController extends ChangeNotifier {
-  SubtitleState _state = const SubtitleState();
+  final Store<SubtitleState> _store;
 
-  SubtitleState get state => _state;
+  SubtitleController() : _store = Store(const SubtitleState());
 
-  // Convenience accessors
-  SubtitleTrack? get primaryTrack => _state.primaryTrack;
-  SubtitleTrack? get secondaryTrack => _state.secondaryTrack;
-  Cue? get currentPrimaryCue => _state.currentPrimaryCue;
-  Cue? get currentSecondaryCue => _state.currentSecondaryCue;
-  Cue? get currentCue => _state.currentPrimaryCue;
-  Cue? get selectedCue => _state.selectedCue;
-  bool get loopCue => _state.loopCue;
-  bool get visible => _state.visible;
-  bool get secondaryVisible => _state.secondaryVisible;
-  bool get statusStylesVisible => _state.statusStylesVisible;
-  String get preset => _state.preset;
-  double get primaryFontSize => _state.primaryFontSize;
-  double get secondaryFontSize => _state.secondaryFontSize;
-  String get primaryFontFamily => _state.primaryFontFamily;
-  String get secondaryFontFamily => _state.secondaryFontFamily;
-  double get positionX => _state.positionX;
-  double get positionY => _state.positionY;
-  double get backgroundOpacity => _state.backgroundOpacity;
+  /// The reactive store — allows fine-grained field subscriptions.
+  Store<SubtitleState> get store => _store;
+
+  SubtitleState get state => _store.state;
+
+  // ── Convenience accessors ──
+  SubtitleTrack? get primaryTrack => _store.state.primaryTrack;
+  SubtitleTrack? get secondaryTrack => _store.state.secondaryTrack;
+  Cue? get currentPrimaryCue => _store.state.currentPrimaryCue;
+  Cue? get currentSecondaryCue => _store.state.currentSecondaryCue;
+  Cue? get currentCue => _store.state.currentPrimaryCue;
+  Cue? get selectedCue => _store.state.selectedCue;
+  bool get loopCue => _store.state.loopCue;
+  bool get visible => _store.state.visible;
+  bool get secondaryVisible => _store.state.secondaryVisible;
+  bool get statusStylesVisible => _store.state.statusStylesVisible;
+  String get preset => _store.state.preset;
+  double get primaryFontSize => _store.state.primaryFontSize;
+  double get secondaryFontSize => _store.state.secondaryFontSize;
+  String get primaryFontFamily => _store.state.primaryFontFamily;
+  String get secondaryFontFamily => _store.state.secondaryFontFamily;
+  double get positionX => _store.state.positionX;
+  double get positionY => _store.state.positionY;
+  double get backgroundOpacity => _store.state.backgroundOpacity;
   Map<String, Map<String, dynamic>> get pronunciationBySentence =>
-      _state.pronunciationBySentence;
+      _store.state.pronunciationBySentence;
   Map<String, List<WordTiming>> get timingsBySentence =>
-      _state.timingsBySentence;
+      _store.state.timingsBySentence;
   Map<String, SentenceChunkPartition> get chunkPartitionsBySentence =>
-      _state.chunkPartitionsBySentence;
+      _store.state.chunkPartitionsBySentence;
   List<Map<String, dynamic>> get pronunciationProviders =>
-      _state.pronunciationProviders;
-  List<SubtitleTrack> get subtitleResources => _state.subtitleResources;
+      _store.state.pronunciationProviders;
+  List<SubtitleTrack> get subtitleResources => _store.state.subtitleResources;
   Map<String, SubtitleResourceCapabilities> get subtitleResourceCapabilities =>
-      _state.subtitleResourceCapabilities;
+      _store.state.subtitleResourceCapabilities;
   List<WordTimelineSummary> get wordTimelineSummaries =>
-      _state.wordTimelineSummaries;
+      _store.state.wordTimelineSummaries;
   List<PhoneTimelineSummary> get phoneTimelineSummaries =>
-      _state.phoneTimelineSummaries;
+      _store.state.phoneTimelineSummaries;
   List<ChunkTimelineSummary> get chunkTimelineSummaries =>
-      _state.chunkTimelineSummaries;
-  LLTimelineDocument? get llTimelineDocument => _state.llTimelineDocument;
-  String? get timelineResourceError => _state.timelineResourceError;
-  int? get currentWordToken => _state.currentWordToken;
+      _store.state.chunkTimelineSummaries;
+  LLTimelineDocument? get llTimelineDocument => _store.state.llTimelineDocument;
+  String? get timelineResourceError => _store.state.timelineResourceError;
+  int? get currentWordToken => _store.state.currentWordToken;
   Map<String, Map<String, dynamic>> get phoneticAnalysisBySentence =>
-      _state.phoneticAnalysisBySentence;
-  DetectedPhone? get currentDetectedPhone => _state.currentDetectedPhone;
-  int? get currentChunkIndex => _state.currentChunkIndex;
-  Duration get primarySubtitleOffset => _state.primarySubtitleOffset;
-  Duration get secondarySubtitleOffset => _state.secondarySubtitleOffset;
-  TimelineCursor get primaryCursor => _state.primaryCursor;
-  TimelineCursor get secondaryCursor => _state.secondaryCursor;
+      _store.state.phoneticAnalysisBySentence;
+  DetectedPhone? get currentDetectedPhone => _store.state.currentDetectedPhone;
+  int? get currentChunkIndex => _store.state.currentChunkIndex;
+  Duration get primarySubtitleOffset => _store.state.primarySubtitleOffset;
+  Duration get secondarySubtitleOffset => _store.state.secondarySubtitleOffset;
+  TimelineCursor get primaryCursor => _store.state.primaryCursor;
+  TimelineCursor get secondaryCursor => _store.state.secondaryCursor;
 
-  void _update(SubtitleState Function(SubtitleState) fn) {
-    _state = fn(_state);
-    notifyListeners();
-  }
+  /// Create a [ValueNotifier] that tracks a specific derived value.
+  ValueNotifier<R> select<R>(R Function(SubtitleState) selector) =>
+      _store.select(selector);
 
   /// Update cue positions based on current media position.
   void updatePosition(Duration mediaPosition) {
-    final primaryOffset = _state.primarySubtitleOffset;
-    final secondaryOffset = _state.secondarySubtitleOffset;
-    final newPrimary = _state.primaryCursor.current(mediaPosition);
-    final newSecondary = _state.secondaryCursor.current(
+    final s = _store.state;
+    final primaryOffset = s.primarySubtitleOffset;
+    final secondaryOffset = s.secondarySubtitleOffset;
+    final newPrimary = s.primaryCursor.current(mediaPosition);
+    final newSecondary = s.secondaryCursor.current(
       mediaPosition + secondaryOffset - primaryOffset,
     );
-    if (newPrimary != _state.currentPrimaryCue ||
-        newSecondary != _state.currentSecondaryCue) {
-      _update(
-        (s) => s.copyWith(
+    if (newPrimary != s.currentPrimaryCue ||
+        newSecondary != s.currentSecondaryCue) {
+      _store.update(
+        (st) => st.copyWith(
           currentPrimaryCue: newPrimary,
           currentSecondaryCue: newSecondary,
         ),
@@ -269,27 +277,40 @@ class SubtitleController extends ChangeNotifier {
   }
 
   void setPrimaryTrack(SubtitleTrack? track) =>
-      _update((s) => s.copyWith(primaryTrack: track));
+      _store.update((s) => s.copyWith(primaryTrack: track));
 
   void setSecondaryTrack(SubtitleTrack? track) =>
-      _update((s) => s.copyWith(secondaryTrack: track));
+      _store.update((s) => s.copyWith(secondaryTrack: track));
 
-  void setVisible(bool visible) => _update((s) => s.copyWith(visible: visible));
+  void setVisible(bool visible) =>
+      _store.update((s) => s.copyWith(visible: visible));
+
   void setSecondaryVisible(bool visible) =>
-      _update((s) => s.copyWith(secondaryVisible: visible));
+      _store.update((s) => s.copyWith(secondaryVisible: visible));
+
   void setStatusStylesVisible(bool visible) =>
-      _update((s) => s.copyWith(statusStylesVisible: visible));
-  void setLoopCue(bool loop) => _update((s) => s.copyWith(loopCue: loop));
-  void setPreset(String preset) => _update((s) => s.copyWith(preset: preset));
+      _store.update((s) => s.copyWith(statusStylesVisible: visible));
+
+  void setLoopCue(bool loop) =>
+      _store.update((s) => s.copyWith(loopCue: loop));
+
+  void setPreset(String preset) =>
+      _store.update((s) => s.copyWith(preset: preset));
+
   void setPrimaryFontSize(double size) =>
-      _update((s) => s.copyWith(primaryFontSize: size));
+      _store.update((s) => s.copyWith(primaryFontSize: size));
+
   void setSecondaryFontSize(double size) =>
-      _update((s) => s.copyWith(secondaryFontSize: size));
+      _store.update((s) => s.copyWith(secondaryFontSize: size));
+
   void setPrimaryFontFamily(String family) =>
-      _update((s) => s.copyWith(primaryFontFamily: family));
+      _store.update((s) => s.copyWith(primaryFontFamily: family));
+
   void setSecondaryFontFamily(String family) =>
-      _update((s) => s.copyWith(secondaryFontFamily: family));
-  void setSelectedCue(Cue? cue) => _update((s) => s.copyWith(selectedCue: cue));
+      _store.update((s) => s.copyWith(secondaryFontFamily: family));
+
+  void setSelectedCue(Cue? cue) =>
+      _store.update((s) => s.copyWith(selectedCue: cue));
 
   void movePosition(
     double dx,
@@ -297,7 +318,7 @@ class SubtitleController extends ChangeNotifier {
     double viewportWidth,
     double viewportHeight,
   ) {
-    _update(
+    _store.update(
       (s) => s.copyWith(
         positionX: (s.positionX + dx / viewportWidth).clamp(0.0, 1.0),
         positionY: (s.positionY + dy / viewportHeight).clamp(0.0, 1.0),
@@ -306,13 +327,13 @@ class SubtitleController extends ChangeNotifier {
   }
 
   void setPositionX(double x) =>
-      _update((s) => s.copyWith(positionX: x.clamp(0.0, 1.0)));
+      _store.update((s) => s.copyWith(positionX: x.clamp(0.0, 1.0)));
 
   void setPositionY(double y) =>
-      _update((s) => s.copyWith(positionY: y.clamp(0.0, 1.0)));
+      _store.update((s) => s.copyWith(positionY: y.clamp(0.0, 1.0)));
 
   void setBackgroundOpacity(double opacity) =>
-      _update((s) => s.copyWith(backgroundOpacity: opacity));
+      _store.update((s) => s.copyWith(backgroundOpacity: opacity));
 
   void setSpeechEnhancements({
     required Map<String, Map<String, dynamic>> pronunciationBySentence,
@@ -320,7 +341,7 @@ class SubtitleController extends ChangeNotifier {
     required List<Map<String, dynamic>> pronunciationProviders,
     Map<String, Map<String, dynamic>> phoneticAnalysisBySentence = const {},
     Map<String, SentenceChunkPartition> chunkPartitionsBySentence = const {},
-  }) => _update(
+  }) => _store.update(
     (s) => s.copyWith(
       pronunciationBySentence: pronunciationBySentence,
       timingsBySentence: timingsBySentence,
@@ -331,24 +352,25 @@ class SubtitleController extends ChangeNotifier {
   );
 
   void setSubtitleResources(List<SubtitleTrack> resources) =>
-      _update((s) => s.copyWith(subtitleResources: resources));
+      _store.update((s) => s.copyWith(subtitleResources: resources));
 
   void setSubtitleResourceCapabilities(
     Map<String, SubtitleResourceCapabilities> capabilities,
-  ) => _update((s) => s.copyWith(subtitleResourceCapabilities: capabilities));
+  ) => _store.update((s) => s.copyWith(subtitleResourceCapabilities: capabilities));
 
   void setSentencePronunciation(
     String sentenceId,
     Map<String, dynamic> pronunciation,
   ) {
+    final s = _store.state;
     final values = Map<String, Map<String, dynamic>>.from(
-      _state.pronunciationBySentence,
+      s.pronunciationBySentence,
     );
     values[sentenceId] = pronunciation;
-    _update((s) => s.copyWith(pronunciationBySentence: values));
+    _store.update((st) => st.copyWith(pronunciationBySentence: values));
   }
 
-  void clearSpeechEnhancements() => _update(
+  void clearSpeechEnhancements() => _store.update(
     (s) => s.copyWith(
       pronunciationBySentence: const {},
       timingsBySentence: const {},
@@ -372,7 +394,7 @@ class SubtitleController extends ChangeNotifier {
     required List<ChunkTimelineSummary> chunkSummaries,
     required LLTimelineDocument? document,
     String? error,
-  }) => _update(
+  }) => _store.update(
     (s) => s.copyWith(
       wordTimelineSummaries: summaries,
       phoneTimelineSummaries: phoneSummaries,
@@ -383,9 +405,9 @@ class SubtitleController extends ChangeNotifier {
   );
 
   void setTimelineResourceError(String error) =>
-      _update((s) => s.copyWith(timelineResourceError: error));
+      _store.update((s) => s.copyWith(timelineResourceError: error));
 
-  void clearTimelineResource() => _update(
+  void clearTimelineResource() => _store.update(
     (s) => s.copyWith(
       wordTimelineSummaries: const [],
       phoneTimelineSummaries: const [],
@@ -400,24 +422,25 @@ class SubtitleController extends ChangeNotifier {
     required bool enabled,
     bool? chunkEnabled,
   }) {
-    final cue = _state.currentPrimaryCue;
+    final s = _store.state;
+    final cue = s.currentPrimaryCue;
     final token = enabled && cue != null
         ? currentWordTokenIndex(
-            _state.timingsBySentence[cue.id] ?? const [],
+            s.timingsBySentence[cue.id] ?? const [],
             mediaPosition,
-            offset: _state.primarySubtitleOffset,
+            offset: s.primarySubtitleOffset,
           )
         : null;
     final chunk = (chunkEnabled ?? enabled) && cue != null
         ? currentChunkAtPosition(
-            _state.chunkPartitionsBySentence[cue.id],
+            s.chunkPartitionsBySentence[cue.id],
             mediaPosition,
-            offset: _state.primarySubtitleOffset,
+            offset: s.primarySubtitleOffset,
           )
         : null;
-    if (token != _state.currentWordToken || chunk != _state.currentChunkIndex) {
-      _update(
-        (s) => s.copyWith(currentWordToken: token, currentChunkIndex: chunk),
+    if (token != s.currentWordToken || chunk != s.currentChunkIndex) {
+      _store.update(
+        (st) => st.copyWith(currentWordToken: token, currentChunkIndex: chunk),
       );
     }
   }
@@ -426,41 +449,42 @@ class SubtitleController extends ChangeNotifier {
     Duration mediaPosition, {
     required bool enabled,
   }) {
-    final cue = _state.currentPrimaryCue;
+    final s = _store.state;
+    final cue = s.currentPrimaryCue;
     final raw = !enabled || cue == null
         ? null
-        : _state.phoneticAnalysisBySentence[cue.id];
+        : s.phoneticAnalysisBySentence[cue.id];
     final phones = ((raw?['detected_phones'] as List<dynamic>?) ?? const [])
         .map((value) => DetectedPhone.fromJson(value as Map<String, dynamic>))
         .toList(growable: false);
     final phone = currentDetectedPhoneAt(
       phones,
       mediaPosition,
-      offset: _state.primarySubtitleOffset,
+      offset: s.primarySubtitleOffset,
     );
-    if (phone?.symbol != _state.currentDetectedPhone?.symbol ||
-        phone?.start != _state.currentDetectedPhone?.start ||
-        phone?.end != _state.currentDetectedPhone?.end) {
-      _update((state) => state.copyWith(currentDetectedPhone: phone));
+    if (phone?.symbol != s.currentDetectedPhone?.symbol ||
+        phone?.start != s.currentDetectedPhone?.start ||
+        phone?.end != s.currentDetectedPhone?.end) {
+      _store.update((st) => st.copyWith(currentDetectedPhone: phone));
     }
   }
 
   /// Seek to the previous cue relative to the current one.
   Cue? previousCue() {
-    final cue = _state.currentPrimaryCue;
+    final cue = _store.state.currentPrimaryCue;
     if (cue == null) return null;
-    return _state.primaryCursor.previous(cue);
+    return _store.state.primaryCursor.previous(cue);
   }
 
   /// Seek to the next cue relative to the current one.
   Cue? nextCue() {
-    return _state.primaryCursor.next(_state.currentPrimaryCue);
+    return _store.state.primaryCursor.next(_store.state.currentPrimaryCue);
   }
 
   /// Binary search the transcript list to keep the active cue visible.
   int transcriptIndexFor(Cue? cue) {
-    if (cue == null || _state.primaryTrack == null) return 0;
-    final cues = _state.primaryTrack!.cues;
+    if (cue == null || _store.state.primaryTrack == null) return 0;
+    final cues = _store.state.primaryTrack!.cues;
     var low = 0;
     var high = cues.length;
     while (low < high) {
@@ -475,14 +499,14 @@ class SubtitleController extends ChangeNotifier {
   }
 
   void setPrimarySubtitleOffset(Duration offset) =>
-      _update((s) => s.copyWith(primarySubtitleOffset: offset));
+      _store.update((s) => s.copyWith(primarySubtitleOffset: offset));
 
   void setSecondarySubtitleOffset(Duration offset) =>
-      _update((s) => s.copyWith(secondarySubtitleOffset: offset));
+      _store.update((s) => s.copyWith(secondarySubtitleOffset: offset));
 
   void setCurrentPrimaryCue(Cue? cue) =>
-      _update((s) => s.copyWith(currentPrimaryCue: cue));
+      _store.update((s) => s.copyWith(currentPrimaryCue: cue));
 
   void setCurrentSecondaryCue(Cue? cue) =>
-      _update((s) => s.copyWith(currentSecondaryCue: cue));
+      _store.update((s) => s.copyWith(currentSecondaryCue: cue));
 }

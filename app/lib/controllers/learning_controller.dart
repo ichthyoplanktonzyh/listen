@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/timeline.dart';
+import '../state/store.dart';
 
 const _unset = Object();
 
@@ -72,13 +73,20 @@ class LearningState {
 
 /// Controls vocabulary learning state: word profiles, dictionary lookups,
 /// phrase candidates, and sentence diagnosis.
+///
+/// Uses [Store] internally for fine-grained reactive state.
 class LearningController extends ChangeNotifier {
-  LearningState _state = const LearningState();
+  final Store<LearningState> _store;
   List<String> _availableLanguages = const ['en', 'zh', 'ja'];
   final Map<String, Map<String, dynamic>> _languageProfiles = {};
   Map<String, dynamic>? _currentLanguageProfile;
 
-  LearningState get state => _state;
+  LearningController() : _store = Store(const LearningState());
+
+  /// The reactive store — allows fine-grained field subscriptions.
+  Store<LearningState> get store => _store;
+
+  LearningState get state => _store.state;
   List<String> get availableLanguages => _availableLanguages;
   Map<String, dynamic>? get currentLanguageProfile => _currentLanguageProfile;
 
@@ -87,31 +95,35 @@ class LearningController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Convenience accessors
-  Map<String, Map<String, dynamic>> get wordProfiles => _state.wordProfiles;
-  Map<String, Map<String, dynamic>> get phraseProfiles => _state.phraseProfiles;
-  Map<String, dynamic>? get selectedWordDetails => _state.selectedWordDetails;
-  Map<String, dynamic>? get selectedDictionary => _state.selectedDictionary;
-  Map<String, dynamic>? get selectedPronunciation =>
-      _state.selectedPronunciation;
-  List<Map<String, dynamic>> get phraseCandidates => _state.phraseCandidates;
-  Map<String, dynamic>? get diagnosis => _state.diagnosis;
-  int get sidePanel => _state.sidePanel;
-  SubtitleToken? get selectedToken => _state.selectedToken;
-  Cue? get selectedCue => _state.selectedCue;
+  /// Create a [ValueNotifier] that tracks a specific derived value.
+  ValueNotifier<R> select<R>(R Function(LearningState) selector) =>
+      _store.select(selector);
 
-  void _update(LearningState Function(LearningState) fn) {
-    _state = fn(_state);
-    notifyListeners();
-  }
+  // Convenience accessors
+  Map<String, Map<String, dynamic>> get wordProfiles =>
+      _store.state.wordProfiles;
+  Map<String, Map<String, dynamic>> get phraseProfiles =>
+      _store.state.phraseProfiles;
+  Map<String, dynamic>? get selectedWordDetails =>
+      _store.state.selectedWordDetails;
+  Map<String, dynamic>? get selectedDictionary =>
+      _store.state.selectedDictionary;
+  Map<String, dynamic>? get selectedPronunciation =>
+      _store.state.selectedPronunciation;
+  List<Map<String, dynamic>> get phraseCandidates =>
+      _store.state.phraseCandidates;
+  Map<String, dynamic>? get diagnosis => _store.state.diagnosis;
+  int get sidePanel => _store.state.sidePanel;
+  SubtitleToken? get selectedToken => _store.state.selectedToken;
+  Cue? get selectedCue => _store.state.selectedCue;
 
   void setWordProfiles(Map<String, Map<String, dynamic>> profiles) =>
-      _update((s) => s.copyWith(wordProfiles: profiles));
+      _store.update((s) => s.copyWith(wordProfiles: profiles));
 
   void setPhraseProfiles(Map<String, Map<String, dynamic>> profiles) =>
-      _update((s) => s.copyWith(phraseProfiles: profiles));
+      _store.update((s) => s.copyWith(phraseProfiles: profiles));
 
-  void selectWord(Map<String, dynamic>? details) => _update(
+  void selectWord(Map<String, dynamic>? details) => _store.update(
     (s) => s.copyWith(
       selectedWordDetails: details,
       selectedDictionary: null,
@@ -121,10 +133,10 @@ class LearningController extends ChangeNotifier {
   );
 
   void setSelectedDictionary(Map<String, dynamic>? dict) =>
-      _update((s) => s.copyWith(selectedDictionary: dict));
+      _store.update((s) => s.copyWith(selectedDictionary: dict));
 
   void setSelectedPronunciation(Map<String, dynamic>? pron) =>
-      _update((s) => s.copyWith(selectedPronunciation: pron));
+      _store.update((s) => s.copyWith(selectedPronunciation: pron));
 
   Future<void> loadLanguageProfile(
     String languageCode,
@@ -142,39 +154,38 @@ class LearningController extends ChangeNotifier {
   }
 
   void setPhraseCandidates(List<Map<String, dynamic>> candidates) =>
-      _update((s) => s.copyWith(phraseCandidates: candidates));
+      _store.update((s) => s.copyWith(phraseCandidates: candidates));
 
   void setDiagnosis(Map<String, dynamic>? diagnosis) =>
-      _update((s) => s.copyWith(diagnosis: diagnosis));
+      _store.update((s) => s.copyWith(diagnosis: diagnosis));
 
   void selectSidePanel(int index) =>
-      _update((s) => s.copyWith(sidePanel: index));
+      _store.update((s) => s.copyWith(sidePanel: index));
 
   void setSelectedToken(SubtitleToken? token) =>
-      _update((s) => s.copyWith(selectedToken: token));
+      _store.update((s) => s.copyWith(selectedToken: token));
 
-  void setSelectedCue(Cue? cue) => _update((s) => s.copyWith(selectedCue: cue));
+  void setSelectedCue(Cue? cue) =>
+      _store.update((s) => s.copyWith(selectedCue: cue));
 
   void updateSingleWordProfile(String lemma, Map<String, dynamic> profile) {
-    final profiles = Map<String, Map<String, dynamic>>.from(
-      _state.wordProfiles,
-    );
+    final s = _store.state;
+    final profiles = Map<String, Map<String, dynamic>>.from(s.wordProfiles);
     profiles[lemma] = profile;
-    _update((s) => s.copyWith(wordProfiles: profiles));
+    _store.update((st) => st.copyWith(wordProfiles: profiles));
   }
 
   void updateSinglePhraseProfile(
     String canonical,
     Map<String, dynamic> profile,
   ) {
-    final profiles = Map<String, Map<String, dynamic>>.from(
-      _state.phraseProfiles,
-    );
+    final s = _store.state;
+    final profiles = Map<String, Map<String, dynamic>>.from(s.phraseProfiles);
     profiles[canonical] = profile;
-    _update((s) => s.copyWith(phraseProfiles: profiles));
+    _store.update((st) => st.copyWith(phraseProfiles: profiles));
   }
 
-  void clearSelection() => _update(
+  void clearSelection() => _store.update(
     (s) => s.copyWith(
       selectedWordDetails: null,
       selectedDictionary: null,
@@ -184,14 +195,17 @@ class LearningController extends ChangeNotifier {
 
   /// Update the status of a word in the local cache.
   void updateWordStatusLocally(String lemma, String? status) {
-    final profiles = Map<String, Map<String, dynamic>>.from(
-      _state.wordProfiles,
-    );
+    final s = _store.state;
+    final profiles = Map<String, Map<String, dynamic>>.from(s.wordProfiles);
     if (status == null) {
       profiles.remove(lemma);
     } else {
-      profiles[lemma] = {...?profiles[lemma], 'status': status, 'lemma': lemma};
+      profiles[lemma] = {
+        ...?profiles[lemma],
+        'status': status,
+        'lemma': lemma,
+      };
     }
-    _update((s) => s.copyWith(wordProfiles: profiles));
+    _store.update((st) => st.copyWith(wordProfiles: profiles));
   }
 }
