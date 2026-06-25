@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-06-25 CST: 修复桌面播放器播放位置不上报导致的进度条与字幕同步停滞。
+  `DesktopPlayerAdapter` 恢复 100ms position polling，并通过
+  `VideoPlayerController.position` 主动触发 fvp `getPosition()`，避免只读取缓存
+  `value.position`。position stream 仅由主动 polling/seek/stop 发布，避免
+  `VideoPlayerController` 的 buffering/state listener 用旧缓存 position 覆盖真实位置。
+  切换媒体、播放失败与 dispose 会取消旧 timer，seek/stop 后立即发布当前位置；
+  增加 generation 校验防止旧播放器异步结果污染新媒体。修复 Store-backed
+  Player/Subtitle/Learning controllers 未转发 ChangeNotifier 通知的问题，确保
+  `main.dart` 的 `ListenableBuilder` 在 position/cue 更新时重建进度条与字幕层。
+  增加 controller 通知回归测试。验证: `flutter analyze` 0 issues,
+  `flutter test` 65/65 passed, `flutter build macos --debug` passed。
+
 - 2026-06-25 CST: Phase 2.10 Steps 2-6 — fb-espeak CTC phoneme provider 选型与集成。
   (1) **Step 2 补充 benchmark**: fb-espeak PER=30.5%（Apache 2.0）选定；
   vitouphy PER=19.5% 因 TIMIT 许可阻塞被排除。
