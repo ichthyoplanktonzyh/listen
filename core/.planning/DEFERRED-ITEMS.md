@@ -13,20 +13,23 @@
 
 ## 一、英语真实语流分析 [P1]
 
-> 推进阶段：Phase 2.10（已大部分完成）
+> 推进阶段：Phase 2.10（集成已完成，待端到端验证）
 
 | # | 项目 | 来源 | 现状 | 目标 |
 |---|------|------|------|------|
-| ~~E1~~ | ~~PhoneTimeline release provider 选型~~ | Phase 2.5 | ✅ fb-espeak 已选定（PER=30.5%, Apache 2.0） | ~~完成~~ |
-| ~~E2~~ | ~~语流规则从"文本预测"升级为"音频检测"~~ | Phase 2.5/2.7 | ✅ CTC 管线已集成，真实 confidence 驱动 finding 分类 | ~~完成~~ |
-| ~~E3~~ | ~~Phone alignment benchmark 复跑~~ | Phase 2.5 | ✅ 10 条 TIMIT development cases 完成，6 候选已 benchmark | ~~完成~~ |
-| E4 | 端到端真实音频验证 | Phase 2.10 Step 5 | ⏳ 代码已就绪，待下载模型后用真实媒体测试 | App 内完整跑通：音频→CTC→IPA 显示→finding 分类 |
-| E5 | 真实语流保真度审查 | Phase 2.5 | ⏳ 依赖 E4 完成后人工审查 | 人工 precision review 高置信 findings |
+| E1 | 端到端真实音频验证 | Phase 2.10 Step 5 | ⏳ 代码已就绪，待下载模型后用真实媒体测试 | App 内完整跑通：音频→CTC→IPA 显示→finding 分类 |
+| E2 | 真实语流保真度审查 | Phase 2.5 | ⏳ 依赖 E1 完成后人工审查 | 人工 precision review 高置信 findings |
 
 ### 推进条件
 
-- E4：运行 `./scripts/setup-phoneme-model.sh` 或 App 内下载模型后即可验证
-- E5：E4 通过后，人工检查弱读/省音/闪音 finding 的 precision
+- E1：App 设置 → Audio analysis models → 下载，或命令行 `./scripts/setup-phoneme-model.sh`
+- E2：E1 通过后，人工检查弱读/省音/闪音 finding 的 precision
+
+### 已完成（本轮关闭）
+
+- ~~PhoneTimeline release provider 选型~~：✅ fb-espeak 选定（PER=30.5%, Apache 2.0）
+- ~~语流规则从"文本预测"升级为"音频检测"~~：✅ CTC 管线已集成
+- ~~Phone alignment benchmark~~：✅ 10 条 TIMIT cases，6 候选已 benchmark
 
 ---
 
@@ -36,17 +39,20 @@
 
 | # | 项目 | 来源 | 现状 | 目标 |
 |---|------|------|------|------|
-| ~~A1~~ | ~~LANG-004 听觉锚定观察~~ | Phase 2.6 | ⏳ Step 4，依赖 2.10 | 观察可锚定 ListeningUnit（R1 修订） |
-| ~~A2~~ | ~~LANG-009 L1 诊断 seam~~ | Phase 2.6 | ⏳ Step 5，依赖 2.10 | 诊断函数签名支持可选 L1 参数 |
-| ~~A3~~ | ~~能力矩阵 API 暴露 client~~ | Phase 2.6 | ✅ Phase 2.12 完成（profile 驱动门控） | ~~完成~~ |
-| ~~A4~~ | ~~学习语言来源优先级~~ | Phase 2.6 | ✅ Phase 2.11 Step 2 完成（设置 + fallback 链） | ~~完成~~ |
-| A5 | identity 边界 profile 化 | Phase 2.6 ja | `normalize_lemma` 约 6 处对 en/zh/ja 行为等价 | 归一逻辑走 profile，支持大小写敏感语言 |
-| ~~A6~~ | ~~domain `lib.rs` 拆分~~ | Phase 2.3.5 | ✅ Phase 2.11 Step 3 完成（1317→194 行，13 模块） | ~~完成~~ |
+| A1 | LANG-004 听觉锚定观察 | Phase 2.6 | ⏳ Phase 2.11 Step 4，依赖 2.10 验证 | 观察可锚定 ListeningUnit（R1 修订） |
+| A2 | LANG-009 L1 诊断 seam | Phase 2.6 | ⏳ Phase 2.11 Step 5，依赖 2.10 验证 | 诊断函数签名支持可选 L1 参数 |
+| A3 | identity 边界 profile 化 | Phase 2.6 ja | Phase 2.11 Step 6，低优先 | 归一逻辑走 profile，支持大小写敏感语言 |
 
 ### 推进条件
 
-- A1/A2：Phase 2.10 已集成，可推进（Phase 2.11 Step 4-5）
-- A5：低优先（Step 6），等实际碰到大小写敏感语言问题时推进
+- A1/A2：Phase 2.10 E1 验证通过后可推进
+- A3：等实际碰到大小写敏感语言问题时推进
+
+### 已完成（本轮关闭）
+
+- ~~能力矩阵 API~~：✅ Phase 2.12 完成（profile 驱动门控）
+- ~~学习语言来源优先级~~：✅ Phase 2.11 Step 2 完成
+- ~~domain lib.rs 拆分~~：✅ Phase 2.11 Step 3 完成（1317→194 行，13 模块）
 
 ---
 
@@ -85,5 +91,5 @@
 | # | 项目 | 来源 | 现状 |
 |---|------|------|------|
 | M1 | GUI `--asr` 下拉选择 | Phase 2.9 | 当前 CLI only |
-| M2 | ONNX 量化模型（fb-espeak） | Phase 2.10 | 当前 ~1.26GB PyTorch；ONNX 可降至 ~300MB | 
+| M2 | ONNX 量化模型（fb-espeak） | Phase 2.10 | 当前 ~1.26GB PyTorch；ONNX 可降至 ~300MB |
 | M3 | hi (Devanagari abugida) 书写轴验证 | Phase 2.5.5 | 列为下一个探针 |

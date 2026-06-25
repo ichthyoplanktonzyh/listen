@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-06-24T12:00:00.000Z"
+last_updated: "2026-06-25T12:00:00.000Z"
 progress:
   total_phases: 11
   completed_phases: 1
@@ -15,14 +15,14 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-25 CST
-> 更新原因：Phase 2.10 Step 1 Provider Benchmark 完成；Phase 2.11 Steps 1-3 完成。
+> 更新原因：Phase 2.10 集成完成（含 App 内模型下载）；Phase 2.12 完成；播放器 position polling 修复。
 
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
-- **Phase**：Phase 2.10 📋 已规划（English Real Speech Analysis）+
-  Phase 2.11 📋 已规划（Architecture Seam Consolidation）
-- **分支**：`refactor/ui-state-management`
+- **Phase**：Phase 2.10 ✅ 集成完成（待端到端验证）+
+  Phase 2.11 ⏳ Steps 1-3 完成（Step 4-5 待推进）
+- **分支**：`main`
 - **版本**：0.7.0
 
 ## 项目双路线
@@ -32,7 +32,7 @@ progress:
 | 路线 | 目标 | 当前状态 |
 |---|---|---|
 | 本地重装生产引擎 | 生成精准 WordTimeline / ChunkTimeline / LLTimeline JSON | ✅ 阶段性收口，转长期研究 |
-| 轻量消费端 LLPlayerNext | 稳定读取 `.lltimeline.json` 并播放学习 | ⏳ Phase 2.3 第一版实现完成，待真实媒体 QA |
+| 轻量消费端 LLPlayerNext | 稳定读取 `.lltimeline.json` 并播放学习 | ⏳ Phase 2.3 第一版完成待收口；Phase 2.10/2.12 已集成 |
 
 ## 当前 Phase 状态
 
@@ -450,7 +450,11 @@ progress:
   - `phonetic_fixture.rs`：`build_ctc_phonetic_analysis()` 真实 CTC 推理路径
   - `api-http/phonetic_analysis.rs`：CTC provider 注册 + model seed + 执行分派
   - `scripts/wav2vec2-phoneme-cli.py`：Python sidecar（CTC decode + timestamp + logit confidence）
-  - `scripts/setup-phoneme-model.sh`：模型下载脚本
+  - `scripts/setup-phoneme-model.sh`：命令行模型下载脚本
+  - `scripts/download-phoneme-model.py`：后台模型下载 sidecar（JSON 进度输出）
+  - `install_model` API：后台 spawn Python 下载，带进度回报和状态更新
+  - Flutter `phonetic_analysis_ui.dart`：模型下载按钮 + 进度条（App 内一键下载）
+  - Flutter `api_service.dart`：新增 `installPhoneticAnalysisModel()` API
   - Flutter `diagnosis_card.dart`：IPA 优先显示
 - **Step 4 Finding 升级 ✅**（隐式完成 — 现有 alignment + findings 管线已完整支持真实 confidence）
 - **Step 5 App 验证**：⏳ 待下载模型后端到端真实音频测试
@@ -528,10 +532,11 @@ progress:
 
 ## 下一步工作
 
-1. **Phase 2.10 Step 5 端到端验证**：下载 fb-espeak 模型（`scripts/setup-phoneme-model.sh`），
-   用真实音频确认 sidecar 输出 + IPA 显示 + finding 分类正确。
-2. **Phase 2.11 Step 4–5**（依赖 2.10）：L1 诊断 seam + 听觉锚定准备。
+1. **Phase 2.10 Step 5 端到端验证**：App 内下载 fb-espeak 模型（或命令行
+   `./scripts/setup-phoneme-model.sh`），用真实音频确认 CTC→IPA 显示→finding 分类正确。
+2. **Phase 2.11 Step 4–5**（依赖 2.10 验证通过）：L1 诊断 seam + 听觉锚定准备。
 3. Phase 2.3 正式收口（手动 QA 已通过，待写 closeout）。
+4. 桌面播放器 position polling 已修复（2026-06-25），验证字幕同步稳定性。
 
 ## 指标
 
