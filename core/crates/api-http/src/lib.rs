@@ -360,8 +360,12 @@ pub fn router(state: ApiState) -> Router {
             get(phonetic_analysis_jobs).post(create_phonetic_analysis_job),
         )
         .route(
+            "/v1/phonetic-analysis/jobs/clear",
+            post(clear_terminal_phonetic_analysis_jobs),
+        )
+        .route(
             "/v1/phonetic-analysis/jobs/{job_id}",
-            get(phonetic_analysis_job),
+            get(phonetic_analysis_job).delete(delete_phonetic_analysis_job),
         )
         .route(
             "/v1/phonetic-analysis/jobs/{job_id}/cancel",

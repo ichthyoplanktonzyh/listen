@@ -163,6 +163,32 @@ impl PhoneticAnalysisRepository for SqliteRepository {
             .map_err(repo)
     }
 
+    fn delete_phonetic_job(&self, id: &PhoneticAnalysisJobId) -> Result<(), ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "DELETE FROM phonetic_analysis_jobs WHERE id=?1",
+                params![id.as_str()],
+            )
+            .map_err(repo)?;
+        Ok(())
+    }
+
+    fn delete_terminal_phonetic_jobs(&self) -> Result<u64, ApplicationError> {
+        let terminal = ["completed", "cancelled", "failed", "interrupted"];
+        let count = self
+            .connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "DELETE FROM phonetic_analysis_jobs WHERE status IN (?1,?2,?3,?4)",
+                params![terminal[0], terminal[1], terminal[2], terminal[3]],
+            )
+            .map_err(repo)? as u64;
+        Ok(count)
+    }
+
     fn interrupt_active_phonetic_jobs(&self, updated_at_ms: u64) -> Result<(), ApplicationError> {
         let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
         let tx = conn.transaction().map_err(repo)?;

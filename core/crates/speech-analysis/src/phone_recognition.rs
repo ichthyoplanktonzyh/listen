@@ -35,7 +35,8 @@ pub fn recognize_phones(
     model_revision: &str,
 ) -> Result<RecognizedPhones, String> {
     let script = sidecar_script_path().ok_or("wav2vec2 phoneme sidecar script not found")?;
-    let output = Command::new("python3")
+    let python = sidecar_python();
+    let output = Command::new(&python)
         .arg(&script)
         .arg("--model-dir")
         .arg(model_dir)
@@ -86,6 +87,37 @@ fn map_ipa_phone(ipa: &str, map: &HashMap<&str, (&str, &str)>) -> (String, Strin
     } else {
         (ipa.to_uppercase(), ipa.into())
     }
+}
+
+fn sidecar_python() -> String {
+    if let Ok(path) = std::env::var("LLPLAYERNEXT_PYTHON") {
+        if std::path::Path::new(&path).is_file() {
+            return path;
+        }
+    }
+    let mut dirs: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            dirs.push(parent.into());
+        }
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        dirs.push(cwd);
+    }
+    for start in &dirs {
+        let mut dir = start.as_path();
+        loop {
+            let candidate = dir.join(".venv/bin/python3");
+            if candidate.is_file() {
+                return candidate.to_string_lossy().into_owned();
+            }
+            match dir.parent() {
+                Some(parent) if parent != dir => dir = parent,
+                _ => break,
+            }
+        }
+    }
+    "python3".into()
 }
 
 fn sidecar_script_path() -> Option<String> {

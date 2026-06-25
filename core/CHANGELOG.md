@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- 2026-06-25 CST: CTC 音素分析链路端到端打通 + 任务生命周期管理。
+  (1) **链路修复**: 创建项目根目录 `.venv`（torch 2.12 + torchaudio 2.11 +
+  transformers 5.12 + torchcodec + phonemizer），`phone_recognition.rs` 新增
+  `sidecar_python()` 自动从 `current_exe`/`current_dir` 向上搜索 `.venv/bin/python3`；
+  后端 `models()` 过滤掉 `research-fixture` provider 避免 Flutter 误选；
+  `main.dart` `_analyzePhonetics()` 改用 SnackBar 反馈替代不可见的 `status` 变量。
+  (2) **任务生命周期管理**: 后端新增 `DELETE /v1/phonetic-analysis/jobs/{id}`
+  和 `POST /v1/phonetic-analysis/jobs/clear` 端点；repository trait 增加
+  `delete_phonetic_job` 和 `delete_terminal_phonetic_jobs`，SQLite 层实现。
+  Flutter `phonetic_analysis_ui.dart` 全面重写：状态图标（颜色区分完成/失败/进行中/
+  排队）、本地化状态标签芯片、活跃任务 1s 轮询空闲降为 5s、任务计数徽章、
+  单任务删除（带确认）、批量"清除已完成"、创建时间相对显示、错误信息卡片内展示。
+  中英文各新增 13 个本地化键。验证: Rust 编译通过, `dart analyze` 0 issues。
+
 - 2026-06-25 CST: 修复模型下载三个 bug：(1) 脚本路径解析用相对路径导致 App 运行时
   找不到 `download-phoneme-model.py`，改为从 `current_exe()`/`current_dir()` 向上搜索
   `scripts/` 目录；phoneme-cli sidecar 同步修复。(2) 下载进度无反馈 —— `snapshot_download()`

@@ -339,6 +339,8 @@ pub trait PhoneticAnalysisRepository: Send + Sync {
         &self,
         input_fingerprint: &str,
     ) -> Result<Option<PhoneticAnalysisJob>, ApplicationError>;
+    fn delete_phonetic_job(&self, id: &PhoneticAnalysisJobId) -> Result<(), ApplicationError>;
+    fn delete_terminal_phonetic_jobs(&self) -> Result<u64, ApplicationError>;
     fn interrupt_active_phonetic_jobs(&self, updated_at_ms: u64) -> Result<(), ApplicationError>;
     fn save_phonetic_analysis(
         &self,

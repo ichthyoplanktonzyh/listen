@@ -92,7 +92,11 @@ impl PhoneticAnalysisCoordinator {
     }
 
     pub fn models(&self) -> Result<Vec<PhoneticAnalysisModelDescriptor>, ApplicationError> {
-        self.repository.list_phonetic_models()
+        let mut models = self.repository.list_phonetic_models()?;
+        if !fake_enabled() {
+            models.retain(|m| m.provider_id != FAKE_PROVIDER_ID);
+        }
+        Ok(models)
     }
 
     pub async fn install_model(
@@ -431,6 +435,30 @@ impl PhoneticAnalysisCoordinator {
             self.emit_job(&job);
         }
         Ok(job)
+    }
+
+    pub fn delete_job(&self, id: &PhoneticAnalysisJobId) -> Result<(), ApplicationError> {
+        let job = self
+            .repository
+            .get_phonetic_job(id)?
+            .ok_or(ApplicationError::NotFound("phonetic analysis job"))?;
+        if matches!(
+            job.status,
+            PhoneticAnalysisJobStatus::Queued
+                | PhoneticAnalysisJobStatus::Extracting
+                | PhoneticAnalysisJobStatus::RecognizingPhones
+                | PhoneticAnalysisJobStatus::Aligning
+                | PhoneticAnalysisJobStatus::Analyzing
+        ) {
+            return Err(ApplicationError::Conflict(
+                "cannot delete an active phonetic analysis job",
+            ));
+        }
+        self.repository.delete_phonetic_job(id)
+    }
+
+    pub fn clear_terminal_jobs(&self) -> Result<u64, ApplicationError> {
+        self.repository.delete_terminal_phonetic_jobs()
     }
 
     pub fn retry_job(

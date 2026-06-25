@@ -15,6 +15,7 @@
 .tmp/
 .vscode/
 __pycache__/
+.venv/
 .claude/worktrees/
 build/
 dist/

@@ -128,6 +128,23 @@ pub(crate) async fn cancel_phonetic_analysis_job(
         .map_err(ApiError::from)
 }
 
+pub(crate) async fn delete_phonetic_analysis_job(
+    State(state): State<ApiState>,
+    Path(job_id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    state.phonetic_analysis.delete_job(
+        &domain::PhoneticAnalysisJobId::parse(job_id).map_err(ApplicationError::from)?,
+    )?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub(crate) async fn clear_terminal_phonetic_analysis_jobs(
+    State(state): State<ApiState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let deleted = state.phonetic_analysis.clear_terminal_jobs()?;
+    Ok(Json(serde_json::json!({ "deleted": deleted })))
+}
+
 pub(crate) async fn retry_phonetic_analysis_job(
     State(state): State<ApiState>,
     Path(job_id): Path<String>,
