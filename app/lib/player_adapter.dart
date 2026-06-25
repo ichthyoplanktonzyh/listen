@@ -37,6 +37,10 @@ class DesktopPlayerAdapter {
   final _playing = StreamController<bool>.broadcast();
   final _errors = StreamController<String>.broadcast();
   final _tracks = StreamController<PlayerTracks>.broadcast();
+  Timer? _positionTimer;
+  int? _pollingPositionGeneration;
+  int _positionTimerGeneration = 0;
+  Duration? _lastPublishedPosition;
   double _rate = 1;
   double _volume = 100;
   VideoPlayerController? get _controller => controller.value;
@@ -46,44 +50,93 @@ class DesktopPlayerAdapter {
   Stream<bool> get playing => _playing.stream;
   Stream<String> get errors => _errors.stream;
   Stream<PlayerTracks> get tracks => _tracks.stream;
-  Duration get currentPosition => _controller?.value.position ?? Duration.zero;
+  Duration get currentPosition => _lastPublishedPosition ?? Duration.zero;
 
   Future<void> open(String path, {bool play = true}) async {
     final previous = _controller;
     if (previous != null) {
+      _stopPositionTimer();
       previous.removeListener(_notify);
       await previous.dispose();
     }
+    _lastPublishedPosition = null;
     final uri = Uri.tryParse(path);
     final next = uri != null && uri.hasScheme && uri.scheme != 'file'
         ? VideoPlayerController.networkUrl(uri)
         : VideoPlayerController.file(File(path));
     controller.value = next;
-    // Event-driven position tracking instead of Timer.periodic polling.
-    // VideoPlayerController extends ValueNotifier and fires on every frame.
     next.addListener(_notify);
     try {
       await next.initialize();
       await next.setPlaybackSpeed(_rate);
       await next.setVolume(_volume / 100);
+      _startPositionTimer(next);
       if (play) await next.play();
       _notify();
       _publishTracks(next);
     } catch (error) {
+      _stopPositionTimer();
       _errors.add('Playback failed: $error');
       rethrow;
     }
   }
 
-  /// Called on every [VideoPlayerController] value change (frame-level events).
-  /// Replaces the old Timer.periodic(100ms) polling with true event-driven updates.
+  /// Called when [VideoPlayerController] publishes state changes.
   void _notify() {
     final value = _controller?.value;
     if (value == null) return;
-    _position.add(value.position);
     _duration.add(value.duration);
     _playing.add(value.isPlaying);
     if (value.hasError) _errors.add(value.errorDescription ?? 'Playback error');
+  }
+
+  void _startPositionTimer(VideoPlayerController value) {
+    _stopPositionTimer();
+    final generation = ++_positionTimerGeneration;
+    _positionTimer = Timer.periodic(
+      const Duration(milliseconds: 100),
+      (_) => unawaited(_pollPosition(value, generation)),
+    );
+  }
+
+  void _stopPositionTimer() {
+    _positionTimerGeneration++;
+    _positionTimer?.cancel();
+    _positionTimer = null;
+  }
+
+  Future<void> _pollPosition(
+    VideoPlayerController value,
+    int generation,
+  ) async {
+    if (_pollingPositionGeneration == generation ||
+        generation != _positionTimerGeneration ||
+        _controller != value) {
+      return;
+    }
+    _pollingPositionGeneration = generation;
+    try {
+      final position = await value.position;
+      if (position == null ||
+          generation != _positionTimerGeneration ||
+          _controller != value ||
+          _position.isClosed) {
+        return;
+      }
+      _publishPosition(position);
+    } catch (error) {
+      if (!_errors.isClosed) _errors.add('Position polling failed: $error');
+    } finally {
+      if (_pollingPositionGeneration == generation) {
+        _pollingPositionGeneration = null;
+      }
+    }
+  }
+
+  void _publishPosition(Duration position) {
+    if (_position.isClosed || position == _lastPublishedPosition) return;
+    _lastPublishedPosition = position;
+    _position.add(position);
   }
 
   void _publishTracks(VideoPlayerController value) {
@@ -124,12 +177,24 @@ class DesktopPlayerAdapter {
   }
 
   Future<void> play() async => _controller?.play();
+
   Future<void> stop() async {
-    await _controller?.pause();
-    await _controller?.seekTo(Duration.zero);
+    final value = _controller;
+    if (value == null) return;
+    await value.pause();
+    await value.seekTo(Duration.zero);
+    _publishPosition(Duration.zero);
   }
 
-  Future<void> seek(Duration position) async => _controller?.seekTo(position);
+  Future<void> seek(Duration position) async {
+    final value = _controller;
+    if (value == null) return;
+    await value.seekTo(position);
+    if (_controller == value) {
+      _publishPosition(value.value.position);
+    }
+  }
+
   Future<void> setRate(double rate) async {
     _rate = rate;
     await _controller?.setPlaybackSpeed(rate);
@@ -148,6 +213,7 @@ class DesktopPlayerAdapter {
       _controller?.setSubtitleTracks(const []);
 
   Future<void> dispose() async {
+    _stopPositionTimer();
     final value = _controller;
     if (value != null) {
       value.removeListener(_notify);

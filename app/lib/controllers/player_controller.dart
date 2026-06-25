@@ -121,7 +121,9 @@ class PlayerState {
 class PlayerController extends ChangeNotifier {
   final Store<PlayerState> _store;
 
-  PlayerController() : _store = Store(const PlayerState());
+  PlayerController() : _store = Store(const PlayerState()) {
+    _store.addListener(notifyListeners);
+  }
 
   /// The reactive store — allows fine-grained field subscriptions via [Store.select].
   Store<PlayerState> get store => _store;
@@ -202,11 +204,9 @@ class PlayerController extends ChangeNotifier {
     ),
   );
 
-  void setMuted(bool muted) =>
-      _store.update((s) => s.copyWith(muted: muted));
+  void setMuted(bool muted) => _store.update((s) => s.copyWith(muted: muted));
 
-  void setRate(double rate) =>
-      _store.update((s) => s.copyWith(rate: rate));
+  void setRate(double rate) => _store.update((s) => s.copyWith(rate: rate));
 
   void setVolume(double volume) =>
       _store.update((s) => s.copyWith(volume: volume));
@@ -229,9 +229,16 @@ class PlayerController extends ChangeNotifier {
   void setSelectedEmbeddedSubtitleId(String? id) =>
       _store.update((s) => s.copyWith(selectedEmbeddedSubtitleId: id));
 
-  void setSourceLoop(Duration? start, Duration? end) =>
-      _store.update((s) => s.copyWith(sourceLoopStart: start, sourceLoopEnd: end));
+  void setSourceLoop(Duration? start, Duration? end) => _store.update(
+    (s) => s.copyWith(sourceLoopStart: start, sourceLoopEnd: end),
+  );
 
   void setMediaPath(String path) =>
       _store.update((s) => s.copyWith(mediaPath: path));
+
+  @override
+  void dispose() {
+    _store.dispose();
+    super.dispose();
+  }
 }

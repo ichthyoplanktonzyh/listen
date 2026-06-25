@@ -81,7 +81,9 @@ class LearningController extends ChangeNotifier {
   final Map<String, Map<String, dynamic>> _languageProfiles = {};
   Map<String, dynamic>? _currentLanguageProfile;
 
-  LearningController() : _store = Store(const LearningState());
+  LearningController() : _store = Store(const LearningState()) {
+    _store.addListener(notifyListeners);
+  }
 
   /// The reactive store — allows fine-grained field subscriptions.
   Store<LearningState> get store => _store;
@@ -200,12 +202,14 @@ class LearningController extends ChangeNotifier {
     if (status == null) {
       profiles.remove(lemma);
     } else {
-      profiles[lemma] = {
-        ...?profiles[lemma],
-        'status': status,
-        'lemma': lemma,
-      };
+      profiles[lemma] = {...?profiles[lemma], 'status': status, 'lemma': lemma};
     }
     _store.update((st) => st.copyWith(wordProfiles: profiles));
+  }
+
+  @override
+  void dispose() {
+    _store.dispose();
+    super.dispose();
   }
 }

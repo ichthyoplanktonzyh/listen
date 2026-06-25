@@ -197,7 +197,9 @@ class SubtitleState {
 class SubtitleController extends ChangeNotifier {
   final Store<SubtitleState> _store;
 
-  SubtitleController() : _store = Store(const SubtitleState());
+  SubtitleController() : _store = Store(const SubtitleState()) {
+    _store.addListener(notifyListeners);
+  }
 
   /// The reactive store — allows fine-grained field subscriptions.
   Store<SubtitleState> get store => _store;
@@ -291,8 +293,7 @@ class SubtitleController extends ChangeNotifier {
   void setStatusStylesVisible(bool visible) =>
       _store.update((s) => s.copyWith(statusStylesVisible: visible));
 
-  void setLoopCue(bool loop) =>
-      _store.update((s) => s.copyWith(loopCue: loop));
+  void setLoopCue(bool loop) => _store.update((s) => s.copyWith(loopCue: loop));
 
   void setPreset(String preset) =>
       _store.update((s) => s.copyWith(preset: preset));
@@ -356,7 +357,9 @@ class SubtitleController extends ChangeNotifier {
 
   void setSubtitleResourceCapabilities(
     Map<String, SubtitleResourceCapabilities> capabilities,
-  ) => _store.update((s) => s.copyWith(subtitleResourceCapabilities: capabilities));
+  ) => _store.update(
+    (s) => s.copyWith(subtitleResourceCapabilities: capabilities),
+  );
 
   void setSentencePronunciation(
     String sentenceId,
@@ -509,4 +512,10 @@ class SubtitleController extends ChangeNotifier {
 
   void setCurrentSecondaryCue(Cue? cue) =>
       _store.update((s) => s.copyWith(currentSecondaryCue: cue));
+
+  @override
+  void dispose() {
+    _store.dispose();
+    super.dispose();
+  }
 }

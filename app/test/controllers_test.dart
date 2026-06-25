@@ -51,6 +51,32 @@ void main() {
     expect(controller.embeddedSubtitleTracks, const [track]);
   });
 
+  test('store-backed controllers notify aggregate listeners', () {
+    final player = PlayerController();
+    var playerNotifications = 0;
+    player.addListener(() => playerNotifications++);
+    player.setPosition(const Duration(milliseconds: 250));
+    expect(player.position, const Duration(milliseconds: 250));
+    expect(playerNotifications, 1);
+    player.dispose();
+
+    final subtitle = SubtitleController()..setPrimaryTrack(track);
+    var subtitleNotifications = 0;
+    subtitle.addListener(() => subtitleNotifications++);
+    subtitle.updatePosition(const Duration(milliseconds: 250));
+    expect(subtitle.currentPrimaryCue, cue);
+    expect(subtitleNotifications, 1);
+    subtitle.dispose();
+
+    final learning = LearningController();
+    var learningNotifications = 0;
+    learning.addListener(() => learningNotifications++);
+    learning.selectSidePanel(1);
+    expect(learning.sidePanel, 1);
+    expect(learningNotifications, 1);
+    learning.dispose();
+  });
+
   test('subtitle controller clears tracks and follows local word timings', () {
     final controller = SubtitleController()
       ..setPrimaryTrack(track)
