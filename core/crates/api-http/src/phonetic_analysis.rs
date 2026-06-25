@@ -747,13 +747,32 @@ fn default_ctc_model_dir() -> Option<String> {
 }
 
 fn download_script_path() -> Option<String> {
-    let candidates = [
-        "scripts/download-phoneme-model.py",
-        "../scripts/download-phoneme-model.py",
-    ];
-    for path in candidates {
-        if std::path::Path::new(path).exists() {
-            return Some(path.into());
+    if let Ok(path) = std::env::var("LLPLAYERNEXT_DOWNLOAD_SCRIPT") {
+        if std::path::Path::new(&path).is_file() {
+            return Some(path);
+        }
+    }
+    let name = "download-phoneme-model.py";
+    let mut dirs: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            dirs.push(parent.into());
+        }
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        dirs.push(cwd);
+    }
+    for start in &dirs {
+        let mut dir = start.as_path();
+        loop {
+            let candidate = dir.join("scripts").join(name);
+            if candidate.is_file() {
+                return Some(candidate.to_string_lossy().into_owned());
+            }
+            match dir.parent() {
+                Some(parent) if parent != dir => dir = parent,
+                _ => break,
+            }
         }
     }
     None
