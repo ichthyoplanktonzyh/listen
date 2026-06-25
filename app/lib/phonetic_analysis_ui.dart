@@ -91,6 +91,15 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
     );
   }
 
+  Future<void> _installModel(String modelId) async {
+    try {
+      await (widget.api?.installPhoneticAnalysisModel(modelId));
+      await _refresh();
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    }
+  }
+
   Widget _models(AppLocalizations l) => ListView(
     children: [
       for (final provider in providers)
@@ -113,16 +122,57 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
         ListTile(
           leading: const Icon(Icons.memory_outlined),
           title: Text('${model['display_name']} · ${model['state']}'),
-          subtitle: Text(
-            '${model['license']} · ${model['revision']}\n'
-            '${model['training_data_provenance']}\n'
-            '${model['application_verified'] == true ? l.text('applicationVerified') : l.text('notApplicationVerified')} · '
-            '${model['distribution_allowed'] == true ? l.text('distributionAllowed') : l.text('distributionNotAllowed')}',
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (model['state'] == 'installing')
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: LinearProgressIndicator(
+                    value: model['size_bytes'] != null &&
+                            (model['size_bytes'] as num) > 0
+                        ? (model['installed_bytes'] as num?)?.toDouble() ??
+                            0.0 /
+                            (model['size_bytes'] as num).toDouble()
+                        : null,
+                  ),
+                ),
+              Text(
+                '${model['license']} · ${model['revision']}\n'
+                '${model['training_data_provenance']}\n'
+                '${model['application_verified'] == true ? l.text('applicationVerified') : l.text('notApplicationVerified')} · '
+                '${model['distribution_allowed'] == true ? l.text('distributionAllowed') : l.text('distributionNotAllowed')}',
+              ),
+            ],
           ),
           isThreeLine: true,
+          trailing: _modelAction(model, l),
         ),
     ],
   );
+
+  Widget? _modelAction(Map<String, dynamic> model, AppLocalizations l) {
+    final state = model['state'] as String?;
+    final id = model['id'] as String?;
+    if (state == 'downloadable' || state == 'failed') {
+      return IconButton(
+        tooltip: l.text('download'),
+        onPressed: id == null ? null : () => _installModel(id),
+        icon: const Icon(Icons.download),
+      );
+    }
+    if (state == 'installing') {
+      return const SizedBox(
+        width: 24,
+        height: 24,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+    if (state == 'custom' || state == 'installed') {
+      return const Icon(Icons.check_circle_outline, color: Colors.green);
+    }
+    return null;
+  }
 
   Widget _jobs(AppLocalizations l) => jobs.isEmpty
       ? Center(child: Text(l.text('noPhoneticAnalysisJobs')))

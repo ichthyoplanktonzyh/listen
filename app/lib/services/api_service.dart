@@ -380,6 +380,14 @@ class LocalApi {
               as List<dynamic>)
           .cast<Map<String, dynamic>>();
 
+  Future<Map<String, dynamic>> installPhoneticAnalysisModel(
+    String modelId,
+  ) async =>
+      (await _request('POST', '/v1/phonetic-analysis/models/install', {
+            'model_id': modelId,
+          }))
+          as Map<String, dynamic>;
+
   Future<List<Map<String, dynamic>>> phoneticAnalysisJobs() async =>
       ((await _request('GET', '/v1/phonetic-analysis/jobs')) as List<dynamic>)
           .cast<Map<String, dynamic>>();

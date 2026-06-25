@@ -3165,7 +3165,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _loopPhoneticRange(
         phone.start.inMilliseconds,
         phone.end.inMilliseconds,
-        'Looping detected phone ${phone.symbol}',
+        'Looping detected phone ${phone.displayIpa}',
       ),
     ),
     onLoopFinding: (finding) => unawaited(

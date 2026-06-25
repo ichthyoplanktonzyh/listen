@@ -798,6 +798,7 @@ Duration? _durationFromNullableMs(int? value) =>
 class DetectedPhone {
   const DetectedPhone({
     required this.symbol,
+    required this.displayIpa,
     required this.phoneSet,
     required this.start,
     required this.end,
@@ -809,6 +810,7 @@ class DetectedPhone {
 
   factory DetectedPhone.fromJson(Map<String, dynamic> json) => DetectedPhone(
     symbol: json['symbol'] as String,
+    displayIpa: (json['display_ipa'] as String?) ?? json['symbol'] as String,
     phoneSet: json['phone_set'] as String,
     start: Duration(milliseconds: json['start_ms'] as int),
     end: Duration(milliseconds: json['end_ms'] as int),
@@ -820,6 +822,7 @@ class DetectedPhone {
 
   Map<String, dynamic> toJson() => {
     'symbol': symbol,
+    'display_ipa': displayIpa,
     'phone_set': phoneSet,
     'start_ms': start.inMilliseconds,
     'end_ms': end.inMilliseconds,
@@ -830,6 +833,7 @@ class DetectedPhone {
   };
 
   final String symbol;
+  final String displayIpa;
   final String phoneSet;
   final Duration start;
   final Duration end;

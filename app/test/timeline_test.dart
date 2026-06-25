@@ -186,6 +186,7 @@ void main() {
       const phones = [
         DetectedPhone(
           symbol: 'AH',
+          displayIpa: 'ə',
           phoneSet: 'arpabet',
           start: Duration(milliseconds: 100),
           end: Duration(milliseconds: 200),
@@ -220,6 +221,7 @@ void main() {
       const phones = [
         DetectedPhone(
           symbol: 'A',
+          displayIpa: 'A',
           phoneSet: 'test',
           start: Duration(milliseconds: 100),
           end: Duration(milliseconds: 200),
@@ -230,6 +232,7 @@ void main() {
         ),
         DetectedPhone(
           symbol: 'B',
+          displayIpa: 'B',
           phoneSet: 'test',
           start: Duration(milliseconds: 200),
           end: Duration(milliseconds: 300),

@@ -99,7 +99,7 @@ class DiagnosisCard extends StatelessWidget {
                     in phoneticAnalysis!['detected_phones'] as List<dynamic>)
                   ActionChip(
                     label: Text(
-                      '${raw['symbol']} '
+                      '${(raw['display_ipa'] as String?) ?? raw['symbol']} '
                       '${(((raw['confidence'] as num?)?.toDouble() ?? 0) * 100).round()}%',
                     ),
                     onPressed: onLoopDetectedPhone == null
@@ -115,7 +115,7 @@ class DiagnosisCard extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
                   '${l.text('currentDetectedPhone')}: '
-                  '${currentDetectedPhone!.symbol} '
+                  '${currentDetectedPhone!.displayIpa} '
                   '(${((currentDetectedPhone!.confidence ?? 0) * 100).round()}%)',
                 ),
               ),
