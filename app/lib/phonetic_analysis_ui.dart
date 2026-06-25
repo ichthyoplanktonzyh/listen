@@ -91,6 +91,13 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
     );
   }
 
+  double? _installProgress(Map<String, dynamic> model) {
+    final size = (model['size_bytes'] as num?)?.toDouble() ?? 0.0;
+    final installed = (model['installed_bytes'] as num?)?.toDouble() ?? 0.0;
+    if (size <= 0) return null;
+    return (installed / size).clamp(0.0, 1.0);
+  }
+
   Future<void> _installModel(String modelId) async {
     try {
       await (widget.api?.installPhoneticAnalysisModel(modelId));
@@ -129,12 +136,15 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: LinearProgressIndicator(
-                    value: model['size_bytes'] != null &&
-                            (model['size_bytes'] as num) > 0
-                        ? (model['installed_bytes'] as num?)?.toDouble() ??
-                            0.0 /
-                            (model['size_bytes'] as num).toDouble()
-                        : null,
+                    value: _installProgress(model),
+                  ),
+                ),
+              if (model['error'] != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    '${model['error']}',
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
                   ),
                 ),
               Text(
