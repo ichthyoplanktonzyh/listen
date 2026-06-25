@@ -1,6 +1,6 @@
 # 残留 / 延后项总览
 
-> 最后更新：2026-06-24 CST
+> 最后更新：2026-06-25 CST
 > 用途：跨阶段残留项汇总，供后续 phase 规划参考。每项标注来源阶段、优先级和推进条件。
 
 ## 优先级说明
@@ -13,45 +13,52 @@
 
 ## 一、英语真实语流分析 [P1]
 
-> 推进阶段：Phase 2.10
+> 推进阶段：Phase 2.10（已大部分完成）
 
 | # | 项目 | 来源 | 现状 | 目标 |
 |---|------|------|------|------|
-| E1 | PhoneTimeline release provider 选型 | Phase 2.5 | 无 release provider；候选 MFA/ZIPA/Wav2IPA/Allosaurus 均未过 benchmark | 选出一个 phone recognizer，通过质量门禁 |
-| E2 | 语流规则从"文本预测"升级为"音频检测" | Phase 2.5/2.7 | `analyze_rules()` 全是 `LikelyByContext`/`PossibleByRule` | 弱读/省音/闪音有音频层证据支撑 |
-| E3 | Phone alignment benchmark 复跑 | Phase 2.5 | research infrastructure 已验证，但未用真实 development cases 跑过 | 至少 10 条 development cases 通过 quality gate |
-| E4 | 真实语流保真度审查 | Phase 2.5 | provider 不能把弱读/省音规范化回字典发音后仍声称 detected | 人工 precision review 高置信 findings |
+| ~~E1~~ | ~~PhoneTimeline release provider 选型~~ | Phase 2.5 | ✅ fb-espeak 已选定（PER=30.5%, Apache 2.0） | ~~完成~~ |
+| ~~E2~~ | ~~语流规则从"文本预测"升级为"音频检测"~~ | Phase 2.5/2.7 | ✅ CTC 管线已集成，真实 confidence 驱动 finding 分类 | ~~完成~~ |
+| ~~E3~~ | ~~Phone alignment benchmark 复跑~~ | Phase 2.5 | ✅ 10 条 TIMIT development cases 完成，6 候选已 benchmark | ~~完成~~ |
+| E4 | 端到端真实音频验证 | Phase 2.10 Step 5 | ⏳ 代码已就绪，待下载模型后用真实媒体测试 | App 内完整跑通：音频→CTC→IPA 显示→finding 分类 |
+| E5 | 真实语流保真度审查 | Phase 2.5 | ⏳ 依赖 E4 完成后人工审查 | 人工 precision review 高置信 findings |
 
 ### 推进条件
 
-- Phase 2.5 的 `2.5-BENCHMARK.md` 质量门禁是入口标准
-- 已有 research infrastructure：`phonetic-eval.py`、`phonetic-research-adapter.py`、evaluation catalog
-- PhoneTimeline 资源契约已就绪（Phase 2.5），app 端可消费
+- E4：运行 `./scripts/setup-phoneme-model.sh` 或 App 内下载模型后即可验证
+- E5：E4 通过后，人工检查弱读/省音/闪音 finding 的 precision
 
 ---
 
 ## 二、架构优化 [P1]
 
-> 推进阶段：Phase 2.11
+> 推进阶段：Phase 2.11（Steps 1-3 已完成）
 
 | # | 项目 | 来源 | 现状 | 目标 |
 |---|------|------|------|------|
-| A1 | LANG-004 听觉锚定观察 | Phase 2.6 | ListeningUnit 为视图概念，观察仍锚定词 | 观察可锚定 ListeningUnit（R1 修订） |
-| A2 | LANG-009 L1 诊断 seam | Phase 2.6 | `(L1, L2_unit, status)` 签名在设计层预留，未进入 `diagnose` 代码 | 诊断函数签名支持可选 L1 参数 |
-| A3 | 能力矩阵 API 暴露 client | Phase 2.6 | 面板用脚本门控 | 后端暴露语言能力矩阵，client 按能力显示/隐藏功能 |
-| A4 | 学习语言来源优先级 | Phase 2.6 | active 字幕轨语言 → en fallback | 支持用户手动选择 + 媒体 metadata 两个来源 |
+| ~~A1~~ | ~~LANG-004 听觉锚定观察~~ | Phase 2.6 | ⏳ Step 4，依赖 2.10 | 观察可锚定 ListeningUnit（R1 修订） |
+| ~~A2~~ | ~~LANG-009 L1 诊断 seam~~ | Phase 2.6 | ⏳ Step 5，依赖 2.10 | 诊断函数签名支持可选 L1 参数 |
+| ~~A3~~ | ~~能力矩阵 API 暴露 client~~ | Phase 2.6 | ✅ Phase 2.12 完成（profile 驱动门控） | ~~完成~~ |
+| ~~A4~~ | ~~学习语言来源优先级~~ | Phase 2.6 | ✅ Phase 2.11 Step 2 完成（设置 + fallback 链） | ~~完成~~ |
 | A5 | identity 边界 profile 化 | Phase 2.6 ja | `normalize_lemma` 约 6 处对 en/zh/ja 行为等价 | 归一逻辑走 profile，支持大小写敏感语言 |
-| A6 | domain `lib.rs` 拆分 | Phase 2.3.5 | 约 1317 行，Phase 2.3.5 判定暂不作为前置项 | 按领域拆分为独立 module |
+| ~~A6~~ | ~~domain `lib.rs` 拆分~~ | Phase 2.3.5 | ✅ Phase 2.11 Step 3 完成（1317→194 行，13 模块） | ~~完成~~ |
 
 ### 推进条件
 
-- 不改变已有产品行为（英语 + 中文回归基线）
-- A1/A2 依赖真实声音侧（E1-E4）有一定进展后才有实际效果
-- A3 可独立推进
+- A1/A2：Phase 2.10 已集成，可推进（Phase 2.11 Step 4-5）
+- A5：低优先（Step 6），等实际碰到大小写敏感语言问题时推进
 
 ---
 
-## 三、中文相关 [P3]
+## 三、Phase 2.3 收口 [P2]
+
+| # | 项目 | 来源 | 现状 | 目标 |
+|---|------|------|------|------|
+| Q1 | Phase 2.3 正式收口 | Phase 2.3 | 手动 QA 已通过，待写 closeout 文档 | 写 closeout、更新 STATE.md 标记完成 |
+
+---
+
+## 四、中文相关 [P3]
 
 | # | 项目 | 来源 | 现状 | 推进条件 |
 |---|------|------|------|---------|
@@ -62,7 +69,7 @@
 
 ---
 
-## 四、日语相关 [P3]
+## 五、日语相关 [P3]
 
 | # | 项目 | 来源 | 现状 | 推进条件 |
 |---|------|------|------|---------|
@@ -73,10 +80,10 @@
 
 ---
 
-## 五、小项 [P2]
+## 六、小项 [P2]
 
 | # | 项目 | 来源 | 现状 |
 |---|------|------|------|
 | M1 | GUI `--asr` 下拉选择 | Phase 2.9 | 当前 CLI only |
-| M2 | Phase 2.3 正式收口 | Phase 2.3 | 手动 QA 已通过，待写 closeout |
+| M2 | ONNX 量化模型（fb-espeak） | Phase 2.10 | 当前 ~1.26GB PyTorch；ONNX 可降至 ~300MB | 
 | M3 | hi (Devanagari abugida) 书写轴验证 | Phase 2.5.5 | 列为下一个探针 |
