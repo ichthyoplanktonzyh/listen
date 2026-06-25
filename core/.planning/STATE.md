@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-06-22T08:10:00.000Z"
+last_updated: "2026-06-24T12:00:00.000Z"
 progress:
-  total_phases: 10
-  completed_phases: 0
+  total_phases: 11
+  completed_phases: 1
   total_plans: 4
   completed_plans: 0
   percent: 0
@@ -15,15 +15,16 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-24 CST
-> 更新原因：Phase 2.9 收口——生产管线多语言解耦 + 可插拔模型架构 + mlx-whisper ASR +
-> jieba 词级分词。中文端到端验证通过，mlx-whisper 质量与 WhisperX 持平、速度快 7.5 倍。
+> 更新原因：Phase 2.12 收口——Flutter 前端状态管理重构完成。Store\<T\> 基础设施、
+> typed domain models、三个 Controller 的 Store 迁移、SubtitleOverlay/SidePanel
+> 布局提取。0 analyze issues, 64 tests passed。
 
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
 - **Phase**：Phase 2.10 📋 已规划（English Real Speech Analysis）+
   Phase 2.11 📋 已规划（Architecture Seam Consolidation）
-- **分支**：`feature/forced-alignment-research`
+- **分支**：`refactor/ui-state-management`
 - **版本**：0.7.0
 
 ## 项目双路线
@@ -442,6 +443,23 @@ progress:
   L1 诊断 seam（依赖 2.10）→ 听觉锚定准备（依赖 2.10）→ identity profile 化（低优先）。
 - 与 Phase 2.10 部分并行：Step 1–3 不依赖 2.10。
 - 规划文档：`.planning/phases/2.11-architecture-seam-consolidation/`
+
+### Phase 2.12: UI State Management Refactoring ✅ 已完成
+
+- 目标：重构 Flutter 前端的响应式状态管理层，为 UI/UX 重构提供细粒度基础设施。
+- **Store\<T\>**：通用响应式状态容器（`state/store.dart`），通过 `select()` 暴露
+  字段级 ValueNotifier，Widget 只监听需要的数据切片。`StoreBuilder<T,R>` 声明式
+  选择器 Widget（`state/builder.dart`）。
+- **Typed domain models**：新增 `models/types.dart`，提供 WordProfile、WordDetail、
+  Diagnosis、PhraseCandidate、PronunciationProvider、PronunciationAnalysis、
+  LanguageProfile、PhoneticAnalysis 共 8 个 typed 类替代 `Map<String, dynamic>`。
+- **Controller 迁移**：PlayerController / SubtitleController / LearningController
+  内部由 ChangeNotifier 改为 Store 驱动，新增 `select()` 公开方法。保留原有
+  convenience getter/setter 和 ChangeNotifier 接口，100% 向后兼容。
+- **布局提取**：SubtitleOverlay（原 `_playerSurface()` ~100 行）和 SidePanel
+  （原 `_sidePanel()` ~70 行）提取为独立 Widget。
+- 验证：`dart analyze` 0 issues，`flutter test` 64/64 passed。
+- 规划文档：`.planning/phases/2.12-ui-state-management-refactoring/`
 
 ### 强制对齐研究 🧭 长期推进
 

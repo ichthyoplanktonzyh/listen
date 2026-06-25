@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- 2026-06-25 CST: Phase 2.12 — UI State Management Refactoring (Flutter).
+  (1) **Store\<T\> 基础设施**: 通用响应式状态容器，支持 `select()` 细粒度字段级
+  ValueNotifier 订阅。新增 StoreBuilder/StoreBuilder2 声明式选择器 Widget。
+  (2) **Typed domain models**: 新增 `models/types.dart`，提供 WordProfile、WordDetail、
+  Diagnosis、PhraseCandidate 等 7 个 typed 类替代 `Map<String, dynamic>`。
+  (3) **Controller 迁移**: PlayerController / SubtitleController / LearningController
+  内部迁移到 Store，保留 ChangeNotifier 向后兼容。
+  (4) **布局提取**: SubtitleOverlay（原 _playerSurface()）和 SidePanel（原 _sidePanel()）
+  提取为独立 Widget 文件，减少 main.dart 的构建方法复杂度。
+  (5) **验证**: `dart analyze` 0 issues, `flutter test` 64/64 passed。
+  分支: `refactor/ui-state-management`。规划文档:
+  `.planning/phases/2.12-ui-state-management-refactoring/`
+
 - 2026-06-24 CST: Phase 2.9 closeout + Phase 2.10/2.11 planning.
   (1) **Phase 2.9 收口**: 生产管线多语言解耦完成。2.9-CLOSEOUT.md 记录 Rust 侧
   (AlignerRegistry/语言传播/CJK 分词) + Python 侧 (mlx-whisper/jieba/M:N 对齐)
