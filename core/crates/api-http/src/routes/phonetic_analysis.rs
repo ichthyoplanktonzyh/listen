@@ -21,14 +21,33 @@ pub(crate) async fn install_phonetic_analysis_model(
     State(state): State<ApiState>,
     Json(request): Json<ModelIdRequest>,
 ) -> Result<Json<domain::PhoneticAnalysisModelDescriptor>, ApiError> {
-    state
+    let id = domain::PhoneticAnalysisModelId::parse(request.model_id)
+        .map_err(ApplicationError::from)?;
+    let model = state
         .phonetic_analysis
-        .install_model(
-            &domain::PhoneticAnalysisModelId::parse(request.model_id)
-                .map_err(ApplicationError::from)?,
-        )
-        .map(Json)
-        .map_err(ApiError::from)
+        .models()?
+        .into_iter()
+        .find(|m| m.id == id)
+        .ok_or(ApplicationError::NotFound("phonetic analysis model"))?;
+    if !model.distribution_allowed || !model.application_verified {
+        return Err(ApiError::from(ApplicationError::Conflict(
+            "phonetic analysis model is not approved for installation",
+        )));
+    }
+    if model.state == domain::PhoneticModelState::Installing {
+        return Ok(Json(model));
+    }
+    let coordinator = state.phonetic_analysis.clone();
+    tokio::spawn(async move {
+        let _ = coordinator.install_model(id).await;
+    });
+    let updated = state
+        .phonetic_analysis
+        .models()?
+        .into_iter()
+        .find(|m| m.id == model.id)
+        .unwrap_or(model);
+    Ok(Json(updated))
 }
 
 pub(crate) async fn register_custom_phonetic_analysis_model(

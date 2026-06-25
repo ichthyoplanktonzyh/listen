@@ -201,6 +201,7 @@ fn phone_timeline(
         metrics_json: serde_json::json!({ "synthetic": true }),
         phones: vec![DetectedPhone {
             symbol: "H".into(),
+            display_ipa: "H".into(),
             phone_set: "research_fixture_symbols".into(),
             start_ms: 150,
             end_ms: 260,
@@ -2185,6 +2186,7 @@ fn phonetic_models_jobs_analyses_and_feedback_round_trip() {
         phone_set: "arpabet".into(),
         detected_phones: vec![DetectedPhone {
             symbol: "HH".into(),
+            display_ipa: "h".into(),
             phone_set: "arpabet".into(),
             start_ms: 100,
             end_ms: 200,

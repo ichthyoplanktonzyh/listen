@@ -425,7 +425,7 @@ progress:
 - 验证：Python 14/14 + cargo test + clippy 全通过；英语回归基线不变。
 - 收口文档：`.planning/phases/2.9-production-multilingual-decoupling/2.9-CLOSEOUT.md`
 
-### Phase 2.10: English Real Speech Analysis ✅ Step 2 选型完成（2026-06-25）
+### Phase 2.10: English Real Speech Analysis ✅ 集成完成（2026-06-25）
 
 - 目标：选出 phone-level provider，让英语语流分析从"文本预测"升级为"音频检测"。
 - **Step 1 Provider Benchmark ✅**（2026-06-25）：
@@ -444,7 +444,17 @@ progress:
   - ✅ MFA：保留为 canonical phone boundary provider（非 identity）
   - ⚠️ ZIPA：MIT 代码 + 模型许可未正式声明，作为备选
   - `release_provider_selected: true`
-- Step 3–6：待执行（provider 集成 → finding 升级 → app 验证 → 回归）
+- **Step 3 Provider 集成 ✅**（2026-06-25）：
+  - `DetectedPhone` 新增 `display_ipa` 字段（IPA 显示 + ARPAbet 内部对齐）
+  - `speech-analysis/phone_recognition.rs`：IPA→ARPAbet 映射表 + sidecar 调用封装
+  - `phonetic_fixture.rs`：`build_ctc_phonetic_analysis()` 真实 CTC 推理路径
+  - `api-http/phonetic_analysis.rs`：CTC provider 注册 + model seed + 执行分派
+  - `scripts/wav2vec2-phoneme-cli.py`：Python sidecar（CTC decode + timestamp + logit confidence）
+  - `scripts/setup-phoneme-model.sh`：模型下载脚本
+  - Flutter `diagnosis_card.dart`：IPA 优先显示
+- **Step 4 Finding 升级 ✅**（隐式完成 — 现有 alignment + findings 管线已完整支持真实 confidence）
+- **Step 5 App 验证**：⏳ 待下载模型后端到端真实音频测试
+- **Step 6 测试回归 ✅**：Rust 299 tests + Flutter 64 tests 全部通过
 - 新产出：`scripts/wav2vec2-ctc-phoneme-research.py`（候选 E/F 推理适配器）、
   `scripts/ipa-to-timit-phone-map.json`（IPA→TIMIT 映射表）
 - 规划文档：`.planning/phases/2.10-english-real-speech-analysis/`
@@ -518,11 +528,10 @@ progress:
 
 ## 下一步工作
 
-1. **Phase 2.10 Step 3**：将选定的 fb-espeak provider 集成到生产管线（PronunciationProvider 实现 +
-   PhoneTimeline 桥接）。
-2. **Phase 2.10 Step 4–6**：语流 finding 升级 → App 消费验证 → 测试回归。
-3. **Phase 2.11 Step 4–5**（依赖 2.10）：L1 诊断 seam + 听觉锚定准备。
-4. Phase 2.3 正式收口（手动 QA 已通过，待写 closeout）。
+1. **Phase 2.10 Step 5 端到端验证**：下载 fb-espeak 模型（`scripts/setup-phoneme-model.sh`），
+   用真实音频确认 sidecar 输出 + IPA 显示 + finding 分类正确。
+2. **Phase 2.11 Step 4–5**（依赖 2.10）：L1 诊断 seam + 听觉锚定准备。
+3. Phase 2.3 正式收口（手动 QA 已通过，待写 closeout）。
 
 ## 指标
 

@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- 2026-06-25 CST: Phase 2.10 Steps 2-6 — fb-espeak CTC phoneme provider 选型与集成。
+  (1) **Step 2 补充 benchmark**: fb-espeak PER=30.5%（Apache 2.0）选定；
+  vitouphy PER=19.5% 因 TIMIT 许可阻塞被排除。
+  (2) **Step 3 生产管线集成**:
+  - `DetectedPhone` 新增 `display_ipa` 字段，UI 以 IPA 为主显示
+  - `speech-analysis/phone_recognition.rs`: IPA→ARPAbet 映射 + sidecar 封装
+  - `phonetic_fixture.rs`: `build_ctc_phonetic_analysis()` 真实 CTC 推理路径
+  - `api-http/phonetic_analysis.rs`: CTC provider 注册 + model seed + 执行分派
+  - `scripts/wav2vec2-phoneme-cli.py`: Python sidecar（CTC decode + logit confidence）
+  - `scripts/setup-phoneme-model.sh`: 命令行模型下载脚本
+  - `scripts/download-phoneme-model.py`: 后台模型下载 sidecar（JSON 进度输出）
+  - Flutter `diagnosis_card.dart`: IPA 优先显示
+  - Flutter `phonetic_analysis_ui.dart`: 模型下载按钮 + 进度条（App 内一键下载）
+  - `install_model` API: 后台 spawn Python 下载进程，带进度回报和状态更新
+  - Flutter `api_service.dart`: 新增 `installPhoneticAnalysisModel()` API 调用
+  (3) **Step 4 finding 升级**: 隐式完成（现有 alignment + findings 管线已支持真实 confidence）
+  (4) **Step 5 端到端验证**: 待下载模型后测试
+  (5) **Step 6 回归**: Rust 299 tests + Flutter 64 tests 全部通过
+  使用方式: App 设置 → Audio analysis models → 点击下载按钮；或命令行 `./scripts/setup-phoneme-model.sh`。
+
 - 2026-06-25 CST: Phase 2.11 Steps 1-3 完成 + Phase 2.10 研究计划。
   (1) **Step 3 — domain lib.rs 拆分**: 从 1317 行缩减到 194 行。新增 13 个领域模块
   (media / subtitle / pronunciation / word_timing / chunk_timeline / phone_timeline /

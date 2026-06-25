@@ -22,14 +22,16 @@ impl AppServices {
             } else {
                 start + width
             };
+            let sym = word
+                .normalized
+                .as_deref()
+                .and_then(|value| value.chars().next())
+                .unwrap_or('?')
+                .to_ascii_uppercase()
+                .to_string();
             phones.push(DetectedPhone {
-                symbol: word
-                    .normalized
-                    .as_deref()
-                    .and_then(|value| value.chars().next())
-                    .unwrap_or('?')
-                    .to_ascii_uppercase()
-                    .to_string(),
+                display_ipa: sym.clone(),
+                symbol: sym,
                 phone_set: "research_fixture_symbols".into(),
                 start_ms: start,
                 end_ms: end,
@@ -106,6 +108,88 @@ impl AppServices {
             alignments,
             findings,
             analyzer_version: "research-fixture-v1".into(),
+            created_at_ms: now_ms(),
+        };
+        analysis.validate().map_err(ApplicationError::from)?;
+        Ok(analysis)
+    }
+
+    pub fn build_ctc_phonetic_analysis(
+        &self,
+        job: &PhoneticAnalysisJob,
+        sentence: Option<&SubtitleSentence>,
+        audio_path: &str,
+        model_dir: &str,
+    ) -> Result<PhoneticAnalysis, ApplicationError> {
+        let recognized = speech_analysis::phone_recognition::recognize_phones(
+            audio_path,
+            model_dir,
+            job.audio_start_ms,
+            job.audio_end_ms,
+            &job.model_revision,
+        )
+        .map_err(|e| ApplicationError::ExternalProcess(e.into()))?;
+        let phones = recognized.phones;
+        if phones.is_empty() {
+            return Err(ApplicationError::Validation("no phones detected in audio"));
+        }
+        let id = PhoneticAnalysisId::from_fingerprint(
+            "phonetic-analysis",
+            &format!(
+                "{}:{}:{}:{}:{}",
+                job.id.as_str(),
+                job.input_fingerprint,
+                job.sentence_id
+                    .as_ref()
+                    .map(SubtitleSentenceId::as_str)
+                    .unwrap_or("track"),
+                job.audio_start_ms,
+                job.audio_end_ms
+            ),
+        );
+        let canonical = sentence
+            .map(speech_analysis::analyze_sentence)
+            .into_iter()
+            .flat_map(|analysis| analysis.phonemes)
+            .filter_map(|phone| {
+                phone.token_index.map(|token_index| {
+                    speech_analysis::phonetic_alignment::CanonicalPhone {
+                        symbol: phone.symbol,
+                        token_index,
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        let alignments = speech_analysis::phonetic_alignment::align_phones(&canonical, &phones);
+        let findings = speech_analysis::phonetic_findings::findings_from_alignments(
+            &id,
+            job.audio_start_ms,
+            job.audio_end_ms,
+            &alignments,
+            &phones,
+        );
+        let analysis = PhoneticAnalysis {
+            id,
+            job_id: job.id.clone(),
+            media_id: job.media_id.clone(),
+            track_id: job.track_id.clone(),
+            sentence_id: job.sentence_id.clone(),
+            audio_start_ms: job.audio_start_ms,
+            audio_end_ms: job.audio_end_ms,
+            provider_id: speech_analysis::phone_recognition::PROVIDER_ID.into(),
+            provider_version: speech_analysis::phone_recognition::PROVIDER_VERSION.into(),
+            model_id: job.model_id.clone(),
+            model_revision: job.model_revision.clone(),
+            model_checksum_sha256: job.model_checksum_sha256.clone(),
+            phone_set: "arpabet".into(),
+            detected_phones: phones,
+            alignments,
+            findings,
+            analyzer_version: format!(
+                "{}-{}",
+                speech_analysis::phone_recognition::PROVIDER_ID,
+                speech_analysis::phone_recognition::PROVIDER_VERSION
+            ),
             created_at_ms: now_ms(),
         };
         analysis.validate().map_err(ApplicationError::from)?;

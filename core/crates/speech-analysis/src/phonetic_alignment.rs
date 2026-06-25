@@ -181,6 +181,7 @@ mod tests {
             .enumerate()
             .map(|(index, symbol)| DetectedPhone {
                 symbol: (*symbol).into(),
+                display_ipa: (*symbol).into(),
                 phone_set: "test".into(),
                 start_ms: index as u64 * 10,
                 end_ms: index as u64 * 10 + 10,

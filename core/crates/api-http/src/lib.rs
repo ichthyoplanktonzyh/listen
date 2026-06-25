@@ -536,6 +536,12 @@ impl From<ApplicationError> for ApiError {
             ApplicationError::Conflict(message) => {
                 Self::new(StatusCode::CONFLICT, "asset_conflict", message, false)
             }
+            ApplicationError::ExternalProcess(message) => Self::new(
+                StatusCode::BAD_GATEWAY,
+                "external_process_error",
+                message,
+                true,
+            ),
         }
     }
 }

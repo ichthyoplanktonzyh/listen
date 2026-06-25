@@ -114,6 +114,7 @@ pub struct PhoneticAnalysisJob {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DetectedPhone {
     pub symbol: String,
+    pub display_ipa: String,
     pub phone_set: String,
     pub start_ms: u64,
     pub end_ms: u64,
@@ -292,6 +293,7 @@ mod tests {
             detected_phones: vec![
                 DetectedPhone {
                     symbol: "HH".into(),
+                    display_ipa: "h".into(),
                     phone_set: "arpabet".into(),
                     start_ms: 100,
                     end_ms: 200,
@@ -303,6 +305,7 @@ mod tests {
                 },
                 DetectedPhone {
                     symbol: "AH".into(),
+                    display_ipa: "ə".into(),
                     phone_set: "arpabet".into(),
                     start_ms: 200,
                     end_ms: 300,

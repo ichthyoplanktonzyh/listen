@@ -13,6 +13,9 @@ use tokio::sync::{Semaphore, broadcast};
 const FAKE_PROVIDER_ID: &str = "research-fixture";
 const FAKE_MODEL_ID: &str = "research-fixture:deterministic@v1";
 
+const CTC_PROVIDER_ID: &str = "wav2vec2-ctc-phoneme";
+const CTC_MODEL_ID: &str = "wav2vec2-ctc-phoneme:fb-espeak-cv-ft@v1";
+
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct CreatePhoneticJobRequest {
     pub track_id: String,
@@ -45,50 +48,153 @@ impl PhoneticAnalysisCoordinator {
         };
         value.repository.interrupt_active_phonetic_jobs(now_ms())?;
         value.seed_research_model()?;
+        value.seed_ctc_model()?;
         Ok(value)
     }
 
     pub fn providers(&self) -> Vec<PhoneticAnalysisProviderInfo> {
-        let enabled = fake_enabled();
-        vec![PhoneticAnalysisProviderInfo {
-            id: FAKE_PROVIDER_ID.into(),
-            display_name: "Deterministic research fixture".into(),
-            runtime_id: "built-in-test-runtime".into(),
-            runtime_version: env!("CARGO_PKG_VERSION").into(),
-            available: enabled,
-            experimental: true,
+        let ctc_available = ctc_model_dir().is_some();
+        let mut providers = vec![PhoneticAnalysisProviderInfo {
+            id: CTC_PROVIDER_ID.into(),
+            display_name: "wav2vec2 CTC phoneme recognition (fb-espeak)".into(),
+            runtime_id: "transformers-pytorch".into(),
+            runtime_version: "v1".into(),
+            available: ctc_available,
+            experimental: false,
             supports_timestamps: true,
             supports_confidence: true,
             supported_languages: vec!["en".into()],
             supported_dialects: vec!["en-US".into()],
-            phone_sets: vec!["arpabet".into()],
-            diagnostic: (!enabled).then_some(
-                "No release phonetic provider is selected. The deterministic research fixture is disabled."
+            phone_sets: vec!["arpabet".into(), "ipa".into()],
+            diagnostic: (!ctc_available).then_some(
+                "Model not installed. Set LLPLAYERNEXT_PHONEME_MODEL_DIR or download the model."
                     .into(),
             ),
-        }]
+        }];
+        if fake_enabled() {
+            providers.push(PhoneticAnalysisProviderInfo {
+                id: FAKE_PROVIDER_ID.into(),
+                display_name: "Deterministic research fixture".into(),
+                runtime_id: "built-in-test-runtime".into(),
+                runtime_version: env!("CARGO_PKG_VERSION").into(),
+                available: true,
+                experimental: true,
+                supports_timestamps: true,
+                supports_confidence: true,
+                supported_languages: vec!["en".into()],
+                supported_dialects: vec!["en-US".into()],
+                phone_sets: vec!["arpabet".into()],
+                diagnostic: None,
+            });
+        }
+        providers
     }
 
     pub fn models(&self) -> Result<Vec<PhoneticAnalysisModelDescriptor>, ApplicationError> {
         self.repository.list_phonetic_models()
     }
 
-    pub fn install_model(
-        &self,
-        id: &PhoneticAnalysisModelId,
+    pub async fn install_model(
+        self: Arc<Self>,
+        id: PhoneticAnalysisModelId,
     ) -> Result<PhoneticAnalysisModelDescriptor, ApplicationError> {
-        let model = self
+        let mut model = self
             .repository
-            .get_phonetic_model(id)?
+            .get_phonetic_model(&id)?
             .ok_or(ApplicationError::NotFound("phonetic analysis model"))?;
         if !model.distribution_allowed || !model.application_verified {
             return Err(ApplicationError::Conflict(
                 "phonetic analysis model is not approved for installation",
             ));
         }
-        Err(ApplicationError::Conflict(
-            "no release phonetic provider supports model installation",
-        ))
+        if model.state == PhoneticModelState::Installing {
+            return Err(ApplicationError::Conflict(
+                "model is already being installed",
+            ));
+        }
+
+        let model_dir = default_ctc_model_dir()
+            .ok_or(ApplicationError::Repository("cannot determine model directory".into()))?;
+
+        model.state = PhoneticModelState::Installing;
+        model.error = None;
+        model.updated_at_ms = now_ms();
+        self.repository.upsert_phonetic_model(&model)?;
+        self.emit_model(&model);
+
+        let script = download_script_path().ok_or(ApplicationError::Repository(
+            "download-phoneme-model.py not found".into(),
+        ))?;
+
+        let result = async {
+            tokio::fs::create_dir_all(&model_dir).await.map_err(|e| {
+                ApplicationError::Repository(format!("cannot create model dir: {e}"))
+            })?;
+
+            let mut child = tokio::process::Command::new("python3")
+                .arg(&script)
+                .arg("--model-dir")
+                .arg(&model_dir)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .map_err(|e| ApplicationError::ExternalProcess(format!("spawn failed: {e}")))?;
+
+            let stdout = child.stdout.take().unwrap();
+            let mut reader = tokio::io::BufReader::new(stdout).lines();
+
+            use tokio::io::AsyncBufReadExt;
+            while let Some(line) = reader
+                .next_line()
+                .await
+                .map_err(|e| ApplicationError::Repository(e.to_string()))?
+            {
+                if let Ok(msg) = serde_json::from_str::<serde_json::Value>(&line) {
+                    let progress = msg.get("progress").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    model.installed_bytes = (progress / 100.0 * model.size_bytes as f64) as u64;
+                    model.updated_at_ms = now_ms();
+                    self.repository.upsert_phonetic_model(&model)?;
+                    self.emit_model(&model);
+
+                    if msg.get("status").and_then(|v| v.as_str()) == Some("failed") {
+                        let message = msg
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown error");
+                        return Err(ApplicationError::ExternalProcess(message.into()));
+                    }
+                }
+            }
+
+            let status = child
+                .wait()
+                .await
+                .map_err(|e| ApplicationError::ExternalProcess(e.to_string()))?;
+            if !status.success() {
+                return Err(ApplicationError::ExternalProcess(format!(
+                    "download script exited with {status}"
+                )));
+            }
+            Ok(())
+        }
+        .await;
+
+        match result {
+            Ok(()) => {
+                model.state = PhoneticModelState::Custom;
+                model.local_path = Some(model_dir);
+                model.installed_bytes = model.size_bytes;
+                model.error = None;
+            }
+            Err(error) => {
+                model.state = PhoneticModelState::Failed;
+                model.error = Some(error.to_string());
+            }
+        }
+        model.updated_at_ms = now_ms();
+        let model = self.repository.upsert_phonetic_model(&model)?;
+        self.emit_model(&model);
+        Ok(model)
     }
 
     pub fn register_custom_model(
@@ -122,9 +228,9 @@ impl PhoneticAnalysisCoordinator {
     }
 
     pub fn delete_model(&self, id: &PhoneticAnalysisModelId) -> Result<(), ApplicationError> {
-        if id.as_str() == FAKE_MODEL_ID {
+        if id.as_str() == FAKE_MODEL_ID || id.as_str() == CTC_MODEL_ID {
             return Err(ApplicationError::Conflict(
-                "the deterministic research fixture cannot be deleted",
+                "built-in model descriptors cannot be deleted",
             ));
         }
         if self.repository.get_phonetic_model(id)?.is_none() {
@@ -187,9 +293,15 @@ impl PhoneticAnalysisCoordinator {
         self: Arc<Self>,
         request: CreatePhoneticJobRequest,
     ) -> Result<PhoneticAnalysisJob, ApplicationError> {
-        if !fake_enabled() {
+        let is_ctc = request.model_id == CTC_MODEL_ID;
+        if !is_ctc && !fake_enabled() {
             return Err(ApplicationError::Conflict(
                 "no phonetic analysis provider is available",
+            ));
+        }
+        if is_ctc && ctc_model_dir().is_none() {
+            return Err(ApplicationError::Conflict(
+                "wav2vec2 phoneme model is not installed",
             ));
         }
         let track_id = SubtitleTrackId::parse(request.track_id)?;
@@ -269,10 +381,10 @@ impl PhoneticAnalysisCoordinator {
             },
             audio_start_ms: start_ms,
             audio_end_ms: end_ms,
-            provider_id: FAKE_PROVIDER_ID.into(),
+            provider_id: if is_ctc { CTC_PROVIDER_ID } else { FAKE_PROVIDER_ID }.into(),
             provider_version: "v1".into(),
-            runtime_id: "built-in-test-runtime".into(),
-            runtime_version: env!("CARGO_PKG_VERSION").into(),
+            runtime_id: if is_ctc { "transformers-pytorch" } else { "built-in-test-runtime" }.into(),
+            runtime_version: if is_ctc { "v1" } else { env!("CARGO_PKG_VERSION") }.into(),
             model_id: model.id,
             model_revision: model.revision,
             model_checksum_sha256: model.checksum_sha256,
@@ -400,6 +512,24 @@ impl PhoneticAnalysisCoordinator {
                 "deterministic research fixture failure",
             ));
         }
+        let is_ctc = job.provider_id == CTC_PROVIDER_ID;
+        let audio_path = if is_ctc {
+            let media = self
+                .services
+                .read_media(&job.media_id)?
+                .ok_or(ApplicationError::NotFound("media item"))?;
+            Some(media.path)
+        } else {
+            None
+        };
+        let model_dir = if is_ctc {
+            Some(
+                ctc_model_dir()
+                    .ok_or(ApplicationError::Conflict("wav2vec2 phoneme model is not installed"))?,
+            )
+        } else {
+            None
+        };
         let analyses = if job.scope == PhoneticAnalysisScope::Track {
             self.services
                 .read_subtitle_track(&job.track_id)?
@@ -412,11 +542,20 @@ impl PhoneticAnalysisCoordinator {
                     sentence_job.scope = PhoneticAnalysisScope::Sentence;
                     sentence_job.audio_start_ms = sentence.start.get();
                     sentence_job.audio_end_ms = sentence.end.get();
-                    self.services.build_research_fixture_phonetic_analysis(
-                        &sentence_job,
-                        Some(&sentence),
-                        job_research_mode(&sentence_job).as_deref() == Some("partial"),
-                    )
+                    if is_ctc {
+                        self.services.build_ctc_phonetic_analysis(
+                            &sentence_job,
+                            Some(&sentence),
+                            audio_path.as_deref().unwrap(),
+                            model_dir.as_deref().unwrap(),
+                        )
+                    } else {
+                        self.services.build_research_fixture_phonetic_analysis(
+                            &sentence_job,
+                            Some(&sentence),
+                            job_research_mode(&sentence_job).as_deref() == Some("partial"),
+                        )
+                    }
                 })
                 .collect::<Result<Vec<_>, _>>()?
         } else {
@@ -426,11 +565,20 @@ impl PhoneticAnalysisCoordinator {
                 .map(|id| self.services.read_sentence(id))
                 .transpose()?
                 .flatten();
-            vec![self.services.build_research_fixture_phonetic_analysis(
-                &job,
-                sentence.as_ref(),
-                job_research_mode(&job).as_deref() == Some("partial"),
-            )?]
+            if is_ctc {
+                vec![self.services.build_ctc_phonetic_analysis(
+                    &job,
+                    sentence.as_ref(),
+                    audio_path.as_deref().unwrap(),
+                    model_dir.as_deref().unwrap(),
+                )?]
+            } else {
+                vec![self.services.build_research_fixture_phonetic_analysis(
+                    &job,
+                    sentence.as_ref(),
+                    job_research_mode(&job).as_deref() == Some("partial"),
+                )?]
+            }
         };
         let mut phone_timeline_ids = Vec::new();
         for analysis in &analyses {
@@ -509,6 +657,48 @@ impl PhoneticAnalysisCoordinator {
         Ok(())
     }
 
+    fn seed_ctc_model(&self) -> Result<(), ApplicationError> {
+        let id = PhoneticAnalysisModelId::parse(CTC_MODEL_ID)?;
+        if self.repository.get_phonetic_model(&id)?.is_none() {
+            let model_dir = ctc_model_dir();
+            let state = if model_dir.is_some() {
+                PhoneticModelState::Custom
+            } else {
+                PhoneticModelState::Downloadable
+            };
+            self.repository
+                .upsert_phonetic_model(&PhoneticAnalysisModelDescriptor {
+                    id,
+                    provider_id: CTC_PROVIDER_ID.into(),
+                    display_name: "wav2vec2-lv-60-espeak-cv-ft".into(),
+                    family: "wav2vec2-ctc".into(),
+                    revision: "v1".into(),
+                    checksum_sha256: "fb-espeak-cv-ft".into(),
+                    download_url: Some(
+                        "https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft".into(),
+                    ),
+                    local_path: model_dir,
+                    size_bytes: 1_260_000_000,
+                    supported_languages: vec!["en".into()],
+                    supported_dialects: vec!["en-US".into()],
+                    phone_sets: vec!["arpabet".into(), "ipa".into()],
+                    supports_timestamps: true,
+                    expected_sample_rate_hz: 16_000,
+                    context_window_ms: None,
+                    state,
+                    installed_bytes: 0,
+                    error: None,
+                    license: "Apache-2.0".into(),
+                    training_data_provenance:
+                        "CommonVoice + LibriVox native speaker speech".into(),
+                    distribution_allowed: true,
+                    application_verified: true,
+                    updated_at_ms: now_ms(),
+                })?;
+        }
+        Ok(())
+    }
+
     fn emit_job(&self, job: &PhoneticAnalysisJob) {
         let _ = self.events.send(EventEnvelope::v1(
             EventName::PhoneticAnalysisJobChanged,
@@ -526,6 +716,47 @@ impl PhoneticAnalysisCoordinator {
 
 fn fake_enabled() -> bool {
     cfg!(test) || std::env::var("LLPLAYERNEXT_ENABLE_FAKE_PHONETIC_PROVIDER").as_deref() == Ok("1")
+}
+
+fn ctc_model_dir() -> Option<String> {
+    if let Ok(path) = std::env::var("LLPLAYERNEXT_PHONEME_MODEL_DIR") {
+        if std::path::Path::new(&path).is_dir() {
+            return Some(path);
+        }
+    }
+    let home = std::env::var_os("HOME")?;
+    let default = std::path::PathBuf::from(home)
+        .join("Library/Application Support/LLPlayerNext/models/wav2vec2-phoneme");
+    if default.is_dir() {
+        return Some(default.to_string_lossy().into_owned());
+    }
+    None
+}
+
+fn default_ctc_model_dir() -> Option<String> {
+    if let Ok(path) = std::env::var("LLPLAYERNEXT_PHONEME_MODEL_DIR") {
+        return Some(path);
+    }
+    let home = std::env::var_os("HOME")?;
+    Some(
+        std::path::PathBuf::from(home)
+            .join("Library/Application Support/LLPlayerNext/models/wav2vec2-phoneme")
+            .to_string_lossy()
+            .into_owned(),
+    )
+}
+
+fn download_script_path() -> Option<String> {
+    let candidates = [
+        "scripts/download-phoneme-model.py",
+        "../scripts/download-phoneme-model.py",
+    ];
+    for path in candidates {
+        if std::path::Path::new(path).exists() {
+            return Some(path.into());
+        }
+    }
+    None
 }
 
 pub fn finding_id(value: String) -> Result<PhoneticFindingId, ApplicationError> {

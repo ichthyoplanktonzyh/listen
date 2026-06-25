@@ -4,6 +4,7 @@ pub mod chunk_partition;
 pub mod forced_align;
 pub mod learned_prosodic_provider;
 pub mod pause_refinement;
+pub mod phone_recognition;
 pub mod phonetic_alignment;
 pub mod phonetic_findings;
 pub mod rich_acoustic_evidence;

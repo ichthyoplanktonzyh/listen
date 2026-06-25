@@ -236,6 +236,7 @@ mod tests {
     fn phone(symbol: &str, confidence: f32) -> DetectedPhone {
         DetectedPhone {
             symbol: symbol.into(),
+            display_ipa: symbol.into(),
             phone_set: "test".into(),
             start_ms: 10,
             end_ms: 20,
