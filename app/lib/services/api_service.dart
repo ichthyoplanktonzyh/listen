@@ -516,6 +516,17 @@ class LocalApi {
           ))
           as Map<String, dynamic>;
 
+  Future<void> deletePhoneticAnalysisJob(String jobId) async {
+    await _request(
+      'DELETE',
+      '/v1/phonetic-analysis/jobs/${Uri.encodeComponent(jobId)}',
+    );
+  }
+
+  Future<Map<String, dynamic>> clearTerminalPhoneticAnalysisJobs() async =>
+      (await _request('POST', '/v1/phonetic-analysis/jobs/clear'))
+          as Map<String, dynamic>;
+
   Future<Map<String, dynamic>> updatePhoneticFindingFeedback({
     required String findingId,
     required String value,

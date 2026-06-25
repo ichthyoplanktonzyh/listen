@@ -1369,6 +1369,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final track = subtitleController.primaryTrack;
     final cue = subtitleController.currentPrimaryCue;
     if (service == null || track == null || (!wholeTrack && cue == null)) {
+      _showSnackBar('No media or subtitle loaded');
       return;
     }
     try {
@@ -1392,13 +1393,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
         modelId: model['id'] as String,
       );
       if (mounted) {
-        setState(() => status = 'Audio analysis ${job['status']}');
+        _showSnackBar('Audio analysis ${job['status']}');
       }
     } catch (error) {
       if (mounted) {
-        setState(() => status = 'Audio analysis unavailable: $error');
+        _showSnackBar('Audio analysis failed: $error');
       }
     }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
+    );
   }
 
   Future<void> _generateSubtitles({required bool secondary}) async {
