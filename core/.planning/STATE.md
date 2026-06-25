@@ -14,10 +14,8 @@ progress:
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-24 CST
-> 更新原因：Phase 2.12 收口——Flutter 前端状态管理重构完成。Store\<T\> 基础设施、
-> typed domain models、三个 Controller 的 Store 迁移、SubtitleOverlay/SidePanel
-> 布局提取。0 analyze issues, 64 tests passed。
+> 最后更新：2026-06-25 CST
+> 更新原因：Phase 2.10 Step 1 Provider Benchmark 完成；Phase 2.11 Steps 1-3 完成。
 
 ## 当前位置
 
@@ -427,21 +425,28 @@ progress:
 - 验证：Python 14/14 + cargo test + clippy 全通过；英语回归基线不变。
 - 收口文档：`.planning/phases/2.9-production-multilingual-decoupling/2.9-CLOSEOUT.md`
 
-### Phase 2.10: English Real Speech Analysis 📋 已规划
+### Phase 2.10: English Real Speech Analysis ⏳ Step 1 完成，Step 2 选型完成
 
 - 目标：选出 phone-level provider，让英语语流分析从"文本预测"升级为"音频检测"。
-- 候选：MFA phone alignment、ZIPA、Wav2IPA、Allosaurus。
-- 6 步：provider benchmark → 选型决策 → provider 集成 → 语流 finding 升级 →
-  app 消费验证 → 测试回归。
-- 质量门禁：Phase 2.5 定义的 7 条入口标准。
+- **Step 1 Provider Benchmark ✅**（2026-06-25）：
+  - 10 条 TIMIT development cases 评估完成
+  - 4 个候选已 benchmark：MFA (PER=33.8%) / ZIPA (PER=50.0%) / slplab W2V2
+    (PER=31.5%, 全场最佳) / l2-arctic (PER=97.0%)
+  - Benchmark 报告：`2.10-BENCHMARK.md`
+- **Step 2 选型决策 ✅**：推荐 slplab/wav2vec2-large-robust-L2-english-phoneme-recognition
+  （PER 最低 31.5%、Apache 2.0、timeline_valid=1.0），ZIPA 作为轻量级备选（许可证待审）。
+  `release_provider_selected: false`（需生产管线集成验证后升级）。
+- Step 3–6：待后续会话执行（provider 集成 → finding 升级 → app 验证 → 回归）。
 - 规划文档：`.planning/phases/2.10-english-real-speech-analysis/`
 
-### Phase 2.11: Architecture Seam Consolidation 📋 已规划
+### Phase 2.11: Architecture Seam Consolidation ⏳ Steps 1-3 完成
 
 - 目标：落地多语言扩展中预留的设计 seam，消除 client 脚本硬编码。
-- 6 步：能力矩阵 API（独立）→ 学习语言来源（独立）→ domain 拆分（独立）→
-  L1 诊断 seam（依赖 2.10）→ 听觉锚定准备（依赖 2.10）→ identity profile 化（低优先）。
-- 与 Phase 2.10 部分并行：Step 1–3 不依赖 2.10。
+- **Step 1 能力矩阵 API ✅**：Phase 2.12 已完成（`_isHan` 替换为 profile 驱动门控）。
+- **Step 2 学习语言来源 ✅**（2026-06-25）：AppSettings 新增 `learningLanguage`，
+  优先级链 user > subtitle track > en fallback，设置对话框下拉框，中英双语。
+- **Step 3 domain 拆分 ✅**（2026-06-25）：lib.rs 1317→194 行，13 个领域模块。
+- Step 4–5：依赖 2.10，待条件推进。Step 6：低优先。
 - 规划文档：`.planning/phases/2.11-architecture-seam-consolidation/`
 
 ### Phase 2.12: UI State Management Refactoring ✅ 已完成
@@ -503,11 +508,11 @@ progress:
 
 ## 下一步工作
 
-1. **Phase 2.10**：English Real Speech Analysis — provider benchmark + 选型 + 集成，
-   让英语语流分析从文本预测升级为音频检测。
-2. **Phase 2.11 Step 1–3**（可与 2.10 并行）：能力矩阵 API + 学习语言来源 + domain 拆分。
-3. **Phase 2.11 Step 4–5**（依赖 2.10）：L1 诊断 seam + 听觉锚定准备。
-4. Phase 2.3 正式收口（手动 QA 已通过，待写 closeout）。
+1. **Phase 2.10 Step 3**：将 slplab W2V2 集成到生产管线（PhoneAlignmentProvider）。
+2. **Phase 2.10 Step 4**：语流 finding 升级（文本预测 + 音频检测融合）。
+3. **Phase 2.10 Step 5–6**：App 消费验证 + 测试回归。
+4. **Phase 2.11 Step 4–5**（依赖 2.10）：L1 诊断 seam + 听觉锚定准备。
+5. Phase 2.3 正式收口（手动 QA 已通过，待写 closeout）。
 
 ## 指标
 
