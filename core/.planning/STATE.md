@@ -15,7 +15,7 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-25 CST
-> 更新原因：Phase 2.10 集成完成（含 App 内模型下载）；Phase 2.12 完成；播放器 position polling 修复。
+> 更新原因：Phase 2.10 模型下载已验证成功；脚本路径/进度/状态重置三 bug 修复。
 
 ## 当前位置
 
@@ -457,7 +457,12 @@ progress:
   - Flutter `api_service.dart`：新增 `installPhoneticAnalysisModel()` API
   - Flutter `diagnosis_card.dart`：IPA 优先显示
 - **Step 4 Finding 升级 ✅**（隐式完成 — 现有 alignment + findings 管线已完整支持真实 confidence）
-- **Step 5 App 验证**：⏳ 待下载模型后端到端真实音频测试
+- **Step 5 App 验证 — 模型下载 ✅**（2026-06-25）：
+  - App 内一键下载验证通过（~1.26GB fb-espeak 模型）
+  - 修复三个 bug：脚本路径解析（相对路径→向上搜索）、进度反馈（后台轮询目录大小）、
+    Flutter 进度条运算符优先级
+  - 启动时 `reset_stale_installs()` 防止 `installing` 状态卡死
+  - ⏳ 真实音频 CTC→IPA→finding 端到端测试待下次 session 验证
 - **Step 6 测试回归 ✅**：Rust 299 tests + Flutter 64 tests 全部通过
 - 新产出：`scripts/wav2vec2-ctc-phoneme-research.py`（候选 E/F 推理适配器）、
   `scripts/ipa-to-timit-phone-map.json`（IPA→TIMIT 映射表）
@@ -532,11 +537,10 @@ progress:
 
 ## 下一步工作
 
-1. **Phase 2.10 Step 5 端到端验证**：App 内下载 fb-espeak 模型（或命令行
-   `./scripts/setup-phoneme-model.sh`），用真实音频确认 CTC→IPA 显示→finding 分类正确。
+1. **Phase 2.10 Step 5 端到端验证（音频侧）**：模型已下载成功，用真实音频确认
+   CTC→IPA 显示→finding 分类正确。重点验证弱读/省音/闪音 finding 的 precision。
 2. **Phase 2.11 Step 4–5**（依赖 2.10 验证通过）：L1 诊断 seam + 听觉锚定准备。
 3. Phase 2.3 正式收口（手动 QA 已通过，待写 closeout）。
-4. 桌面播放器 position polling 已修复（2026-06-25），验证字幕同步稳定性。
 
 ## 指标
 

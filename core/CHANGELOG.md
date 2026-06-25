@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-06-25 CST: 修复模型下载三个 bug：(1) 脚本路径解析用相对路径导致 App 运行时
+  找不到 `download-phoneme-model.py`，改为从 `current_exe()`/`current_dir()` 向上搜索
+  `scripts/` 目录；phoneme-cli sidecar 同步修复。(2) 下载进度无反馈 —— `snapshot_download()`
+  阻塞无回调，新增后台线程每 3s 轮询模型目录大小并输出 JSON 进度。(3) Flutter 进度条
+  运算符优先级 bug（`?? 0.0 / size`），提取 `_installProgress()` 方法。新增：模型
+  下载失败时红色错误提示；启动时 `reset_stale_installs()` 自动将卡住的 `installing`
+  状态重置为 `downloadable`。模型下载已验证成功（~1.26GB fb-espeak）。
+  验证: Rust 299 tests + Flutter 65 tests 全部通过。
+
 - 2026-06-25 CST: 修复桌面播放器播放位置不上报导致的进度条与字幕同步停滞。
   `DesktopPlayerAdapter` 恢复 100ms position polling，并通过
   `VideoPlayerController.position` 主动触发 fvp `getPosition()`，避免只读取缓存
