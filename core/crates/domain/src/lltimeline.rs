@@ -1,0 +1,114 @@
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    ChunkTimeline, ChunkTimelineChunk, ChunkTimelineId, LanguageCode, MediaId, PhoneTimeline,
+    PhoneTimelineId, SubtitleSentenceId, SubtitleTokenKind, WordTimeline, WordTimelineId,
+};
+
+pub const LLTIMELINE_SCHEMA_V1: &str = "llplayer.timeline.v1";
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LLTimelineDocument {
+    pub schema: String,
+    pub metadata: LLTimelineMetadata,
+    pub segments: Vec<LLTimelineSegment>,
+    #[serde(default)]
+    pub word_timelines: Vec<WordTimeline>,
+    pub active_word_timeline_id: Option<WordTimelineId>,
+    #[serde(default)]
+    pub phone_timelines: Vec<PhoneTimeline>,
+    pub active_phone_timeline_id: Option<PhoneTimelineId>,
+    #[serde(default)]
+    pub chunk_timelines: Vec<ChunkTimeline>,
+    pub active_chunk_timeline_id: Option<ChunkTimelineId>,
+    #[serde(default)]
+    pub artifacts: Vec<LLTimelineArtifact>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LLTimelineMetadata {
+    pub created_at_ms: u64,
+    pub generator: LLTimelineGenerator,
+    pub media: LLTimelineMedia,
+    pub language: Option<LanguageCode>,
+    pub human_reviewed: bool,
+    #[serde(default)]
+    pub extra: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LLTimelineGenerator {
+    pub id: String,
+    pub version: String,
+    pub mode: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LLTimelineMedia {
+    pub id: MediaId,
+    pub fingerprint: String,
+    pub path: Option<String>,
+    pub title: String,
+    pub duration_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LLTimelineSegment {
+    pub id: SubtitleSentenceId,
+    pub index: u32,
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub text: String,
+    pub display_text: String,
+    pub tokens: Vec<LLTimelineToken>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LLTimelineToken {
+    pub index: u32,
+    pub kind: SubtitleTokenKind,
+    pub text: String,
+    pub normalized: Option<String>,
+    pub start_char: u32,
+    pub end_char: u32,
+}
+
+pub type LLTimelineChunkTimeline = ChunkTimeline;
+pub type LLTimelineChunk = ChunkTimelineChunk;
+pub type LLTimelinePhoneTimeline = PhoneTimeline;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LLTimelineWordRef {
+    pub sentence_id: SubtitleSentenceId,
+    pub token_index: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LLTimelineArtifact {
+    pub kind: String,
+    pub provider_id: Option<String>,
+    pub provider_version: Option<String>,
+    #[serde(default)]
+    pub payload: serde_json::Value,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::WordTimelineId;
+
+    #[test]
+    fn lltimeline_v1_fixture_deserializes() {
+        let document: LLTimelineDocument = serde_json::from_str(include_str!(
+            "../../../testdata/lltimeline/v1-minimal.lltimeline.json"
+        ))
+        .unwrap();
+        assert_eq!(document.schema, LLTIMELINE_SCHEMA_V1);
+        assert_eq!(document.segments.len(), 1);
+        assert_eq!(document.word_timelines.len(), 1);
+        assert_eq!(
+            document.active_word_timeline_id,
+            Some(WordTimelineId::parse("timeline-fixture").unwrap())
+        );
+    }
+}

@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- 2026-06-25 CST: Phase 2.11 Steps 1-3 完成 + Phase 2.10 研究计划。
+  (1) **Step 3 — domain lib.rs 拆分**: 从 1317 行缩减到 194 行。新增 13 个领域模块
+  (media / subtitle / pronunciation / word_timing / chunk_timeline / phone_timeline /
+  lltimeline / phonetic_analysis / learning / dictionary / transcription / vocabulary /
+  diagnosis)，测试下沉到各自模块。
+  (2) **Step 1 — 能力矩阵 API**: Phase 2.12 已完成（`_isHan` 替换为 profile 驱动门控，
+  `/v1/languages` + `/v1/languages/{code}/profile` 端点已就位）。
+  (3) **Step 2 — 学习语言来源**: AppSettings 新增 `learningLanguage` 字段（默认 `auto`），
+  优先级链：用户设置 > 字幕轨语言 > `en` fallback。设置对话框顶部新增学习语言下拉框。
+  中英双语 localization。
+  (4) **Phase 2.10 研究计划**: 编写 `2.10-RESEARCH-PLAN.md`，盘点已有基础设施
+  (PhoneTimeline / MFA / ZIPA / 评估 harness)，规划 4 阶段研究流程
+  (环境验证 → 候选 benchmark → 选型决策 → 结果记录)。
+  (5) **验证**: 294 cargo tests + 64 flutter tests passed, `flutter analyze` 0 issues。
+
 - 2026-06-25 CST: Phase 2.12 — UI State Management Refactoring (Flutter).
   (1) **Store\<T\> 基础设施**: 通用响应式状态容器，支持 `select()` 细粒度字段级
   ValueNotifier 订阅。新增 StoreBuilder/StoreBuilder2 声明式选择器 Widget。
