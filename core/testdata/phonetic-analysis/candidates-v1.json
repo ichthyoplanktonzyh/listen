@@ -2,17 +2,20 @@
   "version": 1,
   "reviewed_at": "2026-06-25",
   "revised_at": "2026-06-25",
-  "revision_reason": "slplab and l2-arctic invalidated: L2 pronunciation assessment models, not native connected speech phone recognizers. Two new candidates added for benchmarking.",
-  "release_provider_selected": false,
-  "research_summary": "Phase 2.10 benchmark revised: slplab W2V2 (Korean L2 model) and l2-arctic invalidated due to training target mismatch. Remaining viable candidates: MFA (canonical boundary only, PER=33.8%) and ZIPA (IPA identity, PER=50.0% with mapping loss). Two new candidates pending benchmark: fb/wav2vec2-lv-60-espeak-cv-ft (multilingual phoneme, CommonVoice-trained) and vitouphy/wav2vec2-xls-r-300m-timit-phoneme (TIMIT fine-tuned). No provider selected.",
+  "revision_reason": "Supplementary benchmark completed for candidates E (fb-espeak) and F (vitouphy). License review finalized. Provider selected: fb/wav2vec2-lv-60-espeak-cv-ft.",
+  "release_provider_selected": true,
+  "selected_provider_id": "fb-wav2vec2-lv-60-espeak-cv-ft",
+  "selected_provider_role": "phone_identity_provider",
+  "selection_criteria": "PER=30.5% (best among distributable candidates). Apache 2.0 license with clear model provenance. Native speaker training data (CommonVoice + LibriVox). Connected speech fidelity: outputs real IPA including flaps, weak forms, schwa.",
+  "research_summary": "Phase 2.10 supplementary benchmark complete. Full candidate ranking: vitouphy (19.5% PER, but TIMIT license restricted — can't distribute), fb-espeak (30.5% PER, Apache 2.0 — SELECTED), MFA (33.8% PER, MIT — boundary provider only), ZIPA (50.0% PER, MIT code / model license unclear). Selection: fb-espeak as phone identity provider; MFA retained for boundary reference.",
   "benchmark_reference": ".planning/phases/2.10-english-real-speech-analysis/2.10-BENCHMARK.md",
   "candidates": [
     {
       "id": "zipa-small-crctc-300k",
       "role": "phone_identity_provider",
-      "status": "best_research_candidate_pending_license_review",
+      "status": "researched_license_pending",
       "runtime": "onnxruntime",
-      "license": "permissive_claimed_exact_license_pending",
+      "license": "Code: MIT (verified 2026-06-25); Model: not explicitly declared on HF",
       "license_verified": false,
       "code_revision": "f96afe2842868bb1d3cea1efe191806fdcd3c955",
       "code_license": "MIT",
@@ -60,26 +63,53 @@
     },
     {
       "id": "fb-wav2vec2-lv-60-espeak-cv-ft",
-      "role": "native_speech_phone_recognition_candidate",
-      "status": "pending_benchmark",
+      "role": "phone_identity_provider",
+      "status": "selected",
       "runtime": "transformers-pytorch",
       "license": "Apache-2.0",
       "license_verified": true,
       "model_size_mb": 1260,
-      "notes": "Facebook official model. wav2vec2-large-lv60 fine-tuned on CommonVoice for multilingual phoneme recognition. IPA output. Trained on native speaker speech (CommonVoice + LibriVox), not L2 assessment. Research paper: 'Simple and Effective Zero-shot Cross-lingual Phoneme Recognition' (Xu, Baevski, Auli).",
+      "benchmark": {
+        "per": 0.305,
+        "phone_count": 322,
+        "reference_phone_count": 302,
+        "timeline_valid_ratio": 1.0,
+        "rtf_estimate": 1.5,
+        "deletions": 7,
+        "insertions": 27,
+        "substitutions": 58,
+        "ipa_to_timit_map": "scripts/ipa-to-timit-phone-map.json",
+        "adapter": "scripts/wav2vec2-ctc-phoneme-research.py",
+        "limitations": "High insertion rate (27) due to espeak IPA tokenizer granularity. 1.26 GB model size — consider ONNX quantization for distribution."
+      },
+      "notes": "Facebook official model. wav2vec2-large-lv60 fine-tuned on CommonVoice for multilingual phoneme recognition. IPA output. Trained on native speaker speech (CommonVoice + LibriVox), not L2 assessment. SELECTED as phone identity provider for Phase 2.10.",
       "sources": [
-        "https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft"
+        "https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft",
+        "https://arxiv.org/abs/XXXX (Xu, Baevski, Auli — Simple and Effective Zero-shot Cross-lingual Phoneme Recognition)"
       ]
     },
     {
       "id": "vitouphy-wav2vec2-xls-r-300m-timit-phoneme",
-      "role": "timit_native_phone_recognition_candidate",
-      "status": "pending_benchmark",
+      "role": "research_reference_only",
+      "status": "researched_not_distributable_timit_license",
       "runtime": "transformers-pytorch",
-      "license": "Apache-2.0",
+      "license": "Apache-2.0 (base model) / LDC restricted (fine-tuning data)",
       "license_verified": false,
       "model_size_mb": 1200,
-      "notes": "XLS-R 300M fine-tuned directly on TIMIT (80/10/10 split). Outputs TIMIT phone set natively (no mapping needed). Reported PER ~8% on TIMIT test. Risk: may overfit to TIMIT read speech and degrade on natural connected speech.",
+      "distribution_review": "blocked_by_timit_ldc_restricted_license",
+      "benchmark": {
+        "per": 0.195,
+        "phone_count": 303,
+        "reference_phone_count": 302,
+        "timeline_valid_ratio": 1.0,
+        "rtf_estimate": 1.3,
+        "deletions": 4,
+        "insertions": 5,
+        "substitutions": 50,
+        "ipa_to_timit_map": "scripts/ipa-to-timit-phone-map.json",
+        "limitations": "Outputs IPA characters (not TIMIT phone set as assumed). Trained on TIMIT (LDC restricted) — cannot distribute in product. Best PER at 19.5% — serves as SOTA upper bound reference."
+      },
+      "notes": "XLS-R 300M fine-tuned directly on TIMIT (80/10/10 split). Outputs IPA characters (44 token vocab), NOT TIMIT phone set as previously assumed. SA1/SA2 PER 13.75% vs SX PER 19.44% — moderate overfitting. Best benchmark performer but blocked by TIMIT LDC restricted license.",
       "sources": [
         "https://huggingface.co/vitouphy/wav2vec2-xls-r-300m-timit-phoneme"
       ]
