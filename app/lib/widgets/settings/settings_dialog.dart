@@ -43,6 +43,9 @@ class SettingsDialog extends StatefulWidget {
     required this.showExperimentalPhoneticResults,
     required this.phonemeHighlightVisible,
     required this.phoneticCachePolicy,
+    required this.learningLanguage,
+    required this.availableLanguages,
+    required this.onLearningLanguageChanged,
     required this.onLanguageChanged,
     required this.onSubtitlePresetChanged,
     required this.onPrimaryFontSizeChanged,
@@ -112,8 +115,11 @@ class SettingsDialog extends StatefulWidget {
   final bool showExperimentalPhoneticResults;
   final bool phonemeHighlightVisible;
   final String phoneticCachePolicy;
+  final String learningLanguage;
+  final List<String> availableLanguages;
 
   // Callbacks
+  final ValueChanged<String> onLearningLanguageChanged;
   final ValueChanged<String> onLanguageChanged;
   final ValueChanged<String> onSubtitlePresetChanged;
   final ValueChanged<double> onPrimaryFontSizeChanged;
@@ -189,6 +195,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late bool showExperimentalPhoneticResults;
   late bool phonemeHighlightVisible;
   late String phoneticCachePolicy;
+  late String learningLanguage;
 
   late final TextEditingController ffmpegController;
   late final TextEditingController ffprobeController;
@@ -239,6 +246,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     showExperimentalPhoneticResults = widget.showExperimentalPhoneticResults;
     phonemeHighlightVisible = widget.phonemeHighlightVisible;
     phoneticCachePolicy = widget.phoneticCachePolicy;
+    learningLanguage = widget.learningLanguage;
     ffmpegController = TextEditingController(text: widget.ffmpegPath);
     ffprobeController = TextEditingController(text: widget.ffprobePath);
     ytDlpController = TextEditingController(text: widget.ytDlpPath);
@@ -267,6 +275,30 @@ class _SettingsDialogState extends State<SettingsDialog> {
           height: 650,
           child: ListView(
             children: [
+              DropdownButtonFormField<String>(
+                initialValue: learningLanguage,
+                decoration: InputDecoration(
+                  labelText: l.text('learningLanguage'),
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: 'auto',
+                    child: Text(l.text('automatic')),
+                  ),
+                  for (final code in widget.availableLanguages)
+                    DropdownMenuItem(
+                      value: code,
+                      child: Text(_languageLabel(l, code)),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  learningLanguage = value;
+                  widget.onLearningLanguageChanged(value);
+                  refresh(() {});
+                },
+              ),
+              const Divider(),
               Text(
                 l.text('subtitles'),
                 style: const TextStyle(fontWeight: FontWeight.bold),
@@ -821,6 +853,13 @@ class _SettingsDialogState extends State<SettingsDialog> {
         ),
     ],
   );
+
+  String _languageLabel(AppLocalizations l, String code) => switch (code) {
+    'en' => l.text('english'),
+    'zh' => l.text('chinese'),
+    'ja' => l.text('japanese'),
+    _ => code,
+  };
 
   Widget _fontSelector(
     String label,

@@ -51,6 +51,7 @@ class SettingsController extends ChangeNotifier {
       _settings.showExperimentalPhoneticResults;
   bool get phonemeHighlightVisible => _settings.phonemeHighlightVisible;
   String get phoneticCachePolicy => _settings.phoneticCachePolicy;
+  String get learningLanguage => _settings.learningLanguage;
   Color get primaryColor => Color(_settings.primaryColor);
   Color get secondaryColor => Color(_settings.secondaryColor);
 

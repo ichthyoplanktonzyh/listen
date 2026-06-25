@@ -47,6 +47,7 @@ class AppSettings {
     this.showExperimentalPhoneticResults = false,
     this.phonemeHighlightVisible = true,
     this.phoneticCachePolicy = 'keep_completed',
+    this.learningLanguage = 'auto',
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
@@ -148,6 +149,8 @@ class AppSettings {
           json['phoneme_highlight_visible'] as bool? ?? true,
       phoneticCachePolicy:
           json['phonetic_cache_policy'] as String? ?? 'keep_completed',
+      learningLanguage:
+          json['learning_language'] as String? ?? 'auto',
     );
   }
 
@@ -195,6 +198,7 @@ class AppSettings {
   final bool showExperimentalPhoneticResults;
   final bool phonemeHighlightVisible;
   final String phoneticCachePolicy;
+  final String learningLanguage;
 
   static File get file => File(
     '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v8.json',
@@ -284,6 +288,7 @@ class AppSettings {
         'show_experimental_phonetic_results': showExperimentalPhoneticResults,
         'phoneme_highlight_visible': phonemeHighlightVisible,
         'phonetic_cache_policy': phoneticCachePolicy,
+        'learning_language': learningLanguage,
       }),
       flush: true,
     );
@@ -333,6 +338,7 @@ class AppSettings {
     bool? showExperimentalPhoneticResults,
     bool? phonemeHighlightVisible,
     String? phoneticCachePolicy,
+    String? learningLanguage,
   }) => AppSettings(
     version: version,
     rate: rate ?? this.rate,
@@ -388,6 +394,7 @@ class AppSettings {
     phonemeHighlightVisible:
         phonemeHighlightVisible ?? this.phonemeHighlightVisible,
     phoneticCachePolicy: phoneticCachePolicy ?? this.phoneticCachePolicy,
+    learningLanguage: learningLanguage ?? this.learningLanguage,
   );
 
   static double _number(

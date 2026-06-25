@@ -1683,6 +1683,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
             settingsController.showExperimentalPhoneticResults,
         phonemeHighlightVisible: settingsController.phonemeHighlightVisible,
         phoneticCachePolicy: settingsController.phoneticCachePolicy,
+        learningLanguage: settingsController.learningLanguage,
+        availableLanguages: learningController.availableLanguages,
+        onLearningLanguageChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(learningLanguage: v),
+          );
+        },
         onLanguageChanged: (v) {
           appLanguage.value = v;
           settingsController.update(
@@ -2258,12 +2265,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   /// Resolves the learning language for vocabulary, dictionary, source-snapshot
-  /// and diagnosis queries. Priority (Phase 2.6 Step 4): the active primary
-  /// subtitle track's language, then a safe `en` fallback that the UI can still
-  /// change. User-selected and media-metadata sources are reserved for a later
-  /// refinement and intentionally not wired yet.
-  String get _learningLanguage =>
-      subtitleController.primaryTrack?.language ?? 'en';
+  /// and diagnosis queries. Priority: user setting > active subtitle track
+  /// language > en fallback.
+  String get _learningLanguage {
+    final preferred = settingsController.learningLanguage;
+    if (preferred != 'auto') return preferred;
+    return subtitleController.primaryTrack?.language ?? 'en';
+  }
 
   Map<String, dynamic>? _sourceFor(SubtitleToken token, Cue cue) {
     if (playerController.mediaFingerprint == null) return null;
