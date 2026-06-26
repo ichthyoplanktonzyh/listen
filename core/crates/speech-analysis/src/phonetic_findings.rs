@@ -29,7 +29,7 @@ pub fn findings_from_alignments(
                 .unwrap_or((audio_start_ms, audio_end_ms));
             let confidence = alignment.confidence.clamp(0.0, 1.0);
             let finding_type = classify(alignment, detected);
-            let status = if confidence >= 0.75 {
+            let status = if confidence >= 0.75 && can_claim_audio_detection(finding_type) {
                 PhoneticFindingStatus::DetectedInAudio
             } else if confidence >= 0.6 {
                 PhoneticFindingStatus::SupportedByAlignment
@@ -97,6 +97,13 @@ fn classify(alignment: &PhoneAlignment, detected: &[DetectedPhone]) -> &'static 
     }
 }
 
+fn can_claim_audio_detection(finding_type: &str) -> bool {
+    matches!(
+        finding_type,
+        "weak_form" | "flapping" | "assimilation" | "contraction" | "elision"
+    )
+}
+
 fn detected_slice<'a>(
     alignment: &PhoneAlignment,
     detected_phones: &'a [DetectedPhone],
@@ -139,13 +146,43 @@ mod tests {
             &analysis_id,
             0,
             100,
-            &[alignment(PhoneAlignmentKind::Substitution, 0.9)],
+            &[alignment_with(
+                PhoneAlignmentKind::Substitution,
+                0.9,
+                &["AH"],
+                0,
+                0,
+            )],
             &[phone("AX", 0.9)],
         );
 
         assert_eq!(findings[0].status, PhoneticFindingStatus::DetectedInAudio);
         assert_eq!(findings[0].audio_start_ms, 10);
         assert_eq!(findings[0].audio_end_ms, 20);
+    }
+
+    #[test]
+    fn generic_high_confidence_substitution_is_not_audio_detection() {
+        let analysis_id = PhoneticAnalysisId::from_fingerprint("analysis", "generic-substitution");
+        let findings = findings_from_alignments(
+            &analysis_id,
+            0,
+            100,
+            &[alignment_with(
+                PhoneAlignmentKind::Substitution,
+                0.92,
+                &["S"],
+                0,
+                0,
+            )],
+            &[phone("K", 0.92)],
+        );
+
+        assert_eq!(findings[0].finding_type, "phone_substitution");
+        assert_eq!(
+            findings[0].status,
+            PhoneticFindingStatus::SupportedByAlignment
+        );
     }
 
     #[test]

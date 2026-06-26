@@ -16,7 +16,13 @@
   boundary 和 pause-based prosodic phrase detection。
   (4) **Flutter 消费**: `PhoneTimeline` 解析 `sound_analysis`；`PhonemeRibbon` 优先消费
   `learning_phones`，并显示音节间隔和韵律短语边界；无 `sound_analysis` 时保留本地
-  `buildLearningPhones()` fallback。
+  `buildLearningPhones()` fallback；finding evidence marker overlay 会映射到 stable
+  learning phone 上，`detected_in_audio` 强标记、alignment/uncertain 弱标记，不改写教学标签。
+  observed insertion/linking evidence 会锚定到最近 learning phone marker，保持证据可见但不新增
+  教学 phone。
+  `detected_in_audio` 后端升级策略同步收紧：高置信 generic `phone_substitution`
+  不再声明为真实语流检测，只有弱读、flapping、同化、缩约、省音等已知 connected-speech
+  family 可升级。
   (5) **研究边界文档化**: 补充 Phase 2.14 context 与 Prosodic Hierarchy alignment 文档，
   明确当前实现是 `Phone -> LearningPhone -> Syllable -> pause-based ProsodicPhrase`
   的最小可靠子集，不声称完整实现 Foot / Prosodic Word / Phonological Phrase /
