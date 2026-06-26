@@ -2953,6 +2953,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                             .timingsBySentence[cueId],
                                         observedPhones: observedPhones,
                                       );
+                                  final findings = buildPhonemeRibbonFindings(
+                                    rawFindings:
+                                        ((raw?['findings'] as List<dynamic>?) ??
+                                                const [])
+                                            .cast<Map<String, dynamic>>(),
+                                    phones: phones,
+                                    soundAnalysis: soundAnalysis,
+                                  );
                                   if (phones.isEmpty) {
                                     return const SizedBox.shrink();
                                   }
@@ -2970,6 +2978,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                       prosodicPhrases:
                                           soundAnalysis?.prosodicPhrases ??
                                           const [],
+                                      findings: findings,
                                     ),
                                   );
                                 },

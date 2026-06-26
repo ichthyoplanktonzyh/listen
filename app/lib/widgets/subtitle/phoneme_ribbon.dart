@@ -15,6 +15,7 @@ class PhonemeRibbon extends StatelessWidget {
     this.style = 'window',
     this.syllables = const [],
     this.prosodicPhrases = const [],
+    this.findings = const [],
   });
 
   final List<DetectedPhone> phones;
@@ -25,6 +26,7 @@ class PhonemeRibbon extends StatelessWidget {
   final String style;
   final List<SoundSyllable> syllables;
   final List<SoundProsodicPhrase> prosodicPhrases;
+  final List<PhonemeRibbonFinding> findings;
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +39,7 @@ class PhonemeRibbon extends StatelessWidget {
     final markers = _RibbonMarkers.from(
       syllables: syllables,
       prosodicPhrases: prosodicPhrases,
+      findings: findings,
     );
 
     return LayoutBuilder(
@@ -124,11 +127,13 @@ class _RibbonMarkers {
   const _RibbonMarkers({
     required this.syllableStarts,
     required this.phraseStarts,
+    required this.findingsByPhone,
   });
 
   factory _RibbonMarkers.from({
     required List<SoundSyllable> syllables,
     required List<SoundProsodicPhrase> prosodicPhrases,
+    required List<PhonemeRibbonFinding> findings,
   }) {
     final syllableStarts = <int>{};
     for (final syllable in syllables) {
@@ -148,14 +153,30 @@ class _RibbonMarkers {
     return _RibbonMarkers(
       syllableStarts: syllableStarts,
       phraseStarts: phraseStarts,
+      findingsByPhone: _findingsByPhone(findings),
     );
   }
 
   final Set<int> syllableStarts;
   final Set<int> phraseStarts;
+  final Map<int, List<PhonemeRibbonFinding>> findingsByPhone;
 
   bool phraseBefore(int phoneIndex) => phraseStarts.contains(phoneIndex);
   bool syllableBefore(int phoneIndex) => syllableStarts.contains(phoneIndex);
+  List<PhonemeRibbonFinding> findingsFor(int phoneIndex) =>
+      findingsByPhone[phoneIndex] ?? const [];
+
+  static Map<int, List<PhonemeRibbonFinding>> _findingsByPhone(
+    List<PhonemeRibbonFinding> findings,
+  ) {
+    final values = <int, List<PhonemeRibbonFinding>>{};
+    for (final finding in findings) {
+      for (var index = finding.phoneStart; index <= finding.phoneEnd; index++) {
+        values.putIfAbsent(index, () => []).add(finding);
+      }
+    }
+    return values;
+  }
 }
 
 class _FullRibbon extends StatelessWidget {
@@ -193,6 +214,7 @@ class _FullRibbon extends StatelessWidget {
           fontSize: fontSize,
           isCurrent: i == currentIdx,
           elevated: wave,
+          findings: markers.findingsFor(i),
         ),
       ],
     ],
@@ -247,6 +269,7 @@ class _WindowRibbon extends StatelessWidget {
               fontSize: fontSize,
               isCurrent: start + i == currentIdx,
               elevated: false,
+              findings: markers.findingsFor(start + i),
             ),
           ],
         ],
@@ -335,6 +358,7 @@ class _PhoneCell extends StatelessWidget {
     required this.fontSize,
     required this.isCurrent,
     required this.elevated,
+    required this.findings,
   });
 
   final DetectedPhone phone;
@@ -343,6 +367,7 @@ class _PhoneCell extends StatelessWidget {
   final double fontSize;
   final bool isCurrent;
   final bool elevated;
+  final List<PhonemeRibbonFinding> findings;
 
   @override
   Widget build(BuildContext context) {
@@ -354,7 +379,8 @@ class _PhoneCell extends StatelessWidget {
         : height * 0.86;
     final textFontSize = math.min(fontSize, math.max(8.0, width * 0.56));
 
-    return AnimatedContainer(
+    final marker = _FindingMarker.from(findings);
+    final cell = AnimatedContainer(
       duration: const Duration(milliseconds: 120),
       curve: Curves.easeOutCubic,
       width: width,
@@ -375,21 +401,40 @@ class _PhoneCell extends StatelessWidget {
               ]
             : null,
       ),
-      alignment: Alignment.center,
-      child: width >= 14
-          ? Text(
-              phone.displayIpa,
-              style: TextStyle(
-                fontSize: textFontSize,
-                color: isCurrent ? Colors.white : Colors.white70,
-                fontWeight: isCurrent ? FontWeight.w700 : FontWeight.normal,
-                height: 1.0,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (width >= 14)
+            Center(
+              child: Text(
+                phone.displayIpa,
+                style: TextStyle(
+                  fontSize: textFontSize,
+                  color: isCurrent ? Colors.white : Colors.white70,
+                  fontWeight: isCurrent ? FontWeight.w700 : FontWeight.normal,
+                  height: 1.0,
+                ),
+                overflow: TextOverflow.clip,
+                maxLines: 1,
               ),
-              overflow: TextOverflow.clip,
-              maxLines: 1,
-            )
-          : null,
+            ),
+          if (marker != null)
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Container(
+                height: marker.strong ? 3.0 : 2.0,
+                margin: const EdgeInsets.only(left: 3, right: 3, bottom: 2),
+                decoration: BoxDecoration(
+                  color: marker.color,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
+    if (marker == null) return cell;
+    return Tooltip(message: marker.tooltip, child: cell);
   }
 
   static Color _phoneColor(String symbol) {
@@ -419,4 +464,31 @@ class _PhoneCell extends StatelessWidget {
   };
 
   static const _approximants = {'W', 'Y', 'R', 'L', 'HH'};
+}
+
+class _FindingMarker {
+  const _FindingMarker({
+    required this.strong,
+    required this.color,
+    required this.tooltip,
+  });
+
+  static _FindingMarker? from(List<PhonemeRibbonFinding> findings) {
+    final detected = findings.where((value) => value.detectedInAudio).toList();
+    final selected = detected.isNotEmpty ? detected : findings;
+    final finding = selected.isEmpty ? null : selected.first;
+    if (finding == null) return null;
+    final confidence = (finding.confidence * 100).round();
+    return _FindingMarker(
+      strong: finding.detectedInAudio,
+      color: finding.detectedInAudio
+          ? const Color(0xFFFFD166)
+          : const Color(0xFFB8E1FF).withAlpha(185),
+      tooltip: '${finding.findingType} · ${finding.status} · $confidence%',
+    );
+  }
+
+  final bool strong;
+  final Color color;
+  final String tooltip;
 }

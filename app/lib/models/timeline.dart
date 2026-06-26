@@ -813,6 +813,26 @@ class SoundProsodicPhrase {
   };
 }
 
+class PhonemeRibbonFinding {
+  const PhonemeRibbonFinding({
+    required this.phoneStart,
+    required this.phoneEnd,
+    required this.findingType,
+    required this.status,
+    required this.confidence,
+    required this.evidence,
+  });
+
+  final int phoneStart;
+  final int phoneEnd;
+  final String findingType;
+  final String status;
+  final double confidence;
+  final String evidence;
+
+  bool get detectedInAudio => status == 'detected_in_audio';
+}
+
 class PhoneTimelineSummary {
   const PhoneTimelineSummary({
     required this.id,
@@ -1210,6 +1230,93 @@ Duration _durationOverlap(
   final start = aStart > bStart ? aStart : bStart;
   final end = aEnd < bEnd ? aEnd : bEnd;
   return end > start ? end - start : Duration.zero;
+}
+
+List<PhonemeRibbonFinding> buildPhonemeRibbonFindings({
+  required List<Map<String, dynamic>> rawFindings,
+  required List<DetectedPhone> phones,
+  SoundAnalysis? soundAnalysis,
+}) {
+  if (rawFindings.isEmpty || phones.isEmpty) return const [];
+
+  final observedToLearning = <int, int>{};
+  if (soundAnalysis != null) {
+    for (var i = 0; i < soundAnalysis.learningPhones.length; i++) {
+      final observedIndex = soundAnalysis.learningPhones[i].observedPhoneIndex;
+      if (observedIndex != null) observedToLearning[observedIndex] = i;
+    }
+  }
+
+  final result = <PhonemeRibbonFinding>[];
+  for (final finding in rawFindings) {
+    final rawStart = finding['aligned_phone_start'] as int?;
+    final rawEnd = finding['aligned_phone_end'] as int?;
+    if (rawStart == null || rawEnd == null || rawStart > rawEnd) continue;
+
+    final displayIndexes = <int>[];
+    for (
+      var observedIndex = rawStart;
+      observedIndex <= rawEnd;
+      observedIndex++
+    ) {
+      final displayIndex = soundAnalysis == null
+          ? observedIndex
+          : observedToLearning[observedIndex];
+      if (displayIndex != null &&
+          displayIndex >= 0 &&
+          displayIndex < phones.length) {
+        displayIndexes.add(displayIndex);
+      }
+    }
+    if (displayIndexes.isEmpty && soundAnalysis != null) {
+      final nearest = _nearestLearningPhoneIndex(
+        rawStart,
+        rawEnd,
+        observedToLearning,
+        phones.length,
+      );
+      if (nearest != null) displayIndexes.add(nearest);
+    }
+    if (displayIndexes.isEmpty) continue;
+    displayIndexes.sort();
+
+    result.add(
+      PhonemeRibbonFinding(
+        phoneStart: displayIndexes.first,
+        phoneEnd: displayIndexes.last,
+        findingType: finding['finding_type'] as String? ?? 'audio_evidence',
+        status: finding['status'] as String? ?? 'uncertain',
+        confidence: (finding['confidence'] as num?)?.toDouble() ?? 0.0,
+        evidence: finding['evidence'] as String? ?? '',
+      ),
+    );
+  }
+  return result;
+}
+
+int? _nearestLearningPhoneIndex(
+  int observedStart,
+  int observedEnd,
+  Map<int, int> observedToLearning,
+  int phoneCount,
+) {
+  int? bestIndex;
+  var bestDistance = 1 << 30;
+  for (final entry in observedToLearning.entries) {
+    final distance = entry.key < observedStart
+        ? observedStart - entry.key
+        : entry.key > observedEnd
+        ? entry.key - observedEnd
+        : 0;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = entry.value;
+    }
+  }
+  if (bestIndex == null || bestIndex < 0 || bestIndex >= phoneCount) {
+    return null;
+  }
+  return bestIndex;
 }
 
 Map<String, Map<String, dynamic>> latestPhoneticAnalysesBySentence(

@@ -378,6 +378,128 @@ void main() {
     expect(learningPhones.single.provider, 'dictionary+wav2vec2-ctc-timing');
   });
 
+  test('phoneme ribbon findings map observed evidence to learning phones', () {
+    final soundAnalysis = SoundAnalysis.fromJson(const {
+      'provider_id': 'wav2vec2-ctc-phoneme',
+      'provider_version': 'fb-espeak-v1',
+      'model_revision': 'model-rev',
+      'phone_set': 'arpabet',
+      'generated_from': 'expected_phones_aligned_to_observed_timing',
+      'learning_phones': [
+        {
+          'symbol': 'S',
+          'display_ipa': 's',
+          'phone_set': 'arpabet',
+          'start_ms': 120,
+          'end_ms': 180,
+          'confidence': 0.41,
+          'token_index': 0,
+          'observed_phone_index': 3,
+          'observed_symbol': 'K',
+          'evidence': 'substitution',
+        },
+      ],
+      'syllables': [],
+      'prosodic_phrases': [],
+    });
+    final phones = soundAnalysis.learningPhones
+        .map(
+          (phone) => phone.toDetectedPhone(
+            provider: soundAnalysis.providerId,
+            modelRevision: soundAnalysis.modelRevision!,
+          ),
+        )
+        .toList(growable: false);
+
+    final markers = buildPhonemeRibbonFindings(
+      rawFindings: const [
+        {
+          'finding_type': 'phone_substitution',
+          'status': 'detected_in_audio',
+          'confidence': 0.82,
+          'aligned_phone_start': 3,
+          'aligned_phone_end': 3,
+          'evidence': 'Substitution alignment',
+        },
+      ],
+      phones: phones,
+      soundAnalysis: soundAnalysis,
+    );
+
+    expect(markers.single.phoneStart, 0);
+    expect(markers.single.phoneEnd, 0);
+    expect(markers.single.detectedInAudio, true);
+    expect(phones.single.symbol, 'S');
+  });
+
+  test(
+    'phoneme ribbon findings anchor insertion evidence to nearest learning phone',
+    () {
+      final soundAnalysis = SoundAnalysis.fromJson(const {
+        'provider_id': 'wav2vec2-ctc-phoneme',
+        'provider_version': 'fb-espeak-v1',
+        'model_revision': 'model-rev',
+        'phone_set': 'arpabet',
+        'generated_from': 'expected_phones_aligned_to_observed_timing',
+        'learning_phones': [
+          {
+            'symbol': 'S',
+            'display_ipa': 's',
+            'phone_set': 'arpabet',
+            'start_ms': 100,
+            'end_ms': 150,
+            'confidence': 0.8,
+            'token_index': 0,
+            'observed_phone_index': 1,
+            'observed_symbol': 'S',
+            'evidence': 'match',
+          },
+          {
+            'symbol': 'T',
+            'display_ipa': 't',
+            'phone_set': 'arpabet',
+            'start_ms': 180,
+            'end_ms': 230,
+            'confidence': 0.8,
+            'token_index': 0,
+            'observed_phone_index': 4,
+            'observed_symbol': 'T',
+            'evidence': 'match',
+          },
+        ],
+        'syllables': [],
+        'prosodic_phrases': [],
+      });
+      final phones = soundAnalysis.learningPhones
+          .map(
+            (phone) => phone.toDetectedPhone(
+              provider: soundAnalysis.providerId,
+              modelRevision: soundAnalysis.modelRevision!,
+            ),
+          )
+          .toList(growable: false);
+
+      final markers = buildPhonemeRibbonFindings(
+        rawFindings: const [
+          {
+            'finding_type': 'linking_or_insertion',
+            'status': 'supported_by_alignment',
+            'confidence': 0.68,
+            'aligned_phone_start': 3,
+            'aligned_phone_end': 3,
+            'evidence': 'Insertion alignment',
+          },
+        ],
+        phones: phones,
+        soundAnalysis: soundAnalysis,
+      );
+
+      expect(markers.single.phoneStart, 1);
+      expect(markers.single.findingType, 'linking_or_insertion');
+      expect(phones.map((phone) => phone.symbol), ['S', 'T']);
+    },
+  );
+
   test(
     'learning phones fall back to dictionary phones without CTC evidence',
     () {
