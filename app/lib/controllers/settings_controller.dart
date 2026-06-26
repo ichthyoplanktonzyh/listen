@@ -45,6 +45,7 @@ class SettingsController extends ChangeNotifier {
   String get ruleHintsLevel => _settings.ruleHintsLevel;
   String get phoneticAnalysisPreference => _settings.phoneticAnalysisPreference;
   bool get phonemeRibbonVisible => _settings.phonemeRibbonVisible;
+  String get phonemeRibbonStyle => _settings.phonemeRibbonStyle;
   String get learningLanguage => _settings.learningLanguage;
   Color get primaryColor => Color(_settings.primaryColor);
   Color get secondaryColor => Color(_settings.secondaryColor);

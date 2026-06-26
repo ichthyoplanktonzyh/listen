@@ -47,6 +47,7 @@ class AppSettings {
     this.showExperimentalPhoneticResults = false,
     this.phonemeHighlightVisible = true,
     this.phonemeRibbonVisible = false,
+    this.phonemeRibbonStyle = 'window',
     this.phoneticCachePolicy = 'keep_completed',
     this.learningLanguage = 'auto',
   });
@@ -150,6 +151,8 @@ class AppSettings {
           json['phoneme_highlight_visible'] as bool? ?? true,
       phonemeRibbonVisible:
           json['phoneme_ribbon_visible'] as bool? ?? false,
+      phonemeRibbonStyle:
+          _phonemeRibbonStyle(json['phoneme_ribbon_style']),
       phoneticCachePolicy:
           json['phonetic_cache_policy'] as String? ?? 'keep_completed',
       learningLanguage:
@@ -201,6 +204,7 @@ class AppSettings {
   final bool showExperimentalPhoneticResults;
   final bool phonemeHighlightVisible;
   final bool phonemeRibbonVisible;
+  final String phonemeRibbonStyle;
   final String phoneticCachePolicy;
   final String learningLanguage;
 
@@ -292,6 +296,7 @@ class AppSettings {
         'show_experimental_phonetic_results': showExperimentalPhoneticResults,
         'phoneme_highlight_visible': phonemeHighlightVisible,
         'phoneme_ribbon_visible': phonemeRibbonVisible,
+        'phoneme_ribbon_style': phonemeRibbonStyle,
         'phonetic_cache_policy': phoneticCachePolicy,
         'learning_language': learningLanguage,
       }),
@@ -343,6 +348,7 @@ class AppSettings {
     bool? showExperimentalPhoneticResults,
     bool? phonemeHighlightVisible,
     bool? phonemeRibbonVisible,
+    String? phonemeRibbonStyle,
     String? phoneticCachePolicy,
     String? learningLanguage,
   }) => AppSettings(
@@ -400,6 +406,7 @@ class AppSettings {
     phonemeHighlightVisible:
         phonemeHighlightVisible ?? this.phonemeHighlightVisible,
     phonemeRibbonVisible: phonemeRibbonVisible ?? this.phonemeRibbonVisible,
+    phonemeRibbonStyle: phonemeRibbonStyle ?? this.phonemeRibbonStyle,
     phoneticCachePolicy: phoneticCachePolicy ?? this.phoneticCachePolicy,
     learningLanguage: learningLanguage ?? this.learningLanguage,
   );
@@ -419,4 +426,7 @@ class AppSettings {
 
   static String _chunkHighlightStyle(Object? value) =>
       value == 'bounce' || value == 'glow' ? value as String : 'background';
+
+  static String _phonemeRibbonStyle(Object? value) =>
+      value == 'wave' ? value as String : 'window';
 }

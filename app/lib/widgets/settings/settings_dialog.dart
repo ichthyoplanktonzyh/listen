@@ -37,6 +37,7 @@ class SettingsDialog extends StatefulWidget {
     required this.wordAnimationIntensity,
     required this.ruleHintsLevel,
     required this.phonemeRibbonVisible,
+    required this.phonemeRibbonStyle,
     required this.phoneticAnalysisPreference,
     required this.learningLanguage,
     required this.availableLanguages,
@@ -66,6 +67,7 @@ class SettingsDialog extends StatefulWidget {
     required this.onWordAnimationIntensityChanged,
     required this.onRuleHintsLevelChanged,
     required this.onPhonemeRibbonVisibleChanged,
+    required this.onPhonemeRibbonStyleChanged,
     required this.onPhoneticAnalysisPreferenceChanged,
     required this.onSave,
   });
@@ -99,6 +101,7 @@ class SettingsDialog extends StatefulWidget {
   final double wordAnimationIntensity;
   final String ruleHintsLevel;
   final bool phonemeRibbonVisible;
+  final String phonemeRibbonStyle;
   final String phoneticAnalysisPreference;
   final String learningLanguage;
   final List<String> availableLanguages;
@@ -130,6 +133,7 @@ class SettingsDialog extends StatefulWidget {
   final ValueChanged<double> onWordAnimationIntensityChanged;
   final ValueChanged<String> onRuleHintsLevelChanged;
   final ValueChanged<bool> onPhonemeRibbonVisibleChanged;
+  final ValueChanged<String> onPhonemeRibbonStyleChanged;
   final ValueChanged<String> onPhoneticAnalysisPreferenceChanged;
   final Future<void> Function({
     required String ffmpegPath,
@@ -168,6 +172,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late double wordAnimationIntensity;
   late String ruleHintsLevel;
   late bool phonemeRibbonVisible;
+  late String phonemeRibbonStyle;
   late String phoneticAnalysisPreference;
   late String learningLanguage;
 
@@ -213,6 +218,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     wordAnimationIntensity = widget.wordAnimationIntensity;
     ruleHintsLevel = widget.ruleHintsLevel;
     phonemeRibbonVisible = widget.phonemeRibbonVisible;
+    phonemeRibbonStyle = widget.phonemeRibbonStyle;
     phoneticAnalysisPreference = widget.phoneticAnalysisPreference;
     learningLanguage = widget.learningLanguage;
     ffmpegController = TextEditingController(text: widget.ffmpegPath);
@@ -426,6 +432,30 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   widget.onPhonemeRibbonVisibleChanged(value);
                   refresh(() {});
                 },
+              ),
+              DropdownButtonFormField<String>(
+                initialValue: phonemeRibbonStyle,
+                decoration: InputDecoration(
+                  labelText: l.text('phonemeRibbonStyle'),
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: 'window',
+                    child: Text(l.text('phonemeRibbonWindow')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'wave',
+                    child: Text(l.text('phonemeRibbonWave')),
+                  ),
+                ],
+                onChanged: phonemeRibbonVisible
+                    ? (value) {
+                        if (value == null) return;
+                        phonemeRibbonStyle = value;
+                        widget.onPhonemeRibbonStyleChanged(value);
+                        refresh(() {});
+                      }
+                    : null,
               ),
               DropdownButtonFormField<String>(
                 initialValue: phoneticAnalysisPreference,

@@ -1674,6 +1674,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         phoneticAnalysisPreference:
             settingsController.phoneticAnalysisPreference,
         phonemeRibbonVisible: settingsController.phonemeRibbonVisible,
+        phonemeRibbonStyle: settingsController.phonemeRibbonStyle,
         learningLanguage: settingsController.learningLanguage,
         availableLanguages: learningController.availableLanguages,
         onLearningLanguageChanged: (v) {
@@ -1814,6 +1815,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         onPhoneticAnalysisPreferenceChanged: (v) {
           settingsController.update(
             settingsController.settings.copyWith(phoneticAnalysisPreference: v),
+          );
+        },
+        onPhonemeRibbonStyleChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(phonemeRibbonStyle: v),
           );
         },
         onPhonemeRibbonVisibleChanged: (v) {
@@ -2909,39 +2915,34 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                   final cueId = subtitleController.currentPrimaryCue!.id;
                                   final raw = subtitleController
                                       .phoneticAnalysisBySentence[cueId];
-                                  final phones = ((raw?['detected_phones']
+                                  var phones = ((raw?['detected_phones']
                                               as List<dynamic>?) ??
                                           const [])
                                       .map((v) => DetectedPhone.fromJson(
                                           v as Map<String, dynamic>))
                                       .toList(growable: false);
-                                  if (phones.isNotEmpty) {
-                                    return Padding(
-                                      padding: const EdgeInsets.only(top: 4),
-                                      child: PhonemeRibbon(
-                                        phones: phones,
-                                        position: playerController.position,
-                                        fontSize: primarySize * 0.45,
-                                        height: primarySize * 1.1,
-                                      ),
-                                    );
+                                  if (phones.isEmpty) {
+                                    final pron = subtitleController
+                                        .pronunciationBySentence[cueId];
+                                    final timings = subtitleController
+                                        .timingsBySentence[cueId];
+                                    if (pron != null && timings != null && timings.isNotEmpty) {
+                                      phones = synthesizePhonesFromDictionary(pron, timings);
+                                    }
                                   }
-                                  final ipa = subtitleController
-                                      .pronunciationBySentence[cueId];
-                                  if (ipa != null) {
-                                    return Padding(
-                                      padding: const EdgeInsets.only(top: 4),
-                                      child: Text(
-                                        _pronunciationText(ipa),
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontSize: primarySize * 0.55,
-                                          color: Colors.white70,
-                                        ),
-                                      ),
-                                    );
+                                  if (phones.isEmpty) {
+                                    return const SizedBox.shrink();
                                   }
-                                  return const SizedBox.shrink();
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: PhonemeRibbon(
+                                      phones: phones,
+                                      position: playerController.position,
+                                      fontSize: primarySize * 0.45,
+                                      height: primarySize * 1.1,
+                                      style: settingsController.phonemeRibbonStyle,
+                                    ),
+                                  );
                                 },
                               ),
                             if (subtitleController.secondaryVisible &&
@@ -2995,10 +2996,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     'monospace' => 'Menlo',
     _ => null,
   };
-
-  String _pronunciationText(Map<String, dynamic> analysis) {
-    return analysis['display_ipa'] as String;
-  }
 
   String _timingQuality(String sentenceId) {
     final first = subtitleController.timingsBySentence[sentenceId]!.first;
