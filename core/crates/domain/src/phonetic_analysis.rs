@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     DomainError, MediaId, PhoneticAnalysisId, PhoneticAnalysisJobId, PhoneticAnalysisModelId,
-    PhoneticFindingId, SubtitleSentenceId, SubtitleTrackId,
+    PhoneticFindingId, SoundAnalysis, SubtitleSentenceId, SubtitleTrackId,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -206,6 +206,8 @@ pub struct PhoneticAnalysis {
     pub detected_phones: Vec<DetectedPhone>,
     pub alignments: Vec<PhoneAlignment>,
     pub findings: Vec<PhoneticFinding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sound_analysis: Option<SoundAnalysis>,
     pub analyzer_version: String,
     pub created_at_ms: u64,
 }
@@ -333,6 +335,7 @@ mod tests {
                 evidence: "fake".into(),
                 status: PhoneticFindingStatus::SupportedByAlignment,
             }],
+            sound_analysis: None,
             analyzer_version: "v1".into(),
             created_at_ms: 1,
         }

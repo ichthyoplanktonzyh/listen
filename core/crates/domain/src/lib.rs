@@ -26,6 +26,9 @@ pub use chunk_timeline::*;
 mod phone_timeline;
 pub use phone_timeline::*;
 
+mod sound_analysis;
+pub use sound_analysis::*;
+
 mod lltimeline;
 pub use lltimeline::*;
 

@@ -90,6 +90,15 @@ impl AppServices {
             &alignments,
             &phones,
         );
+        let sound_analysis = speech_analysis::sound_analysis::build_sound_analysis(
+            &canonical,
+            &phones,
+            &alignments,
+            "research-fixture",
+            "v1",
+            Some(job.model_revision.clone()),
+            "research_fixture_symbols",
+        );
         let analysis = PhoneticAnalysis {
             id,
             job_id: job.id.clone(),
@@ -107,6 +116,7 @@ impl AppServices {
             detected_phones: phones,
             alignments,
             findings,
+            sound_analysis: Some(sound_analysis),
             analyzer_version: "research-fixture-v1".into(),
             created_at_ms: now_ms(),
         };
@@ -168,6 +178,15 @@ impl AppServices {
             &alignments,
             &phones,
         );
+        let sound_analysis = speech_analysis::sound_analysis::build_sound_analysis(
+            &canonical,
+            &phones,
+            &alignments,
+            speech_analysis::phone_recognition::PROVIDER_ID,
+            speech_analysis::phone_recognition::PROVIDER_VERSION,
+            Some(job.model_revision.clone()),
+            "arpabet",
+        );
         let analysis = PhoneticAnalysis {
             id,
             job_id: job.id.clone(),
@@ -185,6 +204,7 @@ impl AppServices {
             detected_phones: phones,
             alignments,
             findings,
+            sound_analysis: Some(sound_analysis),
             analyzer_version: format!(
                 "{}-{}",
                 speech_analysis::phone_recognition::PROVIDER_ID,

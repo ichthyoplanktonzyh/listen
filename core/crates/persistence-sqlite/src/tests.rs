@@ -213,6 +213,7 @@ fn phone_timeline(
         }],
         alignments: Vec::new(),
         findings: Vec::new(),
+        sound_analysis: None,
         created_at_ms: 1,
         updated_at_ms: 1,
     }
@@ -1411,8 +1412,7 @@ async fn dictionary_lookup_routes_by_learning_language() {
     let chinese = Arc::new(FakeChineseDictionary {
         calls: AtomicUsize::new(0),
     });
-    let providers: Vec<Arc<dyn DictionaryProvider>> =
-        vec![english.clone(), chinese.clone()];
+    let providers: Vec<Arc<dyn DictionaryProvider>> = vec![english.clone(), chinese.clone()];
 
     // A Chinese query only reaches the zh provider; the en provider is skipped
     // by supported_languages, so en and zh dictionaries never cross-talk.
@@ -1422,7 +1422,10 @@ async fn dictionary_lookup_routes_by_learning_language() {
         .unwrap();
     assert_eq!(bundle.results.len(), 1);
     assert_eq!(bundle.results[0].provider.id, "fake-zh");
-    let lookup = bundle.results[0].lookup.as_ref().expect("zh lookup present");
+    let lookup = bundle.results[0]
+        .lookup
+        .as_ref()
+        .expect("zh lookup present");
     assert_eq!(lookup.phonetics[0].text, "kā fēi");
     assert_eq!(english.calls.load(Ordering::Relaxed), 0);
     assert_eq!(chinese.calls.load(Ordering::Relaxed), 1);
@@ -1639,20 +1642,46 @@ fn english_and_chinese_vocabulary_and_sources_stay_isolated() {
     // A word exists only under its own language; it never leaks across.
     assert!(services.read_word_profile("zh", "咖啡").unwrap().is_some());
     assert!(services.read_word_profile("en", "咖啡").unwrap().is_none());
-    assert!(services.read_word_profile("en", "coffee").unwrap().is_some());
-    assert!(services.read_word_profile("zh", "coffee").unwrap().is_none());
+    assert!(
+        services
+            .read_word_profile("en", "coffee")
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        services
+            .read_word_profile("zh", "coffee")
+            .unwrap()
+            .is_none()
+    );
 
     // Vocabulary lists are isolated by language.
     let zh_vocab = services
         .list_vocabulary("zh", WordStatus::UnknownMeaning, "", 200, 0)
         .unwrap();
-    assert!(zh_vocab.iter().any(|d| d.profile.normalized_lemma == "咖啡"));
-    assert!(zh_vocab.iter().all(|d| d.profile.normalized_lemma != "coffee"));
+    assert!(
+        zh_vocab
+            .iter()
+            .any(|d| d.profile.normalized_lemma == "咖啡")
+    );
+    assert!(
+        zh_vocab
+            .iter()
+            .all(|d| d.profile.normalized_lemma != "coffee")
+    );
     let en_vocab = services
         .list_vocabulary("en", WordStatus::KnownRecognized, "", 200, 0)
         .unwrap();
-    assert!(en_vocab.iter().any(|d| d.profile.normalized_lemma == "coffee"));
-    assert!(en_vocab.iter().all(|d| d.profile.normalized_lemma != "咖啡"));
+    assert!(
+        en_vocab
+            .iter()
+            .any(|d| d.profile.normalized_lemma == "coffee")
+    );
+    assert!(
+        en_vocab
+            .iter()
+            .all(|d| d.profile.normalized_lemma != "咖啡")
+    );
 
     // The Chinese source snapshot is captured under the Chinese profile.
     let details = services.word_details(&chinese.id).unwrap().unwrap();
@@ -2213,6 +2242,7 @@ fn phonetic_models_jobs_analyses_and_feedback_round_trip() {
             evidence: "fake".into(),
             status: PhoneticFindingStatus::SupportedByAlignment,
         }],
+        sound_analysis: None,
         analyzer_version: "v1".into(),
         created_at_ms: 3,
     };

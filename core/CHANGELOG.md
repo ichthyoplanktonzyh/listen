@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- 2026-06-26 CST: Phase 2.14 — Sound-First Learning Architecture 收口。
+  (1) **稳定教学标签优先**: 明确并落地
+  `CTC provides audio evidence and timing; expected pronunciation provides teaching labels`。
+  Phoneme ribbon 不再直接显示 raw CTC label；当 expected `/s/` 遇到 CTC 误判 `/k/`
+  时，默认训练 UI 仍显示稳定 `/s/`，CTC 只提供 timing/confidence/mismatch evidence。
+  (2) **SoundAnalysis 资源化**: 新增 `SoundAnalysis`、`SoundLearningPhone`、
+  `SoundSyllable`、`SoundProsodicPhrase` 等领域模型；`PhoneticAnalysis` 与
+  `PhoneTimeline` 均携带可选 `sound_analysis`，旧 JSON 兼容，SQLite 继续复用完整
+  `timeline_json` 持久化，LLTimeline export/import 通过 PhoneTimeline 资源路径保留。
+  (3) **声音组织算法**: 新增 `speech_analysis::sound_analysis`，将 expected phones 与
+  observed CTC phones 对齐为 `LearningPhone`，实现 SSP 音节化、pause-aware onset
+  boundary 和 pause-based prosodic phrase detection。
+  (4) **Flutter 消费**: `PhoneTimeline` 解析 `sound_analysis`；`PhonemeRibbon` 优先消费
+  `learning_phones`，并显示音节间隔和韵律短语边界；无 `sound_analysis` 时保留本地
+  `buildLearningPhones()` fallback。
+  (5) **研究边界文档化**: 补充 Phase 2.14 context 与 Prosodic Hierarchy alignment 文档，
+  明确当前实现是 `Phone -> LearningPhone -> Syllable -> pause-based ProsodicPhrase`
+  的最小可靠子集，不声称完整实现 Foot / Prosodic Word / Phonological Phrase /
+  Intonation Phrase。
+  验证: `cargo test --workspace --quiet`、`flutter analyze`、
+  `flutter test test/timeline_test.dart`、`./scripts/validate-contracts.sh` 通过。
+  收口文档: `.planning/phases/2.14-sound-first-learning-architecture/2.14-CLOSEOUT.md`。
+
 - 2026-06-26 CST: Phase 2.13 — Text-Centered Phoneme Ribbon 收口。
   (1) **长短句自适应显示**: 短句完整显示音素带；长句自动切换为分页窗口，只显示当前
   音素附近的一页，避免把过多音素压缩成不可读噪音。

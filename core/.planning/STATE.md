@@ -15,7 +15,7 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-26 CST
-> 更新原因：Phase 2.13 文字线音素 Ribbon 收口；长句交互改为低疲劳分页窗口；Phase 2.14 继续承接声音线架构。
+> 更新原因：Phase 2.14 声音线学习架构收口；稳定教学标签优先原则落地；SoundAnalysis/音节/韵律短语进入 PhoneTimeline。
 
 ## 当前位置
 
@@ -23,7 +23,7 @@ progress:
 - **Phase**：Phase 2.10 ✅ 端到端验证通过 +
   Phase 2.11 ⏳ Steps 1-3 完成（Step 4-5 待推进）+
   Phase 2.13 ✅ 文字线音素 Ribbon 收口完成 +
-  Phase 2.14 📋 声音线学习架构（已规划）
+  Phase 2.14 ✅ 声音线学习架构收口完成
 - **分支**：`main`
 - **版本**：0.7.0
 
@@ -497,6 +497,45 @@ progress:
 - 验证：`dart analyze` 0 issues，`flutter test` 64/64 passed。
 - 规划文档：`.planning/phases/2.12-ui-state-management-refactoring/`
 
+### Phase 2.13: 文字线音素 Ribbon ✅ 已完成
+
+- 目标：让文字线即使没有 CTC 真实 phone timeline，也能从 pronunciation provider +
+  word timing 合成稳定 phoneme ribbon，实现 Whisper 转录后的音素跳动体验。
+- 完成内容：
+  - `PhonemeRibbon` 支持长句低疲劳分页窗口。
+  - 无 CTC/PhoneTimeline 时，从字典 pronunciation + WordTiming 合成 phones。
+  - 有 CTC/PhoneTimeline 时，原先会直接显示 raw detected phones；该行为在 Phase 2.14
+    已被 stable learning phone layer 校正。
+
+### Phase 2.14: Sound-First Learning Architecture ✅ 已完成
+
+- 核心准则：**CTC provides audio evidence and timing; expected pronunciation provides teaching labels.**
+- 目标：建立第二条声音线，以真实音频证据组织 timing、节奏、音节和韵律短语，同时保证用户
+  默认看到的教学标签稳定可靠。
+- 完成内容：
+  - 新增 `SoundAnalysis` / `SoundLearningPhone` / `SoundSyllable` /
+    `SoundProsodicPhrase` 领域模型。
+  - `PhoneticAnalysis` 和 `PhoneTimeline` 新增可选 `sound_analysis`，旧 JSON 兼容。
+  - `speech-analysis::sound_analysis` 已实现 expected-vs-observed 对齐、learning phone 生成、
+    SSP 音节化、pause-aware onset boundary 和 pause-based prosodic phrase detection。
+  - CTC `/k/` 误判 expected `/s/` 时，用户默认 ribbon 仍显示 `/s/`；CTC 只提供 timing /
+    confidence / mismatch evidence。
+  - CTC / research fixture phonetic analysis 自动生成 `sound_analysis`，创建 PhoneTimeline 时复制。
+  - Flutter `PhoneTimeline` 解析 `sound_analysis`，`PhonemeRibbon` 使用 `learning_phones`
+    并显示音节间隔和韵律短语边界。
+  - OpenAPI 新增 SoundAnalysis 相关 schema，并补齐 `DetectedPhone.display_ipa`。
+- 验证：
+  - `cargo test --workspace --quiet` 通过。
+  - `flutter analyze` 通过。
+  - `flutter test test/timeline_test.dart` 通过。
+  - `./scripts/validate-contracts.sh` 通过。
+- 收口文档：
+  - `.planning/phases/2.14-sound-first-learning-architecture/2.14-CONTEXT.md`
+  - `.planning/phases/2.14-sound-first-learning-architecture/2.14-PLAN.md`
+  - `.planning/phases/2.14-sound-first-learning-architecture/2.14-STABLE-LEARNING-PHONE.md`
+  - `.planning/phases/2.14-sound-first-learning-architecture/2.14-PROSODIC-HIERARCHY-ALIGNMENT.md`
+  - `.planning/phases/2.14-sound-first-learning-architecture/2.14-CLOSEOUT.md`
+
 ### 强制对齐研究 🧭 长期推进
 
 - torchaudio MMS_FA sidecar（`scripts/forced-align/align-cli.py`）。
@@ -535,8 +574,12 @@ progress:
 11. **文字线/声音线双主线架构**（2026-06-26）：学习体验分两条主线——文字线（Whisper
     转录 → 词 → chunk → 词典音素，回答"说了什么"）和声音线（CTC 音素 → 音节 →
     韵律短语，回答"怎么说的"），两者差异即"为什么听不懂"。sentence 为共享作用域
-    边界，数据共存于 lltime.json（`sound_analysis` 字段）。Phase 2.13 收口文字线
+    边界，数据共存于 LLTimeline/PhoneTimeline（`sound_analysis` 字段）。Phase 2.13 收口文字线
     音素体验，Phase 2.14 建立声音线架构。
+12. **稳定教学标签优先**（2026-06-26）：CTC 是真实音频 observation/evidence，不是用户
+    默认教学标签真值。phoneme ribbon 和声音线默认展示 `LearningPhone`：label 来自
+    expected pronunciation，timing/confidence 来自 observed CTC。raw CTC mismatch 进入
+    诊断/高级 evidence，不直接成为训练答案。
 
 ## 当前阻塞项
 
@@ -544,11 +587,10 @@ progress:
 
 ## 下一步工作
 
-1. **Phase 2.13 Step 2-3**：集成合成音素到 ribbon 渲染 + 脉冲动画。完成后文字线
-   音素体验闭环——Whisper 转录即可音素跳动。
-2. **Phase 2.14 Step 1**：音节化算法（Rust speech-analysis crate）。
-3. **Phase 2.11 Step 4–5**（依赖 2.10 验证通过）：L1 诊断 seam + 听觉锚定准备。
-4. Phase 2.3 正式收口（手动 QA 已通过，待写 closeout）。
+1. **Phase 2.11 Step 4–5**（依赖 2.10/2.14 验证通过）：L1 诊断 seam + 听觉锚定准备。
+2. **声音线后续增强**：finding marker overlay、`audio_detection` evidence 升级策略、
+   observed insertion 高级证据 UI。
+3. Phase 2.3 正式收口（手动 QA 已通过，待写 closeout）。
 
 ## 指标
 

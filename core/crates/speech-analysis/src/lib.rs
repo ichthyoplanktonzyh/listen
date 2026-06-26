@@ -8,6 +8,7 @@ pub mod phone_recognition;
 pub mod phonetic_alignment;
 pub mod phonetic_findings;
 pub mod rich_acoustic_evidence;
+pub mod sound_analysis;
 pub mod text_chunk_detection;
 use std::collections::HashMap;
 use std::path::PathBuf;

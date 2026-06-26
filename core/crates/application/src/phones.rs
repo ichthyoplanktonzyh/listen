@@ -72,6 +72,7 @@ impl AppServices {
             phones: analysis.detected_phones.clone(),
             alignments: analysis.alignments.clone(),
             findings: analysis.findings.clone(),
+            sound_analysis: analysis.sound_analysis.clone(),
             created_at_ms: now,
             updated_at_ms: now,
         };
