@@ -531,6 +531,7 @@ class PhoneTimeline {
     required this.findings,
     required this.createdAt,
     required this.updatedAt,
+    this.soundAnalysis,
     this.sentenceId,
     this.parentWordTimelineId,
     this.parentPhoneticAnalysisId,
@@ -565,6 +566,11 @@ class PhoneTimeline {
     findings: ((json['findings'] as List<dynamic>?) ?? const [])
         .cast<Map<String, dynamic>>()
         .toList(growable: false),
+    soundAnalysis: json['sound_analysis'] is Map
+        ? SoundAnalysis.fromJson(
+            Map<String, dynamic>.from(json['sound_analysis'] as Map),
+          )
+        : null,
     createdAt: Duration(milliseconds: json['created_at_ms'] as int),
     updatedAt: Duration(milliseconds: json['updated_at_ms'] as int),
   );
@@ -587,6 +593,7 @@ class PhoneTimeline {
   final List<DetectedPhone> phones;
   final List<Map<String, dynamic>> alignments;
   final List<Map<String, dynamic>> findings;
+  final SoundAnalysis? soundAnalysis;
   final Duration createdAt;
   final Duration updatedAt;
 
@@ -604,6 +611,205 @@ class PhoneTimeline {
     'detected_phones': phones.map((value) => value.toJson()).toList(),
     'alignments': alignments,
     'findings': findings,
+    if (soundAnalysis != null) 'sound_analysis': soundAnalysis!.toJson(),
+  };
+}
+
+class SoundAnalysis {
+  const SoundAnalysis({
+    required this.providerId,
+    required this.providerVersion,
+    required this.phoneSet,
+    required this.generatedFrom,
+    required this.learningPhones,
+    required this.syllables,
+    required this.prosodicPhrases,
+    this.modelRevision,
+  });
+
+  factory SoundAnalysis.fromJson(Map<String, dynamic> json) => SoundAnalysis(
+    providerId: json['provider_id'] as String,
+    providerVersion: json['provider_version'] as String,
+    modelRevision: json['model_revision'] as String?,
+    phoneSet: json['phone_set'] as String,
+    generatedFrom: json['generated_from'] as String,
+    learningPhones: ((json['learning_phones'] as List<dynamic>?) ?? const [])
+        .map(
+          (value) => SoundLearningPhone.fromJson(value as Map<String, dynamic>),
+        )
+        .toList(growable: false),
+    syllables: ((json['syllables'] as List<dynamic>?) ?? const [])
+        .map((value) => SoundSyllable.fromJson(value as Map<String, dynamic>))
+        .toList(growable: false),
+    prosodicPhrases: ((json['prosodic_phrases'] as List<dynamic>?) ?? const [])
+        .map(
+          (value) =>
+              SoundProsodicPhrase.fromJson(value as Map<String, dynamic>),
+        )
+        .toList(growable: false),
+  );
+
+  final String providerId;
+  final String providerVersion;
+  final String? modelRevision;
+  final String phoneSet;
+  final String generatedFrom;
+  final List<SoundLearningPhone> learningPhones;
+  final List<SoundSyllable> syllables;
+  final List<SoundProsodicPhrase> prosodicPhrases;
+
+  Map<String, dynamic> toJson() => {
+    'provider_id': providerId,
+    'provider_version': providerVersion,
+    'model_revision': modelRevision,
+    'phone_set': phoneSet,
+    'generated_from': generatedFrom,
+    'learning_phones': learningPhones.map((value) => value.toJson()).toList(),
+    'syllables': syllables.map((value) => value.toJson()).toList(),
+    'prosodic_phrases': prosodicPhrases.map((value) => value.toJson()).toList(),
+  };
+}
+
+class SoundLearningPhone {
+  const SoundLearningPhone({
+    required this.symbol,
+    required this.displayIpa,
+    required this.phoneSet,
+    required this.start,
+    required this.end,
+    required this.evidence,
+    this.confidence,
+    this.tokenIndex,
+    this.observedPhoneIndex,
+    this.observedSymbol,
+  });
+
+  factory SoundLearningPhone.fromJson(Map<String, dynamic> json) =>
+      SoundLearningPhone(
+        symbol: json['symbol'] as String,
+        displayIpa:
+            (json['display_ipa'] as String?) ?? json['symbol'] as String,
+        phoneSet: json['phone_set'] as String,
+        start: Duration(milliseconds: json['start_ms'] as int),
+        end: Duration(milliseconds: json['end_ms'] as int),
+        confidence: (json['confidence'] as num?)?.toDouble(),
+        tokenIndex: json['token_index'] as int?,
+        observedPhoneIndex: json['observed_phone_index'] as int?,
+        observedSymbol: json['observed_symbol'] as String?,
+        evidence: json['evidence'] as String,
+      );
+
+  final String symbol;
+  final String displayIpa;
+  final String phoneSet;
+  final Duration start;
+  final Duration end;
+  final double? confidence;
+  final int? tokenIndex;
+  final int? observedPhoneIndex;
+  final String? observedSymbol;
+  final String evidence;
+
+  DetectedPhone toDetectedPhone({
+    required String provider,
+    required String modelRevision,
+  }) => DetectedPhone(
+    symbol: symbol,
+    displayIpa: displayIpa,
+    phoneSet: phoneSet,
+    start: start,
+    end: end,
+    confidence: confidence,
+    tokenIndex: tokenIndex,
+    provider: provider,
+    modelRevision: modelRevision,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'symbol': symbol,
+    'display_ipa': displayIpa,
+    'phone_set': phoneSet,
+    'start_ms': start.inMilliseconds,
+    'end_ms': end.inMilliseconds,
+    'confidence': confidence,
+    'token_index': tokenIndex,
+    'observed_phone_index': observedPhoneIndex,
+    'observed_symbol': observedSymbol,
+    'evidence': evidence,
+  };
+}
+
+class SoundSyllable {
+  const SoundSyllable({
+    required this.phones,
+    required this.onset,
+    required this.nucleus,
+    required this.coda,
+    required this.start,
+    required this.end,
+    required this.stress,
+  });
+
+  factory SoundSyllable.fromJson(Map<String, dynamic> json) => SoundSyllable(
+    phones: ((json['phones'] as List<dynamic>?) ?? const []).cast<int>(),
+    onset: ((json['onset'] as List<dynamic>?) ?? const []).cast<int>(),
+    nucleus: ((json['nucleus'] as List<dynamic>?) ?? const []).cast<int>(),
+    coda: ((json['coda'] as List<dynamic>?) ?? const []).cast<int>(),
+    start: Duration(milliseconds: json['start_ms'] as int),
+    end: Duration(milliseconds: json['end_ms'] as int),
+    stress: json['stress'] as String,
+  );
+
+  final List<int> phones;
+  final List<int> onset;
+  final List<int> nucleus;
+  final List<int> coda;
+  final Duration start;
+  final Duration end;
+  final String stress;
+
+  Map<String, dynamic> toJson() => {
+    'phones': phones,
+    'onset': onset,
+    'nucleus': nucleus,
+    'coda': coda,
+    'start_ms': start.inMilliseconds,
+    'end_ms': end.inMilliseconds,
+    'stress': stress,
+  };
+}
+
+class SoundProsodicPhrase {
+  const SoundProsodicPhrase({
+    required this.syllables,
+    required this.start,
+    required this.end,
+    required this.boundaryEvidence,
+    required this.confidence,
+  });
+
+  factory SoundProsodicPhrase.fromJson(Map<String, dynamic> json) =>
+      SoundProsodicPhrase(
+        syllables: ((json['syllables'] as List<dynamic>?) ?? const [])
+            .cast<int>(),
+        start: Duration(milliseconds: json['start_ms'] as int),
+        end: Duration(milliseconds: json['end_ms'] as int),
+        boundaryEvidence: json['boundary_evidence'] as String,
+        confidence: (json['confidence'] as num).toDouble(),
+      );
+
+  final List<int> syllables;
+  final Duration start;
+  final Duration end;
+  final String boundaryEvidence;
+  final double confidence;
+
+  Map<String, dynamic> toJson() => {
+    'syllables': syllables,
+    'start_ms': start.inMilliseconds,
+    'end_ms': end.inMilliseconds,
+    'boundary_evidence': boundaryEvidence,
+    'confidence': confidence,
   };
 }
 
@@ -878,7 +1084,7 @@ List<DetectedPhone> synthesizePhonesFromDictionary(
     if (variants.isEmpty) continue;
     final phonemes =
         (variants[0] as Map<String, dynamic>)['phonemes'] as List<dynamic>? ??
-            const [];
+        const [];
     if (phonemes.isEmpty) continue;
 
     final startMs = timing.start.inMilliseconds;
@@ -890,20 +1096,120 @@ List<DetectedPhone> synthesizePhonesFromDictionary(
       final p = phonemes[i] as Map<String, dynamic>;
       final pStart = startMs + (perPhonemeMs * i).round();
       final pEnd = startMs + (perPhonemeMs * (i + 1)).round();
-      result.add(DetectedPhone(
-        symbol: p['symbol'] as String,
-        displayIpa: (p['display_ipa'] as String?) ?? p['symbol'] as String,
-        phoneSet: (p['phoneme_set'] as String?) ?? 'ipa',
-        start: Duration(milliseconds: pStart),
-        end: Duration(milliseconds: pEnd),
-        confidence: null,
-        tokenIndex: tokenIndex,
-        provider: 'dictionary',
-        modelRevision: '',
-      ));
+      result.add(
+        DetectedPhone(
+          symbol: p['symbol'] as String,
+          displayIpa: (p['display_ipa'] as String?) ?? p['symbol'] as String,
+          phoneSet: (p['phoneme_set'] as String?) ?? 'ipa',
+          start: Duration(milliseconds: pStart),
+          end: Duration(milliseconds: pEnd),
+          confidence: null,
+          tokenIndex: tokenIndex,
+          provider: 'dictionary',
+          modelRevision: '',
+        ),
+      );
     }
   }
   return result;
+}
+
+List<DetectedPhone> buildLearningPhones({
+  required Map<String, dynamic>? pronunciation,
+  required List<WordTiming>? wordTimings,
+  required List<DetectedPhone> observedPhones,
+}) {
+  final expectedPhones = pronunciation == null || wordTimings == null
+      ? const <DetectedPhone>[]
+      : synthesizePhonesFromDictionary(pronunciation, wordTimings);
+  if (expectedPhones.isEmpty) return observedPhones;
+  if (observedPhones.isEmpty) return expectedPhones;
+
+  final observedByToken = <int, List<DetectedPhone>>{};
+  for (final observed in observedPhones) {
+    final tokenIndex = observed.tokenIndex;
+    if (tokenIndex == null) continue;
+    observedByToken.putIfAbsent(tokenIndex, () => []).add(observed);
+  }
+  final consumedByToken = <int, int>{};
+
+  return [
+    for (final expected in expectedPhones)
+      _learningPhoneFromExpected(
+        expected,
+        _alignedObservedPhone(
+          expected,
+          observedByToken,
+          consumedByToken,
+          observedPhones,
+        ),
+      ),
+  ];
+}
+
+DetectedPhone _learningPhoneFromExpected(
+  DetectedPhone expected,
+  DetectedPhone? observed,
+) {
+  if (observed == null) return expected;
+  return DetectedPhone(
+    symbol: expected.symbol,
+    displayIpa: expected.displayIpa,
+    phoneSet: expected.phoneSet,
+    start: observed.start,
+    end: observed.end,
+    confidence: observed.confidence,
+    tokenIndex: expected.tokenIndex,
+    provider: '${expected.provider}+${observed.provider}-timing',
+    modelRevision: observed.modelRevision,
+  );
+}
+
+DetectedPhone? _alignedObservedPhone(
+  DetectedPhone expected,
+  Map<int, List<DetectedPhone>> observedByToken,
+  Map<int, int> consumedByToken,
+  List<DetectedPhone> observedPhones,
+) {
+  final tokenIndex = expected.tokenIndex;
+  if (tokenIndex != null) {
+    final candidates = observedByToken[tokenIndex];
+    if (candidates != null && candidates.isNotEmpty) {
+      final next = consumedByToken[tokenIndex] ?? 0;
+      if (next < candidates.length) {
+        consumedByToken[tokenIndex] = next + 1;
+        return candidates[next];
+      }
+      return null;
+    }
+  }
+
+  var bestOverlap = Duration.zero;
+  DetectedPhone? best;
+  for (final observed in observedPhones) {
+    final overlap = _durationOverlap(
+      expected.start,
+      expected.end,
+      observed.start,
+      observed.end,
+    );
+    if (overlap > bestOverlap) {
+      bestOverlap = overlap;
+      best = observed;
+    }
+  }
+  return bestOverlap > Duration.zero ? best : null;
+}
+
+Duration _durationOverlap(
+  Duration aStart,
+  Duration aEnd,
+  Duration bStart,
+  Duration bEnd,
+) {
+  final start = aStart > bStart ? aStart : bStart;
+  final end = aEnd < bEnd ? aEnd : bEnd;
+  return end > start ? end - start : Duration.zero;
 }
 
 Map<String, Map<String, dynamic>> latestPhoneticAnalysesBySentence(

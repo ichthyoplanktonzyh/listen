@@ -13,6 +13,8 @@ class PhonemeRibbon extends StatelessWidget {
     this.height = 28.0,
     this.gap = 1.0,
     this.style = 'window',
+    this.syllables = const [],
+    this.prosodicPhrases = const [],
   });
 
   final List<DetectedPhone> phones;
@@ -21,6 +23,8 @@ class PhonemeRibbon extends StatelessWidget {
   final double height;
   final double gap;
   final String style;
+  final List<SoundSyllable> syllables;
+  final List<SoundProsodicPhrase> prosodicPhrases;
 
   @override
   Widget build(BuildContext context) {
@@ -30,6 +34,10 @@ class PhonemeRibbon extends StatelessWidget {
     if (totalMs <= 0) return const SizedBox.shrink();
 
     final currentIdx = _currentIndex();
+    final markers = _RibbonMarkers.from(
+      syllables: syllables,
+      prosodicPhrases: prosodicPhrases,
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -52,6 +60,7 @@ class PhonemeRibbon extends StatelessWidget {
                   fontSize: fontSize,
                   gap: gap,
                   wave: style == 'wave',
+                  markers: markers,
                 )
               : _WindowRibbon(
                   phones: phones,
@@ -60,6 +69,7 @@ class PhonemeRibbon extends StatelessWidget {
                   fontSize: fontSize,
                   gap: gap,
                   maxWidth: maxWidth,
+                  markers: markers,
                 ),
         );
       },
@@ -77,9 +87,8 @@ class PhonemeRibbon extends StatelessWidget {
           posMs < phones[i].end.inMilliseconds) {
         return i;
       }
-      final mid = (phones[i].start.inMilliseconds +
-              phones[i].end.inMilliseconds) ~/
-          2;
+      final mid =
+          (phones[i].start.inMilliseconds + phones[i].end.inMilliseconds) ~/ 2;
       final d = (posMs - mid).abs().toDouble();
       if (d < bestDist) {
         bestDist = d;
@@ -111,6 +120,44 @@ class PhonemeRibbon extends StatelessWidget {
   }
 }
 
+class _RibbonMarkers {
+  const _RibbonMarkers({
+    required this.syllableStarts,
+    required this.phraseStarts,
+  });
+
+  factory _RibbonMarkers.from({
+    required List<SoundSyllable> syllables,
+    required List<SoundProsodicPhrase> prosodicPhrases,
+  }) {
+    final syllableStarts = <int>{};
+    for (final syllable in syllables) {
+      if (syllable.phones.isNotEmpty) syllableStarts.add(syllable.phones.first);
+    }
+    final phraseStarts = <int>{};
+    for (final phrase in prosodicPhrases) {
+      if (phrase.syllables.isEmpty) continue;
+      final syllableIndex = phrase.syllables.first;
+      if (syllableIndex >= 0 && syllableIndex < syllables.length) {
+        final syllable = syllables[syllableIndex];
+        if (syllable.phones.isNotEmpty) phraseStarts.add(syllable.phones.first);
+      }
+    }
+    phraseStarts.remove(0);
+    syllableStarts.remove(0);
+    return _RibbonMarkers(
+      syllableStarts: syllableStarts,
+      phraseStarts: phraseStarts,
+    );
+  }
+
+  final Set<int> syllableStarts;
+  final Set<int> phraseStarts;
+
+  bool phraseBefore(int phoneIndex) => phraseStarts.contains(phoneIndex);
+  bool syllableBefore(int phoneIndex) => syllableStarts.contains(phoneIndex);
+}
+
 class _FullRibbon extends StatelessWidget {
   const _FullRibbon({
     required this.phones,
@@ -120,6 +167,7 @@ class _FullRibbon extends StatelessWidget {
     required this.fontSize,
     required this.gap,
     required this.wave,
+    required this.markers,
   });
 
   final List<DetectedPhone> phones;
@@ -129,25 +177,26 @@ class _FullRibbon extends StatelessWidget {
   final double fontSize;
   final double gap;
   final bool wave;
+  final _RibbonMarkers markers;
 
   @override
   Widget build(BuildContext context) => Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          for (var i = 0; i < phones.length; i++) ...[
-            if (i > 0) SizedBox(width: gap),
-            _PhoneCell(
-              phone: phones[i],
-              width: widths[i],
-              height: height,
-              fontSize: fontSize,
-              isCurrent: i == currentIdx,
-              elevated: wave,
-            ),
-          ],
-        ],
-      );
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.end,
+    children: [
+      for (var i = 0; i < phones.length; i++) ...[
+        if (i > 0) _PhoneSeparator(markers: markers, phoneIndex: i, gap: gap),
+        _PhoneCell(
+          phone: phones[i],
+          width: widths[i],
+          height: height,
+          fontSize: fontSize,
+          isCurrent: i == currentIdx,
+          elevated: wave,
+        ),
+      ],
+    ],
+  );
 }
 
 class _WindowRibbon extends StatelessWidget {
@@ -158,6 +207,7 @@ class _WindowRibbon extends StatelessWidget {
     required this.fontSize,
     required this.gap,
     required this.maxWidth,
+    required this.markers,
   });
 
   final List<DetectedPhone> phones;
@@ -166,6 +216,7 @@ class _WindowRibbon extends StatelessWidget {
   final double fontSize;
   final double gap;
   final double maxWidth;
+  final _RibbonMarkers markers;
 
   @override
   Widget build(BuildContext context) {
@@ -183,7 +234,12 @@ class _WindowRibbon extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           for (var i = 0; i < visiblePhones.length; i++) ...[
-            if (i > 0) SizedBox(width: gap),
+            if (i > 0)
+              _PhoneSeparator(
+                markers: markers,
+                phoneIndex: start + i,
+                gap: gap,
+              ),
             _PhoneCell(
               phone: visiblePhones[i],
               width: cellWidth,
@@ -243,6 +299,34 @@ class _WindowRibbon extends StatelessWidget {
   }
 }
 
+class _PhoneSeparator extends StatelessWidget {
+  const _PhoneSeparator({
+    required this.markers,
+    required this.phoneIndex,
+    required this.gap,
+  });
+
+  final _RibbonMarkers markers;
+  final int phoneIndex;
+  final double gap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (markers.phraseBefore(phoneIndex)) {
+      return Container(
+        width: math.max(5.0, gap * 4),
+        height: 22,
+        alignment: Alignment.center,
+        child: Container(width: 1.4, color: Colors.white.withAlpha(190)),
+      );
+    }
+    if (markers.syllableBefore(phoneIndex)) {
+      return SizedBox(width: math.max(4.0, gap * 3));
+    }
+    return SizedBox(width: gap);
+  }
+}
+
 class _PhoneCell extends StatelessWidget {
   const _PhoneCell({
     required this.phone,
@@ -264,9 +348,7 @@ class _PhoneCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = _phoneColor(phone.symbol);
     final confidence = phone.confidence ?? 0.8;
-    final alpha = isCurrent
-        ? 1.0
-        : (0.3 + confidence * 0.3).clamp(0.2, 0.6);
+    final alpha = isCurrent ? 1.0 : (0.3 + confidence * 0.3).clamp(0.2, 0.6);
     final targetHeight = isCurrent
         ? height * (elevated ? 1.16 : 1.08)
         : height * 0.86;
@@ -318,14 +400,23 @@ class _PhoneCell extends StatelessWidget {
   }
 
   static const _vowels = {
-    'AA', 'AE', 'AH', 'AO', 'AW', 'AX', 'AY',
-    'EH', 'ER', 'EY',
-    'IH', 'IY',
-    'OW', 'OY',
-    'UH', 'UW',
+    'AA',
+    'AE',
+    'AH',
+    'AO',
+    'AW',
+    'AX',
+    'AY',
+    'EH',
+    'ER',
+    'EY',
+    'IH',
+    'IY',
+    'OW',
+    'OY',
+    'UH',
+    'UW',
   };
 
-  static const _approximants = {
-    'W', 'Y', 'R', 'L', 'HH',
-  };
+  static const _approximants = {'W', 'Y', 'R', 'L', 'HH'};
 }

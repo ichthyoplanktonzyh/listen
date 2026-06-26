@@ -180,6 +180,76 @@ void main() {
     expect(timeline.words.single.providerVersion, '2.0');
   });
 
+  test('parses phone timeline sound analysis for grouped ribbon display', () {
+    final timeline = PhoneTimeline.fromJson(const {
+      'id': 'phone-timeline-1',
+      'track_id': 'track-1',
+      'media_id': 'media-1',
+      'sentence_id': 'sentence-1',
+      'parent_word_timeline_id': null,
+      'parent_phonetic_analysis_id': 'analysis-1',
+      'provider_id': 'wav2vec2-ctc-phoneme',
+      'provider_version': 'fb-espeak-v1',
+      'model_id': 'model-1',
+      'model_revision': 'model-rev',
+      'phone_set': 'arpabet',
+      'precision': 'detected',
+      'created_by': 'algorithm',
+      'status': 'active',
+      'metrics_json': {},
+      'phones': [],
+      'alignments': [],
+      'findings': [],
+      'sound_analysis': {
+        'provider_id': 'wav2vec2-ctc-phoneme',
+        'provider_version': 'fb-espeak-v1',
+        'model_revision': 'model-rev',
+        'phone_set': 'arpabet',
+        'generated_from': 'expected_phones_aligned_to_observed_timing',
+        'learning_phones': [
+          {
+            'symbol': 'S',
+            'display_ipa': 's',
+            'phone_set': 'arpabet',
+            'start_ms': 120,
+            'end_ms': 180,
+            'confidence': 0.41,
+            'token_index': 0,
+            'observed_phone_index': 0,
+            'observed_symbol': 'K',
+            'evidence': 'substitution',
+          },
+        ],
+        'syllables': [
+          {
+            'phones': [0],
+            'onset': [],
+            'nucleus': [],
+            'coda': [0],
+            'start_ms': 120,
+            'end_ms': 180,
+            'stress': 'unknown',
+          },
+        ],
+        'prosodic_phrases': [
+          {
+            'syllables': [0],
+            'start_ms': 120,
+            'end_ms': 180,
+            'boundary_evidence': 'sentence_end',
+            'confidence': 0.9,
+          },
+        ],
+      },
+      'created_at_ms': 1,
+      'updated_at_ms': 2,
+    });
+
+    expect(timeline.soundAnalysis?.learningPhones.single.symbol, 'S');
+    expect(timeline.soundAnalysis?.learningPhones.single.observedSymbol, 'K');
+    expect(timeline.toSoundPatternJson()['sound_analysis'], isA<Map>());
+  });
+
   test(
     'selects current detected phone with offset and excludes end boundary',
     () {
@@ -254,6 +324,104 @@ void main() {
           .toList();
 
       expect(selected, ['A', 'B', 'A', null, 'B', null]);
+    },
+  );
+
+  test('learning phones keep expected labels when CTC label mismatches', () {
+    const timings = [
+      WordTiming(
+        sentenceId: 'sentence-1',
+        tokenIndex: 0,
+        start: Duration(milliseconds: 100),
+        end: Duration(milliseconds: 300),
+        source: 'forced_aligned',
+        provider: 'mfa',
+      ),
+    ];
+    const observed = [
+      DetectedPhone(
+        symbol: 'K',
+        displayIpa: 'k',
+        phoneSet: 'arpabet',
+        start: Duration(milliseconds: 120),
+        end: Duration(milliseconds: 260),
+        confidence: 0.41,
+        tokenIndex: 0,
+        provider: 'wav2vec2-ctc',
+        modelRevision: 'v1',
+      ),
+    ];
+    final learningPhones = buildLearningPhones(
+      pronunciation: const {
+        'words': [
+          {
+            'token_index': 0,
+            'variants': [
+              {
+                'phonemes': [
+                  {'symbol': 'S', 'display_ipa': 's', 'phoneme_set': 'arpabet'},
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      wordTimings: timings,
+      observedPhones: observed,
+    );
+
+    expect(learningPhones.single.symbol, 'S');
+    expect(learningPhones.single.displayIpa, 's');
+    expect(learningPhones.single.start, const Duration(milliseconds: 120));
+    expect(learningPhones.single.end, const Duration(milliseconds: 260));
+    expect(learningPhones.single.confidence, 0.41);
+    expect(learningPhones.single.provider, 'dictionary+wav2vec2-ctc-timing');
+  });
+
+  test(
+    'learning phones fall back to dictionary phones without CTC evidence',
+    () {
+      const timings = [
+        WordTiming(
+          sentenceId: 'sentence-1',
+          tokenIndex: 0,
+          start: Duration(milliseconds: 100),
+          end: Duration(milliseconds: 300),
+          source: 'estimated',
+          provider: 'deterministic',
+        ),
+      ];
+      final learningPhones = buildLearningPhones(
+        pronunciation: const {
+          'words': [
+            {
+              'token_index': 0,
+              'variants': [
+                {
+                  'phonemes': [
+                    {
+                      'symbol': 'S',
+                      'display_ipa': 's',
+                      'phoneme_set': 'arpabet',
+                    },
+                    {
+                      'symbol': 'T',
+                      'display_ipa': 't',
+                      'phoneme_set': 'arpabet',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        wordTimings: timings,
+        observedPhones: const [],
+      );
+
+      expect(learningPhones.map((phone) => phone.symbol), ['S', 'T']);
+      expect(learningPhones.first.start, const Duration(milliseconds: 100));
+      expect(learningPhones.last.end, const Duration(milliseconds: 300));
     },
   );
 

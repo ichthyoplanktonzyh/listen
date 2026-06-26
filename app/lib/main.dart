@@ -248,12 +248,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         status = 'Local core connected';
       });
       subscriptions.add(value.events().listen(_onEvent));
-      value.listLanguages().then(
-        (languages) {
-          if (mounted) learningController.availableLanguages = languages;
-        },
-        onError: (_) {},
-      );
+      value.listLanguages().then((languages) {
+        if (mounted) learningController.availableLanguages = languages;
+      }, onError: (_) {});
       progressTimer = Timer.periodic(const Duration(seconds: 5), (_) {
         if (playerController.mediaId != null) {
           unawaited(
@@ -1067,7 +1064,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
-  Future<void> _changeTrackLanguage(SubtitleTrack track, String language) async {
+  Future<void> _changeTrackLanguage(
+    SubtitleTrack track,
+    String language,
+  ) async {
     final service = api;
     if (service == null) return;
     try {
@@ -2912,24 +2912,47 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 subtitleController.currentPrimaryCue != null)
                               Builder(
                                 builder: (_) {
-                                  final cueId = subtitleController.currentPrimaryCue!.id;
+                                  final cueId =
+                                      subtitleController.currentPrimaryCue!.id;
                                   final raw = subtitleController
                                       .phoneticAnalysisBySentence[cueId];
-                                  var phones = ((raw?['detected_phones']
-                                              as List<dynamic>?) ??
-                                          const [])
-                                      .map((v) => DetectedPhone.fromJson(
-                                          v as Map<String, dynamic>))
-                                      .toList(growable: false);
-                                  if (phones.isEmpty) {
-                                    final pron = subtitleController
-                                        .pronunciationBySentence[cueId];
-                                    final timings = subtitleController
-                                        .timingsBySentence[cueId];
-                                    if (pron != null && timings != null && timings.isNotEmpty) {
-                                      phones = synthesizePhonesFromDictionary(pron, timings);
-                                    }
-                                  }
+                                  final soundAnalysis =
+                                      raw?['sound_analysis'] is Map
+                                      ? SoundAnalysis.fromJson(
+                                          Map<String, dynamic>.from(
+                                            raw!['sound_analysis'] as Map,
+                                          ),
+                                        )
+                                      : null;
+                                  final observedPhones =
+                                      ((raw?['detected_phones']
+                                                  as List<dynamic>?) ??
+                                              const [])
+                                          .map(
+                                            (v) => DetectedPhone.fromJson(
+                                              v as Map<String, dynamic>,
+                                            ),
+                                          )
+                                          .toList(growable: false);
+                                  final phones =
+                                      soundAnalysis?.learningPhones
+                                          .map(
+                                            (phone) => phone.toDetectedPhone(
+                                              provider:
+                                                  soundAnalysis.providerId,
+                                              modelRevision:
+                                                  soundAnalysis.modelRevision ??
+                                                  soundAnalysis.providerVersion,
+                                            ),
+                                          )
+                                          .toList(growable: false) ??
+                                      buildLearningPhones(
+                                        pronunciation: subtitleController
+                                            .pronunciationBySentence[cueId],
+                                        wordTimings: subtitleController
+                                            .timingsBySentence[cueId],
+                                        observedPhones: observedPhones,
+                                      );
                                   if (phones.isEmpty) {
                                     return const SizedBox.shrink();
                                   }
@@ -2940,7 +2963,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                       position: playerController.position,
                                       fontSize: primarySize * 0.45,
                                       height: primarySize * 1.1,
-                                      style: settingsController.phonemeRibbonStyle,
+                                      style:
+                                          settingsController.phonemeRibbonStyle,
+                                      syllables:
+                                          soundAnalysis?.syllables ?? const [],
+                                      prosodicPhrases:
+                                          soundAnalysis?.prosodicPhrases ??
+                                          const [],
                                     ),
                                   );
                                 },
@@ -3044,7 +3073,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       details: learningController.selectedWordDetails!,
                       dictionary: learningController.selectedDictionary,
                       pronunciation: learningController.selectedPronunciation,
-                      languageProfile: learningController.currentLanguageProfile,
+                      languageProfile:
+                          learningController.currentLanguageProfile,
                       onStatus: _setSelectedWordStatus,
                       onSave: _saveSelectedLearningContent,
                       onSource: _playOccurrence,
