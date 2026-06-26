@@ -35,22 +35,16 @@ class SettingsController extends ChangeNotifier {
   String get transcriptionLanguage => _settings.transcriptionLanguage;
   String get transcriptionDestination => _settings.transcriptionDestination;
   String get openSubtitlesApiKey => _settings.openSubtitlesApiKey;
-  bool get pronunciationVisible => _settings.pronunciationVisible;
   bool get wordSyncVisible => _settings.wordSyncVisible;
   bool get showChunkGrouping => _settings.showChunkGrouping;
   String get chunkDisplayStyle => _settings.chunkDisplayStyle;
   bool get highlightCurrentChunk => _settings.highlightCurrentChunk;
   String get chunkHighlightStyle => _settings.chunkHighlightStyle;
-  String get phonemeDisplay => _settings.phonemeDisplay;
   String get wordHighlightStyle => _settings.wordHighlightStyle;
   double get wordAnimationIntensity => _settings.wordAnimationIntensity;
   String get ruleHintsLevel => _settings.ruleHintsLevel;
-  bool get precomputePronunciation => _settings.precomputePronunciation;
   String get phoneticAnalysisPreference => _settings.phoneticAnalysisPreference;
-  bool get showExperimentalPhoneticResults =>
-      _settings.showExperimentalPhoneticResults;
-  bool get phonemeHighlightVisible => _settings.phonemeHighlightVisible;
-  String get phoneticCachePolicy => _settings.phoneticCachePolicy;
+  bool get phonemeRibbonVisible => _settings.phonemeRibbonVisible;
   String get learningLanguage => _settings.learningLanguage;
   Color get primaryColor => Color(_settings.primaryColor);
   Color get secondaryColor => Color(_settings.secondaryColor);

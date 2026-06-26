@@ -26,6 +26,7 @@ import 'controllers/learning_controller.dart';
 import 'controllers/settings_controller.dart';
 import 'utils/subtitle_style.dart';
 import 'utils/word_list_parser.dart';
+import 'widgets/subtitle/phoneme_ribbon.dart';
 import 'widgets/subtitle/token_line.dart';
 import 'widgets/panels/word_learning_panel.dart';
 import 'screens/subtitle_resources_screen.dart';
@@ -215,24 +216,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
       transcriptionLanguage: settingsController.transcriptionLanguage,
       transcriptionDestination: settingsController.transcriptionDestination,
       openSubtitlesApiKey: settingsController.openSubtitlesApiKey,
-      pronunciationVisible: settingsController.pronunciationVisible,
       wordSyncVisible: settingsController.wordSyncVisible,
       showChunkGrouping: settingsController.showChunkGrouping,
       chunkDisplayStyle: settingsController.chunkDisplayStyle,
       highlightCurrentChunk: settingsController.highlightCurrentChunk,
       chunkHighlightStyle: settingsController.chunkHighlightStyle,
-      phonemeDisplay: settingsController.phonemeDisplay,
       wordHighlightStyle: settingsController.wordHighlightStyle,
       wordAnimationIntensity: settingsController.wordAnimationIntensity,
       ruleHintsLevel: settingsController.ruleHintsLevel,
-      precomputePronunciation: settingsController.precomputePronunciation,
       phoneticProviderId: settingsController.settings.phoneticProviderId,
       phoneticModelId: settingsController.settings.phoneticModelId,
       phoneticAnalysisPreference: settingsController.phoneticAnalysisPreference,
-      showExperimentalPhoneticResults:
-          settingsController.showExperimentalPhoneticResults,
-      phonemeHighlightVisible: settingsController.phonemeHighlightVisible,
-      phoneticCachePolicy: settingsController.phoneticCachePolicy,
+      phonemeRibbonVisible: settingsController.phonemeRibbonVisible,
     ),
   );
 
@@ -355,7 +350,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     subtitleController.updateCurrentDetectedPhone(
       value,
-      enabled: settingsController.settings.phonemeHighlightVisible,
+      enabled: settingsController.settings.phonemeRibbonVisible,
     );
 
     final primaryCue = subtitleController.currentPrimaryCue;
@@ -689,7 +684,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     subtitleController.updateCurrentDetectedPhone(
       playerController.position,
-      enabled: settingsController.settings.phonemeHighlightVisible,
+      enabled: settingsController.settings.phonemeRibbonVisible,
     );
     if (errors.isNotEmpty && mounted) {
       setState(
@@ -735,12 +730,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     List<String> errors,
   ) async {
     try {
-      if (settingsController.precomputePronunciation) {
-        return await service.trackPronunciation(trackId);
-      }
-      final cue = subtitleController.currentPrimaryCue;
-      if (cue == null) return const [];
-      return [await service.analyzePronunciation(cue.id)];
+      return await service.trackPronunciation(trackId);
     } catch (error) {
       errors.add('pronunciation: $error');
       return const [];
@@ -1673,23 +1663,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ffprobePath: settingsController.ffprobePath,
         ytDlpPath: settingsController.ytDlpPath,
         openSubtitlesApiKey: settingsController.openSubtitlesApiKey,
-        pronunciationVisible: settingsController.pronunciationVisible,
         wordSyncVisible: settingsController.wordSyncVisible,
         showChunkGrouping: settingsController.showChunkGrouping,
         chunkDisplayStyle: settingsController.chunkDisplayStyle,
         highlightCurrentChunk: settingsController.highlightCurrentChunk,
         chunkHighlightStyle: settingsController.chunkHighlightStyle,
-        phonemeDisplay: settingsController.phonemeDisplay,
         wordHighlightStyle: settingsController.wordHighlightStyle,
         wordAnimationIntensity: settingsController.wordAnimationIntensity,
         ruleHintsLevel: settingsController.ruleHintsLevel,
-        precomputePronunciation: settingsController.precomputePronunciation,
         phoneticAnalysisPreference:
             settingsController.phoneticAnalysisPreference,
-        showExperimentalPhoneticResults:
-            settingsController.showExperimentalPhoneticResults,
-        phonemeHighlightVisible: settingsController.phonemeHighlightVisible,
-        phoneticCachePolicy: settingsController.phoneticCachePolicy,
+        phonemeRibbonVisible: settingsController.phonemeRibbonVisible,
         learningLanguage: settingsController.learningLanguage,
         availableLanguages: learningController.availableLanguages,
         onLearningLanguageChanged: (v) {
@@ -1770,11 +1754,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
             settingsController.settings.copyWith(transcriptionDestination: v),
           );
         },
-        onPronunciationVisibleChanged: (v) {
-          settingsController.update(
-            settingsController.settings.copyWith(pronunciationVisible: v),
-          );
-        },
         onWordSyncVisibleChanged: (v) {
           settingsController.update(
             settingsController.settings.copyWith(wordSyncVisible: v),
@@ -1817,11 +1796,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
             settingsController.settings.copyWith(chunkHighlightStyle: v),
           );
         },
-        onPhonemeDisplayChanged: (v) {
-          settingsController.update(
-            settingsController.settings.copyWith(phonemeDisplay: v),
-          );
-        },
         onWordHighlightStyleChanged: (v) {
           settingsController.update(
             settingsController.settings.copyWith(wordHighlightStyle: v),
@@ -1837,35 +1811,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
             settingsController.settings.copyWith(ruleHintsLevel: v),
           );
         },
-        onPrecomputePronunciationChanged: (v) {
-          settingsController.update(
-            settingsController.settings.copyWith(precomputePronunciation: v),
-          );
-        },
         onPhoneticAnalysisPreferenceChanged: (v) {
           settingsController.update(
             settingsController.settings.copyWith(phoneticAnalysisPreference: v),
           );
         },
-        onShowExperimentalPhoneticResultsChanged: (v) {
+        onPhonemeRibbonVisibleChanged: (v) {
           settingsController.update(
             settingsController.settings.copyWith(
-              showExperimentalPhoneticResults: v,
+              phonemeRibbonVisible: v,
+              phonemeHighlightVisible: v,
             ),
-          );
-        },
-        onPhonemeHighlightVisibleChanged: (v) {
-          settingsController.update(
-            settingsController.settings.copyWith(phonemeHighlightVisible: v),
           );
           subtitleController.updateCurrentDetectedPhone(
             playerController.position,
             enabled: v,
-          );
-        },
-        onPhoneticCachePolicyChanged: (v) {
-          settingsController.update(
-            settingsController.settings.copyWith(phoneticCachePolicy: v),
           );
         },
         onSave:
@@ -2942,28 +2902,47 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                   onChunk: _seekChunk,
                                 ),
                               ),
-                            if (settingsController.pronunciationVisible &&
-                                subtitleController.currentPrimaryCue != null &&
-                                subtitleController
-                                        .pronunciationBySentence[subtitleController
-                                        .currentPrimaryCue!
-                                        .id] !=
-                                    null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Text(
-                                  _pronunciationText(
-                                    subtitleController
-                                        .pronunciationBySentence[subtitleController
-                                        .currentPrimaryCue!
-                                        .id]!,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: primarySize * 0.55,
-                                    color: Colors.white70,
-                                  ),
-                                ),
+                            if (settingsController.phonemeRibbonVisible &&
+                                subtitleController.currentPrimaryCue != null)
+                              Builder(
+                                builder: (_) {
+                                  final cueId = subtitleController.currentPrimaryCue!.id;
+                                  final raw = subtitleController
+                                      .phoneticAnalysisBySentence[cueId];
+                                  final phones = ((raw?['detected_phones']
+                                              as List<dynamic>?) ??
+                                          const [])
+                                      .map((v) => DetectedPhone.fromJson(
+                                          v as Map<String, dynamic>))
+                                      .toList(growable: false);
+                                  if (phones.isNotEmpty) {
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: PhonemeRibbon(
+                                        phones: phones,
+                                        position: playerController.position,
+                                        fontSize: primarySize * 0.45,
+                                        height: primarySize * 1.1,
+                                      ),
+                                    );
+                                  }
+                                  final ipa = subtitleController
+                                      .pronunciationBySentence[cueId];
+                                  if (ipa != null) {
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Text(
+                                        _pronunciationText(ipa),
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: primarySize * 0.55,
+                                          color: Colors.white70,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  return const SizedBox.shrink();
+                                },
                               ),
                             if (subtitleController.secondaryVisible &&
                                 subtitleController.currentSecondaryCue != null)
@@ -3018,12 +2997,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   };
 
   String _pronunciationText(Map<String, dynamic> analysis) {
-    if (settingsController.phonemeDisplay == 'ipa') {
-      return analysis['display_ipa'] as String;
-    }
-    return ((analysis['phonemes'] as List<dynamic>?) ?? const [])
-        .map((value) => (value as Map<String, dynamic>)['symbol'])
-        .join(' ');
+    return analysis['display_ipa'] as String;
   }
 
   String _timingQuality(String sentenceId) {
@@ -3153,9 +3127,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 .isEmpty
         ? null
         : _timingQuality(subtitleController.currentPrimaryCue!.id),
-    phoneticAnalysis:
-        !settingsController.showExperimentalPhoneticResults ||
-            subtitleController.currentPrimaryCue == null
+    phoneticAnalysis: subtitleController.currentPrimaryCue == null
         ? null
         : subtitleController.phoneticAnalysisBySentence[subtitleController
               .currentPrimaryCue!

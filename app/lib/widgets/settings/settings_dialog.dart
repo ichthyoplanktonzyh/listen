@@ -28,21 +28,16 @@ class SettingsDialog extends StatefulWidget {
     required this.ffprobePath,
     required this.ytDlpPath,
     required this.openSubtitlesApiKey,
-    required this.pronunciationVisible,
     required this.wordSyncVisible,
     required this.showChunkGrouping,
     required this.chunkDisplayStyle,
     required this.highlightCurrentChunk,
     required this.chunkHighlightStyle,
-    required this.phonemeDisplay,
     required this.wordHighlightStyle,
     required this.wordAnimationIntensity,
     required this.ruleHintsLevel,
-    required this.precomputePronunciation,
+    required this.phonemeRibbonVisible,
     required this.phoneticAnalysisPreference,
-    required this.showExperimentalPhoneticResults,
-    required this.phonemeHighlightVisible,
-    required this.phoneticCachePolicy,
     required this.learningLanguage,
     required this.availableLanguages,
     required this.onLearningLanguageChanged,
@@ -62,21 +57,16 @@ class SettingsDialog extends StatefulWidget {
     required this.onTranscriptionQualityChanged,
     required this.onTranscriptionLanguageChanged,
     required this.onTranscriptionDestinationChanged,
-    required this.onPronunciationVisibleChanged,
     required this.onWordSyncVisibleChanged,
     required this.onShowChunkGroupingChanged,
     required this.onChunkDisplayStyleChanged,
     required this.onHighlightCurrentChunkChanged,
     required this.onChunkHighlightStyleChanged,
-    required this.onPhonemeDisplayChanged,
     required this.onWordHighlightStyleChanged,
     required this.onWordAnimationIntensityChanged,
     required this.onRuleHintsLevelChanged,
-    required this.onPrecomputePronunciationChanged,
+    required this.onPhonemeRibbonVisibleChanged,
     required this.onPhoneticAnalysisPreferenceChanged,
-    required this.onShowExperimentalPhoneticResultsChanged,
-    required this.onPhonemeHighlightVisibleChanged,
-    required this.onPhoneticCachePolicyChanged,
     required this.onSave,
   });
 
@@ -100,21 +90,16 @@ class SettingsDialog extends StatefulWidget {
   final String ffprobePath;
   final String ytDlpPath;
   final String openSubtitlesApiKey;
-  final bool pronunciationVisible;
   final bool wordSyncVisible;
   final bool showChunkGrouping;
   final String chunkDisplayStyle;
   final bool highlightCurrentChunk;
   final String chunkHighlightStyle;
-  final String phonemeDisplay;
   final String wordHighlightStyle;
   final double wordAnimationIntensity;
   final String ruleHintsLevel;
-  final bool precomputePronunciation;
+  final bool phonemeRibbonVisible;
   final String phoneticAnalysisPreference;
-  final bool showExperimentalPhoneticResults;
-  final bool phonemeHighlightVisible;
-  final String phoneticCachePolicy;
   final String learningLanguage;
   final List<String> availableLanguages;
 
@@ -136,21 +121,16 @@ class SettingsDialog extends StatefulWidget {
   final ValueChanged<String> onTranscriptionQualityChanged;
   final ValueChanged<String> onTranscriptionLanguageChanged;
   final ValueChanged<String> onTranscriptionDestinationChanged;
-  final ValueChanged<bool> onPronunciationVisibleChanged;
   final ValueChanged<bool> onWordSyncVisibleChanged;
   final ValueChanged<bool> onShowChunkGroupingChanged;
   final ValueChanged<String> onChunkDisplayStyleChanged;
   final ValueChanged<bool> onHighlightCurrentChunkChanged;
   final ValueChanged<String> onChunkHighlightStyleChanged;
-  final ValueChanged<String> onPhonemeDisplayChanged;
   final ValueChanged<String> onWordHighlightStyleChanged;
   final ValueChanged<double> onWordAnimationIntensityChanged;
   final ValueChanged<String> onRuleHintsLevelChanged;
-  final ValueChanged<bool> onPrecomputePronunciationChanged;
+  final ValueChanged<bool> onPhonemeRibbonVisibleChanged;
   final ValueChanged<String> onPhoneticAnalysisPreferenceChanged;
-  final ValueChanged<bool> onShowExperimentalPhoneticResultsChanged;
-  final ValueChanged<bool> onPhonemeHighlightVisibleChanged;
-  final ValueChanged<String> onPhoneticCachePolicyChanged;
   final Future<void> Function({
     required String ffmpegPath,
     required String ffprobePath,
@@ -164,7 +144,6 @@ class SettingsDialog extends StatefulWidget {
 }
 
 class _SettingsDialogState extends State<SettingsDialog> {
-  // Mirrors of parent state for instant UI updates (parent calls setState + rebuilds dialog)
   late String language;
   late String subtitlePreset;
   late double primaryFontSize;
@@ -180,21 +159,16 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late String transcriptionQuality;
   late String transcriptionLanguage;
   late String transcriptionDestination;
-  late bool pronunciationVisible;
   late bool wordSyncVisible;
   late bool showChunkGrouping;
   late String chunkDisplayStyle;
   late bool highlightCurrentChunk;
   late String chunkHighlightStyle;
-  late String phonemeDisplay;
   late String wordHighlightStyle;
   late double wordAnimationIntensity;
   late String ruleHintsLevel;
-  late bool precomputePronunciation;
+  late bool phonemeRibbonVisible;
   late String phoneticAnalysisPreference;
-  late bool showExperimentalPhoneticResults;
-  late bool phonemeHighlightVisible;
-  late String phoneticCachePolicy;
   late String learningLanguage;
 
   late final TextEditingController ffmpegController;
@@ -211,7 +185,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
   @override
   void didUpdateWidget(covariant SettingsDialog oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Re-sync if parent rebuilds with new values
     _initFromWidget();
   }
 
@@ -231,21 +204,16 @@ class _SettingsDialogState extends State<SettingsDialog> {
     transcriptionQuality = widget.transcriptionQuality;
     transcriptionLanguage = widget.transcriptionLanguage;
     transcriptionDestination = widget.transcriptionDestination;
-    pronunciationVisible = widget.pronunciationVisible;
     wordSyncVisible = widget.wordSyncVisible;
     showChunkGrouping = widget.showChunkGrouping;
     chunkDisplayStyle = widget.chunkDisplayStyle;
     highlightCurrentChunk = widget.highlightCurrentChunk;
     chunkHighlightStyle = widget.chunkHighlightStyle;
-    phonemeDisplay = widget.phonemeDisplay;
     wordHighlightStyle = widget.wordHighlightStyle;
     wordAnimationIntensity = widget.wordAnimationIntensity;
     ruleHintsLevel = widget.ruleHintsLevel;
-    precomputePronunciation = widget.precomputePronunciation;
+    phonemeRibbonVisible = widget.phonemeRibbonVisible;
     phoneticAnalysisPreference = widget.phoneticAnalysisPreference;
-    showExperimentalPhoneticResults = widget.showExperimentalPhoneticResults;
-    phonemeHighlightVisible = widget.phonemeHighlightVisible;
-    phoneticCachePolicy = widget.phoneticCachePolicy;
     learningLanguage = widget.learningLanguage;
     ffmpegController = TextEditingController(text: widget.ffmpegPath);
     ffprobeController = TextEditingController(text: widget.ffprobePath);
@@ -302,15 +270,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
               Text(
                 l.text('subtitles'),
                 style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              SwitchListTile(
-                value: pronunciationVisible,
-                title: Text(l.text('showPronunciation')),
-                onChanged: (value) {
-                  pronunciationVisible = value;
-                  widget.onPronunciationVisibleChanged(value);
-                  refresh(() {});
-                },
               ),
               SwitchListTile(
                 value: wordSyncVisible,
@@ -431,22 +390,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 refresh,
               ),
               DropdownButtonFormField<String>(
-                initialValue: phonemeDisplay,
-                decoration: InputDecoration(
-                  labelText: l.text('pronunciationDisplay'),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'ipa', child: Text('IPA')),
-                  DropdownMenuItem(value: 'arpabet', child: Text('ARPAbet')),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  phonemeDisplay = value;
-                  widget.onPhonemeDisplayChanged(value);
-                  refresh(() {});
-                },
-              ),
-              DropdownButtonFormField<String>(
                 initialValue: ruleHintsLevel,
                 decoration: InputDecoration(labelText: l.text('ruleHints')),
                 items: [
@@ -470,18 +413,19 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   refresh(() {});
                 },
               ),
-              SwitchListTile(
-                value: precomputePronunciation,
-                title: Text(l.text('precomputePronunciation')),
-                onChanged: (value) {
-                  precomputePronunciation = value;
-                  widget.onPrecomputePronunciationChanged(value);
-                  refresh(() {});
-                },
-              ),
+              const Divider(),
               Text(
                 l.text('phoneticAnalysis'),
                 style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SwitchListTile(
+                value: phonemeRibbonVisible,
+                title: Text(l.text('phonemeRibbonVisible')),
+                onChanged: (value) {
+                  phonemeRibbonVisible = value;
+                  widget.onPhonemeRibbonVisibleChanged(value);
+                  refresh(() {});
+                },
               ),
               DropdownButtonFormField<String>(
                 initialValue: phoneticAnalysisPreference,
@@ -509,46 +453,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   refresh(() {});
                 },
               ),
-              SwitchListTile(
-                value: showExperimentalPhoneticResults,
-                title: Text(l.text('showExperimentalPhoneticResults')),
-                onChanged: (value) {
-                  showExperimentalPhoneticResults = value;
-                  widget.onShowExperimentalPhoneticResultsChanged(value);
-                  refresh(() {});
-                },
-              ),
-              SwitchListTile(
-                value: phonemeHighlightVisible,
-                title: Text(l.text('phonemeHighlightVisible')),
-                onChanged: (value) {
-                  phonemeHighlightVisible = value;
-                  widget.onPhonemeHighlightVisibleChanged(value);
-                  refresh(() {});
-                },
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: phoneticCachePolicy,
-                decoration: InputDecoration(
-                  labelText: l.text('phoneticCachePolicy'),
-                ),
-                items: [
-                  DropdownMenuItem(
-                    value: 'keep_completed',
-                    child: Text(l.text('phoneticCacheKeepCompleted')),
-                  ),
-                  DropdownMenuItem(
-                    value: 'temporary',
-                    child: Text(l.text('phoneticCacheTemporary')),
-                  ),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  phoneticCachePolicy = value;
-                  widget.onPhoneticCachePolicyChanged(value);
-                  refresh(() {});
-                },
-              ),
+              const Divider(),
               DropdownButtonFormField<String>(
                 initialValue: language,
                 decoration: InputDecoration(labelText: l.text('language')),

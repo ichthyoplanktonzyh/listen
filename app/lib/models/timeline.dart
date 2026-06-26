@@ -855,6 +855,57 @@ DetectedPhone? currentDetectedPhoneAt(
   return null;
 }
 
+List<DetectedPhone> synthesizePhonesFromDictionary(
+  Map<String, dynamic> pronunciation,
+  List<WordTiming> wordTimings,
+) {
+  final words = pronunciation['words'] as List<dynamic>? ?? const [];
+  if (words.isEmpty || wordTimings.isEmpty) return const [];
+
+  final timingByToken = <int, WordTiming>{};
+  for (final wt in wordTimings) {
+    timingByToken[wt.tokenIndex] = wt;
+  }
+
+  final result = <DetectedPhone>[];
+  for (final raw in words) {
+    final word = raw as Map<String, dynamic>;
+    final tokenIndex = word['token_index'] as int;
+    final timing = timingByToken[tokenIndex];
+    if (timing == null) continue;
+
+    final variants = word['variants'] as List<dynamic>? ?? const [];
+    if (variants.isEmpty) continue;
+    final phonemes =
+        (variants[0] as Map<String, dynamic>)['phonemes'] as List<dynamic>? ??
+            const [];
+    if (phonemes.isEmpty) continue;
+
+    final startMs = timing.start.inMilliseconds;
+    final endMs = timing.end.inMilliseconds;
+    final durationMs = endMs - startMs;
+    final perPhonemeMs = durationMs / phonemes.length;
+
+    for (var i = 0; i < phonemes.length; i++) {
+      final p = phonemes[i] as Map<String, dynamic>;
+      final pStart = startMs + (perPhonemeMs * i).round();
+      final pEnd = startMs + (perPhonemeMs * (i + 1)).round();
+      result.add(DetectedPhone(
+        symbol: p['symbol'] as String,
+        displayIpa: (p['display_ipa'] as String?) ?? p['symbol'] as String,
+        phoneSet: (p['phoneme_set'] as String?) ?? 'ipa',
+        start: Duration(milliseconds: pStart),
+        end: Duration(milliseconds: pEnd),
+        confidence: null,
+        tokenIndex: tokenIndex,
+        provider: 'dictionary',
+        modelRevision: '',
+      ));
+    }
+  }
+  return result;
+}
+
 Map<String, Map<String, dynamic>> latestPhoneticAnalysesBySentence(
   List<Map<String, dynamic>> analyses,
 ) {

@@ -146,15 +146,13 @@ class SubtitleOverlay extends StatelessWidget {
                                     onChunk: onChunk,
                                   ),
                                 ),
-                              if (settings.pronunciationVisible &&
-                                  cue != null &&
+                              if (cue != null &&
                                   sc.pronunciationBySentence[cue.id] != null)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 4),
                                   child: Text(
                                     _pronunciationText(
                                       sc.pronunciationBySentence[cue.id]!,
-                                      settings.phonemeDisplay,
                                     ),
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
@@ -200,12 +198,7 @@ class SubtitleOverlay extends StatelessWidget {
     );
   }
 
-  String _pronunciationText(Map<String, dynamic> analysis, String display) {
-    if (display == 'ipa') {
-      return analysis['display_ipa'] as String;
-    }
-    return ((analysis['phonemes'] as List<dynamic>?) ?? const [])
-        .map((value) => (value as Map<String, dynamic>)['symbol'])
-        .join(' ');
+  String _pronunciationText(Map<String, dynamic> analysis) {
+    return analysis['display_ipa'] as String;
   }
 }
