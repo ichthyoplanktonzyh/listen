@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- 2026-06-26 CST: 音素设置精简 + PhonemeRibbon 降级策略 + 双主线架构规划。
+  (1) **设置精简**: 11 个音素相关设置项收敛为 3 个（phonemeRibbonVisible /
+  phoneticAnalysisPreference / learningLanguage）。移除的 6 项硬编码为合理默认值：
+  pronunciationVisible 跟随 ribbon 开关、phonemeDisplay 固定 IPA、
+  precomputePronunciation 始终开启、phonemeHighlightVisible 联动 ribbon、
+  showExperimentalPhoneticResults 始终显示、phoneticCachePolicy 固定 keep_completed。
+  涉及 settings_dialog.dart / main.dart / settings_controller.dart / localization.dart /
+  subtitle_overlay.dart，settings.dart 保留字段用于 JSON 向后兼容。
+  (2) **Ribbon 降级逻辑修正**: 开关逻辑修复（ribbon 开=显示音素信息，关=全部隐藏）；
+  CTC 数据优先、无 CTC 时回退 IPA 文字、均无则隐藏；新增
+  `synthesizePhonesFromDictionary()` 函数从词典发音 + 词级时间戳合成 DetectedPhone。
+  (3) **双主线架构确立**: 文字线（Whisper 转录 → 词 → chunk → 词典音素，回答"说了
+  什么"）和声音线（CTC 音素 → 音节 → 韵律短语，回答"怎么说的"），sentence 为共享
+  作用域。Phase 2.13 修订为文字线音素收口，新建 Phase 2.14 声音线学习架构。
+  验证: `dart analyze` 0 issues。
+
 - 2026-06-25 CST: CTC 音素分析链路端到端打通 + 任务生命周期管理。
   (1) **链路修复**: 创建项目根目录 `.venv`（torch 2.12 + torchaudio 2.11 +
   transformers 5.12 + torchcodec + phonemizer），`phone_recognition.rs` 新增

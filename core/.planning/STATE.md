@@ -14,14 +14,16 @@ progress:
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-25 CST
-> 更新原因：Phase 2.10 模型下载已验证成功；脚本路径/进度/状态重置三 bug 修复。
+> 最后更新：2026-06-26 CST
+> 更新原因：确立文字线/声音线双主线架构；Phase 2.13 修订为文字线音素体验收口；新建 Phase 2.14 声音线架构。
 
 ## 当前位置
 
 - **里程碑**：Milestone 2 — 本地重装生产引擎
-- **Phase**：Phase 2.10 ✅ 集成完成（待端到端验证）+
-  Phase 2.11 ⏳ Steps 1-3 完成（Step 4-5 待推进）
+- **Phase**：Phase 2.10 ✅ 端到端验证通过 +
+  Phase 2.11 ⏳ Steps 1-3 完成（Step 4-5 待推进）+
+  Phase 2.13 ⏳ 文字线音素 Ribbon（设置精简完成，合成时间 + 脉冲动画待做）+
+  Phase 2.14 📋 声音线学习架构（已规划）
 - **分支**：`main`
 - **版本**：0.7.0
 
@@ -530,6 +532,11 @@ progress:
     PROJECT.md（§2 愿景 / §4.4 原则 / §10.9 概念 / §15.5 里程碑）、REQUIREMENTS.md
     LANG-001..010、ROADMAP.md §14.11、codebase ARCHITECTURE/DATA-MODEL 多语言方向节、
     ADR 0012。英语行为为回归基线，下一步进入 Phase 2.6 实现。
+11. **文字线/声音线双主线架构**（2026-06-26）：学习体验分两条主线——文字线（Whisper
+    转录 → 词 → chunk → 词典音素，回答"说了什么"）和声音线（CTC 音素 → 音节 →
+    韵律短语，回答"怎么说的"），两者差异即"为什么听不懂"。sentence 为共享作用域
+    边界，数据共存于 lltime.json（`sound_analysis` 字段）。Phase 2.13 收口文字线
+    音素体验，Phase 2.14 建立声音线架构。
 
 ## 当前阻塞项
 
@@ -537,10 +544,11 @@ progress:
 
 ## 下一步工作
 
-1. **Phase 2.10 Step 5 端到端验证（音频侧）**：模型已下载成功，用真实音频确认
-   CTC→IPA 显示→finding 分类正确。重点验证弱读/省音/闪音 finding 的 precision。
-2. **Phase 2.11 Step 4–5**（依赖 2.10 验证通过）：L1 诊断 seam + 听觉锚定准备。
-3. Phase 2.3 正式收口（手动 QA 已通过，待写 closeout）。
+1. **Phase 2.13 Step 2-3**：集成合成音素到 ribbon 渲染 + 脉冲动画。完成后文字线
+   音素体验闭环——Whisper 转录即可音素跳动。
+2. **Phase 2.14 Step 1**：音节化算法（Rust speech-analysis crate）。
+3. **Phase 2.11 Step 4–5**（依赖 2.10 验证通过）：L1 诊断 seam + 听觉锚定准备。
+4. Phase 2.3 正式收口（手动 QA 已通过，待写 closeout）。
 
 ## 指标
 
