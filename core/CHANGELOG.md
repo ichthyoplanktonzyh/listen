@@ -2,9 +2,19 @@
 
 ## Unreleased
 
+- 2026-06-26 CST: Phase 2.13 — Text-Centered Phoneme Ribbon 收口。
+  (1) **长短句自适应显示**: 短句完整显示音素带；长句自动切换为分页窗口，只显示当前
+  音素附近的一页，避免把过多音素压缩成不可读噪音。
+  (2) **低疲劳交互**: 移除长句模式下的波浪、脉冲、连续居中滑动和底部进度条；窗口
+  内容保持稳定，当前音素只在当前页内轻量高亮，跨页时才整体换页。
+  (3) **设置与降级链闭合**: 设置中新增音素带显示方式，短句可选轻量 wave；CTC 真实
+  音素优先，无 CTC 时从词典发音 + 词级时间戳合成 `DetectedPhone`，无可用数据则隐藏。
+  收口文档: `.planning/phases/2.13-phoneme-ribbon-interaction/2.13-CLOSEOUT.md`。
+  验证: `git diff --check` 通过；当前 shell 未提供 `flutter`/`dart`，未运行 analyze/test。
+
 - 2026-06-26 CST: 音素设置精简 + PhonemeRibbon 降级策略 + 双主线架构规划。
-  (1) **设置精简**: 11 个音素相关设置项收敛为 3 个（phonemeRibbonVisible /
-  phoneticAnalysisPreference / learningLanguage）。移除的 6 项硬编码为合理默认值：
+  (1) **设置精简**: 11 个音素相关设置项收敛为 4 个（phonemeRibbonVisible /
+  phonemeRibbonStyle / phoneticAnalysisPreference / learningLanguage）。移除的 6 项硬编码为合理默认值：
   pronunciationVisible 跟随 ribbon 开关、phonemeDisplay 固定 IPA、
   precomputePronunciation 始终开启、phonemeHighlightVisible 联动 ribbon、
   showExperimentalPhoneticResults 始终显示、phoneticCachePolicy 固定 keep_completed。
