@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-06-27T02:47:00.000Z"
+last_updated: "2026-06-27T04:50:00.000Z"
 progress:
   total_phases: 11
   completed_phases: 1
@@ -15,7 +15,7 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-27 CST
-> 更新原因：Phase 2.3 人工校对 UI 正式收口；声音线 evidence marker 新增可点击回放入口。
+> 更新原因：创建 Phase 2.17 Real Media Sound-Line QA，转入真实英语媒体回归包与声音线听感 QA。
 
 ## 当前位置
 
@@ -25,7 +25,8 @@ progress:
   Phase 2.13 ✅ 文字线音素 Ribbon 收口完成 +
   Phase 2.14 ✅ 声音线学习架构收口完成 +
   Phase 2.15 ✅ 声音线学习 UX 收口完成 +
-  Phase 2.16 ✅ 真实语流模型 v1 收口完成
+  Phase 2.16 ✅ 真实语流模型 v1 收口完成 +
+  Phase 2.17 ⏳ 真实媒体声音线 QA 已规划
 - **分支**：`main`
 - **版本**：0.7.0
 
@@ -594,6 +595,23 @@ progress:
 - 收口文档：
   - `.planning/phases/2.16-real-connected-speech-model-v1/2.16-CLOSEOUT.md`
 
+### Phase 2.17: Real Media Sound-Line QA ⏳ 已规划
+
+- 目标：建立 2-3 条真实英语媒体声音线回归包，验证 `sound_analysis.connected_speech`、
+  声音线 marker、evidence 回放和 raw CTC mismatch 过滤边界是否能支撑真实学习体验。
+- 阶段原则：
+  - 先验证真实材料，不继续凭 fixture 扩大模型能力。
+  - 不把无明确再分发许可的媒体文件直接提交到 repo。
+  - repo 交付物优先为 manifest、checksum、验证脚本、QA notes 和过滤决策记录。
+- 计划交付：
+  - `testdata/sound-line-real-media/manifest.jsonl` 风格的真实媒体 QA manifest。
+  - `scripts/verify-sound-line-real-media.py` 轻量 verifier。
+  - 每条 case 的 manual listening observation。
+  - `2.17-CTC-MISMATCH-FINDINGS.md`，沉淀 raw CTC mismatch 的保留/过滤/降级决策。
+- 规划文档：
+  - `.planning/phases/2.17-real-media-sound-line-qa/2.17-CONTEXT.md`
+  - `.planning/phases/2.17-real-media-sound-line-qa/2.17-PLAN.md`
+
 ### 强制对齐研究 🧭 长期推进
 
 - torchaudio MMS_FA sidecar（`scripts/forced-align/align-cli.py`）。
@@ -655,10 +673,11 @@ progress:
 
 ## 下一步工作
 
-1. 准备 2-3 条可复现真实英语媒体 QA 包，包含 media、subtitle、PhoneTimeline、
-   `sound_analysis.connected_speech`、期望截图/听感记录，用作后续真实听感回归。
-2. 评估 raw CTC mismatch 的高级诊断呈现与默认过滤边界。
-3. 基于真实 QA 结果决定 Phase 2.17 是否进入 Real Media Sound-Line QA / Advanced CTC Filtering。
+1. 启动 Phase 2.17：从 `/Users/shadow/Desktop/视频` 和既有 timeline production outputs 选择
+   2-3 条真实英语媒体 case，建立 manifest 与 checksum。
+2. 实现 `scripts/verify-sound-line-real-media.py`，验证 manifest、LLTimeline、PhoneTimeline、
+   `sound_analysis.connected_speech` 和 marker playback window。
+3. 记录 manual listening observations，并沉淀 raw CTC mismatch 的保留/过滤/降级决策。
 
 ## 指标
 

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-06-27 12:50 CST: 创建 Phase 2.17 — Real Media Sound-Line QA。
+  (1) **阶段目标**: 从继续扩展模型能力转向真实英语媒体回归包，验证
+  `sound_analysis.connected_speech`、声音线 marker、evidence 回放和 raw CTC mismatch
+  过滤边界是否能支撑真实学习体验。
+  (2) **规划交付**: 新增 `.planning/phases/2.17-real-media-sound-line-qa/2.17-CONTEXT.md`
+  和 `2.17-PLAN.md`，定义 manifest、checksum、lightweight verifier、manual listening
+  observations 和 `2.17-CTC-MISMATCH-FINDINGS.md`。
+  (3) **repo 边界**: 明确不提交无再分发许可的媒体本体，repo 内优先保留 manifest、验证脚本、
+  QA notes 和过滤决策记录。
+
 - 2026-06-27 10:47 CST: Phase 2.3 正式收口 + 声音线 evidence 回放入口。
   (1) **Phase 2.3 closeout**: 真实媒体手动 QA 已通过，`.planning/STATE.md` 与
   `2.3-CLOSEOUT.md` 从“待手动 QA”更新为正式完成。
