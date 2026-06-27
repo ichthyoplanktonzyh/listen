@@ -1,40 +1,78 @@
-# LLPlayerNext UI/UX 分析
+# LLPlayerNext UI Statecharts 分析
 
-> 生成日期: 2026-06-24
-> 目的: 为 UI/UX 重构提供基础 —— 先理解数据/状态，再设计界面。
+## 概述
 
-## 核心主张
+本分析运用 **Statecharts（状态图）** 方法论对 LLPlayerNext 项目的 UI 状态管理进行建模。Statecharts 由 David Harel 于 1987 年提出，是对有限状态机（FSM）的形式化扩展，核心概念包括：
 
-UI/UX 只是数据/状态的投影。重构 UI/UX 之前，必须先回答：
+| 概念 | 含义 | 本项目中的体现 |
+|------|------|----------------|
+| **层次化状态（Hierarchy）** | 状态可嵌套，子状态继承父状态行为 | `PlayerScreen` 中的全局 UI 状态嵌套各子控制器的状态 |
+| **正交区域（Orthogonality）** | 多个独立并发运行的状态机 | `PlayerController` / `SubtitleController` / `LearningController` 并行运行 |
+| **历史状态（History）** | 记住退出前的最后一个子状态 | 侧面板 Tab 选择 `sidePanel` 保留上次选择 |
+| **守卫条件（Guard）** | 转移需满足的条件 | `mounted` 检查、`mediaId != null` 等前置条件 |
+| **动作（Action）** | 进入/退出状态时或转移时执行的操作 | `entry:` 加载数据、`exit:` 清理资源、转移时调用 API |
+| **延迟事件（Delayed Event）** | 经过指定时间后触发的事件 | `progressTimer` 每 5 秒保存播放进度 |
 
-1. **我们有什么数据/状态？** → 见 [状态机分析](01-state-machines.md)
-2. **UI 展示了哪些信息？** → 见 [UI 数据架构](02-ui-data-architecture.md)
-3. **数据如何在系统中流动？** → 见 [数据流与领域模型](03-data-flow-and-domain-models.md)
+## 项目架构简览
+
+```
+┌──────────────────────────────────────────────────────┐
+│                    PlayerScreen                       │
+│  ┌───────────────┐  ┌──────────────────────────────┐ │
+│  │  PlayerSurface │  │        SidePanel             │ │
+│  │  (视频 + 字幕)  │  │  ┌──────┬─────────┬───────┐ │ │
+│  │               │  │  │Transcript│Resources│Word│Diag│ │
+│  └───────────────┘  │  └──────┴─────────┴───────┘ │
+│  ┌──────────────────────────────────────────────┐   │
+│  │              Bottom Bar (Controls)            │   │
+│  └──────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────┘
+
+状态容器（独立正交区域）：
+  PlayerController.Store<PlayerState>
+  SubtitleController.Store<SubtitleState>
+  LearningController.Store<LearningState>
+  SettingsController (简单 ChangeNotifier)
+```
+
+## 识别的状态机概要
+
+本项目包含 **4 个并发运行的正交状态机**，外加 **1 个事件驱动的 Orchestrator**：
+
+| # | 状态机 | Store 类型 | 职责 |
+|---|--------|-----------|------|
+| 1 | **PlayerMachine** | `Store<PlayerState>` | 媒体播放生命周期 |
+| 2 | **SubtitleMachine** | `Store<SubtitleState>` | 字幕加载与同步 |
+| 3 | **LearningMachine** | `Store<LearningState>` | 词汇学习与诊断 |
+| 4 | **SettingsMachine** | ChangeNotifier | 设置持久化 |
+| 5 | **AppOrchestrator** | `_PlayerScreenState` | 编排以上状态机的协调与事件分发 |
+
+## 状态图形式化约定
+
+本文使用 **SCXML 风格**的文本表示法：
+
+```
+状态名 [区域名] {
+  entry: 进入动作
+  exit: 退出动作
+  
+  子状态A {
+    entry: ...
+    on EVENT: 目标状态 / 动作
+  }
+}
+
+转移: 源状态 --[事件(守卫)]--> 目标状态 / 动作
+```
 
 ## 文件结构
 
 ```
 ui-analysis/
-├── README.md                        ← 本文件
-├── 01-state-machines.md             ← 5 个状态机的完整分析
-├── 02-ui-data-architecture.md       ← 每个 UI 组件消费的数据和展示的信息
-└── 03-data-flow-and-domain-models.md ← 数据流路径 + 核心领域模型
+├── README.md                  # 本文 — 总览与约定
+├── 01-player-machine.md       # PlayerMachine 状态图
+├── 02-subtitle-machine.md     # SubtitleMachine 状态图
+├── 03-learning-machine.md     # LearningMachine 状态图
+├── 04-orchestrator.md         # AppOrchestrator 编排层分析
+└── 05-recommendations.md      # 基于 Statecharts 的改进建议
 ```
-
-## 关键发现
-
-### 当前状态管理的优势
-
-1. **不可变状态 (Immutable State)**: 所有 Controller 使用 `copyWith` 模式，状态变更可追踪
-2. **ChangeNotifier 模式**: Simpler 且易于理解，每个 Controller 独立管理自己的状态切片
-3. **单一编排层**: `_PlayerScreenState` 是唯一的数据编排点，API 调用和跨 Controller 同步集中在此
-
-### 当前状态的劣势 (UI/UX 重构需关注)
-
-1. **状态分散在 4 个 Controller**: Widget 需要通过 `ListenableBuilder` 或 `AppControllers.of(context)` 合并监听多个 Controller，粒度不够细
-2. **状态与 UI 逻辑耦合**: `_PlayerScreenState` 同时负责编排数据、管理本地 UI 状态（`status`, `dragging`, `connectingApi`）和布局构建，职责过重（~600 行 build/builder 方法）
-3. **无 Selector 模式**: Widget 监听到任何状态变更就会重建，即使只关注一个字段。例如 `PlayerState` 有 15 个字段，但任何字段变更都会触发所有监听者
-4. **UI 状态和业务状态混合**: `status` (String 状态栏文本) 和 `connectingApi` 等本地 UI 状态与业务状态混在一起
-5. **状态类型不够精确**: 很多字段使用 `Map<String, dynamic>`（如 `wordProfiles`, `pronunciationBySentence` 等），缺少类型安全
-6. **无副作用管理**: API 调用直接在 Orchestrator 中编排，没有统一的状态机管理 loading/error/success 状态
-7. **无导航状态管理**: 页面跳转（VocabularyScreen、SubtitleResourcesScreen 等）使用 Navigator.push，状态不共享
