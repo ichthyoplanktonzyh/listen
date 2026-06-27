@@ -622,6 +622,7 @@ class SoundAnalysis {
     required this.phoneSet,
     required this.generatedFrom,
     required this.learningPhones,
+    required this.connectedSpeech,
     required this.syllables,
     required this.prosodicPhrases,
     this.modelRevision,
@@ -636,6 +637,13 @@ class SoundAnalysis {
     learningPhones: ((json['learning_phones'] as List<dynamic>?) ?? const [])
         .map(
           (value) => SoundLearningPhone.fromJson(value as Map<String, dynamic>),
+        )
+        .toList(growable: false),
+    connectedSpeech: ((json['connected_speech'] as List<dynamic>?) ?? const [])
+        .map(
+          (value) => ConnectedSpeechExplanation.fromJson(
+            value as Map<String, dynamic>,
+          ),
         )
         .toList(growable: false),
     syllables: ((json['syllables'] as List<dynamic>?) ?? const [])
@@ -655,6 +663,7 @@ class SoundAnalysis {
   final String phoneSet;
   final String generatedFrom;
   final List<SoundLearningPhone> learningPhones;
+  final List<ConnectedSpeechExplanation> connectedSpeech;
   final List<SoundSyllable> syllables;
   final List<SoundProsodicPhrase> prosodicPhrases;
 
@@ -665,6 +674,7 @@ class SoundAnalysis {
     'phone_set': phoneSet,
     'generated_from': generatedFrom,
     'learning_phones': learningPhones.map((value) => value.toJson()).toList(),
+    'connected_speech': connectedSpeech.map((value) => value.toJson()).toList(),
     'syllables': syllables.map((value) => value.toJson()).toList(),
     'prosodic_phrases': prosodicPhrases.map((value) => value.toJson()).toList(),
   };
@@ -735,6 +745,75 @@ class SoundLearningPhone {
     'token_index': tokenIndex,
     'observed_phone_index': observedPhoneIndex,
     'observed_symbol': observedSymbol,
+    'evidence': evidence,
+  };
+}
+
+class ConnectedSpeechExplanation {
+  const ConnectedSpeechExplanation({
+    required this.family,
+    required this.label,
+    required this.hint,
+    required this.confidence,
+    required this.status,
+    required this.expectedSymbols,
+    required this.learningSymbols,
+    required this.observedSymbols,
+    required this.evidence,
+    this.phoneStart,
+    this.phoneEnd,
+    this.tokenStart,
+    this.tokenEnd,
+  });
+
+  factory ConnectedSpeechExplanation.fromJson(
+    Map<String, dynamic> json,
+  ) => ConnectedSpeechExplanation(
+    family: json['family'] as String,
+    label: json['label'] as String,
+    hint: json['hint'] as String? ?? '',
+    phoneStart: json['phone_start'] as int?,
+    phoneEnd: json['phone_end'] as int?,
+    tokenStart: json['token_start'] as int?,
+    tokenEnd: json['token_end'] as int?,
+    confidence: (json['confidence'] as num?)?.toDouble() ?? 0.0,
+    status: json['status'] as String,
+    expectedSymbols: ((json['expected_symbols'] as List<dynamic>?) ?? const [])
+        .cast<String>(),
+    learningSymbols: ((json['learning_symbols'] as List<dynamic>?) ?? const [])
+        .cast<String>(),
+    observedSymbols: ((json['observed_symbols'] as List<dynamic>?) ?? const [])
+        .cast<String>(),
+    evidence: json['evidence'] as String? ?? '',
+  );
+
+  final String family;
+  final String label;
+  final String hint;
+  final int? phoneStart;
+  final int? phoneEnd;
+  final int? tokenStart;
+  final int? tokenEnd;
+  final double confidence;
+  final String status;
+  final List<String> expectedSymbols;
+  final List<String> learningSymbols;
+  final List<String> observedSymbols;
+  final String evidence;
+
+  Map<String, dynamic> toJson() => {
+    'family': family,
+    'label': label,
+    'hint': hint,
+    'phone_start': phoneStart,
+    'phone_end': phoneEnd,
+    'token_start': tokenStart,
+    'token_end': tokenEnd,
+    'confidence': confidence,
+    'status': status,
+    'expected_symbols': expectedSymbols,
+    'learning_symbols': learningSymbols,
+    'observed_symbols': observedSymbols,
     'evidence': evidence,
   };
 }
@@ -821,6 +900,8 @@ class PhonemeRibbonFinding {
     required this.status,
     required this.confidence,
     required this.evidence,
+    this.learnerLabelOverride,
+    this.learnerHint,
   });
 
   final int phoneStart;
@@ -829,10 +910,15 @@ class PhonemeRibbonFinding {
   final String status;
   final double confidence;
   final String evidence;
+  final String? learnerLabelOverride;
+  final String? learnerHint;
 
   bool get detectedInAudio => status == 'detected_in_audio';
 
   String get learnerLabel {
+    if (learnerLabelOverride != null && learnerLabelOverride!.isNotEmpty) {
+      return learnerLabelOverride!;
+    }
     final normalizedType = findingType.toLowerCase();
     if (normalizedType.contains('linking') ||
         normalizedType.contains('insertion')) {
@@ -847,12 +933,26 @@ class PhonemeRibbonFinding {
         normalizedType.contains('omission')) {
       return 'possible deletion';
     }
+    if (normalizedType.contains('assimilation')) {
+      return 'possible assimilation';
+    }
+    if (normalizedType.contains('contraction')) {
+      return 'possible contraction';
+    }
+    if (normalizedType.contains('flapping') ||
+        normalizedType.contains('flap')) {
+      return 'possible flap';
+    }
     return 'supported by audio';
   }
 
   String get learnerTooltip {
     final confidencePercent = (confidence * 100).round();
-    return '$learnerLabel · $confidencePercent%';
+    final hint = learnerHint;
+    if (hint == null || hint.isEmpty) {
+      return '$learnerLabel · $confidencePercent%';
+    }
+    return '$learnerLabel · $confidencePercent%\n$hint';
   }
 }
 
@@ -1279,7 +1379,7 @@ List<PhonemeRibbonFinding> buildPhonemeRibbonFindings({
   required List<DetectedPhone> phones,
   SoundAnalysis? soundAnalysis,
 }) {
-  if (rawFindings.isEmpty || phones.isEmpty) return const [];
+  if (phones.isEmpty) return const [];
 
   final observedToLearning = <int, int>{};
   if (soundAnalysis != null) {
@@ -1290,6 +1390,26 @@ List<PhonemeRibbonFinding> buildPhonemeRibbonFindings({
   }
 
   final result = <PhonemeRibbonFinding>[];
+  if (soundAnalysis != null) {
+    for (final explanation in soundAnalysis.connectedSpeech) {
+      final start = explanation.phoneStart;
+      final end = explanation.phoneEnd;
+      if (start == null || end == null || start > end) continue;
+      if (start < 0 || end >= phones.length) continue;
+      result.add(
+        PhonemeRibbonFinding(
+          phoneStart: start,
+          phoneEnd: end,
+          findingType: explanation.family,
+          status: _connectedSpeechStatus(explanation.status),
+          confidence: explanation.confidence.clamp(0.0, 1.0).toDouble(),
+          evidence: explanation.evidence,
+          learnerLabelOverride: explanation.label,
+          learnerHint: explanation.hint,
+        ),
+      );
+    }
+  }
   for (final finding in rawFindings) {
     final rawStart = finding['aligned_phone_start'] as int?;
     final rawEnd = finding['aligned_phone_end'] as int?;
@@ -1334,6 +1454,19 @@ List<PhonemeRibbonFinding> buildPhonemeRibbonFindings({
     );
   }
   return result;
+}
+
+String _connectedSpeechStatus(String status) {
+  switch (status) {
+    case 'detected_in_audio':
+      return 'detected_in_audio';
+    case 'supported_by_audio':
+      return 'supported_by_alignment';
+    case 'possible_by_rule':
+      return 'uncertain';
+    default:
+      return status;
+  }
 }
 
 int? _nearestLearningPhoneIndex(

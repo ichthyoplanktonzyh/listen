@@ -2440,6 +2440,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await adapter.play();
   }
 
+  Future<void> _loopSoundRibbonFinding(
+    PhonemeRibbonFinding finding,
+    List<DetectedPhone> phones,
+  ) async {
+    if (phones.isEmpty) return;
+    final startIndex = finding.phoneStart.clamp(0, phones.length - 1).toInt();
+    final endIndex = finding.phoneEnd
+        .clamp(startIndex, phones.length - 1)
+        .toInt();
+    final start = phones[startIndex].start.inMilliseconds;
+    final end = phones[endIndex].end.inMilliseconds;
+    await _loopPhoneticRange(start, end, 'Looping sound-line evidence');
+  }
+
   Future<void> _savePhoneticFindingFeedback(
     Map<String, dynamic> finding,
     String value,
@@ -3031,6 +3045,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                       findings: findings,
                                       lane: PhonemeRibbonLane.sound,
                                       tooltip: l.text('soundPatternRibbonHint'),
+                                      onLoopFinding: (finding) => unawaited(
+                                        _loopSoundRibbonFinding(
+                                          finding,
+                                          phones,
+                                        ),
+                                      ),
                                     ),
                                   );
                                 },

@@ -220,6 +220,23 @@ void main() {
             'evidence': 'substitution',
           },
         ],
+        'connected_speech': [
+          {
+            'family': 'weak_form',
+            'label': 'possible reduction',
+            'hint': 'A vowel may be reduced in fast speech.',
+            'phone_start': 0,
+            'phone_end': 0,
+            'token_start': 0,
+            'token_end': 0,
+            'confidence': 0.84,
+            'status': 'detected_in_audio',
+            'expected_symbols': ['AH'],
+            'learning_symbols': ['AH'],
+            'observed_symbols': ['AX'],
+            'evidence': 'reduction evidence',
+          },
+        ],
         'syllables': [
           {
             'phones': [0],
@@ -247,6 +264,7 @@ void main() {
 
     expect(timeline.soundAnalysis?.learningPhones.single.symbol, 'S');
     expect(timeline.soundAnalysis?.learningPhones.single.observedSymbol, 'K');
+    expect(timeline.soundAnalysis?.connectedSpeech.single.family, 'weak_form');
     expect(timeline.toSoundPatternJson()['sound_analysis'], isA<Map>());
   });
 
@@ -430,6 +448,7 @@ void main() {
           'evidence': 'substitution',
         },
       ],
+      'connected_speech': [],
       'syllables': [],
       'prosodic_phrases': [],
     });
@@ -488,6 +507,7 @@ void main() {
             'evidence': 'substitution',
           },
         ],
+        'connected_speech': [],
         'syllables': [],
         'prosodic_phrases': [],
       });
@@ -540,6 +560,65 @@ void main() {
     expect(supported.learnerTooltip, 'supported by audio · 91%');
   });
 
+  test('connected speech explanations become learner-facing sound markers', () {
+    final soundAnalysis = SoundAnalysis.fromJson(const {
+      'provider_id': 'wav2vec2-ctc-phoneme',
+      'provider_version': 'fb-espeak-v1',
+      'model_revision': 'model-rev',
+      'phone_set': 'arpabet',
+      'generated_from': 'expected_phones_aligned_to_observed_timing',
+      'learning_phones': [
+        {
+          'symbol': 'AH',
+          'display_ipa': 'ə',
+          'phone_set': 'arpabet',
+          'start_ms': 100,
+          'end_ms': 150,
+          'confidence': 0.82,
+          'token_index': 0,
+          'observed_phone_index': 1,
+          'observed_symbol': 'AX',
+          'evidence': 'substitution',
+        },
+      ],
+      'connected_speech': [
+        {
+          'family': 'weak_form',
+          'label': 'possible reduction',
+          'hint': 'A vowel may be reduced in fast speech.',
+          'phone_start': 0,
+          'phone_end': 0,
+          'token_start': 0,
+          'token_end': 0,
+          'confidence': 0.84,
+          'status': 'detected_in_audio',
+          'expected_symbols': ['AH'],
+          'learning_symbols': ['AH'],
+          'observed_symbols': ['AX'],
+          'evidence': 'reduction evidence',
+        },
+      ],
+      'syllables': [],
+      'prosodic_phrases': [],
+    });
+    final phones = buildSoundPatternPhones(soundAnalysis);
+
+    final markers = buildPhonemeRibbonFindings(
+      rawFindings: const [],
+      phones: phones,
+      soundAnalysis: soundAnalysis,
+    );
+
+    expect(markers.single.phoneStart, 0);
+    expect(markers.single.detectedInAudio, true);
+    expect(markers.single.learnerLabel, 'possible reduction');
+    expect(
+      markers.single.learnerTooltip,
+      'possible reduction · 84%\nA vowel may be reduced in fast speech.',
+    );
+    expect(phones.single.symbol, 'AH');
+  });
+
   test(
     'phoneme ribbon findings anchor insertion evidence to nearest learning phone',
     () {
@@ -575,6 +654,7 @@ void main() {
             'evidence': 'match',
           },
         ],
+        'connected_speech': [],
         'syllables': [],
         'prosodic_phrases': [],
       });

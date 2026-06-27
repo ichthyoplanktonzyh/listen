@@ -70,4 +70,53 @@ void main() {
     expect(find.byIcon(Icons.graphic_eq), findsOneWidget);
     expect(find.text('No real sound analysis for this line'), findsOneWidget);
   });
+
+  testWidgets('sound pattern evidence marker can request loop playback', (
+    tester,
+  ) async {
+    PhonemeRibbonFinding? looped;
+    const finding = PhonemeRibbonFinding(
+      phoneStart: 0,
+      phoneEnd: 0,
+      findingType: 'weak_form',
+      status: 'detected_in_audio',
+      confidence: 0.84,
+      evidence: 'reduction evidence',
+      learnerLabelOverride: 'possible reduction',
+      learnerHint: 'A vowel may be reduced in fast speech.',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: SizedBox(
+            width: 240,
+            child: PhonemeRibbon(
+              phones: const [
+                DetectedPhone(
+                  symbol: 'AH',
+                  displayIpa: 'ə',
+                  phoneSet: 'arpabet',
+                  start: Duration(milliseconds: 100),
+                  end: Duration(milliseconds: 180),
+                  confidence: 0.8,
+                  tokenIndex: 0,
+                  provider: 'wav2vec2-ctc-phoneme',
+                  modelRevision: 'model-rev',
+                ),
+              ],
+              position: const Duration(milliseconds: 120),
+              lane: PhonemeRibbonLane.sound,
+              findings: const [finding],
+              onLoopFinding: (value) => looped = value,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('ə'));
+
+    expect(looped, same(finding));
+  });
 }

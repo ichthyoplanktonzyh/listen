@@ -20,6 +20,7 @@ class PhonemeRibbon extends StatelessWidget {
     this.findings = const [],
     this.lane = PhonemeRibbonLane.text,
     this.tooltip,
+    this.onLoopFinding,
   });
 
   final List<DetectedPhone> phones;
@@ -33,6 +34,7 @@ class PhonemeRibbon extends StatelessWidget {
   final List<PhonemeRibbonFinding> findings;
   final PhonemeRibbonLane lane;
   final String? tooltip;
+  final ValueChanged<PhonemeRibbonFinding>? onLoopFinding;
 
   @override
   Widget build(BuildContext context) {
@@ -76,6 +78,7 @@ class PhonemeRibbon extends StatelessWidget {
                   wave: style == 'wave',
                   markers: markers,
                   lane: lane,
+                  onLoopFinding: onLoopFinding,
                 )
               : _WindowRibbon(
                   phones: phones,
@@ -86,6 +89,7 @@ class PhonemeRibbon extends StatelessWidget {
                   maxWidth: ribbonMaxWidth,
                   markers: markers,
                   lane: lane,
+                  onLoopFinding: onLoopFinding,
                 ),
         );
         if (lane == PhonemeRibbonLane.text) {
@@ -264,6 +268,7 @@ class _FullRibbon extends StatelessWidget {
     required this.wave,
     required this.markers,
     required this.lane,
+    this.onLoopFinding,
   });
 
   final List<DetectedPhone> phones;
@@ -275,6 +280,7 @@ class _FullRibbon extends StatelessWidget {
   final bool wave;
   final _RibbonMarkers markers;
   final PhonemeRibbonLane lane;
+  final ValueChanged<PhonemeRibbonFinding>? onLoopFinding;
 
   @override
   Widget build(BuildContext context) => Row(
@@ -292,6 +298,7 @@ class _FullRibbon extends StatelessWidget {
           elevated: wave,
           findings: markers.findingsFor(i),
           lane: lane,
+          onLoopFinding: onLoopFinding,
         ),
       ],
     ],
@@ -308,6 +315,7 @@ class _WindowRibbon extends StatelessWidget {
     required this.maxWidth,
     required this.markers,
     required this.lane,
+    this.onLoopFinding,
   });
 
   final List<DetectedPhone> phones;
@@ -318,6 +326,7 @@ class _WindowRibbon extends StatelessWidget {
   final double maxWidth;
   final _RibbonMarkers markers;
   final PhonemeRibbonLane lane;
+  final ValueChanged<PhonemeRibbonFinding>? onLoopFinding;
 
   @override
   Widget build(BuildContext context) {
@@ -350,6 +359,7 @@ class _WindowRibbon extends StatelessWidget {
               elevated: false,
               findings: markers.findingsFor(start + i),
               lane: lane,
+              onLoopFinding: onLoopFinding,
             ),
           ],
         ],
@@ -440,6 +450,7 @@ class _PhoneCell extends StatelessWidget {
     required this.elevated,
     required this.findings,
     required this.lane,
+    this.onLoopFinding,
   });
 
   final DetectedPhone phone;
@@ -450,6 +461,7 @@ class _PhoneCell extends StatelessWidget {
   final bool elevated;
   final List<PhonemeRibbonFinding> findings;
   final PhonemeRibbonLane lane;
+  final ValueChanged<PhonemeRibbonFinding>? onLoopFinding;
 
   @override
   Widget build(BuildContext context) {
@@ -520,7 +532,21 @@ class _PhoneCell extends StatelessWidget {
       ),
     );
     if (marker == null) return cell;
-    return Tooltip(message: marker.tooltip, child: cell);
+    final interactive = onLoopFinding == null
+        ? cell
+        : Semantics(
+            button: true,
+            label: marker.tooltip,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onLoopFinding!(marker.finding),
+                child: cell,
+              ),
+            ),
+          );
+    return Tooltip(message: marker.tooltip, child: interactive);
   }
 
   static Color _phoneColor(String symbol, PhonemeRibbonLane lane) {
@@ -562,6 +588,7 @@ class _FindingMarker {
     required this.strong,
     required this.color,
     required this.tooltip,
+    required this.finding,
   });
 
   static _FindingMarker? from(List<PhonemeRibbonFinding> findings) {
@@ -575,12 +602,14 @@ class _FindingMarker {
           ? const Color(0xFFFFD166)
           : const Color(0xFFB8E1FF).withAlpha(185),
       tooltip: finding.learnerTooltip,
+      finding: finding,
     );
   }
 
   final bool strong;
   final Color color;
   final String tooltip;
+  final PhonemeRibbonFinding finding;
 }
 
 class _SoundRibbonShell extends StatelessWidget {
