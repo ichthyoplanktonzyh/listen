@@ -1,4 +1,5 @@
 use domain::{
+    ConnectedSpeechExplanation, ConnectedSpeechExplanationStatus, ConnectedSpeechFamily,
     DetectedPhone, PhoneAlignment, PhoneAlignmentKind, ProsodicBoundaryEvidence, SoundAnalysis,
     SoundLearningPhone, SoundPhoneEvidence, SoundProsodicPhrase, SoundSyllable, SyllableStress,
 };
@@ -17,6 +18,7 @@ pub fn build_sound_analysis(
     phone_set: &str,
 ) -> SoundAnalysis {
     let learning_phones = build_learning_phones(canonical, observed, alignments, phone_set);
+    let connected_speech = explain_connected_speech(alignments, observed, &learning_phones);
     let syllables = syllabify(&learning_phones);
     let prosodic_phrases = detect_prosodic_phrases(&syllables);
     SoundAnalysis {
@@ -30,6 +32,7 @@ pub fn build_sound_analysis(
             "expected_phones_aligned_to_observed_timing".into()
         },
         learning_phones,
+        connected_speech,
         syllables,
         prosodic_phrases,
     }
@@ -223,6 +226,209 @@ pub fn detect_prosodic_phrases(syllables: &[SoundSyllable]) -> Vec<SoundProsodic
     phrases
 }
 
+pub fn explain_connected_speech(
+    alignments: &[PhoneAlignment],
+    observed: &[DetectedPhone],
+    learning_phones: &[SoundLearningPhone],
+) -> Vec<ConnectedSpeechExplanation> {
+    let mut values = Vec::new();
+    let mut learning_cursor = 0usize;
+
+    for alignment in alignments {
+        let canonical_len = alignment.canonical_phones.len();
+        let phone_range = if canonical_len == 0 {
+            if learning_cursor < learning_phones.len() {
+                Some((learning_cursor as u32, learning_cursor as u32))
+            } else {
+                nearest_learning_phone_range(alignment, learning_phones)
+            }
+        } else {
+            let start = learning_cursor;
+            let end = learning_cursor + canonical_len - 1;
+            learning_cursor += canonical_len;
+            (end < learning_phones.len()).then_some((start as u32, end as u32))
+        };
+
+        let detected = observed_slice(observed, alignment);
+        let Some(family) = connected_speech_family(alignment, &detected) else {
+            continue;
+        };
+        let confidence = explanation_confidence(alignment, family);
+        let (label, hint) = learner_copy(family);
+        let status = explanation_status(alignment, family, confidence);
+        let learning_symbols = phone_range
+            .map(|(start, end)| {
+                (start..=end)
+                    .filter_map(|index| learning_phones.get(index as usize))
+                    .map(|phone| phone.symbol.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        values.push(ConnectedSpeechExplanation {
+            family,
+            label: label.into(),
+            hint: hint.into(),
+            phone_start: phone_range.map(|(start, _)| start),
+            phone_end: phone_range.map(|(_, end)| end),
+            token_start: alignment.token_start,
+            token_end: alignment.token_end.or(alignment.token_start),
+            confidence,
+            status,
+            expected_symbols: alignment.canonical_phones.clone(),
+            learning_symbols,
+            observed_symbols: detected
+                .iter()
+                .map(|(_, phone)| phone.symbol.clone())
+                .collect(),
+            evidence: evidence_copy(family, alignment.kind),
+        });
+    }
+
+    values
+}
+
+fn connected_speech_family(
+    alignment: &PhoneAlignment,
+    detected: &[(usize, &DetectedPhone)],
+) -> Option<ConnectedSpeechFamily> {
+    let canonical = alignment
+        .canonical_phones
+        .iter()
+        .map(|phone| strip_stress(phone))
+        .collect::<Vec<_>>();
+    let observed = detected
+        .iter()
+        .map(|(_, phone)| normalize_phone_symbol(&phone.symbol))
+        .collect::<Vec<_>>();
+    match alignment.kind {
+        PhoneAlignmentKind::Substitution
+            if canonical
+                .iter()
+                .any(|phone| matches!(phone.as_str(), "T" | "D"))
+                && observed
+                    .iter()
+                    .any(|phone| matches!(phone.as_str(), "DX" | "ɾ")) =>
+        {
+            Some(ConnectedSpeechFamily::Flapping)
+        }
+        PhoneAlignmentKind::Substitution
+            if canonical.iter().any(|phone| is_vowel(phone))
+                && observed
+                    .iter()
+                    .any(|phone| matches!(phone.as_str(), "AX" | "AH" | "ə")) =>
+        {
+            Some(ConnectedSpeechFamily::WeakForm)
+        }
+        PhoneAlignmentKind::Merge => Some(ConnectedSpeechFamily::Assimilation),
+        PhoneAlignmentKind::Deletion if alignment.token_start != alignment.token_end => {
+            Some(ConnectedSpeechFamily::Contraction)
+        }
+        PhoneAlignmentKind::Deletion => Some(ConnectedSpeechFamily::Deletion),
+        PhoneAlignmentKind::Insertion => Some(ConnectedSpeechFamily::Linking),
+        PhoneAlignmentKind::Match | PhoneAlignmentKind::Substitution => None,
+    }
+}
+
+fn explanation_confidence(alignment: &PhoneAlignment, family: ConnectedSpeechFamily) -> f32 {
+    let base = alignment.confidence.clamp(0.0, 1.0);
+    if base > 0.0 {
+        return base;
+    }
+    match family {
+        ConnectedSpeechFamily::Deletion | ConnectedSpeechFamily::Contraction => 0.62,
+        ConnectedSpeechFamily::Linking => 0.58,
+        _ => 0.5,
+    }
+}
+
+fn explanation_status(
+    alignment: &PhoneAlignment,
+    family: ConnectedSpeechFamily,
+    confidence: f32,
+) -> ConnectedSpeechExplanationStatus {
+    match family {
+        ConnectedSpeechFamily::Deletion
+        | ConnectedSpeechFamily::Contraction
+        | ConnectedSpeechFamily::Linking
+            if confidence < 0.75 =>
+        {
+            ConnectedSpeechExplanationStatus::PossibleByRule
+        }
+        _ if confidence >= 0.75 && alignment.kind != PhoneAlignmentKind::Insertion => {
+            ConnectedSpeechExplanationStatus::DetectedInAudio
+        }
+        _ => ConnectedSpeechExplanationStatus::SupportedByAudio,
+    }
+}
+
+fn learner_copy(family: ConnectedSpeechFamily) -> (&'static str, &'static str) {
+    match family {
+        ConnectedSpeechFamily::WeakForm => (
+            "possible reduction",
+            "A small function-word or vowel sound may be reduced in fast speech.",
+        ),
+        ConnectedSpeechFamily::Deletion => (
+            "possible deletion",
+            "A /t/ or /d/ sound may be weakened or not fully released here.",
+        ),
+        ConnectedSpeechFamily::Linking => (
+            "possible linking",
+            "The speaker may connect the end of one word into the next word.",
+        ),
+        ConnectedSpeechFamily::Assimilation => (
+            "possible assimilation",
+            "Neighboring sounds may blend so the boundary is easier to say.",
+        ),
+        ConnectedSpeechFamily::Contraction => (
+            "possible contraction",
+            "This phrase may be spoken as a shorter connected form.",
+        ),
+        ConnectedSpeechFamily::Flapping => (
+            "possible flap",
+            "In American English, /t/ or /d/ can sound like a quick tap between vowels.",
+        ),
+    }
+}
+
+fn evidence_copy(family: ConnectedSpeechFamily, kind: PhoneAlignmentKind) -> String {
+    let source = match kind {
+        PhoneAlignmentKind::Insertion => "extra observed sound near the word boundary",
+        PhoneAlignmentKind::Deletion => "expected sound has little direct audio support",
+        PhoneAlignmentKind::Merge => "neighboring expected sounds share one observed region",
+        PhoneAlignmentKind::Substitution => {
+            "observed sound matches a common connected-speech pattern"
+        }
+        PhoneAlignmentKind::Match => "matched sound",
+    };
+    let family = match family {
+        ConnectedSpeechFamily::WeakForm => "reduction",
+        ConnectedSpeechFamily::Deletion => "deletion",
+        ConnectedSpeechFamily::Linking => "linking",
+        ConnectedSpeechFamily::Assimilation => "assimilation",
+        ConnectedSpeechFamily::Contraction => "contraction",
+        ConnectedSpeechFamily::Flapping => "flapping",
+    };
+    format!("{family} evidence: {source}")
+}
+
+fn nearest_learning_phone_range(
+    alignment: &PhoneAlignment,
+    learning_phones: &[SoundLearningPhone],
+) -> Option<(u32, u32)> {
+    let target = alignment.detected_phone_start?;
+    learning_phones
+        .iter()
+        .enumerate()
+        .filter_map(|(index, phone)| {
+            let observed = phone.observed_phone_index?;
+            let distance = observed.abs_diff(target);
+            Some((distance, index as u32))
+        })
+        .min_by_key(|(distance, _)| *distance)
+        .map(|(_, index)| (index, index))
+}
+
 fn observed_slice<'a>(
     observed: &'a [DetectedPhone],
     alignment: &PhoneAlignment,
@@ -236,6 +442,10 @@ fn observed_slice<'a>(
     (start as usize..=end as usize)
         .filter_map(|index| observed.get(index).map(|phone| (index, phone)))
         .collect()
+}
+
+fn normalize_phone_symbol(symbol: &str) -> String {
+    strip_stress(symbol).to_ascii_uppercase()
 }
 
 fn aligned_timing(
@@ -416,6 +626,7 @@ mod tests {
             SoundPhoneEvidence::Substitution
         );
         assert_eq!(analysis.learning_phones[0].start_ms, 100);
+        assert!(analysis.connected_speech.is_empty());
     }
 
     #[test]
@@ -443,6 +654,123 @@ mod tests {
         );
     }
 
+    #[test]
+    fn explains_required_connected_speech_families_without_changing_labels() {
+        let canonical = canonical(&["AH", "T", "D", "Y", "N", "T"]);
+        let observed = observed(&[
+            ("AX", 0, 40),
+            ("DX", 40, 80),
+            ("JH", 80, 130),
+            ("R", 130, 150),
+        ]);
+        let alignments = vec![
+            alignment(
+                PhoneAlignmentKind::Substitution,
+                &["AH"],
+                Some(0),
+                Some(0),
+                0,
+                0.84,
+            ),
+            alignment(
+                PhoneAlignmentKind::Substitution,
+                &["T"],
+                Some(1),
+                Some(1),
+                1,
+                0.88,
+            ),
+            alignment(
+                PhoneAlignmentKind::Merge,
+                &["D", "Y"],
+                Some(2),
+                Some(2),
+                2,
+                0.81,
+            ),
+            alignment(PhoneAlignmentKind::Insertion, &[], Some(3), Some(3), 3, 0.7),
+            alignment(
+                PhoneAlignmentKind::Deletion,
+                &["N", "T"],
+                None,
+                None,
+                4,
+                0.0,
+            ),
+        ];
+
+        let analysis = build_sound_analysis(
+            &canonical,
+            &observed,
+            &alignments,
+            "ctc",
+            "v1",
+            Some("model".into()),
+            "arpabet",
+        );
+
+        assert_eq!(
+            analysis
+                .connected_speech
+                .iter()
+                .map(|value| value.family)
+                .collect::<Vec<_>>(),
+            vec![
+                ConnectedSpeechFamily::WeakForm,
+                ConnectedSpeechFamily::Flapping,
+                ConnectedSpeechFamily::Assimilation,
+                ConnectedSpeechFamily::Linking,
+                ConnectedSpeechFamily::Contraction,
+            ]
+        );
+        assert_eq!(analysis.learning_phones[0].symbol, "AH");
+        assert_eq!(
+            analysis.connected_speech[0].status,
+            ConnectedSpeechExplanationStatus::DetectedInAudio
+        );
+        assert_eq!(
+            analysis.connected_speech[3].status,
+            ConnectedSpeechExplanationStatus::PossibleByRule
+        );
+        assert_eq!(analysis.connected_speech[3].phone_start, Some(4));
+        assert_eq!(analysis.connected_speech[4].confidence, 0.62);
+        assert_eq!(analysis.connected_speech[4].label, "possible contraction");
+    }
+
+    #[test]
+    fn explains_single_phone_deletion_as_low_confidence_hint() {
+        let canonical = canonical(&["T"]);
+        let observed = observed(&[("S", 0, 40)]);
+        let alignments = vec![alignment(
+            PhoneAlignmentKind::Deletion,
+            &["T"],
+            None,
+            None,
+            0,
+            0.0,
+        )];
+
+        let analysis = build_sound_analysis(
+            &canonical,
+            &observed,
+            &alignments,
+            "ctc",
+            "v1",
+            Some("model".into()),
+            "arpabet",
+        );
+
+        assert_eq!(
+            analysis.connected_speech[0].family,
+            ConnectedSpeechFamily::Deletion
+        );
+        assert_eq!(
+            analysis.connected_speech[0].status,
+            ConnectedSpeechExplanationStatus::PossibleByRule
+        );
+        assert_eq!(analysis.connected_speech[0].label, "possible deletion");
+    }
+
     fn observed(values: &[(&str, u64, u64)]) -> Vec<DetectedPhone> {
         values
             .iter()
@@ -459,6 +787,36 @@ mod tests {
                 model_revision: "model".into(),
             })
             .collect()
+    }
+
+    fn canonical(symbols: &[&str]) -> Vec<CanonicalPhone> {
+        symbols
+            .iter()
+            .enumerate()
+            .map(|(index, symbol)| CanonicalPhone {
+                symbol: (*symbol).into(),
+                token_index: index as u32,
+            })
+            .collect()
+    }
+
+    fn alignment(
+        kind: PhoneAlignmentKind,
+        canonical: &[&str],
+        detected_start: Option<u32>,
+        detected_end: Option<u32>,
+        token_start: u32,
+        confidence: f32,
+    ) -> PhoneAlignment {
+        PhoneAlignment {
+            kind,
+            token_start: Some(token_start),
+            token_end: Some(token_start + canonical.len().saturating_sub(1) as u32),
+            canonical_phones: canonical.iter().map(|value| (*value).into()).collect(),
+            detected_phone_start: detected_start,
+            detected_phone_end: detected_end,
+            confidence,
+        }
     }
 
     fn learning(symbol: &str, start_ms: u64, end_ms: u64) -> SoundLearningPhone {

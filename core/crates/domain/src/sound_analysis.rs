@@ -27,6 +27,42 @@ pub struct SoundLearningPhone {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum ConnectedSpeechFamily {
+    WeakForm,
+    Deletion,
+    Linking,
+    Assimilation,
+    Contraction,
+    Flapping,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectedSpeechExplanationStatus {
+    PossibleByRule,
+    SupportedByAudio,
+    DetectedInAudio,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConnectedSpeechExplanation {
+    pub family: ConnectedSpeechFamily,
+    pub label: String,
+    pub hint: String,
+    pub phone_start: Option<u32>,
+    pub phone_end: Option<u32>,
+    pub token_start: Option<u32>,
+    pub token_end: Option<u32>,
+    pub confidence: f32,
+    pub status: ConnectedSpeechExplanationStatus,
+    pub expected_symbols: Vec<String>,
+    pub learning_symbols: Vec<String>,
+    pub observed_symbols: Vec<String>,
+    pub evidence: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum SyllableStress {
     Primary,
     Secondary,
@@ -71,6 +107,8 @@ pub struct SoundAnalysis {
     pub phone_set: String,
     pub generated_from: String,
     pub learning_phones: Vec<SoundLearningPhone>,
+    #[serde(default)]
+    pub connected_speech: Vec<ConnectedSpeechExplanation>,
     pub syllables: Vec<SoundSyllable>,
     pub prosodic_phrases: Vec<SoundProsodicPhrase>,
 }

@@ -1281,6 +1281,35 @@ components:
         end_ms: { type: integer, minimum: 0 }
         boundary_evidence: { $ref: "#/components/schemas/ProsodicBoundaryEvidence" }
         confidence: { type: number, minimum: 0, maximum: 1 }
+    ConnectedSpeechFamily:
+      type: string
+      enum: [weak_form, deletion, linking, assimilation, contraction, flapping]
+    ConnectedSpeechExplanationStatus:
+      type: string
+      enum: [possible_by_rule, supported_by_audio, detected_in_audio]
+    ConnectedSpeechExplanation:
+      type: object
+      required: [family, label, hint, phone_start, phone_end, token_start, token_end, confidence, status, expected_symbols, learning_symbols, observed_symbols, evidence]
+      properties:
+        family: { $ref: "#/components/schemas/ConnectedSpeechFamily" }
+        label: { type: string }
+        hint: { type: string }
+        phone_start: { type: [integer, "null"], minimum: 0 }
+        phone_end: { type: [integer, "null"], minimum: 0 }
+        token_start: { type: [integer, "null"], minimum: 0 }
+        token_end: { type: [integer, "null"], minimum: 0 }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        status: { $ref: "#/components/schemas/ConnectedSpeechExplanationStatus" }
+        expected_symbols:
+          type: array
+          items: { type: string }
+        learning_symbols:
+          type: array
+          items: { type: string }
+        observed_symbols:
+          type: array
+          items: { type: string }
+        evidence: { type: string }
     SoundAnalysis:
       type: object
       required: [provider_id, provider_version, model_revision, phone_set, generated_from, learning_phones, syllables, prosodic_phrases]
@@ -1293,6 +1322,9 @@ components:
         learning_phones:
           type: array
           items: { $ref: "#/components/schemas/SoundLearningPhone" }
+        connected_speech:
+          type: array
+          items: { $ref: "#/components/schemas/ConnectedSpeechExplanation" }
         syllables:
           type: array
           items: { $ref: "#/components/schemas/SoundSyllable" }

@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- 2026-06-27 10:47 CST: Phase 2.3 正式收口 + 声音线 evidence 回放入口。
+  (1) **Phase 2.3 closeout**: 真实媒体手动 QA 已通过，`.planning/STATE.md` 与
+  `2.3-CLOSEOUT.md` 从“待手动 QA”更新为正式完成。
+  (2) **Listen to this moment**: sound pattern ribbon 的 evidence marker cell 可点击，
+  触发 source loop 播放 marker 覆盖的 `LearningPhone` 时间窗，让 connected-speech
+  explanation 从静态标签进入可听验证。
+  (3) **测试**: `phoneme_ribbon_test.dart` 覆盖 marker tap -> loop callback。
+  验证: `flutter analyze`、`flutter test test/timeline_test.dart test/phoneme_ribbon_test.dart`、
+  `cargo test -p speech-analysis`、`./scripts/validate-contracts.sh` 通过。
+
+- 2026-06-27 10:38 CST: Phase 2.16 — Real Connected Speech Model v1 收口。
+  (1) **真实语流解释层**: `SoundAnalysis` 新增向后兼容的 `connected_speech` metadata，
+  分离 expected symbols、stable learning symbols、observed acoustic symbols、family/status/confidence
+  和 learner-facing label/hint。
+  (2) **核心现象 v1**: `speech-analysis` 从 phone alignment pattern 生成 weak form/reduction、
+  deletion、linking、assimilation、contraction、flapping 六类 explanation；generic high-confidence
+  substitution 不会生成 connected-speech teaching explanation，避免 raw CTC mismatch 污染教学标签。
+  (3) **UI 消费**: Flutter timeline model 解析/导出 `connected_speech`，声音线 marker 可直接使用
+  explanation label/hint；无旧 `findings` 时也能展示学习者解释。
+  (4) **契约与文档**: OpenAPI 同步 `ConnectedSpeechExplanation` schema；新增
+  `.planning/phases/2.16-real-connected-speech-model-v1/2.16-CLOSEOUT.md`，并更新 `STATE.md`。
+  验证: `cargo test -p speech-analysis`、`flutter analyze`、
+  `flutter test test/timeline_test.dart test/phoneme_ribbon_test.dart`、
+  `./scripts/validate-contracts.sh` 通过。
+
 - 2026-06-27 10:23 CST: Phase 2.15 — Sound Line Learning UX 收口。
   (1) **声音线 UX 语义化**: `PhonemeRibbon` 新增 text/sound lane，声音线使用独立音频图标、
   颜色组和圆角形态，继续显示音节间隔、韵律短语边界与 evidence marker；文字线和声音线均

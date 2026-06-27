@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-06-27T02:23:00.000Z"
+last_updated: "2026-06-27T02:47:00.000Z"
 progress:
   total_phases: 11
   completed_phases: 1
@@ -15,7 +15,7 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-27 CST
-> 更新原因：Phase 2.15 声音线学习 UX 收口；声音线获得独立视觉语义、真实 sound_analysis 门控、不可用状态和学习者 evidence 文案。
+> 更新原因：Phase 2.3 人工校对 UI 正式收口；声音线 evidence marker 新增可点击回放入口。
 
 ## 当前位置
 
@@ -24,7 +24,8 @@ progress:
   Phase 2.11 ⏳ Steps 1-3 完成（Step 4-5 待推进）+
   Phase 2.13 ✅ 文字线音素 Ribbon 收口完成 +
   Phase 2.14 ✅ 声音线学习架构收口完成 +
-  Phase 2.15 ✅ 声音线学习 UX 收口完成
+  Phase 2.15 ✅ 声音线学习 UX 收口完成 +
+  Phase 2.16 ✅ 真实语流模型 v1 收口完成
 - **分支**：`main`
 - **版本**：0.7.0
 
@@ -35,7 +36,7 @@ progress:
 | 路线 | 目标 | 当前状态 |
 |---|---|---|
 | 本地重装生产引擎 | 生成精准 WordTimeline / ChunkTimeline / LLTimeline JSON | ✅ 阶段性收口，转长期研究 |
-| 轻量消费端 LLPlayerNext | 稳定读取 `.lltimeline.json` 并播放学习 | ⏳ Phase 2.3 第一版完成待收口；Phase 2.10/2.12 已集成 |
+| 轻量消费端 LLPlayerNext | 稳定读取 `.lltimeline.json` 并播放学习 | ✅ Phase 2.3/2.10/2.12 已集成 |
 
 ## 当前 Phase 状态
 
@@ -122,7 +123,7 @@ progress:
   - 收口文档：
     `.planning/phases/2.2-app-timeline-resource-ui/subtitle-resource-semantics-and-lifecycle.md`
 
-### Phase 2.3: 人工校对 UI ⏳ 第一版实现完成，待手动 QA
+### Phase 2.3: 人工校对 UI ✅ 已完成
 
 - 目标：完成 app 端人工校正闭环。
 - 初版不做完整 waveform editor，先做句子级 Word Timing Inspector。
@@ -147,7 +148,7 @@ progress:
   - Timeline Resource Summary 已新增直接导出 LLTimeline JSON 的入口，便于从
     manual/original WordTimeline 版本视图直接导出完整资源。
   - 自动化验证：`flutter analyze`、`flutter test` 通过。
-  - 仍需真实媒体手动 QA 后再最终收口。
+  - 2026-06-27 真实媒体手动 QA 已通过，Phase 2.3 正式收口。
 - 规划文档：
   - `.planning/phases/2.3-manual-timeline-review-ui/2.3-CONTEXT.md`
   - `.planning/phases/2.3-manual-timeline-review-ui/2.3-PLAN.md`
@@ -566,6 +567,33 @@ progress:
 - 收口文档：
   - `.planning/phases/2.15-sound-line-learning-ux/2.15-CLOSEOUT.md`
 
+### Phase 2.16: Real Connected Speech Model v1 ✅ 已完成
+
+- 目标：在 Phase 2.14/2.15 的 `LearningPhone` 声音线之上建立真实语流解释层，让用户看到
+  “为什么这里听起来变了”，而不是把 raw CTC label 当成教学答案。
+- 完成内容：
+  - `SoundAnalysis` 新增向后兼容的 `connected_speech` explanation metadata。
+  - explanation 明确分离 expected symbols、stable learning symbols、observed acoustic
+    symbols、family/status/confidence 和 learner-facing label/hint。
+  - Rust 分析层覆盖 6 类 v1 现象：weak form/reduction、deletion、linking、assimilation、
+    contraction、flapping。
+  - generic high-confidence substitution 不会生成 connected-speech teaching explanation；
+    raw CTC 仍只作为 timing/evidence/diagnostic，不改写基础 learning phone label。
+  - Flutter timeline model 解析 `connected_speech`，声音线 marker 可直接使用 learner-facing
+    explanation label/hint；无旧 `findings` 时也能显示解释。
+  - OpenAPI contract 同步 `ConnectedSpeechExplanation` schema，旧资源缺字段时仍可读取。
+- QA 边界：
+  - 本 phase 收口为模型契约、分析层规则、Flutter 消费和自动化守护完成。
+  - 仓库仍缺 2-3 条可完全复现的真实英语媒体 QA 包；真实媒体截图/听感回归作为后续
+    QA asset 工作，而不是伪装成本次已完成手动验收。
+- 验证：
+  - `cargo test -p speech-analysis` 通过。
+  - `flutter analyze` 通过。
+  - `flutter test test/timeline_test.dart test/phoneme_ribbon_test.dart` 通过。
+  - `./scripts/validate-contracts.sh` 通过。
+- 收口文档：
+  - `.planning/phases/2.16-real-connected-speech-model-v1/2.16-CLOSEOUT.md`
+
 ### 强制对齐研究 🧭 长期推进
 
 - torchaudio MMS_FA sidecar（`scripts/forced-align/align-cli.py`）。
@@ -614,6 +642,12 @@ progress:
     第二条普通 phoneme ribbon。UI 只在当前句存在真实 `sound_analysis` 时渲染声音线；缺失时显示
     轻量 unavailable state，不做词典 fallback。Evidence marker 默认使用学习者文案，内部
     finding/status 保留为高级诊断语义。
+14. **真实语流解释层**（2026-06-27）：`LearningPhone.symbol` 继续保持稳定教学标签；
+    connected-speech 现象通过 `sound_analysis.connected_speech` 作为解释/marker metadata
+    附着，不直接改写用户可见基础音素。Generic CTC substitution 不能生成高置信教学解释。
+15. **声音线 evidence 可回放**（2026-06-27）：sound pattern ribbon 的 evidence marker 可点击
+    循环播放对应 `LearningPhone` 时间窗，让 connected-speech explanation 从静态标签进入
+    可听验证。
 
 ## 当前阻塞项
 
@@ -621,12 +655,10 @@ progress:
 
 ## 下一步工作
 
-1. **Phase 2.16：Real Connected Speech Model v1**：在 2.15 的产品闭环稳定后，系统化覆盖
-   高频真实语流现象：弱读、吞音/省音、连读、同化、缩约、flapping 等。目标是核心现象
-   v1，不承诺一次实现完整 Prosodic Hierarchy。
-2. 准备 2-3 条可复现真实英语媒体 QA 包，包含 media、subtitle、PhoneTimeline、
-   `sound_analysis`、期望截图/听感记录，用作 Phase 2.16 输入。
-3. Phase 2.3 正式收口（手动 QA 已通过，待写 closeout）。
+1. 准备 2-3 条可复现真实英语媒体 QA 包，包含 media、subtitle、PhoneTimeline、
+   `sound_analysis.connected_speech`、期望截图/听感记录，用作后续真实听感回归。
+2. 评估 raw CTC mismatch 的高级诊断呈现与默认过滤边界。
+3. 基于真实 QA 结果决定 Phase 2.17 是否进入 Real Media Sound-Line QA / Advanced CTC Filtering。
 
 ## 指标
 
