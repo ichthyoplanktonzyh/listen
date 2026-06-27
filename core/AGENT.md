@@ -42,6 +42,12 @@ Core directories:
 - `.planning/` — project management source of truth.
 - `docs/decisions/` — append-only ADRs.
 
+Local QA media:
+
+- `/Users/shadow/Desktop/视频` — user-provided real English media samples for
+  manual or pipeline QA, especially speech/sound-line phases that need real
+  listening material beyond repository fixtures.
+
 ## Architecture Rules
 
 - Keep dependency direction one-way: `domain` is the leaf foundation;

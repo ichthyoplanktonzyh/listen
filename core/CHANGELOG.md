@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- 2026-06-27 10:23 CST: Phase 2.15 — Sound Line Learning UX 收口。
+  (1) **声音线 UX 语义化**: `PhonemeRibbon` 新增 text/sound lane，声音线使用独立音频图标、
+  颜色组和圆角形态，继续显示音节间隔、韵律短语边界与 evidence marker；文字线和声音线均
+  增加 tooltip 解释各自学习语义。
+  (2) **真实 sound_analysis 门控**: 新增 `buildSoundPatternPhones()`，声音线只在当前句存在
+  `sound_analysis.learning_phones` 时渲染；缺失时显示轻量不可用状态，不做词典 fallback，
+  也不显示 raw CTC-only 教学标签。
+  (3) **学习者文案**: evidence marker tooltip 从内部 finding/status 改为
+  `supported by audio`、`possible linking`、`possible reduction`、`possible deletion` 等低风险学习表达。
+  (4) **测试稳定性**: 新增 `phoneme_ribbon_test.dart`，扩展 `timeline_test.dart` 覆盖无
+  `sound_analysis` 不 fallback、CTC observed mismatch 不污染教学标签和 evidence 文案映射；修复
+  `phonetic_analysis_ui_test.dart` 在周期 Timer 页面上使用 `pumpAndSettle` 的既有超时。
+  验证: `flutter analyze`、`flutter test test/timeline_test.dart test/phoneme_ribbon_test.dart`、
+  `flutter test test/phonetic_analysis_ui_test.dart`、`flutter test` 通过。
+  收口文档: `.planning/phases/2.15-sound-line-learning-ux/2.15-CLOSEOUT.md`。
+
 - 2026-06-27 10:12 CST: 新增根目录 `AGENT.md`，作为 coding agent 新会话入口。
   记录 `.planning` 首读顺序、双路线项目形态、架构边界、代码放置规则、工具链
   `CARGO` / `FLUTTER` / `PATH` 环境准备、常用验证命令、文档维护规则和收尾检查事项。

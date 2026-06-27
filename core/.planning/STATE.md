@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-06-25T12:00:00.000Z"
+last_updated: "2026-06-27T02:23:00.000Z"
 progress:
   total_phases: 11
   completed_phases: 1
@@ -14,8 +14,8 @@ progress:
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-26 CST
-> 更新原因：Phase 2.14 声音线学习架构收口；稳定教学标签优先原则落地；SoundAnalysis/音节/韵律短语进入 PhoneTimeline。
+> 最后更新：2026-06-27 CST
+> 更新原因：Phase 2.15 声音线学习 UX 收口；声音线获得独立视觉语义、真实 sound_analysis 门控、不可用状态和学习者 evidence 文案。
 
 ## 当前位置
 
@@ -23,7 +23,8 @@ progress:
 - **Phase**：Phase 2.10 ✅ 端到端验证通过 +
   Phase 2.11 ⏳ Steps 1-3 完成（Step 4-5 待推进）+
   Phase 2.13 ✅ 文字线音素 Ribbon 收口完成 +
-  Phase 2.14 ✅ 声音线学习架构收口完成
+  Phase 2.14 ✅ 声音线学习架构收口完成 +
+  Phase 2.15 ✅ 声音线学习 UX 收口完成
 - **分支**：`main`
 - **版本**：0.7.0
 
@@ -537,6 +538,34 @@ progress:
   - `.planning/phases/2.14-sound-first-learning-architecture/2.14-PROSODIC-HIERARCHY-ALIGNMENT.md`
   - `.planning/phases/2.14-sound-first-learning-architecture/2.14-CLOSEOUT.md`
 
+### Phase 2.15: Sound Line Learning UX ✅ 已完成
+
+- 目标：把 Phase 2.14 的第二条声音线从“结构和渲染能力”推进为用户能理解、能开启、
+  能训练、能信任的学习界面。
+- 完成内容：
+  - 设置继续保留文字线 phoneme ribbon 与声音线 sound pattern ribbon 的独立开关。
+  - `PhonemeRibbon` 新增 text/sound lane；声音线使用独立音频图标、色彩组和圆角形态，
+    避免看起来像第二条相同的文字线 phoneme ribbon。
+  - 声音线只消费 `sound_analysis.learning_phones`；当前句缺少 `sound_analysis` 时显示轻量
+    unavailable state，不做词典 fallback，也不显示 raw CTC-only 教学标签。
+  - evidence marker tooltip 映射为学习者文案：
+    `supported by audio` / `possible linking` / `possible reduction` / `possible deletion`。
+  - `buildSoundPatternPhones()` 集中守护稳定教学标签：observed CTC mismatch 仍不污染默认
+    learning phone label。
+  - 修复既有 `phonetic_analysis_ui_test.dart` 在周期 Timer 页面上使用 `pumpAndSettle`
+    导致的稳定超时。
+- QA 边界：
+  - 自动化验证覆盖 UI/model 路径。
+  - 当前仓库没有 2-3 条已生成 `sound_analysis` 的真实媒体 QA 包；完整真实媒体听感验收记录为
+    Phase 2.16 输入，不伪装为已完成手动验收。
+- 验证：
+  - `flutter analyze` 通过。
+  - `flutter test test/timeline_test.dart test/phoneme_ribbon_test.dart` 通过。
+  - `flutter test test/phonetic_analysis_ui_test.dart` 通过。
+  - `flutter test` 通过。
+- 收口文档：
+  - `.planning/phases/2.15-sound-line-learning-ux/2.15-CLOSEOUT.md`
+
 ### 强制对齐研究 🧭 长期推进
 
 - torchaudio MMS_FA sidecar（`scripts/forced-align/align-cli.py`）。
@@ -581,6 +610,10 @@ progress:
     默认教学标签真值。phoneme ribbon 和声音线默认展示 `LearningPhone`：label 来自
     expected pronunciation，timing/confidence 来自 observed CTC。raw CTC mismatch 进入
     诊断/高级 evidence，不直接成为训练答案。
+13. **声音线 UX 门控**（2026-06-27）：声音线是 sound pattern learning surface，不是
+    第二条普通 phoneme ribbon。UI 只在当前句存在真实 `sound_analysis` 时渲染声音线；缺失时显示
+    轻量 unavailable state，不做词典 fallback。Evidence marker 默认使用学习者文案，内部
+    finding/status 保留为高级诊断语义。
 
 ## 当前阻塞项
 
@@ -588,12 +621,11 @@ progress:
 
 ## 下一步工作
 
-1. **Phase 2.15：Sound Line Learning UX**：把 Phase 2.14 的第二条声音线变成用户能理解、
-   能开启、能训练、能信任的产品闭环；重点是 UI 语义、真实媒体 QA、空状态、evidence 的
-   学习化表达，而不是继续扩展语音学层级。
-2. **Phase 2.16：Real Connected Speech Model v1**：在 2.15 的产品闭环稳定后，系统化覆盖
+1. **Phase 2.16：Real Connected Speech Model v1**：在 2.15 的产品闭环稳定后，系统化覆盖
    高频真实语流现象：弱读、吞音/省音、连读、同化、缩约、flapping 等。目标是核心现象
    v1，不承诺一次实现完整 Prosodic Hierarchy。
+2. 准备 2-3 条可复现真实英语媒体 QA 包，包含 media、subtitle、PhoneTimeline、
+   `sound_analysis`、期望截图/听感记录，用作 Phase 2.16 输入。
 3. Phase 2.3 正式收口（手动 QA 已通过，待写 closeout）。
 
 ## 指标
