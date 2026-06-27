@@ -2966,6 +2966,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                       height: primarySize * 1.1,
                                       style:
                                           settingsController.phonemeRibbonStyle,
+                                      tooltip: l.text('textPhonemeRibbonHint'),
                                     ),
                                   );
                                 },
@@ -2987,18 +2988,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                         )
                                       : null;
                                   if (soundAnalysis == null) {
-                                    return const SizedBox.shrink();
-                                  }
-                                  final phones = soundAnalysis.learningPhones
-                                      .map(
-                                        (phone) => phone.toDetectedPhone(
-                                          provider: soundAnalysis.providerId,
-                                          modelRevision:
-                                              soundAnalysis.modelRevision ??
-                                              soundAnalysis.providerVersion,
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: SoundPatternUnavailableRibbon(
+                                        message: l.text(
+                                          'soundPatternUnavailable',
                                         ),
-                                      )
-                                      .toList(growable: false);
+                                        tooltip: l.text(
+                                          'soundPatternUnavailableTooltip',
+                                        ),
+                                        fontSize: primarySize * 0.34,
+                                        height: primarySize * 0.9,
+                                      ),
+                                    );
+                                  }
+                                  final phones = buildSoundPatternPhones(
+                                    soundAnalysis,
+                                  );
                                   final findings = buildPhonemeRibbonFindings(
                                     rawFindings:
                                         ((raw?['findings'] as List<dynamic>?) ??
@@ -3023,6 +3029,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                       prosodicPhrases:
                                           soundAnalysis.prosodicPhrases,
                                       findings: findings,
+                                      lane: PhonemeRibbonLane.sound,
+                                      tooltip: l.text('soundPatternRibbonHint'),
                                     ),
                                   );
                                 },

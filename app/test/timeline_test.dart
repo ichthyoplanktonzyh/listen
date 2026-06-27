@@ -464,6 +464,83 @@ void main() {
   });
 
   test(
+    'sound pattern phones require sound analysis and keep stable labels',
+    () {
+      expect(buildSoundPatternPhones(null), isEmpty);
+
+      final soundAnalysis = SoundAnalysis.fromJson(const {
+        'provider_id': 'wav2vec2-ctc-phoneme',
+        'provider_version': 'fb-espeak-v1',
+        'model_revision': null,
+        'phone_set': 'arpabet',
+        'generated_from': 'expected_phones_aligned_to_observed_timing',
+        'learning_phones': [
+          {
+            'symbol': 'S',
+            'display_ipa': 's',
+            'phone_set': 'arpabet',
+            'start_ms': 120,
+            'end_ms': 180,
+            'confidence': 0.41,
+            'token_index': 0,
+            'observed_phone_index': 3,
+            'observed_symbol': 'K',
+            'evidence': 'substitution',
+          },
+        ],
+        'syllables': [],
+        'prosodic_phrases': [],
+      });
+
+      final phones = buildSoundPatternPhones(soundAnalysis);
+
+      expect(phones.single.symbol, 'S');
+      expect(phones.single.displayIpa, 's');
+      expect(phones.single.modelRevision, 'fb-espeak-v1');
+    },
+  );
+
+  test('phoneme ribbon findings expose learner-facing evidence text', () {
+    const linking = PhonemeRibbonFinding(
+      phoneStart: 0,
+      phoneEnd: 0,
+      findingType: 'linking_or_insertion',
+      status: 'supported_by_alignment',
+      confidence: 0.68,
+      evidence: 'Insertion alignment',
+    );
+    const reduction = PhonemeRibbonFinding(
+      phoneStart: 1,
+      phoneEnd: 1,
+      findingType: 'vowel_reduction',
+      status: 'detected_in_audio',
+      confidence: 0.82,
+      evidence: 'Reduced vowel',
+    );
+    const deletion = PhonemeRibbonFinding(
+      phoneStart: 2,
+      phoneEnd: 2,
+      findingType: 'phone_deletion',
+      status: 'detected_in_audio',
+      confidence: 0.76,
+      evidence: 'Deletion alignment',
+    );
+    const supported = PhonemeRibbonFinding(
+      phoneStart: 3,
+      phoneEnd: 3,
+      findingType: 'phone_substitution',
+      status: 'detected_in_audio',
+      confidence: 0.91,
+      evidence: 'Substitution alignment',
+    );
+
+    expect(linking.learnerLabel, 'possible linking');
+    expect(reduction.learnerLabel, 'possible reduction');
+    expect(deletion.learnerLabel, 'possible deletion');
+    expect(supported.learnerTooltip, 'supported by audio · 91%');
+  });
+
+  test(
     'phoneme ribbon findings anchor insertion evidence to nearest learning phone',
     () {
       final soundAnalysis = SoundAnalysis.fromJson(const {

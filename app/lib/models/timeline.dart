@@ -831,6 +831,29 @@ class PhonemeRibbonFinding {
   final String evidence;
 
   bool get detectedInAudio => status == 'detected_in_audio';
+
+  String get learnerLabel {
+    final normalizedType = findingType.toLowerCase();
+    if (normalizedType.contains('linking') ||
+        normalizedType.contains('insertion')) {
+      return 'possible linking';
+    }
+    if (normalizedType.contains('reduction') ||
+        normalizedType.contains('weak')) {
+      return 'possible reduction';
+    }
+    if (normalizedType.contains('deletion') ||
+        normalizedType.contains('elision') ||
+        normalizedType.contains('omission')) {
+      return 'possible deletion';
+    }
+    return 'supported by audio';
+  }
+
+  String get learnerTooltip {
+    final confidencePercent = (confidence * 100).round();
+    return '$learnerLabel · $confidencePercent%';
+  }
 }
 
 class PhoneTimelineSummary {
@@ -1222,6 +1245,22 @@ DetectedPhone? _alignedObservedPhone(
     }
   }
   return bestOverlap > Duration.zero ? best : null;
+}
+
+List<DetectedPhone> buildSoundPatternPhones(SoundAnalysis? soundAnalysis) {
+  if (soundAnalysis == null || soundAnalysis.learningPhones.isEmpty) {
+    return const [];
+  }
+  final modelRevision =
+      soundAnalysis.modelRevision ?? soundAnalysis.providerVersion;
+  return soundAnalysis.learningPhones
+      .map(
+        (phone) => phone.toDetectedPhone(
+          provider: soundAnalysis.providerId,
+          modelRevision: modelRevision,
+        ),
+      )
+      .toList(growable: false);
 }
 
 Duration _durationOverlap(

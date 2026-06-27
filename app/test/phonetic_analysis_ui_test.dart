@@ -4,6 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/phonetic_analysis_ui.dart';
 
+Future<void> pumpAnalysisCenterFrame(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 500));
+}
+
 void main() {
   testWidgets('analysis center exposes model provenance and job actions', (
     tester,
@@ -74,18 +79,19 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await pumpAnalysisCenterFrame(tester);
 
     expect(find.textContaining('Research fixture'), findsOneWidget);
     expect(find.textContaining('Research only'), findsOneWidget);
 
     await tester.tap(find.text('Jobs'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('track · recognizing_phones'), findsOneWidget);
+    await pumpAnalysisCenterFrame(tester);
+    expect(find.text('track'), findsOneWidget);
+    expect(find.text('Recognizing phones'), findsOneWidget);
     expect(find.textContaining('research failure'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Cancel'));
-    await tester.pumpAndSettle();
+    await pumpAnalysisCenterFrame(tester);
     expect(cancelled, 'active-job');
 
     jobs = [
@@ -100,11 +106,11 @@ void main() {
       },
     ];
     await tester.tap(find.byIcon(Icons.refresh).first);
-    await tester.pumpAndSettle();
+    await pumpAnalysisCenterFrame(tester);
     await tester.tap(find.text('Jobs'));
-    await tester.pumpAndSettle();
+    await pumpAnalysisCenterFrame(tester);
     await tester.tap(find.byTooltip('Retry'));
-    await tester.pumpAndSettle();
+    await pumpAnalysisCenterFrame(tester);
     expect(retried, 'failed-job');
   });
 }

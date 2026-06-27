@@ -226,6 +226,13 @@ class AppLocalizations {
       'phonemeRibbonStyle': 'Ribbon display style',
       'phonemeRibbonWindow': 'Sliding window',
       'phonemeRibbonWave': 'Wave magnification',
+      'textPhonemeRibbonHint':
+          'Text line: stable teaching phones from the subtitle words.',
+      'soundPatternRibbonHint':
+          'Sound line: real audio timing, syllables, and phrase breaks.',
+      'soundPatternUnavailable': 'No real sound analysis for this line',
+      'soundPatternUnavailableTooltip':
+          'The sound pattern ribbon only appears after audio analysis creates sound_analysis for the current sentence.',
       'analyzeRealPronunciation': 'Analyze audio pronunciation',
       'analyzeSubtitleTrack': 'Analyze subtitle track',
       'canonicalPronunciation': 'Canonical pronunciation',
@@ -517,6 +524,11 @@ class AppLocalizations {
       'phonemeRibbonStyle': '音素带显示方式',
       'phonemeRibbonWindow': '滑动窗口',
       'phonemeRibbonWave': '波浪放大',
+      'textPhonemeRibbonHint': '文字线：来自字幕单词的稳定教学音素。',
+      'soundPatternRibbonHint': '声音线：真实音频时序、音节和短语停顿。',
+      'soundPatternUnavailable': '当前句暂无真实声音分析',
+      'soundPatternUnavailableTooltip':
+          '声音模式时间带只在当前句已有 sound_analysis 音频分析时显示。',
       'analyzeRealPronunciation': '分析真实发音',
       'analyzeSubtitleTrack': '分析整条字幕',
       'canonicalPronunciation': '规范发音',

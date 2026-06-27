@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../models/timeline.dart';
 
+enum PhonemeRibbonLane { text, sound }
+
 class PhonemeRibbon extends StatelessWidget {
   const PhonemeRibbon({
     super.key,
@@ -16,6 +18,8 @@ class PhonemeRibbon extends StatelessWidget {
     this.syllables = const [],
     this.prosodicPhrases = const [],
     this.findings = const [],
+    this.lane = PhonemeRibbonLane.text,
+    this.tooltip,
   });
 
   final List<DetectedPhone> phones;
@@ -27,6 +31,8 @@ class PhonemeRibbon extends StatelessWidget {
   final List<SoundSyllable> syllables;
   final List<SoundProsodicPhrase> prosodicPhrases;
   final List<PhonemeRibbonFinding> findings;
+  final PhonemeRibbonLane lane;
+  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -48,22 +54,28 @@ class PhonemeRibbon extends StatelessWidget {
         if (!maxWidth.isFinite || maxWidth <= 0) {
           return const SizedBox.shrink();
         }
+        final leadingWidth = lane == PhonemeRibbonLane.sound
+            ? _SoundRibbonShell.leadingWidth(height)
+            : 0.0;
+        final ribbonMaxWidth = maxWidth - leadingWidth;
+        if (ribbonMaxWidth <= 0) return const SizedBox.shrink();
         final fullReadableWidth =
             phones.length * _readableCellWidth + gap * (phones.length - 1);
-        final canShowFull = fullReadableWidth <= maxWidth;
+        final canShowFull = fullReadableWidth <= ribbonMaxWidth;
 
-        return SizedBox(
+        final ribbon = SizedBox(
           height: height * 1.35,
           child: canShowFull
               ? _FullRibbon(
                   phones: phones,
-                  widths: _fullCellWidths(maxWidth, totalMs),
+                  widths: _fullCellWidths(ribbonMaxWidth, totalMs),
                   currentIdx: currentIdx,
                   height: height,
                   fontSize: fontSize,
                   gap: gap,
                   wave: style == 'wave',
                   markers: markers,
+                  lane: lane,
                 )
               : _WindowRibbon(
                   phones: phones,
@@ -71,10 +83,20 @@ class PhonemeRibbon extends StatelessWidget {
                   height: height,
                   fontSize: fontSize,
                   gap: gap,
-                  maxWidth: maxWidth,
+                  maxWidth: ribbonMaxWidth,
                   markers: markers,
+                  lane: lane,
                 ),
         );
+        if (lane == PhonemeRibbonLane.text) {
+          return tooltip == null
+              ? ribbon
+              : Tooltip(message: tooltip!, child: ribbon);
+        }
+        final decorated = _SoundRibbonShell(height: height, child: ribbon);
+        return tooltip == null
+            ? decorated
+            : Tooltip(message: tooltip!, child: decorated);
       },
     );
   }
@@ -120,6 +142,58 @@ class PhonemeRibbon extends StatelessWidget {
                 ((phone.end.inMilliseconds - phone.start.inMilliseconds) /
                     totalMs),
     ];
+  }
+}
+
+class SoundPatternUnavailableRibbon extends StatelessWidget {
+  const SoundPatternUnavailableRibbon({
+    super.key,
+    required this.message,
+    this.tooltip,
+    this.fontSize = 11,
+    this.height = 24,
+  });
+
+  final String message;
+  final String? tooltip;
+  final double fontSize;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Semantics(
+      label: tooltip ?? message,
+      child: SizedBox(
+        height: height,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.graphic_eq,
+              size: math.max(12, height * 0.52),
+              color: Colors.white.withAlpha(110),
+            ),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                message,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white.withAlpha(135),
+                  fontSize: fontSize,
+                  height: 1.0,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    return tooltip == null
+        ? content
+        : Tooltip(message: tooltip!, child: content);
   }
 }
 
@@ -189,6 +263,7 @@ class _FullRibbon extends StatelessWidget {
     required this.gap,
     required this.wave,
     required this.markers,
+    required this.lane,
   });
 
   final List<DetectedPhone> phones;
@@ -199,6 +274,7 @@ class _FullRibbon extends StatelessWidget {
   final double gap;
   final bool wave;
   final _RibbonMarkers markers;
+  final PhonemeRibbonLane lane;
 
   @override
   Widget build(BuildContext context) => Row(
@@ -215,6 +291,7 @@ class _FullRibbon extends StatelessWidget {
           isCurrent: i == currentIdx,
           elevated: wave,
           findings: markers.findingsFor(i),
+          lane: lane,
         ),
       ],
     ],
@@ -230,6 +307,7 @@ class _WindowRibbon extends StatelessWidget {
     required this.gap,
     required this.maxWidth,
     required this.markers,
+    required this.lane,
   });
 
   final List<DetectedPhone> phones;
@@ -239,6 +317,7 @@ class _WindowRibbon extends StatelessWidget {
   final double gap;
   final double maxWidth;
   final _RibbonMarkers markers;
+  final PhonemeRibbonLane lane;
 
   @override
   Widget build(BuildContext context) {
@@ -270,6 +349,7 @@ class _WindowRibbon extends StatelessWidget {
               isCurrent: start + i == currentIdx,
               elevated: false,
               findings: markers.findingsFor(start + i),
+              lane: lane,
             ),
           ],
         ],
@@ -359,6 +439,7 @@ class _PhoneCell extends StatelessWidget {
     required this.isCurrent,
     required this.elevated,
     required this.findings,
+    required this.lane,
   });
 
   final DetectedPhone phone;
@@ -368,10 +449,11 @@ class _PhoneCell extends StatelessWidget {
   final bool isCurrent;
   final bool elevated;
   final List<PhonemeRibbonFinding> findings;
+  final PhonemeRibbonLane lane;
 
   @override
   Widget build(BuildContext context) {
-    final color = _phoneColor(phone.symbol);
+    final color = _phoneColor(phone.symbol, lane);
     final confidence = phone.confidence ?? 0.8;
     final alpha = isCurrent ? 1.0 : (0.3 + confidence * 0.3).clamp(0.2, 0.6);
     final targetHeight = isCurrent
@@ -387,9 +469,13 @@ class _PhoneCell extends StatelessWidget {
       height: targetHeight,
       decoration: BoxDecoration(
         color: color.withAlpha((alpha * 255).round()),
-        borderRadius: BorderRadius.circular(3),
+        borderRadius: BorderRadius.circular(
+          lane == PhonemeRibbonLane.sound ? 7 : 3,
+        ),
         border: isCurrent
             ? Border.all(color: Colors.white.withAlpha(210), width: 1.2)
+            : lane == PhonemeRibbonLane.sound
+            ? Border.all(color: Colors.white.withAlpha(48), width: 0.8)
             : null,
         boxShadow: isCurrent && elevated
             ? [
@@ -437,8 +523,13 @@ class _PhoneCell extends StatelessWidget {
     return Tooltip(message: marker.tooltip, child: cell);
   }
 
-  static Color _phoneColor(String symbol) {
+  static Color _phoneColor(String symbol, PhonemeRibbonLane lane) {
     final s = symbol.toUpperCase();
+    if (lane == PhonemeRibbonLane.sound) {
+      if (_vowels.contains(s)) return const Color(0xFF00A8A8);
+      if (_approximants.contains(s)) return const Color(0xFFB76EAE);
+      return const Color(0xFFD79D2A);
+    }
     if (_vowels.contains(s)) return const Color(0xFF5B8DEF);
     if (_approximants.contains(s)) return const Color(0xFF7BC47F);
     return const Color(0xFFE8935A);
@@ -478,17 +569,40 @@ class _FindingMarker {
     final selected = detected.isNotEmpty ? detected : findings;
     final finding = selected.isEmpty ? null : selected.first;
     if (finding == null) return null;
-    final confidence = (finding.confidence * 100).round();
     return _FindingMarker(
       strong: finding.detectedInAudio,
       color: finding.detectedInAudio
           ? const Color(0xFFFFD166)
           : const Color(0xFFB8E1FF).withAlpha(185),
-      tooltip: '${finding.findingType} · ${finding.status} · $confidence%',
+      tooltip: finding.learnerTooltip,
     );
   }
 
   final bool strong;
   final Color color;
   final String tooltip;
+}
+
+class _SoundRibbonShell extends StatelessWidget {
+  const _SoundRibbonShell({required this.height, required this.child});
+
+  final double height;
+  final Widget child;
+
+  static double leadingWidth(double height) => math.max(12, height * 0.46) + 5;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      Icon(
+        Icons.graphic_eq,
+        size: math.max(12, height * 0.46),
+        color: Colors.white.withAlpha(170),
+      ),
+      const SizedBox(width: 5),
+      Flexible(child: child),
+    ],
+  );
 }
