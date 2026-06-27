@@ -521,8 +521,9 @@ progress:
   - CTC `/k/` 误判 expected `/s/` 时，用户默认 ribbon 仍显示 `/s/`；CTC 只提供 timing /
     confidence / mismatch evidence。
   - CTC / research fixture phonetic analysis 自动生成 `sound_analysis`，创建 PhoneTimeline 时复制。
-  - Flutter `PhoneTimeline` 解析 `sound_analysis`，`PhonemeRibbon` 使用 `learning_phones`
-    并显示音节间隔和韵律短语边界。
+  - Flutter `PhoneTimeline` 解析 `sound_analysis`；文字线 phoneme ribbon 使用 expected
+    phone + observed timing，声音线由独立 sound pattern ribbon 消费 `sound_analysis`
+    并显示音节间隔、韵律短语边界和 evidence marker。
   - OpenAPI 新增 SoundAnalysis 相关 schema，并补齐 `DetectedPhone.display_ipa`。
 - 验证：
   - `cargo test --workspace --quiet` 通过。
@@ -587,9 +588,12 @@ progress:
 
 ## 下一步工作
 
-1. **Phase 2.11 Step 4–5**（依赖 2.10/2.14 验证通过）：L1 诊断 seam + 听觉锚定准备。
-2. **声音线后续增强**：finding marker overlay、`audio_detection` evidence 升级策略、
-   observed insertion 高级证据 UI。
+1. **Phase 2.15：Sound Line Learning UX**：把 Phase 2.14 的第二条声音线变成用户能理解、
+   能开启、能训练、能信任的产品闭环；重点是 UI 语义、真实媒体 QA、空状态、evidence 的
+   学习化表达，而不是继续扩展语音学层级。
+2. **Phase 2.16：Real Connected Speech Model v1**：在 2.15 的产品闭环稳定后，系统化覆盖
+   高频真实语流现象：弱读、吞音/省音、连读、同化、缩约、flapping 等。目标是核心现象
+   v1，不承诺一次实现完整 Prosodic Hierarchy。
 3. Phase 2.3 正式收口（手动 QA 已通过，待写 closeout）。
 
 ## 指标

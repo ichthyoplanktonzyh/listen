@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-06-27 CST: Phase 2.15 / 2.16 路线确认。
+  (1) Phase 2.15 定义为 **Sound Line Learning UX**：把第二条声音线推进为用户能理解、
+  能开启、能训练、能信任的产品闭环，聚焦真实媒体 QA、独立 UI 语义、空状态和
+  evidence marker 的学习化表达。
+  (2) Phase 2.16 定义为 **Real Connected Speech Model v1**：在 2.15 产品闭环稳定后，
+  系统化覆盖弱读、吞音/省音、连读、同化、缩约、flapping 等高频真实语流现象；明确
+  不承诺一次实现完整 Prosodic Hierarchy。
+
 - 2026-06-26 CST: Phase 2.14 — Sound-First Learning Architecture 收口。
   (1) **稳定教学标签优先**: 明确并落地
   `CTC provides audio evidence and timing; expected pronunciation provides teaching labels`。
@@ -14,12 +22,14 @@
   (3) **声音组织算法**: 新增 `speech_analysis::sound_analysis`，将 expected phones 与
   observed CTC phones 对齐为 `LearningPhone`，实现 SSP 音节化、pause-aware onset
   boundary 和 pause-based prosodic phrase detection。
-  (4) **Flutter 消费**: `PhoneTimeline` 解析 `sound_analysis`；`PhonemeRibbon` 优先消费
-  `learning_phones`，并显示音节间隔和韵律短语边界；无 `sound_analysis` 时保留本地
-  `buildLearningPhones()` fallback；finding evidence marker overlay 会映射到 stable
-  learning phone 上，`detected_in_audio` 强标记、alignment/uncertain 弱标记，不改写教学标签。
-  observed insertion/linking evidence 会锚定到最近 learning phone marker，保持证据可见但不新增
-  教学 phone。
+  (4) **Flutter 消费**: `PhoneTimeline` 解析 `sound_analysis`；前端拆分为两个独立入口：
+  文字线 phoneme ribbon 使用文本/词典 expected phone，并只借用 observed CTC timing/evidence；
+  没有 expected phone 时不显示 raw CTC-only 教学标签。
+  声音线 sound pattern ribbon 只在存在 `sound_analysis` 时显示，消费 `learning_phones`、
+  音节间隔、韵律短语边界和 finding evidence marker，不做词典 fallback。marker 会映射到
+  stable learning phone 上，`detected_in_audio` 强标记、alignment/uncertain 弱标记，不改写
+  教学标签。observed insertion/linking evidence 会锚定到最近 learning phone marker，保持证据
+  可见但不新增教学 phone。
   `detected_in_audio` 后端升级策略同步收紧：高置信 generic `phone_substitution`
   不再声明为真实语流检测，只有弱读、flapping、同化、缩约、省音等已知 connected-speech
   family 可升级。
