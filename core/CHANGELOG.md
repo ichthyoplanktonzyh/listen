@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 2026-06-27 10:12 CST: 新增根目录 `AGENT.md`，作为 coding agent 新会话入口。
+  记录 `.planning` 首读顺序、双路线项目形态、架构边界、代码放置规则、工具链
+  `CARGO` / `FLUTTER` / `PATH` 环境准备、常用验证命令、文档维护规则和收尾检查事项。
+
 - 2026-06-27 CST: Phase 2.15 / 2.16 路线确认。
   (1) Phase 2.15 定义为 **Sound Line Learning UX**：把第二条声音线推进为用户能理解、
   能开启、能训练、能信任的产品闭环，聚焦真实媒体 QA、独立 UI 语义、空状态和
