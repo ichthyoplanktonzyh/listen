@@ -1138,11 +1138,14 @@ List<DetectedPhone> buildLearningPhones({
   required Map<String, dynamic>? pronunciation,
   required List<WordTiming>? wordTimings,
   required List<DetectedPhone> observedPhones,
+  bool allowObservedOnlyFallback = true,
 }) {
   final expectedPhones = pronunciation == null || wordTimings == null
       ? const <DetectedPhone>[]
       : synthesizePhonesFromDictionary(pronunciation, wordTimings);
-  if (expectedPhones.isEmpty) return observedPhones;
+  if (expectedPhones.isEmpty) {
+    return allowObservedOnlyFallback ? observedPhones : const [];
+  }
   if (observedPhones.isEmpty) return expectedPhones;
 
   final observedByToken = <int, List<DetectedPhone>>{};

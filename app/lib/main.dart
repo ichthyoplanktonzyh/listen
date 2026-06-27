@@ -228,6 +228,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       phoneticModelId: settingsController.settings.phoneticModelId,
       phoneticAnalysisPreference: settingsController.phoneticAnalysisPreference,
       phonemeRibbonVisible: settingsController.phonemeRibbonVisible,
+      soundPatternRibbonVisible: settingsController.soundPatternRibbonVisible,
     ),
   );
 
@@ -347,7 +348,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     subtitleController.updateCurrentDetectedPhone(
       value,
-      enabled: settingsController.settings.phonemeRibbonVisible,
+      enabled:
+          settingsController.settings.phonemeRibbonVisible ||
+          settingsController.settings.soundPatternRibbonVisible,
     );
 
     final primaryCue = subtitleController.currentPrimaryCue;
@@ -681,7 +684,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     subtitleController.updateCurrentDetectedPhone(
       playerController.position,
-      enabled: settingsController.settings.phonemeRibbonVisible,
+      enabled:
+          settingsController.settings.phonemeRibbonVisible ||
+          settingsController.settings.soundPatternRibbonVisible,
     );
     if (errors.isNotEmpty && mounted) {
       setState(
@@ -1674,6 +1679,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         phoneticAnalysisPreference:
             settingsController.phoneticAnalysisPreference,
         phonemeRibbonVisible: settingsController.phonemeRibbonVisible,
+        soundPatternRibbonVisible: settingsController.soundPatternRibbonVisible,
         phonemeRibbonStyle: settingsController.phonemeRibbonStyle,
         learningLanguage: settingsController.learningLanguage,
         availableLanguages: learningController.availableLanguages,
@@ -1826,12 +1832,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
           settingsController.update(
             settingsController.settings.copyWith(
               phonemeRibbonVisible: v,
-              phonemeHighlightVisible: v,
+              phonemeHighlightVisible:
+                  v || settingsController.settings.soundPatternRibbonVisible,
             ),
           );
           subtitleController.updateCurrentDetectedPhone(
             playerController.position,
-            enabled: v,
+            enabled: v || settingsController.settings.soundPatternRibbonVisible,
+          );
+        },
+        onSoundPatternRibbonVisibleChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(
+              soundPatternRibbonVisible: v,
+              phonemeHighlightVisible:
+                  v || settingsController.settings.phonemeRibbonVisible,
+            ),
+          );
+          subtitleController.updateCurrentDetectedPhone(
+            playerController.position,
+            enabled: v || settingsController.settings.phonemeRibbonVisible,
           );
         },
         onSave:
@@ -2916,14 +2936,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                       subtitleController.currentPrimaryCue!.id;
                                   final raw = subtitleController
                                       .phoneticAnalysisBySentence[cueId];
-                                  final soundAnalysis =
-                                      raw?['sound_analysis'] is Map
-                                      ? SoundAnalysis.fromJson(
-                                          Map<String, dynamic>.from(
-                                            raw!['sound_analysis'] as Map,
-                                          ),
-                                        )
-                                      : null;
                                   final observedPhones =
                                       ((raw?['detected_phones']
                                                   as List<dynamic>?) ??
@@ -2934,25 +2946,59 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                             ),
                                           )
                                           .toList(growable: false);
-                                  final phones =
-                                      soundAnalysis?.learningPhones
-                                          .map(
-                                            (phone) => phone.toDetectedPhone(
-                                              provider:
-                                                  soundAnalysis.providerId,
-                                              modelRevision:
-                                                  soundAnalysis.modelRevision ??
-                                                  soundAnalysis.providerVersion,
-                                            ),
-                                          )
-                                          .toList(growable: false) ??
-                                      buildLearningPhones(
-                                        pronunciation: subtitleController
-                                            .pronunciationBySentence[cueId],
-                                        wordTimings: subtitleController
-                                            .timingsBySentence[cueId],
-                                        observedPhones: observedPhones,
-                                      );
+                                  final phones = buildLearningPhones(
+                                    pronunciation: subtitleController
+                                        .pronunciationBySentence[cueId],
+                                    wordTimings: subtitleController
+                                        .timingsBySentence[cueId],
+                                    observedPhones: observedPhones,
+                                    allowObservedOnlyFallback: false,
+                                  );
+                                  if (phones.isEmpty) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: PhonemeRibbon(
+                                      phones: phones,
+                                      position: playerController.position,
+                                      fontSize: primarySize * 0.45,
+                                      height: primarySize * 1.1,
+                                      style:
+                                          settingsController.phonemeRibbonStyle,
+                                    ),
+                                  );
+                                },
+                              ),
+                            if (settingsController.soundPatternRibbonVisible &&
+                                subtitleController.currentPrimaryCue != null)
+                              Builder(
+                                builder: (_) {
+                                  final cueId =
+                                      subtitleController.currentPrimaryCue!.id;
+                                  final raw = subtitleController
+                                      .phoneticAnalysisBySentence[cueId];
+                                  final soundAnalysis =
+                                      raw?['sound_analysis'] is Map
+                                      ? SoundAnalysis.fromJson(
+                                          Map<String, dynamic>.from(
+                                            raw!['sound_analysis'] as Map,
+                                          ),
+                                        )
+                                      : null;
+                                  if (soundAnalysis == null) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  final phones = soundAnalysis.learningPhones
+                                      .map(
+                                        (phone) => phone.toDetectedPhone(
+                                          provider: soundAnalysis.providerId,
+                                          modelRevision:
+                                              soundAnalysis.modelRevision ??
+                                              soundAnalysis.providerVersion,
+                                        ),
+                                      )
+                                      .toList(growable: false);
                                   final findings = buildPhonemeRibbonFindings(
                                     rawFindings:
                                         ((raw?['findings'] as List<dynamic>?) ??
@@ -2969,15 +3015,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                     child: PhonemeRibbon(
                                       phones: phones,
                                       position: playerController.position,
-                                      fontSize: primarySize * 0.45,
-                                      height: primarySize * 1.1,
+                                      fontSize: primarySize * 0.42,
+                                      height: primarySize,
                                       style:
                                           settingsController.phonemeRibbonStyle,
-                                      syllables:
-                                          soundAnalysis?.syllables ?? const [],
+                                      syllables: soundAnalysis.syllables,
                                       prosodicPhrases:
-                                          soundAnalysis?.prosodicPhrases ??
-                                          const [],
+                                          soundAnalysis.prosodicPhrases,
                                       findings: findings,
                                     ),
                                   );

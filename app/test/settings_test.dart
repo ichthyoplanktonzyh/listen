@@ -114,6 +114,7 @@ void main() {
     expect(settings.phoneticAnalysisPreference, 'on_demand');
     expect(settings.showExperimentalPhoneticResults, isFalse);
     expect(settings.phonemeHighlightVisible, isTrue);
+    expect(settings.soundPatternRibbonVisible, isFalse);
     expect(settings.phoneticCachePolicy, 'keep_completed');
   });
 
@@ -130,9 +131,13 @@ void main() {
       wordAnimationIntensity: 0.8,
       ruleHintsLevel: 'all',
       precomputePronunciation: false,
+      soundPatternRibbonVisible: false,
     );
 
-    final updated = settings.copyWith(wordSyncVisible: true);
+    final updated = settings.copyWith(
+      wordSyncVisible: true,
+      soundPatternRibbonVisible: true,
+    );
 
     expect(updated.pronunciationVisible, isFalse);
     expect(updated.wordSyncVisible, isTrue);
@@ -145,6 +150,7 @@ void main() {
     expect(updated.wordAnimationIntensity, 0.8);
     expect(updated.ruleHintsLevel, 'all');
     expect(updated.precomputePronunciation, isFalse);
+    expect(updated.soundPatternRibbonVisible, isTrue);
   });
 
   test('falls back from an unsupported word highlight style', () {
@@ -167,5 +173,16 @@ void main() {
     expect(settings.chunkDisplayStyle, 'spacing');
     expect(settings.highlightCurrentChunk, isTrue);
     expect(settings.chunkHighlightStyle, 'bounce');
+  });
+
+  test('loads independent sound pattern ribbon visibility v8', () {
+    final settings = AppSettings.fromJson({
+      'version': 8,
+      'phoneme_ribbon_visible': false,
+      'sound_pattern_ribbon_visible': true,
+    });
+
+    expect(settings.phonemeRibbonVisible, isFalse);
+    expect(settings.soundPatternRibbonVisible, isTrue);
   });
 }

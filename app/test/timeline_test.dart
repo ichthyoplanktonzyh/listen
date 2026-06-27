@@ -378,6 +378,37 @@ void main() {
     expect(learningPhones.single.provider, 'dictionary+wav2vec2-ctc-timing');
   });
 
+  test('learning phones can reject observed-only CTC labels', () {
+    const observed = [
+      DetectedPhone(
+        symbol: 'K',
+        displayIpa: 'k',
+        phoneSet: 'arpabet',
+        start: Duration(milliseconds: 120),
+        end: Duration(milliseconds: 260),
+        confidence: 0.41,
+        tokenIndex: 0,
+        provider: 'wav2vec2-ctc',
+        modelRevision: 'v1',
+      ),
+    ];
+
+    final defaultFallback = buildLearningPhones(
+      pronunciation: null,
+      wordTimings: null,
+      observedPhones: observed,
+    );
+    final stableTextLine = buildLearningPhones(
+      pronunciation: null,
+      wordTimings: null,
+      observedPhones: observed,
+      allowObservedOnlyFallback: false,
+    );
+
+    expect(defaultFallback.single.symbol, 'K');
+    expect(stableTextLine, isEmpty);
+  });
+
   test('phoneme ribbon findings map observed evidence to learning phones', () {
     final soundAnalysis = SoundAnalysis.fromJson(const {
       'provider_id': 'wav2vec2-ctc-phoneme',

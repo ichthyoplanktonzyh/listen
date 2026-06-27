@@ -37,6 +37,7 @@ class SettingsDialog extends StatefulWidget {
     required this.wordAnimationIntensity,
     required this.ruleHintsLevel,
     required this.phonemeRibbonVisible,
+    required this.soundPatternRibbonVisible,
     required this.phonemeRibbonStyle,
     required this.phoneticAnalysisPreference,
     required this.learningLanguage,
@@ -67,6 +68,7 @@ class SettingsDialog extends StatefulWidget {
     required this.onWordAnimationIntensityChanged,
     required this.onRuleHintsLevelChanged,
     required this.onPhonemeRibbonVisibleChanged,
+    required this.onSoundPatternRibbonVisibleChanged,
     required this.onPhonemeRibbonStyleChanged,
     required this.onPhoneticAnalysisPreferenceChanged,
     required this.onSave,
@@ -101,6 +103,7 @@ class SettingsDialog extends StatefulWidget {
   final double wordAnimationIntensity;
   final String ruleHintsLevel;
   final bool phonemeRibbonVisible;
+  final bool soundPatternRibbonVisible;
   final String phonemeRibbonStyle;
   final String phoneticAnalysisPreference;
   final String learningLanguage;
@@ -133,6 +136,7 @@ class SettingsDialog extends StatefulWidget {
   final ValueChanged<double> onWordAnimationIntensityChanged;
   final ValueChanged<String> onRuleHintsLevelChanged;
   final ValueChanged<bool> onPhonemeRibbonVisibleChanged;
+  final ValueChanged<bool> onSoundPatternRibbonVisibleChanged;
   final ValueChanged<String> onPhonemeRibbonStyleChanged;
   final ValueChanged<String> onPhoneticAnalysisPreferenceChanged;
   final Future<void> Function({
@@ -172,6 +176,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late double wordAnimationIntensity;
   late String ruleHintsLevel;
   late bool phonemeRibbonVisible;
+  late bool soundPatternRibbonVisible;
   late String phonemeRibbonStyle;
   late String phoneticAnalysisPreference;
   late String learningLanguage;
@@ -218,6 +223,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     wordAnimationIntensity = widget.wordAnimationIntensity;
     ruleHintsLevel = widget.ruleHintsLevel;
     phonemeRibbonVisible = widget.phonemeRibbonVisible;
+    soundPatternRibbonVisible = widget.soundPatternRibbonVisible;
     phonemeRibbonStyle = widget.phonemeRibbonStyle;
     phoneticAnalysisPreference = widget.phoneticAnalysisPreference;
     learningLanguage = widget.learningLanguage;
@@ -433,6 +439,15 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   refresh(() {});
                 },
               ),
+              SwitchListTile(
+                value: soundPatternRibbonVisible,
+                title: Text(l.text('soundPatternRibbonVisible')),
+                onChanged: (value) {
+                  soundPatternRibbonVisible = value;
+                  widget.onSoundPatternRibbonVisibleChanged(value);
+                  refresh(() {});
+                },
+              ),
               DropdownButtonFormField<String>(
                 initialValue: phonemeRibbonStyle,
                 decoration: InputDecoration(
@@ -448,7 +463,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     child: Text(l.text('phonemeRibbonWave')),
                   ),
                 ],
-                onChanged: phonemeRibbonVisible
+                onChanged: phonemeRibbonVisible || soundPatternRibbonVisible
                     ? (value) {
                         if (value == null) return;
                         phonemeRibbonStyle = value;

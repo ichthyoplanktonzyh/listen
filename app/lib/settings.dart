@@ -47,6 +47,7 @@ class AppSettings {
     this.showExperimentalPhoneticResults = false,
     this.phonemeHighlightVisible = true,
     this.phonemeRibbonVisible = false,
+    this.soundPatternRibbonVisible = false,
     this.phonemeRibbonStyle = 'window',
     this.phoneticCachePolicy = 'keep_completed',
     this.learningLanguage = 'auto',
@@ -149,14 +150,13 @@ class AppSettings {
           json['show_experimental_phonetic_results'] as bool? ?? false,
       phonemeHighlightVisible:
           json['phoneme_highlight_visible'] as bool? ?? true,
-      phonemeRibbonVisible:
-          json['phoneme_ribbon_visible'] as bool? ?? false,
-      phonemeRibbonStyle:
-          _phonemeRibbonStyle(json['phoneme_ribbon_style']),
+      phonemeRibbonVisible: json['phoneme_ribbon_visible'] as bool? ?? false,
+      soundPatternRibbonVisible:
+          json['sound_pattern_ribbon_visible'] as bool? ?? false,
+      phonemeRibbonStyle: _phonemeRibbonStyle(json['phoneme_ribbon_style']),
       phoneticCachePolicy:
           json['phonetic_cache_policy'] as String? ?? 'keep_completed',
-      learningLanguage:
-          json['learning_language'] as String? ?? 'auto',
+      learningLanguage: json['learning_language'] as String? ?? 'auto',
     );
   }
 
@@ -204,6 +204,7 @@ class AppSettings {
   final bool showExperimentalPhoneticResults;
   final bool phonemeHighlightVisible;
   final bool phonemeRibbonVisible;
+  final bool soundPatternRibbonVisible;
   final String phonemeRibbonStyle;
   final String phoneticCachePolicy;
   final String learningLanguage;
@@ -296,6 +297,7 @@ class AppSettings {
         'show_experimental_phonetic_results': showExperimentalPhoneticResults,
         'phoneme_highlight_visible': phonemeHighlightVisible,
         'phoneme_ribbon_visible': phonemeRibbonVisible,
+        'sound_pattern_ribbon_visible': soundPatternRibbonVisible,
         'phoneme_ribbon_style': phonemeRibbonStyle,
         'phonetic_cache_policy': phoneticCachePolicy,
         'learning_language': learningLanguage,
@@ -348,6 +350,7 @@ class AppSettings {
     bool? showExperimentalPhoneticResults,
     bool? phonemeHighlightVisible,
     bool? phonemeRibbonVisible,
+    bool? soundPatternRibbonVisible,
     String? phonemeRibbonStyle,
     String? phoneticCachePolicy,
     String? learningLanguage,
@@ -406,6 +409,8 @@ class AppSettings {
     phonemeHighlightVisible:
         phonemeHighlightVisible ?? this.phonemeHighlightVisible,
     phonemeRibbonVisible: phonemeRibbonVisible ?? this.phonemeRibbonVisible,
+    soundPatternRibbonVisible:
+        soundPatternRibbonVisible ?? this.soundPatternRibbonVisible,
     phonemeRibbonStyle: phonemeRibbonStyle ?? this.phonemeRibbonStyle,
     phoneticCachePolicy: phoneticCachePolicy ?? this.phoneticCachePolicy,
     learningLanguage: learningLanguage ?? this.learningLanguage,
