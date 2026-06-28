@@ -21,29 +21,6 @@ CREATE TABLE subtitle_sentences (
 
 CREATE INDEX idx_subtitle_timeline ON subtitle_sentences(track_id, start_ms, end_ms);
 
-CREATE TABLE word_profiles (
-  id TEXT PRIMARY KEY NOT NULL,
-  language TEXT NOT NULL,
-  lemma TEXT NOT NULL,
-  normalized_lemma TEXT NOT NULL,
-  display_form TEXT NOT NULL,
-  status TEXT,
-  updated_at_ms INTEGER NOT NULL,
-  UNIQUE(language, normalized_lemma)
-);
-
-CREATE TABLE word_observations (
-  id TEXT PRIMARY KEY NOT NULL,
-  word_profile_id TEXT NOT NULL REFERENCES word_profiles(id) ON DELETE CASCADE,
-  sentence_id TEXT NOT NULL REFERENCES subtitle_sentences(id) ON DELETE CASCADE,
-  original_form TEXT NOT NULL,
-  result TEXT NOT NULL,
-  created_at_ms INTEGER NOT NULL
-);
-
-CREATE INDEX idx_observation_sentence ON word_observations(sentence_id);
-CREATE INDEX idx_observation_word ON word_observations(word_profile_id);
-
 CREATE TABLE dictionary_cache (
   id TEXT PRIMARY KEY NOT NULL,
   language TEXT NOT NULL,

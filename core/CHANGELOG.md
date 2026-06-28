@@ -2,6 +2,65 @@
 
 ## Unreleased
 
+- 2026-06-28 08:59 CST: Phase 2.18 前端 typed payload 与 workflow 收口。
+  (1) **Typed payload**: Flutter 新增/补齐 `DictionaryLookupBundle`、`WordPronunciation`、
+  `PronunciationAnalysis`、`PhoneticAnalysis`、`PhoneticFinding` 等 DTO，`LearningController` /
+  `SubtitleController` 不再以裸 `Map<String, dynamic>` 保存 dictionary、pronunciation、phonetic-analysis
+  业务状态。
+  (2) **Widget boundary**: `WordLearningPanel` 和 `DiagnosisCard` 改为消费 typed DTO。
+  (3) **Workflow extraction**: phrase candidate、word entry load/open/update、lexical observation、
+  learning-content save 下沉到 `LearningWorkflowController`；timeline resource refresh、word timing、
+  sentence pronunciation、chunk partition、phone/sound-pattern analysis 加载下沉到
+  `SpeechEnhancementWorkflowController`，`main.dart` 进一步收缩为 UI wiring/status。
+  验证: `flutter analyze apps/desktop`、`flutter test --reporter compact` 通过。
+
+- 2026-06-27 18:20 CST: Phase 2.18 主路径重构完成候选。
+  (1) **旧学习资产路径删除**: active code path 收敛为 `LexicalEntry + LexicalUnit`；
+  旧 word-profile domain/repository/API/OpenAPI/generated client/script/Flutter fixture 路径已移除。
+  (2) **词汇与诊断**: diagnosis、lexical observation、vocabulary v5 export/import 均使用 lexical entry。
+  (3) **Flutter typed state**: `LearningController` 改为 typed lexical entries、phrase candidates、
+  selected details、language profile 和 diagnosis；TokenLine 使用 typed phrase candidate/lexical entry。
+  (4) **Timeline envelope**: Rust 与 Flutter 新增 `TimelineMetrics` / `ChunkEvidence` typed envelope，
+  保留 object-shaped `metrics_json` / `evidence_json` wire/storage 字段。
+  (5) **文档事实源**: 刷新 `.planning/codebase/ARCHITECTURE.md` 与
+  `.planning/codebase/DATA-MODEL.md`。
+  验证: `cargo check -p domain -p application -p persistence-sqlite -p api-http`、
+  `cargo test -p application -p persistence-sqlite -p api-http --quiet`、
+  `flutter analyze apps/desktop`、`flutter test --reporter compact` 通过。
+
+- 2026-06-27 16:45 CST: Phase 2.18 重构首轮落地。
+  (1) **契约**: 补齐缺失 OpenAPI/generated client 路由，并让 contract validation 双向校验 router
+  与 OpenAPI path set。
+  (2) **Rust 边界**: `AppServices` 拆出 subtitle track、pronunciation、timeline resource、
+  LLTimeline resource repository 依赖；learning asset 边界更名为 `LearningAssetRepository`。
+  (3) **学习资产模型**: `LexicalEntry` 新增权威 `LexicalUnit`，SQLite lexical 唯一性改为
+  `language + granularity + normalization + normalized_key`；`WordStatus` 更名为 `LearningStatus`。
+  (4) **应用 DTO**: `application::dto` 不再公开 `speech_analysis` 类型别名。
+  (5) **Timeline 生命周期**: SQLite word/chunk/phone timeline runs 增加每 track 单 active partial unique
+  index，并新增 schema-level 测试。
+  (6) **Flutter 状态流**: 新增 typed `BackendEvent`、`BackendEventCoordinator` 和带 generation guard 的
+  `LearningWorkflowController.refreshDiagnosis()`。
+  验证: `cargo test -p application --quiet`、`cargo test -p api-http openapi --quiet`、
+  `cargo test -p persistence-sqlite --quiet`、`./scripts/validate-contracts.sh`、
+  `./scripts/test.sh --quick --low-memory` 通过。
+
+- 2026-06-27 15:38 CST: Phase 2.18 明确为非兼容式断代重构。
+  (1) **兼容性决策**: 用户确认不需要考虑历史兼容性，旧 SQLite 数据、旧 LLTimeline 资源、
+  旧 WordProfile 资源、旧 API/UI adapter 均可抛弃。
+  (2) **规划调整**: Phase 2.18 文档从“legacy adapter / 可迁移”改为“新模型优先 / 旧路径删除”，
+  默认以 `LexicalEntry + LexicalUnit`、统一 timeline lifecycle、typed Flutter state 和新 contract 为准。
+
+- 2026-06-27 15:33 CST: 扩展 Phase 2.18 为 Codebase Architecture Refactor。
+  (1) **范围升级**: 根据用户追加要求，将原“架构契约与项目卫生”阶段升级为代码层面的全面重构阶段，
+  覆盖核心学习资产模型、timeline lifecycle、repository/use-case/API 边界、Flutter 状态机与
+  async generation guard。
+  (2) **新增审计**: 新增
+  `.planning/phases/2.18-codebase-architecture-refactor/2.18-REFACTOR-AUDIT.md`，
+  记录 `WordProfile` / `LexicalEntry` / `LexicalUnit` 并存、`SubtitleRepository` 过宽、
+  `application::dto` 泄漏 `speech_analysis` DTO、`main.dart` orchestrator 过重和动态 JSON 状态等问题。
+  (3) **规划同步**: 将 Phase 2.18 文档迁移到
+  `.planning/phases/2.18-codebase-architecture-refactor/`，并更新 `.planning/STATE.md`。
+
 - 2026-06-27 12:50 CST: 创建 Phase 2.17 — Real Media Sound-Line QA。
   (1) **阶段目标**: 从继续扩展模型能力转向真实英语媒体回归包，验证
   `sound_analysis.connected_speech`、声音线 marker、evidence 回放和 raw CTC mismatch

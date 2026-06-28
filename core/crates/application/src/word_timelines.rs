@@ -5,14 +5,14 @@ impl AppServices {
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<WordTimeline>, ApplicationError> {
-        self.subtitles.list_word_timelines(track_id)
+        self.timelines.list_word_timelines(track_id)
     }
 
     pub fn summarize_word_timelines(
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<WordTimelineSummary>, ApplicationError> {
-        let timelines = self.subtitles.list_word_timelines(track_id)?;
+        let timelines = self.timelines.list_word_timelines(track_id)?;
         Ok(timelines
             .iter()
             .map(word_timeline_summary)
@@ -23,7 +23,7 @@ impl AppServices {
         &self,
         id: &WordTimelineId,
     ) -> Result<Option<WordTimeline>, ApplicationError> {
-        self.subtitles.get_word_timeline(id)
+        self.timelines.get_word_timeline(id)
     }
 
     pub fn create_word_timeline(
@@ -32,7 +32,7 @@ impl AppServices {
         input: CreateWordTimeline,
     ) -> Result<WordTimeline, ApplicationError> {
         let track = self
-            .subtitles
+            .subtitle_tracks
             .get_track(track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         let words = validate_word_timeline_words(&track, &input.words)?;
@@ -51,9 +51,9 @@ impl AppServices {
         if requested_status == TimelineStatus::Active {
             timeline.status = TimelineStatus::Candidate;
         }
-        let timeline = self.subtitles.save_word_timeline(&timeline)?;
+        let timeline = self.timelines.save_word_timeline(&timeline)?;
         if requested_status == TimelineStatus::Active {
-            self.subtitles.activate_word_timeline(&timeline.id)
+            self.timelines.activate_word_timeline(&timeline.id)
         } else {
             Ok(timeline)
         }
@@ -63,14 +63,14 @@ impl AppServices {
         &self,
         id: &WordTimelineId,
     ) -> Result<WordTimeline, ApplicationError> {
-        self.subtitles.activate_word_timeline(id)
+        self.timelines.activate_word_timeline(id)
     }
 
     pub fn archive_word_timeline(
         &self,
         id: &WordTimelineId,
     ) -> Result<WordTimeline, ApplicationError> {
-        self.subtitles.archive_word_timeline(id)
+        self.timelines.archive_word_timeline(id)
     }
 
     pub fn publish_word_timeline(
@@ -78,7 +78,7 @@ impl AppServices {
         id: &WordTimelineId,
     ) -> Result<WordTimeline, ApplicationError> {
         let mut timeline = self
-            .subtitles
+            .timelines
             .get_word_timeline(id)?
             .ok_or(ApplicationError::NotFound("word timeline"))?;
         if timeline.status == TimelineStatus::Archived {
@@ -86,15 +86,15 @@ impl AppServices {
         }
         mark_word_timeline_published(&mut timeline);
         timeline.updated_at_ms = now_ms();
-        let timeline = self.subtitles.save_word_timeline(&timeline)?;
-        self.subtitles.activate_word_timeline(&timeline.id)
+        let timeline = self.timelines.save_word_timeline(&timeline)?;
+        self.timelines.activate_word_timeline(&timeline.id)
     }
 
     pub fn delete_word_timeline(
         &self,
         id: &WordTimelineId,
     ) -> Result<WordTimeline, ApplicationError> {
-        self.subtitles.delete_word_timeline(id)
+        self.timelines.delete_word_timeline(id)
     }
 
     pub fn word_timing_diagnostics_for_track(
@@ -102,7 +102,7 @@ impl AppServices {
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<SentenceWordTimingDiagnostics>, ApplicationError> {
         let track = self
-            .subtitles
+            .subtitle_tracks
             .get_track(track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         track
@@ -144,29 +144,31 @@ impl AppServices {
         track_id: &SubtitleTrackId,
     ) -> Result<LLTimelineDocument, ApplicationError> {
         let track = self
-            .subtitles
+            .subtitle_tracks
             .get_track(track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         let media = self
             .media
             .get(&track.media_id)?
             .ok_or(ApplicationError::NotFound("media item"))?;
-        let word_timelines = self.subtitles.list_word_timelines(track_id)?;
+        let word_timelines = self.timelines.list_word_timelines(track_id)?;
         let active_word_timeline_id = word_timelines
             .iter()
             .find(|timeline| timeline.status == TimelineStatus::Active)
             .map(|timeline| timeline.id.clone());
-        let chunk_timelines = self.subtitles.list_chunk_timelines(track_id)?;
+        let chunk_timelines = self.timelines.list_chunk_timelines(track_id)?;
         let active_chunk_timeline_id = chunk_timelines
             .iter()
             .find(|timeline| timeline.status == TimelineStatus::Active)
             .map(|timeline| timeline.id.clone());
-        let phone_timelines = self.subtitles.list_phone_timelines(track_id)?;
+        let phone_timelines = self.timelines.list_phone_timelines(track_id)?;
         let active_phone_timeline_id = phone_timelines
             .iter()
             .find(|timeline| timeline.status == TimelineStatus::Active)
             .map(|timeline| timeline.id.clone());
-        let persisted_resource = self.subtitles.get_lltimeline_resource(track_id)?;
+        let persisted_resource = self
+            .lltimeline_resources
+            .get_lltimeline_resource(track_id)?;
         let (metadata, artifacts) = if let Some((mut metadata, artifacts)) = persisted_resource {
             metadata.media = LLTimelineMedia {
                 id: media.id,
@@ -272,8 +274,8 @@ impl AppServices {
             status: SubtitleTrackStatus::Available,
             sentences: lltimeline_segments_to_sentences(&document.segments)?,
         };
-        self.subtitles.save_track(&track)?;
-        self.subtitles.save_lltimeline_resource(
+        self.subtitle_tracks.save_track(&track)?;
+        self.lltimeline_resources.save_lltimeline_resource(
             &track.id,
             &document.metadata,
             &document.artifacts,
@@ -288,10 +290,10 @@ impl AppServices {
             {
                 timeline.status = TimelineStatus::Candidate;
             }
-            self.subtitles.save_word_timeline(&timeline)?;
+            self.timelines.save_word_timeline(&timeline)?;
         }
         if let Some(active_id) = document.active_word_timeline_id {
-            self.subtitles.activate_word_timeline(&active_id)?;
+            self.timelines.activate_word_timeline(&active_id)?;
         }
 
         for mut timeline in document.phone_timelines {
@@ -303,10 +305,10 @@ impl AppServices {
             {
                 timeline.status = TimelineStatus::Candidate;
             }
-            self.subtitles.save_phone_timeline(&timeline)?;
+            self.timelines.save_phone_timeline(&timeline)?;
         }
         if let Some(active_id) = document.active_phone_timeline_id {
-            self.subtitles.activate_phone_timeline(&active_id)?;
+            self.timelines.activate_phone_timeline(&active_id)?;
         }
 
         for mut timeline in document.chunk_timelines {
@@ -318,10 +320,10 @@ impl AppServices {
             {
                 timeline.status = TimelineStatus::Candidate;
             }
-            self.subtitles.save_chunk_timeline(&timeline)?;
+            self.timelines.save_chunk_timeline(&timeline)?;
         }
         if let Some(active_id) = document.active_chunk_timeline_id {
-            self.subtitles.activate_chunk_timeline(&active_id)?;
+            self.timelines.activate_chunk_timeline(&active_id)?;
         }
 
         Ok(track)
@@ -346,7 +348,7 @@ impl AppServices {
         }
         let track_fingerprint = lltimeline_track_fingerprint(&document);
         let track_id = self
-            .subtitles
+            .subtitle_tracks
             .get_by_media_fingerprint(&media.id, &track_fingerprint)?
             .map(|track| track.id)
             .unwrap_or_else(|| {

@@ -17,6 +17,10 @@ CREATE INDEX phone_timeline_runs_track_idx
 CREATE INDEX phone_timeline_runs_track_status_idx
   ON phone_timeline_runs(track_id, status, updated_at_ms DESC);
 
+CREATE UNIQUE INDEX phone_timeline_runs_one_active_per_track_idx
+  ON phone_timeline_runs(track_id)
+  WHERE status = '"active"';
+
 CREATE INDEX phone_timeline_runs_sentence_idx
   ON phone_timeline_runs(sentence_id, created_at_ms DESC);
 

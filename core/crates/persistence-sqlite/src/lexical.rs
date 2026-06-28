@@ -1,6 +1,6 @@
-use application::{ApplicationError, LexicalEntryRepository, LexicalSourceContext};
+use application::{ApplicationError, LearningAssetRepository, LexicalSourceContext};
 use domain::*;
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{OptionalExtension, params, params_from_iter};
 use std::collections::HashMap;
 
 use super::{SqliteRepository, from_json, json, repo};
@@ -9,6 +9,7 @@ type LexicalAssets = (
     Vec<LexicalEntry>,
     Vec<LexicalStatusHistory>,
     Vec<LexicalOccurrence>,
+    Vec<LexicalObservation>,
 );
 
 impl SqliteRepository {
@@ -17,7 +18,8 @@ impl SqliteRepository {
         let entries = {
             let mut statement = conn
                 .prepare(
-                    "SELECT id,language,kind,canonical_form,normalized_form,display_form,status,
+                    "SELECT id,language,kind,granularity,normalization,normalized_key,
+                            canonical_form,normalized_form,display_form,status,
                             user_definition,personal_note,normalization_provider,normalization_version,
                             user_corrected,updated_at_ms,learning_updated_at_ms FROM lexical_entries",
                 )
@@ -56,7 +58,21 @@ impl SqliteRepository {
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(repo)?
         };
-        Ok((entries, history, occurrences))
+        let observations = {
+            let mut statement = conn
+                .prepare(
+                    "SELECT id,lexical_entry_id,COALESCE(sentence_id,sentence_id_snapshot),
+                            original_form,result,created_at_ms
+                     FROM lexical_observations WHERE cleared_at_ms IS NULL",
+                )
+                .map_err(repo)?;
+            statement
+                .query_map([], lexical_observation_row)
+                .map_err(repo)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(repo)?
+        };
+        Ok((entries, history, occurrences, observations))
     }
 
     pub(super) fn import_lexical_assets(
@@ -64,13 +80,14 @@ impl SqliteRepository {
         entries: &[LexicalEntry],
         history: &[LexicalStatusHistory],
         occurrences: &[LexicalOccurrence],
+        observations: &[LexicalObservation],
     ) -> Result<(), ApplicationError> {
         let mut imported_ids = HashMap::new();
         for entry in entries {
             let local =
-                self.lexical_entry_by_key(&entry.language, entry.kind, &entry.normalized_form)?;
+                self.lexical_entry_by_key(&entry.language, entry.kind, &entry.unit.normalized_key)?;
             let merged = merge_imported_entry(local.as_ref(), entry);
-            let details = self.upsert_lexical_entry(&merged, None, WordChangeSource::Import)?;
+            let details = self.upsert_lexical_entry(&merged, None, LearningChangeSource::Import)?;
             imported_ids.insert(entry.id.clone(), details.entry.id);
         }
         let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
@@ -149,6 +166,35 @@ impl SqliteRepository {
             )
             .map_err(repo)?;
         }
+        for value in observations {
+            let lexical_entry_id = imported_ids
+                .get(&value.lexical_entry_id)
+                .unwrap_or(&value.lexical_entry_id);
+            let id = LexicalObservationId::from_fingerprint(
+                "lexical-observation",
+                &format!(
+                    "{}:{}:{}",
+                    lexical_entry_id.as_str(),
+                    value.sentence_id.as_str(),
+                    value.created_at_ms
+                ),
+            );
+            tx.execute(
+                "INSERT OR IGNORE INTO lexical_observations
+                 (id,lexical_entry_id,sentence_id,sentence_id_snapshot,original_form,result,
+                  created_at_ms,cleared_at_ms)
+                 VALUES (?1,?2,NULL,?3,?4,?5,?6,NULL)",
+                params![
+                    id.as_str(),
+                    lexical_entry_id.as_str(),
+                    value.sentence_id.as_str(),
+                    value.original_form,
+                    json(&value.result)?,
+                    value.created_at_ms,
+                ],
+            )
+            .map_err(repo)?;
+        }
         tx.commit().map_err(repo)
     }
 }
@@ -175,23 +221,29 @@ fn merge_imported_entry(local: Option<&LexicalEntry>, imported: &LexicalEntry) -
     merged
 }
 
-impl LexicalEntryRepository for SqliteRepository {
+impl LearningAssetRepository for SqliteRepository {
     fn upsert_lexical_entry(
         &self,
         entry: &LexicalEntry,
         source: Option<&LexicalSourceContext>,
-        change_source: WordChangeSource,
+        change_source: LearningChangeSource,
     ) -> Result<LexicalEntryDetails, ApplicationError> {
+        if entry.unit.language.as_str() != entry.language.as_str()
+            || entry.unit.normalized_key.as_str() != entry.normalized_form.as_str()
+        {
+            return Err(ApplicationError::Validation("lexical unit identity"));
+        }
         let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
         let tx = conn.transaction().map_err(repo)?;
         let effective_id = tx
             .query_row(
                 "SELECT id FROM lexical_entries
-                 WHERE language=?1 AND kind=?2 AND normalized_form=?3",
+                 WHERE language=?1 AND granularity=?2 AND normalization=?3 AND normalized_key=?4",
                 params![
-                    entry.language.as_str(),
-                    json(&entry.kind)?,
-                    entry.normalized_form
+                    entry.unit.language.as_str(),
+                    entry.unit.granularity.as_str(),
+                    entry.unit.normalization.as_str(),
+                    entry.unit.normalized_key.as_str()
                 ],
                 |row| row.get::<_, String>(0),
             )
@@ -214,11 +266,13 @@ impl LexicalEntryRepository for SqliteRepository {
             .map_err(repo)?;
         tx.execute(
             "INSERT INTO lexical_entries
-             (id,language,kind,canonical_form,normalized_form,display_form,status,
+             (id,language,kind,granularity,normalization,normalized_key,
+              canonical_form,normalized_form,display_form,status,
               user_definition,personal_note,normalization_provider,normalization_version,
               user_corrected,updated_at_ms,learning_updated_at_ms)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)
-             ON CONFLICT(language,kind,normalized_form) DO UPDATE SET
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)
+             ON CONFLICT(language,granularity,normalization,normalized_key) DO UPDATE SET
+               kind=excluded.kind,
                canonical_form=excluded.canonical_form,
                display_form=excluded.display_form,status=excluded.status,
                user_definition=COALESCE(excluded.user_definition,user_definition),
@@ -232,14 +286,17 @@ impl LexicalEntryRepository for SqliteRepository {
                 effective_id.as_str(),
                 entry.language.as_str(),
                 json(&entry.kind)?,
-                entry.canonical_form,
-                entry.normalized_form,
-                entry.display_form,
+                entry.unit.granularity.as_str(),
+                entry.unit.normalization.as_str(),
+                entry.unit.normalized_key.as_str(),
+                entry.canonical_form.as_str(),
+                entry.normalized_form.as_str(),
+                entry.display_form.as_str(),
                 entry.status.map(|value| json(&value)).transpose()?,
-                entry.user_definition,
-                entry.personal_note,
-                entry.normalization_provider,
-                entry.normalization_version,
+                entry.user_definition.as_deref(),
+                entry.personal_note.as_deref(),
+                entry.normalization_provider.as_str(),
+                entry.normalization_version.as_str(),
                 entry.user_corrected,
                 entry.updated_at_ms,
                 entry.learning_updated_at_ms,
@@ -328,7 +385,8 @@ impl LexicalEntryRepository for SqliteRepository {
         let conn = self.connection.lock().expect("sqlite mutex poisoned");
         let entry = conn
             .query_row(
-                "SELECT id,language,kind,canonical_form,normalized_form,display_form,status,
+                "SELECT id,language,kind,granularity,normalization,normalized_key,
+                        canonical_form,normalized_form,display_form,status,
                         user_definition,personal_note,normalization_provider,normalization_version,
                         user_corrected,updated_at_ms,learning_updated_at_ms
                  FROM lexical_entries WHERE id=?1",
@@ -378,7 +436,7 @@ impl LexicalEntryRepository for SqliteRepository {
         &self,
         language: &LanguageCode,
         kind: Option<LexicalEntryKind>,
-        status: Option<WordStatus>,
+        status: Option<LearningStatus>,
         search: &str,
         limit: u32,
         offset: u32,
@@ -392,9 +450,9 @@ impl LexicalEntryRepository for SqliteRepository {
                      WHERE e.language=?1
                        AND (?2 IS NULL OR e.kind=?2)
                        AND (?3 IS NULL OR e.status=?3)
-                       AND (?4='' OR e.normalized_form LIKE '%'||?4||'%' OR e.display_form LIKE '%'||?4||'%')
+                       AND (?4='' OR e.normalized_key LIKE '%'||?4||'%' OR e.display_form LIKE '%'||?4||'%')
                      GROUP BY e.id
-                     ORDER BY COALESCE(MAX(o.last_seen_at_ms),e.updated_at_ms) DESC,e.normalized_form
+                     ORDER BY COALESCE(MAX(o.last_seen_at_ms),e.updated_at_ms) DESC,e.normalized_key
                      LIMIT ?5 OFFSET ?6",
                 )
                 .map_err(repo)?;
@@ -472,38 +530,222 @@ impl LexicalEntryRepository for SqliteRepository {
             .lock()
             .expect("sqlite mutex poisoned")
             .query_row(
-                "SELECT id,language,kind,canonical_form,normalized_form,display_form,status,
+                "SELECT id,language,kind,granularity,normalization,normalized_key,
+                        canonical_form,normalized_form,display_form,status,
                         user_definition,personal_note,normalization_provider,normalization_version,
                         user_corrected,updated_at_ms,learning_updated_at_ms
                  FROM lexical_entries
-                 WHERE language=?1 AND kind=?2 AND normalized_form=?3",
+                 WHERE language=?1 AND kind=?2 AND normalized_key=?3",
                 params![language.as_str(), json(&kind)?, normalized_form],
                 lexical_entry_row,
             )
             .optional()
             .map_err(repo)
     }
+
+    fn lexical_entries_by_keys(
+        &self,
+        language: &LanguageCode,
+        kind: LexicalEntryKind,
+        normalized_forms: &[String],
+    ) -> Result<Vec<LexicalEntry>, ApplicationError> {
+        if normalized_forms.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = std::iter::repeat_n("?", normalized_forms.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT id,language,kind,granularity,normalization,normalized_key,
+                    canonical_form,normalized_form,display_form,status,
+                    user_definition,personal_note,normalization_provider,normalization_version,
+                    user_corrected,updated_at_ms,learning_updated_at_ms
+             FROM lexical_entries
+             WHERE language=? AND kind=? AND normalized_key IN ({placeholders})"
+        );
+        let mut values = vec![language.as_str().to_owned(), json(&kind)?];
+        values.extend(normalized_forms.iter().cloned());
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = conn.prepare(&sql).map_err(repo)?;
+        statement
+            .query_map(params_from_iter(values), lexical_entry_row)
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
+    fn create_lexical_observation(
+        &self,
+        observation: &LexicalObservation,
+    ) -> Result<LexicalObservation, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "INSERT INTO lexical_observations
+                 (id,lexical_entry_id,sentence_id,sentence_id_snapshot,original_form,result,
+                  created_at_ms,cleared_at_ms)
+                 VALUES (?1,?2,?3,?3,?4,?5,?6,NULL)
+                 ON CONFLICT(lexical_entry_id,sentence_id) DO UPDATE SET
+                   id=excluded.id,
+                   original_form=excluded.original_form,
+                   result=excluded.result,
+                   created_at_ms=excluded.created_at_ms,
+                   cleared_at_ms=NULL",
+                params![
+                    observation.id.as_str(),
+                    observation.lexical_entry_id.as_str(),
+                    observation.sentence_id.as_str(),
+                    observation.original_form,
+                    json(&observation.result)?,
+                    observation.created_at_ms,
+                ],
+            )
+            .map_err(repo)?;
+        Ok(observation.clone())
+    }
+
+    fn list_lexical_observations_by_sentence(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<Vec<LexicalObservation>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = conn
+            .prepare(
+                "SELECT id,lexical_entry_id,COALESCE(sentence_id,sentence_id_snapshot),
+                        original_form,result,created_at_ms
+                 FROM lexical_observations
+                 WHERE sentence_id=?1 AND cleared_at_ms IS NULL
+                 ORDER BY created_at_ms",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map([sentence_id.as_str()], lexical_observation_row)
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
+    fn clear_lexical_observation(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<(), ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "UPDATE lexical_observations SET cleared_at_ms=unixepoch('subsec') * 1000
+                 WHERE lexical_entry_id=?1 AND sentence_id=?2",
+                params![lexical_entry_id.as_str(), sentence_id.as_str()],
+            )
+            .map(|_| ())
+            .map_err(repo)
+    }
+
+    fn update_lexical_learning_content(
+        &self,
+        id: &LexicalEntryId,
+        user_definition: Option<String>,
+        personal_note: Option<String>,
+        updated_at_ms: u64,
+    ) -> Result<LexicalEntryDetails, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "UPDATE lexical_entries
+                 SET user_definition=?2,personal_note=?3,learning_updated_at_ms=?4
+                 WHERE id=?1",
+                params![
+                    id.as_str(),
+                    user_definition.as_deref(),
+                    personal_note.as_deref(),
+                    updated_at_ms,
+                ],
+            )
+            .map_err(repo)?;
+        self.lexical_details(id)?
+            .ok_or(ApplicationError::NotFound("lexical entry"))
+    }
+
+    fn export_assets(&self) -> Result<VocabularyAssetBundle, ApplicationError> {
+        let (lexical_entries, lexical_history, lexical_occurrences, lexical_observations) =
+            self.export_lexical_assets()?;
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        Ok(VocabularyAssetBundle {
+            version: 5,
+            exported_at_ms: application::now_ms(),
+            lexical_entries,
+            lexical_history,
+            lexical_occurrences,
+            lexical_observations,
+            phonetic_finding_feedback: read_all_phonetic_feedback(&conn)?,
+        })
+    }
+
+    fn import_assets(&self, bundle: &VocabularyAssetBundle) -> Result<(), ApplicationError> {
+        self.import_lexical_assets(
+            &bundle.lexical_entries,
+            &bundle.lexical_history,
+            &bundle.lexical_occurrences,
+            &bundle.lexical_observations,
+        )?;
+        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let tx = conn.transaction().map_err(repo)?;
+        for feedback in &bundle.phonetic_finding_feedback {
+            tx.execute(
+                "INSERT INTO phonetic_finding_feedback(finding_id,feedback_json,updated_at_ms)
+                 VALUES (?1,?2,?3)
+                 ON CONFLICT(finding_id) DO UPDATE SET
+                   feedback_json=CASE
+                     WHEN excluded.updated_at_ms>updated_at_ms THEN excluded.feedback_json
+                     ELSE feedback_json END,
+                   updated_at_ms=MAX(updated_at_ms,excluded.updated_at_ms)",
+                params![
+                    feedback.finding_id.as_str(),
+                    json(feedback)?,
+                    feedback.updated_at_ms
+                ],
+            )
+            .map_err(repo)?;
+        }
+        tx.commit().map_err(repo)
+    }
 }
 
 fn lexical_entry_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LexicalEntry> {
+    let language = LanguageCode::parse(row.get::<_, String>(1)?).map_err(super::domain_sql)?;
+    let kind = from_json(&row.get::<_, String>(2)?)?;
+    let granularity = row.get::<_, String>(3)?;
+    let normalization = row.get::<_, String>(4)?;
+    let normalized_key = row.get::<_, String>(5)?;
+    let display_form = row.get::<_, String>(8)?;
     Ok(LexicalEntry {
         id: LexicalEntryId::parse(row.get::<_, String>(0)?).map_err(super::domain_sql)?,
-        language: LanguageCode::parse(row.get::<_, String>(1)?).map_err(super::domain_sql)?,
-        kind: from_json(&row.get::<_, String>(2)?)?,
-        canonical_form: row.get(3)?,
-        normalized_form: row.get(4)?,
-        display_form: row.get(5)?,
+        unit: LexicalUnit::new(
+            language.clone(),
+            granularity,
+            normalization,
+            normalized_key,
+            display_form.clone(),
+        ),
+        language,
+        kind,
+        canonical_form: row.get(6)?,
+        normalized_form: row.get(7)?,
+        display_form,
         status: row
-            .get::<_, Option<String>>(6)?
+            .get::<_, Option<String>>(9)?
             .map(|value| from_json(&value))
             .transpose()?,
-        user_definition: row.get(7)?,
-        personal_note: row.get(8)?,
-        normalization_provider: row.get(9)?,
-        normalization_version: row.get(10)?,
-        user_corrected: row.get(11)?,
-        updated_at_ms: row.get(12)?,
-        learning_updated_at_ms: row.get(13)?,
+        user_definition: row.get(10)?,
+        personal_note: row.get(11)?,
+        normalization_provider: row.get(12)?,
+        normalization_version: row.get(13)?,
+        user_corrected: row.get(14)?,
+        updated_at_ms: row.get(15)?,
+        learning_updated_at_ms: row.get(16)?,
     })
 }
 
@@ -553,4 +795,32 @@ fn lexical_occurrence_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LexicalOc
         last_seen_at_ms: row.get(14)?,
         encounter_count: row.get(15)?,
     })
+}
+
+fn lexical_observation_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LexicalObservation> {
+    Ok(LexicalObservation {
+        id: LexicalObservationId::parse(row.get::<_, String>(0)?).map_err(super::domain_sql)?,
+        lexical_entry_id: LexicalEntryId::parse(row.get::<_, String>(1)?)
+            .map_err(super::domain_sql)?,
+        sentence_id: SubtitleSentenceId::parse(row.get::<_, String>(2)?)
+            .map_err(super::domain_sql)?,
+        original_form: row.get(3)?,
+        result: from_json(&row.get::<_, String>(4)?)?,
+        created_at_ms: row.get(5)?,
+    })
+}
+
+fn read_all_phonetic_feedback(
+    conn: &rusqlite::Connection,
+) -> Result<Vec<PhoneticFindingFeedback>, ApplicationError> {
+    let mut statement = conn
+        .prepare(
+            "SELECT feedback_json FROM phonetic_finding_feedback ORDER BY updated_at_ms,finding_id",
+        )
+        .map_err(repo)?;
+    statement
+        .query_map([], |row| from_json(&row.get::<_, String>(0)?))
+        .map_err(repo)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(repo)
 }

@@ -218,6 +218,29 @@ paths:
                 $ref: "#/components/schemas/SubtitleTrack"
         default:
           $ref: "#/components/responses/Error"
+  /v1/subtitles/{track_id}/language:
+    parameters:
+      - name: track_id
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      operationId: updateTrackLanguage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTrackLanguage"
+      responses:
+        "200":
+          description: Updated subtitle learning language
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubtitleTrack"
+        default:
+          $ref: "#/components/responses/Error"
   /v1/subtitles/{track_id}/export:
     get:
       operationId: exportSubtitle
@@ -586,13 +609,27 @@ paths:
       operationId: retrySpeechBatchJob
       responses:
         "200": { description: Retried speech enhancement batch job }
+  /v1/lexical-entries/batch:
+    post:
+      operationId: readLexicalEntries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BatchLexicalEntries" }
+      responses:
+        "200":
+          description: Existing lexical entries for normalized forms
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/LexicalEntry" } }
   /v1/lexical-entries:
     get:
       operationId: listLexicalEntries
       parameters:
         - { name: language, in: query, schema: { type: string, default: en } }
         - { name: kind, in: query, schema: { enum: [word, phrase] } }
-        - { name: status, in: query, schema: { $ref: "#/components/schemas/WordStatus" } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/LearningStatus" } }
         - { name: search, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
         - { name: offset, in: query, schema: { type: integer, minimum: 0 } }
@@ -626,6 +663,38 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/LexicalEntryDetails" }
+  /v1/lexical-entries/{id}/learning-content:
+    put:
+      operationId: updateLexicalLearningContent
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateLexicalLearningContent" }
+      responses:
+        "200":
+          description: Updated lexical learning content
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LexicalEntryDetails" }
+  /v1/lexical-observations:
+    post:
+      operationId: createLexicalObservation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateLexicalObservation" }
+      responses:
+        "200":
+          description: Context-specific listening observation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LexicalObservation" }
+        "204":
+          description: Observation cleared
   /v1/lexical-normalization:
     post:
       operationId: normalizeLexical
@@ -723,83 +792,6 @@ paths:
             schema: { $ref: "#/components/schemas/SubtitleDownloadRequest" }
       responses:
         "200": { description: Downloaded subtitle bytes }
-  /v1/word-profiles:
-    get:
-      operationId: readWordProfile
-      parameters:
-        - name: language
-          in: query
-          required: true
-          schema: { type: string }
-        - name: lemma
-          in: query
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: Profile or null when not classified
-          content:
-            application/json:
-              schema:
-                anyOf:
-                  - $ref: "#/components/schemas/WordProfile"
-                  - type: "null"
-        default:
-          $ref: "#/components/responses/Error"
-    put:
-      operationId: updateWordProfile
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateWordProfile"
-      responses:
-        "200":
-          description: Updated profile
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WordProfile"
-        default:
-          $ref: "#/components/responses/Error"
-  /v1/word-profiles/batch:
-    post:
-      operationId: readWordProfiles
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BatchWordProfiles"
-      responses:
-        "200":
-          description: Existing profiles; absent lemmas are unclassified
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/WordProfile" }
-        default:
-          $ref: "#/components/responses/Error"
-  /v1/word-observations:
-    post:
-      operationId: createWordObservation
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateWordObservation"
-      responses:
-        "200":
-          description: Context-specific listening observation
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WordObservation"
-        default:
-          $ref: "#/components/responses/Error"
   /v1/vocabulary:
     get:
       operationId: listVocabulary
@@ -814,7 +806,7 @@ paths:
           description: Dynamic vocabulary book
           content:
             application/json:
-              schema: { type: array, items: { $ref: "#/components/schemas/WordDetails" } }
+              schema: { type: array, items: { $ref: "#/components/schemas/LexicalEntryDetails" } }
   /v1/vocabulary/export:
     get:
       operationId: exportVocabulary
@@ -848,37 +840,6 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ExternalVocabularyImportSummary" }
-  /v1/word-profiles/{profile_id}/details:
-    get:
-      operationId: wordDetails
-      parameters:
-        - { name: profile_id, in: path, required: true, schema: { type: string } }
-      responses:
-        "200":
-          description: Profile, history and durable sources
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/WordDetails" }
-  /v1/word-profiles/{profile_id}/learning-content:
-    put:
-      operationId: updateWordLearningContent
-      parameters:
-        - { name: profile_id, in: path, required: true, schema: { type: string } }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                user_definition: { type: [string, "null"] }
-                personal_note: { type: [string, "null"] }
-      responses:
-        "200":
-          description: Updated learning content and word details
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/WordDetails" }
   /v1/media/{media_id}/availability:
     put:
       operationId: updateMediaAvailability
@@ -924,6 +885,36 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/DictionaryLookupBundle" }
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/languages:
+    get:
+      operationId: listLanguages
+      responses:
+        "200":
+          description: Declared learning languages
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: string }
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/languages/{code}/profile:
+    parameters:
+      - name: code
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: languageProfile
+      responses:
+        "200":
+          description: Learning capability profile for one language
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LanguageLearningProfile"
         default:
           $ref: "#/components/responses/Error"
   /v1/sentences/{sentence_id}/diagnosis:
@@ -1041,6 +1032,19 @@ paths:
       operationId: createPhoneticAnalysisJob
       responses:
         "200": { description: Queued phonetic analysis job }
+  /v1/phonetic-analysis/jobs/clear:
+    post:
+      operationId: clearTerminalPhoneticAnalysisJobs
+      responses:
+        "200":
+          description: Deleted terminal phonetic analysis jobs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deleted]
+                properties:
+                  deleted: { type: integer, minimum: 0 }
   /v1/phonetic-analysis/jobs/{job_id}:
     get:
       operationId: phoneticAnalysisJob
@@ -1129,6 +1133,11 @@ components:
       properties:
         path: { type: string }
         language: { type: [string, "null"] }
+    UpdateTrackLanguage:
+      type: object
+      required: [language]
+      properties:
+        language: { type: string }
     SubtitleToken:
       type: object
       required: [index, kind, text, normalized, start_char, end_char]
@@ -1165,6 +1174,54 @@ components:
         sentences:
           type: array
           items: { $ref: "#/components/schemas/SubtitleSentence" }
+    CapabilitySupport:
+      enum: [supported, approximate, unsupported]
+    LanguageLearningProfile:
+      type: object
+      required:
+        - language
+        - display_name
+        - script
+        - tokenization
+        - lexical_granularities
+        - lexical_normalization
+        - listening_units
+        - pronunciation
+        - sound_features
+        - rhythm_prosody
+        - morphology
+        - dictionary_providers
+        - diagnosis_reasons
+        - word_timeline
+        - chunk_timeline
+        - phone_timeline
+      properties:
+        language: { type: string }
+        display_name: { type: string }
+        script: { type: string }
+        tokenization: { type: string }
+        lexical_granularities:
+          type: array
+          items: { type: string }
+        lexical_normalization: { type: string }
+        listening_units:
+          type: array
+          items: { type: string }
+        pronunciation: { type: string }
+        sound_features:
+          type: array
+          items: { type: string }
+        rhythm_prosody: { type: string }
+        morphology: { type: string }
+        dictionary_providers:
+          type: array
+          items: { type: string }
+        diagnosis_reasons:
+          type: array
+          items: { type: string }
+        word_timeline: { $ref: "#/components/schemas/CapabilitySupport" }
+        chunk_timeline: { $ref: "#/components/schemas/CapabilitySupport" }
+        phone_timeline: { $ref: "#/components/schemas/CapabilitySupport" }
     TimingSource:
       enum: [asr_reported, forced_aligned, estimated, user_adjusted]
     TimelineCreator:
@@ -1626,7 +1683,7 @@ components:
         provider_id: { type: [string, "null"] }
         provider_version: { type: [string, "null"] }
         payload: { type: object, additionalProperties: true }
-    WordStatus:
+    LearningStatus:
       enum: [unknown_meaning, known_not_recognized, known_recognized]
     LexicalSource:
       type: object
@@ -1652,7 +1709,7 @@ components:
         display_form: { type: string }
         status:
           anyOf:
-            - $ref: "#/components/schemas/WordStatus"
+            - $ref: "#/components/schemas/LearningStatus"
             - type: "null"
         user_definition: { type: [string, "null"] }
         personal_note: { type: [string, "null"] }
@@ -1662,9 +1719,10 @@ components:
             - type: "null"
     LexicalEntry:
       type: object
-      required: [id, language, kind, canonical_form, normalized_form, display_form, status, user_definition, personal_note, normalization_provider, normalization_version, user_corrected, updated_at_ms, learning_updated_at_ms]
+      required: [id, unit, language, kind, canonical_form, normalized_form, display_form, status, user_definition, personal_note, normalization_provider, normalization_version, user_corrected, updated_at_ms, learning_updated_at_ms]
       properties:
         id: { type: string }
+        unit: { $ref: "#/components/schemas/LexicalUnit" }
         language: { type: string }
         kind: { enum: [word, phrase] }
         canonical_form: { type: string }
@@ -1672,7 +1730,7 @@ components:
         display_form: { type: string }
         status:
           anyOf:
-            - $ref: "#/components/schemas/WordStatus"
+            - $ref: "#/components/schemas/LearningStatus"
             - type: "null"
         user_definition: { type: [string, "null"] }
         personal_note: { type: [string, "null"] }
@@ -1681,6 +1739,15 @@ components:
         user_corrected: { type: boolean }
         updated_at_ms: { type: integer, minimum: 0 }
         learning_updated_at_ms: { type: integer, minimum: 0 }
+    LexicalUnit:
+      type: object
+      required: [language, granularity, normalization, normalized_key, display_form]
+      properties:
+        language: { type: string }
+        granularity: { type: string }
+        normalization: { type: string }
+        normalized_key: { type: string }
+        display_form: { type: string }
     LexicalOccurrence:
       type: object
       required: [id, source_key, lexical_entry_id, original_form, sentence_text_snapshot, media_title_snapshot, media_fingerprint_snapshot, start_ms_snapshot, end_ms_snapshot, token_start, token_end, first_seen_at_ms, last_seen_at_ms, encounter_count]
@@ -1710,7 +1777,7 @@ components:
         previous_status: { type: [string, "null"] }
         new_status: { type: [string, "null"] }
         changed_at_ms: { type: integer, minimum: 0 }
-        change_source: { enum: [user_selection, import, legacy_baseline] }
+        change_source: { enum: [user_selection, import] }
     LexicalEntryDetails:
       type: object
       required: [entry, history, occurrences]
@@ -1793,52 +1860,26 @@ components:
         source: { type: string }
         rating: { type: number }
         download_count: { type: integer, minimum: 0 }
-    WordProfile:
+    BatchLexicalEntries:
       type: object
-      required: [id, language, lemma, normalized_lemma, display_form, status, updated_at_ms, user_definition, personal_note, learning_updated_at_ms]
-      properties:
-        id: { type: string }
-        language: { type: string }
-        lemma: { type: string }
-        normalized_lemma: { type: string }
-        display_form: { type: string }
-        status:
-          anyOf:
-            - enum: [unknown_meaning, known_not_recognized, known_recognized]
-            - type: "null"
-        updated_at_ms: { type: integer, minimum: 0 }
-        user_definition: { type: [string, "null"] }
-        personal_note: { type: [string, "null"] }
-        learning_updated_at_ms: { type: integer, minimum: 0 }
-    UpdateWordProfile:
-      type: object
-      required: [language, lemma, display_form]
+      required: [language, kind, forms]
       properties:
         language: { type: string }
-        lemma: { type: string }
-        display_form: { type: string }
-        status:
-          anyOf:
-            - enum: [unknown_meaning, known_not_recognized, known_recognized]
-            - type: "null"
-        source:
-          anyOf:
-            - $ref: "#/components/schemas/SourceContext"
-            - type: "null"
-    BatchWordProfiles:
-      type: object
-      required: [language, lemmas]
-      properties:
-        language: { type: string }
-        lemmas:
+        kind: { enum: [word, phrase] }
+        forms:
           type: array
           maxItems: 5000
           items: { type: string }
-    CreateWordObservation:
+    UpdateLexicalLearningContent:
       type: object
-      required: [word_profile_id, sentence_id, original_form]
       properties:
-        word_profile_id: { type: string }
+        user_definition: { type: [string, "null"] }
+        personal_note: { type: [string, "null"] }
+    CreateLexicalObservation:
+      type: object
+      required: [lexical_entry_id, sentence_id, original_form]
+      properties:
+        lexical_entry_id: { type: string }
         sentence_id: { type: string }
         original_form: { type: string }
         result:
@@ -1848,81 +1889,28 @@ components:
         clear: { type: boolean, default: false }
         source:
           anyOf:
-            - $ref: "#/components/schemas/SourceContext"
+            - $ref: "#/components/schemas/LexicalSource"
             - type: "null"
-    SourceContext:
+    LexicalObservation:
       type: object
-      required: [language, normalized_lemma, original_form, sentence_text, media_title, media_fingerprint, start_ms, end_ms]
-      properties:
-        language: { type: string }
-        normalized_lemma: { type: string }
-        media_id: { type: [string, "null"] }
-        sentence_id: { type: [string, "null"] }
-        original_form: { type: string }
-        sentence_text: { type: string }
-        media_title: { type: string }
-        media_fingerprint: { type: string }
-        start_ms: { type: integer, minimum: 0 }
-        end_ms: { type: integer, minimum: 0 }
-    WordObservation:
-      type: object
-      required: [id, word_profile_id, sentence_id, original_form, result, created_at_ms]
+      required: [id, lexical_entry_id, sentence_id, original_form, result, created_at_ms]
       properties:
         id: { type: string }
-        word_profile_id: { type: string }
+        lexical_entry_id: { type: string }
         sentence_id: { type: string }
         original_form: { type: string }
         result: { enum: [recognized_in_context, not_recognized_in_context] }
         created_at_ms: { type: integer, minimum: 0 }
-    WordOccurrence:
-      type: object
-      required: [id, source_key, word_profile_id, original_form, sentence_text_snapshot, media_title_snapshot, media_fingerprint_snapshot, start_ms_snapshot, end_ms_snapshot, first_seen_at_ms, last_seen_at_ms, encounter_count]
-      properties:
-        id: { type: string }
-        source_key: { type: string }
-        word_profile_id: { type: string }
-        media_id: { type: [string, "null"] }
-        sentence_id: { type: [string, "null"] }
-        original_form: { type: string }
-        sentence_text_snapshot: { type: string }
-        media_title_snapshot: { type: string }
-        media_fingerprint_snapshot: { type: string }
-        start_ms_snapshot: { type: integer, minimum: 0 }
-        end_ms_snapshot: { type: integer, minimum: 0 }
-        first_seen_at_ms: { type: integer, minimum: 0 }
-        last_seen_at_ms: { type: integer, minimum: 0 }
-        encounter_count: { type: integer, minimum: 1 }
-    WordStatusHistory:
-      type: object
-      required: [id, word_profile_id, previous_status, new_status, source_occurrence_id, changed_at_ms, change_source]
-      properties:
-        id: { type: string }
-        word_profile_id: { type: string }
-        previous_status: { type: [string, "null"] }
-        new_status: { type: [string, "null"] }
-        source_occurrence_id: { type: [string, "null"] }
-        changed_at_ms: { type: integer, minimum: 0 }
-        change_source: { enum: [user_selection, import, legacy_baseline] }
-    WordDetails:
-      type: object
-      required: [profile, history, occurrences]
-      properties:
-        profile: { $ref: "#/components/schemas/WordProfile" }
-        history: { type: array, items: { $ref: "#/components/schemas/WordStatusHistory" } }
-        occurrences: { type: array, items: { $ref: "#/components/schemas/WordOccurrence" } }
     VocabularyAssetBundle:
       type: object
-      required: [version, exported_at_ms, profiles, history, occurrences, observations, lexical_entries, lexical_history, lexical_occurrences, phonetic_finding_feedback]
+      required: [version, exported_at_ms, lexical_entries, lexical_history, lexical_occurrences, lexical_observations, phonetic_finding_feedback]
       properties:
-        version: { enum: [1, 2, 3, 4] }
+        version: { enum: [5] }
         exported_at_ms: { type: integer, minimum: 0 }
-        profiles: { type: array, items: { $ref: "#/components/schemas/WordProfile" } }
-        history: { type: array, items: { $ref: "#/components/schemas/WordStatusHistory" } }
-        occurrences: { type: array, items: { $ref: "#/components/schemas/WordOccurrence" } }
-        observations: { type: array, items: { $ref: "#/components/schemas/WordObservation" } }
         lexical_entries: { type: array, items: { $ref: "#/components/schemas/LexicalEntry" } }
         lexical_history: { type: array, items: { $ref: "#/components/schemas/LexicalStatusHistory" } }
         lexical_occurrences: { type: array, items: { $ref: "#/components/schemas/LexicalOccurrence" } }
+        lexical_observations: { type: array, items: { $ref: "#/components/schemas/LexicalObservation" } }
         phonetic_finding_feedback: { type: array, items: { type: object } }
     DictionaryLookup:
       type: object
@@ -2016,12 +2004,12 @@ components:
           type: array
           items:
             type: object
-            required: [kind, message, word_profile_ids]
+            required: [kind, message, lexical_entry_ids]
             properties:
               kind:
                 enum: [meaning_barrier, recognition_barrier, insufficient_information, other_factors]
               message: { type: string }
-              word_profile_ids:
+              lexical_entry_ids:
                 type: array
                 items: { type: string }
               reasons:

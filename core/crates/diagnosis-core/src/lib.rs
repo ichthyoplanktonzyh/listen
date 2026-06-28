@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use domain::{
-    DiagnosisHint, DiagnosisKind, ObservationResult, SentenceDiagnosis, SubtitleSentence,
-    SubtitleTokenKind, WordObservation, WordProfile, WordStatus,
+    DiagnosisHint, DiagnosisKind, LearningStatus, LexicalEntry, LexicalObservation,
+    ObservationResult, SentenceDiagnosis, SubtitleSentence, SubtitleTokenKind,
 };
 
 /// Diagnose why a sentence may be hard to understand from the learner's
@@ -12,17 +12,17 @@ use domain::{
 /// this core free of language-specific knowledge.
 pub fn diagnose(
     sentence: &SubtitleSentence,
-    profiles: &[WordProfile],
-    observations: &[WordObservation],
+    entries: &[LexicalEntry],
+    observations: &[LexicalObservation],
 ) -> SentenceDiagnosis {
-    let by_lemma = profiles
+    let by_key = entries
         .iter()
-        .map(|profile| (profile.normalized_lemma.as_str(), profile))
+        .map(|entry| (entry.normalized_form.as_str(), entry))
         .collect::<HashMap<_, _>>();
     let not_recognized = observations
         .iter()
         .filter(|observation| observation.result == ObservationResult::NotRecognizedInContext)
-        .map(|observation| &observation.word_profile_id)
+        .map(|observation| &observation.lexical_entry_id)
         .collect::<HashSet<_>>();
     let lemmas = sentence
         .tokens
@@ -34,16 +34,16 @@ pub fn diagnose(
     let mut recognition = Vec::new();
     let mut unclassified = Vec::new();
     for lemma in &lemmas {
-        match by_lemma
+        match by_key
             .get(lemma)
-            .and_then(|profile| profile.status.map(|s| (profile, s)))
+            .and_then(|entry| entry.status.map(|s| (entry, s)))
         {
-            Some((profile, WordStatus::UnknownMeaning)) => meaning.push(profile.id.clone()),
-            Some((profile, WordStatus::KnownNotRecognized)) => recognition.push(profile.id.clone()),
-            Some((profile, WordStatus::KnownRecognized))
-                if not_recognized.contains(&profile.id) =>
+            Some((entry, LearningStatus::UnknownMeaning)) => meaning.push(entry.id.clone()),
+            Some((entry, LearningStatus::KnownNotRecognized)) => recognition.push(entry.id.clone()),
+            Some((entry, LearningStatus::KnownRecognized))
+                if not_recognized.contains(&entry.id) =>
             {
-                recognition.push(profile.id.clone());
+                recognition.push(entry.id.clone());
             }
             Some(_) => {}
             None => unclassified.push((*lemma).to_owned()),
@@ -55,7 +55,7 @@ pub fn diagnose(
             kind: DiagnosisKind::MeaningBarrier,
             message: "Some words may block understanding because their meanings are unknown."
                 .into(),
-            word_profile_ids: meaning,
+            lexical_entry_ids: meaning,
             reasons: Vec::new(),
         });
     }
@@ -63,7 +63,7 @@ pub fn diagnose(
         hints.push(DiagnosisHint {
             kind: DiagnosisKind::RecognitionBarrier,
             message: "Some known words may not yet be recognized reliably in speech.".into(),
-            word_profile_ids: recognition,
+            lexical_entry_ids: recognition,
             // Language reasons are layered on by the caller; empty here.
             reasons: Vec::new(),
         });
@@ -72,14 +72,14 @@ pub fn diagnose(
         hints.push(DiagnosisHint {
             kind: DiagnosisKind::InsufficientInformation,
             message: "Classify the remaining words before drawing a firm conclusion.".into(),
-            word_profile_ids: vec![],
+            lexical_entry_ids: vec![],
             reasons: Vec::new(),
         });
     } else if hints.is_empty() && !lemmas.is_empty() {
         hints.push(DiagnosisHint {
             kind: DiagnosisKind::OtherFactors,
             message: "Vocabulary does not explain the difficulty; consider grammar, speed, context, or attention.".into(),
-            word_profile_ids: vec![],
+            lexical_entry_ids: vec![],
             reasons: Vec::new(),
         });
     }
@@ -118,40 +118,62 @@ mod tests {
         }
     }
 
-    fn profile(word: &str, status: WordStatus) -> WordProfile {
-        WordProfile {
-            id: WordProfileId::parse(word).unwrap(),
+    fn entry(word: &str, status: LearningStatus) -> LexicalEntry {
+        LexicalEntry {
+            id: LexicalEntryId::parse(word).unwrap(),
+            unit: LexicalUnit::new(
+                LanguageCode::parse("en").unwrap(),
+                LexicalUnit::GRANULARITY_WORD,
+                "core.lemma",
+                word,
+                word,
+            ),
             language: LanguageCode::parse("en").unwrap(),
-            lemma: word.into(),
-            normalized_lemma: word.into(),
+            kind: LexicalEntryKind::Word,
+            canonical_form: word.into(),
+            normalized_form: word.into(),
             display_form: word.into(),
             status: Some(status),
-            updated_at_ms: 0,
             user_definition: None,
             personal_note: None,
+            normalization_provider: "test".into(),
+            normalization_version: "v1".into(),
+            user_corrected: false,
+            updated_at_ms: 0,
             learning_updated_at_ms: 0,
         }
     }
 
-    fn profile_without_status(word: &str) -> WordProfile {
-        WordProfile {
-            id: WordProfileId::parse(word).unwrap(),
+    fn entry_without_status(word: &str) -> LexicalEntry {
+        LexicalEntry {
+            id: LexicalEntryId::parse(word).unwrap(),
+            unit: LexicalUnit::new(
+                LanguageCode::parse("en").unwrap(),
+                LexicalUnit::GRANULARITY_WORD,
+                "core.lemma",
+                word,
+                word,
+            ),
             language: LanguageCode::parse("en").unwrap(),
-            lemma: word.into(),
-            normalized_lemma: word.into(),
+            kind: LexicalEntryKind::Word,
+            canonical_form: word.into(),
+            normalized_form: word.into(),
             display_form: word.into(),
             status: None,
-            updated_at_ms: 0,
             user_definition: None,
             personal_note: None,
+            normalization_provider: "test".into(),
+            normalization_version: "v1".into(),
+            user_corrected: false,
+            updated_at_ms: 0,
             learning_updated_at_ms: 0,
         }
     }
 
-    fn observation(word: &str, result: ObservationResult) -> WordObservation {
-        WordObservation {
-            id: WordObservationId::parse(format!("obs-{word}")).unwrap(),
-            word_profile_id: WordProfileId::parse(word).unwrap(),
+    fn observation(word: &str, result: ObservationResult) -> LexicalObservation {
+        LexicalObservation {
+            id: LexicalObservationId::parse(format!("obs-{word}")).unwrap(),
+            lexical_entry_id: LexicalEntryId::parse(word).unwrap(),
             sentence_id: SubtitleSentenceId::parse("sentence").unwrap(),
             original_form: word.into(),
             result,
@@ -192,15 +214,15 @@ mod tests {
     fn unknown_meaning_triggers_meaning_barrier() {
         let result = diagnose(
             &sentence(),
-            &[profile("alpha", WordStatus::UnknownMeaning)],
+            &[entry("alpha", LearningStatus::UnknownMeaning)],
             &[],
         );
         assert_eq!(result.hints[0].kind, DiagnosisKind::MeaningBarrier);
-        assert_eq!(result.hints[0].word_profile_ids.len(), 1);
+        assert_eq!(result.hints[0].lexical_entry_ids.len(), 1);
         assert!(
             result.hints[0]
-                .word_profile_ids
-                .contains(&WordProfileId::parse("alpha").unwrap())
+                .lexical_entry_ids
+                .contains(&LexicalEntryId::parse("alpha").unwrap())
         );
     }
 
@@ -209,8 +231,8 @@ mod tests {
         let result = diagnose(
             &sentence(),
             &[
-                profile("alpha", WordStatus::UnknownMeaning),
-                profile("beta", WordStatus::UnknownMeaning),
+                entry("alpha", LearningStatus::UnknownMeaning),
+                entry("beta", LearningStatus::UnknownMeaning),
             ],
             &[],
         );
@@ -219,7 +241,7 @@ mod tests {
             .iter()
             .find(|h| h.kind == DiagnosisKind::MeaningBarrier)
             .unwrap();
-        assert_eq!(meaning_hint.word_profile_ids.len(), 2);
+        assert_eq!(meaning_hint.lexical_entry_ids.len(), 2);
     }
 
     // ── RecognitionBarrier ──────────────────────────────────────────
@@ -228,7 +250,7 @@ mod tests {
     fn known_not_recognized_triggers_recognition_barrier() {
         let result = diagnose(
             &sentence(),
-            &[profile("alpha", WordStatus::KnownNotRecognized)],
+            &[entry("alpha", LearningStatus::KnownNotRecognized)],
             &[],
         );
         assert!(
@@ -243,7 +265,7 @@ mod tests {
     fn known_recognized_but_not_in_context_triggers_recognition_barrier() {
         let result = diagnose(
             &sentence(),
-            &[profile("alpha", WordStatus::KnownRecognized)],
+            &[entry("alpha", LearningStatus::KnownRecognized)],
             &[observation(
                 "alpha",
                 ObservationResult::NotRecognizedInContext,
@@ -263,7 +285,7 @@ mod tests {
         // observation says NotRecognizedInContext.
         let result = diagnose(
             &sentence(),
-            &[profile("alpha", WordStatus::KnownRecognized)],
+            &[entry("alpha", LearningStatus::KnownRecognized)],
             &[],
         );
         assert!(
@@ -281,7 +303,7 @@ mod tests {
         // first needs meaning.
         let result = diagnose(
             &sentence(),
-            &[profile("alpha", WordStatus::UnknownMeaning)],
+            &[entry("alpha", LearningStatus::UnknownMeaning)],
             &[observation(
                 "alpha",
                 ObservationResult::NotRecognizedInContext,
@@ -306,7 +328,7 @@ mod tests {
 
     #[test]
     fn profile_without_status_treated_as_unclassified() {
-        let result = diagnose(&sentence(), &[profile_without_status("alpha")], &[]);
+        let result = diagnose(&sentence(), &[entry_without_status("alpha")], &[]);
         // alpha has a profile but no status → treated as unclassified
         assert!(result.unclassified_lemmas.contains(&"alpha".to_owned()));
         // beta is also unclassified (no profile)
@@ -323,7 +345,7 @@ mod tests {
     fn partial_classification_shows_insufficient_information() {
         let result = diagnose(
             &sentence(),
-            &[profile("alpha", WordStatus::KnownRecognized)],
+            &[entry("alpha", LearningStatus::KnownRecognized)],
             &[],
         );
         // beta is unclassified → InsufficientInformation
@@ -343,8 +365,8 @@ mod tests {
         let result = diagnose(
             &sentence(),
             &[
-                profile("alpha", WordStatus::KnownRecognized),
-                profile("beta", WordStatus::KnownRecognized),
+                entry("alpha", LearningStatus::KnownRecognized),
+                entry("beta", LearningStatus::KnownRecognized),
             ],
             &[],
         );
@@ -359,8 +381,8 @@ mod tests {
         let result = diagnose(
             &sentence(),
             &[
-                profile("alpha", WordStatus::UnknownMeaning),
-                profile("beta", WordStatus::KnownNotRecognized),
+                entry("alpha", LearningStatus::UnknownMeaning),
+                entry("beta", LearningStatus::KnownNotRecognized),
             ],
             &[],
         );
@@ -390,8 +412,8 @@ mod tests {
         let result = diagnose(
             &sent,
             &[
-                profile("hello", WordStatus::KnownRecognized),
-                profile("world", WordStatus::KnownRecognized),
+                entry("hello", LearningStatus::KnownRecognized),
+                entry("world", LearningStatus::KnownRecognized),
             ],
             &[],
         );
@@ -419,7 +441,7 @@ mod tests {
         let result = diagnose(&sentence(), &[], &[]);
         assert_eq!(result.unclassified_lemmas.len(), 2);
         assert_eq!(result.hints[0].kind, DiagnosisKind::InsufficientInformation);
-        assert!(result.hints[0].word_profile_ids.is_empty());
+        assert!(result.hints[0].lexical_entry_ids.is_empty());
     }
 
     #[test]
@@ -436,7 +458,7 @@ mod tests {
         // One word known-but-unknown-meaning, one word completely unclassified
         let result = diagnose(
             &sentence(),
-            &[profile("alpha", WordStatus::UnknownMeaning)],
+            &[entry("alpha", LearningStatus::UnknownMeaning)],
             &[],
         );
         assert!(
@@ -459,7 +481,7 @@ mod tests {
         // trigger a RecognitionBarrier.
         let result = diagnose(
             &sentence(),
-            &[profile("alpha", WordStatus::KnownRecognized)],
+            &[entry("alpha", LearningStatus::KnownRecognized)],
             &[observation("alpha", ObservationResult::RecognizedInContext)],
         );
         assert!(
@@ -477,7 +499,7 @@ mod tests {
             ("the", SubtitleTokenKind::Word),
             ("the", SubtitleTokenKind::Word),
         ]);
-        let result = diagnose(&sent, &[profile("the", WordStatus::UnknownMeaning)], &[]);
+        let result = diagnose(&sent, &[entry("the", LearningStatus::UnknownMeaning)], &[]);
         // Only one MeaningBarrier hint, even though "the" appears twice
         let meaning_count = result
             .hints
@@ -485,12 +507,12 @@ mod tests {
             .filter(|h| h.kind == DiagnosisKind::MeaningBarrier)
             .count();
         assert_eq!(meaning_count, 1);
-        // The word_profile_ids should contain the profile id once
+        // The lexical_entry_ids should contain the profile id once
         let meaning_hint = result
             .hints
             .iter()
             .find(|h| h.kind == DiagnosisKind::MeaningBarrier)
             .unwrap();
-        assert_eq!(meaning_hint.word_profile_ids.len(), 1);
+        assert_eq!(meaning_hint.lexical_entry_ids.len(), 1);
     }
 }

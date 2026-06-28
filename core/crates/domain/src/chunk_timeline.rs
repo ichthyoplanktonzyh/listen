@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ChunkId, ChunkTimelineId, MediaId, SubtitleSentenceId, SubtitleTrackId, TimelineCreator,
-    TimelineStatus, WordTimelineId,
+    ChunkEvidence, ChunkId, ChunkTimelineId, MediaId, SubtitleSentenceId, SubtitleTrackId,
+    TimelineCreator, TimelineMetrics, TimelineStatus, WordTimelineId,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,7 +38,7 @@ pub struct ChunkTimeline {
     pub created_by: TimelineCreator,
     pub status: TimelineStatus,
     #[serde(default)]
-    pub metrics_json: serde_json::Value,
+    pub metrics_json: TimelineMetrics,
     pub chunks: Vec<ChunkTimelineChunk>,
     pub created_at_ms: u64,
     pub updated_at_ms: u64,
@@ -60,7 +60,7 @@ pub struct ChunkTimelineChunk {
     #[serde(default)]
     pub warnings: Vec<String>,
     #[serde(default)]
-    pub evidence_json: serde_json::Value,
+    pub evidence_json: ChunkEvidence,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -421,7 +421,7 @@ pub(crate) struct CreateWordTimelineRequest {
     parent_timeline_id: Option<domain::WordTimelineId>,
     created_by: Option<domain::TimelineCreator>,
     status: Option<domain::TimelineStatus>,
-    metrics_json: Option<serde_json::Value>,
+    metrics_json: Option<domain::TimelineMetrics>,
     words: Vec<domain::WordTiming>,
 }
 

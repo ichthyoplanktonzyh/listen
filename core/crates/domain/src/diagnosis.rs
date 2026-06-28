@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{SubtitleSentenceId, WordProfileId};
+use crate::{LexicalEntryId, SubtitleSentenceId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -15,7 +15,7 @@ pub enum DiagnosisKind {
 pub struct DiagnosisHint {
     pub kind: DiagnosisKind,
     pub message: String,
-    pub word_profile_ids: Vec<WordProfileId>,
+    pub lexical_entry_ids: Vec<LexicalEntryId>,
     /// Per-language listening-factor possibilities for this hint, drawn from the
     /// learning language's profile (e.g. `tone_confusion`, `word_boundary` for
     /// Chinese; `weak_form`, `linking` for English). These are contextual

@@ -21,8 +21,8 @@ pub(crate) async fn install_phonetic_analysis_model(
     State(state): State<ApiState>,
     Json(request): Json<ModelIdRequest>,
 ) -> Result<Json<domain::PhoneticAnalysisModelDescriptor>, ApiError> {
-    let id = domain::PhoneticAnalysisModelId::parse(request.model_id)
-        .map_err(ApplicationError::from)?;
+    let id =
+        domain::PhoneticAnalysisModelId::parse(request.model_id).map_err(ApplicationError::from)?;
     let model = state
         .phonetic_analysis
         .models()?

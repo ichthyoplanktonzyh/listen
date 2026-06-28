@@ -1,186 +1,183 @@
-# LLPlayerNext — 系统架构
+# LLPlayerNext System Architecture
 
-> 最后更新：2026-06-21
-> 基于 `feature/forced-alignment-research` 分支
+Last updated: 2026-06-27. Reflects the Phase 2.18 code architecture refactor.
 
-## 1. 架构全景
+## Overview
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  生产引擎 (Python)                                       │
-│  scripts/timeline-production/  +  forced-align/         │
-│  WhisperX ASR → 强制对齐 → LLTimeline JSON v1           │
-└────────────────────────┬────────────────────────────────┘
-                         │ .lltimeline.json (文件交换)
-┌────────────────────────▼────────────────────────────────┐
-│  桌面客户端 (Flutter)                                    │
-│  apps/desktop/                                          │
-│  UI + fvp(mdk)播放器 + 本地TimelineCursor                │
-└────────────────────────┬────────────────────────────────┘
-                         │ HTTP REST + SSE (localhost sidecar)
-┌────────────────────────▼────────────────────────────────┐
-│  Rust API 服务 (api-http)                                │
-│  Axum HTTP Server, ~78 routes, SSE事件总线               │
-└──────────┬──────────────────────────────────────────────┘
-           │
-┌──────────▼──────────────────────────────────────────────┐
-│  Rust Application (application)                         │
-│  AppServices: 用例编排 + Repository/Provider trait定义   │
-└──┬──────────┬──────────┬──────────┬─────────────────────┘
-   │          │          │          │
-   ▼          ▼          ▼          ▼
-domain    subtitle  diagnosis  speech      dictionary
-(数据类型) -core     -core      -analysis   -provider
-          (字幕)     (诊断)     (语音分析)   (字典)
-                               │
-                        persistence-sqlite
-                        (SQLite 实现)
+```text
+Flutter desktop app
+  UI + fvp player + local timeline cursor
+        |
+        | HTTP REST + SSE on localhost
+        v
+api-http
+  Axum transport, auth, route composition, event stream
+        |
+        v
+application
+  use-case orchestration, repository/provider traits, DTO mapping
+        |
+        +--> domain              # stable domain types
+        +--> subtitle-core       # subtitle import/tokenization
+        +--> diagnosis-core      # pure learning diagnosis
+        +--> speech-analysis     # ASR timing/chunk/phone analysis engines
+        +--> dictionary-provider # dictionary + lexical normalization providers
+        |
+        v
+persistence-sqlite
+  SQLite repository implementation and migrations
 ```
 
-## 2. Rust Crate 依赖图
+Dependency direction is intentionally boring:
 
-```
-api-http (二进制)
-  ├── application ─────────────┬── domain (叶子crate，0内部依赖)
-  │   ├── diagnosis-core ──────┤
-  │   ├── subtitle-core ───────┤
-  │   └── speech-analysis ─────┤
-  ├── dictionary-provider ─────┤
-  ├── persistence-sqlite ──────┤
-  ├── api-events ──────────────┘
-  └── domain (直接)
-
-依赖方向：domain ← 领域crates ← application ← api-http/persistence
-api-http 不直接依赖 speech-analysis；语音分析编排通过 application 暴露。
+```text
+domain <- core engines <- application <- api-http / persistence-sqlite
 ```
 
-## 3. 各 Crate 职责
+`api-http` does not call algorithm crates directly. Algorithms enter through
+application use cases and provider/repository boundaries.
 
-### `domain` — 领域数据类型
-- 零内部依赖的叶子 crate
-- `string_id!` 宏生成类型安全 newtype（MediaId, SubtitleSentenceId, WordProfileId 等）
-- 核心结构体：`MediaItem`, `SubtitleTrack`, `SubtitleSentence`, `WordProfile`, `WordTimeline`, `LLTimelineDocument`, `DictionaryLookup`, `TranscriptionJob`, `PhoneticAnalysisJob`
-- 枚举：词汇状态（Unclassified/UnknownMeaning/KnownNotRecognized/KnownRecognized）、上下文观察、工作状态
-- `DomainError` 统一错误类型
+## Crate Responsibilities
 
-### `subtitle-core` — 字幕解析与时间轴
-- SRT / WebVTT 解析（UTF-8/UTF-16）
-- 英语 token 化（word/whitespace/punctuation/other）
-- `Timeline` 运行时位置→字幕句查询
-- 内容指纹与幂等导入
-- Fuzz targets + proptest
+### `domain`
 
-### `diagnosis-core` — 听力诊断引擎
-- 单个公开函数 `diagnose()`
-- 输入：SubtitleSentence + WordProfile[] + WordObservation[]
-- 输出：词义障碍 / 声音识别障碍 / 信息不足 / 其他因素
-- 纯函数，确定性规则
+- Leaf crate for stable data types and IDs.
+- Owns `MediaItem`, subtitle models, `LexicalEntry`, `LexicalUnit`,
+  `LearningStatus`, timeline resources, LLTimeline resources, dictionary,
+  transcription, phonetic analysis, and diagnosis DTOs.
+- `TimelineMetrics` and `ChunkEvidence` wrap timeline JSON extension objects
+  while preserving object-shaped API/storage JSON.
+- `DomainError` is the shared validation error type.
 
-### `speech-analysis` — 语音分析引擎（10个模块）
-| 模块 | 职责 |
+### `application`
+
+- `AppServices` is the use-case facade.
+- Repository boundaries are split by aggregate/resource:
+  - `MediaRepository`
+  - `SubtitleTrackRepository`
+  - `PronunciationRepository`
+  - `TimelineResourceRepository`
+  - `LLTimelineResourceRepository`
+  - `LearningAssetRepository`
+  - transcription, phonetic analysis, dictionary cache, playback progress
+- Application-owned DTOs sit in `application::dto`; algorithm crate structs are
+  mapped at the boundary instead of re-exported.
+- Learning assets use `LexicalEntry + LexicalUnit` as the authoritative model.
+
+### `api-http`
+
+- Axum loopback HTTP server with bearer-token auth.
+- Root `lib.rs` is the composition root for route groups, middleware, SSE, and
+  service construction.
+- OpenAPI parity is tested bidirectionally: implemented `/v1` routes and
+  documented OpenAPI paths must match.
+- Lexical routes are the only learning-asset API surface:
+  - `/v1/lexical-entries`
+  - `/v1/lexical-entries/batch`
+  - `/v1/lexical-entries/{id}`
+  - `/v1/lexical-entries/{id}/learning-content`
+  - `/v1/lexical-observations`
+
+### `persistence-sqlite`
+
+- Single local SQLite repository implementation.
+- A single `SqliteRepository` may implement multiple repository traits; the
+  narrow traits keep use cases from depending on a god interface.
+- Schema is allowed to be destructively rebuilt during Phase 2.18.
+- Partial unique indexes enforce one active word/chunk/phone timeline per track.
+- Lexical export/import version 5 is lexical-only.
+
+### `diagnosis-core`
+
+- Pure deterministic diagnosis engine.
+- Inputs: `SubtitleSentence`, `LexicalEntry[]`, and `LexicalObservation[]`.
+- Outputs: meaning barrier, recognition barrier, insufficient evidence, and
+  reason hints using lexical entry IDs.
+
+### `speech-analysis`
+
+Owns analysis engines, not application contracts:
+
+| Module | Responsibility |
 |---|---|
-| `asr_timing` | whisper.cpp JSON → 词级时间戳提取 |
-| `forced_align` | torchaudio MMS_FA 强制对齐集成 |
-| `pause_refinement` | WAV 静音检测优化词边界 |
-| `chunk_detection` | 声学 chunk 边界检测 |
-| `chunk_partition` | 词级时间轴 → 学习 chunk 分区 |
-| `text_chunk_detection` | 基于 COCA n-gram 的文本 chunk |
-| `phonetic_alignment` | 音素序列动态规划对齐 |
-| `phonetic_findings` | 弱读/省音/连读等发现 |
-| `learned_prosodic_provider` | 规则型韵律分析 |
-| `rich_acoustic_evidence` | 声学证据聚合 |
+| `asr_timing` | ASR word timing extraction |
+| `forced_align` | forced alignment integration |
+| `pause_refinement` | silence-based boundary refinement |
+| `chunk_partition` | word timeline to learning chunk partition |
+| `phonetic_alignment` | phoneme sequence alignment |
+| `phonetic_findings` | reductions, elision, linking findings |
+| `learned_prosodic_provider` | rule-based prosodic analysis |
+| `rich_acoustic_evidence` | acoustic evidence aggregation |
 
-### `application` — 应用服务层
-- Repository trait 定义：Media / Subtitle / WordProfile / VocabularyAsset / Transcription / PhoneticAnalysis / DictionaryCache / PlaybackProgress / LexicalEntry
-- Provider trait 定义：DictionaryProvider / LexicalNormalizationProvider
-- `AppServices` 中央编排器：媒体登记、字幕导入、发音分析、词级时间估算、WordTimeline CRUD、LLTimeline 导入导出、词汇资产 CRUD、字典查询缓存、chunk 检测、诊断
-- 源码按 `dto` / `repositories` / `providers` / `error` / use case 模块拆分，root `lib.rs` 只保留 `AppServices` 装配、re-export 和共享 helper
+### Flutter Desktop
 
-### `dictionary-provider` — 字典数据源
-- `FreeDictionaryProvider`：HTTP 调用 `api.dictionaryapi.dev`
-- `EcdictProvider`：离线 CSV（ECDICT stardict 衍生），同时实现 `LexicalNormalizationProvider`
-- 词形还原（went → go）+ 短语检测
+- `main.dart` remains the composition screen, but event parsing and learning
+  workflows plus speech-enhancement/timeline-resource refresh have been pulled
+  into controllers/coordinators.
+- `LearningController` stores typed lexical entries, phrase candidates,
+  selected lexical details, dictionary lookup, word pronunciation, language
+  profile, and diagnosis.
+- `SubtitleController` stores typed pronunciation providers, sentence
+  pronunciation analyses, and phonetic analyses.
+- `BackendEvent` parsing is typed; lexical change events update the typed
+  learning cache.
+- Timeline models use typed metrics/evidence envelopes.
+- Dictionary, word pronunciation, sentence pronunciation, and phonetic-analysis
+  payloads are parsed at API boundaries before entering controller/widget state.
 
-### `persistence-sqlite` — SQLite 持久化
-- `migrations.rs` 管理 schema 版本和迁移 SQL
-- 按 repository / 表域实现所有 Repository trait 接口
-- 自动迁移 + 预迁移备份
-- 词级时间轴资源管理（activation/deactivation/archival）
-- 词汇资产导入导出
+## Main Data Flows
 
-### `api-http` — HTTP API 二进制
-- Axum 本地 HTTP 服务（loopback 绑定 + Bearer token 认证）
-- ~78 路由，按领域分组：media / subtitles / pronunciation / word-timings / chunking / vocabulary / dictionary / transcription / phonetic-analysis / speech-batch / learning-resources / lexical-entries / diagnosis
-- HTTP handler 位于 `api-http/src/routes/`；root `lib.rs` 负责 router 装配、认证、SSE 和错误响应
-- SSE 事件流（`/v1/events`）
-- 协调器：TranscriptionCoordinator / PhoneticAnalysisCoordinator / SpeechBatchCoordinator
+### Media And Subtitle Import
 
-### `api-events` — 事件 Schema
-- `EventName` 枚举（28 种事件类型）
-- `EventEnvelope`（name + version + JSON payload）
-- JSON Schema 验证
-
-## 4. 数据流
-
-### 播放路径（实时，不经过后端 API）
-```
-播放器位置事件 → TimelineCursor（客户端）→ 当前句/当前词 → UI 更新
+```text
+file picker -> api-http -> application -> subtitle-core -> SQLite -> typed track
 ```
 
-### 学习路径（经过后端 API）
-```
-用户点击单词 → Flutter UI → HTTP POST /v1/dictionary/lookup
-  → AppServices.lookup() → DictionaryProvider → 缓存写入 → 返回结果
-```
+### Learning Lookup And Status
 
-### 字幕导入路径
-```
-SRT/VTT 文件 → Flutter 选择文件 → HTTP POST /v1/media/{id}/subtitles
-  → subtitle_core::import() → 解析 → token化 → SQLite 持久化 → 返回标准化轨道
+```text
+token click -> lexical entry lookup/upsert -> dictionary/pronunciation lookup
+  -> LearningController typed state -> WordLearningPanel
 ```
 
-### 生产管线路径
+### Diagnosis
+
+```text
+cue change -> LearningWorkflowController generation guard
+  -> /v1/sentences/{id}/diagnosis
+  -> diagnosis-core over lexical entries + observations
+  -> typed Diagnosis state
 ```
-媒体文件 → Python prepare-media → run-whisperx → from-whisperx-json
-  → .lltimeline.json → ll timeline-resource.py import → SQLite 资源存储
+
+### Timeline Resources
+
+```text
+subtitle track -> word timeline -> chunk timeline / phone timeline
+  -> SpeechEnhancementWorkflowController -> Flutter timeline/pronunciation model
 ```
 
-## 5. 关键架构边界
+### LLTimeline Import/Export
 
-| 边界 | 规则 |
-|---|---|
-| 播放 vs 后端 | 播放位置事件在客户端本地，不经过 HTTP API |
-| 领域 vs 传输 | `application` 定义 trait，`api-http` 只做 HTTP 适配 |
-| 消费端 vs 生产端 | 消费端不依赖 Python/PyTorch/WhisperX 运行时 |
-| LLTimeline 契约 | Schema 版本化（`llplayer.timeline.v1`），不兼容变化升版本 |
-| 词汇资产 vs 媒体 | 媒体/字幕删除不级联删除词汇学习资产（外键置空） |
-| 学习语言 vs 界面语言 | 学习语言来自字幕轨/用户选择，与 UI 语言独立；语言能力经 profile/provider，未知干净降级（Phase 2.6，ADR 0012） |
+```text
+.lltimeline.json -> api-http -> application validation/fingerprint handling
+  -> persisted LLTimeline metadata/artifacts + generated timeline resources
+```
 
-## 6. 已知架构债务
+## Current Guardrails
 
-1. **`speech-analysis` 职责过重**：10 个模块覆盖 ASR 后处理、对齐、chunk、音素分析四个不同关注点。M2 稳定后建议拆分。
+- `cargo test -p api-http openapi` verifies route/OpenAPI parity.
+- `scripts/validate-contracts.sh` verifies contract smoke paths, event schema,
+  generated client methods, and route drift.
+- Flutter `LearningController` tests cover typed selection/clearing.
+- Persistence tests cover active timeline resource behavior and lexical asset
+  import/export.
 
-2. **Flutter 搜索 Rust binary 路径脆弱**：从 CWD 向上遍历找 `target/release/api-http`，生产发布包应固化路径。
+## Remaining Architecture Debt
 
-## 7. 多语言架构方向（Phase 2.6，规划中）
-
-> 当前代码英语优先（`subtitle-core` 英语 token 化、`language=en` 客户端硬编码、词汇
-> 单位 ≈ 英语 lemma）。Phase 2.6 在 Phase 2.5.5 已校验的抽象上扩展英语 + 汉语。
-> 决策见 `docs/decisions/0012-multilingual-learning-abstraction.md`。
-
-预期触及的 crate / 边界（不改 LLTimeline 契约、不引入重型 runtime）：
-
-- `subtitle-core`：`tokenize_english()` → 语言感知 token 化（英语保留回归基线，汉语
-  分词 + 字级 fallback + 中英混排）。
-- `domain` / `application`：WordProfile 词汇单位泛化为 LexicalUnit（粒度 × 归一，
-  `NormalizedKey` 不透明）；新增 LanguageLearningProfile / capability matrix；ListeningUnit
-  为现有 Word/Chunk/Phone 时间轴资源之上的视图，不新建表。
-- `application` Provider trait：新增语言感知 tokenizer / lexical normalizer、汉语
-  dictionary + 拼音 provider；kind taxonomy 为开放 namespaced string，未知干净降级。
-- `diagnosis-core`：诊断**理由** taxonomy 按 profile 扩展（状态枚举保持语言无关）；
-  签名为母语（L1）维度预留位置，v1 不读取。
-- Flutter 客户端：去除 `language=en` 硬编码，学习语言来自 active 字幕轨/用户选择；
-  汉语最小学习面板。
-
-架构不变量：全局词汇状态枚举语言无关、跨语言复用；新增主流语言主要是 provider + profile
-工作，不需回改既有语言代码与既有 kind 枚举。
+1. `main.dart` is still large. Phase 2.18 moved event parsing, core learning
+   workflows, and speech-enhancement/timeline refresh out first; remaining
+   media/session/resource action wiring can be extracted later.
+2. `speech-analysis` still contains several subdomains in one crate. This is
+   acceptable until APIs stabilize, but it should not leak public DTO shapes.
+3. Route strings still live in the Axum router chain. The parity test is the
+   current guardrail; a manifest can be added later if route growth continues.

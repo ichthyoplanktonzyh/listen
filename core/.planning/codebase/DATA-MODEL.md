@@ -1,141 +1,116 @@
-# M1 Data Model
+# Current Data Model
 
-All persisted time values are non-negative integer milliseconds. All IDs are
-opaque lowercase SHA-256 strings generated from a namespace and stable
-fingerprint. IDs never contain database row numbers or player-library values.
+Last updated: 2026-06-27, Phase 2.18.
+
+All persisted time values are non-negative integer milliseconds. Public IDs are
+opaque SHA-256 strings generated from a namespace and stable fingerprint; they
+do not contain database row numbers or player-library identifiers.
 
 ## Identity Strategy
 
 | Record | Stable identity |
 |---|---|
-| Media | `sha256("media:" + content fingerprint)` |
+| Media | `sha256("media:" + content_fingerprint)` |
 | Subtitle track | Track fingerprint, unique across imports |
-| Subtitle sentence | Deterministic track/cue identity supplied by subtitle core |
-| Word profile | `sha256("word-profile:" + language + ":" + normalized lemma)` |
-| Word observation | Profile, sentence, and creation time; observations are append-only |
-| Word occurrence (M1.5) | Profile and durable source snapshot; live links are optional |
-| Word status history (M1.5) | Profile, change time, and ordered status transition |
-| Dictionary cache entry | Language, normalized lemma, and provider |
+| Subtitle sentence | Deterministic track/cue identity from subtitle-core |
+| Lexical entry | `language + granularity + normalization + normalized_key` |
+| Lexical occurrence | Lexical entry + durable source snapshot key |
+| Lexical observation | Lexical entry + sentence + original form |
+| Dictionary cache entry | Language + normalized form + provider |
+| Timeline resource | Resource namespace + track/media/config fingerprint |
 
-Schema v5 adds nullable user definition and personal note fields to each word
-profile. Their independent learning-content timestamp prevents backup merges
-from coupling personal edits to status changes.
+Media path is mutable metadata, not identity. Registering the same media
+fingerprint updates path/title metadata while retaining the media ID.
 
-Media path is mutable metadata, not identity. Registering the same fingerprint
-updates its path and metadata while retaining its ID and creation timestamp.
-Language codes are lowercase ASCII BCP-47-like values. Lemmas are trimmed and
-lowercased for identity; the original and display forms remain available.
+## Learning Assets
 
-## Learning Semantics
+The authoritative learning asset is `LexicalEntry`.
 
-`WordProfile.status` is the user's current global assessment of a word in one
-language. A `WordObservation` is an append-only result for that word in one
-specific subtitle sentence. Updating a global profile never rewrites historical
-observations, and observations do not silently change the global status.
-
-Milestone 1.5 makes user selection the authoritative source of global status.
-Historical observations may remain append-only, but diagnosis reads only the
-latest effective observation for a profile and sentence and supports clearing
-that effective value.
-
-The durable asset priority is:
+`LexicalEntry.unit` is a `LexicalUnit`:
 
 ```text
-word profile and status history
-  > source sentence snapshot
-  > live sentence and media relationship
-  > replaceable media file
+language
+  + granularity       # word, phrase, char, morpheme, ...
+  + normalization     # provider/profile-specific normalization name
+  + normalized_key    # opaque normalized key
 ```
 
-When the user deliberately sets a status, a `word_occurrence` captures the
-original form, full sentence text, media title, time range, and encounter
-timestamps. It may also link to the current media and sentence for return to
-playback. A `word_status_history` row records the transition and optional source
-occurrence in the same transaction.
+`LearningStatus` is language-agnostic and applies to every lexical granularity:
 
-## Relationships And Deletion
+```text
+null
+unknown_meaning
+known_not_recognized
+known_recognized
+```
+
+Lexical learning state is split by purpose:
+
+| Table/model | Purpose |
+|---|---|
+| `lexical_entries` | Current durable user assessment and notes |
+| `lexical_status_history` | Status transition audit trail |
+| `lexical_occurrences` | Durable source sentence/media snapshot |
+| `lexical_observations` | Sentence-specific heard/not-heard result |
+
+Updating a global status never rewrites historical observations. Diagnosis reads
+current lexical entries plus the latest relevant lexical observation for the
+sentence.
+
+## Deletion Semantics
+
+Vocabulary learning assets outlive replaceable media and subtitles.
 
 ```text
 media_items
   ├── playback_progress (cascade)
   └── subtitle_tracks (cascade)
         └── subtitle_sentences (cascade)
-              └── word_observations (cascade)
 
-word_profiles
-  └── word_observations (cascade)
-```
-
-Deleting a media record removes its progress, imported subtitle timeline, and
-sentence observations. Deleting a word profile removes its observations.
-There is no delete use case in M1; this documents the schema behavior before
-such a use case is exposed.
-
-Milestone 1.5 must migrate vocabulary learning assets away from this cascade:
-
-```text
-word_profiles
-  ├── word_status_history (cascade only when explicitly deleting the profile)
-  └── word_occurrences
+lexical_entries
+  ├── lexical_status_history (cascade only when deleting the entry)
+  ├── lexical_observations (cascade only when deleting the entry)
+  └── lexical_occurrences
         ├── media_id nullable, ON DELETE SET NULL
         └── sentence_id nullable, ON DELETE SET NULL
 ```
 
-Deleting or losing media and subtitle records preserves occurrence snapshots
-and status history. Default cleanup archives replaceable content; permanent
-deletion of vocabulary assets requires an explicit user action.
+Losing or deleting media/subtitle rows preserves lexical occurrence snapshots and
+status history. Media availability changes should archive replaceable content;
+permanent lexical deletion is an explicit learning-asset operation.
 
-## Transactions, Indexes, And Migration
+## Timeline Resources
+
+Word, chunk, and phone timelines share the same resource lifecycle:
+
+```text
+candidate -> active -> archived
+```
+
+SQLite enforces one active resource per track/resource kind with partial unique
+indexes. `created_by`, parent IDs, publication markers, and model/provider
+metadata are provenance/revision metadata, not lifecycle state.
+
+`metrics_json` and `evidence_json` remain object-shaped JSON at the API/storage
+boundary, but the Rust and Flutter models now wrap them in typed envelopes:
+
+| Field | Domain type | Notes |
+|---|---|---|
+| `WordTimeline.metrics_json` | `TimelineMetrics` | lifecycle/provenance metrics |
+| `ChunkTimeline.metrics_json` | `TimelineMetrics` | partitioner and parent timing metrics |
+| `PhoneTimeline.metrics_json` | `TimelineMetrics` | phonetic analysis provenance metrics |
+| `ChunkTimelineChunk.evidence_json` | `ChunkEvidence` | boundary/evidence payload |
+
+Non-object metrics/evidence input is normalized to an empty object.
+
+## Transactions And Migration
 
 - Every migration runs in a transaction and advances `PRAGMA user_version`.
 - Existing databases are copied to `<database>.pre-migration.bak` before an
-  upgrade. Manual recovery is replacing the database with that copy while the
-  service is stopped.
-- Subtitle track replacement deletes and inserts its sentence timeline in one
+  upgrade, but Phase 2.18 does not preserve historical schema compatibility.
+- Subtitle replacement deletes and inserts its sentence timeline in one
   transaction.
-- Unique constraints enforce idempotent media, subtitle, word-profile, and
-  dictionary-cache identities.
-- Timeline and observation indexes support ordered subtitle reads and later
-  diagnosis queries.
-
-Milestone 1.6 schema version is `5`. Migration tests cover historical versions
-1 through 4. Version 5 adds durable user definitions and personal notes.
-# Milestone 1.9 Additions
-
-Schema v8 adds provider/version-isolated `pronunciation_cache` rows plus
-rebuildable `pronunciation_analysis` and `word_timings` rows keyed by subtitle
-sentence. It also adds durable `speech_rule_confirmations` reserved for explicit
-user confirmations. Every analysis row records provider/version; every word
-timing records its source. These caches are separate from vocabulary asset
-export and can be deleted and regenerated without losing learning data.
-
-# Multilingual Direction (Phase 2.6)
-
-The identity and learning-semantics rules above are English-first. Phase 2.6
-generalizes them for multilingual learning (English + Chinese first) on the
-abstraction validated in Phase 2.5.5. See
-`docs/decisions/0012-multilingual-learning-abstraction.md`.
-
-- **Comprehension axis is the language invariant.** The global vocabulary status
-  enum stays language-agnostic and reusable; the durable vocabulary asset does
-  not fork per language. The diagnosis *reason* taxonomy becomes per-profile.
-- **Word profile identity generalizes.** `sha256("word-profile:" + language + ":"
-  + normalized lemma)` becomes language + granularity + opaque normalized key,
-  where granularity is char/word/phrase/morpheme and the normalized key is the
-  opaque output of a per-language normalizer (no substring/affix assumption;
-  Arabic roots are non-concatenative). Existing English word profiles remain
-  readable. Persisted Chinese identity uses a single canonical granularity
-  (word), with character level only as fallback.
-- **ListeningUnit is a view, not a table.** The sound side stays owned by the
-  existing `word_timeline` / `chunk_timeline` / `phone_timeline` resources; no new
-  persisted ListeningUnit store is added in 2.6. A listening observation may
-  anchor to a ListeningUnit (e.g. a tone/pitch minimal pair), not only a lexical
-  unit.
-- **L1 seam.** Diagnosis reserves a nullable learner-L1 dimension; v1 does not
-  read it and adds no schema column for it.
-- **Open kind taxonomies.** Language/unit kinds are namespaced strings with clean
-  degradation, not closed enums, so adding a language does not require a schema or
-  enum migration of existing kinds.
-
-No SQLite schema change is implied by this direction note itself; concrete schema
-deltas are defined in the Phase 2.6 plan.
+- Unique constraints enforce idempotent media, subtitle, lexical, dictionary
+  cache, and active timeline identities.
+- Vocabulary export/import is version 5 and contains only lexical assets plus
+  phonetic finding feedback.

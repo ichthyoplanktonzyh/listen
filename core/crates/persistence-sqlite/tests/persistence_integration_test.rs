@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
-use application::{AppServices, ImportSubtitle, RegisterMedia, UpdateWordProfile};
-use domain::{MediaAvailability, MediaKind, TimeMs, WordStatus};
+use application::{AppServices, ImportSubtitle, RegisterMedia, UpsertLexicalEntry};
+use domain::{
+    LearningStatus, LexicalEntry, LexicalEntryKind, MediaAvailability, MediaKind, TimeMs,
+};
 use persistence_sqlite::SqliteRepository;
 
 /// Create test media and verify it round-trips through the database.
@@ -17,6 +19,48 @@ fn register_test_media(services: &AppServices) -> domain::MediaItem {
         .expect("register media should succeed")
 }
 
+fn make_services(repo: Arc<SqliteRepository>) -> AppServices {
+    AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo,
+    )
+}
+
+fn upsert_word_asset(
+    services: &AppServices,
+    value: impl Into<String>,
+    display_form: impl Into<String>,
+    status: Option<LearningStatus>,
+) {
+    let value = value.into();
+    services
+        .create_lexical_entry(UpsertLexicalEntry {
+            language: "en".into(),
+            kind: LexicalEntryKind::Word,
+            canonical_form: value,
+            display_form: display_form.into(),
+            status,
+            user_definition: None,
+            personal_note: None,
+            source: None,
+        })
+        .expect("upsert lexical word");
+}
+
+fn read_word_asset(services: &AppServices, value: &str) -> Option<LexicalEntry> {
+    services
+        .read_lexical_entries_by_forms("en", LexicalEntryKind::Word, &[value.into()])
+        .expect("read lexical word")
+        .into_iter()
+        .next()
+}
+
 #[test]
 fn file_database_persists_across_reopen() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -25,26 +69,14 @@ fn file_database_persists_across_reopen() {
     // Create and populate
     {
         let repo = SqliteRepository::open(&db_path).expect("open");
-        let services = AppServices::new(
-            Arc::new(repo),
-            Arc::new(SqliteRepository::open(&db_path).expect("open 2")),
-            Arc::new(SqliteRepository::open(&db_path).expect("open 3")),
-            Arc::new(SqliteRepository::open(&db_path).expect("open 4")),
-            Arc::new(SqliteRepository::open(&db_path).expect("open 5")),
-            Arc::new(SqliteRepository::open(&db_path).expect("open 6")),
-            Arc::new(SqliteRepository::open(&db_path).expect("open 7")),
-            Arc::new(SqliteRepository::open(&db_path).expect("open 8")),
-        );
+        let services = make_services(Arc::new(repo));
         let media = register_test_media(&services);
-        services
-            .update_word_profile(UpdateWordProfile {
-                language: "en".into(),
-                lemma: "persist".into(),
-                display_form: "Persist".into(),
-                status: Some(WordStatus::KnownRecognized),
-                source: None,
-            })
-            .expect("update word profile");
+        upsert_word_asset(
+            &services,
+            "persist",
+            "Persist",
+            Some(LearningStatus::KnownRecognized),
+        );
         services
             .update_progress(&media.id, 5555)
             .expect("save progress");
@@ -57,22 +89,10 @@ fn file_database_persists_across_reopen() {
             repo.schema_version().expect("schema version"),
             persistence_sqlite::MIGRATION_VERSION
         );
-        let services = AppServices::new(
-            Arc::new(repo),
-            Arc::new(SqliteRepository::open(&db_path).expect("open")),
-            Arc::new(SqliteRepository::open(&db_path).expect("open")),
-            Arc::new(SqliteRepository::open(&db_path).expect("open")),
-            Arc::new(SqliteRepository::open(&db_path).expect("open")),
-            Arc::new(SqliteRepository::open(&db_path).expect("open")),
-            Arc::new(SqliteRepository::open(&db_path).expect("open")),
-            Arc::new(SqliteRepository::open(&db_path).expect("open")),
-        );
-        let profile = services
-            .read_word_profile("en", "persist")
-            .expect("read")
-            .expect("profile should exist after reopen");
-        assert_eq!(profile.display_form, "Persist");
-        assert_eq!(profile.status, Some(WordStatus::KnownRecognized));
+        let services = make_services(Arc::new(repo));
+        let entry = read_word_asset(&services, "persist").expect("entry should exist after reopen");
+        assert_eq!(entry.display_form, "Persist");
+        assert_eq!(entry.status, Some(LearningStatus::KnownRecognized));
     }
 }
 
@@ -128,25 +148,14 @@ fn concurrent_access_through_mutex_is_safe() {
         .map(|i| {
             let repo = Arc::clone(&repo);
             std::thread::spawn(move || {
-                let services = AppServices::new(
-                    repo.clone(),
-                    repo.clone(),
-                    repo.clone(),
-                    repo.clone(),
-                    repo.clone(),
-                    repo.clone(),
-                    repo.clone(),
-                    repo.clone(),
-                );
+                let services = make_services(repo.clone());
                 for j in 0..50 {
-                    let result = services.update_word_profile(UpdateWordProfile {
-                        language: "en".into(),
-                        lemma: format!("thread-{i}-word-{j}"),
-                        display_form: format!("T{i}W{j}"),
-                        status: Some(WordStatus::UnknownMeaning),
-                        source: None,
-                    });
-                    assert!(result.is_ok(), "thread {i} word {j}: {:?}", result.err());
+                    upsert_word_asset(
+                        &services,
+                        format!("thread-{i}-word-{j}"),
+                        format!("T{i}W{j}"),
+                        Some(LearningStatus::UnknownMeaning),
+                    );
                 }
             })
         })
@@ -157,23 +166,12 @@ fn concurrent_access_through_mutex_is_safe() {
     }
 
     // All 400 words should be queryable
-    let services = AppServices::new(
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo,
-    );
+    let services = make_services(repo);
     for i in 0..8 {
         for j in 0..50 {
-            let profile = services
-                .read_word_profile("en", &format!("thread-{i}-word-{j}"))
-                .expect("read")
+            let entry = read_word_asset(&services, &format!("thread-{i}-word-{j}"))
                 .expect("word should exist");
-            assert_eq!(profile.display_form, format!("T{i}W{j}"));
+            assert_eq!(entry.display_form, format!("T{i}W{j}"));
         }
     }
 }
@@ -182,29 +180,11 @@ fn concurrent_access_through_mutex_is_safe() {
 fn subtitle_import_and_export_preserves_sentence_structure() {
     let repo = Arc::new(SqliteRepository::in_memory().expect("in_memory"));
     let media = {
-        let services = AppServices::new(
-            repo.clone(),
-            repo.clone(),
-            repo.clone(),
-            repo.clone(),
-            repo.clone(),
-            repo.clone(),
-            repo.clone(),
-            repo.clone(),
-        );
+        let services = make_services(repo.clone());
         register_test_media(&services)
     };
 
-    let services = AppServices::new(
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo,
-    );
+    let services = make_services(repo);
     let track = services
         .import_subtitle(ImportSubtitle {
             media_id: media.id.clone(),
@@ -248,16 +228,7 @@ fn subtitle_import_and_export_preserves_sentence_structure() {
 #[test]
 fn media_availability_lifecycle() {
     let repo = Arc::new(SqliteRepository::in_memory().expect("in_memory"));
-    let services = AppServices::new(
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo,
-    );
+    let services = make_services(repo);
     let media = register_test_media(&services);
     assert_eq!(media.availability, MediaAvailability::Available);
 
@@ -282,22 +253,8 @@ fn empty_database_has_no_data() {
         persistence_sqlite::MIGRATION_VERSION
     );
 
-    let services = AppServices::new(
-        Arc::new(repo),
-        Arc::new(SqliteRepository::in_memory().expect("m2")),
-        Arc::new(SqliteRepository::in_memory().expect("m3")),
-        Arc::new(SqliteRepository::in_memory().expect("m4")),
-        Arc::new(SqliteRepository::in_memory().expect("m5")),
-        Arc::new(SqliteRepository::in_memory().expect("m6")),
-        Arc::new(SqliteRepository::in_memory().expect("m7")),
-        Arc::new(SqliteRepository::in_memory().expect("m8")),
-    );
-    assert!(
-        services
-            .read_word_profile("en", "nonexistent")
-            .expect("read")
-            .is_none()
-    );
+    let services = make_services(Arc::new(repo));
+    assert!(read_word_asset(&services, "nonexistent").is_none());
     assert!(
         services
             .read_progress(&domain::MediaId::parse("nonexistent-media-id").unwrap())

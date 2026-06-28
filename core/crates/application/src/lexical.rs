@@ -9,7 +9,7 @@ impl AppServices {
         let language = LanguageCode::parse(language)?;
         let original = normalize_lemma(value);
         require_text(&original, "value")?;
-        if let Some(corrected) = self.lexical.lemma_override(&language, &original)? {
+        if let Some(corrected) = self.learning_assets.lemma_override(&language, &original)? {
             return Ok(LexicalNormalization {
                 original,
                 normalized: corrected,
@@ -53,12 +53,16 @@ impl AppServices {
         let corrected = normalize_lemma(corrected);
         require_text(&original, "original")?;
         require_text(&corrected, "corrected")?;
-        let original_entry =
-            self.lexical
-                .lexical_entry_by_key(&language, LexicalEntryKind::Word, &original)?;
-        let corrected_entry =
-            self.lexical
-                .lexical_entry_by_key(&language, LexicalEntryKind::Word, &corrected)?;
+        let original_entry = self.learning_assets.lexical_entry_by_key(
+            &language,
+            LexicalEntryKind::Word,
+            &original,
+        )?;
+        let corrected_entry = self.learning_assets.lexical_entry_by_key(
+            &language,
+            LexicalEntryKind::Word,
+            &corrected,
+        )?;
         if let (Some(original_entry), Some(corrected_entry)) = (original_entry, corrected_entry)
             && original_entry.id != corrected_entry.id
         {
@@ -66,7 +70,7 @@ impl AppServices {
                 "lemma correction target already has a separate word asset",
             ));
         }
-        self.lexical
+        self.learning_assets
             .set_lemma_override(&language, &original, &corrected, now_ms())?;
         Ok(LexicalNormalization {
             original,
@@ -90,13 +94,13 @@ impl AppServices {
             normalization.normalized.clone()
         };
         require_text(&normalized_form, "canonical_form")?;
-        let id = LexicalEntryId::from_fingerprint(
-            "lexical-entry",
-            &format!("{}:{:?}:{normalized_form}", language.as_str(), input.kind),
-        );
-        self.lexical.upsert_lexical_entry(
+        let unit =
+            lexical_unit_for_entry(&language, input.kind, &normalized_form, &input.display_form);
+        let id = LexicalEntryId::from_fingerprint("lexical-entry", &unit.identity());
+        self.learning_assets.upsert_lexical_entry(
             &LexicalEntry {
                 id,
+                unit,
                 language,
                 kind: input.kind,
                 canonical_form: input.canonical_form,
@@ -112,7 +116,7 @@ impl AppServices {
                 learning_updated_at_ms: now_ms(),
             },
             input.source.as_ref(),
-            WordChangeSource::UserSelection,
+            LearningChangeSource::UserSelection,
         )
     }
 
@@ -120,19 +124,19 @@ impl AppServices {
         &self,
         id: &LexicalEntryId,
     ) -> Result<Option<LexicalEntryDetails>, ApplicationError> {
-        self.lexical.lexical_details(id)
+        self.learning_assets.lexical_details(id)
     }
 
     pub fn list_lexical_entries(
         &self,
         language: &str,
         kind: Option<LexicalEntryKind>,
-        status: Option<WordStatus>,
+        status: Option<LearningStatus>,
         search: &str,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<LexicalEntryDetails>, ApplicationError> {
-        self.lexical.list_lexical_entries(
+        self.learning_assets.list_lexical_entries(
             &LanguageCode::parse(language)?,
             kind,
             status,
@@ -147,7 +151,7 @@ impl AppServices {
         sentence_id: &SubtitleSentenceId,
     ) -> Result<Vec<PhraseCandidate>, ApplicationError> {
         let sentence = self
-            .subtitles
+            .subtitle_tracks
             .get_sentence(sentence_id)?
             .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
         let language = self.sentence_language(sentence_id)?;
@@ -168,4 +172,24 @@ impl AppServices {
         });
         Ok(candidates)
     }
+}
+
+pub(crate) fn lexical_unit_for_entry(
+    language: &LanguageCode,
+    kind: LexicalEntryKind,
+    normalized_form: &str,
+    display_form: &str,
+) -> LexicalUnit {
+    let profile = domain::profile_for(language);
+    let granularity = match kind {
+        LexicalEntryKind::Word => LexicalUnit::GRANULARITY_WORD,
+        LexicalEntryKind::Phrase => LexicalUnit::GRANULARITY_PHRASE,
+    };
+    LexicalUnit::new(
+        language.clone(),
+        granularity,
+        profile.lexical_normalization,
+        normalized_form,
+        display_form,
+    )
 }

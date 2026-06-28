@@ -31,14 +31,14 @@ impl AppServices {
         if self.media.get(media_id)?.is_none() {
             return Err(ApplicationError::NotFound("media item"));
         }
-        self.subtitles.list_tracks_for_media(media_id)
+        self.subtitle_tracks.list_tracks_for_media(media_id)
     }
 
     pub fn archive_subtitle_track(
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<SubtitleTrack, ApplicationError> {
-        self.subtitles
+        self.subtitle_tracks
             .set_track_status(track_id, SubtitleTrackStatus::Archived)
     }
 
@@ -46,7 +46,7 @@ impl AppServices {
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<SubtitleTrack, ApplicationError> {
-        self.subtitles
+        self.subtitle_tracks
             .set_track_status(track_id, SubtitleTrackStatus::Available)
     }
 
@@ -54,7 +54,7 @@ impl AppServices {
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Option<SubtitleTrack>, ApplicationError> {
-        self.subtitles.delete_track(track_id)
+        self.subtitle_tracks.delete_track(track_id)
     }
 
     pub fn read_progress(&self, media_id: &MediaId) -> Result<Option<TimeMs>, ApplicationError> {

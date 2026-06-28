@@ -9,7 +9,6 @@ mod diagnosis;
 mod dictionary;
 mod dto;
 mod error;
-mod learning;
 mod lexical;
 mod media;
 mod phones;
@@ -31,8 +30,8 @@ pub use providers::*;
 pub use repositories::*;
 pub use util::now_ms;
 pub(crate) use util::{
-    clean_optional, clean_required, lexical_from_word, lexical_source_from_word,
-    normalize_american_english, normalize_phrase, phrase_candidates, require_text,
+    clean_optional, clean_required, normalize_american_english, normalize_phrase,
+    phrase_candidates, require_text,
 };
 
 const DICTIONARY_CACHE_TTL_MS: u64 = 30 * 24 * 60 * 60 * 1000;
@@ -58,12 +57,12 @@ pub(crate) struct ForcedAlignSegment {
 pub struct AppServices {
     pub(crate) media: Arc<dyn MediaRepository>,
     pub(crate) progress: Arc<dyn PlaybackProgressRepository>,
-    pub(crate) words: Arc<dyn WordProfileRepository>,
-    pub(crate) observations: Arc<dyn WordObservationRepository>,
-    pub(crate) subtitles: Arc<dyn SubtitleRepository>,
+    pub(crate) subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
+    pub(crate) pronunciations: Arc<dyn PronunciationRepository>,
+    pub(crate) timelines: Arc<dyn TimelineResourceRepository>,
+    pub(crate) lltimeline_resources: Arc<dyn LLTimelineResourceRepository>,
     pub(crate) dictionary: Arc<dyn DictionaryCacheRepository>,
-    pub(crate) vocabulary: Arc<dyn VocabularyAssetRepository>,
-    pub(crate) lexical: Arc<dyn LexicalEntryRepository>,
+    pub(crate) learning_assets: Arc<dyn LearningAssetRepository>,
     pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
     pub(crate) pronunciation_providers: Arc<Vec<Arc<dyn PronunciationProvider>>>,
 }
@@ -73,22 +72,22 @@ impl AppServices {
     pub fn new(
         media: Arc<dyn MediaRepository>,
         progress: Arc<dyn PlaybackProgressRepository>,
-        words: Arc<dyn WordProfileRepository>,
-        observations: Arc<dyn WordObservationRepository>,
-        subtitles: Arc<dyn SubtitleRepository>,
+        subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
+        pronunciations: Arc<dyn PronunciationRepository>,
+        timelines: Arc<dyn TimelineResourceRepository>,
+        lltimeline_resources: Arc<dyn LLTimelineResourceRepository>,
         dictionary: Arc<dyn DictionaryCacheRepository>,
-        vocabulary: Arc<dyn VocabularyAssetRepository>,
-        lexical: Arc<dyn LexicalEntryRepository>,
+        learning_assets: Arc<dyn LearningAssetRepository>,
     ) -> Self {
         Self {
             media,
             progress,
-            words,
-            observations,
-            subtitles,
+            subtitle_tracks,
+            pronunciations,
+            timelines,
+            lltimeline_resources,
             dictionary,
-            vocabulary,
-            lexical,
+            learning_assets,
             lexical_normalizers: Arc::new(Vec::new()),
             pronunciation_providers: Arc::new(Vec::new()),
         }
@@ -193,7 +192,7 @@ pub(crate) fn build_word_timeline(
     parent_timeline_id: Option<WordTimelineId>,
     created_by: Option<TimelineCreator>,
     status: TimelineStatus,
-    metrics_json: Option<serde_json::Value>,
+    metrics_json: Option<TimelineMetrics>,
 ) -> Result<WordTimeline, ApplicationError> {
     let words = validate_word_timeline_words(track, &words)?;
     let first = words
@@ -256,7 +255,7 @@ pub(crate) fn build_word_timeline(
         parent_timeline_id,
         created_by,
         status,
-        metrics_json: metrics_json.unwrap_or_else(|| serde_json::json!({})),
+        metrics_json: metrics_json.unwrap_or_default(),
         words,
         created_at_ms: now,
         updated_at_ms: now,
@@ -367,7 +366,10 @@ pub(crate) fn word_timeline_summary(timeline: &WordTimeline) -> WordTimelineSumm
 pub(crate) fn word_timeline_lifecycle_stage(timeline: &WordTimeline) -> WordTimelineLifecycleStage {
     if timeline
         .metrics_json
-        .pointer("/lifecycle/published")
+        .as_object()
+        .get("lifecycle")
+        .and_then(serde_json::Value::as_object)
+        .and_then(|value| value.get("published"))
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(false)
     {
@@ -386,13 +388,7 @@ pub(crate) fn word_timeline_lifecycle_stage(timeline: &WordTimeline) -> WordTime
 
 pub(crate) fn mark_word_timeline_published(timeline: &mut WordTimeline) {
     let now = now_ms();
-    if !timeline.metrics_json.is_object() {
-        timeline.metrics_json = serde_json::json!({});
-    }
-    let root = timeline
-        .metrics_json
-        .as_object_mut()
-        .expect("metrics_json was normalized to object");
+    let root = timeline.metrics_json.as_object_mut();
     let lifecycle = root
         .entry("lifecycle")
         .or_insert_with(|| serde_json::json!({}));

@@ -2,7 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use domain::*;
 
-use crate::{ApplicationError, LexicalSourceContext, SourceContext};
+use crate::ApplicationError;
 
 pub(crate) fn require_text(value: &str, field: &'static str) -> Result<(), ApplicationError> {
     if value.trim().is_empty() {
@@ -40,41 +40,6 @@ pub(crate) fn normalize_phrase(value: &str) -> String {
         .map(normalize_lemma)
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-pub(crate) fn lexical_from_word(profile: &WordProfile) -> LexicalEntry {
-    LexicalEntry {
-        id: LexicalEntryId::parse(profile.id.as_str().to_owned())
-            .expect("word profile id is a valid lexical id"),
-        language: profile.language.clone(),
-        kind: LexicalEntryKind::Word,
-        canonical_form: profile.lemma.clone(),
-        normalized_form: profile.normalized_lemma.clone(),
-        display_form: profile.display_form.clone(),
-        status: profile.status,
-        user_definition: profile.user_definition.clone(),
-        personal_note: profile.personal_note.clone(),
-        normalization_provider: "legacy-word-api".into(),
-        normalization_version: "v1".into(),
-        user_corrected: false,
-        updated_at_ms: profile.updated_at_ms,
-        learning_updated_at_ms: profile.learning_updated_at_ms,
-    }
-}
-
-pub(crate) fn lexical_source_from_word(source: &SourceContext) -> LexicalSourceContext {
-    LexicalSourceContext {
-        media_id: source.media_id.clone(),
-        sentence_id: source.sentence_id.clone(),
-        original_form: source.original_form.clone(),
-        sentence_text: source.sentence_text.clone(),
-        media_title: source.media_title.clone(),
-        media_fingerprint: source.media_fingerprint.clone(),
-        start_ms: source.start_ms,
-        end_ms: source.end_ms,
-        token_start: None,
-        token_end: None,
-    }
 }
 
 pub(crate) fn normalize_american_english(value: &str) -> String {

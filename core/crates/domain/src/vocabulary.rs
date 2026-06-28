@@ -1,25 +1,19 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    LearningResourceId, LexicalEntry, LexicalOccurrence, LexicalStatusHistory,
-    PhoneticFindingFeedback, WordObservation, WordOccurrence, WordProfile, WordStatus,
-    WordStatusHistory,
+    LearningResourceId, LearningStatus, LexicalEntry, LexicalObservation, LexicalOccurrence,
+    LexicalStatusHistory, PhoneticFindingFeedback,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VocabularyAssetBundle {
     pub version: u16,
     pub exported_at_ms: u64,
-    pub profiles: Vec<WordProfile>,
-    pub history: Vec<WordStatusHistory>,
-    pub occurrences: Vec<WordOccurrence>,
-    pub observations: Vec<WordObservation>,
-    #[serde(default)]
     pub lexical_entries: Vec<LexicalEntry>,
-    #[serde(default)]
     pub lexical_history: Vec<LexicalStatusHistory>,
-    #[serde(default)]
     pub lexical_occurrences: Vec<LexicalOccurrence>,
+    #[serde(default)]
+    pub lexical_observations: Vec<LexicalObservation>,
     #[serde(default)]
     pub phonetic_finding_feedback: Vec<PhoneticFindingFeedback>,
 }
@@ -27,14 +21,14 @@ pub struct VocabularyAssetBundle {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExternalVocabularyEntry {
     pub word: String,
-    pub status: Option<WordStatus>,
+    pub status: Option<LearningStatus>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExternalVocabularyImport {
     pub language: String,
     pub entries: Vec<ExternalVocabularyEntry>,
-    pub default_status: Option<WordStatus>,
+    pub default_status: Option<LearningStatus>,
     pub overwrite_existing: bool,
 }
 

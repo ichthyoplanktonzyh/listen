@@ -23,14 +23,14 @@ impl AppServices {
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<ChunkTimeline>, ApplicationError> {
-        self.subtitles.list_chunk_timelines(track_id)
+        self.timelines.list_chunk_timelines(track_id)
     }
 
     pub fn summarize_chunk_timelines(
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<ChunkTimelineSummary>, ApplicationError> {
-        let timelines = self.subtitles.list_chunk_timelines(track_id)?;
+        let timelines = self.timelines.list_chunk_timelines(track_id)?;
         Ok(timelines.iter().map(chunk_timeline_summary).collect())
     }
 
@@ -38,7 +38,7 @@ impl AppServices {
         &self,
         id: &ChunkTimelineId,
     ) -> Result<Option<ChunkTimeline>, ApplicationError> {
-        self.subtitles.get_chunk_timeline(id)
+        self.timelines.get_chunk_timeline(id)
     }
 
     pub fn generate_chunk_timeline(
@@ -48,11 +48,11 @@ impl AppServices {
     ) -> Result<ChunkTimeline, ApplicationError> {
         let requested_status = requested_status.unwrap_or(TimelineStatus::Candidate);
         let track = self
-            .subtitles
+            .subtitle_tracks
             .get_track(track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         let word_timeline = self
-            .subtitles
+            .timelines
             .active_word_timeline(track_id)?
             .ok_or(ApplicationError::NotFound("active word timeline"))?;
         let mut grouped = std::collections::HashMap::<SubtitleSentenceId, Vec<WordTiming>>::new();
@@ -124,7 +124,8 @@ impl AppServices {
                 "parent_word_timeline_id": word_timeline.id.as_str(),
                 "word_timing_sources": timing_sources.iter().map(|source| serde_json::json!(source)).collect::<Vec<_>>(),
                 "partitioner_config": config,
-            }),
+            })
+            .into(),
             chunks,
             created_at_ms: now,
             updated_at_ms: now,
@@ -132,9 +133,9 @@ impl AppServices {
         if requested_status == TimelineStatus::Active {
             timeline.status = TimelineStatus::Candidate;
         }
-        let timeline = self.subtitles.save_chunk_timeline(&timeline)?;
+        let timeline = self.timelines.save_chunk_timeline(&timeline)?;
         if requested_status == TimelineStatus::Active {
-            self.subtitles.activate_chunk_timeline(&timeline.id)
+            self.timelines.activate_chunk_timeline(&timeline.id)
         } else {
             Ok(timeline)
         }
@@ -144,21 +145,21 @@ impl AppServices {
         &self,
         id: &ChunkTimelineId,
     ) -> Result<ChunkTimeline, ApplicationError> {
-        self.subtitles.activate_chunk_timeline(id)
+        self.timelines.activate_chunk_timeline(id)
     }
 
     pub fn archive_chunk_timeline(
         &self,
         id: &ChunkTimelineId,
     ) -> Result<ChunkTimeline, ApplicationError> {
-        self.subtitles.archive_chunk_timeline(id)
+        self.timelines.archive_chunk_timeline(id)
     }
 
     pub fn delete_chunk_timeline(
         &self,
         id: &ChunkTimelineId,
     ) -> Result<ChunkTimeline, ApplicationError> {
-        self.subtitles.delete_chunk_timeline(id)
+        self.timelines.delete_chunk_timeline(id)
     }
 
     /// Detect acoustic chunk boundaries for every sentence in a subtitle track.
@@ -177,7 +178,7 @@ impl AppServices {
     > {
         use speech_analysis::chunk_detection::{ChunkDetectionConfig, detect_chunk_boundaries};
         let track = self
-            .subtitles
+            .subtitle_tracks
             .get_track(track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         let config = ChunkDetectionConfig::default();
@@ -214,15 +215,17 @@ impl AppServices {
     ) -> Result<speech_analysis::text_chunk_detection::TextChunkDetectionResult, ApplicationError>
     {
         if !self.sentence_supports_text_chunks(sentence_id) {
-            return Ok(speech_analysis::text_chunk_detection::TextChunkDetectionResult {
-                sentence_id: sentence_id.clone(),
-                chunks: vec![],
-                boundaries: vec![],
-                source_counts: Default::default(),
-            });
+            return Ok(
+                speech_analysis::text_chunk_detection::TextChunkDetectionResult {
+                    sentence_id: sentence_id.clone(),
+                    chunks: vec![],
+                    boundaries: vec![],
+                    source_counts: Default::default(),
+                },
+            );
         }
         let sentence = self
-            .subtitles
+            .subtitle_tracks
             .get_sentence(sentence_id)?
             .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
         let candidates = self.phrase_candidates(sentence_id)?;
@@ -244,7 +247,7 @@ impl AppServices {
         ApplicationError,
     > {
         let track = self
-            .subtitles
+            .subtitle_tracks
             .get_track(track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         if !track_supports_text_chunks(&track) {
@@ -272,7 +275,7 @@ impl AppServices {
             ChunkDetectionConfig, combine_chunks, detect_chunk_boundaries,
         };
         let sentence = self
-            .subtitles
+            .subtitle_tracks
             .get_sentence(sentence_id)?
             .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
         let timings = self.word_timings(sentence_id)?;
@@ -289,18 +292,20 @@ impl AppServices {
     pub fn chunk_partition(
         &self,
         sentence_id: &SubtitleSentenceId,
-    ) -> Result<speech_analysis::chunk_partition::SentenceChunkPartition, ApplicationError> {
+    ) -> Result<SentenceChunkPartition, ApplicationError> {
         let sentence = self
-            .subtitles
+            .subtitle_tracks
             .get_sentence(sentence_id)?
             .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
         let timings = self.word_timings(sentence_id)?;
         let candidates = self.phrase_candidates(sentence_id)?;
-        Ok(speech_analysis::chunk_partition::partition_sentence(
-            &sentence,
-            &timings,
-            &candidates,
-            &speech_analysis::chunk_partition::ChunkPartitionConfig::default(),
+        Ok(sentence_chunk_partition_from_analysis(
+            speech_analysis::chunk_partition::partition_sentence(
+                &sentence,
+                &timings,
+                &candidates,
+                &speech_analysis::chunk_partition::ChunkPartitionConfig::default(),
+            ),
         ))
     }
 
@@ -308,21 +313,21 @@ impl AppServices {
     pub fn chunk_partition_diagnostics(
         &self,
         sentence_id: &SubtitleSentenceId,
-    ) -> Result<speech_analysis::chunk_partition::SentenceChunkDiagnostics, ApplicationError> {
+    ) -> Result<SentenceChunkDiagnostics, ApplicationError> {
         let sentence = self
-            .subtitles
+            .subtitle_tracks
             .get_sentence(sentence_id)?
             .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
         let timings = self.word_timings(sentence_id)?;
         let candidates = self.phrase_candidates(sentence_id)?;
-        Ok(
+        Ok(sentence_chunk_diagnostics_from_analysis(
             speech_analysis::chunk_partition::partition_sentence_with_diagnostics(
                 &sentence,
                 &timings,
                 &candidates,
                 &speech_analysis::chunk_partition::ChunkPartitionConfig::default(),
             ),
-        )
+        ))
     }
 
     /// Produce product-facing chunk partitions for every sentence in a track.
@@ -331,7 +336,7 @@ impl AppServices {
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<SentenceChunkPartition>, ApplicationError> {
         let track = self
-            .subtitles
+            .subtitle_tracks
             .get_track(track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         let config = chunk_partition_config_for_track_source(&track.source);
@@ -341,11 +346,13 @@ impl AppServices {
             .map(|sentence| {
                 let timings = self.word_timings(&sentence.id)?;
                 let candidates = self.phrase_candidates(&sentence.id)?;
-                Ok(speech_analysis::chunk_partition::partition_sentence(
-                    sentence,
-                    &timings,
-                    &candidates,
-                    &config,
+                Ok(sentence_chunk_partition_from_analysis(
+                    speech_analysis::chunk_partition::partition_sentence(
+                        sentence,
+                        &timings,
+                        &candidates,
+                        &config,
+                    ),
                 ))
             })
             .collect()
@@ -358,7 +365,7 @@ impl AppServices {
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<SentenceChunkDiagnostics>, ApplicationError> {
         let track = self
-            .subtitles
+            .subtitle_tracks
             .get_track(track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         let config = chunk_partition_config_for_track_source(&track.source);
@@ -368,14 +375,14 @@ impl AppServices {
             .map(|sentence| {
                 let timings = self.word_timings(&sentence.id)?;
                 let candidates = self.phrase_candidates(&sentence.id)?;
-                Ok(
+                Ok(sentence_chunk_diagnostics_from_analysis(
                     speech_analysis::chunk_partition::partition_sentence_with_diagnostics(
                         sentence,
                         &timings,
                         &candidates,
                         &config,
                     ),
-                )
+                ))
             })
             .collect()
     }
@@ -386,7 +393,7 @@ impl AppServices {
         timings: &[WordTiming],
     ) -> Result<Vec<WordTiming>, ApplicationError> {
         let track = self
-            .subtitles
+            .subtitle_tracks
             .get_track(track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         let sentences = track
@@ -422,7 +429,7 @@ impl AppServices {
             {
                 return Err(ApplicationError::Validation("word timing monotonicity"));
             }
-            let existing = self.subtitles.get_word_timings(sentence_id)?;
+            let existing = self.timelines.get_word_timings(sentence_id)?;
             if existing.first().is_some_and(|current| {
                 values.first().is_some_and(|incoming| {
                     timing_priority(current.timing_source) > timing_priority(incoming.timing_source)
@@ -430,7 +437,7 @@ impl AppServices {
             }) {
                 continue;
             }
-            self.subtitles.save_word_timings(sentence_id, values)?;
+            self.timelines.save_word_timings(sentence_id, values)?;
             accepted.extend(values.clone());
         }
         if !accepted.is_empty() {
@@ -445,15 +452,116 @@ impl AppServices {
                 TimelineStatus::Candidate,
                 None,
             )?;
-            let timeline = self.subtitles.save_word_timeline(&timeline)?;
-            let _ = self.subtitles.activate_word_timeline(&timeline.id)?;
+            let timeline = self.timelines.save_word_timeline(&timeline)?;
+            let _ = self.timelines.activate_word_timeline(&timeline.id)?;
         }
         Ok(timings.to_vec())
     }
 
     pub fn learned_prosodic_providers(&self) -> Vec<LearnedProsodicProviderInfo> {
-        vec![speech_analysis::learned_prosodic_provider::embedded_provider_info()]
+        vec![learned_prosodic_provider_info_from_analysis(
+            speech_analysis::learned_prosodic_provider::embedded_provider_info(),
+        )]
     }
+}
+
+fn sentence_chunk_partition_from_analysis(
+    value: speech_analysis::chunk_partition::SentenceChunkPartition,
+) -> SentenceChunkPartition {
+    SentenceChunkPartition {
+        sentence_id: value.sentence_id,
+        chunks: value
+            .chunks
+            .into_iter()
+            .map(display_chunk_from_analysis)
+            .collect(),
+        partitioner_id: value.partitioner_id,
+        partitioner_version: value.partitioner_version,
+        timing_quality: serialized_enum_name(value.timing_quality),
+    }
+}
+
+fn display_chunk_from_analysis(
+    value: speech_analysis::chunk_partition::DisplayChunk,
+) -> DisplayChunk {
+    DisplayChunk {
+        index: value.index,
+        token_start: value.token_start,
+        token_end: value.token_end,
+        text: value.text,
+        start_ms: value.start_ms,
+        end_ms: value.end_ms,
+        boundary_after: value.boundary_after.map(display_boundary_from_analysis),
+    }
+}
+
+fn display_boundary_from_analysis(
+    value: speech_analysis::chunk_partition::DisplayChunkBoundary,
+) -> DisplayChunkBoundary {
+    DisplayChunkBoundary {
+        left_token_index: value.left_token_index,
+        right_token_index: value.right_token_index,
+        score: value.score,
+        primary_source: serialized_enum_name(value.primary_source),
+        evidence: value
+            .evidence
+            .into_iter()
+            .map(|item| serde_json::to_value(item).unwrap_or(serde_json::Value::Null))
+            .collect(),
+    }
+}
+
+fn sentence_chunk_diagnostics_from_analysis(
+    value: speech_analysis::chunk_partition::SentenceChunkDiagnostics,
+) -> SentenceChunkDiagnostics {
+    SentenceChunkDiagnostics {
+        partition: sentence_chunk_partition_from_analysis(value.partition),
+        candidates: value
+            .candidates
+            .into_iter()
+            .map(boundary_diagnostic_from_analysis)
+            .collect(),
+    }
+}
+
+fn boundary_diagnostic_from_analysis(
+    value: speech_analysis::chunk_partition::BoundaryDiagnostic,
+) -> BoundaryDiagnostic {
+    BoundaryDiagnostic {
+        left_token_index: value.left_token_index,
+        right_token_index: value.right_token_index,
+        raw_score: value.raw_score,
+        selection_threshold: value.selection_threshold,
+        selected: value.selected,
+        forced: value.forced,
+        primary_source: value.primary_source.map(serialized_enum_name),
+        evidence: value
+            .evidence
+            .into_iter()
+            .map(|item| serde_json::to_value(item).unwrap_or(serde_json::Value::Null))
+            .collect(),
+    }
+}
+
+fn learned_prosodic_provider_info_from_analysis(
+    value: speech_analysis::learned_prosodic_provider::LearnedProsodicProviderInfo,
+) -> LearnedProsodicProviderInfo {
+    LearnedProsodicProviderInfo {
+        provider_id: value.provider_id,
+        model_revision: value.model_revision,
+        license: value.license,
+        runtime: value.runtime,
+        available: value.available,
+        optional: value.optional,
+        diagnostic: value.diagnostic,
+    }
+}
+
+fn serialized_enum_name<T: serde::Serialize>(value: T) -> String {
+    serde_json::to_value(value)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_owned))
+        .unwrap_or_else(|| "unknown".to_owned())
 }
 
 fn chunk_timeline_summary(timeline: &ChunkTimeline) -> ChunkTimelineSummary {
@@ -532,7 +640,8 @@ fn chunk_timeline_chunk(
         warnings: Vec::new(),
         evidence_json: serde_json::json!({
             "boundary_after": chunk.boundary_after,
-        }),
+        })
+        .into(),
     }
 }
 

@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{MediaId, SubtitleSentenceId, SubtitleTrackId, TimelineCreator, TimelineStatus, WordTimelineId};
+use crate::{
+    MediaId, SubtitleSentenceId, SubtitleTrackId, TimelineCreator, TimelineMetrics, TimelineStatus,
+    WordTimelineId,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -36,7 +39,7 @@ pub struct WordTimeline {
     pub parent_timeline_id: Option<WordTimelineId>,
     pub created_by: TimelineCreator,
     pub status: TimelineStatus,
-    pub metrics_json: serde_json::Value,
+    pub metrics_json: TimelineMetrics,
     pub words: Vec<WordTiming>,
     pub created_at_ms: u64,
     pub updated_at_ms: u64,

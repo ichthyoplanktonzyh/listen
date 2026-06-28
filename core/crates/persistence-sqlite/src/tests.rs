@@ -1,9 +1,8 @@
 use super::*;
 use application::{
     AppServices, DictionaryProvider, DictionaryProviderError, ImportSubtitle,
-    LexicalEntryRepository, MediaRepository, PhoneticAnalysisRepository, RegisterMedia,
-    SourceContext, SubtitleRepository, TranscriptionRepository, UpdateWordProfile,
-    UpsertLexicalEntry, VocabularyAssetRepository, WordObservationRepository,
+    LearningAssetRepository, MediaRepository, PhoneticAnalysisRepository, RegisterMedia,
+    SubtitleRepository, TranscriptionRepository, UpsertLexicalEntry,
 };
 use async_trait::async_trait;
 use domain::*;
@@ -19,6 +18,36 @@ struct FailingDictionary;
 
 struct FakeChineseDictionary {
     calls: AtomicUsize,
+}
+
+fn upsert_word_asset(
+    services: &AppServices,
+    language: &str,
+    value: &str,
+    display_form: &str,
+    status: Option<LearningStatus>,
+    source: Option<application::LexicalSourceContext>,
+) -> LexicalEntryDetails {
+    services
+        .create_lexical_entry(UpsertLexicalEntry {
+            language: language.into(),
+            kind: LexicalEntryKind::Word,
+            canonical_form: value.into(),
+            display_form: display_form.into(),
+            status,
+            user_definition: None,
+            personal_note: None,
+            source,
+        })
+        .unwrap()
+}
+
+fn read_word_asset(services: &AppServices, language: &str, value: &str) -> Option<LexicalEntry> {
+    services
+        .read_lexical_entries_by_forms(language, LexicalEntryKind::Word, &[value.into()])
+        .unwrap()
+        .into_iter()
+        .next()
 }
 
 fn transcription_job(
@@ -121,7 +150,7 @@ fn word_timeline(
         parent_timeline_id: None,
         created_by: TimelineCreator::Algorithm,
         status,
-        metrics_json: serde_json::json!({}),
+        metrics_json: serde_json::json!({}).into(),
         words: vec![WordTiming {
             sentence_id,
             token_index: 0,
@@ -155,7 +184,7 @@ fn chunk_timeline(
         precision: ChunkTimelinePrecision::Precise,
         created_by: TimelineCreator::Algorithm,
         status,
-        metrics_json: serde_json::json!({}),
+        metrics_json: serde_json::json!({}).into(),
         chunks: vec![ChunkTimelineChunk {
             id: ChunkId::parse(format!("{id}-chunk-1")).unwrap(),
             sentence_id: track.sentences[0].id.clone(),
@@ -168,7 +197,7 @@ fn chunk_timeline(
             boundary_sources: vec![ChunkBoundarySource::Pause],
             confidence: 0.9,
             warnings: Vec::new(),
-            evidence_json: serde_json::json!({}),
+            evidence_json: serde_json::json!({}).into(),
         }],
         created_at_ms: 1,
         updated_at_ms: 1,
@@ -198,7 +227,7 @@ fn phone_timeline(
         precision: PhoneTimelinePrecision::Approximate,
         created_by: TimelineCreator::Algorithm,
         status,
-        metrics_json: serde_json::json!({ "synthetic": true }),
+        metrics_json: serde_json::json!({ "synthetic": true }).into(),
         phones: vec![DetectedPhone {
             symbol: "H".into(),
             display_ipa: "H".into(),
@@ -387,68 +416,6 @@ fn upgrades_historical_v2_database() {
 }
 
 #[test]
-fn upgrades_historical_v3_database_and_creates_legacy_history() {
-    let connection = Connection::open_in_memory().unwrap();
-    connection
-        .execute_batch(include_str!("../migrations/0001_media.sql"))
-        .unwrap();
-    connection
-        .execute_batch(include_str!("../migrations/0002_learning.sql"))
-        .unwrap();
-    connection
-        .execute_batch("PRAGMA foreign_keys=OFF;")
-        .unwrap();
-    connection
-        .execute_batch(include_str!("../migrations/0003_subtitle_identity.sql"))
-        .unwrap();
-    connection.pragma_update(None, "user_version", 3).unwrap();
-    connection.execute(
-            "INSERT INTO word_profiles VALUES ('p','en','hello','hello','Hello','\"known_recognized\"',10)",
-            [],
-        ).unwrap();
-    migrate(&connection).unwrap();
-    assert_eq!(
-        connection
-            .query_row("SELECT count(*) FROM word_status_history", [], |r| r
-                .get::<_, u32>(0))
-            .unwrap(),
-        1
-    );
-}
-
-#[test]
-fn upgrades_historical_v4_database_and_preserves_profiles() {
-    let connection = Connection::open_in_memory().unwrap();
-    connection
-        .execute_batch(include_str!("../migrations/0001_media.sql"))
-        .unwrap();
-    connection
-        .execute_batch(include_str!("../migrations/0002_learning.sql"))
-        .unwrap();
-    connection
-        .execute_batch("PRAGMA foreign_keys=OFF;")
-        .unwrap();
-    connection
-        .execute_batch(include_str!("../migrations/0003_subtitle_identity.sql"))
-        .unwrap();
-    connection
-        .execute_batch(include_str!("../migrations/0004_vocabulary_assets.sql"))
-        .unwrap();
-    connection.pragma_update(None, "user_version", 4).unwrap();
-    connection.execute(
-            "INSERT INTO word_profiles VALUES ('p','en','hello','hello','Hello','\"known_recognized\"',10)",
-            [],
-        ).unwrap();
-    migrate(&connection).unwrap();
-    let values: (String, Option<String>, u64) = connection.query_row(
-            "SELECT display_form,user_definition,learning_updated_at_ms FROM word_profiles WHERE id='p'",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        ).unwrap();
-    assert_eq!(values, ("Hello".into(), None, 0));
-}
-
-#[test]
 fn upgrades_historical_v5_database_and_adds_transcription_assets() {
     let connection = Connection::open_in_memory().unwrap();
     connection
@@ -560,6 +527,63 @@ fn activating_word_timeline_updates_active_resource_and_compatibility_timings() 
     assert_eq!(compatibility_timings[0].provider_id, "mms-fa");
     assert_eq!(compatibility_timings[0].start_ms, 150);
     assert_eq!(compatibility_timings[0].end_ms, 260);
+}
+
+#[test]
+fn timeline_active_uniqueness_is_schema_enforced() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let track = word_timeline_track();
+    repo.save_track(&track).unwrap();
+
+    let word_active = word_timeline(
+        "timeline-active-unique-1",
+        &track,
+        TimelineStatus::Active,
+        "mms-fa",
+        150,
+        260,
+    );
+    let word_duplicate = word_timeline(
+        "timeline-active-unique-2",
+        &track,
+        TimelineStatus::Active,
+        "whisper-dtw",
+        180,
+        290,
+    );
+    repo.save_word_timeline(&word_active).unwrap();
+    assert!(repo.save_word_timeline(&word_duplicate).is_err());
+
+    let chunk_active = chunk_timeline(
+        "chunk-active-unique-1",
+        &track,
+        &word_active,
+        TimelineStatus::Active,
+    );
+    let chunk_duplicate = chunk_timeline(
+        "chunk-active-unique-2",
+        &track,
+        &word_active,
+        TimelineStatus::Active,
+    );
+    repo.save_chunk_timeline(&chunk_active).unwrap();
+    assert!(repo.save_chunk_timeline(&chunk_duplicate).is_err());
+
+    let phone_active = phone_timeline(
+        "phone-active-unique-1",
+        &track,
+        &word_active,
+        TimelineStatus::Active,
+    );
+    let phone_duplicate = phone_timeline(
+        "phone-active-unique-2",
+        &track,
+        &word_active,
+        TimelineStatus::Active,
+    );
+    repo.save_phone_timeline(&phone_active).unwrap();
+    assert!(repo.save_phone_timeline(&phone_duplicate).is_err());
 }
 
 #[test]
@@ -792,62 +816,6 @@ fn lltimeline_resource_metadata_and_artifacts_round_trip() {
 }
 
 #[test]
-fn upgrades_historical_v6_database_and_migrates_words_to_lexical_entries() {
-    let connection = Connection::open_in_memory().unwrap();
-    connection
-        .execute_batch(include_str!("../migrations/0001_media.sql"))
-        .unwrap();
-    connection
-        .execute_batch(include_str!("../migrations/0002_learning.sql"))
-        .unwrap();
-    connection
-        .execute_batch("PRAGMA foreign_keys=OFF;")
-        .unwrap();
-    connection
-        .execute_batch(include_str!("../migrations/0003_subtitle_identity.sql"))
-        .unwrap();
-    connection
-        .execute_batch(include_str!("../migrations/0004_vocabulary_assets.sql"))
-        .unwrap();
-    connection.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
-    connection
-        .execute_batch(include_str!("../migrations/0005_learning_experience.sql"))
-        .unwrap();
-    connection
-        .execute_batch(include_str!("../migrations/0006_transcription.sql"))
-        .unwrap();
-    connection.pragma_update(None, "user_version", 6).unwrap();
-    connection
-        .execute(
-            "INSERT INTO word_profiles
-             (id,language,lemma,normalized_lemma,display_form,status,updated_at_ms,
-              user_definition,personal_note,learning_updated_at_ms)
-             VALUES ('legacy','en','went','went','Went','\"known_not_recognized\"',10,
-                     'past tense','from a lesson',11)",
-            [],
-        )
-        .unwrap();
-    migrate(&connection).unwrap();
-    let value: (String, String, Option<String>, Option<String>) = connection
-        .query_row(
-            "SELECT kind,display_form,user_definition,personal_note
-                 FROM lexical_entries WHERE id='legacy'",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-        )
-        .unwrap();
-    assert_eq!(
-        value,
-        (
-            "\"word\"".into(),
-            "Went".into(),
-            Some("past tense".into()),
-            Some("from a lesson".into())
-        )
-    );
-}
-
-#[test]
 fn upgrades_historical_v7_database_and_preserves_lexical_assets() {
     let connection = Connection::open_in_memory().unwrap();
     for migration in [
@@ -877,10 +845,12 @@ fn upgrades_historical_v7_database_and_preserves_lexical_assets() {
     connection
         .execute(
             "INSERT INTO lexical_entries
-                 (id,language,kind,canonical_form,normalized_form,display_form,status,
+                 (id,language,kind,granularity,normalization,normalized_key,
+                  canonical_form,normalized_form,display_form,status,
                   normalization_provider,normalization_version,user_corrected,updated_at_ms,
                   learning_updated_at_ms)
-                 VALUES ('asset','en','\"word\"','hello','hello','Hello','\"known_recognized\"',
+                 VALUES ('asset','en','\"word\"','core.word','core.lemma','hello',
+                         'hello','hello','Hello','\"known_recognized\"',
                          'legacy','v1',0,10,0)",
             [],
         )
@@ -1093,19 +1063,15 @@ fn services_are_idempotent_and_persist_state() {
         Some(TimeMs::new(1250))
     );
 
-    let word = services
-        .update_word_profile(UpdateWordProfile {
-            language: "en".into(),
-            lemma: "Hello".into(),
-            display_form: "Hello".into(),
-            status: Some(WordStatus::KnownRecognized),
-            source: None,
-        })
-        .unwrap();
-    assert_eq!(
-        services.read_word_profile("EN", "hello").unwrap(),
-        Some(word)
+    let word = upsert_word_asset(
+        &services,
+        "en",
+        "Hello",
+        "Hello",
+        Some(LearningStatus::KnownRecognized),
+        None,
     );
+    assert_eq!(read_word_asset(&services, "EN", "hello"), Some(word.entry));
 
     let subtitle = ImportSubtitle {
         media_id: first.id,
@@ -1142,7 +1108,7 @@ fn lexical_words_and_phrases_keep_independent_state_and_sources() {
             kind: LexicalEntryKind::Phrase,
             canonical_form: "give up".into(),
             display_form: "give up".into(),
-            status: Some(WordStatus::KnownNotRecognized),
+            status: Some(LearningStatus::KnownNotRecognized),
             user_definition: Some("stop trying".into()),
             personal_note: None,
             source: Some(application::LexicalSourceContext {
@@ -1165,7 +1131,7 @@ fn lexical_words_and_phrases_keep_independent_state_and_sources() {
             kind: LexicalEntryKind::Word,
             canonical_form: "give".into(),
             display_form: "give".into(),
-            status: Some(WordStatus::KnownRecognized),
+            status: Some(LearningStatus::KnownRecognized),
             user_definition: None,
             personal_note: None,
             source: None,
@@ -1173,22 +1139,24 @@ fn lexical_words_and_phrases_keep_independent_state_and_sources() {
         .unwrap();
     assert_ne!(phrase.entry.id, word.entry.id);
     assert_eq!(phrase.occurrences.len(), 1);
-    assert_eq!(phrase.entry.status, Some(WordStatus::KnownNotRecognized));
-    assert_eq!(word.entry.status, Some(WordStatus::KnownRecognized));
-    services
-        .update_word_profile(UpdateWordProfile {
-            language: "en".into(),
-            lemma: "give".into(),
-            display_form: "give".into(),
-            status: Some(WordStatus::UnknownMeaning),
-            source: None,
-        })
-        .unwrap();
+    assert_eq!(
+        phrase.entry.status,
+        Some(LearningStatus::KnownNotRecognized)
+    );
+    assert_eq!(word.entry.status, Some(LearningStatus::KnownRecognized));
+    upsert_word_asset(
+        &services,
+        "en",
+        "give",
+        "give",
+        Some(LearningStatus::UnknownMeaning),
+        None,
+    );
     let words = services
         .list_lexical_entries("en", Some(LexicalEntryKind::Word), None, "give", 10, 0)
         .unwrap();
     assert_eq!(words.len(), 1);
-    assert_eq!(words[0].entry.status, Some(WordStatus::UnknownMeaning));
+    assert_eq!(words[0].entry.status, Some(LearningStatus::UnknownMeaning));
     assert_eq!(
         services
             .normalize_lexical_form("en", "went")
@@ -1210,7 +1178,7 @@ fn lexical_words_and_phrases_keep_independent_state_and_sources() {
             kind: LexicalEntryKind::Word,
             canonical_form: "run".into(),
             display_form: "run".into(),
-            status: Some(WordStatus::KnownRecognized),
+            status: Some(LearningStatus::KnownRecognized),
             user_definition: None,
             personal_note: None,
             source: None,
@@ -1222,7 +1190,7 @@ fn lexical_words_and_phrases_keep_independent_state_and_sources() {
             kind: LexicalEntryKind::Word,
             canonical_form: "jog".into(),
             display_form: "jog".into(),
-            status: Some(WordStatus::UnknownMeaning),
+            status: Some(LearningStatus::UnknownMeaning),
             user_definition: None,
             personal_note: None,
             source: None,
@@ -1253,7 +1221,7 @@ fn lexical_asset_import_merges_newest_fields_and_remaps_sources() {
             kind: LexicalEntryKind::Phrase,
             canonical_form: "give up".into(),
             display_form: "give up".into(),
-            status: Some(WordStatus::KnownRecognized),
+            status: Some(LearningStatus::KnownRecognized),
             user_definition: Some("local definition".into()),
             personal_note: Some("local note".into()),
             source: Some(application::LexicalSourceContext {
@@ -1273,7 +1241,7 @@ fn lexical_asset_import_merges_newest_fields_and_remaps_sources() {
     let imported_id = LexicalEntryId::from_fingerprint("import", "give up");
     let mut imported_entry = local.entry.clone();
     imported_entry.id = imported_id.clone();
-    imported_entry.status = Some(WordStatus::UnknownMeaning);
+    imported_entry.status = Some(LearningStatus::UnknownMeaning);
     imported_entry.updated_at_ms = local.entry.updated_at_ms;
     imported_entry.user_definition = Some("newer imported definition".into());
     imported_entry.personal_note = Some("newer imported note".into());
@@ -1287,25 +1255,27 @@ fn lexical_asset_import_merges_newest_fields_and_remaps_sources() {
         id: LexicalStatusHistoryId::from_fingerprint("import-history", "give up"),
         lexical_entry_id: imported_id,
         previous_status: None,
-        new_status: Some(WordStatus::UnknownMeaning),
+        new_status: Some(LearningStatus::UnknownMeaning),
         changed_at_ms: local.entry.updated_at_ms.saturating_sub(1),
-        change_source: WordChangeSource::Import,
+        change_source: LearningChangeSource::Import,
     };
 
     repo.import_lexical_assets(
         std::slice::from_ref(&imported_entry),
         std::slice::from_ref(&imported_history),
         std::slice::from_ref(&imported_occurrence),
+        &[],
     )
     .unwrap();
     repo.import_lexical_assets(
         std::slice::from_ref(&imported_entry),
         std::slice::from_ref(&imported_history),
         std::slice::from_ref(&imported_occurrence),
+        &[],
     )
     .unwrap();
     let merged = services.lexical_details(&local.entry.id).unwrap().unwrap();
-    assert_eq!(merged.entry.status, Some(WordStatus::KnownRecognized));
+    assert_eq!(merged.entry.status, Some(LearningStatus::KnownRecognized));
     assert_eq!(
         merged.entry.user_definition.as_deref(),
         Some("newer imported definition")
@@ -1316,7 +1286,7 @@ fn lexical_asset_import_merges_newest_fields_and_remaps_sources() {
         merged
             .history
             .iter()
-            .filter(|value| value.change_source == WordChangeSource::Import)
+            .filter(|value| value.change_source == LearningChangeSource::Import)
             .count(),
         1
     );
@@ -1324,7 +1294,7 @@ fn lexical_asset_import_merges_newest_fields_and_remaps_sources() {
         merged
             .history
             .iter()
-            .find(|value| value.change_source == WordChangeSource::Import)
+            .find(|value| value.change_source == LearningChangeSource::Import)
             .map(|value| &value.lexical_entry_id),
         Some(&local.entry.id)
     );
@@ -1441,7 +1411,7 @@ async fn dictionary_lookup_routes_by_learning_language() {
 }
 
 #[test]
-fn diagnosis_reads_word_profiles_in_the_track_language() {
+fn diagnosis_reads_lexical_entries_in_the_track_language() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = AppServices::new(
         repo.clone(),
@@ -1491,24 +1461,22 @@ fn diagnosis_reads_word_profiles_in_the_track_language() {
     // "我" is a single token under both jieba and the char-level fallback. Give
     // it an UnknownMeaning status in zh, and a *different* status in en for the
     // same surface, to prove diagnosis reads zh and the en profile never leaks.
-    let zh_profile = services
-        .update_word_profile(UpdateWordProfile {
-            language: "zh".into(),
-            lemma: "我".into(),
-            display_form: "我".into(),
-            status: Some(WordStatus::UnknownMeaning),
-            source: None,
-        })
-        .unwrap();
-    services
-        .update_word_profile(UpdateWordProfile {
-            language: "en".into(),
-            lemma: "我".into(),
-            display_form: "我".into(),
-            status: Some(WordStatus::KnownRecognized),
-            source: None,
-        })
-        .unwrap();
+    let zh_entry = upsert_word_asset(
+        &services,
+        "zh",
+        "我",
+        "我",
+        Some(LearningStatus::UnknownMeaning),
+        None,
+    );
+    upsert_word_asset(
+        &services,
+        "en",
+        "我",
+        "我",
+        Some(LearningStatus::KnownRecognized),
+        None,
+    );
 
     let diagnosis = services.diagnose_sentence(&sentence.id).unwrap();
     assert!(!diagnosis.unclassified_lemmas.contains(&"我".to_string()));
@@ -1517,7 +1485,7 @@ fn diagnosis_reads_word_profiles_in_the_track_language() {
         .iter()
         .find(|hint| hint.kind == DiagnosisKind::MeaningBarrier)
         .expect("zh UnknownMeaning status surfaces a meaning barrier");
-    assert!(meaning.word_profile_ids.contains(&zh_profile.id));
+    assert!(meaning.lexical_entry_ids.contains(&zh_entry.entry.id));
 }
 
 #[test]
@@ -1555,15 +1523,14 @@ fn recognition_barrier_carries_the_language_listening_reasons() {
         .unwrap();
     let sentence = &track.sentences[0];
     // KnownNotRecognized -> the word is known but was not heard -> recognition barrier.
-    services
-        .update_word_profile(UpdateWordProfile {
-            language: "zh".into(),
-            lemma: "我".into(),
-            display_form: "我".into(),
-            status: Some(WordStatus::KnownNotRecognized),
-            source: None,
-        })
-        .unwrap();
+    upsert_word_asset(
+        &services,
+        "zh",
+        "我",
+        "我",
+        Some(LearningStatus::KnownNotRecognized),
+        None,
+    );
 
     let diagnosis = services.diagnose_sentence(&sentence.id).unwrap();
     let recognition = diagnosis
@@ -1598,93 +1565,68 @@ fn english_and_chinese_vocabulary_and_sources_stay_isolated() {
         repo.clone(),
         repo.clone(),
     );
-    let chinese = services
-        .update_word_profile(UpdateWordProfile {
-            language: "zh".into(),
-            lemma: "咖啡".into(),
-            display_form: "咖啡".into(),
-            status: Some(WordStatus::UnknownMeaning),
-            source: Some(SourceContext {
-                language: LanguageCode::parse("zh").unwrap(),
-                normalized_lemma: "咖啡".into(),
-                media_id: None,
-                sentence_id: None,
-                original_form: "咖啡".into(),
-                sentence_text: "我想喝咖啡".into(),
-                media_title: "ZH".into(),
-                media_fingerprint: "zh-fp".into(),
-                start_ms: 0,
-                end_ms: 1000,
-            }),
-        })
-        .unwrap();
-    services
-        .update_word_profile(UpdateWordProfile {
-            language: "en".into(),
-            lemma: "coffee".into(),
-            display_form: "coffee".into(),
-            status: Some(WordStatus::KnownRecognized),
-            source: Some(SourceContext {
-                language: LanguageCode::parse("en").unwrap(),
-                normalized_lemma: "coffee".into(),
-                media_id: None,
-                sentence_id: None,
-                original_form: "coffee".into(),
-                sentence_text: "I drink coffee".into(),
-                media_title: "EN".into(),
-                media_fingerprint: "en-fp".into(),
-                start_ms: 0,
-                end_ms: 1000,
-            }),
-        })
-        .unwrap();
+    let chinese = upsert_word_asset(
+        &services,
+        "zh",
+        "咖啡",
+        "咖啡",
+        Some(LearningStatus::UnknownMeaning),
+        Some(application::LexicalSourceContext {
+            media_id: None,
+            sentence_id: None,
+            original_form: "咖啡".into(),
+            sentence_text: "我想喝咖啡".into(),
+            media_title: "ZH".into(),
+            media_fingerprint: "zh-fp".into(),
+            start_ms: 0,
+            end_ms: 1000,
+            token_start: None,
+            token_end: None,
+        }),
+    );
+    upsert_word_asset(
+        &services,
+        "en",
+        "coffee",
+        "coffee",
+        Some(LearningStatus::KnownRecognized),
+        Some(application::LexicalSourceContext {
+            media_id: None,
+            sentence_id: None,
+            original_form: "coffee".into(),
+            sentence_text: "I drink coffee".into(),
+            media_title: "EN".into(),
+            media_fingerprint: "en-fp".into(),
+            start_ms: 0,
+            end_ms: 1000,
+            token_start: None,
+            token_end: None,
+        }),
+    );
 
     // A word exists only under its own language; it never leaks across.
-    assert!(services.read_word_profile("zh", "咖啡").unwrap().is_some());
-    assert!(services.read_word_profile("en", "咖啡").unwrap().is_none());
-    assert!(
-        services
-            .read_word_profile("en", "coffee")
-            .unwrap()
-            .is_some()
-    );
-    assert!(
-        services
-            .read_word_profile("zh", "coffee")
-            .unwrap()
-            .is_none()
-    );
+    assert!(read_word_asset(&services, "zh", "咖啡").is_some());
+    assert!(read_word_asset(&services, "en", "咖啡").is_none());
+    assert!(read_word_asset(&services, "en", "coffee").is_some());
+    assert!(read_word_asset(&services, "zh", "coffee").is_none());
 
     // Vocabulary lists are isolated by language.
     let zh_vocab = services
-        .list_vocabulary("zh", WordStatus::UnknownMeaning, "", 200, 0)
+        .list_vocabulary("zh", LearningStatus::UnknownMeaning, "", 200, 0)
         .unwrap();
-    assert!(
-        zh_vocab
-            .iter()
-            .any(|d| d.profile.normalized_lemma == "咖啡")
-    );
-    assert!(
-        zh_vocab
-            .iter()
-            .all(|d| d.profile.normalized_lemma != "coffee")
-    );
+    assert!(zh_vocab.iter().any(|d| d.entry.normalized_form == "咖啡"));
+    assert!(zh_vocab.iter().all(|d| d.entry.normalized_form != "coffee"));
     let en_vocab = services
-        .list_vocabulary("en", WordStatus::KnownRecognized, "", 200, 0)
+        .list_vocabulary("en", LearningStatus::KnownRecognized, "", 200, 0)
         .unwrap();
-    assert!(
-        en_vocab
-            .iter()
-            .any(|d| d.profile.normalized_lemma == "coffee")
-    );
-    assert!(
-        en_vocab
-            .iter()
-            .all(|d| d.profile.normalized_lemma != "咖啡")
-    );
+    assert!(en_vocab.iter().any(|d| d.entry.normalized_form == "coffee"));
+    assert!(en_vocab.iter().all(|d| d.entry.normalized_form != "咖啡"));
 
     // The Chinese source snapshot is captured under the Chinese profile.
-    let details = services.word_details(&chinese.id).unwrap().unwrap();
+    let details = services
+        .lexical_details(&chinese.entry.id)
+        .unwrap()
+        .unwrap();
     assert_eq!(details.occurrences.len(), 1);
     assert_eq!(details.occurrences[0].sentence_text_snapshot, "我想喝咖啡");
 }
@@ -1721,9 +1663,7 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
         })
         .unwrap();
     let sentence = &track.sentences[0];
-    let source = SourceContext {
-        language: LanguageCode::parse("en").unwrap(),
-        normalized_lemma: "hello".into(),
+    let source = application::LexicalSourceContext {
         media_id: Some(media.id),
         sentence_id: Some(sentence.id.clone()),
         original_form: "Hello".into(),
@@ -1732,32 +1672,32 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
         media_fingerprint: "source-media".into(),
         start_ms: sentence.start.get(),
         end_ms: sentence.end.get(),
+        token_start: Some(0),
+        token_end: Some(0),
     };
-    let profile = services
-        .update_word_profile(UpdateWordProfile {
-            language: "en".into(),
-            lemma: "hello".into(),
-            display_form: "Hello".into(),
-            status: Some(WordStatus::UnknownMeaning),
-            source: Some(source.clone()),
-        })
-        .unwrap();
-    services
-        .update_word_profile(UpdateWordProfile {
-            language: "en".into(),
-            lemma: "hello".into(),
-            display_form: "Hello".into(),
-            status: Some(WordStatus::KnownRecognized),
-            source: Some(source),
-        })
-        .unwrap();
-    let details = services.word_details(&profile.id).unwrap().unwrap();
+    let entry = upsert_word_asset(
+        &services,
+        "en",
+        "hello",
+        "Hello",
+        Some(LearningStatus::UnknownMeaning),
+        Some(source.clone()),
+    );
+    upsert_word_asset(
+        &services,
+        "en",
+        "hello",
+        "Hello",
+        Some(LearningStatus::KnownRecognized),
+        Some(source),
+    );
+    let details = services.lexical_details(&entry.entry.id).unwrap().unwrap();
     assert_eq!(details.history.len(), 2);
     assert_eq!(details.occurrences[0].encounter_count, 2);
 
     services
-        .create_observation(application::CreateWordObservation {
-            word_profile_id: profile.id.clone(),
+        .create_lexical_observation(application::CreateLexicalObservation {
+            lexical_entry_id: entry.entry.id.clone(),
             sentence_id: sentence.id.clone(),
             original_form: "Hello".into(),
             result: ObservationResult::RecognizedInContext,
@@ -1765,8 +1705,8 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
         })
         .unwrap();
     services
-        .create_observation(application::CreateWordObservation {
-            word_profile_id: profile.id.clone(),
+        .create_lexical_observation(application::CreateLexicalObservation {
+            lexical_entry_id: entry.entry.id.clone(),
             sentence_id: sentence.id.clone(),
             original_form: "Hello".into(),
             result: ObservationResult::NotRecognizedInContext,
@@ -1774,13 +1714,19 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
         })
         .unwrap();
     assert_eq!(
-        repo.list_by_sentence(&sentence.id).unwrap()[0].result,
+        repo.list_lexical_observations_by_sentence(&sentence.id)
+            .unwrap()[0]
+            .result,
         ObservationResult::NotRecognizedInContext
     );
     services
-        .clear_observation(&profile.id, &sentence.id)
+        .clear_lexical_observation(&entry.entry.id, &sentence.id)
         .unwrap();
-    assert!(repo.list_by_sentence(&sentence.id).unwrap().is_empty());
+    assert!(
+        repo.list_lexical_observations_by_sentence(&sentence.id)
+            .unwrap()
+            .is_empty()
+    );
 
     services
         .set_media_availability(
@@ -1790,7 +1736,7 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
         .unwrap();
     assert_eq!(
         services
-            .word_details(&profile.id)
+            .lexical_details(&entry.entry.id)
             .unwrap()
             .unwrap()
             .occurrences[0]
@@ -1806,12 +1752,12 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
             duration_ms: Some(5000),
         })
         .unwrap();
-    let relinked = services.word_details(&profile.id).unwrap().unwrap();
+    let relinked = services.lexical_details(&entry.entry.id).unwrap().unwrap();
     assert!(relinked.occurrences[0].media_id.is_some());
     assert!(relinked.occurrences[0].sentence_id.is_some());
     services
-        .create_observation(application::CreateWordObservation {
-            word_profile_id: profile.id.clone(),
+        .create_lexical_observation(application::CreateLexicalObservation {
+            lexical_entry_id: entry.entry.id.clone(),
             sentence_id: sentence.id.clone(),
             original_form: "Hello".into(),
             result: ObservationResult::RecognizedInContext,
@@ -1820,7 +1766,7 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
         .unwrap();
 
     let bundle = services.export_vocabulary().unwrap();
-    assert_eq!(bundle.observations.len(), 1);
+    assert_eq!(bundle.lexical_observations.len(), 1);
     let restored = Arc::new(SqliteRepository::in_memory().unwrap());
     let restored_services = AppServices::new(
         restored.clone(),
@@ -1834,26 +1780,26 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
     );
     restored_services.import_vocabulary(&bundle).unwrap();
     let restored_details = restored_services
-        .word_details(&profile.id)
+        .lexical_details(&entry.entry.id)
         .unwrap()
         .unwrap();
     assert_eq!(
-        restored_details.profile.status,
-        Some(WordStatus::KnownRecognized)
+        restored_details.entry.status,
+        Some(LearningStatus::KnownRecognized)
     );
     assert_eq!(restored_details.occurrences[0].media_id, None);
     assert_eq!(
         restored_services
             .export_vocabulary()
             .unwrap()
-            .observations
+            .lexical_observations
             .len(),
         1
     );
     restored_services.import_vocabulary(&bundle).unwrap();
     assert_eq!(
         restored_services
-            .word_details(&profile.id)
+            .lexical_details(&entry.entry.id)
             .unwrap()
             .unwrap()
             .occurrences
@@ -1869,44 +1815,45 @@ fn vocabulary_query_handles_ten_thousand_profiles_and_fifty_thousand_sources() {
         let mut conn = repo.connection.lock().unwrap();
         let tx = conn.transaction().unwrap();
         for word in 0..10_000 {
-            let profile_id = format!("profile-{word}");
             let lexical_kind = if word % 2 == 0 {
                 "\"word\""
             } else {
                 "\"phrase\""
             };
-            tx.execute(
-                "INSERT INTO word_profiles
-                     (id,language,lemma,normalized_lemma,display_form,status,updated_at_ms)
-                     VALUES (?1,'en',?2,?2,?2,'\"unknown_meaning\"',?3)",
-                params![profile_id, format!("word-{word:05}"), word],
-            )
-            .unwrap();
+            let lexical_id = format!("lexical-{word}");
             tx.execute(
                 "INSERT INTO lexical_entries
-                     (id,language,kind,canonical_form,normalized_form,display_form,status,
+                     (id,language,kind,granularity,normalization,normalized_key,
+                      canonical_form,normalized_form,display_form,status,
                       normalization_provider,normalization_version,user_corrected,
                       updated_at_ms,learning_updated_at_ms)
-                     VALUES (?1,'en',?2,?3,?3,?3,'\"unknown_meaning\"','test','v1',0,?4,0)",
+                     VALUES (?1,'en',?2,?5,'core.lemma',?3,?3,?3,?3,
+                             '\"unknown_meaning\"','test','v1',0,?4,0)",
                 params![
-                    format!("lexical-{word}"),
+                    lexical_id,
                     lexical_kind,
                     format!("asset-{word:05}"),
-                    word
+                    word,
+                    if word % 2 == 0 {
+                        "core.word"
+                    } else {
+                        "core.phrase"
+                    },
                 ],
             )
             .unwrap();
             for source in 0..5 {
                 tx.execute(
-                    "INSERT INTO word_occurrences
-                         (id,source_key,word_profile_id,original_form,sentence_text_snapshot,
+                    "INSERT INTO lexical_occurrences
+                         (id,source_key,lexical_entry_id,original_form,sentence_text_snapshot,
                           media_title_snapshot,media_fingerprint_snapshot,start_ms_snapshot,
-                          end_ms_snapshot,first_seen_at_ms,last_seen_at_ms,encounter_count)
-                         VALUES (?1,?2,?3,?4,?5,'Media',?6,?7,?8,?9,?9,1)",
+                          end_ms_snapshot,token_start,token_end,first_seen_at_ms,last_seen_at_ms,
+                          encounter_count)
+                         VALUES (?1,?2,?3,?4,?5,'Media',?6,?7,?8,NULL,NULL,?9,?9,1)",
                     params![
                         format!("occurrence-{word}-{source}"),
                         format!("source-{word}-{source}"),
-                        profile_id,
+                        format!("lexical-{word}"),
                         format!("word-{word:05}"),
                         format!("Sentence containing word-{word:05}"),
                         format!("media-{source}"),
@@ -1922,10 +1869,11 @@ fn vocabulary_query_handles_ten_thousand_profiles_and_fifty_thousand_sources() {
     }
     let started = std::time::Instant::now();
     let values = repo
-        .list_vocabulary(
+        .list_lexical_entries(
             &LanguageCode::parse("en").unwrap(),
-            WordStatus::UnknownMeaning,
-            "word-09",
+            Some(LexicalEntryKind::Word),
+            Some(LearningStatus::UnknownMeaning),
+            "asset-09",
             200,
             0,
         )
@@ -1941,7 +1889,7 @@ fn vocabulary_query_handles_ten_thousand_profiles_and_fifty_thousand_sources() {
         .list_lexical_entries(
             &LanguageCode::parse("en").unwrap(),
             Some(LexicalEntryKind::Phrase),
-            Some(WordStatus::UnknownMeaning),
+            Some(LearningStatus::UnknownMeaning),
             "asset-09",
             200,
             0,
@@ -1968,14 +1916,15 @@ fn failed_source_capture_rolls_back_profile_and_history() {
         repo.clone(),
         repo.clone(),
     );
-    let result = services.update_word_profile(UpdateWordProfile {
+    let result = services.create_lexical_entry(UpsertLexicalEntry {
         language: "en".into(),
-        lemma: "rollback".into(),
+        kind: LexicalEntryKind::Word,
+        canonical_form: "rollback".into(),
         display_form: "Rollback".into(),
-        status: Some(WordStatus::UnknownMeaning),
-        source: Some(SourceContext {
-            language: LanguageCode::parse("en").unwrap(),
-            normalized_lemma: "rollback".into(),
+        status: Some(LearningStatus::UnknownMeaning),
+        user_definition: None,
+        personal_note: None,
+        source: Some(application::LexicalSourceContext {
             media_id: Some(MediaId::parse("missing-media").unwrap()),
             sentence_id: None,
             original_form: "Rollback".into(),
@@ -1984,16 +1933,19 @@ fn failed_source_capture_rolls_back_profile_and_history() {
             media_fingerprint: "broken".into(),
             start_ms: 10,
             end_ms: 1000,
+            token_start: None,
+            token_end: None,
         }),
     });
     assert!(result.is_err());
+    assert!(read_word_asset(&services, "en", "rollback").is_none());
     assert!(
         services
-            .read_word_profile("en", "rollback")
+            .export_vocabulary()
             .unwrap()
-            .is_none()
+            .lexical_history
+            .is_empty()
     );
-    assert!(services.export_vocabulary().unwrap().history.is_empty());
 }
 
 #[test]
@@ -2019,35 +1971,36 @@ fn external_import_preserves_existing_status_and_updates_learning_content() {
                 },
                 ExternalVocabularyEntry {
                     word: "World".into(),
-                    status: Some(WordStatus::UnknownMeaning),
+                    status: Some(LearningStatus::UnknownMeaning),
                 },
                 ExternalVocabularyEntry {
                     word: "hello".into(),
                     status: None,
                 },
             ],
-            default_status: Some(WordStatus::KnownRecognized),
+            default_status: Some(LearningStatus::KnownRecognized),
             overwrite_existing: false,
         })
         .unwrap();
-    assert_eq!(summary.created, 2);
-    assert_eq!(summary.invalid, 1);
-    let hello = services.read_word_profile("en", "hello").unwrap().unwrap();
+    assert_eq!(summary.initialized, 2);
+    assert_eq!(summary.skipped, 1);
+    assert_eq!(summary.invalid, 0);
+    let hello = read_word_asset(&services, "en", "hello").unwrap();
     let details = services
-        .update_word_learning_content(
+        .update_lexical_learning_content(
             &hello.id,
             Some(" greeting ".into()),
             Some(" personal ".into()),
         )
         .unwrap();
-    assert_eq!(details.profile.user_definition.as_deref(), Some("greeting"));
-    assert_eq!(services.export_vocabulary().unwrap().version, 4);
+    assert_eq!(details.entry.user_definition.as_deref(), Some("greeting"));
+    assert_eq!(services.export_vocabulary().unwrap().version, 5);
     let second = services
         .import_external_vocabulary(&ExternalVocabularyImport {
             language: "en".into(),
             entries: vec![ExternalVocabularyEntry {
                 word: "hello".into(),
-                status: Some(WordStatus::UnknownMeaning),
+                status: Some(LearningStatus::UnknownMeaning),
             }],
             default_status: None,
             overwrite_existing: false,
@@ -2056,11 +2009,10 @@ fn external_import_preserves_existing_status_and_updates_learning_content() {
     assert_eq!(second.skipped, 1);
     assert_eq!(
         services
-            .read_word_profile("en", "hello")
-            .unwrap()
-            .unwrap()
+            .read_lexical_entries_by_forms("en", LexicalEntryKind::Word, &["hello".into()])
+            .unwrap()[0]
             .status,
-        Some(WordStatus::KnownRecognized)
+        Some(LearningStatus::KnownRecognized)
     );
 }
 
@@ -2281,7 +2233,7 @@ fn phonetic_models_jobs_analyses_and_feedback_round_trip() {
         Some(feedback.clone())
     );
     let bundle = repo.export_assets().unwrap();
-    assert_eq!(bundle.version, 4);
+    assert_eq!(bundle.version, 5);
     assert_eq!(bundle.phonetic_finding_feedback, vec![feedback.clone()]);
     let restored = SqliteRepository::in_memory().unwrap();
     restored.import_assets(&bundle).unwrap();

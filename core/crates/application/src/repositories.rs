@@ -1,6 +1,6 @@
 use domain::*;
 
-use crate::{ApplicationError, LexicalSourceContext, SourceContext};
+use crate::{ApplicationError, LexicalSourceContext};
 
 pub trait MediaRepository: Send + Sync {
     fn upsert(&self, media: &MediaItem) -> Result<MediaItem, ApplicationError>;
@@ -163,76 +163,456 @@ pub trait SubtitleRepository: Send + Sync {
     ) -> Result<Option<(LLTimelineMetadata, Vec<LLTimelineArtifact>)>, ApplicationError>;
 }
 
-pub trait WordProfileRepository: Send + Sync {
-    fn upsert(&self, profile: &WordProfile) -> Result<WordProfile, ApplicationError>;
-    fn get_by_key(
+pub trait SubtitleTrackRepository: Send + Sync {
+    fn save_track(&self, track: &SubtitleTrack) -> Result<(), ApplicationError>;
+    fn get_track(&self, id: &SubtitleTrackId) -> Result<Option<SubtitleTrack>, ApplicationError>;
+    fn list_tracks_for_media(
         &self,
-        language: &LanguageCode,
-        normalized_lemma: &str,
-    ) -> Result<Option<WordProfile>, ApplicationError>;
-    fn get_many(
+        media_id: &MediaId,
+    ) -> Result<Vec<SubtitleTrack>, ApplicationError>;
+    fn set_track_status(
         &self,
+        id: &SubtitleTrackId,
+        status: SubtitleTrackStatus,
+    ) -> Result<SubtitleTrack, ApplicationError>;
+    fn set_track_language(
+        &self,
+        id: &SubtitleTrackId,
         language: &LanguageCode,
-        normalized_lemmas: &[String],
-    ) -> Result<Vec<WordProfile>, ApplicationError>;
+    ) -> Result<SubtitleTrack, ApplicationError>;
+    fn delete_track(&self, id: &SubtitleTrackId)
+    -> Result<Option<SubtitleTrack>, ApplicationError>;
+    fn get_by_media_fingerprint(
+        &self,
+        media_id: &MediaId,
+        fingerprint: &str,
+    ) -> Result<Option<SubtitleTrack>, ApplicationError>;
+    fn get_sentence(
+        &self,
+        id: &SubtitleSentenceId,
+    ) -> Result<Option<SubtitleSentence>, ApplicationError>;
+    fn sentence_track_language(
+        &self,
+        id: &SubtitleSentenceId,
+    ) -> Result<Option<LanguageCode>, ApplicationError>;
 }
 
-pub trait WordObservationRepository: Send + Sync {
-    fn create(&self, observation: &WordObservation) -> Result<WordObservation, ApplicationError>;
-    fn list_by_sentence(
+impl<T: SubtitleRepository + ?Sized> SubtitleTrackRepository for T {
+    fn save_track(&self, track: &SubtitleTrack) -> Result<(), ApplicationError> {
+        SubtitleRepository::save_track(self, track)
+    }
+
+    fn get_track(&self, id: &SubtitleTrackId) -> Result<Option<SubtitleTrack>, ApplicationError> {
+        SubtitleRepository::get_track(self, id)
+    }
+
+    fn list_tracks_for_media(
         &self,
-        sentence_id: &SubtitleSentenceId,
-    ) -> Result<Vec<WordObservation>, ApplicationError>;
-    fn clear(
+        media_id: &MediaId,
+    ) -> Result<Vec<SubtitleTrack>, ApplicationError> {
+        SubtitleRepository::list_tracks_for_media(self, media_id)
+    }
+
+    fn set_track_status(
         &self,
-        word_profile_id: &WordProfileId,
-        sentence_id: &SubtitleSentenceId,
+        id: &SubtitleTrackId,
+        status: SubtitleTrackStatus,
+    ) -> Result<SubtitleTrack, ApplicationError> {
+        SubtitleRepository::set_track_status(self, id, status)
+    }
+
+    fn set_track_language(
+        &self,
+        id: &SubtitleTrackId,
+        language: &LanguageCode,
+    ) -> Result<SubtitleTrack, ApplicationError> {
+        SubtitleRepository::set_track_language(self, id, language)
+    }
+
+    fn delete_track(
+        &self,
+        id: &SubtitleTrackId,
+    ) -> Result<Option<SubtitleTrack>, ApplicationError> {
+        SubtitleRepository::delete_track(self, id)
+    }
+
+    fn get_by_media_fingerprint(
+        &self,
+        media_id: &MediaId,
+        fingerprint: &str,
+    ) -> Result<Option<SubtitleTrack>, ApplicationError> {
+        SubtitleRepository::get_by_media_fingerprint(self, media_id, fingerprint)
+    }
+
+    fn get_sentence(
+        &self,
+        id: &SubtitleSentenceId,
+    ) -> Result<Option<SubtitleSentence>, ApplicationError> {
+        SubtitleRepository::get_sentence(self, id)
+    }
+
+    fn sentence_track_language(
+        &self,
+        id: &SubtitleSentenceId,
+    ) -> Result<Option<LanguageCode>, ApplicationError> {
+        SubtitleRepository::sentence_track_language(self, id)
+    }
+}
+
+pub trait PronunciationRepository: Send + Sync {
+    fn save_word_pronunciation(
+        &self,
+        language: &str,
+        accent: &str,
+        pronunciation: &WordPronunciation,
+        provider_id: &str,
+        provider_version: &str,
     ) -> Result<(), ApplicationError>;
+    fn get_word_pronunciation(
+        &self,
+        language: &str,
+        accent: &str,
+        normalized_text: &str,
+        provider_id: &str,
+        provider_version: &str,
+    ) -> Result<Option<WordPronunciation>, ApplicationError>;
+    fn save_pronunciation(&self, analysis: &SentencePronunciation) -> Result<(), ApplicationError>;
+    fn get_pronunciation(
+        &self,
+        id: &SubtitleSentenceId,
+    ) -> Result<Option<SentencePronunciation>, ApplicationError>;
 }
 
-pub trait VocabularyAssetRepository: Send + Sync {
-    fn apply_status(
+impl<T: SubtitleRepository + ?Sized> PronunciationRepository for T {
+    fn save_word_pronunciation(
         &self,
-        profile: &WordProfile,
-        source: Option<&SourceContext>,
-        change_source: WordChangeSource,
-    ) -> Result<WordDetails, ApplicationError>;
-    fn capture_occurrence(
+        language: &str,
+        accent: &str,
+        pronunciation: &WordPronunciation,
+        provider_id: &str,
+        provider_version: &str,
+    ) -> Result<(), ApplicationError> {
+        SubtitleRepository::save_word_pronunciation(
+            self,
+            language,
+            accent,
+            pronunciation,
+            provider_id,
+            provider_version,
+        )
+    }
+
+    fn get_word_pronunciation(
         &self,
-        profile: &WordProfile,
-        source: &SourceContext,
-    ) -> Result<WordOccurrence, ApplicationError>;
-    fn list_vocabulary(
+        language: &str,
+        accent: &str,
+        normalized_text: &str,
+        provider_id: &str,
+        provider_version: &str,
+    ) -> Result<Option<WordPronunciation>, ApplicationError> {
+        SubtitleRepository::get_word_pronunciation(
+            self,
+            language,
+            accent,
+            normalized_text,
+            provider_id,
+            provider_version,
+        )
+    }
+
+    fn save_pronunciation(&self, analysis: &SentencePronunciation) -> Result<(), ApplicationError> {
+        SubtitleRepository::save_pronunciation(self, analysis)
+    }
+
+    fn get_pronunciation(
         &self,
-        language: &LanguageCode,
-        status: WordStatus,
-        search: &str,
-        limit: u32,
-        offset: u32,
-    ) -> Result<Vec<WordDetails>, ApplicationError>;
-    fn details(&self, id: &WordProfileId) -> Result<Option<WordDetails>, ApplicationError>;
-    fn export_assets(&self) -> Result<VocabularyAssetBundle, ApplicationError>;
-    fn import_assets(&self, bundle: &VocabularyAssetBundle) -> Result<(), ApplicationError>;
-    fn update_learning_content(
-        &self,
-        id: &WordProfileId,
-        user_definition: Option<String>,
-        personal_note: Option<String>,
-        updated_at_ms: u64,
-    ) -> Result<WordDetails, ApplicationError>;
-    fn import_external(
-        &self,
-        input: &ExternalVocabularyImport,
-        imported_at_ms: u64,
-    ) -> Result<ExternalVocabularyImportSummary, ApplicationError>;
+        id: &SubtitleSentenceId,
+    ) -> Result<Option<SentencePronunciation>, ApplicationError> {
+        SubtitleRepository::get_pronunciation(self, id)
+    }
 }
 
-pub trait LexicalEntryRepository: Send + Sync {
+pub trait TimelineResourceRepository: Send + Sync {
+    fn save_word_timings(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+        timings: &[WordTiming],
+    ) -> Result<(), ApplicationError>;
+    fn get_word_timings(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<Vec<WordTiming>, ApplicationError>;
+    fn save_word_timeline(&self, timeline: &WordTimeline)
+    -> Result<WordTimeline, ApplicationError>;
+    fn list_word_timelines(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<WordTimeline>, ApplicationError>;
+    fn get_word_timeline(
+        &self,
+        id: &WordTimelineId,
+    ) -> Result<Option<WordTimeline>, ApplicationError>;
+    fn active_word_timeline(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<WordTimeline>, ApplicationError>;
+    fn activate_word_timeline(&self, id: &WordTimelineId)
+    -> Result<WordTimeline, ApplicationError>;
+    fn archive_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError>;
+    fn delete_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError>;
+    fn save_chunk_timeline(
+        &self,
+        timeline: &ChunkTimeline,
+    ) -> Result<ChunkTimeline, ApplicationError>;
+    fn list_chunk_timelines(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<ChunkTimeline>, ApplicationError>;
+    fn get_chunk_timeline(
+        &self,
+        id: &ChunkTimelineId,
+    ) -> Result<Option<ChunkTimeline>, ApplicationError>;
+    fn active_chunk_timeline(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<ChunkTimeline>, ApplicationError>;
+    fn activate_chunk_timeline(
+        &self,
+        id: &ChunkTimelineId,
+    ) -> Result<ChunkTimeline, ApplicationError>;
+    fn archive_chunk_timeline(
+        &self,
+        id: &ChunkTimelineId,
+    ) -> Result<ChunkTimeline, ApplicationError>;
+    fn delete_chunk_timeline(
+        &self,
+        id: &ChunkTimelineId,
+    ) -> Result<ChunkTimeline, ApplicationError>;
+    fn save_phone_timeline(
+        &self,
+        timeline: &PhoneTimeline,
+    ) -> Result<PhoneTimeline, ApplicationError>;
+    fn list_phone_timelines(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<PhoneTimeline>, ApplicationError>;
+    fn get_phone_timeline(
+        &self,
+        id: &PhoneTimelineId,
+    ) -> Result<Option<PhoneTimeline>, ApplicationError>;
+    fn active_phone_timeline(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<PhoneTimeline>, ApplicationError>;
+    fn activate_phone_timeline(
+        &self,
+        id: &PhoneTimelineId,
+    ) -> Result<PhoneTimeline, ApplicationError>;
+    fn archive_phone_timeline(
+        &self,
+        id: &PhoneTimelineId,
+    ) -> Result<PhoneTimeline, ApplicationError>;
+    fn delete_phone_timeline(
+        &self,
+        id: &PhoneTimelineId,
+    ) -> Result<PhoneTimeline, ApplicationError>;
+}
+
+impl<T: SubtitleRepository + ?Sized> TimelineResourceRepository for T {
+    fn save_word_timings(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+        timings: &[WordTiming],
+    ) -> Result<(), ApplicationError> {
+        SubtitleRepository::save_word_timings(self, sentence_id, timings)
+    }
+
+    fn get_word_timings(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<Vec<WordTiming>, ApplicationError> {
+        SubtitleRepository::get_word_timings(self, sentence_id)
+    }
+
+    fn save_word_timeline(
+        &self,
+        timeline: &WordTimeline,
+    ) -> Result<WordTimeline, ApplicationError> {
+        SubtitleRepository::save_word_timeline(self, timeline)
+    }
+
+    fn list_word_timelines(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<WordTimeline>, ApplicationError> {
+        SubtitleRepository::list_word_timelines(self, track_id)
+    }
+
+    fn get_word_timeline(
+        &self,
+        id: &WordTimelineId,
+    ) -> Result<Option<WordTimeline>, ApplicationError> {
+        SubtitleRepository::get_word_timeline(self, id)
+    }
+
+    fn active_word_timeline(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<WordTimeline>, ApplicationError> {
+        SubtitleRepository::active_word_timeline(self, track_id)
+    }
+
+    fn activate_word_timeline(
+        &self,
+        id: &WordTimelineId,
+    ) -> Result<WordTimeline, ApplicationError> {
+        SubtitleRepository::activate_word_timeline(self, id)
+    }
+
+    fn archive_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError> {
+        SubtitleRepository::archive_word_timeline(self, id)
+    }
+
+    fn delete_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError> {
+        SubtitleRepository::delete_word_timeline(self, id)
+    }
+
+    fn save_chunk_timeline(
+        &self,
+        timeline: &ChunkTimeline,
+    ) -> Result<ChunkTimeline, ApplicationError> {
+        SubtitleRepository::save_chunk_timeline(self, timeline)
+    }
+
+    fn list_chunk_timelines(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<ChunkTimeline>, ApplicationError> {
+        SubtitleRepository::list_chunk_timelines(self, track_id)
+    }
+
+    fn get_chunk_timeline(
+        &self,
+        id: &ChunkTimelineId,
+    ) -> Result<Option<ChunkTimeline>, ApplicationError> {
+        SubtitleRepository::get_chunk_timeline(self, id)
+    }
+
+    fn active_chunk_timeline(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<ChunkTimeline>, ApplicationError> {
+        SubtitleRepository::active_chunk_timeline(self, track_id)
+    }
+
+    fn activate_chunk_timeline(
+        &self,
+        id: &ChunkTimelineId,
+    ) -> Result<ChunkTimeline, ApplicationError> {
+        SubtitleRepository::activate_chunk_timeline(self, id)
+    }
+
+    fn archive_chunk_timeline(
+        &self,
+        id: &ChunkTimelineId,
+    ) -> Result<ChunkTimeline, ApplicationError> {
+        SubtitleRepository::archive_chunk_timeline(self, id)
+    }
+
+    fn delete_chunk_timeline(
+        &self,
+        id: &ChunkTimelineId,
+    ) -> Result<ChunkTimeline, ApplicationError> {
+        SubtitleRepository::delete_chunk_timeline(self, id)
+    }
+
+    fn save_phone_timeline(
+        &self,
+        timeline: &PhoneTimeline,
+    ) -> Result<PhoneTimeline, ApplicationError> {
+        SubtitleRepository::save_phone_timeline(self, timeline)
+    }
+
+    fn list_phone_timelines(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<PhoneTimeline>, ApplicationError> {
+        SubtitleRepository::list_phone_timelines(self, track_id)
+    }
+
+    fn get_phone_timeline(
+        &self,
+        id: &PhoneTimelineId,
+    ) -> Result<Option<PhoneTimeline>, ApplicationError> {
+        SubtitleRepository::get_phone_timeline(self, id)
+    }
+
+    fn active_phone_timeline(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<PhoneTimeline>, ApplicationError> {
+        SubtitleRepository::active_phone_timeline(self, track_id)
+    }
+
+    fn activate_phone_timeline(
+        &self,
+        id: &PhoneTimelineId,
+    ) -> Result<PhoneTimeline, ApplicationError> {
+        SubtitleRepository::activate_phone_timeline(self, id)
+    }
+
+    fn archive_phone_timeline(
+        &self,
+        id: &PhoneTimelineId,
+    ) -> Result<PhoneTimeline, ApplicationError> {
+        SubtitleRepository::archive_phone_timeline(self, id)
+    }
+
+    fn delete_phone_timeline(
+        &self,
+        id: &PhoneTimelineId,
+    ) -> Result<PhoneTimeline, ApplicationError> {
+        SubtitleRepository::delete_phone_timeline(self, id)
+    }
+}
+
+pub trait LLTimelineResourceRepository: Send + Sync {
+    fn save_lltimeline_resource(
+        &self,
+        track_id: &SubtitleTrackId,
+        metadata: &LLTimelineMetadata,
+        artifacts: &[LLTimelineArtifact],
+    ) -> Result<(), ApplicationError>;
+    fn get_lltimeline_resource(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<(LLTimelineMetadata, Vec<LLTimelineArtifact>)>, ApplicationError>;
+}
+
+impl<T: SubtitleRepository + ?Sized> LLTimelineResourceRepository for T {
+    fn save_lltimeline_resource(
+        &self,
+        track_id: &SubtitleTrackId,
+        metadata: &LLTimelineMetadata,
+        artifacts: &[LLTimelineArtifact],
+    ) -> Result<(), ApplicationError> {
+        SubtitleRepository::save_lltimeline_resource(self, track_id, metadata, artifacts)
+    }
+
+    fn get_lltimeline_resource(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<(LLTimelineMetadata, Vec<LLTimelineArtifact>)>, ApplicationError> {
+        SubtitleRepository::get_lltimeline_resource(self, track_id)
+    }
+}
+
+pub trait LearningAssetRepository: Send + Sync {
     fn upsert_lexical_entry(
         &self,
         entry: &LexicalEntry,
         source: Option<&LexicalSourceContext>,
-        change_source: WordChangeSource,
+        change_source: LearningChangeSource,
     ) -> Result<LexicalEntryDetails, ApplicationError>;
     fn lexical_details(
         &self,
@@ -242,11 +622,39 @@ pub trait LexicalEntryRepository: Send + Sync {
         &self,
         language: &LanguageCode,
         kind: Option<LexicalEntryKind>,
-        status: Option<WordStatus>,
+        status: Option<LearningStatus>,
         search: &str,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<LexicalEntryDetails>, ApplicationError>;
+    fn lexical_entries_by_keys(
+        &self,
+        language: &LanguageCode,
+        kind: LexicalEntryKind,
+        normalized_forms: &[String],
+    ) -> Result<Vec<LexicalEntry>, ApplicationError>;
+    fn create_lexical_observation(
+        &self,
+        observation: &LexicalObservation,
+    ) -> Result<LexicalObservation, ApplicationError>;
+    fn list_lexical_observations_by_sentence(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<Vec<LexicalObservation>, ApplicationError>;
+    fn clear_lexical_observation(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<(), ApplicationError>;
+    fn update_lexical_learning_content(
+        &self,
+        id: &LexicalEntryId,
+        user_definition: Option<String>,
+        personal_note: Option<String>,
+        updated_at_ms: u64,
+    ) -> Result<LexicalEntryDetails, ApplicationError>;
+    fn export_assets(&self) -> Result<VocabularyAssetBundle, ApplicationError>;
+    fn import_assets(&self, bundle: &VocabularyAssetBundle) -> Result<(), ApplicationError>;
     fn set_lemma_override(
         &self,
         language: &LanguageCode,

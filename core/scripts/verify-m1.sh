@@ -40,20 +40,19 @@ api_curl -X PUT -d '{"position_ms":1234}' "$base/v1/media/$media_id/progress" >/
 progress="$(api_curl "$base/v1/media/$media_id/progress")"
 json_assert "$progress" 'v.position_ms===1234' "progress position_ms should be 1234"
 
-# Word profile CRUD
-word='{"language":"en","lemma":"Hello","display_form":"Hello","status":"known_recognized"}'
-updated_profile="$(api_curl -X PUT -d "$word" "$base/v1/word-profiles")"
-profile_id="$(json_get "$updated_profile" '.id')"
-profile="$(api_curl "$base/v1/word-profiles?language=en&lemma=hello")"
-json_assert "$profile" 'v.status==="known_recognized"' "word profile status should be known_recognized"
+# Lexical entry CRUD
+word='{"language":"en","kind":"word","canonical_form":"Hello","display_form":"Hello","status":"known_recognized"}'
+updated_entry="$(api_curl -X PUT -d "$word" "$base/v1/lexical-entries")"
+entry_id="$(json_get "$updated_entry" '.entry.id')"
+json_assert "$updated_entry" 'v.entry.status==="known_recognized"' "lexical entry status should be known_recognized"
 
 # Batch lookup
-batch="$(api_curl -d '{"language":"en","lemmas":["hello","missing"]}' "$base/v1/word-profiles/batch")"
-json_assert "$batch" 'v.length===1' "batch should return 1 profile for existing lemma only"
+batch="$(api_curl -d '{"language":"en","kind":"word","forms":["hello","missing"]}' "$base/v1/lexical-entries/batch")"
+json_assert "$batch" 'v.length===1' "batch should return 1 entry for existing lexical form only"
 
-# Word observation
-observation="$(node -e 'process.stdout.write(JSON.stringify({word_profile_id:process.argv[1],sentence_id:process.argv[2],original_form:"Hello",result:"recognized_in_context"}))' "$profile_id" "$sentence_id")"
-api_curl -d "$observation" "$base/v1/word-observations" >/dev/null
+# Lexical observation
+observation="$(node -e 'process.stdout.write(JSON.stringify({lexical_entry_id:process.argv[1],sentence_id:process.argv[2],original_form:"Hello",result:"recognized_in_context"}))' "$entry_id" "$sentence_id")"
+api_curl -d "$observation" "$base/v1/lexical-observations" >/dev/null
 
 # Diagnosis
 diagnosis="$(api_curl "$base/v1/sentences/$sentence_id/diagnosis")"

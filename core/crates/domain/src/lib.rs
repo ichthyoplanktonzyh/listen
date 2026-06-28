@@ -3,10 +3,12 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 mod language_profile;
-pub use language_profile::{available_languages, profile_for, CapabilitySupport, LanguageLearningProfile};
+pub use language_profile::{
+    CapabilitySupport, LanguageLearningProfile, available_languages, profile_for,
+};
 
 mod lexical_unit;
-pub use lexical_unit::{baseline_normalized_key, LexicalUnit};
+pub use lexical_unit::{LexicalUnit, baseline_normalized_key};
 
 mod media;
 pub use media::*;
@@ -16,6 +18,9 @@ pub use subtitle::*;
 
 mod pronunciation;
 pub use pronunciation::*;
+
+mod timeline_envelope;
+pub use timeline_envelope::*;
 
 mod word_timing;
 pub use word_timing::*;
@@ -80,10 +85,6 @@ macro_rules! string_id {
 string_id!(MediaId);
 string_id!(SubtitleTrackId);
 string_id!(SubtitleSentenceId);
-string_id!(WordProfileId);
-string_id!(WordObservationId);
-string_id!(WordOccurrenceId);
-string_id!(WordStatusHistoryId);
 string_id!(DictionaryEntryId);
 string_id!(TranscriptionJobId);
 string_id!(TranscriptionModelId);
@@ -93,6 +94,7 @@ string_id!(ChunkId);
 string_id!(PhoneTimelineId);
 string_id!(LLTimelineId);
 string_id!(LexicalEntryId);
+string_id!(LexicalObservationId);
 string_id!(LexicalOccurrenceId);
 string_id!(LexicalStatusHistoryId);
 string_id!(LearningResourceId);

@@ -397,9 +397,25 @@ fn is_kana_char(c: char) -> bool {
 }
 
 fn is_small_kana(c: char) -> bool {
-    matches!(c,
-        'っ' | 'ッ' | 'ゃ' | 'ャ' | 'ゅ' | 'ュ' | 'ょ' | 'ョ' |
-        'ぁ' | 'ァ' | 'ぃ' | 'ィ' | 'ぅ' | 'ゥ' | 'ぇ' | 'ェ' | 'ぉ' | 'ォ'
+    matches!(
+        c,
+        'っ' | 'ッ'
+            | 'ゃ'
+            | 'ャ'
+            | 'ゅ'
+            | 'ュ'
+            | 'ょ'
+            | 'ョ'
+            | 'ぁ'
+            | 'ァ'
+            | 'ぃ'
+            | 'ィ'
+            | 'ぅ'
+            | 'ゥ'
+            | 'ぇ'
+            | 'ェ'
+            | 'ぉ'
+            | 'ォ'
     )
 }
 
@@ -935,10 +951,7 @@ mod tests {
     #[test]
     fn syllable_timed_gives_equal_weight_to_cjk_chars() {
         let sentence = chinese_sentence(&["因为", "我", "不", "知道"]);
-        let timings = estimate_word_timings_with_rhythm(
-            &sentence,
-            Some("zh.syllable_tone"),
-        );
+        let timings = estimate_word_timings_with_rhythm(&sentence, Some("zh.syllable_tone"));
         assert_eq!(timings.len(), 4);
         // "因为" (2 chars) should get 2x the duration of "我" (1 char)
         let d0 = timings[0].end_ms - timings[0].start_ms;

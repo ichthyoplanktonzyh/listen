@@ -2,7 +2,10 @@ use crate::*;
 
 impl AppServices {
     pub fn pronunciation_providers(&self) -> Vec<PronunciationProviderInfo> {
-        self.pronunciation_providers.iter().map(|p| p.info()).collect()
+        self.pronunciation_providers
+            .iter()
+            .map(|p| p.info())
+            .collect()
     }
 
     pub fn pronunciation_rules(&self, language: &str) -> serde_json::Value {
@@ -38,7 +41,7 @@ impl AppServices {
             if !info.languages.iter().any(|l| l == primary || l == language) {
                 continue;
             }
-            if let Some(value) = self.subtitles.get_word_pronunciation(
+            if let Some(value) = self.pronunciations.get_word_pronunciation(
                 primary,
                 language,
                 &normalized,
@@ -48,7 +51,7 @@ impl AppServices {
                 return Ok(value);
             }
             if let Some(value) = provider.lookup_word(word, 0) {
-                self.subtitles.save_word_pronunciation(
+                self.pronunciations.save_word_pronunciation(
                     primary,
                     language,
                     &value,
@@ -58,7 +61,9 @@ impl AppServices {
                 return Ok(value);
             }
         }
-        Err(ApplicationError::NotFound("pronunciation provider for language"))
+        Err(ApplicationError::NotFound(
+            "pronunciation provider for language",
+        ))
     }
 
     pub fn analyze_pronunciation(
@@ -70,7 +75,7 @@ impl AppServices {
         if profile.pronunciation == "core.none" {
             return Err(ApplicationError::NotFound("pronunciation for language"));
         }
-        if let Some(value) = self.subtitles.get_pronunciation(sentence_id)? {
+        if let Some(value) = self.pronunciations.get_pronunciation(sentence_id)? {
             let still_valid = self.pronunciation_providers.iter().any(|p| {
                 let info = p.info();
                 info.id == value.provider_id && info.version == value.provider_version
@@ -80,7 +85,7 @@ impl AppServices {
             }
         }
         let sentence = self
-            .subtitles
+            .subtitle_tracks
             .get_sentence(sentence_id)?
             .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
         let primary = language
@@ -98,30 +103,35 @@ impl AppServices {
                 continue;
             }
             if let Some(value) = provider.analyze_sentence(&sentence) {
-                self.subtitles.save_pronunciation(&value)?;
+                self.pronunciations.save_pronunciation(&value)?;
                 return Ok(value);
             }
         }
-        Err(ApplicationError::NotFound("pronunciation provider for language"))
+        Err(ApplicationError::NotFound(
+            "pronunciation provider for language",
+        ))
     }
 
     pub fn pronunciation_cache_state(
         &self,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<Option<bool>, ApplicationError> {
-        Ok(self.subtitles.get_pronunciation(sentence_id)?.map(|value| {
-            self.pronunciation_providers.iter().any(|p| {
-                let info = p.info();
-                info.id == value.provider_id && info.version == value.provider_version
-            })
-        }))
+        Ok(self
+            .pronunciations
+            .get_pronunciation(sentence_id)?
+            .map(|value| {
+                self.pronunciation_providers.iter().any(|p| {
+                    let info = p.info();
+                    info.id == value.provider_id && info.version == value.provider_version
+                })
+            }))
     }
 
     pub fn word_timings(
         &self,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<Vec<WordTiming>, ApplicationError> {
-        let existing = self.subtitles.get_word_timings(sentence_id)?;
+        let existing = self.timelines.get_word_timings(sentence_id)?;
         if word_timing_cache_is_usable(&existing) {
             return Ok(existing);
         }
@@ -131,14 +141,14 @@ impl AppServices {
             return Ok(Vec::new());
         }
         let sentence = self
-            .subtitles
+            .subtitle_tracks
             .get_sentence(sentence_id)?
             .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
         let values = speech_analysis::estimate_word_timings_with_rhythm(
             &sentence,
             Some(profile.rhythm_prosody.as_str()),
         );
-        self.subtitles.save_word_timings(sentence_id, &values)?;
+        self.timelines.save_word_timings(sentence_id, &values)?;
         Ok(values)
     }
 
@@ -146,7 +156,7 @@ impl AppServices {
         &self,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<Option<bool>, ApplicationError> {
-        let values = self.subtitles.get_word_timings(sentence_id)?;
+        let values = self.timelines.get_word_timings(sentence_id)?;
         Ok(values.first().map(|_| word_timing_cache_is_usable(&values)))
     }
 
@@ -155,7 +165,7 @@ impl AppServices {
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<SentencePronunciation>, ApplicationError> {
         let track = self
-            .subtitles
+            .subtitle_tracks
             .get_track(track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         Ok(track
@@ -169,13 +179,13 @@ impl AppServices {
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<WordTiming>, ApplicationError> {
-        if let Some(timeline) = self.subtitles.active_word_timeline(track_id)?
+        if let Some(timeline) = self.timelines.active_word_timeline(track_id)?
             && !timeline.words.is_empty()
         {
             return Ok(timeline.words);
         }
         let track = self
-            .subtitles
+            .subtitle_tracks
             .get_track(track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         let mut values = Vec::new();

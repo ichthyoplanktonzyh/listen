@@ -1,199 +1,206 @@
+use crate::lexical::lexical_unit_for_entry;
 use crate::*;
 
 impl AppServices {
-    pub fn update_word_profile(
-        &self,
-        input: UpdateWordProfile,
-    ) -> Result<WordProfile, ApplicationError> {
-        let language = LanguageCode::parse(input.language)?;
-        let normalized_lemma = self
-            .normalize_lexical_form(language.as_str(), &input.lemma)?
-            .normalized;
-        require_text(&normalized_lemma, "lemma")?;
-        let profile = WordProfile {
-            id: WordProfileId::from_fingerprint(
-                "word-profile",
-                &format!("{}:{normalized_lemma}", language.as_str()),
-            ),
-            language,
-            lemma: input.lemma,
-            normalized_lemma,
-            display_form: input.display_form,
-            status: input.status,
-            updated_at_ms: now_ms(),
-            user_definition: None,
-            personal_note: None,
-            learning_updated_at_ms: 0,
-        };
-        if let Some(source) = input.source.as_ref()
-            && (source.language != profile.language
-                || self
-                    .normalize_lexical_form(profile.language.as_str(), &source.normalized_lemma)?
-                    .normalized
-                    != profile.normalized_lemma
-                || source.end_ms < source.start_ms)
-        {
-            return Err(ApplicationError::Validation("source context"));
-        }
-        let updated = self
-            .vocabulary
-            .apply_status(
-                &profile,
-                input.source.as_ref(),
-                WordChangeSource::UserSelection,
-            )
-            .map(|details| details.profile)?;
-        let lexical_source = input.source.as_ref().map(lexical_source_from_word);
-        self.lexical.upsert_lexical_entry(
-            &lexical_from_word(&updated),
-            lexical_source.as_ref(),
-            WordChangeSource::UserSelection,
-        )?;
-        Ok(updated)
-    }
-
-    pub fn read_word_profile(
+    pub fn read_lexical_entries_by_forms(
         &self,
         language: &str,
-        lemma: &str,
-    ) -> Result<Option<WordProfile>, ApplicationError> {
-        let language = LanguageCode::parse(language.to_owned())?;
-        let raw = normalize_lemma(lemma);
-        let normalized = self
-            .normalize_lexical_form(language.as_str(), lemma)?
-            .normalized;
-        if let Some(value) = self.words.get_by_key(&language, &normalized)? {
-            return Ok(Some(value));
-        }
-        self.words.get_by_key(&language, &raw)
-    }
-
-    pub fn read_word_profiles(
-        &self,
-        language: &str,
-        lemmas: &[String],
-    ) -> Result<Vec<WordProfile>, ApplicationError> {
+        kind: LexicalEntryKind,
+        forms: &[String],
+    ) -> Result<Vec<LexicalEntry>, ApplicationError> {
         let language = LanguageCode::parse(language.to_owned())?;
         let mut normalized = std::collections::BTreeSet::new();
-        for lemma in lemmas {
-            let normalized_lemma = self
-                .normalize_lexical_form(language.as_str(), lemma)?
-                .normalized;
-            if !normalized_lemma.is_empty() {
-                normalized.insert(normalized_lemma);
+        for form in forms {
+            let value = match kind {
+                LexicalEntryKind::Word => {
+                    self.normalize_lexical_form(language.as_str(), form)?
+                        .normalized
+                }
+                LexicalEntryKind::Phrase => normalize_phrase(form),
+            };
+            if !value.is_empty() {
+                normalized.insert(value);
             }
         }
         let normalized = normalized.into_iter().collect::<Vec<_>>();
-        self.words.get_many(&language, &normalized)
+        self.learning_assets
+            .lexical_entries_by_keys(&language, kind, &normalized)
     }
 
-    pub fn create_observation(
+    pub fn create_lexical_observation(
         &self,
-        input: CreateWordObservation,
-    ) -> Result<WordObservation, ApplicationError> {
+        input: CreateLexicalObservation,
+    ) -> Result<LexicalObservation, ApplicationError> {
         require_text(&input.original_form, "original_form")?;
-        let source_profile = input
-            .source
-            .as_ref()
-            .map(|source| {
-                let profile = self
-                    .vocabulary
-                    .details(&input.word_profile_id)?
-                    .map(|details| details.profile)
-                    .ok_or(ApplicationError::NotFound("word profile"))?;
-                if source.language != profile.language
-                    || self
-                        .normalize_lexical_form(
-                            profile.language.as_str(),
-                            &source.normalized_lemma,
-                        )?
-                        .normalized
-                        != profile.normalized_lemma
-                    || source.end_ms < source.start_ms
-                {
-                    return Err(ApplicationError::Validation("source context"));
-                }
-                Ok(profile)
-            })
-            .transpose()?;
+        let mut entry = self
+            .learning_assets
+            .lexical_details(&input.lexical_entry_id)?
+            .map(|details| details.entry)
+            .ok_or(ApplicationError::NotFound("lexical entry"))?;
+        if let Some(source) = input.source.as_ref() {
+            if source.end_ms < source.start_ms {
+                return Err(ApplicationError::Validation("source context"));
+            }
+        }
         let created_at_ms = now_ms();
-        let observation = self.observations.create(&WordObservation {
-            id: WordObservationId::from_fingerprint(
-                "word-observation",
-                &format!(
-                    "{}:{}:{created_at_ms}",
-                    input.word_profile_id.as_str(),
-                    input.sentence_id.as_str()
+        let observation = self
+            .learning_assets
+            .create_lexical_observation(&LexicalObservation {
+                id: LexicalObservationId::from_fingerprint(
+                    "lexical-observation",
+                    &format!(
+                        "{}:{}:{created_at_ms}",
+                        input.lexical_entry_id.as_str(),
+                        input.sentence_id.as_str()
+                    ),
                 ),
-            ),
-            word_profile_id: input.word_profile_id,
-            sentence_id: input.sentence_id,
-            original_form: input.original_form,
-            result: input.result,
-            created_at_ms,
-        })?;
-        if let (Some(source), Some(profile)) = (input.source.as_ref(), source_profile.as_ref()) {
-            self.vocabulary.capture_occurrence(profile, source)?;
+                lexical_entry_id: input.lexical_entry_id,
+                sentence_id: input.sentence_id,
+                original_form: input.original_form,
+                result: input.result,
+                created_at_ms,
+            })?;
+        if let Some(source) = input.source.as_ref() {
+            entry.updated_at_ms = created_at_ms;
+            self.learning_assets.upsert_lexical_entry(
+                &entry,
+                Some(source),
+                LearningChangeSource::UserSelection,
+            )?;
         }
         Ok(observation)
     }
 
-    pub fn clear_observation(
+    pub fn clear_lexical_observation(
         &self,
-        word_profile_id: &WordProfileId,
+        lexical_entry_id: &LexicalEntryId,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<(), ApplicationError> {
-        self.observations.clear(word_profile_id, sentence_id)
+        self.learning_assets
+            .clear_lexical_observation(lexical_entry_id, sentence_id)
     }
 
     pub fn list_vocabulary(
         &self,
         language: &str,
-        status: WordStatus,
+        status: LearningStatus,
         search: &str,
         limit: u32,
         offset: u32,
-    ) -> Result<Vec<WordDetails>, ApplicationError> {
-        self.vocabulary.list_vocabulary(
+    ) -> Result<Vec<LexicalEntryDetails>, ApplicationError> {
+        self.learning_assets.list_lexical_entries(
             &LanguageCode::parse(language)?,
-            status,
+            Some(LexicalEntryKind::Word),
+            Some(status),
             search,
             limit.min(200),
             offset,
         )
     }
 
-    pub fn word_details(
-        &self,
-        id: &WordProfileId,
-    ) -> Result<Option<WordDetails>, ApplicationError> {
-        self.vocabulary.details(id)
-    }
-
     pub fn export_vocabulary(&self) -> Result<VocabularyAssetBundle, ApplicationError> {
-        self.vocabulary.export_assets()
+        self.learning_assets.export_assets()
     }
 
     pub fn import_vocabulary(
         &self,
         bundle: &VocabularyAssetBundle,
     ) -> Result<(), ApplicationError> {
-        if bundle.version != 1 && bundle.version != 2 && bundle.version != 3 && bundle.version != 4
-        {
+        if bundle.version != 5 {
             return Err(ApplicationError::Validation(
                 "unsupported asset bundle version",
             ));
         }
-        self.vocabulary.import_assets(bundle).and_then(|_| {
-            for profile in &bundle.profiles {
-                self.lexical.upsert_lexical_entry(
-                    &lexical_from_word(profile),
-                    None,
-                    WordChangeSource::Import,
-                )?;
+        self.learning_assets.import_assets(bundle)
+    }
+
+    pub fn update_lexical_learning_content(
+        &self,
+        id: &LexicalEntryId,
+        user_definition: Option<String>,
+        personal_note: Option<String>,
+    ) -> Result<LexicalEntryDetails, ApplicationError> {
+        self.learning_assets.update_lexical_learning_content(
+            id,
+            clean_optional(user_definition),
+            clean_optional(personal_note),
+            now_ms(),
+        )
+    }
+
+    pub fn import_external_vocabulary(
+        &self,
+        input: &ExternalVocabularyImport,
+    ) -> Result<ExternalVocabularyImportSummary, ApplicationError> {
+        let language = LanguageCode::parse(input.language.clone())?;
+        let mut summary = ExternalVocabularyImportSummary::default();
+        let imported_at_ms = now_ms();
+        for value in &input.entries {
+            let word = normalize_lemma(&value.word);
+            if word.is_empty() {
+                summary.invalid += 1;
+                continue;
             }
-            Ok(())
-        })
+            let normalization = self.normalize_lexical_form(language.as_str(), &word)?;
+            let existing = self.learning_assets.lexical_entry_by_key(
+                &language,
+                LexicalEntryKind::Word,
+                &normalization.normalized,
+            )?;
+            if existing.is_some() && !input.overwrite_existing {
+                summary.skipped += 1;
+                continue;
+            }
+            let unit = lexical_unit_for_entry(
+                &language,
+                LexicalEntryKind::Word,
+                &normalization.normalized,
+                &word,
+            );
+            let status = value.status.or(input.default_status);
+            let id = existing
+                .as_ref()
+                .map(|entry| entry.id.clone())
+                .unwrap_or_else(|| {
+                    LexicalEntryId::from_fingerprint("lexical-entry", &unit.identity())
+                });
+            let entry = LexicalEntry {
+                id,
+                unit,
+                language: language.clone(),
+                kind: LexicalEntryKind::Word,
+                canonical_form: word.clone(),
+                normalized_form: normalization.normalized,
+                display_form: word,
+                status,
+                user_definition: existing
+                    .as_ref()
+                    .and_then(|entry| entry.user_definition.clone()),
+                personal_note: existing
+                    .as_ref()
+                    .and_then(|entry| entry.personal_note.clone()),
+                normalization_provider: normalization.provider,
+                normalization_version: normalization.version,
+                user_corrected: normalization.user_corrected,
+                updated_at_ms: imported_at_ms,
+                learning_updated_at_ms: existing
+                    .as_ref()
+                    .map_or(imported_at_ms, |entry| entry.learning_updated_at_ms),
+            };
+            self.learning_assets.upsert_lexical_entry(
+                &entry,
+                None,
+                LearningChangeSource::Import,
+            )?;
+            if existing.is_some() {
+                summary.overwritten += 1;
+            } else if status.is_some() {
+                summary.initialized += 1;
+            } else {
+                summary.created += 1;
+            }
+        }
+        Ok(summary)
     }
 
     pub fn set_media_availability(

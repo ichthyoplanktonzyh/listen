@@ -5,7 +5,7 @@
 //! **open namespaced strings** (`core.*` + `<lang>.*`) with clean degradation,
 //! not exhaustive enums, so adding a language never edits shared `match` arms.
 //!
-//! The global vocabulary status enum (`WordStatus`) stays language-agnostic and
+//! The global vocabulary status enum (`LearningStatus`) stays language-agnostic and
 //! is intentionally *not* part of a profile: it sits on the comprehension axis
 //! (meaning x sound) that holds for every language. What varies per language is
 //! the diagnosis *reason* taxonomy, declared here as `diagnosis_reasons`.
@@ -161,7 +161,12 @@ impl LanguageLearningProfile {
             lexical_normalization: "core.surface".to_string(),
             listening_units: strings(&["core.syllable", "ja.mora", "core.word", "core.phrase"]),
             pronunciation: "ja.kana".to_string(),
-            sound_features: strings(&["ja.pitch_accent", "ja.mora", "ja.long_vowel", "ja.gemination"]),
+            sound_features: strings(&[
+                "ja.pitch_accent",
+                "ja.mora",
+                "ja.long_vowel",
+                "ja.gemination",
+            ]),
             rhythm_prosody: "ja.mora_timed".to_string(),
             morphology: "ja.agglutinative".to_string(),
             dictionary_providers: strings(&["jmdict"]),
@@ -263,9 +268,11 @@ mod tests {
         let profile = profile_for(&lang("zh"));
         assert_eq!(profile.display_name, "Chinese");
         assert_eq!(profile.tokenization, "zh.word_segmentation");
-        assert!(profile
-            .lexical_granularities
-            .contains(&"core.char".to_string()));
+        assert!(
+            profile
+                .lexical_granularities
+                .contains(&"core.char".to_string())
+        );
         assert!(profile.has_sound_feature("zh.tone"));
         assert!(profile.supports_listening_unit("zh.tone_syllable"));
         assert_eq!(profile.pronunciation, "zh.pinyin");
@@ -286,13 +293,17 @@ mod tests {
         // Japanese declares its own listening axis (mora) and reasons.
         assert!(profile.supports_listening_unit("ja.mora"));
         assert!(profile.has_sound_feature("ja.pitch_accent"));
-        assert!(profile
-            .diagnosis_reasons
-            .contains(&"pitch_accent".to_string()));
+        assert!(
+            profile
+                .diagnosis_reasons
+                .contains(&"pitch_accent".to_string())
+        );
         // It must not inherit Chinese tone reasons.
-        assert!(!profile
-            .diagnosis_reasons
-            .contains(&"tone_confusion".to_string()));
+        assert!(
+            !profile
+                .diagnosis_reasons
+                .contains(&"tone_confusion".to_string())
+        );
     }
 
     #[test]

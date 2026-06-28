@@ -18,12 +18,12 @@ impl AppServices {
             identity_salt: input.identity_salt,
         })?;
         if let Some(existing) = self
-            .subtitles
+            .subtitle_tracks
             .get_by_media_fingerprint(&track.media_id, &track.fingerprint)?
         {
             return Ok(existing);
         }
-        self.subtitles.save_track(&track)?;
+        self.subtitle_tracks.save_track(&track)?;
         Ok(track)
     }
 
@@ -32,21 +32,21 @@ impl AppServices {
         track_id: &SubtitleTrackId,
         language: &LanguageCode,
     ) -> Result<SubtitleTrack, ApplicationError> {
-        self.subtitles.set_track_language(track_id, language)
+        self.subtitle_tracks.set_track_language(track_id, language)
     }
 
     pub fn read_subtitle_track(
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Option<SubtitleTrack>, ApplicationError> {
-        self.subtitles.get_track(track_id)
+        self.subtitle_tracks.get_track(track_id)
     }
 
     pub fn read_sentence(
         &self,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<Option<SubtitleSentence>, ApplicationError> {
-        self.subtitles.get_sentence(sentence_id)
+        self.subtitle_tracks.get_sentence(sentence_id)
     }
 
     /// Resolve the learning language for a sentence from its subtitle track,
@@ -56,7 +56,7 @@ impl AppServices {
         &self,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<LanguageCode, ApplicationError> {
-        match self.subtitles.sentence_track_language(sentence_id)? {
+        match self.subtitle_tracks.sentence_track_language(sentence_id)? {
             Some(language) => Ok(language),
             None => Ok(LanguageCode::parse("en")?),
         }

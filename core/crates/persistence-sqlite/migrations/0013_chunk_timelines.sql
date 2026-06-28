@@ -15,5 +15,9 @@ CREATE INDEX chunk_timeline_runs_track_idx
 CREATE INDEX chunk_timeline_runs_track_status_idx
   ON chunk_timeline_runs(track_id, status, updated_at_ms DESC);
 
+CREATE UNIQUE INDEX chunk_timeline_runs_one_active_per_track_idx
+  ON chunk_timeline_runs(track_id)
+  WHERE status = '"active"';
+
 CREATE INDEX chunk_timeline_runs_parent_word_timeline_idx
   ON chunk_timeline_runs(parent_word_timeline_id, created_at_ms DESC);

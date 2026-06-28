@@ -8,7 +8,6 @@ mod progress;
 mod subtitles;
 mod support;
 mod transcription;
-mod vocabulary;
 
 pub use connection::SqliteRepository;
 pub use migrations::{MIGRATION_VERSION, migrate};

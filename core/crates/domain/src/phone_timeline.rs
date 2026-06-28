@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     DetectedPhone, MediaId, PhoneAlignment, PhoneTimelineId, PhoneticAnalysisId,
     PhoneticAnalysisModelId, PhoneticFinding, SoundAnalysis, SubtitleSentenceId, SubtitleTrackId,
-    TimelineCreator, TimelineStatus, WordTimelineId,
+    TimelineCreator, TimelineMetrics, TimelineStatus, WordTimelineId,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -31,7 +31,7 @@ pub struct PhoneTimeline {
     pub created_by: TimelineCreator,
     pub status: TimelineStatus,
     #[serde(default)]
-    pub metrics_json: serde_json::Value,
+    pub metrics_json: TimelineMetrics,
     #[serde(default)]
     pub phones: Vec<DetectedPhone>,
     #[serde(default)]

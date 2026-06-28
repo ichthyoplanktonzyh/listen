@@ -118,8 +118,9 @@ impl PhoneticAnalysisCoordinator {
             ));
         }
 
-        let model_dir = default_ctc_model_dir()
-            .ok_or(ApplicationError::Repository("cannot determine model directory".into()))?;
+        let model_dir = default_ctc_model_dir().ok_or(ApplicationError::Repository(
+            "cannot determine model directory".into(),
+        ))?;
 
         model.state = PhoneticModelState::Installing;
         model.error = None;
@@ -386,10 +387,25 @@ impl PhoneticAnalysisCoordinator {
             },
             audio_start_ms: start_ms,
             audio_end_ms: end_ms,
-            provider_id: if is_ctc { CTC_PROVIDER_ID } else { FAKE_PROVIDER_ID }.into(),
+            provider_id: if is_ctc {
+                CTC_PROVIDER_ID
+            } else {
+                FAKE_PROVIDER_ID
+            }
+            .into(),
             provider_version: "v1".into(),
-            runtime_id: if is_ctc { "transformers-pytorch" } else { "built-in-test-runtime" }.into(),
-            runtime_version: if is_ctc { "v1" } else { env!("CARGO_PKG_VERSION") }.into(),
+            runtime_id: if is_ctc {
+                "transformers-pytorch"
+            } else {
+                "built-in-test-runtime"
+            }
+            .into(),
+            runtime_version: if is_ctc {
+                "v1"
+            } else {
+                env!("CARGO_PKG_VERSION")
+            }
+            .into(),
             model_id: model.id,
             model_revision: model.revision,
             model_checksum_sha256: model.checksum_sha256,
@@ -552,10 +568,9 @@ impl PhoneticAnalysisCoordinator {
             None
         };
         let model_dir = if is_ctc {
-            Some(
-                ctc_model_dir()
-                    .ok_or(ApplicationError::Conflict("wav2vec2 phoneme model is not installed"))?,
-            )
+            Some(ctc_model_dir().ok_or(ApplicationError::Conflict(
+                "wav2vec2 phoneme model is not installed",
+            ))?)
         } else {
             None
         };
@@ -718,8 +733,7 @@ impl PhoneticAnalysisCoordinator {
                     installed_bytes: 0,
                     error: None,
                     license: "Apache-2.0".into(),
-                    training_data_provenance:
-                        "CommonVoice + LibriVox native speaker speech".into(),
+                    training_data_provenance: "CommonVoice + LibriVox native speaker speech".into(),
                     distribution_allowed: true,
                     application_verified: true,
                     updated_at_ms: now_ms(),

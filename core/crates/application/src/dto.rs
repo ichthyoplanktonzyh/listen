@@ -24,10 +24,63 @@ pub struct WordTimingBoundaryDiagnostic {
     pub right_provider_version: String,
 }
 
-pub type SentenceChunkPartition = speech_analysis::chunk_partition::SentenceChunkPartition;
-pub type SentenceChunkDiagnostics = speech_analysis::chunk_partition::SentenceChunkDiagnostics;
-pub type LearnedProsodicProviderInfo =
-    speech_analysis::learned_prosodic_provider::LearnedProsodicProviderInfo;
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SentenceChunkPartition {
+    pub sentence_id: SubtitleSentenceId,
+    pub chunks: Vec<DisplayChunk>,
+    pub partitioner_id: String,
+    pub partitioner_version: String,
+    pub timing_quality: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DisplayChunk {
+    pub index: u32,
+    pub token_start: u32,
+    pub token_end: u32,
+    pub text: String,
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub boundary_after: Option<DisplayChunkBoundary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DisplayChunkBoundary {
+    pub left_token_index: u32,
+    pub right_token_index: u32,
+    pub score: f32,
+    pub primary_source: String,
+    pub evidence: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BoundaryDiagnostic {
+    pub left_token_index: u32,
+    pub right_token_index: u32,
+    pub raw_score: f32,
+    pub selection_threshold: f32,
+    pub selected: bool,
+    pub forced: bool,
+    pub primary_source: Option<String>,
+    pub evidence: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SentenceChunkDiagnostics {
+    pub partition: SentenceChunkPartition,
+    pub candidates: Vec<BoundaryDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LearnedProsodicProviderInfo {
+    pub provider_id: String,
+    pub model_revision: String,
+    pub license: String,
+    pub runtime: String,
+    pub available: bool,
+    pub optional: bool,
+    pub diagnostic: Option<String>,
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateWordTimeline {
@@ -37,7 +90,7 @@ pub struct CreateWordTimeline {
     pub parent_timeline_id: Option<WordTimelineId>,
     pub created_by: Option<TimelineCreator>,
     pub status: Option<TimelineStatus>,
-    pub metrics_json: Option<serde_json::Value>,
+    pub metrics_json: Option<TimelineMetrics>,
     pub words: Vec<WordTiming>,
 }
 
@@ -67,35 +120,12 @@ pub struct RegisterMedia {
 }
 
 #[derive(Debug, Clone)]
-pub struct UpdateWordProfile {
-    pub language: String,
-    pub lemma: String,
-    pub display_form: String,
-    pub status: Option<WordStatus>,
-    pub source: Option<SourceContext>,
-}
-
-#[derive(Debug, Clone)]
-pub struct CreateWordObservation {
-    pub word_profile_id: WordProfileId,
+pub struct CreateLexicalObservation {
+    pub lexical_entry_id: LexicalEntryId,
     pub sentence_id: SubtitleSentenceId,
     pub original_form: String,
     pub result: ObservationResult,
-    pub source: Option<SourceContext>,
-}
-
-#[derive(Debug, Clone)]
-pub struct SourceContext {
-    pub language: LanguageCode,
-    pub normalized_lemma: String,
-    pub media_id: Option<MediaId>,
-    pub sentence_id: Option<SubtitleSentenceId>,
-    pub original_form: String,
-    pub sentence_text: String,
-    pub media_title: String,
-    pub media_fingerprint: String,
-    pub start_ms: u64,
-    pub end_ms: u64,
+    pub source: Option<LexicalSourceContext>,
 }
 
 #[derive(Debug, Clone)]
@@ -118,7 +148,7 @@ pub struct UpsertLexicalEntry {
     pub kind: LexicalEntryKind,
     pub canonical_form: String,
     pub display_form: String,
-    pub status: Option<WordStatus>,
+    pub status: Option<LearningStatus>,
     pub user_definition: Option<String>,
     pub personal_note: Option<String>,
     pub source: Option<LexicalSourceContext>,

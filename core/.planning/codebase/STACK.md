@@ -120,8 +120,8 @@ datasets (可选，用于 TIMIT/Buckeye)
 
 - **引擎**：SQLite（rusqlite bundled）
 - **位置**：`~/Library/Application Support/LLPlayerNext/llplayer.db`
-- **迁移**：10 个版本（0001 ~ 0010），自动迁移 + 预迁移备份
-- **关键表**：media_items, subtitle_tracks, subtitle_sentences, word_profiles, word_observations, word_timeline_runs, dictionary_cache, transcription_jobs, phonetic_analysis_jobs, learning_resources, lexical_entries
+- **迁移**：14 个版本（0001 ~ 0014），自动迁移 + 预迁移备份
+- **关键表**：media_items, subtitle_tracks, subtitle_sentences, lexical_entries, lexical_occurrences, lexical_status_history, lexical_observations, word_timeline_runs, chunk_timeline_runs, phone_timeline_runs, lltimeline_resources, dictionary_cache, transcription_jobs, phonetic_analysis_jobs, learning_resources
 
 ## 6. 构建与测试
 

@@ -1,7 +1,7 @@
 use super::*;
 use domain::{
-    LanguageCode, LexicalEntryId, LexicalEntryKind, SubtitleSentence, SubtitleSentenceId,
-    SubtitleToken, SubtitleTokenKind, TimeMs, TimingSource, WordProfile, WordProfileId, WordStatus,
+    LexicalEntryKind, SubtitleSentence, SubtitleSentenceId, SubtitleToken, SubtitleTokenKind,
+    TimeMs, TimingSource,
 };
 
 // ── require_text ────────────────────────────────────────────────────────
@@ -177,105 +177,36 @@ fn normalize_phrase_with_irregulars() {
     assert_eq!(normalize_phrase("was going"), "was going");
 }
 
-// ── lexical_from_word ───────────────────────────────────────────────────
+// ── lexical identity ────────────────────────────────────────────────────
 
 #[test]
-fn lexical_from_word_maps_core_fields() {
-    let profile = WordProfile {
-        id: WordProfileId::from_fingerprint("test", "en:hello"),
-        language: LanguageCode::parse("en").unwrap(),
-        lemma: "Hello".into(),
-        normalized_lemma: "hello".into(),
-        display_form: "Hello".into(),
-        status: Some(WordStatus::KnownRecognized),
-        updated_at_ms: 1000,
-        user_definition: Some("a greeting".into()),
-        personal_note: Some("common".into()),
-        learning_updated_at_ms: 2000,
-    };
-    let entry = lexical_from_word(&profile);
-    assert_eq!(entry.language.as_str(), "en");
-    assert_eq!(entry.kind, LexicalEntryKind::Word);
-    assert_eq!(entry.canonical_form, "Hello");
-    assert_eq!(entry.normalized_form, "hello");
-    assert_eq!(entry.display_form, "Hello");
-    assert_eq!(entry.status, Some(WordStatus::KnownRecognized));
-    assert_eq!(entry.user_definition, Some("a greeting".into()));
-    assert_eq!(entry.personal_note, Some("common".into()));
-    assert_eq!(entry.normalization_provider, "legacy-word-api");
-    assert_eq!(entry.normalization_version, "v1");
-    assert!(!entry.user_corrected);
-    assert_eq!(entry.updated_at_ms, 1000);
-    assert_eq!(entry.learning_updated_at_ms, 2000);
+fn lexical_unit_for_word_uses_language_profile_normalization() {
+    let language = domain::LanguageCode::parse("en").unwrap();
+    let unit =
+        crate::lexical::lexical_unit_for_entry(&language, LexicalEntryKind::Word, "hello", "Hello");
+    assert_eq!(unit.language.as_str(), "en");
+    assert_eq!(unit.granularity, domain::LexicalUnit::GRANULARITY_WORD);
+    assert_eq!(unit.normalization, "core.lemma");
+    assert_eq!(unit.normalized_key, "hello");
 }
 
 #[test]
-fn lexical_from_word_id_is_parseable() {
-    let profile = WordProfile {
-        id: WordProfileId::from_fingerprint("test", "en:test"),
-        language: LanguageCode::parse("en").unwrap(),
-        lemma: "test".into(),
-        normalized_lemma: "test".into(),
-        display_form: "test".into(),
-        status: None,
-        updated_at_ms: 0,
-        user_definition: None,
-        personal_note: None,
-        learning_updated_at_ms: 0,
-    };
-    let entry = lexical_from_word(&profile);
-    // The id should be parseable as a LexicalEntryId (uses the same string
-    // format from WordProfileId)
-    let parsed = LexicalEntryId::parse(entry.id.as_str().to_owned());
-    assert!(parsed.is_ok());
-}
-
-// ── lexical_source_from_word ────────────────────────────────────────────
-
-#[test]
-fn lexical_source_maps_all_fields() {
-    let source = SourceContext {
-        language: LanguageCode::parse("en").unwrap(),
-        normalized_lemma: "hello".into(),
-        media_id: None,
-        sentence_id: None,
-        original_form: "Hello".into(),
-        sentence_text: "Hello world".into(),
-        media_title: "Test".into(),
-        media_fingerprint: "fp1".into(),
-        start_ms: 100,
-        end_ms: 500,
-    };
-    let lex_source = lexical_source_from_word(&source);
-    assert_eq!(lex_source.original_form, "Hello");
-    assert_eq!(lex_source.sentence_text, "Hello world");
-    assert_eq!(lex_source.media_title, "Test");
-    assert_eq!(lex_source.media_fingerprint, "fp1");
-    assert_eq!(lex_source.start_ms, 100);
-    assert_eq!(lex_source.end_ms, 500);
-    assert_eq!(lex_source.token_start, None);
-    assert_eq!(lex_source.token_end, None);
-}
-
-#[test]
-fn lexical_source_preserves_media_and_sentence_ids() {
-    let media_id = domain::MediaId::from_fingerprint("test", "media1");
-    let sentence_id = SubtitleSentenceId::from_fingerprint("test", "sent1");
-    let source = SourceContext {
-        language: LanguageCode::parse("en").unwrap(),
-        normalized_lemma: "test".into(),
-        media_id: Some(media_id.clone()),
-        sentence_id: Some(sentence_id.clone()),
-        original_form: "test".into(),
-        sentence_text: "test".into(),
-        media_title: "title".into(),
-        media_fingerprint: "fp".into(),
-        start_ms: 0,
-        end_ms: 100,
-    };
-    let lex_source = lexical_source_from_word(&source);
-    assert_eq!(lex_source.media_id, Some(media_id));
-    assert_eq!(lex_source.sentence_id, Some(sentence_id));
+fn lexical_unit_distinguishes_word_and_phrase_assets() {
+    let language = domain::LanguageCode::parse("en").unwrap();
+    let word = crate::lexical::lexical_unit_for_entry(
+        &language,
+        LexicalEntryKind::Word,
+        "take care",
+        "take care",
+    );
+    let phrase = crate::lexical::lexical_unit_for_entry(
+        &language,
+        LexicalEntryKind::Phrase,
+        "take care",
+        "take care",
+    );
+    assert_ne!(word.identity(), phrase.identity());
+    assert_eq!(phrase.granularity, domain::LexicalUnit::GRANULARITY_PHRASE);
 }
 
 // ── timing_priority ─────────────────────────────────────────────────────

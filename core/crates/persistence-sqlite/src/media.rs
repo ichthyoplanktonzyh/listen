@@ -30,20 +30,20 @@ impl MediaRepository for SqliteRepository {
             )
             .map_err(repo)?;
             conn.execute(
-                "UPDATE word_occurrences SET media_id=?1
+                "UPDATE lexical_occurrences SET media_id=?1
                  WHERE media_id IS NULL AND media_fingerprint_snapshot=?2",
                 params![media.id.as_str(), media.fingerprint],
             )
             .map_err(repo)?;
             conn.execute(
-                "UPDATE word_occurrences
+                "UPDATE lexical_occurrences
                  SET sentence_id=(
                    SELECT s.id FROM subtitle_sentences s
                    JOIN subtitle_tracks t ON t.id=s.track_id
                    WHERE t.media_id=?1
-                     AND s.start_ms=word_occurrences.start_ms_snapshot
-                     AND s.end_ms=word_occurrences.end_ms_snapshot
-                     AND s.display_text=word_occurrences.sentence_text_snapshot
+                     AND s.start_ms=lexical_occurrences.start_ms_snapshot
+                     AND s.end_ms=lexical_occurrences.end_ms_snapshot
+                     AND s.display_text=lexical_occurrences.sentence_text_snapshot
                    LIMIT 1
                  )
                  WHERE media_id=?1 AND sentence_id IS NULL",
@@ -51,13 +51,13 @@ impl MediaRepository for SqliteRepository {
             )
             .map_err(repo)?;
             conn.execute(
-                "UPDATE word_observations
+                "UPDATE lexical_observations
                  SET sentence_id=sentence_id_snapshot
                  WHERE sentence_id IS NULL
                    AND EXISTS (
                      SELECT 1 FROM subtitle_sentences s
                      JOIN subtitle_tracks t ON t.id=s.track_id
-                     WHERE s.id=word_observations.sentence_id_snapshot AND t.media_id=?1
+                     WHERE s.id=lexical_observations.sentence_id_snapshot AND t.media_id=?1
                    )",
                 [media.id.as_str()],
             )
@@ -105,7 +105,7 @@ impl MediaRepository for SqliteRepository {
             .map_err(repo)?;
         if availability != MediaAvailability::Available {
             tx.execute(
-                "UPDATE word_observations SET sentence_id=NULL
+                "UPDATE lexical_observations SET sentence_id=NULL
                  WHERE sentence_id IN (
                    SELECT s.id FROM subtitle_sentences s
                    JOIN subtitle_tracks t ON t.id=s.track_id
@@ -115,7 +115,7 @@ impl MediaRepository for SqliteRepository {
             )
             .map_err(repo)?;
             tx.execute(
-                "UPDATE word_occurrences SET media_id=NULL, sentence_id=NULL WHERE media_id=?1",
+                "UPDATE lexical_occurrences SET media_id=NULL, sentence_id=NULL WHERE media_id=?1",
                 [id.as_str()],
             )
             .map_err(repo)?;

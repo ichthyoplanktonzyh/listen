@@ -20,25 +20,25 @@ sentence_id="$(json_get "$track" '.sentences[0].id')"
 # Build source context
 source="$(node -e '
   const media=JSON.parse(process.argv[1]), track=JSON.parse(process.argv[2]), s=track.sentences[0];
-  process.stdout.write(JSON.stringify({language:"en",normalized_lemma:"hello",media_id:media.id,
+  process.stdout.write(JSON.stringify({media_id:media.id,
     sentence_id:s.id,original_form:"Hello",sentence_text:s.display_text,media_title:media.title,
-    media_fingerprint:media.fingerprint,start_ms:s.start,end_ms:s.end}))
+    media_fingerprint:media.fingerprint,start_ms:s.start,end_ms:s.end,token_start:0,token_end:0}))
 ' "$media" "$track")"
 
-# Update word profile with source
-update="$(node -e 'process.stdout.write(JSON.stringify({language:"en",lemma:"hello",display_form:"Hello",status:"unknown_meaning",source:JSON.parse(process.argv[1])}))' "$source")"
-profile="$(api_curl -X PUT -d "$update" "$base/v1/word-profiles")"
-profile_id="$(json_get "$profile" '.id')"
+# Update lexical entry with source
+update="$(node -e 'process.stdout.write(JSON.stringify({language:"en",kind:"word",canonical_form:"hello",display_form:"Hello",status:"unknown_meaning",source:JSON.parse(process.argv[1])}))' "$source")"
+details="$(api_curl -X PUT -d "$update" "$base/v1/lexical-entries")"
+entry_id="$(json_get "$details" '.entry.id')"
 
 # Idempotent re-import
-api_curl -X PUT -d "$update" "$base/v1/word-profiles" >/dev/null
+api_curl -X PUT -d "$update" "$base/v1/lexical-entries" >/dev/null
 
-details="$(api_curl "$base/v1/word-profiles/$profile_id/details")"
+details="$(api_curl "$base/v1/lexical-entries/$entry_id")"
 json_assert "$details" 'v.history.length===1&&v.occurrences[0].encounter_count===2' "history should deduplicate, encounter count should be 2"
 
-# Word observation
-observation="$(node -e 'process.stdout.write(JSON.stringify({word_profile_id:process.argv[1],sentence_id:process.argv[2],original_form:"Hello",result:"recognized_in_context",source:JSON.parse(process.argv[3])}))' "$profile_id" "$sentence_id" "$source")"
-api_curl -d "$observation" "$base/v1/word-observations" >/dev/null
+# Lexical observation
+observation="$(node -e 'process.stdout.write(JSON.stringify({lexical_entry_id:process.argv[1],sentence_id:process.argv[2],original_form:"Hello",result:"recognized_in_context",source:JSON.parse(process.argv[3])}))' "$entry_id" "$sentence_id" "$source")"
+api_curl -d "$observation" "$base/v1/lexical-observations" >/dev/null
 
 # Vocabulary book
 book="$(api_curl "$base/v1/vocabulary?status=unknown_meaning&language=en")"
@@ -49,12 +49,12 @@ bundle="$(api_curl "$base/v1/vocabulary/export")"
 
 # Archive media and verify occurrence nullification
 api_curl -X PUT -d '{"availability":"archived"}' "$base/v1/media/$media_id/availability" >/dev/null
-details="$(api_curl "$base/v1/word-profiles/$profile_id/details")"
+details="$(api_curl "$base/v1/lexical-entries/$entry_id")"
 json_assert "$details" 'v.occurrences[0].media_id===null' "archived media should nullify media_id in occurrence"
 
 # Move media and verify re-link
 api_curl -d '{"path":"/tmp/moved-source.mp4","fingerprint":"m15-media","title":"M15 Source moved","kind":"video"}' "$base/v1/media" >/dev/null
-details="$(api_curl "$base/v1/word-profiles/$profile_id/details")"
+details="$(api_curl "$base/v1/lexical-entries/$entry_id")"
 json_assert "$details" 'v.occurrences[0].media_id!==null&&v.occurrences[0].sentence_id!==null' "moved media should re-link occurrences"
 
 stop_api
@@ -68,7 +68,7 @@ for _ in 1 2; do
 done
 
 restored="$(api_curl "$base/v1/vocabulary/export")"
-json_assert "$restored" 'v.profiles.length===1&&v.history.length===2&&v.occurrences.length===1&&v.observations.length===1&&v.history.some(h=>h.change_source==="import")' "restored bundle should preserve all data with import history"
+json_assert "$restored" 'v.version===5&&v.lexical_entries.length===1&&v.lexical_history.length===1&&v.lexical_occurrences.length===1&&v.lexical_observations.length===1' "restored bundle should preserve all lexical data"
 
 stop_api
 

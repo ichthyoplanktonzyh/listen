@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
-status: unknown
-last_updated: "2026-06-27T04:50:00.000Z"
+status: active
+last_updated: "2026-06-27T18:20:00.000Z"
 progress:
   total_phases: 11
   completed_phases: 1
@@ -15,7 +15,8 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-27 CST
-> 更新原因：创建 Phase 2.17 Real Media Sound-Line QA，转入真实英语媒体回归包与声音线听感 QA。
+> 更新原因：Phase 2.18 代码架构重构完成主路径实现；旧学习资产路径已删除，
+> lexical 权威模型、typed learning state、timeline metrics/evidence envelope 和契约验证已收口。
 
 ## 当前位置
 
@@ -26,7 +27,8 @@ progress:
   Phase 2.14 ✅ 声音线学习架构收口完成 +
   Phase 2.15 ✅ 声音线学习 UX 收口完成 +
   Phase 2.16 ✅ 真实语流模型 v1 收口完成 +
-  Phase 2.17 ⏳ 真实媒体声音线 QA 已规划
+  Phase 2.17 ⏳ 真实媒体声音线 QA 已规划 +
+  Phase 2.18 🧱 代码架构全面重构主路径已完成，等待最终 gate
 - **分支**：`main`
 - **版本**：0.7.0
 
@@ -38,6 +40,50 @@ progress:
 |---|---|---|
 | 本地重装生产引擎 | 生成精准 WordTimeline / ChunkTimeline / LLTimeline JSON | ✅ 阶段性收口，转长期研究 |
 | 轻量消费端 LLPlayerNext | 稳定读取 `.lltimeline.json` 并播放学习 | ✅ Phase 2.3/2.10/2.12 已集成 |
+
+## 当前横切治理 Phase
+
+### Phase 2.18: Codebase Architecture Refactor 🧱 主路径已完成
+
+- 目标：趁项目尚未继续膨胀，单独解决 2026-06-27 架构复盘发现的代码架构问题，不混入
+  Phase 2.17 真实媒体 QA。
+- 已完成重构主路径：
+  - OpenAPI/generated client 已补齐缺失 route；contract validation 增加实现/契约双向 parity。
+  - `SubtitleRepository` 已拆为 subtitle track、pronunciation、timeline resource、LLTimeline resource
+    等 application 边界；`AppServices` 不再依赖全能 subtitle repository。
+  - `LexicalEntry` 已携带权威 `LexicalUnit`，SQLite lexical identity 使用
+    `language + granularity + normalization + normalized_key`；状态枚举更名为 `LearningStatus`。
+  - `LearningAssetRepository` 是 lexical learning asset 的一等 repository 边界。
+  - 旧 learning-asset domain/repository/API/OpenAPI/generated client/script/Flutter fixture 路径已从 active code path 删除。
+  - 诊断、observation、vocabulary export/import 均走 lexical entry。
+  - `application::dto` 不再公开 `speech_analysis` 类型别名，chunk partition/diagnostics/provider info
+    已转换为 application-owned DTO。
+  - SQLite word/chunk/phone timeline runs 已增加每 track 单 active partial unique index，并有
+    schema-level 测试覆盖。
+  - Flutter 新增 typed `BackendEvent` 与 `BackendEventCoordinator`，`main.dart` 不再直接解析 SSE payload；
+    diagnosis refresh 已下沉到 `LearningWorkflowController` 并使用 generation guard 丢弃 stale result。
+  - `LearningController` 的 lexical entries、phrase candidates、selected details、language profile、
+    dictionary lookup、word pronunciation、diagnosis 已 typed。
+  - `SubtitleController` 的 pronunciation provider、sentence pronunciation、phonetic analysis 已 typed；
+    `WordLearningPanel` / `DiagnosisCard` 不再接收这些业务 payload 的裸 map。
+  - `LearningWorkflowController` 继续承接 phrase candidate、word entry load/open/update、observation
+    和 learning content 保存流程，`main.dart` 只保留 UI wiring/status。
+  - 新增 `SpeechEnhancementWorkflowController`，timeline resource refresh、word timing、sentence
+    pronunciation、chunk partition、phone/sound-pattern analysis 加载解析已从 `main.dart` 移出。
+  - Rust/Flutter timeline models 已新增 `TimelineMetrics` / `ChunkEvidence` typed envelope。
+  - `.planning/codebase/ARCHITECTURE.md` 与 `.planning/codebase/DATA-MODEL.md` 已刷新为当前事实源。
+- 剩余债务：
+  - `main.dart` 仍可继续拆 media/session/resource action wiring。
+  - route manifest 尚未抽成共享事实源；当前由 route/OpenAPI parity test 守护。
+- 兼容性决策：
+  - 不需要保留历史兼容性。
+  - 旧 SQLite 数据、旧 LLTimeline JSON、旧学习资产资源和旧 API/UI adapter 均可抛弃。
+  - Phase 2.18 以 `LexicalEntry + LexicalUnit`、统一 timeline lifecycle、typed Flutter state
+    和新 contract 为准。
+- 规划文档：
+  - `.planning/phases/2.18-codebase-architecture-refactor/2.18-CONTEXT.md`
+  - `.planning/phases/2.18-codebase-architecture-refactor/2.18-PLAN.md`
+  - `.planning/phases/2.18-codebase-architecture-refactor/2.18-REFACTOR-AUDIT.md`
 
 ## 当前 Phase 状态
 
@@ -315,7 +361,7 @@ progress:
   - 建立英语 + 汉语双语言回归测试。
 - 实现进度（2026-06-22）：
   - ✅ Step 1：`domain/language_profile.rs` 的 `LanguageLearningProfile` + 能力矩阵
-    （开放 namespaced kind，en/zh/degraded，理解轴不变量 `WordStatus` 不动）。
+    （开放 namespaced kind，en/zh/degraded，理解轴不变量 `LearningStatus` 不动）。
   - ✅ Step 2：`subtitle-core` 的 `Tokenizer` trait + profile 驱动 `tokenize(language, text)`；
     汉语默认 jieba-rs 0.7.4 词分词，`--no-default-features` 走字级 fallback；英语回归基线不变。
     全 workspace 255 测试通过、clippy 干净。
@@ -324,7 +370,7 @@ progress:
   - ✅ Step 4：去 `language=en` 硬编码。`subtitle_core::import` 在未声明语言时按脚本检测
     （含汉字→zh，否则 en）用于分词与存储 `track.language`；Flutter `SubtitleTrack` 读取
     `language`，`_learningLanguage` 解析器（active 字幕轨语言→`en` fallback）串到所有
-    word-profile/vocab/dict/phrase 调用与 `_sourceFor`。英语回归基线不变。全 workspace 272
+    lexical/vocab/dict/phrase 调用与 `_sourceFor`。英语回归基线不变。全 workspace 272
     测试 + flutter analyze/test + validate-contracts 通过。
   - ✅ Step 5：汉语词典/拼音 provider。`ChineseDictionaryProvider`（`supported_languages: ["zh"]`）
     接入 **CC-CEDICT**（约 12 万词条，读安装的 `.u8`、数字拼音转调号、简繁双查），25 词种子作离线
@@ -489,9 +535,9 @@ progress:
 - **Store\<T\>**：通用响应式状态容器（`state/store.dart`），通过 `select()` 暴露
   字段级 ValueNotifier，Widget 只监听需要的数据切片。`StoreBuilder<T,R>` 声明式
   选择器 Widget（`state/builder.dart`）。
-- **Typed domain models**：新增 `models/types.dart`，提供 WordProfile、WordDetail、
+- **Typed domain models**：`models/types.dart` 提供 LexicalEntry、LexicalEntryDetails、
   Diagnosis、PhraseCandidate、PronunciationProvider、PronunciationAnalysis、
-  LanguageProfile、PhoneticAnalysis 共 8 个 typed 类替代 `Map<String, dynamic>`。
+  LanguageProfile、PhoneticAnalysis 等 typed 类替代核心 `Map<String, dynamic>`。
 - **Controller 迁移**：PlayerController / SubtitleController / LearningController
   内部由 ChangeNotifier 改为 Store 驱动，新增 `select()` 公开方法。保留原有
   convenience getter/setter 和 ChangeNotifier 接口，100% 向后兼容。

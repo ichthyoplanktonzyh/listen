@@ -1,12 +1,12 @@
 //! Lexical learning unit (Phase 2.6, ADR 0012 R2).
 //!
-//! `LexicalUnit` generalizes the English-lemma `WordProfile` identity to any
-//! language. Identity is two orthogonal axes — **granularity** and
-//! **normalization** — plus an opaque `normalized_key` produced by a
-//! per-language normalizer (no substring / affix-stripping assumption; Arabic
-//! roots are non-concatenative). It models only the vocabulary learning object,
-//! never real-audio chunking, which stays with the timeline resources /
-//! `ListeningUnit` view.
+//! `LexicalUnit` is the new identity model for vocabulary learning objects in
+//! any language. Identity is two orthogonal axes — **granularity** and
+//! **normalization** — plus an opaque `normalized_key` produced by a per-language
+//! normalizer (no substring / affix-stripping assumption; Arabic roots are
+//! non-concatenative). It models only the vocabulary learning object, never
+//! real-audio chunking, which stays with the timeline resources / `ListeningUnit`
+//! view.
 
 use serde::{Deserialize, Serialize};
 
@@ -89,11 +89,9 @@ impl LexicalUnit {
 
     /// Stable identity string used to derive a persistent id.
     ///
-    /// The legacy English default (word granularity) keeps
-    /// `language:normalized_key`, so existing `WordProfileId` fingerprints
-    /// (`sha256("word-profile:" + language + ":" + normalized_lemma)`) stay
-    /// unchanged. Non-word granularities namespace the key, so Chinese
-    /// characters never collide with Chinese words or English lemmas.
+    /// Word granularity uses the compact `language:normalized_key` identity.
+    /// Non-word granularities namespace the key, so Chinese characters never
+    /// collide with Chinese words or English lemmas.
     pub fn identity(&self) -> String {
         if self.granularity == Self::GRANULARITY_WORD {
             format!("{}:{}", self.language.as_str(), self.normalized_key)
@@ -129,13 +127,11 @@ mod tests {
     }
 
     #[test]
-    fn english_word_is_lemma_normalized_and_backward_compatible() {
+    fn english_word_is_lemma_normalized_with_stable_identity() {
         let unit = LexicalUnit::word_from_profile(&profile_for(&lang("en")), "Going");
         assert_eq!(unit.granularity, LexicalUnit::GRANULARITY_WORD);
         assert_eq!(unit.normalization, LexicalUnit::NORMALIZATION_LEMMA);
         assert_eq!(unit.normalized_key, "going");
-        // Legacy WordProfileId fingerprint input is `language:normalized_lemma`;
-        // the word-granularity identity must reproduce that exact format.
         assert_eq!(unit.identity(), "en:going");
     }
 
@@ -172,6 +168,9 @@ mod tests {
             "咖啡"
         );
         // An unknown normalization kind degrades to a trimmed surface key.
-        assert_eq!(baseline_normalized_key("ar.templatic", " kataba "), "kataba");
+        assert_eq!(
+            baseline_normalized_key("ar.templatic", " kataba "),
+            "kataba"
+        );
     }
 }

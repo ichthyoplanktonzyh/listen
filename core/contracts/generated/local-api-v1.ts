@@ -1,7 +1,7 @@
 // Handwritten client generation experiment for contracts/openapi/v1.yaml.
 // Replace with generated Dart output when the Flutter desktop integration begins.
 export type MediaKind = "video" | "audio";
-export type WordStatus =
+export type LearningStatus =
   | "unknown_meaning"
   | "known_not_recognized"
   | "known_recognized";
@@ -71,6 +71,27 @@ export interface SubtitleTrack {
   source: string;
   status: "available" | "archived";
   sentences: SubtitleSentence[];
+}
+
+export type CapabilitySupport = "supported" | "approximate" | "unsupported";
+
+export interface LanguageLearningProfile {
+  language: string;
+  display_name: string;
+  script: string;
+  tokenization: string;
+  lexical_granularities: string[];
+  lexical_normalization: string;
+  listening_units: string[];
+  pronunciation: string;
+  sound_features: string[];
+  rhythm_prosody: string;
+  morphology: string;
+  dictionary_providers: string[];
+  diagnosis_reasons: string[];
+  word_timeline: CapabilitySupport;
+  chunk_timeline: CapabilitySupport;
+  phone_timeline: CapabilitySupport;
 }
 
 export type TimingSource =
@@ -322,34 +343,49 @@ export interface SpeechBatchJob {
   updated_at_ms: number;
 }
 
-export interface UpdateWordProfile {
-  language: string;
-  lemma: string;
-  display_form: string;
-  status?: WordStatus | null;
-  source?: unknown | null;
-}
-
-export interface WordProfile extends UpdateWordProfile {
-  id: string;
-  normalized_lemma: string;
-  status: WordStatus | null;
-  updated_at_ms: number;
-  user_definition: string | null;
-  personal_note: string | null;
-  learning_updated_at_ms: number;
-}
-
 export type LexicalEntryKind = "word" | "phrase";
+
+export interface LexicalSource {
+  media_id?: string | null;
+  sentence_id?: string | null;
+  original_form: string;
+  sentence_text: string;
+  media_title: string;
+  media_fingerprint: string;
+  start_ms: number;
+  end_ms: number;
+  token_start?: number | null;
+  token_end?: number | null;
+}
+
+export interface UpsertLexicalEntry {
+  language: string;
+  kind: LexicalEntryKind;
+  canonical_form: string;
+  display_form: string;
+  status?: LearningStatus | null;
+  user_definition?: string | null;
+  personal_note?: string | null;
+  source?: LexicalSource | null;
+}
+
+export interface LexicalUnit {
+  language: string;
+  granularity: string;
+  normalization: string;
+  normalized_key: string;
+  display_form: string;
+}
 
 export interface LexicalEntry {
   id: string;
+  unit: LexicalUnit;
   language: string;
   kind: LexicalEntryKind;
   canonical_form: string;
   normalized_form: string;
   display_form: string;
-  status: WordStatus | null;
+  status: LearningStatus | null;
   user_definition: string | null;
   personal_note: string | null;
   normalization_provider: string;
@@ -363,6 +399,25 @@ export interface LexicalEntryDetails {
   entry: LexicalEntry;
   history: unknown[];
   occurrences: unknown[];
+}
+
+export interface LexicalObservation {
+  id: string;
+  lexical_entry_id: string;
+  sentence_id: string;
+  original_form: string;
+  result: "recognized_in_context" | "not_recognized_in_context";
+  created_at_ms: number;
+}
+
+export interface VocabularyAssetBundle {
+  version: 5;
+  exported_at_ms: number;
+  lexical_entries: LexicalEntry[];
+  lexical_history: unknown[];
+  lexical_occurrences: unknown[];
+  lexical_observations: LexicalObservation[];
+  phonetic_finding_feedback: unknown[];
 }
 
 export interface LexicalNormalization {
@@ -505,6 +560,13 @@ export class LocalApiV1 {
   restoreSubtitle(trackId: string): Promise<SubtitleTrack> {
     return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}/restore`, {
       method: "POST",
+    });
+  }
+
+  updateTrackLanguage(trackId: string, language: string): Promise<SubtitleTrack> {
+    return this.request(`/v1/subtitles/${encodeURIComponent(trackId)}/language`, {
+      method: "PATCH",
+      body: JSON.stringify({ language }),
     });
   }
 
@@ -672,12 +734,67 @@ export class LocalApiV1 {
     });
   }
 
-  listLexicalEntries(): Promise<LexicalEntryDetails[]> {
-    return this.request("/v1/lexical-entries?language=en&limit=200&offset=0");
+  readLexicalEntries(
+    language: string,
+    kind: LexicalEntryKind,
+    forms: string[],
+  ): Promise<LexicalEntry[]> {
+    return this.request("/v1/lexical-entries/batch", {
+      method: "POST",
+      body: JSON.stringify({ language, kind, forms }),
+    });
   }
 
-  upsertLexicalEntry(input: unknown): Promise<LexicalEntryDetails> {
+  listLexicalEntries(input: {
+    language?: string;
+    kind?: LexicalEntryKind;
+    status?: LearningStatus;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<LexicalEntryDetails[]> {
+    const query = new URLSearchParams({
+      language: input.language ?? "en",
+      limit: String(input.limit ?? 200),
+      offset: String(input.offset ?? 0),
+    });
+    if (input.kind) query.set("kind", input.kind);
+    if (input.status) query.set("status", input.status);
+    if (input.search) query.set("search", input.search);
+    return this.request(`/v1/lexical-entries?${query}`);
+  }
+
+  upsertLexicalEntry(input: UpsertLexicalEntry): Promise<LexicalEntryDetails> {
     return this.request("/v1/lexical-entries", { method: "PUT", body: JSON.stringify(input) });
+  }
+
+  lexicalEntryDetails(id: string): Promise<LexicalEntryDetails> {
+    return this.request(`/v1/lexical-entries/${encodeURIComponent(id)}`);
+  }
+
+  updateLexicalLearningContent(
+    id: string,
+    userDefinition: string | null,
+    personalNote: string | null,
+  ): Promise<LexicalEntryDetails> {
+    return this.request(`/v1/lexical-entries/${encodeURIComponent(id)}/learning-content`, {
+      method: "PUT",
+      body: JSON.stringify({ user_definition: userDefinition, personal_note: personalNote }),
+    });
+  }
+
+  createLexicalObservation(input: {
+    lexical_entry_id: string;
+    sentence_id: string;
+    original_form: string;
+    result?: "recognized_in_context" | "not_recognized_in_context" | null;
+    clear?: boolean;
+    source?: LexicalSource | null;
+  }): Promise<LexicalObservation | undefined> {
+    return this.request("/v1/lexical-observations", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
   }
 
   normalizeLexical(value: string): Promise<LexicalNormalization> {
@@ -823,6 +940,12 @@ export class LocalApiV1 {
     });
   }
 
+  clearTerminalPhoneticAnalysisJobs(): Promise<{ deleted: number }> {
+    return this.request("/v1/phonetic-analysis/jobs/clear", {
+      method: "POST",
+    });
+  }
+
   phoneticAnalysisJob(jobId: string): Promise<unknown> {
     return this.request(`/v1/phonetic-analysis/jobs/${encodeURIComponent(jobId)}`);
   }
@@ -858,62 +981,16 @@ export class LocalApiV1 {
     );
   }
 
-  readWordProfile(language: string, lemma: string): Promise<WordProfile | null> {
-    const query = new URLSearchParams({ language, lemma });
-    return this.request(`/v1/word-profiles?${query}`);
-  }
-
-  updateWordProfile(input: UpdateWordProfile): Promise<WordProfile> {
-    return this.request("/v1/word-profiles", {
-      method: "PUT",
-      body: JSON.stringify(input),
-    });
-  }
-
-  readWordProfiles(language: string, lemmas: string[]): Promise<WordProfile[]> {
-    return this.request("/v1/word-profiles/batch", {
-      method: "POST",
-      body: JSON.stringify({ language, lemmas }),
-    });
-  }
-
-  createWordObservation(input: {
-    word_profile_id: string;
-    sentence_id: string;
-    original_form: string;
-    result: "recognized_in_context" | "not_recognized_in_context";
-  }): Promise<unknown> {
-    return this.request("/v1/word-observations", {
-      method: "POST",
-      body: JSON.stringify(input),
-    });
-  }
-
-  listVocabulary(status: WordStatus, search = ""): Promise<unknown[]> {
+  listVocabulary(status: LearningStatus, search = ""): Promise<unknown[]> {
     const query = new URLSearchParams({ language: "en", status, search });
     return this.request(`/v1/vocabulary?${query}`);
   }
 
-  wordDetails(profileId: string): Promise<unknown> {
-    return this.request(`/v1/word-profiles/${encodeURIComponent(profileId)}/details`);
-  }
-
-  updateWordLearningContent(
-    profileId: string,
-    userDefinition: string | null,
-    personalNote: string | null,
-  ): Promise<unknown> {
-    return this.request(`/v1/word-profiles/${encodeURIComponent(profileId)}/learning-content`, {
-      method: "PUT",
-      body: JSON.stringify({ user_definition: userDefinition, personal_note: personalNote }),
-    });
-  }
-
-  exportVocabulary(): Promise<unknown> {
+  exportVocabulary(): Promise<VocabularyAssetBundle> {
     return this.request("/v1/vocabulary/export");
   }
 
-  importVocabulary(bundle: unknown): Promise<unknown> {
+  importVocabulary(bundle: VocabularyAssetBundle): Promise<unknown> {
     return this.request("/v1/vocabulary/import", {
       method: "POST",
       body: JSON.stringify(bundle),
@@ -942,6 +1019,14 @@ export class LocalApiV1 {
     return this.request(`/v1/dictionary?${query}`);
   }
 
+  listLanguages(): Promise<string[]> {
+    return this.request("/v1/languages");
+  }
+
+  languageProfile(code: string): Promise<LanguageLearningProfile> {
+    return this.request(`/v1/languages/${encodeURIComponent(code)}/profile`);
+  }
+
   diagnoseSentence(sentenceId: string): Promise<unknown> {
     return this.request(`/v1/sentences/${encodeURIComponent(sentenceId)}/diagnosis`);
   }
@@ -956,6 +1041,7 @@ export class LocalApiV1 {
     if (authenticated) headers.set("authorization", `Bearer ${this.token}`);
     const response = await fetch(`${this.baseUrl}${path}`, { ...init, headers });
     if (!response.ok) throw (await response.json()) as ErrorBody;
+    if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
   }
 

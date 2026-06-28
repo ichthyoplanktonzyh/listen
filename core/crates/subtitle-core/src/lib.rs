@@ -488,7 +488,7 @@ impl Tokenizer for JapaneseTokenizer {
 
 #[cfg(feature = "lindera")]
 fn build_lindera_segmenter() -> lindera::segmenter::Segmenter {
-    use lindera::dictionary::{load_embedded_dictionary, DictionaryKind};
+    use lindera::dictionary::{DictionaryKind, load_embedded_dictionary};
     use lindera::mode::Mode;
     use lindera::segmenter::Segmenter;
     let dictionary = load_embedded_dictionary(DictionaryKind::IPADIC)
@@ -588,9 +588,27 @@ fn is_punctuation_char(ch: char) -> bool {
     ch.is_ascii_punctuation()
         || matches!(
             ch,
-            '…' | '“' | '”' | '‘' | '’' | '—' | '–'
-                | '，' | '。' | '！' | '？' | '、' | '；' | '：'
-                | '（' | '）' | '《' | '》' | '「' | '」' | '【' | '】'
+            '…' | '“'
+                | '”'
+                | '‘'
+                | '’'
+                | '—'
+                | '–'
+                | '，'
+                | '。'
+                | '！'
+                | '？'
+                | '、'
+                | '；'
+                | '：'
+                | '（'
+                | '）'
+                | '《'
+                | '》'
+                | '「'
+                | '」'
+                | '【'
+                | '】'
         )
 }
 
@@ -973,7 +991,10 @@ mod language_tokenize_tests {
     fn chinese_is_segmented_not_one_word_token() {
         let tokens = tokenize(Some(&lang("zh")), "我想喝咖啡");
         let words = word_texts(&tokens);
-        assert!(words.len() > 1, "expected multiple word tokens, got {words:?}");
+        assert!(
+            words.len() > 1,
+            "expected multiple word tokens, got {words:?}"
+        );
         let rebuilt: String = tokens.iter().map(|token| token.text.as_str()).collect();
         assert_eq!(rebuilt, "我想喝咖啡");
         for token in &tokens {
@@ -1081,8 +1102,7 @@ mod import_language_detection_tests {
         import(ImportSubtitle {
             media_id: MediaId::parse("media").unwrap(),
             source_name: "a.srt".into(),
-            content: format!("1\n00:00:00,000 --> 00:00:01,000\n{body}\n")
-                .into_bytes(),
+            content: format!("1\n00:00:00,000 --> 00:00:01,000\n{body}\n").into_bytes(),
             language: language.map(|code| LanguageCode::parse(code).unwrap()),
             identity_salt: None,
         })
@@ -1100,14 +1120,20 @@ mod import_language_detection_tests {
     #[test]
     fn undeclared_chinese_subtitle_detects_zh_and_segments() {
         let track = import_srt("我想喝咖啡", None);
-        assert_eq!(track.language.as_ref().map(LanguageCode::as_str), Some("zh"));
+        assert_eq!(
+            track.language.as_ref().map(LanguageCode::as_str),
+            Some("zh")
+        );
         assert!(word_count(&track) > 1, "expected Chinese segmentation");
     }
 
     #[test]
     fn undeclared_english_subtitle_detects_en_baseline() {
         let track = import_srt("I can't re-enter", None);
-        assert_eq!(track.language.as_ref().map(LanguageCode::as_str), Some("en"));
+        assert_eq!(
+            track.language.as_ref().map(LanguageCode::as_str),
+            Some("en")
+        );
         let tokens = &track.sentences[0].tokens;
         assert_eq!(*tokens, tokenize_english("I can't re-enter"));
     }
@@ -1117,8 +1143,15 @@ mod import_language_detection_tests {
         // A caller-declared language wins even when the script suggests otherwise,
         // so an explicit en keeps the whitespace baseline on Han text.
         let track = import_srt("我想喝咖啡", Some("en"));
-        assert_eq!(track.language.as_ref().map(LanguageCode::as_str), Some("en"));
-        assert_eq!(word_count(&track), 1, "en tokenizer treats Han run as one word");
+        assert_eq!(
+            track.language.as_ref().map(LanguageCode::as_str),
+            Some("en")
+        );
+        assert_eq!(
+            word_count(&track),
+            1,
+            "en tokenizer treats Han run as one word"
+        );
     }
 
     #[test]
@@ -1127,7 +1160,10 @@ mod import_language_detection_tests {
         // also contains kanji, so detection must not misroute it to zh — the
         // central falsification this dispatch fix closes.
         let track = import_srt("私は学生です", None);
-        assert_eq!(track.language.as_ref().map(LanguageCode::as_str), Some("ja"));
+        assert_eq!(
+            track.language.as_ref().map(LanguageCode::as_str),
+            Some("ja")
+        );
         assert!(word_count(&track) > 1, "expected Japanese segmentation");
     }
 
@@ -1136,6 +1172,9 @@ mod import_language_detection_tests {
         // Han with no kana stays Chinese: the kana signal adds Japanese without
         // regressing the existing Chinese detection baseline.
         let track = import_srt("我想喝咖啡", None);
-        assert_eq!(track.language.as_ref().map(LanguageCode::as_str), Some("zh"));
+        assert_eq!(
+            track.language.as_ref().map(LanguageCode::as_str),
+            Some("zh")
+        );
     }
 }

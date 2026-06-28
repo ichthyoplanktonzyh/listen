@@ -643,7 +643,9 @@ fn acoustic_gap_threshold(
     [left?, right?]
         .into_iter()
         .map(|source| match source {
-            TimingSource::AsrReported | TimingSource::AsrAligned => config.asr_reported_gap_threshold_ms,
+            TimingSource::AsrReported | TimingSource::AsrAligned => {
+                config.asr_reported_gap_threshold_ms
+            }
             TimingSource::ForcedAligned => config.forced_aligned_gap_threshold_ms,
             TimingSource::UserAdjusted => config.user_adjusted_gap_threshold_ms,
             TimingSource::Estimated => unreachable!("estimated timings are not acoustic evidence"),
@@ -672,7 +674,14 @@ fn punctuation_between(
     let strong = punctuation.chars().any(|value| {
         matches!(
             value,
-            '.' | '?' | '!' | ';' | ':' | '\u{3002}' | '\u{FF1F}' | '\u{FF01}' | '\u{FF1B}'
+            '.' | '?'
+                | '!'
+                | ';'
+                | ':'
+                | '\u{3002}'
+                | '\u{FF1F}'
+                | '\u{FF01}'
+                | '\u{FF1B}'
                 | '\u{FF1A}'
         )
     });
@@ -704,9 +713,7 @@ fn build_chunk(
         .iter()
         .map(|word| word.text.as_str())
         .collect();
-    let all_cjk = texts
-        .iter()
-        .all(|t| t.chars().all(|ch| is_cjk_char(ch)));
+    let all_cjk = texts.iter().all(|t| t.chars().all(|ch| is_cjk_char(ch)));
     let separator = if all_cjk { "" } else { " " };
     DisplayChunk {
         index: index as u32,

@@ -369,11 +369,7 @@ impl ChineseDictionaryProvider {
                 .iter()
                 .enumerate()
                 .map(|(i, ch)| {
-                    let char_pinyin = syllables
-                        .get(i)
-                        .copied()
-                        .unwrap_or("")
-                        .to_owned();
+                    let char_pinyin = syllables.get(i).copied().unwrap_or("").to_owned();
                     let meaning = self.resolve_single_char(ch, index.as_deref());
                     CharacterBreakdown {
                         character: ch.clone(),
@@ -1276,13 +1272,23 @@ mod tests {
         assert_eq!(lookup.definitions[0].text, "film; movie");
         // Traditional headword resolves to the same entry.
         assert_eq!(
-            provider.resolve("電影").expect("traditional resolves").phonetics[0].text,
+            provider
+                .resolve("電影")
+                .expect("traditional resolves")
+                .phonetics[0]
+                .text,
             "diàn yǐng"
         );
         // u: becomes ü and carries the tone.
-        assert_eq!(provider.resolve("旅行").unwrap().phonetics[0].text, "lǚ xíng");
+        assert_eq!(
+            provider.resolve("旅行").unwrap().phonetics[0].text,
+            "lǚ xíng"
+        );
         // A word absent from the file still resolves from the built-in seed.
-        assert_eq!(provider.resolve("咖啡").unwrap().phonetics[0].text, "kā fēi");
+        assert_eq!(
+            provider.resolve("咖啡").unwrap().phonetics[0].text,
+            "kā fēi"
+        );
     }
 
     #[test]
@@ -1315,7 +1321,11 @@ mod tests {
             let mut writer = std::io::BufWriter::new(fixture.as_file());
             writeln!(writer, "# JMdict/EDICT2").unwrap();
             writeln!(writer, "頭 [あたま] /(n) head/(P)/EntL1582710X/").unwrap();
-            writeln!(writer, "見る;観る [みる] /(v1,vt) to see/to look at/EntL1259290X/").unwrap();
+            writeln!(
+                writer,
+                "見る;観る [みる] /(v1,vt) to see/to look at/EntL1259290X/"
+            )
+            .unwrap();
             writeln!(writer, "ありがとう /(int) thank you/EntL1000000X/").unwrap();
             writer.flush().unwrap();
             fixture.as_file().sync_all().unwrap();
@@ -1328,7 +1338,10 @@ mod tests {
         assert_eq!(lookup.phonetics[0].text, "あたま");
         assert_eq!(lookup.definitions[0].text, "head");
         // Kana reading resolves to the same entry.
-        assert_eq!(provider.resolve("あたま").unwrap().definitions[0].text, "head");
+        assert_eq!(
+            provider.resolve("あたま").unwrap().definitions[0].text,
+            "head"
+        );
         // A ;-separated variant headword resolves; multiple glosses join.
         assert_eq!(
             provider.resolve("観る").unwrap().definitions[0].text,
@@ -1339,7 +1352,10 @@ mod tests {
         assert_eq!(thanks.definitions[0].text, "thank you");
         assert!(thanks.phonetics.is_empty());
         // A word absent from the file still resolves from the built-in seed.
-        assert_eq!(provider.resolve("学生").unwrap().phonetics[0].text, "がくせい");
+        assert_eq!(
+            provider.resolve("学生").unwrap().phonetics[0].text,
+            "がくせい"
+        );
     }
 
     #[test]

@@ -1,16 +1,19 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use application::{ApplicationError, LexicalSourceContext, UpsertLexicalEntry};
+use api_events::{EventEnvelope, EventName};
+use application::{
+    ApplicationError, CreateLexicalObservation, LexicalSourceContext, UpsertLexicalEntry,
+};
 use async_trait::async_trait;
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use domain::{
-    LearningResourceDescriptor, LearningResourceId, LearningResourceState, LexicalEntryDetails,
-    LexicalEntryId, LexicalEntryKind, PhraseCandidate, SubtitleSearchResult, SubtitleSentenceId,
-    WordStatus,
+    LearningResourceDescriptor, LearningResourceId, LearningResourceState, LearningStatus,
+    LexicalEntry, LexicalEntryDetails, LexicalEntryId, LexicalEntryKind, ObservationResult,
+    PhraseCandidate, SubtitleSearchResult, SubtitleSentenceId,
 };
 use reqwest::Client;
 use serde::Deserialize;
@@ -457,7 +460,7 @@ fn replace_resource(
 pub struct LexicalQuery {
     language: Option<String>,
     kind: Option<LexicalEntryKind>,
-    status: Option<WordStatus>,
+    status: Option<LearningStatus>,
     search: Option<String>,
     limit: Option<u32>,
     offset: Option<u32>,
@@ -482,6 +485,24 @@ pub async fn list_lexical_entries(
 }
 
 #[derive(Debug, Deserialize)]
+pub struct BatchLexicalRequest {
+    language: String,
+    kind: LexicalEntryKind,
+    forms: Vec<String>,
+}
+
+pub async fn read_lexical_entries(
+    State(state): State<ApiState>,
+    Json(request): Json<BatchLexicalRequest>,
+) -> Result<Json<Vec<LexicalEntry>>, ApiError> {
+    state
+        .services
+        .read_lexical_entries_by_forms(&request.language, request.kind, &request.forms)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+#[derive(Debug, Deserialize)]
 pub struct LexicalSourceRequest {
     media_id: Option<String>,
     sentence_id: Option<String>,
@@ -495,13 +516,33 @@ pub struct LexicalSourceRequest {
     token_end: Option<u32>,
 }
 
+impl LexicalSourceRequest {
+    fn into_context(self) -> Result<LexicalSourceContext, ApplicationError> {
+        Ok(LexicalSourceContext {
+            media_id: self.media_id.map(domain::MediaId::parse).transpose()?,
+            sentence_id: self
+                .sentence_id
+                .map(SubtitleSentenceId::parse)
+                .transpose()?,
+            original_form: self.original_form,
+            sentence_text: self.sentence_text,
+            media_title: self.media_title,
+            media_fingerprint: self.media_fingerprint,
+            start_ms: self.start_ms,
+            end_ms: self.end_ms,
+            token_start: self.token_start,
+            token_end: self.token_end,
+        })
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct UpsertLexicalRequest {
     language: String,
     kind: LexicalEntryKind,
     canonical_form: String,
     display_form: String,
-    status: Option<WordStatus>,
+    status: Option<LearningStatus>,
     user_definition: Option<String>,
     personal_note: Option<String>,
     source: Option<LexicalSourceRequest>,
@@ -511,7 +552,7 @@ pub async fn upsert_lexical_entry(
     State(state): State<ApiState>,
     Json(request): Json<UpsertLexicalRequest>,
 ) -> Result<Json<LexicalEntryDetails>, ApiError> {
-    state
+    let details = state
         .services
         .create_lexical_entry(UpsertLexicalEntry {
             language: request.language,
@@ -523,29 +564,15 @@ pub async fn upsert_lexical_entry(
             personal_note: request.personal_note,
             source: request
                 .source
-                .map(|source| {
-                    Ok::<LexicalSourceContext, application::ApplicationError>(
-                        LexicalSourceContext {
-                            media_id: source.media_id.map(domain::MediaId::parse).transpose()?,
-                            sentence_id: source
-                                .sentence_id
-                                .map(SubtitleSentenceId::parse)
-                                .transpose()?,
-                            original_form: source.original_form,
-                            sentence_text: source.sentence_text,
-                            media_title: source.media_title,
-                            media_fingerprint: source.media_fingerprint,
-                            start_ms: source.start_ms,
-                            end_ms: source.end_ms,
-                            token_start: source.token_start,
-                            token_end: source.token_end,
-                        },
-                    )
-                })
+                .map(LexicalSourceRequest::into_context)
                 .transpose()?,
         })
-        .map(Json)
-        .map_err(ApiError::from)
+        .map_err(ApiError::from)?;
+    let _ = state.events.send(EventEnvelope::v1(
+        EventName::LexicalEntryChanged,
+        serde_json::to_value(&details).expect("lexical details serializes"),
+    ));
+    Ok(Json(details))
 }
 
 pub async fn lexical_details(
@@ -557,6 +584,85 @@ pub async fn lexical_details(
         .lexical_details(&LexicalEntryId::parse(id).map_err(ApplicationError::from)?)?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("lexical entry"))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateLearningContentRequest {
+    user_definition: Option<String>,
+    personal_note: Option<String>,
+}
+
+pub async fn update_lexical_learning_content(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(request): Json<UpdateLearningContentRequest>,
+) -> Result<Json<LexicalEntryDetails>, ApiError> {
+    let details = state
+        .services
+        .update_lexical_learning_content(
+            &LexicalEntryId::parse(id).map_err(ApplicationError::from)?,
+            request.user_definition,
+            request.personal_note,
+        )
+        .map_err(ApiError::from)?;
+    let _ = state.events.send(EventEnvelope::v1(
+        EventName::LexicalEntryChanged,
+        serde_json::to_value(&details).expect("lexical details serializes"),
+    ));
+    Ok(Json(details))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateLexicalObservationRequest {
+    lexical_entry_id: String,
+    sentence_id: String,
+    original_form: String,
+    result: Option<ObservationResult>,
+    clear: Option<bool>,
+    source: Option<LexicalSourceRequest>,
+}
+
+pub async fn create_lexical_observation(
+    State(state): State<ApiState>,
+    Json(request): Json<CreateLexicalObservationRequest>,
+) -> Result<Response, ApiError> {
+    let lexical_entry_id =
+        LexicalEntryId::parse(request.lexical_entry_id).map_err(ApplicationError::from)?;
+    let sentence_id =
+        SubtitleSentenceId::parse(request.sentence_id).map_err(ApplicationError::from)?;
+    if request.clear.unwrap_or(false) {
+        state
+            .services
+            .clear_lexical_observation(&lexical_entry_id, &sentence_id)?;
+        let _ = state.events.send(EventEnvelope::v1(
+            EventName::LexicalObservationCleared,
+            serde_json::json!({
+                "lexical_entry_id": lexical_entry_id,
+                "sentence_id": sentence_id,
+            }),
+        ));
+        return Ok(StatusCode::NO_CONTENT.into_response());
+    }
+    let observation = state
+        .services
+        .create_lexical_observation(CreateLexicalObservation {
+            lexical_entry_id,
+            sentence_id,
+            original_form: request.original_form,
+            result: request
+                .result
+                .ok_or(ApplicationError::Validation("result"))?,
+            source: request
+                .source
+                .map(LexicalSourceRequest::into_context)
+                .transpose()?,
+        })
+        .map_err(ApiError::from)?;
+    let _ = state.events.send(EventEnvelope::v1(
+        EventName::LexicalObservationCreated,
+        serde_json::to_value(&observation).expect("lexical observation serializes"),
+    ));
+    Ok(Json(observation).into_response())
 }
 
 #[derive(Debug, Deserialize)]

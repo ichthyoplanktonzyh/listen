@@ -4,8 +4,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use api_events::{EventEnvelope, EventName};
 use application::{
-    AppServices, ApplicationError, CreateWordObservation, DictionaryProvider,
-    EnglishPronunciationProvider, ImportSubtitle, RegisterMedia, SourceContext, UpdateWordProfile,
+    AppServices, ApplicationError, DictionaryProvider, EnglishPronunciationProvider,
+    ImportSubtitle, RegisterMedia,
 };
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
@@ -20,8 +20,8 @@ use dictionary_provider::{
     FreeDictionaryProvider, JapaneseDictionaryProvider,
 };
 use domain::{
-    LanguageCode, MediaAvailability, MediaId, MediaKind, ObservationResult, SubtitleSentenceId,
-    SubtitleTrackId, VocabularyAssetBundle, WordProfileId, WordStatus,
+    LanguageCode, LearningStatus, MediaAvailability, MediaId, MediaKind, SubtitleSentenceId,
+    SubtitleTrackId, VocabularyAssetBundle,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
@@ -244,18 +244,24 @@ pub fn router(state: ApiState) -> Router {
         .route("/v1/speech/jobs/{job_id}", get(speech_job))
         .route("/v1/speech/jobs/{job_id}/cancel", post(cancel_speech_job))
         .route("/v1/speech/jobs/{job_id}/retry", post(retry_speech_job))
-        .route("/v1/word-profiles/batch", post(read_words))
         .route(
             "/v1/media/{media_id}/progress",
             get(read_progress).put(update_progress),
         )
-        .route("/v1/word-profiles", get(read_word).put(update_word))
-        .route("/v1/word-observations", post(create_observation))
+        .route("/v1/lexical-entries/batch", post(m18::read_lexical_entries))
         .route(
             "/v1/lexical-entries",
             get(m18::list_lexical_entries).put(m18::upsert_lexical_entry),
         )
         .route("/v1/lexical-entries/{id}", get(m18::lexical_details))
+        .route(
+            "/v1/lexical-entries/{id}/learning-content",
+            put(m18::update_lexical_learning_content),
+        )
+        .route(
+            "/v1/lexical-observations",
+            post(m18::create_lexical_observation),
+        )
         .route("/v1/lexical-normalization", post(m18::normalize_lexical))
         .route(
             "/v1/lexical-normalization/correct",
@@ -279,11 +285,6 @@ pub fn router(state: ApiState) -> Router {
         .route("/v1/vocabulary", get(list_vocabulary))
         .route("/v1/vocabulary/export", get(export_vocabulary))
         .route("/v1/vocabulary/import", post(import_vocabulary))
-        .route("/v1/word-profiles/{profile_id}/details", get(word_details))
-        .route(
-            "/v1/word-profiles/{profile_id}/learning-content",
-            put(update_learning_content),
-        )
         .route(
             "/v1/vocabulary/import-external",
             post(import_external_vocabulary),

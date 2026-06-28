@@ -81,12 +81,7 @@ fn extract_sentence_word_timings(
     let word_spans = resolve_time_spans(&words, sentence.end.get());
 
     if words.len() == word_tokens.len() {
-        return extract_direct(
-            &words,
-            &word_spans,
-            &word_tokens,
-            sentence,
-        );
+        return extract_direct(&words, &word_spans, &word_tokens, sentence);
     }
 
     // BPE/tokenizer mismatch — try character-level alignment.
@@ -106,9 +101,7 @@ fn extract_direct(
     sentence: &SubtitleSentence,
 ) -> Result<Vec<WordTiming>, ExtractError> {
     let mut timings = Vec::with_capacity(words.len());
-    for (word, (token, &(start_ms, end_ms))) in
-        words.iter().zip(tokens.iter().zip(spans.iter()))
-    {
+    for (word, (token, &(start_ms, end_ms))) in words.iter().zip(tokens.iter().zip(spans.iter())) {
         if start_ms > end_ms || end_ms < sentence.start.get() || start_ms > sentence.end.get() {
             return Ok(vec![]);
         }

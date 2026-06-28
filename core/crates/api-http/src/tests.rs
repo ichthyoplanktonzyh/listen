@@ -2,6 +2,7 @@ use super::*;
 use axum::body::to_bytes;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
 use persistence_sqlite::SqliteRepository;
+use std::collections::BTreeSet;
 use tower::ServiceExt;
 
 fn test_app() -> Router {
@@ -1383,80 +1384,114 @@ async fn speech_batch_job_queues_ten_thousand_sentences_and_can_cancel_and_retry
     assert_eq!(response.status(), StatusCode::OK);
 }
 
+#[tokio::test]
+async fn language_routes_track_patch_and_terminal_job_clear_are_typed() {
+    let app = test_app();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/v1/languages")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let languages: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert!(
+        languages
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("en"))
+    );
+    assert!(
+        languages
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("zh"))
+    );
+    assert!(
+        languages
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("ja"))
+    );
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/v1/languages/en-US/profile")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let profile: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(profile["language"], "en-us");
+    assert_eq!(profile["lexical_normalization"], "core.lemma");
+    assert_eq!(profile["word_timeline"], "supported");
+
+    let track = setup_phonetic_track(&app, "language-patch").await;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::patch(format!(
+                "/v1/subtitles/{}/language",
+                track["id"].as_str().unwrap()
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .header(CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                serde_json::json!({"language": "zh-Hant"}).to_string(),
+            ))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let updated: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(updated["language"], "zh-hant");
+
+    let response = app
+        .oneshot(
+            Request::post("/v1/phonetic-analysis/jobs/clear")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let cleared: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(cleared["deleted"], 0);
+}
+
 #[test]
-fn openapi_lists_implemented_routes() {
+fn openapi_paths_match_implemented_routes() {
     let openapi = include_str!("../../../contracts/openapi/v1.yaml");
-    for path in [
-        "/v1/health",
-        "/v1/media",
-        "/v1/lltimeline/import",
-        "/v1/media/{media_id}",
-        "/v1/media/{media_id}/subtitles",
-        "/v1/media/{media_id}/progress",
-        "/v1/subtitles/{track_id}",
-        "/v1/subtitles/{track_id}/export",
-        "/v1/pronunciation/providers",
-        "/v1/pronunciation/lookup",
-        "/v1/pronunciation/analyze-sentence",
-        "/v1/pronunciation/rules",
-        "/v1/subtitles/{track_id}/pronunciation",
-        "/v1/subtitles/{track_id}/pronunciation-analysis",
-        "/v1/subtitles/{track_id}/word-timings",
-        "/v1/subtitles/{track_id}/word-timelines",
-        "/v1/subtitles/{track_id}/word-timelines/summary",
-        "/v1/subtitles/{track_id}/lltimeline/export",
-        "/v1/word-timelines/{timeline_id}",
-        "/v1/word-timelines/{timeline_id}/activate",
-        "/v1/word-timelines/{timeline_id}/publish",
-        "/v1/word-timelines/{timeline_id}/archive",
-        "/v1/word-timelines/{timeline_id}/export",
-        "/v1/subtitles/{track_id}/word-timing-diagnostics",
-        "/v1/subtitles/{track_id}/chunk-partitions",
-        "/v1/subtitles/{track_id}/chunk-diagnostics",
-        "/v1/chunk/providers",
-        "/v1/subtitles/{track_id}/chunk-timelines",
-        "/v1/subtitles/{track_id}/chunk-timelines/summary",
-        "/v1/chunk-timelines/{timeline_id}",
-        "/v1/chunk-timelines/{timeline_id}/activate",
-        "/v1/chunk-timelines/{timeline_id}/archive",
-        "/v1/chunk-timelines/{timeline_id}/export",
-        "/v1/subtitles/{track_id}/phone-timelines",
-        "/v1/subtitles/{track_id}/phone-timelines/summary",
-        "/v1/phone-timelines/{timeline_id}",
-        "/v1/phone-timelines/{timeline_id}/activate",
-        "/v1/phone-timelines/{timeline_id}/archive",
-        "/v1/phone-timelines/{timeline_id}/export",
-        "/v1/speech/jobs",
-        "/v1/word-profiles",
-        "/v1/word-profiles/batch",
-        "/v1/word-observations",
-        "/v1/vocabulary",
-        "/v1/vocabulary/export",
-        "/v1/vocabulary/import",
-        "/v1/word-profiles/{profile_id}/details",
-        "/v1/word-profiles/{profile_id}/learning-content",
-        "/v1/vocabulary/import-external",
-        "/v1/media/{media_id}/availability",
-        "/v1/events",
-        "/v1/dictionary",
-        "/v1/sentences/{sentence_id}/diagnosis",
-        "/v1/transcription/providers",
-        "/v1/transcription/models",
-        "/v1/transcription/jobs",
-        "/v1/transcription/jobs/{job_id}/archive",
-        "/v1/phonetic-analysis/providers",
-        "/v1/phonetic-analysis/models",
-        "/v1/phonetic-analysis/models/install",
-        "/v1/phonetic-analysis/models/register-custom",
-        "/v1/phonetic-analysis/models/{model_id}/cancel-install",
-        "/v1/phonetic-analysis/models/{model_id}",
-        "/v1/phonetic-analysis/jobs",
-        "/v1/subtitles/{track_id}/phonetic-analyses",
-        "/v1/phonetic-analysis/{analysis_id}/findings",
-        "/v1/phonetic-analysis/findings/{finding_id}/feedback",
-    ] {
-        assert!(openapi.contains(path), "OpenAPI missing {path}");
-    }
+    let router_source = include_str!("lib.rs");
+    let documented = openapi_v1_paths(openapi);
+    let implemented = implemented_v1_paths(router_source);
+
+    let undocumented = implemented
+        .difference(&documented)
+        .cloned()
+        .collect::<Vec<_>>();
+    let unimplemented = documented
+        .difference(&implemented)
+        .cloned()
+        .collect::<Vec<_>>();
+    assert!(
+        undocumented.is_empty() && unimplemented.is_empty(),
+        "OpenAPI route drift\nimplemented but undocumented: {undocumented:#?}\ndocumented but unimplemented: {unimplemented:#?}"
+    );
 }
 
 #[test]
@@ -1475,11 +1510,13 @@ fn openapi_version_snapshot_and_path_count() {
         "OpenAPI spec version snapshot changed"
     );
 
-    // Count documented paths as a regression gate.
+    // Count documented paths using the router source as the implementation fact
+    // source, so new routes cannot bypass OpenAPI.
     let path_count = openapi.lines().filter(|l| l.starts_with("  /v1/")).count();
+    let implemented_count = implemented_v1_paths(include_str!("lib.rs")).len();
     assert_eq!(
-        path_count, 93,
-        "OpenAPI path count changed from 93 — update snapshot if paths were added/removed"
+        path_count, implemented_count,
+        "OpenAPI path count must match implemented /v1 route count"
     );
 
     // All paths must be under /v1/.
@@ -1499,20 +1536,37 @@ fn openapi_version_snapshot_and_path_count() {
         "SubtitleToken:",
         "LexicalEntry:",
         "LexicalEntryDetails:",
-        "WordProfile:",
-        "WordObservation:",
-        "WordOccurrence:",
+        "BatchLexicalEntries:",
+        "CreateLexicalObservation:",
+        "LexicalObservation:",
         "SentenceDiagnosis:",
         "DictionaryLookup:",
         "DictionaryLookupBundle:",
         "VocabularyAssetBundle:",
         "LearningResource:",
         "SubtitleSearchResult:",
-        "WordDetails:",
+        "UpdateLexicalLearningContent:",
     ] {
         assert!(
             openapi.contains(&format!("    {schema}")),
             "OpenAPI schema missing: {schema}"
         );
     }
+}
+
+fn openapi_v1_paths(openapi: &str) -> BTreeSet<String> {
+    openapi
+        .lines()
+        .filter_map(|line| line.strip_prefix("  /v1/"))
+        .filter_map(|line| line.strip_suffix(':'))
+        .map(|path| format!("/v1/{path}"))
+        .collect()
+}
+
+fn implemented_v1_paths(router_source: &str) -> BTreeSet<String> {
+    router_source
+        .split('"')
+        .filter(|value| value.starts_with("/v1/"))
+        .map(str::to_owned)
+        .collect()
 }

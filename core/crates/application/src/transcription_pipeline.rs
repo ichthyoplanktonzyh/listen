@@ -15,7 +15,7 @@ impl AppServices {
         language: Option<&str>,
     ) -> Result<Option<WordTimelinePipelineResult>, ApplicationError> {
         let track = self
-            .subtitles
+            .subtitle_tracks
             .get_track(track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         let mut timings = match speech_analysis::asr_timing::extract_word_timings_from_json(

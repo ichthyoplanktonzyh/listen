@@ -46,7 +46,7 @@ impl SubtitleRepository for SqliteRepository {
             )
             .map_err(repo)?;
             tx.execute(
-                "UPDATE word_occurrences SET sentence_id=?1
+                "UPDATE lexical_occurrences SET sentence_id=?1
                  WHERE sentence_id IS NULL
                    AND media_id=?2
                    AND start_ms_snapshot=?3
@@ -62,7 +62,7 @@ impl SubtitleRepository for SqliteRepository {
             )
             .map_err(repo)?;
             tx.execute(
-                "UPDATE word_observations SET sentence_id=?1
+                "UPDATE lexical_observations SET sentence_id=?1
                  WHERE sentence_id IS NULL AND sentence_id_snapshot=?1",
                 [sentence.id.as_str()],
             )
