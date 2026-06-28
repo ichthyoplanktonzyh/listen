@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-06-28 20:29 CST: 扩展 Phase 2.17 — Real Media Sound-Line QA 执行计划。
+  (1) **Benchmark 分层**: 明确 TIMIT 作为 phone-level sanity check，Buckeye 作为优先
+  natural connected speech benchmark，本地新闻/TED-LIUM/LibriSpeech/VCTK/Common Voice
+  作为 product-like 或 supplemental regression 材料。
+  (2) **可交接执行方案**: `2.17-PLAN.md` 新增 manifest schema、local-only 许可策略、
+  verifier 规则、manual QA observation 模板、CTC mismatch decision table 要求、执行步骤和
+  下一智能体 handoff checklist。
+
 - 2026-06-28 19:37 CST: 落地 Phase 3.0.1 学习行为架构代码地基。
   新增 domain learning-loop 模型与 ID，application practice service、Practice / Review /
   LearningEvent repository traits，SQLite schema v15 与 `practice_sessions`、`practice_items`、
