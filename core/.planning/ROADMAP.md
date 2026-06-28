@@ -8,6 +8,9 @@
 > 暂缓到生产资源闭环之后重新排序。
 > 2026-06-22 路线更新：在 Milestone 2 下新增“多语言学习基础”工作流（Phase 2.5.5
 > 抽象校验 → Phase 2.6 英语 + 汉语实现），与生产引擎主线并行；详见 §14.11。
+> 2026-06-28 架构更新：Phase 2.18 完成非兼容式代码架构重构；学习资产 active path
+> 收敛为 `LexicalEntry + LexicalUnit + LearningStatus`，旧 `WordProfile` /
+> `WordObservation` 与旧兼容 adapter 不再作为后续路线基线。
 > 完成报告见 `docs/release/milestone-1.md`。
 
 ## 1. 路线图目标
@@ -77,6 +80,8 @@ LLTimeline JSON v1
 - 轻量消费端的核心职责是读取 `.lltimeline.json`、执行高亮/chunk 播放和学习交互。
 - 生产端可以使用 Python、GPU、Whisper Large-v3、WhisperX、MFA/BFA、VAD、人声分离和人工校对。
 - CNN10、NBC Nightly News 等新闻类内容是首批生产管线优化对象。
+- Phase 2.18 后，学习资产权威模型是 `LexicalEntry + LexicalUnit + LearningStatus`；
+  旧 `WordProfile` / `WordObservation` 只属于历史文档语境，不再作为 active code path。
 
 ### 2.2 MVP 核心闭环
 

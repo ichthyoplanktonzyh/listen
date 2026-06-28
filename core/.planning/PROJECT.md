@@ -3,17 +3,20 @@
 ## 1. 文档信息
 
 - 文档用途：定义产品目标、MVP 范围、核心体验和架构边界
-- 当前阶段：Milestone 1.5 已完成
-- 当前发布：LLPlayerNext 0.4.0 macOS Apple Silicon 单用户版本
+- 当前阶段：Milestone 2 active；Phase 2.18 代码架构全面重构已收口，Phase 2.17 真实媒体声音线 QA 已规划
+- 当前发布：LLPlayerNext 0.7.0 macOS Apple Silicon 单用户版本
 - 后续平台：Windows、Linux、Android、iOS
 - 参考产品与代码库：LLPlayer
-- 需求明细与验收映射：`requirements.md`
-- 实施阶段与交付计划：`roadmap.md`
+- 需求明细与验收映射：`.planning/REQUIREMENTS.md`
+- 实施阶段与交付计划：`.planning/ROADMAP.md`
 - 产品定义更新：2026-06-18 14:50:26 CST，将项目拆分为“本地重装生产引擎”
   与“轻量消费端”两条协同路线
 - 产品定义更新：2026-06-22，确立多语言听力学习方向（首批 English + Chinese，
   架构对主流 top-15 学习语言封顶有效），以听力能力为核心；详见 §4.4、§15.5
   与 `docs/decisions/0012-multilingual-learning-abstraction.md`
+- 产品定义更新：2026-06-28，Phase 2.18 完成非兼容式代码架构重构；学习资产权威模型收敛为
+  `LexicalEntry + LexicalUnit + LearningStatus`，旧 `WordProfile` / `WordObservation` 资源、
+  旧 API/UI adapter 与旧 SQLite/LLTimeline 兼容路径不再作为 active path 维护。
 
 ## 2. 产品愿景
 
@@ -501,23 +504,22 @@ MVP 必须本地保存：
 - 标准化文本
 - token 列表
 
-### 10.4 WordProfile
+### 10.4 LexicalEntry
 
-- 词汇标识
+- 学习资产标识
 - 语言
-- lemma
-- 规范化 lemma
-- 展示词形
-- 全局听力状态
+- `LexicalUnit`：粒度、归一策略、归一 key 和展示词形
+- 学习资产类型：word / phrase / char / morpheme 等
+- 全局学习状态：unknown meaning / known not recognized / known recognized
 - 用户编辑的词义与音标
 - 创建与更新时间
 
-唯一性概念为 `Language + NormalizedLemma`。
+唯一性概念为 `Language + granularity + normalization + normalized_key`。
 
-### 10.5 WordObservation
+### 10.5 LexicalObservation
 
 - 观察记录标识
-- 词汇标识
+- 学习资产标识
 - 字幕句标识
 - 原始词形
 - 本次是否听出
@@ -574,15 +576,16 @@ word | silence | breath | noise | music | speaker_change
   韵律、形态、诊断规则、时间轴能力、降级行为）。
 - **LexicalUnit**：词汇学习对象，泛化自英语 lemma。身份由两条正交轴决定——粒度
   （字/词/短语/词素）× 归一形态（表层/lemma/citation/词根）；`NormalizedKey` 为归一器
-  不透明输出。§10.4 的 `Language + NormalizedLemma` 唯一性据此泛化为
-  `Language + 粒度 + NormalizedKey`，旧英语 WordProfile 仍可读取。
+  不透明输出。Phase 2.18 后，active path 以 §10.4 的
+  `Language + granularity + normalization + normalized_key` 为权威身份，不再保留旧
+  `WordProfile` 兼容路径。
 - **ListeningUnit**：真实声音流中需辨认的听觉单位（如 sound pattern、chunk、音节、
   声调音节）。它是现有 Word/Chunk/Phone 时间轴资源之上的视图，不是新的持久存储。
   听力观察可锚定到 ListeningUnit（如声调最小对立），不只锚定 LexicalUnit。
 
 ## 11. API 与事件概念
 
-详细接口要求见 `requirements.md`。MVP 需要覆盖以下领域能力：
+详细接口要求见 `.planning/REQUIREMENTS.md`。MVP 需要覆盖以下领域能力：
 
 ```text
 Media
@@ -594,10 +597,10 @@ Subtitles
   get normalized track
   get sentences and tokens
 
-Words
-  get profiles in batch
-  update global listening status
-  create context observation
+Learning assets
+  get lexical entries in batch
+  update global learning status
+  create lexical observation
 
 Dictionary
   lookup word

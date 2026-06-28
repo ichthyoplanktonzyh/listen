@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-06-28 16:26 CST: 同步 Phase 2.18 后的入口文档。
+  更新 `AGENT.md`、`.planning/PROJECT.md`、`.planning/REQUIREMENTS.md`、
+  `.planning/ROADMAP.md`、`.planning/MAINTENANCE.md` 和 `.planning/STATE.md`：
+  当前阶段/版本改为 Milestone 2 / 0.7.0，学习资产权威模型改为
+  `LexicalEntry + LexicalUnit + LearningStatus`，旧 `WordProfile` / `WordObservation`
+  兼容路径不再作为 active path；phase 完成模板统一为 `X.X-CLOSEOUT.md`。
+
 - 2026-06-28 16:19 CST: Phase 2.18 正式收口。
   新增 `.planning/phases/2.18-codebase-architecture-refactor/2.18-CLOSEOUT.md`，
   将 `2.18-PLAN.md` 标记为 `COMPLETED`，并更新 `.planning/STATE.md` 的当前阶段、兼容性决策、

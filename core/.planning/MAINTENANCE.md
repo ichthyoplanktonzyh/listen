@@ -1,6 +1,6 @@
 # LLPlayerNext — 文档体系维护规则
 
-> 最后更新：2026-06-18
+> 最后更新：2026-06-28
 > 基于 GSD 文件结构体系，结合本项目实践制定
 
 ---
@@ -55,14 +55,14 @@
 X.X-feature-name/
 ├── X.X-PLAN.md          ← 执行计划（必须）
 ├── X.X-CONTEXT.md       ← 上下文：从哪些讨论来、关键决策（按需）
-├── X.X-SUMMARY.md       ← 完成总结（完成时必须）
+├── X.X-CLOSEOUT.md      ← 完成收口（完成时必须）
 └── design-notes/        ← 上游设计参考（按需）
 ```
 
 ### 3.3 phase 完成流程
 
 1. 所有任务完成，测试通过
-2. 撰写 `X.X-SUMMARY.md`
+2. 撰写 `X.X-CLOSEOUT.md`
 3. 更新 `STATE.md`（当前状态、下一步）
 4. 更新 `MILESTONES.md`（如果是里程碑收口）
 5. **phase 文件夹冻结**，不再修改
@@ -116,7 +116,7 @@ X.X-feature-name/
 - [ ] `CHANGELOG.md` 增量更新，精确时间戳,到分钟。
 
 ### 每次 phase 完成
-- [ ] 撰写 `X.X-SUMMARY.md`
+- [ ] 撰写 `X.X-CLOSEOUT.md`
 - [ ] 更新 `STATE.md`：当前位置、下一步、最近决策
 - [ ] 更新 `MILESTONES.md`（如果涉及里程碑收口）
 

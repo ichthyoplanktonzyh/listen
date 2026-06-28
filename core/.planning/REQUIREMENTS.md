@@ -2223,6 +2223,10 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 > 实现状态（Phase 2.6 收口 2026-06-22，见 `2.6-CLOSEOUT.md`）：LANG-001/002/003/005/006/
 > 007/008/010 已实现并通过 en + zh 回归；LANG-004（听觉锚定观察）与 LANG-009（L1 诊断 seam）
 > 按设计 v1 仅留 seam，待真实声音侧与 L1×L2 对比难度表落地后实现。
+>
+> Phase 2.18 更新（2026-06-28）：学习资产 active path 已收敛为
+> `LexicalEntry + LexicalUnit + LearningStatus`。旧 `WordProfile` / `WordObservation`
+> 资源、旧 API/UI adapter 和旧 SQLite/LLTimeline 兼容路径不再作为需求基线维护。
 
 ### LANG-001：语言能力矩阵与 Profile
 
@@ -2256,7 +2260,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   子串/去缀。
 - 验收标准：
   - 词汇状态不再假设所有语言都有 lemma。
-  - 旧英语 WordProfile 可继续读取。
+  - active path 不再读取或生成旧英语 `WordProfile`。
   - 汉语词/字不污染英语词汇状态；持久身份用单一 canonical 粒度（词），字级仅 fallback。
 - 依赖：WORD-006、WORD-007、LANG-002。
 

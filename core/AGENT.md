@@ -62,6 +62,13 @@ Local QA media:
   incompatible changes require a schema/version decision.
 - Vocabulary and learning assets outlive replaceable media/subtitle records.
   Do not casually cascade-delete durable learning history.
+- After Phase 2.18, the authoritative learning asset model is
+  `LexicalEntry + LexicalUnit + LearningStatus`. Do not reintroduce
+  `WordProfile` / `WordObservation` or legacy learning-asset adapters unless a
+  new phase explicitly changes the architecture.
+- Phase 2.18 intentionally does not preserve historical compatibility for old
+  SQLite data, old LLTimeline resources, old learning assets, or old API/UI
+  adapters.
 - Learning language and UI language are separate concepts. Language-specific
   behavior should enter through profiles/providers/capability checks and degrade
   cleanly.

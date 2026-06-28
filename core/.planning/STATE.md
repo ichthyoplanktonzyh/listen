@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: active
-last_updated: "2026-06-28T08:19:30.000Z"
+last_updated: "2026-06-28T08:26:21.000Z"
 progress:
   total_phases: 11
   completed_phases: 1
@@ -15,8 +15,9 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-28 CST
-> 更新原因：Phase 2.18 代码架构重构正式收口；新增 closeout，更新 changelog/state，
-> 删除过期 `.planning/DEFERRED-ITEMS.md`，剩余非阻塞事项归档到 Phase 2.18 closeout 与 STATE。
+> 更新原因：Phase 2.18 代码架构重构正式收口后，同步入口文档
+> `AGENT.md`、`.planning/PROJECT.md`、`.planning/REQUIREMENTS.md`、
+> `.planning/ROADMAP.md` 与 `.planning/MAINTENANCE.md`，删除旧学习资产兼容表述。
 
 ## 当前位置
 
