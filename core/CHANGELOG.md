@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- 2026-06-28 22:58 CST: 推进 Phase 2.17 real-media QA pack 中间态。
+  (1) **QA pack 骨架**: 新增 `testdata/sound-line-real-media/` README、8-case manifest
+  和 case notes stub，覆盖 local news、TED-LIUM、Buckeye、TIMIT；local-only 资源只记录
+  locator/checksum，不提交媒体或完整 transcript timeline。
+  (2) **Verifier**: 新增 `scripts/verify-sound-line-real-media.py`，支持 default /
+  `--strict-local` / `--json` / `--require-ready`，并按当前 inclusive phone range 契约从
+  `sound_analysis.learning_phones` 推导 marker playback window。
+  (3) **CTC sidecar 环境**: `speech-analysis` 启动 wav2vec2 phoneme sidecar 时补入常见
+  Homebrew PATH，避免 Rust 子进程找不到 `espeak`。
+  (4) **计划更新**: `2.17-PLAN.md` 记录当前完成项、未完成项、真实阻塞点、下一步 headless
+  QA runner 方向，以及 UI E2E 当前只有组件级测试、缺少体系化端到端覆盖的判断。
+  验证: `python3 scripts/verify-sound-line-real-media.py --manifest testdata/sound-line-real-media/manifest.jsonl`、
+  `python3 scripts/verify-sound-line-real-media.py --manifest testdata/sound-line-real-media/manifest.jsonl --json`、
+  `python3 scripts/verify-sound-line-real-media.py --manifest testdata/sound-line-real-media/manifest.jsonl --require-ready`
+  按预期失败于 readiness、`cargo test -p speech-analysis` 通过。
+
 - 2026-06-28 20:29 CST: 扩展 Phase 2.17 — Real Media Sound-Line QA 执行计划。
   (1) **Benchmark 分层**: 明确 TIMIT 作为 phone-level sanity check，Buckeye 作为优先
   natural connected speech benchmark，本地新闻/TED-LIUM/LibriSpeech/VCTK/Common Voice

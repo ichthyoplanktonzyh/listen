@@ -36,7 +36,9 @@ pub fn recognize_phones(
 ) -> Result<RecognizedPhones, String> {
     let script = sidecar_script_path().ok_or("wav2vec2 phoneme sidecar script not found")?;
     let python = sidecar_python();
-    let output = Command::new(&python)
+    let mut command = Command::new(&python);
+    command.env("PATH", sidecar_path_env());
+    let output = command
         .arg(&script)
         .arg("--model-dir")
         .arg(model_dir)
@@ -118,6 +120,20 @@ fn sidecar_python() -> String {
         }
     }
     "python3".into()
+}
+
+fn sidecar_path_env() -> String {
+    let mut value = std::env::var("PATH").unwrap_or_default();
+    for dir in ["/usr/local/bin", "/opt/homebrew/bin"] {
+        if std::path::Path::new(dir).is_dir() && !value.split(':').any(|entry| entry == dir) {
+            value = if value.is_empty() {
+                dir.into()
+            } else {
+                format!("{dir}:{value}")
+            };
+        }
+    }
+    value
 }
 
 fn sidecar_script_path() -> Option<String> {
