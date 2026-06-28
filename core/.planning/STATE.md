@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: active
-last_updated: "2026-06-27T18:20:00.000Z"
+last_updated: "2026-06-28T08:19:30.000Z"
 progress:
   total_phases: 11
   completed_phases: 1
@@ -14,9 +14,9 @@ progress:
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-27 CST
-> 更新原因：Phase 2.18 代码架构重构完成主路径实现；旧学习资产路径已删除，
-> lexical 权威模型、typed learning state、timeline metrics/evidence envelope 和契约验证已收口。
+> 最后更新：2026-06-28 CST
+> 更新原因：Phase 2.18 代码架构重构正式收口；新增 closeout，更新 changelog/state，
+> 删除过期 `.planning/DEFERRED-ITEMS.md`，剩余非阻塞事项归档到 Phase 2.18 closeout 与 STATE。
 
 ## 当前位置
 
@@ -28,7 +28,7 @@ progress:
   Phase 2.15 ✅ 声音线学习 UX 收口完成 +
   Phase 2.16 ✅ 真实语流模型 v1 收口完成 +
   Phase 2.17 ⏳ 真实媒体声音线 QA 已规划 +
-  Phase 2.18 🧱 代码架构全面重构主路径已完成，等待最终 gate
+  Phase 2.18 ✅ 代码架构全面重构已收口
 - **分支**：`main`
 - **版本**：0.7.0
 
@@ -43,7 +43,7 @@ progress:
 
 ## 当前横切治理 Phase
 
-### Phase 2.18: Codebase Architecture Refactor 🧱 主路径已完成
+### Phase 2.18: Codebase Architecture Refactor ✅ 已完成
 
 - 目标：趁项目尚未继续膨胀，单独解决 2026-06-27 架构复盘发现的代码架构问题，不混入
   Phase 2.17 真实媒体 QA。
@@ -75,15 +75,22 @@ progress:
 - 剩余债务：
   - `main.dart` 仍可继续拆 media/session/resource action wiring。
   - route manifest 尚未抽成共享事实源；当前由 route/OpenAPI parity test 守护。
+  - UI 异步状态仍可进一步显式化为 loading / ready / stale / error / session 模型。
+  - `speech-analysis` crate 内部仍承载多个子域，后续模型继续扩张时可再拆 crate 或 module boundary。
+  - 真实媒体听感 QA、connected speech 样本包和长期回归素材归 Phase 2.17 / 后续 QA 推进。
 - 兼容性决策：
   - 不需要保留历史兼容性。
   - 旧 SQLite 数据、旧 LLTimeline JSON、旧学习资产资源和旧 API/UI adapter 均可抛弃。
   - Phase 2.18 以 `LexicalEntry + LexicalUnit`、统一 timeline lifecycle、typed Flutter state
     和新 contract 为准。
+- 收口记录：
+  - 主重构提交：`c41244b refactor: complete phase 2.18 architecture overhaul`。
+  - 过期 `.planning/DEFERRED-ITEMS.md` 已删除；跨阶段遗留项以各 phase closeout 与本 STATE 为准。
 - 规划文档：
   - `.planning/phases/2.18-codebase-architecture-refactor/2.18-CONTEXT.md`
   - `.planning/phases/2.18-codebase-architecture-refactor/2.18-PLAN.md`
   - `.planning/phases/2.18-codebase-architecture-refactor/2.18-REFACTOR-AUDIT.md`
+  - `.planning/phases/2.18-codebase-architecture-refactor/2.18-CLOSEOUT.md`
 
 ## 当前 Phase 状态
 

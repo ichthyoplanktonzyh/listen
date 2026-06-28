@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-06-28 16:19 CST: Phase 2.18 正式收口。
+  新增 `.planning/phases/2.18-codebase-architecture-refactor/2.18-CLOSEOUT.md`，
+  将 `2.18-PLAN.md` 标记为 `COMPLETED`，并更新 `.planning/STATE.md` 的当前阶段、兼容性决策、
+  剩余非阻塞后续项和收口记录。删除过期 `.planning/DEFERRED-ITEMS.md`；跨阶段遗留项以后以
+  各 phase closeout、`.planning/STATE.md` 和后续 phase plan 为准。
+  当前未彻底完成但不阻塞收口的事项：`main.dart` media/session/resource wiring 继续拆分、
+  route manifest 共享事实源、显式 UI async state、`speech-analysis` 子域拆分、真实媒体 QA。
+
 - 2026-06-28 08:59 CST: Phase 2.18 前端 typed payload 与 workflow 收口。
   (1) **Typed payload**: Flutter 新增/补齐 `DictionaryLookupBundle`、`WordPronunciation`、
   `PronunciationAnalysis`、`PhoneticAnalysis`、`PhoneticFinding` 等 DTO，`LearningController` /
