@@ -1,6 +1,6 @@
 # LLPlayerNext System Architecture
 
-Last updated: 2026-06-27. Reflects the Phase 2.18 code architecture refactor.
+Last updated: 2026-06-28. Reflects Phase 3.0.1 learning-loop architecture foundation.
 
 ## Overview
 
@@ -44,7 +44,11 @@ application use cases and provider/repository boundaries.
 - Leaf crate for stable data types and IDs.
 - Owns `MediaItem`, subtitle models, `LexicalEntry`, `LexicalUnit`,
   `LearningStatus`, timeline resources, LLTimeline resources, dictionary,
-  transcription, phonetic analysis, and diagnosis DTOs.
+  transcription, phonetic analysis, diagnosis DTOs, and Phase 3.0.1 learning-loop
+  models.
+- Learning-loop models include `PracticeSession`, `PracticeItem`, `PracticeAttempt`,
+  `ReviewItem`, `ReviewAttempt`, `LearningEvent`, corpus/difficulty/learner-profile
+  data shapes, and recording/shadowing metadata shapes.
 - `TimelineMetrics` and `ChunkEvidence` wrap timeline JSON extension objects
   while preserving object-shaped API/storage JSON.
 - `DomainError` is the shared validation error type.
@@ -59,10 +63,16 @@ application use cases and provider/repository boundaries.
   - `TimelineResourceRepository`
   - `LLTimelineResourceRepository`
   - `LearningAssetRepository`
+  - `PracticeRepository`
+  - `ReviewRepository`
+  - `LearningEventRepository`
   - transcription, phonetic analysis, dictionary cache, playback progress
 - Application-owned DTOs sit in `application::dto`; algorithm crate structs are
   mapped at the boundary instead of re-exported.
 - Learning assets use `LexicalEntry + LexicalUnit` as the authoritative model.
+- Phase 3.0.1 practice services can create practice sessions/items, evaluate
+  text attempts, persist `PracticeAttempt`, write failed lexical anchors as
+  `LexicalObservation`, optionally create `ReviewItem`, and append `LearningEvent`.
 
 ### `api-http`
 
@@ -77,6 +87,13 @@ application use cases and provider/repository boundaries.
   - `/v1/lexical-entries/{id}`
   - `/v1/lexical-entries/{id}/learning-content`
   - `/v1/lexical-observations`
+- Learning-loop foundation routes:
+  - `/v1/practice/sessions`
+  - `/v1/practice/items`
+  - `/v1/practice/attempts`
+  - `/v1/practice/attempts/{id}`
+  - `/v1/review/items`
+  - `/v1/review/items/{id}`
 
 ### `persistence-sqlite`
 
@@ -86,6 +103,11 @@ application use cases and provider/repository boundaries.
 - Schema is allowed to be destructively rebuilt during Phase 2.18.
 - Partial unique indexes enforce one active word/chunk/phone timeline per track.
 - Lexical export/import version 5 is lexical-only.
+- Schema v15 adds `practice_sessions`, `practice_items`, `practice_attempts`,
+  `review_items`, `review_attempts`, and `learning_events`.
+- Learning-loop persistence stores JSON snapshots plus query columns for kind,
+  status, subject, result, and timestamps. Corpus/difficulty/recording persistence
+  is not yet implemented.
 
 ### `diagnosis-core`
 
@@ -149,6 +171,16 @@ cue change -> LearningWorkflowController generation guard
   -> typed Diagnosis state
 ```
 
+### Practice Attempt
+
+```text
+practice item request -> application::practice -> SQLite practice_items
+practice attempt submit -> text evaluation -> SQLite practice_attempts
+  -> failed lexical anchors create LexicalObservation
+  -> optional ReviewItem
+  -> LearningEvent append
+```
+
 ### Timeline Resources
 
 ```text
@@ -171,6 +203,8 @@ subtitle track -> word timeline -> chunk timeline / phone timeline
 - Flutter `LearningController` tests cover typed selection/clearing.
 - Persistence tests cover active timeline resource behavior and lexical asset
   import/export.
+- Persistence and API tests cover the first learning-loop foundation slice:
+  practice item/attempt, review item, and learning event persistence.
 
 ## Remaining Architecture Debt
 
@@ -181,3 +215,6 @@ subtitle track -> word timeline -> chunk timeline / phone timeline
    acceptable until APIs stabilize, but it should not leak public DTO shapes.
 3. Route strings still live in the Axum router chain. The parity test is the
    current guardrail; a manifest can be added later if route growth continues.
+4. Phase 3.0.1 currently implements the practice/review/event foundation only.
+   Corpus search, difficulty caching, learner-profile storage, recording metadata,
+   Flutter practice controllers, and dashboard aggregation remain future work.

@@ -11,6 +11,8 @@
 > 2026-06-28 架构更新：Phase 2.18 完成非兼容式代码架构重构；学习资产 active path
 > 收敛为 `LexicalEntry + LexicalUnit + LearningStatus`，旧 `WordProfile` /
 > `WordObservation` 与旧兼容 adapter 不再作为后续路线基线。
+> 2026-06-28 产品路线更新：新增 Phase 3.0 英语听力学习闭环方向文档，作为真实输入、
+> 可理解度判断、诊断、主动练习、复习巩固、L1-aware 诊断和进度反馈的后续对齐依据。
 > 完成报告见 `docs/release/milestone-1.md`。
 
 ## 1. 路线图目标
@@ -1290,6 +1292,67 @@ M8 退出条件。
 - 同一 UI 可打开英语和汉语字幕，按各自语言查询词汇状态、查词与诊断。
 - 新增主流语言主要是 provider + profile 工作，不需改动既有语言代码。
 
+### 14.12 Phase 3.0：英语听力学习闭环
+
+> 状态：已建立规划参考，不代表立即替代 Phase 2.17 真实媒体声音线 QA。
+> 方向文档见 `.planning/phases/3.0-english-listening-learning-loop/3.0-CONTEXT.md` 与
+> `.planning/phases/3.0-english-listening-learning-loop/3.0-PLAN.md`。
+
+Phase 3.0 的目标是在 Phase 2 的真实声音流资源和 Phase 2.18 的新学习资产架构之上，
+把英语作为第一门语言做成完整学习闭环：
+
+```text
+真实输入
+  -> 可理解度判断
+  -> 听力障碍诊断
+  -> 主动验证练习
+  -> 复习巩固
+  -> 进度反馈
+  -> 回到真实输入
+```
+
+核心产品判断：
+
+- 真正语言能力来自听力突破，听力突破来自大量可理解输入。
+- 常见语言学习软件能力需要被重新解释为听力本位能力。
+- 词汇学习的目标不是只记住释义，而是在真实音频中识别词和短语。
+- Cloze、听写、字幕渐隐和 chunk replay 是把被动诊断转成主动验证的优先路径。
+- Anki / SRS 应作为真实语境复习的互操作或补充，不应限制 LLPlayerNext 的权威学习资产模型。
+- L1 与 L2 理论应进入诊断层，首个真实组合为 Mandarin L1 -> English L2。
+
+Phase 3.0 的高层工作流：
+
+1. **真实媒体证据地基**：先完成 Phase 2.17，固定 sound-line marker 在真实媒体中的可信边界。
+2. **可理解输入与模式分离**：建立材料难度信号，并区分精听 / 泛听体验。
+3. **字幕渐隐与主动验证**：支持延迟字幕、点击显示、cloze、chunk / sentence dictation。
+4. **听力驱动词汇与复习**：词汇详情围绕真实片段、来源 chunk、练习结果和 SRS 队列展开。
+5. **本地 YouGlish-like 个人语料库**：从用户媒体中搜索词、短语、chunk 和语流现象。
+6. **L1-aware diagnosis**：为 Mandarin -> English 建立弱读、schwa、词尾辅音、flapping、
+   stress-timed rhythm 等难点解释与专项练习。
+7. **Shadowing 与录音对比**：优先做 chunk-level 跟读、可调速播放和 A-B 录音对比，不先承诺复杂发音评分。
+8. **诊断型 dashboard**：统计服务“哪里听不懂、是否变好了、下一步练什么”，而不是做打卡装饰。
+
+Phase 3.0 的第一个架构地基阶段为：
+
+- **Phase 3.0.1 Learning Loop Architecture Foundation**（backend foundation 已落地）：定义
+  Practice / Review / LearningEvent / Corpus / Difficulty / LearnerProfile / Recording 边界，并以
+  cloze + chunk dictation 作为第一条 backend vertical slice。参考
+  `.planning/phases/3.0.1-learning-loop-architecture-foundation/`。
+
+Phase 3.0 的近期建议顺序：
+
+```text
+Phase 2.17 真实声音线 QA
+  -> Phase 3.0.1 学习行为架构地基
+  -> 输入难度信号与精听/泛听模式
+  -> 字幕渐隐、cloze、chunk dictation
+  -> 本地 YouGlish-like 个人语料搜索
+  -> 听力驱动词汇详情与 native SRS
+  -> Mandarin -> English L1-aware diagnosis v1
+  -> Chunk-level shadowing 和录音 A-B 对比
+  -> 诊断型 dashboard
+```
+
 ## 15. 依赖关系
 
 ```mermaid
@@ -1311,7 +1374,8 @@ flowchart TD
     M16 --> M17["Milestone 1.7 本地 Whisper 字幕生成"]
     M17 --> M2P["Milestone 2 生产引擎与时间轴资源"]
     M2P --> M2C["轻量消费端资源读取"]
-    M2C --> FUTURE["移动正式客户端与后续能力"]
+    M2C --> M30["Phase 3.0 英语听力学习闭环"]
+    M30 --> FUTURE["移动正式客户端与后续能力"]
 ```
 
 ## 16. 需求阶段映射

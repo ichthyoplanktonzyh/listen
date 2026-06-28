@@ -20,7 +20,8 @@ use dictionary_provider::{
     FreeDictionaryProvider, JapaneseDictionaryProvider,
 };
 use domain::{
-    LanguageCode, LearningStatus, MediaAvailability, MediaId, MediaKind, SubtitleSentenceId,
+    LanguageCode, LearningStatus, MediaAvailability, MediaId, MediaKind, PracticeAttempt,
+    PracticeAttemptId, PracticeItem, PracticeSession, ReviewItem, ReviewItemId, SubtitleSentenceId,
     SubtitleTrackId, VocabularyAssetBundle,
 };
 use serde::{Deserialize, Serialize};
@@ -37,6 +38,7 @@ use routes::dictionary::*;
 use routes::language::*;
 use routes::media::*;
 use routes::phonetic_analysis::*;
+use routes::practice::*;
 use routes::pronunciation::*;
 use routes::speech::*;
 use routes::timelines::*;
@@ -271,6 +273,12 @@ pub fn router(state: ApiState) -> Router {
             "/v1/sentences/{sentence_id}/phrase-candidates",
             get(m18::phrase_candidates),
         )
+        .route("/v1/practice/sessions", post(create_practice_session))
+        .route("/v1/practice/items", post(create_practice_item))
+        .route("/v1/practice/attempts", post(submit_practice_attempt))
+        .route("/v1/practice/attempts/{id}", get(practice_attempt))
+        .route("/v1/review/items", post(create_review_item))
+        .route("/v1/review/items/{id}", get(review_item))
         .route("/v1/learning-resources", get(m18::resources))
         .route(
             "/v1/learning-resources/{id}/install",

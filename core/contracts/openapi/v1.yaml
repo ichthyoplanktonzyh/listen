@@ -735,6 +735,84 @@ paths:
           content:
             application/json:
               schema: { type: array, items: { $ref: "#/components/schemas/PhraseCandidate" } }
+  /v1/practice/sessions:
+    post:
+      operationId: createPracticeSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePracticeSession" }
+      responses:
+        "200":
+          description: Created practice session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PracticeSession" }
+  /v1/practice/items:
+    post:
+      operationId: createPracticeItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePracticeItem" }
+      responses:
+        "200":
+          description: Created practice item
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PracticeItem" }
+  /v1/practice/attempts:
+    post:
+      operationId: submitPracticeAttempt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SubmitPracticeAttempt" }
+      responses:
+        "200":
+          description: Persisted practice attempt with evaluation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PracticeAttempt" }
+  /v1/practice/attempts/{id}:
+    get:
+      operationId: practiceAttempt
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Practice attempt
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PracticeAttempt" }
+  /v1/review/items:
+    post:
+      operationId: createReviewItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateReviewItem" }
+      responses:
+        "200":
+          description: Created review item
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewItem" }
+  /v1/review/items/{id}:
+    get:
+      operationId: reviewItem
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Review item
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewItem" }
   /v1/learning-resources:
     get:
       operationId: learningResources
@@ -1901,6 +1979,166 @@ components:
         original_form: { type: string }
         result: { enum: [recognized_in_context, not_recognized_in_context] }
         created_at_ms: { type: integer, minimum: 0 }
+    PracticeMode:
+      enum: [intensive, extensive, review, specialty]
+    PracticeKind:
+      enum: [cloze, dictation, subtitle_fade, shadowing]
+    PracticeTargetKind:
+      enum: [lexical, sentence, chunk, segment, connected_speech]
+    PracticeAnchorKind:
+      enum: [lexical_entry, sentence, word_timeline, chunk_timeline, chunk, phone_timeline, phone, connected_speech]
+    PracticeResult:
+      enum: [correct, partial, incorrect, skipped]
+    PracticeTokenResult:
+      enum: [correct, missing, extra, mismatch]
+    ReviewSourceKind:
+      enum: [lexical_entry, practice_failure, chunk, sentence, connected_speech]
+    ReviewItemStatus:
+      enum: [active, suspended, archived]
+    LearningEventKind:
+      enum: [listening_started, listening_completed, practice_completed, review_completed, status_changed]
+    LearningEventSubjectKind:
+      enum: [media, sentence, chunk, lexical_entry, review_item, practice_attempt]
+    PracticeSession:
+      type: object
+      required: [id, mode, media_id, track_id, source, started_at_ms, ended_at_ms]
+      properties:
+        id: { type: string }
+        mode: { $ref: "#/components/schemas/PracticeMode" }
+        media_id: { type: [string, "null"] }
+        track_id: { type: [string, "null"] }
+        source: { type: string }
+        started_at_ms: { type: integer, minimum: 0 }
+        ended_at_ms: { type: [integer, "null"], minimum: 0 }
+    CreatePracticeSession:
+      type: object
+      required: [mode]
+      properties:
+        mode: { $ref: "#/components/schemas/PracticeMode" }
+        media_id: { type: [string, "null"] }
+        track_id: { type: [string, "null"] }
+        source: { type: [string, "null"] }
+    PracticeTarget:
+      type: object
+      required: [kind, id, sentence_id, chunk_id, start_ms, end_ms]
+      properties:
+        kind: { $ref: "#/components/schemas/PracticeTargetKind" }
+        id: { type: [string, "null"] }
+        sentence_id: { type: [string, "null"] }
+        chunk_id: { type: [string, "null"] }
+        start_ms: { type: [integer, "null"], minimum: 0 }
+        end_ms: { type: [integer, "null"], minimum: 0 }
+    PracticeAnchor:
+      type: object
+      required: [kind, id, label, lexical_entry_id, sentence_id, token_start, token_end, start_ms, end_ms]
+      properties:
+        kind: { $ref: "#/components/schemas/PracticeAnchorKind" }
+        id: { type: string }
+        label: { type: [string, "null"] }
+        lexical_entry_id: { type: [string, "null"] }
+        sentence_id: { type: [string, "null"] }
+        token_start: { type: [integer, "null"], minimum: 0 }
+        token_end: { type: [integer, "null"], minimum: 0 }
+        start_ms: { type: [integer, "null"], minimum: 0 }
+        end_ms: { type: [integer, "null"], minimum: 0 }
+    PracticeItem:
+      type: object
+      required: [id, session_id, kind, target, prompt_snapshot, expected_answer, anchors, created_at_ms]
+      properties:
+        id: { type: string }
+        session_id: { type: [string, "null"] }
+        kind: { $ref: "#/components/schemas/PracticeKind" }
+        target: { $ref: "#/components/schemas/PracticeTarget" }
+        prompt_snapshot: { type: string }
+        expected_answer: {}
+        anchors: { type: array, items: { $ref: "#/components/schemas/PracticeAnchor" } }
+        created_at_ms: { type: integer, minimum: 0 }
+    CreatePracticeItem:
+      type: object
+      required: [kind, target, prompt_snapshot, expected_text, anchors]
+      properties:
+        session_id: { type: [string, "null"] }
+        kind: { $ref: "#/components/schemas/PracticeKind" }
+        target: { $ref: "#/components/schemas/PracticeTarget" }
+        prompt_snapshot: { type: string }
+        expected_text: { type: string }
+        anchors: { type: array, items: { $ref: "#/components/schemas/PracticeAnchor" } }
+    PracticeTokenEvaluation:
+      type: object
+      required: [expected, actual, result]
+      properties:
+        expected: { type: [string, "null"] }
+        actual: { type: [string, "null"] }
+        result: { $ref: "#/components/schemas/PracticeTokenResult" }
+    PracticeEvaluation:
+      type: object
+      required: [summary, token_results, extra]
+      properties:
+        summary: { type: string }
+        token_results: { type: array, items: { $ref: "#/components/schemas/PracticeTokenEvaluation" } }
+        extra: {}
+    PracticeAttempt:
+      type: object
+      required: [id, item_id, submitted_at_ms, input, result, score, evaluation, generated_observation_ids, generated_review_item_ids]
+      properties:
+        id: { type: string }
+        item_id: { type: string }
+        submitted_at_ms: { type: integer, minimum: 0 }
+        input: {}
+        result: { $ref: "#/components/schemas/PracticeResult" }
+        score: { type: [number, "null"], minimum: 0, maximum: 1 }
+        evaluation: { $ref: "#/components/schemas/PracticeEvaluation" }
+        generated_observation_ids: { type: array, items: { type: string } }
+        generated_review_item_ids: { type: array, items: { type: string } }
+    SubmitPracticeAttempt:
+      type: object
+      required: [item_id, text_answer, create_review_item_on_failure]
+      properties:
+        item_id: { type: string }
+        text_answer: { type: string }
+        create_review_item_on_failure: { type: boolean }
+    ReviewSource:
+      type: object
+      required: [kind, id, practice_attempt_id, lexical_entry_id]
+      properties:
+        kind: { $ref: "#/components/schemas/ReviewSourceKind" }
+        id: { type: [string, "null"] }
+        practice_attempt_id: { type: [string, "null"] }
+        lexical_entry_id: { type: [string, "null"] }
+    ReviewItem:
+      type: object
+      required: [id, source, anchors, prompt_snapshot, status, created_at_ms, updated_at_ms]
+      properties:
+        id: { type: string }
+        source: { $ref: "#/components/schemas/ReviewSource" }
+        anchors: { type: array, items: { $ref: "#/components/schemas/PracticeAnchor" } }
+        prompt_snapshot: { type: string }
+        status: { $ref: "#/components/schemas/ReviewItemStatus" }
+        created_at_ms: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
+    CreateReviewItem:
+      type: object
+      required: [source, anchors, prompt_snapshot]
+      properties:
+        source: { $ref: "#/components/schemas/ReviewSource" }
+        anchors: { type: array, items: { $ref: "#/components/schemas/PracticeAnchor" } }
+        prompt_snapshot: { type: string }
+    LearningEventSubject:
+      type: object
+      required: [kind, id]
+      properties:
+        kind: { $ref: "#/components/schemas/LearningEventSubjectKind" }
+        id: { type: string }
+    LearningEvent:
+      type: object
+      required: [id, occurred_at_ms, kind, subject, payload, session_id]
+      properties:
+        id: { type: string }
+        occurred_at_ms: { type: integer, minimum: 0 }
+        kind: { $ref: "#/components/schemas/LearningEventKind" }
+        subject: { $ref: "#/components/schemas/LearningEventSubject" }
+        payload: {}
+        session_id: { type: [string, "null"] }
     VocabularyAssetBundle:
       type: object
       required: [version, exported_at_ms, lexical_entries, lexical_history, lexical_occurrences, lexical_observations, phonetic_finding_feedback]

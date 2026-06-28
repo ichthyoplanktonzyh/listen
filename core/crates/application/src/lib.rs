@@ -13,6 +13,7 @@ mod lexical;
 mod media;
 mod phones;
 mod phonetic_fixture;
+mod practice;
 mod pronunciation;
 mod pronunciation_providers;
 mod providers;
@@ -63,6 +64,9 @@ pub struct AppServices {
     pub(crate) lltimeline_resources: Arc<dyn LLTimelineResourceRepository>,
     pub(crate) dictionary: Arc<dyn DictionaryCacheRepository>,
     pub(crate) learning_assets: Arc<dyn LearningAssetRepository>,
+    pub(crate) practice: Arc<dyn PracticeRepository>,
+    pub(crate) review: Arc<dyn ReviewRepository>,
+    pub(crate) learning_events: Arc<dyn LearningEventRepository>,
     pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
     pub(crate) pronunciation_providers: Arc<Vec<Arc<dyn PronunciationProvider>>>,
 }
@@ -88,9 +92,24 @@ impl AppServices {
             lltimeline_resources,
             dictionary,
             learning_assets,
+            practice: Arc::new(DisabledLearningLoopRepository),
+            review: Arc::new(DisabledLearningLoopRepository),
+            learning_events: Arc::new(DisabledLearningLoopRepository),
             lexical_normalizers: Arc::new(Vec::new()),
             pronunciation_providers: Arc::new(Vec::new()),
         }
+    }
+
+    pub fn with_learning_loop_repositories(
+        mut self,
+        practice: Arc<dyn PracticeRepository>,
+        review: Arc<dyn ReviewRepository>,
+        learning_events: Arc<dyn LearningEventRepository>,
+    ) -> Self {
+        self.practice = practice;
+        self.review = review;
+        self.learning_events = learning_events;
+        self
     }
 
     pub fn with_lexical_normalizers(
@@ -107,6 +126,14 @@ impl AppServices {
     ) -> Self {
         self.pronunciation_providers = Arc::new(providers);
         self
+    }
+}
+
+struct DisabledLearningLoopRepository;
+
+impl DisabledLearningLoopRepository {
+    fn disabled() -> ApplicationError {
+        ApplicationError::Repository("learning loop repository is not configured".into())
     }
 }
 

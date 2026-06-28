@@ -410,6 +410,139 @@ export interface LexicalObservation {
   created_at_ms: number;
 }
 
+export type PracticeMode = "intensive" | "extensive" | "review" | "specialty";
+export type PracticeKind = "cloze" | "dictation" | "subtitle_fade" | "shadowing";
+export type PracticeTargetKind = "lexical" | "sentence" | "chunk" | "segment" | "connected_speech";
+export type PracticeAnchorKind =
+  | "lexical_entry"
+  | "sentence"
+  | "word_timeline"
+  | "chunk_timeline"
+  | "chunk"
+  | "phone_timeline"
+  | "phone"
+  | "connected_speech";
+export type PracticeResult = "correct" | "partial" | "incorrect" | "skipped";
+export type PracticeTokenResult = "correct" | "missing" | "extra" | "mismatch";
+export type ReviewSourceKind =
+  | "lexical_entry"
+  | "practice_failure"
+  | "chunk"
+  | "sentence"
+  | "connected_speech";
+export type ReviewItemStatus = "active" | "suspended" | "archived";
+
+export interface PracticeSession {
+  id: string;
+  mode: PracticeMode;
+  media_id: string | null;
+  track_id: string | null;
+  source: string;
+  started_at_ms: number;
+  ended_at_ms: number | null;
+}
+
+export interface CreatePracticeSession {
+  mode: PracticeMode;
+  media_id?: string | null;
+  track_id?: string | null;
+  source?: string | null;
+}
+
+export interface PracticeTarget {
+  kind: PracticeTargetKind;
+  id: string | null;
+  sentence_id: string | null;
+  chunk_id: string | null;
+  start_ms: number | null;
+  end_ms: number | null;
+}
+
+export interface PracticeAnchor {
+  kind: PracticeAnchorKind;
+  id: string;
+  label: string | null;
+  lexical_entry_id: string | null;
+  sentence_id: string | null;
+  token_start: number | null;
+  token_end: number | null;
+  start_ms: number | null;
+  end_ms: number | null;
+}
+
+export interface PracticeItem {
+  id: string;
+  session_id: string | null;
+  kind: PracticeKind;
+  target: PracticeTarget;
+  prompt_snapshot: string;
+  expected_answer: unknown;
+  anchors: PracticeAnchor[];
+  created_at_ms: number;
+}
+
+export interface CreatePracticeItem {
+  session_id?: string | null;
+  kind: PracticeKind;
+  target: PracticeTarget;
+  prompt_snapshot: string;
+  expected_text: string;
+  anchors: PracticeAnchor[];
+}
+
+export interface PracticeTokenEvaluation {
+  expected: string | null;
+  actual: string | null;
+  result: PracticeTokenResult;
+}
+
+export interface PracticeEvaluation {
+  summary: string;
+  token_results: PracticeTokenEvaluation[];
+  extra: unknown;
+}
+
+export interface PracticeAttempt {
+  id: string;
+  item_id: string;
+  submitted_at_ms: number;
+  input: unknown;
+  result: PracticeResult;
+  score: number | null;
+  evaluation: PracticeEvaluation;
+  generated_observation_ids: string[];
+  generated_review_item_ids: string[];
+}
+
+export interface SubmitPracticeAttempt {
+  item_id: string;
+  text_answer: string;
+  create_review_item_on_failure: boolean;
+}
+
+export interface ReviewSource {
+  kind: ReviewSourceKind;
+  id: string | null;
+  practice_attempt_id: string | null;
+  lexical_entry_id: string | null;
+}
+
+export interface ReviewItem {
+  id: string;
+  source: ReviewSource;
+  anchors: PracticeAnchor[];
+  prompt_snapshot: string;
+  status: ReviewItemStatus;
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
+export interface CreateReviewItem {
+  source: ReviewSource;
+  anchors: PracticeAnchor[];
+  prompt_snapshot: string;
+}
+
 export interface VocabularyAssetBundle {
   version: 5;
   exported_at_ms: number;
@@ -811,6 +944,42 @@ export class LocalApiV1 {
 
   phraseCandidates(sentenceId: string): Promise<unknown[]> {
     return this.request(`/v1/sentences/${encodeURIComponent(sentenceId)}/phrase-candidates`);
+  }
+
+  createPracticeSession(input: CreatePracticeSession): Promise<PracticeSession> {
+    return this.request("/v1/practice/sessions", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  createPracticeItem(input: CreatePracticeItem): Promise<PracticeItem> {
+    return this.request("/v1/practice/items", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  submitPracticeAttempt(input: SubmitPracticeAttempt): Promise<PracticeAttempt> {
+    return this.request("/v1/practice/attempts", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  practiceAttempt(id: string): Promise<PracticeAttempt> {
+    return this.request(`/v1/practice/attempts/${encodeURIComponent(id)}`);
+  }
+
+  createReviewItem(input: CreateReviewItem): Promise<ReviewItem> {
+    return this.request("/v1/review/items", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  reviewItem(id: string): Promise<ReviewItem> {
+    return this.request(`/v1/review/items/${encodeURIComponent(id)}`);
   }
 
   learningResources(): Promise<LearningResource[]> {

@@ -1,5 +1,6 @@
 mod connection;
 mod dictionary;
+mod learning_loop;
 mod lexical;
 mod media;
 mod migrations;

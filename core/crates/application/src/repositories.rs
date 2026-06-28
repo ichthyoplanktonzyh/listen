@@ -675,6 +675,109 @@ pub trait LearningAssetRepository: Send + Sync {
     ) -> Result<Option<LexicalEntry>, ApplicationError>;
 }
 
+pub trait PracticeRepository: Send + Sync {
+    fn create_practice_session(
+        &self,
+        session: &PracticeSession,
+    ) -> Result<PracticeSession, ApplicationError>;
+    fn get_practice_session(
+        &self,
+        id: &PracticeSessionId,
+    ) -> Result<Option<PracticeSession>, ApplicationError>;
+    fn create_practice_item(&self, item: &PracticeItem) -> Result<PracticeItem, ApplicationError>;
+    fn get_practice_item(
+        &self,
+        id: &PracticeItemId,
+    ) -> Result<Option<PracticeItem>, ApplicationError>;
+    fn create_practice_attempt(
+        &self,
+        attempt: &PracticeAttempt,
+    ) -> Result<PracticeAttempt, ApplicationError>;
+    fn get_practice_attempt(
+        &self,
+        id: &PracticeAttemptId,
+    ) -> Result<Option<PracticeAttempt>, ApplicationError>;
+}
+
+pub trait ReviewRepository: Send + Sync {
+    fn create_review_item(&self, item: &ReviewItem) -> Result<ReviewItem, ApplicationError>;
+    fn get_review_item(&self, id: &ReviewItemId) -> Result<Option<ReviewItem>, ApplicationError>;
+    fn list_review_items(
+        &self,
+        status: Option<ReviewItemStatus>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<ReviewItem>, ApplicationError>;
+    fn create_review_attempt(
+        &self,
+        attempt: &ReviewAttempt,
+    ) -> Result<ReviewAttempt, ApplicationError>;
+    fn get_review_attempt(
+        &self,
+        id: &ReviewAttemptId,
+    ) -> Result<Option<ReviewAttempt>, ApplicationError>;
+}
+
+pub trait LearningEventRepository: Send + Sync {
+    fn append_learning_event(
+        &self,
+        event: &LearningEvent,
+    ) -> Result<LearningEvent, ApplicationError>;
+    fn list_learning_events(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<LearningEvent>, ApplicationError>;
+}
+
+pub trait CorpusIndexRepository: Send + Sync {
+    fn upsert_corpus_occurrence(
+        &self,
+        occurrence: &CorpusOccurrence,
+    ) -> Result<CorpusOccurrence, ApplicationError>;
+    fn search_corpus_occurrences(
+        &self,
+        language: &LanguageCode,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<CorpusOccurrence>, ApplicationError>;
+}
+
+pub trait DifficultyRepository: Send + Sync {
+    fn save_difficulty_profile(
+        &self,
+        profile: &ContentDifficultyProfile,
+    ) -> Result<ContentDifficultyProfile, ApplicationError>;
+    fn get_difficulty_profile(
+        &self,
+        subject_kind: &str,
+        subject_id: &str,
+    ) -> Result<Option<ContentDifficultyProfile>, ApplicationError>;
+}
+
+pub trait LearnerProfileRepository: Send + Sync {
+    fn save_learner_profile(
+        &self,
+        profile: &LearnerProfile,
+    ) -> Result<LearnerProfile, ApplicationError>;
+    fn get_learner_profile(
+        &self,
+        id: &LearnerProfileId,
+    ) -> Result<Option<LearnerProfile>, ApplicationError>;
+}
+
+pub trait RecordingRepository: Send + Sync {
+    fn save_recording_asset(
+        &self,
+        asset: &RecordingAsset,
+    ) -> Result<RecordingAsset, ApplicationError>;
+    fn get_recording_asset(
+        &self,
+        id: &RecordingAssetId,
+    ) -> Result<Option<RecordingAsset>, ApplicationError>;
+}
+
 pub trait DictionaryCacheRepository: Send + Sync {
     fn put(&self, entry: &DictionaryEntry) -> Result<(), ApplicationError>;
     fn get(

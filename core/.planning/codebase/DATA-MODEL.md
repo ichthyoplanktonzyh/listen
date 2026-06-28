@@ -1,6 +1,6 @@
 # Current Data Model
 
-Last updated: 2026-06-27, Phase 2.18.
+Last updated: 2026-06-28, Phase 3.0.1.
 
 All persisted time values are non-negative integer milliseconds. Public IDs are
 opaque SHA-256 strings generated from a namespace and stable fingerprint; they
@@ -18,6 +18,11 @@ do not contain database row numbers or player-library identifiers.
 | Lexical observation | Lexical entry + sentence + original form |
 | Dictionary cache entry | Language + normalized form + provider |
 | Timeline resource | Resource namespace + track/media/config fingerprint |
+| Practice session | `sha256("practice-session:" + mode/media/track/timestamp)` |
+| Practice item | `sha256("practice-item:" + kind/prompt/expected/timestamp)` |
+| Practice attempt | `sha256("practice-attempt:" + item/input/timestamp)` |
+| Review item | `sha256("review-item:" + source/prompt/timestamp)` |
+| Learning event | `sha256("learning-event:" + kind/subject/timestamp)` |
 
 Media path is mutable metadata, not identity. Registering the same media
 fingerprint updates path/title metadata while retaining the media ID.
@@ -57,6 +62,31 @@ Updating a global status never rewrites historical observations. Diagnosis reads
 current lexical entries plus the latest relevant lexical observation for the
 sentence.
 
+## Learning Loop Foundation
+
+Phase 3.0.1 introduces durable learning-behavior facts without replacing lexical
+assets:
+
+| Table/model | Purpose |
+|---|---|
+| `practice_sessions` | A study mode/session envelope such as intensive, extensive, review, or specialty |
+| `practice_items` | A cloze, dictation, subtitle-fade, or shadowing prompt snapshot anchored to real content |
+| `practice_attempts` | Historical user submission, evaluation, generated observations, and generated review links |
+| `review_items` | A schedulable review target pointing to lexical entries, chunks, sentences, practice failures, or future sound cases |
+| `review_attempts` | Historical review rating attempts |
+| `learning_events` | Append-mostly analytics facts for practice/review/listening/status events |
+
+`PracticeAttempt` owns what the user tried and how it was evaluated. It may create
+`LexicalObservation` evidence, but it must not silently change global
+`LearningStatus`.
+
+`ReviewItem` owns scheduling targets, not lexical identity. `LexicalEntry` remains
+the authoritative vocabulary learning asset. Anki export or AnkiConnect should
+adapt from `ReviewItem` later rather than define the internal model.
+
+`learning_events` is the intended future source for dashboard aggregation. It is
+not a substitute for status history, practice attempts, or review attempts.
+
 ## Deletion Semantics
 
 Vocabulary learning assets outlive replaceable media and subtitles.
@@ -73,6 +103,18 @@ lexical_entries
   └── lexical_occurrences
         ├── media_id nullable, ON DELETE SET NULL
         └── sentence_id nullable, ON DELETE SET NULL
+
+practice_sessions
+  ├── media_id nullable, ON DELETE SET NULL
+  ├── track_id nullable, ON DELETE SET NULL
+  └── practice_items
+        └── practice_attempts
+
+review_items
+  └── review_attempts
+
+learning_events
+  └── session_id nullable, ON DELETE SET NULL
 ```
 
 Losing or deleting media/subtitle rows preserves lexical occurrence snapshots and
@@ -111,6 +153,7 @@ Non-object metrics/evidence input is normalized to an empty object.
 - Subtitle replacement deletes and inserts its sentence timeline in one
   transaction.
 - Unique constraints enforce idempotent media, subtitle, lexical, dictionary
-  cache, and active timeline identities.
+  cache, active timeline identities, and learning-loop IDs.
 - Vocabulary export/import is version 5 and contains only lexical assets plus
   phonetic finding feedback.
+- SQLite schema version is 15 after adding learning-loop foundation tables.

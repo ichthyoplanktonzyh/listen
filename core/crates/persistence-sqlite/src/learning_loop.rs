@@ -1,0 +1,279 @@
+use application::{
+    ApplicationError, LearningEventRepository, PracticeRepository, ReviewRepository,
+};
+use domain::*;
+use rusqlite::{OptionalExtension, params};
+
+use super::{SqliteRepository, from_json, json, repo};
+
+impl PracticeRepository for SqliteRepository {
+    fn create_practice_session(
+        &self,
+        session: &PracticeSession,
+    ) -> Result<PracticeSession, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.execute(
+            "INSERT INTO practice_sessions
+             (id,mode,media_id,track_id,started_at_ms,ended_at_ms,session_json)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)
+             ON CONFLICT(id) DO UPDATE SET
+               ended_at_ms=excluded.ended_at_ms,
+               session_json=excluded.session_json",
+            params![
+                session.id.as_str(),
+                json(&session.mode)?,
+                session.media_id.as_ref().map(|value| value.as_str()),
+                session.track_id.as_ref().map(|value| value.as_str()),
+                session.started_at_ms,
+                session.ended_at_ms,
+                json(session)?,
+            ],
+        )
+        .map_err(repo)?;
+        Ok(session.clone())
+    }
+
+    fn get_practice_session(
+        &self,
+        id: &PracticeSessionId,
+    ) -> Result<Option<PracticeSession>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.query_row(
+            "SELECT session_json FROM practice_sessions WHERE id=?1",
+            [id.as_str()],
+            |row| from_json(&row.get::<_, String>(0)?),
+        )
+        .optional()
+        .map_err(repo)
+    }
+
+    fn create_practice_item(&self, item: &PracticeItem) -> Result<PracticeItem, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.execute(
+            "INSERT INTO practice_items
+             (id,session_id,kind,target_kind,created_at_ms,item_json)
+             VALUES (?1,?2,?3,?4,?5,?6)
+             ON CONFLICT(id) DO UPDATE SET item_json=excluded.item_json",
+            params![
+                item.id.as_str(),
+                item.session_id.as_ref().map(|value| value.as_str()),
+                json(&item.kind)?,
+                json(&item.target.kind)?,
+                item.created_at_ms,
+                json(item)?,
+            ],
+        )
+        .map_err(repo)?;
+        Ok(item.clone())
+    }
+
+    fn get_practice_item(
+        &self,
+        id: &PracticeItemId,
+    ) -> Result<Option<PracticeItem>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.query_row(
+            "SELECT item_json FROM practice_items WHERE id=?1",
+            [id.as_str()],
+            |row| from_json(&row.get::<_, String>(0)?),
+        )
+        .optional()
+        .map_err(repo)
+    }
+
+    fn create_practice_attempt(
+        &self,
+        attempt: &PracticeAttempt,
+    ) -> Result<PracticeAttempt, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.execute(
+            "INSERT INTO practice_attempts
+             (id,item_id,result,submitted_at_ms,attempt_json)
+             VALUES (?1,?2,?3,?4,?5)
+             ON CONFLICT(id) DO UPDATE SET attempt_json=excluded.attempt_json",
+            params![
+                attempt.id.as_str(),
+                attempt.item_id.as_str(),
+                json(&attempt.result)?,
+                attempt.submitted_at_ms,
+                json(attempt)?,
+            ],
+        )
+        .map_err(repo)?;
+        Ok(attempt.clone())
+    }
+
+    fn get_practice_attempt(
+        &self,
+        id: &PracticeAttemptId,
+    ) -> Result<Option<PracticeAttempt>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.query_row(
+            "SELECT attempt_json FROM practice_attempts WHERE id=?1",
+            [id.as_str()],
+            |row| from_json(&row.get::<_, String>(0)?),
+        )
+        .optional()
+        .map_err(repo)
+    }
+}
+
+impl ReviewRepository for SqliteRepository {
+    fn create_review_item(&self, item: &ReviewItem) -> Result<ReviewItem, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.execute(
+            "INSERT INTO review_items
+             (id,source_kind,status,created_at_ms,updated_at_ms,item_json)
+             VALUES (?1,?2,?3,?4,?5,?6)
+             ON CONFLICT(id) DO UPDATE SET
+               status=excluded.status,
+               updated_at_ms=excluded.updated_at_ms,
+               item_json=excluded.item_json",
+            params![
+                item.id.as_str(),
+                json(&item.source.kind)?,
+                json(&item.status)?,
+                item.created_at_ms,
+                item.updated_at_ms,
+                json(item)?,
+            ],
+        )
+        .map_err(repo)?;
+        Ok(item.clone())
+    }
+
+    fn get_review_item(&self, id: &ReviewItemId) -> Result<Option<ReviewItem>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.query_row(
+            "SELECT item_json FROM review_items WHERE id=?1",
+            [id.as_str()],
+            |row| from_json(&row.get::<_, String>(0)?),
+        )
+        .optional()
+        .map_err(repo)
+    }
+
+    fn list_review_items(
+        &self,
+        status: Option<ReviewItemStatus>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<ReviewItem>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        if let Some(status) = status {
+            let mut statement = conn
+                .prepare(
+                    "SELECT item_json FROM review_items
+                     WHERE status=?1
+                     ORDER BY updated_at_ms DESC
+                     LIMIT ?2 OFFSET ?3",
+                )
+                .map_err(repo)?;
+            statement
+                .query_map(params![json(&status)?, limit.min(200), offset], |row| {
+                    from_json(&row.get::<_, String>(0)?)
+                })
+                .map_err(repo)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(repo)
+        } else {
+            let mut statement = conn
+                .prepare(
+                    "SELECT item_json FROM review_items
+                     ORDER BY updated_at_ms DESC
+                     LIMIT ?1 OFFSET ?2",
+                )
+                .map_err(repo)?;
+            statement
+                .query_map(params![limit.min(200), offset], |row| {
+                    from_json(&row.get::<_, String>(0)?)
+                })
+                .map_err(repo)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(repo)
+        }
+    }
+
+    fn create_review_attempt(
+        &self,
+        attempt: &ReviewAttempt,
+    ) -> Result<ReviewAttempt, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.execute(
+            "INSERT INTO review_attempts
+             (id,item_id,reviewed_at_ms,rating,attempt_json)
+             VALUES (?1,?2,?3,?4,?5)
+             ON CONFLICT(id) DO UPDATE SET attempt_json=excluded.attempt_json",
+            params![
+                attempt.id.as_str(),
+                attempt.item_id.as_str(),
+                attempt.reviewed_at_ms,
+                json(&attempt.rating)?,
+                json(attempt)?,
+            ],
+        )
+        .map_err(repo)?;
+        Ok(attempt.clone())
+    }
+
+    fn get_review_attempt(
+        &self,
+        id: &ReviewAttemptId,
+    ) -> Result<Option<ReviewAttempt>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.query_row(
+            "SELECT attempt_json FROM review_attempts WHERE id=?1",
+            [id.as_str()],
+            |row| from_json(&row.get::<_, String>(0)?),
+        )
+        .optional()
+        .map_err(repo)
+    }
+}
+
+impl LearningEventRepository for SqliteRepository {
+    fn append_learning_event(
+        &self,
+        event: &LearningEvent,
+    ) -> Result<LearningEvent, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.execute(
+            "INSERT OR IGNORE INTO learning_events
+             (id,occurred_at_ms,kind,subject_kind,subject_id,session_id,event_json)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![
+                event.id.as_str(),
+                event.occurred_at_ms,
+                json(&event.kind)?,
+                json(&event.subject.kind)?,
+                event.subject.id.as_str(),
+                event.session_id.as_ref().map(|value| value.as_str()),
+                json(event)?,
+            ],
+        )
+        .map_err(repo)?;
+        Ok(event.clone())
+    }
+
+    fn list_learning_events(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<LearningEvent>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = conn
+            .prepare(
+                "SELECT event_json FROM learning_events
+                 ORDER BY occurred_at_ms DESC
+                 LIMIT ?1 OFFSET ?2",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map(params![limit.min(500), offset], |row| {
+                from_json(&row.get::<_, String>(0)?)
+            })
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+}

@@ -43,6 +43,9 @@ pub use phonetic_analysis::*;
 mod learning;
 pub use learning::*;
 
+mod learning_loop;
+pub use learning_loop::*;
+
 mod dictionary;
 pub use dictionary::*;
 
@@ -98,6 +101,15 @@ string_id!(LexicalObservationId);
 string_id!(LexicalOccurrenceId);
 string_id!(LexicalStatusHistoryId);
 string_id!(LearningResourceId);
+string_id!(PracticeSessionId);
+string_id!(PracticeItemId);
+string_id!(PracticeAttemptId);
+string_id!(ReviewItemId);
+string_id!(ReviewAttemptId);
+string_id!(LearningEventId);
+string_id!(CorpusOccurrenceId);
+string_id!(LearnerProfileId);
+string_id!(RecordingAssetId);
 string_id!(PronunciationAnalysisId);
 string_id!(PhoneticAnalysisModelId);
 string_id!(PhoneticAnalysisJobId);

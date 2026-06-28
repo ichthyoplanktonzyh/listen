@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: active
-last_updated: "2026-06-28T08:26:21.000Z"
+last_updated: "2026-06-28T11:37:00.000Z"
 progress:
   total_phases: 11
   completed_phases: 1
@@ -15,9 +15,8 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-28 CST
-> 更新原因：Phase 2.18 代码架构重构正式收口后，同步入口文档
-> `AGENT.md`、`.planning/PROJECT.md`、`.planning/REQUIREMENTS.md`、
-> `.planning/ROADMAP.md` 与 `.planning/MAINTENANCE.md`，删除旧学习资产兼容表述。
+> 更新原因：Phase 3.0.1 backend learning-loop foundation 已落地，新增 Practice /
+> Review / LearningEvent domain、repository、SQLite v15、API 和 contract 测试。
 
 ## 当前位置
 
@@ -29,7 +28,9 @@ progress:
   Phase 2.15 ✅ 声音线学习 UX 收口完成 +
   Phase 2.16 ✅ 真实语流模型 v1 收口完成 +
   Phase 2.17 ⏳ 真实媒体声音线 QA 已规划 +
-  Phase 2.18 ✅ 代码架构全面重构已收口
+  Phase 2.18 ✅ 代码架构全面重构已收口 +
+  Phase 3.0 🧭 英语听力学习闭环方向已建档 +
+  Phase 3.0.1 ✅ backend 学习行为架构地基已落地
 - **分支**：`main`
 - **版本**：0.7.0
 
@@ -41,6 +42,46 @@ progress:
 |---|---|---|
 | 本地重装生产引擎 | 生成精准 WordTimeline / ChunkTimeline / LLTimeline JSON | ✅ 阶段性收口，转长期研究 |
 | 轻量消费端 LLPlayerNext | 稳定读取 `.lltimeline.json` 并播放学习 | ✅ Phase 2.3/2.10/2.12 已集成 |
+
+## 后续产品方向
+
+### Phase 3.0: English Listening Learning Loop 🧭 已建档
+
+- 目标：在 Phase 2 的真实声音流资源和 Phase 2.18 的新学习资产架构之上，把英语作为第一门语言
+  做成完整学习闭环。
+- 核心闭环：
+  `真实输入 -> 可理解度判断 -> 诊断 -> 主动练习 -> 复习巩固 -> 进度反馈 -> 回到真实输入`。
+- 核心理念：
+  - 真正语言能力来自听力突破和大量可理解输入。
+  - 常见语言学习功能必须重写为听力本位能力。
+  - L1 与 L2 理论进入诊断层，首个真实组合为 Mandarin L1 -> English L2。
+  - Cloze、听写、字幕渐隐、chunk replay 和本地 YouGlish-like 个人语料库是 Phase 3.0 的关键体验。
+- 近期顺序仍以 Phase 2.17 真实声音线 QA 为前置，然后再推进输入难度、精听/泛听、主动验证、
+  听力驱动词汇、L1-aware diagnosis、shadowing 和诊断型 dashboard。
+- 规划文档：
+  - `.planning/phases/3.0-english-listening-learning-loop/3.0-CONTEXT.md`
+  - `.planning/phases/3.0-english-listening-learning-loop/3.0-PLAN.md`
+
+### Phase 3.0.1: Learning Loop Architecture Foundation ✅ Backend Foundation Completed
+
+- 已完成后端地基：domain model、application repository traits/service、SQLite schema v15、
+  `/v1/practice/*` 与 `/v1/review/*` API、OpenAPI/generated client 和 contract validation。
+- 第一条 backend vertical slice：
+  `当前 chunk -> cloze / chunk dictation -> PracticeAttempt -> LexicalObservation / ReviewItem /
+  LearningEvent`。
+- 关键 guardrail：
+  - 练习失败不静默修改全局 `LearningStatus`。
+  - Anki 是互操作 adapter，不是内部权威复习模型。
+  - Dashboard 从 learning event / durable attempt 聚合，不从 transient UI state 拼。
+  - L1-aware diagnosis 走 profile/provider，不写死在 Flutter 文案。
+- 后续 slice：
+  Flutter practice controller/UI、corpus search、difficulty profile、learner profile persistence、
+  recording/shadowing 和 dashboard aggregation。
+- 规划文档：
+  - `.planning/phases/3.0.1-learning-loop-architecture-foundation/3.0.1-CONTEXT.md`
+  - `.planning/phases/3.0.1-learning-loop-architecture-foundation/3.0.1-ARCHITECTURE.md`
+  - `.planning/phases/3.0.1-learning-loop-architecture-foundation/3.0.1-PLAN.md`
+  - `.planning/phases/3.0.1-learning-loop-architecture-foundation/3.0.1-CLOSEOUT.md`
 
 ## 当前横切治理 Phase
 

@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- 2026-06-28 19:37 CST: 落地 Phase 3.0.1 学习行为架构代码地基。
+  新增 domain learning-loop 模型与 ID，application practice service、Practice / Review /
+  LearningEvent repository traits，SQLite schema v15 与 `practice_sessions`、`practice_items`、
+  `practice_attempts`、`review_items`、`review_attempts`、`learning_events` 表，最小
+  `/v1/practice/*` 与 `/v1/review/*` API 路由，OpenAPI/generated client/contract validation
+  同步，以及 persistence/API 测试。同步刷新 `.planning/codebase/ARCHITECTURE.md`、
+  `.planning/codebase/DATA-MODEL.md`、`.planning/codebase/STRUCTURE.md` 和
+  `.planning/codebase/STACK.md`。新增
+  `.planning/phases/3.0.1-learning-loop-architecture-foundation/3.0.1-CLOSEOUT.md` 记录后端地基收口。
+
+- 2026-06-28 17:31 CST: 新增 Phase 3.0.1 学习行为架构地基规划。
+  新增 `.planning/phases/3.0.1-learning-loop-architecture-foundation/3.0.1-CONTEXT.md`、
+  `3.0.1-ARCHITECTURE.md` 和 `3.0.1-PLAN.md`，定义 Practice / Review / LearningEvent /
+  Corpus / Difficulty / LearnerProfile / Recording 边界，以及 cloze + chunk dictation 第一条
+  vertical slice；同步更新 Phase 3.0 plan、`.planning/PROJECT.md`、`.planning/REQUIREMENTS.md`、
+  `.planning/ROADMAP.md` 与 `.planning/STATE.md`。
+
+- 2026-06-28 17:14 CST: 建立 Phase 3.0 英语听力学习闭环规划参考。
+  新增 `.planning/phases/3.0-english-listening-learning-loop/3.0-CONTEXT.md` 和
+  `.planning/phases/3.0-english-listening-learning-loop/3.0-PLAN.md`，将真实输入、
+  可理解度判断、诊断、cloze/听写/字幕渐隐、听力驱动词汇、本地 YouGlish-like 语料库、
+  Mandarin -> English L1-aware diagnosis、shadowing 和诊断型 dashboard 收敛为后续
+  Phase 3.0 对齐依据；同步更新 `.planning/PROJECT.md`、`.planning/REQUIREMENTS.md`、
+  `.planning/ROADMAP.md` 与 `.planning/STATE.md`。
+
 - 2026-06-28 16:26 CST: 同步 Phase 2.18 后的入口文档。
   更新 `AGENT.md`、`.planning/PROJECT.md`、`.planning/REQUIREMENTS.md`、
   `.planning/ROADMAP.md`、`.planning/MAINTENANCE.md` 和 `.planning/STATE.md`：

@@ -1,6 +1,6 @@
 # LLPlayerNext — 代码库物理结构
 
-> 最后更新：2026-06-21
+> 最后更新：2026-06-28
 > 回答"文件放在哪"。概念分层见 ARCHITECTURE.md。
 
 ## 1. 顶层目录布局
@@ -48,15 +48,15 @@ LLPlayerNext/
 
 | Crate | 文件数 | 职责 | 依赖方向 |
 |---|---|---|---|
-| `domain` | 1 | ID 类型、枚举、`DomainError` | 无外部依赖 |
+| `domain` | 2+ | ID 类型、枚举、学习资产、timeline、learning-loop 模型、`DomainError` | 无外部依赖 |
 | `api-events` | 1 | SSE 事件 Schema 定义 | domain |
 | `subtitle-core` | 1 | SRT/VTT 解析、token 化、时间轴查询 | domain |
 | `diagnosis-core` | 1 | 词义障碍、声音识别障碍、信息不足诊断 | domain |
 | `speech-analysis` | 11 | ASR 时序提取、chunk 检测/分区、强制对齐、pause 精炼、音素对齐、韵律学习 | domain |
-| `application` | 19 | `AppServices` 编排器、Repository/Provider trait、DTO、按 use case 拆分的应用服务 | domain, subtitle-core, diagnosis-core, speech-analysis |
+| `application` | 20+ | `AppServices` 编排器、Repository/Provider trait、DTO、按 use case 拆分的应用服务、practice foundation | domain, subtitle-core, diagnosis-core, speech-analysis |
 | `dictionary-provider` | 1 | 词典查询 provider | application, domain |
-| `persistence-sqlite` | 13 | SQLite 连接/迁移、按 repository/表域拆分的持久化实现、幂等、唯一约束 | application, domain |
-| `api-http` | 7 + `routes/` 9 | Axum HTTP 入口、route group handler、转录/音素/chunk API、Bearer 认证 | application, api-events, dictionary-provider, persistence-sqlite |
+| `persistence-sqlite` | 14+ | SQLite 连接/迁移、按 repository/表域拆分的持久化实现、幂等、唯一约束 | application, domain |
+| `api-http` | 7 + `routes/` 10 | Axum HTTP 入口、route group handler、转录/音素/chunk/practice API、Bearer 认证 | application, api-events, dictionary-provider, persistence-sqlite |
 
 ### apps/desktop/ — Flutter macOS 应用
 

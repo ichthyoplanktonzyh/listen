@@ -2339,6 +2339,127 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - 新增语言不需回改既有枚举与 match。
 - 依赖：LANG-001。
 
+## 18.5 Phase 3.0 英语听力学习闭环方向性需求
+
+> 方向文档见 `.planning/phases/3.0-english-listening-learning-loop/`。本节只记录后续
+> Phase 3.0 相关工作的需求边界，不提前拆分每个执行 phase 的详细验收任务。
+> 具体实现 phase 启动时，应将对应条目细化为可测试需求和验收标准。
+
+### LOOP-000：学习行为架构地基
+
+- 优先级：P0
+- 阶段：Phase 3.0.1
+- 需求：在实现 cloze、听写、SRS、语料搜索、shadowing 和 dashboard 前，先建立统一的学习行为事实模型。
+- 方向：
+  - Practice 表达 cloze、dictation、subtitle fade、shadowing 等主动练习。
+  - Review 表达复习对象、调度和复习尝试，不替代 `LexicalEntry`。
+  - LearningEvent / activity ledger 作为统计事实来源。
+  - Corpus / Difficulty / LearnerProfile 作为个人语料搜索、可理解输入和 L1-aware diagnosis 的边界。
+  - 第一条 vertical slice 使用 cloze + chunk dictation。
+
+### LOOP-001：可理解输入与材料难度信号
+
+- 优先级：P0
+- 阶段：Phase 3.0
+- 需求：系统应能为英语媒体、句子或片段提供学习难度信号，用于区分泛听材料、精听材料和过难材料。
+- 信号方向：
+  - 未知词密度。
+  - `known_not_recognized` 密度。
+  - 语速。
+  - chunk 长度和复杂度。
+  - connected-speech 密度。
+  - timeline / resource quality。
+
+### LOOP-002：精听 / 泛听模式分离
+
+- 优先级：P0
+- 阶段：Phase 3.0
+- 需求：同一媒体应支持低打断的泛听模式和高密度练习的精听模式。
+- 方向：
+  - 泛听记录完成度、输入量和整体理解度。
+  - 精听支持句循环、chunk 循环、字幕渐隐、cloze、听写和声音线解释。
+
+### LOOP-003：字幕渐隐与主动验证
+
+- 优先级：P0
+- 阶段：Phase 3.0
+- 需求：系统应支持从全字幕逐步过渡到听音频主动恢复内容。
+- 方向：
+  - 延迟字幕。
+  - 点击显示字幕。
+  - 隐藏已掌握词。
+  - Cloze 验证 `known_recognized`。
+  - Chunk / sentence dictation。
+  - 失败结果写入 observation 或练习记录；全局状态调整需用户确认。
+
+### LOOP-004：Chunk-first 训练
+
+- 优先级：P0
+- 阶段：Phase 3.0
+- 需求：ChunkTimeline 应成为精听练习的一等单位，而不只是播放辅助资源。
+- 方向：
+  - 单 chunk replay。
+  - chunk 逐步展开。
+  - chunk cloze。
+  - chunk dictation。
+  - chunk shadowing 入口。
+
+### LOOP-005：听力驱动词汇复习
+
+- 优先级：P0
+- 阶段：Phase 3.0
+- 需求：词汇复习应围绕真实音频片段、来源句、来源 chunk 和历史练习表现展开。
+- 方向：
+  - 词汇详情显示真实片段和最近 cloze / dictation / observation 结果。
+  - Native SRS 支持词汇卡、真实例句卡、音频识别卡、cloze 卡和 chunk 卡。
+  - Anki export / AnkiConnect 可作为互操作层，不作为权威学习资产存储。
+
+### LOOP-006：本地 YouGlish-like 个人语料库
+
+- 优先级：P1
+- 阶段：Phase 3.0
+- 需求：用户应能从自己的媒体库中搜索词、短语、chunk 和语流现象，并直接播放真实片段。
+- 方向：
+  - 搜索词 / 短语。
+  - 搜索 connected-speech family。
+  - 播放词窗口、chunk 或整句。
+  - 将片段加入练习或复习队列。
+
+### LOOP-007：L1-aware diagnosis
+
+- 优先级：P1
+- 阶段：Phase 3.0
+- 需求：诊断应能解释特定 L1 背景下的 L2 听力障碍。首个真实组合为 Mandarin L1 -> English L2。
+- 方向：
+  - 区分 UI language、L1 和 L2。
+  - 建立 Mandarin -> English 难点 profile。
+  - 对 weak forms、schwa、词尾辅音、flapping、linking、stress-timed rhythm 等提供短解释。
+  - 解释必须回到真实片段复听和练习，不做泛泛语法课。
+
+### LOOP-008：Shadowing 与录音对比
+
+- 优先级：P2
+- 阶段：Phase 3.0
+- 需求：系统应支持 chunk-level 可调速 shadowing 和原音 / 用户录音 A-B 对比。
+- 方向：
+  - 以 chunk 为默认跟读单位。
+  - 支持可调速、循环和逐步展开。
+  - 支持录音回放、波形对比、时长差异和停顿位置差异。
+  - 复杂音素级评分不是第一版承诺。
+
+### LOOP-009：诊断型学习统计
+
+- 优先级：P1
+- 阶段：Phase 3.0
+- 需求：Dashboard 应服务听力诊断和下一步练习建议，而不是只展示打卡或总时长。
+- 方向：
+  - 泛听输入量与精听句子数。
+  - cloze / dictation 正确率。
+  - `known_not_recognized -> known_recognized` 转化。
+  - 反复失败词和常见 connected-speech family。
+  - L1-aware 难点分布。
+  - 同一材料二刷/三刷理解度提升。
+
 ## 19. MVP 发布追踪矩阵
 
 | 发布能力 | 必须满足的需求 |
@@ -2359,3 +2480,4 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | Milestone 2 生产引擎 | LLT-001 至 LLT-006、PROD-001 至 PROD-007、EVAL-001 至 EVAL-004 |
 | Milestone 2 轻量消费端 | LLT-007、CONSUME-001 至 CONSUME-004 |
 | Milestone 2 多语言学习基础 | LANG-001 至 LANG-010 |
+| Phase 3.0 英语听力学习闭环 | LOOP-000 至 LOOP-009 |

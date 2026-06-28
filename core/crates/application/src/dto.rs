@@ -128,6 +128,38 @@ pub struct CreateLexicalObservation {
     pub source: Option<LexicalSourceContext>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreatePracticeSession {
+    pub mode: PracticeMode,
+    pub media_id: Option<MediaId>,
+    pub track_id: Option<SubtitleTrackId>,
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreatePracticeItem {
+    pub session_id: Option<PracticeSessionId>,
+    pub kind: PracticeKind,
+    pub target: PracticeTarget,
+    pub prompt_snapshot: String,
+    pub expected_text: String,
+    pub anchors: Vec<PracticeAnchor>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubmitPracticeAttempt {
+    pub item_id: PracticeItemId,
+    pub text_answer: String,
+    pub create_review_item_on_failure: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateReviewItem {
+    pub source: ReviewSource,
+    pub anchors: Vec<PracticeAnchor>,
+    pub prompt_snapshot: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct LexicalSourceContext {
     pub media_id: Option<MediaId>,

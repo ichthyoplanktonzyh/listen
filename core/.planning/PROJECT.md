@@ -761,3 +761,37 @@ TXT/CSV 词表初始化、统一词汇学习面板、用户释义与笔记，以
 
 > 同一套 UI 能打开英语和汉语字幕，按各自语言查询词汇状态、查词与诊断；新增主流语言
 > 主要是 provider + profile 工作，不需改动既有语言代码。
+
+### 15.6 Phase 3.0：英语听力学习闭环方向
+
+2026-06-28 确立。Phase 3.0 不是继续堆学习功能菜单，而是在 Phase 2 真实声音流资源与
+Phase 2.18 新学习资产架构之上，把英语作为第一门语言做成完整学习闭环：
+
+```text
+真实输入
+  -> 可理解度判断
+  -> 听力障碍诊断
+  -> 主动验证练习
+  -> 复习巩固
+  -> 进度反馈
+  -> 回到真实输入
+```
+
+核心原则：
+
+- 真正语言能力来自听力突破，听力突破来自大量可理解输入。
+- 精听与泛听是两种不同体验：泛听积累输入量，精听解释并修复障碍。
+- 词汇学习应围绕真实音频识别，而不是只围绕释义记忆。
+- Cloze、听写、字幕渐隐和 chunk replay 是把被动诊断转为主动验证的优先路径。
+- Anki / SRS 是复习互操作与补充，不是 LLPlayerNext 权威学习资产模型。
+- L1 与 L2 理论进入诊断层，首个真实目标是 Mandarin L1 -> English L2。
+- Shadowing 先从 chunk-level 可调速跟读和录音 A-B 对比开始，不先承诺复杂发音评分。
+- Dashboard 应解释听力障碍变化和下一步练习，而不是做泛泛打卡统计。
+- 进入具体功能扩张前，先通过 Phase 3.0.1 把 Practice / Review / LearningEvent /
+  Corpus / Difficulty / LearnerProfile 等学习行为架构立为一等边界。
+
+后续工作参考：
+
+- `.planning/phases/3.0-english-listening-learning-loop/3.0-CONTEXT.md`
+- `.planning/phases/3.0-english-listening-learning-loop/3.0-PLAN.md`
+- `.planning/phases/3.0.1-learning-loop-architecture-foundation/3.0.1-ARCHITECTURE.md`
