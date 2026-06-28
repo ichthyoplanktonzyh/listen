@@ -48,7 +48,7 @@ void main() {
     configHash: 'hash',
     createdBy: 'algorithm',
     status: 'active',
-    metricsJson: {},
+    metricsJson: TimelineMetrics.empty(),
     words: sourceWords,
     createdAt: Duration.zero,
     updatedAt: Duration.zero,

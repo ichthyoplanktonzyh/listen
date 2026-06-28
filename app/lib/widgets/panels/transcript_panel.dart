@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/timeline.dart';
+import '../../models/types.dart';
 import '../../utils/format_duration.dart';
 import '../subtitle/token_line.dart';
 
@@ -12,7 +13,7 @@ class TranscriptPanel extends StatelessWidget {
     required this.scrollController,
     required this.itemExtent,
     required this.currentCue,
-    required this.wordProfiles,
+    required this.wordEntries,
     required this.showStyles,
     required this.baseColor,
     required this.onWord,
@@ -23,7 +24,7 @@ class TranscriptPanel extends StatelessWidget {
   final ScrollController scrollController;
   final double itemExtent;
   final Cue? currentCue;
-  final Map<String, Map<String, dynamic>> wordProfiles;
+  final Map<String, LexicalEntry> wordEntries;
   final bool showStyles;
   final Color baseColor;
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
@@ -54,7 +55,7 @@ class TranscriptPanel extends StatelessWidget {
                         leading: Text(formatDuration(cue.start)),
                         title: TokenLine(
                           cue: cue,
-                          profiles: wordProfiles,
+                          profiles: wordEntries,
                           showStyles: showStyles,
                           baseColor: baseColor,
                           onWord: onWord,

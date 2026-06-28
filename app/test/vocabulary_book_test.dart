@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
+import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/widgets/panels/word_learning_panel.dart';
 import 'package:llplayer_next/widgets/vocabulary/vocabulary_book_view.dart';
 import 'package:llplayer_next/widgets/vocabulary/vocabulary_details_view.dart';
@@ -81,7 +82,7 @@ void main() {
   ) async {
     Map<String, dynamic>? selected;
     final word = <String, dynamic>{
-      'profile': {'display_form': 'Hello'},
+      'entry': {'display_form': 'Hello'},
       'occurrences': [
         {
           'sentence_text_snapshot': 'Hello from a durable snapshot.',
@@ -120,7 +121,7 @@ void main() {
     tester,
   ) async {
     final word = <String, dynamic>{
-      'profile': {'display_form': 'Move me'},
+      'entry': {'display_form': 'Move me'},
       'occurrences': const [],
     };
     await tester.pumpWidget(
@@ -155,7 +156,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: VocabularyDetailsView(
-            profile: const {'status': 'known_recognized'},
+            entry: const {'status': 'known_recognized'},
             occurrences: [occurrence],
             history: const [
               {
@@ -210,49 +211,9 @@ void main() {
       await tester.pumpWidget(
         localized(
           WordLearningPanel(
-            details: const {
-              'profile': {
-                'display_form': 'Hello',
-                'status': 'unknown_meaning',
-                'user_definition': null,
-                'personal_note': null,
-              },
-              'occurrences': [],
-              'history': [],
-            },
-            dictionary: const {
-              'results': [
-                {
-                  'provider': {'display_name': 'Provider A'},
-                  'lookup': {
-                    'phonetics': [
-                      {
-                        'text': '/hello/',
-                        'audio_url': 'https://example.test/hello.mp3',
-                      },
-                    ],
-                    'definitions': [
-                      {'text': 'a greeting', 'part_of_speech': 'noun'},
-                    ],
-                  },
-                  'error': null,
-                },
-              ],
-            },
-            pronunciation: const {
-              'variants': [
-                {
-                  'display_ipa': 'həˈloʊ',
-                  'is_fallback': false,
-                  'phonemes': [
-                    {'symbol': 'HH'},
-                    {'symbol': 'AH0'},
-                    {'symbol': 'L'},
-                    {'symbol': 'OW1'},
-                  ],
-                },
-              ],
-            },
+            details: _helloDetails,
+            dictionary: _helloDictionary,
+            pronunciation: _helloPronunciation,
             onStatus: (_) {},
             onSave: (value, memo) async {
               definition = value;
@@ -280,55 +241,31 @@ void main() {
     },
   );
 
-  testWidgets('word learning panel breaks a Han word into per-character pinyin', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      localized(
-        WordLearningPanel(
-          details: const {
-            'profile': {
-              'language': 'zh',
-              'display_form': '咖啡',
-              'status': 'unknown_meaning',
-              'user_definition': null,
-              'personal_note': null,
-            },
-            'occurrences': [],
-            'history': [],
-          },
-          dictionary: const {
-            'results': [
-              {
-                'provider': {'display_name': 'CC-CEDICT'},
-                'lookup': {
-                  'phonetics': [
-                    {'text': 'kā fēi', 'region': 'zh', 'audio_url': null},
-                  ],
-                  'definitions': [
-                    {'text': 'coffee', 'part_of_speech': null},
-                  ],
-                },
-                'error': null,
-              },
-            ],
-          },
-          languageProfile: const {'pronunciation': 'zh.pinyin'},
-          onStatus: (_) {},
-          onSave: (_, _) async {},
-          onSource: (_) {},
-          onHeard: () {},
-          onNotHeard: () {},
+  testWidgets(
+    'word learning panel breaks a Han word into per-character pinyin',
+    (tester) async {
+      await tester.pumpWidget(
+        localized(
+          WordLearningPanel(
+            details: _coffeeDetails,
+            dictionary: _coffeeDictionary,
+            languageProfile: _zhPinyinProfile,
+            onStatus: (_) {},
+            onSave: (_, _) async {},
+            onSource: (_) {},
+            onHeard: () {},
+            onNotHeard: () {},
+          ),
         ),
-      ),
-    );
-    // The word's characters are aligned with their pinyin syllables (字 → 拼音).
-    expect(find.text('Characters'), findsOneWidget);
-    expect(find.text('咖'), findsOneWidget);
-    expect(find.text('啡'), findsOneWidget);
-    expect(find.text('kā'), findsOneWidget);
-    expect(find.text('fēi'), findsOneWidget);
-  });
+      );
+      // The word's characters are aligned with their pinyin syllables (字 → 拼音).
+      expect(find.text('Characters'), findsOneWidget);
+      expect(find.text('咖'), findsOneWidget);
+      expect(find.text('啡'), findsOneWidget);
+      expect(find.text('kā'), findsOneWidget);
+      expect(find.text('fēi'), findsOneWidget);
+    },
+  );
 
   testWidgets('per-character pinyin does not fire for a Japanese kanji word', (
     tester,
@@ -339,33 +276,8 @@ void main() {
     await tester.pumpWidget(
       localized(
         WordLearningPanel(
-          details: const {
-            'profile': {
-              'language': 'ja',
-              'display_form': '学生',
-              'status': 'unknown_meaning',
-              'user_definition': null,
-              'personal_note': null,
-            },
-            'occurrences': [],
-            'history': [],
-          },
-          dictionary: const {
-            'results': [
-              {
-                'provider': {'display_name': 'CC-CEDICT'},
-                'lookup': {
-                  'phonetics': [
-                    {'text': 'xué shēng', 'region': 'zh', 'audio_url': null},
-                  ],
-                  'definitions': [
-                    {'text': 'student', 'part_of_speech': null},
-                  ],
-                },
-                'error': null,
-              },
-            ],
-          },
+          details: _studentDetails,
+          dictionary: _studentDictionary,
           onStatus: (_) {},
           onSave: (_, _) async {},
           onSource: (_) {},
@@ -388,3 +300,122 @@ void main() {
     expect(AppLocalizations.of(context).text('vocabulary'), '词汇本');
   });
 }
+
+const _helloDetails = LexicalEntryDetails(
+  entry: LexicalEntry(
+    id: 'lexical-hello',
+    normalizedForm: 'hello',
+    displayForm: 'Hello',
+    kind: 'word',
+    status: 'unknown_meaning',
+    language: 'en',
+  ),
+);
+
+const _helloDictionary = DictionaryLookupBundle(
+  query: 'hello',
+  normalizedLemma: 'hello',
+  results: [
+    DictionaryLookupResult(
+      provider: DictionaryProviderDescriptor(
+        id: 'provider-a',
+        displayName: 'Provider A',
+      ),
+      lookup: DictionaryLookup(
+        query: 'hello',
+        lemma: 'hello',
+        phonetics: [
+          DictionaryPhonetic(
+            text: '/hello/',
+            audioUrl: 'https://example.test/hello.mp3',
+          ),
+        ],
+        definitions: [
+          DictionaryDefinition(text: 'a greeting', partOfSpeech: 'noun'),
+        ],
+      ),
+    ),
+  ],
+);
+
+const _helloPronunciation = WordPronunciation(
+  tokenIndex: 0,
+  text: 'Hello',
+  normalized: 'hello',
+  variants: [
+    PronunciationVariant(
+      displayIpa: 'həˈloʊ',
+      phonemes: [
+        PronunciationPhoneme(symbol: 'HH'),
+        PronunciationPhoneme(symbol: 'AH0'),
+        PronunciationPhoneme(symbol: 'L'),
+        PronunciationPhoneme(symbol: 'OW1'),
+      ],
+    ),
+  ],
+);
+
+const _coffeeDetails = LexicalEntryDetails(
+  entry: LexicalEntry(
+    id: 'lexical-coffee',
+    normalizedForm: '咖啡',
+    displayForm: '咖啡',
+    kind: 'word',
+    status: 'unknown_meaning',
+    language: 'zh',
+  ),
+);
+
+const _coffeeDictionary = DictionaryLookupBundle(
+  query: '咖啡',
+  normalizedLemma: '咖啡',
+  results: [
+    DictionaryLookupResult(
+      provider: DictionaryProviderDescriptor(
+        id: 'cc-cedict',
+        displayName: 'CC-CEDICT',
+      ),
+      lookup: DictionaryLookup(
+        query: '咖啡',
+        lemma: '咖啡',
+        phonetics: [DictionaryPhonetic(text: 'kā fēi', region: 'zh')],
+        definitions: [DictionaryDefinition(text: 'coffee')],
+      ),
+    ),
+  ],
+);
+
+const _studentDetails = LexicalEntryDetails(
+  entry: LexicalEntry(
+    id: 'lexical-student',
+    normalizedForm: '学生',
+    displayForm: '学生',
+    kind: 'word',
+    status: 'unknown_meaning',
+    language: 'ja',
+  ),
+);
+
+const _studentDictionary = DictionaryLookupBundle(
+  query: '学生',
+  normalizedLemma: '学生',
+  results: [
+    DictionaryLookupResult(
+      provider: DictionaryProviderDescriptor(
+        id: 'cc-cedict',
+        displayName: 'CC-CEDICT',
+      ),
+      lookup: DictionaryLookup(
+        query: '学生',
+        lemma: '学生',
+        phonetics: [DictionaryPhonetic(text: 'xué shēng', region: 'zh')],
+        definitions: [DictionaryDefinition(text: 'student')],
+      ),
+    ),
+  ],
+);
+
+const _zhPinyinProfile = LanguageProfile(
+  languageCode: 'zh',
+  pronunciation: 'zh.pinyin',
+);

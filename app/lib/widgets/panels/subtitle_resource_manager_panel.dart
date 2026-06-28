@@ -55,7 +55,8 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
   final Future<void> Function(SubtitleTrack track) onRestoreSubtitle;
   final Future<void> Function(SubtitleTrack track) onDeleteSubtitle;
   final Future<void> Function(SubtitleTrack track) onExportSubtitle;
-  final Future<void> Function(SubtitleTrack track, String language) onLanguageChanged;
+  final Future<void> Function(SubtitleTrack track, String language)
+  onLanguageChanged;
   final List<String> availableLanguages;
   final Future<void> Function(SubtitleTrack track) onExportLLTimeline;
   final Future<void> Function(String timelineId) onActivateWordTimeline;
@@ -399,11 +400,7 @@ class _LanguageChip extends StatelessWidget {
   final List<String> availableLanguages;
   final Future<void> Function(String language) onChanged;
 
-  static const _displayNames = {
-    'en': 'English',
-    'zh': '中文',
-    'ja': '日本語',
-  };
+  static const _displayNames = {'en': 'English', 'zh': '中文', 'ja': '日本語'};
 
   @override
   Widget build(BuildContext context) {
@@ -421,8 +418,9 @@ class _LanguageChip extends StatelessWidget {
             child: Text(
               '${_displayNames[code] ?? code} ($code)',
               style: TextStyle(
-                fontWeight:
-                    code == language ? FontWeight.bold : FontWeight.normal,
+                fontWeight: code == language
+                    ? FontWeight.bold
+                    : FontWeight.normal,
               ),
             ),
           ),

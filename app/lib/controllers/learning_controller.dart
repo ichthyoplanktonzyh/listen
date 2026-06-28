@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/timeline.dart';
+import '../models/types.dart';
 import '../state/store.dart';
 
 const _unset = Object();
@@ -8,9 +9,9 @@ const _unset = Object();
 /// Immutable snapshot of learning-related state.
 class LearningState {
   const LearningState({
-    this.wordProfiles = const {},
-    this.phraseProfiles = const {},
-    this.selectedWordDetails,
+    this.wordEntries = const {},
+    this.phraseEntries = const {},
+    this.selectedLexicalDetails,
     this.selectedDictionary,
     this.selectedPronunciation,
     this.selectedToken,
@@ -20,40 +21,40 @@ class LearningState {
     this.sidePanel = 0,
   });
 
-  final Map<String, Map<String, dynamic>> wordProfiles;
-  final Map<String, Map<String, dynamic>> phraseProfiles;
-  final Map<String, dynamic>? selectedWordDetails;
-  final Map<String, dynamic>? selectedDictionary;
-  final Map<String, dynamic>? selectedPronunciation;
+  final Map<String, LexicalEntry> wordEntries;
+  final Map<String, LexicalEntryDetails> phraseEntries;
+  final LexicalEntryDetails? selectedLexicalDetails;
+  final DictionaryLookupBundle? selectedDictionary;
+  final WordPronunciation? selectedPronunciation;
   final SubtitleToken? selectedToken;
   final Cue? selectedCue;
-  final List<Map<String, dynamic>> phraseCandidates;
-  final Map<String, dynamic>? diagnosis;
+  final List<PhraseCandidate> phraseCandidates;
+  final Diagnosis? diagnosis;
   final int sidePanel;
 
   LearningState copyWith({
-    Map<String, Map<String, dynamic>>? wordProfiles,
-    Map<String, Map<String, dynamic>>? phraseProfiles,
-    Object? selectedWordDetails = _unset,
+    Map<String, LexicalEntry>? wordEntries,
+    Map<String, LexicalEntryDetails>? phraseEntries,
+    Object? selectedLexicalDetails = _unset,
     Object? selectedDictionary = _unset,
     Object? selectedPronunciation = _unset,
     Object? selectedToken = _unset,
     Object? selectedCue = _unset,
-    List<Map<String, dynamic>>? phraseCandidates,
+    List<PhraseCandidate>? phraseCandidates,
     Object? diagnosis = _unset,
     int? sidePanel,
   }) => LearningState(
-    wordProfiles: wordProfiles ?? this.wordProfiles,
-    phraseProfiles: phraseProfiles ?? this.phraseProfiles,
-    selectedWordDetails: identical(selectedWordDetails, _unset)
-        ? this.selectedWordDetails
-        : selectedWordDetails as Map<String, dynamic>?,
+    wordEntries: wordEntries ?? this.wordEntries,
+    phraseEntries: phraseEntries ?? this.phraseEntries,
+    selectedLexicalDetails: identical(selectedLexicalDetails, _unset)
+        ? this.selectedLexicalDetails
+        : selectedLexicalDetails as LexicalEntryDetails?,
     selectedDictionary: identical(selectedDictionary, _unset)
         ? this.selectedDictionary
-        : selectedDictionary as Map<String, dynamic>?,
+        : selectedDictionary as DictionaryLookupBundle?,
     selectedPronunciation: identical(selectedPronunciation, _unset)
         ? this.selectedPronunciation
-        : selectedPronunciation as Map<String, dynamic>?,
+        : selectedPronunciation as WordPronunciation?,
     selectedToken: identical(selectedToken, _unset)
         ? this.selectedToken
         : selectedToken as SubtitleToken?,
@@ -63,23 +64,23 @@ class LearningState {
     phraseCandidates: phraseCandidates ?? this.phraseCandidates,
     diagnosis: identical(diagnosis, _unset)
         ? this.diagnosis
-        : diagnosis as Map<String, dynamic>?,
+        : diagnosis as Diagnosis?,
     sidePanel: sidePanel ?? this.sidePanel,
   );
 
   bool get hasDiagnosis => diagnosis != null;
-  bool get hasWordSelected => selectedWordDetails != null;
+  bool get hasWordSelected => selectedLexicalDetails != null;
 }
 
-/// Controls vocabulary learning state: word profiles, dictionary lookups,
+/// Controls vocabulary learning state: lexical entries, dictionary lookups,
 /// phrase candidates, and sentence diagnosis.
 ///
 /// Uses [Store] internally for fine-grained reactive state.
 class LearningController extends ChangeNotifier {
   final Store<LearningState> _store;
   List<String> _availableLanguages = const ['en', 'zh', 'ja'];
-  final Map<String, Map<String, dynamic>> _languageProfiles = {};
-  Map<String, dynamic>? _currentLanguageProfile;
+  final Map<String, LanguageProfile> _languageProfiles = {};
+  LanguageProfile? _currentLanguageProfile;
 
   LearningController() : _store = Store(const LearningState()) {
     _store.addListener(notifyListeners);
@@ -90,7 +91,9 @@ class LearningController extends ChangeNotifier {
 
   LearningState get state => _store.state;
   List<String> get availableLanguages => _availableLanguages;
-  Map<String, dynamic>? get currentLanguageProfile => _currentLanguageProfile;
+  LanguageProfile? get currentLanguageProfile => _currentLanguageProfile;
+  LanguageProfile? languageProfileFor(String languageCode) =>
+      _languageProfiles[languageCode];
 
   set availableLanguages(List<String> value) {
     _availableLanguages = value;
@@ -102,42 +105,40 @@ class LearningController extends ChangeNotifier {
       _store.select(selector);
 
   // Convenience accessors
-  Map<String, Map<String, dynamic>> get wordProfiles =>
-      _store.state.wordProfiles;
-  Map<String, Map<String, dynamic>> get phraseProfiles =>
-      _store.state.phraseProfiles;
-  Map<String, dynamic>? get selectedWordDetails =>
-      _store.state.selectedWordDetails;
-  Map<String, dynamic>? get selectedDictionary =>
+  Map<String, LexicalEntry> get wordEntries => _store.state.wordEntries;
+  Map<String, LexicalEntryDetails> get phraseEntries =>
+      _store.state.phraseEntries;
+  LexicalEntryDetails? get selectedLexicalDetails =>
+      _store.state.selectedLexicalDetails;
+  DictionaryLookupBundle? get selectedDictionary =>
       _store.state.selectedDictionary;
-  Map<String, dynamic>? get selectedPronunciation =>
+  WordPronunciation? get selectedPronunciation =>
       _store.state.selectedPronunciation;
-  List<Map<String, dynamic>> get phraseCandidates =>
-      _store.state.phraseCandidates;
-  Map<String, dynamic>? get diagnosis => _store.state.diagnosis;
+  List<PhraseCandidate> get phraseCandidates => _store.state.phraseCandidates;
+  Diagnosis? get diagnosis => _store.state.diagnosis;
   int get sidePanel => _store.state.sidePanel;
   SubtitleToken? get selectedToken => _store.state.selectedToken;
   Cue? get selectedCue => _store.state.selectedCue;
 
-  void setWordProfiles(Map<String, Map<String, dynamic>> profiles) =>
-      _store.update((s) => s.copyWith(wordProfiles: profiles));
+  void setWordEntries(Map<String, LexicalEntry> entries) =>
+      _store.update((s) => s.copyWith(wordEntries: entries));
 
-  void setPhraseProfiles(Map<String, Map<String, dynamic>> profiles) =>
-      _store.update((s) => s.copyWith(phraseProfiles: profiles));
+  void setPhraseEntries(Map<String, LexicalEntryDetails> entries) =>
+      _store.update((s) => s.copyWith(phraseEntries: entries));
 
-  void selectWord(Map<String, dynamic>? details) => _store.update(
+  void selectWord(LexicalEntryDetails? details) => _store.update(
     (s) => s.copyWith(
-      selectedWordDetails: details,
+      selectedLexicalDetails: details,
       selectedDictionary: null,
       selectedPronunciation: null,
       sidePanel: details != null ? 2 : s.sidePanel,
     ),
   );
 
-  void setSelectedDictionary(Map<String, dynamic>? dict) =>
+  void setSelectedDictionary(DictionaryLookupBundle? dict) =>
       _store.update((s) => s.copyWith(selectedDictionary: dict));
 
-  void setSelectedPronunciation(Map<String, dynamic>? pron) =>
+  void setSelectedPronunciation(WordPronunciation? pron) =>
       _store.update((s) => s.copyWith(selectedPronunciation: pron));
 
   Future<void> loadLanguageProfile(
@@ -149,16 +150,22 @@ class LearningController extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    final profile = await fetcher(languageCode);
+    final profile = LanguageProfile.fromJson(await fetcher(languageCode));
     _languageProfiles[languageCode] = profile;
     _currentLanguageProfile = profile;
     notifyListeners();
   }
 
-  void setPhraseCandidates(List<Map<String, dynamic>> candidates) =>
+  void setLanguageProfile(LanguageProfile profile) {
+    _languageProfiles[profile.languageCode] = profile;
+    _currentLanguageProfile = profile;
+    notifyListeners();
+  }
+
+  void setPhraseCandidates(List<PhraseCandidate> candidates) =>
       _store.update((s) => s.copyWith(phraseCandidates: candidates));
 
-  void setDiagnosis(Map<String, dynamic>? diagnosis) =>
+  void setDiagnosis(Diagnosis? diagnosis) =>
       _store.update((s) => s.copyWith(diagnosis: diagnosis));
 
   void selectSidePanel(int index) =>
@@ -170,42 +177,27 @@ class LearningController extends ChangeNotifier {
   void setSelectedCue(Cue? cue) =>
       _store.update((s) => s.copyWith(selectedCue: cue));
 
-  void updateSingleWordProfile(String lemma, Map<String, dynamic> profile) {
+  void updateSingleWordEntry(String lemma, LexicalEntry entry) {
     final s = _store.state;
-    final profiles = Map<String, Map<String, dynamic>>.from(s.wordProfiles);
-    profiles[lemma] = profile;
-    _store.update((st) => st.copyWith(wordProfiles: profiles));
+    final entries = Map<String, LexicalEntry>.from(s.wordEntries);
+    entries[lemma] = entry;
+    _store.update((st) => st.copyWith(wordEntries: entries));
   }
 
-  void updateSinglePhraseProfile(
-    String canonical,
-    Map<String, dynamic> profile,
-  ) {
+  void updateSinglePhraseEntry(String canonical, LexicalEntryDetails details) {
     final s = _store.state;
-    final profiles = Map<String, Map<String, dynamic>>.from(s.phraseProfiles);
-    profiles[canonical] = profile;
-    _store.update((st) => st.copyWith(phraseProfiles: profiles));
+    final entries = Map<String, LexicalEntryDetails>.from(s.phraseEntries);
+    entries[canonical] = details;
+    _store.update((st) => st.copyWith(phraseEntries: entries));
   }
 
   void clearSelection() => _store.update(
     (s) => s.copyWith(
-      selectedWordDetails: null,
+      selectedLexicalDetails: null,
       selectedDictionary: null,
       selectedPronunciation: null,
     ),
   );
-
-  /// Update the status of a word in the local cache.
-  void updateWordStatusLocally(String lemma, String? status) {
-    final s = _store.state;
-    final profiles = Map<String, Map<String, dynamic>>.from(s.wordProfiles);
-    if (status == null) {
-      profiles.remove(lemma);
-    } else {
-      profiles[lemma] = {...?profiles[lemma], 'status': status, 'lemma': lemma};
-    }
-    _store.update((st) => st.copyWith(wordProfiles: profiles));
-  }
 
   @override
   void dispose() {

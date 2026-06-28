@@ -3,6 +3,7 @@ import 'package:llplayer_next/controllers/learning_controller.dart';
 import 'package:llplayer_next/controllers/player_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
 import 'package:llplayer_next/models/timeline.dart';
+import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/player_adapter.dart';
 
 void main() {
@@ -84,7 +85,11 @@ void main() {
       ..setSpeechEnhancements(
         pronunciationBySentence: const {},
         pronunciationProviders: const [
-          {'id': 'cmudict', 'version': '1'},
+          PronunciationProvider(
+            id: 'cmudict',
+            displayName: 'CMUdict',
+            version: '1',
+          ),
         ],
         timingsBySentence: const {
           'sentence-1': [
@@ -99,20 +104,24 @@ void main() {
           ],
         },
         phoneticAnalysisBySentence: const {
-          'sentence-1': {
-            'detected_phones': [
-              {
-                'symbol': 'HH',
-                'phone_set': 'arpabet',
-                'start_ms': 100,
-                'end_ms': 200,
-                'confidence': 0.5,
-                'token_index': 0,
-                'provider_id': 'test',
-                'model_revision': 'v1',
-              },
+          'sentence-1': PhoneticAnalysis(
+            providerId: 'test',
+            modelRevision: 'v1',
+            phoneSet: 'arpabet',
+            detectedPhones: [
+              DetectedPhone(
+                symbol: 'HH',
+                displayIpa: 'HH',
+                phoneSet: 'arpabet',
+                start: Duration(milliseconds: 100),
+                end: Duration(milliseconds: 200),
+                confidence: 0.5,
+                tokenIndex: 0,
+                provider: 'test',
+                modelRevision: 'v1',
+              ),
             ],
-          },
+          ),
         },
         chunkPartitionsBySentence: const {
           'sentence-1': SentenceChunkPartition(
@@ -146,7 +155,7 @@ void main() {
     );
     expect(controller.currentWordToken, isNull);
     expect(controller.currentChunkIndex, isNull);
-    expect(controller.pronunciationProviders.single['id'], 'cmudict');
+    expect(controller.pronunciationProviders.single.id, 'cmudict');
     controller.updateCurrentDetectedPhone(
       const Duration(milliseconds: 150),
       enabled: true,
@@ -198,9 +207,7 @@ void main() {
   test('selecting a word opens the word learning side panel', () {
     final controller = LearningController()
       ..selectSidePanel(1)
-      ..selectWord(const {
-        'profile': {'lemma': 'hello'},
-      });
+      ..selectWord(_lexicalDetails);
 
     expect(controller.sidePanel, 2);
   });
@@ -265,15 +272,31 @@ void main() {
 
   test('learning controller clears pronunciation and diagnosis', () {
     final controller = LearningController()
-      ..selectWord(const {'profile': {}})
-      ..setSelectedPronunciation(const {'variants': []})
-      ..setDiagnosis(const {'hints': []});
+      ..selectWord(_lexicalDetails)
+      ..setSelectedPronunciation(
+        const WordPronunciation(
+          tokenIndex: 0,
+          text: 'Hello',
+          normalized: 'hello',
+        ),
+      )
+      ..setDiagnosis(const Diagnosis());
 
     controller.clearSelection();
     controller.setDiagnosis(null);
 
-    expect(controller.selectedWordDetails, isNull);
+    expect(controller.selectedLexicalDetails, isNull);
     expect(controller.selectedPronunciation, isNull);
     expect(controller.diagnosis, isNull);
   });
 }
+
+const _lexicalDetails = LexicalEntryDetails(
+  entry: LexicalEntry(
+    id: 'lexical-1',
+    normalizedForm: 'hello',
+    displayForm: 'Hello',
+    kind: 'word',
+    language: 'en',
+  ),
+);

@@ -14,16 +14,20 @@ import 'player_adapter.dart';
 import 'settings.dart';
 import 'transcription_ui.dart';
 
+import 'controllers/app_controllers.dart';
+import 'controllers/backend_event_coordinator.dart';
+import 'controllers/learning_controller.dart';
+import 'controllers/learning_workflow_controller.dart';
+import 'controllers/manual_review_controller.dart';
+import 'controllers/player_controller.dart';
+import 'controllers/speech_enhancement_workflow_controller.dart';
+import 'controllers/subtitle_controller.dart';
+import 'controllers/settings_controller.dart';
 import 'models/timeline.dart';
+import 'models/types.dart';
 import 'phonetic_analysis_ui.dart';
 import 'services/api_service.dart';
 import 'services/external_tools.dart';
-import 'controllers/app_controllers.dart';
-import 'controllers/manual_review_controller.dart';
-import 'controllers/player_controller.dart';
-import 'controllers/subtitle_controller.dart';
-import 'controllers/learning_controller.dart';
-import 'controllers/settings_controller.dart';
 import 'utils/subtitle_style.dart';
 import 'utils/word_list_parser.dart';
 import 'widgets/subtitle/phoneme_ribbon.dart';
@@ -102,6 +106,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final playerController = PlayerController();
   final subtitleController = SubtitleController();
   final learningController = LearningController();
+  final learningWorkflowController = LearningWorkflowController();
+  final speechEnhancementWorkflowController =
+      SpeechEnhancementWorkflowController();
   final settingsController = SettingsController();
 
   // ── Local UI state (not managed by controllers) ──
@@ -285,56 +292,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _onEvent(Map<String, dynamic> event) {
-    if (event['event'] == 'service-started') {
-      unawaited(_loadWordProfiles());
-      final trackId = subtitleController.primaryTrack?.id;
-      if (trackId != null) unawaited(_loadTimelineResource(trackId));
-      return;
-    }
-    if (event['event'] == 'transcription-job-changed') {
-      final job = event['payload'] as Map<String, dynamic>;
-      if (job['status'] == 'completed' &&
-          job['media_id'] == playerController.mediaId &&
-          job['generated_track_id'] != null) {
-        unawaited(
-          api!
-              .readSubtitle(job['generated_track_id'] as String)
-              .then(
-                (track) => _loadGeneratedTrack(
-                  track,
-                  job['destination'] == 'secondary',
-                ),
-              ),
-        );
-      } else if (mounted && job['media_id'] == playerController.mediaId) {
-        setState(
-          () => status =
-              'ASR ${job['status']} · ${job['phase_progress'] as int}%',
-        );
-      }
-      return;
-    }
-    if (event['event'] == 'phonetic-analysis-job-changed') {
-      final job = event['payload'] as Map<String, dynamic>;
-      if (job['track_id'] == subtitleController.primaryTrack?.id) {
-        if (job['status'] == 'completed') {
-          unawaited(_loadSpeechEnhancements(job['track_id'] as String));
-        }
-        if (mounted) {
-          setState(
-            () => status =
-                'Audio analysis ${job['status']} · ${job['phase_progress'] as int}%',
-          );
-        }
-      }
-      return;
-    }
-    if (event['event'] != 'word-profile-changed') return;
-    final profile = event['payload'] as Map<String, dynamic>;
-    learningController.updateSingleWordProfile(
-      profile['normalized_lemma'] as String,
-      profile,
-    );
+    BackendEventCoordinator(
+      currentMediaId: () => playerController.mediaId,
+      currentPrimaryTrackId: () => subtitleController.primaryTrack?.id,
+      loadWordEntries: _loadWordEntries,
+      loadTimelineResource: _loadTimelineResource,
+      readSubtitle: (trackId) => api!.readSubtitle(trackId),
+      loadGeneratedTrack: _loadGeneratedTrack,
+      loadSpeechEnhancements: _loadSpeechEnhancements,
+      setStatus: (value) {
+        if (mounted) setState(() => status = value);
+      },
+      updateWordEntry: learningController.updateSingleWordEntry,
+    ).handle(event);
   }
 
   void _onPosition(Duration value) {
@@ -563,8 +533,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       subtitleController.primaryCursor.current(playerController.position),
     );
     setState(() => status = nextStatus);
-    await _loadWordProfiles();
-    await _loadPhraseProfiles();
+    await _loadWordEntries();
+    await _loadPhraseEntries();
     await _loadPhraseCandidates(subtitleController.currentPrimaryCue);
     await _loadSpeechEnhancements(track.id);
   }
@@ -635,45 +605,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _loadSpeechEnhancements(String trackId) async {
     final service = api;
     if (service == null) return;
-    await _loadTimelineResource(trackId);
-    final errors = <String>[];
-    final timings = await _loadOptionalResourceCapability(
-      () => service.trackWordTimings(trackId),
-      'word timing',
-      errors,
-    );
-    final providers = await _loadOptionalResourceCapability(
-      service.pronunciationProviders,
-      'pronunciation provider',
-      errors,
-    );
-    final soundPatterns = await _loadSoundPatternAnalyses(
-      service,
-      trackId,
-      errors,
-    );
-    final partitions = await _loadChunkPartitions(service, trackId, errors);
-    final grouped = <String, List<WordTiming>>{};
-    for (final raw in timings) {
-      final value = WordTiming.fromJson(raw);
-      grouped.putIfAbsent(value.sentenceId, () => []).add(value);
-    }
-    final analyses = await _loadPronunciationEnhancements(
-      service,
-      trackId,
-      errors,
-    );
+    final result = await speechEnhancementWorkflowController
+        .loadSpeechEnhancements(
+          service: service,
+          trackId: trackId,
+          previousTimeline: _existingTimelineResourceState(),
+        );
     if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
+    _applyTimelineResource(result.timeline);
     subtitleController.setSpeechEnhancements(
-      timingsBySentence: grouped,
-      chunkPartitionsBySentence: partitions,
-      pronunciationBySentence: Map<String, Map<String, dynamic>>.fromEntries(
-        analyses.map(
-          (value) => MapEntry(value['sentence_id'] as String, value),
-        ),
-      ),
-      pronunciationProviders: providers,
-      phoneticAnalysisBySentence: soundPatterns,
+      timingsBySentence: result.timingsBySentence,
+      chunkPartitionsBySentence: result.chunkPartitionsBySentence,
+      pronunciationBySentence: result.pronunciationBySentence,
+      pronunciationProviders: result.pronunciationProviders,
+      phoneticAnalysisBySentence: result.phoneticAnalysisBySentence,
     );
     subtitleController.updateCurrentWord(
       playerController.position,
@@ -688,164 +633,47 @@ class _PlayerScreenState extends State<PlayerScreen> {
           settingsController.settings.phonemeRibbonVisible ||
           settingsController.settings.soundPatternRibbonVisible,
     );
-    if (errors.isNotEmpty && mounted) {
+    if (result.errors.isNotEmpty && mounted) {
       setState(
         () => status =
             'Speech enhancements partially unavailable: '
-            '${errors.join('; ')}',
+            '${result.errors.join('; ')}',
       );
     }
-  }
-
-  Future<Map<String, Map<String, dynamic>>> _loadSoundPatternAnalyses(
-    LocalApi service,
-    String trackId,
-    List<String> errors,
-  ) async {
-    final active = subtitleController.phoneTimelineSummaries
-        .where((summary) => summary.isActive)
-        .firstOrNull;
-    if (active != null) {
-      try {
-        final timeline = PhoneTimeline.fromJson(
-          await service.phoneTimeline(active.id),
-        );
-        final sentenceId = timeline.sentenceId;
-        if (sentenceId != null) {
-          return {sentenceId: timeline.toSoundPatternJson()};
-        }
-      } catch (error) {
-        errors.add('phone timeline: $error');
-      }
-    }
-    final phoneticAnalyses = await _loadOptionalResourceCapability(
-      () => service.trackPhoneticAnalyses(trackId),
-      'phone',
-      errors,
-    );
-    return latestPhoneticAnalysesBySentence(phoneticAnalyses);
-  }
-
-  Future<List<Map<String, dynamic>>> _loadPronunciationEnhancements(
-    LocalApi service,
-    String trackId,
-    List<String> errors,
-  ) async {
-    try {
-      return await service.trackPronunciation(trackId);
-    } catch (error) {
-      errors.add('pronunciation: $error');
-      return const [];
-    }
-  }
-
-  Future<Map<String, SentenceChunkPartition>> _loadChunkPartitions(
-    LocalApi service,
-    String trackId,
-    List<String> errors,
-  ) async {
-    final active = subtitleController.chunkTimelineSummaries
-        .where((summary) => summary.isActive)
-        .firstOrNull;
-    if (active != null) {
-      try {
-        return chunkPartitionsFromTimeline(
-          ChunkTimeline.fromJson(await service.chunkTimeline(active.id)),
-        );
-      } catch (error) {
-        errors.add('chunk timeline: $error');
-      }
-    }
-    final partitions = await _loadOptionalResourceCapability(
-      () => service.trackChunkPartitions(trackId),
-      'chunk',
-      errors,
-    );
-    return Map<String, SentenceChunkPartition>.fromEntries(
-      partitions.map((raw) {
-        final partition = SentenceChunkPartition.fromJson(raw);
-        return MapEntry(partition.sentenceId, partition);
-      }),
-    );
   }
 
   Future<void> _loadTimelineResource(String trackId) async {
     final service = api;
     if (service == null) return;
-    final errors = <String>[];
-    final previousSummaries = subtitleController.wordTimelineSummaries;
-    final previousPhoneSummaries = subtitleController.phoneTimelineSummaries;
-    final previousChunkSummaries = subtitleController.chunkTimelineSummaries;
-    final previousDocument = subtitleController.llTimelineDocument;
-
-    late List<WordTimelineSummary> summaries;
-    late List<PhoneTimelineSummary> phoneSummaries;
-    late List<ChunkTimelineSummary> chunkSummaries;
-    LLTimelineDocument? document;
-
-    try {
-      final values = await service.trackWordTimelineSummaries(trackId);
-      summaries = values
-          .map((raw) => WordTimelineSummary.fromJson(raw))
-          .toList(growable: false);
-    } catch (error) {
-      errors.add('summary: $error');
-      summaries = previousSummaries;
-    }
-
-    try {
-      final values = await service.trackPhoneTimelineSummaries(trackId);
-      phoneSummaries = values
-          .map((raw) => PhoneTimelineSummary.fromJson(raw))
-          .toList(growable: false);
-    } catch (error) {
-      errors.add('phone summary: $error');
-      phoneSummaries = previousPhoneSummaries;
-    }
-
-    try {
-      final values = await service.trackChunkTimelineSummaries(trackId);
-      chunkSummaries = values
-          .map((raw) => ChunkTimelineSummary.fromJson(raw))
-          .toList(growable: false);
-    } catch (error) {
-      errors.add('chunk summary: $error');
-      chunkSummaries = previousChunkSummaries;
-    }
-
-    try {
-      final value = await service.exportTrackLLTimeline(trackId);
-      final exportedDocument = LLTimelineDocument.fromJson(value);
-      document =
-          exportedDocument.artifacts.isEmpty &&
-              previousDocument?.artifacts.isNotEmpty == true
-          ? previousDocument
-          : exportedDocument;
-    } catch (error) {
-      errors.add('export: $error');
-      document = previousDocument;
-    }
-
+    final result = await speechEnhancementWorkflowController
+        .loadTimelineResource(
+          service: service,
+          trackId: trackId,
+          previous: _existingTimelineResourceState(),
+        );
     if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
-    final hasTimelineData =
-        summaries.isNotEmpty ||
-        phoneSummaries.isNotEmpty ||
-        chunkSummaries.isNotEmpty ||
-        document != null;
-    if (!hasTimelineData && errors.length == 4) {
-      subtitleController.setTimelineResourceError(
-        'Timeline resource unavailable: ${errors.join('; ')}',
+    _applyTimelineResource(result);
+  }
+
+  ExistingTimelineResourceState _existingTimelineResourceState() =>
+      ExistingTimelineResourceState(
+        wordSummaries: subtitleController.wordTimelineSummaries,
+        phoneSummaries: subtitleController.phoneTimelineSummaries,
+        chunkSummaries: subtitleController.chunkTimelineSummaries,
+        document: subtitleController.llTimelineDocument,
       );
+
+  void _applyTimelineResource(TimelineResourceLoadResult result) {
+    if (result.unavailable) {
+      subtitleController.setTimelineResourceError(result.error ?? '');
       return;
     }
     subtitleController.setTimelineResource(
-      summaries: summaries,
-      phoneSummaries: phoneSummaries,
-      chunkSummaries: chunkSummaries,
-      document: document,
-      error: errors.isEmpty
-          ? null
-          : 'Timeline resource refresh warning: ${errors.join('; ')}',
+      summaries: result.wordSummaries,
+      phoneSummaries: result.phoneSummaries,
+      chunkSummaries: result.chunkSummaries,
+      document: result.document,
+      error: result.error,
     );
   }
 
@@ -1085,8 +913,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (updated != null) {
           subtitleController.setPrimaryTrack(updated);
         }
-        await _loadWordProfiles();
-        await _loadPhraseProfiles();
+        await _loadWordEntries();
+        await _loadPhraseEntries();
       }
       if (mounted) setState(() => status = 'Language set to $language');
     } catch (error) {
@@ -1352,7 +1180,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     try {
       final value = await service.analyzePronunciation(cue.id);
       if (mounted && subtitleController.currentPrimaryCue?.id == cue.id) {
-        subtitleController.setSentencePronunciation(cue.id, value);
+        subtitleController.setSentencePronunciation(
+          cue.id,
+          PronunciationAnalysis.fromJson(value),
+        );
       }
     } catch (_) {
       // Pronunciation is optional and must never block playback.
@@ -1917,36 +1748,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _loadPhraseCandidates(Cue? cue) async {
-    if (api == null || cue == null) {
-      if (mounted) learningController.setPhraseCandidates(const []);
-      return;
-    }
-    try {
-      if (mounted && subtitleController.currentPrimaryCue?.id == cue.id) {
-        learningController.setPhraseCandidates(const []);
-      }
-      final candidates = await api!.phraseCandidates(cue.id);
-      if (mounted && subtitleController.currentPrimaryCue?.id == cue.id) {
-        learningController.setPhraseCandidates(candidates);
-      }
-    } catch (_) {
-      if (mounted && subtitleController.currentPrimaryCue?.id == cue.id) {
-        learningController.setPhraseCandidates(const []);
-      }
-    }
+    await learningWorkflowController.loadPhraseCandidates(
+      api: api,
+      cue: cue,
+      learning: learningController,
+      isMounted: () => mounted,
+      currentCueId: () => subtitleController.currentPrimaryCue?.id,
+    );
   }
 
-  Future<void> _openPhrase(Map<String, dynamic> candidate, Cue cue) async {
+  Future<void> _openPhrase(PhraseCandidate candidate, Cue cue) async {
     if (api == null || playerController.mediaFingerprint == null) return;
-    final canonical = candidate['canonical_form'] as String;
+    final canonical = candidate.canonicalForm;
     final details = await showPhraseCandidate(
       context: context,
       api: api!,
-      candidate: candidate,
-      initialStatus:
-          (learningController.phraseProfiles[canonical]?['entry']
-                  as Map<String, dynamic>?)?['status']
-              as String?,
+      candidate: candidate.toJson(),
+      initialStatus: learningController.phraseEntries[canonical]?.entry.status,
       source: {
         'language': _learningLanguage,
         'media_id': playerController.mediaId,
@@ -1959,9 +1777,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       },
     );
     if (details != null && mounted) {
-      learningController.updateSinglePhraseProfile(canonical, details);
+      learningController.updateSinglePhraseEntry(
+        canonical,
+        LexicalEntryDetails.fromJson(details),
+      );
       setState(() {
-        status = 'Saved phrase "${candidate['display_form']}"';
+        status = 'Saved phrase "${candidate.displayForm}"';
       });
     }
   }
@@ -2090,22 +1911,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _markFirstWord(String? wordStatus) async {
-    final cue = subtitleController.currentPrimaryCue;
-    final service = api;
-    if (cue == null || service == null) return;
-    final tokens = cue.tokens
-        .where((value) => value.kind == 'word' && value.normalized != null)
-        .toList(growable: false);
-    final token = tokens.isEmpty ? null : tokens.first;
-    if (token == null) return;
-    final profile = await service.updateWordProfile(
-      token.normalized!,
-      token.text,
-      wordStatus,
+    await learningWorkflowController.markFirstWord(
+      api: api,
+      cue: subtitleController.currentPrimaryCue,
+      wordStatus: wordStatus,
       language: _learningLanguage,
-      source: _sourceFor(token, cue),
+      learning: learningController,
+      isMounted: () => mounted,
+      sourceFor: _sourceFor,
     );
-    learningController.updateSingleWordProfile(token.normalized!, profile);
     await _refreshDiagnosis();
   }
 
@@ -2123,99 +1937,58 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() => status = 'Exported diagnostics to ${location.path}');
   }
 
-  Future<void> _loadWordProfiles() async {
-    final lemmas = subtitleController.primaryTrack?.cues
-        .expand((cue) => cue.tokens)
-        .where((token) => token.kind == 'word' && token.normalized != null)
-        .map((token) => token.normalized!)
-        .toSet()
-        .toList();
-    if (lemmas == null || api == null) return;
-    final values = await api!.readWordProfiles(
-      lemmas,
+  Future<void> _loadWordEntries() async {
+    await learningWorkflowController.loadWordEntries(
+      api: api,
+      track: subtitleController.primaryTrack,
       language: _learningLanguage,
+      learning: learningController,
+      isMounted: () => mounted,
     );
-    final profiles = Map<String, Map<String, dynamic>>.fromEntries(
-      values.map(
-        (profile) => MapEntry(profile['normalized_lemma'] as String, profile),
-      ),
-    );
-    learningController.setWordProfiles(profiles);
   }
 
-  Future<void> _loadPhraseProfiles() async {
-    if (api == null) return;
-    final values = await api!.lexicalEntries(
-      kind: 'phrase',
+  Future<void> _loadPhraseEntries() async {
+    await learningWorkflowController.loadPhraseEntries(
+      api: api,
       language: _learningLanguage,
+      learning: learningController,
+      isMounted: () => mounted,
     );
-    if (!mounted) return;
-    final profiles = Map<String, Map<String, dynamic>>.fromEntries(
-      values.map((details) {
-        final entry = details['entry'] as Map<String, dynamic>;
-        return MapEntry(entry['canonical_form'] as String, details);
-      }),
-    );
-    learningController.setPhraseProfiles(profiles);
   }
 
   Future<void> _openWord(SubtitleToken token, Cue cue) async {
-    final lemma = token.normalized;
-    if (lemma == null || api == null) return;
     try {
-      var profile = learningController.wordProfiles[lemma];
-      profile ??= await api!.updateWordProfile(
-        lemma,
-        token.text,
-        null,
+      await learningWorkflowController.openWord(
+        api: api,
+        token: token,
+        cue: cue,
         language: _learningLanguage,
+        learning: learningController,
+        isMounted: () => mounted,
       );
-      final details = await api!.wordDetails(profile['id'] as String);
-      final dictionary = await api!.lookupDictionary(
-        lemma,
-        language: _learningLanguage,
-      );
-      final pronunciation = await api!.lookupPronunciation(token.text);
-      if (!mounted) return;
-      learningController.updateSingleWordProfile(lemma, profile);
-      learningController.setSelectedToken(token);
-      learningController.setSelectedCue(cue);
-      learningController.selectWord(details);
-      learningController.setSelectedDictionary(dictionary);
-      learningController.setSelectedPronunciation(pronunciation);
-      if (api != null) {
-        await learningController.loadLanguageProfile(
-          _learningLanguage,
-          api!.lookupLanguageProfile,
-        );
-      }
-      learningController.selectSidePanel(2);
     } catch (error) {
       if (mounted) setState(() => status = 'Dictionary unavailable: $error');
     }
   }
 
   Future<void> _setSelectedWordStatus(String? selected) async {
-    final token = learningController.selectedToken;
-    final cue = learningController.selectedCue;
-    if (token?.normalized == null || cue == null || api == null) return;
     try {
-      final profile = await api!.updateWordProfile(
-        token!.normalized!,
-        token.text,
-        selected,
+      final update = await learningWorkflowController.setSelectedWordStatus(
+        api: api,
+        selected: selected,
         language: _learningLanguage,
-        source: _sourceFor(token, cue),
+        learning: learningController,
+        isMounted: () => mounted,
+        sourceFor: _sourceFor,
       );
-      final details = await api!.wordDetails(profile['id'] as String);
-      learningController.updateSingleWordProfile(token.normalized!, profile);
-      learningController.selectWord(details);
-      setState(() {
-        status = 'Updated global status for "${token.text}"';
-      });
+      if (mounted && update != null) {
+        setState(() {
+          status = 'Updated global status for "${update.tokenText}"';
+        });
+      }
       await _refreshDiagnosis();
     } catch (error) {
-      setState(() => status = 'Word update failed: $error');
+      if (mounted) setState(() => status = 'Word update failed: $error');
     }
   }
 
@@ -2223,34 +1996,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
     String? definition,
     String? note,
   ) async {
-    final profile =
-        learningController.selectedWordDetails?['profile']
-            as Map<String, dynamic>?;
-    if (profile == null || api == null) return;
-    final details = await api!.updateLearningContent(
-      profile['id'] as String,
-      userDefinition: definition,
-      personalNote: note,
+    await learningWorkflowController.saveSelectedLearningContent(
+      api: api,
+      definition: definition,
+      note: note,
+      learning: learningController,
+      isMounted: () => mounted,
     );
-    if (mounted) {
-      learningController.selectWord(details);
-    }
   }
 
   Future<void> _observeSelected(bool heard) async {
-    final token = learningController.selectedToken;
-    final cue = learningController.selectedCue;
-    final profile =
-        learningController.selectedWordDetails?['profile']
-            as Map<String, dynamic>?;
-    if (token == null || cue == null || profile == null || api == null) return;
-    await api!.createObservation(
-      wordProfileId: profile['id'] as String,
-      sentenceId: cue.id,
-      originalForm: token.text,
+    final observed = await learningWorkflowController.observeSelected(
+      api: api,
       heard: heard,
-      source: _sourceFor(token, cue),
+      learning: learningController,
+      sourceFor: _sourceFor,
     );
+    if (!observed) return;
     if (mounted) {
       setState(() => status = heard ? l.text('heard') : l.text('notHeard'));
     }
@@ -2269,8 +2031,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Map<String, dynamic>? _sourceFor(SubtitleToken token, Cue cue) {
     if (playerController.mediaFingerprint == null) return null;
     return {
-      'language': _learningLanguage,
-      'normalized_lemma': token.normalized,
       'media_id': playerController.mediaId,
       'sentence_id': cue.id,
       'original_form': token.text,
@@ -2279,6 +2039,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       'media_fingerprint': playerController.mediaFingerprint,
       'start_ms': cue.start.inMilliseconds,
       'end_ms': cue.end.inMilliseconds,
+      'token_start': token.index,
+      'token_end': token.index,
     };
   }
 
@@ -2455,14 +2217,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _savePhoneticFindingFeedback(
-    Map<String, dynamic> finding,
+    PhoneticFinding finding,
     String value,
   ) async {
     final service = api;
     if (service == null) return;
     try {
       await service.updatePhoneticFindingFeedback(
-        findingId: finding['id'] as String,
+        findingId: finding.id,
         value: value,
       );
       if (mounted) {
@@ -2501,8 +2263,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         jsonDecode(await File(file.path).readAsString())
             as Map<String, dynamic>;
     await service.importVocabulary(bundle);
-    await _loadWordProfiles();
-    await _loadPhraseProfiles();
+    await _loadWordEntries();
+    await _loadPhraseEntries();
     setState(() => status = 'Imported vocabulary assets');
   }
 
@@ -2587,7 +2349,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       defaultStatus: defaultStatus,
       overwriteExisting: overwrite,
     );
-    await _loadWordProfiles();
+    await _loadWordEntries();
     setState(() => status = 'Imported word list: $result');
   }
 
@@ -2607,16 +2369,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (mounted) learningController.setDiagnosis(null);
       return;
     }
-    try {
-      final value = await service.diagnose(cue.id);
-      if (mounted && cue.id == subtitleController.currentPrimaryCue?.id) {
-        learningController.setDiagnosis(value);
-      }
-    } catch (_) {
-      if (mounted && cue.id == subtitleController.currentPrimaryCue?.id) {
-        learningController.setDiagnosis(null);
-      }
-    }
+    await learningWorkflowController.refreshDiagnosis(
+      cue: cue,
+      diagnose: (cueId) async =>
+          Diagnosis.fromJson(await service.diagnose(cueId)),
+      currentCueId: () => subtitleController.currentPrimaryCue?.id,
+      setDiagnosis: (value) {
+        if (mounted) learningController.setDiagnosis(value);
+      },
+    );
   }
 
   Future<void> _seekCue(Cue? cue) async {
@@ -2792,7 +2553,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           children: [
                             Expanded(flex: 3, child: _playerSurface()),
                             if (subtitleController.visible ||
-                                learningController.selectedWordDetails !=
+                                learningController.selectedLexicalDetails !=
                                     null ||
                                 learningController.sidePanel == 1)
                               SizedBox(
@@ -2904,11 +2665,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 ),
                                 child: TokenLine(
                                   cue: subtitleController.currentPrimaryCue!,
-                                  profiles: learningController.wordProfiles,
+                                  profiles: learningController.wordEntries,
                                   phraseCandidates:
                                       learningController.phraseCandidates,
-                                  phraseProfiles:
-                                      learningController.phraseProfiles,
+                                  phraseEntries:
+                                      learningController.phraseEntries,
                                   showStyles:
                                       subtitleController.statusStylesVisible,
                                   fontSize: primarySize,
@@ -2948,24 +2709,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 builder: (_) {
                                   final cueId =
                                       subtitleController.currentPrimaryCue!.id;
-                                  final raw = subtitleController
+                                  final analysis = subtitleController
                                       .phoneticAnalysisBySentence[cueId];
-                                  final observedPhones =
-                                      ((raw?['detected_phones']
-                                                  as List<dynamic>?) ??
-                                              const [])
-                                          .map(
-                                            (v) => DetectedPhone.fromJson(
-                                              v as Map<String, dynamic>,
-                                            ),
-                                          )
-                                          .toList(growable: false);
                                   final phones = buildLearningPhones(
                                     pronunciation: subtitleController
-                                        .pronunciationBySentence[cueId],
+                                        .pronunciationBySentence[cueId]
+                                        ?.toJson(),
                                     wordTimings: subtitleController
                                         .timingsBySentence[cueId],
-                                    observedPhones: observedPhones,
+                                    observedPhones:
+                                        analysis?.detectedPhones ?? const [],
                                     allowObservedOnlyFallback: false,
                                   );
                                   if (phones.isEmpty) {
@@ -2991,16 +2744,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 builder: (_) {
                                   final cueId =
                                       subtitleController.currentPrimaryCue!.id;
-                                  final raw = subtitleController
+                                  final analysis = subtitleController
                                       .phoneticAnalysisBySentence[cueId];
-                                  final soundAnalysis =
-                                      raw?['sound_analysis'] is Map
-                                      ? SoundAnalysis.fromJson(
-                                          Map<String, dynamic>.from(
-                                            raw!['sound_analysis'] as Map,
-                                          ),
-                                        )
-                                      : null;
+                                  final soundAnalysis = analysis?.soundAnalysis;
                                   if (soundAnalysis == null) {
                                     return Padding(
                                       padding: const EdgeInsets.only(top: 4),
@@ -3021,9 +2767,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                   );
                                   final findings = buildPhonemeRibbonFindings(
                                     rawFindings:
-                                        ((raw?['findings'] as List<dynamic>?) ??
-                                                const [])
-                                            .cast<Map<String, dynamic>>(),
+                                        analysis?.findings
+                                            .map((value) => value.toJson())
+                                            .toList(growable: false) ??
+                                        const [],
                                     phones: phones,
                                     soundAnalysis: soundAnalysis,
                                   );
@@ -3148,10 +2895,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
           child: switch (learningController.sidePanel) {
             1 => _subtitleResources(),
             2 =>
-              learningController.selectedWordDetails == null
+              learningController.selectedLexicalDetails == null
                   ? Center(child: Text(l.text('noWordSelected')))
                   : WordLearningPanel(
-                      details: learningController.selectedWordDetails!,
+                      details: learningController.selectedLexicalDetails!,
                       dictionary: learningController.selectedDictionary,
                       pronunciation: learningController.selectedPronunciation,
                       languageProfile:
@@ -3178,7 +2925,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     scrollController: transcriptController,
     itemExtent: transcriptItemExtent,
     currentCue: subtitleController.currentPrimaryCue,
-    wordProfiles: learningController.wordProfiles,
+    wordEntries: learningController.wordEntries,
     showStyles: subtitleController.statusStylesVisible,
     baseColor: settingsController.primaryColor,
     onWord: _openWord,
@@ -3257,8 +3004,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     ),
     onLoopFinding: (finding) => unawaited(
       _loopPhoneticRange(
-        (finding['audio_start_ms'] as num).toInt(),
-        (finding['audio_end_ms'] as num).toInt(),
+        finding.audioStartMs,
+        finding.audioEndMs,
         'Looping audio finding evidence',
       ),
     ),

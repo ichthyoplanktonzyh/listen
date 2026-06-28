@@ -53,10 +53,9 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
 
   void _scheduleTimer() {
     timer?.cancel();
-    final interval =
-        _hasActiveJobs
-            ? const Duration(seconds: 1)
-            : const Duration(seconds: 5);
+    final interval = _hasActiveJobs
+        ? const Duration(seconds: 1)
+        : const Duration(seconds: 5);
     timer = Timer.periodic(interval, (_) => _refresh());
   }
 
@@ -110,10 +109,9 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
             IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
           ],
         ),
-        body:
-            error != null
-                ? Center(child: Text(error!))
-                : TabBarView(children: [_models(l), _jobs(l)]),
+        body: error != null
+            ? Center(child: Text(error!))
+            : TabBarView(children: [_models(l), _jobs(l)]),
       ),
     );
   }
@@ -121,12 +119,11 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
   Widget _jobCountBadge() {
     final active = jobs.where((j) => _isActive(j['status'] as String)).length;
     final failed = jobs.where((j) => j['status'] == 'failed').length;
-    final color =
-        failed > 0
-            ? Colors.red
-            : active > 0
-                ? Colors.blue
-                : Colors.grey;
+    final color = failed > 0
+        ? Colors.red
+        : active > 0
+        ? Colors.blue
+        : Colors.grey;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
@@ -327,9 +324,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
                 _formatTimestamp(createdAt.toInt()),
                 style: TextStyle(
                   fontSize: 11,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withAlpha(120),
+                  color: Theme.of(context).colorScheme.onSurface.withAlpha(120),
                 ),
               ),
             ),
@@ -347,11 +342,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
       case 'failed':
         return const Icon(Icons.error, color: Colors.red, size: 22);
       case 'cancelled':
-        return Icon(
-          Icons.cancel,
-          color: Colors.orange.shade300,
-          size: 22,
-        );
+        return Icon(Icons.cancel, color: Colors.orange.shade300, size: 22);
       case 'interrupted':
         return Icon(
           Icons.warning_amber,
@@ -449,26 +440,23 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
   Future<void> _confirmDeleteJob(String id, AppLocalizations l) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: Text(l.text('deleteJob')),
-            content: Text(l.text('confirmDeleteJob')),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: Text(l.text('cancel')),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: Text(
-                  l.text('deleteJob'),
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                ),
-              ),
-            ],
+      builder: (ctx) => AlertDialog(
+        title: Text(l.text('deleteJob')),
+        content: Text(l.text('confirmDeleteJob')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l.text('cancel')),
           ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              l.text('deleteJob'),
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ),
+        ],
+      ),
     );
     if (confirmed == true) {
       await widget.api?.deletePhoneticAnalysisJob(id);
@@ -479,26 +467,23 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
   Future<void> _confirmClearTerminal(AppLocalizations l) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: Text(l.text('clearCompleted')),
-            content: Text(l.text('confirmClearJobs')),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: Text(l.text('cancel')),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: Text(
-                  l.text('clearCompleted'),
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                ),
-              ),
-            ],
+      builder: (ctx) => AlertDialog(
+        title: Text(l.text('clearCompleted')),
+        content: Text(l.text('confirmClearJobs')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l.text('cancel')),
           ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              l.text('clearCompleted'),
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ),
+        ],
+      ),
     );
     if (confirmed == true) {
       await widget.api?.clearTerminalPhoneticAnalysisJobs();
@@ -516,9 +501,12 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
     'analyzing',
   }.contains(status);
 
-  static bool _isTerminal(String status) =>
-      const {'completed', 'cancelled', 'failed', 'interrupted'}
-          .contains(status);
+  static bool _isTerminal(String status) => const {
+    'completed',
+    'cancelled',
+    'failed',
+    'interrupted',
+  }.contains(status);
 
   String _formatTimestamp(int ms) {
     final dt = DateTime.fromMillisecondsSinceEpoch(ms);

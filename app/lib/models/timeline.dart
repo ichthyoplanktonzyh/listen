@@ -205,6 +205,32 @@ class WordTiming {
   };
 }
 
+class TimelineMetrics {
+  const TimelineMetrics(this.fields);
+  const TimelineMetrics.empty() : fields = const {};
+
+  factory TimelineMetrics.fromJson(Object? json) => json is Map
+      ? TimelineMetrics(Map<String, dynamic>.from(json))
+      : const TimelineMetrics.empty();
+
+  final Map<String, dynamic> fields;
+
+  Map<String, dynamic> toJson() => Map<String, dynamic>.from(fields);
+}
+
+class ChunkEvidence {
+  const ChunkEvidence(this.fields);
+  const ChunkEvidence.empty() : fields = const {};
+
+  factory ChunkEvidence.fromJson(Object? json) => json is Map
+      ? ChunkEvidence(Map<String, dynamic>.from(json))
+      : const ChunkEvidence.empty();
+
+  final Map<String, dynamic> fields;
+
+  Map<String, dynamic> toJson() => Map<String, dynamic>.from(fields);
+}
+
 class WordTimeline {
   const WordTimeline({
     required this.id,
@@ -232,9 +258,7 @@ class WordTimeline {
     parentTimelineId: json['parent_timeline_id'] as String?,
     createdBy: json['created_by'] as String,
     status: json['status'] as String,
-    metricsJson: Map<String, dynamic>.from(
-      (json['metrics_json'] as Map?) ?? const {},
-    ),
+    metricsJson: TimelineMetrics.fromJson(json['metrics_json']),
     words: (json['words'] as List<dynamic>)
         .map((value) => WordTiming.fromJson(value as Map<String, dynamic>))
         .toList(growable: false),
@@ -251,7 +275,7 @@ class WordTimeline {
   final String? parentTimelineId;
   final String createdBy;
   final String status;
-  final Map<String, dynamic> metricsJson;
+  final TimelineMetrics metricsJson;
   final List<WordTiming> words;
   final Duration createdAt;
   final Duration updatedAt;
@@ -363,9 +387,7 @@ class ChunkTimelineChunk {
         warnings: ((json['warnings'] as List<dynamic>?) ?? const [])
             .cast<String>()
             .toList(growable: false),
-        evidenceJson: Map<String, dynamic>.from(
-          (json['evidence_json'] as Map?) ?? const {},
-        ),
+        evidenceJson: ChunkEvidence.fromJson(json['evidence_json']),
       );
 
   final String id;
@@ -379,7 +401,7 @@ class ChunkTimelineChunk {
   final List<String> boundarySources;
   final double confidence;
   final List<String> warnings;
-  final Map<String, dynamic> evidenceJson;
+  final ChunkEvidence evidenceJson;
 
   DisplayChunk toDisplayChunk({required int sentenceLocalIndex}) =>
       DisplayChunk(
@@ -421,9 +443,7 @@ class ChunkTimeline {
     precision: json['precision'] as String,
     createdBy: json['created_by'] as String,
     status: json['status'] as String,
-    metricsJson: Map<String, dynamic>.from(
-      (json['metrics_json'] as Map?) ?? const {},
-    ),
+    metricsJson: TimelineMetrics.fromJson(json['metrics_json']),
     chunks: (json['chunks'] as List<dynamic>)
         .map(
           (value) => ChunkTimelineChunk.fromJson(value as Map<String, dynamic>),
@@ -443,7 +463,7 @@ class ChunkTimeline {
   final String precision;
   final String createdBy;
   final String status;
-  final Map<String, dynamic> metricsJson;
+  final TimelineMetrics metricsJson;
   final List<ChunkTimelineChunk> chunks;
   final Duration createdAt;
   final Duration updatedAt;
@@ -554,9 +574,7 @@ class PhoneTimeline {
     precision: json['precision'] as String,
     createdBy: json['created_by'] as String,
     status: json['status'] as String,
-    metricsJson: Map<String, dynamic>.from(
-      (json['metrics_json'] as Map?) ?? const {},
-    ),
+    metricsJson: TimelineMetrics.fromJson(json['metrics_json']),
     phones: ((json['phones'] as List<dynamic>?) ?? const [])
         .map((value) => DetectedPhone.fromJson(value as Map<String, dynamic>))
         .toList(growable: false),
@@ -589,7 +607,7 @@ class PhoneTimeline {
   final String precision;
   final String createdBy;
   final String status;
-  final Map<String, dynamic> metricsJson;
+  final TimelineMetrics metricsJson;
   final List<DetectedPhone> phones;
   final List<Map<String, dynamic>> alignments;
   final List<Map<String, dynamic>> findings;
@@ -607,7 +625,7 @@ class PhoneTimeline {
     'model_revision': modelRevision ?? providerVersion,
     'phone_set': phoneSet,
     'precision': precision,
-    'metrics_json': metricsJson,
+    'metrics_json': metricsJson.toJson(),
     'detected_phones': phones.map((value) => value.toJson()).toList(),
     'alignments': alignments,
     'findings': findings,

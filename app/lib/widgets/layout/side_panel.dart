@@ -4,6 +4,7 @@ import '../../localization.dart';
 import '../../controllers/learning_controller.dart';
 import '../../controllers/subtitle_controller.dart';
 import '../../models/timeline.dart';
+import '../../models/types.dart';
 import '../panels/transcript_panel.dart';
 import '../panels/timeline_resource_summary_panel.dart';
 import '../panels/word_learning_panel.dart';
@@ -20,7 +21,7 @@ class SidePanel extends StatelessWidget {
     required this.subtitleController,
     required this.transcriptController,
     required this.transcriptItemExtent,
-    required this.wordProfiles,
+    required this.wordEntries,
     required this.showStyles,
     required this.baseColor,
     required this.languageProfile,
@@ -54,10 +55,10 @@ class SidePanel extends StatelessWidget {
   final SubtitleController subtitleController;
   final ScrollController transcriptController;
   final double transcriptItemExtent;
-  final Map<String, Map<String, dynamic>> wordProfiles;
+  final Map<String, LexicalEntry> wordEntries;
   final bool showStyles;
   final Color baseColor;
-  final Map<String, dynamic>? languageProfile;
+  final LanguageProfile? languageProfile;
 
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
   final Future<void> Function(Cue? cue) onSeekCue;
@@ -73,8 +74,8 @@ class SidePanel extends StatelessWidget {
   final VoidCallback? onAnalyzePhonetics;
   final VoidCallback? onAnalyzeTrackPhonetics;
   final ValueChanged<DetectedPhone>? onLoopDetectedPhone;
-  final ValueChanged<Map<String, dynamic>>? onLoopPhoneticFinding;
-  final void Function(Map<String, dynamic> finding, String value)?
+  final ValueChanged<PhoneticFinding>? onLoopPhoneticFinding;
+  final void Function(PhoneticFinding finding, String value)?
   onPhoneticFindingFeedback;
 
   // Timeline resource callbacks
@@ -127,9 +128,7 @@ class SidePanel extends StatelessWidget {
             onSelectionChanged: (value) => lc.selectSidePanel(value.first),
             showSelectedIcon: false,
           ),
-          Expanded(
-            child: _panelContent(context, l),
-          ),
+          Expanded(child: _panelContent(context, l)),
         ],
       ),
     );
@@ -161,7 +160,7 @@ class SidePanel extends StatelessWidget {
           onExportLLTimeline: onExportLLTimeline,
         );
       case 2:
-        final details = lc.selectedWordDetails;
+        final details = lc.selectedLexicalDetails;
         if (details == null) {
           return Center(child: Text(l.text('noWordSelected')));
         }
@@ -182,13 +181,14 @@ class SidePanel extends StatelessWidget {
           return Center(child: Text(l.text('diagnosis')));
         }
         final cue = sc.currentPrimaryCue;
-        final timingQuality = cue != null && sc.timingsBySentence.containsKey(cue.id)
+        final timingQuality =
+            cue != null && sc.timingsBySentence.containsKey(cue.id)
             ? '${sc.timingsBySentence[cue.id]!.first.source.replaceAll('_', ' ')} · ${sc.timingsBySentence[cue.id]!.first.provider}'
             : null;
         return DiagnosisCard(
           diagnosis: diagnosis,
           pronunciation: sc.pronunciationBySentence[cue?.id],
-          ruleHintsLevel: 'likely',  // from settings
+          ruleHintsLevel: 'likely', // from settings
           pronunciationProviders: sc.pronunciationProviders,
           timingQuality: timingQuality,
           phoneticAnalysis: sc.phoneticAnalysisBySentence[cue?.id],
@@ -205,7 +205,7 @@ class SidePanel extends StatelessWidget {
           scrollController: transcriptController,
           itemExtent: transcriptItemExtent,
           currentCue: sc.currentPrimaryCue,
-          wordProfiles: wordProfiles,
+          wordEntries: wordEntries,
           showStyles: showStyles,
           baseColor: baseColor,
           onWord: onWord,

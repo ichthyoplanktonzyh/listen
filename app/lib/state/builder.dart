@@ -51,8 +51,7 @@ class _StoreBuilderStateful<T, R> extends StatefulWidget {
   final Widget Function(BuildContext, R) builder;
 
   @override
-  State<_StoreBuilderStateful<T, R>> createState() =>
-      _StoreBuilderState();
+  State<_StoreBuilderStateful<T, R>> createState() => _StoreBuilderState();
 }
 
 class _StoreBuilderState<T, R> extends State<_StoreBuilderStateful<T, R>> {

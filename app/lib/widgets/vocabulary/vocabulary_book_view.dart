@@ -19,10 +19,10 @@ class VocabularyBookView extends StatelessWidget {
           itemCount: words.length,
           itemBuilder: (context, index) {
             final value = words[index];
-            final profile = value['profile'] as Map<String, dynamic>;
+            final entry = value['entry'] as Map<String, dynamic>;
             final occurrences = value['occurrences'] as List<dynamic>;
             return ListTile(
-              title: Text(profile['display_form'] as String),
+              title: Text(entry['display_form'] as String),
               subtitle: Text(
                 occurrences.isEmpty
                     ? AppLocalizations.of(context).text('noSourceSnapshot')

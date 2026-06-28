@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../localization.dart';
+import '../models/types.dart';
 import '../services/api_service.dart';
 import '../widgets/panels/word_learning_panel.dart';
 import '../widgets/vocabulary/vocabulary_book_view.dart';
@@ -59,20 +60,24 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   }
 
   Future<void> _details(Map<String, dynamic> value) async {
-    final profile = value['profile'] as Map<String, dynamic>;
-    final details = await widget.api.wordDetails(profile['id'] as String);
-    final dictionary = await widget.api.lookupDictionary(
-      profile['normalized_lemma'] as String,
-      language: widget.language,
+    final entry = LexicalEntry.fromJson(value['entry'] as Map<String, dynamic>);
+    final details = LexicalEntryDetails.fromJson(
+      await widget.api.lexicalEntryDetails(entry.id),
     );
-    final pronunciation = await widget.api.lookupPronunciation(
-      profile['display_form'] as String,
+    final dictionary = DictionaryLookupBundle.fromJson(
+      await widget.api.lookupDictionary(
+        entry.normalizedForm,
+        language: widget.language,
+      ),
+    );
+    final pronunciation = WordPronunciation.fromJson(
+      await widget.api.lookupPronunciation(entry.displayForm),
     );
     if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(profile['display_form'] as String),
+        title: Text(entry.displayForm),
         content: SizedBox(
           width: 700,
           height: 650,
@@ -81,9 +86,9 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
             dictionary: dictionary,
             pronunciation: pronunciation,
             onStatus: (value) async {
-              await widget.api.updateWordProfile(
-                profile['normalized_lemma'] as String,
-                profile['display_form'] as String,
+              await widget.api.upsertWordLexicalEntry(
+                entry.normalizedForm,
+                entry.displayForm,
                 value,
                 language: widget.language,
               );
@@ -91,8 +96,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
               await _load();
             },
             onSave: (definition, note) async {
-              await widget.api.updateLearningContent(
-                profile['id'] as String,
+              await widget.api.updateLexicalLearningContent(
+                entry.id,
                 userDefinition: definition,
                 personalNote: note,
               );

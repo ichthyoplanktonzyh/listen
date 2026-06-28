@@ -99,8 +99,7 @@ class _SlotKey {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _SlotKey && identical(_fn, other._fn);
+      identical(this, other) || other is _SlotKey && identical(_fn, other._fn);
 
   @override
   int get hashCode => identityHashCode(_fn);

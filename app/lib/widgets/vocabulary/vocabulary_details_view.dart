@@ -5,13 +5,13 @@ import '../../localization.dart';
 class VocabularyDetailsView extends StatelessWidget {
   const VocabularyDetailsView({
     super.key,
-    required this.profile,
+    required this.entry,
     required this.occurrences,
     required this.history,
     required this.onSource,
   });
 
-  final Map<String, dynamic> profile;
+  final Map<String, dynamic> entry;
   final List<Map<String, dynamic>> occurrences;
   final List<Map<String, dynamic>> history;
   final ValueChanged<Map<String, dynamic>> onSource;
@@ -23,7 +23,7 @@ class VocabularyDetailsView extends StatelessWidget {
     child: ListView(
       children: [
         Text(
-          '${AppLocalizations.of(context).text('currentStatus')}: ${AppLocalizations.of(context).status(profile['status'] as String?)}',
+          '${AppLocalizations.of(context).text('currentStatus')}: ${AppLocalizations.of(context).status(entry['status'] as String?)}',
         ),
         const SizedBox(height: 16),
         Text(

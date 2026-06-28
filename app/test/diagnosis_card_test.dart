@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
+import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/widgets/panels/diagnosis_card.dart';
 
 void main() {
@@ -22,7 +23,7 @@ void main() {
         ],
         home: Scaffold(
           body: DiagnosisCard(
-            diagnosis: const {'hints': <dynamic>[]},
+            diagnosis: const Diagnosis(),
             onAnalyzePhonetics: () => sentenceRuns++,
             onAnalyzeTrackPhonetics: () => trackRuns++,
           ),
@@ -51,22 +52,16 @@ void main() {
         ],
         home: Scaffold(
           body: DiagnosisCard(
-            diagnosis: const {
-              'hints': [
-                {
-                  'kind': 'recognition_barrier',
-                  'message': 'Known words were not recognized.',
-                  'word_profile_ids': ['p1'],
-                  'reasons': ['tone_confusion', 'word_boundary'],
-                },
-                {
-                  'kind': 'meaning_barrier',
-                  'message': 'Unknown vocabulary.',
-                  'word_profile_ids': ['p2'],
-                  'reasons': <dynamic>[],
-                },
+            diagnosis: const Diagnosis(
+              hints: [
+                DiagnosisHint(
+                  kind: 'recognition_barrier',
+                  lexicalEntryIds: ['p1'],
+                  reasons: ['tone_confusion', 'word_boundary'],
+                ),
+                DiagnosisHint(kind: 'meaning_barrier', lexicalEntryIds: ['p2']),
               ],
-            },
+            ),
           ),
         ),
       ),
@@ -83,17 +78,17 @@ void main() {
     tester,
   ) async {
     DetectedPhone? loopedPhone;
-    Map<String, dynamic>? loopedFinding;
+    PhoneticFinding? loopedFinding;
     String? feedback;
-    final finding = <String, dynamic>{
-      'id': 'finding-1',
-      'finding_type': 'possible_elision',
-      'status': 'uncertain',
-      'confidence': 0.5,
-      'evidence': 'Deletion alignment evidence',
-      'audio_start_ms': 100,
-      'audio_end_ms': 200,
-    };
+    const finding = PhoneticFinding(
+      id: 'finding-1',
+      findingType: 'possible_elision',
+      status: 'uncertain',
+      confidence: 0.5,
+      evidence: 'Deletion alignment evidence',
+      audioStartMs: 100,
+      audioEndMs: 200,
+    );
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
@@ -105,26 +100,38 @@ void main() {
         ],
         home: Scaffold(
           body: DiagnosisCard(
-            diagnosis: const {'hints': <dynamic>[]},
-            pronunciation: const {'rules': <dynamic>[]},
-            phoneticAnalysis: {
-              'provider_id': 'fixture',
-              'model_revision': 'v1',
-              'phone_set': 'test',
-              'detected_phones': [
-                {
-                  'symbol': 'AH',
-                  'phone_set': 'test',
-                  'start_ms': 100,
-                  'end_ms': 150,
-                  'confidence': 0.5,
-                  'token_index': 0,
-                  'provider_id': 'fixture',
-                  'model_revision': 'v1',
-                },
+            diagnosis: const Diagnosis(),
+            pronunciation: const PronunciationAnalysis(
+              sentenceId: 'sentence-1',
+              displayIpa: 'AH',
+              rules: [
+                PronunciationRule(
+                  ruleFamily: 'weak_form',
+                  reason: 'context',
+                  status: 'likely_by_context',
+                  confidence: 0.7,
+                ),
               ],
-              'findings': [finding],
-            },
+            ),
+            phoneticAnalysis: const PhoneticAnalysis(
+              providerId: 'fixture',
+              modelRevision: 'v1',
+              phoneSet: 'test',
+              detectedPhones: [
+                DetectedPhone(
+                  symbol: 'AH',
+                  displayIpa: 'AH',
+                  phoneSet: 'test',
+                  start: Duration(milliseconds: 100),
+                  end: Duration(milliseconds: 150),
+                  confidence: 0.5,
+                  tokenIndex: 0,
+                  provider: 'fixture',
+                  modelRevision: 'v1',
+                ),
+              ],
+              findings: [finding],
+            ),
             onLoopDetectedPhone: (value) => loopedPhone = value,
             onLoopFinding: (value) => loopedFinding = value,
             onFindingFeedback: (_, value) => feedback = value,
@@ -138,20 +145,14 @@ void main() {
     await tester.tap(find.text('AH 50%'));
     expect(loopedPhone?.symbol, 'AH');
 
-    await tester.scrollUntilVisible(
-      find.text('Loop evidence'),
-      100,
-      scrollable: find.byType(Scrollable),
-    );
+    await tester.drag(find.byType(ListView), const Offset(0, -120));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Loop evidence'));
     expect(loopedFinding, same(finding));
     await tester.tap(find.text('Matches what I hear'));
     expect(feedback, 'confirmed');
-    await tester.scrollUntilVisible(
-      find.text('Rule prediction'),
-      100,
-      scrollable: find.byType(Scrollable),
-    );
+    await tester.drag(find.byType(ListView), const Offset(0, -120));
+    await tester.pumpAndSettle();
     expect(find.text('Rule prediction'), findsOneWidget);
   });
 }

@@ -45,7 +45,8 @@ class SubtitleResourcesScreen extends StatefulWidget {
   final Future<void> Function(SubtitleTrack track) onRestoreSubtitle;
   final Future<void> Function(SubtitleTrack track) onDeleteSubtitle;
   final Future<void> Function(SubtitleTrack track) onExportSubtitle;
-  final Future<void> Function(SubtitleTrack track, String language) onLanguageChanged;
+  final Future<void> Function(SubtitleTrack track, String language)
+  onLanguageChanged;
   final List<String> availableLanguages;
   final Future<void> Function(SubtitleTrack track) onExportLLTimeline;
   final Future<void> Function(String timelineId) onActivateWordTimeline;

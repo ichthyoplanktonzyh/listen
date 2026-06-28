@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../models/types.dart';
 import '../vocabulary/pronunciation_button.dart';
 
 class WordLearningPanel extends StatefulWidget {
@@ -17,10 +18,10 @@ class WordLearningPanel extends StatefulWidget {
     required this.onNotHeard,
   });
 
-  final Map<String, dynamic> details;
-  final Map<String, dynamic>? dictionary;
-  final Map<String, dynamic>? pronunciation;
-  final Map<String, dynamic>? languageProfile;
+  final LexicalEntryDetails details;
+  final DictionaryLookupBundle? dictionary;
+  final WordPronunciation? pronunciation;
+  final LanguageProfile? languageProfile;
   final ValueChanged<String?> onStatus;
   final Future<void> Function(String?, String?) onSave;
   final ValueChanged<Map<String, dynamic>> onSource;
@@ -35,26 +36,21 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
   late final TextEditingController definition;
   late final TextEditingController note;
 
-  Map<String, dynamic> get profile =>
-      widget.details['profile'] as Map<String, dynamic>;
+  LexicalEntry get entry => widget.details.entry;
 
   @override
   void initState() {
     super.initState();
-    definition = TextEditingController(
-      text: profile['user_definition'] as String? ?? '',
-    );
-    note = TextEditingController(
-      text: profile['personal_note'] as String? ?? '',
-    );
+    definition = TextEditingController(text: entry.userDefinition ?? '');
+    note = TextEditingController(text: entry.personalNote ?? '');
   }
 
   @override
   void didUpdateWidget(covariant WordLearningPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.details != widget.details) {
-      definition.text = profile['user_definition'] as String? ?? '';
-      note.text = profile['personal_note'] as String? ?? '';
+      definition.text = entry.userDefinition ?? '';
+      note.text = entry.personalNote ?? '';
     }
   }
 
@@ -74,9 +70,11 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
   /// any future language with per-character pronunciation routes through the same
   /// path. Empty for non-Chinese, single-character words, or mismatched counts.
   List<({String character, String pinyin, String meaning})>
-      _hanCharacterBreakdown() {
-    if (widget.languageProfile?['pronunciation'] != 'zh.pinyin') return const [];
-    final word = profile['display_form'] as String;
+  _hanCharacterBreakdown() {
+    if (widget.languageProfile?.pronunciation != 'zh.pinyin') {
+      return const [];
+    }
+    final word = entry.displayForm;
     final characters = word.runes.map(String.fromCharCode).toList();
     if (characters.length < 2) return const [];
     final backend = _backendCharacterBreakdowns();
@@ -90,28 +88,21 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
     if (syllables.length != characters.length) return const [];
     return [
       for (var index = 0; index < characters.length; index += 1)
-        (
-          character: characters[index],
-          pinyin: syllables[index],
-          meaning: '',
-        ),
+        (character: characters[index], pinyin: syllables[index], meaning: ''),
     ];
   }
 
   List<({String character, String pinyin, String meaning})>
-      _backendCharacterBreakdowns() {
-    for (final raw
-        in (widget.dictionary?['results'] as List<dynamic>? ?? const [])) {
-      final lookup = (raw as Map<String, dynamic>)['lookup'] as Map?;
-      final breakdowns =
-          lookup?['character_breakdowns'] as List<dynamic>? ?? const [];
+  _backendCharacterBreakdowns() {
+    for (final result in widget.dictionary?.results ?? const []) {
+      final breakdowns = result.lookup?.characterBreakdowns ?? const [];
       if (breakdowns.isEmpty) continue;
       return [
-        for (final entry in breakdowns)
+        for (final value in breakdowns)
           (
-            character: (entry as Map<String, dynamic>)['character'] as String,
-            pinyin: entry['phonetic'] as String? ?? '',
-            meaning: entry['meaning'] as String? ?? '',
+            character: value.character,
+            pinyin: value.phonetic,
+            meaning: value.meaning,
           ),
       ];
     }
@@ -119,13 +110,10 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
   }
 
   String? _firstChinesePinyin() {
-    for (final raw
-        in (widget.dictionary?['results'] as List<dynamic>? ?? const [])) {
-      final lookup = (raw as Map<String, dynamic>)['lookup'] as Map?;
-      for (final phonetic in (lookup?['phonetics'] as List<dynamic>? ?? const [])) {
-        final map = phonetic as Map<String, dynamic>;
-        final text = (map['text'] as String?)?.trim() ?? '';
-        if (map['region'] == 'zh' && text.isNotEmpty) return text;
+    for (final result in widget.dictionary?.results ?? const []) {
+      for (final phonetic in result.lookup?.phonetics ?? const []) {
+        final text = phonetic.text.trim();
+        if (phonetic.region == 'zh' && text.isNotEmpty) return text;
       }
     }
     return null;
@@ -134,33 +122,26 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final results =
-        (widget.dictionary?['results'] as List<dynamic>? ?? const []);
+    final results = widget.dictionary?.results ?? const [];
     final characterBreakdown = _hanCharacterBreakdown();
     // Only IPA-bearing variants are worth a section. Languages without an IPA
     // pronunciation provider (e.g. Chinese, whose pinyin arrives via the
     // dictionary phonetics below) yield empty variants, so the section hides
     // instead of showing a blank row.
     final pronunciationVariants = [
-      for (final raw in (widget.pronunciation?['variants'] as List<dynamic>? ??
-          const []))
-        if (((raw as Map<String, dynamic>)['display_ipa'] as String?)
-                ?.isNotEmpty ??
-            false)
-          raw,
+      for (final variant in widget.pronunciation?.variants ?? const [])
+        if (variant.displayIpa.isNotEmpty) variant,
     ];
-    final occurrences = widget.details['occurrences'] as List<dynamic>;
-    final history = widget.details['history'] as List<dynamic>;
+    final occurrences = widget.details.occurrences;
+    final history = widget.details.history;
     return ListView(
       padding: const EdgeInsets.all(14),
       children: [
         Text(
-          profile['display_form'] as String,
+          entry.displayForm,
           style: Theme.of(context).textTheme.headlineMedium,
         ),
-        Text(
-          '${l.text('currentStatus')}: ${l.status(profile['status'] as String?)}',
-        ),
+        Text('${l.text('currentStatus')}: ${l.status(entry.status)}'),
         Wrap(
           spacing: 6,
           children: [
@@ -172,7 +153,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
             ])
               ChoiceChip(
                 label: Text(l.status(value)),
-                selected: profile['status'] == value,
+                selected: entry.status == value,
                 onSelected: (_) => widget.onStatus(value),
               ),
           ],
@@ -197,19 +178,13 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
                         entry.character,
                         style: const TextStyle(fontSize: 22),
                       ),
-                      Text(
-                        entry.pinyin,
-                        style: const TextStyle(fontSize: 13),
-                      ),
+                      Text(entry.pinyin, style: const TextStyle(fontSize: 13)),
                       if (entry.meaning.isNotEmpty)
                         Text(
                           entry.meaning,
                           style: TextStyle(
                             fontSize: 11,
-                            color: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.color
+                            color: Theme.of(context).textTheme.bodySmall?.color
                                 ?.withValues(alpha: 0.7),
                           ),
                           maxLines: 2,
@@ -228,15 +203,13 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
             l.text('pronunciation'),
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-          for (final raw in pronunciationVariants)
+          for (final variant in pronunciationVariants)
             ListTile(
               dense: true,
-              title: Text(
-                raw['display_ipa'] as String,
-              ),
+              title: Text(variant.displayIpa),
               subtitle: Text(
-                '${raw['is_fallback'] == true ? 'deterministic fallback' : 'CMUdict'} · '
-                '${(raw['phonemes'] as List<dynamic>).map((value) => (value as Map<String, dynamic>)['symbol']).join(' ')}',
+                '${variant.isFallback ? 'deterministic fallback' : 'CMUdict'} · '
+                '${variant.phonemes.map((value) => value.symbol).join(' ')}',
               ),
             ),
           const Divider(),
@@ -246,46 +219,35 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         if (results.isEmpty) Text(l.text('noDictionary')),
-        for (final raw in results)
+        for (final result in results)
           Builder(
             builder: (context) {
-              final result = raw as Map<String, dynamic>;
-              final provider = result['provider'] as Map<String, dynamic>;
-              final lookup = result['lookup'] as Map<String, dynamic>?;
+              final lookup = result.lookup;
               return ExpansionTile(
                 initiallyExpanded: true,
-                title: Text(provider['display_name'] as String),
-                subtitle: result['error'] == null
+                title: Text(result.provider.displayName),
+                subtitle: result.error == null
                     ? null
                     : Text(l.text('providerUnavailable')),
                 children: [
-                  if (result['error'] != null)
-                    ListTile(title: Text(result['error'] as String)),
+                  if (result.error != null)
+                    ListTile(title: Text(result.error!)),
                   if (lookup != null)
-                    for (final value in lookup['phonetics'] as List<dynamic>)
+                    for (final value in lookup.phonetics)
                       ListTile(
                         dense: true,
-                        title: Text(
-                          (value as Map<String, dynamic>)['text'] as String,
-                        ),
+                        title: Text(value.text),
                         trailing:
-                            value['audio_url'] is String &&
-                                (value['audio_url'] as String).isNotEmpty
-                            ? PronunciationButton(
-                                audioUrl: value['audio_url'] as String,
-                              )
+                            value.audioUrl != null && value.audioUrl!.isNotEmpty
+                            ? PronunciationButton(audioUrl: value.audioUrl!)
                             : null,
                       ),
                   if (lookup != null)
-                    for (final value in lookup['definitions'] as List<dynamic>)
+                    for (final value in lookup.definitions)
                       ListTile(
                         dense: true,
-                        title: Text(
-                          (value as Map<String, dynamic>)['text'] as String,
-                        ),
-                        subtitle: Text(
-                          value['part_of_speech'] as String? ?? '',
-                        ),
+                        title: Text(value.text),
+                        subtitle: Text(value.partOfSpeech ?? ''),
                       ),
                 ],
               );
@@ -322,31 +284,29 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
           l.text('sources'),
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        for (final raw in occurrences)
+        for (final occurrence in occurrences)
           ListTile(
-            title: Text(
-              (raw as Map<String, dynamic>)['sentence_text_snapshot'] as String,
-            ),
+            title: Text(occurrence.sentenceTextSnapshot),
             subtitle: Text(
-              '${raw['media_title_snapshot']} · ${l.text('encountered')} ${raw['encounter_count']} ${l.text('times')}',
+              '${occurrence.mediaTitleSnapshot} · ${l.text('encountered')} ${occurrence.encounterCount} ${l.text('times')}',
             ),
             trailing: Icon(
-              raw['media_id'] == null ? Icons.link_off : Icons.play_arrow,
+              occurrence.mediaId == null ? Icons.link_off : Icons.play_arrow,
             ),
-            onTap: () => widget.onSource(raw),
+            onTap: () => widget.onSource(occurrence.toJson()),
           ),
         const Divider(),
         Text(
           l.text('statusHistory'),
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        for (final raw in history)
+        for (final item in history)
           ListTile(
             dense: true,
             title: Text(
-              '${l.status((raw as Map<String, dynamic>)['previous_status'] as String?)} → ${l.status(raw['new_status'] as String?)}',
+              '${l.status(item.previousStatus)} → ${l.status(item.newStatus)}',
             ),
-            subtitle: Text('${raw['change_source']} · ${raw['changed_at_ms']}'),
+            subtitle: Text('${item.changeSource} · ${item.changedAtMs}'),
           ),
       ],
     );

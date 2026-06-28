@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/learning_controller.dart';
 import '../../controllers/subtitle_controller.dart';
 import '../../models/timeline.dart';
+import '../../models/types.dart';
 import '../../settings.dart';
 import '../../utils/subtitle_style.dart';
 import '../../player_adapter.dart';
@@ -33,7 +34,7 @@ class SubtitleOverlay extends StatelessWidget {
   final DesktopPlayerAdapter adapter;
   final String? Function(String) tokenLineFontFamily;
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
-  final Future<void> Function(Map<String, dynamic> candidate, Cue cue) onPhrase;
+  final Future<void> Function(PhraseCandidate candidate, Cue cue) onPhrase;
   final Future<void> Function(DisplayChunk chunk) onChunk;
   final Future<void> Function(Cue cue) onSeekCue;
   final Future<void> Function() onSaveSettings;
@@ -71,10 +72,10 @@ class SubtitleOverlay extends StatelessWidget {
         return Stack(
           alignment: Alignment.bottomCenter,
           children: [
-            const Positioned.fill(
-              child: ColoredBox(color: Colors.black),
-            ),
-            if (sc.visible && (cue != null || (sc.secondaryVisible && sc.currentSecondaryCue != null)))
+            const Positioned.fill(child: ColoredBox(color: Colors.black)),
+            if (sc.visible &&
+                (cue != null ||
+                    (sc.secondaryVisible && sc.currentSecondaryCue != null)))
               Align(
                 alignment: Alignment(
                   subtitlePosition.dx * 2 - 1,
@@ -117,9 +118,9 @@ class SubtitleOverlay extends StatelessWidget {
                                   onTap: () => onSeekCue(cue),
                                   child: TokenLine(
                                     cue: cue,
-                                    profiles: lc.wordProfiles,
+                                    profiles: lc.wordEntries,
                                     phraseCandidates: lc.phraseCandidates,
-                                    phraseProfiles: lc.phraseProfiles,
+                                    phraseEntries: lc.phraseEntries,
                                     showStyles: sc.statusStylesVisible,
                                     fontSize: primarySize,
                                     fontFamily: tokenLineFontFamily(
@@ -198,7 +199,6 @@ class SubtitleOverlay extends StatelessWidget {
     );
   }
 
-  String _pronunciationText(Map<String, dynamic> analysis) {
-    return analysis['display_ipa'] as String;
-  }
+  String _pronunciationText(PronunciationAnalysis analysis) =>
+      analysis.displayIpa;
 }

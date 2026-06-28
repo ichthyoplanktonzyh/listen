@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/timeline.dart';
+import '../../models/types.dart';
 
 /// Renders a subtitle [Cue] as a line of style-aware tokens,
 /// with clickable words and phrase underlines.
@@ -13,7 +14,7 @@ class TokenLine extends StatelessWidget {
     required this.onWord,
     this.onChunk,
     this.phraseCandidates = const [],
-    this.phraseProfiles = const {},
+    this.phraseEntries = const {},
     this.onPhrase,
     this.fontSize = 15,
     this.fontFamily,
@@ -28,7 +29,7 @@ class TokenLine extends StatelessWidget {
   });
 
   final Cue cue;
-  final Map<String, Map<String, dynamic>> profiles;
+  final Map<String, LexicalEntry> profiles;
   final bool showStyles;
   final double fontSize;
   final String? fontFamily;
@@ -42,10 +43,9 @@ class TokenLine extends StatelessWidget {
   final double currentWordIntensity;
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
   final Future<void> Function(DisplayChunk chunk)? onChunk;
-  final List<Map<String, dynamic>> phraseCandidates;
-  final Map<String, Map<String, dynamic>> phraseProfiles;
-  final Future<void> Function(Map<String, dynamic> candidate, Cue cue)?
-  onPhrase;
+  final List<PhraseCandidate> phraseCandidates;
+  final Map<String, LexicalEntryDetails> phraseEntries;
+  final Future<void> Function(PhraseCandidate candidate, Cue cue)? onPhrase;
 
   @override
   Widget build(BuildContext context) => Text.rich(
@@ -149,14 +149,13 @@ class TokenLine extends StatelessWidget {
       phraseCandidates
           .where(
             (candidate) =>
-                (candidate['token_start'] as int) >= firstIndex &&
-                (candidate['token_end'] as int) <= lastIndex,
+                candidate.tokenStart >= firstIndex &&
+                candidate.tokenEnd <= lastIndex,
           )
           .toList(growable: false),
     );
     final byStart = {
-      for (final candidate in candidates)
-        candidate['token_start'] as int: candidate,
+      for (final candidate in candidates) candidate.tokenStart: candidate,
     };
     final spans = <InlineSpan>[];
     var cursor = 0;
@@ -167,24 +166,21 @@ class TokenLine extends StatelessWidget {
         cursor += 1;
         continue;
       }
-      final end = candidate['token_end'] as int;
+      final end = candidate.tokenEnd;
       final phraseTokens = <SubtitleToken>[];
       while (cursor < tokens.length && tokens[cursor].index <= end) {
         phraseTokens.add(tokens[cursor]);
         cursor += 1;
       }
-      final canonical = candidate['canonical_form'] as String;
-      final status =
-          (phraseProfiles[canonical]?['entry']
-                  as Map<String, dynamic>?)?['status']
-              as String?;
+      final canonical = candidate.canonicalForm;
+      final status = phraseEntries[canonical]?.entry.status;
       spans.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.baseline,
           baseline: TextBaseline.alphabetic,
           child: PhraseUnderlineSpan(
             color: _phraseColor(context, status),
-            tooltip: candidate['display_form'] as String,
+            tooltip: candidate.displayForm,
             onTap: onPhrase == null ? null : () => onPhrase!(candidate, cue),
             child: Text.rich(
               TextSpan(
@@ -202,7 +198,7 @@ class TokenLine extends StatelessWidget {
 
   InlineSpan _tokenSpan(BuildContext context, SubtitleToken token) {
     final clickable = token.kind == 'word' && token.normalized != null;
-    final status = profiles[token.normalized]?['status'] as String?;
+    final status = profiles[token.normalized]?.status;
     final current = token.index == currentTokenIndex;
     final style = _style(context, status, current: current);
     if (!clickable) return TextSpan(text: token.text, style: style);
@@ -285,32 +281,25 @@ class TokenLine extends StatelessWidget {
 }
 
 /// Select non-overlapping phrases prioritizing longer spans.
-List<Map<String, dynamic>> _nonOverlappingPhraseCandidates(
-  List<Map<String, dynamic>> values,
+List<PhraseCandidate> _nonOverlappingPhraseCandidates(
+  List<PhraseCandidate> values,
 ) {
   final sorted = [...values]
     ..sort((left, right) {
-      final leftLength =
-          (left['token_end'] as int) - (left['token_start'] as int);
-      final rightLength =
-          (right['token_end'] as int) - (right['token_start'] as int);
+      final leftLength = left.tokenEnd - left.tokenStart;
+      final rightLength = right.tokenEnd - right.tokenStart;
       return rightLength.compareTo(leftLength);
     });
-  final selected = <Map<String, dynamic>>[];
+  final selected = <PhraseCandidate>[];
   for (final candidate in sorted) {
-    final start = candidate['token_start'] as int;
-    final end = candidate['token_end'] as int;
+    final start = candidate.tokenStart;
+    final end = candidate.tokenEnd;
     final overlaps = selected.any(
-      (value) =>
-          start <= (value['token_end'] as int) &&
-          end >= (value['token_start'] as int),
+      (value) => start <= value.tokenEnd && end >= value.tokenStart,
     );
     if (!overlaps) selected.add(candidate);
   }
-  selected.sort(
-    (left, right) =>
-        (left['token_start'] as int).compareTo(right['token_start'] as int),
-  );
+  selected.sort((left, right) => left.tokenStart.compareTo(right.tokenStart));
   return selected;
 }
 

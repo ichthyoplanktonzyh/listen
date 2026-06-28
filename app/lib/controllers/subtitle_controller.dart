@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/timeline.dart';
+import '../models/types.dart';
 import '../state/store.dart';
 
 const _unset = Object();
@@ -63,10 +64,10 @@ class SubtitleState {
   final double positionX;
   final double positionY;
   final double backgroundOpacity;
-  final Map<String, Map<String, dynamic>> pronunciationBySentence;
+  final Map<String, PronunciationAnalysis> pronunciationBySentence;
   final Map<String, List<WordTiming>> timingsBySentence;
   final Map<String, SentenceChunkPartition> chunkPartitionsBySentence;
-  final List<Map<String, dynamic>> pronunciationProviders;
+  final List<PronunciationProvider> pronunciationProviders;
   final List<SubtitleTrack> subtitleResources;
   final Map<String, SubtitleResourceCapabilities> subtitleResourceCapabilities;
   final List<WordTimelineSummary> wordTimelineSummaries;
@@ -75,7 +76,7 @@ class SubtitleState {
   final LLTimelineDocument? llTimelineDocument;
   final String? timelineResourceError;
   final int? currentWordToken;
-  final Map<String, Map<String, dynamic>> phoneticAnalysisBySentence;
+  final Map<String, PhoneticAnalysis> phoneticAnalysisBySentence;
   final DetectedPhone? currentDetectedPhone;
   final int? currentChunkIndex;
 
@@ -99,10 +100,10 @@ class SubtitleState {
     double? positionX,
     double? positionY,
     double? backgroundOpacity,
-    Map<String, Map<String, dynamic>>? pronunciationBySentence,
+    Map<String, PronunciationAnalysis>? pronunciationBySentence,
     Map<String, List<WordTiming>>? timingsBySentence,
     Map<String, SentenceChunkPartition>? chunkPartitionsBySentence,
-    List<Map<String, dynamic>>? pronunciationProviders,
+    List<PronunciationProvider>? pronunciationProviders,
     List<SubtitleTrack>? subtitleResources,
     Map<String, SubtitleResourceCapabilities>? subtitleResourceCapabilities,
     List<WordTimelineSummary>? wordTimelineSummaries,
@@ -111,7 +112,7 @@ class SubtitleState {
     Object? llTimelineDocument = _unset,
     Object? timelineResourceError = _unset,
     Object? currentWordToken = _unset,
-    Map<String, Map<String, dynamic>>? phoneticAnalysisBySentence,
+    Map<String, PhoneticAnalysis>? phoneticAnalysisBySentence,
     Object? currentDetectedPhone = _unset,
     Object? currentChunkIndex = _unset,
   }) => SubtitleState(
@@ -225,13 +226,13 @@ class SubtitleController extends ChangeNotifier {
   double get positionX => _store.state.positionX;
   double get positionY => _store.state.positionY;
   double get backgroundOpacity => _store.state.backgroundOpacity;
-  Map<String, Map<String, dynamic>> get pronunciationBySentence =>
+  Map<String, PronunciationAnalysis> get pronunciationBySentence =>
       _store.state.pronunciationBySentence;
   Map<String, List<WordTiming>> get timingsBySentence =>
       _store.state.timingsBySentence;
   Map<String, SentenceChunkPartition> get chunkPartitionsBySentence =>
       _store.state.chunkPartitionsBySentence;
-  List<Map<String, dynamic>> get pronunciationProviders =>
+  List<PronunciationProvider> get pronunciationProviders =>
       _store.state.pronunciationProviders;
   List<SubtitleTrack> get subtitleResources => _store.state.subtitleResources;
   Map<String, SubtitleResourceCapabilities> get subtitleResourceCapabilities =>
@@ -245,7 +246,7 @@ class SubtitleController extends ChangeNotifier {
   LLTimelineDocument? get llTimelineDocument => _store.state.llTimelineDocument;
   String? get timelineResourceError => _store.state.timelineResourceError;
   int? get currentWordToken => _store.state.currentWordToken;
-  Map<String, Map<String, dynamic>> get phoneticAnalysisBySentence =>
+  Map<String, PhoneticAnalysis> get phoneticAnalysisBySentence =>
       _store.state.phoneticAnalysisBySentence;
   DetectedPhone? get currentDetectedPhone => _store.state.currentDetectedPhone;
   int? get currentChunkIndex => _store.state.currentChunkIndex;
@@ -337,10 +338,10 @@ class SubtitleController extends ChangeNotifier {
       _store.update((s) => s.copyWith(backgroundOpacity: opacity));
 
   void setSpeechEnhancements({
-    required Map<String, Map<String, dynamic>> pronunciationBySentence,
+    required Map<String, PronunciationAnalysis> pronunciationBySentence,
     required Map<String, List<WordTiming>> timingsBySentence,
-    required List<Map<String, dynamic>> pronunciationProviders,
-    Map<String, Map<String, dynamic>> phoneticAnalysisBySentence = const {},
+    required List<PronunciationProvider> pronunciationProviders,
+    Map<String, PhoneticAnalysis> phoneticAnalysisBySentence = const {},
     Map<String, SentenceChunkPartition> chunkPartitionsBySentence = const {},
   }) => _store.update(
     (s) => s.copyWith(
@@ -363,10 +364,10 @@ class SubtitleController extends ChangeNotifier {
 
   void setSentencePronunciation(
     String sentenceId,
-    Map<String, dynamic> pronunciation,
+    PronunciationAnalysis pronunciation,
   ) {
     final s = _store.state;
-    final values = Map<String, Map<String, dynamic>>.from(
+    final values = Map<String, PronunciationAnalysis>.from(
       s.pronunciationBySentence,
     );
     values[sentenceId] = pronunciation;
@@ -454,14 +455,11 @@ class SubtitleController extends ChangeNotifier {
   }) {
     final s = _store.state;
     final cue = s.currentPrimaryCue;
-    final raw = !enabled || cue == null
+    final analysis = !enabled || cue == null
         ? null
         : s.phoneticAnalysisBySentence[cue.id];
-    final phones = ((raw?['detected_phones'] as List<dynamic>?) ?? const [])
-        .map((value) => DetectedPhone.fromJson(value as Map<String, dynamic>))
-        .toList(growable: false);
     final phone = currentDetectedPhoneAt(
-      phones,
+      analysis?.detectedPhones ?? const [],
       mediaPosition,
       offset: s.primarySubtitleOffset,
     );

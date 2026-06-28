@@ -1,0 +1,272 @@
+import '../models/timeline.dart';
+import '../models/types.dart';
+import '../services/api_service.dart';
+import 'learning_controller.dart';
+
+class LearningWordStatusUpdate {
+  const LearningWordStatusUpdate({required this.tokenText});
+
+  final String tokenText;
+}
+
+class LearningWorkflowController {
+  int _diagnosisGeneration = 0;
+  int _phraseCandidateGeneration = 0;
+
+  Future<void> loadPhraseCandidates({
+    required LocalApi? api,
+    required Cue? cue,
+    required LearningController learning,
+    required bool Function() isMounted,
+    required String? Function() currentCueId,
+  }) async {
+    final generation = ++_phraseCandidateGeneration;
+    if (api == null || cue == null) {
+      if (isMounted()) learning.setPhraseCandidates(const []);
+      return;
+    }
+    try {
+      if (isMounted() &&
+          _isCurrentPhraseRequest(generation, cue.id, currentCueId())) {
+        learning.setPhraseCandidates(const []);
+      }
+      final candidates = (await api.phraseCandidates(
+        cue.id,
+      )).map(PhraseCandidate.fromJson).toList(growable: false);
+      if (isMounted() &&
+          _isCurrentPhraseRequest(generation, cue.id, currentCueId())) {
+        learning.setPhraseCandidates(candidates);
+      }
+    } catch (_) {
+      if (isMounted() &&
+          _isCurrentPhraseRequest(generation, cue.id, currentCueId())) {
+        learning.setPhraseCandidates(const []);
+      }
+    }
+  }
+
+  Future<void> loadWordEntries({
+    required LocalApi? api,
+    required SubtitleTrack? track,
+    required String language,
+    required LearningController learning,
+    required bool Function() isMounted,
+  }) async {
+    final lemmas = track?.cues
+        .expand((cue) => cue.tokens)
+        .where((token) => token.kind == 'word' && token.normalized != null)
+        .map((token) => token.normalized!)
+        .toSet()
+        .toList();
+    if (lemmas == null || api == null) return;
+    final values = await api.readLexicalEntriesBatch(
+      lemmas,
+      language: language,
+    );
+    if (!isMounted()) return;
+    final entries = Map<String, LexicalEntry>.fromEntries(
+      values.map((entry) {
+        final value = LexicalEntry.fromJson(entry);
+        return MapEntry(value.normalizedForm, value);
+      }),
+    );
+    learning.setWordEntries(entries);
+  }
+
+  Future<void> loadPhraseEntries({
+    required LocalApi? api,
+    required String language,
+    required LearningController learning,
+    required bool Function() isMounted,
+  }) async {
+    if (api == null) return;
+    final values = await api.lexicalEntries(kind: 'phrase', language: language);
+    if (!isMounted()) return;
+    final entries = Map<String, LexicalEntryDetails>.fromEntries(
+      values.map((details) {
+        final value = LexicalEntryDetails.fromJson(details);
+        return MapEntry(value.entry.normalizedForm, value);
+      }),
+    );
+    learning.setPhraseEntries(entries);
+  }
+
+  Future<void> openWord({
+    required LocalApi? api,
+    required SubtitleToken token,
+    required Cue cue,
+    required String language,
+    required LearningController learning,
+    required bool Function() isMounted,
+  }) async {
+    final lemma = token.normalized;
+    if (lemma == null || api == null) return;
+    var entry = learning.wordEntries[lemma];
+    late final LexicalEntryDetails details;
+    if (entry == null) {
+      details = LexicalEntryDetails.fromJson(
+        await api.upsertWordLexicalEntry(
+          lemma,
+          token.text,
+          null,
+          language: language,
+        ),
+      );
+      entry = details.entry;
+    } else {
+      details = LexicalEntryDetails.fromJson(
+        await api.lexicalEntryDetails(entry.id),
+      );
+    }
+    final dictionary = DictionaryLookupBundle.fromJson(
+      await api.lookupDictionary(lemma, language: language),
+    );
+    final pronunciation = WordPronunciation.fromJson(
+      await api.lookupPronunciation(token.text),
+    );
+    final languageProfile =
+        learning.languageProfileFor(language) ??
+        LanguageProfile.fromJson(await api.lookupLanguageProfile(language));
+    if (!isMounted()) return;
+    learning.updateSingleWordEntry(lemma, entry);
+    learning.setSelectedToken(token);
+    learning.setSelectedCue(cue);
+    learning.selectWord(details);
+    learning.setSelectedDictionary(dictionary);
+    learning.setSelectedPronunciation(pronunciation);
+    learning.setLanguageProfile(languageProfile);
+    learning.selectSidePanel(2);
+  }
+
+  Future<LexicalEntryDetails?> markFirstWord({
+    required LocalApi? api,
+    required Cue? cue,
+    required String? wordStatus,
+    required String language,
+    required LearningController learning,
+    required bool Function() isMounted,
+    required Map<String, dynamic>? Function(SubtitleToken token, Cue cue)
+    sourceFor,
+  }) async {
+    if (cue == null || api == null) return null;
+    final tokens = cue.tokens
+        .where((value) => value.kind == 'word' && value.normalized != null)
+        .toList(growable: false);
+    final token = tokens.isEmpty ? null : tokens.first;
+    if (token == null) return null;
+    final details = LexicalEntryDetails.fromJson(
+      await api.upsertWordLexicalEntry(
+        token.normalized!,
+        token.text,
+        wordStatus,
+        language: language,
+        source: sourceFor(token, cue),
+      ),
+    );
+    if (isMounted()) {
+      learning.updateSingleWordEntry(token.normalized!, details.entry);
+    }
+    return details;
+  }
+
+  Future<LearningWordStatusUpdate?> setSelectedWordStatus({
+    required LocalApi? api,
+    required String? selected,
+    required String language,
+    required LearningController learning,
+    required bool Function() isMounted,
+    required Map<String, dynamic>? Function(SubtitleToken token, Cue cue)
+    sourceFor,
+  }) async {
+    final token = learning.selectedToken;
+    final cue = learning.selectedCue;
+    if (token?.normalized == null || cue == null || api == null) return null;
+    final details = LexicalEntryDetails.fromJson(
+      await api.upsertWordLexicalEntry(
+        token!.normalized!,
+        token.text,
+        selected,
+        language: language,
+        source: sourceFor(token, cue),
+      ),
+    );
+    if (!isMounted()) return null;
+    learning.updateSingleWordEntry(token.normalized!, details.entry);
+    learning.selectWord(details);
+    return LearningWordStatusUpdate(tokenText: token.text);
+  }
+
+  Future<void> saveSelectedLearningContent({
+    required LocalApi? api,
+    required String? definition,
+    required String? note,
+    required LearningController learning,
+    required bool Function() isMounted,
+  }) async {
+    final entry = learning.selectedLexicalDetails?.entry;
+    if (entry == null || api == null) return;
+    final details = LexicalEntryDetails.fromJson(
+      await api.updateLexicalLearningContent(
+        entry.id,
+        userDefinition: definition,
+        personalNote: note,
+      ),
+    );
+    if (isMounted()) learning.selectWord(details);
+  }
+
+  Future<bool> observeSelected({
+    required LocalApi? api,
+    required bool heard,
+    required LearningController learning,
+    required Map<String, dynamic>? Function(SubtitleToken token, Cue cue)
+    sourceFor,
+  }) async {
+    final token = learning.selectedToken;
+    final cue = learning.selectedCue;
+    final entry = learning.selectedLexicalDetails?.entry;
+    if (token == null || cue == null || entry == null || api == null) {
+      return false;
+    }
+    await api.createLexicalObservation(
+      lexicalEntryId: entry.id,
+      sentenceId: cue.id,
+      originalForm: token.text,
+      heard: heard,
+      source: sourceFor(token, cue),
+    );
+    return true;
+  }
+
+  Future<void> refreshDiagnosis({
+    required Cue? cue,
+    required Future<Diagnosis> Function(String cueId) diagnose,
+    required String? Function() currentCueId,
+    required void Function(Diagnosis? diagnosis) setDiagnosis,
+  }) async {
+    final generation = ++_diagnosisGeneration;
+    if (cue == null) {
+      setDiagnosis(null);
+      return;
+    }
+    try {
+      final value = await diagnose(cue.id);
+      if (_isCurrent(generation, cue.id, currentCueId())) {
+        setDiagnosis(value);
+      }
+    } catch (_) {
+      if (_isCurrent(generation, cue.id, currentCueId())) {
+        setDiagnosis(null);
+      }
+    }
+  }
+
+  bool _isCurrent(int generation, String cueId, String? currentCueId) =>
+      generation == _diagnosisGeneration && cueId == currentCueId;
+
+  bool _isCurrentPhraseRequest(
+    int generation,
+    String cueId,
+    String? currentCueId,
+  ) => generation == _phraseCandidateGeneration && cueId == currentCueId;
+}

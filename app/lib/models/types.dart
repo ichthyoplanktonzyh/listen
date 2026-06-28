@@ -4,22 +4,24 @@ import 'timeline.dart';
 // Typed domain models replacing Map<String, dynamic>
 // ──────────────────────────────────────────────
 
-/// A user's word learning profile.
-class WordProfile {
-  const WordProfile({
+/// A user's lexical learning asset.
+class LexicalEntry {
+  const LexicalEntry({
     required this.id,
-    required this.normalizedLemma,
+    required this.normalizedForm,
     required this.displayForm,
+    required this.kind,
     this.status,
     this.userDefinition,
     this.personalNote,
     required this.language,
   });
 
-  factory WordProfile.fromJson(Map<String, dynamic> json) => WordProfile(
+  factory LexicalEntry.fromJson(Map<String, dynamic> json) => LexicalEntry(
     id: json['id'] as String,
-    normalizedLemma: json['normalized_lemma'] as String,
+    normalizedForm: json['normalized_form'] as String,
     displayForm: json['display_form'] as String,
+    kind: json['kind'] as String,
     status: json['status'] as String?,
     userDefinition: json['user_definition'] as String?,
     personalNote: json['personal_note'] as String?,
@@ -27,10 +29,11 @@ class WordProfile {
   );
 
   final String id;
-  final String normalizedLemma;
+  final String normalizedForm;
   final String displayForm;
+  final String kind;
 
-  /// Word status: null | 'unknown_meaning' | 'known_not_recognized' | 'known_recognized'
+  /// Learning status: null | 'unknown_meaning' | 'known_not_recognized' | 'known_recognized'
   final String? status;
   final String? userDefinition;
   final String? personalNote;
@@ -38,22 +41,24 @@ class WordProfile {
 
   Map<String, dynamic> toJson() => {
     'id': id,
-    'normalized_lemma': normalizedLemma,
+    'normalized_form': normalizedForm,
     'display_form': displayForm,
+    'kind': kind,
     'status': status,
     'user_definition': userDefinition,
     'personal_note': personalNote,
     'language': language,
   };
 
-  WordProfile copyWith({
+  LexicalEntry copyWith({
     String? status,
     String? userDefinition,
     String? personalNote,
-  }) => WordProfile(
+  }) => LexicalEntry(
     id: id,
-    normalizedLemma: normalizedLemma,
+    normalizedForm: normalizedForm,
     displayForm: displayForm,
+    kind: kind,
     status: status ?? this.status,
     userDefinition: userDefinition ?? this.userDefinition,
     personalNote: personalNote ?? this.personalNote,
@@ -61,31 +66,39 @@ class WordProfile {
   );
 }
 
-/// History entry for a word's status change.
-class WordStatusHistory {
-  const WordStatusHistory({
-    required this.status,
-    this.source,
-    required this.changedAt,
+/// History entry for a lexical asset status change.
+class LexicalStatusHistory {
+  const LexicalStatusHistory({
+    this.previousStatus,
+    this.newStatus,
+    required this.changeSource,
+    required this.changedAtMs,
   });
 
-  factory WordStatusHistory.fromJson(Map<String, dynamic> json) =>
-      WordStatusHistory(
-        status: json['status'] as String,
-        source: json['source'] as Map<String, dynamic>?,
-        changedAt: DateTime.fromMillisecondsSinceEpoch(
-          json['changed_at'] as int,
-        ),
+  factory LexicalStatusHistory.fromJson(Map<String, dynamic> json) =>
+      LexicalStatusHistory(
+        previousStatus: json['previous_status'] as String?,
+        newStatus: json['new_status'] as String?,
+        changeSource: json['change_source'] as String,
+        changedAtMs: json['changed_at_ms'] as int,
       );
 
-  final String status;
-  final Map<String, dynamic>? source;
-  final DateTime changedAt;
+  final String? previousStatus;
+  final String? newStatus;
+  final String changeSource;
+  final int changedAtMs;
+
+  Map<String, dynamic> toJson() => {
+    'previous_status': previousStatus,
+    'new_status': newStatus,
+    'change_source': changeSource,
+    'changed_at_ms': changedAtMs,
+  };
 }
 
-/// An occurrence/source-snapshot of a word in context.
-class WordOccurrence {
-  const WordOccurrence({
+/// An occurrence/source-snapshot of a lexical asset in context.
+class LexicalOccurrence {
+  const LexicalOccurrence({
     required this.mediaTitleSnapshot,
     required this.mediaFingerprintSnapshot,
     required this.sentenceTextSnapshot,
@@ -96,16 +109,17 @@ class WordOccurrence {
     this.sentenceId,
   });
 
-  factory WordOccurrence.fromJson(Map<String, dynamic> json) => WordOccurrence(
-    mediaTitleSnapshot: json['media_title_snapshot'] as String,
-    mediaFingerprintSnapshot: json['media_fingerprint_snapshot'] as String,
-    sentenceTextSnapshot: json['sentence_text_snapshot'] as String,
-    startMsSnapshot: json['start_ms_snapshot'] as int,
-    endMsSnapshot: json['end_ms_snapshot'] as int,
-    encounterCount: json['encounter_count'] as int,
-    mediaId: json['media_id'] as String?,
-    sentenceId: json['sentence_id'] as String?,
-  );
+  factory LexicalOccurrence.fromJson(Map<String, dynamic> json) =>
+      LexicalOccurrence(
+        mediaTitleSnapshot: json['media_title_snapshot'] as String,
+        mediaFingerprintSnapshot: json['media_fingerprint_snapshot'] as String,
+        sentenceTextSnapshot: json['sentence_text_snapshot'] as String,
+        startMsSnapshot: json['start_ms_snapshot'] as int,
+        endMsSnapshot: json['end_ms_snapshot'] as int,
+        encounterCount: json['encounter_count'] as int,
+        mediaId: json['media_id'] as String?,
+        sentenceId: json['sentence_id'] as String?,
+      );
 
   final String mediaTitleSnapshot;
   final String mediaFingerprintSnapshot;
@@ -115,35 +129,55 @@ class WordOccurrence {
   final int encounterCount;
   final String? mediaId;
   final String? sentenceId;
+
+  Map<String, dynamic> toJson() => {
+    'media_title_snapshot': mediaTitleSnapshot,
+    'media_fingerprint_snapshot': mediaFingerprintSnapshot,
+    'sentence_text_snapshot': sentenceTextSnapshot,
+    'start_ms_snapshot': startMsSnapshot,
+    'end_ms_snapshot': endMsSnapshot,
+    'encounter_count': encounterCount,
+    'media_id': mediaId,
+    'sentence_id': sentenceId,
+  };
 }
 
-/// Full word details returned by the API.
-class WordDetail {
-  const WordDetail({
-    required this.profile,
+/// Full lexical asset details returned by the API.
+class LexicalEntryDetails {
+  const LexicalEntryDetails({
+    required this.entry,
     this.history = const [],
     this.occurrences = const [],
   });
 
-  factory WordDetail.fromJson(Map<String, dynamic> json) => WordDetail(
-    profile: WordProfile.fromJson(
-      json['profile'] as Map<String, dynamic>,
-    ),
-    history: ((json['history'] as List<dynamic>?) ?? const [])
-        .map(
-          (value) => WordStatusHistory.fromJson(value as Map<String, dynamic>),
-        )
-        .toList(growable: false),
-    occurrences: ((json['occurrences'] as List<dynamic>?) ?? const [])
-        .map(
-          (value) => WordOccurrence.fromJson(value as Map<String, dynamic>),
-        )
-        .toList(growable: false),
-  );
+  factory LexicalEntryDetails.fromJson(Map<String, dynamic> json) =>
+      LexicalEntryDetails(
+        entry: LexicalEntry.fromJson(json['entry'] as Map<String, dynamic>),
+        history: ((json['history'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) =>
+                  LexicalStatusHistory.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+        occurrences: ((json['occurrences'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) =>
+                  LexicalOccurrence.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+      );
 
-  final WordProfile profile;
-  final List<WordStatusHistory> history;
-  final List<WordOccurrence> occurrences;
+  final LexicalEntry entry;
+  final List<LexicalStatusHistory> history;
+  final List<LexicalOccurrence> occurrences;
+
+  Map<String, dynamic> toJson() => {
+    'entry': entry.toJson(),
+    'history': history.map((value) => value.toJson()).toList(growable: false),
+    'occurrences': occurrences
+        .map((value) => value.toJson())
+        .toList(growable: false),
+  };
 }
 
 // ──────────────────────────────────────────────
@@ -153,24 +187,27 @@ class WordDetail {
 class DiagnosisHint {
   const DiagnosisHint({
     required this.kind,
+    this.lexicalEntryIds = const [],
     this.reasons = const [],
   });
 
   factory DiagnosisHint.fromJson(Map<String, dynamic> json) => DiagnosisHint(
     kind: json['kind'] as String,
+    lexicalEntryIds: ((json['lexical_entry_ids'] as List<dynamic>?) ?? const [])
+        .cast<String>()
+        .toList(growable: false),
     reasons: ((json['reasons'] as List<dynamic>?) ?? const [])
         .cast<String>()
         .toList(growable: false),
   );
 
   final String kind;
+  final List<String> lexicalEntryIds;
   final List<String> reasons;
 }
 
 class Diagnosis {
-  const Diagnosis({
-    this.hints = const [],
-  });
+  const Diagnosis({this.hints = const []});
 
   factory Diagnosis.fromJson(Map<String, dynamic> json) => Diagnosis(
     hints: ((json['hints'] as List<dynamic>?) ?? const [])
@@ -181,7 +218,15 @@ class Diagnosis {
   final List<DiagnosisHint> hints;
 
   Map<String, dynamic> toJson() => {
-    'hints': hints.map((h) => {'kind': h.kind, 'reasons': h.reasons}).toList(),
+    'hints': hints
+        .map(
+          (h) => {
+            'kind': h.kind,
+            'lexical_entry_ids': h.lexicalEntryIds,
+            'reasons': h.reasons,
+          },
+        )
+        .toList(),
   };
 }
 
@@ -196,6 +241,7 @@ class PhraseCandidate {
     required this.tokenStart,
     required this.tokenEnd,
     this.confidence,
+    this.reason,
   });
 
   factory PhraseCandidate.fromJson(Map<String, dynamic> json) =>
@@ -205,6 +251,7 @@ class PhraseCandidate {
         tokenStart: json['token_start'] as int,
         tokenEnd: json['token_end'] as int,
         confidence: (json['confidence'] as num?)?.toDouble(),
+        reason: json['reason'] as String?,
       );
 
   final String canonicalForm;
@@ -212,12 +259,369 @@ class PhraseCandidate {
   final int tokenStart;
   final int tokenEnd;
   final double? confidence;
+  final String? reason;
 
   Map<String, dynamic> toJson() => {
     'canonical_form': canonicalForm,
     'display_form': displayForm,
     'token_start': tokenStart,
     'token_end': tokenEnd,
+    'confidence': confidence,
+    'reason': reason,
+  };
+}
+
+// ──────────────────────────────────────────────
+// Dictionary Lookup
+// ──────────────────────────────────────────────
+
+class DictionaryLookupBundle {
+  const DictionaryLookupBundle({
+    required this.query,
+    required this.normalizedLemma,
+    this.results = const [],
+  });
+
+  factory DictionaryLookupBundle.fromJson(Map<String, dynamic> json) =>
+      DictionaryLookupBundle(
+        query: json['query'] as String? ?? '',
+        normalizedLemma: json['normalized_lemma'] as String? ?? '',
+        results: ((json['results'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) => DictionaryLookupResult.fromJson(
+                value as Map<String, dynamic>,
+              ),
+            )
+            .toList(growable: false),
+      );
+
+  final String query;
+  final String normalizedLemma;
+  final List<DictionaryLookupResult> results;
+
+  Map<String, dynamic> toJson() => {
+    'query': query,
+    'normalized_lemma': normalizedLemma,
+    'results': results.map((value) => value.toJson()).toList(growable: false),
+  };
+}
+
+class DictionaryLookupResult {
+  const DictionaryLookupResult({
+    required this.provider,
+    this.lookup,
+    this.error,
+  });
+
+  factory DictionaryLookupResult.fromJson(Map<String, dynamic> json) {
+    final lookup = json['lookup'];
+    return DictionaryLookupResult(
+      provider: DictionaryProviderDescriptor.fromJson(
+        (json['provider'] as Map<String, dynamic>?) ?? const {},
+      ),
+      lookup: lookup is Map<String, dynamic>
+          ? DictionaryLookup.fromJson(lookup)
+          : null,
+      error: json['error'] as String?,
+    );
+  }
+
+  final DictionaryProviderDescriptor provider;
+  final DictionaryLookup? lookup;
+  final String? error;
+
+  Map<String, dynamic> toJson() => {
+    'provider': provider.toJson(),
+    'lookup': lookup?.toJson(),
+    'error': error,
+  };
+}
+
+class DictionaryProviderDescriptor {
+  const DictionaryProviderDescriptor({
+    required this.id,
+    required this.displayName,
+    this.supportedLanguages = const [],
+    this.providesDefinitions = false,
+    this.providesPhonetics = false,
+    this.providesAudio = false,
+    this.offline = false,
+  });
+
+  factory DictionaryProviderDescriptor.fromJson(Map<String, dynamic> json) =>
+      DictionaryProviderDescriptor(
+        id: json['id'] as String? ?? '',
+        displayName: json['display_name'] as String? ?? '',
+        supportedLanguages:
+            ((json['supported_languages'] as List<dynamic>?) ?? const [])
+                .cast<String>()
+                .toList(growable: false),
+        providesDefinitions: json['provides_definitions'] as bool? ?? false,
+        providesPhonetics: json['provides_phonetics'] as bool? ?? false,
+        providesAudio: json['provides_audio'] as bool? ?? false,
+        offline: json['offline'] as bool? ?? false,
+      );
+
+  final String id;
+  final String displayName;
+  final List<String> supportedLanguages;
+  final bool providesDefinitions;
+  final bool providesPhonetics;
+  final bool providesAudio;
+  final bool offline;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'display_name': displayName,
+    'supported_languages': supportedLanguages,
+    'provides_definitions': providesDefinitions,
+    'provides_phonetics': providesPhonetics,
+    'provides_audio': providesAudio,
+    'offline': offline,
+  };
+}
+
+class DictionaryLookup {
+  const DictionaryLookup({
+    required this.query,
+    required this.lemma,
+    this.definitions = const [],
+    this.phonetics = const [],
+    this.characterBreakdowns = const [],
+    this.provider,
+    this.cachedAtMs,
+  });
+
+  factory DictionaryLookup.fromJson(Map<String, dynamic> json) =>
+      DictionaryLookup(
+        query: json['query'] as String? ?? '',
+        lemma: json['lemma'] as String? ?? '',
+        definitions: ((json['definitions'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) =>
+                  DictionaryDefinition.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+        phonetics: ((json['phonetics'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) =>
+                  DictionaryPhonetic.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+        characterBreakdowns:
+            ((json['character_breakdowns'] as List<dynamic>?) ?? const [])
+                .map(
+                  (value) => CharacterBreakdown.fromJson(
+                    value as Map<String, dynamic>,
+                  ),
+                )
+                .toList(growable: false),
+        provider: json['provider'] as String?,
+        cachedAtMs: json['cached_at_ms'] as int?,
+      );
+
+  final String query;
+  final String lemma;
+  final List<DictionaryDefinition> definitions;
+  final List<DictionaryPhonetic> phonetics;
+  final List<CharacterBreakdown> characterBreakdowns;
+  final String? provider;
+  final int? cachedAtMs;
+
+  Map<String, dynamic> toJson() => {
+    'query': query,
+    'lemma': lemma,
+    'definitions': definitions
+        .map((value) => value.toJson())
+        .toList(growable: false),
+    'phonetics': phonetics
+        .map((value) => value.toJson())
+        .toList(growable: false),
+    'character_breakdowns': characterBreakdowns
+        .map((value) => value.toJson())
+        .toList(growable: false),
+    'provider': provider,
+    'cached_at_ms': cachedAtMs,
+  };
+}
+
+class DictionaryDefinition {
+  const DictionaryDefinition({required this.text, this.partOfSpeech});
+
+  factory DictionaryDefinition.fromJson(Map<String, dynamic> json) =>
+      DictionaryDefinition(
+        text: json['text'] as String? ?? '',
+        partOfSpeech: json['part_of_speech'] as String?,
+      );
+
+  final String text;
+  final String? partOfSpeech;
+
+  Map<String, dynamic> toJson() => {
+    'text': text,
+    'part_of_speech': partOfSpeech,
+  };
+}
+
+class DictionaryPhonetic {
+  const DictionaryPhonetic({required this.text, this.region, this.audioUrl});
+
+  factory DictionaryPhonetic.fromJson(Map<String, dynamic> json) =>
+      DictionaryPhonetic(
+        text: json['text'] as String? ?? '',
+        region: json['region'] as String?,
+        audioUrl: json['audio_url'] as String?,
+      );
+
+  final String text;
+  final String? region;
+  final String? audioUrl;
+
+  Map<String, dynamic> toJson() => {
+    'text': text,
+    'region': region,
+    'audio_url': audioUrl,
+  };
+}
+
+class CharacterBreakdown {
+  const CharacterBreakdown({
+    required this.character,
+    this.phonetic = '',
+    this.meaning = '',
+  });
+
+  factory CharacterBreakdown.fromJson(Map<String, dynamic> json) =>
+      CharacterBreakdown(
+        character: json['character'] as String? ?? '',
+        phonetic: json['phonetic'] as String? ?? '',
+        meaning: json['meaning'] as String? ?? '',
+      );
+
+  final String character;
+  final String phonetic;
+  final String meaning;
+
+  Map<String, dynamic> toJson() => {
+    'character': character,
+    'phonetic': phonetic,
+    'meaning': meaning,
+  };
+}
+
+// ──────────────────────────────────────────────
+// Word Pronunciation Lookup
+// ──────────────────────────────────────────────
+
+class WordPronunciation {
+  const WordPronunciation({
+    required this.tokenIndex,
+    required this.text,
+    required this.normalized,
+    this.variants = const [],
+  });
+
+  factory WordPronunciation.fromJson(Map<String, dynamic> json) =>
+      WordPronunciation(
+        tokenIndex: json['token_index'] as int? ?? 0,
+        text: json['text'] as String? ?? '',
+        normalized: json['normalized'] as String? ?? '',
+        variants: ((json['variants'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) =>
+                  PronunciationVariant.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+      );
+
+  final int tokenIndex;
+  final String text;
+  final String normalized;
+  final List<PronunciationVariant> variants;
+
+  Map<String, dynamic> toJson() => {
+    'token_index': tokenIndex,
+    'text': text,
+    'normalized': normalized,
+    'variants': variants.map((value) => value.toJson()).toList(growable: false),
+  };
+}
+
+class PronunciationVariant {
+  const PronunciationVariant({
+    this.phonemes = const [],
+    required this.displayIpa,
+    this.isFallback = false,
+  });
+
+  factory PronunciationVariant.fromJson(Map<String, dynamic> json) =>
+      PronunciationVariant(
+        phonemes: ((json['phonemes'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) =>
+                  PronunciationPhoneme.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+        displayIpa: json['display_ipa'] as String? ?? '',
+        isFallback: json['is_fallback'] as bool? ?? false,
+      );
+
+  final List<PronunciationPhoneme> phonemes;
+  final String displayIpa;
+  final bool isFallback;
+
+  Map<String, dynamic> toJson() => {
+    'phonemes': phonemes.map((value) => value.toJson()).toList(growable: false),
+    'display_ipa': displayIpa,
+    'is_fallback': isFallback,
+  };
+}
+
+class PronunciationPhoneme {
+  const PronunciationPhoneme({
+    required this.symbol,
+    this.phonemeSet,
+    this.displayIpa,
+    this.stress,
+    this.syllableIndex,
+    this.tokenIndex,
+    this.startMs,
+    this.endMs,
+    this.confidence,
+  });
+
+  factory PronunciationPhoneme.fromJson(Map<String, dynamic> json) =>
+      PronunciationPhoneme(
+        symbol: json['symbol'] as String? ?? '',
+        phonemeSet: json['phoneme_set'] as String?,
+        displayIpa: json['display_ipa'] as String?,
+        stress: json['stress'] as int?,
+        syllableIndex: json['syllable_index'] as int?,
+        tokenIndex: json['token_index'] as int?,
+        startMs: json['start_ms'] as int?,
+        endMs: json['end_ms'] as int?,
+        confidence: (json['confidence'] as num?)?.toDouble(),
+      );
+
+  final String symbol;
+  final String? phonemeSet;
+  final String? displayIpa;
+  final int? stress;
+  final int? syllableIndex;
+  final int? tokenIndex;
+  final int? startMs;
+  final int? endMs;
+  final double? confidence;
+
+  Map<String, dynamic> toJson() => {
+    'symbol': symbol,
+    'phoneme_set': phonemeSet,
+    'display_ipa': displayIpa,
+    'stress': stress,
+    'syllable_index': syllableIndex,
+    'token_index': tokenIndex,
+    'start_ms': startMs,
+    'end_ms': endMs,
     'confidence': confidence,
   };
 }
@@ -237,9 +641,10 @@ class PronunciationProvider {
 
   factory PronunciationProvider.fromJson(Map<String, dynamic> json) =>
       PronunciationProvider(
-        id: json['id'] as String,
-        displayName: json['display_name'] as String,
-        version: json['version'] as String,
+        id: json['id'] as String? ?? '',
+        displayName:
+            json['display_name'] as String? ?? json['id'] as String? ?? '',
+        version: json['version'] as String? ?? '',
         degraded: json['degraded'] as bool? ?? false,
         diagnostic: json['diagnostic'] as String?,
       );
@@ -258,46 +663,70 @@ class PronunciationProvider {
 class PronunciationAnalysis {
   const PronunciationAnalysis({
     required this.sentenceId,
+    this.language = '',
+    this.accent = '',
+    this.providerId = '',
+    this.providerVersion = '',
+    this.phonemeSet = '',
     required this.displayIpa,
+    this.words = const [],
     this.phonemes = const [],
-    this.provider,
     this.rules = const [],
   });
 
   factory PronunciationAnalysis.fromJson(Map<String, dynamic> json) =>
       PronunciationAnalysis(
-        sentenceId: json['sentence_id'] as String,
-        displayIpa: json['display_ipa'] as String,
-        phonemes: ((json['phonemes'] as List<dynamic>?) ?? const [])
-            .map((value) => PhonemeInfo.fromJson(value as Map<String, dynamic>))
+        sentenceId: json['sentence_id'] as String? ?? '',
+        language: json['language'] as String? ?? '',
+        accent: json['accent'] as String? ?? '',
+        providerId:
+            json['provider_id'] as String? ?? json['provider'] as String? ?? '',
+        providerVersion: json['provider_version'] as String? ?? '',
+        phonemeSet: json['phoneme_set'] as String? ?? '',
+        displayIpa: json['display_ipa'] as String? ?? '',
+        words: ((json['words'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) =>
+                  WordPronunciation.fromJson(value as Map<String, dynamic>),
+            )
             .toList(growable: false),
-        provider: json['provider'] as String?,
+        phonemes: ((json['phonemes'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) =>
+                  PronunciationPhoneme.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
         rules: ((json['rules'] as List<dynamic>?) ?? const [])
             .map(
-              (value) => PronunciationRule.fromJson(
-                value as Map<String, dynamic>,
-              ),
+              (value) =>
+                  PronunciationRule.fromJson(value as Map<String, dynamic>),
             )
             .toList(growable: false),
       );
 
   final String sentenceId;
+  final String language;
+  final String accent;
+  final String providerId;
+  final String providerVersion;
+  final String phonemeSet;
   final String displayIpa;
-  final List<PhonemeInfo> phonemes;
-  final String? provider;
+  final List<WordPronunciation> words;
+  final List<PronunciationPhoneme> phonemes;
   final List<PronunciationRule> rules;
-}
 
-class PhonemeInfo {
-  const PhonemeInfo({
-    required this.symbol,
-  });
-
-  factory PhonemeInfo.fromJson(Map<String, dynamic> json) => PhonemeInfo(
-    symbol: json['symbol'] as String,
-  );
-
-  final String symbol;
+  Map<String, dynamic> toJson() => {
+    'sentence_id': sentenceId,
+    'language': language,
+    'accent': accent,
+    'provider_id': providerId,
+    'provider_version': providerVersion,
+    'phoneme_set': phonemeSet,
+    'display_ipa': displayIpa,
+    'words': words.map((value) => value.toJson()).toList(growable: false),
+    'phonemes': phonemes.map((value) => value.toJson()).toList(growable: false),
+    'rules': rules.map((value) => value.toJson()).toList(growable: false),
+  };
 }
 
 class PronunciationRule {
@@ -320,6 +749,13 @@ class PronunciationRule {
   final String reason;
   final String status;
   final double confidence;
+
+  Map<String, dynamic> toJson() => {
+    'rule_family': ruleFamily,
+    'reason': reason,
+    'status': status,
+    'confidence': confidence,
+  };
 }
 
 // ──────────────────────────────────────────────
@@ -339,14 +775,21 @@ class LanguageProfile {
         languageCode: json['language_code'] as String,
         pronunciation: json['pronunciation'] as String?,
         segmentation: json['segmentation'] as String?,
-        capabilities: (json['capabilities'] as Map<String, dynamic>?) ??
-            const {},
+        capabilities:
+            (json['capabilities'] as Map<String, dynamic>?) ?? const {},
       );
 
   final String languageCode;
   final String? pronunciation;
   final String? segmentation;
   final Map<String, dynamic> capabilities;
+
+  Map<String, dynamic> toJson() => {
+    'language_code': languageCode,
+    'pronunciation': pronunciation,
+    'segmentation': segmentation,
+    'capabilities': capabilities,
+  };
 }
 
 // ──────────────────────────────────────────────
@@ -355,39 +798,170 @@ class LanguageProfile {
 
 class PhoneticAnalysis {
   const PhoneticAnalysis({
+    this.id = '',
+    this.jobId = '',
+    this.mediaId = '',
+    this.trackId = '',
+    this.sentenceId,
+    this.audioStartMs,
+    this.audioEndMs,
     required this.providerId,
+    this.providerVersion = '',
+    this.modelId = '',
     required this.modelRevision,
+    this.modelChecksumSha256 = '',
     required this.phoneSet,
     this.detectedPhones = const [],
     this.findings = const [],
+    this.soundAnalysis,
+    this.analyzerVersion = '',
+    this.createdAtMs,
   });
 
-  factory PhoneticAnalysis.fromJson(Map<String, dynamic> json) =>
-      PhoneticAnalysis(
-        providerId: json['provider_id'] as String,
-        modelRevision: json['model_revision'] as String,
-        phoneSet: json['phone_set'] as String,
-        detectedPhones: ((json['detected_phones'] as List<dynamic>?) ?? const [])
-            .map(
-              (value) => DetectedPhone.fromJson(value as Map<String, dynamic>),
-            )
-            .toList(growable: false),
-        findings: ((json['findings'] as List<dynamic>?) ?? const [])
-            .map((value) => value as Map<String, dynamic>)
-            .toList(growable: false),
-      );
+  factory PhoneticAnalysis.fromJson(
+    Map<String, dynamic> json,
+  ) => PhoneticAnalysis(
+    id: json['id'] as String? ?? '',
+    jobId: json['job_id'] as String? ?? '',
+    mediaId: json['media_id'] as String? ?? '',
+    trackId: json['track_id'] as String? ?? '',
+    sentenceId: json['sentence_id'] as String?,
+    audioStartMs: json['audio_start_ms'] as int?,
+    audioEndMs: json['audio_end_ms'] as int?,
+    providerId: json['provider_id'] as String? ?? '',
+    providerVersion: json['provider_version'] as String? ?? '',
+    modelId: json['model_id'] as String? ?? '',
+    modelRevision: json['model_revision'] as String? ?? '',
+    modelChecksumSha256: json['model_checksum_sha256'] as String? ?? '',
+    phoneSet: json['phone_set'] as String? ?? '',
+    detectedPhones: ((json['detected_phones'] as List<dynamic>?) ?? const [])
+        .map((value) => DetectedPhone.fromJson(value as Map<String, dynamic>))
+        .toList(growable: false),
+    findings: ((json['findings'] as List<dynamic>?) ?? const [])
+        .map((value) => PhoneticFinding.fromJson(value as Map<String, dynamic>))
+        .toList(growable: false),
+    soundAnalysis: json['sound_analysis'] is Map
+        ? SoundAnalysis.fromJson(
+            Map<String, dynamic>.from(json['sound_analysis'] as Map),
+          )
+        : null,
+    analyzerVersion: json['analyzer_version'] as String? ?? '',
+    createdAtMs: json['created_at_ms'] as int?,
+  );
 
+  final String id;
+  final String jobId;
+  final String mediaId;
+  final String trackId;
+  final String? sentenceId;
+  final int? audioStartMs;
+  final int? audioEndMs;
   final String providerId;
+  final String providerVersion;
+  final String modelId;
   final String modelRevision;
+  final String modelChecksumSha256;
   final String phoneSet;
   final List<DetectedPhone> detectedPhones;
-  final List<Map<String, dynamic>> findings;
+  final List<PhoneticFinding> findings;
+  final SoundAnalysis? soundAnalysis;
+  final String analyzerVersion;
+  final int? createdAtMs;
 
   Map<String, dynamic> toJson() => {
+    'id': id,
+    'job_id': jobId,
+    'media_id': mediaId,
+    'track_id': trackId,
+    'sentence_id': sentenceId,
+    'audio_start_ms': audioStartMs,
+    'audio_end_ms': audioEndMs,
     'provider_id': providerId,
+    'provider_version': providerVersion,
+    'model_id': modelId,
     'model_revision': modelRevision,
+    'model_checksum_sha256': modelChecksumSha256,
     'phone_set': phoneSet,
     'detected_phones': detectedPhones.map((p) => p.toJson()).toList(),
-    'findings': findings,
+    'findings': findings.map((value) => value.toJson()).toList(),
+    'sound_analysis': soundAnalysis?.toJson(),
+    'analyzer_version': analyzerVersion,
+    'created_at_ms': createdAtMs,
+  };
+}
+
+class PhoneticFinding {
+  const PhoneticFinding({
+    required this.id,
+    this.analysisId = '',
+    required this.findingType,
+    this.affectedTokenStart = 0,
+    this.affectedTokenEnd = 0,
+    this.canonicalPhones = const [],
+    this.detectedPhones = const [],
+    this.alignedPhoneStart,
+    this.alignedPhoneEnd,
+    required this.audioStartMs,
+    required this.audioEndMs,
+    required this.confidence,
+    this.evidence = '',
+    required this.status,
+  });
+
+  factory PhoneticFinding.fromJson(
+    Map<String, dynamic> json,
+  ) => PhoneticFinding(
+    id: json['id'] as String? ?? '',
+    analysisId: json['analysis_id'] as String? ?? '',
+    findingType: json['finding_type'] as String? ?? '',
+    affectedTokenStart: json['affected_token_start'] as int? ?? 0,
+    affectedTokenEnd: json['affected_token_end'] as int? ?? 0,
+    canonicalPhones: ((json['canonical_phones'] as List<dynamic>?) ?? const [])
+        .cast<String>()
+        .toList(growable: false),
+    detectedPhones: ((json['detected_phones'] as List<dynamic>?) ?? const [])
+        .cast<String>()
+        .toList(growable: false),
+    alignedPhoneStart: json['aligned_phone_start'] as int?,
+    alignedPhoneEnd: json['aligned_phone_end'] as int?,
+    audioStartMs: json['audio_start_ms'] as int? ?? 0,
+    audioEndMs: json['audio_end_ms'] as int? ?? 0,
+    confidence: (json['confidence'] as num?)?.toDouble() ?? 0,
+    evidence: json['evidence'] as String? ?? '',
+    status: json['status'] as String? ?? '',
+  );
+
+  final String id;
+  final String analysisId;
+  final String findingType;
+  final int affectedTokenStart;
+  final int affectedTokenEnd;
+  final List<String> canonicalPhones;
+  final List<String> detectedPhones;
+  final int? alignedPhoneStart;
+  final int? alignedPhoneEnd;
+  final int audioStartMs;
+  final int audioEndMs;
+  final double confidence;
+  final String evidence;
+  final String status;
+
+  bool get detectedInAudio => status == 'detected_in_audio';
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'analysis_id': analysisId,
+    'finding_type': findingType,
+    'affected_token_start': affectedTokenStart,
+    'affected_token_end': affectedTokenEnd,
+    'canonical_phones': canonicalPhones,
+    'detected_phones': detectedPhones,
+    'aligned_phone_start': alignedPhoneStart,
+    'aligned_phone_end': alignedPhoneEnd,
+    'audio_start_ms': audioStartMs,
+    'audio_end_ms': audioEndMs,
+    'confidence': confidence,
+    'evidence': evidence,
+    'status': status,
   };
 }

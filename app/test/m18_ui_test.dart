@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/m18_ui.dart';
 import 'package:llplayer_next/models/timeline.dart';
+import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/widgets/subtitle/token_line.dart';
 
@@ -90,7 +91,7 @@ void main() {
   testWidgets(
     'subtitle phrase underline prefers longest candidate and selects phrase',
     (tester) async {
-      Map<String, dynamic>? selectedPhrase;
+      PhraseCandidate? selectedPhrase;
       var selectedWords = 0;
       const cue = Cue(
         id: 'sentence-1',
@@ -153,18 +154,18 @@ void main() {
             profiles: const {},
             showStyles: true,
             phraseCandidates: const [
-              {
-                'canonical_form': 'look forward to',
-                'display_form': 'look forward to',
-                'token_start': 2,
-                'token_end': 6,
-              },
-              {
-                'canonical_form': 'forward to',
-                'display_form': 'forward to',
-                'token_start': 4,
-                'token_end': 6,
-              },
+              PhraseCandidate(
+                canonicalForm: 'look forward to',
+                displayForm: 'look forward to',
+                tokenStart: 2,
+                tokenEnd: 6,
+              ),
+              PhraseCandidate(
+                canonicalForm: 'forward to',
+                displayForm: 'forward to',
+                tokenStart: 4,
+                tokenEnd: 6,
+              ),
             ],
             onWord: (_, _) async => selectedWords += 1,
             onPhrase: (candidate, _) async => selectedPhrase = candidate,
@@ -174,7 +175,7 @@ void main() {
       expect(find.byType(PhraseUnderlineSpan), findsOneWidget);
       final underline = tester.getRect(find.byType(PhraseUnderlineSpan));
       await tester.tapAt(Offset(underline.center.dx, underline.bottom - 2));
-      expect(selectedPhrase?['canonical_form'], 'look forward to');
+      expect(selectedPhrase?.canonicalForm, 'look forward to');
       expect(selectedWords, 0);
     },
   );

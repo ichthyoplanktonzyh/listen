@@ -539,44 +539,48 @@ class LocalApi {
           ))
           as Map<String, dynamic>;
 
-  Future<List<Map<String, dynamic>>> readWordProfiles(
-    List<String> lemmas, {
+  Future<List<Map<String, dynamic>>> readLexicalEntriesBatch(
+    List<String> forms, {
     required String language,
+    String kind = 'word',
   }) async {
     final values =
-        await _request('POST', '/v1/word-profiles/batch', {
+        await _request('POST', '/v1/lexical-entries/batch', {
               'language': language,
-              'lemmas': lemmas,
+              'kind': kind,
+              'forms': forms,
             })
             as List<dynamic>;
     return values.cast<Map<String, dynamic>>();
   }
 
-  Future<Map<String, dynamic>> updateWordProfile(
-    String lemma,
+  Future<Map<String, dynamic>> upsertWordLexicalEntry(
+    String canonicalForm,
     String displayForm,
     String? status, {
     required String language,
     Map<String, dynamic>? source,
-  }) async =>
-      (await _request('PUT', '/v1/word-profiles', {
-            'language': language,
-            'lemma': lemma,
-            'display_form': displayForm,
-            'status': status,
-            'source': source,
-          }))
-          as Map<String, dynamic>;
+  }) async {
+    final details = await upsertLexicalEntry({
+      'language': language,
+      'kind': 'word',
+      'canonical_form': canonicalForm,
+      'display_form': displayForm,
+      'status': status,
+      'source': source,
+    });
+    return details;
+  }
 
-  Future<void> createObservation({
-    required String wordProfileId,
+  Future<void> createLexicalObservation({
+    required String lexicalEntryId,
     required String sentenceId,
     required String originalForm,
     required bool heard,
     Map<String, dynamic>? source,
   }) async {
-    await _request('POST', '/v1/word-observations', {
-      'word_profile_id': wordProfileId,
+    await _request('POST', '/v1/lexical-observations', {
+      'lexical_entry_id': lexicalEntryId,
       'sentence_id': sentenceId,
       'original_form': originalForm,
       'result': heard ? 'recognized_in_context' : 'not_recognized_in_context',
@@ -584,12 +588,12 @@ class LocalApi {
     });
   }
 
-  Future<void> clearObservation({
-    required String wordProfileId,
+  Future<void> clearLexicalObservation({
+    required String lexicalEntryId,
     required String sentenceId,
   }) async {
-    await _request('POST', '/v1/word-observations', {
-      'word_profile_id': wordProfileId,
+    await _request('POST', '/v1/lexical-observations', {
+      'lexical_entry_id': lexicalEntryId,
       'sentence_id': sentenceId,
       'original_form': '',
       'clear': true,
@@ -610,16 +614,16 @@ class LocalApi {
     return values.cast<Map<String, dynamic>>();
   }
 
-  Future<Map<String, dynamic>> wordDetails(String profileId) async =>
-      (await _request('GET', '/v1/word-profiles/$profileId/details'))
+  Future<Map<String, dynamic>> lexicalEntryDetails(String entryId) async =>
+      (await _request('GET', '/v1/lexical-entries/$entryId'))
           as Map<String, dynamic>;
 
-  Future<Map<String, dynamic>> updateLearningContent(
-    String profileId, {
+  Future<Map<String, dynamic>> updateLexicalLearningContent(
+    String entryId, {
     String? userDefinition,
     String? personalNote,
   }) async =>
-      (await _request('PUT', '/v1/word-profiles/$profileId/learning-content', {
+      (await _request('PUT', '/v1/lexical-entries/$entryId/learning-content', {
             'user_definition': userDefinition,
             'personal_note': personalNote,
           }))
