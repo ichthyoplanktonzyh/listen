@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- 2026-06-29 14:37 CST: 补充 Phase 2.20 rhythm-first listening analysis 调研记录。
+  新增 `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-RESEARCH.md`，
+  从英语听力认知、L2 connected speech、prosody annotation、参考工具/数据集和产品形态
+  判断 rhythm-first 方向基本成立但需避免把 stress-timed English 当成绝对物理定律。
+  同步 `2.20-PLAN.md` 指向该 research basis。
+  验证: documentation-only change, not run.
+
+- 2026-06-29 14:32 CST: 建立 Phase 2.20 rhythm-first listening analysis 新方向。
+  (1) **Product pivot**: 将真实语流分析的默认产品中心从 phone-level ribbon 调整为
+  rhythm-first listening frame，优先展示 stress anchors、weak groups、compression spans、
+  phrase boundaries 和 listening hotspots；phone-level expected/observed alignment 保留为
+  evidence layer 和长期模型质量工作。
+  (2) **Phase docs**: 新增
+  `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-CONTEXT.md`、
+  `2.20-PLAN.md` 和 `2.20-EVALUATION.md`，明确 UI surface、RhythmFrame resource shape、
+  deterministic baseline、benchmark/manual QA 分层和 pipeline bottleneck attribution。
+  (3) **Planning sync**: 同步 `.planning/PROJECT.md`、`.planning/REQUIREMENTS.md`、
+  `.planning/ROADMAP.md`、`.planning/codebase/TESTING.md` 和 `.planning/STATE.md`，
+  新增 RHY-001 至 RHY-008 需求，并把 Phase 2.19 phone benchmark scoring 定位为底层
+  evidence-quality 支撑。
+  验证: documentation-only change, not run.
+
 - 2026-06-29 10:26 CST: 启动 Phase 2.19 real benchmark scoring 初始评估。
   (1) **Scorer**: 新增 `scripts/evaluate-sound-line-benchmarks.py`，从 Phase 2.17 manifest
   和 ignored `.tmp` artifacts 读取结果，并对 TIMIT `.PHN`、Buckeye `.phones`、TED-LIUM `.stm`

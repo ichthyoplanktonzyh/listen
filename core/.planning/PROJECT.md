@@ -3,7 +3,7 @@
 ## 1. 文档信息
 
 - 文档用途：定义产品目标、MVP 范围、核心体验和架构边界
-- 当前阶段：Milestone 2 active；Phase 2.18 代码架构全面重构已收口，Phase 2.17 真实媒体声音线 QA 已规划
+- 当前阶段：Milestone 2 active；Phase 2.20 rhythm-first listening analysis 已启动
 - 当前发布：LLPlayerNext 0.7.0 macOS Apple Silicon 单用户版本
 - 后续平台：Windows、Linux、Android、iOS
 - 参考产品与代码库：LLPlayer
@@ -17,6 +17,9 @@
 - 产品定义更新：2026-06-28，Phase 2.18 完成非兼容式代码架构重构；学习资产权威模型收敛为
   `LexicalEntry + LexicalUnit + LearningStatus`，旧 `WordProfile` / `WordObservation` 资源、
   旧 API/UI adapter 与旧 SQLite/LLTimeline 兼容路径不再作为 active path 维护。
+- 产品定义更新：2026-06-29，真实语流分析的产品中心从 phone-level ribbon 调整为
+  rhythm-first listening frame：默认先解释重音节奏、弱读音团、压缩区、停顿和听感锚点；
+  phone-level 输出保留为证据层和长期模型质量工作。
 
 ## 2. 产品愿景
 
@@ -43,6 +46,13 @@ provider 进入系统，缺失能力干净降级。详见 §4.4。
 用户播放视频或音频时，播放器不仅显示字幕，还会根据用户对每个单词的实际掌握情况进行区分，帮助用户回答：
 
 > 我为什么没有听懂这句话？
+
+这个问题被拆成两条互补路径：
+
+1. **单词问题**：不知道词义、词形、搭配或上下文含义，由词汇状态、词典、观察记录和练习闭环承接。
+2. **声音识别问题**：认识这些词但在真实音频中没有听出来，由 rhythm-first listening frame
+   承接。系统应优先展示真实听感中的重音锚点、弱读音团、压缩区、停顿和期望/真实错配；
+   phone-level expected/observed 对齐作为可展开证据层，而不是默认主视图。
 
 Milestone 1 MVP 聚焦可靠的听力播放基础设施、基础诊断闭环和最常用的
 LLPlayer 桌面学习体验：
@@ -129,6 +139,12 @@ MVP 首先通过用户主动维护的词汇听力状态，区分：
 词典音标用于帮助用户建立拼写与标准发音的联系。真实语流分析、词级强制对齐、
 音素级时间轴和 chunk 精修不属于 Milestone 1 MVP；它们从 Milestone 2 起进入
 “生产引擎优先、消费端读取资源”的路线。
+
+真实语流分析的默认产品中心不是逐个 phone 的识别结果，而是解释用户实际听到的声音组织。
+英语场景下，系统应先建立重音节奏框架，再在局部弱读、连读、压缩或错配区域展开
+phone-level 证据。当前 phone recognizer 的 PER 可能偏高，因此 raw phone label 不得作为
+默认教学真值；稳定教学标签来自 expected pronunciation，真实音频提供 timing、confidence
+和 evidence。
 
 ### 4.2 目标用户
 
@@ -558,6 +574,9 @@ MVP 必须本地保存：
 - `words`: 词级时间轴，包含 `type`、speaker、confidence、source、provider/version。
 - `phonemes`: 可挂在 word 下或作为独立 phone timeline，用于未来音素级高亮。
 - `chunks`: 基于 word/phone timeline 生成或人工修正后的学习 chunk。
+- `sound_analysis`: 可选真实语流分析视图，优先包含 rhythm frame（stress anchors、
+  weak groups、compression spans、phrase boundaries、listening hotspots），并可附带
+  learning phones、connected-speech markers 和 phone evidence。
 - `artifacts`: 可选记录 whisper/WhisperX/MFA 原始输出、评估报告和校验摘要。
 
 `word.type` 至少应支持：
@@ -582,6 +601,9 @@ word | silence | breath | noise | music | speaker_change
 - **ListeningUnit**：真实声音流中需辨认的听觉单位（如 sound pattern、chunk、音节、
   声调音节）。它是现有 Word/Chunk/Phone 时间轴资源之上的视图，不是新的持久存储。
   听力观察可锚定到 ListeningUnit（如声调最小对立），不只锚定 LexicalUnit。
+- **RhythmFrame**：句级真实听感视图，组织 stress anchors、weak groups、
+  compression spans、phrase boundaries 和 listening hotspots。它是回答“这句话实际应该怎么听”
+  的默认声音分析层；phone evidence 是其下的可展开证据。
 
 ## 11. API 与事件概念
 

@@ -1,6 +1,6 @@
 # LLPlayerNext — 测试体系
 
-> 最后更新：2026-06-18
+> 最后更新：2026-06-29
 
 ## 1. 测试层次
 
@@ -17,6 +17,9 @@
 ├────────────────────────────────────────┤
 │ 单元测试                                │
 │ domain / diagnosis / subtitle / speech │
+├────────────────────────────────────────┤
+│ 评估脚本与人工 QA                       │
+│ phone evidence + rhythm/listening QA    │
 ├────────────────────────────────────────┤
 │ 属性测试 + Fuzz                        │
 │ subtitle 解析 / token 化               │
@@ -83,6 +86,7 @@
 | `transcription_ui_test.dart` | 转写 UI |
 | `m18_ui_test.dart` | M1.8 学习质量功能 UI |
 | `phonetic_analysis_ui_test.dart` | 音素分析 UI |
+| future rhythm-frame widget tests | Phase 2.20 rhythm frame grouping、hotspot、empty/confidence state |
 
 ### 运行
 
@@ -96,6 +100,8 @@ cd apps/desktop && flutter test
 |---|---|
 | `scripts/evaluate-word-timelines.py` | 词级时间轴比较（偏移分布/覆盖/gold 指标） |
 | `scripts/phonetic-eval.py` | 音素分析评估（PER/timeline 有效性/token 关联） |
+| `scripts/evaluate-sound-line-benchmarks.py` | Phase 2.19 real-media QA pack 对 TIMIT/Buckeye/TED-LIUM reference 的 phone/text/timing 初始评分 |
+| future rhythm/listening scorer | Phase 2.20 stress anchor、weak group、compression span、phrase boundary、listening explanation quality |
 | `scripts/validate-contracts.sh` | LLTimeline Schema smoke + 契约测试 |
 
 ### Python 评估缺少自动化单元测试
@@ -211,3 +217,6 @@ scripts/validate-contracts.sh    # 单独契约验证
 | Python 管线单元测试 | P2 | production_pipeline.py 核心函数 |
 | Flutter widget 交互测试 | P2 | 播放器/字幕点击/拖放交互 |
 | 跨语言 E2E 测试 | P2 | 端到端：生产管线 → 导入 → 播放验证 |
+| Rhythm-first 评测脚本 | P0 | Phase 2.20 需要 stress anchor、weak group、compression span、phrase boundary 与 explanation quality scorer |
+| RhythmFrame UI widget tests | P0 | Phase 2.20 需要验证 rhythm frame 分组、hotspot、缺失/低置信降级和 phone detail 展开 |
+| Manual listening QA material | P0 | Phase 2.20 需要可复现标注表，避免只用 PER 判断真实听感解释质量 |

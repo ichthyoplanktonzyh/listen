@@ -42,6 +42,7 @@
 | M1.9 | 发音与词级同步基础 |
 | M2-PROD | 本地重装生产引擎与精准时间轴资源 |
 | M2-CONSUME | 轻量消费端时间轴资源读取 |
+| M2-RHY | Rhythm-first 真实听感分析 |
 | FUTURE | MVP 后研究与增强 |
 
 M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强化也已
@@ -64,10 +65,15 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | 当前句诊断 | 根据当前字幕句中的词汇状态生成的可解释诊断线索 |
 | 本地重装生产引擎 | 面向项目开发者本人、可使用 Python/GPU/重模型/人工校对的高精度时间轴生产管线 |
 | 轻量消费端 | 分发版 LLPlayerNext，重点读取生产端资源并提供播放、高亮、chunk 学习和词汇诊断 |
-| LLTimeline JSON | 生产端与消费端之间的版本化时间轴交换文件，包含 metadata、segments、words、phonemes、chunks 和 artifacts |
+| LLTimeline JSON | 生产端与消费端之间的版本化时间轴交换文件，包含 metadata、segments、words、phonemes、chunks、sound_analysis 和 artifacts |
 | WordTimeline | 可复用、可评估、可人工修正的词级时间轴资源 |
 | PhoneTimeline | 可选音素级时间轴资源，可由 MFA/BFA 或其他 aligner 生成 |
 | ChunkTimeline | 基于 word/phone timeline 生成或人工修正的学习 chunk 资源 |
+| SoundAnalysis | 句级真实语流分析资源；Phase 2.20 起默认产品中心是 RhythmFrame，phone evidence 为下层证据 |
+| RhythmFrame | 真实听感中的重音节奏框架，包含 stress anchors、weak groups、compression spans、phrase boundaries 和 listening hotspots |
+| StressAnchor | 用户听一句话时应优先抓住的重音/语义声音锚点 |
+| WeakGroup | 附着在重音锚点周围的弱读、背景化或压缩词组 |
+| ListeningHotspot | 解释“文字读音”和“实际听感”错配的局部区域 |
 
 ## 3. 需求总览映射
 
@@ -89,6 +95,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | 移动端准备 | 无强制发布项 | MOB-001 至 MOB-009 |
 | 生产端精准时间轴 | 无强制 Milestone 1 发布项 | LLT-001 至 LLT-007、PROD-001 至 PROD-007、EVAL-001 至 EVAL-004 |
 | 轻量消费端资源读取 | 无强制 Milestone 1 发布项 | CONSUME-001 至 CONSUME-004 |
+| Rhythm-first 真实听感分析 | 无强制 Milestone 1 发布项 | RHY-001 至 RHY-008 |
 
 ## 4. 平台需求
 
@@ -1006,9 +1013,14 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 ### DIAG-009：真实语流分析
 
 - 优先级：P2
-- 阶段：FUTURE
-- 需求：未来研究词级、音素级对齐和真实语流现象。
-- 验收标准：准确性研究完成后定义。
+- 阶段：M2-RHY / FUTURE
+- 需求：真实语流分析应优先解释学习者实际听到的重音节奏、弱读压缩和听感锚点，
+  而不是默认展示 raw phone-level 识别结果。词级、音素级对齐和 connected-speech
+  现象作为证据层服务于该解释。
+- 验收标准：
+  - 默认用户视图能区分“单词问题”和“声音识别问题”。
+  - 声音识别问题默认先展示 rhythm frame，再允许展开 phone-level evidence。
+  - 低置信 raw phone 识别不得直接成为教学结论。
 - 依赖：桌面与移动播放基础稳定。
 
 ## 12. API 与事件需求
@@ -2214,6 +2226,106 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - 回归 fixture 可以提交，用于比较算法改动前后质量。
 - 依赖：LLT-006、CONSUME-004。
 
+## 18.3.5 Rhythm-first 真实听感分析需求
+
+> Phase 2.20 起，真实语流分析的默认目标是回答“这句话实际应该怎么听”，而不是先展示
+> phone-level 识别结果。Phone evidence 仍然保留，但作为解释层证据和长期模型质量工作。
+
+### RHY-001：RhythmFrame 资源模型
+
+- 优先级：P0
+- 阶段：M2-RHY
+- 需求：系统应在句级 `sound_analysis` 中提供 RhythmFrame 或等价结构，描述 stress anchors、
+  weak groups、compression spans、phrase boundaries、listening hotspots 和质量/来源信息。
+- 验收标准：
+  - RhythmFrame 记录生成来源、timing source、phone evidence coverage 和整体 confidence。
+  - 缺失 RhythmFrame 时消费端有明确降级，不伪造真实听感分析。
+  - 字段可通过 LLTimeline import/export 或现有 analysis API 保留。
+- 依赖：LLT-001、LLT-003、LLT-004、PROD-004。
+
+### RHY-002：期望读音与真实听感分层
+
+- 优先级：P0
+- 阶段：M2-RHY
+- 需求：UI 和数据模型必须区分 expected pronunciation、observed rhythm evidence 和 phone evidence。
+- 验收标准：
+  - 词典/规则读音作为稳定教学参考显示。
+  - 真实听感层显示重音、节奏、弱读、压缩和停顿。
+  - Raw CTC phone label 不作为默认教学标签。
+- 依赖：PRON-002、LLT-004、RHY-001。
+
+### RHY-003：StressAnchor 与 WeakGroup baseline
+
+- 优先级：P0
+- 阶段：M2-RHY
+- 需求：系统应基于词典重音、词类/功能词、word timing、pause、duration 和已有 connected-speech
+  evidence，生成第一版 stress anchor 与 weak group。
+- 验收标准：
+  - content word / primary-stress syllable 可成为 anchor candidate。
+  - function words 可附着到邻近 anchor 形成 weak group。
+  - 明显 pause/gap 会阻断错误附着。
+  - 规则为确定性 baseline，并有单元测试。
+- 依赖：RHY-001、PRON-002、PROD-004。
+
+### RHY-004：CompressionSpan 与 PhraseBoundary
+
+- 优先级：P0
+- 阶段：M2-RHY
+- 需求：系统应识别短时长高密度语音区域和自然停顿边界，帮助用户定位“这一团为什么听不清”。
+- 验收标准：
+  - 多个 expected words/syllables 在短窗口内可标为 compression span。
+  - pause/gap 可生成高置信 phrase boundary。
+  - duration-only 证据不足时标记为 tentative。
+- 依赖：RHY-003、LLT-003。
+
+### RHY-005：ListeningHotspot learner-facing explanation
+
+- 优先级：P0
+- 阶段：M2-RHY
+- 需求：系统应把弱读、压缩、连读、删除、同化、flapping 等现象映射为学习者能理解的
+  listening hotspot，而不是暴露底层 edit operation。
+- 验收标准：
+  - 每个 hotspot 包含 word/syllable span、解释类型、证据来源和 confidence。
+  - 低置信 phone mismatch 只能作为 evidence，不能单独生成高置信教学解释。
+  - 默认文案回答“这里为什么听起来不像文字/词典读音”。
+- 依赖：RHY-001、RHY-002、Phase 2.16 connected-speech model。
+
+### RHY-006：Rhythm-first UI
+
+- 优先级：P0
+- 阶段：M2-RHY
+- 需求：消费端应提供 rhythm-first 声音分析视图，默认展示 expected pronunciation reference、
+  RhythmFrame 和 hotspots，phone detail 作为可展开证据层。
+- 验收标准：
+  - stress anchors、weak groups、compression spans 和 phrase boundaries 可在当前句中区分。
+  - phone ribbon 或 phone detail 不再是声音分析的唯一/默认主视图。
+  - 缺少 sound_analysis、缺少 phone evidence 或低置信时有明确状态。
+- 依赖：RHY-001 至 RHY-005、CONSUME-004。
+
+### RHY-007：Rhythm/listening 评测体系
+
+- 优先级：P0
+- 阶段：M2-RHY
+- 需求：真实语流评测应从 phone PER 扩展到 stress anchor、weak group、compression span、
+  phrase boundary 和 listening explanation quality。
+- 验收标准：
+  - TIMIT/Buckeye/TED-LIUM/product media 的评测角色分开记录。
+  - Phone PER 作为 evidence-layer 指标报告，不作为唯一产品 gate。
+  - Manual QA sheet 能标注 anchors、weak groups、compression spans、hotspots 和解释质量。
+- 依赖：EVAL-002、EVAL-004、RHY-001。
+
+### RHY-008：Benchmark-driven pipeline diagnosis
+
+- 优先级：P0
+- 阶段：M2-RHY
+- 需求：系统应根据评测结果归因 pipeline 阻碍项，区分 transcript、timing、stress model、
+  weak-group attachment、duration/compression、connected-speech classifier、phone model 和 UI 表达问题。
+- 验收标准：
+  - 每次 rhythm evaluation report 包含 layer-level bottleneck summary。
+  - 后续改进 phase 依据评分/人工 QA 结果选择，不只依据直觉。
+  - 若 phone evidence 质量不足，UI 仍能降级为 rhythm-only 或 tentative explanation。
+- 依赖：RHY-007、EVAL-002。
+
 ## 18.4 Milestone 2 多语言学习基础需求
 
 > 方向与抽象决策见 `docs/decisions/0012-multilingual-learning-abstraction.md` 与
@@ -2479,5 +2591,6 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | Milestone 1.5 词汇学习资产 | WORD-011 至 WORD-018、API-014 至 API-017、DATA-012 至 DATA-016、UI-013 至 UI-015、TEST-015 至 TEST-018 |
 | Milestone 2 生产引擎 | LLT-001 至 LLT-006、PROD-001 至 PROD-007、EVAL-001 至 EVAL-004 |
 | Milestone 2 轻量消费端 | LLT-007、CONSUME-001 至 CONSUME-004 |
+| Phase 2.20 Rhythm-first 真实听感分析 | RHY-001 至 RHY-008 |
 | Milestone 2 多语言学习基础 | LANG-001 至 LANG-010 |
 | Phase 3.0 英语听力学习闭环 | LOOP-000 至 LOOP-009 |

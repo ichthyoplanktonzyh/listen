@@ -13,6 +13,9 @@
 > `WordObservation` 与旧兼容 adapter 不再作为后续路线基线。
 > 2026-06-28 产品路线更新：新增 Phase 3.0 英语听力学习闭环方向文档，作为真实输入、
 > 可理解度判断、诊断、主动练习、复习巩固、L1-aware 诊断和进度反馈的后续对齐依据。
+> 2026-06-29 产品路线更新：新增 Phase 2.20 Rhythm-first listening analysis，将真实语流分析
+> 的产品中心从 phone-level ribbon 调整为重音节奏框架、弱读音团、压缩区和听感解释；
+> Phase 2.19 phone benchmark scoring 保留为底层 evidence-quality 工作。
 > 完成报告见 `docs/release/milestone-1.md`。
 
 ## 1. 路线图目标
@@ -84,6 +87,8 @@ LLTimeline JSON v1
 - CNN10、NBC Nightly News 等新闻类内容是首批生产管线优化对象。
 - Phase 2.18 后，学习资产权威模型是 `LexicalEntry + LexicalUnit + LearningStatus`；
   旧 `WordProfile` / `WordObservation` 只属于历史文档语境，不再作为 active code path。
+- Phase 2.20 后，真实语流分析默认以 rhythm-first listening frame 回答“这句话实际怎么听”，
+  phone-level expected/observed 对齐保留为证据层与长期模型质量工作。
 
 ### 2.2 MVP 核心闭环
 
@@ -1238,6 +1243,15 @@ M8 退出条件。
 - 置信度和人工抽样验证。
 - 防止错误结果误导用户的产品机制。
 
+2026-06-29 起，本方向进一步调整为 rhythm-first：
+
+- 默认产品视图先展示 stress anchors、weak groups、compression spans、phrase boundaries
+  和 listening hotspots。
+- PhoneTimeline / CTC / expected-vs-observed phone alignment 作为证据层，支撑局部解释，
+  不再作为默认主视图。
+- 评测体系同时报告 phone evidence quality 和 listening explanation quality，避免用 PER
+  单一指标判断产品价值。
+
 ### 14.9 Milestone 1.6：桌面学习体验与词汇初始化强化
 
 > 状态：已完成。2026-06-10 发布 0.4.0；验证见
@@ -1343,6 +1357,8 @@ Phase 3.0 的近期建议顺序：
 
 ```text
 Phase 2.17 真实声音线 QA
+  -> Phase 2.19 phone evidence benchmark scoring
+  -> Phase 2.20 rhythm-first listening analysis
   -> Phase 3.0.1 学习行为架构地基
   -> 输入难度信号与精听/泛听模式
   -> 字幕渐隐、cloze、chunk dictation
@@ -1352,6 +1368,43 @@ Phase 2.17 真实声音线 QA
   -> Chunk-level shadowing 和录音 A-B 对比
   -> 诊断型 dashboard
 ```
+
+### 14.13 Phase 2.20：Rhythm-first Listening Analysis
+
+> 状态：ACTIVE。方向文档见
+> `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-CONTEXT.md`、
+> `2.20-PLAN.md` 与 `2.20-EVALUATION.md`。
+
+Phase 2.20 的目标是把真实语流分析从“phone-level 展示”重心转为“听感结构解释”：
+
+```text
+expected pronunciation
+  -> observed rhythm frame
+  -> stress anchors / weak groups / compression spans / phrase boundaries
+  -> listening hotspots
+  -> optional phone evidence
+```
+
+核心判断：
+
+- 用户听不懂一句话时，首先需要知道应该抓哪些声音锚点。
+- 英语真实语流的可听结构主要由重音、节奏、弱读、压缩和停顿组织。
+- 当前 phone recognizer 的 PER 对 phone-level 细节影响较大，但不应阻塞 rhythm-frame
+  产品体验。
+- TIMIT / Buckeye / TED-LIUM benchmark 仍然重要，但要分别用于 phone evidence、natural
+  connected speech、transcript/timing 和 product-like rhythm QA。
+
+Phase 2.20 的近期顺序：
+
+1. 锁定 RhythmFrame 资源模型和 learner-facing UI 术语。
+2. 建立 deterministic baseline：lexical stress + function words + word timing + pause/duration +
+   connected-speech evidence。
+3. 在 UI 中显示 expected pronunciation reference、真实 rhythm frame、hotspots 和可展开
+   phone detail。
+4. 建立 rhythm/listening evaluation：stress anchor、weak group、compression span、
+   phrase boundary 和 explanation quality。
+5. 用评测结果归因 pipeline 阻碍项，再决定后续是修 timing、stress model、connected-speech
+   classifier、phone model 还是 UI 表达。
 
 ## 15. 依赖关系
 
@@ -1374,7 +1427,9 @@ flowchart TD
     M16 --> M17["Milestone 1.7 本地 Whisper 字幕生成"]
     M17 --> M2P["Milestone 2 生产引擎与时间轴资源"]
     M2P --> M2C["轻量消费端资源读取"]
-    M2C --> M30["Phase 3.0 英语听力学习闭环"]
+    M2P --> M2RHY["Phase 2.20 Rhythm-first 真实听感分析"]
+    M2C --> M2RHY
+    M2RHY --> M30["Phase 3.0 英语听力学习闭环"]
     M30 --> FUTURE["移动正式客户端与后续能力"]
 ```
 

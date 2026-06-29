@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: active
-last_updated: "2026-06-29T02:26:00.000Z"
+last_updated: "2026-06-29T06:32:00.000Z"
 progress:
   total_phases: 11
   completed_phases: 1
@@ -15,8 +15,9 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-29 CST
-> 更新原因：Phase 2.19 real benchmark scoring 已启动，新增 Phase 2.17 artifacts 对
-> TIMIT / Buckeye / TED-LIUM reference 的初始 scorer 和结果记录。
+> 更新原因：新增 Phase 2.20 rhythm-first listening analysis，把真实语流分析的产品中心
+> 从 phone-level ribbon 调整为重音节奏框架、弱读音团、压缩区和听感解释；Phase 2.19
+> phone benchmark scoring 保留为底层 evidence-quality 支撑。
 
 ## 当前位置
 
@@ -30,6 +31,7 @@ progress:
   Phase 2.17 ✅ 真实媒体声音线 QA 已收口 +
   Phase 2.18 ✅ 代码架构全面重构已收口 +
   Phase 2.19 ⏳ 真实 benchmark scoring 初始评估已落地 +
+  Phase 2.20 ⏳ Rhythm-first 真实听感分析已启动 +
   Phase 3.0 🧭 英语听力学习闭环方向已建档 +
   Phase 3.0.1 ✅ backend 学习行为架构地基已落地
 - **分支**：`main`
@@ -46,6 +48,31 @@ progress:
 
 ## 后续产品方向
 
+### Phase 2.20: Rhythm-first Listening Analysis ⏳ Active
+
+- 目标：把真实语流分析从 phone-level 默认展示转为 rhythm-first listening frame，
+  先回答“这句话实际怎么听、该抓哪些声音锚点、哪些区域被弱读/压缩/连起来”。
+- 核心决策：
+  - 单词问题由现有 lexical learning path 承接。
+  - 声音识别问题默认先展示 stress anchors、weak groups、compression spans、
+    phrase boundaries 和 listening hotspots。
+  - Phone-level expected/observed alignment 保留为 evidence layer 和长期模型质量工作；
+    当前 PER 较高不应阻塞 rhythm-frame UI。
+  - Phase 2.19 的 TIMIT/Buckeye/TED-LIUM scoring 继续用于 phone/text/timing evidence quality，
+    但不再作为唯一产品 gate。
+- 下一步：
+  1. 实现 deterministic RhythmFrame baseline：lexical stress + function words + word timing +
+     pause/duration + connected-speech evidence。
+  2. 扩展 `sound_analysis` JSON，加入 `rhythm_frame` resource shape。
+  3. 在 Flutter 中新增 rhythm-first 视图：expected pronunciation reference、rhythm frame、
+     hotspots、可展开 phone evidence。
+  4. 建立 rhythm/listening QA：stress anchor、weak group、compression span、phrase boundary、
+     explanation quality。
+- 规划文档：
+  - `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-CONTEXT.md`
+  - `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-PLAN.md`
+  - `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-EVALUATION.md`
+
 ### Phase 3.0: English Listening Learning Loop 🧭 已建档
 
 - 目标：在 Phase 2 的真实声音流资源和 Phase 2.18 的新学习资产架构之上，把英语作为第一门语言
@@ -57,8 +84,9 @@ progress:
   - 常见语言学习功能必须重写为听力本位能力。
   - L1 与 L2 理论进入诊断层，首个真实组合为 Mandarin L1 -> English L2。
   - Cloze、听写、字幕渐隐、chunk replay 和本地 YouGlish-like 个人语料库是 Phase 3.0 的关键体验。
-- 近期顺序仍以 Phase 2.17 真实声音线 QA 的后续评分/E2E 补强为参考，然后再推进输入难度、精听/泛听、主动验证、
-  听力驱动词汇、L1-aware diagnosis、shadowing 和诊断型 dashboard。
+- 近期顺序以 Phase 2.19 phone evidence benchmark scoring 和 Phase 2.20 rhythm-first
+  listening analysis 为前置依据，然后再推进输入难度、精听/泛听、主动验证、听力驱动词汇、
+  L1-aware diagnosis、shadowing 和诊断型 dashboard。
 - 规划文档：
   - `.planning/phases/3.0-english-listening-learning-loop/3.0-CONTEXT.md`
   - `.planning/phases/3.0-english-listening-learning-loop/3.0-PLAN.md`
