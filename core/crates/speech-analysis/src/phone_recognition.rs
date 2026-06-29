@@ -38,6 +38,9 @@ pub fn recognize_phones(
     let python = sidecar_python();
     let mut command = Command::new(&python);
     command.env("PATH", sidecar_path_env());
+    if let Some(library) = sidecar_espeak_library() {
+        command.env("PHONEMIZER_ESPEAK_LIBRARY", library);
+    }
     let output = command
         .arg(&script)
         .arg("--model-dir")
@@ -134,6 +137,23 @@ fn sidecar_path_env() -> String {
         }
     }
     value
+}
+
+fn sidecar_espeak_library() -> Option<String> {
+    if let Ok(path) = std::env::var("PHONEMIZER_ESPEAK_LIBRARY") {
+        if std::path::Path::new(&path).is_file() {
+            return Some(path);
+        }
+    }
+    [
+        "/opt/homebrew/lib/libespeak-ng.dylib",
+        "/opt/homebrew/lib/libespeak.dylib",
+        "/usr/local/lib/libespeak-ng.dylib",
+        "/usr/local/lib/libespeak.dylib",
+    ]
+    .into_iter()
+    .find(|path| std::path::Path::new(path).is_file())
+    .map(str::to_owned)
 }
 
 fn sidecar_script_path() -> Option<String> {

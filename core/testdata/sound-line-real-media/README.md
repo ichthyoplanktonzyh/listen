@@ -18,8 +18,8 @@ real English media.
 - Full transcript timelines generated from local-only web videos.
 
 All local-only resources are referenced via `local_path` in the manifest, with
-SHA-256 checksums recorded when available. Local-only resources are managed
-outside the repository at their original locations.
+SHA-256 checksums recorded when available. Generated local-only timelines should
+live under ignored `.tmp/sound-line-real-media/` or another non-repo local path.
 
 ## Manifest schema
 
@@ -36,7 +36,7 @@ Each line in `manifest.jsonl` is a JSON object with these fields:
 | `source` | yes | `{kind, locator, external_url}` |
 | `media` | yes | `{local_path, sha256, duration_ms}` |
 | `subtitle` | no | `{local_path, sha256, kind}` — when separate from timeline |
-| `lltimeline` | yes | `{path, local_only, sha256}` |
+| `lltimeline` | yes | `{path, local_path, local_only, sha256}`; `path` is the portable repo locator, `local_path` is the optional ignored/local artifact path |
 | `targets` | yes | `{phenomena, expected_connected_speech_families, min_manual_observations}` |
 | `qa_notes` | yes | Path to case notes markdown file |
 
@@ -64,6 +64,22 @@ python scripts/verify-sound-line-real-media.py \
 python scripts/verify-sound-line-real-media.py \
   --manifest testdata/sound-line-real-media/manifest.jsonl --require-ready
 ```
+
+## Refreshing local-only timelines
+
+Use the headless API runner to refresh ignored `.tmp` artifacts without clicking
+through the desktop UI:
+
+```sh
+python3 scripts/run-sound-line-real-media-case.py \
+  --case-id p217-brooklyn-news-001 \
+  --sentence-limit 5
+```
+
+The runner starts `api-http` against a temporary SQLite database, imports the
+case's local LLTimeline, creates sentence-level CTC phonetic-analysis jobs,
+polls completion, and exports the refreshed LLTimeline back to
+`lltimeline.local_path`.
 
 ## Manual listening observations
 

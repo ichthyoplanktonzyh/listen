@@ -325,7 +325,10 @@ fn connected_speech_family(
             Some(ConnectedSpeechFamily::Contraction)
         }
         PhoneAlignmentKind::Deletion => Some(ConnectedSpeechFamily::Deletion),
-        PhoneAlignmentKind::Insertion => Some(ConnectedSpeechFamily::Linking),
+        // A raw CTC insertion is not enough evidence for learner-facing linking.
+        // Real linking needs cross-token boundary context; otherwise every extra
+        // observed phone becomes a noisy "possible linking" marker.
+        PhoneAlignmentKind::Insertion => None,
         PhoneAlignmentKind::Match | PhoneAlignmentKind::Substitution => None,
     }
 }
@@ -719,7 +722,6 @@ mod tests {
                 ConnectedSpeechFamily::WeakForm,
                 ConnectedSpeechFamily::Flapping,
                 ConnectedSpeechFamily::Assimilation,
-                ConnectedSpeechFamily::Linking,
                 ConnectedSpeechFamily::Contraction,
             ]
         );
@@ -728,13 +730,30 @@ mod tests {
             analysis.connected_speech[0].status,
             ConnectedSpeechExplanationStatus::DetectedInAudio
         );
-        assert_eq!(
-            analysis.connected_speech[3].status,
-            ConnectedSpeechExplanationStatus::PossibleByRule
+        assert_eq!(analysis.connected_speech[3].confidence, 0.62);
+        assert_eq!(analysis.connected_speech[3].label, "possible contraction");
+    }
+
+    #[test]
+    fn raw_insertion_does_not_become_linking_without_boundary_context() {
+        let canonical = canonical(&["AH"]);
+        let observed = observed(&[("AH", 0, 40), ("R", 40, 60)]);
+        let alignments = vec![
+            alignment(PhoneAlignmentKind::Match, &["AH"], Some(0), Some(0), 0, 0.9),
+            alignment(PhoneAlignmentKind::Insertion, &[], Some(1), Some(1), 0, 0.9),
+        ];
+
+        let analysis = build_sound_analysis(
+            &canonical,
+            &observed,
+            &alignments,
+            "ctc",
+            "v1",
+            Some("model".into()),
+            "arpabet",
         );
-        assert_eq!(analysis.connected_speech[3].phone_start, Some(4));
-        assert_eq!(analysis.connected_speech[4].confidence, 0.62);
-        assert_eq!(analysis.connected_speech[4].label, "possible contraction");
+
+        assert!(analysis.connected_speech.is_empty());
     }
 
     #[test]

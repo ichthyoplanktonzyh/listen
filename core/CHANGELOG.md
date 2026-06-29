@@ -2,6 +2,49 @@
 
 ## Unreleased
 
+- 2026-06-29 10:15 CST: 收口 Phase 2.17 real-media sound-line QA。
+  (1) **Headless runner**: 新增 `scripts/run-sound-line-real-media-case.py`，通过临时
+  `api-http` + SQLite 执行 register media、LLTimeline import、句级 CTC phonetic job、poll 和
+  export，不再依赖手点 UI 生成 PhoneTimeline。
+  (2) **Runtime 修复**: CTC sidecar 启动环境现在自动注入 Homebrew `PATH` 和可用的
+  `PHONEMIZER_ESPEAK_LIBRARY`；修复 `phonetic_alignment::backtrace` 在 detected index zero
+  deletion 路径上的 `usize` 下溢 panic，避免 background job 卡在 `analyzing`。
+  (3) **Artifact refresh**: 8 个 Phase 2.17 local-only 小窗口 artifacts 已刷新到 ignored
+  `.tmp/sound-line-real-media/cases/`，manifest `lltimeline.sha256` 同步当前本机 artifact。
+  Brooklyn / Venezuela 保留 deletion、weak_form、assimilation、flapping markers；TED-LIUM /
+  Buckeye / TIMIT 不再从 raw insertion 生成 `linking` 爆炸。
+  (4) **Closeout**: `2.17-CTC-MISMATCH-FINDINGS.md` 更新为 accepted findings，新增
+  `2.17-CLOSEOUT.md`，同步 `2.17-PLAN.md`、`.planning/STATE.md` 和 QA README/case note。
+  验证: `PATH="/opt/homebrew/opt/rustup/bin:$PATH" cargo fmt --check`、
+  `PATH="/opt/homebrew/opt/rustup/bin:$PATH" cargo test -p speech-analysis`、
+  `python3 -m py_compile scripts/run-sound-line-real-media-case.py scripts/verify-sound-line-real-media.py`、
+  `python3 scripts/verify-sound-line-real-media.py --manifest testdata/sound-line-real-media/manifest.jsonl --strict-local --require-ready`、
+  `python3 scripts/verify-sound-line-real-media.py --manifest testdata/sound-line-real-media/manifest.jsonl --json` 通过。
+
+- 2026-06-29 09:35 CST: 收敛 Phase 2.17 local-only artifact 与 benchmark 评估边界。
+  (1) **Artifact 边界**: 将 8 个生成的 `.lltimeline.json` 保持在 ignored
+  `.tmp/sound-line-real-media/cases/`，manifest 通过 `lltimeline.local_path` 引用；repo 继续只提交
+  manifest、notes、checksum 和 verifier，不提交 local-only 派生 transcript/timeline。
+  (2) **Verifier**: 支持 `lltimeline.local_path`，并统一 marker playback window 阈值文案。
+  `--strict-local`、`--require-ready` 和 `--json` 在当前本机 artifacts 上均通过。
+  (3) **评估边界**: `2.17-PLAN.md` 明确 benchmark case 用于 pipeline vs reference/gold
+  比较，product-media case 用于 UI/听感 QA；当前 Buckeye/TED-LIUM/TIMIT artifacts 暴露
+  `linking` marker 爆炸，说明链路 ready 但学习质量未 ready。
+  (4) **Findings**: 新增 `2.17-CTC-MISMATCH-FINDINGS.md` draft，并同步 Brooklyn 当前 family
+  breakdown 与下一步过滤/去重方向。
+
+- 2026-06-29 09:52 CST: 收紧 Phase 2.17 linking marker 生成与 verifier 质量警告。
+  (1) **算法门控**: `speech-analysis::sound_analysis` 不再把 generic CTC insertion 自动提升为
+  learner-facing `linking` marker；没有跨词边界上下文时只保留底层 alignment，不生成教学解释。
+  (2) **Verifier 质量警告**: `verify-sound-line-real-media.py` 现在会 warning 缺少 WordTimeline 的
+  phone-only artifact，以及单一 connected-speech family 占比过高的 marker 爆炸。
+  (3) **重跑策略**: `2.17-PLAN.md` 与 `2.17-CTC-MISMATCH-FINDINGS.md` 明确当前 `.tmp`
+  timelines 是旧逻辑 artifact，应先重跑 Brooklyn + 一个 Buckeye/TED-LIUM 代表 case，再决定是否
+  全量重跑 8 个 local-only artifacts。
+  验证: `cargo test -p speech-analysis sound_analysis`、`python3 scripts/verify-sound-line-real-media.py --manifest testdata/sound-line-real-media/manifest.jsonl --strict-local`、
+  `python3 scripts/verify-sound-line-real-media.py --manifest testdata/sound-line-real-media/manifest.jsonl --json`、
+  `python3 -m py_compile scripts/verify-sound-line-real-media.py` 通过。
+
 - 2026-06-28 22:58 CST: 推进 Phase 2.17 real-media QA pack 中间态。
   (1) **QA pack 骨架**: 新增 `testdata/sound-line-real-media/` README、8-case manifest
   和 case notes stub，覆盖 local news、TED-LIUM、Buckeye、TIMIT；local-only 资源只记录

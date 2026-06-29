@@ -114,7 +114,7 @@ fn backtrace(
                 .map(|phone| phone.symbol.clone())
                 .collect(),
             detected_phone_start: (!detected_slice.is_empty()).then_some(detected_start as u32),
-            detected_phone_end: (!detected_slice.is_empty()).then_some((j - 1) as u32),
+            detected_phone_end: (!detected_slice.is_empty()).then(|| (j - 1) as u32),
             confidence,
         });
         i = canonical_start;
@@ -163,6 +163,27 @@ mod tests {
         assert_eq!(values[0].kind, PhoneAlignmentKind::Merge);
         assert_eq!(values[0].token_start, Some(0));
         assert_eq!(values[0].token_end, Some(2));
+    }
+
+    #[test]
+    fn deletion_at_zero_detected_index_does_not_underflow() {
+        let values = align_phones(&canonical(&[(0, "K"), (0, "AE")]), &[]);
+        assert_eq!(values.len(), 2);
+        assert!(
+            values
+                .iter()
+                .all(|value| value.kind == PhoneAlignmentKind::Deletion)
+        );
+        assert!(
+            values
+                .iter()
+                .all(|value| value.detected_phone_start.is_none())
+        );
+        assert!(
+            values
+                .iter()
+                .all(|value| value.detected_phone_end.is_none())
+        );
     }
 
     fn canonical(values: &[(u32, &str)]) -> Vec<CanonicalPhone> {

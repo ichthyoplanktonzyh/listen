@@ -28,6 +28,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+PLAYBACK_WINDOW_MIN_MS = 10
+PLAYBACK_WINDOW_MAX_MS = 1500
 VALID_LAYERS = {"phone_gold", "natural_connected_speech", "product_media", "supplemental"}
 VALID_STATUSES = {"possible_by_rule", "supported_by_audio", "detected_in_audio"}
 CASE_ID_RE = re.compile(r"^[a-z][a-z0-9-]*$")
@@ -41,6 +43,13 @@ def expand_path(raw: str) -> Path:
     if raw.startswith("~/"):
         return Path.home() / raw[2:]
     return Path(raw)
+
+
+def resolve_manifest_path(raw: str, repo_root: Path) -> Path:
+    expanded = expand_path(raw)
+    if expanded.is_absolute():
+        return expanded
+    return repo_root / expanded
 
 
 def red(text: str) -> str:
@@ -126,27 +135,28 @@ def check_file_existence(case: dict[str, Any], repo_root: Path, strict_local: bo
     if not qa_notes_path.is_file():
         errors.append(f"[{case_id}]: qa_notes file not found: {case['qa_notes']}")
 
-    # Check lltimeline file
+    # Check lltimeline file. Repo `path` is the portable locator; local-only
+    # generated timelines may instead live under ignored `.tmp/` via `local_path`.
     llt = case["lltimeline"]
-    timeline_rel = llt.get("path", "")
-    if timeline_rel:
-        timeline_path = repo_root / timeline_rel
-        if timeline_path.is_file():
-            pass  # exists, will validate later
-        elif llt.get("local_only"):
-            msg = f"[{case_id}]: lltimeline not found (local_only): {timeline_rel}"
+    timeline_path = timeline_path_for_case(case, repo_root)
+    if timeline_path is not None and timeline_path.is_file():
+        pass  # exists, will validate later
+    else:
+        timeline_locator = llt.get("local_path") or llt.get("path") or "<missing>"
+        if llt.get("local_only"):
+            msg = f"[{case_id}]: lltimeline not found (local_only): {timeline_locator}"
             if strict_local:
                 errors.append(msg)
             else:
                 warnings.append(msg)
         else:
-            errors.append(f"[{case_id}]: lltimeline not found (not local_only): {timeline_rel}")
+            errors.append(f"[{case_id}]: lltimeline not found (not local_only): {timeline_locator}")
 
     # Check media file
     media = case.get("media", {})
     media_path_str = media.get("local_path", "")
     if media_path_str:
-        media_path = expand_path(media_path_str)
+        media_path = resolve_manifest_path(media_path_str, repo_root)
         if not media_path.exists() and not media_path.is_dir():
             warnings.append(f"[{case_id}]: media file not found: {media_path_str}")
         elif media.get("sha256") and media_path.is_file():
@@ -158,14 +168,18 @@ def check_file_existence(case: dict[str, Any], repo_root: Path, strict_local: bo
     if isinstance(subtitle, dict):
         sub_path_str = subtitle.get("local_path", "")
         if sub_path_str:
-            sub_path = expand_path(sub_path_str)
+            sub_path = resolve_manifest_path(sub_path_str, repo_root)
             if not sub_path.is_file():
                 warnings.append(f"[{case_id}]: subtitle file not found: {sub_path_str}")
 
     return errors, warnings
 
 
-def validate_timeline(timeline_path: Path, case_id: str) -> tuple[list[str], list[str]]:
+def validate_timeline(
+    timeline_path: Path,
+    case_id: str,
+    layer: str,
+) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
 
@@ -182,11 +196,21 @@ def validate_timeline(timeline_path: Path, case_id: str) -> tuple[list[str], lis
     for field in ("segments", "word_timelines", "phone_timelines"):
         if field not in doc or not isinstance(doc[field], list):
             warnings.append(f"[{case_id}]: timeline missing or empty '{field}'")
+    word_count = sum(
+        len(timeline.get("words") or [])
+        for timeline in doc.get("word_timelines") or []
+        if isinstance(timeline, dict)
+    )
+    if layer in {"natural_connected_speech", "product_media"} and word_count == 0:
+        warnings.append(
+            f"[{case_id}]: no WordTimeline words; this is phone-only and not a full product-path regression"
+        )
 
     # Check phone_timelines
     phone_timelines = doc.get("phone_timelines") or []
     has_learning_phones = False
     has_connected_speech = False
+    family_counts: dict[str, int] = {}
 
     for pt_idx, pt in enumerate(phone_timelines):
         if not isinstance(pt, dict):
@@ -228,6 +252,9 @@ def validate_timeline(timeline_path: Path, case_id: str) -> tuple[list[str], lis
             for cs_idx, cs in enumerate(cs_list):
                 if not isinstance(cs, dict):
                     continue
+                family = cs.get("family")
+                if isinstance(family, str):
+                    family_counts[family] = family_counts.get(family, 0) + 1
                 # Check phone range bounds
                 phone_start = cs.get("phone_start")
                 phone_end = cs.get("phone_end")
@@ -260,10 +287,14 @@ def validate_timeline(timeline_path: Path, case_id: str) -> tuple[list[str], lis
                                 f"[{case_id}]: phone_timelines[{pt_idx}].connected_speech[{cs_idx}] "
                                 "cannot derive playback window from learning_phones"
                             )
-                        elif window < 40 or window > 1500:
+                        elif (
+                            window < PLAYBACK_WINDOW_MIN_MS
+                            or window > PLAYBACK_WINDOW_MAX_MS
+                        ):
                             errors.append(
                                 f"[{case_id}]: phone_timelines[{pt_idx}].connected_speech[{cs_idx}] "
-                                f"derived playback window ({window}ms) outside [40, 1500]"
+                                f"derived playback window ({window}ms) outside "
+                                f"[{PLAYBACK_WINDOW_MIN_MS}, {PLAYBACK_WINDOW_MAX_MS}]"
                             )
 
                 # Check status
@@ -285,6 +316,15 @@ def validate_timeline(timeline_path: Path, case_id: str) -> tuple[list[str], lis
         warnings.append(f"[{case_id}]: no active/candidate PhoneTimeline with learning_phones")
     if not has_connected_speech:
         warnings.append(f"[{case_id}]: no active/candidate PhoneTimeline with connected_speech")
+    connected_count = sum(family_counts.values())
+    if connected_count >= 20:
+        family, count = max(family_counts.items(), key=lambda item: item[1])
+        ratio = count / connected_count
+        if ratio >= 0.8:
+            warnings.append(
+                f"[{case_id}]: connected_speech family '{family}' dominates "
+                f"{count}/{connected_count} markers; inspect provider/rule overgeneration"
+            )
 
     return errors, warnings
 
@@ -304,6 +344,23 @@ def playback_window_from_learning_phones(phones: list[Any]) -> int | None:
     if not starts or not ends:
         return None
     return max(ends) - min(starts)
+
+
+def timeline_path_for_case(case: dict[str, Any], repo_root: Path) -> Path | None:
+    llt = case.get("lltimeline")
+    if not isinstance(llt, dict):
+        return None
+    for key in ("path", "local_path"):
+        raw = llt.get(key)
+        if not isinstance(raw, str) or not raw:
+            continue
+        candidate = resolve_manifest_path(raw, repo_root)
+        if candidate.is_file():
+            return candidate
+    raw = llt.get("local_path") or llt.get("path")
+    if isinstance(raw, str) and raw:
+        return resolve_manifest_path(raw, repo_root)
+    return None
 
 
 def main() -> int:
@@ -363,34 +420,32 @@ def main() -> int:
     connected_speech_cases = 0
     learning_phone_cases = 0
     for case in cases:
-        llt_rel = case["lltimeline"].get("path", "")
-        if not llt_rel:
+        llt_path = timeline_path_for_case(case, repo_root)
+        if llt_path is None:
             continue
-        llt_path = repo_root / llt_rel
         if not llt_path.is_file():
             continue
         timeline_cases += 1
-        errs, warns = validate_timeline(llt_path, case["case_id"])
+        errs, warns = validate_timeline(llt_path, case["case_id"], case.get("layer", ""))
         all_errors.extend(errs)
         all_warnings.extend(warns)
 
-        # Quick check for connected_speech presence (without full parse overhead)
+        # Quick check for learning_phones and connected_speech presence
         try:
             doc = json.loads(llt_path.read_text(encoding="utf-8"))
             for pt in doc.get("phone_timelines") or []:
                 if not isinstance(pt, dict):
                     continue
                 sa = pt.get("sound_analysis")
-                if isinstance(sa, dict):
-                    cs = sa.get("connected_speech")
-                    if isinstance(cs, list) and cs:
-                        connected_speech_cases += 1
-                        break
-                if isinstance(sa, dict):
-                    lp = sa.get("learning_phones")
-                    if isinstance(lp, list) and lp:
-                        learning_phone_cases += 1
-                        break
+                if not isinstance(sa, dict):
+                    continue
+                cs = sa.get("connected_speech")
+                lp = sa.get("learning_phones")
+                if isinstance(lp, list) and lp:
+                    learning_phone_cases += 1
+                if isinstance(cs, list) and cs:
+                    connected_speech_cases += 1
+                break  # one timeline is enough per case
         except Exception:
             pass
 
