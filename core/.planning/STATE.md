@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: active
-last_updated: "2026-06-29T02:10:00.000Z"
+last_updated: "2026-06-29T02:26:00.000Z"
 progress:
   total_phases: 11
   completed_phases: 1
@@ -15,9 +15,8 @@ progress:
 # LLPlayerNext — 项目活记忆
 
 > 最后更新：2026-06-29 CST
-> 更新原因：Phase 2.17 real-media sound-line QA 已收口，新增 local-only QA pack、
-> headless API runner、verifier、CTC mismatch findings，并修复 phonemizer sidecar 与
-> phonetic alignment panic。
+> 更新原因：Phase 2.19 real benchmark scoring 已启动，新增 Phase 2.17 artifacts 对
+> TIMIT / Buckeye / TED-LIUM reference 的初始 scorer 和结果记录。
 
 ## 当前位置
 
@@ -30,6 +29,7 @@ progress:
   Phase 2.16 ✅ 真实语流模型 v1 收口完成 +
   Phase 2.17 ✅ 真实媒体声音线 QA 已收口 +
   Phase 2.18 ✅ 代码架构全面重构已收口 +
+  Phase 2.19 ⏳ 真实 benchmark scoring 初始评估已落地 +
   Phase 3.0 🧭 英语听力学习闭环方向已建档 +
   Phase 3.0.1 ✅ backend 学习行为架构地基已落地
 - **分支**：`main`
@@ -711,6 +711,26 @@ progress:
   - `.planning/phases/2.17-real-media-sound-line-qa/2.17-CTC-MISMATCH-FINDINGS.md`
   - `.planning/phases/2.17-real-media-sound-line-qa/2.17-CLOSEOUT.md`
 
+### Phase 2.19: Real Benchmark Scoring ⏳ 初始评估已落地
+
+- 目标：把 Phase 2.17 QA artifacts 与 benchmark reference/gold 做量化对比，回答 pipeline
+  真实效果，而不只验证资源形状。
+- 已新增 `scripts/evaluate-sound-line-benchmarks.py`：
+  - TIMIT：`.PHN` content-phone PER。
+  - Buckeye：`.phones` actual-pronunciation windowed PER。
+  - TED-LIUM：`.stm` transcript exact match 与 segment timing offset。
+- 初始结果：
+  - TED-LIUM Al Gore / Bill Gates transcript 和 segment timing 与 `.stm` reference 精确匹配。
+  - Buckeye s0201a / s0301a PER 分别约 0.304 / 0.352，接近历史 fb-espeak TIMIT dev baseline。
+  - Buckeye s0101a PER 约 1.005，TIMIT Phase 2.17 artifact PER 约 0.874，均暴露窗口/映射/
+    artifact 生成问题，不能作为最终模型质量结论。
+  - 历史 fb-espeak TIMIT dev baseline 复跑为 PER 0.304636。
+- 当前判断：pipeline 已经可评估，但 phone-level 质量尚未 release-grade；下一步优先排查
+  TIMIT sentence window、espeak symbol mapping、Buckeye lead-in filtering 和 boundary metrics。
+- 规划文档：
+  - `.planning/phases/2.19-real-benchmark-scoring/2.19-PLAN.md`
+  - `.planning/phases/2.19-real-benchmark-scoring/2.19-INITIAL-RESULTS.md`
+
 ### 强制对齐研究 🧭 长期推进
 
 - torchaudio MMS_FA sidecar（`scripts/forced-align/align-cli.py`）。
@@ -773,7 +793,8 @@ progress:
 ## 下一步工作
 
 1. 为 TIMIT / Buckeye / TED-LIUM 建立 reference scoring harness，分别比较 phone boundary /
-   phone identity、word/phone label、transcript alignment。
+   phone identity、word/phone label、transcript alignment；Phase 2.19 已有初始 scorer，下一步
+   排查 TIMIT/Buckeye 异常窗口并补 boundary metrics。
 2. 建立桌面 UI E2E/integration phase：启动真实 sidecar，导入媒体/LLTimeline，创建 phonetic job，
    等待 PhoneTimeline，点击 sound-line marker 并验证 playback window。
 3. 在后续学习闭环 phase 中继续推进输入难度、精听/泛听、主动验证、听力驱动词汇和诊断 dashboard。

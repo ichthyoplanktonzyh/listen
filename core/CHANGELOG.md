@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- 2026-06-29 10:26 CST: 启动 Phase 2.19 real benchmark scoring 初始评估。
+  (1) **Scorer**: 新增 `scripts/evaluate-sound-line-benchmarks.py`，从 Phase 2.17 manifest
+  和 ignored `.tmp` artifacts 读取结果，并对 TIMIT `.PHN`、Buckeye `.phones`、TED-LIUM `.stm`
+  做本地 reference 对比。
+  (2) **初始结果**: TED-LIUM transcript/timing 对齐为 exact；Buckeye s0201a/s0301a 初始
+  PER 分别约 0.304/0.352；Buckeye s0101a 与 TIMIT Phase 2.17 artifact 暴露明显窗口/映射问题，
+  其中 TIMIT 小窗口 PER 约 0.874，显著差于历史 fb-espeak TIMIT dev baseline 0.304636。
+  (3) **规划**: 新增 `.planning/phases/2.19-real-benchmark-scoring/2.19-PLAN.md` 和
+  `2.19-INITIAL-RESULTS.md`，明确后续要排查 TIMIT sentence window、espeak symbol mapping、
+  Buckeye lead-in filtering、boundary metrics 和 product-media manual listening precision。
+  验证: `python3 -m py_compile scripts/evaluate-sound-line-benchmarks.py`、
+  `python3 scripts/evaluate-sound-line-benchmarks.py --manifest testdata/sound-line-real-media/manifest.jsonl`、
+  `python3 scripts/phonetic-eval.py score testdata/phonetic-analysis/reference-dev-v1-content-only.jsonl testdata/phonetic-analysis/prediction-fb-espeak-timit-mapped-v1.jsonl` 通过。
+
 - 2026-06-29 10:15 CST: 收口 Phase 2.17 real-media sound-line QA。
   (1) **Headless runner**: 新增 `scripts/run-sound-line-real-media-case.py`，通过临时
   `api-http` + SQLite 执行 register media、LLTimeline import、句级 CTC phonetic job、poll 和
