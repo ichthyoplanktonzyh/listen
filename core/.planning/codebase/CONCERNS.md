@@ -44,8 +44,13 @@
 - **影响**：发布包中可能找不到 Rust 二进制
 - **修复思路**：生产发布包固化 sidecar 路径（macOS bundle 内嵌）
 
-### `LocalApi` HTTP transport 非注入（2026-06-30 测试期新增）
+### `LocalApi` HTTP transport 非注入 ✅ 已修复（2026-06-30）
 
+- **当前状态**：已加 `ApiTransport` seam + `LocalApi.withTransport(...)` 测试构造器，
+  生产路径 `_transport ?? _httpClientTransport` 行为不变；`_request`（79 个调用点）现可
+  无 sidecar 单测。已落地 `test/api_service_transport_test.dart`（解码/错误映射/body 编码）。
+  **后续**：补全 `api_service.dart` 各方法与两个 workflow controller 的方法级测试；
+  SSE(`/v1/events`) 与文件上传/下载等 3 处特殊 `_client` 裸调暂未纳入 seam。
 - **文件**：`apps/desktop/lib/services/api_service.dart:49`（`final HttpClient _client = HttpClient();`）
 - **问题**：transport 在字段初始化处写死 `dart:io HttpClient`，没有可注入的 seam；
   且 `LocalApi` 只有私有构造 `LocalApi._(...)`，唯一公开入口是会起真实 sidecar 进程的
@@ -143,7 +148,7 @@
 
 | # | 项 | 文件:line | 性质 | 风险 | 备注 |
 |---|---|---|---|---|---|
-| A1 | `LocalApi` transport 非注入 | `api_service.dart:49` | 测试+架构双赢 seam | 低 | 修后解锁 Tier A 客户端单测；见 §1 |
+| A1 | `LocalApi` transport 非注入 ✅ 已修复 | `api_service.dart` | 测试+架构双赢 seam | 低 | 已加 `ApiTransport` seam + `withTransport` 测试构造器，行为不变；后续补方法级/controller 测试，见 §1 |
 | A2 | `build_word_timeline` / `save_word_timeline_snapshot` 参数过多 | `application/src/lib.rs:213` (9/7)、`:292` (8/7) | 松散参数 → 参数结构体 | 低 | clippy `too_many_arguments`；机械清理 |
 | A3 | workspace clippy warning 漂移 | `speech-analysis`/`application`/`dictionary-provider` 等 lib | 验证门禁失效嫌疑 | 低 | `--strict` 可能已名存实亡，与文档"clippy 干净"矛盾；已挂后台任务 |
 | A4 | `speech-analysis` 职责过重 | `crates/speech-analysis/src/`（11 模块） | 拆 crate（结构性大改） | 中高 | 见 §1；**先出评审**再动 |

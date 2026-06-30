@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- 2026-06-30 20:30 CST: 收口 Tier A 测试，并修复架构债 A1（`LocalApi` transport 非注入），
+  这是第一处"架构修复解锁测试"的闭环。
+  (1) **A1 seam（生产代码，行为不变）**：`apps/desktop/lib/services/api_service.dart`
+  抽出 `ApiTransport` typedef + `LocalApi.withTransport(...)` 测试构造器；`_request`
+  （79 个调用点）改走 `_transport ?? _httpClientTransport`，默认实现保留原样 header/请求
+  逻辑。生产路径字节级不变；SSE 与上传/下载 3 处特殊 `_client` 裸调暂留。
+  (2) **解锁的测试**：新增 `apps/desktop/test/api_service_transport_test.dart`（3 测试）：
+  GET 经 seam 解码、非 2xx → `HttpException`、PUT body 编码经 seam 转发。
+  (3) **文档**：`CONCERNS.md` A1 标记已修复（§1/§6），记录后续补方法级/controller 测试；
+  `TESTING.md` 同步。
+  验证: `flutter analyze`（api_service + 新测试，0 issue）、`flutter test`（103→106 全绿）。
+  合并摩擦评估：main（Phase 2.21 韵律）未触及 `api_service.dart` 及本 worktree 测试目标，
+  唯一保证冲突是 CHANGELOG.md（琐碎可解）。
+
 - 2026-06-30 20:05 CST: Tier A 续作——补 SQLite 迁移失败恢复刻画测试（CONCERNS §2/§3
   点名的脆弱区，至今无自动化）。新增
   `crates/persistence-sqlite/tests/migration_recovery_test.rs`（4 测试）：
