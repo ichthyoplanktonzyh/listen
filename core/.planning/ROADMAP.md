@@ -16,6 +16,10 @@
 > 2026-06-29 产品路线更新：新增 Phase 2.20 Rhythm-first listening analysis，将真实语流分析
 > 的产品中心从 phone-level ribbon 调整为重音节奏框架、弱读音团、压缩区和听感解释；
 > Phase 2.19 phone benchmark scoring 保留为底层 evidence-quality 工作。
+> 2026-06-30 架构路线更新：新增 Phase 2.21 Audible Structure Architecture，把 Phase 2.20
+> 的 rhythm-first UI/实验铺垫上升为正式 audible-structure contract；旧 `RhythmFrame` v0
+> 兼容性不再阻塞新模型，后续先落实 A/B/C references、provenance、nuclei、WordTimeline
+> + duration/energy substrate 和 CTC phone segmental-only ownership。
 > 完成报告见 `docs/release/milestone-1.md`。
 
 ## 1. 路线图目标
@@ -89,6 +93,10 @@ LLTimeline JSON v1
   旧 `WordProfile` / `WordObservation` 只属于历史文档语境，不再作为 active code path。
 - Phase 2.20 后，真实语流分析默认以 rhythm-first listening frame 回答“这句话实际怎么听”，
   phone-level expected/observed 对齐保留为证据层与长期模型质量工作。
+- Phase 2.21 后，actual audible structure 的权威定义从 `RhythmFrame` v0 转到
+  Phase 2.21 架构锁：文本先验不能冒充实际听到的结构；L1-L3 必须能由 WordTimeline +
+  dictionary/syllable structure + duration/energy 生成；CTC phone evidence 只拥有 L4
+  connected-speech/segmental 解释。
 
 ### 2.2 MVP 核心闭环
 

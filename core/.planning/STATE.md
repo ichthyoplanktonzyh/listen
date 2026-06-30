@@ -23,7 +23,9 @@ progress:
 > benchmark 方向重组为 stress/rhythm 分层体系，并把算法/指标必须有研究、标注或
 > product QA 依据的原则写入根目录 `AGENT.md`。同日路线复盘确认：`RhythmFrame`
 > 产品 contract 正确，但 generator 主线需要从 CTC-derived rhythm 迁移到 forced-aligned
-> WordTimeline + duration/rate + RMS energy/F0 的 layered hybrid。
+> WordTimeline + duration/rate + RMS energy/F0 的 layered hybrid。2026-06-30 17:37 CST
+> 新增 Phase 2.21 Audible Structure Architecture，单独落实 actual audible structure
+> contract；旧 `RhythmFrame` v0 兼容性不再阻塞新模型。
 
 ## 当前位置
 
@@ -38,6 +40,7 @@ progress:
   Phase 2.18 ✅ 代码架构全面重构已收口 +
   Phase 2.19 ⏳ 真实 benchmark scoring 初始评估已落地 +
   Phase 2.20 ⏳ Rhythm-first 真实听感分析已启动 +
+  Phase 2.21 ⏳ Audible Structure Architecture 已启动 +
   Phase 3.0 🧭 英语听力学习闭环方向已建档 +
   Phase 3.0.1 ✅ backend 学习行为架构地基已落地
 - **分支**：`main`
@@ -150,16 +153,11 @@ progress:
     可以大胆尝试，但必须标明 evidence class 和用途。
   - OpenAPI schema、Rust unit tests、Flutter widget test 和 contract validation 已同步。
 - 下一步：
-  1. 用 `scripts/prepare-rhythm-acoustic-qa.py` 在 5-10 个本地有 active WordTimeline
-     的句子上生成对比 JSON/JSONL，并完成人工听感标注：actual prominent words、weak/reduced
-     groups、compressed regions、phrase boundaries 和 hotspot manual score。
-  2. 根据人工 QA，把 production pipeline 侧 RMS energy/loudness extractor 正式写成
-     provider-attributed evidence；不要把依赖放入 Flutter consumer app。
-  3. LDC/SLDR 等 human-gold 资源只做 local-only adapter 约定，不提交受限数据。
-  4. 等本地资源可协作时，用现有 8 个 Phase 2.17 real-media cases 重跑或补标 `rhythm_frame`，
-     统计 misleading / useful / unsupported explanations。
-  5. 在仓库内继续打磨主声音视图：可展开 phone evidence。
-  6. 根据 manual QA 决定 F0/pitch reset 是否进入 Phase 2.20，或先用 duration+energy 收口。
+  1. 结构主线已转入 Phase 2.21：先重写 audible-structure / RhythmFrame contract。
+  2. `scripts/prepare-rhythm-acoustic-qa.py` 暂作为 Phase 2.21 的 experiment seam，
+     等 contract 稳定后再用于人工 QA 和 duration/energy 候选校准。
+  3. Phase 2.20 已落地的 UI、scorer、Helsinki/LibriTTS adapter 和 benchmark roles 作为
+     Phase 2.21 的脚手架继续复用。
 - 规划文档：
   - `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-CONTEXT.md`
   - `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-PLAN.md`
@@ -168,6 +166,39 @@ progress:
   - `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-ROUTE-CORRECTION.md`
   - `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-ACOUSTIC-FEATURE-PATH.md`
   - `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-EVALUATION.md`
+
+### Phase 2.21: Audible Structure Architecture ⏳ Active
+
+- 目标：把 Phase 2.20 的 rhythm-first UI/实验铺垫上升为正式 actual audible structure
+  architecture，并重写 `RhythmFrame` 的权威 contract。
+- 核心决策：
+  - 本 phase 可以不保留旧 `RhythmFrame` v0 兼容性；正确 structure 优先。
+  - actual/audible claim 必须有至少一个 audio-backed signal：
+    `timing`、`energy`、`pitch` 或 `phone_segmental`。只有 `text_prior` 的 claim
+    必须标为 predicted。
+  - 三参考模型是权威 expected-side 结构：citation form、default connected variants、
+    actual delivery；`B-A` 是 teachable rule，`C-B` 是 clip-specific surprise。
+  - L1-L3 RhythmFrame 必须能由 WordTimeline + dictionary/syllable structure +
+    duration/energy 生成；CTC phone evidence 只拥有 L4 connected-speech/segmental
+    evidence。
+  - Nucleus 是 phrase-scoped learner-facing candidate；低证据 phrase 可以 abstain，
+    不硬判。
+- 已落地：
+  - 新增 `.planning/phases/2.21-audible-structure-architecture/2.21-AUDIBLE-STRUCTURE-MODEL.md`
+    作为 architecture lock。
+  - 新增 `2.21-CONTEXT.md` 和 `2.21-PLAN.md`，明确本 phase 从 Phase 2.20 分离，
+    并把 duration/RMS harness 降级为 experiment seam。
+- 下一步：
+  1. 按 2.21 contract 重写 Rust/OpenAPI/Flutter 的 `RhythmFrame` 数据模型：
+     references、provenance、prominence cues、evidence class、phrase-scoped nuclei、
+     connected-speech refs 和 quality signal sources。
+  2. 更新 fixtures/tests，允许旧 v0 fixture 被替换，不为历史资源做兼容包袱。
+  3. 再推进 WordTimeline + duration/energy generation boundary，确保无 phone evidence
+     也能产出 L1-L3。
+- 规划文档：
+  - `.planning/phases/2.21-audible-structure-architecture/2.21-CONTEXT.md`
+  - `.planning/phases/2.21-audible-structure-architecture/2.21-PLAN.md`
+  - `.planning/phases/2.21-audible-structure-architecture/2.21-AUDIBLE-STRUCTURE-MODEL.md`
 
 ### Phase 3.0: English Listening Learning Loop 🧭 已建档
 

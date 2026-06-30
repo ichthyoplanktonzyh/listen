@@ -2,23 +2,21 @@
 
 ## Unreleased
 
-- 2026-06-30 14:31 CST: 立住 Phase 2.20 "actual audible structure" 架构与方向，新增
-  canonical 锁定文档
-  `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-AUDIBLE-STRUCTURE-MODEL.md`。
-  (1) **Definition lock**: 把可听结构锁为四层——音步锚点（L1）、调核 nucleus（L2）、
-  调群边界（L3）、连读音变（L4），以 foot 为统一单位；明确 v0 缺失 nucleus、用文本预测
-  冒充音频测量、节奏骑在 CTC 上的符合性差距。
-  (2) **Three-reference + provenance lock**: 把模糊的 "expected" 拆为 citation /
-  default-connected / actual 三参照，规定 `默认−词典 = 可教规则`、`实际−默认 = 本句意外`；
-  每条结论必须带 signal source + evidence class，只有音频信号支撑才可标"实际/可听"，
-  纯 `text_prior` 必须标 predicted。
-  (3) **Substrate + ownership lock**: 节奏骨架 L1–L3 改由 forced-aligned WordTimeline +
-  词典 + duration/energy 产出，phone 缺席也要成立，CTC 降级为 L4 `phone_segmental` 证据；
-  L1 母语过滤与纯语速难度归诊断层（LANG-009 seam），不进 RhythmFrame。
-  (4) **Open decisions deferred**: 不设任何阈值，F0/pitch 改为带判据的决策门（生产侧、
-  非消费端），实验 harness 调参与人工标注明确归实验侧。给出目标 `rhythm_frame` 数据形状
-  和 6 条符合性 checklist。
-  验证: documentation-only architecture lock，未改动 worktree 在飞的实验文件。
+- 2026-06-30 17:37 CST: 将 actual audible structure contract 从 Phase 2.20 中拆出为
+  独立 Phase 2.21。
+  (1) **New phase**: 新增
+  `.planning/phases/2.21-audible-structure-architecture/2.21-CONTEXT.md`、
+  `2.21-PLAN.md` 和 `2.21-AUDIBLE-STRUCTURE-MODEL.md`，单独推进 audible-structure
+  架构锁、RhythmFrame contract rewrite、WordTimeline + duration/energy substrate 和
+  provenance model。
+  (2) **Compatibility decision**: 明确旧 `RhythmFrame` v0、旧 fixture、旧本地 artifact
+  兼容性不再阻塞本 phase；正确 structure 优先。
+  (3) **Model normalization**: 将 rhythm group/foot 改为可吸附前置或后置 weak material，
+  将 default connected form 定义为 ranked/contextual variants，将 nucleus 改为 phrase-scoped
+  candidate 并允许低证据 abstain，同时加入 syllable timing seam。
+  (4) **Planning sync**: 同步 `STATE.md`、`ROADMAP.md` 和 handoff，把 Phase 2.20 定位为
+  UI/实验/评测铺垫，把 Phase 2.21 设为当前结构主线。
+  验证: documentation-only phase split, `git diff --check` 通过。
 
 - 2026-06-30 13:41 CST: 为 Phase 2.20 D -> F 路线补上 duration/RMS manual QA
   对比实验工具。
