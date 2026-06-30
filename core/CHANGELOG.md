@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- 2026-06-30 14:01 CST: 启动测试体系建设 Tier A（worktree `testing-system-buildout`），
+  落地跨语言后端栈与前端状态/推送层的基础测试，零生产代码改动。
+  (1) **Rust 全栈集成**: 新增 `crates/api-http/tests/api_integration_test.rs`，
+  以真实 `router(ApiState::new(...))` + `SqliteRepository::in_memory()`、`tower::oneshot`
+  进程内驱动 `api-http → application → persistence` 整栈（鉴权拒绝、health、media
+  注册/读取/404、字幕导入往返、archive/restore/delete 生命周期，7 测试）。
+  (2) **Flutter SSE 推送核心**: 新增 `apps/desktop/test/backend_event_coordinator_test.dart`，
+  覆盖 `BackendEventCoordinator` 全部分发分支（service-started、转写 job completed/in-progress/
+  跨 media、音素 job primary/非 primary、lexical-entry 转发、未知事件 no-op，9 测试）。
+  (3) **Flutter 状态容器**: 新增 `apps/desktop/test/store_test.dart`，覆盖 `Store<T>`
+  selector 身份 memoize、字段级精准通知、equal-state no-op、replace 刷新（6 测试）。
+  (4) **路线决策**: `api_service.dart`（`dart:io HttpClient`，非注入式）的全栈消费契约
+  归入 Tier B 真实 sidecar E2E，本阶段不为凑覆盖改造生产客户端；`.planning/codebase/TESTING.md`
+  第 9 节记录 Tier A/B/C 建设路线与缺口状态。
+  验证: `cargo test -p api-http`（7/7）、`flutter test`（84→99 全绿）、`flutter analyze` 干净。
+  既有遗留: `api-http` lib `lib.rs:823` 有 3 个既有 clippy let-chains warning（非本次引入），
+  `--strict` 下会红，留待单独清理。
+
 - 2026-06-30 13:29 CST: Phase 2.20 路线复盘后更新交接文档，准备新 session 继续推进。
   (1) **Route correction**: 新增
   `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-ROUTE-CORRECTION.md`，
