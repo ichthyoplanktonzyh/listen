@@ -255,3 +255,113 @@ async fn subtitle_archive_restore_delete_lifecycle() {
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND, "deleted track no longer readable");
 }
+
+#[tokio::test]
+async fn lltimeline_import_creates_track_with_word_timeline() {
+    let app = build_app();
+
+    // Import a full LLTimeline v1 document; this is the core resource contract.
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/lltimeline/v1-minimal.lltimeline.json");
+    let document: Value = serde_json::from_slice(&std::fs::read(&fixture).expect("read fixture"))
+        .expect("parse lltimeline fixture");
+
+    let (status, track) = send(
+        &app,
+        post_json("/v1/lltimeline/import", Some(TOKEN), &document),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "import lltimeline: {track}");
+    let track_id = track["id"].as_str().expect("track id").to_owned();
+    assert!(
+        track["sentences"]
+            .as_array()
+            .is_some_and(|s| !s.is_empty()),
+        "imported document yields subtitle sentences"
+    );
+
+    // The bundled word timeline imports alongside the track.
+    let (status, timelines) = send(
+        &app,
+        get(&format!("/v1/subtitles/{track_id}/word-timelines"), Some(TOKEN)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{timelines}");
+    assert!(
+        !timelines.as_array().expect("word timeline array").is_empty(),
+        "imported document carries its word timeline"
+    );
+}
+
+#[tokio::test]
+async fn word_timeline_create_and_activate_lifecycle() {
+    let app = build_app();
+    let registered = register_media(&app, "Word Timeline Host").await;
+    let media_id = registered["id"].as_str().expect("media id").to_owned();
+    let (status, track) = import_srt(&app, &media_id, SAMPLE_SRT).await;
+    assert_eq!(status, StatusCode::OK, "{track}");
+    let track_id = track["id"].as_str().expect("track id").to_owned();
+    let sentence_id = track["sentences"][0]["id"]
+        .as_str()
+        .expect("sentence id")
+        .to_owned();
+
+    let (status, timeline) = send(
+        &app,
+        post_json(
+            &format!("/v1/subtitles/{track_id}/word-timelines"),
+            Some(TOKEN),
+            &json!({
+                "status": "candidate",
+                "words": [{
+                    "sentence_id": sentence_id,
+                    "token_index": 0,
+                    "text": "Hello",
+                    "start_ms": 1000,
+                    "end_ms": 1500,
+                    "timing_source": "estimated",
+                    "provider_id": "integration-test",
+                    "provider_version": "1",
+                }],
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "create word timeline: {timeline}");
+    let timeline_id = timeline["id"].as_str().expect("timeline id").to_owned();
+    assert_eq!(timeline["status"], "candidate");
+
+    let (status, activated) = send(
+        &app,
+        method_no_body(
+            "POST",
+            &format!("/v1/word-timelines/{timeline_id}/activate"),
+            Some(TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "activate: {activated}");
+    assert_eq!(activated["status"], "active");
+}
+
+#[tokio::test]
+async fn sentence_diagnosis_returns_well_formed_structure() {
+    let app = build_app();
+    let registered = register_media(&app, "Diagnosis Host").await;
+    let media_id = registered["id"].as_str().expect("media id").to_owned();
+    let (status, track) = import_srt(&app, &media_id, SAMPLE_SRT).await;
+    assert_eq!(status, StatusCode::OK, "{track}");
+    let sentence_id = track["sentences"][0]["id"]
+        .as_str()
+        .expect("sentence id")
+        .to_owned();
+
+    let (status, diagnosis) = send(
+        &app,
+        get(&format!("/v1/sentences/{sentence_id}/diagnosis"), Some(TOKEN)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "diagnose: {diagnosis}");
+    assert_eq!(diagnosis["sentence_id"], sentence_id);
+    assert!(diagnosis["hints"].is_array(), "diagnosis exposes a hints array");
+}

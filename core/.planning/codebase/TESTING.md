@@ -47,7 +47,7 @@
 | 位置 | 内容 |
 |---|---|
 | `crates/persistence-sqlite/tests/` | 持久化全流程集成测试（亦驱动 `AppServices` 编排） |
-| `crates/api-http/tests/api_integration_test.rs` | 全栈 HTTP 集成：真实 `router(ApiState::new(...))` + in-memory SQLite，`tower::oneshot` 进程内驱动 `api-http → application → persistence`（鉴权拒绝、media 注册/读取/404、字幕导入往返、archive/restore/delete 生命周期） |
+| `crates/api-http/tests/api_integration_test.rs` | 全栈 HTTP 集成：真实 `router(ApiState::new(...))` + in-memory SQLite，`tower::oneshot` 进程内驱动 `api-http → application → persistence`（鉴权拒绝、media 注册/读取/404、字幕导入往返、archive/restore/delete 生命周期、LLTimeline v1 文档导入往返、word timeline create→activate、句子 diagnosis） |
 | `crates/speech-analysis/tests/asr_timing_integration_test.rs` | whisper.cpp JSON → 词级时间戳 |
 | `crates/speech-analysis/tests/chunk_detection_integration_test.rs` | 声学 chunk 检测 |
 | `crates/speech-analysis/tests/chunk_partition_golden_test.rs` | 金标准 chunk 分区 |
@@ -252,7 +252,7 @@ scripts/validate-contracts.sh    # 单独契约验证
 
 | 缺口 | 优先级 | 状态 | 说明 |
 |---|---|---|---|
-| `api-http` 关键路由测试 | P1 | 🟡 部分 | Tier A `api_integration_test.rs` 已覆盖 media/subtitle 生命周期 + 鉴权；word timeline / LLTimeline import / diagnosis / vocabulary 路由待补 |
+| `api-http` 关键路由测试 | P1 | 🟡 部分 | Tier A `api_integration_test.rs` 已覆盖鉴权、media/subtitle 生命周期、LLTimeline 导入往返、word timeline create→activate、diagnosis；vocabulary/lexical、pronunciation、phonetic/chunk timeline、transcription job 路由待补 |
 | `application` 层集成测试 | P1 | 🟡 部分 | `persistence-sqlite/tests/` 已驱动 `AppServices` 编排；无独立 `application/tests/` 目录 |
 | Flutter 状态/推送层测试 | P1 | 🟢 已建 | `backend_event_coordinator_test.dart` + `store_test.dart`；`builder.dart`（StoreBuilder 连动）与 workflow controllers 待补 |
 | Python 管线单元测试 | P2 | 🔴 缺 | production_pipeline.py 核心函数 |

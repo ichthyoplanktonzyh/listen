@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-06-30 14:07 CST: Tier A 续作——扩 `api-http` 全栈集成测试路由覆盖，
+  仍为纯测试改动。`api_integration_test.rs` 新增 3 条：
+  (1) **LLTimeline 资源契约**: 导入 `testdata/lltimeline/v1-minimal.lltimeline.json`
+  完整文档 → 200 SubtitleTrack，并验证捆绑的 word timeline 随文档持久化。
+  (2) **Word timeline 生命周期**: `create`（candidate）→ `activate`（active），
+  覆盖播放器消费的核心资源激活路径。
+  (3) **Diagnosis 端点**: 对导入字幕的句子返回结构良好的 `SentenceDiagnosis`。
+  验证: `cargo test -p api-http --test api_integration_test`（10/10）；
+  测试文件零新增 clippy warning（workspace 既有 lint 漂移与本改动无关）。
+
 - 2026-06-30 14:01 CST: 启动测试体系建设 Tier A（worktree `testing-system-buildout`），
   落地跨语言后端栈与前端状态/推送层的基础测试，零生产代码改动。
   (1) **Rust 全栈集成**: 新增 `crates/api-http/tests/api_integration_test.rs`，
