@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-06-30 14:28 CST: Tier A 续作——补 Flutter 状态层 widget 测试，并记录 A1 对
+  workflow controller 测试的硬阻塞。
+  (1) **Store builder 测试**: 新增 `apps/desktop/test/builder_test.dart`，覆盖
+  `StoreBuilder` / `StoreBuilder2` 的选择性重建（无关字段不重建、选中字段才重建、
+  equal-state no-op，4 测试）。
+  (2) **A1 证据加固**: `CONCERNS.md` §1 记录 `LocalApi` 只有私有构造 `LocalApi._`、
+  唯一入口 `connect()` 起真实 sidecar，测试连子类伪造都做不到；`LearningWorkflowController`
+  / `SpeechEnhancementWorkflowController` 直接持有 `LocalApi`，单测被此 seam 挡死，
+  确认延后到 A1 修复后。
+  验证: `flutter test test/builder_test.dart`（4/4）。
+
 - 2026-06-30 14:21 CST: 在测试体系建设期对架构做证据化审计并记录到 `CONCERNS.md`，
   决定走"测试优先安全网"——先记录、继续铺测试、收口后再统一修架构。
   (1) **新增待修复登记**（§6）：A1 `LocalApi` transport 非注入（`api_service.dart:49`，

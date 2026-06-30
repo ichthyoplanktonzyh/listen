@@ -47,11 +47,18 @@
 ### `LocalApi` HTTP transport 非注入（2026-06-30 测试期新增）
 
 - **文件**：`apps/desktop/lib/services/api_service.dart:49`（`final HttpClient _client = HttpClient();`）
-- **问题**：transport 在字段初始化处写死 `dart:io HttpClient`，没有可注入的 seam
+- **问题**：transport 在字段初始化处写死 `dart:io HttpClient`，没有可注入的 seam；
+  且 `LocalApi` 只有私有构造 `LocalApi._(...)`，唯一公开入口是会起真实 sidecar 进程的
+  `static connect()`——测试连"子类 override 伪造"都做不到（跨 library 调不到私有构造）
 - **影响**：客户端请求构造 / 响应映射 / 错误处理无法做 Tier A 单测，只能等 Tier B 真实
-  sidecar 才能间接验证；约 900 行客户端逻辑因此长期零直接覆盖
-- **修复思路**：引入可注入 transport（构造参数带默认值，行为不变），解锁 Tier A 客户端测试
-- **测试影响**：`api_service.dart` 的请求/响应单测**刻意延后**到此 seam 修复后，避免假覆盖
+  sidecar 才能间接验证；约 900 行客户端逻辑因此长期零直接覆盖。**下游连带**：
+  `LearningWorkflowController` / `SpeechEnhancementWorkflowController` 直接持有 `LocalApi`
+  （`learning_workflow_controller.dart:17`、`speech_enhancement_workflow_controller.dart:59`），
+  无法注入 fake，故这两个 controller 的单测也被此 seam 挡死
+- **修复思路**：引入可注入 transport 或 `LocalApi` 接口（构造参数带默认值，行为不变），
+  解锁 Tier A 客户端 + workflow controller 测试
+- **测试影响**：`api_service.dart` 与两个 workflow controller 的单测**刻意延后**到此 seam
+  修复后，避免假覆盖或写一次性脆弱 fake
 
 ### Python 管线缺少单元测试
 

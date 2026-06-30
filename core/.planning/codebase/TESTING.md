@@ -80,6 +80,7 @@
 | `timeline_test.dart` | TimelineCursor 位置查询 |
 | `backend_event_coordinator_test.dart` | SSE 推送核心：service-started / 转写 job（completed 加载 vs in-progress 报状态 vs 跨 media 忽略）/ 音素 job（primary 命中 vs 非 primary 早退）/ lexical-entry 转发 / 未知事件 no-op |
 | `store_test.dart` | `Store<T>` 状态容器：selector 身份 memoize、字段级精准通知、equal-state no-op、replace 刷新全部 + 聚合通知 |
+| `builder_test.dart` | `StoreBuilder` / `StoreBuilder2` widget：只在选中 slice 变化时重建、无关字段不重建、equal-state no-op |
 | `api_service_test.dart` | LocalApi HTTP 客户端（sidecar 路径解析；全栈消费契约见 Tier B 真实 sidecar） |
 | `settings_test.dart` | AppSettings 持久化与升级 |
 | `controllers_test.dart` | 控制器状态管理 |
@@ -254,7 +255,7 @@ scripts/validate-contracts.sh    # 单独契约验证
 |---|---|---|---|
 | `api-http` 关键路由测试 | P1 | 🟡 部分 | Tier A `api_integration_test.rs` 已覆盖鉴权、media/subtitle 生命周期、LLTimeline 导入往返、word timeline create→activate、diagnosis；vocabulary/lexical、pronunciation、phonetic/chunk timeline、transcription job 路由待补 |
 | `application` 层集成测试 | P1 | 🟡 部分 | `persistence-sqlite/tests/` 已驱动 `AppServices` 编排；无独立 `application/tests/` 目录 |
-| Flutter 状态/推送层测试 | P1 | 🟢 已建 | `backend_event_coordinator_test.dart` + `store_test.dart`；`builder.dart`（StoreBuilder 连动）与 workflow controllers 待补 |
+| Flutter 状态/推送层测试 | P1 | 🟢 已建 | `backend_event_coordinator_test.dart` + `store_test.dart` + `builder_test.dart`（StoreBuilder/StoreBuilder2 选择性重建）；workflow controllers 单测被 CONCERNS A1（`LocalApi` 非注入 + 私有构造）挡住，延后到 seam 修复后 |
 | Python 管线单元测试 | P2 | 🔴 缺 | production_pipeline.py 核心函数 |
 | Flutter widget 交互测试 | P2 | 🔴 缺 | 播放器/字幕点击/拖放交互 |
 | 跨语言 E2E 测试 | P2 | 🔴 缺 | Tier B：Flutter → 真实 Rust sidecar 端到端 |
