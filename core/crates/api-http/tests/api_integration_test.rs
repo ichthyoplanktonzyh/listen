@@ -77,6 +77,19 @@ fn post_json(uri: &str, token: Option<&str>, body: &Value) -> Request<Body> {
         .expect("build POST request")
 }
 
+fn put_json(uri: &str, token: Option<&str>, body: &Value) -> Request<Body> {
+    let mut builder = Request::builder()
+        .method("PUT")
+        .uri(uri)
+        .header("content-type", "application/json");
+    if let Some(token) = token {
+        builder = builder.header("authorization", format!("Bearer {token}"));
+    }
+    builder
+        .body(Body::from(serde_json::to_vec(body).expect("serialize body")))
+        .expect("build PUT request")
+}
+
 fn method_no_body(method: &str, uri: &str, token: Option<&str>) -> Request<Body> {
     let mut builder = Request::builder().method(method).uri(uri);
     if let Some(token) = token {
@@ -364,4 +377,74 @@ async fn sentence_diagnosis_returns_well_formed_structure() {
     assert_eq!(status, StatusCode::OK, "diagnose: {diagnosis}");
     assert_eq!(diagnosis["sentence_id"], sentence_id);
     assert!(diagnosis["hints"].is_array(), "diagnosis exposes a hints array");
+}
+
+#[tokio::test]
+async fn lexical_entry_upsert_list_detail_and_update_lifecycle() {
+    let app = build_app();
+
+    // Upsert a word entry (the learning asset the vocabulary book is built on).
+    let (status, details) = send(
+        &app,
+        put_json(
+            "/v1/lexical-entries",
+            Some(TOKEN),
+            &json!({
+                "language": "en",
+                "kind": "word",
+                "canonical_form": "ubiquitous",
+                "display_form": "ubiquitous",
+                "status": "unknown_meaning",
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "upsert lexical entry: {details}");
+    let entry_id = details["entry"]["id"]
+        .as_str()
+        .expect("entry id")
+        .to_owned();
+    assert_eq!(details["entry"]["normalized_form"], "ubiquitous");
+    assert_eq!(details["entry"]["status"], "unknown_meaning");
+
+    // It appears in the language/kind-scoped list.
+    let (status, list) = send(
+        &app,
+        get("/v1/lexical-entries?language=en&kind=word", Some(TOKEN)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{list}");
+    assert!(
+        list.as_array()
+            .expect("entry list array")
+            .iter()
+            .any(|d| d["entry"]["id"] == details["entry"]["id"]),
+        "upserted entry appears in the list"
+    );
+
+    // Detail fetch by id round-trips.
+    let (status, fetched) = send(
+        &app,
+        get(&format!("/v1/lexical-entries/{entry_id}"), Some(TOKEN)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{fetched}");
+    assert_eq!(fetched["entry"]["id"], details["entry"]["id"]);
+
+    // Durable learning content updates persist on the entry.
+    let (status, updated) = send(
+        &app,
+        put_json(
+            &format!("/v1/lexical-entries/{entry_id}/learning-content"),
+            Some(TOKEN),
+            &json!({
+                "user_definition": "found everywhere",
+                "personal_note": "GRE word",
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "update learning content: {updated}");
+    assert_eq!(updated["entry"]["user_definition"], "found everywhere");
+    assert_eq!(updated["entry"]["personal_note"], "GRE word");
 }

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-06-30 14:34 CST: Tier A 续作——api-http 集成测试覆盖 lexical entry 学习核心
+  生命周期。`api_integration_test.rs` 新增 1 条：PUT `/v1/lexical-entries` upsert（word，
+  status=unknown_meaning）→ GET 列表按 language/kind 命中 → GET `/{id}` 详情往返 →
+  PUT `/{id}/learning-content` 持久化 user_definition / personal_note。新增 `put_json` 助手。
+  验证: `cargo test -p api-http --test api_integration_test`（11/11）。
+
 - 2026-06-30 14:28 CST: Tier A 续作——补 Flutter 状态层 widget 测试，并记录 A1 对
   workflow controller 测试的硬阻塞。
   (1) **Store builder 测试**: 新增 `apps/desktop/test/builder_test.dart`，覆盖
