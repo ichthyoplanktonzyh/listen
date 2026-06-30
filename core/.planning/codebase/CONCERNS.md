@@ -77,7 +77,9 @@
 - **脆弱原因**：13 个迁移版本线性依赖，任一迁移 bug 可导致数据库损坏
 - **常见故障**：迁移失败后无自动回滚；预迁移备份是手动操作
 - **安全修改方式**：新增迁移前在副本数据库上验证；不修改已有迁移
-- **测试覆盖**：有迁移前备份，但缺少迁移失败恢复的自动化测试
+- **测试覆盖**：迁移前备份 + 失败恢复已有刻画测试
+  `crates/persistence-sqlite/tests/migration_recovery_test.rs`（2026-06-30 起）；
+  迁移链各版本的正向 schema 断言仍可后续补强
 
 ### 音频预处理管线
 
@@ -106,7 +108,7 @@
 | Python 管线单元测试 | P2 | `scripts/timeline-production/` | 见上 |
 | Flutter widget 交互测试 | P2 | `apps/desktop/test/` | 播放器/字幕点击/拖放无测试 |
 | 跨语言 E2E 测试 | P2 | — | 生产管线 → 导入 → 播放链无自动化验证 |
-| 迁移失败恢复测试 | P2 | `crates/persistence-sqlite/` | 见脆弱区域 |
+| 迁移失败恢复测试 | P2 ✅ | `crates/persistence-sqlite/tests/migration_recovery_test.rs` | 备份/失败恢复已刻画 |
 | sidecar 握手集成测试 | P2 | `crates/api-http/` + `apps/desktop/` | 见脆弱区域 |
 
 ---

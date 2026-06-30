@@ -46,7 +46,8 @@
 
 | 位置 | 内容 |
 |---|---|
-| `crates/persistence-sqlite/tests/` | 持久化全流程集成测试（亦驱动 `AppServices` 编排） |
+| `crates/persistence-sqlite/tests/persistence_integration_test.rs` | 持久化全流程集成测试（亦驱动 `AppServices` 编排） |
+| `crates/persistence-sqlite/tests/migration_recovery_test.rs` | 迁移备份/失败恢复刻画：升级旧库建 `.pre-migration.bak`、全新/最新库不建备份、**迁移失败时原库完整保留在备份中可恢复**、版本不前进 |
 | `crates/api-http/tests/api_integration_test.rs` | 全栈 HTTP 集成：真实 `router(ApiState::new(...))` + in-memory SQLite，`tower::oneshot` 进程内驱动 `api-http → application → persistence`（鉴权拒绝、media 注册/读取/404、字幕导入往返、archive/restore/delete 生命周期、LLTimeline v1 文档导入往返、word timeline create→activate、句子 diagnosis、lexical entry upsert→list→detail→学习内容更新） |
 | `crates/speech-analysis/tests/asr_timing_integration_test.rs` | whisper.cpp JSON → 词级时间戳 |
 | `crates/speech-analysis/tests/chunk_detection_integration_test.rs` | 声学 chunk 检测 |

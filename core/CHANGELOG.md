@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-06-30 20:05 CST: Tier A 续作——补 SQLite 迁移失败恢复刻画测试（CONCERNS §2/§3
+  点名的脆弱区，至今无自动化）。新增
+  `crates/persistence-sqlite/tests/migration_recovery_test.rs`（4 测试）：
+  (1) 升级落后版本旧库时创建 `<path>.pre-migration.bak`，备份保留迁移前版本与内容；
+  (2) 全新库（路径不存在）不创建备份；
+  (3) 重开最新版本库幂等、不再创建备份；
+  (4) **迁移失败时**（预置 `media_items` 表与裸 `CREATE TABLE` 迁移 0001 冲突）原库
+  完整保留在备份中可恢复，且 live 库 `user_version` 不前进。
+  刻画当前真实行为，作为后续迁移系统重构的安全网。
+  验证: `cargo test -p persistence-sqlite --test migration_recovery_test`（4/4）。
+
 - 2026-06-30 14:34 CST: Tier A 续作——api-http 集成测试覆盖 lexical entry 学习核心
   生命周期。`api_integration_test.rs` 新增 1 条：PUT `/v1/lexical-entries` upsert（word，
   status=unknown_meaning）→ GET 列表按 language/kind 命中 → GET `/{id}` 详情往返 →
