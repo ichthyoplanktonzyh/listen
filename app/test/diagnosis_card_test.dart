@@ -155,4 +155,98 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Rule prediction'), findsOneWidget);
   });
+
+  testWidgets('rhythm frame renders before phone evidence', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: const Scaffold(
+          body: DiagnosisCard(
+            diagnosis: Diagnosis(),
+            phoneticAnalysis: PhoneticAnalysis(
+              providerId: 'fixture',
+              modelRevision: 'v1',
+              phoneSet: 'arpabet',
+              soundAnalysis: SoundAnalysis(
+                providerId: 'fixture',
+                providerVersion: 'v1',
+                phoneSet: 'arpabet',
+                generatedFrom: 'expected_stress_aligned_to_observed_timing_v0',
+                learningPhones: [],
+                connectedSpeech: [],
+                syllables: [],
+                prosodicPhrases: [],
+                rhythmFrame: RhythmFrame(
+                  generatedFrom:
+                      'expected_stress_aligned_to_observed_timing_v0',
+                  stressAnchors: [
+                    RhythmStressAnchor(
+                      start: Duration(milliseconds: 100),
+                      end: Duration(milliseconds: 300),
+                      label: 'market',
+                      reason: 'anchor',
+                      importance: 'primary',
+                      confidence: 0.82,
+                    ),
+                  ],
+                  weakGroups: [
+                    RhythmWeakGroup(
+                      start: Duration(milliseconds: 0),
+                      end: Duration(milliseconds: 90),
+                      label: 'could have',
+                      reason: 'weak',
+                      confidence: 0.7,
+                    ),
+                  ],
+                  compressionSpans: [
+                    RhythmCompressionSpan(
+                      start: Duration(milliseconds: 0),
+                      end: Duration(milliseconds: 180),
+                      expectedUnits: 5,
+                      duration: Duration(milliseconds: 180),
+                      unitRatePerSecond: 27.8,
+                      label: 'could have been',
+                      reason: 'packed',
+                      confidence: 0.74,
+                    ),
+                  ],
+                  phraseBoundaries: [],
+                  listeningHotspots: [
+                    ListeningHotspot(
+                      id: 'hs1',
+                      kind: 'weak_group',
+                      start: Duration(milliseconds: 0),
+                      end: Duration(milliseconds: 90),
+                      label: 'weak group',
+                      hint: 'backgrounded',
+                      confidence: 0.7,
+                    ),
+                  ],
+                  quality: RhythmFrameQuality(
+                    timingSource: 'phone_timeline',
+                    phoneEvidenceCoverage: 0.9,
+                    rhythmConfidence: 0.77,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Listening rhythm'), findsOneWidget);
+    expect(find.text('Anchors:'), findsOneWidget);
+    expect(find.text('market 82%'), findsOneWidget);
+    expect(find.text('could have 70%'), findsOneWidget);
+    expect(find.text('could have been 74%'), findsOneWidget);
+    expect(find.text('weak group 70%'), findsOneWidget);
+    expect(find.textContaining('Rhythm confidence: 77%'), findsOneWidget);
+  });
 }

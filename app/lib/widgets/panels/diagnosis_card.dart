@@ -91,6 +91,11 @@ class DiagnosisCard extends StatelessWidget {
               '${phoneticAnalysis!.modelRevision} · '
               '${phoneticAnalysis!.phoneSet}',
             ),
+            if (phoneticAnalysis!.soundAnalysis?.rhythmFrame != null)
+              _rhythmFrame(
+                context,
+                phoneticAnalysis!.soundAnalysis!.rhythmFrame!,
+              ),
             Wrap(
               spacing: 4,
               runSpacing: 4,
@@ -172,6 +177,103 @@ class DiagnosisCard extends StatelessWidget {
       ],
     ),
   );
+
+  Widget _rhythmFrame(BuildContext context, RhythmFrame frame) {
+    final l = AppLocalizations.of(context);
+    final quality = (frame.quality.rhythmConfidence * 100).round();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l.text('listeningRhythm'),
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          if (frame.stressAnchors.isNotEmpty)
+            _chipLine(
+              l.text('stressAnchors'),
+              frame.stressAnchors.map(
+                (anchor) => _confidenceLabel(anchor.label, anchor.confidence),
+              ),
+              const Color(0xff6fb6ff),
+            ),
+          if (frame.weakGroups.isNotEmpty)
+            _chipLine(
+              l.text('weakGroups'),
+              frame.weakGroups.map(
+                (group) => _confidenceLabel(group.label, group.confidence),
+              ),
+              const Color(0xff9fb0bd),
+            ),
+          if (frame.compressionSpans.isNotEmpty)
+            _chipLine(
+              l.text('compressedSpans'),
+              frame.compressionSpans.map(
+                (span) => _confidenceLabel(span.label, span.confidence),
+              ),
+              const Color(0xffffbf69),
+            ),
+          if (frame.listeningHotspots.isNotEmpty)
+            _chipLine(
+              l.text('listeningHotspots'),
+              frame.listeningHotspots
+                  .take(4)
+                  .map(
+                    (hotspot) =>
+                        _confidenceLabel(hotspot.label, hotspot.confidence),
+                  ),
+              const Color(0xffffd166),
+            ),
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              '${l.text('rhythmQuality')}: $quality% · '
+              '${frame.quality.timingSource.replaceAll('_', ' ')}',
+              style: const TextStyle(fontSize: 12, color: Color(0xffaab4c0)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chipLine(String label, Iterable<String> values, Color color) {
+    final chips = values
+        .where((value) => value.trim().isNotEmpty)
+        .map(
+          (value) => Chip(
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            backgroundColor: color.withAlpha(42),
+            side: BorderSide(color: color.withAlpha(115)),
+            label: Text(
+              value,
+              style: const TextStyle(fontSize: 12),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        )
+        .toList(growable: false);
+    if (chips.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 5),
+      child: Wrap(
+        spacing: 5,
+        runSpacing: 5,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text('$label:', style: const TextStyle(fontSize: 12)),
+          ...chips,
+        ],
+      ),
+    );
+  }
+
+  String _confidenceLabel(String label, double confidence) {
+    final percent = (confidence * 100).round();
+    return '$label $percent%';
+  }
 
   Widget _finding(
     BuildContext context,

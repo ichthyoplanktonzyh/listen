@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/models/timeline.dart';
+import 'package:llplayer_next/models/types.dart';
+import 'package:llplayer_next/widgets/subtitle/expected_pronunciation_reference.dart';
 import 'package:llplayer_next/widgets/subtitle/phoneme_ribbon.dart';
+import 'package:llplayer_next/widgets/subtitle/rhythm_frame_ribbon.dart';
+import 'package:llplayer_next/widgets/subtitle/sound_pattern_mode_toggle.dart';
 
 void main() {
   testWidgets('sound pattern ribbon has distinct audio identity', (
@@ -119,4 +123,228 @@ void main() {
 
     expect(looped, same(finding));
   });
+
+  testWidgets('rhythm frame ribbon surfaces rhythm cues in subtitle layer', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Center(
+          child: SizedBox(
+            width: 460,
+            child: RhythmFrameRibbon(
+              title: 'Listening rhythm',
+              anchorLabel: 'Anchors',
+              weakGroupLabel: 'Weak groups',
+              compressionLabel: 'Compressed',
+              hotspotLabel: 'Hotspots',
+              position: Duration(milliseconds: 130),
+              frame: RhythmFrame(
+                generatedFrom: 'fixture',
+                stressAnchors: [
+                  RhythmStressAnchor(
+                    start: Duration(milliseconds: 100),
+                    end: Duration(milliseconds: 260),
+                    label: 'market',
+                    reason: 'main stress',
+                    importance: 'primary',
+                    confidence: 0.82,
+                  ),
+                ],
+                weakGroups: [
+                  RhythmWeakGroup(
+                    start: Duration(milliseconds: 0),
+                    end: Duration(milliseconds: 90),
+                    label: 'could have',
+                    reason: 'function words are reduced',
+                    confidence: 0.7,
+                  ),
+                ],
+                compressionSpans: [
+                  RhythmCompressionSpan(
+                    start: Duration(milliseconds: 0),
+                    end: Duration(milliseconds: 180),
+                    expectedUnits: 5,
+                    duration: Duration(milliseconds: 180),
+                    unitRatePerSecond: 27.8,
+                    label: 'could have been',
+                    reason: 'packed timing',
+                    confidence: 0.74,
+                  ),
+                ],
+                phraseBoundaries: [
+                  RhythmPhraseBoundary(
+                    at: Duration(milliseconds: 310),
+                    evidence: 'pause',
+                    confidence: 0.8,
+                  ),
+                ],
+                listeningHotspots: [
+                  ListeningHotspot(
+                    id: 'hs1',
+                    kind: 'weak_group',
+                    start: Duration(milliseconds: 0),
+                    end: Duration(milliseconds: 90),
+                    label: 'weak group',
+                    hint: 'backgrounded',
+                    confidence: 0.7,
+                  ),
+                ],
+                quality: RhythmFrameQuality(
+                  timingSource: 'phone_timeline',
+                  phoneEvidenceCoverage: 0.9,
+                  rhythmConfidence: 0.77,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.multiline_chart), findsOneWidget);
+    expect(find.text('Listening rhythm'), findsOneWidget);
+    expect(find.text('77%'), findsOneWidget);
+    expect(find.textContaining('market'), findsOneWidget);
+    expect(find.textContaining('could have'), findsWidgets);
+    expect(find.byTooltip('Anchors: market\nmain stress'), findsOneWidget);
+  });
+
+  testWidgets('rhythm frame ribbon can request cue loop playback', (
+    tester,
+  ) async {
+    Duration? loopStart;
+    Duration? loopEnd;
+    String? loopLabel;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: SizedBox(
+            width: 360,
+            child: RhythmFrameRibbon(
+              title: 'Listening rhythm',
+              anchorLabel: 'Anchors',
+              weakGroupLabel: 'Weak groups',
+              compressionLabel: 'Compressed',
+              hotspotLabel: 'Hotspots',
+              position: const Duration(milliseconds: 40),
+              onLoopCue: (start, end, label) {
+                loopStart = start;
+                loopEnd = end;
+                loopLabel = label;
+              },
+              frame: const RhythmFrame(
+                generatedFrom: 'fixture',
+                stressAnchors: [
+                  RhythmStressAnchor(
+                    start: Duration(milliseconds: 100),
+                    end: Duration(milliseconds: 260),
+                    label: 'market',
+                    reason: 'main stress',
+                    importance: 'primary',
+                    confidence: 0.82,
+                  ),
+                ],
+                weakGroups: [],
+                compressionSpans: [],
+                phraseBoundaries: [],
+                listeningHotspots: [
+                  ListeningHotspot(
+                    id: 'hs1',
+                    kind: 'weak_group',
+                    start: Duration(milliseconds: 20),
+                    end: Duration(milliseconds: 90),
+                    label: 'weak group',
+                    hint: 'backgrounded',
+                    confidence: 0.7,
+                  ),
+                ],
+                quality: RhythmFrameQuality(
+                  timingSource: 'phone_timeline',
+                  phoneEvidenceCoverage: 0.9,
+                  rhythmConfidence: 0.77,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('weak group 70%'));
+
+    expect(loopStart, const Duration(milliseconds: 20));
+    expect(loopEnd, const Duration(milliseconds: 90));
+    expect(loopLabel, 'weak group');
+  });
+
+  testWidgets('sound pattern mode toggle switches between rhythm and phones', (
+    tester,
+  ) async {
+    final changes = <String>[];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: SoundPatternModeToggle(
+            mode: 'rhythm',
+            rhythmTooltip: 'Listening rhythm',
+            phonesTooltip: 'Phone evidence',
+            semanticsLabel: 'Sound pattern layer',
+            onChanged: changes.add,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Listening rhythm'));
+    expect(changes, isEmpty);
+
+    await tester.tap(find.byTooltip('Phone evidence'));
+    expect(changes, ['phones']);
+  });
+
+  testWidgets(
+    'expected pronunciation reference shows word IPA and current word',
+    (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Center(
+            child: SizedBox(
+              width: 360,
+              child: ExpectedPronunciationReference(
+                title: 'Expected',
+                currentTokenIndex: 2,
+                analysis: PronunciationAnalysis(
+                  sentenceId: 's1',
+                  displayIpa: 'ðə ˈmɑrkət',
+                  words: [
+                    WordPronunciation(
+                      tokenIndex: 0,
+                      text: 'The',
+                      normalized: 'the',
+                      variants: [PronunciationVariant(displayIpa: 'ðə')],
+                    ),
+                    WordPronunciation(
+                      tokenIndex: 2,
+                      text: 'market',
+                      normalized: 'market',
+                      variants: [PronunciationVariant(displayIpa: 'ˈmɑrkət')],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byIcon(Icons.record_voice_over), findsOneWidget);
+      expect(find.text('Expected'), findsOneWidget);
+      expect(find.text('ðə'), findsOneWidget);
+      expect(find.text('ˈmɑrkət'), findsOneWidget);
+      expect(find.byTooltip('market: ˈmɑrkət'), findsOneWidget);
+    },
+  );
 }

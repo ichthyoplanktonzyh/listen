@@ -38,6 +38,7 @@ class SettingsDialog extends StatefulWidget {
     required this.ruleHintsLevel,
     required this.phonemeRibbonVisible,
     required this.soundPatternRibbonVisible,
+    required this.soundPatternDisplayMode,
     required this.phonemeRibbonStyle,
     required this.phoneticAnalysisPreference,
     required this.learningLanguage,
@@ -69,6 +70,7 @@ class SettingsDialog extends StatefulWidget {
     required this.onRuleHintsLevelChanged,
     required this.onPhonemeRibbonVisibleChanged,
     required this.onSoundPatternRibbonVisibleChanged,
+    required this.onSoundPatternDisplayModeChanged,
     required this.onPhonemeRibbonStyleChanged,
     required this.onPhoneticAnalysisPreferenceChanged,
     required this.onSave,
@@ -104,6 +106,7 @@ class SettingsDialog extends StatefulWidget {
   final String ruleHintsLevel;
   final bool phonemeRibbonVisible;
   final bool soundPatternRibbonVisible;
+  final String soundPatternDisplayMode;
   final String phonemeRibbonStyle;
   final String phoneticAnalysisPreference;
   final String learningLanguage;
@@ -137,6 +140,7 @@ class SettingsDialog extends StatefulWidget {
   final ValueChanged<String> onRuleHintsLevelChanged;
   final ValueChanged<bool> onPhonemeRibbonVisibleChanged;
   final ValueChanged<bool> onSoundPatternRibbonVisibleChanged;
+  final ValueChanged<String> onSoundPatternDisplayModeChanged;
   final ValueChanged<String> onPhonemeRibbonStyleChanged;
   final ValueChanged<String> onPhoneticAnalysisPreferenceChanged;
   final Future<void> Function({
@@ -177,6 +181,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late String ruleHintsLevel;
   late bool phonemeRibbonVisible;
   late bool soundPatternRibbonVisible;
+  late String soundPatternDisplayMode;
   late String phonemeRibbonStyle;
   late String phoneticAnalysisPreference;
   late String learningLanguage;
@@ -224,6 +229,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     ruleHintsLevel = widget.ruleHintsLevel;
     phonemeRibbonVisible = widget.phonemeRibbonVisible;
     soundPatternRibbonVisible = widget.soundPatternRibbonVisible;
+    soundPatternDisplayMode = widget.soundPatternDisplayMode;
     phonemeRibbonStyle = widget.phonemeRibbonStyle;
     phoneticAnalysisPreference = widget.phoneticAnalysisPreference;
     learningLanguage = widget.learningLanguage;
@@ -449,6 +455,30 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 },
               ),
               DropdownButtonFormField<String>(
+                initialValue: soundPatternDisplayMode,
+                decoration: InputDecoration(
+                  labelText: l.text('soundPatternDisplayMode'),
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: 'rhythm',
+                    child: Text(l.text('soundPatternModeRhythm')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'phones',
+                    child: Text(l.text('soundPatternModePhones')),
+                  ),
+                ],
+                onChanged: soundPatternRibbonVisible
+                    ? (value) {
+                        if (value == null) return;
+                        soundPatternDisplayMode = value;
+                        widget.onSoundPatternDisplayModeChanged(value);
+                        refresh(() {});
+                      }
+                    : null,
+              ),
+              DropdownButtonFormField<String>(
                 initialValue: phonemeRibbonStyle,
                 decoration: InputDecoration(
                   labelText: l.text('phonemeRibbonStyle'),
@@ -463,7 +493,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     child: Text(l.text('phonemeRibbonWave')),
                   ),
                 ],
-                onChanged: phonemeRibbonVisible || soundPatternRibbonVisible
+                onChanged:
+                    phonemeRibbonVisible ||
+                        (soundPatternRibbonVisible &&
+                            soundPatternDisplayMode == 'phones')
                     ? (value) {
                         if (value == null) return;
                         phonemeRibbonStyle = value;

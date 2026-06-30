@@ -180,9 +180,22 @@ void main() {
       'version': 8,
       'phoneme_ribbon_visible': false,
       'sound_pattern_ribbon_visible': true,
+      'sound_pattern_display_mode': 'phones',
     });
 
     expect(settings.phonemeRibbonVisible, isFalse);
     expect(settings.soundPatternRibbonVisible, isTrue);
+    expect(settings.soundPatternDisplayMode, 'phones');
+  });
+
+  test('defaults sound pattern display to rhythm and validates modes', () {
+    final defaults = AppSettings.fromJson({
+      'version': 8,
+      'sound_pattern_display_mode': 'unexpected',
+    });
+    final phones = defaults.copyWith(soundPatternDisplayMode: 'phones');
+
+    expect(defaults.soundPatternDisplayMode, 'rhythm');
+    expect(phones.soundPatternDisplayMode, 'phones');
   });
 }

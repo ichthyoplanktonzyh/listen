@@ -48,6 +48,7 @@ class AppSettings {
     this.phonemeHighlightVisible = true,
     this.phonemeRibbonVisible = false,
     this.soundPatternRibbonVisible = false,
+    this.soundPatternDisplayMode = 'rhythm',
     this.phonemeRibbonStyle = 'window',
     this.phoneticCachePolicy = 'keep_completed',
     this.learningLanguage = 'auto',
@@ -153,6 +154,9 @@ class AppSettings {
       phonemeRibbonVisible: json['phoneme_ribbon_visible'] as bool? ?? false,
       soundPatternRibbonVisible:
           json['sound_pattern_ribbon_visible'] as bool? ?? false,
+      soundPatternDisplayMode: _soundPatternDisplayMode(
+        json['sound_pattern_display_mode'],
+      ),
       phonemeRibbonStyle: _phonemeRibbonStyle(json['phoneme_ribbon_style']),
       phoneticCachePolicy:
           json['phonetic_cache_policy'] as String? ?? 'keep_completed',
@@ -205,6 +209,7 @@ class AppSettings {
   final bool phonemeHighlightVisible;
   final bool phonemeRibbonVisible;
   final bool soundPatternRibbonVisible;
+  final String soundPatternDisplayMode;
   final String phonemeRibbonStyle;
   final String phoneticCachePolicy;
   final String learningLanguage;
@@ -298,6 +303,7 @@ class AppSettings {
         'phoneme_highlight_visible': phonemeHighlightVisible,
         'phoneme_ribbon_visible': phonemeRibbonVisible,
         'sound_pattern_ribbon_visible': soundPatternRibbonVisible,
+        'sound_pattern_display_mode': soundPatternDisplayMode,
         'phoneme_ribbon_style': phonemeRibbonStyle,
         'phonetic_cache_policy': phoneticCachePolicy,
         'learning_language': learningLanguage,
@@ -351,6 +357,7 @@ class AppSettings {
     bool? phonemeHighlightVisible,
     bool? phonemeRibbonVisible,
     bool? soundPatternRibbonVisible,
+    String? soundPatternDisplayMode,
     String? phonemeRibbonStyle,
     String? phoneticCachePolicy,
     String? learningLanguage,
@@ -411,6 +418,8 @@ class AppSettings {
     phonemeRibbonVisible: phonemeRibbonVisible ?? this.phonemeRibbonVisible,
     soundPatternRibbonVisible:
         soundPatternRibbonVisible ?? this.soundPatternRibbonVisible,
+    soundPatternDisplayMode:
+        soundPatternDisplayMode ?? this.soundPatternDisplayMode,
     phonemeRibbonStyle: phonemeRibbonStyle ?? this.phonemeRibbonStyle,
     phoneticCachePolicy: phoneticCachePolicy ?? this.phoneticCachePolicy,
     learningLanguage: learningLanguage ?? this.learningLanguage,
@@ -434,4 +443,7 @@ class AppSettings {
 
   static String _phonemeRibbonStyle(Object? value) =>
       value == 'wave' ? value as String : 'window';
+
+  static String _soundPatternDisplayMode(Object? value) =>
+      value == 'phones' ? value as String : 'rhythm';
 }

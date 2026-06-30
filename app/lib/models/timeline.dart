@@ -644,6 +644,7 @@ class SoundAnalysis {
     required this.syllables,
     required this.prosodicPhrases,
     this.modelRevision,
+    this.rhythmFrame,
   });
 
   factory SoundAnalysis.fromJson(Map<String, dynamic> json) => SoundAnalysis(
@@ -673,6 +674,11 @@ class SoundAnalysis {
               SoundProsodicPhrase.fromJson(value as Map<String, dynamic>),
         )
         .toList(growable: false),
+    rhythmFrame: json['rhythm_frame'] is Map
+        ? RhythmFrame.fromJson(
+            Map<String, dynamic>.from(json['rhythm_frame'] as Map),
+          )
+        : null,
   );
 
   final String providerId;
@@ -684,6 +690,7 @@ class SoundAnalysis {
   final List<ConnectedSpeechExplanation> connectedSpeech;
   final List<SoundSyllable> syllables;
   final List<SoundProsodicPhrase> prosodicPhrases;
+  final RhythmFrame? rhythmFrame;
 
   Map<String, dynamic> toJson() => {
     'provider_id': providerId,
@@ -695,6 +702,7 @@ class SoundAnalysis {
     'connected_speech': connectedSpeech.map((value) => value.toJson()).toList(),
     'syllables': syllables.map((value) => value.toJson()).toList(),
     'prosodic_phrases': prosodicPhrases.map((value) => value.toJson()).toList(),
+    if (rhythmFrame != null) 'rhythm_frame': rhythmFrame!.toJson(),
   };
 }
 
@@ -708,6 +716,7 @@ class SoundLearningPhone {
     required this.evidence,
     this.confidence,
     this.tokenIndex,
+    this.stress,
     this.observedPhoneIndex,
     this.observedSymbol,
   });
@@ -722,6 +731,7 @@ class SoundLearningPhone {
         end: Duration(milliseconds: json['end_ms'] as int),
         confidence: (json['confidence'] as num?)?.toDouble(),
         tokenIndex: json['token_index'] as int?,
+        stress: json['stress'] as int?,
         observedPhoneIndex: json['observed_phone_index'] as int?,
         observedSymbol: json['observed_symbol'] as String?,
         evidence: json['evidence'] as String,
@@ -734,6 +744,7 @@ class SoundLearningPhone {
   final Duration end;
   final double? confidence;
   final int? tokenIndex;
+  final int? stress;
   final int? observedPhoneIndex;
   final String? observedSymbol;
   final String evidence;
@@ -761,6 +772,7 @@ class SoundLearningPhone {
     'end_ms': end.inMilliseconds,
     'confidence': confidence,
     'token_index': tokenIndex,
+    'stress': stress,
     'observed_phone_index': observedPhoneIndex,
     'observed_symbol': observedSymbol,
     'evidence': evidence,
@@ -907,6 +919,387 @@ class SoundProsodicPhrase {
     'end_ms': end.inMilliseconds,
     'boundary_evidence': boundaryEvidence,
     'confidence': confidence,
+  };
+}
+
+class RhythmFrame {
+  const RhythmFrame({
+    required this.generatedFrom,
+    required this.stressAnchors,
+    required this.weakGroups,
+    required this.compressionSpans,
+    required this.phraseBoundaries,
+    required this.listeningHotspots,
+    required this.quality,
+  });
+
+  factory RhythmFrame.fromJson(Map<String, dynamic> json) => RhythmFrame(
+    generatedFrom: json['generated_from'] as String? ?? '',
+    stressAnchors: ((json['stress_anchors'] as List<dynamic>?) ?? const [])
+        .map(
+          (value) => RhythmStressAnchor.fromJson(value as Map<String, dynamic>),
+        )
+        .toList(growable: false),
+    weakGroups: ((json['weak_groups'] as List<dynamic>?) ?? const [])
+        .map((value) => RhythmWeakGroup.fromJson(value as Map<String, dynamic>))
+        .toList(growable: false),
+    compressionSpans:
+        ((json['compression_spans'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) =>
+                  RhythmCompressionSpan.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+    phraseBoundaries:
+        ((json['phrase_boundaries'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) =>
+                  RhythmPhraseBoundary.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+    listeningHotspots:
+        ((json['listening_hotspots'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) =>
+                  ListeningHotspot.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+    quality: RhythmFrameQuality.fromJson(
+      (json['quality'] as Map<String, dynamic>?) ?? const {},
+    ),
+  );
+
+  final String generatedFrom;
+  final List<RhythmStressAnchor> stressAnchors;
+  final List<RhythmWeakGroup> weakGroups;
+  final List<RhythmCompressionSpan> compressionSpans;
+  final List<RhythmPhraseBoundary> phraseBoundaries;
+  final List<ListeningHotspot> listeningHotspots;
+  final RhythmFrameQuality quality;
+
+  Map<String, dynamic> toJson() => {
+    'generated_from': generatedFrom,
+    'stress_anchors': stressAnchors.map((value) => value.toJson()).toList(),
+    'weak_groups': weakGroups.map((value) => value.toJson()).toList(),
+    'compression_spans': compressionSpans
+        .map((value) => value.toJson())
+        .toList(),
+    'phrase_boundaries': phraseBoundaries
+        .map((value) => value.toJson())
+        .toList(),
+    'listening_hotspots': listeningHotspots
+        .map((value) => value.toJson())
+        .toList(),
+    'quality': quality.toJson(),
+  };
+}
+
+class RhythmStressAnchor {
+  const RhythmStressAnchor({
+    required this.start,
+    required this.end,
+    required this.label,
+    required this.reason,
+    required this.importance,
+    required this.confidence,
+    this.tokenIndex,
+    this.syllableIndex,
+    this.phoneStart,
+    this.phoneEnd,
+    this.evidence = const [],
+  });
+
+  factory RhythmStressAnchor.fromJson(Map<String, dynamic> json) =>
+      RhythmStressAnchor(
+        tokenIndex: json['token_index'] as int?,
+        syllableIndex: json['syllable_index'] as int?,
+        phoneStart: json['phone_start'] as int?,
+        phoneEnd: json['phone_end'] as int?,
+        start: Duration(milliseconds: json['start_ms'] as int? ?? 0),
+        end: Duration(milliseconds: json['end_ms'] as int? ?? 0),
+        label: json['label'] as String? ?? '',
+        reason: json['reason'] as String? ?? '',
+        importance: json['importance'] as String? ?? 'secondary',
+        confidence: (json['confidence'] as num?)?.toDouble() ?? 0.0,
+        evidence: ((json['evidence'] as List<dynamic>?) ?? const [])
+            .cast<String>()
+            .toList(growable: false),
+      );
+
+  final int? tokenIndex;
+  final int? syllableIndex;
+  final int? phoneStart;
+  final int? phoneEnd;
+  final Duration start;
+  final Duration end;
+  final String label;
+  final String reason;
+  final String importance;
+  final double confidence;
+  final List<String> evidence;
+
+  Map<String, dynamic> toJson() => {
+    'token_index': tokenIndex,
+    'syllable_index': syllableIndex,
+    'phone_start': phoneStart,
+    'phone_end': phoneEnd,
+    'start_ms': start.inMilliseconds,
+    'end_ms': end.inMilliseconds,
+    'label': label,
+    'reason': reason,
+    'importance': importance,
+    'confidence': confidence,
+    'evidence': evidence,
+  };
+}
+
+class RhythmWeakGroup {
+  const RhythmWeakGroup({
+    required this.start,
+    required this.end,
+    required this.label,
+    required this.reason,
+    required this.confidence,
+    this.tokenStart,
+    this.tokenEnd,
+    this.phoneStart,
+    this.phoneEnd,
+    this.anchorTokenIndex,
+    this.evidence = const [],
+  });
+
+  factory RhythmWeakGroup.fromJson(Map<String, dynamic> json) =>
+      RhythmWeakGroup(
+        tokenStart: json['token_start'] as int?,
+        tokenEnd: json['token_end'] as int?,
+        phoneStart: json['phone_start'] as int?,
+        phoneEnd: json['phone_end'] as int?,
+        anchorTokenIndex: json['anchor_token_index'] as int?,
+        start: Duration(milliseconds: json['start_ms'] as int? ?? 0),
+        end: Duration(milliseconds: json['end_ms'] as int? ?? 0),
+        label: json['label'] as String? ?? '',
+        reason: json['reason'] as String? ?? '',
+        confidence: (json['confidence'] as num?)?.toDouble() ?? 0.0,
+        evidence: ((json['evidence'] as List<dynamic>?) ?? const [])
+            .cast<String>()
+            .toList(growable: false),
+      );
+
+  final int? tokenStart;
+  final int? tokenEnd;
+  final int? phoneStart;
+  final int? phoneEnd;
+  final int? anchorTokenIndex;
+  final Duration start;
+  final Duration end;
+  final String label;
+  final String reason;
+  final double confidence;
+  final List<String> evidence;
+
+  Map<String, dynamic> toJson() => {
+    'token_start': tokenStart,
+    'token_end': tokenEnd,
+    'phone_start': phoneStart,
+    'phone_end': phoneEnd,
+    'anchor_token_index': anchorTokenIndex,
+    'start_ms': start.inMilliseconds,
+    'end_ms': end.inMilliseconds,
+    'label': label,
+    'reason': reason,
+    'confidence': confidence,
+    'evidence': evidence,
+  };
+}
+
+class RhythmCompressionSpan {
+  const RhythmCompressionSpan({
+    required this.start,
+    required this.end,
+    required this.expectedUnits,
+    required this.duration,
+    required this.unitRatePerSecond,
+    required this.label,
+    required this.reason,
+    required this.confidence,
+    this.tokenStart,
+    this.tokenEnd,
+    this.phoneStart,
+    this.phoneEnd,
+    this.evidence = const [],
+  });
+
+  factory RhythmCompressionSpan.fromJson(Map<String, dynamic> json) =>
+      RhythmCompressionSpan(
+        tokenStart: json['token_start'] as int?,
+        tokenEnd: json['token_end'] as int?,
+        phoneStart: json['phone_start'] as int?,
+        phoneEnd: json['phone_end'] as int?,
+        start: Duration(milliseconds: json['start_ms'] as int? ?? 0),
+        end: Duration(milliseconds: json['end_ms'] as int? ?? 0),
+        expectedUnits: json['expected_units'] as int? ?? 0,
+        duration: Duration(milliseconds: json['duration_ms'] as int? ?? 0),
+        unitRatePerSecond:
+            (json['unit_rate_per_second'] as num?)?.toDouble() ?? 0.0,
+        label: json['label'] as String? ?? '',
+        reason: json['reason'] as String? ?? '',
+        confidence: (json['confidence'] as num?)?.toDouble() ?? 0.0,
+        evidence: ((json['evidence'] as List<dynamic>?) ?? const [])
+            .cast<String>()
+            .toList(growable: false),
+      );
+
+  final int? tokenStart;
+  final int? tokenEnd;
+  final int? phoneStart;
+  final int? phoneEnd;
+  final Duration start;
+  final Duration end;
+  final int expectedUnits;
+  final Duration duration;
+  final double unitRatePerSecond;
+  final String label;
+  final String reason;
+  final double confidence;
+  final List<String> evidence;
+
+  Map<String, dynamic> toJson() => {
+    'token_start': tokenStart,
+    'token_end': tokenEnd,
+    'phone_start': phoneStart,
+    'phone_end': phoneEnd,
+    'start_ms': start.inMilliseconds,
+    'end_ms': end.inMilliseconds,
+    'expected_units': expectedUnits,
+    'duration_ms': duration.inMilliseconds,
+    'unit_rate_per_second': unitRatePerSecond,
+    'label': label,
+    'reason': reason,
+    'confidence': confidence,
+    'evidence': evidence,
+  };
+}
+
+class RhythmPhraseBoundary {
+  const RhythmPhraseBoundary({
+    required this.at,
+    required this.evidence,
+    required this.confidence,
+    this.afterTokenIndex,
+    this.beforeTokenIndex,
+  });
+
+  factory RhythmPhraseBoundary.fromJson(Map<String, dynamic> json) =>
+      RhythmPhraseBoundary(
+        afterTokenIndex: json['after_token_index'] as int?,
+        beforeTokenIndex: json['before_token_index'] as int?,
+        at: Duration(milliseconds: json['at_ms'] as int? ?? 0),
+        evidence: json['evidence'] as String? ?? '',
+        confidence: (json['confidence'] as num?)?.toDouble() ?? 0.0,
+      );
+
+  final int? afterTokenIndex;
+  final int? beforeTokenIndex;
+  final Duration at;
+  final String evidence;
+  final double confidence;
+
+  Map<String, dynamic> toJson() => {
+    'after_token_index': afterTokenIndex,
+    'before_token_index': beforeTokenIndex,
+    'at_ms': at.inMilliseconds,
+    'evidence': evidence,
+    'confidence': confidence,
+  };
+}
+
+class ListeningHotspot {
+  const ListeningHotspot({
+    required this.id,
+    required this.kind,
+    required this.start,
+    required this.end,
+    required this.label,
+    required this.hint,
+    required this.confidence,
+    this.tokenStart,
+    this.tokenEnd,
+    this.phoneStart,
+    this.phoneEnd,
+    this.evidence = const [],
+  });
+
+  factory ListeningHotspot.fromJson(Map<String, dynamic> json) =>
+      ListeningHotspot(
+        id: json['id'] as String? ?? '',
+        kind: json['kind'] as String? ?? '',
+        tokenStart: json['token_start'] as int?,
+        tokenEnd: json['token_end'] as int?,
+        phoneStart: json['phone_start'] as int?,
+        phoneEnd: json['phone_end'] as int?,
+        start: Duration(milliseconds: json['start_ms'] as int? ?? 0),
+        end: Duration(milliseconds: json['end_ms'] as int? ?? 0),
+        label: json['label'] as String? ?? '',
+        hint: json['hint'] as String? ?? '',
+        confidence: (json['confidence'] as num?)?.toDouble() ?? 0.0,
+        evidence: ((json['evidence'] as List<dynamic>?) ?? const [])
+            .cast<String>()
+            .toList(growable: false),
+      );
+
+  final String id;
+  final String kind;
+  final int? tokenStart;
+  final int? tokenEnd;
+  final int? phoneStart;
+  final int? phoneEnd;
+  final Duration start;
+  final Duration end;
+  final String label;
+  final String hint;
+  final double confidence;
+  final List<String> evidence;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'kind': kind,
+    'token_start': tokenStart,
+    'token_end': tokenEnd,
+    'phone_start': phoneStart,
+    'phone_end': phoneEnd,
+    'start_ms': start.inMilliseconds,
+    'end_ms': end.inMilliseconds,
+    'label': label,
+    'hint': hint,
+    'confidence': confidence,
+    'evidence': evidence,
+  };
+}
+
+class RhythmFrameQuality {
+  const RhythmFrameQuality({
+    required this.timingSource,
+    required this.phoneEvidenceCoverage,
+    required this.rhythmConfidence,
+  });
+
+  factory RhythmFrameQuality.fromJson(Map<String, dynamic> json) =>
+      RhythmFrameQuality(
+        timingSource: json['timing_source'] as String? ?? 'mixed',
+        phoneEvidenceCoverage:
+            (json['phone_evidence_coverage'] as num?)?.toDouble() ?? 0.0,
+        rhythmConfidence:
+            (json['rhythm_confidence'] as num?)?.toDouble() ?? 0.0,
+      );
+
+  final String timingSource;
+  final double phoneEvidenceCoverage;
+  final double rhythmConfidence;
+
+  Map<String, dynamic> toJson() => {
+    'timing_source': timingSource,
+    'phone_evidence_coverage': phoneEvidenceCoverage,
+    'rhythm_confidence': rhythmConfidence,
   };
 }
 
