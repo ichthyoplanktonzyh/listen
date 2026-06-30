@@ -1,0 +1,253 @@
+{
+  "schema": "llplayer.timeline.v1",
+  "metadata": {
+    "created_at_ms": 1782740000000,
+    "generator": {
+      "id": "phase-2.20-rhythm-fixture",
+      "version": "v1",
+      "mode": "synthetic"
+    },
+    "media": {
+      "id": "fixture-media",
+      "fingerprint": "p220-fixture-rhythm-001",
+      "path": "synthetic://p220-fixture-rhythm-001",
+      "title": "Phase 2.20 RhythmFrame QA fixture",
+      "duration_ms": 5200
+    },
+    "language": "en",
+    "human_reviewed": true
+  },
+  "segments": [
+    {
+      "id": "fixture-s1",
+      "index": 0,
+      "start_ms": 1000,
+      "end_ms": 2600,
+      "text": "I could have been there in time.",
+      "display_text": "I could have been there in time."
+    },
+    {
+      "id": "fixture-s2",
+      "index": 1,
+      "start_ms": 3000,
+      "end_ms": 4600,
+      "text": "The market opened early.",
+      "display_text": "The market opened early."
+    }
+  ],
+  "word_timelines": [],
+  "phone_timelines": [
+    {
+      "id": "fixture-phone-s1",
+      "sentence_id": "fixture-s1",
+      "status": "candidate",
+      "sound_analysis": {
+        "provider_id": "fixture",
+        "provider_version": "v1",
+        "model_revision": "v1",
+        "phone_set": "arpabet",
+        "generated_from": "expected_stress_aligned_to_observed_timing_v0",
+        "learning_phones": [
+          {"symbol": "AY", "start_ms": 1000, "end_ms": 1080, "token_index": 0, "confidence": 0.9},
+          {"symbol": "K", "start_ms": 1120, "end_ms": 1160, "token_index": 2, "confidence": 0.9},
+          {"symbol": "AH", "start_ms": 1160, "end_ms": 1200, "token_index": 2, "confidence": 0.88},
+          {"symbol": "D", "start_ms": 1200, "end_ms": 1230, "token_index": 2, "confidence": 0.85},
+          {"symbol": "AH", "start_ms": 1230, "end_ms": 1280, "token_index": 4, "confidence": 0.86},
+          {"symbol": "V", "start_ms": 1280, "end_ms": 1320, "token_index": 4, "confidence": 0.86},
+          {"symbol": "B", "start_ms": 1320, "end_ms": 1370, "token_index": 6, "confidence": 0.9},
+          {"symbol": "IH", "start_ms": 1370, "end_ms": 1430, "token_index": 6, "confidence": 0.9},
+          {"symbol": "N", "start_ms": 1430, "end_ms": 1480, "token_index": 6, "confidence": 0.9},
+          {"symbol": "DH", "start_ms": 1900, "end_ms": 1950, "token_index": 8, "confidence": 0.95},
+          {"symbol": "EH", "start_ms": 1950, "end_ms": 2070, "token_index": 8, "confidence": 0.97},
+          {"symbol": "R", "start_ms": 2070, "end_ms": 2140, "token_index": 8, "confidence": 0.96}
+        ],
+        "connected_speech": [
+          {
+            "family": "weak_form",
+            "label": "possible weak form",
+            "hint": "Function words are reduced before the next stress.",
+            "phone_start": 1,
+            "phone_end": 8,
+            "token_start": 2,
+            "token_end": 6,
+            "confidence": 0.78,
+            "status": "detected_in_audio",
+            "evidence": "short reduced function-word chain before the stress anchor"
+          }
+        ],
+        "syllables": [],
+        "prosodic_phrases": [],
+        "rhythm_frame": {
+          "generated_from": "expected_stress_aligned_to_observed_timing_v0",
+          "stress_anchors": [
+            {
+              "token_index": 8,
+              "start_ms": 1900,
+              "end_ms": 2140,
+              "label": "there",
+              "reason": "Catch this stressed content word as the listening anchor.",
+              "importance": "primary",
+              "confidence": 0.92,
+              "evidence": ["content_word", "primary_stress", "observed_duration"]
+            }
+          ],
+          "weak_groups": [
+            {
+              "token_start": 0,
+              "token_end": 6,
+              "anchor_token_index": 8,
+              "start_ms": 1000,
+              "end_ms": 1680,
+              "label": "I could have been",
+              "reason": "The function-word chain is backgrounded before the anchor.",
+              "confidence": 0.74,
+              "evidence": ["function_words", "short_duration"]
+            }
+          ],
+          "compression_spans": [
+            {
+              "token_start": 2,
+              "token_end": 6,
+              "start_ms": 1120,
+              "end_ms": 1680,
+              "expected_units": 8,
+              "duration_ms": 560,
+              "unit_rate_per_second": 14.3,
+              "label": "could have been",
+              "reason": "Several expected sounds are packed into a short duration.",
+              "confidence": 0.81,
+              "evidence": ["duration_per_expected_unit"]
+            }
+          ],
+          "phrase_boundaries": [
+            {
+              "after_token_index": 8,
+              "before_token_index": 10,
+              "at_ms": 2140,
+              "evidence": "short pause after the main anchor",
+              "confidence": 0.82
+            }
+          ],
+          "listening_hotspots": [
+            {
+              "id": "weak-1",
+              "kind": "weak_group",
+              "token_start": 2,
+              "token_end": 6,
+              "start_ms": 1120,
+              "end_ms": 1680,
+              "label": "could have been",
+              "hint": "The phrase is reduced and fast before the stress anchor.",
+              "confidence": 0.78,
+              "evidence": ["weak_form", "compression"]
+            }
+          ],
+          "quality": {
+            "timing_source": "phone_timeline",
+            "phone_evidence_coverage": 0.91,
+            "rhythm_confidence": 0.84
+          }
+        }
+      }
+    },
+    {
+      "id": "fixture-phone-s2",
+      "sentence_id": "fixture-s2",
+      "status": "candidate",
+      "sound_analysis": {
+        "provider_id": "fixture",
+        "provider_version": "v1",
+        "model_revision": "v1",
+        "phone_set": "arpabet",
+        "generated_from": "expected_stress_aligned_to_observed_timing_v0",
+        "learning_phones": [
+          {"symbol": "DH", "start_ms": 3000, "end_ms": 3040, "token_index": 0, "confidence": 0.9},
+          {"symbol": "AH", "start_ms": 3040, "end_ms": 3090, "token_index": 0, "confidence": 0.88},
+          {"symbol": "M", "start_ms": 3180, "end_ms": 3230, "token_index": 2, "confidence": 0.94},
+          {"symbol": "AA", "start_ms": 3230, "end_ms": 3360, "token_index": 2, "confidence": 0.96},
+          {"symbol": "R", "start_ms": 3360, "end_ms": 3430, "token_index": 2, "confidence": 0.95},
+          {"symbol": "K", "start_ms": 3430, "end_ms": 3490, "token_index": 2, "confidence": 0.94},
+          {"symbol": "AH", "start_ms": 3490, "end_ms": 3560, "token_index": 2, "confidence": 0.92},
+          {"symbol": "T", "start_ms": 3560, "end_ms": 3620, "token_index": 2, "confidence": 0.93},
+          {"symbol": "OW", "start_ms": 3710, "end_ms": 3820, "token_index": 4, "confidence": 0.95},
+          {"symbol": "P", "start_ms": 3820, "end_ms": 3880, "token_index": 4, "confidence": 0.94},
+          {"symbol": "AH", "start_ms": 3880, "end_ms": 3960, "token_index": 4, "confidence": 0.92}
+        ],
+        "connected_speech": [],
+        "syllables": [],
+        "prosodic_phrases": [],
+        "rhythm_frame": {
+          "generated_from": "expected_stress_aligned_to_observed_timing_v0",
+          "stress_anchors": [
+            {
+              "token_index": 2,
+              "start_ms": 3180,
+              "end_ms": 3620,
+              "label": "market",
+              "reason": "Main content word carries the sentence rhythm.",
+              "importance": "primary",
+              "confidence": 0.9,
+              "evidence": ["content_word", "primary_stress"]
+            },
+            {
+              "token_index": 4,
+              "start_ms": 3710,
+              "end_ms": 3960,
+              "label": "opened",
+              "reason": "Second content-word anchor.",
+              "importance": "secondary",
+              "confidence": 0.86,
+              "evidence": ["content_word"]
+            }
+          ],
+          "weak_groups": [
+            {
+              "token_start": 0,
+              "token_end": 0,
+              "anchor_token_index": 2,
+              "start_ms": 3000,
+              "end_ms": 3090,
+              "label": "The",
+              "reason": "Article is backgrounded before the content word.",
+              "confidence": 0.69,
+              "evidence": ["function_word"]
+            }
+          ],
+          "compression_spans": [],
+          "phrase_boundaries": [
+            {
+              "after_token_index": 4,
+              "before_token_index": 6,
+              "at_ms": 3960,
+              "evidence": "boundary before final adverb",
+              "confidence": 0.76
+            }
+          ],
+          "listening_hotspots": [
+            {
+              "id": "weak-article",
+              "kind": "weak_group",
+              "token_start": 0,
+              "token_end": 0,
+              "start_ms": 3000,
+              "end_ms": 3090,
+              "label": "weak article",
+              "hint": "The article is light before the noun.",
+              "confidence": 0.69,
+              "evidence": ["weak_group"]
+            }
+          ],
+          "quality": {
+            "timing_source": "phone_timeline",
+            "phone_evidence_coverage": 0.88,
+            "rhythm_confidence": 0.79
+          }
+        }
+      }
+    }
+  ],
+  "active_phone_timeline_id": null,
+  "chunk_timelines": [],
+  "active_chunk_timeline_id": null,
+  "artifacts": []
+}

@@ -75,6 +75,7 @@ impl AppServices {
                         speech_analysis::phonetic_alignment::CanonicalPhone {
                             symbol: phone.symbol,
                             token_index,
+                            stress: phone.stress,
                         }
                     })
                 })
@@ -94,10 +95,13 @@ impl AppServices {
             &canonical,
             &phones,
             &alignments,
-            "research-fixture",
-            "v1",
-            Some(job.model_revision.clone()),
-            "research_fixture_symbols",
+            speech_analysis::sound_analysis::SoundAnalysisConfig {
+                provider_id: "research-fixture",
+                provider_version: "v1",
+                model_revision: Some(job.model_revision.clone()),
+                phone_set: "research_fixture_symbols",
+                sentence,
+            },
         );
         let analysis = PhoneticAnalysis {
             id,
@@ -166,6 +170,7 @@ impl AppServices {
                     speech_analysis::phonetic_alignment::CanonicalPhone {
                         symbol: phone.symbol,
                         token_index,
+                        stress: phone.stress,
                     }
                 })
             })
@@ -182,10 +187,13 @@ impl AppServices {
             &canonical,
             &phones,
             &alignments,
-            speech_analysis::phone_recognition::PROVIDER_ID,
-            speech_analysis::phone_recognition::PROVIDER_VERSION,
-            Some(job.model_revision.clone()),
-            "arpabet",
+            speech_analysis::sound_analysis::SoundAnalysisConfig {
+                provider_id: speech_analysis::phone_recognition::PROVIDER_ID,
+                provider_version: speech_analysis::phone_recognition::PROVIDER_VERSION,
+                model_revision: Some(job.model_revision.clone()),
+                phone_set: "arpabet",
+                sentence,
+            },
         );
         let analysis = PhoneticAnalysis {
             id,

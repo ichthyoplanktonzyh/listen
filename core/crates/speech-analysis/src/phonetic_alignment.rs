@@ -4,6 +4,7 @@ use domain::{DetectedPhone, PhoneAlignment, PhoneAlignmentKind};
 pub struct CanonicalPhone {
     pub symbol: String,
     pub token_index: u32,
+    pub stress: Option<u8>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -192,6 +193,7 @@ mod tests {
             .map(|(token_index, symbol)| CanonicalPhone {
                 symbol: (*symbol).into(),
                 token_index: *token_index,
+                stress: None,
             })
             .collect()
     }

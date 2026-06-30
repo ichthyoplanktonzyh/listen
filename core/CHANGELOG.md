@@ -2,6 +2,221 @@
 
 ## Unreleased
 
+- 2026-06-30 13:29 CST: Phase 2.20 路线复盘后更新交接文档，准备新 session 继续推进。
+  (1) **Route correction**: 新增
+  `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-ROUTE-CORRECTION.md`，
+  明确 Phase 2.20 的目标是 actual audible structure，而不是 default predicted reading；
+  `RhythmFrame` contract/UI/QA 继续保留，但 generator 主线从 CTC-derived rhythm skeleton
+  迁移到 forced-aligned WordTimeline + duration/rate + RMS energy/loudness，F0/pitch reset
+  作为校准后的正式候选。
+  (2) **Acoustic path revision**:
+  `2.20-ACOUSTIC-FEATURE-PATH.md` 已改为路线修订说明，重新定位
+  `pre_boundary_lengthening` 为 fallback/diagnostic `heuristic_proxy`，不再把本地缺少
+  `librosa`/Parselmouth 等包当作不上 production-side acoustic prosody 的理由。
+  (3) **Handoff**: 重写 `.planning/handoff/continue-here.md`，记录最新 20 句
+  Helsinki/LibriTTS diagnostic（stress anchor F1 `0.574949`、phrase boundary F1
+  `0.210145`、boundary evidence `pause=218` / `pre_boundary_lengthening=17`）和下一步
+  D -> F 对比实验：current CTC-derived RhythmFrame vs forced-aligned WordTimeline +
+  duration/rate vs WordTimeline + RMS energy。
+  (4) **Planning sync**: 同步 `2.20-PLAN.md`、`2.20-ALGORITHM-METRICS-RESEARCH.md`、
+  `2.20-EVALUATION.md` 和 `.planning/STATE.md`，明确 CTC phone evidence 降级为
+  flapping/deletion/weak-form/phone-mismatch 等 segmental evidence，不再当 rhythm skeleton。
+  验证: documentation-only handoff update, `git diff --check` 通过。
+
+- 2026-06-30 12:57 CST: 将 Phase 2.20 算法/指标原则写入 agent 入口，并让
+  Helsinki/LibriTTS scorer 输出基准上下文。
+  (1) **Agent rule**: `AGENT.md` 新增 Algorithms And Metrics 原则，明确项目已有数据、
+  小样本 smoke、自动标签和当前指标不默认视为正确答案；算法、指标和阈值应尽量来自
+  published research、corpus annotation convention、reported tool baseline 或 manual product
+  QA；有依据时可以大胆试，但要记录 `gold` / `silver_label` / `heuristic_proxy` /
+  `manual_product_qa` / `coverage` evidence class。
+  (2) **Benchmark context**: `scripts/evaluate-helsinki-prosody.py` 在每个报告中输出
+  `benchmark_context`，标明 Helsinki/LibriTTS 是 `weak_prosody_regression` /
+  `silver_label`，记录 prominence/boundary label 语义、Talman et al. 2019 BERT text-model
+  prominence baselines（2-way accuracy `0.832`、3-way accuracy `0.686`）和不能直接与
+  end-to-end audio RhythmFrame F1 比较的 caveat。
+  (3) **Docs/tests**: 同步 rhythm-prosody README、Phase 2.20 evaluation/plan 和
+  `.planning/STATE.md`，并让 Helsinki scorer 单测校验报告上下文。
+  验证: `python3 -m py_compile scripts/evaluate-helsinki-prosody.py scripts/test_evaluate_helsinki_prosody.py`、
+  `python3 scripts/test_evaluate_helsinki_prosody.py`、
+  `python3 scripts/evaluate-helsinki-prosody.py --prosody-dir /Users/shadow/prosody --split dev --limit 3 --lltimeline-manifest .tmp/helsinki-libritts-rhythm-dev-smoke/manifest.jsonl`、
+  `git diff --check` 通过。
+
+- 2026-06-30 10:40 CST: 为 Phase 2.20 补齐算法/指标校准原则并跑通首个
+  Helsinki/LibriTTS 真实 smoke。
+  (1) **Research calibration**: 新增
+  `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-ALGORITHM-METRICS-RESEARCH.md`，
+  明确当前项目指标、小样本 smoke、Helsinki automatic labels 都只是 diagnostic/silver
+  signal；后续算法与 gate 需要对齐 published prosody/phonetics baselines、corpus annotation
+  convention 或 manual product QA。
+  (2) **Local smoke**: 使用 `.tmp/helsinki-libritts-rhythm-dev-smoke/manifest.jsonl`
+  跑通本地 API refresh，3/3 LibriTTS/Helsinki dev 样本生成 `sound_analysis.rhythm_frame`；
+  diagnostic Helsinki silver-label score 为 stress anchor F1 `0.827586`、phrase boundary F1
+  `0.285714`。该结果只记录为 pipeline diagnostic，不作为 closeout gate。
+  (3) **Scorer/algorithm hygiene**: `scripts/evaluate-helsinki-prosody.py` 修正 LLTimeline
+  raw token index 到 word index 的映射，并在 API 导入重映射 sentence id 后回退到文本匹配；
+  `speech-analysis` 的默认 stress anchor 规则避免把 function words 作为主 anchor，并扩展
+  常见英语 function-word 列表。
+  验证: `PATH="/opt/homebrew/opt/rustup/bin:$PATH" cargo test -p speech-analysis sound_analysis --quiet`、
+  `PATH="/opt/homebrew/opt/rustup/bin:$PATH" cargo fmt --check`、
+  `python3 scripts/test_evaluate_helsinki_prosody.py`、
+  `python3 scripts/test_prepare_helsinki_libritts_benchmark.py`、
+  `python3 scripts/evaluate-helsinki-prosody.py --prosody-dir /Users/shadow/prosody --split dev --limit 3 --lltimeline-manifest .tmp/helsinki-libritts-rhythm-dev-smoke/manifest.jsonl`
+  通过。
+
+- 2026-06-30 10:20 CST: 打通 Helsinki/LibriTTS 本地 benchmark baseline 准备链路。
+  (1) **Prep script**: 新增 `scripts/prepare-helsinki-libritts-benchmark.py`，可从 Helsinki
+  Prosody labels 选择小样本，定位 LibriTTS `.wav`，生成 ignored baseline `.lltimeline.json`
+  和 dual-use manifest；支持 extracted split directory，也支持
+  `/Users/shadow/Downloads/dev-clean.tar.gz` / `test-clean.tar.gz` 这类 split archive，只抽取
+  selected wav 到 `.tmp/.../audio`。
+  (2) **Evaluator fix**: `scripts/evaluate-helsinki-prosody.py` 在 baseline artifact 尚无
+  `phone_timelines` 时会基于 `segments` 识别句子，并报告 `missing_rhythm_frame`，不再误报
+  `missing_sentence`。
+  (3) **Tests/docs**: 新增 `scripts/test_prepare_helsinki_libritts_benchmark.py`，覆盖目录输入、
+  archive 输入、missing audio 和 baseline LLTimeline shape；同步 rhythm-prosody README、
+  Phase 2.20 evaluation/plan、`.planning/STATE.md` 和 `.planning/codebase/TESTING.md`。
+  验证: `python3 -m py_compile scripts/evaluate-helsinki-prosody.py scripts/test_evaluate_helsinki_prosody.py scripts/prepare-helsinki-libritts-benchmark.py scripts/test_prepare_helsinki_libritts_benchmark.py`、
+  `python3 scripts/test_evaluate_helsinki_prosody.py`、
+  `python3 scripts/test_prepare_helsinki_libritts_benchmark.py`、
+  `python3 scripts/prepare-helsinki-libritts-benchmark.py --prosody-dir /Users/shadow/prosody --libritts-archive /Users/shadow/Downloads/dev-clean.tar.gz --split dev --limit 3 --output-dir .tmp/helsinki-libritts-rhythm-dev-smoke`、
+  `python3 scripts/evaluate-helsinki-prosody.py --prosody-dir /Users/shadow/prosody --split dev --limit 3 --lltimeline-manifest .tmp/helsinki-libritts-rhythm-dev-smoke/manifest.jsonl --include-sentences`
+  通过。
+
+- 2026-06-30 09:55 CST: 建立 Phase 2.20 Helsinki/LibriTTS weak-label prosody benchmark adapter。
+  (1) **Scorer**: 新增 `scripts/evaluate-helsinki-prosody.py`，解析 Helsinki Prosody split
+  文件，并用 prominence labels 评估 `RhythmFrame.stress_anchors`，用 word-boundary labels
+  评估 `RhythmFrame.phrase_boundaries`；支持 `--prosody-dir`、`--labels`、
+  `--lltimeline-manifest`、`--lltimeline-dir`、threshold 和 quality gate 参数。
+  (2) **Fixture/tests**: 新增 `testdata/rhythm-prosody-benchmarks/`，包含可提交的
+  Helsinki-style label fixture、LLTimeline fixture、manifest 和 README；新增
+  `scripts/test_evaluate_helsinki_prosody.py` 覆盖 label parsing、RhythmFrame matching、
+  missing-rhythm 状态和 committed fixture CLI gate。
+  (3) **Docs**: 同步 Phase 2.20 benchmark research/evaluation/plan、`.planning/STATE.md`
+  和 `.planning/codebase/TESTING.md`，明确 Helsinki labels 是 stress/boundary silver-label
+  regression，不替代 weak group/compression/hotspot 的 manual product QA。
+  验证: `python3 -m py_compile scripts/evaluate-helsinki-prosody.py scripts/test_evaluate_helsinki_prosody.py`、
+  `python3 scripts/test_evaluate_helsinki_prosody.py`、
+  `python3 scripts/evaluate-helsinki-prosody.py --labels testdata/rhythm-prosody-benchmarks/fixture-helsinki.txt --lltimeline-manifest testdata/rhythm-prosody-benchmarks/fixture-manifest.jsonl --min-scored-sentences 1 --min-anchor-f1 1.0 --min-boundary-f1 1.0 --fail-on-quality-gate`、
+  `python3 scripts/evaluate-helsinki-prosody.py --prosody-dir /Users/shadow/prosody --split dev --limit 5`
+  通过。
+
+- 2026-06-30 00:00 CST: 重新组织 Phase 2.20 benchmark 方向为 stress/rhythm-first。
+  (1) **Research**: 新增
+  `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-BENCHMARK-RESEARCH.md`，
+  调研 Helsinki Prosody/LibriTTS、BU Radio Speech、Rhythm and Pitch Corpus、
+  Aix-MARSEC/ProPOSEC、Buckeye、TED-LIUM、IViE、NXT Switchboard、Wav2ToBI 和
+  ToBI references，并明确没有单一公开集能覆盖完整 learner-facing RhythmFrame 产品链路。
+  (2) **Evaluation pivot**: `2.20-EVALUATION.md` 增加 benchmark roles：
+  `evidence_quality`、`weak_prosody_regression`、`human_prosody_gold`、
+  `product_listening_qa`、`robustness_probe`。
+  (3) **Plan sync**: `2.20-PLAN.md` 将 TIMIT 调整为 evidence-layer sanity，
+  将 Helsinki/LibriTTS 设为首选公开弱标签回归方向，将 BU/RaP/Aix 设为可选 human
+  prosody gold，将 Buckeye/TED/product media 保留为 weak group/compression/hotspot
+  产品 QA gate。
+  验证: documentation-only change, `git diff --check` 通过。
+
+- 2026-06-29 20:16 CST: 为 Phase 2.20 字幕层 rhythm 模式补齐 expected pronunciation reference。
+  (1) **UI**: 新增 `ExpectedPronunciationReference`，按词展示词典 IPA，并按当前 token
+  高亮当前词；无逐词 variant 时降级显示句级 `display_ipa`。
+  (2) **Rhythm surface**: 主播放器在 sound pattern `rhythm` 模式中把 expected pronunciation
+  放在 RhythmFrame 上方，使“预期读音”和“真实听感节奏”同屏出现；`phones` 模式仍保留为
+  phone evidence 证据层。
+  (3) **Localization/tests**: 新增中英本地化文案，`phoneme_ribbon_test.dart` 覆盖 expected
+  reference 的词级 IPA 和 tooltip。
+  验证: `$HOME/.local/share/flutter/bin/dart format --set-exit-if-changed apps/desktop/lib/main.dart apps/desktop/lib/localization.dart apps/desktop/lib/widgets/subtitle/expected_pronunciation_reference.dart apps/desktop/test/phoneme_ribbon_test.dart`、
+  `cd apps/desktop && $HOME/.local/share/flutter/bin/flutter analyze`、
+  `cd apps/desktop && $HOME/.local/share/flutter/bin/flutter test test/phoneme_ribbon_test.dart`、
+  `cd apps/desktop && $HOME/.local/share/flutter/bin/flutter test`
+  通过。
+
+- 2026-06-29 20:07 CST: 为 Phase 2.20 字幕层 sound pattern 增加 rhythm/phones 就地快切。
+  (1) **UI**: 新增 `SoundPatternModeToggle` 图标控件，在字幕层声音时间带旁用 rhythm /
+  phone evidence 两个图标切换显示模式，不需要进入设置弹窗。
+  (2) **State wiring**: 主播放器把快切接入现有 `sound_pattern_display_mode` 持久化设置，
+  保持默认 rhythm-first，同时保留 phone evidence ribbon 作为可切换证据层。
+  (3) **Tests**: `phoneme_ribbon_test.dart` 覆盖图标快切只在切到另一模式时触发回调。
+  验证: `$HOME/.local/share/flutter/bin/dart format --set-exit-if-changed apps/desktop/lib/main.dart apps/desktop/lib/widgets/subtitle/sound_pattern_mode_toggle.dart apps/desktop/test/phoneme_ribbon_test.dart`、
+  `cd apps/desktop && $HOME/.local/share/flutter/bin/flutter test test/phoneme_ribbon_test.dart`、
+  `cd apps/desktop && $HOME/.local/share/flutter/bin/flutter analyze` 通过。
+
+- 2026-06-29 20:03 CST: 为 Phase 2.20 字幕层 RhythmFrame ribbon 增加 cue loop 交互。
+  (1) **UI**: `RhythmFrameRibbon` 新增可选 `onLoopCue` 回调，rhythm cue chip 在有回调时变为
+  可点击目标，并保留 tooltip/semantics。
+  (2) **Playback wiring**: 字幕层 rhythm 模式接入现有 source loop 逻辑，点击 anchor/weak/
+  compression/hotspot chip 可循环播放对应听感区间；phone evidence ribbon 的原有 loop 行为不变。
+  (3) **Tests**: `phoneme_ribbon_test.dart` 新增 rhythm cue loop callback 覆盖。
+  验证: `$HOME/.local/share/flutter/bin/dart format --set-exit-if-changed apps/desktop/lib/widgets/subtitle/rhythm_frame_ribbon.dart apps/desktop/lib/main.dart apps/desktop/test/phoneme_ribbon_test.dart`、
+  `cd apps/desktop && $HOME/.local/share/flutter/bin/flutter test test/phoneme_ribbon_test.dart`
+  通过。
+
+- 2026-06-29 20:02 CST: 为 Phase 2.20 RhythmFrame QA/scorer 增加仓库内可重复运行的
+  committed fixture gate。
+  (1) **Fixture**: 新增 `testdata/rhythm-frame-qa/fixture-manifest.jsonl`、
+  `fixture-rhythm.lltimeline.json` 和 `fixture-annotations.jsonl`，用两句合成
+  LLTimeline 覆盖 stress anchors、weak groups、compression spans、phrase boundaries
+  与 listening hotspots，不依赖本地真实媒体或 ignored `.tmp` artifacts。
+  (2) **Regression**: `scripts/test_evaluate_rhythm_frame.py` 新增 CLI smoke，验证
+  strict annotation validation、`--fail-on-quality-gate`、1.0 rhythm coverage、2 条
+  annotated sentences、0 misleading/unsupported hotspot gates。
+  (3) **Docs**: 同步 `testdata/rhythm-frame-qa/README.md`、Phase 2.20 evaluation/plan、
+  `.planning/STATE.md` 和 `.planning/codebase/TESTING.md`，明确 committed fixture 与
+  本地真实媒体 QA 的边界。
+  验证: `python3 -m py_compile scripts/evaluate-rhythm-frame.py scripts/test_evaluate_rhythm_frame.py`、
+  `python3 scripts/test_evaluate_rhythm_frame.py`、
+  `python3 scripts/evaluate-rhythm-frame.py --manifest testdata/rhythm-frame-qa/fixture-manifest.jsonl --annotations testdata/rhythm-frame-qa/fixture-annotations.jsonl --strict-annotations --min-rhythm-coverage 1.0 --min-annotated-sentences 2 --min-overall-useful-rate 1.0 --max-hotspot-misleading-rate 0.0 --max-hotspot-unsupported-rate 0.0 --fail-on-quality-gate`
+  通过。
+
+- 2026-06-29 19:40 CST: 建立 Phase 2.20 RhythmFrame QA/scorer 初版。
+  (1) **Manual QA schema**: 新增 `testdata/rhythm-frame-qa/`，包含 annotation schema、
+  sample JSONL 和标注/评分说明，覆盖 stress anchors、weak groups、compression spans、
+  phrase boundaries、listening hotspots 与 `correct/useful_but_incomplete/unclear/misleading/unsupported`
+  rubric。
+  (2) **Scorer**: 新增 `scripts/evaluate-rhythm-frame.py`，可读取 Phase 2.17 manifest 和
+  local-only LLTimeline artifacts，输出 `rhythm_frame` 覆盖率、每句结构摘要、manual label
+  matching、hotspot score distribution 和 `summary.manual_qa` 聚合；支持 `--emit-template`
+  生成标注模板，并支持 `--strict-annotations` 校验 duplicate、invalid score 和 unknown
+  sentence target。新增 closeout quality gates：`--min-rhythm-coverage`、
+  `--min-annotated-sentences`、`--min-overall-useful-rate`、
+  `--max-hotspot-misleading-rate`、`--max-hotspot-unsupported-rate` 和
+  `--fail-on-quality-gate`。
+  (3) **Baseline**: 当前旧 `.tmp/sound-line-real-media` artifacts 为 8 cases / 51 phone timelines /
+  0 rhythm frames，符合预期，因为这些 artifact 生成早于 Phase 2.20 `rhythm_frame` 字段；本机
+  smoke 重跑 `p217-brooklyn-news-001 --sentence-limit 1` 后 scorer 可读到 1 条 refreshed
+  RhythmFrame（ignored `.tmp` artifact，不提交）。
+  验证: `python3 -m py_compile scripts/evaluate-rhythm-frame.py scripts/test_evaluate_rhythm_frame.py`、
+  `python3 scripts/test_evaluate_rhythm_frame.py`、
+  `python3 scripts/evaluate-rhythm-frame.py --manifest testdata/sound-line-real-media/manifest.jsonl`、
+  `PATH="/opt/homebrew/opt/rustup/bin:$PATH" python3 scripts/run-sound-line-real-media-case.py --case-id p217-brooklyn-news-001 --sentence-limit 1`
+  通过。
+
+- 2026-06-29 15:28 CST: 将 Phase 2.20 RhythmFrame 推进到字幕层主显示。
+  (1) **Subtitle layer**: 新增 `RhythmFrameRibbon`，在字幕下方直接展示 listening rhythm
+  时间线、stress anchors、weak groups、compression spans、listening hotspots 和当前播放位置。
+  (2) **Mode switch**: `sound_pattern_display_mode` 持久化为 `rhythm` / `phones` 两种模式；
+  声音模式时间带默认 rhythm-first，原 phone evidence ribbon 保留为可切换证据层。
+  (3) **Settings/UI**: 设置弹窗新增“声音时间带模式”，中英本地化同步；右侧诊断卡继续保留
+  compact rhythm detail。
+  验证: `dart format --set-exit-if-changed`、`git diff --check`、
+  `cd apps/desktop && $HOME/.local/share/flutter/bin/flutter analyze`、
+  `cd apps/desktop && $HOME/.local/share/flutter/bin/flutter test`、
+  `cargo fmt --check`、`cargo test --workspace --quiet`、`./scripts/validate-contracts.sh` 通过。
+
+- 2026-06-29 15:07 CST: 推进 Phase 2.20 RhythmFrame v0 纵切片。
+  (1) **Resource shape**: `SoundAnalysis` 新增可选 `rhythm_frame`，OpenAPI 同步
+  `RhythmFrame` / stress anchors / weak groups / compression spans / phrase boundaries /
+  listening hotspots / quality schema；`SoundLearningPhone` 保留可选 lexical stress。
+  (2) **Algorithm**: `speech-analysis::sound_analysis` 生成 deterministic rhythm-first
+  baseline，融合 CMUdict/fallback lexical stress、function-word grouping、phone timing
+  pause/duration 和 connected-speech evidence；raw phone mismatch 不会单独生成高置信默认听感解释。
+  (3) **Flutter**: typed timeline model 解析 `rhythm_frame`，诊断卡在 phone evidence 前展示
+  compact rhythm-first 区块（anchors、weak groups、compressed spans、hotspots、confidence）。
+  (4) **Planning sync**: 更新 `.planning/STATE.md` 与 codebase 架构/数据模型/测试事实源。
+  验证: `cargo test --workspace --quiet`、`./scripts/validate-contracts.sh`、
+  `cd apps/desktop && flutter analyze`、`cd apps/desktop && flutter test` 通过。
+  备注: `cargo clippy --workspace --all-targets -- -D warnings` 仍被既有 unrelated lint 阻塞
+  （`chunk_partition.rs`、`phone_recognition.rs`、`forced_align.rs`）。
+
 - 2026-06-29 14:37 CST: 补充 Phase 2.20 rhythm-first listening analysis 调研记录。
   新增 `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-RESEARCH.md`，
   从英语听力认知、L2 connected speech、prosody annotation、参考工具/数据集和产品形态

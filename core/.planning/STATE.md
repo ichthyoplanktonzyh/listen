@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: active
-last_updated: "2026-06-29T06:32:00.000Z"
+last_updated: "2026-06-29T16:00:00.000Z"
 progress:
   total_phases: 11
   completed_phases: 1
@@ -14,10 +14,16 @@ progress:
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-29 CST
-> 更新原因：新增 Phase 2.20 rhythm-first listening analysis，把真实语流分析的产品中心
-> 从 phone-level ribbon 调整为重音节奏框架、弱读音团、压缩区和听感解释；Phase 2.19
-> phone benchmark scoring 保留为底层 evidence-quality 支撑。
+> 最后更新：2026-06-30 CST
+> 更新原因：Phase 2.20 deterministic RhythmFrame v0 已落地到 `sound_analysis.rhythm_frame`、
+> OpenAPI、Flutter typed model、字幕层 rhythm-first ribbon、字幕 rhythm/phones 就地快切、
+> 字幕 expected pronunciation reference、字幕 rhythm cue loop、诊断卡 compact rhythm 区块，
+> 并新增仓库内可重复运行的 RhythmFrame QA/scorer fixture gate；Phase 2.19 phone
+> benchmark scoring 继续作为底层 evidence-quality 支撑。2026-06-30 已将 Phase 2.20
+> benchmark 方向重组为 stress/rhythm 分层体系，并把算法/指标必须有研究、标注或
+> product QA 依据的原则写入根目录 `AGENT.md`。同日路线复盘确认：`RhythmFrame`
+> 产品 contract 正确，但 generator 主线需要从 CTC-derived rhythm 迁移到 forced-aligned
+> WordTimeline + duration/rate + RMS energy/F0 的 layered hybrid。
 
 ## 当前位置
 
@@ -60,17 +66,100 @@ progress:
     当前 PER 较高不应阻塞 rhythm-frame UI。
   - Phase 2.19 的 TIMIT/Buckeye/TED-LIUM scoring 继续用于 phone/text/timing evidence quality，
     但不再作为唯一产品 gate。
+  - Benchmark 方向已从 phone-first 重新组织为 stress/rhythm tiers：
+    TIMIT 退回 evidence-quality，Helsinki Prosody / LibriTTS prosody labels 作为首选
+    public weak-label regression，BU Radio Speech / RaP / Aix-MARSEC/ProPOSEC 作为可选
+    human prosody gold，Buckeye/TED/product media 继续承担 product listening QA。
+- 已落地：
+  - `SoundAnalysis` 新增可选 `rhythm_frame`，包含 stress anchors、weak groups、
+    compression spans、phrase boundaries、listening hotspots 和 quality。
+  - `speech-analysis::sound_analysis` 已实现 deterministic v0：使用 CMUdict/fallback
+    lexical stress、function-word grouping、phone timing pause/duration 和 connected-speech
+    evidence；raw phone mismatch 不会单独生成高置信默认听感解释。
+  - Flutter typed model 与诊断卡已能显示 compact rhythm-first 区块，phone chips/findings
+    继续作为后续 evidence layer。
+  - 字幕层声音模式时间带新增 `rhythm` / `phones` 显示模式；默认 `rhythm` 时在字幕下方直接
+    展示 expected pronunciation reference、RhythmFrame 时间线、声音锚点、弱读音团、压缩区和
+    听感热点，`phones` 模式保留原 phone-level evidence ribbon；字幕层旁侧已有图标快切，
+    可在 rhythm/phones 间就地来回切换；点击 rhythm cue chip 可复用 source loop 直接复听
+    对应听感区间。
+  - Rhythm/listening QA 初版工具已落地：`testdata/rhythm-frame-qa/` 提供标注 schema/template，
+    `scripts/evaluate-rhythm-frame.py` 可对 Phase 2.17 manifest 输出 RhythmFrame 覆盖率和手工
+    标注匹配分，并校验 duplicate/invalid score/unknown sentence 等标注问题；旧 `.tmp`
+    artifacts 初始基线为 8 cases / 51 phone timelines / 0 rhythm frames。
+    scorer 现支持可配置 closeout gates：`--min-rhythm-coverage`、
+    `--min-annotated-sentences`、`--min-overall-useful-rate`、
+    `--max-hotspot-misleading-rate`、`--max-hotspot-unsupported-rate` 和
+    `--fail-on-quality-gate`。
+    `testdata/rhythm-frame-qa/fixture-*` 现提供 committed synthetic LLTimeline + annotations，
+    可在不重跑本地媒体的情况下验证 strict annotation validation 与质量门禁 CLI 路径。
+    本机 smoke 重跑 `p217-brooklyn-news-001 --sentence-limit 1` 已生成 1 条 RhythmFrame，证明
+    runner → algorithm → scorer 链路可用（ignored `.tmp` 本地 artifact，不提交）。
+  - Helsinki/LibriTTS weak-label benchmark adapter 已落地：
+    `scripts/evaluate-helsinki-prosody.py` 可解析 Helsinki Prosody prominence / word-boundary
+    labels，并在提供 LLTimeline manifest 时评分 `RhythmFrame.stress_anchors` 和
+    `phrase_boundaries`；`testdata/rhythm-prosody-benchmarks/` 提供 committed fixture 和 CLI
+    gate，不提交 LibriTTS 音频或完整 Helsinki corpus。
+  - LibriTTS/Helsinki local prep 已落地：
+    `scripts/prepare-helsinki-libritts-benchmark.py` 可从 extracted LibriTTS split 目录或
+    `/Users/shadow/Downloads/dev-clean.tar.gz` / `test-clean.tar.gz` 这类 split archive 中只抽取
+    selected wav 到 `.tmp`，生成 baseline LLTimeline 和 dual-use manifest；本机 `dev --limit 3`
+    smoke 已准备 3/3 样本，并由 evaluator 正确报告为 `missing_rhythm_frame`（等待 API refresh）。
+  - Algorithm/metrics calibration 原则已建档：
+    `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-ALGORITHM-METRICS-RESEARCH.md`
+    明确当前项目指标、小样本 smoke 和 Helsinki automatic labels 都不是“真理”，算法/指标变更
+    需要对齐 published prosody/phonetics baselines、corpus annotation convention 或 manual
+    product QA。
+  - LibriTTS/Helsinki 3-sentence smoke 已跑通 local API refresh：3/3 生成 `rhythm_frame`，
+    silver-label diagnostic score 为 stress anchor F1 0.827586、phrase boundary F1 0.285714；
+    该数值只用于诊断，不作为 gate。
+  - Helsinki/LibriTTS scorer report 已新增 `benchmark_context`：明确 benchmark role 为
+    `weak_prosody_regression`、evidence class 为 `silver_label`，记录 Helsinki label 语义、
+    Talman et al. 2019 BERT text-model prominence baselines（2-way accuracy 0.832、3-way
+    accuracy 0.686），并说明这些 baseline 只是校准上下文，不能直接等同 end-to-end audio
+    RhythmFrame F1。
+  - Benchmark role manifest 已落地：
+    `testdata/rhythm-prosody-benchmarks/benchmark-roles.json` 约定
+    `evidence_quality`、`weak_prosody_regression`、`human_prosody_gold`、
+    `product_listening_qa`、`robustness_probe` 五类角色、默认 evidence class、closeout use 和
+    local-only 数据政策；`scripts/test_rhythm_benchmark_roles.py` 负责防止角色约定漂移。
+  - 第一条 research-backed acoustic prosody feature path 已选定并实现：
+    `2.20-ACOUSTIC-FEATURE-PATH.md` 将 pre-boundary final lengthening / local
+    rate-normalized duration evidence 定为 Phase 2.20 的首个边界补强路径；
+    `speech-analysis` 的 RhythmFrame phrase boundaries 现在可在无明显 pause 但边界前词显著
+    拉长时输出 `evidence = "pre_boundary_lengthening"`。
+  - 路线校正已建档：
+    `2.20-ROUTE-CORRECTION.md` 明确 Phase 2.20 的目标是 actual audible structure，而不是
+    default predicted reading；当前 `stress_anchors` 主要是 `text_predicted` prior，CTC phone
+    evidence 应降级为 flapping/deletion/weak-form/phone-mismatch 等 segmental evidence，不再作为
+    rhythm skeleton。主线改为 D -> F：forced-aligned WordTimeline + duration/rate + RMS
+    energy/loudness，F0/pitch reset 作为校准后正式候选。
+  - 最新本地 Helsinki/LibriTTS dev `limit 20` diagnostic 已完成：20/20 scored，
+    stress anchor F1 0.574949，phrase boundary F1 0.210145，
+    predicted boundary evidence counts 为 pause 218 / pre_boundary_lengthening 17；
+    该结果只说明当前 CTC-derived baseline 过切 boundary，不能作为 gate。
+  - 根目录 `AGENT.md` 已新增 Algorithms And Metrics 原则：已有项目数据、小样本 smoke、
+    自动标签和当前指标不默认视为真理；算法/指标/阈值要尽量来自 published research、
+    corpus annotation convention、reported tool baseline 或 manual product QA；有合理依据时
+    可以大胆尝试，但必须标明 evidence class 和用途。
+  - OpenAPI schema、Rust unit tests、Flutter widget test 和 contract validation 已同步。
 - 下一步：
-  1. 实现 deterministic RhythmFrame baseline：lexical stress + function words + word timing +
-     pause/duration + connected-speech evidence。
-  2. 扩展 `sound_analysis` JSON，加入 `rhythm_frame` resource shape。
-  3. 在 Flutter 中新增 rhythm-first 视图：expected pronunciation reference、rhythm frame、
-     hotspots、可展开 phone evidence。
-  4. 建立 rhythm/listening QA：stress anchor、weak group、compression span、phrase boundary、
-     explanation quality。
+  1. 为 Phase 2.20 建立 5-10 句 manual QA 对比实验：current CTC-derived RhythmFrame vs
+     forced-aligned WordTimeline + duration/rate vs WordTimeline + RMS energy。
+  2. 在 production pipeline 侧 prototype RMS energy/loudness extractor，把结果写成
+     provider-attributed evidence；不要把依赖放入 Flutter consumer app。
+  3. LDC/SLDR 等 human-gold 资源只做 local-only adapter 约定，不提交受限数据。
+  4. 等本地资源可协作时，用现有 8 个 Phase 2.17 real-media cases 重跑或补标 `rhythm_frame`，
+     统计 misleading / useful / unsupported explanations。
+  5. 在仓库内继续打磨主声音视图：可展开 phone evidence。
+  6. 根据 manual QA 决定 F0/pitch reset 是否进入 Phase 2.20，或先用 duration+energy 收口。
 - 规划文档：
   - `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-CONTEXT.md`
   - `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-PLAN.md`
+  - `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-BENCHMARK-RESEARCH.md`
+  - `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-ALGORITHM-METRICS-RESEARCH.md`
+  - `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-ROUTE-CORRECTION.md`
+  - `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-ACOUSTIC-FEATURE-PATH.md`
   - `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-EVALUATION.md`
 
 ### Phase 3.0: English Listening Learning Loop 🧭 已建档

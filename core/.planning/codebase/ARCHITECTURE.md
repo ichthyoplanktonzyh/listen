@@ -128,6 +128,7 @@ Owns analysis engines, not application contracts:
 | `chunk_partition` | word timeline to learning chunk partition |
 | `phonetic_alignment` | phoneme sequence alignment |
 | `phonetic_findings` | reductions, elision, linking findings |
+| `sound_analysis` | learning-phone, syllable, phrase, connected-speech and RhythmFrame generation |
 | `learned_prosodic_provider` | rule-based prosodic analysis |
 | `rich_acoustic_evidence` | acoustic evidence aggregation |
 
@@ -144,6 +145,11 @@ Owns analysis engines, not application contracts:
 - `BackendEvent` parsing is typed; lexical change events update the typed
   learning cache.
 - Timeline models use typed metrics/evidence envelopes.
+- Sound analysis models include typed `RhythmFrame` data for anchors, weak groups,
+  compression spans, phrase boundaries, listening hotspots, and quality.
+- The subtitle sound-pattern layer can display `RhythmFrame` as the default
+  rhythm-first overlay or switch back to phone-level evidence via
+  `AppSettings.soundPatternDisplayMode`.
 - Dictionary, word pronunciation, sentence pronunciation, and phonetic-analysis
   payloads are parsed at API boundaries before entering controller/widget state.
 

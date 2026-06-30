@@ -142,8 +142,22 @@ boundary, but the Rust and Flutter models now wrap them in typed envelopes:
 | `ChunkTimeline.metrics_json` | `TimelineMetrics` | partitioner and parent timing metrics |
 | `PhoneTimeline.metrics_json` | `TimelineMetrics` | phonetic analysis provenance metrics |
 | `ChunkTimelineChunk.evidence_json` | `ChunkEvidence` | boundary/evidence payload |
+| `PhoneTimeline.sound_analysis.rhythm_frame` | `RhythmFrame` | rhythm-first listening map: anchors, weak groups, compression spans, phrase boundaries, hotspots, and quality |
 
 Non-object metrics/evidence input is normalized to an empty object.
+`SoundAnalysis.rhythm_frame` is optional for backward-compatible older
+PhoneTimeline resources; missing rhythm data should degrade to the existing
+sound-line/phone evidence UI or the compact unavailable state in rhythm mode.
+
+## Desktop Settings
+
+Flutter persists desktop preferences in the versioned `settings-v8.json` file.
+Phase 2.20 adds `sound_pattern_display_mode`:
+
+| Value | Meaning |
+|---|---|
+| `rhythm` | Default subtitle-layer sound pattern display; renders `RhythmFrame` anchors, weak groups, compression spans, and hotspots |
+| `phones` | Legacy/evidence display; renders phone-level sound-pattern timing and findings |
 
 ## Transactions And Migration
 

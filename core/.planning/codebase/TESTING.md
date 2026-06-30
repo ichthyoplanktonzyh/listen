@@ -1,6 +1,6 @@
 # LLPlayerNext — 测试体系
 
-> 最后更新：2026-06-29
+> 最后更新：2026-06-30
 
 ## 1. 测试层次
 
@@ -35,7 +35,7 @@
 | `domain` | ID 类型、枚举序列化、PhoneticAnalysis::validate() |
 | `subtitle-core` | SRT/VTT 解析、token 化、时间轴查询（空隙/重叠/边界） |
 | `diagnosis-core` | 词义障碍、声音识别障碍、信息不足、其他因素 |
-| `speech-analysis` | 100 句发音基线测试、规则型语流检测、chunk 分区 |
+| `speech-analysis` | 100 句发音基线测试、规则型语流检测、RhythmFrame v0、chunk 分区 |
 | `application` | AppServices 用例逻辑、chunk 检测 |
 | `dictionary-provider` | Provider 查询、缓存逻辑 |
 | `persistence-sqlite` | CRUD 操作、幂等、唯一约束、事务 |
@@ -86,7 +86,8 @@
 | `transcription_ui_test.dart` | 转写 UI |
 | `m18_ui_test.dart` | M1.8 学习质量功能 UI |
 | `phonetic_analysis_ui_test.dart` | 音素分析 UI |
-| future rhythm-frame widget tests | Phase 2.20 rhythm frame grouping、hotspot、empty/confidence state |
+| `diagnosis_card_test.dart` rhythm case | Phase 2.20 compact rhythm frame anchors、weak groups、compression spans、hotspots、confidence state |
+| `phoneme_ribbon_test.dart` rhythm case | Phase 2.20 subtitle-layer `RhythmFrameRibbon` timeline、anchor/weak/compression/hotspot chips、tooltip state、rhythm cue loop callback、sound pattern rhythm/phones icon toggle 和 expected pronunciation reference |
 
 ### 运行
 
@@ -101,12 +102,20 @@ cd apps/desktop && flutter test
 | `scripts/evaluate-word-timelines.py` | 词级时间轴比较（偏移分布/覆盖/gold 指标） |
 | `scripts/phonetic-eval.py` | 音素分析评估（PER/timeline 有效性/token 关联） |
 | `scripts/evaluate-sound-line-benchmarks.py` | Phase 2.19 real-media QA pack 对 TIMIT/Buckeye/TED-LIUM reference 的 phone/text/timing 初始评分 |
-| future rhythm/listening scorer | Phase 2.20 stress anchor、weak group、compression span、phrase boundary、listening explanation quality |
+| `scripts/evaluate-rhythm-frame.py` | Phase 2.20 RhythmFrame 覆盖率、manual QA annotation validation/matching、hotspot score distribution、manual QA 汇总和 closeout quality gates |
+| `scripts/test_evaluate_rhythm_frame.py` | RhythmFrame scorer 的 missing-artifact、manual matching、annotation validation、aggregate summary、quality gate 和 committed fixture CLI smoke 单元测试 |
+| `scripts/evaluate-helsinki-prosody.py` | Phase 2.20 Helsinki Prosody / LibriTTS weak-label regression adapter，比较 `stress_anchors` 和 `phrase_boundaries` 对 prominence/boundary labels 的命中 |
+| `scripts/test_evaluate_helsinki_prosody.py` | Helsinki prosody adapter 的 label parser、RhythmFrame matching、missing-rhythm 状态和 committed fixture CLI gate 单元测试 |
+| `scripts/prepare-helsinki-libritts-benchmark.py` | Phase 2.20 local-only LibriTTS/Helsinki baseline manifest/LLTimeline builder，支持 extracted split directory 和 split `.tar.gz` |
+| `scripts/test_prepare_helsinki_libritts_benchmark.py` | LibriTTS/Helsinki prep 的 directory/archive input、missing-audio handling 和 baseline LLTimeline shape 单元测试 |
 | `scripts/validate-contracts.sh` | LLTimeline Schema smoke + 契约测试 |
 
 ### Python 评估缺少自动化单元测试
 
-当前 Python 脚本侧重评估/比较功能，缺少 `pytest` 单元测试。建议后续为 `production_pipeline.py` 核心函数（音频预处理、WhisperX JSON 转换）添加测试。
+多数 Python 脚本仍侧重评估/比较功能，单元测试覆盖有限；Phase 2.20 scorer 已有
+`scripts/test_evaluate_rhythm_frame.py` 和 `scripts/test_evaluate_helsinki_prosody.py`。
+Phase 2.20 LibriTTS/Helsinki prep 也已有 `scripts/test_prepare_helsinki_libritts_benchmark.py`。
+建议后续继续为 `production_pipeline.py` 核心函数（音频预处理、WhisperX JSON 转换）添加测试。
 
 ## 5. 契约测试
 
@@ -130,6 +139,8 @@ cd apps/desktop && flutter test
 | `testdata/pronunciation/` | 100 句英语发音基线 |
 | `testdata/phonetic-analysis/` | M2.0 音素评估目录（60 用例） |
 | `testdata/timeline-production/` | WhisperX 样本输出 |
+| `testdata/rhythm-frame-qa/` | Phase 2.20 RhythmFrame manual QA schema、sample annotations、committed synthetic fixture 和 strict gate regression |
+| `testdata/rhythm-prosody-benchmarks/` | Phase 2.20 Helsinki-style prominence/boundary fixture、LLTimeline fixture 和 weak-label adapter README |
 
 ## 7. 统一测试编排器（`scripts/test.sh`）
 
@@ -201,6 +212,18 @@ cd apps/desktop && flutter analyze
 python scripts/evaluate-word-timelines.py compare \
   testdata/word-timelines/baseline-v1.json \
   testdata/word-timelines/candidate-v1.json
+python3 scripts/test_rhythm_benchmark_roles.py
+python3 scripts/test_evaluate_rhythm_frame.py
+python3 scripts/evaluate-rhythm-frame.py \
+  --manifest testdata/rhythm-frame-qa/fixture-manifest.jsonl \
+  --annotations testdata/rhythm-frame-qa/fixture-annotations.jsonl \
+  --strict-annotations \
+  --min-rhythm-coverage 1.0 \
+  --min-annotated-sentences 2 \
+  --min-overall-useful-rate 1.0 \
+  --max-hotspot-misleading-rate 0.0 \
+  --max-hotspot-unsupported-rate 0.0 \
+  --fail-on-quality-gate
 
 # 全体验证（统一入口）
 scripts/test.sh --full
@@ -218,5 +241,5 @@ scripts/validate-contracts.sh    # 单独契约验证
 | Flutter widget 交互测试 | P2 | 播放器/字幕点击/拖放交互 |
 | 跨语言 E2E 测试 | P2 | 端到端：生产管线 → 导入 → 播放验证 |
 | Rhythm-first 评测脚本 | P0 | Phase 2.20 需要 stress anchor、weak group、compression span、phrase boundary 与 explanation quality scorer |
-| RhythmFrame UI widget tests | P0 | Phase 2.20 需要验证 rhythm frame 分组、hotspot、缺失/低置信降级和 phone detail 展开 |
+| RhythmFrame full UI widget tests | P1 | compact 诊断卡测试已覆盖 v0；完整声音视图仍需验证 rhythm frame 分组、hotspot、缺失/低置信降级和 phone detail 展开 |
 | Manual listening QA material | P0 | Phase 2.20 需要可复现标注表，避免只用 PER 判断真实听感解释质量 |

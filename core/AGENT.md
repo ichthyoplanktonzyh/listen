@@ -90,6 +90,22 @@ Local QA media:
 Follow existing module style before adding new abstractions. Keep changes scoped
 to the requested behavior and surrounding ownership boundary.
 
+## Algorithms And Metrics
+
+- Existing project data, metrics, small smoke runs, and automatic labels are
+  diagnostic signals, not truth by default.
+- Algorithm, metric, and threshold changes should be grounded in published
+  research, public corpus annotation conventions, reported tool baselines, or
+  explicit manual product QA.
+- Good evidence should unlock bold iteration. Do not stall merely because an
+  input is not human gold, but always record the evidence class and intended use:
+  `gold`, `silver_label`, `heuristic_proxy`, `manual_product_qa`, or `coverage`.
+- Small samples are for validating the pipeline and exposing failure modes. Do
+  not blindly tune product semantics to improve a tiny smoke score.
+- When research or product evidence is missing for a user-facing algorithm
+  change, add the research note, annotation plan, or experiment design before
+  treating the change as a product claim.
+
 ## Toolchain Environment
 
 Some shells used by agents do not load the user's interactive profile. Before

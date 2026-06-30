@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LLPlayerNext RhythmFrame QA Annotation",
+  "type": "object",
+  "required": [
+    "case_id",
+    "sentence_id",
+    "transcript",
+    "stress_anchors",
+    "weak_groups",
+    "compression_spans",
+    "phrase_boundaries",
+    "listening_hotspots"
+  ],
+  "properties": {
+    "case_id": {
+      "type": "string"
+    },
+    "sentence_id": {
+      "type": "string"
+    },
+    "transcript": {
+      "type": "string"
+    },
+    "media_start_ms": {
+      "type": ["integer", "null"]
+    },
+    "media_end_ms": {
+      "type": ["integer", "null"]
+    },
+    "stress_anchors": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/rhythm_item"
+      }
+    },
+    "weak_groups": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/rhythm_span"
+      }
+    },
+    "compression_spans": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/rhythm_span"
+      }
+    },
+    "phrase_boundaries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/phrase_boundary"
+      }
+    },
+    "listening_hotspots": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/hotspot"
+      }
+    },
+    "overall": {
+      "type": "object",
+      "properties": {
+        "manual_score": {
+          "$ref": "#/$defs/manual_score_or_null"
+        },
+        "misleading_reason": {
+          "type": "string"
+        },
+        "phone_detail_needed": {
+          "type": ["boolean", "null"]
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "reviewer": {
+      "type": "string"
+    },
+    "reviewed_at": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "manual_score": {
+      "type": "string",
+      "enum": [
+        "correct",
+        "useful_but_incomplete",
+        "unclear",
+        "misleading",
+        "unsupported"
+      ]
+    },
+    "manual_score_or_null": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/manual_score"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "rhythm_item": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "token_index": {
+          "type": ["integer", "null"]
+        },
+        "word_index": {
+          "type": ["integer", "null"]
+        },
+        "start_ms": {
+          "type": ["integer", "null"]
+        },
+        "end_ms": {
+          "type": ["integer", "null"]
+        },
+        "importance": {
+          "type": "string"
+        },
+        "manual_score": {
+          "$ref": "#/$defs/manual_score_or_null"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "rhythm_span": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "token_start": {
+          "type": ["integer", "null"]
+        },
+        "token_end": {
+          "type": ["integer", "null"]
+        },
+        "word_range": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "start_ms": {
+          "type": ["integer", "null"]
+        },
+        "end_ms": {
+          "type": ["integer", "null"]
+        },
+        "heard_as": {
+          "type": "string"
+        },
+        "manual_score": {
+          "$ref": "#/$defs/manual_score_or_null"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "phrase_boundary": {
+      "type": "object",
+      "properties": {
+        "at_ms": {
+          "type": ["integer", "null"]
+        },
+        "after_token_index": {
+          "type": ["integer", "null"]
+        },
+        "before_token_index": {
+          "type": ["integer", "null"]
+        },
+        "evidence": {
+          "type": "string"
+        },
+        "manual_score": {
+          "$ref": "#/$defs/manual_score_or_null"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "hotspot": {
+      "type": "object",
+      "properties": {
+        "hotspot_id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "token_start": {
+          "type": ["integer", "null"]
+        },
+        "token_end": {
+          "type": ["integer", "null"]
+        },
+        "start_ms": {
+          "type": ["integer", "null"]
+        },
+        "end_ms": {
+          "type": ["integer", "null"]
+        },
+        "manual_score": {
+          "$ref": "#/$defs/manual_score"
+        },
+        "audible_evidence": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

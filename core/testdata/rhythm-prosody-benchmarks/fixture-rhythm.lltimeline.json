@@ -1,0 +1,91 @@
+{
+  "schema": "llplayer.timeline.v1",
+  "metadata": {
+    "created_at_ms": 1782816000000,
+    "generator": {
+      "id": "phase-2.20-helsinki-prosody-fixture",
+      "version": "v1",
+      "mode": "synthetic"
+    },
+    "media": {
+      "id": "fixture-helsinki-media",
+      "fingerprint": "fixture_000001_000001_000000_000000",
+      "path": "synthetic://fixture_000001_000001_000000_000000",
+      "title": "Phase 2.20 Helsinki prosody adapter fixture",
+      "duration_ms": 1800
+    },
+    "language": "en",
+    "human_reviewed": true
+  },
+  "segments": [
+    {
+      "id": "fixture-helsinki-s1",
+      "index": 0,
+      "start_ms": 0,
+      "end_ms": 1500,
+      "text": "The market opened early.",
+      "display_text": "The market opened early."
+    }
+  ],
+  "word_timelines": [],
+  "phone_timelines": [
+    {
+      "id": "fixture-helsinki-phone-s1",
+      "sentence_id": "fixture-helsinki-s1",
+      "status": "candidate",
+      "sound_analysis": {
+        "provider_id": "fixture",
+        "provider_version": "v1",
+        "model_revision": "v1",
+        "phone_set": "arpabet",
+        "generated_from": "expected_stress_aligned_to_observed_timing_v0",
+        "learning_phones": [],
+        "connected_speech": [],
+        "syllables": [],
+        "prosodic_phrases": [],
+        "rhythm_frame": {
+          "generated_from": "fixture_helsinki_prosody",
+          "stress_anchors": [
+            {
+              "token_index": 2,
+              "start_ms": 240,
+              "end_ms": 620,
+              "label": "market",
+              "reason": "High Helsinki prominence label.",
+              "importance": "primary",
+              "confidence": 0.95,
+              "evidence": ["fixture_prominence"]
+            },
+            {
+              "token_index": 4,
+              "start_ms": 700,
+              "end_ms": 1040,
+              "label": "opened",
+              "reason": "Prominent Helsinki label.",
+              "importance": "secondary",
+              "confidence": 0.82,
+              "evidence": ["fixture_prominence"]
+            }
+          ],
+          "weak_groups": [],
+          "compression_spans": [],
+          "phrase_boundaries": [
+            {
+              "after_token_index": 4,
+              "before_token_index": 6,
+              "at_ms": 1040,
+              "evidence": "High Helsinki word-boundary label after opened.",
+              "confidence": 0.9
+            }
+          ],
+          "listening_hotspots": [],
+          "quality": {
+            "timing_source": "fixture",
+            "phone_evidence_coverage": 0.0,
+            "rhythm_confidence": 0.9
+          }
+        }
+      }
+    }
+  ]
+}
