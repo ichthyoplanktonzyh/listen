@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+- 2026-06-30 14:31 CST: 立住 Phase 2.20 "actual audible structure" 架构与方向，新增
+  canonical 锁定文档
+  `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-AUDIBLE-STRUCTURE-MODEL.md`。
+  (1) **Definition lock**: 把可听结构锁为四层——音步锚点（L1）、调核 nucleus（L2）、
+  调群边界（L3）、连读音变（L4），以 foot 为统一单位；明确 v0 缺失 nucleus、用文本预测
+  冒充音频测量、节奏骑在 CTC 上的符合性差距。
+  (2) **Three-reference + provenance lock**: 把模糊的 "expected" 拆为 citation /
+  default-connected / actual 三参照，规定 `默认−词典 = 可教规则`、`实际−默认 = 本句意外`；
+  每条结论必须带 signal source + evidence class，只有音频信号支撑才可标"实际/可听"，
+  纯 `text_prior` 必须标 predicted。
+  (3) **Substrate + ownership lock**: 节奏骨架 L1–L3 改由 forced-aligned WordTimeline +
+  词典 + duration/energy 产出，phone 缺席也要成立，CTC 降级为 L4 `phone_segmental` 证据；
+  L1 母语过滤与纯语速难度归诊断层（LANG-009 seam），不进 RhythmFrame。
+  (4) **Open decisions deferred**: 不设任何阈值，F0/pitch 改为带判据的决策门（生产侧、
+  非消费端），实验 harness 调参与人工标注明确归实验侧。给出目标 `rhythm_frame` 数据形状
+  和 6 条符合性 checklist。
+  验证: documentation-only architecture lock，未改动 worktree 在飞的实验文件。
+
+- 2026-06-30 13:41 CST: 为 Phase 2.20 D -> F 路线补上 duration/RMS manual QA
+  对比实验工具。
+  (1) **Experiment harness**: 新增 `scripts/prepare-rhythm-acoustic-qa.py`，
+  读取 manifest / LLTimeline / 本地音频，按句输出 current CTC-derived
+  `RhythmFrame`、active WordTimeline duration/rate 特征和 per-word RMS energy/loudness
+  对比；非 wav 媒体通过本机 `ffmpeg` 解码，所有新 evidence 标为
+  `heuristic_proxy` / `manual_product_qa_input`，不写回产品资源。
+  (2) **Manual QA template**: 脚本支持 `--emit-template` 输出兼容现有
+  RhythmFrame manual annotation schema 的 JSONL，并把三路系统候选放入
+  `system_compare`，用于 5-10 句人工听感标注。
+  (3) **Tests/docs**: 新增 `scripts/test_prepare_rhythm_acoustic_qa.py`，用合成 wav
+  fixture 覆盖 active WordTimeline、current RhythmFrame、duration/rate candidate、
+  RMS prominence candidate 和 template CLI；同步 Phase 2.20 evaluation、STATE 和
+  handoff。
+  验证: `python3 -m py_compile scripts/prepare-rhythm-acoustic-qa.py scripts/test_prepare_rhythm_acoustic_qa.py`、
+  `python3 scripts/test_prepare_rhythm_acoustic_qa.py`、
+  `python3 scripts/test_evaluate_rhythm_frame.py`、
+  `python3 scripts/prepare-rhythm-acoustic-qa.py --manifest testdata/sound-line-real-media/manifest.jsonl --case-id p217-brooklyn-news-001 --limit 1`
+  的等价 import smoke（1 句 scored，ffmpeg 音频加载成功，WordTimeline timing present）、
+  `git diff --check` 通过。
+
 - 2026-06-30 13:29 CST: Phase 2.20 路线复盘后更新交接文档，准备新 session 继续推进。
   (1) **Route correction**: 新增
   `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-ROUTE-CORRECTION.md`，

@@ -29,6 +29,24 @@ python3 scripts/evaluate-rhythm-frame.py \
 Current Phase 2.17 artifacts may predate `rhythm_frame`; those rows will show
 `system.status = "missing_rhythm_frame"` until the case is regenerated.
 
+## Generate A Duration/RMS Comparison Template
+
+Phase 2.20 route correction compares the current CTC-derived `RhythmFrame`
+against active WordTimeline duration/rate and per-word RMS energy evidence before
+changing the product generator:
+
+```bash
+python3 scripts/prepare-rhythm-acoustic-qa.py \
+  --manifest testdata/sound-line-real-media/manifest.jsonl \
+  --case-id p217-brooklyn-news-001 \
+  --limit 10 \
+  --emit-template > testdata/rhythm-frame-qa/acoustic-comparison.local.jsonl
+```
+
+Rows include the normal manual-label fields plus `system_compare`. Duration/rate
+and RMS candidates are `heuristic_proxy` evidence for manual QA, not product
+truth.
+
 ## Committed Fixture Smoke
 
 The synthetic fixture is intentionally small and redistributable. It keeps the

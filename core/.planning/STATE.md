@@ -138,15 +138,22 @@ progress:
     stress anchor F1 0.574949，phrase boundary F1 0.210145，
     predicted boundary evidence counts 为 pause 218 / pre_boundary_lengthening 17；
     该结果只说明当前 CTC-derived baseline 过切 boundary，不能作为 gate。
+  - Duration/RMS manual QA 对比实验工具已落地：
+    `scripts/prepare-rhythm-acoustic-qa.py` 可读取 manifest / LLTimeline / 本地音频，
+    输出 current CTC-derived `RhythmFrame`、active WordTimeline duration/rate 和 per-word
+    RMS energy/loudness 三路对比；`--emit-template` 可生成带 `system_compare` 的
+    manual annotation JSONL。该脚本只产出 `heuristic_proxy` / `manual_product_qa_input`
+    实验材料，不写回产品资源。
   - 根目录 `AGENT.md` 已新增 Algorithms And Metrics 原则：已有项目数据、小样本 smoke、
     自动标签和当前指标不默认视为真理；算法/指标/阈值要尽量来自 published research、
     corpus annotation convention、reported tool baseline 或 manual product QA；有合理依据时
     可以大胆尝试，但必须标明 evidence class 和用途。
   - OpenAPI schema、Rust unit tests、Flutter widget test 和 contract validation 已同步。
 - 下一步：
-  1. 为 Phase 2.20 建立 5-10 句 manual QA 对比实验：current CTC-derived RhythmFrame vs
-     forced-aligned WordTimeline + duration/rate vs WordTimeline + RMS energy。
-  2. 在 production pipeline 侧 prototype RMS energy/loudness extractor，把结果写成
+  1. 用 `scripts/prepare-rhythm-acoustic-qa.py` 在 5-10 个本地有 active WordTimeline
+     的句子上生成对比 JSON/JSONL，并完成人工听感标注：actual prominent words、weak/reduced
+     groups、compressed regions、phrase boundaries 和 hotspot manual score。
+  2. 根据人工 QA，把 production pipeline 侧 RMS energy/loudness extractor 正式写成
      provider-attributed evidence；不要把依赖放入 Flutter consumer app。
   3. LDC/SLDR 等 human-gold 资源只做 local-only adapter 约定，不提交受限数据。
   4. 等本地资源可协作时，用现有 8 个 Phase 2.17 real-media cases 重跑或补标 `rhythm_frame`，

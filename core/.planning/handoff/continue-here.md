@@ -49,6 +49,12 @@ forced-aligned WordTimeline skeleton
 - `scripts/evaluate-helsinki-prosody.py`
   - 已输出 `benchmark_context`。
   - 已输出 `score_summary.predicted_boundary_evidence_counts`。
+- `scripts/prepare-rhythm-acoustic-qa.py`
+  - 已提供 D -> F manual QA 对比桥：current CTC-derived `RhythmFrame` vs
+    active WordTimeline duration/rate vs per-word RMS energy/loudness。
+  - 支持 `--emit-template` 输出带 `system_compare` 的 manual annotation JSONL。
+  - 所有 duration/rate/energy 候选仍是 `heuristic_proxy` /
+    `manual_product_qa_input`，不是 product truth。
 - `testdata/rhythm-prosody-benchmarks/benchmark-roles.json`
   - 已约定 benchmark role/evidence class/closeout use。
 
@@ -84,26 +90,37 @@ Interpretation:
 
 Do not keep optimizing CTC-derived RhythmFrame as the main route.
 
-Next session should implement or design this experiment:
+Next session should run and label this experiment:
 
-1. Select 5-10 local sentences for manual QA.
-2. Compare:
+1. Select 5-10 local sentences with active WordTimeline timing for manual QA.
+2. Run:
+
+```bash
+python3 scripts/prepare-rhythm-acoustic-qa.py \
+  --manifest testdata/sound-line-real-media/manifest.jsonl \
+  --case-id p217-brooklyn-news-001 \
+  --limit 10 \
+  --emit-template > testdata/rhythm-frame-qa/acoustic-comparison.local.jsonl
+```
+
+3. Compare:
    - current CTC-derived RhythmFrame;
    - forced-aligned WordTimeline + duration/rate;
    - forced-aligned WordTimeline + RMS energy/loudness.
-3. Use manual labels for:
+4. Use manual labels for:
    - actual prominent words;
    - weak/reduced groups;
    - compressed regions;
    - phrase boundaries;
    - hotspot score: `correct`, `useful_but_incomplete`, `unclear`, `misleading`,
      `unsupported`.
-4. Decide whether duration+energy is enough for Phase 2.20 closeout or whether
+5. Decide whether duration+energy is enough for Phase 2.20 closeout or whether
    F0/pitch reset must enter this phase.
 
 Candidate files to inspect:
 
 - `scripts/run-sound-line-real-media-case.py`
+- `scripts/prepare-rhythm-acoustic-qa.py`
 - `scripts/prepare-helsinki-libritts-benchmark.py`
 - `scripts/evaluate-rhythm-frame.py`
 - `scripts/evaluate-helsinki-prosody.py`
@@ -115,6 +132,11 @@ Candidate files to inspect:
 
 - `python3 scripts/test_evaluate_helsinki_prosody.py`
 - `python3 scripts/test_rhythm_benchmark_roles.py`
+- `python3 -m py_compile scripts/prepare-rhythm-acoustic-qa.py scripts/test_prepare_rhythm_acoustic_qa.py`
+- `python3 scripts/test_prepare_rhythm_acoustic_qa.py`
+- `scripts/prepare-rhythm-acoustic-qa.py` equivalent import smoke on
+  `p217-brooklyn-news-001 --limit 1`: 1 scored sentence, ffmpeg audio loaded,
+  active WordTimeline present.
 - `PATH="/opt/homebrew/opt/rustup/bin:$PATH" cargo fmt --check`
 - `PATH="/opt/homebrew/opt/rustup/bin:$PATH" cargo test -p speech-analysis sound_analysis --quiet`
 - `python3 scripts/evaluate-helsinki-prosody.py --prosody-dir /Users/shadow/prosody --split dev --limit 20 --lltimeline-manifest .tmp/helsinki-libritts-rhythm-dev-20/manifest.jsonl`
