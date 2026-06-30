@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-06-30 14:21 CST: 在测试体系建设期对架构做证据化审计并记录到 `CONCERNS.md`，
+  决定走"测试优先安全网"——先记录、继续铺测试、收口后再统一修架构。
+  (1) **新增待修复登记**（§6）：A1 `LocalApi` transport 非注入（`api_service.dart:49`，
+  挡住 Tier A 客户端单测，该项测试延后到 seam 修复后）；A2 `build_word_timeline` /
+  `save_word_timeline_snapshot` 参数过多（`application/src/lib.rs:213`/`:292`，clippy
+  `too_many_arguments`）；A3 workspace clippy warning 漂移；A4 `speech-analysis` 拆 crate、
+  A5 `domain/lib.rs` 拆分（结构性大改，先出评审再动）。
+  (2) **已证伪**：`AppServices::new` 8 参数是接口隔离（ISP），非 smell，不修。
+  (3) **刷新过期条目**：§3 测试缺口表中 application/api-http 集成测试更新为"🟡 部分"，
+  指向 `crates/api-http/tests/api_integration_test.rs`。
+  验证: documentation-only，`git diff --check` 通过。
+
 - 2026-06-30 14:07 CST: Tier A 续作——扩 `api-http` 全栈集成测试路由覆盖，
   仍为纯测试改动。`api_integration_test.rs` 新增 3 条：
   (1) **LLTimeline 资源契约**: 导入 `testdata/lltimeline/v1-minimal.lltimeline.json`

@@ -44,6 +44,15 @@
 - **影响**：发布包中可能找不到 Rust 二进制
 - **修复思路**：生产发布包固化 sidecar 路径（macOS bundle 内嵌）
 
+### `LocalApi` HTTP transport 非注入（2026-06-30 测试期新增）
+
+- **文件**：`apps/desktop/lib/services/api_service.dart:49`（`final HttpClient _client = HttpClient();`）
+- **问题**：transport 在字段初始化处写死 `dart:io HttpClient`，没有可注入的 seam
+- **影响**：客户端请求构造 / 响应映射 / 错误处理无法做 Tier A 单测，只能等 Tier B 真实
+  sidecar 才能间接验证；约 900 行客户端逻辑因此长期零直接覆盖
+- **修复思路**：引入可注入 transport（构造参数带默认值，行为不变），解锁 Tier A 客户端测试
+- **测试影响**：`api_service.dart` 的请求/响应单测**刻意延后**到此 seam 修复后，避免假覆盖
+
 ### Python 管线缺少单元测试
 
 - **文件**：`scripts/timeline-production/production_pipeline.py`, `scripts/forced-align/align-cli.py`
@@ -85,8 +94,8 @@
 
 | 缺口 | 优先级 | 文件 | 风险 |
 |---|---|---|---|
-| `application` 层集成测试 | P1 | `crates/application/` 缺少 `tests/` 目录 | 用例编排逻辑只在 E2E 层面间接验证 |
-| `api-http` 路由集成测试 | P1 | `crates/api-http/` 缺少请求-响应测试 | 路由错误映射、认证中间件未经自动化验证 |
+| `application` 层集成测试 | P1 🟡 部分 | `persistence-sqlite/tests/` 已驱动 `AppServices`；无独立 `application/tests/` | 用例编排逻辑只在 E2E 层面间接验证 |
+| `api-http` 路由集成测试 | P1 🟡 部分 | `crates/api-http/tests/api_integration_test.rs`（2026-06-30 起，鉴权/media/subtitle/LLTimeline/word-timeline/diagnosis）；其余路由待补 | 路由错误映射、认证中间件已部分自动化验证 |
 | Python 管线单元测试 | P2 | `scripts/timeline-production/` | 见上 |
 | Flutter widget 交互测试 | P2 | `apps/desktop/test/` | 播放器/字幕点击/拖放无测试 |
 | 跨语言 E2E 测试 | P2 | — | 生产管线 → 导入 → 播放链无自动化验证 |
@@ -116,5 +125,27 @@
 
 ---
 
-*清单更新：2026-06-21*
+## 6. 架构审计 — 测试体系建设期（2026-06-30）
+
+> 决策：先**记录**架构问题，**继续把测试安全网铺广铺绿**，待测试体系收口后再**统一修复**
+> 架构（测试优先安全网）。结构性大改动手前单独出评审文档，不在测试工作里夹带。
+
+### 待修复（已记录，按 leverage × 低风险排序，post-test-buildout）
+
+| # | 项 | 文件:line | 性质 | 风险 | 备注 |
+|---|---|---|---|---|---|
+| A1 | `LocalApi` transport 非注入 | `api_service.dart:49` | 测试+架构双赢 seam | 低 | 修后解锁 Tier A 客户端单测；见 §1 |
+| A2 | `build_word_timeline` / `save_word_timeline_snapshot` 参数过多 | `application/src/lib.rs:213` (9/7)、`:292` (8/7) | 松散参数 → 参数结构体 | 低 | clippy `too_many_arguments`；机械清理 |
+| A3 | workspace clippy warning 漂移 | `speech-analysis`/`application`/`dictionary-provider` 等 lib | 验证门禁失效嫌疑 | 低 | `--strict` 可能已名存实亡，与文档"clippy 干净"矛盾；已挂后台任务 |
+| A4 | `speech-analysis` 职责过重 | `crates/speech-analysis/src/`（11 模块） | 拆 crate（结构性大改） | 中高 | 见 §1；**先出评审**再动 |
+| A5 | `domain/src/lib.rs` ~1317 行 | `crates/domain/src/lib.rs` | mechanical 拆分 | 中 | 先出评审再动 |
+
+### 已证伪 — 看着像问题、实则刻意设计（不修）
+
+- **`AppServices::new` 8 个位置参数** `application/src/lib.rs:76`：是 8 个不同 repository
+  trait 的**接口隔离（ISP）**，非重复。合并会破坏 ISP。保留。
+
+---
+
+*清单更新：2026-06-30*
 *问题解决后删除对应条目，新发现问题随时追加*
