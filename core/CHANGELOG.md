@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- 2026-07-01 10:36 CST: 修复 Phase 2.18 后旧本地库 schema 漂移导致的媒体/字幕断链。
+  (1) **Destructive repair migration**: SQLite schema 升到 v16，新增
+  `0016_destructive_lexical_reset.sql`，重建 `LexicalEntry + LexicalUnit`
+  所需的 lexical/learning-resource 表，清理旧 v7 lexical schema。
+  (2) **Runtime impact**: 修复已有库 `user_version=15` 但缺少
+  `lexical_observations`、`granularity`、`normalization`、`normalized_key`
+  时，媒体注册、SRT 导入和字幕增强加载被 `no such table/column` 阻断的问题。
+  (3) **Custom Whisper DTW**: 自定义 whisper.cpp 模型不再因为
+  `family=custom` 跳过 `-dtw`；现在会从 `display_name`/`local_path`
+  解析 stock preset，覆盖 `ggml-large-v3-q5_0.bin` 等量化文件名，恢复
+  Whisper 生成字幕后的 WordTimeline/Chunk 材料。
+  (4) **Regression**: 新增坏库回归测试，模拟旧 0007 已跑完且版本号已到 15 的真实形态，
+  确认迁移到 v16 后表结构恢复且旧词库数据按当前断代策略丢弃。
+  验证: `cargo test -p persistence-sqlite -- --nocapture`、
+  `cargo test -p api-http dtw -- --nocapture`、
+  `cargo test -p api-http --test api_integration_test -- --nocapture`、
+  `./scripts/test.sh --quick --json` 通过；复制坏库的真实 HTTP media register + SRT import
+  smoke 通过。
+
 - 2026-07-01 CST: 合并 testing-system-buildout 后清理 main 既有 analyze 告警——
   移除 `test/controllers_test.dart:233` 与 `test/timeline_resource_summary_panel_test.dart:33`
   中 `rhythmFrames: const []` 冗余的 `const`（`unnecessary_const`，随 Phase 2.21 韵律

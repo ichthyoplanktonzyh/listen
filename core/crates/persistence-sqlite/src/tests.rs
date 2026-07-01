@@ -11,6 +11,75 @@ use rusqlite::{Connection, params};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+const LEGACY_PHASE_218_LEXICAL_SCHEMA: &str = r#"
+CREATE TABLE lexical_entries (
+  id TEXT PRIMARY KEY NOT NULL,
+  language TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  canonical_form TEXT NOT NULL,
+  normalized_form TEXT NOT NULL,
+  display_form TEXT NOT NULL,
+  status TEXT,
+  user_definition TEXT,
+  personal_note TEXT,
+  normalization_provider TEXT NOT NULL,
+  normalization_version TEXT NOT NULL,
+  user_corrected INTEGER NOT NULL DEFAULT 0,
+  updated_at_ms INTEGER NOT NULL,
+  learning_updated_at_ms INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(language, kind, normalized_form)
+);
+
+CREATE INDEX idx_lexical_entries_status
+  ON lexical_entries(language, kind, status, normalized_form);
+
+CREATE TABLE lexical_occurrences (
+  id TEXT PRIMARY KEY NOT NULL,
+  source_key TEXT NOT NULL,
+  lexical_entry_id TEXT NOT NULL REFERENCES lexical_entries(id) ON DELETE CASCADE,
+  media_id TEXT REFERENCES media_items(id) ON DELETE SET NULL,
+  sentence_id TEXT REFERENCES subtitle_sentences(id) ON DELETE SET NULL,
+  original_form TEXT NOT NULL,
+  sentence_text_snapshot TEXT NOT NULL,
+  media_title_snapshot TEXT NOT NULL,
+  media_fingerprint_snapshot TEXT NOT NULL,
+  start_ms_snapshot INTEGER NOT NULL,
+  end_ms_snapshot INTEGER NOT NULL,
+  token_start INTEGER,
+  token_end INTEGER,
+  first_seen_at_ms INTEGER NOT NULL,
+  last_seen_at_ms INTEGER NOT NULL,
+  encounter_count INTEGER NOT NULL,
+  UNIQUE(lexical_entry_id, source_key)
+);
+
+CREATE INDEX idx_lexical_occurrences_recent
+  ON lexical_occurrences(lexical_entry_id, last_seen_at_ms DESC);
+
+CREATE TABLE lexical_status_history (
+  id TEXT PRIMARY KEY NOT NULL,
+  lexical_entry_id TEXT NOT NULL REFERENCES lexical_entries(id) ON DELETE CASCADE,
+  previous_status TEXT,
+  new_status TEXT,
+  changed_at_ms INTEGER NOT NULL,
+  change_source TEXT NOT NULL
+);
+
+CREATE TABLE lemma_overrides (
+  language TEXT NOT NULL,
+  original_normalized TEXT NOT NULL,
+  corrected_normalized TEXT NOT NULL,
+  updated_at_ms INTEGER NOT NULL,
+  PRIMARY KEY(language, original_normalized)
+);
+
+CREATE TABLE learning_resources (
+  id TEXT PRIMARY KEY NOT NULL,
+  descriptor_json TEXT NOT NULL,
+  updated_at_ms INTEGER NOT NULL
+);
+"#;
+
 struct FakeDictionary {
     calls: AtomicUsize,
 }
@@ -49,6 +118,33 @@ fn read_word_asset(services: &AppServices, language: &str, value: &str) -> Optio
         .unwrap()
         .into_iter()
         .next()
+}
+
+fn table_exists(connection: &Connection, name: &str) -> bool {
+    connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+            [name],
+            |row| row.get::<_, u32>(0),
+        )
+        .unwrap()
+        > 0
+}
+
+fn table_column_count(connection: &Connection, table: &str, columns: &[&str]) -> u32 {
+    let placeholders = (0..columns.len())
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql =
+        format!("SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name IN ({placeholders})");
+    connection
+        .query_row(
+            &sql,
+            rusqlite::params_from_iter(columns.iter().copied()),
+            |row| row.get::<_, u32>(0),
+        )
+        .unwrap()
 }
 
 fn transcription_job(
@@ -354,6 +450,89 @@ impl DictionaryProvider for FakeChineseDictionary {
 fn new_database_migrates_to_latest() {
     let repo = SqliteRepository::in_memory().unwrap();
     assert_eq!(repo.schema_version().unwrap(), MIGRATION_VERSION);
+}
+
+#[test]
+fn current_version_with_legacy_lexical_schema_is_destructively_repaired() {
+    let connection = Connection::open_in_memory().unwrap();
+    for migration in [
+        include_str!("../migrations/0001_media.sql"),
+        include_str!("../migrations/0002_learning.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection
+        .execute_batch("PRAGMA foreign_keys=OFF;")
+        .unwrap();
+    for migration in [
+        include_str!("../migrations/0003_subtitle_identity.sql"),
+        include_str!("../migrations/0004_vocabulary_assets.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+    for migration in [
+        include_str!("../migrations/0005_learning_experience.sql"),
+        include_str!("../migrations/0006_transcription.sql"),
+        LEGACY_PHASE_218_LEXICAL_SCHEMA,
+        include_str!("../migrations/0008_pronunciation.sql"),
+        include_str!("../migrations/0009_phonetic_analysis.sql"),
+        include_str!("../migrations/0010_word_timelines.sql"),
+        include_str!("../migrations/0011_lltimeline_resources.sql"),
+        include_str!("../migrations/0012_subtitle_resource_lifecycle.sql"),
+        include_str!("../migrations/0013_chunk_timelines.sql"),
+        include_str!("../migrations/0014_phone_timelines.sql"),
+        include_str!("../migrations/0015_learning_loop.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection
+        .execute(
+            "INSERT INTO lexical_entries
+                 (id,language,kind,canonical_form,normalized_form,display_form,status,
+                  normalization_provider,normalization_version,user_corrected,updated_at_ms,
+                  learning_updated_at_ms)
+                 VALUES ('legacy-entry','en','\"word\"','hello','hello','Hello',
+                         '\"known_recognized\"','legacy','v1',0,10,0)",
+            [],
+        )
+        .unwrap();
+    connection.pragma_update(None, "user_version", 15).unwrap();
+
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "lexical_entries",
+            &["granularity", "normalization", "normalized_key"]
+        ),
+        0
+    );
+    assert!(!table_exists(&connection, "lexical_observations"));
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "lexical_entries",
+            &["granularity", "normalization", "normalized_key"]
+        ),
+        3
+    );
+    assert!(table_exists(&connection, "lexical_observations"));
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM lexical_entries", [], |row| row
+                .get::<_, u32>(0))
+            .unwrap(),
+        0
+    );
 }
 
 #[test]
@@ -817,7 +996,7 @@ fn lltimeline_resource_metadata_and_artifacts_round_trip() {
 }
 
 #[test]
-fn upgrades_historical_v7_database_and_preserves_lexical_assets() {
+fn upgrades_historical_v7_database_and_resets_lexical_assets() {
     let connection = Connection::open_in_memory().unwrap();
     for migration in [
         include_str!("../migrations/0001_media.sql"),
@@ -859,14 +1038,12 @@ fn upgrades_historical_v7_database_and_preserves_lexical_assets() {
     migrate(&connection).unwrap();
     assert_eq!(
         connection
-            .query_row(
-                "SELECT display_form FROM lexical_entries WHERE id='asset'",
-                [],
-                |row| { row.get::<_, String>(0) }
-            )
+            .query_row("SELECT COUNT(*) FROM lexical_entries", [], |row| row
+                .get::<_, u32>(0))
             .unwrap(),
-        "Hello"
+        0
     );
+    assert!(table_exists(&connection, "lexical_observations"));
     assert_eq!(
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))

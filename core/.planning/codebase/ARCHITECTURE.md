@@ -105,6 +105,9 @@ application use cases and provider/repository boundaries.
 - Lexical export/import version 5 is lexical-only.
 - Schema v15 adds `practice_sessions`, `practice_items`, `practice_attempts`,
   `review_items`, `review_attempts`, and `learning_events`.
+- Schema v16 destructively resets lexical/learning-resource tables to the
+  authoritative `LexicalEntry + LexicalUnit + LexicalObservation` shape for
+  local databases that had already run the old v7 lexical migration.
 - Learning-loop persistence stores JSON snapshots plus query columns for kind,
   status, subject, result, and timestamps. Corpus/difficulty/recording persistence
   is not yet implemented.

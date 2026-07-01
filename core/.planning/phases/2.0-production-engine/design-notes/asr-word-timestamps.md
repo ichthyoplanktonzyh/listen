@@ -102,7 +102,9 @@ The `-dtw` parameter value must match the model. The mapping uses
 | `ggml-base.bin` | `base` |
 | `ggml-small.bin` | `small` |
 | `ggml-medium.bin` | `medium` |
-| Custom models (`family != "whisper"`) | DTW disabled |
+| `ggml-large-v3.bin` / quantized variants | `large.v3` |
+| `ggml-large-v3-turbo.bin` / quantized variants | `large.v3.turbo` |
+| Custom whisper.cpp models with an unknown stock preset | DTW disabled |
 
 ### Graceful Degradation
 
@@ -117,7 +119,7 @@ The extraction fails safely at multiple levels:
 | Timing outside sentence boundary | Skip that sentence |
 | Non-monotonic word sequence | Skip that sentence |
 | Any unavailable lexical token changes the word mapping | Skip that sentence |
-| Model `family != "whisper"` | DTW flag not passed to whisper-cli |
+| whisper.cpp model name cannot be mapped to a stock DTW preset | DTW flag not passed to whisper-cli |
 
 In all cases, **transcription succeeds** and the track is imported. Missing
 ASR timings simply fall back to the existing weighted estimator.
@@ -211,9 +213,10 @@ diagnostics show the final gap and whether adjacent words use
    (issue #2036). The current invocation uses default `n_processors=1`.
 2. **Flash attention**: DTW is silently disabled when `-fa` is used. Not
    applicable to the current configuration.
-3. **Custom models**: DTW is skipped for non-whisper-family models. Custom
-   fine-tuned whisper models may work if their alignment heads match the
-   stock preset, but this is untested.
+3. **Custom models**: whisper.cpp custom models enable DTW when their
+   registered path or display name maps to a stock preset, including common
+   quantized filenames such as `ggml-large-v3-q5_0.bin`. Unknown custom names
+   still degrade to transcript-only SRT import.
 4. **Token alignment precision**: DTW gives point timestamps. Word intervals
    end at the next word start (or sentence end), which is appropriate for
    continuous highlighting but may need refinement for M2.0 phoneme alignment.

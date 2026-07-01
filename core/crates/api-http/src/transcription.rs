@@ -468,6 +468,7 @@ impl TranscriptionCoordinator {
             .repository
             .get_model(&job.model_id)?
             .ok_or(ApplicationError::NotFound("transcription model"))?;
+        let dtw_preset = dtw_preset_for_model(&model);
         let model_path = model
             .local_path
             .ok_or(ApplicationError::Validation("model path"))?;
@@ -504,10 +505,9 @@ impl TranscriptionCoordinator {
             "-of".into(),
             output.to_string_lossy().into_owned(),
         ];
-        let enable_dtw = model.family == "whisper";
-        if enable_dtw {
+        if let Some(preset) = dtw_preset.as_ref() {
             whisper_args.push("-dtw".into());
-            whisper_args.push(model.display_name.clone());
+            whisper_args.push(preset.clone());
         }
         whisper_args.extend([
             "-l".into(),
@@ -551,7 +551,7 @@ impl TranscriptionCoordinator {
             )),
         })?;
         // Extract ASR word-level timings from JSON-full output when DTW was enabled.
-        if enable_dtw {
+        if dtw_preset.is_some() {
             let json_path = output.with_extension("json");
             if let Ok(json_bytes) = tokio::fs::read(&json_path).await
                 && let Ok(track) = self.services.read_subtitle_track(&track.id)
@@ -729,6 +729,58 @@ fn catalog() -> Vec<TranscriptionModelDescriptor> {
     .collect()
 }
 
+fn dtw_preset_for_model(model: &TranscriptionModelDescriptor) -> Option<String> {
+    if model.provider_id != "whisper.cpp" {
+        return None;
+    }
+    let mut candidates = vec![model.display_name.as_str()];
+    if let Some(path) = model.local_path.as_deref()
+        && let Some(name) = Path::new(path).file_name().and_then(|value| value.to_str())
+    {
+        candidates.push(name);
+    }
+    candidates.into_iter().find_map(dtw_preset_from_name)
+}
+
+fn dtw_preset_from_name(name: &str) -> Option<String> {
+    let mut normalized = name.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return None;
+    }
+    if let Some(file_name) = Path::new(&normalized)
+        .file_name()
+        .and_then(|value| value.to_str())
+    {
+        normalized = file_name.to_string();
+    }
+    if let Some(stripped) = normalized.strip_suffix(".bin") {
+        normalized = stripped.to_string();
+    }
+    normalized = normalized.replace('_', "-");
+    for prefix in ["ggml-", "whisper-"] {
+        if let Some(stripped) = normalized.strip_prefix(prefix) {
+            normalized = stripped.to_string();
+        }
+    }
+    if let Some(index) = normalized.find("-q") {
+        normalized.truncate(index);
+    }
+    if let Some(index) = normalized.find(".q") {
+        normalized.truncate(index);
+    }
+    let preset = match normalized.as_str() {
+        "tiny" | "tiny.en" | "base" | "base.en" | "small" | "small.en" | "medium" | "medium.en" => {
+            normalized
+        }
+        "large-v1" | "large.v1" => "large.v1".into(),
+        "large-v2" | "large.v2" => "large.v2".into(),
+        "large-v3" | "large.v3" => "large.v3".into(),
+        "large-v3-turbo" | "large.v3.turbo" => "large.v3.turbo".into(),
+        _ => return None,
+    };
+    Some(preset)
+}
+
 fn support_dir() -> PathBuf {
     std::env::var_os("LLPLAYERNEXT_SUPPORT_DIR")
         .map(PathBuf::from)
@@ -870,5 +922,71 @@ mod tests {
         assert_eq!(resolved, whisper);
 
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn resolves_dtw_presets_for_whisper_cpp_models() {
+        assert_eq!(dtw_preset_from_name("base.en").as_deref(), Some("base.en"));
+        assert_eq!(
+            dtw_preset_from_name("ggml-large-v3.bin").as_deref(),
+            Some("large.v3")
+        );
+        assert_eq!(
+            dtw_preset_from_name("ggml-small.en-q5_0.bin").as_deref(),
+            Some("small.en")
+        );
+        assert_eq!(
+            dtw_preset_from_name("ggml-large-v3-turbo-q8_0.bin").as_deref(),
+            Some("large.v3.turbo")
+        );
+        assert!(dtw_preset_from_name("not-a-whisper-model.bin").is_none());
+    }
+
+    #[test]
+    fn custom_whisper_cpp_models_enable_dtw_from_registered_path() {
+        let model = TranscriptionModelDescriptor {
+            id: TranscriptionModelId::parse("custom").unwrap(),
+            provider_id: "whisper.cpp".into(),
+            display_name: "custom.bin".into(),
+            family: "custom".into(),
+            revision: "local".into(),
+            checksum_sha256: "checksum".into(),
+            download_url: None,
+            local_path: Some("/models/ggml-large-v3-q5_0.bin".into()),
+            size_bytes: 1,
+            quality: TranscriptionQuality::Balanced,
+            english_only: false,
+            supports_translation: true,
+            state: TranscriptionModelState::Custom,
+            installed_bytes: 1,
+            error: None,
+            license: "User supplied".into(),
+            updated_at_ms: 1,
+        };
+        assert_eq!(dtw_preset_for_model(&model).as_deref(), Some("large.v3"));
+    }
+
+    #[test]
+    fn non_whisper_cpp_models_do_not_enable_dtw() {
+        let model = TranscriptionModelDescriptor {
+            id: TranscriptionModelId::parse("custom").unwrap(),
+            provider_id: "other".into(),
+            display_name: "ggml-base.en.bin".into(),
+            family: "whisper".into(),
+            revision: "local".into(),
+            checksum_sha256: "checksum".into(),
+            download_url: None,
+            local_path: Some("/models/ggml-base.en.bin".into()),
+            size_bytes: 1,
+            quality: TranscriptionQuality::Balanced,
+            english_only: false,
+            supports_translation: true,
+            state: TranscriptionModelState::Custom,
+            installed_bytes: 1,
+            error: None,
+            license: "User supplied".into(),
+            updated_at_ms: 1,
+        };
+        assert!(dtw_preset_for_model(&model).is_none());
     }
 }

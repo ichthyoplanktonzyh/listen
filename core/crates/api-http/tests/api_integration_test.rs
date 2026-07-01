@@ -73,7 +73,9 @@ fn post_json(uri: &str, token: Option<&str>, body: &Value) -> Request<Body> {
         builder = builder.header("authorization", format!("Bearer {token}"));
     }
     builder
-        .body(Body::from(serde_json::to_vec(body).expect("serialize body")))
+        .body(Body::from(
+            serde_json::to_vec(body).expect("serialize body"),
+        ))
         .expect("build POST request")
 }
 
@@ -86,7 +88,9 @@ fn put_json(uri: &str, token: Option<&str>, body: &Value) -> Request<Body> {
         builder = builder.header("authorization", format!("Bearer {token}"));
     }
     builder
-        .body(Body::from(serde_json::to_vec(body).expect("serialize body")))
+        .body(Body::from(
+            serde_json::to_vec(body).expect("serialize body"),
+        ))
         .expect("build PUT request")
 }
 
@@ -140,8 +144,7 @@ async fn import_srt(app: &Router, media_id: &str, srt: &str) -> (StatusCode, Val
     result
 }
 
-const SAMPLE_SRT: &str =
-    "1\n00:00:01,000 --> 00:00:02,000\nHello world\n\n2\n00:00:02,500 --> 00:00:04,000\nSecond line here\n";
+const SAMPLE_SRT: &str = "1\n00:00:01,000 --> 00:00:02,000\nHello world\n\n2\n00:00:02,500 --> 00:00:04,000\nSecond line here\n";
 
 #[tokio::test]
 async fn health_endpoint_is_unprotected() {
@@ -155,11 +158,7 @@ async fn health_endpoint_is_unprotected() {
 #[tokio::test]
 async fn protected_route_rejects_missing_token() {
     let app = build_app();
-    let (status, body) = send(
-        &app,
-        post_json("/v1/media", None, &json!({ "title": "x" })),
-    )
-    .await;
+    let (status, body) = send(&app, post_json("/v1/media", None, &json!({ "title": "x" }))).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
 }
 
@@ -191,7 +190,10 @@ async fn read_unknown_media_returns_404() {
     let app = build_app();
     let (status, _) = send(
         &app,
-        get("/v1/media/0000000000000000000000000000000000000000000000000000000000000000", Some(TOKEN)),
+        get(
+            "/v1/media/0000000000000000000000000000000000000000000000000000000000000000",
+            Some(TOKEN),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
@@ -238,7 +240,11 @@ async fn subtitle_archive_restore_delete_lifecycle() {
     // Archive moves the track out of the active set without deleting it.
     let (status, archived) = send(
         &app,
-        method_no_body("POST", &format!("/v1/subtitles/{track_id}/archive"), Some(TOKEN)),
+        method_no_body(
+            "POST",
+            &format!("/v1/subtitles/{track_id}/archive"),
+            Some(TOKEN),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{archived}");
@@ -247,7 +253,11 @@ async fn subtitle_archive_restore_delete_lifecycle() {
     // Restore brings it back to available.
     let (status, restored) = send(
         &app,
-        method_no_body("POST", &format!("/v1/subtitles/{track_id}/restore"), Some(TOKEN)),
+        method_no_body(
+            "POST",
+            &format!("/v1/subtitles/{track_id}/restore"),
+            Some(TOKEN),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{restored}");
@@ -261,12 +271,12 @@ async fn subtitle_archive_restore_delete_lifecycle() {
     .await;
     assert_eq!(status, StatusCode::OK);
 
-    let (status, _) = send(
-        &app,
-        get(&format!("/v1/subtitles/{track_id}"), Some(TOKEN)),
-    )
-    .await;
-    assert_eq!(status, StatusCode::NOT_FOUND, "deleted track no longer readable");
+    let (status, _) = send(&app, get(&format!("/v1/subtitles/{track_id}"), Some(TOKEN))).await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "deleted track no longer readable"
+    );
 }
 
 #[tokio::test]
@@ -287,21 +297,25 @@ async fn lltimeline_import_creates_track_with_word_timeline() {
     assert_eq!(status, StatusCode::OK, "import lltimeline: {track}");
     let track_id = track["id"].as_str().expect("track id").to_owned();
     assert!(
-        track["sentences"]
-            .as_array()
-            .is_some_and(|s| !s.is_empty()),
+        track["sentences"].as_array().is_some_and(|s| !s.is_empty()),
         "imported document yields subtitle sentences"
     );
 
     // The bundled word timeline imports alongside the track.
     let (status, timelines) = send(
         &app,
-        get(&format!("/v1/subtitles/{track_id}/word-timelines"), Some(TOKEN)),
+        get(
+            &format!("/v1/subtitles/{track_id}/word-timelines"),
+            Some(TOKEN),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{timelines}");
     assert!(
-        !timelines.as_array().expect("word timeline array").is_empty(),
+        !timelines
+            .as_array()
+            .expect("word timeline array")
+            .is_empty(),
         "imported document carries its word timeline"
     );
 }
@@ -371,12 +385,18 @@ async fn sentence_diagnosis_returns_well_formed_structure() {
 
     let (status, diagnosis) = send(
         &app,
-        get(&format!("/v1/sentences/{sentence_id}/diagnosis"), Some(TOKEN)),
+        get(
+            &format!("/v1/sentences/{sentence_id}/diagnosis"),
+            Some(TOKEN),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "diagnose: {diagnosis}");
     assert_eq!(diagnosis["sentence_id"], sentence_id);
-    assert!(diagnosis["hints"].is_array(), "diagnosis exposes a hints array");
+    assert!(
+        diagnosis["hints"].is_array(),
+        "diagnosis exposes a hints array"
+    );
 }
 
 #[tokio::test]

@@ -7,8 +7,8 @@
 
 use std::path::{Path, PathBuf};
 
-use rusqlite::Connection;
 use persistence_sqlite::SqliteRepository;
+use rusqlite::Connection;
 
 fn user_version(path: &Path) -> u32 {
     Connection::open(path)
@@ -99,7 +99,10 @@ fn reopening_a_current_database_is_idempotent_and_makes_no_backup() {
         .schema_version()
         .expect("schema version");
 
-    assert_eq!(first, second, "reopening a current db keeps the same version");
+    assert_eq!(
+        first, second,
+        "reopening a current db keeps the same version"
+    );
     assert!(first > 0);
     assert!(
         !backup_of(&path).exists(),

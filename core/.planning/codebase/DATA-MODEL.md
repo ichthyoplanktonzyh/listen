@@ -195,10 +195,14 @@ Phase 2.20 adds `sound_pattern_display_mode`:
 - Every migration runs in a transaction and advances `PRAGMA user_version`.
 - Existing databases are copied to `<database>.pre-migration.bak` before an
   upgrade, but Phase 2.18 does not preserve historical schema compatibility.
+- Schema v16 destructively rebuilds the lexical/learning-resource tables to the
+  authoritative `LexicalEntry + LexicalUnit + LexicalObservation` shape when
+  upgrading older local databases; old lexical learning data is intentionally
+  discarded under the Phase 2.18 compatibility policy.
 - Subtitle replacement deletes and inserts its sentence timeline in one
   transaction.
 - Unique constraints enforce idempotent media, subtitle, lexical, dictionary
   cache, active timeline identities, and learning-loop IDs.
 - Vocabulary export/import is version 5 and contains only lexical assets plus
   phonetic finding feedback.
-- SQLite schema version is 15 after adding learning-loop foundation tables.
+- SQLite schema version is 16 after the destructive lexical schema repair.
