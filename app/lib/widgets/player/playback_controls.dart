@@ -16,6 +16,7 @@ class PlaybackControls extends StatelessWidget {
     required this.statusStylesVisible,
     required this.subtitlesVisible,
     required this.secondarySubtitlesVisible,
+    required this.secondarySubtitlesAvailable,
     required this.rate,
     required this.volume,
     required this.muted,
@@ -61,6 +62,7 @@ class PlaybackControls extends StatelessWidget {
   final bool statusStylesVisible;
   final bool subtitlesVisible;
   final bool secondarySubtitlesVisible;
+  final bool secondarySubtitlesAvailable;
   final double rate;
   final double volume;
   final bool muted;
@@ -157,30 +159,44 @@ class PlaybackControls extends StatelessWidget {
                     onSelected: onLoopCueChanged,
                   ),
                   IconButton(
-                    tooltip: l.text('previousChunk'),
+                    tooltip: chunkControlsEnabled
+                        ? l.text('previousChunk')
+                        : l.text('chunkReplayUnavailableControl'),
                     onPressed: chunkControlsEnabled
                         ? onSeekToPreviousChunk
                         : null,
                     icon: const Icon(Icons.keyboard_double_arrow_left),
                   ),
                   IconButton(
-                    tooltip: l.text('nextChunk'),
+                    tooltip: chunkControlsEnabled
+                        ? l.text('nextChunk')
+                        : l.text('chunkReplayUnavailableControl'),
                     onPressed: chunkControlsEnabled ? onSeekToNextChunk : null,
                     icon: const Icon(Icons.keyboard_double_arrow_right),
                   ),
-                  FilterChip(
-                    label: Text(l.text('loopChunk')),
-                    selected: chunkLoopActive,
-                    onSelected: chunkControlsEnabled
-                        ? (_) => onLoopCurrentChunk()
-                        : null,
+                  Tooltip(
+                    message: chunkControlsEnabled
+                        ? l.text('loopChunk')
+                        : l.text('chunkReplayUnavailableControl'),
+                    child: FilterChip(
+                      label: Text(l.text('loopChunk')),
+                      selected: chunkLoopActive,
+                      onSelected: chunkControlsEnabled
+                          ? (_) => onLoopCurrentChunk()
+                          : null,
+                    ),
                   ),
-                  TextButton.icon(
-                    onPressed: chunkControlsEnabled
-                        ? onLoopExpandedChunk
-                        : null,
-                    icon: const Icon(Icons.unfold_more),
-                    label: Text(l.text('expandChunk')),
+                  Tooltip(
+                    message: chunkControlsEnabled
+                        ? l.text('expandChunk')
+                        : l.text('chunkReplayUnavailableControl'),
+                    child: TextButton.icon(
+                      onPressed: chunkControlsEnabled
+                          ? onLoopExpandedChunk
+                          : null,
+                      icon: const Icon(Icons.unfold_more),
+                      label: Text(l.text('expandChunk')),
+                    ),
                   ),
                   if (sourceLoopStart != null)
                     TextButton(
@@ -200,10 +216,19 @@ class PlaybackControls extends StatelessWidget {
                     onSelected: onSubtitlesVisibleChanged,
                   ),
                   const SizedBox(width: 8),
-                  FilterChip(
-                    label: Text(l.text('secondary')),
-                    selected: secondarySubtitlesVisible,
-                    onSelected: onSecondaryVisibleChanged,
+                  Tooltip(
+                    message: secondarySubtitlesAvailable
+                        ? l.text('secondary')
+                        : l.text('secondarySubtitleUnavailable'),
+                    child: FilterChip(
+                      label: Text(l.text('secondary')),
+                      selected:
+                          secondarySubtitlesAvailable &&
+                          secondarySubtitlesVisible,
+                      onSelected: secondarySubtitlesAvailable
+                          ? onSecondaryVisibleChanged
+                          : null,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   DropdownButton<double>(
@@ -314,18 +339,22 @@ class PlaybackControls extends StatelessWidget {
                   const SizedBox(width: 12),
                   Text(l.text('secondaryOffset')),
                   IconButton(
-                    onPressed: () => onSecondaryOffsetChanged(
-                      secondarySubtitleOffset -
-                          const Duration(milliseconds: 100),
-                    ),
+                    onPressed: secondarySubtitlesAvailable
+                        ? () => onSecondaryOffsetChanged(
+                            secondarySubtitleOffset -
+                                const Duration(milliseconds: 100),
+                          )
+                        : null,
                     icon: const Icon(Icons.remove),
                   ),
                   Text('${secondarySubtitleOffset.inMilliseconds} ms'),
                   IconButton(
-                    onPressed: () => onSecondaryOffsetChanged(
-                      secondarySubtitleOffset +
-                          const Duration(milliseconds: 100),
-                    ),
+                    onPressed: secondarySubtitlesAvailable
+                        ? () => onSecondaryOffsetChanged(
+                            secondarySubtitleOffset +
+                                const Duration(milliseconds: 100),
+                          )
+                        : null,
                     icon: const Icon(Icons.add),
                   ),
                 ],

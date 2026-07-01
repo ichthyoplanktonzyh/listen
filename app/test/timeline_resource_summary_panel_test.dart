@@ -15,6 +15,7 @@ void main() {
     await tester.pumpWidget(
       _Harness(
         child: TimelineResourceSummaryPanel(
+          activeTrack: _track,
           document: const LLTimelineDocument(
             schema: 'llplayer.timeline.v1',
             metadata: LLTimelineMetadata(
@@ -30,7 +31,7 @@ void main() {
             activeWordTimelineId: 'timeline-active',
             activePhoneTimelineId: 'phone-active',
             activeChunkTimelineId: 'chunk-active',
-            rhythmFrames: [],
+            rhythmFrames: [_activeRhythmFrame],
             artifacts: [
               LLTimelineArtifact(kind: 'production_report', payload: {}),
             ],
@@ -125,22 +126,33 @@ void main() {
     );
 
     expect(find.text('LLTimeline present'), findsOneWidget);
+    expect(find.text('Learning capabilities'), findsOneWidget);
+    expect(find.text('Word sync'), findsOneWidget);
+    expect(find.text('Listening structure'), findsOneWidget);
+    expect(
+      find.textContaining('Document listening structure is ready'),
+      findsOneWidget,
+    );
     expect(find.text('Production report ready'), findsOneWidget);
     expect(find.textContaining('whisperx 1.0'), findsWidgets);
     expect(find.textContaining('mfa 2.0'), findsOneWidget);
     expect(find.textContaining('research-fixture'), findsWidgets);
     expect(find.textContaining('acoustic_semantic_v1'), findsWidgets);
 
-    await tester.tap(find.byIcon(Icons.play_circle_outline));
-    await tester.pump();
-
-    expect(activated, 'timeline-mfa');
     await tester.tap(find.byIcon(Icons.rate_review_outlined));
     await tester.pump();
     expect(reviewRuns, 1);
     await tester.tap(find.byIcon(Icons.file_download_outlined));
     await tester.pump();
     expect(exports, 1);
+
+    const activateMfa = ValueKey('activate-word-timeline-timeline-mfa');
+    await tester.ensureVisible(find.byKey(activateMfa));
+    await tester.pump();
+    await tester.tap(find.byKey(activateMfa));
+    await tester.pump();
+
+    expect(activated, 'timeline-mfa');
   });
 
   testWidgets('timeline resource summary shows legacy fallback', (
@@ -149,6 +161,7 @@ void main() {
     await tester.pumpWidget(
       _Harness(
         child: TimelineResourceSummaryPanel(
+          activeTrack: _track,
           document: null,
           summaries: const [],
           phoneSummaries: const [],
@@ -171,9 +184,93 @@ void main() {
     );
 
     expect(find.text('Legacy timing fallback'), findsOneWidget);
-    expect(find.text('No WordTimeline candidates'), findsOneWidget);
+    expect(find.text('Subtitles'), findsOneWidget);
+    expect(
+      find.textContaining('Needs an active Word sync timeline'),
+      findsOneWidget,
+    );
+    expect(find.text('No Word sync candidates'), findsOneWidget);
   });
 }
+
+const _track = SubtitleTrack(
+  id: 'track-1',
+  mediaId: 'media-1',
+  language: 'en',
+  source: 'fixture',
+  cues: [
+    Cue(
+      id: 'sentence-1',
+      index: 0,
+      start: Duration.zero,
+      end: Duration(seconds: 1),
+      text: 'Hello',
+      tokens: [],
+    ),
+  ],
+);
+
+const _refs = RhythmFrameReferences(
+  citation: RhythmReference(
+    label: 'citation_form',
+    source: 'dictionary_lexical_stress',
+    evidenceClass: 'heuristic_proxy',
+  ),
+  actual: RhythmReference(
+    label: 'actual_delivery',
+    source: 'word_timeline_duration',
+    evidenceClass: 'heuristic_proxy',
+  ),
+);
+
+const _activeRhythmFrame = LLTimelineRhythmFrame(
+  id: 'rhythm-1',
+  trackId: 'track-1',
+  mediaId: 'media-1',
+  sentenceId: 'sentence-1',
+  parentWordTimelineId: 'timeline-active',
+  providerId: 'wordtimeline-rhythm-frame',
+  providerVersion: 'phase-2.21',
+  status: 'active',
+  metricsJson: TimelineMetrics.empty(),
+  rhythmFrame: RhythmFrame(
+    generatedFrom: 'wordtimeline_timing_prominence_v1',
+    references: _refs,
+    stressAnchors: [
+      RhythmStressAnchor(
+        tokenIndex: 0,
+        start: Duration.zero,
+        end: Duration(milliseconds: 300),
+        label: 'Hello',
+        reason: 'timing-supported anchor',
+        importance: 'primary',
+        isNucleus: true,
+        prominence: 0.8,
+        prominenceCues: ['timing'],
+        signalSources: ['timing'],
+        evidenceClass: 'heuristic_proxy',
+        claimStatus: 'audio_supported',
+        confidence: 0.8,
+      ),
+    ],
+    nuclei: [],
+    weakGroups: [],
+    compressionSpans: [],
+    phraseBoundaries: [],
+    connectedSpeechRefs: [],
+    listeningHotspots: [],
+    quality: RhythmFrameQuality(
+      timingSource: 'word_timeline',
+      prominenceSources: ['timing'],
+      boundarySources: [],
+      connectedSpeechSource: 'text_prior',
+      phoneEvidenceCoverage: 0.0,
+      rhythmConfidence: 0.8,
+    ),
+  ),
+  createdAt: Duration(milliseconds: 10),
+  updatedAt: Duration(milliseconds: 20),
+);
 
 class _Harness extends StatelessWidget {
   const _Harness({required this.child});

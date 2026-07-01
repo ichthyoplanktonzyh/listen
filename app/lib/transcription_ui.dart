@@ -10,7 +10,7 @@ import 'localization.dart';
 typedef LoadGeneratedTrack =
     Future<void> Function(Map<String, dynamic> track, bool secondary);
 
-Future<void> showGenerateSubtitles({
+Future<bool> showGenerateSubtitles({
   required BuildContext context,
   required LocalApi api,
   required String mediaId,
@@ -26,7 +26,7 @@ Future<void> showGenerateSubtitles({
         (model) => model['state'] == 'installed' || model['state'] == 'custom',
       )
       .toList(growable: false);
-  if (!context.mounted) return;
+  if (!context.mounted) return false;
   if (installed.isEmpty) {
     await showDialog<void>(
       context: context,
@@ -41,7 +41,7 @@ Future<void> showGenerateSubtitles({
         ],
       ),
     );
-    return;
+    return false;
   }
   final preferred = installed
       .where((model) => model['quality'] == preferredQuality)
@@ -49,6 +49,7 @@ Future<void> showGenerateSubtitles({
   var modelId = (preferred ?? installed.first)['id'] as String;
   var language = preferredLanguage;
   var translate = false;
+  var created = false;
   await showDialog<void>(
     context: context,
     builder: (context) => StatefulBuilder(
@@ -117,6 +118,7 @@ Future<void> showGenerateSubtitles({
                 language: language == 'auto' ? null : language,
                 force: force,
               );
+              created = true;
               if (context.mounted) Navigator.pop(context);
             },
             child: Text(l.text('generateWholeMedia')),
@@ -125,6 +127,7 @@ Future<void> showGenerateSubtitles({
       ),
     ),
   );
+  return created;
 }
 
 extension<T> on Iterable<T> {
@@ -393,13 +396,16 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                   if (status == 'completed')
                     IconButton(
                       tooltip: l.text('regenerate'),
-                      onPressed: () => showGenerateSubtitles(
-                        context: context,
-                        api: widget.api,
-                        mediaId: job['media_id'] as String,
-                        secondary: job['destination'] == 'secondary',
-                        force: true,
-                      ),
+                      onPressed: () async {
+                        final created = await showGenerateSubtitles(
+                          context: context,
+                          api: widget.api,
+                          mediaId: job['media_id'] as String,
+                          secondary: job['destination'] == 'secondary',
+                          force: true,
+                        );
+                        if (created) await _refresh();
+                      },
                       icon: const Icon(Icons.auto_fix_high),
                     ),
                   if (!active)

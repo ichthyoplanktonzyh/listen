@@ -23,6 +23,7 @@ import 'controllers/player_controller.dart';
 import 'controllers/speech_enhancement_workflow_controller.dart';
 import 'controllers/subtitle_controller.dart';
 import 'controllers/settings_controller.dart';
+import 'models/capability_readiness.dart';
 import 'models/timeline.dart';
 import 'models/types.dart';
 import 'phonetic_analysis_ui.dart';
@@ -117,6 +118,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // ── Local UI state (not managed by controllers) ──
   String status = 'Starting local core...';
   OnlineMediaDownload? activeDownload;
+  String? downloadError;
+  int downloadGeneration = 0;
   bool dragging = false;
   bool connectingApi = true;
 
@@ -304,7 +307,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       loadTimelineResource: _loadTimelineResource,
       readSubtitle: (trackId) => api!.readSubtitle(trackId),
       loadGeneratedTrack: _loadGeneratedTrack,
-      loadSpeechEnhancements: _loadSpeechEnhancements,
+      loadSpeechEnhancements: (trackId) async {
+        await _loadSpeechEnhancements(trackId);
+      },
       setStatus: (value) {
         if (mounted) setState(() => status = value);
       },
@@ -526,12 +531,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
-  Future<void> _usePrimarySubtitleTrack(
+  Future<SpeechEnhancementLoadResult?> _usePrimarySubtitleTrack(
     SubtitleTrack track, {
     required String nextStatus,
   }) async {
     await adapter.disableNativeSubtitles();
-    if (!mounted) return;
+    if (!mounted) return null;
     subtitleController.clearSpeechEnhancements();
     subtitleController.setPrimaryTrack(track);
     subtitleController.setCurrentPrimaryCue(
@@ -541,7 +546,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await _loadWordEntries();
     await _loadPhraseEntries();
     await _loadPhraseCandidates(subtitleController.currentPrimaryCue);
-    await _loadSpeechEnhancements(track.id);
+    return _loadSpeechEnhancements(track.id);
   }
 
   String? _llTimelineMediaFingerprint(Map<String, dynamic> document) {
@@ -596,27 +601,34 @@ class _PlayerScreenState extends State<PlayerScreen> {
         subtitleController.secondaryCursor.current(playerController.position),
       );
       setState(() {
-        status = 'Loaded generated secondary subtitle';
+        status = l.text('generatedSecondarySubtitleLoaded');
       });
     } else {
-      await _usePrimarySubtitleTrack(
+      final result = await _usePrimarySubtitleTrack(
         imported,
-        nextStatus: 'Loaded generated primary subtitle',
+        nextStatus: l.text('loadingGeneratedPrimarySubtitle'),
       );
+      if (mounted && subtitleController.primaryTrack?.id == imported.id) {
+        setState(() => status = _generatedPrimarySubtitleStatus(result));
+      }
     }
     await _loadSubtitleResources(updateStatus: false);
   }
 
-  Future<void> _loadSpeechEnhancements(String trackId) async {
+  Future<SpeechEnhancementLoadResult?> _loadSpeechEnhancements(
+    String trackId,
+  ) async {
     final service = api;
-    if (service == null) return;
+    if (service == null) return null;
     final result = await speechEnhancementWorkflowController
         .loadSpeechEnhancements(
           service: service,
           trackId: trackId,
           previousTimeline: _existingTimelineResourceState(),
         );
-    if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
+    if (!mounted || subtitleController.primaryTrack?.id != trackId) {
+      return null;
+    }
     _applyTimelineResource(result.timeline);
     subtitleController.setSpeechEnhancements(
       timingsBySentence: result.timingsBySentence,
@@ -645,7 +657,31 @@ class _PlayerScreenState extends State<PlayerScreen> {
             '${result.errors.join('; ')}',
       );
     }
+    return result;
   }
+
+  String _generatedPrimarySubtitleStatus(SpeechEnhancementLoadResult? result) {
+    final parts = <String>[l.text('generatedPrimarySubtitleLoaded')];
+    final readiness = _currentCapabilityReadiness();
+    parts.addAll(readiness.learningItems.map(_capabilityStatusSegment));
+    if (result != null && result.errors.isNotEmpty) {
+      parts.add(l.text('generatedSubtitleResourceWarning'));
+    }
+    return parts.join(' · ');
+  }
+
+  CapabilityReadinessSnapshot _currentCapabilityReadiness() =>
+      CapabilityReadinessSnapshot.fromResources(
+        activeTrack: subtitleController.primaryTrack,
+        document: subtitleController.llTimelineDocument,
+        wordTimelineSummaries: subtitleController.wordTimelineSummaries,
+        chunkTimelineSummaries: subtitleController.chunkTimelineSummaries,
+        phoneTimelineSummaries: subtitleController.phoneTimelineSummaries,
+        timelineResourceError: subtitleController.timelineResourceError,
+      );
+
+  String _capabilityStatusSegment(CapabilityReadiness readiness) =>
+      '${l.text(readiness.titleKey)}: ${l.text(readiness.stateKey)}';
 
   Future<void> _loadTimelineResource(String trackId) async {
     final service = api;
@@ -1244,7 +1280,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       setState(() => status = 'Open media and connect the local core first');
       return;
     }
-    await showGenerateSubtitles(
+    final created = await showGenerateSubtitles(
       context: context,
       api: api!,
       mediaId: playerController.mediaId!,
@@ -1252,6 +1288,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       preferredQuality: settingsController.transcriptionQuality,
       preferredLanguage: settingsController.transcriptionLanguage,
     );
+    if (created && mounted) {
+      setState(
+        () => status = secondary
+            ? l.text('secondarySubtitleGenerationStarted')
+            : l.text('primarySubtitleGenerationStarted'),
+      );
+    }
   }
 
   Future<void> _openTranscriptionCenter() async {
@@ -1373,7 +1416,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       confirmButtonText: l.text('downloadHere'),
     );
     if (directory == null) return;
-    setState(() => status = l.text('startingDownload'));
+    final generation = ++downloadGeneration;
+    activeDownload?.cancel();
+    setState(() {
+      activeDownload = null;
+      downloadError = null;
+      status = l.text('startingDownload');
+    });
+    playerController.setDownloadedMediaPath(null);
     try {
       final download = await tools.downloadOnlineMedia(pageUrl, directory);
       if (!mounted) {
@@ -1382,10 +1432,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
       setState(() {
         activeDownload = download;
+        downloadError = null;
         status = l.text('downloadingInBackground');
       });
       playerController.setDownloadProgress(0);
-      playerController.setDownloadedMediaPath('');
       subscriptions.add(
         download.progress.listen((value) {
           if (mounted) playerController.setDownloadProgress(value);
@@ -1394,26 +1444,32 @@ class _PlayerScreenState extends State<PlayerScreen> {
       unawaited(
         download.completed.then(
           (path) {
-            if (!mounted) return;
+            if (!mounted || downloadGeneration != generation) return;
             setState(() {
               activeDownload = null;
+              downloadError = null;
               status = '${l.text('downloadComplete')}: $path';
             });
             if (path != null) playerController.setDownloadedMediaPath(path);
             playerController.setDownloadProgress(0);
           },
           onError: (Object error) {
-            if (!mounted) return;
+            if (!mounted || downloadGeneration != generation) return;
             setState(() {
               activeDownload = null;
+              downloadError = error.toString();
               status = '${l.text('downloadFailed')}: $error';
             });
+            playerController.setDownloadProgress(0);
           },
         ),
       );
     } catch (error) {
       if (mounted) {
-        setState(() => status = '${l.text('downloadFailed')}: $error');
+        setState(() {
+          downloadError = error.toString();
+          status = '${l.text('downloadFailed')}: $error';
+        });
       }
     }
   }
@@ -2582,7 +2638,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         child: Row(
                           children: [
                             Expanded(flex: 3, child: _playerSurface()),
-                            if (subtitleController.visible ||
+                            if (subtitleController.primaryTrack != null ||
                                 learningController.selectedLexicalDetails !=
                                     null ||
                                 learningController.sidePanel == 1)
@@ -2593,9 +2649,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           ],
                         ),
                       ),
-                      if (activeDownload != null ||
-                          playerController.downloadedMediaPath != null)
-                        _downloadStatusBar(),
+                      if (_downloadStatusSnapshot() != null)
+                        _downloadStatusBar(_downloadStatusSnapshot()!),
                       _controls(),
                     ],
                   ),
@@ -2917,7 +2972,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                     soundAnalysis: soundAnalysis,
                                   );
                                   if (phones.isEmpty) {
-                                    return const SizedBox.shrink();
+                                    return soundPatternLayer(
+                                      SoundPatternUnavailableRibbon(
+                                        message: l.text(
+                                          'soundPatternUnavailable',
+                                        ),
+                                        tooltip: l.text(
+                                          'soundPatternUnavailableTooltip',
+                                        ),
+                                        fontSize: primarySize * 0.34,
+                                        height: primarySize * 0.9,
+                                      ),
+                                    );
                                   }
                                   return soundPatternLayer(
                                     PhonemeRibbon(
@@ -3154,96 +3220,128 @@ class _PlayerScreenState extends State<PlayerScreen> {
         unawaited(_savePhoneticFindingFeedback(finding, value)),
   );
 
-  Widget _controls() => PlaybackControls(
-    adapter: adapter,
-    position: playerController.position,
-    duration: playerController.duration,
-    playing: playerController.playing,
-    loopCue: subtitleController.loopCue,
-    sourceLoopStart: playerController.sourceLoopStart,
-    statusStylesVisible: subtitleController.statusStylesVisible,
-    subtitlesVisible: subtitleController.visible,
-    secondarySubtitlesVisible: subtitleController.secondaryVisible,
-    rate: playerController.rate,
-    volume: playerController.volume,
-    muted: playerController.muted,
-    audioTracks: playerController.audioTracks,
-    selectedAudioId: playerController.selectedAudioId,
-    embeddedSubtitleTracks: playerController.embeddedSubtitleTracks,
-    selectedEmbeddedSubtitleId: playerController.selectedEmbeddedSubtitleId,
-    primarySubtitleOffset: subtitleController.primarySubtitleOffset,
-    secondarySubtitleOffset: subtitleController.secondarySubtitleOffset,
-    status: playerController.status,
-    onSeek: (value) => adapter.seek(value),
-    onSeekToPreviousCue: () => _seekCue(
-      subtitleController.primaryCursor.previous(
-        subtitleController.currentPrimaryCue,
+  Widget _controls() {
+    if (playerController.mediaPath == null) return _noMediaControls();
+    final currentChunk = _currentChunkRef();
+    return PlaybackControls(
+      adapter: adapter,
+      position: playerController.position,
+      duration: playerController.duration,
+      playing: playerController.playing,
+      loopCue: subtitleController.loopCue,
+      sourceLoopStart: playerController.sourceLoopStart,
+      statusStylesVisible: subtitleController.statusStylesVisible,
+      subtitlesVisible: subtitleController.visible,
+      secondarySubtitlesVisible: subtitleController.secondaryVisible,
+      secondarySubtitlesAvailable: subtitleController.secondaryTrack != null,
+      rate: playerController.rate,
+      volume: playerController.volume,
+      muted: playerController.muted,
+      audioTracks: playerController.audioTracks,
+      selectedAudioId: playerController.selectedAudioId,
+      embeddedSubtitleTracks: playerController.embeddedSubtitleTracks,
+      selectedEmbeddedSubtitleId: playerController.selectedEmbeddedSubtitleId,
+      primarySubtitleOffset: subtitleController.primarySubtitleOffset,
+      secondarySubtitleOffset: subtitleController.secondarySubtitleOffset,
+      status: status,
+      onSeek: (value) => adapter.seek(value),
+      onSeekToPreviousCue: () => _seekCue(
+        subtitleController.primaryCursor.previous(
+          subtitleController.currentPrimaryCue,
+        ),
+      ),
+      onSeekToZero: () => adapter.seek(Duration.zero),
+      onPlayPause: adapter.playOrPause,
+      onStop: adapter.stop,
+      onSeekToNextCue: () => _seekCue(
+        subtitleController.primaryCursor.next(
+          subtitleController.currentPrimaryCue,
+        ),
+      ),
+      chunkControlsEnabled: currentChunk != null,
+      chunkLoopActive:
+          playerController.sourceLoopStart != null &&
+          currentChunk?.start == playerController.sourceLoopStart,
+      onSeekToPreviousChunk: () => _seekAdjacentChunk(-1),
+      onSeekToNextChunk: () => _seekAdjacentChunk(1),
+      onLoopCurrentChunk: _loopCurrentChunk,
+      onLoopExpandedChunk: _loopExpandedChunk,
+      onLoopCueChanged: (value) {
+        subtitleController.setLoopCue(value);
+        if (value) playerController.setSourceLoop(null, null);
+      },
+      onStopSourceLoop: () => playerController.setSourceLoop(null, null),
+      onStatusStylesChanged: (value) {
+        subtitleController.setStatusStylesVisible(value);
+        unawaited(_saveSettings());
+      },
+      onSubtitlesVisibleChanged: (value) {
+        subtitleController.setVisible(value);
+        unawaited(_saveSettings());
+      },
+      onSecondaryVisibleChanged: (value) {
+        subtitleController.setSecondaryVisible(value);
+        unawaited(_saveSettings());
+      },
+      onRateChanged: (value) {
+        playerController.setRate(value);
+        adapter.setRate(value);
+        unawaited(_saveSettings());
+      },
+      onVolumeChanged: (value) {
+        playerController.setVolume(value);
+        if (!playerController.muted) adapter.setVolume(value);
+        unawaited(_saveSettings());
+      },
+      onMuteToggle: () {
+        final newMuted = !playerController.muted;
+        playerController.setMuted(newMuted);
+        adapter.setVolume(newMuted ? 0 : playerController.volume);
+      },
+      onAudioTrackChanged: (track) {
+        playerController.setSelectedAudioId(track.id);
+        adapter.selectAudio(track);
+      },
+      onEmbeddedSubtitleTrackChanged: (track) {
+        playerController.setSelectedEmbeddedSubtitleId(track.id);
+        adapter.selectSubtitle(track);
+      },
+      onPrimaryOffsetChanged: (offset) {
+        subtitleController.setPrimarySubtitleOffset(offset);
+        unawaited(_saveSettings());
+      },
+      onSecondaryOffsetChanged: (offset) {
+        subtitleController.setSecondarySubtitleOffset(offset);
+        unawaited(_saveSettings());
+      },
+    );
+  }
+
+  Widget _noMediaControls() => Material(
+    color: const Color(0xff11161c),
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${l.text('noMediaControlsHint')} · $status',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: Theme.of(context).colorScheme.secondary),
+            ),
+          ),
+          const SizedBox(width: 12),
+          FilledButton.tonalIcon(
+            onPressed: _openMedia,
+            icon: const Icon(Icons.folder_open),
+            label: Text(l.text('openVideoAudio')),
+          ),
+        ],
       ),
     ),
-    onSeekToZero: () => adapter.seek(Duration.zero),
-    onPlayPause: adapter.playOrPause,
-    onStop: adapter.stop,
-    onSeekToNextCue: () => _seekCue(
-      subtitleController.primaryCursor.next(
-        subtitleController.currentPrimaryCue,
-      ),
-    ),
-    chunkControlsEnabled: _currentChunkRef() != null,
-    chunkLoopActive:
-        playerController.sourceLoopStart != null &&
-        _currentChunkRef()?.start == playerController.sourceLoopStart,
-    onSeekToPreviousChunk: () => _seekAdjacentChunk(-1),
-    onSeekToNextChunk: () => _seekAdjacentChunk(1),
-    onLoopCurrentChunk: _loopCurrentChunk,
-    onLoopExpandedChunk: _loopExpandedChunk,
-    onLoopCueChanged: (value) {
-      subtitleController.setLoopCue(value);
-      if (value) playerController.setSourceLoop(null, null);
-    },
-    onStopSourceLoop: () => playerController.setSourceLoop(null, null),
-    onStatusStylesChanged: (value) {
-      subtitleController.setStatusStylesVisible(value);
-      unawaited(_saveSettings());
-    },
-    onSubtitlesVisibleChanged: (value) {
-      subtitleController.setVisible(value);
-      unawaited(_saveSettings());
-    },
-    onSecondaryVisibleChanged: (value) {
-      subtitleController.setSecondaryVisible(value);
-      unawaited(_saveSettings());
-    },
-    onRateChanged: (value) {
-      playerController.setRate(value);
-      adapter.setRate(value);
-      unawaited(_saveSettings());
-    },
-    onVolumeChanged: (value) {
-      playerController.setVolume(value);
-      if (!playerController.muted) adapter.setVolume(value);
-      unawaited(_saveSettings());
-    },
-    onMuteToggle: () {
-      final newMuted = !playerController.muted;
-      playerController.setMuted(newMuted);
-      adapter.setVolume(newMuted ? 0 : playerController.volume);
-    },
-    onAudioTrackChanged: (track) {
-      playerController.setSelectedAudioId(track.id);
-      adapter.selectAudio(track);
-    },
-    onEmbeddedSubtitleTrackChanged: (track) {
-      playerController.setSelectedEmbeddedSubtitleId(track.id);
-      adapter.selectSubtitle(track);
-    },
-    onPrimaryOffsetChanged: (offset) {
-      subtitleController.setPrimarySubtitleOffset(offset);
-      unawaited(_saveSettings());
-    },
-    onSecondaryOffsetChanged: (offset) {
-      subtitleController.setSecondarySubtitleOffset(offset);
-      unawaited(_saveSettings());
-    },
   );
 
   _ChunkRef? _currentChunkRef() {
@@ -3347,22 +3445,49 @@ class _PlayerScreenState extends State<PlayerScreen> {
     return value.isNegative ? Duration.zero : value;
   }
 
-  Widget _downloadStatusBar() => DownloadStatusBar(
-    activeDownload: activeDownload,
-    downloadProgress: playerController.downloadProgress,
-    downloadedMediaPath: playerController.downloadedMediaPath,
-    onCancel: () {
-      activeDownload?.cancel();
-      setState(() => activeDownload = null);
-    },
-    onOpenMediaPath: () =>
-        _openMediaPath(playerController.downloadedMediaPath!),
-    onDismiss: () => setState(() {
-      playerController.setDownloadedMediaPath('');
-      if (activeDownload != null) activeDownload?.cancel();
-      activeDownload = null;
-    }),
-  );
+  DownloadStatusSnapshot? _downloadStatusSnapshot() {
+    if (activeDownload != null) {
+      return DownloadStatusSnapshot.downloading(
+        progress: playerController.downloadProgress,
+      );
+    }
+    final path = playerController.downloadedMediaPath?.trim();
+    if (path != null && path.isNotEmpty) {
+      return DownloadStatusSnapshot.completed(path);
+    }
+    final error = downloadError?.trim();
+    if (error != null && error.isNotEmpty) {
+      return DownloadStatusSnapshot.failed(error);
+    }
+    return null;
+  }
+
+  Widget _downloadStatusBar(DownloadStatusSnapshot downloadStatus) =>
+      DownloadStatusBar(
+        status: downloadStatus,
+        onCancel: () {
+          activeDownload?.cancel();
+          downloadGeneration++;
+          playerController.setDownloadProgress(0);
+          setState(() {
+            activeDownload = null;
+            downloadError = null;
+            status = l.text('downloadCancelled');
+          });
+        },
+        onOpenMediaPath: () {
+          final path = downloadStatus.downloadedMediaPath;
+          if (path != null) unawaited(_openMediaPath(path));
+        },
+        onDismiss: () => setState(() {
+          downloadGeneration++;
+          playerController.setDownloadedMediaPath(null);
+          playerController.setDownloadProgress(0);
+          if (activeDownload != null) activeDownload?.cancel();
+          activeDownload = null;
+          downloadError = null;
+        }),
+      );
 }
 
 class _ChunkRef {

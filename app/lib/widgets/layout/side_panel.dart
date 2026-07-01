@@ -141,6 +141,7 @@ class SidePanel extends StatelessWidget {
     switch (lc.sidePanel) {
       case 1:
         return TimelineResourceSummaryPanel(
+          activeTrack: sc.primaryTrack,
           document: sc.llTimelineDocument,
           summaries: sc.wordTimelineSummaries,
           phoneSummaries: sc.phoneTimelineSummaries,

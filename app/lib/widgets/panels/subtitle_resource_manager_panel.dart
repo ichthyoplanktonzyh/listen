@@ -151,6 +151,7 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
           ),
           const Divider(height: 1, color: Color(0xff26313c)),
           TimelineResourceSummaryPanel(
+            activeTrack: activeTrack,
             document: timelineDocument,
             summaries: wordTimelineSummaries,
             phoneSummaries: phoneTimelineSummaries,

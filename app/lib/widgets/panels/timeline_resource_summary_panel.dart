@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../models/capability_readiness.dart';
 import '../../models/timeline.dart';
 import '../../utils/format_duration.dart';
 
 class TimelineResourceSummaryPanel extends StatelessWidget {
   const TimelineResourceSummaryPanel({
     super.key,
+    required this.activeTrack,
     required this.document,
     required this.summaries,
     required this.phoneSummaries,
@@ -26,6 +28,7 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
     required this.onExportLLTimeline,
   });
 
+  final SubtitleTrack? activeTrack;
   final LLTimelineDocument? document;
   final List<WordTimelineSummary> summaries;
   final List<PhoneTimelineSummary> phoneSummaries;
@@ -54,218 +57,231 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
     final activeChunk = chunkSummaries
         .where((value) => value.isActive)
         .firstOrNull;
+    final readiness = CapabilityReadinessSnapshot.fromResources(
+      activeTrack: activeTrack,
+      document: document,
+      wordTimelineSummaries: summaries,
+      chunkTimelineSummaries: chunkSummaries,
+      phoneTimelineSummaries: phoneSummaries,
+      timelineResourceError: error,
+    );
     final hasResource =
         document?.importedResource == true ||
         summaries.isNotEmpty ||
         phoneSummaries.isNotEmpty ||
         chunkSummaries.isNotEmpty;
     final artifacts = document?.artifacts ?? const <LLTimelineArtifact>[];
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: Color(0xff10151b),
-        border: Border(bottom: BorderSide(color: Color(0xff26313c))),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.timeline, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    l.text('timelineResource'),
-                    style: Theme.of(context).textTheme.titleSmall,
-                    overflow: TextOverflow.ellipsis,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 430),
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: Color(0xff10151b),
+          border: Border(bottom: BorderSide(color: Color(0xff26313c))),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.timeline, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      l.text('timelineResource'),
+                      style: Theme.of(context).textTheme.titleSmall,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-                Tooltip(
-                  message: l.text('importLLTimeline'),
-                  child: IconButton(
-                    icon: const Icon(Icons.file_upload_outlined),
-                    onPressed: onImport,
+                  Tooltip(
+                    message: l.text('importLLTimeline'),
+                    child: IconButton(
+                      icon: const Icon(Icons.file_upload_outlined),
+                      onPressed: onImport,
+                    ),
                   ),
-                ),
-                Tooltip(
-                  message: l.text('refresh'),
-                  child: IconButton(
-                    icon: const Icon(Icons.refresh),
-                    onPressed: onRefresh,
+                  Tooltip(
+                    message: l.text('refresh'),
+                    child: IconButton(
+                      icon: const Icon(Icons.refresh),
+                      onPressed: onRefresh,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                _Chip(
-                  icon: hasResource ? Icons.check_circle : Icons.info_outline,
-                  label: hasResource
-                      ? l.text('lltimelinePresent')
-                      : l.text('legacyTimelineFallback'),
-                  color: hasResource
-                      ? const Color(0xff38b88f)
-                      : const Color(0xff8fa1b3),
-                ),
-                if (document != null)
-                  _Chip(
-                    icon: Icons.memory,
-                    label:
-                        '${document!.metadata.generatorId} ${document!.metadata.generatorVersion}',
-                    color: const Color(0xff6dd6c3),
-                  ),
-                if (document?.metadata.humanReviewed == true ||
-                    active?.humanReviewed == true)
-                  _Chip(
-                    icon: Icons.verified_user_outlined,
-                    label: l.text('humanReviewed'),
-                    color: const Color(0xffc9d96b),
-                  ),
-                _Chip(
-                  icon: _productionReady(artifacts)
-                      ? Icons.fact_check_outlined
-                      : Icons.pending_actions_outlined,
-                  label: _productionReady(artifacts)
-                      ? l.text('productionReportReady')
-                      : l.text('productionReportMissing'),
-                  color: _productionReady(artifacts)
-                      ? const Color(0xff38b88f)
-                      : const Color(0xff8fa1b3),
-                ),
-              ],
-            ),
-            if (error != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                error!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ],
               ),
-            ],
-            const SizedBox(height: 10),
-            _ActiveTimelineLine(active: active),
-            const SizedBox(height: 6),
-            _ActivePhoneLine(active: activePhone),
-            const SizedBox(height: 6),
-            _ActiveChunkLine(active: activeChunk),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton.tonalIcon(
-                  icon: const Icon(Icons.rate_review_outlined),
-                  label: Text(l.text('manualReview')),
-                  onPressed: hasResource ? onManualReview : null,
-                ),
-                FilledButton.tonalIcon(
-                  icon: const Icon(Icons.auto_awesome_motion_outlined),
-                  label: Text(l.text('generateChunks')),
-                  onPressed: active == null ? null : onGenerateChunkTimeline,
-                ),
-                FilledButton.tonalIcon(
-                  icon: const Icon(Icons.file_download_outlined),
-                  label: Text(l.text('exportLLTimelineJson')),
-                  onPressed: hasResource ? onExportLLTimeline : null,
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: phoneSummaries.isEmpty ? 34 : 74,
-              child: phoneSummaries.isEmpty
-                  ? Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        l.text('noPhoneTimelineCandidates'),
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    )
-                  : ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: phoneSummaries.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 8),
-                      itemBuilder: (context, index) => _PhoneCandidateTile(
-                        summary: phoneSummaries[index],
-                        onActivate: onActivatePhoneTimeline,
-                        onArchive: onArchivePhoneTimeline,
-                        onDelete: onDeletePhoneTimeline,
-                      ),
-                    ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: chunkSummaries.isEmpty ? 34 : 74,
-              child: chunkSummaries.isEmpty
-                  ? Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        l.text('noChunkTimelineCandidates'),
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    )
-                  : ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: chunkSummaries.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 8),
-                      itemBuilder: (context, index) => _ChunkCandidateTile(
-                        summary: chunkSummaries[index],
-                        onActivate: onActivateChunkTimeline,
-                        onArchive: onArchiveChunkTimeline,
-                        onDelete: onDeleteChunkTimeline,
-                      ),
-                    ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: summaries.isEmpty ? 34 : 74,
-              child: summaries.isEmpty
-                  ? Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        l.text('noTimelineCandidates'),
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    )
-                  : ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: summaries.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 8),
-                      itemBuilder: (context, index) => _CandidateTile(
-                        summary: summaries[index],
-                        onActivate: onActivate,
-                      ),
-                    ),
-            ),
-            if (artifacts.isNotEmpty) ...[
               const SizedBox(height: 8),
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
-                children: artifacts
-                    .map(
-                      (artifact) => _Chip(
-                        icon: artifact.kind.contains('failure')
-                            ? Icons.warning_amber_outlined
-                            : Icons.inventory_2_outlined,
-                        label: artifact.providerId == null
-                            ? artifact.kind
-                            : '${artifact.kind} · ${artifact.providerId}',
-                        color: artifact.kind.contains('failure')
-                            ? const Color(0xffd89a4a)
-                            : const Color(0xff9eb7ff),
-                      ),
-                    )
-                    .toList(growable: false),
+                children: [
+                  _Chip(
+                    icon: hasResource ? Icons.check_circle : Icons.info_outline,
+                    label: hasResource
+                        ? l.text('lltimelinePresent')
+                        : l.text('legacyTimelineFallback'),
+                    color: hasResource
+                        ? const Color(0xff38b88f)
+                        : const Color(0xff8fa1b3),
+                  ),
+                  if (document != null)
+                    _Chip(
+                      icon: Icons.memory,
+                      label:
+                          '${document!.metadata.generatorId} ${document!.metadata.generatorVersion}',
+                      color: const Color(0xff6dd6c3),
+                    ),
+                  if (document?.metadata.humanReviewed == true ||
+                      active?.humanReviewed == true)
+                    _Chip(
+                      icon: Icons.verified_user_outlined,
+                      label: l.text('humanReviewed'),
+                      color: const Color(0xffc9d96b),
+                    ),
+                  _Chip(
+                    icon: _productionReady(artifacts)
+                        ? Icons.fact_check_outlined
+                        : Icons.pending_actions_outlined,
+                    label: _productionReady(artifacts)
+                        ? l.text('productionReportReady')
+                        : l.text('productionReportMissing'),
+                    color: _productionReady(artifacts)
+                        ? const Color(0xff38b88f)
+                        : const Color(0xff8fa1b3),
+                  ),
+                ],
               ),
+              if (error != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  error!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: 10),
+              _CapabilityReadinessGrid(snapshot: readiness),
+              const SizedBox(height: 10),
+              _ActiveTimelineLine(active: active),
+              const SizedBox(height: 6),
+              _ActivePhoneLine(active: activePhone),
+              const SizedBox(height: 6),
+              _ActiveChunkLine(active: activeChunk),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.tonalIcon(
+                    icon: const Icon(Icons.rate_review_outlined),
+                    label: Text(l.text('manualReview')),
+                    onPressed: hasResource ? onManualReview : null,
+                  ),
+                  FilledButton.tonalIcon(
+                    icon: const Icon(Icons.auto_awesome_motion_outlined),
+                    label: Text(l.text('generateChunks')),
+                    onPressed: active == null ? null : onGenerateChunkTimeline,
+                  ),
+                  FilledButton.tonalIcon(
+                    icon: const Icon(Icons.file_download_outlined),
+                    label: Text(l.text('exportLLTimelineJson')),
+                    onPressed: hasResource ? onExportLLTimeline : null,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: phoneSummaries.isEmpty ? 34 : 74,
+                child: phoneSummaries.isEmpty
+                    ? Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          l.text('noPhoneTimelineCandidates'),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      )
+                    : ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: phoneSummaries.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 8),
+                        itemBuilder: (context, index) => _PhoneCandidateTile(
+                          summary: phoneSummaries[index],
+                          onActivate: onActivatePhoneTimeline,
+                          onArchive: onArchivePhoneTimeline,
+                          onDelete: onDeletePhoneTimeline,
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: chunkSummaries.isEmpty ? 34 : 74,
+                child: chunkSummaries.isEmpty
+                    ? Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          l.text('noChunkTimelineCandidates'),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      )
+                    : ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: chunkSummaries.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 8),
+                        itemBuilder: (context, index) => _ChunkCandidateTile(
+                          summary: chunkSummaries[index],
+                          onActivate: onActivateChunkTimeline,
+                          onArchive: onArchiveChunkTimeline,
+                          onDelete: onDeleteChunkTimeline,
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: summaries.isEmpty ? 34 : 74,
+                child: summaries.isEmpty
+                    ? Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          l.text('noTimelineCandidates'),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      )
+                    : ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: summaries.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 8),
+                        itemBuilder: (context, index) => _CandidateTile(
+                          summary: summaries[index],
+                          onActivate: onActivate,
+                        ),
+                      ),
+              ),
+              if (artifacts.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: artifacts
+                      .map(
+                        (artifact) => _Chip(
+                          icon: artifact.kind.contains('failure')
+                              ? Icons.warning_amber_outlined
+                              : Icons.inventory_2_outlined,
+                          label: artifact.providerId == null
+                              ? artifact.kind
+                              : '${artifact.kind} · ${artifact.providerId}',
+                          color: artifact.kind.contains('failure')
+                              ? const Color(0xffd89a4a)
+                              : const Color(0xff9eb7ff),
+                        ),
+                      )
+                      .toList(growable: false),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -273,6 +289,150 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
 
   bool _productionReady(List<LLTimelineArtifact> artifacts) =>
       artifacts.any((value) => value.kind.contains('production_report'));
+}
+
+class _CapabilityReadinessGrid extends StatelessWidget {
+  const _CapabilityReadinessGrid({required this.snapshot});
+
+  final CapabilityReadinessSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          l.text('capabilityReadiness'),
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
+        const SizedBox(height: 6),
+        SizedBox(
+          height: 86,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: snapshot.items.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, index) =>
+                _CapabilityReadinessTile(readiness: snapshot.items[index]),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CapabilityReadinessTile extends StatelessWidget {
+  const _CapabilityReadinessTile({required this.readiness});
+
+  final CapabilityReadiness readiness;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final color = _stateColor(readiness.state);
+    return SizedBox(
+      width: 232,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xff151d25),
+          border: Border.all(color: color.withValues(alpha: 0.55)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Icon(_stateIcon(readiness.state), size: 15, color: color),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      l.text(readiness.titleKey),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  _StateBadge(readiness: readiness, color: color),
+                ],
+              ),
+              const SizedBox(height: 5),
+              Text(
+                _detailText(l, readiness),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: const Color(0xffa9b7c5)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _detailText(AppLocalizations l, CapabilityReadiness readiness) {
+    final parts = <String>[l.text(readiness.detailKey)];
+    if (readiness.count != null && readiness.countLabelKey != null) {
+      parts.add('${readiness.count} ${l.text(readiness.countLabelKey!)}');
+    }
+    final detail = readiness.technicalDetail?.trim();
+    if (detail != null && detail.isNotEmpty) parts.add(detail);
+    return parts.join(' · ');
+  }
+
+  IconData _stateIcon(CapabilityReadinessState state) => switch (state) {
+    CapabilityReadinessState.available => Icons.check_circle_outline,
+    CapabilityReadinessState.generating => Icons.hourglass_empty,
+    CapabilityReadinessState.degraded => Icons.warning_amber_outlined,
+    CapabilityReadinessState.unavailable => Icons.info_outline,
+    CapabilityReadinessState.unsupported => Icons.block,
+    CapabilityReadinessState.stale => Icons.update,
+    CapabilityReadinessState.error => Icons.error_outline,
+  };
+
+  Color _stateColor(CapabilityReadinessState state) => switch (state) {
+    CapabilityReadinessState.available => const Color(0xff38b88f),
+    CapabilityReadinessState.generating => const Color(0xff6da8e8),
+    CapabilityReadinessState.degraded => const Color(0xffd6b85f),
+    CapabilityReadinessState.unavailable => const Color(0xff8fa1b3),
+    CapabilityReadinessState.unsupported => const Color(0xff778391),
+    CapabilityReadinessState.stale => const Color(0xffd89a4a),
+    CapabilityReadinessState.error => const Color(0xffe06c75),
+  };
+}
+
+class _StateBadge extends StatelessWidget {
+  const _StateBadge({required this.readiness, required this.color});
+
+  final CapabilityReadiness readiness;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.16),
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      child: Text(
+        AppLocalizations.of(context).text(readiness.stateKey),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: color,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    ),
+  );
 }
 
 class _ActiveTimelineLine extends StatelessWidget {
@@ -452,6 +612,7 @@ class _CandidateTile extends StatelessWidget {
                     ? l.text('activeTimeline')
                     : l.text('activateTimeline'),
                 child: IconButton(
+                  key: ValueKey('activate-word-timeline-${summary.id}'),
                   icon: Icon(
                     summary.isActive
                         ? Icons.play_circle_fill

@@ -214,7 +214,7 @@ class PlayerController extends ChangeNotifier {
   void setStatus(String status) =>
       _store.update((s) => s.copyWith(status: status));
 
-  void setDownloadedMediaPath(String path) =>
+  void setDownloadedMediaPath(String? path) =>
       _store.update((s) => s.copyWith(downloadedMediaPath: path));
 
   void setAudioTracks(List<PlayerTrack> tracks) =>

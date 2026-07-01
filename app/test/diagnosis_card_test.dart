@@ -299,7 +299,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Listening rhythm'), findsOneWidget);
+    expect(find.text('Listening structure'), findsOneWidget);
     expect(find.text('Nucleus:'), findsOneWidget);
     expect(find.text('Anchors:'), findsOneWidget);
     expect(find.text('market 82% audible'), findsWidgets);
