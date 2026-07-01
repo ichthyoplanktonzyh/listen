@@ -11,9 +11,10 @@ typedef RhythmCueLoopCallback =
 /// Renders Reference C as a perceptual foreground/background structure.
 ///
 /// The default surface deliberately omits diagnostic categories such as
-/// compression spans and hotspots. Learners see the few prominent vowel/phone
-/// anchors worth catching, with weak groups receding between them. Detailed
-/// phone evidence remains an expandable L4 surface owned by the overlay.
+/// compression spans and hotspots. Learners see the foreground sound shapes
+/// worth catching — often a vowel nucleus plus nearby consonant edges — with
+/// weak groups receding between them. Detailed phone evidence remains an
+/// expandable L4 surface owned by the overlay.
 class RhythmFrameRibbon extends StatelessWidget {
   const RhythmFrameRibbon({
     super.key,
@@ -147,7 +148,7 @@ class RhythmFrameRibbon extends StatelessWidget {
                 value.tokenIndex != null &&
                 value.tokenIndex == anchor.tokenIndex,
           );
-      final audibleLabel = _prominentPhone(anchor.tokenIndex, anchor.label);
+      final audibleLabel = _audibleSoundShape(anchor.tokenIndex, anchor.label);
       values.add(
         _AudibleItem(
           kind: nucleus ? _AudibleKind.nucleus : _AudibleKind.anchor,
@@ -180,7 +181,10 @@ class RhythmFrameRibbon extends StatelessWidget {
           anchorTokens.contains(nucleus.tokenIndex)) {
         continue;
       }
-      final audibleLabel = _prominentPhone(nucleus.tokenIndex, nucleus.label);
+      final audibleLabel = _audibleSoundShape(
+        nucleus.tokenIndex,
+        nucleus.label,
+      );
       values.add(
         _AudibleItem(
           kind: _AudibleKind.nucleus,
@@ -240,7 +244,7 @@ class RhythmFrameRibbon extends StatelessWidget {
     return values;
   }
 
-  String _prominentPhone(int? tokenIndex, String fallback) {
+  String _audibleSoundShape(int? tokenIndex, String fallback) {
     if (tokenIndex == null || pronunciation == null) return fallback;
     WordPronunciation? word;
     for (final value in pronunciation!.words) {
@@ -251,12 +255,35 @@ class RhythmFrameRibbon extends StatelessWidget {
     }
     if (word == null || word.variants.isEmpty) return fallback;
     final variant = word.variants.first;
-    final stressed = variant.phonemes
-        .where((phone) => (phone.stress ?? 0) > 0)
-        .map((phone) => (phone.displayIpa ?? phone.symbol).trim())
-        .where((value) => value.isNotEmpty)
-        .join();
-    if (stressed.isNotEmpty) return stressed;
+    final phones = variant.phonemes
+        .where((phone) => _phoneDisplay(phone).isNotEmpty)
+        .toList(growable: false);
+    if (phones.isNotEmpty) {
+      final stressedVowel = phones.indexWhere(
+        (phone) => (phone.stress ?? 0) > 0 && _isVowelPhone(phone),
+      );
+      final firstVowel = phones.indexWhere(_isVowelPhone);
+      final nucleusIndex = stressedVowel >= 0 ? stressedVowel : firstVowel;
+      if (nucleusIndex >= 0) {
+        var start = nucleusIndex;
+        while (start > 0 && !_isVowelPhone(phones[start - 1])) {
+          start -= 1;
+        }
+        var end = nucleusIndex;
+        while (end + 1 < phones.length && !_isVowelPhone(phones[end + 1])) {
+          end += 1;
+        }
+        final shape = phones
+            .sublist(start, end + 1)
+            .map(_phoneDisplay)
+            .join()
+            .trim();
+        if (shape.isNotEmpty) return shape;
+      }
+
+      final consonantEdge = _phoneDisplay(phones.first).trim();
+      if (consonantEdge.isNotEmpty) return consonantEdge;
+    }
 
     // Some providers carry stress only in the compact IPA string. Preserve the
     // marked syllable rather than inventing an observed phone.
@@ -264,6 +291,34 @@ class RhythmFrameRibbon extends StatelessWidget {
     return marked?.group(1)?.trim().isNotEmpty == true
         ? marked!.group(1)!.trim()
         : fallback;
+  }
+
+  String _phoneDisplay(PronunciationPhoneme phone) =>
+      (phone.displayIpa ?? phone.symbol).trim();
+
+  bool _isVowelPhone(PronunciationPhoneme phone) {
+    final symbol = phone.symbol.trim().toUpperCase().replaceAll(
+      RegExp(r'\d+$'),
+      '',
+    );
+    return const {
+      'AA',
+      'AE',
+      'AH',
+      'AO',
+      'AW',
+      'AX',
+      'AY',
+      'EH',
+      'ER',
+      'EY',
+      'IH',
+      'IY',
+      'OW',
+      'OY',
+      'UH',
+      'UW',
+    }.contains(symbol);
   }
 
   String _weakGroupSound(RhythmWeakGroup group) {

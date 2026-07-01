@@ -330,6 +330,111 @@ void main() {
     );
   });
 
+  testWidgets('rhythm frame ribbon shows audible consonant vowel shape', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Center(
+          child: SizedBox(
+            width: 360,
+            child: RhythmFrameRibbon(
+              title: 'This audio',
+              anchorLabel: 'Anchors',
+              weakGroupLabel: 'Weak groups',
+              compressionLabel: 'Compressed',
+              hotspotLabel: 'Hotspots',
+              position: Duration(milliseconds: 150),
+              pronunciation: PronunciationAnalysis(
+                sentenceId: 's1',
+                displayIpa: 'tʃeɪndʒd',
+                words: [
+                  WordPronunciation(
+                    tokenIndex: 0,
+                    text: 'changed',
+                    normalized: 'changed',
+                    variants: [
+                      PronunciationVariant(
+                        displayIpa: 'tʃeɪndʒd',
+                        phonemes: [
+                          PronunciationPhoneme(symbol: 'CH', displayIpa: 'tʃ'),
+                          PronunciationPhoneme(
+                            symbol: 'EY1',
+                            displayIpa: 'eɪ',
+                            stress: 1,
+                          ),
+                          PronunciationPhoneme(symbol: 'N', displayIpa: 'n'),
+                          PronunciationPhoneme(symbol: 'JH', displayIpa: 'dʒ'),
+                          PronunciationPhoneme(symbol: 'D', displayIpa: 'd'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              frame: RhythmFrame(
+                generatedFrom: 'wordtimeline_timing_prominence_v1',
+                references: RhythmFrameReferences(
+                  citation: RhythmReference(
+                    label: 'citation_form',
+                    source: 'dictionary_lexical_stress',
+                    evidenceClass: 'heuristic_proxy',
+                  ),
+                  actual: RhythmReference(
+                    label: 'actual_delivery',
+                    source: 'word_timeline_duration',
+                    evidenceClass: 'heuristic_proxy',
+                  ),
+                ),
+                stressAnchors: [
+                  RhythmStressAnchor(
+                    tokenIndex: 0,
+                    start: Duration(milliseconds: 100),
+                    end: Duration(milliseconds: 260),
+                    label: 'changed',
+                    reason: 'clearly timed content sound',
+                    importance: 'secondary',
+                    isNucleus: false,
+                    prominence: 0.72,
+                    prominenceCues: ['timing'],
+                    signalSources: ['timing'],
+                    evidenceClass: 'heuristic_proxy',
+                    claimStatus: 'audio_supported',
+                    confidence: 0.72,
+                  ),
+                ],
+                nuclei: [],
+                weakGroups: [],
+                compressionSpans: [],
+                phraseBoundaries: [],
+                connectedSpeechRefs: [],
+                listeningHotspots: [],
+                quality: RhythmFrameQuality(
+                  timingSource: 'word_timeline',
+                  prominenceSources: ['timing'],
+                  boundarySources: [],
+                  connectedSpeechSource: 'text_prior',
+                  phoneEvidenceCoverage: 0,
+                  rhythmConfidence: 0.72,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('/tʃeɪndʒd/'), findsOneWidget);
+    expect(find.text('changed'), findsOneWidget);
+    expect(
+      find.byTooltip(
+        'Anchors: changed\n/tʃeɪndʒd/\nclearly timed content sound\n'
+        'audio supported · heuristic proxy · timing',
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('rhythm frame ribbon can request cue loop playback', (
     tester,
   ) async {
