@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- 2026-06-30 21:05 CST: 收口修复——移除 `test/builder_test.dart` 冗余的
+  `package:flutter/foundation.dart` import（`material.dart` 已提供 `@immutable`），
+  全项目 `flutter analyze` 恢复 0 issue。收口验证：`flutter analyze` 干净、
+  `flutter test`（115）、`cargo test -p api-http -p persistence-sqlite` 全绿。
+
 - 2026-06-30 20:52 CST: 兑现 A1——用新解锁的 transport seam 为两个 workflow controller
   补测试（此前因 `LocalApi` 不可注入完全无法单测）。
   (1) **`learning_workflow_controller_test.dart`**（7 测试）：`refreshDiagnosis` 的
