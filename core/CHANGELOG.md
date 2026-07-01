@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-01 14:15 CST: Phase 2.22 Step 3 subtitle resource capability-first。
+  字幕资源 tile 现在以用户能力为主，直接展示 Subtitles、Word sync、Chunk replay、
+  Phone evidence 的可用/不可用状态和数量；Listening structure 不再被假装成逐资源已知事实，
+  active resource 指向下方 timeline details，inactive resource 明确需要激活后检查。
+  同步记录一个后端闭环发现：当前 API 能逐字幕资源提供 sentence/word/chunk/phone
+  能力计数，但没有直接的 per-subtitle-resource Listening structure readiness 查询，
+  该事实目前只能在激活/export track timeline 后获得。
+
 - 2026-07-01 13:58 CST: 推进 Phase 2.22 P0 user-facing workflow semantics。
   (1) **Local Whisper path**: 生成字幕弹窗现在返回是否真正创建任务；主界面在任务创建后显示
   主/副字幕生成预期，生成主字幕自动载入后会汇总 Word sync、Chunk replay、Listening
