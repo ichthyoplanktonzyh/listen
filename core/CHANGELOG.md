@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- 2026-07-01 15:45 CST: Phase 2.22 建模重建 + 前端拆分增量（SM-02 / SM-03）。
+  复核发现 GPT 的 2.22 遗漏了用户可见状态机建模、Capability Stack 的 L 层号自相矛盾、
+  readiness 仅覆盖 5/11 层，且“前端 closeout 已完成”属高估。
+  (1) **权威模型**: 新增
+  `.planning/phases/2.22-user-facing-workflow-semantics/2.22-USER-VISIBLE-STATE-MACHINE.md`
+  （R0-R8 surface 区域 + Section C 能力就绪 lane + Defect Register SM-01..08 / SM-F1..F8）；
+  修正 `2.22-FEATURE-SEMANTICS-MODEL.md` 的 L 层号并新增 Model↔Code 对账；
+  `2.22-CURRENT-FEATURE-INVENTORY.md` 改为覆盖清单 + 已验证 P0 模板 F1-F8。
+  (2) **记账纠正**: `STATE.md` / `2.22-PLAN.md` 去除“closeout 已完成”高估，列清 OPEN 项。
+  (3) **SM-02**: 删除死且分叉的 `apps/desktop/lib/widgets/layout/side_panel.dart`
+  （其 Resources tab 用旧 `TimelineResourceSummaryPanel`，接线会退化 Resources tab，故删非接）。
+  (4) **SM-03**: 下载状态从散落 5 处（`activeDownload` / `downloadError` /
+  `downloadGeneration` + PlayerState `downloadProgress` / `downloadedMediaPath`）
+  收敛为单一 `DownloadController`（generation + disposed 守卫，仅依赖 Stream/Future 原语，
+  与下载服务解耦以便单测）；`main.dart` −84 行，`PlayerState` 去掉 2 个死字段。
+  验证: `cd apps/desktop && flutter analyze` 无问题、full `flutter test` 131 passed
+  （新增 `test/download_controller_test.dart` +5）。
+
 - 2026-07-01 15:15 CST: 修复 Whisper 生成字幕后的 Timeline resource 状态误判。
   当当前字幕已加载 generated word timings 但没有 active `WordTimelineSummary` 时，
   Timeline resource 面板现在会把 Word sync 显示为可用，并显示词级 timing 数量；

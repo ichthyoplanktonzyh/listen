@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: active
-last_updated: "2026-07-01T14:25:00.000+08:00"
+last_updated: "2026-07-01T15:30:00.000+08:00"
 progress:
   total_phases: 11
   completed_phases: 1
@@ -29,10 +29,13 @@ progress:
 > 当前所有用户功能的前端语义、入口、状态和降级路径不够清晰，新增 Phase 2.22
 > User-Facing Workflow Semantics，专门收敛本机 Whisper 默认路径、资源能力可用性、
 > Listening structure / Phone evidence 语义分层、typed status 和端到端 QA。
-> 2026-07-01 14:25 CST Phase 2.22 前端 closeout slice 已完成：
-> Step 0 audit、capability readiness、资源能力面板、Local Whisper 默认路径、typed
-> download/task feedback、布局入口和前端 E2E QA 清单已落地；前端语义暴露出的后端闭环问题
-> 已记录到 backend contract gap log，暂不在本切片修后端。
+> 2026-07-01 Phase 2.22 前端 P0 切片已落地（Step 0 audit、capability readiness、资源能力面板、
+> Local Whisper 默认路径、typed download/task feedback、布局入口、前端 E2E QA 清单），但复核
+> 发现 GPT 遗漏了用户可见状态机建模、Capability Stack 的 L 层号自相矛盾、readiness 仅覆盖 5/11
+> 能力层且“前端 closeout 已完成”属高估。本次已重建 `2.22-USER-VISIBLE-STATE-MACHINE.md`（真正的
+> 用户可见状态机 + 能力就绪 lane）、修正 `2.22-FEATURE-SEMANTICS-MODEL.md` 层号并新增 Model↔Code
+> 对账、把 `2.22-CURRENT-FEATURE-INVENTORY.md` 改为覆盖清单 + 已验证 P0 模板，并纠正记账；余下
+> OPEN 项（SM-01..SM-08）转入真正的前端重构。
 
 ## 当前位置
 
@@ -48,7 +51,7 @@ progress:
   Phase 2.19 ⏳ 真实 benchmark scoring 初始评估已落地 +
   Phase 2.20 ⏳ Rhythm-first 真实听感分析已启动 +
   Phase 2.21 ⏳ Audible Structure Architecture 已启动 +
-  Phase 2.22 ⏳ User-Facing Workflow Semantics 前端 closeout 已完成 +
+  Phase 2.22 ⏳ User-Facing Workflow Semantics 建模已重建 / 前端 P0 部分完成 +
   Phase 3.0 🧭 英语听力学习闭环方向已建档 +
   Phase 3.0.1 ✅ backend 学习行为架构地基已落地
 - **分支**：`main`
@@ -61,7 +64,7 @@ progress:
 | 路线 | 目标 | 当前状态 |
 |---|---|---|
 | 本地重装生产引擎 | 生成精准 WordTimeline / ChunkTimeline / LLTimeline JSON | ✅ 阶段性收口，转长期研究 |
-| 轻量消费端 LLPlayerNext | 稳定读取 `.lltimeline.json` 并播放学习 | ⏳ Phase 2.22 前端语义已收敛，后端契约缺口已记录 |
+| 轻量消费端 LLPlayerNext | 稳定读取 `.lltimeline.json` 并播放学习 | ⏳ Phase 2.22 建模已重建；前端 P0 部分完成，OPEN 项见状态机 Defect Register |
 
 ## 后续产品方向
 
@@ -283,7 +286,7 @@ progress:
   - `.planning/phases/2.21-audible-structure-architecture/2.21-PLAN.md`
   - `.planning/phases/2.21-audible-structure-architecture/2.21-AUDIBLE-STRUCTURE-MODEL.md`
 
-### Phase 2.22: User-Facing Workflow Semantics ⏳ Frontend Closeout Complete
+### Phase 2.22: User-Facing Workflow Semantics ⏳ 建模已重建 / 前端 P0 部分完成
 
 - 目标：把当前所有用户功能组织成清晰、可发现、可降级、可验证的用户路径，包括媒体播放、
   URL/下载、拖拽、字幕获取、资源管理、Word sync、Chunk replay、Listening structure、
@@ -334,14 +337,34 @@ progress:
     Practice/Review readiness contract 等后端缺口；本阶段不修后端。
   - 新增 `2.22-FRONTEND-E2E-QA.md`，固定本地可重复的前端端到端 smoke checklist。
   - PROJECT / ROADMAP / REQUIREMENTS 已新增 Phase 2.22 与 `UX-001` 至 `UX-008` 需求。
+- 建模纠偏（2026-07-01，本次复核）：
+  - 新增 `2.22-USER-VISIBLE-STATE-MACHINE.md`：真正的用户可见状态机（R0-R8 surface 区域 +
+    Section C 能力就绪 lane），对齐当前 main 并区分已修复/仍开放缺陷（SM-F1..F8 已修，
+    SM-01..08 仍开放）。此前 STEP0 audit 只是散文区域表，不构成状态机。
+  - 修正 `2.22-FEATURE-SEMANTICS-MODEL.md`：Capability Stack 与 Readiness Examples 的 L 层号
+    自相矛盾已统一，并新增 Model↔Code 对账表（明确 5/11 层已建 readiness lane）。
+  - `2.22-CURRENT-FEATURE-INVENTORY.md` 从裸清单改为“覆盖清单 + 已验证 P0 模板（F1-F8）”。
+- 记账纠正（此前被表述为“已落地/closeout complete”，实际为部分完成）：
+  - typed CapabilityReadiness 仅覆盖 5/11 能力层（缺 media/playback、transcript/overlay、
+    vocabulary、diagnosis、download/task、practice/review），且仅接入资源面板 1-2 个 surface；
+    PLAN Step 1 要求的其余就绪层仍未建。
+  - 用户可见状态机此前未真正建模（本次补上）。
+  - download 仍是 `activeDownload` + `downloadedMediaPath` 双字段派生，未统一为单一 owned state。
+  - `widgets/layout/side_panel.dart` 的 `SidePanel` 为死代码，main.dart 仍用重复内联 `_sidePanel()`。
+  - 自由字符串 `status` 仍承载大部分工作流状态（~99 setState）。
+  - 真实进度：建模基座已重建 + 一批 P0 前端切片已落地（SM-F1..F8），但“前端 closeout”尚未达成。
 - 下一步：
-  1. 暂不修后端；先按 `2.22-FRONTEND-E2E-QA.md` 做真实媒体手工 smoke。
-  2. 后续 backend/product phase 按 `2.22-BACKEND-CONTRACT-GAPS.md` 逐项补契约，
-     再反向简化前端派生逻辑。
-  3. Phase 3.0 practice/review 前端入口应等待 backend readiness contract 明确后再闭环。
+  1. 按 `2.22-USER-VISIBLE-STATE-MACHINE.md` 的 Defect Register（SM-01..SM-08）推进真正的前端
+     重构：合并 side panel 死代码、download 收敛为单一 owned state、把 readiness 接入
+     overlay/bottom controls/diagnosis、补 media/vocabulary/diagnosis/task readiness lane、
+     status typed 化；重构中暴露的后端问题追加到 `2.22-BACKEND-CONTRACT-GAPS.md`。
+  2. 用 `2.22-FRONTEND-E2E-QA.md` 做真实媒体手工 smoke 验证。
+  3. 后续 backend/product phase 按 `2.22-BACKEND-CONTRACT-GAPS.md` 逐项补契约，再反向简化前端派生逻辑。
+  4. Phase 3.0 practice/review 前端入口应等待 backend readiness contract 明确后再闭环。
 - 规划文档：
   - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-CONTEXT.md`
   - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-FEATURE-SEMANTICS-MODEL.md`
+  - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-USER-VISIBLE-STATE-MACHINE.md`
   - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-CURRENT-FEATURE-INVENTORY.md`
   - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-PLAN.md`
   - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-STEP0-UI-AUDIT.md`
