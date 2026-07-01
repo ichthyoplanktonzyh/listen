@@ -47,6 +47,10 @@ class BackendEventCoordinator {
       _handleWordTimingsCompleted(event);
       return;
     }
+    if (event is SoundLineCompletedEvent) {
+      _handleSoundLineCompleted(event);
+      return;
+    }
     if (event is PhoneticAnalysisJobChangedEvent) {
       _handlePhoneticAnalysisJob(event);
       return;
@@ -71,12 +75,19 @@ class BackendEventCoordinator {
     setStatus('ASR ${event.status} · ${event.phaseProgress}%');
   }
 
+  // Text line: whisper word timings are ready. Refresh resources so the core
+  // experience (word seeking, chunks, phonetics) picks them up.
   void _handleWordTimingsCompleted(WordTimingsCompletedEvent event) {
     if (event.trackId != currentPrimaryTrackId()) return;
     unawaited(loadSpeechEnhancements(event.trackId));
-    if (event.line == 'sound') {
-      setStatus('Sound line ready');
-    }
+  }
+
+  // Sound line: the independent listening-structure workflow finished. Refresh
+  // so the C (this-audio) view picks up pause/acoustic evidence.
+  void _handleSoundLineCompleted(SoundLineCompletedEvent event) {
+    if (event.trackId != currentPrimaryTrackId()) return;
+    unawaited(loadSpeechEnhancements(event.trackId));
+    setStatus('Sound line ready');
   }
 
   void _handlePhoneticAnalysisJob(PhoneticAnalysisJobChangedEvent event) {

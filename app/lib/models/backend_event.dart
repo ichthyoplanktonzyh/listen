@@ -12,6 +12,8 @@ class BackendEvent {
         TranscriptionJobChangedEvent.fromJson(payload),
       'word-timings-completed' when payload is Map<String, dynamic> =>
         WordTimingsCompletedEvent.fromJson(payload),
+      'sound-line-completed' when payload is Map<String, dynamic> =>
+        SoundLineCompletedEvent.fromJson(payload),
       'phonetic-analysis-job-changed' when payload is Map<String, dynamic> =>
         PhoneticAnalysisJobChangedEvent.fromJson(payload),
       'lexical-entry-changed' when payload is Map<String, dynamic> =>
@@ -55,6 +57,28 @@ class WordTimingsCompletedEvent extends BackendEvent {
   final int count;
   final String? line;
   final String? timelineId;
+}
+
+/// Emitted when the independent sound-line workflow finishes enriching a track
+/// with listening-structure (pause/acoustic) resources. Distinct from the
+/// text-line `word-timings-completed` so the two workflows never conflate.
+class SoundLineCompletedEvent extends BackendEvent {
+  const SoundLineCompletedEvent({
+    required this.trackId,
+    this.timelineId,
+    this.acousticCueCount = 0,
+  });
+
+  factory SoundLineCompletedEvent.fromJson(Map<String, dynamic> json) =>
+      SoundLineCompletedEvent(
+        trackId: json['track_id'] as String? ?? '',
+        timelineId: json['timeline_id'] as String?,
+        acousticCueCount: json['acoustic_cue_count'] as int? ?? 0,
+      );
+
+  final String trackId;
+  final String? timelineId;
+  final int acousticCueCount;
 }
 
 class TranscriptionJobChangedEvent extends BackendEvent {

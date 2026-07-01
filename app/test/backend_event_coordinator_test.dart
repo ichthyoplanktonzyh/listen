@@ -211,30 +211,47 @@ void main() {
     );
 
     test(
-      'completed sound-line word timings refresh current speech enhancements',
+      'completed text-line word timings refresh resources silently',
       () async {
         final recorder = _Recorder()..primaryTrackId = 'track-1';
         recorder.build().handle({
           'event': 'word-timings-completed',
           'payload': {
             'track_id': 'track-1',
-            'line': 'sound',
+            'line': 'text',
             'count': 3,
-            'timeline_id': 'timeline-sound',
+            'timeline_id': 'timeline-text',
           },
         });
         await pumpEventQueue();
 
+        // Text line refreshes but must not steal the status line from the user.
         expect(recorder.loadedSpeechEnhancements, ['track-1']);
-        expect(recorder.statuses, ['Sound line ready']);
+        expect(recorder.statuses, isEmpty);
       },
     );
 
-    test('word timings for a non-primary track are ignored', () async {
+    test('completed sound line refreshes and reports readiness', () async {
       final recorder = _Recorder()..primaryTrackId = 'track-1';
       recorder.build().handle({
-        'event': 'word-timings-completed',
-        'payload': {'track_id': 'track-2', 'line': 'sound', 'count': 3},
+        'event': 'sound-line-completed',
+        'payload': {
+          'track_id': 'track-1',
+          'timeline_id': 'timeline-sound',
+          'acoustic_cue_count': 5,
+        },
+      });
+      await pumpEventQueue();
+
+      expect(recorder.loadedSpeechEnhancements, ['track-1']);
+      expect(recorder.statuses, ['Sound line ready']);
+    });
+
+    test('sound line for a non-primary track is ignored', () async {
+      final recorder = _Recorder()..primaryTrackId = 'track-1';
+      recorder.build().handle({
+        'event': 'sound-line-completed',
+        'payload': {'track_id': 'track-2', 'acoustic_cue_count': 5},
       });
       await pumpEventQueue();
 
