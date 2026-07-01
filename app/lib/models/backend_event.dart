@@ -88,6 +88,7 @@ class TranscriptionJobChangedEvent extends BackendEvent {
     this.mediaId,
     this.generatedTrackId,
     this.destination,
+    this.archivedAtMs,
   });
 
   factory TranscriptionJobChangedEvent.fromJson(Map<String, dynamic> json) =>
@@ -97,6 +98,7 @@ class TranscriptionJobChangedEvent extends BackendEvent {
         mediaId: json['media_id'] as String?,
         generatedTrackId: json['generated_track_id'] as String?,
         destination: json['destination'] as String?,
+        archivedAtMs: json['archived_at_ms'] as int?,
       );
 
   final String status;
@@ -104,6 +106,7 @@ class TranscriptionJobChangedEvent extends BackendEvent {
   final String? mediaId;
   final String? generatedTrackId;
   final String? destination;
+  final int? archivedAtMs;
 }
 
 class PhoneticAnalysisJobChangedEvent extends BackendEvent {

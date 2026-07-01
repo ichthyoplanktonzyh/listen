@@ -62,17 +62,27 @@ class BackendEventCoordinator {
 
   void _handleTranscriptionJob(TranscriptionJobChangedEvent event) {
     if (event.mediaId != currentMediaId()) return;
+    // Archiving republishes the completed job snapshot. It is metadata churn,
+    // not a second completion, and its generated track may already be deleted.
+    if (event.archivedAtMs != null) return;
     setTaskStatus(UserTaskStatus.transcription(event));
     if (event.status == 'completed' && event.generatedTrackId != null) {
-      unawaited(
-        readSubtitle(event.generatedTrackId!).then(
-          (track) =>
-              loadGeneratedTrack(track, event.destination == 'secondary'),
-        ),
-      );
+      unawaited(_loadCompletedTranscription(event));
       return;
     }
     setStatus('ASR ${event.status} · ${event.phaseProgress}%');
+  }
+
+  Future<void> _loadCompletedTranscription(
+    TranscriptionJobChangedEvent event,
+  ) async {
+    try {
+      final track = await readSubtitle(event.generatedTrackId!);
+      if (event.mediaId != currentMediaId()) return;
+      await loadGeneratedTrack(track, event.destination == 'secondary');
+    } catch (error) {
+      setStatus('Generated subtitle unavailable: $error');
+    }
   }
 
   // Text line: whisper word timings are ready. Refresh resources so the core

@@ -23,6 +23,7 @@ class _Recorder {
   final List<LexicalEntry> updatedEntries = [];
 
   Map<String, dynamic> subtitleToReturn = const {'id': 'gen-track'};
+  Object? subtitleReadError;
 
   BackendEventCoordinator build() => BackendEventCoordinator(
     currentMediaId: () => mediaId,
@@ -35,6 +36,7 @@ class _Recorder {
     },
     readSubtitle: (trackId) async {
       readSubtitleCalls.add(trackId);
+      if (subtitleReadError case final error?) throw error;
       return subtitleToReturn;
     },
     loadGeneratedTrack: (track, secondary) async {
@@ -124,6 +126,54 @@ void main() {
         // The completed-with-track branch returns early after typed status, so no
         // free-form status is pushed.
         expect(recorder.statuses, isEmpty);
+      },
+    );
+
+    test('archived completion does not reload its generated track', () async {
+      final recorder = _Recorder()..mediaId = 'media-1';
+      recorder.build().handle({
+        'event': 'transcription-job-changed',
+        'payload': {
+          'status': 'completed',
+          'phase_progress': 100,
+          'media_id': 'media-1',
+          'generated_track_id': 'deleted-track',
+          'destination': 'primary',
+          'archived_at_ms': 123,
+        },
+      });
+      await pumpEventQueue();
+
+      expect(recorder.readSubtitleCalls, isEmpty);
+      expect(recorder.generatedTracks, isEmpty);
+      expect(recorder.taskStatuses, isEmpty);
+      expect(recorder.statuses, isEmpty);
+    });
+
+    test(
+      'missing generated track is reported without escaping async',
+      () async {
+        final recorder = _Recorder()
+          ..mediaId = 'media-1'
+          ..subtitleReadError = StateError('missing track');
+        recorder.build().handle({
+          'event': 'transcription-job-changed',
+          'payload': {
+            'status': 'completed',
+            'phase_progress': 100,
+            'media_id': 'media-1',
+            'generated_track_id': 'deleted-track',
+            'destination': 'primary',
+          },
+        });
+        await pumpEventQueue();
+
+        expect(recorder.readSubtitleCalls, ['deleted-track']);
+        expect(recorder.generatedTracks, isEmpty);
+        expect(
+          recorder.statuses.single,
+          contains('Generated subtitle unavailable'),
+        );
       },
     );
 
