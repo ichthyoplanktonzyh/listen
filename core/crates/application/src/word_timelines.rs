@@ -1,4 +1,74 @@
+use std::collections::HashMap;
+
 use crate::*;
+
+const RHYTHM_FRAME_PROVIDER_ID: &str = "wordtimeline-rhythm-frame";
+const RHYTHM_FRAME_PROVIDER_VERSION: &str = "phase-2.21-w2";
+const RHYTHM_WORD_ACOUSTIC_CUES_ARTIFACT_KIND: &str = "rhythm_word_acoustic_cues";
+
+fn rhythm_word_acoustic_cues_by_sentence(
+    artifacts: &[LLTimelineArtifact],
+    active_word_timeline_id: Option<&WordTimelineId>,
+) -> HashMap<SubtitleSentenceId, Vec<speech_analysis::sound_analysis::RhythmWordAcousticCue>> {
+    let mut values: HashMap<
+        SubtitleSentenceId,
+        Vec<speech_analysis::sound_analysis::RhythmWordAcousticCue>,
+    > = HashMap::new();
+    let Some(active_word_timeline_id) = active_word_timeline_id else {
+        return values;
+    };
+    for artifact in artifacts {
+        if artifact.kind != RHYTHM_WORD_ACOUSTIC_CUES_ARTIFACT_KIND {
+            continue;
+        }
+        if artifact
+            .payload
+            .get("timeline_id")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|timeline_id| timeline_id != active_word_timeline_id.as_str())
+        {
+            continue;
+        }
+        let Some(cues) = artifact
+            .payload
+            .get("cues")
+            .and_then(serde_json::Value::as_array)
+        else {
+            continue;
+        };
+        for cue in cues {
+            let Some(sentence_id) = cue
+                .get("sentence_id")
+                .and_then(serde_json::Value::as_str)
+                .and_then(|value| SubtitleSentenceId::parse(value).ok())
+            else {
+                continue;
+            };
+            let Some(token_index) = cue
+                .get("token_index")
+                .and_then(serde_json::Value::as_u64)
+                .and_then(|value| u32::try_from(value).ok())
+            else {
+                continue;
+            };
+            let energy_prominence = cue
+                .get("energy_prominence")
+                .and_then(serde_json::Value::as_f64)
+                .filter(|value| value.is_finite())
+                .map(|value| (value as f32).clamp(0.0, 1.0));
+            if energy_prominence.is_none() {
+                continue;
+            }
+            values.entry(sentence_id).or_default().push(
+                speech_analysis::sound_analysis::RhythmWordAcousticCue {
+                    token_index,
+                    energy_prominence,
+                },
+            );
+        }
+    }
+    values
+}
 
 impl AppServices {
     pub fn list_word_timelines(
@@ -216,6 +286,14 @@ impl AppServices {
                 Vec::new(),
             )
         };
+        let word_acoustic_cues =
+            rhythm_word_acoustic_cues_by_sentence(&artifacts, active_word_timeline_id.as_ref());
+        let rhythm_frames = self.rhythm_frames_from_active_word_timeline(
+            &track,
+            &word_timelines,
+            active_word_timeline_id.as_ref(),
+            &word_acoustic_cues,
+        )?;
         Ok(LLTimelineDocument {
             schema: LLTIMELINE_SCHEMA_V1.to_owned(),
             metadata,
@@ -224,6 +302,7 @@ impl AppServices {
             active_word_timeline_id,
             phone_timelines,
             active_phone_timeline_id,
+            rhythm_frames,
             chunk_timelines,
             active_chunk_timeline_id,
             artifacts,
@@ -309,6 +388,12 @@ impl AppServices {
         }
         if let Some(active_id) = document.active_phone_timeline_id {
             self.timelines.activate_phone_timeline(&active_id)?;
+        }
+
+        for frame in document.rhythm_frames {
+            if frame.media_id != track.media_id || frame.track_id != track.id {
+                return Err(ApplicationError::Validation("lltimeline rhythm frame"));
+            }
         }
 
         for mut timeline in document.chunk_timelines {
@@ -419,6 +504,100 @@ impl AppServices {
             timeline.media_id = media.id.clone();
             timeline.track_id = track_id.clone();
         }
+        for frame in &mut document.rhythm_frames {
+            frame.media_id = media.id.clone();
+            frame.track_id = track_id.clone();
+        }
         self.import_lltimeline_document(document)
+    }
+
+    fn rhythm_frames_from_active_word_timeline(
+        &self,
+        track: &SubtitleTrack,
+        word_timelines: &[WordTimeline],
+        active_word_timeline_id: Option<&WordTimelineId>,
+        word_acoustic_cues: &HashMap<
+            SubtitleSentenceId,
+            Vec<speech_analysis::sound_analysis::RhythmWordAcousticCue>,
+        >,
+    ) -> Result<Vec<LLTimelineRhythmFrame>, ApplicationError> {
+        let Some(active_id) = active_word_timeline_id else {
+            return Ok(Vec::new());
+        };
+        let Some(timeline) = word_timelines
+            .iter()
+            .find(|timeline| &timeline.id == active_id)
+        else {
+            return Ok(Vec::new());
+        };
+        let is_english = track
+            .language
+            .as_ref()
+            .map(|lang| lang.as_str().starts_with("en"))
+            .unwrap_or(true);
+        let mut frames = Vec::new();
+        for sentence in &track.sentences {
+            let words = timeline
+                .words
+                .iter()
+                .filter(|word| word.sentence_id == sentence.id)
+                .cloned()
+                .collect::<Vec<_>>();
+            if words.is_empty() {
+                continue;
+            }
+            let canonical = if is_english {
+                speech_analysis::analyze_sentence(sentence)
+                    .phonemes
+                    .into_iter()
+                    .filter_map(|phone| {
+                        phone.token_index.map(|token_index| {
+                            speech_analysis::phonetic_alignment::CanonicalPhone {
+                                symbol: phone.symbol,
+                                token_index,
+                                stress: phone.stress,
+                            }
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            };
+            let rhythm_frame =
+                speech_analysis::sound_analysis::build_rhythm_frame_from_word_timeline(
+                    sentence,
+                    &canonical,
+                    &words,
+                    word_acoustic_cues
+                        .get(&sentence.id)
+                        .map(|cues| cues.as_slice()),
+                );
+            let id = RhythmFrameId::from_fingerprint(
+                "rhythm-frame",
+                &format!("{}:{}", timeline.id.as_str(), sentence.id.as_str()),
+            );
+            frames.push(LLTimelineRhythmFrame {
+                id,
+                track_id: track.id.clone(),
+                media_id: track.media_id.clone(),
+                sentence_id: sentence.id.clone(),
+                parent_word_timeline_id: Some(timeline.id.clone()),
+                provider_id: RHYTHM_FRAME_PROVIDER_ID.into(),
+                provider_version: RHYTHM_FRAME_PROVIDER_VERSION.into(),
+                status: TimelineStatus::Active,
+                metrics_json: TimelineMetrics::from_value(serde_json::json!({
+                    "source": "active_word_timeline",
+                    "word_count": words.len(),
+                    "energy_cue_count": word_acoustic_cues
+                        .get(&sentence.id)
+                        .map(|cues| cues.len())
+                        .unwrap_or(0),
+                })),
+                rhythm_frame,
+                created_at_ms: timeline.updated_at_ms,
+                updated_at_ms: now_ms(),
+            });
+        }
+        Ok(frames)
     }
 }

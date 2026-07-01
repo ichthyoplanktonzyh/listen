@@ -28,13 +28,52 @@ def base_document(with_rhythm: bool) -> dict[str, object]:
     }
     if with_rhythm:
         sound_analysis["rhythm_frame"] = {
-            "generated_from": "fixture",
+            "generated_from": "wordtimeline_timing_acoustic_prominence_v1",
+            "references": {
+                "citation": {
+                    "label": "citation_form",
+                    "source": "dictionary_lexical_stress",
+                    "evidence_class": "heuristic_proxy",
+                },
+                "default_connected": {
+                    "label": "default_connected_variants",
+                    "source": "english_connected_speech_rules_v1",
+                    "evidence_class": "heuristic_proxy",
+                },
+                "actual": {
+                    "label": "actual_delivery",
+                    "source": "word_timeline_duration_energy",
+                    "evidence_class": "heuristic_proxy",
+                },
+            },
             "stress_anchors": [
                 {
                     "token_index": 2,
                     "start_ms": 120,
                     "end_ms": 280,
                     "label": "market",
+                    "reason": "duration and energy prominence",
+                    "importance": "primary",
+                    "is_nucleus": True,
+                    "prominence": 0.82,
+                    "prominence_cues": ["timing", "energy"],
+                    "signal_sources": ["timing", "energy"],
+                    "evidence_class": "heuristic_proxy",
+                    "claim_status": "audio_supported",
+                    "confidence": 0.82,
+                }
+            ],
+            "nuclei": [
+                {
+                    "phrase_index": 0,
+                    "token_index": 2,
+                    "start_ms": 120,
+                    "end_ms": 280,
+                    "label": "market",
+                    "reason": "phrase-scoped nucleus candidate",
+                    "cues": ["timing", "energy"],
+                    "evidence_class": "heuristic_proxy",
+                    "claim_status": "audio_supported",
                     "confidence": 0.82,
                 }
             ],
@@ -45,6 +84,11 @@ def base_document(with_rhythm: bool) -> dict[str, object]:
                     "start_ms": 0,
                     "end_ms": 110,
                     "label": "in the",
+                    "reason": "short weak material before the anchor",
+                    "reduction_refs": ["cs1"],
+                    "signal_sources": ["timing"],
+                    "evidence_class": "heuristic_proxy",
+                    "claim_status": "audio_supported",
                     "confidence": 0.7,
                 }
             ],
@@ -55,6 +99,10 @@ def base_document(with_rhythm: bool) -> dict[str, object]:
                     "start_ms": 0,
                     "end_ms": 280,
                     "label": "in the market",
+                    "reason": "rate-normalized duration is compact",
+                    "signal_sources": ["timing"],
+                    "evidence_class": "heuristic_proxy",
+                    "claim_status": "audio_supported",
                     "confidence": 0.74,
                 }
             ],
@@ -63,7 +111,25 @@ def base_document(with_rhythm: bool) -> dict[str, object]:
                     "at_ms": 300,
                     "after_token_index": 2,
                     "before_token_index": 4,
+                    "reason": "pause after the anchor",
+                    "cues": ["pause"],
+                    "signal_sources": ["timing"],
+                    "evidence_class": "heuristic_proxy",
+                    "claim_status": "audio_supported",
+                    "is_final": False,
                     "confidence": 0.8,
+                }
+            ],
+            "connected_speech_refs": [
+                {
+                    "id": "cs1",
+                    "token_start": 0,
+                    "token_end": 1,
+                    "label": "weak form",
+                    "divergence": "clip_specific",
+                    "signal_sources": ["phone_segmental"],
+                    "evidence_class": "heuristic_proxy",
+                    "confidence": 0.7,
                 }
             ],
             "listening_hotspots": [
@@ -75,11 +141,18 @@ def base_document(with_rhythm: bool) -> dict[str, object]:
                     "start_ms": 0,
                     "end_ms": 110,
                     "label": "weak group",
+                    "hint": "backgrounded function words",
+                    "signal_sources": ["timing"],
+                    "evidence_class": "heuristic_proxy",
+                    "claim_status": "audio_supported",
                     "confidence": 0.7,
                 }
             ],
             "quality": {
-                "timing_source": "phone_timeline",
+                "timing_source": "word_timeline",
+                "prominence_sources": ["timing", "energy"],
+                "boundary_sources": ["timing"],
+                "connected_speech_source": "phone_segmental",
                 "phone_evidence_coverage": 0.9,
                 "rhythm_confidence": 0.77,
             },
@@ -321,8 +394,23 @@ class RhythmFrameEvaluationTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         output = json.loads(result.stdout)
         self.assertEqual(output["summary"]["rhythm_frame_coverage"], 1.0)
+        self.assertEqual(output["summary"]["phone_timeline_sentence_count"], 3)
         self.assertEqual(output["summary"]["manual_qa"]["annotated_sentence_count"], 2)
         self.assertTrue(output["quality_gates"]["passed"])
+        no_phone = next(
+            case
+            for case in output["results"]
+            if case["case_id"] == "p221-fixture-no-phone-rhythm-001"
+        )
+        sentence = no_phone["sentences"][0]
+        self.assertEqual(sentence["resource_kind"], "rhythm_frame")
+        self.assertEqual(sentence["quality"]["phone_evidence_coverage"], 0.0)
+        self.assertEqual(sentence["quality"]["timing_source"], "word_timeline")
+        self.assertGreaterEqual(sentence["counts"]["connected_speech_refs"], 1)
+        self.assertEqual(sentence["quality"]["connected_speech_source"], "text_prior")
+        self.assertGreater(sentence["counts"]["stress_anchors"], 0)
+        self.assertGreater(sentence["counts"]["nuclei"], 0)
+        self.assertIn("timing", sentence["quality"]["prominence_sources"])
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
   "metadata": {
     "created_at_ms": 1782740000000,
     "generator": {
-      "id": "phase-2.20-rhythm-fixture",
+      "id": "phase-2.21-audible-structure-fixture",
       "version": "v1",
       "mode": "synthetic"
     },
@@ -11,7 +11,7 @@
       "id": "fixture-media",
       "fingerprint": "p220-fixture-rhythm-001",
       "path": "synthetic://p220-fixture-rhythm-001",
-      "title": "Phase 2.20 RhythmFrame QA fixture",
+      "title": "Phase 2.21 Audible Structure QA fixture",
       "duration_ms": 5200
     },
     "language": "en",
@@ -46,7 +46,7 @@
         "provider_version": "v1",
         "model_revision": "v1",
         "phone_set": "arpabet",
-        "generated_from": "expected_stress_aligned_to_observed_timing_v0",
+        "generated_from": "expected_phones_aligned_to_observed_timing",
         "learning_phones": [
           {"symbol": "AY", "start_ms": 1000, "end_ms": 1080, "token_index": 0, "confidence": 0.9},
           {"symbol": "K", "start_ms": 1120, "end_ms": 1160, "token_index": 2, "confidence": 0.9},
@@ -78,36 +78,83 @@
         "syllables": [],
         "prosodic_phrases": [],
         "rhythm_frame": {
-          "generated_from": "expected_stress_aligned_to_observed_timing_v0",
+          "generated_from": "wordtimeline_timing_acoustic_prominence_v1",
+          "references": {
+            "citation": {
+              "label": "citation_form",
+              "source": "dictionary_lexical_stress",
+              "evidence_class": "heuristic_proxy"
+            },
+            "default_connected": {
+              "label": "default_connected_variants",
+              "source": "english_connected_speech_rules_v1",
+              "evidence_class": "heuristic_proxy"
+            },
+            "actual": {
+              "label": "actual_delivery",
+              "source": "word_timeline_duration_energy",
+              "evidence_class": "heuristic_proxy"
+            }
+          },
           "stress_anchors": [
             {
               "token_index": 8,
+              "syllable_index": 0,
+              "phone_start": null,
+              "phone_end": null,
               "start_ms": 1900,
               "end_ms": 2140,
               "label": "there",
               "reason": "Catch this stressed content word as the listening anchor.",
               "importance": "primary",
-              "confidence": 0.92,
-              "evidence": ["content_word", "primary_stress", "observed_duration"]
+              "is_nucleus": true,
+              "prominence": 0.92,
+              "prominence_cues": ["timing", "energy"],
+              "signal_sources": ["timing", "energy"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "confidence": 0.92
+            }
+          ],
+          "nuclei": [
+            {
+              "phrase_index": 0,
+              "token_index": 8,
+              "syllable_index": 0,
+              "start_ms": 1900,
+              "end_ms": 2140,
+              "label": "there",
+              "reason": "Phrase-scoped nucleus candidate supported by duration and energy.",
+              "cues": ["timing", "energy"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "confidence": 0.92
             }
           ],
           "weak_groups": [
             {
               "token_start": 0,
               "token_end": 6,
+              "phone_start": null,
+              "phone_end": null,
               "anchor_token_index": 8,
               "start_ms": 1000,
               "end_ms": 1680,
               "label": "I could have been",
               "reason": "The function-word chain is backgrounded before the anchor.",
-              "confidence": 0.74,
-              "evidence": ["function_words", "short_duration"]
+              "reduction_refs": ["cs1"],
+              "signal_sources": ["timing"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "confidence": 0.74
             }
           ],
           "compression_spans": [
             {
               "token_start": 2,
               "token_end": 6,
+              "phone_start": null,
+              "phone_end": null,
               "start_ms": 1120,
               "end_ms": 1680,
               "expected_units": 8,
@@ -115,8 +162,10 @@
               "unit_rate_per_second": 14.3,
               "label": "could have been",
               "reason": "Several expected sounds are packed into a short duration.",
-              "confidence": 0.81,
-              "evidence": ["duration_per_expected_unit"]
+              "signal_sources": ["timing"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "confidence": 0.81
             }
           ],
           "phrase_boundaries": [
@@ -124,8 +173,28 @@
               "after_token_index": 8,
               "before_token_index": 10,
               "at_ms": 2140,
-              "evidence": "short pause after the main anchor",
+              "reason": "Short pause after the main anchor.",
+              "cues": ["pause"],
+              "signal_sources": ["timing"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "is_final": false,
               "confidence": 0.82
+            }
+          ],
+          "connected_speech_refs": [
+            {
+              "id": "cs1",
+              "connected_speech_index": 0,
+              "token_start": 2,
+              "token_end": 6,
+              "phone_start": 1,
+              "phone_end": 8,
+              "label": "possible weak form",
+              "divergence": "clip_specific",
+              "signal_sources": ["phone_segmental"],
+              "evidence_class": "heuristic_proxy",
+              "confidence": 0.78
             }
           ],
           "listening_hotspots": [
@@ -134,16 +203,23 @@
               "kind": "weak_group",
               "token_start": 2,
               "token_end": 6,
+              "phone_start": null,
+              "phone_end": null,
               "start_ms": 1120,
               "end_ms": 1680,
               "label": "could have been",
               "hint": "The phrase is reduced and fast before the stress anchor.",
-              "confidence": 0.78,
-              "evidence": ["weak_form", "compression"]
+              "signal_sources": ["timing"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "confidence": 0.78
             }
           ],
           "quality": {
-            "timing_source": "phone_timeline",
+            "timing_source": "word_timeline",
+            "prominence_sources": ["timing", "energy"],
+            "boundary_sources": ["timing"],
+            "connected_speech_source": "phone_segmental",
             "phone_evidence_coverage": 0.91,
             "rhythm_confidence": 0.84
           }
@@ -159,7 +235,7 @@
         "provider_version": "v1",
         "model_revision": "v1",
         "phone_set": "arpabet",
-        "generated_from": "expected_stress_aligned_to_observed_timing_v0",
+        "generated_from": "expected_phones_aligned_to_observed_timing",
         "learning_phones": [
           {"symbol": "DH", "start_ms": 3000, "end_ms": 3040, "token_index": 0, "confidence": 0.9},
           {"symbol": "AH", "start_ms": 3040, "end_ms": 3090, "token_index": 0, "confidence": 0.88},
@@ -177,40 +253,93 @@
         "syllables": [],
         "prosodic_phrases": [],
         "rhythm_frame": {
-          "generated_from": "expected_stress_aligned_to_observed_timing_v0",
+          "generated_from": "wordtimeline_timing_acoustic_prominence_v1",
+          "references": {
+            "citation": {
+              "label": "citation_form",
+              "source": "dictionary_lexical_stress",
+              "evidence_class": "heuristic_proxy"
+            },
+            "default_connected": {
+              "label": "default_connected_variants",
+              "source": "english_connected_speech_rules_v1",
+              "evidence_class": "heuristic_proxy"
+            },
+            "actual": {
+              "label": "actual_delivery",
+              "source": "word_timeline_duration_energy",
+              "evidence_class": "heuristic_proxy"
+            }
+          },
           "stress_anchors": [
             {
               "token_index": 2,
+              "syllable_index": 0,
+              "phone_start": null,
+              "phone_end": null,
               "start_ms": 3180,
               "end_ms": 3620,
               "label": "market",
               "reason": "Main content word carries the sentence rhythm.",
               "importance": "primary",
-              "confidence": 0.9,
-              "evidence": ["content_word", "primary_stress"]
+              "is_nucleus": true,
+              "prominence": 0.9,
+              "prominence_cues": ["timing", "energy"],
+              "signal_sources": ["timing", "energy"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "confidence": 0.9
             },
             {
               "token_index": 4,
+              "syllable_index": 1,
+              "phone_start": null,
+              "phone_end": null,
               "start_ms": 3710,
               "end_ms": 3960,
               "label": "opened",
               "reason": "Second content-word anchor.",
               "importance": "secondary",
-              "confidence": 0.86,
-              "evidence": ["content_word"]
+              "is_nucleus": false,
+              "prominence": 0.86,
+              "prominence_cues": ["timing"],
+              "signal_sources": ["timing"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "confidence": 0.86
+            }
+          ],
+          "nuclei": [
+            {
+              "phrase_index": 0,
+              "token_index": 2,
+              "syllable_index": 0,
+              "start_ms": 3180,
+              "end_ms": 3620,
+              "label": "market",
+              "reason": "Phrase-scoped nucleus candidate supported by duration and energy.",
+              "cues": ["timing", "energy"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "confidence": 0.9
             }
           ],
           "weak_groups": [
             {
               "token_start": 0,
               "token_end": 0,
+              "phone_start": null,
+              "phone_end": null,
               "anchor_token_index": 2,
               "start_ms": 3000,
               "end_ms": 3090,
               "label": "The",
               "reason": "Article is backgrounded before the content word.",
-              "confidence": 0.69,
-              "evidence": ["function_word"]
+              "reduction_refs": [],
+              "signal_sources": ["timing"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "confidence": 0.69
             }
           ],
           "compression_spans": [],
@@ -219,26 +348,39 @@
               "after_token_index": 4,
               "before_token_index": 6,
               "at_ms": 3960,
-              "evidence": "boundary before final adverb",
+              "reason": "Boundary before final adverb.",
+              "cues": ["pause"],
+              "signal_sources": ["timing"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "is_final": false,
               "confidence": 0.76
             }
           ],
+          "connected_speech_refs": [],
           "listening_hotspots": [
             {
               "id": "weak-article",
               "kind": "weak_group",
               "token_start": 0,
               "token_end": 0,
+              "phone_start": null,
+              "phone_end": null,
               "start_ms": 3000,
               "end_ms": 3090,
               "label": "weak article",
               "hint": "The article is light before the noun.",
-              "confidence": 0.69,
-              "evidence": ["weak_group"]
+              "signal_sources": ["timing"],
+              "evidence_class": "heuristic_proxy",
+              "claim_status": "audio_supported",
+              "confidence": 0.69
             }
           ],
           "quality": {
-            "timing_source": "phone_timeline",
+            "timing_source": "word_timeline",
+            "prominence_sources": ["timing", "energy"],
+            "boundary_sources": ["timing"],
+            "connected_speech_source": "phone_segmental",
             "phone_evidence_coverage": 0.88,
             "rhythm_confidence": 0.79
           }

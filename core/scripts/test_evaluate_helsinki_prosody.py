@@ -28,10 +28,64 @@ def fixture_document(with_rhythm: bool = True) -> dict[str, object]:
     }
     if with_rhythm:
         sound_analysis["rhythm_frame"] = {
-            "generated_from": "fixture",
+            "generated_from": "wordtimeline_timing_acoustic_prominence_v1",
+            "references": {
+                "citation": {
+                    "label": "citation_form",
+                    "source": "dictionary_lexical_stress",
+                    "evidence_class": "heuristic_proxy",
+                },
+                "actual": {
+                    "label": "actual_delivery",
+                    "source": "word_timeline_duration_energy",
+                    "evidence_class": "heuristic_proxy",
+                },
+            },
             "stress_anchors": [
-                {"token_index": 2, "label": "market", "confidence": 0.9},
-                {"token_index": 4, "label": "opened", "confidence": 0.8},
+                {
+                    "token_index": 2,
+                    "label": "market",
+                    "start_ms": 240,
+                    "end_ms": 620,
+                    "reason": "duration and energy prominence",
+                    "importance": "primary",
+                    "is_nucleus": True,
+                    "prominence": 0.9,
+                    "prominence_cues": ["timing", "energy"],
+                    "signal_sources": ["timing", "energy"],
+                    "evidence_class": "heuristic_proxy",
+                    "claim_status": "audio_supported",
+                    "confidence": 0.9,
+                },
+                {
+                    "token_index": 4,
+                    "label": "opened",
+                    "start_ms": 700,
+                    "end_ms": 1040,
+                    "reason": "duration prominence",
+                    "importance": "secondary",
+                    "is_nucleus": False,
+                    "prominence": 0.8,
+                    "prominence_cues": ["timing"],
+                    "signal_sources": ["timing"],
+                    "evidence_class": "heuristic_proxy",
+                    "claim_status": "audio_supported",
+                    "confidence": 0.8,
+                },
+            ],
+            "nuclei": [
+                {
+                    "phrase_index": 0,
+                    "token_index": 2,
+                    "start_ms": 240,
+                    "end_ms": 620,
+                    "label": "market",
+                    "reason": "phrase-scoped nucleus candidate",
+                    "cues": ["timing", "energy"],
+                    "evidence_class": "heuristic_proxy",
+                    "claim_status": "audio_supported",
+                    "confidence": 0.9,
+                }
             ],
             "weak_groups": [],
             "compression_spans": [],
@@ -39,12 +93,26 @@ def fixture_document(with_rhythm: bool = True) -> dict[str, object]:
                 {
                     "after_token_index": 4,
                     "before_token_index": 6,
-                    "evidence": "pause",
+                    "at_ms": 1040,
+                    "reason": "pause",
+                    "cues": ["pause"],
+                    "signal_sources": ["timing"],
+                    "evidence_class": "heuristic_proxy",
+                    "claim_status": "audio_supported",
+                    "is_final": False,
                     "confidence": 0.9,
                 }
             ],
+            "connected_speech_refs": [],
             "listening_hotspots": [],
-            "quality": {"rhythm_confidence": 0.88},
+            "quality": {
+                "timing_source": "word_timeline",
+                "prominence_sources": ["timing", "energy"],
+                "boundary_sources": ["timing"],
+                "connected_speech_source": "phone_segmental",
+                "phone_evidence_coverage": 0.0,
+                "rhythm_confidence": 0.88,
+            },
         }
     return {
         "schema": "llplayer.timeline.v1",
@@ -114,6 +182,14 @@ class HelsinkiProsodyEvaluationTest(unittest.TestCase):
             self.assertEqual(summary["stress_anchors"]["f1"], 1.0)
             self.assertEqual(summary["phrase_boundaries"]["f1"], 1.0)
             self.assertEqual(summary["predicted_boundary_evidence_counts"], {"pause": 1})
+            self.assertEqual(
+                summary["predicted_anchor_signal_source_counts"],
+                {"timing": 2, "energy": 1},
+            )
+            self.assertEqual(
+                summary["predicted_boundary_signal_source_counts"],
+                {"timing": 1},
+            )
             self.assertEqual(result["sentences"][0]["text_matches_labels"], True)
             self.assertEqual(result["benchmark_context"]["evidence_class"], "silver_label")
             self.assertEqual(result["benchmark_context"]["reported_baselines"][0]["value"], 0.832)

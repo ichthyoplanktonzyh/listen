@@ -165,6 +165,28 @@ def phone_timelines_by_sentence(document: dict[str, Any]) -> dict[str, dict[str,
     return values
 
 
+def rhythm_frame_timelines_by_sentence(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    values: dict[str, dict[str, Any]] = {}
+    for resource in safe_list(document.get("rhythm_frames")):
+        if not isinstance(resource, dict) or not isinstance(resource.get("sentence_id"), str):
+            continue
+        frame = resource.get("rhythm_frame")
+        if not isinstance(frame, dict):
+            continue
+        sentence_id = resource["sentence_id"]
+        values[sentence_id] = {
+            "id": resource.get("id"),
+            "sentence_id": sentence_id,
+            "resource_kind": "rhythm_frame",
+            "sound_analysis": {
+                "learning_phones": [],
+                "connected_speech": [],
+                "rhythm_frame": frame,
+            },
+        }
+    return values
+
+
 def annotations_by_key(rows: list[dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any]]:
     values: dict[tuple[str, str], dict[str, Any]] = {}
     for row in rows:
@@ -381,6 +403,19 @@ def compact_item(item: dict[str, Any], kind: str) -> dict[str, Any]:
         "label": item.get("label") or item.get("text") or "",
         "confidence": percent(as_float(item.get("confidence"))),
     }
+    signal_sources = safe_list(item.get("signal_sources"))
+    prominence_cues = safe_list(item.get("prominence_cues"))
+    cues = safe_list(item.get("cues"))
+    if signal_sources:
+        value["signal_sources"] = [str(source) for source in signal_sources]
+    if prominence_cues:
+        value["prominence_cues"] = [str(source) for source in prominence_cues]
+    if cues:
+        value["cues"] = [str(cue) for cue in cues]
+    if item.get("evidence_class"):
+        value["evidence_class"] = item.get("evidence_class")
+    if item.get("claim_status"):
+        value["claim_status"] = item.get("claim_status")
     tokens = token_range(item, kind)
     times = time_range(item, kind)
     if tokens is not None:
@@ -445,11 +480,15 @@ def sentence_score(
         }
 
     anchors = [value for value in safe_list(frame.get("stress_anchors")) if isinstance(value, dict)]
+    nuclei = [value for value in safe_list(frame.get("nuclei")) if isinstance(value, dict)]
     weak_groups = [value for value in safe_list(frame.get("weak_groups")) if isinstance(value, dict)]
     compression_spans = [
         value for value in safe_list(frame.get("compression_spans")) if isinstance(value, dict)
     ]
     boundaries = [value for value in safe_list(frame.get("phrase_boundaries")) if isinstance(value, dict)]
+    connected_refs = [
+        value for value in safe_list(frame.get("connected_speech_refs")) if isinstance(value, dict)
+    ]
     hotspots = [value for value in safe_list(frame.get("listening_hotspots")) if isinstance(value, dict)]
     quality = frame.get("quality") if isinstance(frame.get("quality"), dict) else {}
     manual_scores = None
@@ -483,26 +522,36 @@ def sentence_score(
     return {
         "sentence_id": sentence_id,
         "status": "scored",
+        "resource_kind": phone_timeline.get("resource_kind") or "phone_timeline",
         "text": (segment or {}).get("text", ""),
         "start_ms": (segment or {}).get("start_ms"),
         "end_ms": (segment or {}).get("end_ms"),
         "generated_from": frame.get("generated_from"),
+        "references": frame.get("references") if isinstance(frame.get("references"), dict) else None,
         "quality": {
             "timing_source": quality.get("timing_source"),
+            "prominence_sources": safe_list(quality.get("prominence_sources")),
+            "boundary_sources": safe_list(quality.get("boundary_sources")),
+            "connected_speech_source": quality.get("connected_speech_source"),
             "phone_evidence_coverage": percent(as_float(quality.get("phone_evidence_coverage"))),
             "rhythm_confidence": percent(as_float(quality.get("rhythm_confidence"))),
         },
         "counts": {
             "stress_anchors": len(anchors),
+            "nuclei": len(nuclei),
             "weak_groups": len(weak_groups),
             "compression_spans": len(compression_spans),
             "phrase_boundaries": len(boundaries),
+            "connected_speech_refs": len(connected_refs),
             "listening_hotspots": len(hotspots),
         },
         "samples": {
             "stress_anchors": [compact_item(value, "anchor") for value in anchors[:5]],
+            "nuclei": [compact_item(value, "anchor") for value in nuclei[:5]],
             "weak_groups": [compact_item(value, "span") for value in weak_groups[:5]],
             "compression_spans": [compact_item(value, "span") for value in compression_spans[:5]],
+            "phrase_boundaries": [compact_item(value, "boundary") for value in boundaries[:5]],
+            "connected_speech_refs": [compact_item(value, "span") for value in connected_refs[:5]],
             "listening_hotspots": [compact_item(value, "hotspot") for value in hotspots[:5]],
         },
         "manual": manual_scores,
@@ -541,7 +590,20 @@ def evaluate_case(
     document = read_json(path)
     segments = segments_by_id(document)
     rows = []
+    scored_sentence_ids: set[str] = set()
     for sentence_id, timeline in phone_timelines_by_sentence(document).items():
+        rows.append(
+            sentence_score(
+                case_id,
+                segments.get(sentence_id),
+                timeline,
+                annotations.get((case_id, sentence_id)),
+            )
+        )
+        scored_sentence_ids.add(sentence_id)
+    for sentence_id, timeline in rhythm_frame_timelines_by_sentence(document).items():
+        if sentence_id in scored_sentence_ids:
+            continue
         rows.append(
             sentence_score(
                 case_id,

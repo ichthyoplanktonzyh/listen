@@ -91,6 +91,8 @@ impl AppServices {
             &alignments,
             &phones,
         );
+        let word_timings =
+            self.active_sentence_word_timings(&job.track_id, job.sentence_id.as_ref())?;
         let sound_analysis = speech_analysis::sound_analysis::build_sound_analysis(
             &canonical,
             &phones,
@@ -101,6 +103,8 @@ impl AppServices {
                 model_revision: Some(job.model_revision.clone()),
                 phone_set: "research_fixture_symbols",
                 sentence,
+                word_timings: (!word_timings.is_empty()).then_some(word_timings.as_slice()),
+                word_acoustic_cues: None,
             },
         );
         let analysis = PhoneticAnalysis {
@@ -183,6 +187,8 @@ impl AppServices {
             &alignments,
             &phones,
         );
+        let word_timings =
+            self.active_sentence_word_timings(&job.track_id, job.sentence_id.as_ref())?;
         let sound_analysis = speech_analysis::sound_analysis::build_sound_analysis(
             &canonical,
             &phones,
@@ -193,6 +199,8 @@ impl AppServices {
                 model_revision: Some(job.model_revision.clone()),
                 phone_set: "arpabet",
                 sentence,
+                word_timings: (!word_timings.is_empty()).then_some(word_timings.as_slice()),
+                word_acoustic_cues: None,
             },
         );
         let analysis = PhoneticAnalysis {
@@ -222,5 +230,25 @@ impl AppServices {
         };
         analysis.validate().map_err(ApplicationError::from)?;
         Ok(analysis)
+    }
+
+    fn active_sentence_word_timings(
+        &self,
+        track_id: &SubtitleTrackId,
+        sentence_id: Option<&SubtitleSentenceId>,
+    ) -> Result<Vec<WordTiming>, ApplicationError> {
+        let Some(sentence_id) = sentence_id else {
+            return Ok(Vec::new());
+        };
+        let Some(timeline) = self.timelines.active_word_timeline(track_id)? else {
+            return Ok(Vec::new());
+        };
+        let mut words = timeline
+            .words
+            .into_iter()
+            .filter(|word| &word.sentence_id == sentence_id)
+            .collect::<Vec<_>>();
+        words.sort_by_key(|word| (word.start_ms, word.end_ms, word.token_index));
+        Ok(words)
     }
 }

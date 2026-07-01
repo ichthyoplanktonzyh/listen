@@ -580,6 +580,22 @@ pub(crate) fn remap_lltimeline_sentence_ids(
             *word_timeline_id = remapped.clone();
         }
     }
+    for frame in &mut document.rhythm_frames {
+        if let Some(sentence_id) = sentence_ids.get(&frame.sentence_id) {
+            frame.sentence_id = sentence_id.clone();
+        }
+        if let Some(word_timeline_id) = frame.parent_word_timeline_id.as_mut()
+            && let Some(remapped) = word_timeline_ids.get(word_timeline_id)
+        {
+            *word_timeline_id = remapped.clone();
+        }
+    }
+    for frame in &mut document.rhythm_frames {
+        frame.id = RhythmFrameId::from_fingerprint(
+            "rhythm-frame",
+            &format!("{}:{}", track_id.as_str(), frame.id.as_str()),
+        );
+    }
     for phone_timeline in &mut document.phone_timelines {
         if let Some(sentence_id) = phone_timeline.sentence_id.as_mut()
             && let Some(remapped) = sentence_ids.get(sentence_id)

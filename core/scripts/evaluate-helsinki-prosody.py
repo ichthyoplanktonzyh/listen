@@ -31,6 +31,7 @@ def benchmark_context() -> dict[str, Any]:
         "rhythm_frame_fields": {
             "stress_anchors": {
                 "reference": "word prominence labels",
+                "contract": "L1 prominence anchors with signal_sources, prominence_cues, evidence_class, and predicted-vs-audio claim_status",
                 "label_values": {
                     "0": "not prominent",
                     "1": "prominent",
@@ -41,6 +42,7 @@ def benchmark_context() -> dict[str, Any]:
             },
             "phrase_boundaries": {
                 "reference": "word boundary labels",
+                "contract": "L3 phrase boundaries with cues plus signal_sources and evidence_class provenance",
                 "label_values": {
                     "0": "no boundary",
                     "1": "minor boundary",
@@ -374,6 +376,26 @@ def precision_recall_f1(predicted: set[int], gold: set[int]) -> dict[str, Any]:
     }
 
 
+def item_values(item: dict[str, Any], field: str) -> list[str]:
+    value = item.get(field)
+    if isinstance(value, list):
+        return [str(item) for item in value if item is not None]
+    if value is None:
+        return []
+    return [str(value)]
+
+
+def count_item_values(items: list[dict[str, Any]], field: str, fallback: str | None = None) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        values = item_values(item, field)
+        if not values and fallback is not None:
+            values = item_values(item, fallback)
+        for value in values or ["unknown"]:
+            counts[value] = counts.get(value, 0) + 1
+    return counts
+
+
 def score_label_sentence(
     label_sentence: dict[str, Any],
     timeline_sentence: dict[str, Any],
@@ -399,13 +421,14 @@ def score_label_sentence(
         for index, word in enumerate(label_sentence["words"])
         if word["boundary"] is not None and word["normalized"] and word["boundary"] >= boundary_threshold
     }
-    predicted_anchors = {
-        index
+    predicted_anchor_rows = [
+        (item, index)
         for item in rhythm_frame.get("stress_anchors") or []
         if isinstance(item, dict)
         for index in [anchor_index(item, words)]
         if index is not None
-    }
+    ]
+    predicted_anchors = {index for _, index in predicted_anchor_rows}
     predicted_boundary_rows = [
         (item, index)
         for item in rhythm_frame.get("phrase_boundaries") or []
@@ -414,12 +437,13 @@ def score_label_sentence(
         if index is not None
     ]
     predicted_boundaries = {index for _, index in predicted_boundary_rows}
-    predicted_boundary_evidence_counts: dict[str, int] = {}
-    for item, _ in predicted_boundary_rows:
-        evidence = str(item.get("evidence") or "unknown")
-        predicted_boundary_evidence_counts[evidence] = (
-            predicted_boundary_evidence_counts.get(evidence, 0) + 1
-        )
+    anchor_items = [item for item, _ in predicted_anchor_rows]
+    boundary_items = [item for item, _ in predicted_boundary_rows]
+    predicted_anchor_signal_source_counts = count_item_values(anchor_items, "signal_sources")
+    predicted_anchor_evidence_class_counts = count_item_values(anchor_items, "evidence_class")
+    predicted_boundary_evidence_counts = count_item_values(boundary_items, "cues", fallback="evidence")
+    predicted_boundary_signal_source_counts = count_item_values(boundary_items, "signal_sources")
+    predicted_boundary_evidence_class_counts = count_item_values(boundary_items, "evidence_class")
     text_words = timeline_sentence.get("words") or []
     text_matches = text_words == words
     return {
@@ -432,7 +456,11 @@ def score_label_sentence(
         "predicted_anchor_count": len(predicted_anchors),
         "gold_boundary_count": len(gold_boundaries),
         "predicted_boundary_count": len(predicted_boundaries),
+        "predicted_anchor_signal_source_counts": predicted_anchor_signal_source_counts,
+        "predicted_anchor_evidence_class_counts": predicted_anchor_evidence_class_counts,
         "predicted_boundary_evidence_counts": predicted_boundary_evidence_counts,
+        "predicted_boundary_signal_source_counts": predicted_boundary_signal_source_counts,
+        "predicted_boundary_evidence_class_counts": predicted_boundary_evidence_class_counts,
         "stress_anchors": precision_recall_f1(predicted_anchors, gold_anchors),
         "phrase_boundaries": precision_recall_f1(predicted_boundaries, gold_boundaries),
     }
@@ -445,6 +473,10 @@ def aggregate_sentence_scores(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
     status_counts: dict[str, int] = {}
     boundary_evidence_counts: dict[str, int] = {}
+    anchor_signal_source_counts: dict[str, int] = {}
+    anchor_evidence_class_counts: dict[str, int] = {}
+    boundary_signal_source_counts: dict[str, int] = {}
+    boundary_evidence_class_counts: dict[str, int] = {}
     text_mismatch_count = 0
     for row in rows:
         status = str(row.get("status") or "unknown")
@@ -453,8 +485,16 @@ def aggregate_sentence_scores(rows: list[dict[str, Any]]) -> dict[str, Any]:
             text_mismatch_count += 1
         if status != "scored":
             continue
+        for evidence, count in (row.get("predicted_anchor_signal_source_counts") or {}).items():
+            anchor_signal_source_counts[str(evidence)] = anchor_signal_source_counts.get(str(evidence), 0) + int(count)
+        for evidence, count in (row.get("predicted_anchor_evidence_class_counts") or {}).items():
+            anchor_evidence_class_counts[str(evidence)] = anchor_evidence_class_counts.get(str(evidence), 0) + int(count)
         for evidence, count in (row.get("predicted_boundary_evidence_counts") or {}).items():
             boundary_evidence_counts[str(evidence)] = boundary_evidence_counts.get(str(evidence), 0) + int(count)
+        for evidence, count in (row.get("predicted_boundary_signal_source_counts") or {}).items():
+            boundary_signal_source_counts[str(evidence)] = boundary_signal_source_counts.get(str(evidence), 0) + int(count)
+        for evidence, count in (row.get("predicted_boundary_evidence_class_counts") or {}).items():
+            boundary_evidence_class_counts[str(evidence)] = boundary_evidence_class_counts.get(str(evidence), 0) + int(count)
         for field in totals:
             score = row.get(field)
             if not isinstance(score, dict):
@@ -483,7 +523,11 @@ def aggregate_sentence_scores(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "status_counts": status_counts,
         "scored_sentence_count": status_counts.get("scored", 0),
         "text_mismatch_count": text_mismatch_count,
+        "predicted_anchor_signal_source_counts": anchor_signal_source_counts,
+        "predicted_anchor_evidence_class_counts": anchor_evidence_class_counts,
         "predicted_boundary_evidence_counts": boundary_evidence_counts,
+        "predicted_boundary_signal_source_counts": boundary_signal_source_counts,
+        "predicted_boundary_evidence_class_counts": boundary_evidence_class_counts,
         "stress_anchors": finalize(totals["stress_anchors"]),
         "phrase_boundaries": finalize(totals["phrase_boundaries"]),
     }

@@ -1,6 +1,7 @@
 pub mod asr_timing;
 pub mod chunk_detection;
 pub mod chunk_partition;
+pub mod connected_speech_rules;
 pub mod forced_align;
 pub mod learned_prosodic_provider;
 pub mod pause_refinement;
@@ -22,7 +23,7 @@ use domain::{
 use serde::Serialize;
 
 pub const PROVIDER_ID: &str = "cmudict-deterministic";
-pub const PROVIDER_VERSION: &str = "74790861+fallback-v1";
+pub const PROVIDER_VERSION: &str = "74790861+fallback-v2";
 pub const ANALYZER_VERSION: &str = "en-us-rules-v1";
 static CMUDICT: OnceLock<HashMap<String, Vec<String>>> = OnceLock::new();
 
@@ -610,34 +611,115 @@ fn builtin(word: &str) -> Option<&'static [&'static str]> {
 }
 
 fn fallback_arpabet(word: &str) -> String {
-    word.chars()
-        .filter_map(|value| match value {
-            'a' => Some("AE1"),
-            'e' => Some("EH1"),
-            'i' => Some("IH1"),
-            'o' => Some("OW1"),
-            'u' => Some("AH1"),
-            'b' => Some("B"),
-            'c' | 'k' | 'q' => Some("K"),
-            'd' => Some("D"),
-            'f' => Some("F"),
-            'g' => Some("G"),
-            'h' => Some("HH"),
-            'j' => Some("JH"),
-            'l' => Some("L"),
-            'm' => Some("M"),
-            'n' => Some("N"),
-            'p' => Some("P"),
-            'r' => Some("R"),
-            's' | 'x' | 'z' => Some("S"),
-            't' => Some("T"),
-            'v' => Some("V"),
-            'w' => Some("W"),
-            'y' => Some("Y"),
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+    let mut saw_primary_vowel = false;
+    let mut values = Vec::new();
+    for symbol in fallback_base_phones(word) {
+        if fallback_vowel(symbol) {
+            if saw_primary_vowel {
+                values.push(format!("{symbol}0"));
+            } else {
+                values.push(format!("{symbol}1"));
+                saw_primary_vowel = true;
+            }
+        } else {
+            values.push(symbol.into());
+        }
+    }
+    if values.is_empty() {
+        "AH1".into()
+    } else {
+        values.join(" ")
+    }
+}
+
+fn fallback_base_phones(word: &str) -> Vec<&'static str> {
+    let chars = word.chars().collect::<Vec<_>>();
+    let mut values = Vec::new();
+    let mut index = 0;
+    while index < chars.len() {
+        let current = chars[index];
+        let next = chars.get(index + 1).copied();
+        if let Some(symbols) = fallback_digraph(current, next) {
+            values.extend(symbols);
+            index += 2;
+            continue;
+        }
+        match current {
+            'a' => values.push("AE"),
+            'e' => {
+                let final_silent_e =
+                    index + 1 == chars.len() && values.iter().any(|symbol| fallback_vowel(symbol));
+                if !final_silent_e {
+                    values.push("EH");
+                }
+            }
+            'i' | 'y' if index > 0 => values.push("IH"),
+            'i' => values.push("IH"),
+            'o' => values.push("OW"),
+            'u' => values.push("AH"),
+            'b' => values.push("B"),
+            'c' if next.is_some_and(|value| matches!(value, 'e' | 'i' | 'y')) => values.push("S"),
+            'c' | 'k' | 'q' => values.push("K"),
+            'd' => values.push("D"),
+            'f' => values.push("F"),
+            'g' if next.is_some_and(|value| matches!(value, 'e' | 'i' | 'y')) => values.push("JH"),
+            'g' => values.push("G"),
+            'h' => values.push("HH"),
+            'j' => values.push("JH"),
+            'l' => values.push("L"),
+            'm' => values.push("M"),
+            'n' => values.push("N"),
+            'p' => values.push("P"),
+            'r' => values.push("R"),
+            's' | 'z' => values.push("S"),
+            't' => values.push("T"),
+            'v' => values.push("V"),
+            'w' => values.push("W"),
+            'x' => values.extend(["K", "S"]),
+            _ => {}
+        }
+        index += 1;
+    }
+    values
+}
+
+fn fallback_digraph(current: char, next: Option<char>) -> Option<&'static [&'static str]> {
+    match (current, next?) {
+        ('c', 'h') => Some(&["CH"]),
+        ('s', 'h') => Some(&["SH"]),
+        ('t', 'h') => Some(&["TH"]),
+        ('p', 'h') => Some(&["F"]),
+        ('w', 'h') => Some(&["W"]),
+        ('n', 'g') => Some(&["NG"]),
+        ('q', 'u') => Some(&["K", "W"]),
+        ('c', 'k') => Some(&["K"]),
+        ('e', 'e') | ('e', 'a') => Some(&["IY"]),
+        ('o', 'o') => Some(&["UW"]),
+        ('o', 'u') | ('o', 'w') => Some(&["AW"]),
+        ('a', 'i') | ('a', 'y') => Some(&["EY"]),
+        ('o', 'i') | ('o', 'y') => Some(&["OY"]),
+        _ => None,
+    }
+}
+
+fn fallback_vowel(symbol: &str) -> bool {
+    matches!(
+        symbol,
+        "AA" | "AE"
+            | "AH"
+            | "AO"
+            | "AW"
+            | "AY"
+            | "EH"
+            | "ER"
+            | "EY"
+            | "IH"
+            | "IY"
+            | "OW"
+            | "OY"
+            | "UH"
+            | "UW"
+    )
 }
 
 fn split_stress(value: &str) -> (String, Option<u8>) {
@@ -764,6 +846,20 @@ mod tests {
     #[test]
     fn fallback_is_explicit() {
         assert!(lookup("codex", 0).variants[0].is_fallback);
+    }
+
+    #[test]
+    fn fallback_assigns_single_primary_stress() {
+        let codex = lookup("codex", 0);
+        let stresses = codex.variants[0]
+            .phonemes
+            .iter()
+            .filter_map(|phone| phone.stress)
+            .collect::<Vec<_>>();
+
+        assert_eq!(codex.variants[0].is_fallback, true);
+        assert_eq!(stresses.iter().filter(|stress| **stress == 1).count(), 1);
+        assert!(stresses.iter().any(|stress| *stress == 0));
     }
 
     #[test]

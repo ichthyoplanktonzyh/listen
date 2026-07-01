@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ChunkTimeline, ChunkTimelineChunk, ChunkTimelineId, LanguageCode, MediaId, PhoneTimeline,
-    PhoneTimelineId, SubtitleSentenceId, SubtitleTokenKind, WordTimeline, WordTimelineId,
+    PhoneTimelineId, RhythmFrame, RhythmFrameId, SubtitleSentenceId, SubtitleTokenKind,
+    SubtitleTrackId, TimelineMetrics, TimelineStatus, WordTimeline, WordTimelineId,
 };
 
 pub const LLTIMELINE_SCHEMA_V1: &str = "llplayer.timeline.v1";
@@ -18,6 +19,8 @@ pub struct LLTimelineDocument {
     #[serde(default)]
     pub phone_timelines: Vec<PhoneTimeline>,
     pub active_phone_timeline_id: Option<PhoneTimelineId>,
+    #[serde(default)]
+    pub rhythm_frames: Vec<LLTimelineRhythmFrame>,
     #[serde(default)]
     pub chunk_timelines: Vec<ChunkTimeline>,
     pub active_chunk_timeline_id: Option<ChunkTimelineId>,
@@ -76,6 +79,23 @@ pub struct LLTimelineToken {
 pub type LLTimelineChunkTimeline = ChunkTimeline;
 pub type LLTimelineChunk = ChunkTimelineChunk;
 pub type LLTimelinePhoneTimeline = PhoneTimeline;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LLTimelineRhythmFrame {
+    pub id: RhythmFrameId,
+    pub track_id: SubtitleTrackId,
+    pub media_id: MediaId,
+    pub sentence_id: SubtitleSentenceId,
+    pub parent_word_timeline_id: Option<WordTimelineId>,
+    pub provider_id: String,
+    pub provider_version: String,
+    pub status: TimelineStatus,
+    #[serde(default)]
+    pub metrics_json: TimelineMetrics,
+    pub rhythm_frame: RhythmFrame,
+    pub created_at_ms: u64,
+    pub updated_at_ms: u64,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LLTimelineWordRef {

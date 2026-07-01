@@ -12,6 +12,7 @@ rhythm-first listening quality.
 | `sample-annotations.jsonl` | Small documented example; not a benchmark |
 | `fixture-manifest.jsonl` | Committed synthetic scorer/gate regression manifest |
 | `fixture-rhythm.lltimeline.json` | Minimal committed LLTimeline with two `rhythm_frame` sentences |
+| `fixture-no-phone-rhythm.lltimeline.json` | Committed no-phone evidence LLTimeline proving document-level WordTimeline-driven L1-L3 rhythm consumption |
 | `fixture-annotations.jsonl` | Matching committed manual labels for strict gate smoke tests |
 | `annotations.jsonl` | Optional local/manual labels consumed by the scorer; may be absent |
 
@@ -47,11 +48,24 @@ Rows include the normal manual-label fields plus `system_compare`. Duration/rate
 and RMS candidates are `heuristic_proxy` evidence for manual QA, not product
 truth.
 
+Phase 2.21 adds a product generator seam for normalized word-level energy
+prominence cues, but this harness is still an experiment/QA source. Do not copy
+its temporary RMS thresholds into production without calibration.
+
+W4 adds a production-side artifact path (`rhythm_word_acoustic_cues`) that can
+feed RMS relative energy into `RhythmWordAcousticCue`. This is still
+heuristic-proxy evidence until W8 manual QA calibrates and promotes it.
+
 ## Committed Fixture Smoke
 
 The synthetic fixture is intentionally small and redistributable. It keeps the
 scorer, strict annotation validation, and quality gate CLI path testable without
-requiring local media regeneration:
+requiring local media regeneration. The manifest also includes a no-phone
+evidence fixture whose `phone_timelines` are empty and whose document-level
+`rhythm_frames` carry WordTimeline-driven anchors/nuclei/weak/compression/
+boundary/hotspot structure. After W3 it also carries text-prior Reference B
+connected-speech refs, so no-phone does not mean no default connected-form
+prediction:
 
 ```bash
 python3 scripts/evaluate-rhythm-frame.py \

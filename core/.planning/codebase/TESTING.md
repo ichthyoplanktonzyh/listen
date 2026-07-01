@@ -35,7 +35,7 @@
 | `domain` | ID 类型、枚举序列化、PhoneticAnalysis::validate() |
 | `subtitle-core` | SRT/VTT 解析、token 化、时间轴查询（空隙/重叠/边界） |
 | `diagnosis-core` | 词义障碍、声音识别障碍、信息不足、其他因素 |
-| `speech-analysis` | 100 句发音基线测试、规则型语流检测、RhythmFrame v0、chunk 分区 |
+| `speech-analysis` | 100 句发音基线测试、OOV fallback-v2 stress、information-structure prior、Reference B connected-speech rules、规则型语流检测、RhythmFrame audible-structure bridge、chunk 分区 |
 | `application` | AppServices 用例逻辑、chunk 检测 |
 | `dictionary-provider` | Provider 查询、缓存逻辑 |
 | `persistence-sqlite` | CRUD 操作、幂等、唯一约束、事务 |
@@ -76,7 +76,7 @@
 
 | 文件 | 覆盖 |
 |---|---|
-| `timeline_test.dart` | TimelineCursor 位置查询 |
+| `timeline_test.dart` | TimelineCursor 位置查询、LLTimeline document-level rhythm frame parsing and sentence lookup |
 | `api_service_test.dart` | LocalApi HTTP 客户端 |
 | `settings_test.dart` | AppSettings 持久化与升级 |
 | `controllers_test.dart` | 控制器状态管理 |
@@ -86,8 +86,8 @@
 | `transcription_ui_test.dart` | 转写 UI |
 | `m18_ui_test.dart` | M1.8 学习质量功能 UI |
 | `phonetic_analysis_ui_test.dart` | 音素分析 UI |
-| `diagnosis_card_test.dart` rhythm case | Phase 2.20 compact rhythm frame anchors、weak groups、compression spans、hotspots、confidence state |
-| `phoneme_ribbon_test.dart` rhythm case | Phase 2.20 subtitle-layer `RhythmFrameRibbon` timeline、anchor/weak/compression/hotspot chips、tooltip state、rhythm cue loop callback、sound pattern rhythm/phones icon toggle 和 expected pronunciation reference |
+| `diagnosis_card_test.dart` rhythm case | Phase 2.21 compact rhythm frame nuclei、anchors、weak groups、compression spans、hotspots、predicted/audible provenance 和 confidence state |
+| `phoneme_ribbon_test.dart` rhythm case | Phase 2.21 subtitle-layer `RhythmFrameRibbon` timeline、nucleus/anchor/weak/compression/hotspot chips、provenance tooltip state、rhythm cue loop callback、sound pattern rhythm/phones icon toggle 和 expected pronunciation reference |
 
 ### 运行
 
@@ -102,12 +102,13 @@ cd apps/desktop && flutter test
 | `scripts/evaluate-word-timelines.py` | 词级时间轴比较（偏移分布/覆盖/gold 指标） |
 | `scripts/phonetic-eval.py` | 音素分析评估（PER/timeline 有效性/token 关联） |
 | `scripts/evaluate-sound-line-benchmarks.py` | Phase 2.19 real-media QA pack 对 TIMIT/Buckeye/TED-LIUM reference 的 phone/text/timing 初始评分 |
-| `scripts/evaluate-rhythm-frame.py` | Phase 2.20 RhythmFrame 覆盖率、manual QA annotation validation/matching、hotspot score distribution、manual QA 汇总和 closeout quality gates |
-| `scripts/test_evaluate_rhythm_frame.py` | RhythmFrame scorer 的 missing-artifact、manual matching、annotation validation、aggregate summary、quality gate 和 committed fixture CLI smoke 单元测试 |
-| `scripts/evaluate-helsinki-prosody.py` | Phase 2.20 Helsinki Prosody / LibriTTS weak-label regression adapter，比较 `stress_anchors` 和 `phrase_boundaries` 对 prominence/boundary labels 的命中 |
-| `scripts/test_evaluate_helsinki_prosody.py` | Helsinki prosody adapter 的 label parser、RhythmFrame matching、missing-rhythm 状态和 committed fixture CLI gate 单元测试 |
+| `scripts/evaluate-rhythm-frame.py` | Phase 2.21 RhythmFrame 覆盖率、manual QA annotation validation/matching、document-level `rhythm_frames` fallback、provenance samples、hotspot score distribution、manual QA 汇总和 closeout quality gates |
+| `scripts/test_evaluate_rhythm_frame.py` | RhythmFrame scorer 的 missing-artifact、manual matching、annotation validation、aggregate summary、quality gate、2.21 committed fixture CLI smoke、B-side connected refs 和 no-phone/document-level JSON consumer 单元测试 |
+| `scripts/evaluate-helsinki-prosody.py` | Phase 2.21 Helsinki Prosody / LibriTTS weak-label regression adapter，比较 provenance-bearing `stress_anchors` 和 `phrase_boundaries` 对 prominence/boundary labels 的命中 |
+| `scripts/test_evaluate_helsinki_prosody.py` | Helsinki prosody adapter 的 label parser、RhythmFrame matching、provenance counts、missing-rhythm 状态和 committed fixture CLI gate 单元测试 |
 | `scripts/prepare-helsinki-libritts-benchmark.py` | Phase 2.20 local-only LibriTTS/Helsinki baseline manifest/LLTimeline builder，支持 extracted split directory 和 split `.tar.gz` |
 | `scripts/test_prepare_helsinki_libritts_benchmark.py` | LibriTTS/Helsinki prep 的 directory/archive input、missing-audio handling 和 baseline LLTimeline shape 单元测试 |
+| `scripts/timeline-production/test_production_pipeline_acoustic_cues.py` | Production-side `rhythm_word_acoustic_cues` artifact generation from synthetic wav |
 | `scripts/validate-contracts.sh` | LLTimeline Schema smoke + 契约测试 |
 
 ### Python 评估缺少自动化单元测试
@@ -139,7 +140,7 @@ Phase 2.20 LibriTTS/Helsinki prep 也已有 `scripts/test_prepare_helsinki_libri
 | `testdata/pronunciation/` | 100 句英语发音基线 |
 | `testdata/phonetic-analysis/` | M2.0 音素评估目录（60 用例） |
 | `testdata/timeline-production/` | WhisperX 样本输出 |
-| `testdata/rhythm-frame-qa/` | Phase 2.20 RhythmFrame manual QA schema、sample annotations、committed synthetic fixture 和 strict gate regression |
+| `testdata/rhythm-frame-qa/` | Phase 2.21 RhythmFrame manual QA schema、sample annotations、committed synthetic fixtures、document-level no-phone evidence fixture 和 strict gate regression |
 | `testdata/rhythm-prosody-benchmarks/` | Phase 2.20 Helsinki-style prominence/boundary fixture、LLTimeline fixture 和 weak-label adapter README |
 
 ## 7. 统一测试编排器（`scripts/test.sh`）

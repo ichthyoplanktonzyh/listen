@@ -349,14 +349,33 @@ async fn exports_lltimeline_document_with_active_word_timeline() {
     let app = test_app();
     let track = setup_phonetic_track(&app, "lltimeline-media").await;
     let sentence = &track["sentences"][0];
-    let token = sentence["tokens"]
+    let word_tokens = sentence["tokens"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|token| token["kind"] == "word")
-        .expect("fixture has a word token");
-    let start_ms = sentence["start"].as_u64().unwrap() + 10;
-    let end_ms = start_ms + 120;
+        .filter(|token| token["kind"] == "word")
+        .collect::<Vec<_>>();
+    assert!(!word_tokens.is_empty());
+    let mut cursor = sentence["start"].as_u64().unwrap() + 10;
+    let words = word_tokens
+        .iter()
+        .map(|token| {
+            let start_ms = cursor;
+            let end_ms = start_ms + 260;
+            cursor = end_ms + 30;
+            serde_json::json!({
+                "sentence_id": sentence["id"],
+                "token_index": token["index"],
+                "text": token["text"],
+                "start_ms": start_ms,
+                "end_ms": end_ms,
+                "confidence": 0.95,
+                "timing_source": "forced_aligned",
+                "provider_id": "test-aligner",
+                "provider_version": "v1"
+            })
+        })
+        .collect::<Vec<_>>();
     let response = app
         .clone()
         .oneshot(
@@ -372,17 +391,7 @@ async fn exports_lltimeline_document_with_active_word_timeline() {
                     "algorithm_version": "v1",
                     "config_hash": "test-config",
                     "status": "active",
-                    "words": [{
-                        "sentence_id": sentence["id"],
-                        "token_index": token["index"],
-                        "text": token["text"],
-                        "start_ms": start_ms,
-                        "end_ms": end_ms,
-                        "confidence": 0.95,
-                        "timing_source": "forced_aligned",
-                        "provider_id": "test-aligner",
-                        "provider_version": "v1"
-                    }]
+                    "words": words
                 })
                 .to_string(),
             ))
@@ -443,6 +452,23 @@ async fn exports_lltimeline_document_with_active_word_timeline() {
     assert_eq!(document["word_timelines"].as_array().unwrap().len(), 1);
     assert_eq!(document["active_word_timeline_id"], timeline["id"]);
     assert_eq!(document["phone_timelines"].as_array().unwrap().len(), 0);
+    assert_eq!(document["rhythm_frames"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        document["rhythm_frames"][0]["parent_word_timeline_id"],
+        timeline["id"]
+    );
+    assert_eq!(document["rhythm_frames"][0]["sentence_id"], sentence["id"]);
+    assert_eq!(
+        document["rhythm_frames"][0]["provider_id"],
+        "wordtimeline-rhythm-frame"
+    );
+    assert!(
+        document["rhythm_frames"][0]["rhythm_frame"]["stress_anchors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|anchor| anchor["claim_status"] == "audio_supported")
+    );
     assert_eq!(document["chunk_timelines"].as_array().unwrap().len(), 1);
     assert_eq!(document["active_chunk_timeline_id"], chunk_timeline["id"]);
     document["metadata"]["generator"] = serde_json::json!({
@@ -458,6 +484,28 @@ async fn exports_lltimeline_document_with_active_word_timeline() {
             "payload": {
                 "readiness": "ready",
                 "post_alignment": "mfa"
+            }
+        },
+        {
+            "kind": "rhythm_word_acoustic_cues",
+            "provider_id": "rms-word-energy-prominence",
+            "provider_version": "v1",
+            "payload": {
+                "timeline_id": timeline["id"],
+                "source_audio_path": "synthetic://energy-fixture.wav",
+                "calibration": {
+                    "method": "sentence_median_dbfs_delta_v1",
+                    "delta_db_for_max": 6.0
+                },
+                "cues": [
+                    {
+                        "sentence_id": sentence["id"],
+                        "token_index": word_tokens[0]["index"],
+                        "energy_prominence": 0.95,
+                        "dbfs": -12.0,
+                        "db_delta_from_sentence_median": 5.5
+                    }
+                ]
             }
         }
     ]);
@@ -541,6 +589,17 @@ async fn exports_lltimeline_document_with_active_word_timeline() {
     assert_eq!(
         exported_after_import["artifacts"][0]["kind"],
         "production_report"
+    );
+    assert_eq!(
+        exported_after_import["rhythm_frames"][0]["rhythm_frame"]["generated_from"],
+        "wordtimeline_timing_acoustic_prominence_v1"
+    );
+    assert!(
+        exported_after_import["rhythm_frames"][0]["rhythm_frame"]["quality"]["prominence_sources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|source| source == "energy")
     );
 
     let response = app
@@ -846,6 +905,12 @@ async fn imports_lltimeline_for_current_media_with_existing_resource_fingerprint
             let original = word["sentence_id"].as_str().unwrap();
             word["sentence_id"] = serde_json::json!(sentence_ids[original]);
         }
+    }
+    for frame in document["rhythm_frames"].as_array_mut().unwrap() {
+        frame["media_id"] = target_media["id"].clone();
+        frame["track_id"] = serde_json::json!(external_track_id);
+        let original = frame["sentence_id"].as_str().unwrap();
+        frame["sentence_id"] = serde_json::json!(sentence_ids[original]);
     }
 
     let response = app

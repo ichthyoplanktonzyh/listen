@@ -188,13 +188,66 @@ progress:
     作为 architecture lock。
   - 新增 `2.21-CONTEXT.md` 和 `2.21-PLAN.md`，明确本 phase 从 Phase 2.20 分离，
     并把 duration/RMS harness 降级为 experiment seam。
+  - Step 1 contract rewrite 已落地：Rust domain、OpenAPI、Flutter typed model、
+    subtitle ribbon、diagnosis card、RhythmFrame QA scorer、Helsinki scorer 和
+    committed fixtures 已同步到 audible-structure v1 shape，包含 A/B/C references、
+    signal-source/evidence-class provenance、prominence cues、phrase-scoped nuclei、
+    connected-speech refs 和 quality signal sources；旧 v0 fixture 不再作为 active
+    compatibility target。
+  - Step 2 generation boundary 第一刀已落地：phonetic-analysis 构建 `sound_analysis`
+    时会读取 active WordTimeline 的当前句 `WordTiming`，`RhythmFrame` L1-L3 token
+    substrate 优先使用 WordTimeline timing + dictionary/canonical syllable stress；
+    新增 no-phone-evidence 单元测试，证明 observed CTC phone evidence 为空时仍可生成
+    anchors、phrase-scoped nuclei、weak groups、compression spans 和 phrase boundaries。
+    无 WordTimeline 时才退回 `legacy_phone_timing_adapter_v1` /
+    `phone_timeline_transitional`。
+  - Step 2 energy cue seam 已落地：`SoundAnalysisConfig` 可接收 sentence-scoped
+    `RhythmWordAcousticCue`，`speech-analysis` 会把 word-level `energy_prominence`
+    传播到 stress anchor prominence、phrase-scoped nucleus selection、
+    `generated_from = wordtimeline_timing_acoustic_prominence_v1`、
+    `references.actual.source = word_timeline_duration_energy` 和
+    `quality.prominence_sources`。W4 已补上 production-side artifact path；W8 仍需
+    manual QA 校准，不能把 duration/RMS QA harness 的临时阈值当 production gate。
+  - 新增 committed no-phone LLTimeline fixture / scorer smoke：
+    `testdata/rhythm-frame-qa/fixture-no-phone-rhythm.lltimeline.json` 覆盖
+    `phone_evidence_coverage = 0.0`，且 W3 后会携带 text-prior B-side
+    connected-speech refs；anchors/nuclei/weak/compression/boundary/hotspot 仍不依赖
+    observed phone evidence。
+  - Review backlog W1 honesty fix 已落地：`RhythmToken` 会记录 WordTiming 是否来自
+    audio-backed source；只有 `ForcedAligned` / `AsrAligned` / `UserAdjusted` 可产生
+    `Timing` signal source 和 `AudioSupported` L1-L3 claim，`Estimated` timing 只产生
+    `TextPrior` / `Predicted` anchors 且不选 nucleus。
+  - Review backlog W2 first-class WordTimeline → RhythmFrame path 已落地：
+    `LLTimelineDocument` 新增 document-level `rhythm_frames` resource；application
+    export 会从 active WordTimeline + dictionary/canonical stress 直接生成 L1-L3
+    `RhythmFrame`，不需要 phonetic-analysis job、PhoneTimeline 包装或 synthetic phones。
+    Flutter 字幕 rhythm layer 会按 sentence 优先消费 document-level rhythm frame，再
+    fallback 到 `PhoneTimeline.sound_analysis`。
+  - Review backlog W3 Reference B rule engine 已落地：
+    `speech-analysis::connected_speech_rules` 会从英语文本生成 default connected forms
+    作为 B reference，包括约 50 个 function-word weak forms、`could have -> K UH D AH V`
+    等 phrase reductions、linking、t/d weakening、assimilation、contraction 和 flapping。
+    `RhythmFrame.connected_speech_refs` 现在用真实 B 区分 `teachable_rule` 与
+    `clip_specific`；纯 B 预测保持 `TextPrior` / `Predicted`，不会伪装成 actual audio。
+  - Review backlog W4 arch path 已落地：production pipeline 会从已抽取的 16k mono wav
+    计算 per-word RMS relative prominence，并写入 `rhythm_word_acoustic_cues`
+    LLTimeline artifact；application export 会读取该 artifact，向
+    `RhythmWordAcousticCue` 传入 `energy_prominence`，让 RhythmFrame 输出
+    `generated_from = wordtimeline_timing_acoustic_prominence_v1` 和
+    `quality.prominence_sources` 中的 `energy`。W8 manual QA/calibration 仍是
+    promotion gate。
+  - Review backlog W5 Reference A OOV hardening 已落地：CMUdict missing word fallback
+    升级为 `fallback-v2`，支持常见 English digraph、soft c/g、final silent e、x，并只给
+    第一个 fallback vowel primary stress，后续 vowel 标 unstressed，避免 OOV citation
+    structure 把多个 syllable 都伪装成 primary stress。
+  - Review backlog W6 information-structure prior 已落地：RhythmFrame anchor scoring
+    会轻微降低重复 content word 的 text-prior prominence，并给 phrase-final content
+    一个小 focus boost；该 cue 仍属于 `TextPrior`，不会在缺少 timing/energy/pitch/phone
+    evidence 时升级 claim status。
 - 下一步：
-  1. 按 2.21 contract 重写 Rust/OpenAPI/Flutter 的 `RhythmFrame` 数据模型：
-     references、provenance、prominence cues、evidence class、phrase-scoped nuclei、
-     connected-speech refs 和 quality signal sources。
-  2. 更新 fixtures/tests，允许旧 v0 fixture 被替换，不为历史资源做兼容包袱。
-  3. 再推进 WordTimeline + duration/energy generation boundary，确保无 phone evidence
-     也能产出 L1-L3。
+  1. 推进 W8：用 5-10 条真实句子做 manual QA，校准/验证 W4 RMS energy cue。
+  2. 继续用 manual QA / Helsinki scorer 验证 provenance-aware scoring，而不是调旧 v0
+     duration/RMS 阈值。
 - 规划文档：
   - `.planning/phases/2.21-audible-structure-architecture/2.21-CONTEXT.md`
   - `.planning/phases/2.21-audible-structure-architecture/2.21-PLAN.md`

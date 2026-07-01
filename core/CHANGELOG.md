@@ -2,6 +2,187 @@
 
 ## Unreleased
 
+- 2026-06-30 23:32 CST: Phase 2.21 review backlog W6 information-structure
+  prominence prior。
+  (1) **Text prior**: RhythmFrame anchor scoring now lightly down-weights repeated
+  content words and gives phrase-final content a small focus boost.
+  (2) **Honesty invariant**: this remains `TextPrior`; it adjusts prominence and
+  confidence but never upgrades a claim to `AudioSupported` without timing,
+  energy, pitch, or phone evidence.
+  (3) **Tests/docs**: added a unit test for repeated-content downweighting and
+  phrase-final focus boost; synced phase/codebase docs.
+  验证: `cargo test -p speech-analysis --quiet` 通过。
+
+- 2026-06-30 23:29 CST: Phase 2.21 review backlog W5 Reference A OOV fallback
+  hardening。
+  (1) **Fallback v2**: `speech-analysis` pronunciation provider version updated
+  to `74790861+fallback-v2`; CMUdict-missing words now use a deterministic G2P
+  fallback with common English digraphs, soft c/g, final silent e, and x handling.
+  (2) **Stress honesty**: fallback phones now assign a single primary stress to
+  the first fallback vowel and mark later fallback vowels unstressed, instead of
+  treating every OOV vowel as primary stress.
+  (3) **Tests/docs**: added a unit test for fallback stress behavior and synced
+  phase/codebase docs.
+  验证: `cargo test -p speech-analysis --quiet` 通过。
+
+- 2026-06-30 23:24 CST: Phase 2.21 review backlog W4 energy cue live path
+  arch slice。
+  (1) **Production-side provider**: `scripts/timeline-production/production_pipeline.py`
+  now computes per-word RMS relative energy from extracted 16k mono wav and writes
+  a `rhythm_word_acoustic_cues` LLTimeline artifact with `energy_prominence`,
+  `dbfs`, and sentence-median delta diagnostics. Failures degrade to a diagnostics
+  artifact instead of breaking WordTimeline production.
+  (2) **Application consumption**: LLTimeline export parses active WordTimeline
+  matching acoustic cue artifacts and passes them into `RhythmWordAcousticCue`;
+  generated document-level RhythmFrames can now report
+  `wordtimeline_timing_acoustic_prominence_v1` and include `energy` in
+  `quality.prominence_sources`.
+  (3) **Tests/docs**: API export/import regression now verifies artifact →
+  RhythmFrame energy provenance; added production pipeline synthetic-wav test and
+  synchronized phase/codebase docs. W8 manual QA remains required before RMS
+  calibration becomes a release gate.
+  验证: `python3 scripts/timeline-production/test_production_pipeline_acoustic_cues.py`、
+  `python3 scripts/test_prepare_rhythm_acoustic_qa.py`、
+  `cargo test -p application -p api-http -p speech-analysis --quiet` 通过。
+
+- 2026-06-30 23:13 CST: Phase 2.21 review backlog W3 Reference B connected-form
+  rule engine。
+  (1) **Reference B engine**: 新增
+  `speech-analysis::connected_speech_rules`，用英语文本生成 default connected forms，
+  覆盖 closed weak-form lexicon、`could have -> K UH D AH V`、want/going to、did you、
+  linking、t/d weakening、contraction、assimilation 和 flapping candidates。
+  (2) **A/B/C divergence**: `SoundAnalysis.connected_speech` 和
+  `RhythmFrame.connected_speech_refs` 会合并 B rules 与 CTC L4 evidence；B-matched
+  audio 标为 `teachable_rule` 并带 `text_prior + phone_segmental`，B-unmatched audio
+  才标为 `clip_specific`。纯 B prediction 保持 `TextPrior` / `Predicted`。
+  (3) **Fixtures/UI tests**: default_connected source 统一为
+  `english_connected_speech_rules_v1`；no-phone document-level fixture 现在包含
+  text-prior connected refs，但 `phone_evidence_coverage` 仍为 `0.0`。
+  (4) **Planning sync**: 同步 PLAN、CONTEXT、STATE、handoff、ARCHITECTURE、
+  DATA-MODEL、TESTING 和 QA README；后续优先级前移到 W4 product-side energy QA 和
+  W5/W6 text-prior hardening。
+  验证: `cargo test -p speech-analysis --quiet`、
+  `cargo test -p domain -p application -p api-http -p speech-analysis --quiet`、
+  `python3 scripts/test_evaluate_rhythm_frame.py`、
+  `python3 scripts/test_evaluate_helsinki_prosody.py`、
+  `cd apps/desktop && $HOME/.local/share/flutter/bin/flutter test test/timeline_test.dart test/phoneme_ribbon_test.dart test/diagnosis_card_test.dart` 通过。
+
+- 2026-06-30 22:57 CST: Phase 2.21 review backlog W2 first-class WordTimeline →
+  RhythmFrame path。
+  (1) **Named resource path**: `LLTimelineDocument` 新增 document-level
+  `rhythm_frames`，OpenAPI / Rust domain / Flutter typed model 同步解析；export 会
+  从 active WordTimeline + dictionary/canonical stress 生成 `wordtimeline-rhythm-frame`
+  resource，不经 phonetic-analysis job、PhoneTimeline 包装或 synthetic phones。
+  (2) **UI consumption**: subtitle rhythm layer 现在按 sentence 优先使用
+  `LLTimelineDocument.rhythm_frames`，没有 document-level frame 时才 fallback 到
+  `PhoneTimeline.sound_analysis.rhythm_frame`。
+  (3) **Scorer + fixture**: RhythmFrame scorer 会消费 document-level rhythm frames；
+  no-phone committed fixture 已迁移为 `phone_timelines: []` + `rhythm_frames`，证明
+  WordTimeline-only JSON 消费路径。
+  (4) **Planning sync**: 同步 PLAN、CONTEXT、STATE、handoff、ARCHITECTURE、
+  DATA-MODEL、TESTING 和 QA README；后续优先级前移到 W3 default connected-form B
+  reference、W4 product-side energy provider 和 W5/W6 text-prior hardening。
+  验证: `cargo test -p domain -p application -p api-http -p speech-analysis --quiet`、
+  `python3 scripts/test_evaluate_rhythm_frame.py`、
+  `python3 scripts/test_evaluate_helsinki_prosody.py`、
+  `python3 scripts/test_prepare_rhythm_acoustic_qa.py`、
+  `./scripts/validate-contracts.sh`、
+  `cd apps/desktop && $HOME/.local/share/flutter/bin/flutter test test/timeline_test.dart test/controllers_test.dart test/timeline_resource_summary_panel_test.dart test/phoneme_ribbon_test.dart test/diagnosis_card_test.dart`、
+  `cargo fmt --check`、Flutter bundled `dart format --set-exit-if-changed`
+  和 `git diff --check` 通过。
+
+- 2026-06-30 22:32 CST: Phase 2.21 review backlog W1 honesty fix。
+  (1) **Timing-source provenance**: `speech-analysis::sound_analysis` 的
+  `RhythmToken` 现在记录 `timing_audio_supported`，只有 `ForcedAligned` /
+  `AsrAligned` / `UserAdjusted` WordTiming 会把 duration/gap/rate 解释成 `Timing`
+  signal source；`Estimated` timing 输出 `wordtimeline_estimated_prominence_v1`、
+  `quality.timing_source = word_timeline_estimated` 和 text-prior-only provenance。
+  (2) **Claim status**: stress anchors、weak groups、compression spans、phrase
+  boundaries 和 listening hotspots 不再因为 estimated timing 被标成
+  `AudioSupported`；estimated timing 反例不会选 phrase-scoped nucleus。
+  (3) **Planning sync**: 同步 2.21 PLAN、STATE 和 handoff，把后续优先级切到 W2
+  first-class WordTimeline → RhythmFrame path、W3 default connected-form rules 和
+  W4 product-side energy provider。
+  验证: `cargo test -p domain -p application -p speech-analysis --quiet`、
+  `python3 scripts/test_evaluate_rhythm_frame.py`、
+  `python3 scripts/test_evaluate_helsinki_prosody.py`、
+  `python3 scripts/test_prepare_rhythm_acoustic_qa.py`、
+  `./scripts/validate-contracts.sh`、
+  `cd apps/desktop && $HOME/.local/share/flutter/bin/flutter test test/phoneme_ribbon_test.dart test/diagnosis_card_test.dart`、
+  `cargo fmt --check`、Flutter bundled `dart format --set-exit-if-changed`
+  和 `git diff --check` 通过。
+
+- 2026-06-30 18:27 CST: Phase 2.21 Step 2 补齐 energy cue seam 与 no-phone
+  committed fixture。
+  (1) **Energy provenance seam**: `SoundAnalysisConfig` 新增 sentence-scoped
+  `RhythmWordAcousticCue`，`speech-analysis::sound_analysis` 会把 word-level
+  `energy_prominence` 传播到 stress anchor prominence、phrase-scoped nucleus
+  selection、`generated_from = wordtimeline_timing_acoustic_prominence_v1`、
+  `references.actual.source = word_timeline_duration_energy` 和
+  `quality.prominence_sources`；application builder 当前显式传 `None`，等待正式
+  product audio feature provider。
+  (2) **No-phone JSON proof**: 新增
+  `testdata/rhythm-frame-qa/fixture-no-phone-rhythm.lltimeline.json` 并纳入 committed
+  manifest/scorer smoke，覆盖 `phone_evidence_coverage = 0.0`、无
+  `connected_speech_refs` 但仍可消费 anchors/nuclei/weak/compression/boundary/hotspot。
+  (3) **Tests/docs**: Rust 单测覆盖 energy cue provenance 与 nucleus selection；
+  Python scorer 单测断言 no-phone fixture 的 coverage/source/counts；同步 STATE、
+  handoff、codebase docs 和 QA README。
+  验证: `cargo test -p domain -p application -p speech-analysis --quiet`、
+  `python3 scripts/test_evaluate_rhythm_frame.py`、
+  `python3 scripts/test_evaluate_helsinki_prosody.py`、
+  `python3 scripts/test_prepare_rhythm_acoustic_qa.py`、
+  `./scripts/validate-contracts.sh`、
+  `cd apps/desktop && $HOME/.local/share/flutter/bin/flutter test test/phoneme_ribbon_test.dart test/diagnosis_card_test.dart`、
+  `cargo fmt --check`、Flutter bundled `dart format --set-exit-if-changed`
+  和 `git diff --check` 通过。
+
+- 2026-06-30 18:13 CST: Phase 2.21 Step 2 先接入 WordTimeline-driven RhythmFrame
+  generation boundary。
+  (1) **Generator seam**: `SoundAnalysisConfig` 新增 sentence-scoped `WordTiming`
+  输入，`speech-analysis::sound_analysis` 在构造 RhythmFrame L1-L3 时优先使用 active
+  WordTimeline timing + dictionary/canonical syllable stress，输出
+  `generated_from = wordtimeline_timing_prominence_v1` 和
+  `quality.timing_source = word_timeline`；无 WordTimeline 时才退回
+  `phone_timeline_transitional`。
+  (2) **Application wiring**: research fixture 和 CTC phonetic-analysis builder 在生成
+  `sound_analysis` 前读取 active WordTimeline 的当前句 timings 并传入 generator，
+  让 API refresh/export 产生的 JSON 开始走 WordTimeline-first L1-L3 substrate。
+  (3) **No-phone proof**: 新增 Rust 单元测试，证明 observed CTC phone evidence absent
+  时仍能从 WordTimeline + canonical stress 生成 anchors、phrase-scoped nuclei、weak groups、
+  compression spans 和 phrase boundaries；CTC phone evidence coverage 保持 `0.0`。
+  (4) **Planning sync**: 同步 STATE、handoff 和 ARCHITECTURE；下一刀继续把 RMS
+  energy/loudness cue 从 experiment harness 接入 product-side generator。
+  验证: `cargo test -p speech-analysis --quiet`、`cargo test -p application --quiet`、
+  `python3 scripts/test_evaluate_rhythm_frame.py`、`python3 scripts/test_evaluate_helsinki_prosody.py`、
+  `python3 scripts/test_prepare_rhythm_acoustic_qa.py`、
+  `cd apps/desktop && $HOME/.local/share/flutter/bin/flutter test test/phoneme_ribbon_test.dart test/diagnosis_card_test.dart`、
+  `./scripts/validate-contracts.sh` 通过。
+
+- 2026-06-30 18:00 CST: Phase 2.21 Step 1 重写 `RhythmFrame` contract 到 audible
+  structure v1。
+  (1) **Contract/model**: `crates/domain/src/sound_analysis.rs`、OpenAPI 和 Flutter
+  typed model 新增 A/B/C `references`、`RhythmSignalSource`、`RhythmEvidenceClass`、
+  `RhythmClaimStatus`、prominence cues、phrase-scoped `nuclei`、
+  `connected_speech_refs` 和 signal-source aware `quality`。
+  (2) **Generator bridge**: 当前 `speech-analysis` 输出改为
+  `legacy_phone_timing_adapter_v1` / `phone_timeline_transitional`，以新字段表达
+  predicted vs audio-supported provenance；CTC phone evidence 只通过 L4
+  connected-speech refs/hotspots 暴露，不再作为 L1-L3 contract truth。
+  (3) **UI/evaluation/fixtures**: 字幕 rhythm ribbon 和 diagnosis card 显示 nucleus 与
+  provenance；RhythmFrame QA scorer 和 Helsinki scorer 输出 signal source / evidence
+  class 汇总；committed RhythmFrame/Helsinki fixtures 替换为 2.21 shape，不保留 v0
+  `quality.timing_source = phone_timeline` 假设。
+  (4) **Planning sync**: 同步 `.planning/STATE.md`、handoff 和 codebase
+  ARCHITECTURE/DATA-MODEL/TESTING，把 Phase 2.21 下一步改为 WordTimeline +
+  duration/energy generation boundary。
+  验证: `cargo test -p domain -p speech-analysis --quiet`、`cargo test -p domain -p application --quiet`、
+  `python3 scripts/test_evaluate_rhythm_frame.py`、`python3 scripts/test_evaluate_helsinki_prosody.py`、
+  `python3 scripts/test_prepare_rhythm_acoustic_qa.py`、
+  `cd apps/desktop && $HOME/.local/share/flutter/bin/flutter test test/phoneme_ribbon_test.dart test/diagnosis_card_test.dart`、
+  `./scripts/validate-contracts.sh`、`cargo fmt --check`、Flutter bundled `dart format --set-exit-if-changed`
+  和 `git diff --check` 通过。
+
 - 2026-06-30 17:37 CST: 将 actual audible structure contract 从 Phase 2.20 中拆出为
   独立 Phase 2.21。
   (1) **New phase**: 新增

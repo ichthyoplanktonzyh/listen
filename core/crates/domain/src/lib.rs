@@ -95,6 +95,7 @@ string_id!(WordTimelineId);
 string_id!(ChunkTimelineId);
 string_id!(ChunkId);
 string_id!(PhoneTimelineId);
+string_id!(RhythmFrameId);
 string_id!(LLTimelineId);
 string_id!(LexicalEntryId);
 string_id!(LexicalObservationId);
