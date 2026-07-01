@@ -2,6 +2,52 @@
 
 ## Unreleased
 
+- 2026-07-01 13:58 CST: 推进 Phase 2.22 P0 user-facing workflow semantics。
+  (1) **Local Whisper path**: 生成字幕弹窗现在返回是否真正创建任务；主界面在任务创建后显示
+  主/副字幕生成预期，生成主字幕自动载入后会汇总 Word sync、Chunk replay、Listening
+  structure、Phone evidence readiness。
+  (2) **Overlay missing states**: Phone evidence 模式在已有分析对象但无 detected phones
+  时不再静默消失，而是显示明确不可用提示。
+  (3) **Layout semantics**: 隐藏字幕不再隐藏 transcript/resources/diagnosis side panel；
+  no-media 状态改为简洁打开媒体控制条；副字幕与 chunk 控件在不可用时提供明确原因。
+  (4) **Download status**: 下载条改用 typed `DownloadStatusSnapshot`
+  区分 downloading/completed/failed；开始下载会清掉旧完成路径，取消/关闭会使后到的
+  yt-dlp future 失效，避免 dismissed bar 复活。
+  验证:
+  `/Users/shadow/.local/share/flutter/bin/dart format ...`、
+  `cd apps/desktop && /Users/shadow/.local/share/flutter/bin/flutter analyze`、
+  `cd apps/desktop && /Users/shadow/.local/share/flutter/bin/flutter test`、
+  `git diff --check` 通过。
+
+- 2026-07-01 13:30 CST: 完成 Phase 2.22 Step 0 UI audit 文档化。
+  新增
+  `.planning/phases/2.22-user-facing-workflow-semantics/2.22-STEP0-UI-AUDIT.md`，
+  按当前 Flutter 工作树核对用户可见入口、状态区域、端到端路径、标签语义债务和 P0/P1 owner steps；
+  同步 `2.22-PLAN.md` 与 `2.22-CURRENT-FEATURE-INVENTORY.md` 指向该 Step 0
+  产物。本次补充为 documentation-only，没有新增产品代码。
+
+- 2026-07-01 13:22 CST: Phase 2.22 Step 0 audit checkpoint and first P0
+  readiness slice.
+  (1) **Current UI audit**: verified the current Flutter entry/state surfaces
+  against `main` for media open/playback, URL/download, drag/drop,
+  SRT/VTT/imported/embedded/OpenSubtitles/local Whisper subtitle paths, subtitle
+  resources, timeline resources, overlay listening/phone layers, side panel,
+  controls, diagnostics, vocabulary, settings, and task/status feedback.
+  (2) **Capability readiness model**: added a typed frontend
+  `CapabilityReadinessSnapshot` covering Subtitles, Word sync, Chunk replay,
+  Listening structure, and Phone evidence with Phase 2.22 states
+  `available/degraded/unavailable/stale/error`.
+  (3) **Resource panel UX**: timeline resource summary now shows a compact
+  user-facing "Learning capabilities" readiness strip before advanced
+  WordTimeline/ChunkTimeline/PhoneTimeline details, including honest degraded
+  states for estimated/predicted listening structure and unavailable phone
+  evidence.
+  (4) **Language cleanup**: renamed primary UI copy from `sound pattern` /
+  `Listening rhythm` to `Listening structure` / `Phone evidence` while keeping
+  internal setting keys and resource names stable for compatibility.
+  验证: `cd apps/desktop && flutter analyze`、`cd apps/desktop && flutter test`
+  通过。
+
 - 2026-07-01 12:59 CST: 新增 Phase 2.22 User-Facing Workflow Semantics。
   (1) **Phase shell**: 新建
   `.planning/phases/2.22-user-facing-workflow-semantics/`，包含 context、feature
