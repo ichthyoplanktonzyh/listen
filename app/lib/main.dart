@@ -3004,14 +3004,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                             )
                                           : ConnectedSpeechReferenceRibbon(
                                               references: connectedReferences,
+                                              tokens: subtitleController
+                                                  .currentPrimaryCue!
+                                                  .tokens,
                                               title: l.text(
                                                 'connectedSpeechReference',
                                               ),
                                               currentTokenIndex:
                                                   subtitleController
                                                       .currentWordToken,
-                                              fontSize: primarySize * 0.36,
-                                              height: primarySize * 0.94,
+                                              fontSize: primarySize * 0.44,
+                                              height: primarySize * 1.1,
                                               tooltip: l.text(
                                                 'connectedSpeechReferenceTooltip',
                                               ),
@@ -3039,14 +3042,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                   );
                                   final actualView = RhythmFrameRibbon(
                                     frame: rhythmFrame,
+                                    pronunciation: pronunciation,
                                     position: playerController.position,
                                     title: l.text('rhythmReferenceActual'),
                                     anchorLabel: l.text('stressAnchors'),
                                     weakGroupLabel: l.text('weakGroups'),
                                     compressionLabel: l.text('compressedSpans'),
                                     hotspotLabel: l.text('listeningHotspots'),
-                                    fontSize: primarySize * 0.38,
-                                    height: primarySize * 1.05,
+                                    fontSize: primarySize * 0.44,
+                                    height: primarySize * 1.15,
                                     tooltip: predicted
                                         ? l.text('listeningPredictedTooltip')
                                         : l.text('rhythmRibbonHint'),

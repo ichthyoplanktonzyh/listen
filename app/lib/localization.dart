@@ -262,7 +262,7 @@ class AppLocalizations {
           'C · Listening structure supported by this audio',
       'connectedSpeechReference': 'Common speech',
       'connectedSpeechReferenceTooltip':
-          'Common weak forms, linking and reductions predicted for this sentence.',
+          'Rule annotations on the sentence: common weak forms, linking and reductions.',
       'connectedSpeechUnavailable': 'No common speech change for this line',
       'citationPronunciationUnavailable':
           'No dictionary pronunciation for this line',
@@ -280,7 +280,7 @@ class AppLocalizations {
           'Phone evidence appears after audio analysis or an imported timeline provides it for the current sentence.',
       'rhythmFrameUnavailable': 'No listening structure for this line',
       'rhythmRibbonHint':
-          'Listening structure: stress anchors, weak groups, compression, and listening hotspots.',
+          'Audible structure: catch the foreground stress sounds; let the faint weak groups recede.',
       'expectedPronunciationReference': 'Expected',
       'expectedPronunciationTooltip':
           'Dictionary pronunciation reference for the current sentence.',
@@ -659,7 +659,7 @@ class AppLocalizations {
       'rhythmReferenceConnectedTooltip': 'B · 根据语言规则预测的常见连续语流变化',
       'rhythmReferenceActualTooltip': 'C · 当前音频支持的实际听感结构',
       'connectedSpeechReference': '常见语流',
-      'connectedSpeechReferenceTooltip': '当前句中常见的弱读、连读与缩约规则预测。',
+      'connectedSpeechReferenceTooltip': '直接标注在原句上的常见弱读、连读与缩约规则。',
       'connectedSpeechUnavailable': '当前句没有常见语流变化',
       'citationPronunciationUnavailable': '当前句暂无字典读音',
       'showPhoneEvidence': '查看音素证据',
@@ -672,7 +672,7 @@ class AppLocalizations {
       'soundPatternUnavailable': '当前句暂无音素证据',
       'soundPatternUnavailableTooltip': '音素证据需要当前句已有音频分析，或导入的时间轴资源提供对应证据。',
       'rhythmFrameUnavailable': '当前句暂无听感结构',
-      'rhythmRibbonHint': '听感结构：声音锚点、弱读音团、压缩区和听感热点。',
+      'rhythmRibbonHint': '可听结构：抓住前景中的重音音素，让微弱的弱读音团退到背景。',
       'expectedPronunciationReference': '预期',
       'expectedPronunciationTooltip': '当前句的词典发音参考。',
       'analyzeRealPronunciation': '分析真实发音',

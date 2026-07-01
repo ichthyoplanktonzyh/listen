@@ -3,10 +3,17 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../models/timeline.dart';
+import '../../models/types.dart';
 
 typedef RhythmCueLoopCallback =
     void Function(Duration start, Duration end, String label);
 
+/// Renders Reference C as a perceptual foreground/background structure.
+///
+/// The default surface deliberately omits diagnostic categories such as
+/// compression spans and hotspots. Learners see the few prominent vowel/phone
+/// anchors worth catching, with weak groups receding between them. Detailed
+/// phone evidence remains an expandable L4 surface owned by the overlay.
 class RhythmFrameRibbon extends StatelessWidget {
   const RhythmFrameRibbon({
     super.key,
@@ -17,6 +24,7 @@ class RhythmFrameRibbon extends StatelessWidget {
     required this.weakGroupLabel,
     required this.compressionLabel,
     required this.hotspotLabel,
+    this.pronunciation,
     this.fontSize = 12.0,
     this.height = 30.0,
     this.tooltip,
@@ -26,10 +34,14 @@ class RhythmFrameRibbon extends StatelessWidget {
   });
 
   final RhythmFrame frame;
+  final PronunciationAnalysis? pronunciation;
   final Duration position;
   final String title;
   final String anchorLabel;
   final String weakGroupLabel;
+
+  /// Kept in the constructor because these labels still describe details in
+  /// imported frames. They are intentionally not first-class visual lanes.
   final String compressionLabel;
   final String hotspotLabel;
   final double fontSize;
@@ -44,100 +56,37 @@ class RhythmFrameRibbon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = _items();
+    final items = _audibleItems();
     if (items.isEmpty && frame.phraseBoundaries.isEmpty) {
       return const SizedBox.shrink();
     }
 
     final content = Semantics(
       label: tooltip ?? title,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final maxWidth = constraints.maxWidth;
-          if (!maxWidth.isFinite || maxWidth <= 0) {
-            return const SizedBox.shrink();
-          }
-          final timeline = _TimelineRange.from(
-            items: items,
-            boundaries: frame.phraseBoundaries,
-          );
-          final leadingWidth = math.min(
-            math.max(74.0, height * 3.0),
-            maxWidth * 0.34,
-          );
-          final timelineWidth = math.max(0.0, maxWidth - leadingWidth - 8);
-          final chipHeight = math.max(18.0, height * 0.52);
-          final laneHeight = math.max(8.0, height * 0.24);
-          final labels = _labelItems(items);
-
-          return SizedBox(
-            height: height * 1.42,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: leadingWidth,
-                  child: _RhythmBadge(
-                    title: title,
-                    confidence: frame.quality.rhythmConfidence,
-                    height: height,
-                    fontSize: fontSize,
-                    predicted: predicted,
-                    predictedLabel: predictedLabel,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: timelineWidth,
-                        height: laneHeight,
-                        child: _RhythmTimeline(
-                          items: items,
-                          boundaries: frame.phraseBoundaries,
-                          range: timeline,
-                          position: position,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      SizedBox(
-                        height: chipHeight,
-                        child: labels.isEmpty
-                            ? _QuietConfidence(
-                                confidence: frame.quality.rhythmConfidence,
-                                fontSize: fontSize,
-                              )
-                            : SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    for (final item in labels)
-                                      Padding(
-                                        padding: const EdgeInsets.only(
-                                          right: 5,
-                                        ),
-                                        child: _RhythmChip(
-                                          item: item,
-                                          position: position,
-                                          fontSize: fontSize,
-                                          height: chipHeight,
-                                          onLoopCue: onLoopCue,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _RhythmBadge(
+            title: title,
+            confidence: frame.quality.rhythmConfidence,
+            height: height,
+            fontSize: fontSize,
+            predicted: predicted,
+            predictedLabel: predictedLabel,
+          ),
+          const SizedBox(width: 10),
+          Flexible(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: _sequence(items),
+              ),
             ),
-          );
-        },
+          ),
+        ],
       ),
     );
 
@@ -146,45 +95,72 @@ class RhythmFrameRibbon extends StatelessWidget {
         : Tooltip(message: tooltip!, child: content);
   }
 
-  List<_RhythmItem> _items() {
-    final values = <_RhythmItem>[];
-    for (final nucleus in frame.nuclei) {
-      values.add(
-        _RhythmItem(
-          kind: 'Nucleus',
-          label: nucleus.label,
-          start: nucleus.start,
-          end: nucleus.end,
-          confidence: nucleus.confidence,
-          color: const Color(0xFFFF7DA8),
-          priority: 0,
-          tooltip: _tooltip(
-            'Nucleus',
-            nucleus.label,
-            nucleus.reason,
-            provenance: _provenance(
-              nucleus.cues,
-              nucleus.evidenceClass,
-              nucleus.claimStatus,
+  List<Widget> _sequence(List<_AudibleItem> items) {
+    final widgets = <Widget>[];
+    var boundaryCursor = 0;
+    final boundaries = [...frame.phraseBoundaries]
+      ..sort((a, b) => a.at.compareTo(b.at));
+    for (var index = 0; index < items.length; index += 1) {
+      final item = items[index];
+      while (boundaryCursor < boundaries.length &&
+          boundaries[boundaryCursor].at <= item.start) {
+        if (widgets.isNotEmpty) {
+          widgets.add(
+            _PhraseDivider(
+              boundary: boundaries[boundaryCursor],
+              height: height,
             ),
+          );
+        }
+        boundaryCursor += 1;
+      }
+      widgets.add(
+        Padding(
+          padding: EdgeInsets.only(right: index == items.length - 1 ? 0 : 7),
+          child: _AudibleNode(
+            item: item,
+            active: item.contains(position),
+            fontSize: fontSize,
+            height: height,
+            onLoopCue: onLoopCue,
           ),
         ),
       );
     }
+    return widgets;
+  }
+
+  List<_AudibleItem> _audibleItems() {
+    final values = <_AudibleItem>[];
+    final anchorTokens = <int>{};
     for (final anchor in frame.stressAnchors) {
+      if (!predicted &&
+          !anchor.isAudioSupported &&
+          anchor.claimStatus != 'audio_supported') {
+        continue;
+      }
+      if (anchor.tokenIndex != null) anchorTokens.add(anchor.tokenIndex!);
+      final nucleus =
+          anchor.isNucleus ||
+          frame.nuclei.any(
+            (value) =>
+                value.tokenIndex != null &&
+                value.tokenIndex == anchor.tokenIndex,
+          );
+      final audibleLabel = _prominentPhone(anchor.tokenIndex, anchor.label);
       values.add(
-        _RhythmItem(
-          kind: anchorLabel,
-          label: anchor.label,
+        _AudibleItem(
+          kind: nucleus ? _AudibleKind.nucleus : _AudibleKind.anchor,
+          label: audibleLabel,
+          caption: audibleLabel == anchor.label ? '' : anchor.label,
           start: anchor.start,
           end: anchor.end,
           confidence: anchor.confidence,
-          color: const Color(0xFFFFD166),
-          priority: anchor.importance == 'primary' ? 1 : 2,
           tooltip: _tooltip(
-            anchorLabel,
+            nucleus ? 'Nucleus' : anchorLabel,
             anchor.label,
             anchor.reason,
+            display: audibleLabel,
             provenance: _provenance(
               anchor.prominenceCues,
               anchor.evidenceClass,
@@ -194,20 +170,59 @@ class RhythmFrameRibbon extends StatelessWidget {
         ),
       );
     }
-    for (final group in frame.weakGroups) {
+    for (final nucleus in frame.nuclei) {
+      if (!predicted &&
+          !_hasAudioCue(nucleus.cues) &&
+          nucleus.claimStatus != 'audio_supported') {
+        continue;
+      }
+      if (nucleus.tokenIndex != null &&
+          anchorTokens.contains(nucleus.tokenIndex)) {
+        continue;
+      }
+      final audibleLabel = _prominentPhone(nucleus.tokenIndex, nucleus.label);
       values.add(
-        _RhythmItem(
-          kind: weakGroupLabel,
-          label: group.label,
+        _AudibleItem(
+          kind: _AudibleKind.nucleus,
+          label: audibleLabel,
+          caption: audibleLabel == nucleus.label ? '' : nucleus.label,
+          start: nucleus.start,
+          end: nucleus.end,
+          confidence: nucleus.confidence,
+          tooltip: _tooltip(
+            'Nucleus',
+            nucleus.label,
+            nucleus.reason,
+            display: audibleLabel,
+            provenance: _provenance(
+              nucleus.cues,
+              nucleus.evidenceClass,
+              nucleus.claimStatus,
+            ),
+          ),
+        ),
+      );
+    }
+    for (final group in frame.weakGroups) {
+      if (!predicted &&
+          !group.isAudioSupported &&
+          group.claimStatus != 'audio_supported') {
+        continue;
+      }
+      final audibleLabel = _weakGroupSound(group);
+      values.add(
+        _AudibleItem(
+          kind: _AudibleKind.weak,
+          label: audibleLabel,
+          caption: audibleLabel == group.label ? '' : group.label,
           start: group.start,
           end: group.end,
           confidence: group.confidence,
-          color: const Color(0xFF9BE7A2),
-          priority: 3,
           tooltip: _tooltip(
             weakGroupLabel,
             group.label,
             group.reason,
+            display: audibleLabel,
             provenance: _provenance(
               group.signalSources,
               group.evidenceClass,
@@ -217,75 +232,70 @@ class RhythmFrameRibbon extends StatelessWidget {
         ),
       );
     }
-    for (final span in frame.compressionSpans) {
-      values.add(
-        _RhythmItem(
-          kind: compressionLabel,
-          label: span.label,
-          start: span.start,
-          end: span.end,
-          confidence: span.confidence,
-          color: const Color(0xFFFF9F6E),
-          priority: 4,
-          tooltip: _tooltip(
-            compressionLabel,
-            span.label,
-            span.reason,
-            provenance: _provenance(
-              span.signalSources,
-              span.evidenceClass,
-              span.claimStatus,
-            ),
-          ),
-        ),
-      );
-    }
-    for (final hotspot in frame.listeningHotspots) {
-      values.add(
-        _RhythmItem(
-          kind: hotspotLabel,
-          label: hotspot.label,
-          start: hotspot.start,
-          end: hotspot.end,
-          confidence: hotspot.confidence,
-          color: const Color(0xFF8FD3FF),
-          priority: 5,
-          tooltip: _tooltip(
-            hotspotLabel,
-            hotspot.label,
-            hotspot.hint,
-            provenance: _provenance(
-              hotspot.signalSources,
-              hotspot.evidenceClass,
-              hotspot.claimStatus,
-            ),
-          ),
-        ),
-      );
-    }
     values.sort((a, b) {
       final byStart = a.start.compareTo(b.start);
       if (byStart != 0) return byStart;
-      return a.priority.compareTo(b.priority);
+      return a.kind.index.compareTo(b.kind.index);
     });
     return values;
   }
 
-  List<_RhythmItem> _labelItems(List<_RhythmItem> items) {
-    final active = items.where((item) => item.contains(position)).toList();
-    final rest = items.where((item) => !item.contains(position)).toList();
-    active.sort((a, b) => a.priority.compareTo(b.priority));
-    return [...active, ...rest].take(8).toList(growable: false);
+  String _prominentPhone(int? tokenIndex, String fallback) {
+    if (tokenIndex == null || pronunciation == null) return fallback;
+    WordPronunciation? word;
+    for (final value in pronunciation!.words) {
+      if (value.tokenIndex == tokenIndex) {
+        word = value;
+        break;
+      }
+    }
+    if (word == null || word.variants.isEmpty) return fallback;
+    final variant = word.variants.first;
+    final stressed = variant.phonemes
+        .where((phone) => (phone.stress ?? 0) > 0)
+        .map((phone) => (phone.displayIpa ?? phone.symbol).trim())
+        .where((value) => value.isNotEmpty)
+        .join();
+    if (stressed.isNotEmpty) return stressed;
+
+    // Some providers carry stress only in the compact IPA string. Preserve the
+    // marked syllable rather than inventing an observed phone.
+    final marked = RegExp(r"[ˈˌ]([^\s.]+)").firstMatch(variant.displayIpa);
+    return marked?.group(1)?.trim().isNotEmpty == true
+        ? marked!.group(1)!.trim()
+        : fallback;
+  }
+
+  String _weakGroupSound(RhythmWeakGroup group) {
+    final matching = frame.connectedSpeechRefs.where((reference) {
+      final start = reference.tokenStart;
+      final end = reference.tokenEnd ?? start;
+      final groupStart = group.tokenStart;
+      final groupEnd = group.tokenEnd ?? groupStart;
+      if (start == null ||
+          end == null ||
+          groupStart == null ||
+          groupEnd == null) {
+        return false;
+      }
+      return start <= groupEnd && end >= groupStart;
+    });
+    for (final reference in matching) {
+      final ipa = reference.defaultDisplayIpa.trim();
+      if (ipa.isNotEmpty) return ipa;
+    }
+    return group.label;
   }
 
   String _tooltip(
     String kind,
     String label,
     String detail, {
+    required String display,
     String? provenance,
   }) {
     final trimmed = detail.trim();
-    final lines = <String>['$kind: $label'];
+    final lines = <String>['$kind: $label', if (display != label) '/$display/'];
     if (trimmed.isNotEmpty) lines.add(trimmed);
     if (provenance != null && provenance.trim().isNotEmpty) {
       lines.add(provenance);
@@ -329,19 +339,17 @@ class _RhythmBadge extends StatelessWidget {
     height: math.max(24.0, height * 0.86),
     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
     decoration: BoxDecoration(
-      color: const Color(0xFF1E2746).withAlpha(210),
+      color: const Color(0xFF1E2746).withAlpha(190),
       borderRadius: BorderRadius.circular(7),
-      border: Border.all(color: Colors.white.withAlpha(45)),
+      border: Border.all(color: Colors.white.withAlpha(38)),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(
-          Icons.multiline_chart,
+          Icons.hearing,
           size: math.max(13.0, height * 0.42),
-          color: predicted
-              ? const Color(0xFFFFA94D)
-              : const Color(0xFFFFD166),
+          color: predicted ? const Color(0xFFFFA94D) : const Color(0xFFFFD166),
         ),
         const SizedBox(width: 5),
         Flexible(
@@ -350,7 +358,7 @@ class _RhythmBadge extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Colors.white.withAlpha(230),
+              color: Colors.white.withAlpha(220),
               fontSize: math.max(10.0, fontSize * 0.82),
               height: 1.0,
               fontWeight: FontWeight.w700,
@@ -368,7 +376,7 @@ class _RhythmBadge extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Colors.white.withAlpha(155),
+              color: Colors.white.withAlpha(135),
               fontSize: math.max(8.0, fontSize * 0.68),
               height: 1.0,
             ),
@@ -406,125 +414,94 @@ class _PredictedPill extends StatelessWidget {
   );
 }
 
-class _RhythmTimeline extends StatelessWidget {
-  const _RhythmTimeline({
-    required this.items,
-    required this.boundaries,
-    required this.range,
-    required this.position,
-  });
-
-  final List<_RhythmItem> items;
-  final List<RhythmPhraseBoundary> boundaries;
-  final _TimelineRange range;
-  final Duration position;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final width = constraints.maxWidth;
-      if (!width.isFinite || width <= 0 || range.durationMs <= 0) {
-        return const SizedBox.shrink();
-      }
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(999),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(24),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
-            ),
-            for (final item in items)
-              Positioned(
-                left: range.leftFor(item.start, width),
-                top: 0,
-                bottom: 0,
-                width: range.widthFor(item.start, item.end, width),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: item.color.withAlpha(
-                      item.contains(position) ? 245 : 185,
-                    ),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-              ),
-            for (final boundary in boundaries)
-              Positioned(
-                left: range.leftFor(boundary.at, width),
-                top: 0,
-                bottom: 0,
-                width: 2,
-                child: ColoredBox(color: Colors.white.withAlpha(155)),
-              ),
-            if (range.contains(position))
-              Positioned(
-                left: range.leftFor(position, width),
-                top: 0,
-                bottom: 0,
-                width: 2,
-                child: const ColoredBox(color: Colors.white),
-              ),
-          ],
-        ),
-      );
-    },
-  );
-}
-
-class _RhythmChip extends StatelessWidget {
-  const _RhythmChip({
+class _AudibleNode extends StatelessWidget {
+  const _AudibleNode({
     required this.item,
-    required this.position,
+    required this.active,
     required this.fontSize,
     required this.height,
     this.onLoopCue,
   });
 
-  final _RhythmItem item;
-  final Duration position;
+  final _AudibleItem item;
+  final bool active;
   final double fontSize;
   final double height;
   final RhythmCueLoopCallback? onLoopCue;
 
   @override
   Widget build(BuildContext context) {
-    final active = item.contains(position);
-    final chip = Container(
-      constraints: BoxConstraints(
-        minWidth: math.max(58.0, fontSize * 4.8),
-        maxWidth: math.max(96.0, fontSize * 9.2),
-      ),
-      height: height,
-      padding: const EdgeInsets.symmetric(horizontal: 7),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: item.color.withAlpha(active ? 230 : 135),
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(
-          color: active
-              ? Colors.white.withAlpha(190)
-              : item.color.withAlpha(160),
-        ),
-      ),
-      child: Text(
-        '${item.label} ${_formatPercent(item.confidence)}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: Colors.black.withAlpha(active ? 240 : 215),
-          fontSize: math.max(9.0, fontSize * 0.82),
-          height: 1.0,
-          fontWeight: active ? FontWeight.w800 : FontWeight.w700,
+    final nucleus = item.kind == _AudibleKind.nucleus;
+    final weak = item.kind == _AudibleKind.weak;
+    final color = nucleus
+        ? const Color(0xFFFF8FB7)
+        : weak
+        ? Colors.white
+        : const Color(0xFFFFD166);
+    final opacity = weak
+        ? active
+              ? 0.68
+              : 0.34
+        : active
+        ? 1.0
+        : 0.82;
+    final labelSize = weak
+        ? math.max(9.0, fontSize * 0.78)
+        : math.max(12.0, fontSize * (nucleus ? 1.3 : 1.12));
+    final node = AnimatedOpacity(
+      duration: const Duration(milliseconds: 120),
+      opacity: opacity,
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 120),
+        scale: active && !weak ? 1.08 : 1,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (nucleus)
+              Container(
+                width: math.max(15, labelSize * 1.35),
+                height: 2,
+                margin: const EdgeInsets.only(bottom: 2),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(999),
+                  boxShadow: [
+                    BoxShadow(color: color.withAlpha(120), blurRadius: 5),
+                  ],
+                ),
+              ),
+            Text(
+              weak ? item.label : '/${item.label}/',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color,
+                fontSize: labelSize,
+                height: 1,
+                fontWeight: weak ? FontWeight.w400 : FontWeight.w800,
+                letterSpacing: weak ? 0.2 : 0.5,
+                shadows: active && !weak
+                    ? [Shadow(color: color.withAlpha(150), blurRadius: 7)]
+                    : null,
+              ),
+            ),
+            if (item.caption.isNotEmpty)
+              Text(
+                item.caption,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: color.withAlpha(weak ? 105 : 155),
+                  fontSize: math.max(7.0, fontSize * 0.58),
+                  height: 1.05,
+                ),
+              ),
+          ],
         ),
       ),
     );
     final interactive = onLoopCue == null
-        ? chip
+        ? node
         : Semantics(
             button: true,
             label: item.tooltip,
@@ -532,8 +509,18 @@ class _RhythmChip extends StatelessWidget {
               cursor: SystemMouseCursors.click,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: () => onLoopCue!(item.start, item.end, item.label),
-                child: chip,
+                onTap: () => onLoopCue!(
+                  item.start,
+                  item.end,
+                  item.caption.isEmpty ? item.label : item.caption,
+                ),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: weak ? 1 : 3,
+                    vertical: math.max(2, height * 0.08),
+                  ),
+                  child: node,
+                ),
               ),
             ),
           );
@@ -541,95 +528,55 @@ class _RhythmChip extends StatelessWidget {
   }
 }
 
-class _QuietConfidence extends StatelessWidget {
-  const _QuietConfidence({required this.confidence, required this.fontSize});
+class _PhraseDivider extends StatelessWidget {
+  const _PhraseDivider({required this.boundary, required this.height});
 
-  final double confidence;
-  final double fontSize;
+  final RhythmPhraseBoundary boundary;
+  final double height;
 
   @override
-  Widget build(BuildContext context) => Text(
-    _formatPercent(confidence),
-    maxLines: 1,
-    overflow: TextOverflow.ellipsis,
-    style: TextStyle(
-      color: Colors.white.withAlpha(145),
-      fontSize: math.max(9.0, fontSize * 0.8),
-      height: 1.0,
+  Widget build(BuildContext context) => Tooltip(
+    message: boundary.reason,
+    child: Container(
+      width: 1,
+      height: math.max(15, height * 0.58),
+      margin: const EdgeInsets.only(left: 1, right: 8),
+      color: Colors.white.withAlpha(72),
     ),
   );
 }
 
-class _RhythmItem {
-  const _RhythmItem({
+enum _AudibleKind { nucleus, anchor, weak }
+
+class _AudibleItem {
+  const _AudibleItem({
     required this.kind,
     required this.label,
+    required this.caption,
     required this.start,
     required this.end,
     required this.confidence,
-    required this.color,
-    required this.priority,
     required this.tooltip,
   });
 
-  final String kind;
+  final _AudibleKind kind;
   final String label;
+  final String caption;
   final Duration start;
   final Duration end;
   final double confidence;
-  final Color color;
-  final int priority;
   final String tooltip;
 
-  bool contains(Duration position) => position >= start && position < end;
-}
-
-class _TimelineRange {
-  const _TimelineRange({required this.startMs, required this.endMs});
-
-  factory _TimelineRange.from({
-    required List<_RhythmItem> items,
-    required List<RhythmPhraseBoundary> boundaries,
-  }) {
-    var startMs = 0;
-    var endMs = 1;
-    if (items.isNotEmpty) {
-      startMs = items.first.start.inMilliseconds;
-      endMs = items.first.end.inMilliseconds;
-      for (final item in items.skip(1)) {
-        startMs = math.min(startMs, item.start.inMilliseconds);
-        endMs = math.max(endMs, item.end.inMilliseconds);
-      }
-    }
-    for (final boundary in boundaries) {
-      startMs = math.min(startMs, boundary.at.inMilliseconds);
-      endMs = math.max(endMs, boundary.at.inMilliseconds);
-    }
-    if (endMs <= startMs) endMs = startMs + 1;
-    return _TimelineRange(startMs: startMs, endMs: endMs);
-  }
-
-  final int startMs;
-  final int endMs;
-
-  int get durationMs => endMs - startMs;
-
-  bool contains(Duration value) {
-    final ms = value.inMilliseconds;
-    return ms >= startMs && ms <= endMs;
-  }
-
-  double leftFor(Duration value, double width) {
-    final ratio = (value.inMilliseconds - startMs) / durationMs;
-    return (ratio * width).clamp(0.0, math.max(0.0, width - 1)).toDouble();
-  }
-
-  double widthFor(Duration start, Duration end, double width) {
-    final raw =
-        (end.inMilliseconds - start.inMilliseconds) / durationMs * width;
-    return raw.clamp(3.0, width).toDouble();
-  }
+  bool contains(Duration value) => value >= start && value < end;
 }
 
 String _formatPercent(double value) =>
     '${(value.clamp(0.0, 1.0) * 100).round()}%';
+
+bool _hasAudioCue(List<String> values) => values.any(
+  (value) =>
+      value == 'timing' ||
+      value == 'energy' ||
+      value == 'pitch' ||
+      value == 'phone_segmental',
+);

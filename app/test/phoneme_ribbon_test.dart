@@ -140,6 +140,29 @@ void main() {
               compressionLabel: 'Compressed',
               hotspotLabel: 'Hotspots',
               position: Duration(milliseconds: 130),
+              pronunciation: PronunciationAnalysis(
+                sentenceId: 's1',
+                displayIpa: 'kədəv ˈmɑrkət',
+                words: [
+                  WordPronunciation(
+                    tokenIndex: 2,
+                    text: 'market',
+                    normalized: 'market',
+                    variants: [
+                      PronunciationVariant(
+                        displayIpa: 'ˈmɑrkət',
+                        phonemes: [
+                          PronunciationPhoneme(
+                            symbol: 'AA1',
+                            displayIpa: 'ɑ',
+                            stress: 1,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
               frame: RhythmFrame(
                 generatedFrom: 'wordtimeline_timing_acoustic_prominence_v1',
                 references: RhythmFrameReferences(
@@ -161,6 +184,7 @@ void main() {
                 ),
                 stressAnchors: [
                   RhythmStressAnchor(
+                    tokenIndex: 2,
                     start: Duration(milliseconds: 100),
                     end: Duration(milliseconds: 260),
                     label: 'market',
@@ -174,10 +198,26 @@ void main() {
                     claimStatus: 'audio_supported',
                     confidence: 0.82,
                   ),
+                  RhythmStressAnchor(
+                    tokenIndex: 6,
+                    start: Duration(milliseconds: 270),
+                    end: Duration(milliseconds: 300),
+                    label: 'predicted only',
+                    reason: 'text prior',
+                    importance: 'secondary',
+                    isNucleus: false,
+                    prominence: 0.48,
+                    prominenceCues: ['text_prior'],
+                    signalSources: ['text_prior'],
+                    evidenceClass: 'heuristic_proxy',
+                    claimStatus: 'predicted',
+                    confidence: 0.48,
+                  ),
                 ],
                 nuclei: [
                   RhythmNucleus(
                     phraseIndex: 0,
+                    tokenIndex: 2,
                     start: Duration(milliseconds: 100),
                     end: Duration(milliseconds: 260),
                     label: 'market',
@@ -190,6 +230,8 @@ void main() {
                 ],
                 weakGroups: [
                   RhythmWeakGroup(
+                    tokenStart: 0,
+                    tokenEnd: 1,
                     start: Duration(milliseconds: 0),
                     end: Duration(milliseconds: 90),
                     label: 'could have',
@@ -231,7 +273,10 @@ void main() {
                 connectedSpeechRefs: [
                   RhythmConnectedSpeechRef(
                     id: 'cs1',
+                    tokenStart: 0,
+                    tokenEnd: 1,
                     label: 'weak form',
+                    defaultDisplayIpa: 'kədəv',
                     divergence: 'clip_specific',
                     signalSources: ['phone_segmental'],
                     evidenceClass: 'heuristic_proxy',
@@ -267,14 +312,19 @@ void main() {
       ),
     );
 
-    expect(find.byIcon(Icons.multiline_chart), findsOneWidget);
+    expect(find.byIcon(Icons.hearing), findsOneWidget);
     expect(find.text('Listening rhythm'), findsOneWidget);
     expect(find.text('77%'), findsOneWidget);
+    expect(find.text('/ɑ/'), findsOneWidget);
     expect(find.textContaining('market'), findsWidgets);
-    expect(find.textContaining('could have'), findsWidgets);
+    expect(find.text('kədəv'), findsOneWidget);
+    expect(find.textContaining('could have been'), findsNothing);
+    expect(find.text('weak group'), findsNothing);
+    expect(find.textContaining('predicted only'), findsNothing);
     expect(
       find.byTooltip(
-        'Anchors: market\nmain stress\naudio supported · heuristic proxy · timing, energy',
+        'Nucleus: market\n/ɑ/\nmain stress\n'
+        'audio supported · heuristic proxy · timing, energy',
       ),
       findsOneWidget,
     );
@@ -335,24 +385,23 @@ void main() {
                   ),
                 ],
                 nuclei: [],
-                weakGroups: [],
-                compressionSpans: [],
-                phraseBoundaries: [],
-                connectedSpeechRefs: [],
-                listeningHotspots: [
-                  ListeningHotspot(
-                    id: 'hs1',
-                    kind: 'weak_group',
+                weakGroups: [
+                  RhythmWeakGroup(
                     start: Duration(milliseconds: 20),
                     end: Duration(milliseconds: 90),
                     label: 'weak group',
-                    hint: 'backgrounded',
+                    reason: 'backgrounded',
+                    reductionRefs: [],
                     signalSources: ['timing'],
                     evidenceClass: 'heuristic_proxy',
                     claimStatus: 'audio_supported',
                     confidence: 0.7,
                   ),
                 ],
+                compressionSpans: [],
+                phraseBoundaries: [],
+                connectedSpeechRefs: [],
+                listeningHotspots: [],
                 quality: RhythmFrameQuality(
                   timingSource: 'word_timeline',
                   prominenceSources: ['timing', 'energy'],
@@ -368,7 +417,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('weak group 70%'));
+    await tester.tap(find.text('weak group'));
 
     expect(loopStart, const Duration(milliseconds: 20));
     expect(loopEnd, const Duration(milliseconds: 90));
@@ -413,12 +462,56 @@ void main() {
             width: 480,
             child: ConnectedSpeechReferenceRibbon(
               title: 'Common speech',
-              currentTokenIndex: 2,
+              currentTokenIndex: 4,
+              tokens: [
+                SubtitleToken(
+                  index: 0,
+                  kind: 'word',
+                  text: 'I',
+                  normalized: 'i',
+                ),
+                SubtitleToken(
+                  index: 1,
+                  kind: 'whitespace',
+                  text: ' ',
+                  normalized: null,
+                ),
+                SubtitleToken(
+                  index: 2,
+                  kind: 'word',
+                  text: 'could',
+                  normalized: 'could',
+                ),
+                SubtitleToken(
+                  index: 3,
+                  kind: 'whitespace',
+                  text: ' ',
+                  normalized: null,
+                ),
+                SubtitleToken(
+                  index: 4,
+                  kind: 'word',
+                  text: 'have',
+                  normalized: 'have',
+                ),
+                SubtitleToken(
+                  index: 5,
+                  kind: 'whitespace',
+                  text: ' ',
+                  normalized: null,
+                ),
+                SubtitleToken(
+                  index: 6,
+                  kind: 'word',
+                  text: 'gone',
+                  normalized: 'gone',
+                ),
+              ],
               references: [
                 RhythmConnectedSpeechRef(
                   id: 'cs1',
-                  tokenStart: 1,
-                  tokenEnd: 2,
+                  tokenStart: 2,
+                  tokenEnd: 4,
                   family: 'contraction',
                   surfaceText: 'could have',
                   label: 'default contraction',
@@ -442,7 +535,10 @@ void main() {
     expect(find.byIcon(Icons.route_outlined), findsOneWidget);
     expect(find.text('Common speech'), findsOneWidget);
     expect(find.text('could have'), findsOneWidget);
+    expect(find.text('contraction'), findsOneWidget);
     expect(find.text('/kʊdhæv/ → /kʊdəv/'), findsOneWidget);
+    expect(find.text('I'), findsOneWidget);
+    expect(find.text('gone'), findsOneWidget);
     expect(
       find.byTooltip(
         'could have\n/kʊdhæv/ → /kʊdəv/\n'
