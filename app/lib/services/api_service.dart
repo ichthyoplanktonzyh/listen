@@ -32,14 +32,32 @@ Future<String> computeOpenSubtitlesMovieHash(String path) async {
   }
 }
 
+/// Raw HTTP exchange result used by the [LocalApi] transport seam.
+typedef ApiResponse = ({int statusCode, String body});
+
+/// The pluggable transport behind [LocalApi]. Production uses a `dart:io`
+/// [HttpClient]; tests inject a fake so the client can be exercised without a
+/// live sidecar (see CONCERNS.md A1).
+typedef ApiTransport =
+    Future<ApiResponse> Function(String method, String path, String? body);
+
 class LocalApi {
   LocalApi._(
     this.baseUrl,
     this.token,
     this._process,
     this.logPath,
-    this._logSink,
-  );
+    this._logSink, [
+    this._transport,
+  ]);
+
+  /// Test-only constructor that drives the API through an injected
+  /// [ApiTransport] instead of a live sidecar. See CONCERNS.md A1.
+  factory LocalApi.withTransport({
+    required String baseUrl,
+    required String token,
+    required ApiTransport transport,
+  }) => LocalApi._(baseUrl, token, null, null, null, transport);
 
   final String baseUrl;
   final String token;
@@ -47,6 +65,7 @@ class LocalApi {
   final String? logPath;
   final IOSink? _logSink;
   final HttpClient _client = HttpClient();
+  final ApiTransport? _transport;
   bool _closed = false;
 
   static Future<LocalApi> connect() async {
@@ -855,18 +874,32 @@ class LocalApi {
   }
 
   Future<dynamic> _request(String method, String path, [Object? body]) async {
+    final encoded = body != null ? jsonEncode(body) : null;
+    final transport = _transport ?? _httpClientTransport;
+    final response = await transport(method, path, encoded);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw HttpException(response.body, uri: Uri.parse('$baseUrl$path'));
+    }
+    if (response.body.isEmpty) return null;
+    return jsonDecode(response.body);
+  }
+
+  /// Default transport: the real `dart:io` HttpClient. Preserves the original
+  /// header and request behavior exactly; only the raw exchange is extracted so
+  /// it can be swapped in tests.
+  Future<ApiResponse> _httpClientTransport(
+    String method,
+    String path,
+    String? encodedBody,
+  ) async {
     final request = await _client.openUrl(method, Uri.parse('$baseUrl$path'));
     request.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    if (body != null) request.write(jsonEncode(body));
+    if (encodedBody != null) request.write(encodedBody);
     final response = await request.close();
     final text = await response.transform(utf8.decoder).join();
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw HttpException(text, uri: Uri.parse('$baseUrl$path'));
-    }
-    if (text.isEmpty) return null;
-    return jsonDecode(text);
+    return (statusCode: response.statusCode, body: text);
   }
 
   Future<void> close() async {
