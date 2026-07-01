@@ -20,6 +20,9 @@
 > 的 rhythm-first UI/实验铺垫上升为正式 audible-structure contract；旧 `RhythmFrame` v0
 > 兼容性不再阻塞新模型，后续先落实 A/B/C references、provenance、nuclei、WordTimeline
 > + duration/energy substrate 和 CTC phone segmental-only ownership。
+> 2026-07-01 产品路线更新：新增 Phase 2.22 User-Facing Workflow Semantics，在继续
+> Phase 2.21 模型质量闭环的同时，专门收敛当前所有用户功能的前端语义、入口、状态、降级和端到端
+> 使用路径；后续学习闭环工作必须先经过这条用户路径治理。
 > 完成报告见 `docs/release/milestone-1.md`。
 
 ## 1. 路线图目标
@@ -97,6 +100,10 @@ LLTimeline JSON v1
   Phase 2.21 架构锁：文本先验不能冒充实际听到的结构；L1-L3 必须能由 WordTimeline +
   dictionary/syllable structure + duration/energy 生成；CTC phone evidence 只拥有 L4
   connected-speech/segmental 解释。
+- Phase 2.22 后，当前所有用户功能必须被组织成用户可见的能力路径：媒体播放、下载、
+  字幕获取、资源管理、Word sync、Chunk replay、Listening structure、Phone evidence、
+  词汇、诊断、设置、任务中心和 practice/review readiness 都需要明确入口、可用状态、
+  降级原因和下一步行动。
 
 ### 2.2 MVP 核心闭环
 
@@ -1367,6 +1374,8 @@ Phase 3.0 的近期建议顺序：
 Phase 2.17 真实声音线 QA
   -> Phase 2.19 phone evidence benchmark scoring
   -> Phase 2.20 rhythm-first listening analysis
+  -> Phase 2.21 audible-structure architecture
+  -> Phase 2.22 user-facing workflow semantics
   -> Phase 3.0.1 学习行为架构地基
   -> 输入难度信号与精听/泛听模式
   -> 字幕渐隐、cloze、chunk dictation
@@ -1414,6 +1423,41 @@ Phase 2.20 的近期顺序：
 5. 用评测结果归因 pipeline 阻碍项，再决定后续是修 timing、stress model、connected-speech
    classifier、phone model 还是 UI 表达。
 
+### 14.14 Phase 2.22：User-Facing Workflow Semantics
+
+> 状态：ACTIVE。方向文档见
+> `.planning/phases/2.22-user-facing-workflow-semantics/2.22-CONTEXT.md`、
+> `2.22-FEATURE-SEMANTICS-MODEL.md` 与 `2.22-PLAN.md`。
+
+Phase 2.22 的目标是把当前所有用户功能收敛成清晰的用户路径：
+
+```text
+打开媒体
+  -> 本机 Whisper 生成字幕或导入字幕
+  -> 看到字幕资源具备哪些学习能力
+  -> 使用 word sync / chunk replay / listening structure / phone evidence
+  -> 点击词汇、查看诊断、进入练习或复习
+```
+
+核心判断：
+
+- “功能完成”不再只等于 contract、API、模型或局部 widget 完成。
+- 每个功能都必须有用户意图、入口、前置条件、可用状态、降级解释和验证路径。
+- Settings 只能配置默认偏好，不应成为发现主要学习能力的唯一入口。
+- 内部资源名可保留在高级详情中，但普通路径应使用 `Word sync`、`Chunk replay`、
+  `Listening structure`、`Phone evidence` 等用户语义。
+- 本机 Whisper + WordTimeline 是当前最常见消费端路径，必须作为 P0 端到端验收。
+
+Phase 2.22 的近期顺序：
+
+1. 基于 `worktree-ui-feature-semantic-mapping` 的功能图，审计当前 UI 的全部功能入口、标签、状态和跨区域行为。
+2. 建立当前 app/session/media/subtitle 状态下的能力可用性模型。
+3. 修顺本机 Whisper 默认路径：生成字幕、加载轨道、Word sync、Listening structure。
+4. 重组资源面板，使其先展示用户能力，再展示内部 timeline/artifact 详情。
+5. 将 `sound pattern` 等历史语义收敛为 `Listening structure` 与 `Phone evidence`。
+6. 类型化关键状态反馈，修复下载栏、无媒体控制栏、侧面板和副字幕无轨道等体验问题。
+7. 建立 fixture + 本地真实媒体的端到端 QA checklist。
+
 ## 15. 依赖关系
 
 ```mermaid
@@ -1437,7 +1481,9 @@ flowchart TD
     M2P --> M2C["轻量消费端资源读取"]
     M2P --> M2RHY["Phase 2.20 Rhythm-first 真实听感分析"]
     M2C --> M2RHY
-    M2RHY --> M30["Phase 3.0 英语听力学习闭环"]
+    M2RHY --> M221["Phase 2.21 Audible Structure Architecture"]
+    M221 --> M222["Phase 2.22 User-Facing Workflow Semantics"]
+    M222 --> M30["Phase 3.0 英语听力学习闭环"]
     M30 --> FUTURE["移动正式客户端与后续能力"]
 ```
 
@@ -1452,6 +1498,7 @@ flowchart TD
 | M4 | SUB-012、TXT-002 至 TXT-006、TXT-008、WORD-003 至 WORD-009、API-006 至 API-009、UI-004、UI-005、UI-008、UI-009 |
 | M5 | DICT-001 至 DICT-006、DICT-010、DIAG-001 至 DIAG-008、API-010、API-011、UI-006、UI-007 |
 | M6 | PLAT-002、PLAT-004、PLAY-013、SUB-016、DATA-011、UI-010、NFR 与 TEST 发布门槛 |
+| M2-UX | UX-001 至 UX-008 |
 | M7 | ARCH-010、UI-012、MOB-001 至 MOB-008 |
 | M8 | PLAY-014、SUB-015、ENH-001 至 ENH-005 |
 | M1.5 | WORD-011 至 WORD-018、API-014 至 API-017、DATA-012 至 DATA-016、UI-013 至 UI-015、TEST-015 至 TEST-018 |

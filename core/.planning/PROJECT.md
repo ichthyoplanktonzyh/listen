@@ -3,7 +3,8 @@
 ## 1. 文档信息
 
 - 文档用途：定义产品目标、MVP 范围、核心体验和架构边界
-- 当前阶段：Milestone 2 active；Phase 2.20 rhythm-first listening analysis 已启动
+- 当前阶段：Milestone 2 active；Phase 2.21 audible-structure architecture 与
+  Phase 2.22 user-facing workflow semantics 并行收敛
 - 当前发布：LLPlayerNext 0.7.0 macOS Apple Silicon 单用户版本
 - 后续平台：Windows、Linux、Android、iOS
 - 参考产品与代码库：LLPlayer
@@ -20,6 +21,11 @@
 - 产品定义更新：2026-06-29，真实语流分析的产品中心从 phone-level ribbon 调整为
   rhythm-first listening frame：默认先解释重音节奏、弱读音团、压缩区、停顿和听感锚点；
   phone-level 输出保留为证据层和长期模型质量工作。
+- 产品定义更新：2026-07-01，新增 Phase 2.22 user-facing workflow semantics：
+  当前所有用户功能，包括媒体播放、URL/下载、字幕获取、资源管理、Word sync、Chunk replay、
+  Listening structure、Phone evidence、词汇、诊断、设置、任务中心和 practice/review backend
+  readiness，都必须被组织成清晰、可发现、可降级、可验证的用户工作流；“功能完成”不再只等于
+  模型/API/局部 UI 完成，也必须包含入口、状态、下一步行动和端到端验证。
 
 ## 2. 产品愿景
 
@@ -53,6 +59,18 @@ provider 进入系统，缺失能力干净降级。详见 §4.4。
 2. **声音识别问题**：认识这些词但在真实音频中没有听出来，由 rhythm-first listening frame
    承接。系统应优先展示真实听感中的重音锚点、弱读音团、压缩区、停顿和期望/真实错配；
    phone-level expected/observed 对齐作为可展开证据层，而不是默认主视图。
+
+Phase 2.22 进一步要求：这些能力必须以用户任务路径呈现，而不是要求用户理解内部资源名。
+典型路径应是：
+
+```text
+打开媒体
+  -> 本机 Whisper 生成字幕或导入字幕
+  -> 自动呈现字幕能力、Word sync、chunk replay、listening structure、phone evidence 的可用性
+  -> 用户按当前句进行听感分析、词汇诊断和练习
+```
+
+资源 id、provider、JSON 字段和 evidence 细节仍可在高级面板中查看，但不应成为普通使用路径的前置知识。
 
 Milestone 1 MVP 聚焦可靠的听力播放基础设施、基础诊断闭环和最常用的
 LLPlayer 桌面学习体验：

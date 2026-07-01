@@ -43,6 +43,7 @@
 | M2-PROD | 本地重装生产引擎与精准时间轴资源 |
 | M2-CONSUME | 轻量消费端时间轴资源读取 |
 | M2-RHY | Rhythm-first 真实听感分析 |
+| M2-UX | 用户可见工作流语义与端到端体验收敛 |
 | FUTURE | MVP 后研究与增强 |
 
 M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强化也已
@@ -74,6 +75,8 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | StressAnchor | 用户听一句话时应优先抓住的重音/语义声音锚点 |
 | WeakGroup | 附着在重音锚点周围的弱读、背景化或压缩词组 |
 | ListeningHotspot | 解释“文字读音”和“实际听感”错配的局部区域 |
+| 用户可见能力 | 从用户角度描述某条字幕当前能做什么，如 Word sync、Chunk replay、Listening structure、Phone evidence、Vocabulary、Diagnosis |
+| 能力可用状态 | 某项用户可见能力的状态，包括 available、generating、degraded、unavailable、unsupported、stale、error |
 
 ## 3. 需求总览映射
 
@@ -96,6 +99,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | 生产端精准时间轴 | 无强制 Milestone 1 发布项 | LLT-001 至 LLT-007、PROD-001 至 PROD-007、EVAL-001 至 EVAL-004 |
 | 轻量消费端资源读取 | 无强制 Milestone 1 发布项 | CONSUME-001 至 CONSUME-004 |
 | Rhythm-first 真实听感分析 | 无强制 Milestone 1 发布项 | RHY-001 至 RHY-008 |
+| 用户可见工作流语义 | 无强制 Milestone 1 发布项 | UX-001 至 UX-008 |
 
 ## 4. 平台需求
 
@@ -2326,6 +2330,108 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - 若 phone evidence 质量不足，UI 仍能降级为 rhythm-only 或 tentative explanation。
 - 依赖：RHY-007、EVAL-002。
 
+## 18.3.6 用户可见工作流语义需求
+
+> Phase 2.22 起，已有功能必须按用户可见能力组织。内部资源名、provider id、JSON 字段和
+> pipeline 名称可以保留在高级详情中，但不能成为普通用户完成路径的前置知识。
+
+### UX-001：用户可见能力模型
+
+- 优先级：P0
+- 阶段：M2-UX
+- 需求：消费端必须把当前 app/session/media/subtitle 可用能力映射为用户可理解的层级，包括
+  Media source、Playback、Subtitles、Transcript/overlay、Word sync、Chunk replay、
+  Listening structure、Phone evidence、Vocabulary、Diagnosis、System/task feedback 和
+  Practice/Review readiness。
+- 验收标准：
+  - 每项能力具有明确 user-facing 名称和内部资源映射。
+  - 资源面板可以从当前 app/session/media/subtitle 状态推导能力可用性。
+  - 高级详情仍可展示 WordTimeline、ChunkTimeline、PhoneTimeline、RhythmFrame、artifact 和 provider 信息。
+- 依赖：CONSUME-001 至 CONSUME-004、RHY-001。
+
+### UX-002：能力可用状态
+
+- 优先级：P0
+- 阶段：M2-UX
+- 需求：每项用户可见能力必须表达 available、generating、degraded、unavailable、unsupported、stale、error 等状态。
+- 验收标准：
+  - 不可用状态说明缺少的输入或资源。
+  - degraded 状态说明可用但缺少哪些证据或质量较低。
+  - error 状态保留失败原因并提供可行重试或刷新入口。
+  - UI 测试可断言状态类别，而不依赖精确自由字符串。
+- 依赖：UX-001、UI-011、CONSUME-004。
+
+### UX-003：本机 Whisper 默认路径
+
+- 优先级：P0
+- 阶段：M2-UX
+- 需求：用户打开视频/音频后，应能通过清晰路径使用本机 Whisper 生成字幕，并看到生成结果带来的 Word sync、Chunk replay 和 Listening structure 能力。
+- 验收标准：
+  - 转录完成后生成字幕轨可自动加载或通过明确 fallback 按钮加载。
+  - 如果 Whisper JSON/DTW 产生 word timings，Word sync 状态为 available。
+  - 如果 active WordTimeline 可以生成 document-level `rhythm_frames`，Listening structure 状态为 available 或 degraded。
+  - 如果没有 word timings，UI 明确说明 Word sync / Listening structure 需要词级时序。
+- 依赖：M1.7 本地 ASR、LLT-003、CONSUME-002、RHY-006。
+
+### UX-004：资源面板能力优先
+
+- 优先级：P0
+- 阶段：M2-UX
+- 需求：字幕资源和时间轴资源面板必须先回答“这条字幕能做什么”，再展示内部 run 列表。
+- 验收标准：
+  - 每条字幕资源显示 subtitle lifecycle 与学习能力摘要。
+  - Word sync、Chunk replay、Listening structure、Phone evidence、Production artifacts 分组清晰。
+  - 激活、刷新、归档、恢复、删除和导出操作不会打断能力状态解释。
+- 依赖：UX-001、UX-002、LLT-007。
+
+### UX-005：Listening structure 与 Phone evidence 语义分离
+
+- 优先级：P0
+- 阶段：M2-UX
+- 需求：UI 必须把听感结构和 phone evidence 分开表达，不再用含混的 `sound pattern` 作为主语义。
+- 验收标准：
+  - 主要听感入口命名为 Listening structure 或等价产品术语。
+  - Phone evidence 是可切换或可展开的细节层。
+  - 缺少 phone evidence 不阻止 WordTimeline-driven Listening structure 显示。
+  - 只有 text-prior 的 cue 不被描述为实际测得音频。
+- 依赖：RHY-002、RHY-006、UX-002。
+
+### UX-006：类型化任务与状态反馈
+
+- 优先级：P0
+- 阶段：M2-UX
+- 需求：会影响 UI 行为的状态反馈不得只由自由字符串驱动，应使用类型化 task/status/capability state。
+- 验收标准：
+  - 工作中、成功、警告/降级、错误和下一步行动可区分。
+  - 下载状态栏使用单一状态对象表达 downloading、completed、failed、dismissed。
+  - 后端任务事件先更新类型化状态，再生成展示文案。
+  - 关键 UI 测试不依赖匹配长状态字符串。
+- 依赖：UI-011、TEST-014、UX-002。
+
+### UX-007：入口与布局一致性
+
+- 优先级：P1
+- 阶段：M2-UX
+- 需求：主要学习能力应从稳定位置发现，侧面板、底部控制栏、设置弹窗和任务中心之间的职责边界清晰。
+- 验收标准：
+  - Settings 只配置偏好，不是主要学习能力的唯一入口。
+  - 无媒体时隐藏或弱化无意义控制，并突出打开媒体。
+  - 副字幕无轨道、侧面板显示条件、字幕隐藏与资源面板显示关系都有明确反馈。
+  - AppBar、播放叠加层、侧面板、底部控制栏和任务中心各自职责可文档化。
+- 依赖：UI-001 至 UI-011、UX-001。
+
+### UX-008：端到端工作流验证
+
+- 优先级：P0
+- 阶段：M2-UX
+- 需求：当前所有用户功能的核心路径必须通过端到端用户路径验证，而不是只通过 contract 或 widget 局部测试。
+- 验收标准：
+  - 覆盖本机 Whisper 默认路径、普通 SRT/VTT 降级路径和 LLTimeline resource 路径。
+  - 覆盖缺少 WordTimeline、缺少 `rhythm_frames`、缺少 phone evidence、缺少 energy evidence 的降级状态。
+  - 自动化 fixture 测试与本地真实媒体 smoke checklist 分开记录。
+  - 每个 P0 用户路径有明确失败时下一步行动。
+- 依赖：UX-001 至 UX-007、TEST-014。
+
 ## 18.4 Milestone 2 多语言学习基础需求
 
 > 方向与抽象决策见 `docs/decisions/0012-multilingual-learning-abstraction.md` 与
@@ -2592,5 +2698,6 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | Milestone 2 生产引擎 | LLT-001 至 LLT-006、PROD-001 至 PROD-007、EVAL-001 至 EVAL-004 |
 | Milestone 2 轻量消费端 | LLT-007、CONSUME-001 至 CONSUME-004 |
 | Phase 2.20 Rhythm-first 真实听感分析 | RHY-001 至 RHY-008 |
+| Phase 2.22 用户可见工作流语义 | UX-001 至 UX-008 |
 | Milestone 2 多语言学习基础 | LANG-001 至 LANG-010 |
 | Phase 3.0 英语听力学习闭环 | LOOP-000 至 LOOP-009 |

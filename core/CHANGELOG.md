@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- 2026-07-01 12:59 CST: 新增 Phase 2.22 User-Facing Workflow Semantics。
+  (1) **Phase shell**: 新建
+  `.planning/phases/2.22-user-facing-workflow-semantics/`，包含 context、feature
+  semantics model、current feature inventory 和 plan，明确当前问题是所有用户功能的入口、状态、降级和端到端路径混乱，
+  不是单个 `rhythm_frames` 开关。
+  (2) **Product contract**: 定义用户可见能力栈：Media source、Playback、Subtitles、
+  Transcript/overlay、Word sync、Chunk replay、Listening structure、Phone evidence、
+  Vocabulary、Diagnosis、System/task feedback、Practice/Review readiness；
+  readiness states 统一为 available/generating/degraded/unavailable/unsupported/stale/error。
+  (3) **UI worktree input**: `2.22-CURRENT-FEATURE-INVENTORY.md` 参考
+  `worktree-ui-feature-semantic-mapping` 的功能描述，先覆盖媒体、字幕、播放、资源、词汇、
+  诊断、听感/音素、设置和任务反馈等当前全部功能，后续 Step 0 按当前 main 校验。
+  (4) **Roadmap/requirements sync**: PROJECT、ROADMAP、STATE、handoff 和 REQUIREMENTS 已同步
+  Phase 2.22；新增 `M2-UX` 阶段与 `UX-001` 至 `UX-008` 需求，覆盖能力模型、本机
+  Whisper 默认路径、资源面板、Listening structure / Phone evidence 语义、typed status、
+  布局入口和端到端验证。
+  验证: documentation-only change；`git diff --check` 通过。
+
 - 2026-07-01 10:36 CST: 修复 Phase 2.18 后旧本地库 schema 漂移导致的媒体/字幕断链。
   (1) **Destructive repair migration**: SQLite schema 升到 v16，新增
   `0016_destructive_lexical_reset.sql`，重建 `LexicalEntry + LexicalUnit`

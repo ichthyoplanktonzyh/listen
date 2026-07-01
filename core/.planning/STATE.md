@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: active
-last_updated: "2026-06-29T16:00:00.000Z"
+last_updated: "2026-07-01T12:59:00.000+08:00"
 progress:
   total_phases: 11
   completed_phases: 1
@@ -14,7 +14,7 @@ progress:
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-06-30 CST
+> 最后更新：2026-07-01 CST
 > 更新原因：Phase 2.20 deterministic RhythmFrame v0 已落地到 `sound_analysis.rhythm_frame`、
 > OpenAPI、Flutter typed model、字幕层 rhythm-first ribbon、字幕 rhythm/phones 就地快切、
 > 字幕 expected pronunciation reference、字幕 rhythm cue loop、诊断卡 compact rhythm 区块，
@@ -25,7 +25,10 @@ progress:
 > 产品 contract 正确，但 generator 主线需要从 CTC-derived rhythm 迁移到 forced-aligned
 > WordTimeline + duration/rate + RMS energy/F0 的 layered hybrid。2026-06-30 17:37 CST
 > 新增 Phase 2.21 Audible Structure Architecture，单独落实 actual audible structure
-> contract；旧 `RhythmFrame` v0 兼容性不再阻塞新模型。
+> contract；旧 `RhythmFrame` v0 兼容性不再阻塞新模型。2026-07-01 端到端使用路径复盘确认：
+> 当前所有用户功能的前端语义、入口、状态和降级路径不够清晰，新增 Phase 2.22
+> User-Facing Workflow Semantics，专门收敛本机 Whisper 默认路径、资源能力可用性、
+> Listening structure / Phone evidence 语义分层、typed status 和端到端 QA。
 
 ## 当前位置
 
@@ -41,6 +44,7 @@ progress:
   Phase 2.19 ⏳ 真实 benchmark scoring 初始评估已落地 +
   Phase 2.20 ⏳ Rhythm-first 真实听感分析已启动 +
   Phase 2.21 ⏳ Audible Structure Architecture 已启动 +
+  Phase 2.22 ⏳ User-Facing Workflow Semantics 已启动 +
   Phase 3.0 🧭 英语听力学习闭环方向已建档 +
   Phase 3.0.1 ✅ backend 学习行为架构地基已落地
 - **分支**：`main`
@@ -53,7 +57,7 @@ progress:
 | 路线 | 目标 | 当前状态 |
 |---|---|---|
 | 本地重装生产引擎 | 生成精准 WordTimeline / ChunkTimeline / LLTimeline JSON | ✅ 阶段性收口，转长期研究 |
-| 轻量消费端 LLPlayerNext | 稳定读取 `.lltimeline.json` 并播放学习 | ✅ Phase 2.3/2.10/2.12 已集成 |
+| 轻量消费端 LLPlayerNext | 稳定读取 `.lltimeline.json` 并播放学习 | ⏳ Phase 2.22 正在收敛用户可见工作流 |
 
 ## 后续产品方向
 
@@ -275,6 +279,55 @@ progress:
   - `.planning/phases/2.21-audible-structure-architecture/2.21-PLAN.md`
   - `.planning/phases/2.21-audible-structure-architecture/2.21-AUDIBLE-STRUCTURE-MODEL.md`
 
+### Phase 2.22: User-Facing Workflow Semantics ⏳ Active
+
+- 目标：把当前所有用户功能组织成清晰、可发现、可降级、可验证的用户路径，包括媒体播放、
+  URL/下载、拖拽、字幕获取、资源管理、Word sync、Chunk replay、Listening structure、
+  Phone evidence、词汇、诊断、设置、任务中心和 practice/review backend readiness。
+- 触发背景：
+  - 端到端复盘发现，普通用户路径不是“消费 JSON 字段”，而是：
+    `打开媒体 -> 本机 Whisper 生成字幕 -> 自动获得 Word sync / Listening structure
+    可用性 -> 播放中使用听感结构、词汇诊断和练习`。
+  - 当前 UI 仍混用 `sound pattern`、`phonetic analysis`、`rhythm`、`timeline resource`
+    等内部或历史语义，Settings 中的开关也承担了过多功能发现职责。
+  - `worktree-ui-feature-semantic-mapping` 的用户可见状态机/功能交互图提供了方法论输入，
+    但该 worktree 早于 2.21，不能直接作为当前事实源。
+- 核心决策：
+  - “功能完成”必须包含入口、前置条件、能力状态、降级说明、下一步行动和端到端验证。
+  - 主要 UI 应使用用户语义：Subtitles、Word sync、Chunk replay、Listening structure、
+    Phone evidence、Vocabulary、Diagnosis、Practice/Review readiness。
+  - 内部名如 WordTimeline、ChunkTimeline、PhoneTimeline、RhythmFrame、LLTimeline、
+    provider id 和 artifact 仍可在高级资源详情中展示。
+  - Settings 只配置偏好，不应成为发现主要学习能力的唯一入口。
+  - 自由字符串 status 不应继续控制核心 UI 行为；关键工作流需要 typed readiness/task state。
+- 初始验收路径：
+  1. Local Whisper default path：
+     `Open media -> Generate subtitles -> Generated track loads -> Word sync ready
+     -> document-level rhythm_frames render as Listening structure`。
+  2. Plain SRT/VTT path：字幕、词汇和基础诊断可用；缺少 Word sync / Listening structure
+     时明确降级。
+  3. LLTimeline resource path：资源面板展示 Word sync、Chunk replay、Listening structure、
+     Phone evidence 和 artifacts 的能力摘要。
+  4. Missing evidence path：缺少 WordTimeline、`rhythm_frames`、phone evidence 或 energy
+     时，不把 predicted/text-prior claim 伪装成 measured audio。
+- 已落地：
+  - 新增 `.planning/phases/2.22-user-facing-workflow-semantics/2.22-CONTEXT.md`。
+  - 新增 `2.22-FEATURE-SEMANTICS-MODEL.md`，定义用户可见能力栈和 readiness states。
+  - 新增 `2.22-CURRENT-FEATURE-INVENTORY.md`，基于 `worktree-ui-feature-semantic-mapping`
+    的功能图建立全功能审计种子清单，并要求后续按当前 main 校验。
+  - 新增 `2.22-PLAN.md`，按 UI audit、capability readiness、本机 Whisper 默认路径、
+    资源面板、Listening structure 语义、typed status、布局入口和端到端 QA 分步推进。
+  - PROJECT / ROADMAP / REQUIREMENTS 已新增 Phase 2.22 与 `UX-001` 至 `UX-008` 需求。
+- 下一步：
+  1. 从 Step 0 开始审计当前 Flutter 全部功能入口、标签、状态和用户可见状态机。
+  2. 实现 app/session/media/subtitle 级 capability readiness model。
+  3. 先修 P0 本机 Whisper 默认路径和 Listening structure / Phone evidence 语义。
+- 规划文档：
+  - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-CONTEXT.md`
+  - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-FEATURE-SEMANTICS-MODEL.md`
+  - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-CURRENT-FEATURE-INVENTORY.md`
+  - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-PLAN.md`
+
 ### Phase 3.0: English Listening Learning Loop 🧭 已建档
 
 - 目标：在 Phase 2 的真实声音流资源和 Phase 2.18 的新学习资产架构之上，把英语作为第一门语言
@@ -286,8 +339,8 @@ progress:
   - 常见语言学习功能必须重写为听力本位能力。
   - L1 与 L2 理论进入诊断层，首个真实组合为 Mandarin L1 -> English L2。
   - Cloze、听写、字幕渐隐、chunk replay 和本地 YouGlish-like 个人语料库是 Phase 3.0 的关键体验。
-- 近期顺序以 Phase 2.19 phone evidence benchmark scoring 和 Phase 2.20 rhythm-first
-  listening analysis 为前置依据，然后再推进输入难度、精听/泛听、主动验证、听力驱动词汇、
+- 近期顺序以 Phase 2.21 audible-structure correctness 和 Phase 2.22 user-facing workflow
+  semantics 为前置依据，然后再推进输入难度、精听/泛听、主动验证、听力驱动词汇、
   L1-aware diagnosis、shadowing 和诊断型 dashboard。
 - 规划文档：
   - `.planning/phases/3.0-english-listening-learning-loop/3.0-CONTEXT.md`

@@ -1,37 +1,80 @@
-# Continue Here — Phase 2.21 Audible Structure Architecture
+# Continue Here — Phase 2.22 User-Facing Workflow Semantics
 
-> 最后更新：2026-06-30 CST
+> 最后更新：2026-07-01 CST
 > 单一接续入口。先读 `AGENT.md` 和 `.planning/STATE.md`，再读本文件。
 
 ## 当前结论
 
-Phase 2.20 的产品方向是对的：
+Phase 2.21 的 audible-structure 主体架构已经能支撑当前产品方向：
 
 ```text
-在字幕层显示当前句子的实际可听结构
+在字幕层显示当前句子的实际可听结构，但不把 text prior 伪装成 measured audio。
 ```
 
-已经落地的 `RhythmFrame` resource、字幕层 rhythm UI、rhythm/phones toggle、
-expected pronunciation reference、cue loop、QA scorer、Helsinki/LibriTTS scorer、
-duration/RMS manual QA harness 和 benchmark role convention 都应保留为脚手架或实验
-输入。
-
-但是当前主工作方已经切到 Phase 2.21：
+现在端到端使用路径暴露出的主要问题已经转到前端语义和工作流：
 
 ```text
-先锁 actual audible structure architecture
-再重写 RhythmFrame contract / generator / evaluation
+功能已经存在，但用户不知道该从哪里打开、何时可用、为什么不可用、下一步该做什么。
 ```
 
-旧 `RhythmFrame` v0、旧 fixture、旧 `.tmp` artifact 兼容性如果阻碍新结构，可以不保留。
+因此当前工程主线切到 Phase 2.22：
+
+```text
+把当前所有用户功能组织成清晰、可发现、可降级、可验证的用户路径
+```
+
+Phase 2.21 的 W8 manual listening QA 仍未完成，作为模型质量/校准并行待办保留；但下一步代码方向优先推进 Phase 2.22 的 UI/workflow 收敛。
 
 ## 上位文档
 
+- `.planning/phases/2.22-user-facing-workflow-semantics/2.22-CONTEXT.md`
+- `.planning/phases/2.22-user-facing-workflow-semantics/2.22-FEATURE-SEMANTICS-MODEL.md`
+- `.planning/phases/2.22-user-facing-workflow-semantics/2.22-CURRENT-FEATURE-INVENTORY.md`
+- `.planning/phases/2.22-user-facing-workflow-semantics/2.22-PLAN.md`
 - `.planning/phases/2.21-audible-structure-architecture/2.21-AUDIBLE-STRUCTURE-MODEL.md`
 - `.planning/phases/2.21-audible-structure-architecture/2.21-PLAN.md`
 - `.planning/phases/2.21-audible-structure-architecture/2.21-CONTEXT.md`
 - `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-ROUTE-CORRECTION.md`
 - `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-ALGORITHM-METRICS-RESEARCH.md`
+
+## Phase 2.22 Product Lock
+
+User-facing capabilities should be described as:
+
+- Subtitles
+- Word sync
+- Chunk replay
+- Listening structure
+- Phone evidence
+- Vocabulary
+- Diagnosis
+- Practice/Review readiness
+
+Internal names remain valid in advanced resource details:
+
+- WordTimeline
+- ChunkTimeline
+- PhoneTimeline
+- RhythmFrame
+- LLTimeline
+- provider ids / artifacts / metrics
+
+Readiness states should be explicit:
+
+```text
+available | generating | degraded | unavailable | unsupported | stale | error
+```
+
+The P0 default path is:
+
+```text
+Open media
+  -> Generate subtitles with local Whisper
+  -> Generated track loads
+  -> Word sync readiness appears
+  -> document-level rhythm_frames render as Listening structure when available
+  -> missing phone/energy evidence is clearly represented
+```
 
 ## Architecture Lock
 
@@ -155,23 +198,50 @@ Phase 2.21 的关键约束：
     修复前 artifact 会保留旧 id，导致导出 RhythmFrame 没有 `energy` provenance。
   - 空模板 strict validation 通过，但 scorer 现在不会把空模板计为 manual annotations；
     当前 `annotated_sentence_count = 0`，W8 仍需人工听标。
+- Phase 2.22 planning shell:
+  - 新增 `2.22-CONTEXT.md`：解释为什么当前问题是用户可见工作流，而不是单个 `rhythm_frames` 开关。
+  - 新增 `2.22-FEATURE-SEMANTICS-MODEL.md`：定义用户能力栈、readiness states、命名原则和 feature template。
+  - 新增 `2.22-CURRENT-FEATURE-INVENTORY.md`：参考 `uiworktree` 的功能描述，覆盖媒体、字幕、播放、资源、词汇、诊断、听感/音素、设置和任务反馈等当前全部功能。
+  - 新增 `2.22-PLAN.md`：按 UI audit、capability readiness、本机 Whisper 默认路径、资源面板、Listening structure 语义、typed status、布局入口和端到端 QA 推进。
+  - PROJECT / ROADMAP / REQUIREMENTS / STATE 已同步 Phase 2.22 与 `UX-001` 至 `UX-008`。
 
 ## Next Concrete Work
 
-从 Phase 2.21 review backlog 继续：
+工程主线从 Phase 2.22 Step 0 开始：
 
-1. W8 product QA loop：填写 `.tmp/rhythm-frame-qa/w8-product/annotations-template.jsonl`
+1. 审计当前 Flutter 全部功能入口、标签、状态和用户可见状态机，重点文件是 `main.dart`、
+   `transcription_ui.dart`、AppBar、资源面板、settings、本地化文案和 subtitle overlay。
+2. 设计并实现 app/session/media/subtitle 级 capability readiness model。
+3. 优先修本机 Whisper 默认路径：生成字幕后，用户能看到 generated track、Word sync、
+   Listening structure、Phone evidence 的可用状态和下一步行动。
+4. 将 `sound pattern` 语义收敛为 Listening structure / Phone evidence，并修正文案中
+   仍暗示必须有 `sound_analysis` 的旧描述。
+
+并行保留 Phase 2.21 W8：
+
+1. 填写 `.tmp/rhythm-frame-qa/w8-product/annotations-template.jsonl`
    的 anchors/nuclei/weak groups/reductions/manual scores，并跑 scorer gate。
 2. 继续降级/移除 `phone_timeline_transitional` 对 L1-L3 的 fallback ownership，并用
    manual QA / Helsinki scorer 验证 provenance-aware scoring。
 
 ## Candidate Files
 
+- `apps/desktop/lib/main.dart`
+- `apps/desktop/lib/transcription_ui.dart`
+- `apps/desktop/lib/localization.dart`
+- `apps/desktop/lib/settings.dart`
+- `apps/desktop/lib/controllers/subtitle_controller.dart`
+- `apps/desktop/lib/controllers/speech_enhancement_workflow_controller.dart`
+- `apps/desktop/lib/widgets/app_bar/player_app_bar.dart`
+- `apps/desktop/lib/widgets/panels/subtitle_resource_manager_panel.dart`
+- `apps/desktop/lib/widgets/panels/timeline_resource_summary_panel.dart`
+- `apps/desktop/lib/widgets/settings/settings_dialog.dart`
+- `apps/desktop/lib/widgets/subtitle/rhythm_frame_ribbon.dart`
+- `apps/desktop/lib/widgets/panels/diagnosis_card.dart`
+- `apps/desktop/test/`
 - `crates/domain/src/sound_analysis.rs`
 - `contracts/openapi/v1.yaml`
 - `apps/desktop/lib/models/timeline.dart`
-- `apps/desktop/lib/widgets/subtitle/rhythm_frame_ribbon.dart`
-- `apps/desktop/lib/widgets/panels/diagnosis_card.dart`
 - `testdata/rhythm-frame-qa/fixture-rhythm.lltimeline.json`
 - `scripts/evaluate-rhythm-frame.py`
 - `scripts/evaluate-helsinki-prosody.py`
