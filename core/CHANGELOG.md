@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- 2026-07-01 CST: 合并 testing-system-buildout 后清理 main 既有 analyze 告警——
+  移除 `test/controllers_test.dart:233` 与 `test/timeline_resource_summary_panel_test.dart:33`
+  中 `rhythmFrames: const []` 冗余的 `const`（`unnecessary_const`，随 Phase 2.21 韵律
+  提交引入，非本次合并造成）。零行为变化，`flutter analyze` 恢复 0 issue。
+
 - 2026-07-01 00:46 CST: Phase 2.21 W8 local product QA pack。
   (1) **Artifact remap fix**: LLTimeline import now remaps
   `rhythm_word_acoustic_cues.payload.timeline_id` and cue `sentence_id` alongside
