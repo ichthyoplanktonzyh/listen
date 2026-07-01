@@ -30,6 +30,7 @@ void main() {
             activeWordTimelineId: 'timeline-active',
             activePhoneTimelineId: 'phone-active',
             activeChunkTimelineId: 'chunk-active',
+            rhythmFrames: const [],
             artifacts: [
               LLTimelineArtifact(kind: 'production_report', payload: {}),
             ],

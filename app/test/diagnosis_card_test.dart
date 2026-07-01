@@ -177,14 +177,30 @@ void main() {
                 providerId: 'fixture',
                 providerVersion: 'v1',
                 phoneSet: 'arpabet',
-                generatedFrom: 'expected_stress_aligned_to_observed_timing_v0',
+                generatedFrom: 'expected_phones_aligned_to_observed_timing',
                 learningPhones: [],
                 connectedSpeech: [],
                 syllables: [],
                 prosodicPhrases: [],
                 rhythmFrame: RhythmFrame(
-                  generatedFrom:
-                      'expected_stress_aligned_to_observed_timing_v0',
+                  generatedFrom: 'wordtimeline_timing_acoustic_prominence_v1',
+                  references: RhythmFrameReferences(
+                    citation: RhythmReference(
+                      label: 'citation_form',
+                      source: 'dictionary_lexical_stress',
+                      evidenceClass: 'heuristic_proxy',
+                    ),
+                    defaultConnected: RhythmReference(
+                      label: 'default_connected_variants',
+                      source: 'english_connected_speech_rules_v1',
+                      evidenceClass: 'heuristic_proxy',
+                    ),
+                    actual: RhythmReference(
+                      label: 'actual_delivery',
+                      source: 'word_timeline_duration_energy',
+                      evidenceClass: 'heuristic_proxy',
+                    ),
+                  ),
                   stressAnchors: [
                     RhythmStressAnchor(
                       start: Duration(milliseconds: 100),
@@ -192,6 +208,25 @@ void main() {
                       label: 'market',
                       reason: 'anchor',
                       importance: 'primary',
+                      isNucleus: true,
+                      prominence: 0.82,
+                      prominenceCues: ['timing', 'energy'],
+                      signalSources: ['timing', 'energy'],
+                      evidenceClass: 'heuristic_proxy',
+                      claimStatus: 'audio_supported',
+                      confidence: 0.82,
+                    ),
+                  ],
+                  nuclei: [
+                    RhythmNucleus(
+                      phraseIndex: 0,
+                      start: Duration(milliseconds: 100),
+                      end: Duration(milliseconds: 300),
+                      label: 'market',
+                      reason: 'phrase nucleus',
+                      cues: ['timing', 'energy'],
+                      evidenceClass: 'heuristic_proxy',
+                      claimStatus: 'audio_supported',
                       confidence: 0.82,
                     ),
                   ],
@@ -201,6 +236,10 @@ void main() {
                       end: Duration(milliseconds: 90),
                       label: 'could have',
                       reason: 'weak',
+                      reductionRefs: ['cs1'],
+                      signalSources: ['timing'],
+                      evidenceClass: 'heuristic_proxy',
+                      claimStatus: 'audio_supported',
                       confidence: 0.7,
                     ),
                   ],
@@ -213,10 +252,23 @@ void main() {
                       unitRatePerSecond: 27.8,
                       label: 'could have been',
                       reason: 'packed',
+                      signalSources: ['timing'],
+                      evidenceClass: 'heuristic_proxy',
+                      claimStatus: 'audio_supported',
                       confidence: 0.74,
                     ),
                   ],
                   phraseBoundaries: [],
+                  connectedSpeechRefs: [
+                    RhythmConnectedSpeechRef(
+                      id: 'cs1',
+                      label: 'weak form',
+                      divergence: 'clip_specific',
+                      signalSources: ['phone_segmental'],
+                      evidenceClass: 'heuristic_proxy',
+                      confidence: 0.7,
+                    ),
+                  ],
                   listeningHotspots: [
                     ListeningHotspot(
                       id: 'hs1',
@@ -225,11 +277,17 @@ void main() {
                       end: Duration(milliseconds: 90),
                       label: 'weak group',
                       hint: 'backgrounded',
+                      signalSources: ['timing'],
+                      evidenceClass: 'heuristic_proxy',
+                      claimStatus: 'audio_supported',
                       confidence: 0.7,
                     ),
                   ],
                   quality: RhythmFrameQuality(
-                    timingSource: 'phone_timeline',
+                    timingSource: 'word_timeline',
+                    prominenceSources: ['timing', 'energy'],
+                    boundarySources: ['timing'],
+                    connectedSpeechSource: 'phone_segmental',
                     phoneEvidenceCoverage: 0.9,
                     rhythmConfidence: 0.77,
                   ),
@@ -242,11 +300,12 @@ void main() {
     );
 
     expect(find.text('Listening rhythm'), findsOneWidget);
+    expect(find.text('Nucleus:'), findsOneWidget);
     expect(find.text('Anchors:'), findsOneWidget);
-    expect(find.text('market 82%'), findsOneWidget);
-    expect(find.text('could have 70%'), findsOneWidget);
-    expect(find.text('could have been 74%'), findsOneWidget);
-    expect(find.text('weak group 70%'), findsOneWidget);
+    expect(find.text('market 82% audible'), findsWidgets);
+    expect(find.text('could have 70% audible'), findsOneWidget);
+    expect(find.text('could have been 74% audible'), findsOneWidget);
+    expect(find.text('weak group 70% audible'), findsOneWidget);
     expect(find.textContaining('Rhythm confidence: 77%'), findsOneWidget);
   });
 }

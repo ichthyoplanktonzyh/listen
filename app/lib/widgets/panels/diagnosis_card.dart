@@ -190,11 +190,27 @@ class DiagnosisCard extends StatelessWidget {
             l.text('listeningRhythm'),
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
+          if (frame.nuclei.isNotEmpty)
+            _chipLine(
+              'Nucleus',
+              frame.nuclei.map(
+                (nucleus) => _confidenceLabel(
+                  nucleus.label,
+                  nucleus.confidence,
+                  nucleus.claimStatus,
+                ),
+              ),
+              const Color(0xffff7da8),
+            ),
           if (frame.stressAnchors.isNotEmpty)
             _chipLine(
               l.text('stressAnchors'),
               frame.stressAnchors.map(
-                (anchor) => _confidenceLabel(anchor.label, anchor.confidence),
+                (anchor) => _confidenceLabel(
+                  anchor.label,
+                  anchor.confidence,
+                  anchor.claimStatus,
+                ),
               ),
               const Color(0xff6fb6ff),
             ),
@@ -202,7 +218,11 @@ class DiagnosisCard extends StatelessWidget {
             _chipLine(
               l.text('weakGroups'),
               frame.weakGroups.map(
-                (group) => _confidenceLabel(group.label, group.confidence),
+                (group) => _confidenceLabel(
+                  group.label,
+                  group.confidence,
+                  group.claimStatus,
+                ),
               ),
               const Color(0xff9fb0bd),
             ),
@@ -210,7 +230,11 @@ class DiagnosisCard extends StatelessWidget {
             _chipLine(
               l.text('compressedSpans'),
               frame.compressionSpans.map(
-                (span) => _confidenceLabel(span.label, span.confidence),
+                (span) => _confidenceLabel(
+                  span.label,
+                  span.confidence,
+                  span.claimStatus,
+                ),
               ),
               const Color(0xffffbf69),
             ),
@@ -220,8 +244,11 @@ class DiagnosisCard extends StatelessWidget {
               frame.listeningHotspots
                   .take(4)
                   .map(
-                    (hotspot) =>
-                        _confidenceLabel(hotspot.label, hotspot.confidence),
+                    (hotspot) => _confidenceLabel(
+                      hotspot.label,
+                      hotspot.confidence,
+                      hotspot.claimStatus,
+                    ),
                   ),
               const Color(0xffffd166),
             ),
@@ -229,7 +256,9 @@ class DiagnosisCard extends StatelessWidget {
             padding: const EdgeInsets.only(top: 4),
             child: Text(
               '${l.text('rhythmQuality')}: $quality% · '
-              '${frame.quality.timingSource.replaceAll('_', ' ')}',
+              '${frame.quality.timingSource.replaceAll('_', ' ')} · '
+              'prominence ${_sourceLabel(frame.quality.prominenceSources)} · '
+              'boundary ${_sourceLabel(frame.quality.boundarySources)}',
               style: const TextStyle(fontSize: 12, color: Color(0xffaab4c0)),
             ),
           ),
@@ -270,9 +299,15 @@ class DiagnosisCard extends StatelessWidget {
     );
   }
 
-  String _confidenceLabel(String label, double confidence) {
+  String _confidenceLabel(String label, double confidence, String claimStatus) {
     final percent = (confidence * 100).round();
-    return '$label $percent%';
+    final status = claimStatus == 'audio_supported' ? 'audible' : 'predicted';
+    return '$label $percent% $status';
+  }
+
+  String _sourceLabel(List<String> values) {
+    if (values.isEmpty) return 'unknown';
+    return values.map((value) => value.replaceAll('_', ' ')).join('/');
   }
 
   Widget _finding(

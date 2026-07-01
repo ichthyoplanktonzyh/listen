@@ -140,7 +140,24 @@ void main() {
               hotspotLabel: 'Hotspots',
               position: Duration(milliseconds: 130),
               frame: RhythmFrame(
-                generatedFrom: 'fixture',
+                generatedFrom: 'wordtimeline_timing_acoustic_prominence_v1',
+                references: RhythmFrameReferences(
+                  citation: RhythmReference(
+                    label: 'citation_form',
+                    source: 'dictionary_lexical_stress',
+                    evidenceClass: 'heuristic_proxy',
+                  ),
+                  defaultConnected: RhythmReference(
+                    label: 'default_connected_variants',
+                    source: 'english_connected_speech_rules_v1',
+                    evidenceClass: 'heuristic_proxy',
+                  ),
+                  actual: RhythmReference(
+                    label: 'actual_delivery',
+                    source: 'word_timeline_duration_energy',
+                    evidenceClass: 'heuristic_proxy',
+                  ),
+                ),
                 stressAnchors: [
                   RhythmStressAnchor(
                     start: Duration(milliseconds: 100),
@@ -148,6 +165,25 @@ void main() {
                     label: 'market',
                     reason: 'main stress',
                     importance: 'primary',
+                    isNucleus: true,
+                    prominence: 0.82,
+                    prominenceCues: ['timing', 'energy'],
+                    signalSources: ['timing', 'energy'],
+                    evidenceClass: 'heuristic_proxy',
+                    claimStatus: 'audio_supported',
+                    confidence: 0.82,
+                  ),
+                ],
+                nuclei: [
+                  RhythmNucleus(
+                    phraseIndex: 0,
+                    start: Duration(milliseconds: 100),
+                    end: Duration(milliseconds: 260),
+                    label: 'market',
+                    reason: 'phrase nucleus',
+                    cues: ['timing', 'energy'],
+                    evidenceClass: 'heuristic_proxy',
+                    claimStatus: 'audio_supported',
                     confidence: 0.82,
                   ),
                 ],
@@ -157,6 +193,10 @@ void main() {
                     end: Duration(milliseconds: 90),
                     label: 'could have',
                     reason: 'function words are reduced',
+                    reductionRefs: ['cs1'],
+                    signalSources: ['timing'],
+                    evidenceClass: 'heuristic_proxy',
+                    claimStatus: 'audio_supported',
                     confidence: 0.7,
                   ),
                 ],
@@ -169,14 +209,32 @@ void main() {
                     unitRatePerSecond: 27.8,
                     label: 'could have been',
                     reason: 'packed timing',
+                    signalSources: ['timing'],
+                    evidenceClass: 'heuristic_proxy',
+                    claimStatus: 'audio_supported',
                     confidence: 0.74,
                   ),
                 ],
                 phraseBoundaries: [
                   RhythmPhraseBoundary(
                     at: Duration(milliseconds: 310),
-                    evidence: 'pause',
+                    reason: 'pause',
+                    cues: ['pause'],
+                    signalSources: ['timing'],
+                    evidenceClass: 'heuristic_proxy',
+                    claimStatus: 'audio_supported',
+                    isFinal: false,
                     confidence: 0.8,
+                  ),
+                ],
+                connectedSpeechRefs: [
+                  RhythmConnectedSpeechRef(
+                    id: 'cs1',
+                    label: 'weak form',
+                    divergence: 'clip_specific',
+                    signalSources: ['phone_segmental'],
+                    evidenceClass: 'heuristic_proxy',
+                    confidence: 0.7,
                   ),
                 ],
                 listeningHotspots: [
@@ -187,11 +245,17 @@ void main() {
                     end: Duration(milliseconds: 90),
                     label: 'weak group',
                     hint: 'backgrounded',
+                    signalSources: ['timing'],
+                    evidenceClass: 'heuristic_proxy',
+                    claimStatus: 'audio_supported',
                     confidence: 0.7,
                   ),
                 ],
                 quality: RhythmFrameQuality(
-                  timingSource: 'phone_timeline',
+                  timingSource: 'word_timeline',
+                  prominenceSources: ['timing', 'energy'],
+                  boundarySources: ['timing'],
+                  connectedSpeechSource: 'phone_segmental',
                   phoneEvidenceCoverage: 0.9,
                   rhythmConfidence: 0.77,
                 ),
@@ -205,9 +269,14 @@ void main() {
     expect(find.byIcon(Icons.multiline_chart), findsOneWidget);
     expect(find.text('Listening rhythm'), findsOneWidget);
     expect(find.text('77%'), findsOneWidget);
-    expect(find.textContaining('market'), findsOneWidget);
+    expect(find.textContaining('market'), findsWidgets);
     expect(find.textContaining('could have'), findsWidgets);
-    expect(find.byTooltip('Anchors: market\nmain stress'), findsOneWidget);
+    expect(
+      find.byTooltip(
+        'Anchors: market\nmain stress\naudio supported · heuristic proxy · timing, energy',
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('rhythm frame ribbon can request cue loop playback', (
@@ -235,7 +304,19 @@ void main() {
                 loopLabel = label;
               },
               frame: const RhythmFrame(
-                generatedFrom: 'fixture',
+                generatedFrom: 'wordtimeline_timing_acoustic_prominence_v1',
+                references: RhythmFrameReferences(
+                  citation: RhythmReference(
+                    label: 'citation_form',
+                    source: 'dictionary_lexical_stress',
+                    evidenceClass: 'heuristic_proxy',
+                  ),
+                  actual: RhythmReference(
+                    label: 'actual_delivery',
+                    source: 'word_timeline_duration_energy',
+                    evidenceClass: 'heuristic_proxy',
+                  ),
+                ),
                 stressAnchors: [
                   RhythmStressAnchor(
                     start: Duration(milliseconds: 100),
@@ -243,12 +324,20 @@ void main() {
                     label: 'market',
                     reason: 'main stress',
                     importance: 'primary',
+                    isNucleus: true,
+                    prominence: 0.82,
+                    prominenceCues: ['timing', 'energy'],
+                    signalSources: ['timing', 'energy'],
+                    evidenceClass: 'heuristic_proxy',
+                    claimStatus: 'audio_supported',
                     confidence: 0.82,
                   ),
                 ],
+                nuclei: [],
                 weakGroups: [],
                 compressionSpans: [],
                 phraseBoundaries: [],
+                connectedSpeechRefs: [],
                 listeningHotspots: [
                   ListeningHotspot(
                     id: 'hs1',
@@ -257,11 +346,17 @@ void main() {
                     end: Duration(milliseconds: 90),
                     label: 'weak group',
                     hint: 'backgrounded',
+                    signalSources: ['timing'],
+                    evidenceClass: 'heuristic_proxy',
+                    claimStatus: 'audio_supported',
                     confidence: 0.7,
                   ),
                 ],
                 quality: RhythmFrameQuality(
-                  timingSource: 'phone_timeline',
+                  timingSource: 'word_timeline',
+                  prominenceSources: ['timing', 'energy'],
+                  boundarySources: ['timing'],
+                  connectedSpeechSource: 'phone_segmental',
                   phoneEvidenceCoverage: 0.9,
                   rhythmConfidence: 0.77,
                 ),

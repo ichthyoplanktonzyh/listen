@@ -139,6 +139,29 @@ class RhythmFrameRibbon extends StatelessWidget {
 
   List<_RhythmItem> _items() {
     final values = <_RhythmItem>[];
+    for (final nucleus in frame.nuclei) {
+      values.add(
+        _RhythmItem(
+          kind: 'Nucleus',
+          label: nucleus.label,
+          start: nucleus.start,
+          end: nucleus.end,
+          confidence: nucleus.confidence,
+          color: const Color(0xFFFF7DA8),
+          priority: 0,
+          tooltip: _tooltip(
+            'Nucleus',
+            nucleus.label,
+            nucleus.reason,
+            provenance: _provenance(
+              nucleus.cues,
+              nucleus.evidenceClass,
+              nucleus.claimStatus,
+            ),
+          ),
+        ),
+      );
+    }
     for (final anchor in frame.stressAnchors) {
       values.add(
         _RhythmItem(
@@ -148,8 +171,17 @@ class RhythmFrameRibbon extends StatelessWidget {
           end: anchor.end,
           confidence: anchor.confidence,
           color: const Color(0xFFFFD166),
-          priority: anchor.importance == 'primary' ? 0 : 1,
-          tooltip: _tooltip(anchorLabel, anchor.label, anchor.reason),
+          priority: anchor.importance == 'primary' ? 1 : 2,
+          tooltip: _tooltip(
+            anchorLabel,
+            anchor.label,
+            anchor.reason,
+            provenance: _provenance(
+              anchor.prominenceCues,
+              anchor.evidenceClass,
+              anchor.claimStatus,
+            ),
+          ),
         ),
       );
     }
@@ -162,8 +194,17 @@ class RhythmFrameRibbon extends StatelessWidget {
           end: group.end,
           confidence: group.confidence,
           color: const Color(0xFF9BE7A2),
-          priority: 2,
-          tooltip: _tooltip(weakGroupLabel, group.label, group.reason),
+          priority: 3,
+          tooltip: _tooltip(
+            weakGroupLabel,
+            group.label,
+            group.reason,
+            provenance: _provenance(
+              group.signalSources,
+              group.evidenceClass,
+              group.claimStatus,
+            ),
+          ),
         ),
       );
     }
@@ -176,8 +217,17 @@ class RhythmFrameRibbon extends StatelessWidget {
           end: span.end,
           confidence: span.confidence,
           color: const Color(0xFFFF9F6E),
-          priority: 3,
-          tooltip: _tooltip(compressionLabel, span.label, span.reason),
+          priority: 4,
+          tooltip: _tooltip(
+            compressionLabel,
+            span.label,
+            span.reason,
+            provenance: _provenance(
+              span.signalSources,
+              span.evidenceClass,
+              span.claimStatus,
+            ),
+          ),
         ),
       );
     }
@@ -190,8 +240,17 @@ class RhythmFrameRibbon extends StatelessWidget {
           end: hotspot.end,
           confidence: hotspot.confidence,
           color: const Color(0xFF8FD3FF),
-          priority: 4,
-          tooltip: _tooltip(hotspotLabel, hotspot.label, hotspot.hint),
+          priority: 5,
+          tooltip: _tooltip(
+            hotspotLabel,
+            hotspot.label,
+            hotspot.hint,
+            provenance: _provenance(
+              hotspot.signalSources,
+              hotspot.evidenceClass,
+              hotspot.claimStatus,
+            ),
+          ),
         ),
       );
     }
@@ -210,10 +269,32 @@ class RhythmFrameRibbon extends StatelessWidget {
     return [...active, ...rest].take(8).toList(growable: false);
   }
 
-  String _tooltip(String kind, String label, String detail) {
+  String _tooltip(
+    String kind,
+    String label,
+    String detail, {
+    String? provenance,
+  }) {
     final trimmed = detail.trim();
-    if (trimmed.isEmpty) return '$kind: $label';
-    return '$kind: $label\n$trimmed';
+    final lines = <String>['$kind: $label'];
+    if (trimmed.isNotEmpty) lines.add(trimmed);
+    if (provenance != null && provenance.trim().isNotEmpty) {
+      lines.add(provenance);
+    }
+    return lines.join('\n');
+  }
+
+  String _provenance(
+    List<String> signalSources,
+    String evidenceClass,
+    String claimStatus,
+  ) {
+    final status = claimStatus.replaceAll('_', ' ');
+    final evidence = evidenceClass.replaceAll('_', ' ');
+    final sources = signalSources.isEmpty
+        ? 'no signal source'
+        : signalSources.map((value) => value.replaceAll('_', ' ')).join(', ');
+    return '$status · $evidence · $sources';
   }
 }
 

@@ -230,6 +230,7 @@ void main() {
         activeWordTimelineId: 'timeline-active',
         activePhoneTimelineId: null,
         activeChunkTimelineId: null,
+        rhythmFrames: const [],
         artifacts: [
           LLTimelineArtifact(kind: 'alignment_diagnostics', payload: {}),
         ],

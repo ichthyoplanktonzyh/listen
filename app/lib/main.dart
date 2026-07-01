@@ -2780,6 +2780,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                       .pronunciationBySentence[cueId];
                                   final soundAnalysis = analysis?.soundAnalysis;
                                   final rhythmFrame =
+                                      subtitleController.llTimelineDocument
+                                          ?.rhythmFrameForSentence(cueId) ??
                                       soundAnalysis?.rhythmFrame;
                                   Widget soundPatternLayer(Widget child) =>
                                       Padding(

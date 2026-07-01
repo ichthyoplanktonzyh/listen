@@ -180,6 +180,106 @@ void main() {
     expect(timeline.words.single.providerVersion, '2.0');
   });
 
+  test('parses document rhythm frames by sentence', () {
+    final document = LLTimelineDocument.fromJson(const {
+      'schema': 'llplayer.timeline.v1',
+      'metadata': {
+        'created_at_ms': 1,
+        'generator': {
+          'id': 'fixture',
+          'version': 'v1',
+          'mode': 'production_engine',
+        },
+        'media': {
+          'id': 'media-1',
+          'fingerprint': 'fingerprint',
+          'path': null,
+          'title': 'Fixture',
+          'duration_ms': null,
+        },
+        'language': 'en',
+        'human_reviewed': false,
+        'extra': {},
+      },
+      'active_word_timeline_id': 'word-active',
+      'active_phone_timeline_id': null,
+      'active_chunk_timeline_id': null,
+      'rhythm_frames': [
+        {
+          'id': 'rhythm-1',
+          'track_id': 'track-1',
+          'media_id': 'media-1',
+          'sentence_id': 'sentence-1',
+          'parent_word_timeline_id': 'word-active',
+          'provider_id': 'wordtimeline-rhythm-frame',
+          'provider_version': 'phase-2.21-w2',
+          'status': 'active',
+          'metrics_json': {},
+          'created_at_ms': 10,
+          'updated_at_ms': 20,
+          'rhythm_frame': {
+            'generated_from': 'wordtimeline_timing_prominence_v1',
+            'references': {
+              'citation': {
+                'label': 'citation_form',
+                'source': 'dictionary_lexical_stress',
+                'evidence_class': 'heuristic_proxy',
+              },
+              'actual': {
+                'label': 'actual_delivery',
+                'source': 'word_timeline_duration',
+                'evidence_class': 'heuristic_proxy',
+              },
+            },
+            'stress_anchors': [
+              {
+                'token_index': 0,
+                'start_ms': 100,
+                'end_ms': 360,
+                'label': 'Hello',
+                'reason': 'timing-supported anchor',
+                'importance': 'primary',
+                'is_nucleus': true,
+                'prominence': 0.8,
+                'prominence_cues': ['timing'],
+                'signal_sources': ['timing'],
+                'evidence_class': 'heuristic_proxy',
+                'claim_status': 'audio_supported',
+                'confidence': 0.8,
+              },
+            ],
+            'nuclei': [],
+            'weak_groups': [],
+            'compression_spans': [],
+            'phrase_boundaries': [],
+            'connected_speech_refs': [],
+            'listening_hotspots': [],
+            'quality': {
+              'timing_source': 'word_timeline',
+              'prominence_sources': ['timing'],
+              'boundary_sources': [],
+              'connected_speech_source': 'phone_segmental',
+              'phone_evidence_coverage': 0.0,
+              'rhythm_confidence': 0.8,
+            },
+          },
+        },
+      ],
+      'artifacts': [],
+    });
+
+    expect(
+      document.rhythmFrames.single.providerId,
+      'wordtimeline-rhythm-frame',
+    );
+    expect(
+      document.rhythmFrameForSentence('sentence-1')?.generatedFrom,
+      'wordtimeline_timing_prominence_v1',
+    );
+    expect(document.rhythmFrameForSentence('missing'), isNull);
+    expect(document.importedResource, true);
+  });
+
   test('parses phone timeline sound analysis for grouped ribbon display', () {
     final timeline = PhoneTimeline.fromJson(const {
       'id': 'phone-timeline-1',
