@@ -16,6 +16,7 @@ import 'transcription_ui.dart';
 
 import 'controllers/app_controllers.dart';
 import 'controllers/backend_event_coordinator.dart';
+import 'controllers/download_controller.dart';
 import 'controllers/learning_controller.dart';
 import 'controllers/learning_workflow_controller.dart';
 import 'controllers/manual_review_controller.dart';
@@ -115,12 +116,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final speechEnhancementWorkflowController =
       SpeechEnhancementWorkflowController();
   final settingsController = SettingsController();
+  final downloadController = DownloadController();
 
   // ── Local UI state (not managed by controllers) ──
   String status = 'Starting local core...';
-  OnlineMediaDownload? activeDownload;
-  String? downloadError;
-  int downloadGeneration = 0;
   final taskStatuses = <UserTaskKind, UserTaskStatus>{};
   bool dragging = false;
   bool connectingApi = true;
@@ -1464,60 +1463,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
       confirmButtonText: l.text('downloadHere'),
     );
     if (directory == null) return;
-    final generation = ++downloadGeneration;
-    activeDownload?.cancel();
-    setState(() {
-      activeDownload = null;
-      downloadError = null;
-      status = l.text('startingDownload');
-    });
-    playerController.setDownloadedMediaPath(null);
+    downloadController.starting();
+    setState(() => status = l.text('startingDownload'));
     try {
       final download = await tools.downloadOnlineMedia(pageUrl, directory);
       if (!mounted) {
         download.cancel();
         return;
       }
-      setState(() {
-        activeDownload = download;
-        downloadError = null;
-        status = l.text('downloadingInBackground');
-      });
-      playerController.setDownloadProgress(0);
-      subscriptions.add(
-        download.progress.listen((value) {
-          if (mounted) playerController.setDownloadProgress(value);
-        }),
+      downloadController.attach(
+        progress: download.progress,
+        completed: download.completed,
+        cancel: download.cancel,
+        onCompleted: (path) =>
+            setState(() => status = '${l.text('downloadComplete')}: $path'),
+        onFailed: (error) =>
+            setState(() => status = '${l.text('downloadFailed')}: $error'),
       );
-      unawaited(
-        download.completed.then(
-          (path) {
-            if (!mounted || downloadGeneration != generation) return;
-            setState(() {
-              activeDownload = null;
-              downloadError = null;
-              status = '${l.text('downloadComplete')}: $path';
-            });
-            if (path != null) playerController.setDownloadedMediaPath(path);
-            playerController.setDownloadProgress(0);
-          },
-          onError: (Object error) {
-            if (!mounted || downloadGeneration != generation) return;
-            setState(() {
-              activeDownload = null;
-              downloadError = error.toString();
-              status = '${l.text('downloadFailed')}: $error';
-            });
-            playerController.setDownloadProgress(0);
-          },
-        ),
-      );
+      setState(() => status = l.text('downloadingInBackground'));
     } catch (error) {
       if (mounted) {
-        setState(() {
-          downloadError = error.toString();
-          status = '${l.text('downloadFailed')}: $error';
-        });
+        downloadController.fail(error.toString());
+        setState(() => status = '${l.text('downloadFailed')}: $error');
       }
     }
   }
@@ -2541,7 +2508,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (currentMediaId != null) {
       unawaited(api?.saveProgress(currentMediaId, currentPosition));
     }
-    activeDownload?.cancel();
+    downloadController.dispose();
     unawaited(_saveSettings());
     for (final subscription in subscriptions) {
       unawaited(subscription.cancel());
@@ -2586,6 +2553,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         subtitleController,
         learningController,
         settingsController,
+        downloadController,
       ]),
       builder: (context, _) => AppControllers(
         player: playerController,
@@ -2697,8 +2665,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           ],
                         ),
                       ),
-                      if (_downloadStatusSnapshot() != null)
-                        _downloadStatusBar(_downloadStatusSnapshot()!),
+                      if (downloadController.snapshot != null)
+                        _downloadStatusBar(downloadController.snapshot!),
                       _controls(),
                     ],
                   ),
@@ -3495,48 +3463,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
     return value.isNegative ? Duration.zero : value;
   }
 
-  DownloadStatusSnapshot? _downloadStatusSnapshot() {
-    if (activeDownload != null) {
-      return DownloadStatusSnapshot.downloading(
-        progress: playerController.downloadProgress,
-      );
-    }
-    final path = playerController.downloadedMediaPath?.trim();
-    if (path != null && path.isNotEmpty) {
-      return DownloadStatusSnapshot.completed(path);
-    }
-    final error = downloadError?.trim();
-    if (error != null && error.isNotEmpty) {
-      return DownloadStatusSnapshot.failed(error);
-    }
-    return null;
-  }
-
   Widget _downloadStatusBar(DownloadStatusSnapshot downloadStatus) =>
       DownloadStatusBar(
         status: downloadStatus,
         onCancel: () {
-          activeDownload?.cancel();
-          downloadGeneration++;
-          playerController.setDownloadProgress(0);
-          setState(() {
-            activeDownload = null;
-            downloadError = null;
-            status = l.text('downloadCancelled');
-          });
+          downloadController.cancel();
+          setState(() => status = l.text('downloadCancelled'));
         },
         onOpenMediaPath: () {
           final path = downloadStatus.downloadedMediaPath;
           if (path != null) unawaited(_openMediaPath(path));
         },
-        onDismiss: () => setState(() {
-          downloadGeneration++;
-          playerController.setDownloadedMediaPath(null);
-          playerController.setDownloadProgress(0);
-          if (activeDownload != null) activeDownload?.cancel();
-          activeDownload = null;
-          downloadError = null;
-        }),
+        onDismiss: downloadController.dismiss,
       );
 }
 

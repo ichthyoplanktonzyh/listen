@@ -24,8 +24,6 @@ class PlayerState {
     this.selectedAudioId,
     this.embeddedSubtitleTracks = const [],
     this.selectedEmbeddedSubtitleId,
-    this.downloadProgress = 0.0,
-    this.downloadedMediaPath,
     this.sourceLoopStart,
     this.sourceLoopEnd,
   });
@@ -45,8 +43,6 @@ class PlayerState {
   final String? selectedAudioId;
   final List<PlayerTrack> embeddedSubtitleTracks;
   final String? selectedEmbeddedSubtitleId;
-  final double downloadProgress;
-  final String? downloadedMediaPath;
   final Duration? sourceLoopStart;
   final Duration? sourceLoopEnd;
 
@@ -66,8 +62,6 @@ class PlayerState {
     Object? selectedAudioId = _unset,
     List<PlayerTrack>? embeddedSubtitleTracks,
     Object? selectedEmbeddedSubtitleId = _unset,
-    double? downloadProgress,
-    Object? downloadedMediaPath = _unset,
     Object? sourceLoopStart = _unset,
     Object? sourceLoopEnd = _unset,
   }) => PlayerState(
@@ -97,10 +91,6 @@ class PlayerState {
     selectedEmbeddedSubtitleId: identical(selectedEmbeddedSubtitleId, _unset)
         ? this.selectedEmbeddedSubtitleId
         : selectedEmbeddedSubtitleId as String?,
-    downloadProgress: downloadProgress ?? this.downloadProgress,
-    downloadedMediaPath: identical(downloadedMediaPath, _unset)
-        ? this.downloadedMediaPath
-        : downloadedMediaPath as String?,
     sourceLoopStart: identical(sourceLoopStart, _unset)
         ? this.sourceLoopStart
         : sourceLoopStart as Duration?,
@@ -144,8 +134,6 @@ class PlayerController extends ChangeNotifier {
   Duration get duration => _store.state.duration;
   double get rate => _store.state.rate;
   double get volume => _store.state.volume;
-  double get downloadProgress => _store.state.downloadProgress;
-  String? get downloadedMediaPath => _store.state.downloadedMediaPath;
   Duration? get sourceLoopStart => _store.state.sourceLoopStart;
   Duration? get sourceLoopEnd => _store.state.sourceLoopEnd;
   List<PlayerTrack> get audioTracks => _store.state.audioTracks;
@@ -168,15 +156,6 @@ class PlayerController extends ChangeNotifier {
 
   void setPlaying(bool playing) =>
       _store.update((s) => s.copyWith(playing: playing));
-
-  /// Set download progress (0.0–1.0) and reset when complete.
-  void setDownloadProgress(double progress) {
-    if (progress >= 1.0) {
-      _store.update((s) => s.copyWith(downloadProgress: 0.0));
-    } else {
-      _store.update((s) => s.copyWith(downloadProgress: progress));
-    }
-  }
 
   /// Set media metadata after a successful open.
   void setMedia({
@@ -213,9 +192,6 @@ class PlayerController extends ChangeNotifier {
 
   void setStatus(String status) =>
       _store.update((s) => s.copyWith(status: status));
-
-  void setDownloadedMediaPath(String? path) =>
-      _store.update((s) => s.copyWith(downloadedMediaPath: path));
 
   void setAudioTracks(List<PlayerTrack> tracks) =>
       _store.update((s) => s.copyWith(audioTracks: tracks));
