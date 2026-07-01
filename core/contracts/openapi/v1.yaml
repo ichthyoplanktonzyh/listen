@@ -609,6 +609,30 @@ paths:
       operationId: retrySpeechBatchJob
       responses:
         "200": { description: Retried speech enhancement batch job }
+  /v1/sound-line/jobs:
+    get:
+      operationId: soundLineJobs
+      responses:
+        "200": { description: In-memory sound-line (listening structure) jobs }
+    post:
+      operationId: createSoundLineJob
+      responses:
+        "200": { description: Queued background sound-line enrichment job }
+  /v1/sound-line/jobs/{job_id}:
+    get:
+      operationId: soundLineJob
+      responses:
+        "200": { description: Sound-line job status }
+  /v1/sound-line/jobs/{job_id}/cancel:
+    post:
+      operationId: cancelSoundLineJob
+      responses:
+        "200": { description: Cancelled sound-line job }
+  /v1/sound-line/jobs/{job_id}/retry:
+    post:
+      operationId: retrySoundLineJob
+      responses:
+        "200": { description: Retried sound-line job }
   /v1/lexical-entries/batch:
     post:
       operationId: readLexicalEntries

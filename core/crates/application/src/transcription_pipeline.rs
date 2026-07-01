@@ -76,22 +76,27 @@ impl AppServices {
             .subtitle_tracks
             .get_track(track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
-        let extracted_timings = match speech_analysis::asr_timing::extract_word_timings_from_json(
-            whisper_json_bytes,
-            &track.sentences,
-        ) {
-            Ok(timings) if !timings.is_empty() => timings,
-            _ => return Ok(None),
-        };
         let active_text_timeline = self.timelines.active_word_timeline(&track.id)?;
         let dtw_timeline_id = active_text_timeline
             .as_ref()
             .map(|timeline| timeline.id.clone());
-        let mut timings = active_text_timeline
+        // Reuse the already-persisted text-line words when available and only
+        // fall back to re-parsing the whisper JSON when there is no usable
+        // active timeline, avoiding a redundant extract on the normal path.
+        let mut timings = match active_text_timeline
             .as_ref()
             .filter(|timeline| !timeline.words.is_empty())
             .map(|timeline| timeline.words.clone())
-            .unwrap_or(extracted_timings);
+        {
+            Some(words) => words,
+            None => match speech_analysis::asr_timing::extract_word_timings_from_json(
+                whisper_json_bytes,
+                &track.sentences,
+            ) {
+                Ok(timings) if !timings.is_empty() => timings,
+                _ => return Ok(None),
+            },
+        };
         let extracted_word_count = timings.len();
 
         let mut parent_timeline_id = dtw_timeline_id.clone();

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- 2026-07-01 21:30 CST: 声音线彻底解耦为独立后台工作流。
+  新增 `SoundLineCoordinator`（`crates/api-http/src/sound_line.rs`）：拥有自己的 job
+  生命周期（queued/running/completed/cancelled/failed）、独立 temp 目录与独立音频提取，
+  订阅 `transcription-job-changed(completed)` 后自动入队，并暴露
+  `/v1/sound-line/jobs` 的 create/list/get/cancel/retry。转录流程 `process_job` 不再
+  内嵌声音线 spawn 与延迟清理，只负责文字线（存 active `whisper-dtw` timeline）并在完成后
+  立即清理 work_dir——文字线路径上不再有任何声音线代码。事件拆分：文字线用
+  `word-timings-completed(line=text)`，声音线改用新的 `sound-line-changed` /
+  `sound-line-completed`；前端新增 `SoundLineCompletedEvent`，文字线静默刷新、声音线单独
+  报告就绪。红线（声音线永不 activate、绝不改动 active 文字线）由 api-http 测试
+  `sound_line_resources_never_disturb_active_text_timeline` 固化。共用的 ffmpeg 参数
+  构造抽为 `ffmpeg_wav_args`。验证覆盖 `application`/`api-http`/`api-events` 测试、
+  OpenAPI contract 与 Flutter backend event coordinator 测试。
+
 - 2026-07-01 20:10 CST: ASR 文字线与声音线解耦。
   whisper.cpp + DTW 现在只负责文字线，生成 active `whisper-dtw` WordTimeline 后即可完成
   ASR job，保留词级跳动、chunk 与词典音标的原有路径；forced alignment、pause refinement

@@ -5,9 +5,9 @@ use persistence_sqlite::SqliteRepository;
 use std::collections::BTreeSet;
 use tower::ServiceExt;
 
-fn test_app() -> Router {
+fn test_state() -> ApiState {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
-    router(ApiState::new(
+    ApiState::new(
         AppServices::new(
             repo.clone(),
             repo.clone(),
@@ -21,7 +21,11 @@ fn test_app() -> Router {
         .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone()),
         repo,
         "secret",
-    ))
+    )
+}
+
+fn test_app() -> Router {
+    router(test_state())
 }
 
 async fn setup_phonetic_track(app: &Router, fingerprint: &str) -> serde_json::Value {
@@ -645,6 +649,124 @@ async fn exports_lltimeline_document_with_active_word_timeline() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn sound_line_resources_never_disturb_active_text_timeline() {
+    // Red line: building sound-line resources must never activate its own
+    // (Candidate) timelines nor demote the active text-line timeline.
+    let state = test_state();
+    let app = router(state.clone());
+    let track = setup_phonetic_track(&app, "sound-line-redline").await;
+    let track_id_str = track["id"].as_str().unwrap().to_owned();
+    let sentence = &track["sentences"][0];
+    let word_tokens = sentence["tokens"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|token| token["kind"] == "word")
+        .collect::<Vec<_>>();
+    assert!(!word_tokens.is_empty());
+    let mut cursor = sentence["start"].as_u64().unwrap() + 10;
+    let words = word_tokens
+        .iter()
+        .map(|token| {
+            let start_ms = cursor;
+            let end_ms = start_ms + 200;
+            cursor = end_ms + 20;
+            serde_json::json!({
+                "sentence_id": sentence["id"],
+                "token_index": token["index"],
+                "text": token["text"],
+                "start_ms": start_ms,
+                "end_ms": end_ms,
+                "confidence": 0.95,
+                "timing_source": "asr_aligned",
+                "provider_id": "whisper-dtw",
+                "provider_version": "dtw-v2"
+            })
+        })
+        .collect::<Vec<_>>();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post(format!("/v1/subtitles/{track_id_str}/word-timelines"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "algorithm_id": "whisper-dtw",
+                        "algorithm_version": "dtw-v2",
+                        "config_hash": "text-line",
+                        "status": "active",
+                        "metrics_json": {"line": "text"},
+                        "words": words
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let text_timeline: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+
+    let export = |app: Router, track_id: String| async move {
+        let response = app
+            .oneshot(
+                Request::get(format!("/v1/subtitles/{track_id}/lltimeline/export"))
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        serde_json::from_slice::<serde_json::Value>(
+            &to_bytes(response.into_body(), usize::MAX).await.unwrap(),
+        )
+        .unwrap()
+    };
+
+    let before = export(app.clone(), track_id_str.clone()).await;
+    assert_eq!(before["active_word_timeline_id"], text_timeline["id"]);
+
+    // Drive the sound line directly (no whisper JSON, no audio available):
+    // it must still persist a Candidate sound-line timeline without touching active.
+    let track_id = SubtitleTrackId::parse(track_id_str.clone()).unwrap();
+    let result = state
+        .services
+        .build_transcription_sound_line_resources(
+            &track_id,
+            b"",
+            std::path::Path::new("/nonexistent/llplayernext-redline.wav"),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(result.is_some(), "sound line should still produce a timeline");
+
+    let after = export(app.clone(), track_id_str.clone()).await;
+    assert_eq!(
+        after["active_word_timeline_id"], text_timeline["id"],
+        "active text-line timeline must be untouched by the sound line"
+    );
+    let sound_timelines = after["word_timelines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|timeline| timeline["metrics_json"]["line"] == "sound")
+        .collect::<Vec<_>>();
+    assert!(!sound_timelines.is_empty());
+    for timeline in sound_timelines {
+        assert_eq!(
+            timeline["status"], "candidate",
+            "every sound-line timeline must stay Candidate"
+        );
+        assert_ne!(timeline["id"], after["active_word_timeline_id"]);
+    }
 }
 
 #[tokio::test]

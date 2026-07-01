@@ -55,6 +55,10 @@ impl TranscriptionCoordinator {
             temp_dir: std::env::temp_dir().join("LLPlayerNext/transcription"),
         };
         value.repository.interrupt_active_jobs(now_ms())?;
+        // Best-effort cleanup of stale work directories left behind when a
+        // previous run exited before the detached sound-line task could remove
+        // them. Safe at startup because no jobs are running yet.
+        let _ = std::fs::remove_dir_all(&value.temp_dir);
         value.seed_catalog()?;
         Ok(value)
     }
@@ -479,19 +483,7 @@ impl TranscriptionCoordinator {
         let work = self.temp_dir.join(id.as_str());
         tokio::fs::create_dir_all(&work).await.map_err(io_error)?;
         let wav = work.join("audio.wav");
-        let mut ffmpeg_args = vec!["-y".into(), "-i".into(), media.path, "-vn".into()];
-        if let Some(track) = job.audio_track {
-            ffmpeg_args.extend(["-map".into(), format!("0:a:{track}")]);
-        }
-        ffmpeg_args.extend([
-            "-ac".into(),
-            "1".into(),
-            "-ar".into(),
-            "16000".into(),
-            "-c:a".into(),
-            "pcm_s16le".into(),
-            wav.to_string_lossy().into_owned(),
-        ]);
+        let ffmpeg_args = ffmpeg_wav_args(media.path, job.audio_track, &wav);
         self.run_command(&job.id, &ffmpeg, &ffmpeg_args).await?;
         self.transition(&mut job, TranscriptionJobStatus::Transcribing, 35)?;
         let output = work.join("result");
@@ -550,60 +542,27 @@ impl TranscriptionCoordinator {
                 job.model_revision
             )),
         })?;
-        // Extract ASR word-level timings from JSON-full output when DTW was enabled.
-        let mut cleanup_work_dir = true;
+        // Store the text-line word timeline from JSON-full output when DTW was
+        // enabled. The sound line is a separate, independently triggered workflow
+        // (SoundLineCoordinator, driven off the transcription-completed event) —
+        // no sound-line work happens on the transcription path.
         if dtw_preset.is_some() {
             let json_path = output.with_extension("json");
-            if let Ok(json_bytes) = tokio::fs::read(&json_path).await {
-                let track_id = track.id.clone();
-                if let Ok(Some(result)) = self
+            if let Ok(json_bytes) = tokio::fs::read(&json_path).await
+                && let Ok(Some(result)) = self
                     .services
-                    .store_transcription_text_word_timeline(&track_id, &json_bytes)
+                    .store_transcription_text_word_timeline(&track.id, &json_bytes)
                     .await
-                {
-                    let _ = self.events.send(EventEnvelope::v1(
-                        EventName::WordTimingsCompleted,
-                        serde_json::json!({
-                            "track_id": track_id.as_str(),
-                            "line": "text",
-                            "count": result.extracted_word_count,
-                            "timeline_id": result.final_timeline_id.as_ref().map(|id| id.as_str()),
-                        }),
-                    ));
-                    let services = self.services.clone();
-                    let events = self.events.clone();
-                    let wav_path = wav.clone();
-                    let work_dir = work.clone();
-                    let language = job.detected_language.clone();
-                    tokio::spawn(async move {
-                        if let Ok(Some(result)) = services
-                            .build_transcription_sound_line_resources(
-                                &track_id,
-                                &json_bytes,
-                                &wav_path,
-                                resolve_forced_align_sidecar(),
-                                language.as_deref(),
-                            )
-                            .await
-                        {
-                            let _ = events.send(EventEnvelope::v1(
-                                EventName::WordTimingsCompleted,
-                                serde_json::json!({
-                                    "track_id": track_id.as_str(),
-                                    "line": "sound",
-                                    "count": result.extracted_word_count,
-                                    "timeline_id": result.final_timeline_id.as_ref().map(|id| id.as_str()),
-                                    "forced_aligned_word_count": result.forced_aligned_word_count,
-                                    "acoustic_cue_count": result.acoustic_cue_count,
-                                    "energy_prominence_cue_count": result.energy_prominence_cue_count,
-                                    "pitch_prominence_cue_count": result.pitch_prominence_cue_count,
-                                }),
-                            ));
-                        }
-                        let _ = tokio::fs::remove_dir_all(work_dir).await;
-                    });
-                    cleanup_work_dir = false;
-                }
+            {
+                let _ = self.events.send(EventEnvelope::v1(
+                    EventName::WordTimingsCompleted,
+                    serde_json::json!({
+                        "track_id": track.id.as_str(),
+                        "line": "text",
+                        "count": result.extracted_word_count,
+                        "timeline_id": result.final_timeline_id.as_ref().map(|id| id.as_str()),
+                    }),
+                ));
             }
         }
         self.repository.save_provenance(&SubtitleTrackProvenance {
@@ -624,9 +583,7 @@ impl TranscriptionCoordinator {
         job.updated_at_ms = now_ms();
         self.repository.update_job(&job)?;
         self.emit(EventName::TranscriptionJobChanged, &job);
-        if cleanup_work_dir {
-            let _ = tokio::fs::remove_dir_all(work).await;
-        }
+        let _ = tokio::fs::remove_dir_all(work).await;
         Ok(())
     }
 
@@ -829,7 +786,31 @@ fn support_dir() -> PathBuf {
         })
 }
 
-fn resolve_tool(env_name: &str, name: &str) -> Option<PathBuf> {
+/// Build the ffmpeg args that extract a 16 kHz mono PCM wav from a media file.
+/// Shared by the text line (transcription) and the sound line so the audio
+/// format never drifts between the two pipelines.
+pub(crate) fn ffmpeg_wav_args(
+    media_path: String,
+    audio_track: Option<u32>,
+    out_wav: &Path,
+) -> Vec<String> {
+    let mut args = vec!["-y".into(), "-i".into(), media_path, "-vn".into()];
+    if let Some(track) = audio_track {
+        args.extend(["-map".into(), format!("0:a:{track}")]);
+    }
+    args.extend([
+        "-ac".into(),
+        "1".into(),
+        "-ar".into(),
+        "16000".into(),
+        "-c:a".into(),
+        "pcm_s16le".into(),
+        out_wav.to_string_lossy().into_owned(),
+    ]);
+    args
+}
+
+pub(crate) fn resolve_tool(env_name: &str, name: &str) -> Option<PathBuf> {
     if let Some(path) = std::env::var_os(env_name)
         .map(PathBuf::from)
         .filter(|path| path.is_file())
@@ -840,7 +821,7 @@ fn resolve_tool(env_name: &str, name: &str) -> Option<PathBuf> {
     resolve_bundled_tool(name, &executable, &std::env::current_dir().ok()?)
 }
 
-fn resolve_forced_align_sidecar() -> Option<ForcedAlignSidecar> {
+pub(crate) fn resolve_forced_align_sidecar() -> Option<ForcedAlignSidecar> {
     let research_root = std::env::var_os("LLPLAYERNEXT_FA_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
@@ -919,7 +900,7 @@ fn file_id(value: &str) -> String {
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
         .collect()
 }
-fn io_error(error: std::io::Error) -> ApplicationError {
+pub(crate) fn io_error(error: std::io::Error) -> ApplicationError {
     ApplicationError::Repository(error.to_string())
 }
 fn hash_file(path: &Path) -> Result<String, ApplicationError> {

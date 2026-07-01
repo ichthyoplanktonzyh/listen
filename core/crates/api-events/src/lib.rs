@@ -19,6 +19,8 @@ pub enum EventName {
     PronunciationAnalysisCompleted,
     WordTimingsProgress,
     WordTimingsCompleted,
+    SoundLineChanged,
+    SoundLineCompleted,
     SpeechCacheInvalidated,
     PronunciationProviderUnavailable,
     PronunciationProviderDegraded,

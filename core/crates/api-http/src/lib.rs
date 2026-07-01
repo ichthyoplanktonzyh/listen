@@ -30,6 +30,7 @@ use tokio::sync::broadcast;
 mod m18;
 mod phonetic_analysis;
 mod routes;
+mod sound_line;
 mod speech_jobs;
 mod transcription;
 use m18::M18Coordinator;
@@ -40,10 +41,12 @@ use routes::media::*;
 use routes::phonetic_analysis::*;
 use routes::practice::*;
 use routes::pronunciation::*;
+use routes::sound_line::*;
 use routes::speech::*;
 use routes::timelines::*;
 use routes::transcription::*;
 use routes::vocabulary::*;
+use sound_line::{CreateSoundLineJob, SoundLineCoordinator};
 use speech_jobs::{CreateSpeechBatchJob, SpeechBatchCoordinator};
 use transcription::{CreateJobRequest, TranscriptionCoordinator};
 
@@ -58,6 +61,7 @@ pub struct ApiState {
     pub transcription: Arc<TranscriptionCoordinator>,
     pub phonetic_analysis: Arc<PhoneticAnalysisCoordinator>,
     pub speech_jobs: Arc<SpeechBatchCoordinator>,
+    pub sound_line: Arc<SoundLineCoordinator>,
     pub m18: Arc<M18Coordinator>,
 }
 
@@ -86,6 +90,7 @@ impl ApiState {
             services.clone(),
             events.clone(),
         ));
+        let sound_line = SoundLineCoordinator::new(services.clone(), events.clone());
         Self {
             services,
             token: token.into(),
@@ -101,6 +106,7 @@ impl ApiState {
             transcription,
             phonetic_analysis,
             speech_jobs,
+            sound_line,
             m18: Arc::new(M18Coordinator::new()),
         }
     }
@@ -246,6 +252,19 @@ pub fn router(state: ApiState) -> Router {
         .route("/v1/speech/jobs/{job_id}", get(speech_job))
         .route("/v1/speech/jobs/{job_id}/cancel", post(cancel_speech_job))
         .route("/v1/speech/jobs/{job_id}/retry", post(retry_speech_job))
+        .route(
+            "/v1/sound-line/jobs",
+            get(sound_line_jobs).post(create_sound_line_job),
+        )
+        .route("/v1/sound-line/jobs/{job_id}", get(sound_line_job))
+        .route(
+            "/v1/sound-line/jobs/{job_id}/cancel",
+            post(cancel_sound_line_job),
+        )
+        .route(
+            "/v1/sound-line/jobs/{job_id}/retry",
+            post(retry_sound_line_job),
+        )
         .route(
             "/v1/media/{media_id}/progress",
             get(read_progress).put(update_progress),

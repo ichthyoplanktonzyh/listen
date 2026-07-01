@@ -4,6 +4,7 @@ pub(crate) mod media;
 pub(crate) mod phonetic_analysis;
 pub(crate) mod practice;
 pub(crate) mod pronunciation;
+pub(crate) mod sound_line;
 pub(crate) mod speech;
 pub(crate) mod timelines;
 pub(crate) mod transcription;
