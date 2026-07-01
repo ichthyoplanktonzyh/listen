@@ -90,6 +90,8 @@ LLTimeline JSON v1
 - Milestone 1.9 只提供规范发音和规则型语流候选，不声称检测真实音频语流。
 - Milestone 2 的首要目标是生产端生成高精度时间轴资源，而不是把重模型打包进消费端。
 - 轻量消费端的核心职责是读取 `.lltimeline.json`、执行高亮/chunk 播放和学习交互。
+- 轻量消费端必须自成基础生态：bundled whisper.cpp 的 WordTimeline 可驱动 word sync、
+  chunk 和 Listening structure；Rust 负责 pause/RMS/F0 等无重模型分析，sidecar 只升级质量。
 - 生产端可以使用 Python、GPU、Whisper Large-v3、WhisperX、MFA/BFA、VAD、人声分离和人工校对。
 - CNN10、NBC Nightly News 等新闻类内容是首批生产管线优化对象。
 - Phase 2.18 后，学习资产权威模型是 `LexicalEntry + LexicalUnit + LearningStatus`；
@@ -100,6 +102,9 @@ LLTimeline JSON v1
   Phase 2.21 架构锁：文本先验不能冒充实际听到的结构；L1-L3 必须能由 WordTimeline +
   dictionary/syllable structure + duration/energy 生成；CTC phone evidence 只拥有 L4
   connected-speech/segmental 解释。
+- Phase 2.21 consumer-closure correction 后，`AsrReported` 是低精度音频时序而非纯文本预测；
+  Rust 本地服务在 Whisper WAV 生命周期内生成 RMS energy 与 F0/pitch cue。真实 QA 负责
+  校准与回归，不阻塞轻量 DSP 进入消费端。
 - Phase 2.22 后，当前所有用户功能必须被组织成用户可见的能力路径：媒体播放、下载、
   字幕获取、资源管理、Word sync、Chunk replay、Listening structure、Phone evidence、
   词汇、诊断、设置、任务中心和 practice/review readiness 都需要明确入口、可用状态、

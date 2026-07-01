@@ -488,7 +488,7 @@ async fn exports_lltimeline_document_with_active_word_timeline() {
         },
         {
             "kind": "rhythm_word_acoustic_cues",
-            "provider_id": "rms-word-energy-prominence",
+            "provider_id": "rust-word-acoustic-prominence",
             "provider_version": "v1",
             "payload": {
                 "timeline_id": timeline["id"],
@@ -502,6 +502,7 @@ async fn exports_lltimeline_document_with_active_word_timeline() {
                         "sentence_id": sentence["id"],
                         "token_index": word_tokens[0]["index"],
                         "energy_prominence": 0.95,
+                        "pitch_prominence": 0.8,
                         "dbfs": -12.0,
                         "db_delta_from_sentence_median": 5.5
                     }
@@ -600,6 +601,13 @@ async fn exports_lltimeline_document_with_active_word_timeline() {
             .unwrap()
             .iter()
             .any(|source| source == "energy")
+    );
+    assert!(
+        exported_after_import["rhythm_frames"][0]["rhythm_frame"]["quality"]["prominence_sources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|source| source == "pitch")
     );
 
     let response = app

@@ -56,13 +56,28 @@ fn rhythm_word_acoustic_cues_by_sentence(
                 .and_then(serde_json::Value::as_f64)
                 .filter(|value| value.is_finite())
                 .map(|value| (value as f32).clamp(0.0, 1.0));
-            if energy_prominence.is_none() {
+            let pitch_prominence = cue
+                .get("pitch_prominence")
+                .and_then(serde_json::Value::as_f64)
+                .filter(|value| value.is_finite())
+                .map(|value| (value as f32).clamp(0.0, 1.0));
+            let pitch_reset_after = cue
+                .get("pitch_reset_after")
+                .and_then(serde_json::Value::as_f64)
+                .filter(|value| value.is_finite())
+                .map(|value| (value as f32).clamp(0.0, 1.0));
+            if energy_prominence.is_none()
+                && pitch_prominence.is_none()
+                && pitch_reset_after.is_none()
+            {
                 continue;
             }
             values.entry(sentence_id).or_default().push(
                 speech_analysis::sound_analysis::RhythmWordAcousticCue {
                     token_index,
                     energy_prominence,
+                    pitch_prominence,
+                    pitch_reset_after,
                 },
             );
         }
@@ -71,6 +86,53 @@ fn rhythm_word_acoustic_cues_by_sentence(
 }
 
 impl AppServices {
+    pub fn store_rhythm_word_acoustic_analysis(
+        &self,
+        track_id: &SubtitleTrackId,
+        timeline_id: &WordTimelineId,
+        analysis: &speech_analysis::word_acoustics::WordAcousticAnalysis,
+    ) -> Result<usize, ApplicationError> {
+        let document = self.export_lltimeline_document(track_id)?;
+        if document.active_word_timeline_id.as_ref() != Some(timeline_id) {
+            return Err(ApplicationError::Conflict(
+                "word acoustic cues require the active word timeline",
+            ));
+        }
+        let mut artifacts = document.artifacts;
+        artifacts.retain(|artifact| {
+            artifact.kind != RHYTHM_WORD_ACOUSTIC_CUES_ARTIFACT_KIND
+                || artifact
+                    .payload
+                    .get("timeline_id")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|value| value != timeline_id.as_str())
+        });
+        artifacts.push(LLTimelineArtifact {
+            kind: RHYTHM_WORD_ACOUSTIC_CUES_ARTIFACT_KIND.into(),
+            provider_id: Some(speech_analysis::word_acoustics::PROVIDER_ID.into()),
+            provider_version: Some(speech_analysis::word_acoustics::PROVIDER_VERSION.into()),
+            payload: serde_json::json!({
+                "status": "scored",
+                "timeline_id": timeline_id.as_str(),
+                "sample_rate_hz": analysis.sample_rate_hz,
+                "calibration": {
+                    "energy": "sentence_median_dbfs_delta_v1",
+                    "pitch": "normalized_autocorrelation_word_range_reset_v1",
+                },
+                "cue_count": analysis.cues.len(),
+                "positive_energy_cue_count": analysis.positive_energy_cue_count(),
+                "positive_pitch_cue_count": analysis.positive_pitch_cue_count(),
+                "cues": analysis.cues,
+            }),
+        });
+        self.lltimeline_resources.save_lltimeline_resource(
+            track_id,
+            &document.metadata,
+            &artifacts,
+        )?;
+        Ok(analysis.cues.len())
+    }
+
     pub fn list_word_timelines(
         &self,
         track_id: &SubtitleTrackId,

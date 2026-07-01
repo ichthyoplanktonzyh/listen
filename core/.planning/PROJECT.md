@@ -44,10 +44,11 @@ provider 进入系统，缺失能力干净降级。详见 §4.4。
    ASR、强制对齐、VAD、人声分离、说话人切换、规则处理和人工校对能力，
    为 CNN10、NBC Nightly News 等新闻类材料生产高精度词级/音素级时间轴、
    ChunkTimeline 和可发布学习视频资源。
-2. **轻量消费端 LLPlayerNext**：面向分发版和最终学习使用，稳定读取生产端
-   产出的标准时间轴 JSON 文件，进行卡拉 OK 式词级高亮、chunk 播放、字幕学习、
-   词汇状态和诊断。消费端不需要内置最重的 ASR/FA 模型，也不以最高精度生成
-   时间轴为目标。
+2. **轻量消费端 LLPlayerNext**：面向分发版和最终学习使用，既能稳定读取生产端
+   产出的标准时间轴 JSON，也能用 bundled whisper.cpp + Rust 轻量分析形成完整的
+   本地基础生态：词级高亮、chunk、Listening structure、字幕学习、词汇状态和诊断
+   均可用，只是时间与声学精度低于生产端。消费端不内置最重的 FA/CTC 模型，也不以
+   最高精度生成时间轴为目标。
 
 用户播放视频或音频时，播放器不仅显示字幕，还会根据用户对每个单词的实际掌握情况进行区分，帮助用户回答：
 
@@ -133,11 +134,12 @@ LLPlayer 已经实现并验证了大量语言学习播放器所需行为，包�
 | 路线 | 目标 | 可接受依赖 | 输出 |
 |---|---|---|---|
 | 本地重装生产引擎 | 生成尽可能准确、可评估、可人工修正的时间轴资源 | Python、GPU、Whisper Large-v3、WhisperX、MFA/BFA、Demucs/UVR、pyannote 等研究或重模型依赖 | `.lltimeline.json`、评估报告、校对后的 ChunkTimeline、发布用学习视频 |
-| 轻量消费端 | 稳定消费生产资源并提供学习交互 | Rust/Flutter/native runtime、SQLite、轻量本地资源 | 播放、高亮、chunk 学习、词汇状态、诊断 |
+| 轻量消费端 | 自成基础学习生态，并可消费生产资源升级质量 | Rust/Flutter/native runtime、whisper.cpp、SQLite、轻量 DSP/本地资源 | 播放、高亮、chunk、Listening structure、词汇状态、诊断 |
 
-消费端可以保留普通 ASR 或估算时间戳作为降级能力，但不得为了追求生产级精度而引入
-大型 Python/PyTorch/MFA/WhisperX 运行时。生产端可以使用任何本地可控技术，只要产出
-的资源格式稳定、可验证、可追溯、可被消费端读取。
+消费端的普通 ASR 不是只供占位的降级能力：whisper.cpp 一旦产出词级时间，所有依赖
+WordTimeline 的基础功能都必须可用。RMS energy、F0/pitch 等无重模型 DSP 属于 Rust 本地
+服务职责。消费端不得为了追求生产级精度而引入大型 Python/PyTorch/MFA/WhisperX 运行时；
+生产端/sidecar 使用这些重能力提供更精确的可替换资源。
 
 ### 4.1 核心价值
 
@@ -308,6 +310,9 @@ Production Engine (local, heavy)
 
 LLPlayerNext Consumer (light)
   ├── media playback
+  ├── bundled whisper.cpp -> coarse WordTimeline
+  ├── Rust DSP: pause + RMS energy + F0/pitch
+  ├── local baseline: word sync + chunk + RhythmFrame
   ├── import SubtitleTrack and LLTimeline JSON
   ├── karaoke word/phone highlighting
   ├── chunk playback
@@ -315,7 +320,9 @@ LLPlayerNext Consumer (light)
   └── optional local correction of imported resources
 ```
 
-生产端生成资源，消费端读取资源。消费端不承担生产端的最重模型职责。
+消费端先以 whisper.cpp + Rust 轻量算法形成完整但较低精度的学习能力；生产端生成更高
+质量资源替换或增强同一契约。消费端不承担生产端的最重模型职责，但也不因缺少 sidecar
+而缺失 WordTimeline 下游功能。
 
 ## 6. 核心用户流程
 

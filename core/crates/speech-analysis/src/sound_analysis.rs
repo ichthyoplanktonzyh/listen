@@ -20,6 +20,7 @@ const LENGTHENING_BOUNDARY_REFERENCE_BEFORE: usize = 3;
 const LENGTHENING_BOUNDARY_REFERENCE_AFTER: usize = 2;
 const LENGTHENING_BOUNDARY_RATIO: f32 = 1.75;
 const LENGTHENING_BOUNDARY_RATIO_MAX: f32 = 2.75;
+const PITCH_RESET_BOUNDARY_MIN: f32 = 0.5;
 
 pub struct SoundAnalysisConfig<'a> {
     pub provider_id: &'a str,
@@ -35,6 +36,8 @@ pub struct SoundAnalysisConfig<'a> {
 pub struct RhythmWordAcousticCue {
     pub token_index: u32,
     pub energy_prominence: Option<f32>,
+    pub pitch_prominence: Option<f32>,
+    pub pitch_reset_after: Option<f32>,
 }
 
 pub fn build_sound_analysis(
@@ -445,7 +448,10 @@ fn build_rhythm_frame(
     let uses_energy_cues = tokens
         .iter()
         .any(|token| token.energy_prominence_score().is_some());
-    let connected_speech_refs = build_connected_speech_refs(connected_speech);
+    let uses_pitch_prominence_cues = tokens
+        .iter()
+        .any(|token| token.pitch_prominence_score().is_some());
+    let connected_speech_refs = build_connected_speech_refs(sentence, connected_speech);
     let connected_speech_source = connected_speech_quality_source(connected_speech);
     let stress_anchors = detect_stress_anchors(&tokens);
     let phrase_boundaries = detect_phrase_boundaries(&tokens, syllables, prosodic_phrases);
@@ -468,20 +474,28 @@ fn build_rhythm_frame(
         &compression_spans,
     );
     let boundary_sources = boundary_sources(&phrase_boundaries);
+    let uses_pitch_cues =
+        uses_pitch_prominence_cues || boundary_sources.contains(&RhythmSignalSource::Pitch);
+    let uses_acoustic_cues = uses_energy_cues || uses_pitch_cues;
 
     RhythmFrame {
-        generated_from: if uses_word_timeline && uses_audio_timing && uses_energy_cues {
+        generated_from: if uses_word_timeline && uses_audio_timing && uses_acoustic_cues {
             "wordtimeline_timing_acoustic_prominence_v1".into()
         } else if uses_word_timeline && uses_audio_timing {
             "wordtimeline_timing_prominence_v1".into()
-        } else if uses_word_timeline && uses_energy_cues {
+        } else if uses_word_timeline && uses_acoustic_cues {
             "wordtimeline_estimated_acoustic_prominence_v1".into()
         } else if uses_word_timeline {
             "wordtimeline_estimated_prominence_v1".into()
         } else {
             "legacy_phone_timing_adapter_v1".into()
         },
-        references: rhythm_references(uses_word_timeline, uses_audio_timing, uses_energy_cues),
+        references: rhythm_references(
+            uses_word_timeline,
+            uses_audio_timing,
+            uses_energy_cues,
+            uses_pitch_cues,
+        ),
         stress_anchors,
         nuclei,
         weak_groups,
@@ -496,7 +510,11 @@ fn build_rhythm_frame(
                 uses_estimated_word_timing,
             )
             .into(),
-            prominence_sources: prominence_sources(uses_audio_timing, uses_energy_cues),
+            prominence_sources: prominence_sources(
+                uses_audio_timing,
+                uses_energy_cues,
+                uses_pitch_prominence_cues,
+            ),
             boundary_sources,
             connected_speech_source,
             phone_evidence_coverage,
@@ -509,6 +527,7 @@ fn rhythm_references(
     uses_word_timeline: bool,
     uses_audio_timing: bool,
     uses_energy_cues: bool,
+    uses_pitch_cues: bool,
 ) -> RhythmFrameReferences {
     RhythmFrameReferences {
         citation: RhythmReference {
@@ -523,12 +542,24 @@ fn rhythm_references(
         }),
         actual: RhythmReference {
             label: "actual_delivery".into(),
-            source: if uses_word_timeline && uses_audio_timing && uses_energy_cues {
+            source: if uses_word_timeline
+                && uses_audio_timing
+                && uses_energy_cues
+                && uses_pitch_cues
+            {
+                "word_timeline_duration_energy_pitch".into()
+            } else if uses_word_timeline && uses_audio_timing && uses_energy_cues {
                 "word_timeline_duration_energy".into()
+            } else if uses_word_timeline && uses_audio_timing && uses_pitch_cues {
+                "word_timeline_duration_pitch".into()
             } else if uses_word_timeline && uses_audio_timing {
                 "word_timeline_duration".into()
+            } else if uses_word_timeline && uses_energy_cues && uses_pitch_cues {
+                "word_timeline_estimated_timing_energy_pitch".into()
             } else if uses_word_timeline && uses_energy_cues {
                 "word_timeline_estimated_timing_energy".into()
+            } else if uses_word_timeline && uses_pitch_cues {
+                "word_timeline_estimated_timing_pitch".into()
             } else if uses_word_timeline {
                 "word_timeline_estimated_timing".into()
             } else {
@@ -555,13 +586,20 @@ fn timing_source_label(
     }
 }
 
-fn prominence_sources(uses_audio_timing: bool, uses_energy_cues: bool) -> Vec<RhythmSignalSource> {
+fn prominence_sources(
+    uses_audio_timing: bool,
+    uses_energy_cues: bool,
+    uses_pitch_cues: bool,
+) -> Vec<RhythmSignalSource> {
     let mut sources = vec![RhythmSignalSource::TextPrior];
     if uses_audio_timing {
         sources.push(RhythmSignalSource::Timing);
     }
     if uses_energy_cues {
         sources.push(RhythmSignalSource::Energy);
+    }
+    if uses_pitch_cues {
+        sources.push(RhythmSignalSource::Pitch);
     }
     sources
 }
@@ -579,6 +617,7 @@ fn boundary_sources(boundaries: &[RhythmPhraseBoundary]) -> Vec<RhythmSignalSour
 }
 
 fn build_connected_speech_refs(
+    sentence: Option<&SubtitleSentence>,
     connected_speech: &[ConnectedSpeechExplanation],
 ) -> Vec<RhythmConnectedSpeechRef> {
     connected_speech
@@ -612,7 +651,18 @@ fn build_connected_speech_refs(
                 token_end: value.token_end.or(value.token_start),
                 phone_start: value.phone_start,
                 phone_end: value.phone_end,
+                family: Some(value.family),
+                surface_text: connected_surface_text(
+                    sentence,
+                    value.token_start,
+                    value.token_end.or(value.token_start),
+                ),
                 label: value.label.clone(),
+                hint: value.hint.clone(),
+                expected_symbols: value.expected_symbols.clone(),
+                default_symbols: value.learning_symbols.clone(),
+                expected_display_ipa: display_ipa_for_symbols(&value.expected_symbols, false),
+                default_display_ipa: display_ipa_for_symbols(&value.learning_symbols, true),
                 divergence: match value.status {
                     ConnectedSpeechExplanationStatus::PossibleByRule => {
                         RhythmDivergenceKind::TeachableRule
@@ -634,6 +684,40 @@ fn build_connected_speech_refs(
             }
         })
         .collect()
+}
+
+fn display_ipa_for_symbols(symbols: &[String], connected: bool) -> String {
+    symbols
+        .iter()
+        .map(|symbol| {
+            let display: String = if connected && strip_stress(symbol) == "AH" {
+                "ə".into()
+            } else {
+                arpabet_display(symbol)
+            };
+            display.to_ascii_lowercase()
+        })
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+fn connected_surface_text(
+    sentence: Option<&SubtitleSentence>,
+    token_start: Option<u32>,
+    token_end: Option<u32>,
+) -> String {
+    let (Some(sentence), Some(start), Some(end)) = (sentence, token_start, token_end) else {
+        return String::new();
+    };
+    sentence
+        .tokens
+        .iter()
+        .filter(|token| {
+            token.kind == SubtitleTokenKind::Word && token.index >= start && token.index <= end
+        })
+        .map(|token| token.text.as_str())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn connected_speech_quality_source(
@@ -754,6 +838,8 @@ struct RhythmToken {
     has_secondary_stress: bool,
     average_confidence: Option<f32>,
     energy_prominence: Option<f32>,
+    pitch_prominence: Option<f32>,
+    pitch_reset_after: Option<f32>,
     timing_audio_supported: bool,
     from_word_timeline: bool,
 }
@@ -773,6 +859,18 @@ impl RhythmToken {
 
     fn energy_prominence_score(&self) -> Option<f32> {
         self.energy_prominence
+            .filter(|value| value.is_finite() && *value > 0.0)
+            .map(clamp01)
+    }
+
+    fn pitch_prominence_score(&self) -> Option<f32> {
+        self.pitch_prominence
+            .filter(|value| value.is_finite() && *value > 0.0)
+            .map(clamp01)
+    }
+
+    fn pitch_reset_after_score(&self) -> Option<f32> {
+        self.pitch_reset_after
             .filter(|value| value.is_finite() && *value > 0.0)
             .map(clamp01)
     }
@@ -910,6 +1008,8 @@ fn rhythm_token(
         has_secondary_stress,
         average_confidence,
         energy_prominence: acoustic_energy_prominence(word_acoustic_cues, token_index),
+        pitch_prominence: acoustic_pitch_prominence(word_acoustic_cues, token_index),
+        pitch_reset_after: acoustic_pitch_reset_after(word_acoustic_cues, token_index),
         timing_audio_supported: true,
         from_word_timeline: false,
     })
@@ -979,6 +1079,8 @@ fn rhythm_tokens_from_word_timings(
             has_secondary_stress,
             average_confidence: timing.confidence,
             energy_prominence: acoustic_energy_prominence(word_acoustic_cues, timing.token_index),
+            pitch_prominence: acoustic_pitch_prominence(word_acoustic_cues, timing.token_index),
+            pitch_reset_after: acoustic_pitch_reset_after(word_acoustic_cues, timing.token_index),
             timing_audio_supported: is_audio_backed_word_timing(timing.timing_source),
             from_word_timeline: true,
         });
@@ -989,7 +1091,10 @@ fn rhythm_tokens_from_word_timings(
 fn is_audio_backed_word_timing(source: TimingSource) -> bool {
     matches!(
         source,
-        TimingSource::ForcedAligned | TimingSource::AsrAligned | TimingSource::UserAdjusted
+        TimingSource::AsrReported
+            | TimingSource::AsrAligned
+            | TimingSource::ForcedAligned
+            | TimingSource::UserAdjusted
     )
 }
 
@@ -1001,6 +1106,30 @@ fn acoustic_energy_prominence(
         .iter()
         .find(|cue| cue.token_index == token_index)
         .and_then(|cue| cue.energy_prominence)
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .map(clamp01)
+}
+
+fn acoustic_pitch_prominence(
+    word_acoustic_cues: Option<&[RhythmWordAcousticCue]>,
+    token_index: u32,
+) -> Option<f32> {
+    word_acoustic_cues?
+        .iter()
+        .find(|cue| cue.token_index == token_index)
+        .and_then(|cue| cue.pitch_prominence)
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .map(clamp01)
+}
+
+fn acoustic_pitch_reset_after(
+    word_acoustic_cues: Option<&[RhythmWordAcousticCue]>,
+    token_index: u32,
+) -> Option<f32> {
+    word_acoustic_cues?
+        .iter()
+        .find(|cue| cue.token_index == token_index)
+        .and_then(|cue| cue.pitch_reset_after)
         .filter(|value| value.is_finite() && *value > 0.0)
         .map(clamp01)
 }
@@ -1018,6 +1147,7 @@ fn detect_stress_anchors(tokens: &[RhythmToken]) -> Vec<RhythmStressAnchor> {
         let stressed = token.has_primary_stress || token.has_secondary_stress;
         let long_enough = token.duration_ms() >= 180;
         let energy_prominence = token.energy_prominence_score();
+        let pitch_prominence = token.pitch_prominence_score();
         if !content_word {
             continue;
         }
@@ -1033,6 +1163,7 @@ fn detect_stress_anchors(tokens: &[RhythmToken]) -> Vec<RhythmStressAnchor> {
                 + score_flag(token.has_secondary_stress) * 0.08
                 + token.average_confidence.unwrap_or(0.4) * 0.08
                 + energy_prominence.unwrap_or(0.0) * 0.14
+                + pitch_prominence.unwrap_or(0.0) * 0.14
                 + score_flag(final_focus) * 0.08
                 - score_flag(repeated_content) * 0.1,
         );
@@ -1046,10 +1177,14 @@ fn detect_stress_anchors(tokens: &[RhythmToken]) -> Vec<RhythmStressAnchor> {
             signal_sources.push(RhythmSignalSource::Energy);
             prominence_cues.push(RhythmSignalSource::Energy);
         }
+        if pitch_prominence.is_some() {
+            signal_sources.push(RhythmSignalSource::Pitch);
+            prominence_cues.push(RhythmSignalSource::Pitch);
+        }
         let claim_status = claim_status(&signal_sources);
-        let prominence = energy_prominence
-            .map(|energy| confidence.max(energy))
-            .unwrap_or(confidence);
+        let prominence = confidence
+            .max(energy_prominence.unwrap_or(0.0))
+            .max(pitch_prominence.unwrap_or(0.0));
         anchors.push(RhythmStressAnchor {
             token_index: Some(token.index),
             syllable_index: token.syllable_index,
@@ -1282,21 +1417,51 @@ fn detect_phrase_boundaries(
         if gap >= PAUSE_BOUNDARY_MS {
             continue;
         }
-        let Some(ratio) = pre_boundary_lengthening_ratio(tokens, boundary_position) else {
+        let lengthening_ratio = pre_boundary_lengthening_ratio(tokens, boundary_position);
+        let pitch_reset = left
+            .pitch_reset_after_score()
+            .filter(|score| *score >= PITCH_RESET_BOUNDARY_MIN);
+        if lengthening_ratio.is_none() && pitch_reset.is_none() {
             continue;
-        };
+        }
         let range = (LENGTHENING_BOUNDARY_RATIO_MAX - LENGTHENING_BOUNDARY_RATIO).max(f32::EPSILON);
+        let mut cues = Vec::new();
+        let mut signal_sources = Vec::new();
+        let mut confidence: f32 = 0.0;
+        if let Some(ratio) = lengthening_ratio {
+            cues.push("final_lengthening".into());
+            signal_sources.push(RhythmSignalSource::Timing);
+            confidence = confidence.max(clamp01(
+                0.7 + 0.18 * ((ratio - LENGTHENING_BOUNDARY_RATIO) / range),
+            ));
+        }
+        if let Some(score) = pitch_reset {
+            cues.push("pitch_reset".into());
+            signal_sources.push(RhythmSignalSource::Pitch);
+            confidence = confidence.max(clamp01(0.62 + score * 0.28));
+        }
         values.push(RhythmPhraseBoundary {
             after_token_index: Some(left.index),
             before_token_index: Some(right.index),
             at_ms: left.end_ms,
-            reason: "The pre-boundary word is lengthened relative to nearby words.".into(),
-            cues: vec!["final_lengthening".into()],
-            signal_sources: vec![RhythmSignalSource::Timing],
+            reason: match (lengthening_ratio.is_some(), pitch_reset.is_some()) {
+                (true, true) => {
+                    "Final lengthening and a pitch reset support this phrase boundary.".into()
+                }
+                (true, false) => {
+                    "The pre-boundary word is lengthened relative to nearby words.".into()
+                }
+                (false, true) => {
+                    "A pitch reset between words supports this phrase boundary.".into()
+                }
+                (false, false) => unreachable!(),
+            },
+            cues,
+            signal_sources,
             evidence_class: RhythmEvidenceClass::HeuristicProxy,
             claim_status: RhythmClaimStatus::AudioSupported,
             is_final: false,
-            confidence: clamp01(0.7 + 0.18 * ((ratio - LENGTHENING_BOUNDARY_RATIO) / range)),
+            confidence,
         });
     }
     for phrase in prosodic_phrases {
@@ -2317,17 +2482,23 @@ mod tests {
         );
         assert!(!frame.compression_spans.is_empty());
         assert_eq!(frame.phrase_boundaries.len(), 1);
-        assert!(
-            frame
-                .connected_speech_refs
-                .iter()
-                .any(
-                    |value| value.divergence == RhythmDivergenceKind::TeachableRule
-                        && value.signal_sources == vec![RhythmSignalSource::TextPrior]
-                        && value.token_start == Some(1)
-                        && value.token_end == Some(2)
-                )
+        let could_have_ref = frame
+            .connected_speech_refs
+            .iter()
+            .find(|value| value.token_start == Some(1) && value.token_end == Some(2))
+            .expect("could have connected-speech reference");
+        assert_eq!(
+            could_have_ref.divergence,
+            RhythmDivergenceKind::TeachableRule
         );
+        assert_eq!(
+            could_have_ref.signal_sources,
+            [RhythmSignalSource::TextPrior]
+        );
+        assert_eq!(could_have_ref.surface_text, "could have");
+        assert_eq!(could_have_ref.expected_display_ipa, "kʊdhæv");
+        assert_eq!(could_have_ref.default_symbols, ["K", "UH", "D", "AH", "V"]);
+        assert_eq!(could_have_ref.default_display_ipa, "kʊdəv");
         assert!(analysis.connected_speech.iter().any(|value| {
             value.learning_symbols == ["K", "UH", "D", "AH", "V"]
                 && value.status == ConnectedSpeechExplanationStatus::PossibleByRule
@@ -2459,6 +2630,8 @@ mod tests {
         let acoustic_cues = vec![RhythmWordAcousticCue {
             token_index: 2,
             energy_prominence: Some(0.96),
+            pitch_prominence: None,
+            pitch_reset_after: None,
         }];
 
         let analysis = build_sound_analysis(
@@ -2508,6 +2681,79 @@ mod tests {
         );
         assert_eq!(tiny_anchor.claim_status, RhythmClaimStatus::AudioSupported);
         assert!(tiny_anchor.is_nucleus);
+    }
+
+    #[test]
+    fn word_acoustic_pitch_cues_drive_prominence_and_boundary_provenance() {
+        let sentence = sentence(&["we", "hear", "new", "focus"]);
+        let canonical = canonical_with_stress(&[
+            (0, "W", None),
+            (0, "IY", Some(0)),
+            (1, "HH", None),
+            (1, "IH", Some(1)),
+            (2, "N", None),
+            (2, "UW", Some(1)),
+            (3, "F", None),
+            (3, "OW", Some(1)),
+        ]);
+        let word_timings = word_timings(
+            &sentence,
+            &[
+                (0, "we", 0, 100),
+                (1, "hear", 110, 260),
+                (2, "new", 270, 390),
+                (3, "focus", 400, 570),
+            ],
+        );
+        let acoustic_cues = vec![
+            RhythmWordAcousticCue {
+                token_index: 1,
+                energy_prominence: None,
+                pitch_prominence: Some(0.91),
+                pitch_reset_after: Some(0.82),
+            },
+            RhythmWordAcousticCue {
+                token_index: 3,
+                energy_prominence: None,
+                pitch_prominence: Some(0.35),
+                pitch_reset_after: None,
+            },
+        ];
+
+        let frame = build_rhythm_frame_from_word_timeline(
+            &sentence,
+            &canonical,
+            &word_timings,
+            Some(&acoustic_cues),
+        );
+        let hear_anchor = frame
+            .stress_anchors
+            .iter()
+            .find(|anchor| anchor.label == "hear")
+            .unwrap();
+
+        assert!(
+            frame
+                .quality
+                .prominence_sources
+                .contains(&RhythmSignalSource::Pitch)
+        );
+        assert!(
+            hear_anchor
+                .prominence_cues
+                .contains(&RhythmSignalSource::Pitch)
+        );
+        assert_eq!(hear_anchor.claim_status, RhythmClaimStatus::AudioSupported);
+        assert!(frame.phrase_boundaries.iter().any(|boundary| {
+            boundary.after_token_index == Some(1)
+                && boundary.signal_sources.contains(&RhythmSignalSource::Pitch)
+        }));
+    }
+
+    #[test]
+    fn asr_reported_word_timing_is_audio_backed_but_estimated_timing_is_not() {
+        assert!(is_audio_backed_word_timing(TimingSource::AsrReported));
+        assert!(!is_audio_backed_word_timing(TimingSource::Estimated));
     }
 
     #[test]
@@ -2730,6 +2976,8 @@ mod tests {
                     has_secondary_stress: false,
                     average_confidence: Some(0.9),
                     energy_prominence: None,
+                    pitch_prominence: None,
+                    pitch_reset_after: None,
                     timing_audio_supported: true,
                     from_word_timeline: false,
                 }

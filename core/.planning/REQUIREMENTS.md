@@ -2151,10 +2151,11 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 - 优先级：P0
 - 阶段：M2-CONSUME
 - 需求：分发版消费端不得依赖 Python/PyTorch/WhisperX/MFA 等重型生产运行时才能完成
-  词级高亮和 chunk 播放。
+  词级高亮、chunk 播放和基础 Listening structure。
 - 验收标准：
   - 无生产运行时环境时仍可读取 `.lltimeline.json`。
   - 缺失生产运行时不影响普通播放器和学习流程。
+  - bundled whisper.cpp 生成 WordTimeline 后，所有 WordTimeline 下游基础能力都可用。
 - 依赖：LLT-007。
 
 ### CONSUME-002：资源驱动词级高亮
@@ -2187,6 +2188,20 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - 不兼容版本产生明确错误。
   - 部分缺失 phoneme/chunk 不阻断 word timeline 使用。
 - 依赖：LLT-001、LLT-007。
+
+### CONSUME-005：消费端本机分析闭环
+
+- 优先级：P0
+- 阶段：M2-CONSUME / M2-RHY
+- 需求：消费端必须以 whisper.cpp WordTimeline + Rust 轻量算法形成完整基础生态；sidecar
+  只提高对齐、音素和声学分析质量，不决定功能是否存在。
+- 验收标准：
+  - 无 Python/WhisperX/MFA/CTC 环境时，本机转录仍产出 active WordTimeline、chunk 和
+    document-level RhythmFrame。
+  - Rust 从本机转录 WAV 计算 per-word RMS energy 与 F0/pitch cue，并在临时 WAV 删除前持久化。
+  - `AsrReported` 属于低精度音频时序；只有 `Estimated` 属于纯文本预测。
+  - 导入 sidecar/production 资源后沿用同一契约，以更高质量 cue 替换或增强基础结果。
+- 依赖：CONSUME-001 至 CONSUME-004、RHY-001 至 RHY-004。
 
 ### EVAL-001：弱评估报告
 
@@ -2251,10 +2266,12 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 
 - 优先级：P0
 - 阶段：M2-RHY
-- 需求：UI 和数据模型必须区分 expected pronunciation、observed rhythm evidence 和 phone evidence。
+- 需求：UI 和数据模型必须区分 A citation、B default connected、C actual delivery 三个
+  Rhythm reference；phone evidence 是 C 的 L4 证据，不是第四个 Rhythm reference。
 - 验收标准：
-  - 词典/规则读音作为稳定教学参考显示。
-  - 真实听感层显示重音、节奏、弱读、压缩和停顿。
+  - A 以词典独立读音和 lexical stress 作为稳定参考。
+  - B 显示规则预测、可迁移学习的语流变化，并能展示 A → B 音标差异。
+  - C 显示当前音频的重音、节奏、弱读、压缩和停顿。
   - Raw CTC phone label 不作为默认教学标签。
 - 依赖：PRON-002、LLT-004、RHY-001。
 
@@ -2262,12 +2279,13 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 
 - 优先级：P0
 - 阶段：M2-RHY
-- 需求：系统应基于词典重音、词类/功能词、word timing、pause、duration 和已有 connected-speech
-  evidence，生成第一版 stress anchor 与 weak group。
+- 需求：系统应基于词典重音、词类/功能词、word timing、pause、duration、Rust RMS energy、
+  Rust F0/pitch 和已有 connected-speech evidence，生成 stress anchor 与 weak group。
 - 验收标准：
   - content word / primary-stress syllable 可成为 anchor candidate。
   - function words 可附着到邻近 anchor 形成 weak group。
   - 明显 pause/gap 会阻断错误附着。
+  - energy 与 pitch cue 可提升 anchor/nucleus 的音频 provenance，不依赖 Python sidecar。
   - 规则为确定性 baseline，并有单元测试。
 - 依赖：RHY-001、PRON-002、PROD-004。
 
@@ -2279,6 +2297,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 - 验收标准：
   - 多个 expected words/syllables 在短窗口内可标为 compression span。
   - pause/gap 可生成高置信 phrase boundary。
+  - 明显 F0/pitch reset 可作为 phrase boundary 的独立声学证据。
   - duration-only 证据不足时标记为 tentative。
 - 依赖：RHY-003、LLT-003。
 
@@ -2298,9 +2317,10 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 
 - 优先级：P0
 - 阶段：M2-RHY
-- 需求：消费端应提供 rhythm-first 声音分析视图，默认展示 expected pronunciation reference、
-  RhythmFrame 和 hotspots，phone detail 作为可展开证据层。
+- 需求：消费端应提供 A/B/C rhythm-first 视图，分别展示 citation、default connected 和
+  actual RhythmFrame/hotspots；phone detail 只在 C 内作为可展开 L4 证据层。
 - 验收标准：
+  - 字幕旁的紧凑控件可在 A/B/C 间就地切换，旧 `rhythm` / `phones` 设置安全迁移到 C。
   - stress anchors、weak groups、compression spans 和 phrase boundaries 可在当前句中区分。
   - phone ribbon 或 phone detail 不再是声音分析的唯一/默认主视图。
   - 缺少 sound_analysis、缺少 phone evidence 或低置信时有明确状态。
@@ -2316,6 +2336,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - TIMIT/Buckeye/TED-LIUM/product media 的评测角色分开记录。
   - Phone PER 作为 evidence-layer 指标报告，不作为唯一产品 gate。
   - Manual QA sheet 能标注 anchors、weak groups、compression spans、hotspots 和解释质量。
+  - Manual QA 用于阈值校准、回归和失败模式发现，不作为轻量 RMS/F0 能力进入消费端的前置门槛。
 - 依赖：EVAL-002、EVAL-004、RHY-001。
 
 ### RHY-008：Benchmark-driven pipeline diagnosis
@@ -2391,7 +2412,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 - 需求：UI 必须把听感结构和 phone evidence 分开表达，不再用含混的 `sound pattern` 作为主语义。
 - 验收标准：
   - 主要听感入口命名为 Listening structure 或等价产品术语。
-  - Phone evidence 是可切换或可展开的细节层。
+  - A/B/C 都属于 Listening structure；Phone evidence 只在 C 内按需展开。
   - 缺少 phone evidence 不阻止 WordTimeline-driven Listening structure 显示。
   - 只有 text-prior 的 cue 不被描述为实际测得音频。
 - 依赖：RHY-002、RHY-006、UX-002。

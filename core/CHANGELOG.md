@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- 2026-07-01 18:34 CST: Phase 2.21 Rhythm A/B/C subtitle views。
+  字幕层主切换从历史 `rhythm` / `phones` 改为三个都属于 Rhythm 的 reference：A
+  `citation` 显示词典独立读音，B `connected` 显示规则预测的语流形式及 A → B 音标差异，
+  C `actual` 显示当前音频 RhythmFrame。Phones 继续保留，但降为 C 内按需展开的 L4
+  evidence，不再占用一级模式。Rust/OpenAPI/Flutter 为 B 增加 surface、rule family/hint、
+  canonical/default symbols 与 display IPA；旧设置值安全迁移到 C。验证包含 Rust
+  sound-analysis、domain/application/api-http、OpenAPI contracts 和 Flutter 定向测试。
+
+- 2026-07-01 17:48 CST: Phase 2.21 consumer self-contained audible structure。
+  明确轻量消费端必须以 bundled whisper.cpp + Rust 自成完整基础生态，sidecar 只提升质量。
+  新增 `speech-analysis::word_acoustics`：在本机转录 WAV 删除前提取 per-word RMS energy、
+  F0 median/range、pitch prominence 和 pitch reset，并持久化到
+  `rhythm_word_acoustic_cues` artifact。RhythmFrame 现在让 pitch 参与 anchor/nucleus，
+  允许明显 pitch reset 支持 phrase boundary；`AsrReported` 作为低精度音频时序参与
+  duration/compression/boundary，只有 `Estimated` 保持纯文本预测。转录链路不再静默吞掉
+  WordTimeline/acoustic persistence 错误。W8 QA 改为阈值校准与回归，不再作为 RMS/F0
+  是否进入消费端的采用门槛；架构边界记录于 ADR 0013。
+
 - 2026-07-01 16:05 CST: Phase 2.22 SM-07b — overlay predicted-only listening 徽标。
   当前句 listening structure 若无音频信号源（纯 text-prior 预测），overlay 的
   `RhythmFrameRibbon` 现在显示 `predicted` 徽标 + “基于文本预测、非实测音频” tooltip，

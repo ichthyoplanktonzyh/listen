@@ -97,7 +97,7 @@
 | `m18_ui_test.dart` | M1.8 学习质量功能 UI |
 | `phonetic_analysis_ui_test.dart` | 音素分析 UI |
 | `diagnosis_card_test.dart` rhythm case | Phase 2.21 compact rhythm frame nuclei、anchors、weak groups、compression spans、hotspots、predicted/audible provenance 和 confidence state |
-| `phoneme_ribbon_test.dart` rhythm case | Phase 2.21 subtitle-layer `RhythmFrameRibbon` timeline、nucleus/anchor/weak/compression/hotspot chips、provenance tooltip state、rhythm cue loop callback、sound pattern rhythm/phones icon toggle 和 expected pronunciation reference |
+| `phoneme_ribbon_test.dart` rhythm case | Phase 2.21 subtitle-layer `RhythmFrameRibbon` timeline、nucleus/anchor/weak/compression/hotspot chips、provenance tooltip、cue loop、Rhythm A/B/C toggle、A citation reference 与 B connected-speech A → B 音标投影 |
 
 ### 运行
 

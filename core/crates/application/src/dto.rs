@@ -108,6 +108,9 @@ pub struct WordTimelinePipelineResult {
     pub forced_aligned_timeline_id: Option<WordTimelineId>,
     pub final_timeline_id: Option<WordTimelineId>,
     pub stored_legacy_word_timings: bool,
+    pub acoustic_cue_count: usize,
+    pub energy_prominence_cue_count: usize,
+    pub pitch_prominence_cue_count: usize,
 }
 
 #[derive(Debug, Clone)]

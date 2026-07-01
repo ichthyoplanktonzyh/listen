@@ -1584,7 +1584,21 @@ components:
         token_end: { type: [integer, "null"], minimum: 0 }
         phone_start: { type: [integer, "null"], minimum: 0 }
         phone_end: { type: [integer, "null"], minimum: 0 }
+        family:
+          anyOf:
+            - $ref: "#/components/schemas/ConnectedSpeechFamily"
+            - type: "null"
+        surface_text: { type: string }
         label: { type: string }
+        hint: { type: string }
+        expected_symbols:
+          type: array
+          items: { type: string }
+        default_symbols:
+          type: array
+          items: { type: string }
+        expected_display_ipa: { type: string }
+        default_display_ipa: { type: string }
         divergence: { $ref: "#/components/schemas/RhythmDivergenceKind" }
         signal_sources:
           type: array

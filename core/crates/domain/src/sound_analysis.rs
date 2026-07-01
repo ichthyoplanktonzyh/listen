@@ -279,7 +279,21 @@ pub struct RhythmConnectedSpeechRef {
     pub token_end: Option<u32>,
     pub phone_start: Option<u32>,
     pub phone_end: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub family: Option<ConnectedSpeechFamily>,
+    #[serde(default)]
+    pub surface_text: String,
     pub label: String,
+    #[serde(default)]
+    pub hint: String,
+    #[serde(default)]
+    pub expected_symbols: Vec<String>,
+    #[serde(default)]
+    pub default_symbols: Vec<String>,
+    #[serde(default)]
+    pub expected_display_ipa: String,
+    #[serde(default)]
+    pub default_display_ipa: String,
     pub divergence: RhythmDivergenceKind,
     pub signal_sources: Vec<RhythmSignalSource>,
     pub evidence_class: RhythmEvidenceClass,

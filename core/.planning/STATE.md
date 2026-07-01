@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: active
-last_updated: "2026-07-01T15:30:00.000+08:00"
+last_updated: "2026-07-01T18:34:00.000+08:00"
 progress:
   total_phases: 11
   completed_phases: 1
@@ -16,7 +16,7 @@ progress:
 
 > 最后更新：2026-07-01 CST
 > 更新原因：Phase 2.20 deterministic RhythmFrame v0 已落地到 `sound_analysis.rhythm_frame`、
-> OpenAPI、Flutter typed model、字幕层 rhythm-first ribbon、字幕 rhythm/phones 就地快切、
+> OpenAPI、Flutter typed model、字幕层 rhythm-first ribbon、Rhythm A/B/C 就地快切、
 > 字幕 expected pronunciation reference、字幕 rhythm cue loop、诊断卡 compact rhythm 区块，
 > 并新增仓库内可重复运行的 RhythmFrame QA/scorer fixture gate；Phase 2.19 phone
 > benchmark scoring 继续作为底层 evidence-quality 支撑。2026-06-30 已将 Phase 2.20
@@ -36,6 +36,13 @@ progress:
 > 用户可见状态机 + 能力就绪 lane）、修正 `2.22-FEATURE-SEMANTICS-MODEL.md` 层号并新增 Model↔Code
 > 对账、把 `2.22-CURRENT-FEATURE-INVENTORY.md` 改为覆盖清单 + 已验证 P0 模板，并纠正记账；余下
 > OPEN 项（SM-01..SM-08）转入真正的前端重构。
+> 2026-07-01 17:48 CST 明确 consumer self-contained invariant：bundled whisper.cpp
+> 产出的 WordTimeline 必须解锁全部基础功能，sidecar 只升级质量。Rust 已接管 per-word
+> RMS energy 与 F0/pitch，转录 WAV 删除前写入 acoustic cue artifact；`AsrReported`
+> 作为低精度音频时序参与 RhythmFrame。W8 改为校准/回归用途，不再阻塞轻量 DSP 采用。
+> 2026-07-01 18:34 CST 字幕层完成 Rhythm A/B/C 视图：A 词典独立读音、B 规则预测语流、
+> C 当前实际听感；Phones 不再占用一级模式，只在 C 内作为 L4 evidence 按需展开。旧
+> `rhythm` / `phones` 设置统一迁移到 `actual`，避免升级后丢失可用视图。
 
 ## 当前位置
 
@@ -92,11 +99,10 @@ progress:
     evidence；raw phone mismatch 不会单独生成高置信默认听感解释。
   - Flutter typed model 与诊断卡已能显示 compact rhythm-first 区块，phone chips/findings
     继续作为后续 evidence layer。
-  - 字幕层声音模式时间带新增 `rhythm` / `phones` 显示模式；默认 `rhythm` 时在字幕下方直接
-    展示 expected pronunciation reference、RhythmFrame 时间线、声音锚点、弱读音团、压缩区和
-    听感热点，`phones` 模式保留原 phone-level evidence ribbon；字幕层旁侧已有图标快切，
-    可在 rhythm/phones 间就地来回切换；点击 rhythm cue chip 可复用 source loop 直接复听
-    对应听感区间。
+  - 字幕层声音模式已从历史 `rhythm` / `phones` 二选一升级为 Rhythm A/B/C：A 展示词典
+    citation，B 展示 default connected rule 及 A → B 音标变化，C 展示当前 RhythmFrame、
+    声音锚点、弱读音团、压缩区和听感热点。Phones 作为 C 内可展开 L4 evidence 保留；
+    点击 C 的 rhythm cue chip 仍可复用 source loop 直接复听对应听感区间。
   - Rhythm/listening QA 初版工具已落地：`testdata/rhythm-frame-qa/` 提供标注 schema/template，
     `scripts/evaluate-rhythm-frame.py` 可对 Phase 2.17 manifest 输出 RhythmFrame 覆盖率和手工
     标注匹配分，并校验 duplicate/invalid score/unknown sentence 等标注问题；旧 `.tmp`
@@ -217,8 +223,8 @@ progress:
     传播到 stress anchor prominence、phrase-scoped nucleus selection、
     `generated_from = wordtimeline_timing_acoustic_prominence_v1`、
     `references.actual.source = word_timeline_duration_energy` 和
-    `quality.prominence_sources`。W4 已补上 production-side artifact path；W8 仍需
-    manual QA 校准，不能把 duration/RMS QA harness 的临时阈值当 production gate。
+    `quality.prominence_sources`。W4 已补上 artifact path，Rust consumer baseline 现已
+    直接生成 RMS/F0；W8 用于校准，不能把临时阈值当最终 release gate。
   - 新增 committed no-phone LLTimeline fixture / scorer smoke：
     `testdata/rhythm-frame-qa/fixture-no-phone-rhythm.lltimeline.json` 覆盖
     `phone_evidence_coverage = 0.0`，且 W3 后会携带 text-prior B-side
@@ -240,13 +246,15 @@ progress:
     等 phrase reductions、linking、t/d weakening、assimilation、contraction 和 flapping。
     `RhythmFrame.connected_speech_refs` 现在用真实 B 区分 `teachable_rule` 与
     `clip_specific`；纯 B 预测保持 `TextPrior` / `Predicted`，不会伪装成 actual audio。
-  - Review backlog W4 arch path 已落地：production pipeline 会从已抽取的 16k mono wav
-    计算 per-word RMS relative prominence，并写入 `rhythm_word_acoustic_cues`
-    LLTimeline artifact；application export 会读取该 artifact，向
-    `RhythmWordAcousticCue` 传入 `energy_prominence`，让 RhythmFrame 输出
-    `generated_from = wordtimeline_timing_acoustic_prominence_v1` 和
-    `quality.prominence_sources` 中的 `energy`。W8 manual QA/calibration 仍是
-    promotion gate。
+  - Consumer closure 已落地：`speech-analysis::word_acoustics` 从本机 Whisper 的 16k
+    mono WAV 直接计算 per-word RMS relative prominence、F0 median/range、pitch
+    prominence 与 pitch reset，并在临时 WAV 删除前写入
+    `rhythm_word_acoustic_cues` artifact。application export 将 energy/pitch cue 注入
+    RhythmFrame；anchor/nucleus 可带 `Energy`/`Pitch` provenance，明显 pitch reset 可支持
+    phrase boundary。Python production artifact 保持兼容，作为更高质量覆盖来源。
+  - `TimingSource::AsrReported` 现视为低精度但真实的音频时序，可驱动 duration、compression
+    和 boundary；只有 `Estimated` 保持纯文本预测。转录链路不再吞掉 WordTimeline/acoustic
+    持久化错误。
   - Review backlog W5 Reference A OOV hardening 已落地：CMUdict missing word fallback
     升级为 `fallback-v2`，支持常见 English digraph、soft c/g、final silent e、x，并只给
     第一个 fallback vowel primary stress，后续 vowel 标 unstressed，避免 OOV citation
@@ -278,9 +286,9 @@ progress:
     避免导入后 acoustic cue artifact 因 WordTimeline/sentence id 重映射而脱钩。
 - 下一步：
   1. 推进 W8：填写 `.tmp/rhythm-frame-qa/w8-product/annotations-template.jsonl`
-     的人工标签并跑 scorer gate，校准/验证 W4 RMS energy cue。
-  2. 继续用 manual QA / Helsinki scorer 验证 provenance-aware scoring，而不是调旧 v0
-     duration/RMS 阈值。
+     的人工标签，校准 Rust RMS/F0 阈值并记录 octave/voicing 失败模式。
+  2. 增加真实本机 Whisper job 的端到端回归，验证 active WordTimeline、acoustic artifact、
+     RhythmFrame 与 Flutter listening layer 连续可见。
 - 规划文档：
   - `.planning/phases/2.21-audible-structure-architecture/2.21-CONTEXT.md`
   - `.planning/phases/2.21-audible-structure-architecture/2.21-PLAN.md`

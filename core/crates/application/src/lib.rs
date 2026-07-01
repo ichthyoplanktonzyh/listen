@@ -298,7 +298,7 @@ pub(crate) fn save_word_timeline_snapshot(
     config_hash: &str,
     status: TimelineStatus,
     parent_timeline_id: Option<&WordTimelineId>,
-) -> Option<WordTimelineId> {
+) -> Result<WordTimelineId, ApplicationError> {
     services
         .create_word_timeline(
             track_id,
@@ -313,7 +313,6 @@ pub(crate) fn save_word_timeline_snapshot(
                 words: timings.to_vec(),
             },
         )
-        .ok()
         .map(|timeline| timeline.id)
 }
 

@@ -163,12 +163,13 @@ one primary fallback vowel, later fallback vowels unstressed.
 - LLTimeline documents can also carry document-level `rhythm_frames` generated
   from the active WordTimeline; Flutter resolves these by sentence before
   falling back to `PhoneTimeline.sound_analysis`.
-- Production-side `rhythm_word_acoustic_cues` artifacts can provide per-word
-  RMS energy prominence to the Rust generator without adding audio DSP
-  dependencies to Flutter/app runtime.
-- The subtitle sound-pattern layer can display `RhythmFrame` as the default
-  rhythm-first overlay or switch back to phone-level evidence via
-  `AppSettings.soundPatternDisplayMode`.
+- Bundled Rust `word_acoustics` analyzes the mono PCM transcription WAV before it
+  is deleted and persists `rhythm_word_acoustic_cues`: per-word RMS prominence,
+  F0 median/range, pitch prominence and pitch reset. Flutter remains DSP-free;
+  Python production artifacts can replace/enrich the same cue contract.
+- `AppSettings.soundPatternDisplayMode` selects Rhythm reference A (`citation`),
+  B (`connected`), or C (`actual`). Phone-level detail is not a peer mode; it is
+  an expandable L4 evidence surface inside C.
 - Dictionary, word pronunciation, sentence pronunciation, and phonetic-analysis
   payloads are parsed at API boundaries before entering controller/widget state.
 

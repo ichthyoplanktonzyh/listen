@@ -11,6 +11,7 @@ pub mod phonetic_findings;
 pub mod rich_acoustic_evidence;
 pub mod sound_analysis;
 pub mod text_chunk_detection;
+pub mod word_acoustics;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::OnceLock;

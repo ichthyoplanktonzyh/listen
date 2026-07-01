@@ -183,12 +183,16 @@ receive a small focus boost. This changes prominence/confidence only within
 ## Desktop Settings
 
 Flutter persists desktop preferences in the versioned `settings-v8.json` file.
-Phase 2.20 adds `sound_pattern_display_mode`:
+Phase 2.21 uses `sound_pattern_display_mode` for the three Rhythm references:
 
 | Value | Meaning |
 |---|---|
-| `rhythm` | Default subtitle-layer sound pattern display; renders `RhythmFrame` anchors, weak groups, compression spans, and hotspots |
-| `phones` | Legacy/evidence display; renders phone-level sound-pattern timing and findings |
+| `citation` | Reference A: dictionary/citation pronunciation and lexical stress |
+| `connected` | Reference B: rule-predicted default connected form and A → B pronunciation change |
+| `actual` | Reference C (default): current-audio `RhythmFrame`; phone evidence can expand inside this view |
+
+Legacy v8 values `rhythm` and `phones` both migrate to `actual`. Phone evidence
+expansion is ephemeral overlay state, not a fourth persisted Rhythm mode.
 
 ## Transactions And Migration
 
