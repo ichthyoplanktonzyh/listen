@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-01 15:15 CST: 修复 Whisper 生成字幕后的 Timeline resource 状态误判。
+  当当前字幕已加载 generated word timings 但没有 active `WordTimelineSummary` 时，
+  Timeline resource 面板现在会把 Word sync 显示为可用，并显示词级 timing 数量；
+  generated LLTimeline document 也会被视为可导出资源，不再显示成“旧时间轴降级”导致
+  生成语块和导出 LLTimeline JSON 被禁用。
+
 - 2026-07-01 14:45 CST: 修复点击字幕单词后右侧面板不立即跳到词汇学习的问题。
   `LearningWorkflowController.openWord` 现在会在词条、词典、发音和语言画像查询完成前，
   立即记录 selected token/cue 并切换到 Word learning tab；异步查询完成后再填充详情。
