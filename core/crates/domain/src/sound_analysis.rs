@@ -177,6 +177,36 @@ pub struct RhythmStressAnchor {
     pub confidence: f32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RhythmInformationAnchorKind {
+    Vowel,
+    Consonant,
+    Segment,
+    Nucleus,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RhythmInformationAnchor {
+    pub id: String,
+    pub token_index: Option<u32>,
+    pub phone_start: Option<u32>,
+    pub phone_end: Option<u32>,
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub label: String,
+    pub sound: String,
+    pub kind: RhythmInformationAnchorKind,
+    pub is_nucleus: bool,
+    pub prominence: f32,
+    pub cues: Vec<RhythmSignalSource>,
+    pub signal_sources: Vec<RhythmSignalSource>,
+    pub evidence_class: RhythmEvidenceClass,
+    pub claim_status: RhythmClaimStatus,
+    pub confidence: f32,
+    pub reason: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RhythmNucleus {
     pub phrase_index: u32,
@@ -314,6 +344,8 @@ pub struct RhythmFrameQuality {
 pub struct RhythmFrame {
     pub generated_from: String,
     pub references: RhythmFrameReferences,
+    #[serde(default)]
+    pub information_anchors: Vec<RhythmInformationAnchor>,
     pub stress_anchors: Vec<RhythmStressAnchor>,
     pub nuclei: Vec<RhythmNucleus>,
     pub weak_groups: Vec<RhythmWeakGroup>,

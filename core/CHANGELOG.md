@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-02 00:52 CST: 为 Rhythm C 正式引入 `information_anchors`。
+  `RhythmFrame` 新增兼容字段 `information_anchors`，用于建模“人耳实际抓到哪些音素/声音点并据此推断句义”，
+  不再把 `stress_anchors` 当作 C 的核心语义；生成器会从 phone timing 或 word timing + canonical phones
+  产出音素级信息锚点（保留否定、指示、疑问等高信息功能词），C UI 优先渲染 information anchors，
+  旧资源缺字段时才回退到 stress anchors。Readiness 同步把 information anchors 计入音频支持判定。
+
 - 2026-07-02 00:30 CST: 优化 Rhythm C 的真实可听锚点表达。
   C `This audio` 不再把前景锚点过度收窄为“重读音节”：后端允许短但有音频时序支持的
   content sound 成为 audio-supported listening anchor，并将 anchor confidence 与

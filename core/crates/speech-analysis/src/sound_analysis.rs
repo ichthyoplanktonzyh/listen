@@ -3,10 +3,11 @@ use domain::{
     DetectedPhone, ListeningHotspot, ListeningHotspotKind, PhoneAlignment, PhoneAlignmentKind,
     ProsodicBoundaryEvidence, RhythmAnchorImportance, RhythmClaimStatus, RhythmCompressionSpan,
     RhythmConnectedSpeechRef, RhythmDivergenceKind, RhythmEvidenceClass, RhythmFrame,
-    RhythmFrameQuality, RhythmFrameReferences, RhythmNucleus, RhythmPhraseBoundary,
-    RhythmReference, RhythmSignalSource, RhythmStressAnchor, RhythmWeakGroup, SoundAnalysis,
-    SoundLearningPhone, SoundPhoneEvidence, SoundProsodicPhrase, SoundSyllable, SubtitleSentence,
-    SubtitleTokenKind, SyllableStress, TimingSource, WordTiming,
+    RhythmFrameQuality, RhythmFrameReferences, RhythmInformationAnchor,
+    RhythmInformationAnchorKind, RhythmNucleus, RhythmPhraseBoundary, RhythmReference,
+    RhythmSignalSource, RhythmStressAnchor, RhythmWeakGroup, SoundAnalysis, SoundLearningPhone,
+    SoundPhoneEvidence, SoundProsodicPhrase, SoundSyllable, SubtitleSentence, SubtitleTokenKind,
+    SyllableStress, TimingSource, WordTiming,
 };
 
 use crate::phonetic_alignment::CanonicalPhone;
@@ -458,6 +459,13 @@ fn build_rhythm_frame(
     let phrase_boundaries = detect_phrase_boundaries(&tokens, syllables, prosodic_phrases);
     let nuclei = select_nuclei(&tokens, &stress_anchors, &phrase_boundaries);
     let stress_anchors = mark_anchor_nuclei(stress_anchors, &nuclei);
+    let information_anchors = build_information_anchors(
+        &tokens,
+        canonical,
+        learning_phones,
+        &stress_anchors,
+        &nuclei,
+    );
     let weak_groups = detect_weak_groups(&tokens, &stress_anchors, connected_speech);
     let compression_spans = detect_compression_spans(&tokens);
     let listening_hotspots = build_listening_hotspots(
@@ -497,6 +505,7 @@ fn build_rhythm_frame(
             uses_energy_cues,
             uses_pitch_cues,
         ),
+        information_anchors,
         stress_anchors,
         nuclei,
         weak_groups,
@@ -803,6 +812,267 @@ fn mark_anchor_nuclei(
         });
     }
     anchors
+}
+
+#[derive(Debug, Clone)]
+struct InformationAnchorPhone {
+    index: u32,
+    token_index: u32,
+    symbol: String,
+    display_ipa: String,
+    start_ms: u64,
+    end_ms: u64,
+    stress: Option<u8>,
+    confidence: Option<f32>,
+    signal_sources: Vec<RhythmSignalSource>,
+}
+
+fn build_information_anchors(
+    tokens: &[RhythmToken],
+    canonical: &[CanonicalPhone],
+    learning_phones: &[SoundLearningPhone],
+    stress_anchors: &[RhythmStressAnchor],
+    nuclei: &[RhythmNucleus],
+) -> Vec<RhythmInformationAnchor> {
+    let phones = information_anchor_phones(tokens, canonical, learning_phones);
+    let mut values = Vec::new();
+    for token in tokens {
+        if !token.timing_audio_supported && token.energy_prominence_score().is_none() {
+            continue;
+        }
+        if token.is_function_word() && !is_information_function_word(&token.normalized) {
+            continue;
+        }
+        let token_phones = phones
+            .iter()
+            .filter(|phone| phone.token_index == token.index)
+            .cloned()
+            .collect::<Vec<_>>();
+        let Some((start, end, nucleus_index, kind)) = select_information_phone_span(&token_phones)
+        else {
+            continue;
+        };
+        let span = &token_phones[start..=end];
+        let sound = span
+            .iter()
+            .map(|phone| phone.display_ipa.as_str())
+            .collect::<String>()
+            .to_lowercase();
+        if sound.trim().is_empty() {
+            continue;
+        }
+        let stress_anchor = stress_anchors
+            .iter()
+            .find(|anchor| anchor.token_index == Some(token.index));
+        let is_nucleus = nuclei
+            .iter()
+            .any(|nucleus| nucleus.token_index == Some(token.index));
+        let mut signal_sources = vec![RhythmSignalSource::TextPrior];
+        for phone in span {
+            for source in &phone.signal_sources {
+                if !signal_sources.contains(source) {
+                    signal_sources.push(*source);
+                }
+            }
+        }
+        if token.timing_audio_supported && !signal_sources.contains(&RhythmSignalSource::Timing) {
+            signal_sources.push(RhythmSignalSource::Timing);
+        }
+        if token.energy_prominence_score().is_some()
+            && !signal_sources.contains(&RhythmSignalSource::Energy)
+        {
+            signal_sources.push(RhythmSignalSource::Energy);
+        }
+        if token.pitch_prominence_score().is_some()
+            && !signal_sources.contains(&RhythmSignalSource::Pitch)
+        {
+            signal_sources.push(RhythmSignalSource::Pitch);
+        }
+        let confidence = clamp01(
+            span.iter()
+                .filter_map(|phone| phone.confidence)
+                .next()
+                .or(token.average_confidence)
+                .unwrap_or(0.55)
+                + score_flag(signal_sources.contains(&RhythmSignalSource::PhoneSegmental)) * 0.12
+                + score_flag(signal_sources.contains(&RhythmSignalSource::Timing)) * 0.1
+                + token.energy_prominence_score().unwrap_or(0.0) * 0.12
+                + token.pitch_prominence_score().unwrap_or(0.0) * 0.12,
+        );
+        let prominence = clamp01(
+            stress_anchor
+                .map(|anchor| anchor.prominence)
+                .unwrap_or(0.45)
+                + score_flag(kind == RhythmInformationAnchorKind::Nucleus) * 0.08
+                + token.energy_prominence_score().unwrap_or(0.0) * 0.18
+                + token.pitch_prominence_score().unwrap_or(0.0) * 0.18,
+        );
+        values.push(RhythmInformationAnchor {
+            id: format!("ia{}", values.len() + 1),
+            token_index: Some(token.index),
+            phone_start: span.first().map(|phone| phone.index),
+            phone_end: span.last().map(|phone| phone.index),
+            start_ms: span
+                .iter()
+                .map(|phone| phone.start_ms)
+                .min()
+                .unwrap_or(token.start_ms),
+            end_ms: span
+                .iter()
+                .map(|phone| phone.end_ms)
+                .max()
+                .unwrap_or(token.end_ms)
+                .max(token.start_ms + 1),
+            label: token.text.clone(),
+            sound,
+            kind,
+            is_nucleus,
+            prominence,
+            cues: signal_sources.clone(),
+            signal_sources: signal_sources.clone(),
+            evidence_class: RhythmEvidenceClass::HeuristicProxy,
+            claim_status: claim_status(&signal_sources),
+            confidence,
+            reason: information_anchor_reason(kind, &token_phones[nucleus_index], token),
+        });
+    }
+    values
+}
+
+fn information_anchor_phones(
+    tokens: &[RhythmToken],
+    canonical: &[CanonicalPhone],
+    learning_phones: &[SoundLearningPhone],
+) -> Vec<InformationAnchorPhone> {
+    if !learning_phones.is_empty() {
+        return learning_phones
+            .iter()
+            .enumerate()
+            .filter_map(|(index, phone)| {
+                let token_index = phone.token_index?;
+                let mut signal_sources = vec![RhythmSignalSource::TextPrior];
+                if phone.observed_phone_index.is_some()
+                    || matches!(
+                        phone.evidence,
+                        SoundPhoneEvidence::ObservedOnly
+                            | SoundPhoneEvidence::Match
+                            | SoundPhoneEvidence::Substitution
+                            | SoundPhoneEvidence::Merge
+                    )
+                {
+                    signal_sources.push(RhythmSignalSource::PhoneSegmental);
+                    signal_sources.push(RhythmSignalSource::Timing);
+                }
+                Some(InformationAnchorPhone {
+                    index: index as u32,
+                    token_index,
+                    symbol: phone.symbol.clone(),
+                    display_ipa: phone.display_ipa.clone(),
+                    start_ms: phone.start_ms,
+                    end_ms: phone.end_ms.max(phone.start_ms + 1),
+                    stress: phone.stress,
+                    confidence: phone.confidence,
+                    signal_sources,
+                })
+            })
+            .collect();
+    }
+
+    let mut values = Vec::new();
+    for token in tokens {
+        let token_phones = canonical
+            .iter()
+            .filter(|phone| phone.token_index == token.index)
+            .collect::<Vec<_>>();
+        if token_phones.is_empty() {
+            continue;
+        }
+        let duration = token.duration_ms();
+        let count = token_phones.len() as u64;
+        for (offset, phone) in token_phones.iter().enumerate() {
+            let start_ms = token.start_ms + duration.saturating_mul(offset as u64) / count;
+            let end_ms = if offset + 1 == token_phones.len() {
+                token.end_ms
+            } else {
+                token.start_ms + duration.saturating_mul(offset as u64 + 1) / count
+            };
+            let mut signal_sources = vec![RhythmSignalSource::TextPrior];
+            if token.timing_audio_supported {
+                signal_sources.push(RhythmSignalSource::Timing);
+            }
+            values.push(InformationAnchorPhone {
+                index: values.len() as u32,
+                token_index: token.index,
+                symbol: phone.symbol.clone(),
+                display_ipa: arpabet_display(&phone.symbol),
+                start_ms,
+                end_ms: end_ms.max(start_ms + 1),
+                stress: phone.stress,
+                confidence: token.average_confidence,
+                signal_sources,
+            });
+        }
+    }
+    values
+}
+
+fn select_information_phone_span(
+    phones: &[InformationAnchorPhone],
+) -> Option<(usize, usize, usize, RhythmInformationAnchorKind)> {
+    if phones.is_empty() {
+        return None;
+    }
+    let nucleus = phones
+        .iter()
+        .position(|phone| phone.stress.is_some_and(|stress| stress > 0) && is_vowel(&phone.symbol))
+        .or_else(|| phones.iter().position(|phone| is_vowel(&phone.symbol)));
+    if let Some(nucleus) = nucleus {
+        let mut start = nucleus;
+        while start > 0 && !is_vowel(&phones[start - 1].symbol) {
+            start -= 1;
+        }
+        let mut end = nucleus;
+        while end + 1 < phones.len() && !is_vowel(&phones[end + 1].symbol) {
+            end += 1;
+        }
+        let kind = if phones[nucleus].stress.is_some_and(|stress| stress > 0) {
+            RhythmInformationAnchorKind::Nucleus
+        } else if start == end {
+            RhythmInformationAnchorKind::Vowel
+        } else {
+            RhythmInformationAnchorKind::Segment
+        };
+        return Some((start, end, nucleus, kind));
+    }
+    Some((0, 0, 0, RhythmInformationAnchorKind::Consonant))
+}
+
+fn information_anchor_reason(
+    kind: RhythmInformationAnchorKind,
+    nucleus: &InformationAnchorPhone,
+    token: &RhythmToken,
+) -> String {
+    match kind {
+        RhythmInformationAnchorKind::Nucleus => {
+            "This stressed audible sound is a high-value information anchor.".into()
+        }
+        RhythmInformationAnchorKind::Vowel => {
+            "This vowel is the clearest audible point for this information word.".into()
+        }
+        RhythmInformationAnchorKind::Consonant => {
+            "This consonant edge is the clearest audible point for this information word.".into()
+        }
+        RhythmInformationAnchorKind::Segment => {
+            if token.energy_prominence_score().is_some() || token.pitch_prominence_score().is_some()
+            {
+                "This vowel-plus-consonant sound shape is acoustically foregrounded.".into()
+            } else if is_vowel(&nucleus.symbol) {
+                "This vowel-plus-consonant sound shape is the information anchor.".into()
+            } else {
+                "This audible segment carries the information anchor.".into()
+            }
+        }
+    }
 }
 
 fn claim_status(signal_sources: &[RhythmSignalSource]) -> RhythmClaimStatus {
@@ -1851,6 +2121,35 @@ fn is_function_word(value: &str) -> bool {
     )
 }
 
+fn is_information_function_word(value: &str) -> bool {
+    matches!(
+        value,
+        "no" | "not"
+            | "never"
+            | "none"
+            | "nobody"
+            | "nothing"
+            | "neither"
+            | "nor"
+            | "this"
+            | "that"
+            | "these"
+            | "those"
+            | "who"
+            | "what"
+            | "when"
+            | "where"
+            | "why"
+            | "how"
+            | "must"
+            | "should"
+            | "can"
+            | "could"
+            | "will"
+            | "would"
+    )
+}
+
 fn clamp01(value: f32) -> f32 {
     value.clamp(0.0, 1.0)
 }
@@ -2646,6 +2945,18 @@ mod tests {
                 .contains(&RhythmSignalSource::Timing)
         );
         assert!(go_anchor.reason.contains("clearly timed"));
+        let info_anchor = frame
+            .information_anchors
+            .iter()
+            .find(|anchor| anchor.label == "go")
+            .expect("go should have a phoneme-level information anchor");
+        assert_eq!(info_anchor.sound, "goʊ");
+        assert_eq!(info_anchor.claim_status, RhythmClaimStatus::AudioSupported);
+        assert!(
+            info_anchor
+                .signal_sources
+                .contains(&RhythmSignalSource::Timing)
+        );
         assert!(frame.nuclei.iter().any(|nucleus| nucleus.label == "now"));
     }
 
