@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-02 00:15 CST: 优化 Rhythm B 默认语流规则的底层算法口径。
+  B 的 text-prior 规则现在从发音 provider 取得 ARPABET 音素序列，跨词 linking、
+  同辅音保持、t/d weakening 与 American flap 都按音素特征判断，不再按拼写字母猜测；
+  修复 t/d weakening 错把“下一个词尾是辅音”当作条件的问题，改为真正的“下一个词首为辅音”；
+  弱读/短语规则会过滤 canonical 与 reduced 完全相同的 no-op 标注，并在 fallback 发音不可靠时
+  回退到规则表的强读音素。同步更新旧 `analyze_rules` 出口和规则目录说明，删除旧拼写 helper，
+  新增 no-op、phone-boundary linking、t/d vowel/consonant 条件等回归测试。
+
 - 2026-07-01 23:11 CST: 重构 Rhythm B/C 字幕视图的学习语义与视觉层级。
   B `Common speech` 不再把规则拆成卡片列表，而是按原句 token range 就地显示弧线、
   下划线、规则名和 A → B IPA 变化，未变化文本退为上下文；C `This audio` 从诊断标签集合

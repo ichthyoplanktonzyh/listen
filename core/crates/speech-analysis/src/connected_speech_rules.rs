@@ -357,6 +357,28 @@ struct RuleWord {
     token_index: u32,
     text: String,
     normalized: String,
+    symbols: Vec<String>,
+    is_fallback_pronunciation: bool,
+}
+
+impl RuleWord {
+    fn last_phone(&self) -> Option<&str> {
+        self.symbols.last().map(String::as_str)
+    }
+
+    fn first_phone(&self) -> Option<&str> {
+        self.symbols.first().map(String::as_str)
+    }
+
+    fn preferred_symbols(&self, preferred: &[&str]) -> Vec<String> {
+        let (symbols, fallback) =
+            crate::pronunciation_symbols(&self.text, self.token_index, Some(preferred));
+        if fallback {
+            crate::normalize_arpabet_symbols(preferred)
+        } else {
+            symbols
+        }
+    }
 }
 
 pub fn rule_source() -> &'static str {
@@ -372,10 +394,16 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
         .tokens
         .iter()
         .filter(|token| token.kind == SubtitleTokenKind::Word)
-        .map(|token| RuleWord {
-            token_index: token.index,
-            text: token.text.clone(),
-            normalized: crate::normalize_word(&token.text),
+        .map(|token| {
+            let (symbols, is_fallback_pronunciation) =
+                crate::pronunciation_symbols(&token.text, token.index, None);
+            RuleWord {
+                token_index: token.index,
+                text: token.text.clone(),
+                normalized: crate::normalize_word(&token.text),
+                symbols,
+                is_fallback_pronunciation,
+            }
         })
         .collect::<Vec<_>>();
     let mut values = Vec::new();
@@ -390,6 +418,11 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
         {
             phrase_tokens.insert(first.token_index);
             phrase_tokens.insert(second.token_index);
+            let expected_symbols = phrase_expected_symbols(first, second, rule);
+            let default_symbols = crate::normalize_arpabet_symbols(rule.reduced);
+            if same_symbols(&expected_symbols, &default_symbols) {
+                continue;
+            }
             values.push(explanation(
                 rule.family,
                 rule.label,
@@ -397,8 +430,8 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
                 first.token_index,
                 second.token_index,
                 rule.confidence,
-                rule.canonical,
-                rule.reduced,
+                expected_symbols,
+                default_symbols,
                 &format!(
                     "{} {} -> {}",
                     first.text,
@@ -415,6 +448,11 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
             && index + 1 < words.len()
             && let Some(form) = WEAK_FORMS.iter().find(|form| form.word == word.normalized)
         {
+            let expected_symbols = word.preferred_symbols(form.canonical);
+            let default_symbols = crate::normalize_arpabet_symbols(form.reduced);
+            if same_symbols(&expected_symbols, &default_symbols) {
+                continue;
+            }
             values.push(explanation(
                 ConnectedSpeechFamily::WeakForm,
                 "default weak form",
@@ -422,8 +460,8 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
                 word.token_index,
                 word.token_index,
                 0.68,
-                form.canonical,
-                form.reduced,
+                expected_symbols,
+                default_symbols,
                 &format!("{} -> {}", word.text, form.reduced.join(" ")),
                 &format!("weak-{}", form.word),
             ));
@@ -435,7 +473,11 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
         if phrase_tokens.contains(&word.token_index) || phrase_tokens.contains(&next.token_index) {
             continue;
         }
-        if crate::ends_consonant(&word.normalized) && crate::starts_vowel(&next.normalized) {
+        let last_phone = word.last_phone();
+        let next_first_phone = next.first_phone();
+        if last_phone.is_some_and(crate::arpabet_is_consonant)
+            && next_first_phone.is_some_and(crate::arpabet_is_vowel)
+        {
             values.push(explanation(
                 ConnectedSpeechFamily::Linking,
                 "default linking",
@@ -443,14 +485,19 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
                 word.token_index,
                 next.token_index,
                 0.66,
-                &[],
-                &[],
+                Vec::new(),
+                Vec::new(),
                 &format!("{} + {}", word.text, next.text),
                 "link-consonant-vowel",
             ));
         }
-        if crate::last_letter(&word.normalized) == crate::first_letter(&next.normalized)
-            && crate::last_letter(&word.normalized).is_some()
+        if last_phone
+            .zip(next_first_phone)
+            .is_some_and(|(last, first)| {
+                last == first
+                    && crate::arpabet_is_consonant(last)
+                    && crate::arpabet_is_consonant(first)
+            })
         {
             values.push(explanation(
                 ConnectedSpeechFamily::Linking,
@@ -459,14 +506,14 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
                 word.token_index,
                 next.token_index,
                 0.64,
-                &[],
-                &[],
+                Vec::new(),
+                Vec::new(),
                 &format!("{} + {}", word.text, next.text),
                 "link-same-consonant",
             ));
         }
-        if (word.normalized.ends_with('t') || word.normalized.ends_with('d'))
-            && crate::ends_consonant(&next.normalized)
+        if last_phone.is_some_and(|phone| matches!(phone, "T" | "D"))
+            && next_first_phone.is_some_and(crate::arpabet_is_consonant)
         {
             values.push(explanation(
                 ConnectedSpeechFamily::Deletion,
@@ -475,13 +522,15 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
                 word.token_index,
                 next.token_index,
                 0.46,
-                &["T", "D"],
-                &[],
+                last_phone
+                    .map(|phone| vec![phone.to_string()])
+                    .unwrap_or_default(),
+                Vec::new(),
                 &format!("{} + {}", word.text, next.text),
                 "possible-t-d-deletion",
             ));
         }
-        if crate::medial_flap_candidate(&word.normalized) {
+        if crate::has_intervocalic_t_or_d(&word.symbols) {
             values.push(explanation(
                 ConnectedSpeechFamily::Flapping,
                 "default flap",
@@ -489,8 +538,8 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
                 word.token_index,
                 word.token_index,
                 0.58,
-                &["T", "D"],
-                &["DX"],
+                vec!["T".into(), "D".into()],
+                vec!["DX".into()],
                 &word.text,
                 "american-flap-t-d",
             ));
@@ -507,6 +556,23 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
     values
 }
 
+fn phrase_expected_symbols(first: &RuleWord, second: &RuleWord, rule: &PhraseRule) -> Vec<String> {
+    if first.is_fallback_pronunciation || second.is_fallback_pronunciation {
+        return crate::normalize_arpabet_symbols(rule.canonical);
+    }
+    let mut symbols = first.symbols.clone();
+    symbols.extend(second.symbols.clone());
+    if symbols.is_empty() {
+        crate::normalize_arpabet_symbols(rule.canonical)
+    } else {
+        symbols
+    }
+}
+
+fn same_symbols(left: &[String], right: &[String]) -> bool {
+    left == right
+}
+
 fn explanation(
     family: ConnectedSpeechFamily,
     label: &str,
@@ -514,8 +580,8 @@ fn explanation(
     token_start: u32,
     token_end: u32,
     confidence: f32,
-    expected_symbols: &[&str],
-    default_symbols: &[&str],
+    expected_symbols: Vec<String>,
+    default_symbols: Vec<String>,
     evidence_detail: &str,
     rule_id: &str,
 ) -> ConnectedSpeechExplanation {
@@ -529,8 +595,8 @@ fn explanation(
         token_end: Some(token_end),
         confidence,
         status: ConnectedSpeechExplanationStatus::PossibleByRule,
-        expected_symbols: expected_symbols.iter().map(ToString::to_string).collect(),
-        learning_symbols: default_symbols.iter().map(ToString::to_string).collect(),
+        expected_symbols,
+        learning_symbols: default_symbols,
         observed_symbols: Vec::new(),
         evidence: format!("{RULE_SOURCE}; default_connected_rule:{rule_id}; {evidence_detail}"),
     }
@@ -596,5 +662,73 @@ mod tests {
             1
         );
         assert!(values.iter().any(|value| value.token_start == Some(2)));
+    }
+
+    #[test]
+    fn weak_forms_skip_noop_dictionary_forms() {
+        let values = predict_default_connected(&sentence("we were ready"));
+
+        assert!(
+            !values
+                .iter()
+                .any(|value| value.evidence.contains("weak-we"))
+        );
+        assert!(
+            !values
+                .iter()
+                .any(|value| value.evidence.contains("weak-were"))
+        );
+    }
+
+    #[test]
+    fn t_d_weakening_uses_following_initial_phone() {
+        let before_vowel = predict_default_connected(&sentence("last apple"));
+        assert!(
+            !before_vowel
+                .iter()
+                .any(|value| value.evidence.contains("possible-t-d-deletion"))
+        );
+
+        let before_consonant = predict_default_connected(&sentence("last call"));
+        assert!(before_consonant.iter().any(|value| {
+            value.evidence.contains("possible-t-d-deletion")
+                && value.expected_symbols == ["T"]
+                && value.token_start == Some(0)
+                && value.token_end == Some(1)
+        }));
+    }
+
+    #[test]
+    fn shared_boundary_requires_same_consonant_phone() {
+        let vowel_letters = predict_default_connected(&sentence("see each one"));
+        assert!(
+            !vowel_letters
+                .iter()
+                .any(|value| value.evidence.contains("link-same-consonant"))
+        );
+
+        let consonants = predict_default_connected(&sentence("big game"));
+        assert!(
+            consonants
+                .iter()
+                .any(|value| value.evidence.contains("link-same-consonant"))
+        );
+    }
+
+    #[test]
+    fn linking_uses_phone_boundary_not_spelling_only() {
+        let consonant_to_vowel = predict_default_connected(&sentence("pick it up"));
+        assert!(consonant_to_vowel.iter().any(|value| {
+            value.evidence.contains("link-consonant-vowel")
+                && value.token_start == Some(0)
+                && value.token_end == Some(1)
+        }));
+
+        let vowel_to_vowel = predict_default_connected(&sentence("see it"));
+        assert!(
+            !vowel_to_vowel
+                .iter()
+                .any(|value| value.evidence.contains("link-consonant-vowel"))
+        );
     }
 }

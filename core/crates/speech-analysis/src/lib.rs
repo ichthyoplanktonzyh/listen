@@ -103,7 +103,7 @@ pub fn rule_catalog() -> &'static [RuleDefinition] {
                 rule_id: "link-consonant-vowel",
                 rule_family: "linking",
                 description: "A final consonant may link into a following vowel.",
-                condition: "A word ending in a consonant precedes a vowel-initial word.",
+                condition: "A word ending in a consonant phone precedes a vowel-initial phone.",
                 example: "Pick it up",
                 counterexample: "See it",
                 canonical_phonemes: &[],
@@ -113,7 +113,7 @@ pub fn rule_catalog() -> &'static [RuleDefinition] {
                 rule_id: "link-same-consonant",
                 rule_family: "linking",
                 description: "Matching boundary consonants may be held as one boundary.",
-                condition: "Adjacent words share the same boundary consonant letter.",
+                condition: "Adjacent words share the same boundary consonant phone.",
                 example: "Big game",
                 counterexample: "Big house",
                 canonical_phonemes: &[],
@@ -123,9 +123,9 @@ pub fn rule_catalog() -> &'static [RuleDefinition] {
                 rule_id: "possible-t-d-deletion",
                 rule_family: "deletion",
                 description: "Final /t/ or /d/ may weaken before a consonant.",
-                condition: "A t- or d-final word precedes another word.",
+                condition: "A /t/- or /d/-final word precedes a consonant-initial word.",
                 example: "Last call",
-                counterexample: "Last",
+                counterexample: "Last apple",
                 canonical_phonemes: &["T", "D"],
                 suggested_phonemes: &[],
             },
@@ -133,7 +133,7 @@ pub fn rule_catalog() -> &'static [RuleDefinition] {
                 rule_id: "american-flap-t-d",
                 rule_family: "flapping",
                 description: "Intervocalic /t/ or /d/ may become an American English flap.",
-                condition: "A lexical token contains a vowel + t/d + vowel sequence.",
+                condition: "A lexical token contains an intervocalic /t/ or /d/ phone.",
                 example: "Water",
                 counterexample: "Tree",
                 canonical_phonemes: &["T", "D"],
@@ -426,10 +426,14 @@ fn analyze_rules(sentence: &SubtitleSentence) -> Vec<SpeechRuleFinding> {
         .tokens
         .iter()
         .filter(|token| token.kind == SubtitleTokenKind::Word)
-        .map(|token| (token.index, normalize_word(&token.text)))
+        .map(|token| {
+            let normalized = normalize_word(&token.text);
+            let (phones, _) = pronunciation_symbols(&token.text, token.index, None);
+            (token.index, normalized, phones)
+        })
         .collect::<Vec<_>>();
     let mut values = Vec::new();
-    for (index, (token_index, word)) in words.iter().enumerate() {
+    for (index, (token_index, word, phones)) in words.iter().enumerate() {
         if matches!(
             word.as_str(),
             "a" | "an" | "and" | "are" | "can" | "for" | "of" | "the" | "to" | "was" | "were"
@@ -444,7 +448,7 @@ fn analyze_rules(sentence: &SubtitleSentence) -> Vec<SpeechRuleFinding> {
                 SpeechRuleStatus::LikelyByContext,
             ));
         }
-        if medial_flap_candidate(word) {
+        if has_intervocalic_t_or_d(phones) {
             values.push(rule(
                 "american-flap-t-d".into(),
                 "flapping",
@@ -455,7 +459,7 @@ fn analyze_rules(sentence: &SubtitleSentence) -> Vec<SpeechRuleFinding> {
                 SpeechRuleStatus::PossibleByRule,
             ));
         }
-        let Some((next_index, next)) = words.get(index + 1) else {
+        let Some((next_index, next, next_phones)) = words.get(index + 1) else {
             continue;
         };
         if (word == "want" || word == "going") && next == "to" {
@@ -480,7 +484,11 @@ fn analyze_rules(sentence: &SubtitleSentence) -> Vec<SpeechRuleFinding> {
                 SpeechRuleStatus::LikelyByContext,
             ));
         }
-        if ends_consonant(word) && starts_vowel(next) {
+        let last_phone = phones.last().map(String::as_str);
+        let next_first_phone = next_phones.first().map(String::as_str);
+        if last_phone.is_some_and(arpabet_is_consonant)
+            && next_first_phone.is_some_and(arpabet_is_vowel)
+        {
             values.push(rule(
                 "link-consonant-vowel".into(),
                 "linking",
@@ -491,7 +499,12 @@ fn analyze_rules(sentence: &SubtitleSentence) -> Vec<SpeechRuleFinding> {
                 SpeechRuleStatus::PossibleByRule,
             ));
         }
-        if last_letter(word) == first_letter(next) && last_letter(word).is_some() {
+        if last_phone
+            .zip(next_first_phone)
+            .is_some_and(|(last, first)| {
+                last == first && arpabet_is_consonant(last) && arpabet_is_consonant(first)
+            })
+        {
             values.push(rule(
                 "link-same-consonant".into(),
                 "linking",
@@ -502,7 +515,9 @@ fn analyze_rules(sentence: &SubtitleSentence) -> Vec<SpeechRuleFinding> {
                 SpeechRuleStatus::PossibleByRule,
             ));
         }
-        if word.ends_with('t') || word.ends_with('d') {
+        if last_phone.is_some_and(|phone| matches!(phone, "T" | "D"))
+            && next_first_phone.is_some_and(arpabet_is_consonant)
+        {
             values.push(rule(
                 "possible-t-d-deletion".into(),
                 "deletion",
@@ -515,6 +530,118 @@ fn analyze_rules(sentence: &SubtitleSentence) -> Vec<SpeechRuleFinding> {
         }
     }
     values
+}
+
+pub(crate) fn pronunciation_symbols(
+    word: &str,
+    token_index: u32,
+    preferred: Option<&[&str]>,
+) -> (Vec<String>, bool) {
+    let pronunciation = lookup(word, token_index);
+    let variants = pronunciation
+        .variants
+        .iter()
+        .map(|variant| {
+            (
+                variant
+                    .phonemes
+                    .iter()
+                    .map(|phone| strip_arpabet_stress(&phone.symbol))
+                    .collect::<Vec<_>>(),
+                variant.is_fallback,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    if let Some(preferred) = preferred {
+        let preferred = normalize_arpabet_symbols(preferred);
+        if let Some((symbols, fallback)) = variants
+            .iter()
+            .find(|(symbols, _)| *symbols == preferred)
+            .cloned()
+        {
+            return (symbols, fallback);
+        }
+    }
+
+    variants
+        .iter()
+        .find(|(_, fallback)| !*fallback)
+        .or_else(|| variants.first())
+        .cloned()
+        .unwrap_or_default()
+}
+
+pub(crate) fn normalize_arpabet_symbols(symbols: &[&str]) -> Vec<String> {
+    symbols
+        .iter()
+        .map(|symbol| strip_arpabet_stress(symbol))
+        .collect()
+}
+
+pub(crate) fn strip_arpabet_stress(symbol: &str) -> String {
+    symbol
+        .trim()
+        .trim_end_matches(|value: char| value.is_ascii_digit())
+        .to_ascii_uppercase()
+}
+
+pub(crate) fn arpabet_is_vowel(symbol: &str) -> bool {
+    matches!(
+        strip_arpabet_stress(symbol).as_str(),
+        "AA" | "AE"
+            | "AH"
+            | "AO"
+            | "AW"
+            | "AX"
+            | "AY"
+            | "EH"
+            | "ER"
+            | "EY"
+            | "IH"
+            | "IY"
+            | "OW"
+            | "OY"
+            | "UH"
+            | "UW"
+    )
+}
+
+pub(crate) fn arpabet_is_consonant(symbol: &str) -> bool {
+    matches!(
+        strip_arpabet_stress(symbol).as_str(),
+        "B" | "CH"
+            | "D"
+            | "DH"
+            | "F"
+            | "G"
+            | "HH"
+            | "JH"
+            | "K"
+            | "L"
+            | "M"
+            | "N"
+            | "NG"
+            | "P"
+            | "R"
+            | "S"
+            | "SH"
+            | "T"
+            | "TH"
+            | "V"
+            | "W"
+            | "Y"
+            | "Z"
+            | "ZH"
+    )
+}
+
+pub(crate) fn has_intervocalic_t_or_d(symbols: &[String]) -> bool {
+    symbols.windows(3).any(|phones| {
+        arpabet_is_vowel(&phones[0])
+            && matches!(phones[1].as_str(), "T" | "D")
+            && arpabet_is_vowel(&phones[2])
+    })
 }
 
 fn rule(
@@ -778,32 +905,6 @@ fn arpabet_ipa(value: &str) -> &'static str {
         "ZH" => "ʒ",
         _ => "?",
     }
-}
-
-fn starts_vowel(value: &str) -> bool {
-    first_letter(value).is_some_and(|value| "aeiou".contains(value))
-}
-
-fn ends_consonant(value: &str) -> bool {
-    last_letter(value).is_some_and(|value| !"aeiou".contains(value))
-}
-
-fn first_letter(value: &str) -> Option<char> {
-    value.chars().find(|value| value.is_ascii_alphabetic())
-}
-
-fn last_letter(value: &str) -> Option<char> {
-    value
-        .chars()
-        .rev()
-        .find(|value| value.is_ascii_alphabetic())
-}
-
-fn medial_flap_candidate(value: &str) -> bool {
-    let chars = value.chars().collect::<Vec<_>>();
-    chars.windows(3).any(|value| {
-        "aeiou".contains(value[0]) && matches!(value[1], 't' | 'd') && "aeiou".contains(value[2])
-    })
 }
 
 #[cfg(test)]
