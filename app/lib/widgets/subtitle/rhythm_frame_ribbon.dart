@@ -133,6 +133,41 @@ class RhythmFrameRibbon extends StatelessWidget {
 
   List<_AudibleItem> _audibleItems() {
     final values = <_AudibleItem>[];
+    if (frame.informationAnchors.isNotEmpty) {
+      for (final anchor in frame.informationAnchors) {
+        if (!predicted &&
+            !anchor.isAudioSupported &&
+            anchor.claimStatus != 'audio_supported') {
+          continue;
+        }
+        final sound = anchor.sound.trim();
+        values.add(
+          _AudibleItem(
+            kind: anchor.isNucleus ? _AudibleKind.nucleus : _AudibleKind.anchor,
+            label: sound.isEmpty ? anchor.label : sound,
+            caption: sound.isEmpty ? '' : anchor.label,
+            start: anchor.start,
+            end: anchor.end,
+            confidence: anchor.confidence,
+            tooltip: _tooltip(
+              anchor.isNucleus ? 'Nucleus' : anchorLabel,
+              anchor.label,
+              anchor.reason,
+              display: sound.isEmpty ? anchor.label : sound,
+              provenance: _provenance(
+                anchor.cues.isEmpty ? anchor.signalSources : anchor.cues,
+                anchor.evidenceClass,
+                anchor.claimStatus,
+              ),
+            ),
+          ),
+        );
+      }
+      values.addAll(_weakItems());
+      values.sort(_audibleSort);
+      return values;
+    }
+
     final anchorTokens = <int>{};
     for (final anchor in frame.stressAnchors) {
       if (!predicted &&
@@ -208,40 +243,50 @@ class RhythmFrameRibbon extends StatelessWidget {
       );
     }
     for (final group in frame.weakGroups) {
-      if (!predicted &&
-          !group.isAudioSupported &&
-          group.claimStatus != 'audio_supported') {
-        continue;
-      }
-      final audibleLabel = _weakGroupSound(group);
-      values.add(
-        _AudibleItem(
-          kind: _AudibleKind.weak,
-          label: audibleLabel,
-          caption: audibleLabel == group.label ? '' : group.label,
-          start: group.start,
-          end: group.end,
-          confidence: group.confidence,
-          tooltip: _tooltip(
-            weakGroupLabel,
-            group.label,
-            group.reason,
-            display: audibleLabel,
-            provenance: _provenance(
-              group.signalSources,
-              group.evidenceClass,
-              group.claimStatus,
-            ),
-          ),
-        ),
-      );
+      final item = _weakItem(group);
+      if (item != null) values.add(item);
     }
-    values.sort((a, b) {
-      final byStart = a.start.compareTo(b.start);
-      if (byStart != 0) return byStart;
-      return a.kind.index.compareTo(b.kind.index);
-    });
+    values.sort(_audibleSort);
     return values;
+  }
+
+  List<_AudibleItem> _weakItems() => frame.weakGroups
+      .map(_weakItem)
+      .whereType<_AudibleItem>()
+      .toList(growable: false);
+
+  _AudibleItem? _weakItem(RhythmWeakGroup group) {
+    if (!predicted &&
+        !group.isAudioSupported &&
+        group.claimStatus != 'audio_supported') {
+      return null;
+    }
+    final audibleLabel = _weakGroupSound(group);
+    return _AudibleItem(
+      kind: _AudibleKind.weak,
+      label: audibleLabel,
+      caption: audibleLabel == group.label ? '' : group.label,
+      start: group.start,
+      end: group.end,
+      confidence: group.confidence,
+      tooltip: _tooltip(
+        weakGroupLabel,
+        group.label,
+        group.reason,
+        display: audibleLabel,
+        provenance: _provenance(
+          group.signalSources,
+          group.evidenceClass,
+          group.claimStatus,
+        ),
+      ),
+    );
+  }
+
+  int _audibleSort(_AudibleItem a, _AudibleItem b) {
+    final byStart = a.start.compareTo(b.start);
+    if (byStart != 0) return byStart;
+    return a.kind.index.compareTo(b.kind.index);
   }
 
   String _audibleSoundShape(int? tokenIndex, String fallback) {

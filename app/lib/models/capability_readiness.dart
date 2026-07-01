@@ -371,6 +371,7 @@ bool _hasAudioBackedTiming(List<String> timingSources) => timingSources.any(
 bool rhythmFrameHasAudioSupport(RhythmFrame frame) =>
     _hasAudioSource(frame.quality.prominenceSources) ||
     _hasAudioSource(frame.quality.boundarySources) ||
+    frame.informationAnchors.any((value) => value.isAudioSupported) ||
     frame.stressAnchors.any((value) => value.isAudioSupported) ||
     frame.nuclei.any((value) => _hasAudioSource(value.cues)) ||
     frame.weakGroups.any((value) => value.isAudioSupported) ||

@@ -386,6 +386,27 @@ void main() {
                     evidenceClass: 'heuristic_proxy',
                   ),
                 ),
+                informationAnchors: [
+                  RhythmInformationAnchor(
+                    id: 'ia1',
+                    tokenIndex: 0,
+                    phoneStart: 0,
+                    phoneEnd: 4,
+                    start: Duration(milliseconds: 100),
+                    end: Duration(milliseconds: 260),
+                    label: 'changed',
+                    sound: 'tʃeɪndʒd',
+                    kind: 'segment',
+                    isNucleus: false,
+                    prominence: 0.72,
+                    cues: ['timing'],
+                    signalSources: ['timing'],
+                    evidenceClass: 'heuristic_proxy',
+                    claimStatus: 'audio_supported',
+                    confidence: 0.72,
+                    reason: 'clearly timed content sound',
+                  ),
+                ],
                 stressAnchors: [
                   RhythmStressAnchor(
                     tokenIndex: 0,

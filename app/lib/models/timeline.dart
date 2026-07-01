@@ -926,6 +926,7 @@ class RhythmFrame {
   const RhythmFrame({
     required this.generatedFrom,
     required this.references,
+    this.informationAnchors = const [],
     required this.stressAnchors,
     required this.nuclei,
     required this.weakGroups,
@@ -941,6 +942,14 @@ class RhythmFrame {
     references: RhythmFrameReferences.fromJson(
       (json['references'] as Map<String, dynamic>?) ?? const {},
     ),
+    informationAnchors:
+        ((json['information_anchors'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) => RhythmInformationAnchor.fromJson(
+                value as Map<String, dynamic>,
+              ),
+            )
+            .toList(growable: false),
     stressAnchors: ((json['stress_anchors'] as List<dynamic>?) ?? const [])
         .map(
           (value) => RhythmStressAnchor.fromJson(value as Map<String, dynamic>),
@@ -988,6 +997,7 @@ class RhythmFrame {
 
   final String generatedFrom;
   final RhythmFrameReferences references;
+  final List<RhythmInformationAnchor> informationAnchors;
   final List<RhythmStressAnchor> stressAnchors;
   final List<RhythmNucleus> nuclei;
   final List<RhythmWeakGroup> weakGroups;
@@ -1000,6 +1010,9 @@ class RhythmFrame {
   Map<String, dynamic> toJson() => {
     'generated_from': generatedFrom,
     'references': references.toJson(),
+    'information_anchors': informationAnchors
+        .map((value) => value.toJson())
+        .toList(),
     'stress_anchors': stressAnchors.map((value) => value.toJson()).toList(),
     'nuclei': nuclei.map((value) => value.toJson()).toList(),
     'weak_groups': weakGroups.map((value) => value.toJson()).toList(),
@@ -1016,6 +1029,92 @@ class RhythmFrame {
         .map((value) => value.toJson())
         .toList(),
     'quality': quality.toJson(),
+  };
+}
+
+class RhythmInformationAnchor {
+  const RhythmInformationAnchor({
+    required this.id,
+    required this.start,
+    required this.end,
+    required this.label,
+    required this.sound,
+    required this.kind,
+    required this.isNucleus,
+    required this.prominence,
+    required this.cues,
+    required this.signalSources,
+    required this.evidenceClass,
+    required this.claimStatus,
+    required this.confidence,
+    required this.reason,
+    this.tokenIndex,
+    this.phoneStart,
+    this.phoneEnd,
+  });
+
+  factory RhythmInformationAnchor.fromJson(Map<String, dynamic> json) =>
+      RhythmInformationAnchor(
+        id: json['id'] as String? ?? '',
+        tokenIndex: json['token_index'] as int?,
+        phoneStart: json['phone_start'] as int?,
+        phoneEnd: json['phone_end'] as int?,
+        start: Duration(milliseconds: json['start_ms'] as int? ?? 0),
+        end: Duration(milliseconds: json['end_ms'] as int? ?? 0),
+        label: json['label'] as String? ?? '',
+        sound: json['sound'] as String? ?? '',
+        kind: json['kind'] as String? ?? 'segment',
+        isNucleus: json['is_nucleus'] as bool? ?? false,
+        prominence:
+            (json['prominence'] as num?)?.toDouble() ??
+            (json['confidence'] as num?)?.toDouble() ??
+            0.0,
+        cues: _stringList(json['cues']),
+        signalSources: _stringList(json['signal_sources']),
+        evidenceClass: json['evidence_class'] as String? ?? 'heuristic_proxy',
+        claimStatus: json['claim_status'] as String? ?? 'predicted',
+        confidence: (json['confidence'] as num?)?.toDouble() ?? 0.0,
+        reason: json['reason'] as String? ?? '',
+      );
+
+  final String id;
+  final int? tokenIndex;
+  final int? phoneStart;
+  final int? phoneEnd;
+  final Duration start;
+  final Duration end;
+  final String label;
+  final String sound;
+  final String kind;
+  final bool isNucleus;
+  final double prominence;
+  final List<String> cues;
+  final List<String> signalSources;
+  final String evidenceClass;
+  final String claimStatus;
+  final double confidence;
+  final String reason;
+
+  bool get isAudioSupported => _hasAudioSource(signalSources);
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'token_index': tokenIndex,
+    'phone_start': phoneStart,
+    'phone_end': phoneEnd,
+    'start_ms': start.inMilliseconds,
+    'end_ms': end.inMilliseconds,
+    'label': label,
+    'sound': sound,
+    'kind': kind,
+    'is_nucleus': isNucleus,
+    'prominence': prominence,
+    'cues': cues,
+    'signal_sources': signalSources,
+    'evidence_class': evidenceClass,
+    'claim_status': claimStatus,
+    'confidence': confidence,
+    'reason': reason,
   };
 }
 
