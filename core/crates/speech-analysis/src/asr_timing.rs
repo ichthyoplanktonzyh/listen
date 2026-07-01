@@ -78,7 +78,10 @@ fn extract_sentence_word_timings(
         return Ok(vec![]);
     }
 
-    let word_spans = resolve_time_spans(&words, sentence.end.get());
+    let Some(word_spans) = resolve_time_spans(&words, sentence.start.get(), sentence.end.get())
+    else {
+        return Ok(vec![]);
+    };
 
     if words.len() == word_tokens.len() {
         return extract_direct(&words, &word_spans, &word_tokens, sentence);
@@ -102,7 +105,7 @@ fn extract_direct(
 ) -> Result<Vec<WordTiming>, ExtractError> {
     let mut timings = Vec::with_capacity(words.len());
     for (word, (token, &(start_ms, end_ms))) in words.iter().zip(tokens.iter().zip(spans.iter())) {
-        if start_ms > end_ms || end_ms < sentence.start.get() || start_ms > sentence.end.get() {
+        if start_ms >= end_ms || start_ms < sentence.start.get() || end_ms > sentence.end.get() {
             return Ok(vec![]);
         }
 
@@ -110,8 +113,8 @@ fn extract_direct(
             sentence_id: sentence.id.clone(),
             token_index: token.index,
             text: token.text.clone(),
-            start_ms: start_ms.max(sentence.start.get()),
-            end_ms: end_ms.min(sentence.end.get()),
+            start_ms,
+            end_ms,
             confidence: word.mean_confidence,
             timing_source: TimingSource::AsrReported,
             provider_id: "whisper.cpp".into(),
@@ -129,22 +132,73 @@ fn extract_direct(
 }
 
 /// Resolve DTW centisecond timestamps to millisecond (start, end) spans.
-fn resolve_time_spans(words: &[MergedWord], sentence_end_ms: u64) -> Vec<(u64, u64)> {
-    words
+fn resolve_time_spans(
+    words: &[MergedWord],
+    sentence_start_ms: u64,
+    sentence_end_ms: u64,
+) -> Option<Vec<(u64, u64)>> {
+    if words.is_empty() || sentence_end_ms <= sentence_start_ms {
+        return None;
+    }
+    let anchors = words
         .iter()
-        .enumerate()
-        .map(|(i, word)| {
-            let start_ms = (word.start_t_dtw * 10) as u64;
-            let next_start_ms = words
-                .get(i + 1)
-                .map(|next| (next.start_t_dtw * 10) as u64)
-                .unwrap_or(sentence_end_ms);
-            let end_ms = ((word.end_t_dtw * 10) as u64)
-                .saturating_add(DTW_TOKEN_DURATION_MS)
-                .min(next_start_ms);
-            (start_ms, end_ms)
-        })
-        .collect()
+        .map(|word| (word.start_t_dtw >= 0).then_some(word.start_t_dtw as u64 * 10))
+        .collect::<Option<Vec<_>>>()?;
+    if anchors.windows(2).any(|pair| pair[0] > pair[1]) {
+        return None;
+    }
+
+    let mut spans = Vec::with_capacity(words.len());
+    let mut group_start = 0usize;
+    while group_start < words.len() {
+        let anchor = anchors[group_start];
+        let mut group_end = group_start + 1;
+        while group_end < words.len() && anchors[group_end] == anchor {
+            group_end += 1;
+        }
+
+        let lower = anchor.max(sentence_start_ms);
+        let upper = anchors
+            .get(group_end)
+            .copied()
+            .unwrap_or(sentence_end_ms)
+            .min(sentence_end_ms);
+        if upper <= lower {
+            return None;
+        }
+
+        let group_len = group_end - group_start;
+        if group_len == 1 {
+            let raw_end = (words[group_start].end_t_dtw >= 0)
+                .then_some(words[group_start].end_t_dtw as u64 * 10)?;
+            let preferred_end = raw_end.saturating_add(DTW_TOKEN_DURATION_MS).min(upper);
+            let end = preferred_end.max(lower.saturating_add(1));
+            if end > upper {
+                return None;
+            }
+            spans.push((lower, end));
+        } else {
+            let available = upper.saturating_sub(lower);
+            let group_len_ms = group_len as u64;
+            if available < group_len_ms {
+                return None;
+            }
+            let total = DTW_TOKEN_DURATION_MS.max(group_len_ms).min(available);
+            for offset in 0..group_len {
+                let offset = offset as u64;
+                let start = lower + total * offset / group_len_ms;
+                let end = lower + total * (offset + 1) / group_len_ms;
+                if end <= start {
+                    return None;
+                }
+                spans.push((start, end));
+            }
+        }
+
+        group_start = group_end;
+    }
+
+    Some(spans)
 }
 
 /// Character-level time interpolation: distributes whisper BPE timing across
@@ -197,6 +251,14 @@ fn align_words_to_tokens(
         });
 
         source_pos += char_count;
+    }
+
+    if timings.iter().any(|timing| {
+        timing.end_ms <= timing.start_ms
+            || timing.start_ms < sentence.start.get()
+            || timing.end_ms > sentence.end.get()
+    }) {
+        return None;
     }
 
     for pair in timings.windows(2) {
@@ -587,6 +649,40 @@ mod tests {
         assert_eq!(result[1].text, "world");
         assert_eq!(result[0].timing_source, TimingSource::AsrReported);
         assert_eq!(result[0].provider_version, "dtw-v2");
+    }
+
+    #[test]
+    fn repeated_dtw_points_become_non_empty_intervals() {
+        let seg = WhisperSegment {
+            text: "small words".into(),
+            tokens: vec![
+                WhisperToken {
+                    text: " small".into(),
+                    t_dtw: 100,
+                },
+                WhisperToken {
+                    text: " words".into(),
+                    t_dtw: 100,
+                },
+                WhisperToken {
+                    text: " move".into(),
+                    t_dtw: 120,
+                },
+            ],
+        };
+        let sentence = sentence("s1", 1000, 2000, &["small", "words", "move"]);
+        let result = extract_sentence_word_timings(&seg, &sentence).unwrap();
+
+        assert_eq!(result.len(), 3);
+        for timing in &result {
+            assert!(
+                timing.end_ms > timing.start_ms,
+                "ASR timing must be non-empty: {timing:?}"
+            );
+        }
+        for pair in result.windows(2) {
+            assert!(pair[0].end_ms <= pair[1].start_ms);
+        }
     }
 
     #[test]

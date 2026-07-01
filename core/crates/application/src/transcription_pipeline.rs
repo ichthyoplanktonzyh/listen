@@ -26,7 +26,7 @@ impl AppServices {
             _ => return Ok(None),
         };
 
-        let dtw_timeline_id = Some(save_word_timeline_snapshot(
+        let dtw_timeline_id = save_word_timeline_snapshot(
             self,
             &track.id,
             &timings,
@@ -35,7 +35,8 @@ impl AppServices {
             "whisper-json-full-dtw-v2",
             TimelineStatus::Candidate,
             None,
-        )?);
+        )
+        .ok();
         let mut parent_timeline_id = dtw_timeline_id.clone();
 
         let forced_aligned_word_count = if let Some(sidecar) = forced_align_sidecar {
@@ -53,7 +54,7 @@ impl AppServices {
 
         let mut forced_aligned_timeline_id = None;
         if forced_aligned_word_count > 0 {
-            let timeline_id = save_word_timeline_snapshot(
+            if let Ok(timeline_id) = save_word_timeline_snapshot(
                 self,
                 &track.id,
                 &timings,
@@ -62,47 +63,65 @@ impl AppServices {
                 "mms-fa-v1-whisper-segment-window",
                 TimelineStatus::Candidate,
                 parent_timeline_id.as_ref(),
-            )?;
-            parent_timeline_id = Some(timeline_id.clone());
-            forced_aligned_timeline_id = Some(timeline_id);
+            ) {
+                parent_timeline_id = Some(timeline_id.clone());
+                forced_aligned_timeline_id = Some(timeline_id);
+            }
         }
 
         let mut final_timeline_id = parent_timeline_id.clone();
-        let wav_bytes = tokio::fs::read(audio_wav_path).await.map_err(|error| {
-            ApplicationError::ExternalProcess(format!("read analysis WAV: {error}"))
-        })?;
-        if let Ok(refined) = speech_analysis::pause_refinement::refine_word_timings_from_pcm_wav(
-            &wav_bytes,
-            &timings,
-            &speech_analysis::pause_refinement::PauseRefinementConfig::default(),
-        ) && !refined.pauses.is_empty()
+        let wav_bytes = tokio::fs::read(audio_wav_path).await.ok();
+        if let Some(wav_bytes) = wav_bytes.as_deref()
+            && let Ok(refined) = speech_analysis::pause_refinement::refine_word_timings_from_pcm_wav(
+                wav_bytes,
+                &timings,
+                &speech_analysis::pause_refinement::PauseRefinementConfig::default(),
+            )
+            && !refined.pauses.is_empty()
         {
-            timings = refined.timings;
-            final_timeline_id = Some(save_word_timeline_snapshot(
+            let refined_timings = refined.timings;
+            if let Ok(timeline_id) = save_word_timeline_snapshot(
                 self,
                 &track.id,
-                &timings,
+                &refined_timings,
                 speech_analysis::pause_refinement::PROVIDER_ID,
                 speech_analysis::pause_refinement::PROVIDER_VERSION,
                 "pause-refinement-default-v1",
                 TimelineStatus::Active,
                 parent_timeline_id.as_ref(),
-            )?);
+            ) {
+                timings = refined_timings;
+                final_timeline_id = Some(timeline_id);
+            }
         }
 
-        let timeline_id = final_timeline_id
-            .as_ref()
-            .ok_or(ApplicationError::Validation("word timeline snapshot"))?;
-        self.activate_word_timeline(timeline_id)?;
-        let acoustic_analysis =
-            speech_analysis::word_acoustics::analyze_word_acoustics_from_pcm_wav(
-                &wav_bytes, &timings,
-            )
-            .map_err(|error| {
-                ApplicationError::ExternalProcess(format!("word acoustic analysis: {error}"))
-            })?;
-        let acoustic_cue_count =
-            self.store_rhythm_word_acoustic_analysis(&track.id, timeline_id, &acoustic_analysis)?;
+        let active_timeline_id = final_timeline_id.as_ref().and_then(|timeline_id| {
+            self.activate_word_timeline(timeline_id)
+                .ok()
+                .map(|_| timeline_id.clone())
+        });
+        let stored_legacy_word_timings = if active_timeline_id.is_some() {
+            false
+        } else {
+            self.store_word_timings(&track.id, &timings).is_ok()
+        };
+
+        let mut acoustic_cue_count = 0;
+        let mut energy_prominence_cue_count = 0;
+        let mut pitch_prominence_cue_count = 0;
+        if let (Some(timeline_id), Some(wav_bytes)) =
+            (active_timeline_id.as_ref(), wav_bytes.as_deref())
+            && let Ok(acoustic_analysis) =
+                speech_analysis::word_acoustics::analyze_word_acoustics_from_pcm_wav(
+                    wav_bytes, &timings,
+                )
+            && let Ok(cue_count) =
+                self.store_rhythm_word_acoustic_analysis(&track.id, timeline_id, &acoustic_analysis)
+        {
+            acoustic_cue_count = cue_count;
+            energy_prominence_cue_count = acoustic_analysis.positive_energy_cue_count();
+            pitch_prominence_cue_count = acoustic_analysis.positive_pitch_cue_count();
+        }
 
         Ok(Some(WordTimelinePipelineResult {
             extracted_word_count: timings.len(),
@@ -110,10 +129,10 @@ impl AppServices {
             dtw_timeline_id,
             forced_aligned_timeline_id,
             final_timeline_id,
-            stored_legacy_word_timings: false,
+            stored_legacy_word_timings,
             acoustic_cue_count,
-            energy_prominence_cue_count: acoustic_analysis.positive_energy_cue_count(),
-            pitch_prominence_cue_count: acoustic_analysis.positive_pitch_cue_count(),
+            energy_prominence_cue_count,
+            pitch_prominence_cue_count,
         }))
     }
 

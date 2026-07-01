@@ -114,7 +114,7 @@ fn parses_fixture_and_extracts_word_timings() {
         assert_eq!(t.timing_source, TimingSource::AsrReported);
         assert_eq!(t.provider_id, "whisper.cpp");
         assert_eq!(t.provider_version, "dtw-v2");
-        assert!(t.start_ms <= t.end_ms);
+        assert!(t.start_ms < t.end_ms);
         assert!(t.confidence.is_none());
     }
 }

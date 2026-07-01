@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-01 19:16 CST: ASR word-timeline 后处理恢复安全降级。
+  修复最新提交后 ASR 任务会因 `word timing boundary must not be empty` 标红的问题：
+  whisper.cpp DTW 重复时间点现在会被拆成单调、非空词区间，裁到句子边界后仍为 0
+  长度的句子会回退而不是写入非法 timing；转录导入后的 WordTimeline、pause refinement
+  与 word-acoustic cue 保存重新改为 best-effort，失败时保留已生成字幕轨并返回 0 cue/legacy
+  fallback 状态，不再中断主 ASR job。验证覆盖 `speech-analysis`、`application` 与
+  `api-http` 测试。
+
 - 2026-07-01 18:34 CST: Phase 2.21 Rhythm A/B/C subtitle views。
   字幕层主切换从历史 `rhythm` / `phones` 改为三个都属于 Rhythm 的 reference：A
   `citation` 显示词典独立读音，B `connected` 显示规则预测的语流形式及 A → B 音标差异，

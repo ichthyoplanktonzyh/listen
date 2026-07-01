@@ -557,7 +557,8 @@ impl TranscriptionCoordinator {
                 && let Ok(track) = self.services.read_subtitle_track(&track.id)
                 && let Some(track) = track
             {
-                self.services
+                let _ = self
+                    .services
                     .refine_transcription_word_timelines(
                         &track.id,
                         &json_bytes,
@@ -565,7 +566,7 @@ impl TranscriptionCoordinator {
                         resolve_forced_align_sidecar(),
                         job.detected_language.as_deref(),
                     )
-                    .await?;
+                    .await;
             }
         }
         self.repository.save_provenance(&SubtitleTrackProvenance {
