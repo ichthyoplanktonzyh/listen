@@ -21,6 +21,8 @@ class RhythmFrameRibbon extends StatelessWidget {
     this.height = 30.0,
     this.tooltip,
     this.onLoopCue,
+    this.predicted = false,
+    this.predictedLabel,
   });
 
   final RhythmFrame frame;
@@ -34,6 +36,11 @@ class RhythmFrameRibbon extends StatelessWidget {
   final double height;
   final String? tooltip;
   final RhythmCueLoopCallback? onLoopCue;
+
+  /// True when the frame has no audio-backed signal source, i.e. it is a
+  /// text-prior prediction and must not read as measured audio.
+  final bool predicted;
+  final String? predictedLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -75,6 +82,8 @@ class RhythmFrameRibbon extends StatelessWidget {
                     confidence: frame.quality.rhythmConfidence,
                     height: height,
                     fontSize: fontSize,
+                    predicted: predicted,
+                    predictedLabel: predictedLabel,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -304,12 +313,16 @@ class _RhythmBadge extends StatelessWidget {
     required this.confidence,
     required this.height,
     required this.fontSize,
+    this.predicted = false,
+    this.predictedLabel,
   });
 
   final String title;
   final double confidence;
   final double height;
   final double fontSize;
+  final bool predicted;
+  final String? predictedLabel;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -326,7 +339,9 @@ class _RhythmBadge extends StatelessWidget {
         Icon(
           Icons.multiline_chart,
           size: math.max(13.0, height * 0.42),
-          color: const Color(0xFFFFD166),
+          color: predicted
+              ? const Color(0xFFFFA94D)
+              : const Color(0xFFFFD166),
         ),
         const SizedBox(width: 5),
         Flexible(
@@ -343,17 +358,50 @@ class _RhythmBadge extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 5),
-        Text(
-          _formatPercent(confidence),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: Colors.white.withAlpha(155),
-            fontSize: math.max(8.0, fontSize * 0.68),
-            height: 1.0,
+        if (predicted && predictedLabel != null)
+          Flexible(
+            child: _PredictedPill(label: predictedLabel!, fontSize: fontSize),
+          )
+        else
+          Text(
+            _formatPercent(confidence),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withAlpha(155),
+              fontSize: math.max(8.0, fontSize * 0.68),
+              height: 1.0,
+            ),
           ),
-        ),
       ],
+    ),
+  );
+}
+
+class _PredictedPill extends StatelessWidget {
+  const _PredictedPill({required this.label, required this.fontSize});
+
+  final String label;
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+    decoration: BoxDecoration(
+      color: const Color(0xFFFFA94D).withAlpha(58),
+      borderRadius: BorderRadius.circular(5),
+      border: Border.all(color: const Color(0xFFFFA94D).withAlpha(160)),
+    ),
+    child: Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: const Color(0xFFFFC98A),
+        fontSize: math.max(8.0, fontSize * 0.66),
+        height: 1.0,
+        fontWeight: FontWeight.w700,
+      ),
     ),
   );
 }

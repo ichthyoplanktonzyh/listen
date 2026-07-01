@@ -275,6 +275,9 @@ class AppLocalizations {
       'rulePrediction': 'Rule prediction',
       'audioDetectionExperimental': 'Audio detection (experimental)',
       'listeningRhythm': 'Listening structure',
+      'listeningPredictedBadge': 'predicted',
+      'listeningPredictedTooltip':
+          'Predicted from text, not measured from this audio. Listening structure becomes audio-supported once word timing, energy or pitch evidence exists.',
       'stressAnchors': 'Anchors',
       'weakGroups': 'Weak groups',
       'compressedSpans': 'Compressed',
@@ -653,6 +656,8 @@ class AppLocalizations {
       'rulePrediction': '规则预测',
       'audioDetectionExperimental': '音频检测（实验性）',
       'listeningRhythm': '听感结构',
+      'listeningPredictedBadge': '预测',
+      'listeningPredictedTooltip': '基于文本预测，非本段音频实测。听感结构需有词级时长、能量或音高证据才算音频支持。',
       'stressAnchors': '声音锚点',
       'weakGroups': '弱读音团',
       'compressedSpans': '压缩区',

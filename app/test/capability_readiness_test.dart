@@ -1,6 +1,8 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/models/capability_readiness.dart';
 import 'package:llplayer_next/models/timeline.dart';
+import 'package:llplayer_next/widgets/subtitle/rhythm_frame_ribbon.dart';
 
 void main() {
   test('marks every learning layer unavailable without subtitles', () {
@@ -112,6 +114,72 @@ void main() {
       UserCapability.listeningStructure,
       UserCapability.phoneEvidence,
     ]);
+  });
+
+  test('rhythmFrameHasAudioSupport separates audio-backed from text-predicted', () {
+    expect(rhythmFrameHasAudioSupport(_audioRhythmFrame.rhythmFrame), isTrue);
+    expect(
+      rhythmFrameHasAudioSupport(_predictedRhythmFrame.rhythmFrame),
+      isFalse,
+    );
+  });
+
+  testWidgets('rhythm ribbon shows a predicted badge for text-prior frames', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 500,
+              child: RhythmFrameRibbon(
+                frame: _predictedRhythmFrame.rhythmFrame,
+                position: Duration.zero,
+                title: 'Listening structure',
+                anchorLabel: 'Anchors',
+                weakGroupLabel: 'Weak',
+                compressionLabel: 'Compressed',
+                hotspotLabel: 'Hotspots',
+                predicted: true,
+                predictedLabel: 'predicted',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('predicted'), findsOneWidget);
+  });
+
+  testWidgets('rhythm ribbon hides the predicted badge for audio-backed frames', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 500,
+              child: RhythmFrameRibbon(
+                frame: _audioRhythmFrame.rhythmFrame,
+                position: Duration.zero,
+                title: 'Listening structure',
+                anchorLabel: 'Anchors',
+                weakGroupLabel: 'Weak',
+                compressionLabel: 'Compressed',
+                hotspotLabel: 'Hotspots',
+                predicted: false,
+                predictedLabel: 'predicted',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('predicted'), findsNothing);
   });
 }
 

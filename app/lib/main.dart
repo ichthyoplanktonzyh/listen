@@ -2932,6 +2932,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                         ),
                                       );
                                     }
+                                    final predicted =
+                                        !rhythmFrameHasAudioSupport(rhythmFrame);
                                     return soundPatternLayer(
                                       rhythmBody(
                                         RhythmFrameRibbon(
@@ -2948,7 +2950,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                           ),
                                           fontSize: primarySize * 0.38,
                                           height: primarySize * 1.05,
-                                          tooltip: l.text('rhythmRibbonHint'),
+                                          tooltip: predicted
+                                              ? l.text(
+                                                  'listeningPredictedTooltip',
+                                                )
+                                              : l.text('rhythmRibbonHint'),
+                                          predicted: predicted,
+                                          predictedLabel: l.text(
+                                            'listeningPredictedBadge',
+                                          ),
                                           onLoopCue: (start, end, label) =>
                                               unawaited(
                                                 _loopRhythmCue(

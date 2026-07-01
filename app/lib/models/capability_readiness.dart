@@ -287,7 +287,7 @@ CapabilityReadiness _listeningStructureReadiness({
   final hasAudioSupport =
       wordSyncAudioBacked &&
       activeFrames.any(
-        (frame) => _rhythmFrameHasAudioSupport(frame.rhythmFrame),
+        (frame) => rhythmFrameHasAudioSupport(frame.rhythmFrame),
       );
   return CapabilityReadiness(
     capability: UserCapability.listeningStructure,
@@ -365,7 +365,10 @@ bool _hasAudioBackedTiming(List<String> timingSources) => timingSources.any(
       source == 'user_adjusted',
 );
 
-bool _rhythmFrameHasAudioSupport(RhythmFrame frame) =>
+/// Whether a [RhythmFrame] carries at least one audio-backed signal source
+/// (timing/energy/pitch/phone_segmental). Used both by listening-structure
+/// readiness and by the overlay to flag text-predicted-only frames honestly.
+bool rhythmFrameHasAudioSupport(RhythmFrame frame) =>
     _hasAudioSource(frame.quality.prominenceSources) ||
     _hasAudioSource(frame.quality.boundarySources) ||
     frame.stressAnchors.any((value) => value.isAudioSupported) ||
