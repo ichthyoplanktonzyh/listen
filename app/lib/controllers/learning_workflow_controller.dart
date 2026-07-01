@@ -12,6 +12,7 @@ class LearningWordStatusUpdate {
 class LearningWorkflowController {
   int _diagnosisGeneration = 0;
   int _phraseCandidateGeneration = 0;
+  int _openWordGeneration = 0;
 
   Future<void> loadPhraseCandidates({
     required LocalApi? api,
@@ -101,6 +102,7 @@ class LearningWorkflowController {
   }) async {
     final lemma = token.normalized;
     if (lemma == null) return;
+    final generation = ++_openWordGeneration;
     if (isMounted()) {
       learning.setSelectedToken(token);
       learning.setSelectedCue(cue);
@@ -109,9 +111,8 @@ class LearningWorkflowController {
     }
     if (api == null) return;
     var entry = learning.wordEntries[lemma];
-    late final LexicalEntryDetails details;
     if (entry == null) {
-      details = LexicalEntryDetails.fromJson(
+      final details = LexicalEntryDetails.fromJson(
         await api.upsertWordLexicalEntry(
           lemma,
           token.text,
@@ -120,26 +121,68 @@ class LearningWorkflowController {
         ),
       );
       entry = details.entry;
+      if (!_isCurrentOpenWord(generation, isMounted)) return;
+      learning.updateSingleWordEntry(lemma, entry);
+      learning.selectWord(details);
     } else {
-      details = LexicalEntryDetails.fromJson(
+      if (!_isCurrentOpenWord(generation, isMounted)) return;
+      learning.selectWord(LexicalEntryDetails(entry: entry));
+      final details = await _loadExistingWordDetails(api, entry);
+      if (!_isCurrentOpenWord(generation, isMounted)) return;
+      entry = details.entry;
+      learning.updateSingleWordEntry(lemma, entry);
+      learning.selectWord(details);
+    }
+
+    final dictionary = await _tryLoad(
+      () async => DictionaryLookupBundle.fromJson(
+        await api.lookupDictionary(lemma, language: language),
+      ),
+    );
+    if (dictionary != null && _isCurrentOpenWord(generation, isMounted)) {
+      learning.setSelectedDictionary(dictionary);
+    }
+
+    final pronunciation = await _tryLoad(
+      () async =>
+          WordPronunciation.fromJson(await api.lookupPronunciation(token.text)),
+    );
+    if (pronunciation != null && _isCurrentOpenWord(generation, isMounted)) {
+      learning.setSelectedPronunciation(pronunciation);
+    }
+
+    if (learning.languageProfileFor(language) != null) return;
+    final languageProfile = await _tryLoad(
+      () async =>
+          LanguageProfile.fromJson(await api.lookupLanguageProfile(language)),
+    );
+    if (languageProfile != null && _isCurrentOpenWord(generation, isMounted)) {
+      learning.setLanguageProfile(languageProfile);
+    }
+  }
+
+  bool _isCurrentOpenWord(int generation, bool Function() isMounted) =>
+      isMounted() && generation == _openWordGeneration;
+
+  Future<LexicalEntryDetails> _loadExistingWordDetails(
+    LocalApi api,
+    LexicalEntry entry,
+  ) async {
+    try {
+      return LexicalEntryDetails.fromJson(
         await api.lexicalEntryDetails(entry.id),
       );
+    } catch (_) {
+      return LexicalEntryDetails(entry: entry);
     }
-    final dictionary = DictionaryLookupBundle.fromJson(
-      await api.lookupDictionary(lemma, language: language),
-    );
-    final pronunciation = WordPronunciation.fromJson(
-      await api.lookupPronunciation(token.text),
-    );
-    final languageProfile =
-        learning.languageProfileFor(language) ??
-        LanguageProfile.fromJson(await api.lookupLanguageProfile(language));
-    if (!isMounted()) return;
-    learning.updateSingleWordEntry(lemma, entry);
-    learning.selectWord(details);
-    learning.setSelectedDictionary(dictionary);
-    learning.setSelectedPronunciation(pronunciation);
-    learning.setLanguageProfile(languageProfile);
+  }
+
+  Future<T?> _tryLoad<T>(Future<T> Function() loader) async {
+    try {
+      return await loader();
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<LexicalEntryDetails?> markFirstWord({

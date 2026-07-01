@@ -85,6 +85,149 @@ void main() {
       expect(learning.sidePanel, 2);
       expect(learning.selectedLexicalDetails?.entry.normalizedForm, 'hello');
     });
+
+    test('keeps word details visible when optional lookups fail', () async {
+      final controller = LearningWorkflowController();
+      final learning = LearningController()..selectSidePanel(0);
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'tok',
+        transport: (method, path, body) async {
+          if (method == 'PUT' && path == '/v1/lexical-entries') {
+            return (
+              statusCode: 200,
+              body:
+                  '{"entry":{"id":"lexical-1","normalized_form":"hello","display_form":"Hello","kind":"word","language":"en"},"history":[],"occurrences":[]}',
+            );
+          }
+          return (statusCode: 503, body: 'optional service unavailable');
+        },
+      );
+      const token = SubtitleToken(
+        index: 0,
+        kind: 'word',
+        text: 'Hello',
+        normalized: 'hello',
+      );
+
+      await controller.openWord(
+        api: api,
+        token: token,
+        cue: _cue('A'),
+        language: 'en',
+        learning: learning,
+        isMounted: () => true,
+      );
+
+      expect(learning.sidePanel, 2);
+      expect(learning.selectedLexicalDetails?.entry.normalizedForm, 'hello');
+      expect(learning.selectedDictionary, isNull);
+      expect(learning.selectedPronunciation, isNull);
+    });
+
+    test('falls back to cached word entry when details lookup fails', () async {
+      final controller = LearningWorkflowController();
+      final learning = LearningController()
+        ..setWordEntries(const {
+          'hello': LexicalEntry(
+            id: 'lexical-1',
+            normalizedForm: 'hello',
+            displayForm: 'Hello',
+            kind: 'word',
+            language: 'en',
+            status: 'known_not_recognized',
+          ),
+        });
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'tok',
+        transport: (method, path, body) async =>
+            (statusCode: 503, body: 'lookup unavailable'),
+      );
+      const token = SubtitleToken(
+        index: 0,
+        kind: 'word',
+        text: 'Hello',
+        normalized: 'hello',
+      );
+
+      await controller.openWord(
+        api: api,
+        token: token,
+        cue: _cue('A'),
+        language: 'en',
+        learning: learning,
+        isMounted: () => true,
+      );
+
+      expect(learning.sidePanel, 2);
+      expect(learning.selectedLexicalDetails?.entry.id, 'lexical-1');
+      expect(
+        learning.selectedLexicalDetails?.entry.status,
+        'known_not_recognized',
+      );
+    });
+
+    test(
+      'shows cached word entry before full details lookup completes',
+      () async {
+        final controller = LearningWorkflowController();
+        final learning = LearningController()
+          ..setWordEntries(const {
+            'hello': LexicalEntry(
+              id: 'lexical-1',
+              normalizedForm: 'hello',
+              displayForm: 'Hello',
+              kind: 'word',
+              language: 'en',
+            ),
+          });
+        final detailsResponse = Completer<ApiResponse>();
+        final api = LocalApi.withTransport(
+          baseUrl: 'http://test',
+          token: 'tok',
+          transport: (method, path, body) {
+            if (method == 'GET' && path == '/v1/lexical-entries/lexical-1') {
+              return detailsResponse.future;
+            }
+            return Future.value((
+              statusCode: 503,
+              body: 'optional unavailable',
+            ));
+          },
+        );
+        const token = SubtitleToken(
+          index: 0,
+          kind: 'word',
+          text: 'Hello',
+          normalized: 'hello',
+        );
+
+        final future = controller.openWord(
+          api: api,
+          token: token,
+          cue: _cue('A'),
+          language: 'en',
+          learning: learning,
+          isMounted: () => true,
+        );
+
+        expect(learning.sidePanel, 2);
+        expect(learning.selectedLexicalDetails?.entry.id, 'lexical-1');
+
+        detailsResponse.complete((
+          statusCode: 200,
+          body:
+              '{"entry":{"id":"lexical-1","normalized_form":"hello","display_form":"Hello","kind":"word","language":"en","status":"known_recognized"},"history":[],"occurrences":[]}',
+        ));
+        await future;
+
+        expect(
+          learning.selectedLexicalDetails?.entry.status,
+          'known_recognized',
+        );
+      },
+    );
   });
 
   group('LearningWorkflowController.refreshDiagnosis (generation guard)', () {
