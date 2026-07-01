@@ -87,6 +87,89 @@ void main() {
   });
 
   test(
+    'can smooth short display gaps without changing exact default lookup',
+    () {
+      const timings = [
+        WordTiming(
+          sentenceId: 'sentence-1',
+          tokenIndex: 2,
+          start: Duration(milliseconds: 100),
+          end: Duration(milliseconds: 300),
+          source: 'asr_reported',
+          provider: 'whisper.cpp',
+        ),
+        WordTiming(
+          sentenceId: 'sentence-1',
+          tokenIndex: 4,
+          start: Duration(milliseconds: 450),
+          end: Duration(milliseconds: 700),
+          source: 'asr_reported',
+          provider: 'whisper.cpp',
+        ),
+      ];
+
+      expect(
+        currentWordTokenIndex(timings, const Duration(milliseconds: 350)),
+        isNull,
+      );
+      expect(
+        currentWordTokenIndex(
+          timings,
+          const Duration(milliseconds: 350),
+          displayGapTolerance: const Duration(milliseconds: 220),
+        ),
+        2,
+      );
+      expect(
+        currentWordTokenIndex(
+          timings,
+          const Duration(milliseconds: 450),
+          displayGapTolerance: const Duration(milliseconds: 220),
+        ),
+        4,
+      );
+    },
+  );
+
+  test('display gap smoothing expires during longer pauses', () {
+    const timings = [
+      WordTiming(
+        sentenceId: 'sentence-1',
+        tokenIndex: 2,
+        start: Duration(milliseconds: 100),
+        end: Duration(milliseconds: 300),
+        source: 'asr_reported',
+        provider: 'whisper.cpp',
+      ),
+      WordTiming(
+        sentenceId: 'sentence-1',
+        tokenIndex: 4,
+        start: Duration(milliseconds: 800),
+        end: Duration(milliseconds: 1000),
+        source: 'asr_reported',
+        provider: 'whisper.cpp',
+      ),
+    ];
+
+    expect(
+      currentWordTokenIndex(
+        timings,
+        const Duration(milliseconds: 450),
+        displayGapTolerance: const Duration(milliseconds: 220),
+      ),
+      2,
+    );
+    expect(
+      currentWordTokenIndex(
+        timings,
+        const Duration(milliseconds: 550),
+        displayGapTolerance: const Duration(milliseconds: 220),
+      ),
+      isNull,
+    );
+  });
+
+  test(
     'selects both words when repeated ASR points are split into intervals',
     () {
       const timings = [

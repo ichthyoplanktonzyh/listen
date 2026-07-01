@@ -173,6 +173,52 @@ void main() {
     expect(controller.currentPrimaryCue, isNull);
   });
 
+  test(
+    'subtitle controller keeps current word through short ASR display gaps',
+    () {
+      final controller = SubtitleController()
+        ..setPrimaryTrack(track)
+        ..setCurrentPrimaryCue(cue)
+        ..setSpeechEnhancements(
+          pronunciationBySentence: const {},
+          pronunciationProviders: const [],
+          timingsBySentence: const {
+            'sentence-1': [
+              WordTiming(
+                sentenceId: 'sentence-1',
+                tokenIndex: 0,
+                start: Duration(milliseconds: 100),
+                end: Duration(milliseconds: 300),
+                source: 'asr_reported',
+                provider: 'whisper.cpp',
+              ),
+              WordTiming(
+                sentenceId: 'sentence-1',
+                tokenIndex: 2,
+                start: Duration(milliseconds: 450),
+                end: Duration(milliseconds: 650),
+                source: 'asr_reported',
+                provider: 'whisper.cpp',
+              ),
+            ],
+          },
+        );
+
+      controller.updateCurrentWord(
+        const Duration(milliseconds: 350),
+        enabled: true,
+      );
+      expect(controller.currentWordToken, 0);
+      controller.updateCurrentWord(
+        const Duration(milliseconds: 450),
+        enabled: true,
+      );
+      expect(controller.currentWordToken, 2);
+
+      controller.dispose();
+    },
+  );
+
   test('subtitle controller stores resource capabilities separately', () {
     final controller = SubtitleController()
       ..setSubtitleResources(const [track])

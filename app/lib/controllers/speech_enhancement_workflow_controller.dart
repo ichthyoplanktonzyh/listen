@@ -294,6 +294,13 @@ class SpeechEnhancementWorkflowController {
       final value = WordTiming.fromJson(raw);
       grouped.putIfAbsent(value.sentenceId, () => []).add(value);
     }
+    for (final values in grouped.values) {
+      values.sort(
+        (a, b) => a.start == b.start
+            ? a.tokenIndex.compareTo(b.tokenIndex)
+            : a.start.compareTo(b.start),
+      );
+    }
     return grouped;
   }
 }

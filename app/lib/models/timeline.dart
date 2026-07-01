@@ -2409,12 +2409,26 @@ int? currentWordTokenIndex(
   List<WordTiming> timings,
   Duration mediaPosition, {
   Duration offset = Duration.zero,
+  Duration displayGapTolerance = Duration.zero,
 }) {
   final position = mediaPosition - offset;
+  WordTiming? previous;
   for (final timing in timings) {
     if (position >= timing.start && position < timing.end) {
       return timing.tokenIndex;
     }
+    if (position < timing.start) {
+      if (previous != null &&
+          displayGapTolerance > Duration.zero &&
+          position >= previous.end) {
+        final elapsedSincePrevious = position - previous.end;
+        if (elapsedSincePrevious <= displayGapTolerance) {
+          return previous.tokenIndex;
+        }
+      }
+      return null;
+    }
+    previous = timing;
   }
   return null;
 }

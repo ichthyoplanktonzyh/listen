@@ -5,6 +5,7 @@ import '../models/types.dart';
 import '../state/store.dart';
 
 const _unset = Object();
+const _wordHighlightGapTolerance = Duration(milliseconds: 220);
 
 /// Immutable snapshot of subtitle-related state.
 class SubtitleState {
@@ -433,6 +434,7 @@ class SubtitleController extends ChangeNotifier {
             s.timingsBySentence[cue.id] ?? const [],
             mediaPosition,
             offset: s.primarySubtitleOffset,
+            displayGapTolerance: _wordHighlightGapTolerance,
           )
         : null;
     final chunk = (chunkEnabled ?? enabled) && cue != null
