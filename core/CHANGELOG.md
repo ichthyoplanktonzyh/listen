@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-01 16:05 CST: Phase 2.22 SM-07b — overlay predicted-only listening 徽标。
+  当前句 listening structure 若无音频信号源（纯 text-prior 预测），overlay 的
+  `RhythmFrameRibbon` 现在显示 `predicted` 徽标 + “基于文本预测、非实测音频” tooltip，
+  不再让预测读起来像实测音频。`_rhythmFrameHasAudioSupport` 提升为公开
+  `rhythmFrameHasAudioSupport(RhythmFrame)`，overlay 与 listening-structure readiness
+  共用同一判据。修复了徽标在窄 leading 区的 `RenderFlex` 溢出（由 widget 测试发现）。
+  过程记录：SM-07a（readiness 去重）经读码证伪为低价值纠缠改动——两处 readiness 实为不同的
+  word-timing-count fallback，非纯重复——已 deprioritize。
+  验证: `cd apps/desktop && flutter analyze` 无问题、full `flutter test` 134 passed
+  （`capability_readiness_test.dart` 新增谓词 + predicted 徽标 widget 测试）。
+
 - 2026-07-01 15:45 CST: Phase 2.22 建模重建 + 前端拆分增量（SM-02 / SM-03）。
   复核发现 GPT 的 2.22 遗漏了用户可见状态机建模、Capability Stack 的 L 层号自相矛盾、
   readiness 仅覆盖 5/11 层，且“前端 closeout 已完成”属高估。
