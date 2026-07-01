@@ -247,6 +247,14 @@ class _SubtitleResourceTile extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 6),
+                  Text(
+                    l.text('resourceLearningCapabilities'),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: const Color(0xffa9b7c5),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
                   Wrap(
                     spacing: 6,
                     runSpacing: 4,
@@ -257,30 +265,54 @@ class _SubtitleResourceTile extends StatelessWidget {
                         onChanged: onLanguageChanged,
                       ),
                       _CapabilityChip(
-                        label: l.text('sentenceTiming'),
+                        label: l.text('capabilitySubtitles'),
+                        stateLabel: capabilities.sentenceTiming
+                            ? l.text('capabilityStateAvailable')
+                            : l.text('capabilityStateUnavailable'),
                         active: capabilities.sentenceTiming,
                         count: capabilities.sentenceCount,
+                        countLabel: l.text('cues'),
                       ),
                       _CapabilityChip(
-                        label: l.text('wordTiming'),
+                        label: l.text('capabilityWordSync'),
+                        stateLabel: capabilities.wordTiming
+                            ? l.text('capabilityStateAvailable')
+                            : l.text('capabilityStateUnavailable'),
                         active: capabilities.wordTiming,
                         count: capabilities.wordTimingCount,
+                        countLabel: l.text('words'),
                       ),
                       _CapabilityChip(
-                        label: l.text('chunkTiming'),
+                        label: l.text('capabilityChunkReplay'),
+                        stateLabel: capabilities.chunkTiming
+                            ? l.text('capabilityStateAvailable')
+                            : l.text('capabilityStateUnavailable'),
                         active: capabilities.chunkTiming,
                         count: capabilities.chunkCount,
+                        countLabel: l.text('chunks'),
                       ),
                       _CapabilityChip(
-                        label: l.text('phoneTiming'),
+                        label: l.text('capabilityPhoneEvidence'),
+                        stateLabel: capabilities.phoneTiming
+                            ? l.text('capabilityStateAvailable')
+                            : l.text('capabilityStateUnavailable'),
                         active: capabilities.phoneTiming,
                         count: capabilities.phoneCount,
+                        countLabel: l.text('phones'),
+                      ),
+                      _CapabilityChip(
+                        label: l.text('capabilityListeningStructure'),
+                        stateLabel: active
+                            ? l.text('resourceTimelineDetailsBelow')
+                            : l.text('resourceActivateToInspect'),
+                        active: active,
                       ),
                       if (capabilities.error != null)
                         Tooltip(
                           message: capabilities.error!,
                           child: _CapabilityChip(
                             label: l.text('resourcePartial'),
+                            stateLabel: l.text('capabilityStateDegraded'),
                             active: false,
                           ),
                         ),
@@ -357,13 +389,17 @@ class _SubtitleResourceTile extends StatelessWidget {
 class _CapabilityChip extends StatelessWidget {
   const _CapabilityChip({
     required this.label,
+    required this.stateLabel,
     required this.active,
     this.count,
+    this.countLabel,
   });
 
   final String label;
+  final String stateLabel;
   final bool active;
   final int? count;
+  final String? countLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -379,7 +415,7 @@ class _CapabilityChip extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
         child: Text(
-          count == null ? label : '$label $count',
+          _text(),
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
             color: color,
             fontWeight: active ? FontWeight.w700 : FontWeight.w500,
@@ -387,6 +423,15 @@ class _CapabilityChip extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _text() {
+    final countPart = count == null
+        ? null
+        : countLabel == null
+        ? '$count'
+        : '$count $countLabel';
+    return [label, stateLabel, ?countPart].join(' · ');
   }
 }
 

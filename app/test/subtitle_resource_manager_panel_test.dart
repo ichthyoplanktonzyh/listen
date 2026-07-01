@@ -74,11 +74,30 @@ void main() {
     );
 
     expect(find.text('Hello'), findsOneWidget);
-    expect(find.text('Sentence 1'), findsOneWidget);
-    expect(find.text('Word 1'), findsOneWidget);
-    expect(find.text('Chunk 1'), findsOneWidget);
-    expect(find.text('Phone 0'), findsOneWidget);
+    expect(find.text('Learning capabilities'), findsWidgets);
+    expect(
+      find.textContaining('Subtitles · Available · 1 cues'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Word sync · Available · 1 Words'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Chunk replay · Available · 1 Chunks'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Phone evidence · Unavailable · 0 Phones'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Listening structure · Activate to inspect'),
+      findsOneWidget,
+    );
 
+    await tester.ensureVisible(find.byIcon(Icons.play_circle_outline));
+    await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.play_circle_outline));
     await tester.pump();
     expect(activated?.id, 'track-1');
@@ -99,6 +118,6 @@ class _Harness extends StatelessWidget {
       GlobalWidgetsLocalizations.delegate,
       GlobalCupertinoLocalizations.delegate,
     ],
-    home: Scaffold(body: SizedBox(width: 900, height: 700, child: child)),
+    home: Scaffold(body: SizedBox(width: 900, height: 900, child: child)),
   );
 }
