@@ -48,9 +48,11 @@
 
 - **当前状态**：已加 `ApiTransport` seam + `LocalApi.withTransport(...)` 测试构造器，
   生产路径 `_transport ?? _httpClientTransport` 行为不变；`_request`（79 个调用点）现可
-  无 sidecar 单测。已落地 `test/api_service_transport_test.dart`（解码/错误映射/body 编码）。
-  **后续**：补全 `api_service.dart` 各方法与两个 workflow controller 的方法级测试；
-  SSE(`/v1/events`) 与文件上传/下载等 3 处特殊 `_client` 裸调暂未纳入 seam。
+  无 sidecar 单测。已落地 `test/api_service_transport_test.dart`（解码/错误映射/body 编码），
+  并借此覆盖两个 workflow controller（`learning_workflow_controller_test.dart` 的
+  generation guard/stale 丢弃、`speech_enhancement_workflow_controller_test.dart` 的降级）。
+  **后续**：补全 `api_service.dart` 各方法级测试；SSE(`/v1/events`) 与文件上传/下载等
+  3 处特殊 `_client` 裸调暂未纳入 seam。
 - **文件**：`apps/desktop/lib/services/api_service.dart:49`（`final HttpClient _client = HttpClient();`）
 - **问题**：transport 在字段初始化处写死 `dart:io HttpClient`，没有可注入的 seam；
   且 `LocalApi` 只有私有构造 `LocalApi._(...)`，唯一公开入口是会起真实 sidecar 进程的

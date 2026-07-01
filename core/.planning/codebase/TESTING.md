@@ -84,6 +84,8 @@
 | `builder_test.dart` | `StoreBuilder` / `StoreBuilder2` widget：只在选中 slice 变化时重建、无关字段不重建、equal-state no-op |
 | `api_service_test.dart` | LocalApi HTTP 客户端 sidecar 路径解析 |
 | `api_service_transport_test.dart` | A1 transport seam（`LocalApi.withTransport`）：GET 解码、非 2xx → `HttpException`、body 编码经 seam 转发 |
+| `learning_workflow_controller_test.dart` | `LearningWorkflowController`：`refreshDiagnosis` generation guard（happy/null/**stale 丢弃**/切换 cue 丢弃/错误→null）+ `loadPhraseCandidates` 经 A1 seam 加载与清空 |
+| `speech_enhancement_workflow_controller_test.dart` | `SpeechEnhancementWorkflowController.loadTimelineResource` 降级：4 子资源全失败→`unavailable`、部分失败→warning（经 A1 seam） |
 | `settings_test.dart` | AppSettings 持久化与升级 |
 | `controllers_test.dart` | 控制器状态管理 |
 | `external_tools_test.dart` | ffmpeg/ffprobe/yt-dlp 适配器 |
@@ -257,7 +259,7 @@ scripts/validate-contracts.sh    # 单独契约验证
 |---|---|---|---|
 | `api-http` 关键路由测试 | P1 | 🟡 部分 | Tier A `api_integration_test.rs` 已覆盖鉴权、media/subtitle 生命周期、LLTimeline 导入往返、word timeline create→activate、diagnosis、lexical entry 生命周期；pronunciation、phonetic/chunk timeline、transcription job 路由待补 |
 | `application` 层集成测试 | P1 | 🟡 部分 | `persistence-sqlite/tests/` 已驱动 `AppServices` 编排；无独立 `application/tests/` 目录 |
-| Flutter 状态/推送层测试 | P1 | 🟢 已建 | `backend_event_coordinator_test.dart` + `store_test.dart` + `builder_test.dart`；CONCERNS A1 transport seam 已修复并加 `api_service_transport_test.dart`，workflow controllers 与 api_service 方法级测试已解锁，待补 |
+| Flutter 状态/推送层测试 | P1 | 🟢 已建 | coordinator + store + builder + A1 transport seam；两个 workflow controller（generation guard + 降级）已覆盖；api_service 其余方法级测试待补 |
 | Python 管线单元测试 | P2 | 🔴 缺 | production_pipeline.py 核心函数 |
 | Flutter widget 交互测试 | P2 | 🔴 缺 | 播放器/字幕点击/拖放交互 |
 | 跨语言 E2E 测试 | P2 | 🔴 缺 | Tier B：Flutter → 真实 Rust sidecar 端到端 |

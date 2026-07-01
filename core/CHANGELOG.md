@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-06-30 20:52 CST: 兑现 A1——用新解锁的 transport seam 为两个 workflow controller
+  补测试（此前因 `LocalApi` 不可注入完全无法单测）。
+  (1) **`learning_workflow_controller_test.dart`**（7 测试）：`refreshDiagnosis` 的
+  generation guard——happy、null cue 清空、**新请求超越时丢弃 stale 结果**、切换 cue 后
+  丢弃、diagnose 错误映射为 null；`loadPhraseCandidates` 经 `LocalApi.withTransport`
+  端到端加载与 null-api 清空。
+  (2) **`speech_enhancement_workflow_controller_test.dart`**（2 测试）：
+  `loadTimelineResource` 降级——4 个子资源全失败→`unavailable`、部分失败→warning 且不
+  误报 unavailable。
+  验证: `flutter analyze`（0 issue）、`flutter test`（106→115 全绿）。
+
 - 2026-06-30 20:30 CST: 收口 Tier A 测试，并修复架构债 A1（`LocalApi` transport 非注入），
   这是第一处"架构修复解锁测试"的闭环。
   (1) **A1 seam（生产代码，行为不变）**：`apps/desktop/lib/services/api_service.dart`
