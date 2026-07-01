@@ -289,7 +289,8 @@ pub(crate) fn build_word_timeline(
     })
 }
 
-pub(crate) fn save_word_timeline_snapshot(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn save_word_timeline_snapshot_with_metrics(
     services: &AppServices,
     track_id: &SubtitleTrackId,
     timings: &[WordTiming],
@@ -298,6 +299,7 @@ pub(crate) fn save_word_timeline_snapshot(
     config_hash: &str,
     status: TimelineStatus,
     parent_timeline_id: Option<&WordTimelineId>,
+    metrics_json: Option<TimelineMetrics>,
 ) -> Result<WordTimelineId, ApplicationError> {
     services
         .create_word_timeline(
@@ -309,7 +311,7 @@ pub(crate) fn save_word_timeline_snapshot(
                 parent_timeline_id: parent_timeline_id.cloned(),
                 created_by: Some(TimelineCreator::Algorithm),
                 status: Some(status),
-                metrics_json: None,
+                metrics_json,
                 words: timings.to_vec(),
             },
         )

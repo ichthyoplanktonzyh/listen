@@ -8,13 +8,13 @@ const RHYTHM_WORD_ACOUSTIC_CUES_ARTIFACT_KIND: &str = "rhythm_word_acoustic_cues
 
 fn rhythm_word_acoustic_cues_by_sentence(
     artifacts: &[LLTimelineArtifact],
-    active_word_timeline_id: Option<&WordTimelineId>,
+    word_timeline_id: Option<&WordTimelineId>,
 ) -> HashMap<SubtitleSentenceId, Vec<speech_analysis::sound_analysis::RhythmWordAcousticCue>> {
     let mut values: HashMap<
         SubtitleSentenceId,
         Vec<speech_analysis::sound_analysis::RhythmWordAcousticCue>,
     > = HashMap::new();
-    let Some(active_word_timeline_id) = active_word_timeline_id else {
+    let Some(word_timeline_id) = word_timeline_id else {
         return values;
     };
     for artifact in artifacts {
@@ -25,7 +25,7 @@ fn rhythm_word_acoustic_cues_by_sentence(
             .payload
             .get("timeline_id")
             .and_then(serde_json::Value::as_str)
-            .is_some_and(|timeline_id| timeline_id != active_word_timeline_id.as_str())
+            .is_some_and(|timeline_id| timeline_id != word_timeline_id.as_str())
         {
             continue;
         }
@@ -85,6 +85,53 @@ fn rhythm_word_acoustic_cues_by_sentence(
     values
 }
 
+fn rhythm_word_acoustic_artifact_timeline_id(
+    artifact: &LLTimelineArtifact,
+) -> Option<WordTimelineId> {
+    if artifact.kind != RHYTHM_WORD_ACOUSTIC_CUES_ARTIFACT_KIND {
+        return None;
+    }
+    artifact
+        .payload
+        .get("timeline_id")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|value| WordTimelineId::parse(value.to_owned()).ok())
+}
+
+fn word_timeline_line(timeline: &WordTimeline) -> Option<&str> {
+    timeline
+        .metrics_json
+        .as_object()
+        .get("line")
+        .and_then(serde_json::Value::as_str)
+}
+
+fn select_rhythm_source_word_timeline_id(
+    word_timelines: &[WordTimeline],
+    active_word_timeline_id: Option<&WordTimelineId>,
+    artifacts: &[LLTimelineArtifact],
+) -> Option<WordTimelineId> {
+    for artifact in artifacts.iter().rev() {
+        let Some(timeline_id) = rhythm_word_acoustic_artifact_timeline_id(artifact) else {
+            continue;
+        };
+        if word_timelines.iter().any(|timeline| {
+            timeline.id == timeline_id && timeline.status != TimelineStatus::Archived
+        }) {
+            return Some(timeline_id);
+        }
+    }
+    word_timelines
+        .iter()
+        .filter(|timeline| {
+            timeline.status != TimelineStatus::Archived
+                && word_timeline_line(timeline) == Some("sound")
+        })
+        .max_by_key(|timeline| timeline.updated_at_ms)
+        .map(|timeline| timeline.id.clone())
+        .or_else(|| active_word_timeline_id.cloned())
+}
+
 impl AppServices {
     pub fn store_rhythm_word_acoustic_analysis(
         &self,
@@ -93,10 +140,12 @@ impl AppServices {
         analysis: &speech_analysis::word_acoustics::WordAcousticAnalysis,
     ) -> Result<usize, ApplicationError> {
         let document = self.export_lltimeline_document(track_id)?;
-        if document.active_word_timeline_id.as_ref() != Some(timeline_id) {
-            return Err(ApplicationError::Conflict(
-                "word acoustic cues require the active word timeline",
-            ));
+        if !document
+            .word_timelines
+            .iter()
+            .any(|timeline| &timeline.id == timeline_id)
+        {
+            return Err(ApplicationError::NotFound("word timeline"));
         }
         let mut artifacts = document.artifacts;
         artifacts.retain(|artifact| {
@@ -113,6 +162,7 @@ impl AppServices {
             provider_version: Some(speech_analysis::word_acoustics::PROVIDER_VERSION.into()),
             payload: serde_json::json!({
                 "status": "scored",
+                "line": "sound",
                 "timeline_id": timeline_id.as_str(),
                 "sample_rate_hz": analysis.sample_rate_hz,
                 "calibration": {
@@ -348,11 +398,19 @@ impl AppServices {
                 Vec::new(),
             )
         };
-        let word_acoustic_cues =
-            rhythm_word_acoustic_cues_by_sentence(&artifacts, active_word_timeline_id.as_ref());
-        let rhythm_frames = self.rhythm_frames_from_active_word_timeline(
+        let rhythm_source_word_timeline_id = select_rhythm_source_word_timeline_id(
+            &word_timelines,
+            active_word_timeline_id.as_ref(),
+            &artifacts,
+        );
+        let word_acoustic_cues = rhythm_word_acoustic_cues_by_sentence(
+            &artifacts,
+            rhythm_source_word_timeline_id.as_ref(),
+        );
+        let rhythm_frames = self.rhythm_frames_from_word_timeline(
             &track,
             &word_timelines,
+            rhythm_source_word_timeline_id.as_ref(),
             active_word_timeline_id.as_ref(),
             &word_acoustic_cues,
         )?;
@@ -573,24 +631,32 @@ impl AppServices {
         self.import_lltimeline_document(document)
     }
 
-    fn rhythm_frames_from_active_word_timeline(
+    fn rhythm_frames_from_word_timeline(
         &self,
         track: &SubtitleTrack,
         word_timelines: &[WordTimeline],
+        word_timeline_id: Option<&WordTimelineId>,
         active_word_timeline_id: Option<&WordTimelineId>,
         word_acoustic_cues: &HashMap<
             SubtitleSentenceId,
             Vec<speech_analysis::sound_analysis::RhythmWordAcousticCue>,
         >,
     ) -> Result<Vec<LLTimelineRhythmFrame>, ApplicationError> {
-        let Some(active_id) = active_word_timeline_id else {
+        let Some(word_timeline_id) = word_timeline_id else {
             return Ok(Vec::new());
         };
         let Some(timeline) = word_timelines
             .iter()
-            .find(|timeline| &timeline.id == active_id)
+            .find(|timeline| &timeline.id == word_timeline_id)
         else {
             return Ok(Vec::new());
+        };
+        let source = if Some(&timeline.id) == active_word_timeline_id {
+            "active_word_timeline_fallback"
+        } else if word_timeline_line(timeline) == Some("sound") {
+            "sound_line_word_timeline"
+        } else {
+            "acoustic_cue_word_timeline"
         };
         let is_english = track
             .language
@@ -648,7 +714,7 @@ impl AppServices {
                 provider_version: RHYTHM_FRAME_PROVIDER_VERSION.into(),
                 status: TimelineStatus::Active,
                 metrics_json: TimelineMetrics::from_value(serde_json::json!({
-                    "source": "active_word_timeline",
+                    "source": source,
                     "word_count": words.len(),
                     "energy_cue_count": word_acoustic_cues
                         .get(&sentence.id)

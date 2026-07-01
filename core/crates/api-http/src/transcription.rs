@@ -551,22 +551,59 @@ impl TranscriptionCoordinator {
             )),
         })?;
         // Extract ASR word-level timings from JSON-full output when DTW was enabled.
+        let mut cleanup_work_dir = true;
         if dtw_preset.is_some() {
             let json_path = output.with_extension("json");
-            if let Ok(json_bytes) = tokio::fs::read(&json_path).await
-                && let Ok(track) = self.services.read_subtitle_track(&track.id)
-                && let Some(track) = track
-            {
-                let _ = self
+            if let Ok(json_bytes) = tokio::fs::read(&json_path).await {
+                let track_id = track.id.clone();
+                if let Ok(Some(result)) = self
                     .services
-                    .refine_transcription_word_timelines(
-                        &track.id,
-                        &json_bytes,
-                        &wav,
-                        resolve_forced_align_sidecar(),
-                        job.detected_language.as_deref(),
-                    )
-                    .await;
+                    .store_transcription_text_word_timeline(&track_id, &json_bytes)
+                    .await
+                {
+                    let _ = self.events.send(EventEnvelope::v1(
+                        EventName::WordTimingsCompleted,
+                        serde_json::json!({
+                            "track_id": track_id.as_str(),
+                            "line": "text",
+                            "count": result.extracted_word_count,
+                            "timeline_id": result.final_timeline_id.as_ref().map(|id| id.as_str()),
+                        }),
+                    ));
+                    let services = self.services.clone();
+                    let events = self.events.clone();
+                    let wav_path = wav.clone();
+                    let work_dir = work.clone();
+                    let language = job.detected_language.clone();
+                    tokio::spawn(async move {
+                        if let Ok(Some(result)) = services
+                            .build_transcription_sound_line_resources(
+                                &track_id,
+                                &json_bytes,
+                                &wav_path,
+                                resolve_forced_align_sidecar(),
+                                language.as_deref(),
+                            )
+                            .await
+                        {
+                            let _ = events.send(EventEnvelope::v1(
+                                EventName::WordTimingsCompleted,
+                                serde_json::json!({
+                                    "track_id": track_id.as_str(),
+                                    "line": "sound",
+                                    "count": result.extracted_word_count,
+                                    "timeline_id": result.final_timeline_id.as_ref().map(|id| id.as_str()),
+                                    "forced_aligned_word_count": result.forced_aligned_word_count,
+                                    "acoustic_cue_count": result.acoustic_cue_count,
+                                    "energy_prominence_cue_count": result.energy_prominence_cue_count,
+                                    "pitch_prominence_cue_count": result.pitch_prominence_cue_count,
+                                }),
+                            ));
+                        }
+                        let _ = tokio::fs::remove_dir_all(work_dir).await;
+                    });
+                    cleanup_work_dir = false;
+                }
             }
         }
         self.repository.save_provenance(&SubtitleTrackProvenance {
@@ -587,7 +624,9 @@ impl TranscriptionCoordinator {
         job.updated_at_ms = now_ms();
         self.repository.update_job(&job)?;
         self.emit(EventName::TranscriptionJobChanged, &job);
-        let _ = tokio::fs::remove_dir_all(work).await;
+        if cleanup_work_dir {
+            let _ = tokio::fs::remove_dir_all(work).await;
+        }
         Ok(())
     }
 

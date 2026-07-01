@@ -648,6 +648,173 @@ async fn exports_lltimeline_document_with_active_word_timeline() {
 }
 
 #[tokio::test]
+async fn exported_rhythm_frames_prefer_sound_line_word_timeline() {
+    let app = test_app();
+    let track = setup_phonetic_track(&app, "lltimeline-sound-line").await;
+    let sentence = &track["sentences"][0];
+    let word_tokens = sentence["tokens"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|token| token["kind"] == "word")
+        .collect::<Vec<_>>();
+    assert!(!word_tokens.is_empty());
+    let mut cursor = sentence["start"].as_u64().unwrap() + 10;
+    let words = word_tokens
+        .iter()
+        .map(|token| {
+            let start_ms = cursor;
+            let end_ms = start_ms + 260;
+            cursor = end_ms + 30;
+            serde_json::json!({
+                "sentence_id": sentence["id"],
+                "token_index": token["index"],
+                "text": token["text"],
+                "start_ms": start_ms,
+                "end_ms": end_ms,
+                "confidence": 0.95,
+                "timing_source": "asr_aligned",
+                "provider_id": "whisper-dtw",
+                "provider_version": "dtw-v2"
+            })
+        })
+        .collect::<Vec<_>>();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post(format!(
+                "/v1/subtitles/{}/word-timelines",
+                track["id"].as_str().unwrap()
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .header(CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                serde_json::json!({
+                    "algorithm_id": "whisper-dtw",
+                    "algorithm_version": "dtw-v2",
+                    "config_hash": "text-line",
+                    "status": "active",
+                    "metrics_json": {"line": "text"},
+                    "words": words
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let text_timeline: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/v1/subtitles/{}/lltimeline/export",
+                track["id"].as_str().unwrap()
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let mut document: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+
+    let mut sound_timeline = document["word_timelines"][0].clone();
+    sound_timeline["id"] = serde_json::json!("word-timeline-sound-line-fixture");
+    sound_timeline["algorithm_id"] = serde_json::json!("sound-line-whisper-dtw");
+    sound_timeline["algorithm_version"] = serde_json::json!("phase-test");
+    sound_timeline["config_hash"] = serde_json::json!("sound-line");
+    sound_timeline["parent_timeline_id"] = text_timeline["id"].clone();
+    sound_timeline["status"] = serde_json::json!("candidate");
+    sound_timeline["metrics_json"] = serde_json::json!({
+        "line": "sound",
+        "source": "test_sound_line"
+    });
+    document["word_timelines"]
+        .as_array_mut()
+        .unwrap()
+        .push(sound_timeline);
+    document["artifacts"] = serde_json::json!([
+        {
+            "kind": "rhythm_word_acoustic_cues",
+            "provider_id": "rust-word-acoustic-prominence",
+            "provider_version": "v1",
+            "payload": {
+                "timeline_id": "word-timeline-sound-line-fixture",
+                "line": "sound",
+                "cues": [
+                    {
+                        "sentence_id": sentence["id"],
+                        "token_index": word_tokens[0]["index"],
+                        "energy_prominence": 0.95,
+                        "pitch_prominence": 0.8
+                    }
+                ]
+            }
+        }
+    ]);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/lltimeline/import")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(document.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/v1/subtitles/{}/lltimeline/export",
+                track["id"].as_str().unwrap()
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let exported: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let sound_timeline = exported["word_timelines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|timeline| timeline["metrics_json"]["line"] == "sound")
+        .unwrap();
+    assert_eq!(exported["active_word_timeline_id"], text_timeline["id"]);
+    assert_eq!(sound_timeline["status"], "candidate");
+    assert_ne!(sound_timeline["id"], exported["active_word_timeline_id"]);
+    assert_eq!(
+        exported["rhythm_frames"][0]["parent_word_timeline_id"],
+        sound_timeline["id"]
+    );
+    assert_eq!(
+        exported["rhythm_frames"][0]["metrics_json"]["source"],
+        "sound_line_word_timeline"
+    );
+    assert!(
+        exported["rhythm_frames"][0]["rhythm_frame"]["quality"]["prominence_sources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|source| source == "energy")
+    );
+}
+
+#[tokio::test]
 async fn imports_lltimeline_for_current_media_with_user_confirmed_mismatch() {
     let app = test_app();
     let source_track = setup_phonetic_track(&app, "source-media").await;

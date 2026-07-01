@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-01 20:10 CST: ASR 文字线与声音线解耦。
+  whisper.cpp + DTW 现在只负责文字线，生成 active `whisper-dtw` WordTimeline 后即可完成
+  ASR job，保留词级跳动、chunk 与词典音标的原有路径；forced alignment、pause refinement
+  与 word-acoustic cues 改为后台声音线任务，产出 `line=sound` candidate WordTimeline 与
+  RhythmFrame 资源，不再覆盖 active text timeline。LLTimeline 导出优先让 RhythmFrame
+  挂到带声学 cues 的声音线 timeline，前端监听 `word-timings-completed` 后刷新当前资源。
+  验证覆盖 `application`、`api-http` 后端测试与 Flutter backend event coordinator 测试。
+
 - 2026-07-01 19:16 CST: ASR word-timeline 后处理恢复安全降级。
   修复最新提交后 ASR 任务会因 `word timing boundary must not be empty` 标红的问题：
   whisper.cpp DTW 重复时间点现在会被拆成单调、非空词区间，裁到句子边界后仍为 0
