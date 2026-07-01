@@ -43,6 +43,10 @@ class BackendEventCoordinator {
       _handleTranscriptionJob(event);
       return;
     }
+    if (event is WordTimingsCompletedEvent) {
+      _handleWordTimingsCompleted(event);
+      return;
+    }
     if (event is PhoneticAnalysisJobChangedEvent) {
       _handlePhoneticAnalysisJob(event);
       return;
@@ -65,6 +69,14 @@ class BackendEventCoordinator {
       return;
     }
     setStatus('ASR ${event.status} · ${event.phaseProgress}%');
+  }
+
+  void _handleWordTimingsCompleted(WordTimingsCompletedEvent event) {
+    if (event.trackId != currentPrimaryTrackId()) return;
+    unawaited(loadSpeechEnhancements(event.trackId));
+    if (event.line == 'sound') {
+      setStatus('Sound line ready');
+    }
   }
 
   void _handlePhoneticAnalysisJob(PhoneticAnalysisJobChangedEvent event) {

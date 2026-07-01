@@ -10,6 +10,8 @@ class BackendEvent {
       'service-started' => const ServiceStartedEvent(),
       'transcription-job-changed' when payload is Map<String, dynamic> =>
         TranscriptionJobChangedEvent.fromJson(payload),
+      'word-timings-completed' when payload is Map<String, dynamic> =>
+        WordTimingsCompletedEvent.fromJson(payload),
       'phonetic-analysis-job-changed' when payload is Map<String, dynamic> =>
         PhoneticAnalysisJobChangedEvent.fromJson(payload),
       'lexical-entry-changed' when payload is Map<String, dynamic> =>
@@ -31,6 +33,28 @@ class UnknownBackendEvent extends BackendEvent {
 
   final String name;
   final Object? payload;
+}
+
+class WordTimingsCompletedEvent extends BackendEvent {
+  const WordTimingsCompletedEvent({
+    required this.trackId,
+    required this.count,
+    this.line,
+    this.timelineId,
+  });
+
+  factory WordTimingsCompletedEvent.fromJson(Map<String, dynamic> json) =>
+      WordTimingsCompletedEvent(
+        trackId: json['track_id'] as String? ?? '',
+        count: json['count'] as int? ?? 0,
+        line: json['line'] as String?,
+        timelineId: json['timeline_id'] as String?,
+      );
+
+  final String trackId;
+  final int count;
+  final String? line;
+  final String? timelineId;
 }
 
 class TranscriptionJobChangedEvent extends BackendEvent {

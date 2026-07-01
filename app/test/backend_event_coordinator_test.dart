@@ -211,6 +211,38 @@ void main() {
     );
 
     test(
+      'completed sound-line word timings refresh current speech enhancements',
+      () async {
+        final recorder = _Recorder()..primaryTrackId = 'track-1';
+        recorder.build().handle({
+          'event': 'word-timings-completed',
+          'payload': {
+            'track_id': 'track-1',
+            'line': 'sound',
+            'count': 3,
+            'timeline_id': 'timeline-sound',
+          },
+        });
+        await pumpEventQueue();
+
+        expect(recorder.loadedSpeechEnhancements, ['track-1']);
+        expect(recorder.statuses, ['Sound line ready']);
+      },
+    );
+
+    test('word timings for a non-primary track are ignored', () async {
+      final recorder = _Recorder()..primaryTrackId = 'track-1';
+      recorder.build().handle({
+        'event': 'word-timings-completed',
+        'payload': {'track_id': 'track-2', 'line': 'sound', 'count': 3},
+      });
+      await pumpEventQueue();
+
+      expect(recorder.loadedSpeechEnhancements, isEmpty);
+      expect(recorder.statuses, isEmpty);
+    });
+
+    test(
       'lexical-entry-changed forwards the normalized form and entry',
       () async {
         final recorder = _Recorder();
