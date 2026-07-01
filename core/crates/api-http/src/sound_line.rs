@@ -383,6 +383,44 @@ fn completed_track_id(payload: &Value) -> Option<SubtitleTrackId> {
     if payload.get("status")?.as_str()? != "completed" {
         return None;
     }
+    // Archiving emits another transcription-job-changed snapshot while the
+    // status remains completed. That is not a new sound-line trigger.
+    if payload
+        .get("archived_at_ms")
+        .is_some_and(|value| !value.is_null())
+    {
+        return None;
+    }
     let track_id = payload.get("generated_track_id")?.as_str()?;
     SubtitleTrackId::parse(track_id.to_owned()).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fresh_transcription_completion_exposes_track_id() {
+        let payload = serde_json::json!({
+            "status": "completed",
+            "generated_track_id": "track-1",
+            "archived_at_ms": null,
+        });
+
+        assert_eq!(
+            completed_track_id(&payload).map(|id| id.as_str().to_owned()),
+            Some("track-1".into())
+        );
+    }
+
+    #[test]
+    fn archived_completion_does_not_retrigger_sound_line() {
+        let payload = serde_json::json!({
+            "status": "completed",
+            "generated_track_id": "track-1",
+            "archived_at_ms": 123,
+        });
+
+        assert!(completed_track_id(&payload).is_none());
+    }
 }
