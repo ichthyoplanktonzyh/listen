@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-02 00:30 CST: 优化 Rhythm C 的真实可听锚点表达。
+  C `This audio` 不再把前景锚点过度收窄为“重读音节”：后端允许短但有音频时序支持的
+  content sound 成为 audio-supported listening anchor，并将 anchor confidence 与
+  nucleus prominence 分开校准，让能量/音高突出优先决定主核；前端将锚点 label 从单个重读元音
+  扩展为“元音核 + 临近辅音边缘”的可听音段形状（如 `/tʃeɪndʒd/`），弱读团仍保持低对比背景。
+  新增短时序 content anchor 与 consonant-vowel shape 的回归测试。
+
 - 2026-07-02 00:15 CST: 优化 Rhythm B 默认语流规则的底层算法口径。
   B 的 text-prior 规则现在从发音 provider 取得 ARPABET 音素序列，跨词 linking、
   同辅音保持、t/d weakening 与 American flap 都按音素特征判断，不再按拼写字母猜测；

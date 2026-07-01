@@ -21,6 +21,7 @@ const LENGTHENING_BOUNDARY_REFERENCE_AFTER: usize = 2;
 const LENGTHENING_BOUNDARY_RATIO: f32 = 1.75;
 const LENGTHENING_BOUNDARY_RATIO_MAX: f32 = 2.75;
 const PITCH_RESET_BOUNDARY_MIN: f32 = 0.5;
+const MIN_AUDIBLE_ANCHOR_MS: u64 = 70;
 
 pub struct SoundAnalysisConfig<'a> {
     pub provider_id: &'a str,
@@ -1146,12 +1147,20 @@ fn detect_stress_anchors(tokens: &[RhythmToken]) -> Vec<RhythmStressAnchor> {
         let content_word = !token.is_function_word();
         let stressed = token.has_primary_stress || token.has_secondary_stress;
         let long_enough = token.duration_ms() >= 180;
+        let clearly_timed =
+            token.timing_audio_supported && token.duration_ms() >= MIN_AUDIBLE_ANCHOR_MS;
         let energy_prominence = token.energy_prominence_score();
         let pitch_prominence = token.pitch_prominence_score();
+        let acoustically_prominent = energy_prominence.is_some() || pitch_prominence.is_some();
         if !content_word {
             continue;
         }
-        if !stressed && !long_enough && token.text.len() <= 2 {
+        if !stressed
+            && !long_enough
+            && !clearly_timed
+            && !acoustically_prominent
+            && token.text.len() <= 2
+        {
             continue;
         }
         let repeated_content = seen_content_words.contains(&token.normalized);
@@ -1161,6 +1170,7 @@ fn detect_stress_anchors(tokens: &[RhythmToken]) -> Vec<RhythmStressAnchor> {
             0.6 + score_flag(content_word) * 0.08
                 + score_flag(token.has_primary_stress) * 0.14
                 + score_flag(token.has_secondary_stress) * 0.08
+                + score_flag(clearly_timed) * 0.08
                 + token.average_confidence.unwrap_or(0.4) * 0.08
                 + energy_prominence.unwrap_or(0.0) * 0.14
                 + pitch_prominence.unwrap_or(0.0) * 0.14
@@ -1169,7 +1179,7 @@ fn detect_stress_anchors(tokens: &[RhythmToken]) -> Vec<RhythmStressAnchor> {
         );
         let mut signal_sources = vec![RhythmSignalSource::TextPrior];
         let mut prominence_cues = vec![RhythmSignalSource::TextPrior];
-        if long_enough && token.timing_audio_supported {
+        if clearly_timed || (long_enough && token.timing_audio_supported) {
             signal_sources.push(RhythmSignalSource::Timing);
             prominence_cues.push(RhythmSignalSource::Timing);
         }
@@ -1182,9 +1192,15 @@ fn detect_stress_anchors(tokens: &[RhythmToken]) -> Vec<RhythmStressAnchor> {
             prominence_cues.push(RhythmSignalSource::Pitch);
         }
         let claim_status = claim_status(&signal_sources);
-        let prominence = confidence
-            .max(energy_prominence.unwrap_or(0.0))
-            .max(pitch_prominence.unwrap_or(0.0));
+        let prominence = clamp01(
+            0.45 + score_flag(token.has_primary_stress) * 0.16
+                + score_flag(token.has_secondary_stress) * 0.08
+                + score_flag(clearly_timed) * 0.08
+                + energy_prominence.unwrap_or(0.0) * 0.24
+                + pitch_prominence.unwrap_or(0.0) * 0.24
+                + score_flag(final_focus) * 0.08
+                - score_flag(repeated_content) * 0.1,
+        );
         anchors.push(RhythmStressAnchor {
             token_index: Some(token.index),
             syllable_index: token.syllable_index,
@@ -1198,12 +1214,17 @@ fn detect_stress_anchors(tokens: &[RhythmToken]) -> Vec<RhythmStressAnchor> {
                     .into()
             } else if final_focus {
                 "Phrase-final content is a likely focus candidate.".into()
+            } else if acoustically_prominent {
+                "Catch this acoustically prominent vowel/consonant shape as a listening anchor."
+                    .into()
             } else if stressed {
-                "Catch this stressed content word as a listening anchor.".into()
+                "Catch this stressed vowel/consonant shape as a listening anchor.".into()
+            } else if clearly_timed {
+                "Catch this clearly timed content sound as a listening anchor.".into()
             } else {
                 "Catch this content word as a meaning anchor.".into()
             },
-            importance: if token.has_primary_stress || content_word {
+            importance: if token.has_primary_stress || acoustically_prominent || final_focus {
                 RhythmAnchorImportance::Primary
             } else {
                 RhythmAnchorImportance::Secondary
@@ -2597,6 +2618,35 @@ mod tests {
                         && !hotspot.signal_sources.contains(&RhythmSignalSource::Timing)
                 )
         );
+    }
+
+    #[test]
+    fn short_timed_content_sound_can_be_audible_anchor() {
+        let sentence = sentence(&["go", "now"]);
+        let canonical = canonical_with_stress(&[
+            (0, "G", None),
+            (0, "OW", None),
+            (1, "N", None),
+            (1, "AW", Some(1)),
+        ]);
+        let word_timings = word_timings(&sentence, &[(0, "go", 0, 80), (1, "now", 100, 260)]);
+
+        let frame =
+            build_rhythm_frame_from_word_timeline(&sentence, &canonical, &word_timings, None);
+        let go_anchor = frame
+            .stress_anchors
+            .iter()
+            .find(|anchor| anchor.label == "go")
+            .expect("go should be retained as a listening anchor");
+
+        assert_eq!(go_anchor.claim_status, RhythmClaimStatus::AudioSupported);
+        assert!(
+            go_anchor
+                .signal_sources
+                .contains(&RhythmSignalSource::Timing)
+        );
+        assert!(go_anchor.reason.contains("clearly timed"));
+        assert!(frame.nuclei.iter().any(|nucleus| nucleus.label == "now"));
     }
 
     #[test]
