@@ -1507,6 +1507,13 @@ class RhythmConnectedSpeechRef {
     required this.signalSources,
     required this.evidenceClass,
     required this.confidence,
+    this.family,
+    this.surfaceText = '',
+    this.hint = '',
+    this.expectedSymbols = const [],
+    this.defaultSymbols = const [],
+    this.expectedDisplayIpa = '',
+    this.defaultDisplayIpa = '',
     this.connectedSpeechIndex,
     this.tokenStart,
     this.tokenEnd,
@@ -1522,7 +1529,14 @@ class RhythmConnectedSpeechRef {
         tokenEnd: json['token_end'] as int?,
         phoneStart: json['phone_start'] as int?,
         phoneEnd: json['phone_end'] as int?,
+        family: json['family'] as String?,
+        surfaceText: json['surface_text'] as String? ?? '',
         label: json['label'] as String? ?? '',
+        hint: json['hint'] as String? ?? '',
+        expectedSymbols: _stringList(json['expected_symbols']),
+        defaultSymbols: _stringList(json['default_symbols']),
+        expectedDisplayIpa: json['expected_display_ipa'] as String? ?? '',
+        defaultDisplayIpa: json['default_display_ipa'] as String? ?? '',
         divergence: json['divergence'] as String? ?? 'clip_specific',
         signalSources: _stringList(json['signal_sources']),
         evidenceClass: json['evidence_class'] as String? ?? 'heuristic_proxy',
@@ -1535,7 +1549,14 @@ class RhythmConnectedSpeechRef {
   final int? tokenEnd;
   final int? phoneStart;
   final int? phoneEnd;
+  final String? family;
+  final String surfaceText;
   final String label;
+  final String hint;
+  final List<String> expectedSymbols;
+  final List<String> defaultSymbols;
+  final String expectedDisplayIpa;
+  final String defaultDisplayIpa;
   final String divergence;
   final List<String> signalSources;
   final String evidenceClass;
@@ -1548,7 +1569,14 @@ class RhythmConnectedSpeechRef {
     'token_end': tokenEnd,
     'phone_start': phoneStart,
     'phone_end': phoneEnd,
+    if (family != null) 'family': family,
+    'surface_text': surfaceText,
     'label': label,
+    'hint': hint,
+    'expected_symbols': expectedSymbols,
+    'default_symbols': defaultSymbols,
+    'expected_display_ipa': expectedDisplayIpa,
+    'default_display_ipa': defaultDisplayIpa,
     'divergence': divergence,
     'signal_sources': signalSources,
     'evidence_class': evidenceClass,

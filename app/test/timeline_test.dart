@@ -252,7 +252,28 @@ void main() {
             'weak_groups': [],
             'compression_spans': [],
             'phrase_boundaries': [],
-            'connected_speech_refs': [],
+            'connected_speech_refs': [
+              {
+                'id': 'cs1',
+                'connected_speech_index': 0,
+                'token_start': 1,
+                'token_end': 2,
+                'phone_start': null,
+                'phone_end': null,
+                'family': 'contraction',
+                'surface_text': 'could have',
+                'label': 'default connected form',
+                'hint': 'could have often reduces toward could\'ve',
+                'expected_symbols': ['K', 'UH', 'D', 'HH', 'AE', 'V'],
+                'default_symbols': ['K', 'UH', 'D', 'AH', 'V'],
+                'expected_display_ipa': 'kʊdhæv',
+                'default_display_ipa': 'kʊdəv',
+                'divergence': 'teachable_rule',
+                'signal_sources': ['text_prior'],
+                'evidence_class': 'heuristic_proxy',
+                'confidence': 0.82,
+              },
+            ],
             'listening_hotspots': [],
             'quality': {
               'timing_source': 'word_timeline',
@@ -276,6 +297,14 @@ void main() {
       document.rhythmFrameForSentence('sentence-1')?.generatedFrom,
       'wordtimeline_timing_prominence_v1',
     );
+    final connectedRef = document
+        .rhythmFrameForSentence('sentence-1')!
+        .connectedSpeechRefs
+        .single;
+    expect(connectedRef.surfaceText, 'could have');
+    expect(connectedRef.family, 'contraction');
+    expect(connectedRef.expectedDisplayIpa, 'kʊdhæv');
+    expect(connectedRef.defaultDisplayIpa, 'kʊdəv');
     expect(document.rhythmFrameForSentence('missing'), isNull);
     expect(document.importedResource, true);
   });

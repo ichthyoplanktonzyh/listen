@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/types.dart';
+import 'package:llplayer_next/widgets/subtitle/connected_speech_reference_ribbon.dart';
 import 'package:llplayer_next/widgets/subtitle/expected_pronunciation_reference.dart';
 import 'package:llplayer_next/widgets/subtitle/phoneme_ribbon.dart';
 import 'package:llplayer_next/widgets/subtitle/rhythm_frame_ribbon.dart';
@@ -374,7 +375,7 @@ void main() {
     expect(loopLabel, 'weak group');
   });
 
-  testWidgets('sound pattern mode toggle switches between rhythm and phones', (
+  testWidgets('rhythm reference toggle switches among A B and C', (
     tester,
   ) async {
     final changes = <String>[];
@@ -382,22 +383,73 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Center(
-          child: SoundPatternModeToggle(
-            mode: 'rhythm',
-            rhythmTooltip: 'Listening rhythm',
-            phonesTooltip: 'Phone evidence',
-            semanticsLabel: 'Sound pattern layer',
+          child: RhythmReferenceToggle(
+            mode: 'actual',
+            citationTooltip: 'A dictionary',
+            connectedTooltip: 'B common speech',
+            actualTooltip: 'C this audio',
+            semanticsLabel: 'Rhythm references',
             onChanged: changes.add,
           ),
         ),
       ),
     );
 
-    await tester.tap(find.byTooltip('Listening rhythm'));
+    await tester.tap(find.byTooltip('C this audio'));
     expect(changes, isEmpty);
 
-    await tester.tap(find.byTooltip('Phone evidence'));
-    expect(changes, ['phones']);
+    await tester.tap(find.byTooltip('A dictionary'));
+    await tester.tap(find.byTooltip('B common speech'));
+    expect(changes, ['citation', 'connected']);
+  });
+
+  testWidgets('connected speech reference shows A to B rule changes', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Center(
+          child: SizedBox(
+            width: 480,
+            child: ConnectedSpeechReferenceRibbon(
+              title: 'Common speech',
+              currentTokenIndex: 2,
+              references: [
+                RhythmConnectedSpeechRef(
+                  id: 'cs1',
+                  tokenStart: 1,
+                  tokenEnd: 2,
+                  family: 'contraction',
+                  surfaceText: 'could have',
+                  label: 'default contraction',
+                  hint: 'This phrase commonly reduces in connected speech.',
+                  expectedSymbols: ['K', 'UH', 'D', 'HH', 'AE', 'V'],
+                  defaultSymbols: ['K', 'UH', 'D', 'AH', 'V'],
+                  expectedDisplayIpa: 'kʊdhæv',
+                  defaultDisplayIpa: 'kʊdəv',
+                  divergence: 'teachable_rule',
+                  signalSources: ['text_prior'],
+                  evidenceClass: 'heuristic_proxy',
+                  confidence: 0.78,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.route_outlined), findsOneWidget);
+    expect(find.text('Common speech'), findsOneWidget);
+    expect(find.text('could have'), findsOneWidget);
+    expect(find.text('/kʊdhæv/ → /kʊdəv/'), findsOneWidget);
+    expect(
+      find.byTooltip(
+        'could have\n/kʊdhæv/ → /kʊdəv/\n'
+        'This phrase commonly reduces in connected speech.\ncontraction',
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets(

@@ -2,20 +2,22 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-class SoundPatternModeToggle extends StatelessWidget {
-  const SoundPatternModeToggle({
+class RhythmReferenceToggle extends StatelessWidget {
+  const RhythmReferenceToggle({
     super.key,
     required this.mode,
-    required this.rhythmTooltip,
-    required this.phonesTooltip,
+    required this.citationTooltip,
+    required this.connectedTooltip,
+    required this.actualTooltip,
     required this.semanticsLabel,
     this.size = 28,
     this.onChanged,
   });
 
   final String mode;
-  final String rhythmTooltip;
-  final String phonesTooltip;
+  final String citationTooltip;
+  final String connectedTooltip;
+  final String actualTooltip;
   final String semanticsLabel;
   final double size;
   final ValueChanged<String>? onChanged;
@@ -23,7 +25,10 @@ class SoundPatternModeToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final itemSize = math.max(22.0, size - 4);
-    final current = mode == 'phones' ? 'phones' : 'rhythm';
+    final current = switch (mode) {
+      'citation' || 'connected' => mode,
+      _ => 'actual',
+    };
     final content = Container(
       height: math.max(24.0, size),
       padding: const EdgeInsets.all(2),
@@ -36,19 +41,31 @@ class SoundPatternModeToggle extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _ModeButton(
-            value: 'rhythm',
-            selected: current == 'rhythm',
-            tooltip: rhythmTooltip,
-            icon: Icons.multiline_chart,
+            value: 'citation',
+            selected: current == 'citation',
+            tooltip: citationTooltip,
+            icon: Icons.menu_book_outlined,
+            selectedColor: const Color(0xFF8FD3FF),
             itemSize: itemSize,
             onChanged: onChanged,
           ),
           const SizedBox(width: 2),
           _ModeButton(
-            value: 'phones',
-            selected: current == 'phones',
-            tooltip: phonesTooltip,
-            icon: Icons.graphic_eq,
+            value: 'connected',
+            selected: current == 'connected',
+            tooltip: connectedTooltip,
+            icon: Icons.route_outlined,
+            selectedColor: const Color(0xFF6DD6C3),
+            itemSize: itemSize,
+            onChanged: onChanged,
+          ),
+          const SizedBox(width: 2),
+          _ModeButton(
+            value: 'actual',
+            selected: current == 'actual',
+            tooltip: actualTooltip,
+            icon: Icons.multiline_chart,
+            selectedColor: const Color(0xFFFFD166),
             itemSize: itemSize,
             onChanged: onChanged,
           ),
@@ -65,6 +82,7 @@ class _ModeButton extends StatelessWidget {
     required this.selected,
     required this.tooltip,
     required this.icon,
+    required this.selectedColor,
     required this.itemSize,
     required this.onChanged,
   });
@@ -73,6 +91,7 @@ class _ModeButton extends StatelessWidget {
   final bool selected;
   final String tooltip;
   final IconData icon;
+  final Color selectedColor;
   final double itemSize;
   final ValueChanged<String>? onChanged;
 
@@ -95,7 +114,7 @@ class _ModeButton extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: selected
-                  ? const Color(0xFFFFD166).withAlpha(230)
+                  ? selectedColor.withAlpha(230)
                   : Colors.white.withAlpha(20),
               borderRadius: BorderRadius.circular(5),
               border: Border.all(

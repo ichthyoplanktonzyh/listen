@@ -185,17 +185,17 @@ void main() {
 
     expect(settings.phonemeRibbonVisible, isFalse);
     expect(settings.soundPatternRibbonVisible, isTrue);
-    expect(settings.soundPatternDisplayMode, 'phones');
+    expect(settings.soundPatternDisplayMode, 'actual');
   });
 
-  test('defaults sound pattern display to rhythm and validates modes', () {
+  test('defaults Rhythm reference to actual and validates A/B/C modes', () {
     final defaults = AppSettings.fromJson({
       'version': 8,
       'sound_pattern_display_mode': 'unexpected',
     });
-    final phones = defaults.copyWith(soundPatternDisplayMode: 'phones');
+    final connected = defaults.copyWith(soundPatternDisplayMode: 'connected');
 
-    expect(defaults.soundPatternDisplayMode, 'rhythm');
-    expect(phones.soundPatternDisplayMode, 'phones');
+    expect(defaults.soundPatternDisplayMode, 'actual');
+    expect(connected.soundPatternDisplayMode, 'connected');
   });
 }

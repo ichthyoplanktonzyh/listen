@@ -48,7 +48,7 @@ class AppSettings {
     this.phonemeHighlightVisible = true,
     this.phonemeRibbonVisible = false,
     this.soundPatternRibbonVisible = false,
-    this.soundPatternDisplayMode = 'rhythm',
+    this.soundPatternDisplayMode = 'actual',
     this.phonemeRibbonStyle = 'window',
     this.phoneticCachePolicy = 'keep_completed',
     this.learningLanguage = 'auto',
@@ -444,6 +444,10 @@ class AppSettings {
   static String _phonemeRibbonStyle(Object? value) =>
       value == 'wave' ? value as String : 'window';
 
-  static String _soundPatternDisplayMode(Object? value) =>
-      value == 'phones' ? value as String : 'rhythm';
+  static String _soundPatternDisplayMode(Object? value) => switch (value) {
+    'citation' || 'connected' || 'actual' => value as String,
+    // v8 compatibility: both legacy modes now enter the Rhythm C view.
+    'rhythm' || 'phones' => 'actual',
+    _ => 'actual',
+  };
 }

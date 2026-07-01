@@ -461,12 +461,16 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 ),
                 items: [
                   DropdownMenuItem(
-                    value: 'rhythm',
-                    child: Text(l.text('soundPatternModeRhythm')),
+                    value: 'citation',
+                    child: Text(l.text('rhythmReferenceCitation')),
                   ),
                   DropdownMenuItem(
-                    value: 'phones',
-                    child: Text(l.text('soundPatternModePhones')),
+                    value: 'connected',
+                    child: Text(l.text('rhythmReferenceConnected')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'actual',
+                    child: Text(l.text('rhythmReferenceActual')),
                   ),
                 ],
                 onChanged: soundPatternRibbonVisible
@@ -493,10 +497,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     child: Text(l.text('phonemeRibbonWave')),
                   ),
                 ],
-                onChanged:
-                    phonemeRibbonVisible ||
-                        (soundPatternRibbonVisible &&
-                            soundPatternDisplayMode == 'phones')
+                onChanged: phonemeRibbonVisible
                     ? (value) {
                         if (value == null) return;
                         phonemeRibbonStyle = value;
