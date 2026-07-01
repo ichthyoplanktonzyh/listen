@@ -44,6 +44,29 @@
 - **影响**：发布包中可能找不到 Rust 二进制
 - **修复思路**：生产发布包固化 sidecar 路径（macOS bundle 内嵌）
 
+### `LocalApi` HTTP transport 非注入 ✅ 已修复（2026-06-30）
+
+- **当前状态**：已加 `ApiTransport` seam + `LocalApi.withTransport(...)` 测试构造器，
+  生产路径 `_transport ?? _httpClientTransport` 行为不变；`_request`（79 个调用点）现可
+  无 sidecar 单测。已落地 `test/api_service_transport_test.dart`（解码/错误映射/body 编码），
+  并借此覆盖两个 workflow controller（`learning_workflow_controller_test.dart` 的
+  generation guard/stale 丢弃、`speech_enhancement_workflow_controller_test.dart` 的降级）。
+  **后续**：补全 `api_service.dart` 各方法级测试；SSE(`/v1/events`) 与文件上传/下载等
+  3 处特殊 `_client` 裸调暂未纳入 seam。
+- **文件**：`apps/desktop/lib/services/api_service.dart:49`（`final HttpClient _client = HttpClient();`）
+- **问题**：transport 在字段初始化处写死 `dart:io HttpClient`，没有可注入的 seam；
+  且 `LocalApi` 只有私有构造 `LocalApi._(...)`，唯一公开入口是会起真实 sidecar 进程的
+  `static connect()`——测试连"子类 override 伪造"都做不到（跨 library 调不到私有构造）
+- **影响**：客户端请求构造 / 响应映射 / 错误处理无法做 Tier A 单测，只能等 Tier B 真实
+  sidecar 才能间接验证；约 900 行客户端逻辑因此长期零直接覆盖。**下游连带**：
+  `LearningWorkflowController` / `SpeechEnhancementWorkflowController` 直接持有 `LocalApi`
+  （`learning_workflow_controller.dart:17`、`speech_enhancement_workflow_controller.dart:59`），
+  无法注入 fake，故这两个 controller 的单测也被此 seam 挡死
+- **修复思路**：引入可注入 transport 或 `LocalApi` 接口（构造参数带默认值，行为不变），
+  解锁 Tier A 客户端 + workflow controller 测试
+- **测试影响**：`api_service.dart` 与两个 workflow controller 的单测**刻意延后**到此 seam
+  修复后，避免假覆盖或写一次性脆弱 fake
+
 ### Python 管线缺少单元测试
 
 - **文件**：`scripts/timeline-production/production_pipeline.py`, `scripts/forced-align/align-cli.py`
@@ -61,7 +84,9 @@
 - **脆弱原因**：13 个迁移版本线性依赖，任一迁移 bug 可导致数据库损坏
 - **常见故障**：迁移失败后无自动回滚；预迁移备份是手动操作
 - **安全修改方式**：新增迁移前在副本数据库上验证；不修改已有迁移
-- **测试覆盖**：有迁移前备份，但缺少迁移失败恢复的自动化测试
+- **测试覆盖**：迁移前备份 + 失败恢复已有刻画测试
+  `crates/persistence-sqlite/tests/migration_recovery_test.rs`（2026-06-30 起）；
+  迁移链各版本的正向 schema 断言仍可后续补强
 
 ### 音频预处理管线
 
@@ -85,12 +110,12 @@
 
 | 缺口 | 优先级 | 文件 | 风险 |
 |---|---|---|---|
-| `application` 层集成测试 | P1 | `crates/application/` 缺少 `tests/` 目录 | 用例编排逻辑只在 E2E 层面间接验证 |
-| `api-http` 路由集成测试 | P1 | `crates/api-http/` 缺少请求-响应测试 | 路由错误映射、认证中间件未经自动化验证 |
+| `application` 层集成测试 | P1 🟡 部分 | `persistence-sqlite/tests/` 已驱动 `AppServices`；无独立 `application/tests/` | 用例编排逻辑只在 E2E 层面间接验证 |
+| `api-http` 路由集成测试 | P1 🟡 部分 | `crates/api-http/tests/api_integration_test.rs`（2026-06-30 起，鉴权/media/subtitle/LLTimeline/word-timeline/diagnosis）；其余路由待补 | 路由错误映射、认证中间件已部分自动化验证 |
 | Python 管线单元测试 | P2 | `scripts/timeline-production/` | 见上 |
 | Flutter widget 交互测试 | P2 | `apps/desktop/test/` | 播放器/字幕点击/拖放无测试 |
 | 跨语言 E2E 测试 | P2 | — | 生产管线 → 导入 → 播放链无自动化验证 |
-| 迁移失败恢复测试 | P2 | `crates/persistence-sqlite/` | 见脆弱区域 |
+| 迁移失败恢复测试 | P2 ✅ | `crates/persistence-sqlite/tests/migration_recovery_test.rs` | 备份/失败恢复已刻画 |
 | sidecar 握手集成测试 | P2 | `crates/api-http/` + `apps/desktop/` | 见脆弱区域 |
 
 ---
@@ -116,5 +141,27 @@
 
 ---
 
-*清单更新：2026-06-21*
+## 6. 架构审计 — 测试体系建设期（2026-06-30）
+
+> 决策：先**记录**架构问题，**继续把测试安全网铺广铺绿**，待测试体系收口后再**统一修复**
+> 架构（测试优先安全网）。结构性大改动手前单独出评审文档，不在测试工作里夹带。
+
+### 待修复（已记录，按 leverage × 低风险排序，post-test-buildout）
+
+| # | 项 | 文件:line | 性质 | 风险 | 备注 |
+|---|---|---|---|---|---|
+| A1 | `LocalApi` transport 非注入 ✅ 已修复 | `api_service.dart` | 测试+架构双赢 seam | 低 | 已加 `ApiTransport` seam + `withTransport` 测试构造器，行为不变；后续补方法级/controller 测试，见 §1 |
+| A2 | `build_word_timeline` / `save_word_timeline_snapshot` 参数过多 | `application/src/lib.rs:213` (9/7)、`:292` (8/7) | 松散参数 → 参数结构体 | 低 | clippy `too_many_arguments`；机械清理 |
+| A3 | workspace clippy warning 漂移 | `speech-analysis`/`application`/`dictionary-provider` 等 lib | 验证门禁失效嫌疑 | 低 | `--strict` 可能已名存实亡，与文档"clippy 干净"矛盾；已挂后台任务 |
+| A4 | `speech-analysis` 职责过重 | `crates/speech-analysis/src/`（11 模块） | 拆 crate（结构性大改） | 中高 | 见 §1；**先出评审**再动 |
+| A5 | `domain/src/lib.rs` ~1317 行 | `crates/domain/src/lib.rs` | mechanical 拆分 | 中 | 先出评审再动 |
+
+### 已证伪 — 看着像问题、实则刻意设计（不修）
+
+- **`AppServices::new` 8 个位置参数** `application/src/lib.rs:76`：是 8 个不同 repository
+  trait 的**接口隔离（ISP）**，非重复。合并会破坏 ISP。保留。
+
+---
+
+*清单更新：2026-06-30*
 *问题解决后删除对应条目，新发现问题随时追加*

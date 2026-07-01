@@ -249,6 +249,103 @@
   `python3 scripts/prepare-rhythm-acoustic-qa.py --manifest testdata/sound-line-real-media/manifest.jsonl --case-id p217-brooklyn-news-001 --limit 1`
   的等价 import smoke（1 句 scored，ffmpeg 音频加载成功，WordTimeline timing present）、
   `git diff --check` 通过。
+- 2026-06-30 21:05 CST: 收口修复——移除 `test/builder_test.dart` 冗余的
+  `package:flutter/foundation.dart` import（`material.dart` 已提供 `@immutable`），
+  全项目 `flutter analyze` 恢复 0 issue。收口验证：`flutter analyze` 干净、
+  `flutter test`（115）、`cargo test -p api-http -p persistence-sqlite` 全绿。
+
+- 2026-06-30 20:52 CST: 兑现 A1——用新解锁的 transport seam 为两个 workflow controller
+  补测试（此前因 `LocalApi` 不可注入完全无法单测）。
+  (1) **`learning_workflow_controller_test.dart`**（7 测试）：`refreshDiagnosis` 的
+  generation guard——happy、null cue 清空、**新请求超越时丢弃 stale 结果**、切换 cue 后
+  丢弃、diagnose 错误映射为 null；`loadPhraseCandidates` 经 `LocalApi.withTransport`
+  端到端加载与 null-api 清空。
+  (2) **`speech_enhancement_workflow_controller_test.dart`**（2 测试）：
+  `loadTimelineResource` 降级——4 个子资源全失败→`unavailable`、部分失败→warning 且不
+  误报 unavailable。
+  验证: `flutter analyze`（0 issue）、`flutter test`（106→115 全绿）。
+
+- 2026-06-30 20:30 CST: 收口 Tier A 测试，并修复架构债 A1（`LocalApi` transport 非注入），
+  这是第一处"架构修复解锁测试"的闭环。
+  (1) **A1 seam（生产代码，行为不变）**：`apps/desktop/lib/services/api_service.dart`
+  抽出 `ApiTransport` typedef + `LocalApi.withTransport(...)` 测试构造器；`_request`
+  （79 个调用点）改走 `_transport ?? _httpClientTransport`，默认实现保留原样 header/请求
+  逻辑。生产路径字节级不变；SSE 与上传/下载 3 处特殊 `_client` 裸调暂留。
+  (2) **解锁的测试**：新增 `apps/desktop/test/api_service_transport_test.dart`（3 测试）：
+  GET 经 seam 解码、非 2xx → `HttpException`、PUT body 编码经 seam 转发。
+  (3) **文档**：`CONCERNS.md` A1 标记已修复（§1/§6），记录后续补方法级/controller 测试；
+  `TESTING.md` 同步。
+  验证: `flutter analyze`（api_service + 新测试，0 issue）、`flutter test`（103→106 全绿）。
+  合并摩擦评估：main（Phase 2.21 韵律）未触及 `api_service.dart` 及本 worktree 测试目标，
+  唯一保证冲突是 CHANGELOG.md（琐碎可解）。
+
+- 2026-06-30 20:05 CST: Tier A 续作——补 SQLite 迁移失败恢复刻画测试（CONCERNS §2/§3
+  点名的脆弱区，至今无自动化）。新增
+  `crates/persistence-sqlite/tests/migration_recovery_test.rs`（4 测试）：
+  (1) 升级落后版本旧库时创建 `<path>.pre-migration.bak`，备份保留迁移前版本与内容；
+  (2) 全新库（路径不存在）不创建备份；
+  (3) 重开最新版本库幂等、不再创建备份；
+  (4) **迁移失败时**（预置 `media_items` 表与裸 `CREATE TABLE` 迁移 0001 冲突）原库
+  完整保留在备份中可恢复，且 live 库 `user_version` 不前进。
+  刻画当前真实行为，作为后续迁移系统重构的安全网。
+  验证: `cargo test -p persistence-sqlite --test migration_recovery_test`（4/4）。
+
+- 2026-06-30 14:34 CST: Tier A 续作——api-http 集成测试覆盖 lexical entry 学习核心
+  生命周期。`api_integration_test.rs` 新增 1 条：PUT `/v1/lexical-entries` upsert（word，
+  status=unknown_meaning）→ GET 列表按 language/kind 命中 → GET `/{id}` 详情往返 →
+  PUT `/{id}/learning-content` 持久化 user_definition / personal_note。新增 `put_json` 助手。
+  验证: `cargo test -p api-http --test api_integration_test`（11/11）。
+
+- 2026-06-30 14:28 CST: Tier A 续作——补 Flutter 状态层 widget 测试，并记录 A1 对
+  workflow controller 测试的硬阻塞。
+  (1) **Store builder 测试**: 新增 `apps/desktop/test/builder_test.dart`，覆盖
+  `StoreBuilder` / `StoreBuilder2` 的选择性重建（无关字段不重建、选中字段才重建、
+  equal-state no-op，4 测试）。
+  (2) **A1 证据加固**: `CONCERNS.md` §1 记录 `LocalApi` 只有私有构造 `LocalApi._`、
+  唯一入口 `connect()` 起真实 sidecar，测试连子类伪造都做不到；`LearningWorkflowController`
+  / `SpeechEnhancementWorkflowController` 直接持有 `LocalApi`，单测被此 seam 挡死，
+  确认延后到 A1 修复后。
+  验证: `flutter test test/builder_test.dart`（4/4）。
+
+- 2026-06-30 14:21 CST: 在测试体系建设期对架构做证据化审计并记录到 `CONCERNS.md`，
+  决定走"测试优先安全网"——先记录、继续铺测试、收口后再统一修架构。
+  (1) **新增待修复登记**（§6）：A1 `LocalApi` transport 非注入（`api_service.dart:49`，
+  挡住 Tier A 客户端单测，该项测试延后到 seam 修复后）；A2 `build_word_timeline` /
+  `save_word_timeline_snapshot` 参数过多（`application/src/lib.rs:213`/`:292`，clippy
+  `too_many_arguments`）；A3 workspace clippy warning 漂移；A4 `speech-analysis` 拆 crate、
+  A5 `domain/lib.rs` 拆分（结构性大改，先出评审再动）。
+  (2) **已证伪**：`AppServices::new` 8 参数是接口隔离（ISP），非 smell，不修。
+  (3) **刷新过期条目**：§3 测试缺口表中 application/api-http 集成测试更新为"🟡 部分"，
+  指向 `crates/api-http/tests/api_integration_test.rs`。
+  验证: documentation-only，`git diff --check` 通过。
+
+- 2026-06-30 14:07 CST: Tier A 续作——扩 `api-http` 全栈集成测试路由覆盖，
+  仍为纯测试改动。`api_integration_test.rs` 新增 3 条：
+  (1) **LLTimeline 资源契约**: 导入 `testdata/lltimeline/v1-minimal.lltimeline.json`
+  完整文档 → 200 SubtitleTrack，并验证捆绑的 word timeline 随文档持久化。
+  (2) **Word timeline 生命周期**: `create`（candidate）→ `activate`（active），
+  覆盖播放器消费的核心资源激活路径。
+  (3) **Diagnosis 端点**: 对导入字幕的句子返回结构良好的 `SentenceDiagnosis`。
+  验证: `cargo test -p api-http --test api_integration_test`（10/10）；
+  测试文件零新增 clippy warning（workspace 既有 lint 漂移与本改动无关）。
+
+- 2026-06-30 14:01 CST: 启动测试体系建设 Tier A（worktree `testing-system-buildout`），
+  落地跨语言后端栈与前端状态/推送层的基础测试，零生产代码改动。
+  (1) **Rust 全栈集成**: 新增 `crates/api-http/tests/api_integration_test.rs`，
+  以真实 `router(ApiState::new(...))` + `SqliteRepository::in_memory()`、`tower::oneshot`
+  进程内驱动 `api-http → application → persistence` 整栈（鉴权拒绝、health、media
+  注册/读取/404、字幕导入往返、archive/restore/delete 生命周期，7 测试）。
+  (2) **Flutter SSE 推送核心**: 新增 `apps/desktop/test/backend_event_coordinator_test.dart`，
+  覆盖 `BackendEventCoordinator` 全部分发分支（service-started、转写 job completed/in-progress/
+  跨 media、音素 job primary/非 primary、lexical-entry 转发、未知事件 no-op，9 测试）。
+  (3) **Flutter 状态容器**: 新增 `apps/desktop/test/store_test.dart`，覆盖 `Store<T>`
+  selector 身份 memoize、字段级精准通知、equal-state no-op、replace 刷新（6 测试）。
+  (4) **路线决策**: `api_service.dart`（`dart:io HttpClient`，非注入式）的全栈消费契约
+  归入 Tier B 真实 sidecar E2E，本阶段不为凑覆盖改造生产客户端；`.planning/codebase/TESTING.md`
+  第 9 节记录 Tier A/B/C 建设路线与缺口状态。
+  验证: `cargo test -p api-http`（7/7）、`flutter test`（84→99 全绿）、`flutter analyze` 干净。
+  既有遗留: `api-http` lib `lib.rs:823` 有 3 个既有 clippy let-chains warning（非本次引入），
+  `--strict` 下会红，留待单独清理。
 
 - 2026-06-30 13:29 CST: Phase 2.20 路线复盘后更新交接文档，准备新 session 继续推进。
   (1) **Route correction**: 新增
