@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- 2026-07-01 14:45 CST: 修复点击字幕单词后右侧面板不立即跳到词汇学习的问题。
+  `LearningWorkflowController.openWord` 现在会在词条、词典、发音和语言画像查询完成前，
+  立即记录 selected token/cue 并切换到 Word learning tab；异步查询完成后再填充详情。
+  新增回归测试覆盖 lookup 未返回时 side panel 已切换到词汇学习。
+
 - 2026-07-01 14:25 CST: Phase 2.22 frontend workflow semantics closeout slice。
   (1) **Typed task feedback**: 新增 `UserTaskStatus`，把本机 Whisper 字幕生成和
   Phone evidence/audio-analysis job 映射为 `working/success/warning/error/cancelled/unknown`
