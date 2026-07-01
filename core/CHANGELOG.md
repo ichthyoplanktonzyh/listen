@@ -6,7 +6,8 @@
   C `This audio` 不再把前景锚点过度收窄为“重读音节”：后端允许短但有音频时序支持的
   content sound 成为 audio-supported listening anchor，并将 anchor confidence 与
   nucleus prominence 分开校准，让能量/音高突出优先决定主核；前端将锚点 label 从单个重读元音
-  扩展为“元音核 + 临近辅音边缘”的可听音段形状（如 `/tʃeɪndʒd/`），弱读团仍保持低对比背景。
+  扩展为“语义锚点词 + 元音核/临近辅音边缘”的可听信息节点（如 `changed` + `/tʃeɪndʒd/`），
+  弱读团仍保持低对比背景。同步将 C 的文案从 stress/rhythm 调整为 heard information anchors。
   新增短时序 content anchor 与 consonant-vowel shape 的回归测试。
 
 - 2026-07-02 00:15 CST: 优化 Rhythm B 默认语流规则的底层算法口径。
