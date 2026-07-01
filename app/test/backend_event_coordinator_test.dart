@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/backend_event_coordinator.dart';
+import 'package:llplayer_next/models/task_status.dart';
 import 'package:llplayer_next/models/types.dart';
 
 /// Records every callback the coordinator fires so each SSE dispatch branch can
@@ -17,6 +18,7 @@ class _Recorder {
   final List<bool> generatedSecondary = [];
   final List<String> loadedSpeechEnhancements = [];
   final List<String> statuses = [];
+  final List<UserTaskStatus> taskStatuses = [];
   final List<String> updatedForms = [];
   final List<LexicalEntry> updatedEntries = [];
 
@@ -43,6 +45,7 @@ class _Recorder {
       loadedSpeechEnhancements.add(trackId);
     },
     setStatus: statuses.add,
+    setTaskStatus: taskStatuses.add,
     updateWordEntry: (form, entry) {
       updatedForms.add(form);
       updatedEntries.add(entry);
@@ -69,14 +72,17 @@ Map<String, dynamic> _lexicalEntryPayload({
 
 void main() {
   group('BackendEventCoordinator', () {
-    test('service-started loads word entries and the active timeline', () async {
-      final recorder = _Recorder()..primaryTrackId = 'track-1';
-      recorder.build().handle({'event': 'service-started'});
-      await pumpEventQueue();
+    test(
+      'service-started loads word entries and the active timeline',
+      () async {
+        final recorder = _Recorder()..primaryTrackId = 'track-1';
+        recorder.build().handle({'event': 'service-started'});
+        await pumpEventQueue();
 
-      expect(recorder.loadWordEntriesCalls, 1);
-      expect(recorder.loadedTimelineResources, ['track-1']);
-    });
+        expect(recorder.loadWordEntriesCalls, 1);
+        expect(recorder.loadedTimelineResources, ['track-1']);
+      },
+    );
 
     test('service-started skips timeline load when no primary track', () async {
       final recorder = _Recorder();
@@ -87,46 +93,64 @@ void main() {
       expect(recorder.loadedTimelineResources, isEmpty);
     });
 
-    test('completed transcription for current media loads the generated track', () async {
-      final recorder = _Recorder()
-        ..mediaId = 'media-1'
-        ..subtitleToReturn = {'id': 'gen-1'};
-      recorder.build().handle({
-        'event': 'transcription-job-changed',
-        'payload': {
-          'status': 'completed',
-          'phase_progress': 100,
-          'media_id': 'media-1',
-          'generated_track_id': 'gen-1',
-          'destination': 'secondary',
-        },
-      });
-      await pumpEventQueue();
+    test(
+      'completed transcription for current media loads the generated track',
+      () async {
+        final recorder = _Recorder()
+          ..mediaId = 'media-1'
+          ..subtitleToReturn = {'id': 'gen-1'};
+        recorder.build().handle({
+          'event': 'transcription-job-changed',
+          'payload': {
+            'status': 'completed',
+            'phase_progress': 100,
+            'media_id': 'media-1',
+            'generated_track_id': 'gen-1',
+            'destination': 'secondary',
+          },
+        });
+        await pumpEventQueue();
 
-      expect(recorder.readSubtitleCalls, ['gen-1']);
-      expect(recorder.generatedTracks, [
-        {'id': 'gen-1'},
-      ]);
-      expect(recorder.generatedSecondary, [true]);
-      // The completed-with-track branch returns early, so no status is pushed.
-      expect(recorder.statuses, isEmpty);
-    });
+        expect(recorder.readSubtitleCalls, ['gen-1']);
+        expect(recorder.generatedTracks, [
+          {'id': 'gen-1'},
+        ]);
+        expect(recorder.generatedSecondary, [true]);
+        expect(
+          recorder.taskStatuses.single.kind,
+          UserTaskKind.subtitleGeneration,
+        );
+        expect(recorder.taskStatuses.single.state, UserTaskState.success);
+        // The completed-with-track branch returns early after typed status, so no
+        // free-form status is pushed.
+        expect(recorder.statuses, isEmpty);
+      },
+    );
 
-    test('in-progress transcription for current media reports status', () async {
-      final recorder = _Recorder()..mediaId = 'media-1';
-      recorder.build().handle({
-        'event': 'transcription-job-changed',
-        'payload': {
-          'status': 'running',
-          'phase_progress': 42,
-          'media_id': 'media-1',
-        },
-      });
-      await pumpEventQueue();
+    test(
+      'in-progress transcription for current media reports status',
+      () async {
+        final recorder = _Recorder()..mediaId = 'media-1';
+        recorder.build().handle({
+          'event': 'transcription-job-changed',
+          'payload': {
+            'status': 'running',
+            'phase_progress': 42,
+            'media_id': 'media-1',
+          },
+        });
+        await pumpEventQueue();
 
-      expect(recorder.statuses, ['ASR running · 42%']);
-      expect(recorder.readSubtitleCalls, isEmpty);
-    });
+        expect(recorder.statuses, ['ASR running · 42%']);
+        expect(
+          recorder.taskStatuses.single.kind,
+          UserTaskKind.subtitleGeneration,
+        );
+        expect(recorder.taskStatuses.single.state, UserTaskState.working);
+        expect(recorder.taskStatuses.single.progress, 42);
+        expect(recorder.readSubtitleCalls, isEmpty);
+      },
+    );
 
     test('transcription for a different media is ignored', () async {
       final recorder = _Recorder()..mediaId = 'media-1';
@@ -141,50 +165,65 @@ void main() {
       await pumpEventQueue();
 
       expect(recorder.statuses, isEmpty);
+      expect(recorder.taskStatuses, isEmpty);
       expect(recorder.readSubtitleCalls, isEmpty);
     });
 
-    test('completed phonetic analysis for primary track loads enhancements', () async {
-      final recorder = _Recorder()..primaryTrackId = 'track-1';
-      recorder.build().handle({
-        'event': 'phonetic-analysis-job-changed',
-        'payload': {
-          'status': 'completed',
-          'phase_progress': 100,
-          'track_id': 'track-1',
-        },
-      });
-      await pumpEventQueue();
+    test(
+      'completed phonetic analysis for primary track loads enhancements',
+      () async {
+        final recorder = _Recorder()..primaryTrackId = 'track-1';
+        recorder.build().handle({
+          'event': 'phonetic-analysis-job-changed',
+          'payload': {
+            'status': 'completed',
+            'phase_progress': 100,
+            'track_id': 'track-1',
+          },
+        });
+        await pumpEventQueue();
 
-      expect(recorder.loadedSpeechEnhancements, ['track-1']);
-      expect(recorder.statuses, ['Audio analysis completed · 100%']);
-    });
+        expect(recorder.loadedSpeechEnhancements, ['track-1']);
+        expect(recorder.statuses, ['Audio analysis completed · 100%']);
+        expect(recorder.taskStatuses.single.kind, UserTaskKind.audioAnalysis);
+        expect(recorder.taskStatuses.single.state, UserTaskState.success);
+      },
+    );
 
-    test('phonetic analysis for a non-primary track is ignored entirely', () async {
-      final recorder = _Recorder()..primaryTrackId = 'track-1';
-      recorder.build().handle({
-        'event': 'phonetic-analysis-job-changed',
-        'payload': {
-          'status': 'completed',
-          'phase_progress': 100,
-          'track_id': 'track-2',
-        },
-      });
-      await pumpEventQueue();
+    test(
+      'phonetic analysis for a non-primary track is ignored entirely',
+      () async {
+        final recorder = _Recorder()..primaryTrackId = 'track-1';
+        recorder.build().handle({
+          'event': 'phonetic-analysis-job-changed',
+          'payload': {
+            'status': 'completed',
+            'phase_progress': 100,
+            'track_id': 'track-2',
+          },
+        });
+        await pumpEventQueue();
 
-      expect(recorder.loadedSpeechEnhancements, isEmpty);
-      expect(recorder.statuses, isEmpty);
-    });
+        expect(recorder.loadedSpeechEnhancements, isEmpty);
+        expect(recorder.statuses, isEmpty);
+        expect(recorder.taskStatuses, isEmpty);
+      },
+    );
 
-    test('lexical-entry-changed forwards the normalized form and entry', () async {
-      final recorder = _Recorder();
-      recorder.build().handle(_lexicalEntryPayload(normalized: 'going', display: 'Going'));
-      await pumpEventQueue();
+    test(
+      'lexical-entry-changed forwards the normalized form and entry',
+      () async {
+        final recorder = _Recorder();
+        recorder.build().handle(
+          _lexicalEntryPayload(normalized: 'going', display: 'Going'),
+        );
+        await pumpEventQueue();
 
-      expect(recorder.updatedForms, ['going']);
-      expect(recorder.updatedEntries.single.displayForm, 'Going');
-      expect(recorder.updatedEntries.single.normalizedForm, 'going');
-    });
+        expect(recorder.updatedForms, ['going']);
+        expect(recorder.updatedEntries.single.displayForm, 'Going');
+        expect(recorder.updatedEntries.single.normalizedForm, 'going');
+      },
+    );
 
     test('unknown events are a no-op and do not throw', () async {
       final recorder = _Recorder()..mediaId = 'media-1';

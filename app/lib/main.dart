@@ -24,6 +24,7 @@ import 'controllers/speech_enhancement_workflow_controller.dart';
 import 'controllers/subtitle_controller.dart';
 import 'controllers/settings_controller.dart';
 import 'models/capability_readiness.dart';
+import 'models/task_status.dart';
 import 'models/timeline.dart';
 import 'models/types.dart';
 import 'phonetic_analysis_ui.dart';
@@ -120,6 +121,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   OnlineMediaDownload? activeDownload;
   String? downloadError;
   int downloadGeneration = 0;
+  final taskStatuses = <UserTaskKind, UserTaskStatus>{};
   bool dragging = false;
   bool connectingApi = true;
 
@@ -313,9 +315,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
       setStatus: (value) {
         if (mounted) setState(() => status = value);
       },
+      setTaskStatus: _setTaskStatus,
       updateWordEntry: learningController.updateSingleWordEntry,
     ).handle(event);
   }
+
+  void _setTaskStatus(UserTaskStatus value) {
+    if (!mounted) return;
+    setState(() {
+      taskStatuses[value.kind] = value;
+      status = _taskStatusText(value);
+    });
+  }
+
+  String _taskStatusText(UserTaskStatus value) =>
+      '${l.text(value.titleKey)}: ${l.text(value.stateKey)} · '
+      '${value.progress.clamp(0, 100)}%';
 
   void _onPosition(Duration value) {
     subtitleController.updatePosition(value);
@@ -377,6 +392,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               Future<void>.value();
     setState(() {
       status = 'Opening ${path.split(Platform.pathSeparator).last}';
+      taskStatuses.clear();
     });
     playerController.clearMedia();
     playerController.setMediaPath(path);
@@ -1260,10 +1276,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
         modelId: model['id'] as String,
       );
       if (mounted) {
+        _setTaskStatus(
+          UserTaskStatus(
+            kind: UserTaskKind.audioAnalysis,
+            state: UserTaskState.working,
+            rawStatus: job['status'] as String? ?? 'queued',
+            progress: 0,
+            targetId: track.id,
+          ),
+        );
         _showSnackBar('Audio analysis ${job['status']}');
       }
     } catch (error) {
       if (mounted) {
+        _setTaskStatus(
+          UserTaskStatus(
+            kind: UserTaskKind.audioAnalysis,
+            state: UserTaskState.error,
+            rawStatus: 'failed',
+            progress: 0,
+            targetId: track.id,
+          ),
+        );
         _showSnackBar('Audio analysis failed: $error');
       }
     }
@@ -1289,11 +1323,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
       preferredLanguage: settingsController.transcriptionLanguage,
     );
     if (created && mounted) {
-      setState(
-        () => status = secondary
+      setState(() {
+        taskStatuses[UserTaskKind.subtitleGeneration] = UserTaskStatus(
+          kind: UserTaskKind.subtitleGeneration,
+          state: UserTaskState.working,
+          rawStatus: 'queued',
+          progress: 0,
+          targetId: playerController.mediaId,
+        );
+        status = secondary
             ? l.text('secondarySubtitleGenerationStarted')
-            : l.text('primarySubtitleGenerationStarted'),
-      );
+            : l.text('primarySubtitleGenerationStarted');
+      });
     }
   }
 
@@ -1405,7 +1446,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       subtitleController.clearSpeechEnhancements();
       subtitleController.setCurrentPrimaryCue(null);
       subtitleController.setCurrentSecondaryCue(null);
-      setState(() => status = 'Playing online media');
+      setState(() {
+        taskStatuses.clear();
+        status = 'Playing online media';
+      });
     } catch (error) {
       setState(() => status = 'Online media failed: $error');
     }
@@ -3244,6 +3288,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       primarySubtitleOffset: subtitleController.primarySubtitleOffset,
       secondarySubtitleOffset: subtitleController.secondarySubtitleOffset,
       status: status,
+      taskStatuses: taskStatuses.values.toList(growable: false),
       onSeek: (value) => adapter.seek(value),
       onSeekToPreviousCue: () => _seekCue(
         subtitleController.primaryCursor.previous(

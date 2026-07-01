@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../models/backend_event.dart';
+import '../models/task_status.dart';
 import '../models/types.dart';
 
 class BackendEventCoordinator {
@@ -13,6 +14,7 @@ class BackendEventCoordinator {
     required this.loadGeneratedTrack,
     required this.loadSpeechEnhancements,
     required this.setStatus,
+    required this.setTaskStatus,
     required this.updateWordEntry,
   });
 
@@ -25,6 +27,7 @@ class BackendEventCoordinator {
   loadGeneratedTrack;
   final Future<void> Function(String trackId) loadSpeechEnhancements;
   final void Function(String status) setStatus;
+  final void Function(UserTaskStatus status) setTaskStatus;
   final void Function(String normalizedForm, LexicalEntry entry)
   updateWordEntry;
 
@@ -50,9 +53,9 @@ class BackendEventCoordinator {
   }
 
   void _handleTranscriptionJob(TranscriptionJobChangedEvent event) {
-    if (event.status == 'completed' &&
-        event.mediaId == currentMediaId() &&
-        event.generatedTrackId != null) {
+    if (event.mediaId != currentMediaId()) return;
+    setTaskStatus(UserTaskStatus.transcription(event));
+    if (event.status == 'completed' && event.generatedTrackId != null) {
       unawaited(
         readSubtitle(event.generatedTrackId!).then(
           (track) =>
@@ -61,13 +64,12 @@ class BackendEventCoordinator {
       );
       return;
     }
-    if (event.mediaId == currentMediaId()) {
-      setStatus('ASR ${event.status} · ${event.phaseProgress}%');
-    }
+    setStatus('ASR ${event.status} · ${event.phaseProgress}%');
   }
 
   void _handlePhoneticAnalysisJob(PhoneticAnalysisJobChangedEvent event) {
     if (event.trackId != currentPrimaryTrackId()) return;
+    setTaskStatus(UserTaskStatus.audioAnalysis(event));
     if (event.status == 'completed' && event.trackId != null) {
       unawaited(loadSpeechEnhancements(event.trackId!));
     }

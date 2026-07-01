@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../models/task_status.dart';
 import '../../player_adapter.dart';
 import '../../utils/format_duration.dart';
 
@@ -27,6 +28,7 @@ class PlaybackControls extends StatelessWidget {
     required this.primarySubtitleOffset,
     required this.secondarySubtitleOffset,
     required this.status,
+    required this.taskStatuses,
     required this.onSeek,
     required this.onSeekToPreviousCue,
     required this.onSeekToZero,
@@ -73,6 +75,7 @@ class PlaybackControls extends StatelessWidget {
   final Duration primarySubtitleOffset;
   final Duration secondarySubtitleOffset;
   final String status;
+  final List<UserTaskStatus> taskStatuses;
   final bool chunkControlsEnabled;
   final bool chunkLoopActive;
 
@@ -362,13 +365,32 @@ class PlaybackControls extends StatelessWidget {
             ),
             Align(
               alignment: Alignment.centerRight,
-              child: Text(
-                status,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.secondary,
-                ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Flexible(
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      alignment: WrapAlignment.end,
+                      children: [
+                        for (final task in taskStatuses)
+                          _TaskStatusChip(status: task),
+                      ],
+                    ),
+                  ),
+                  if (taskStatuses.isNotEmpty) const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      status,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.secondary,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -376,4 +398,45 @@ class PlaybackControls extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TaskStatusChip extends StatelessWidget {
+  const _TaskStatusChip({required this.status});
+
+  final UserTaskStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final color = _stateColor(status.state);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        border: Border.all(color: color.withValues(alpha: 0.55)),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        child: Text(
+          '${l.text(status.titleKey)} · ${l.text(status.stateKey)} · '
+          '${status.progress.clamp(0, 100)}%',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: color,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _stateColor(UserTaskState state) => switch (state) {
+    UserTaskState.working => const Color(0xff6da8e8),
+    UserTaskState.success => const Color(0xff38b88f),
+    UserTaskState.warning => const Color(0xffd89a4a),
+    UserTaskState.error => const Color(0xffe06c75),
+    UserTaskState.cancelled => const Color(0xff8fa1b3),
+    UserTaskState.unknown => const Color(0xff8fa1b3),
+  };
 }
