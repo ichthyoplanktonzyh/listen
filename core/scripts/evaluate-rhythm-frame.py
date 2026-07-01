@@ -719,8 +719,26 @@ def aggregate_manual_qa(results: list[dict[str, Any]]) -> dict[str, Any]:
             manual = sentence.get("manual")
             if not isinstance(manual, dict):
                 continue
-            annotated_sentence_count += 1
             overall_score = manual.get("overall_manual_score")
+            manual_label_count = 0
+            for field in (
+                "stress_anchors",
+                "nuclei",
+                "weak_groups",
+                "compression_spans",
+                "phrase_boundaries",
+                "connected_speech_refs",
+            ):
+                metric = manual.get(field)
+                if isinstance(metric, dict) and isinstance(metric.get("manual_count"), int):
+                    manual_label_count += int(metric["manual_count"])
+            hotspot = manual.get("listening_hotspots")
+            if isinstance(hotspot, dict):
+                span_match = hotspot.get("span_match")
+                if isinstance(span_match, dict) and isinstance(span_match.get("manual_count"), int):
+                    manual_label_count += int(span_match["manual_count"])
+            if overall_score in HOTSPOT_SCORES or manual_label_count > 0:
+                annotated_sentence_count += 1
             if overall_score in overall_score_counts:
                 overall_score_counts[overall_score] += 1
             for field in (
@@ -734,7 +752,6 @@ def aggregate_manual_qa(results: list[dict[str, Any]]) -> dict[str, Any]:
                 metric = manual.get(field)
                 if isinstance(metric, dict) and isinstance(metric.get("f1"), (int, float)):
                     f1_values[field].append(float(metric["f1"]))
-            hotspot = manual.get("listening_hotspots")
             if isinstance(hotspot, dict):
                 span_match = hotspot.get("span_match")
                 if isinstance(span_match, dict) and isinstance(span_match.get("f1"), (int, float)):

@@ -142,18 +142,26 @@ Phase 2.21 的关键约束：
     `--template-require-rhythm-frame` 和 `--limit`；quality gates 新增
     `--min-rhythm-frame-sentences`、`--min-word-timeline-rhythm-sentences`、
     `--min-energy-prominence-sentences`。
-  - 本机已生成 `.tmp/rhythm-frame-qa/w8-product-template.jsonl`，但当前
-    Phase 2.17 real-media artifacts 只有 1 条旧 v0 phone-timeline RhythmFrame；
+  - 旧 Phase 2.17 real-media artifacts 只有 1 条旧 v0 phone-timeline RhythmFrame；
     readiness summary 为 WordTimeline RhythmFrame = 0、energy prominence = 0、
-    manual labels = 0，所以 W8 还没有 closeout。
+    manual labels = 0，因此不能直接作为 W8 closeout。
+  - 本轮已用 Brooklyn product media 生成新的 W8 local QA pack：
+    `.tmp/rhythm-frame-qa/w8-product/brooklyn-w8.lltimeline.json` 有 114 个
+    `wordtimeline_timing_acoustic_prominence_v1` RhythmFrames；
+    `.tmp/rhythm-frame-qa/w8-product/annotations-template.jsonl` 有 10 条选中句子的
+    空人工标注模板；`.tmp/rhythm-frame-qa/w8-product/clips/` 有对应 10 个 wav clips。
+  - 已修复 import remap bug：LLTimeline import 重写 WordTimeline/sentence ids 时，
+    `rhythm_word_acoustic_cues` artifact 的 `timeline_id` 和 cue `sentence_id` 也会同步重写。
+    修复前 artifact 会保留旧 id，导致导出 RhythmFrame 没有 `energy` provenance。
+  - 空模板 strict validation 通过，但 scorer 现在不会把空模板计为 manual annotations；
+    当前 `annotated_sentence_count = 0`，W8 仍需人工听标。
 
 ## Next Concrete Work
 
 从 Phase 2.21 review backlog 继续：
 
-1. W8 product QA loop：先用当前 production pipeline regenerate/prepare 5-10 条
-   WordTimeline + `rhythm_word_acoustic_cues` 的真实句，再生成 template、人工标注
-   anchors/nuclei/weak groups/reductions，并跑 scorer gate。
+1. W8 product QA loop：填写 `.tmp/rhythm-frame-qa/w8-product/annotations-template.jsonl`
+   的 anchors/nuclei/weak groups/reductions/manual scores，并跑 scorer gate。
 2. 继续降级/移除 `phone_timeline_transitional` 对 L1-L3 的 fallback ownership，并用
    manual QA / Helsinki scorer 验证 provenance-aware scoring。
 

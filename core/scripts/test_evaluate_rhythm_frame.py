@@ -368,6 +368,40 @@ class RhythmFrameEvaluationTest(unittest.TestCase):
             self.assertEqual(manual["mean_f1"]["connected_speech_refs"], 1.0)
             self.assertEqual(manual["mean_f1"]["listening_hotspots"], 1.0)
 
+    def test_empty_template_rows_do_not_count_as_manual_annotations(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            timeline = root / "case.lltimeline.json"
+            write_json(timeline, base_document(with_rhythm=True))
+            case = {
+                "case_id": "case-1",
+                "title": "Case 1",
+                "dataset": "fixture",
+                "layer": "product_media",
+                "lltimeline": {"local_path": str(timeline)},
+            }
+            annotations = {
+                ("case-1", "s1"): {
+                    "case_id": "case-1",
+                    "sentence_id": "s1",
+                    "transcript": "in the market",
+                    "stress_anchors": [],
+                    "nuclei": [],
+                    "weak_groups": [],
+                    "compression_spans": [],
+                    "phrase_boundaries": [],
+                    "connected_speech_refs": [],
+                    "listening_hotspots": [],
+                    "overall": {"manual_score": None},
+                }
+            }
+
+            result = evaluate_rhythm_frame.evaluate_case(case, root, annotations)
+            summary = evaluate_rhythm_frame.aggregate_results([result])
+
+            self.assertEqual(summary["manual_qa"]["annotated_sentence_count"], 0)
+            self.assertIsNone(summary["manual_qa"]["overall_useful_or_correct_rate"])
+
     def test_quality_gates_report_pass_and_failure(self) -> None:
         summary = {
             "rhythm_frame_coverage": 0.75,

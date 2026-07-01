@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- 2026-07-01 00:46 CST: Phase 2.21 W8 local product QA pack。
+  (1) **Artifact remap fix**: LLTimeline import now remaps
+  `rhythm_word_acoustic_cues.payload.timeline_id` and cue `sentence_id` alongside
+  WordTimeline/sentence ids, so imported production-side energy artifacts remain
+  attached to generated RhythmFrames.
+  (2) **Local W8 pack**: refreshed Brooklyn product media into
+  `.tmp/rhythm-frame-qa/w8-product/brooklyn-w8.lltimeline.json` with 114
+  `wordtimeline_timing_acoustic_prominence_v1` RhythmFrames; selected 10 QA
+  sentences and generated `annotations-template.jsonl`, `selected-sentences.md`,
+  and 10 wav clips under `.tmp/rhythm-frame-qa/w8-product/`.
+  (3) **Gate honesty**: empty annotation templates validate but no longer count
+  as manual annotations; the generated W8 template still reports
+  `annotated_sentence_count = 0` until human labels are filled.
+  验证: `cargo test -p application --quiet`、`python3 scripts/test_evaluate_rhythm_frame.py`
+  通过；Brooklyn W8 readiness gate reports 114 WordTimeline+energy RhythmFrames.
+
 - 2026-07-01 00:18 CST: Phase 2.21 W8 product QA tooling checkpoint。
   (1) **Manual QA contract**: RhythmFrame annotation schema, sample labels,
   committed fixture labels, and scorer now include `nuclei` and

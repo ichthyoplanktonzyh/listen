@@ -107,6 +107,9 @@ The JSON output always includes `annotation_validation` and
 `summary.manual_qa`, so invalid score labels, duplicate sentence annotations,
 unknown sentence IDs, and aggregate `correct / misleading / unsupported` counts
 are visible even in non-strict exploratory runs.
+Empty template rows validate successfully but do not count as manual annotations:
+`summary.manual_qa.annotated_sentence_count` only increases after an overall
+score or at least one manual label item is filled.
 
 ## Quality Gates
 

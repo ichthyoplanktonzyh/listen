@@ -253,9 +253,21 @@ progress:
     readiness 为 47 句中仅 1 个旧 v0 phone-timeline RhythmFrame，0 个 WordTimeline
     RhythmFrame，0 个 energy prominence RhythmFrame，0 条 manual labels；因此 W8
     仍需先用当前 production pipeline regenerate 5-10 条真实句，再人工标注。
+  - W8 local product QA pack 已生成：
+    Brooklyn product media 通过 active WordTimeline + `rhythm_word_acoustic_cues`
+    + API import/export 刷新到 `.tmp/rhythm-frame-qa/w8-product/brooklyn-w8.lltimeline.json`；
+    readiness gate 显示 114/114 `wordtimeline_timing_acoustic_prominence_v1`
+    RhythmFrames。已选 10 条产品 QA 句子并生成
+    `.tmp/rhythm-frame-qa/w8-product/annotations-template.jsonl`、
+    `.tmp/rhythm-frame-qa/w8-product/selected-sentences.md` 和 10 个 local wav clips。
+    空模板 strict validation 通过但 `annotated_sentence_count = 0`，manual labels 仍未完成。
+  - W8 generation 修复了一个 application import remap bug：
+    `remap_lltimeline_sentence_ids` 现在会同步重写
+    `rhythm_word_acoustic_cues.payload.timeline_id` 和 cue-level `sentence_id`，
+    避免导入后 acoustic cue artifact 因 WordTimeline/sentence id 重映射而脱钩。
 - 下一步：
-  1. 推进 W8：先 regenerate/prepare 5-10 条当前 product-path 真实句，再做 manual QA，
-     校准/验证 W4 RMS energy cue。
+  1. 推进 W8：填写 `.tmp/rhythm-frame-qa/w8-product/annotations-template.jsonl`
+     的人工标签并跑 scorer gate，校准/验证 W4 RMS energy cue。
   2. 继续用 manual QA / Helsinki scorer 验证 provenance-aware scoring，而不是调旧 v0
      duration/RMS 阈值。
 - 规划文档：

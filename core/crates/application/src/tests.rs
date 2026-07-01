@@ -231,6 +231,114 @@ pub(crate) fn timing_priority_user_overrides_all() {
 }
 
 #[test]
+fn remap_lltimeline_ids_rewrites_rhythm_word_acoustic_cues_artifact() {
+    let media_id = MediaId::parse("media-old").unwrap();
+    let old_track_id = SubtitleTrackId::parse("track-old").unwrap();
+    let new_track_id = SubtitleTrackId::parse("track-new").unwrap();
+    let old_sentence_id = SubtitleSentenceId::parse("sentence-old").unwrap();
+    let old_timeline_id = WordTimelineId::parse("timeline-old").unwrap();
+    let mut document = LLTimelineDocument {
+        schema: LLTIMELINE_SCHEMA_V1.to_owned(),
+        metadata: LLTimelineMetadata {
+            created_at_ms: 1,
+            generator: LLTimelineGenerator {
+                id: "test".into(),
+                version: "test".into(),
+                mode: "test".into(),
+            },
+            media: LLTimelineMedia {
+                id: media_id.clone(),
+                fingerprint: "fingerprint".into(),
+                path: None,
+                title: "Media".into(),
+                duration_ms: None,
+            },
+            language: None,
+            human_reviewed: false,
+            extra: serde_json::json!({}),
+        },
+        segments: vec![LLTimelineSegment {
+            id: old_sentence_id.clone(),
+            index: 0,
+            start_ms: 0,
+            end_ms: 500,
+            text: "Hello".into(),
+            display_text: "Hello".into(),
+            tokens: vec![LLTimelineToken {
+                index: 0,
+                kind: SubtitleTokenKind::Word,
+                text: "Hello".into(),
+                normalized: Some("hello".into()),
+                start_char: 0,
+                end_char: 5,
+            }],
+        }],
+        word_timelines: vec![WordTimeline {
+            id: old_timeline_id.clone(),
+            track_id: old_track_id,
+            media_id,
+            algorithm_id: "fixture".into(),
+            algorithm_version: "v1".into(),
+            config_hash: "default".into(),
+            parent_timeline_id: None,
+            created_by: TimelineCreator::Algorithm,
+            status: TimelineStatus::Active,
+            metrics_json: TimelineMetrics::empty(),
+            words: vec![WordTiming {
+                sentence_id: old_sentence_id.clone(),
+                token_index: 0,
+                text: "Hello".into(),
+                start_ms: 0,
+                end_ms: 500,
+                confidence: Some(1.0),
+                timing_source: TimingSource::ForcedAligned,
+                provider_id: "fixture".into(),
+                provider_version: "v1".into(),
+            }],
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        }],
+        active_word_timeline_id: Some(old_timeline_id.clone()),
+        phone_timelines: Vec::new(),
+        active_phone_timeline_id: None,
+        rhythm_frames: Vec::new(),
+        chunk_timelines: Vec::new(),
+        active_chunk_timeline_id: None,
+        artifacts: vec![LLTimelineArtifact {
+            kind: "rhythm_word_acoustic_cues".into(),
+            provider_id: Some("fixture".into()),
+            provider_version: Some("v1".into()),
+            payload: serde_json::json!({
+                "timeline_id": old_timeline_id.as_str(),
+                "cues": [
+                    {
+                        "sentence_id": old_sentence_id.as_str(),
+                        "token_index": 0,
+                        "energy_prominence": 0.5
+                    }
+                ]
+            }),
+        }],
+    };
+
+    remap_lltimeline_sentence_ids(&mut document, &new_track_id);
+
+    let remapped_timeline_id = document.active_word_timeline_id.as_ref().unwrap().as_str();
+    let remapped_sentence_id = document.segments[0].id.as_str();
+    let payload = document.artifacts[0].payload.as_object().unwrap();
+    assert_eq!(
+        payload["timeline_id"].as_str().unwrap(),
+        remapped_timeline_id
+    );
+    assert_eq!(
+        payload["cues"][0]["sentence_id"].as_str().unwrap(),
+        remapped_sentence_id
+    );
+    assert_ne!(remapped_timeline_id, old_timeline_id.as_str());
+    assert_ne!(remapped_sentence_id, old_sentence_id.as_str());
+}
+
+#[test]
 fn zero_length_word_timing_cache_is_not_usable() {
     let timing = WordTiming {
         sentence_id: SubtitleSentenceId::from_fingerprint("test", "sentence"),

@@ -573,6 +573,7 @@ pub(crate) fn remap_lltimeline_sentence_ids(
             *parent_id = remapped.clone();
         }
     }
+    remap_lltimeline_artifact_refs(document, &sentence_ids, &word_timeline_ids);
     for chunk_timeline in &mut document.chunk_timelines {
         if let Some(word_timeline_id) = chunk_timeline.parent_word_timeline_id.as_mut()
             && let Some(remapped) = word_timeline_ids.get(word_timeline_id)
@@ -648,6 +649,54 @@ pub(crate) fn remap_lltimeline_sentence_ids(
         && let Some(remapped) = chunk_timeline_ids.get(active_id)
     {
         *active_id = remapped.clone();
+    }
+}
+
+fn remap_lltimeline_artifact_refs(
+    document: &mut LLTimelineDocument,
+    sentence_ids: &HashMap<SubtitleSentenceId, SubtitleSentenceId>,
+    word_timeline_ids: &HashMap<WordTimelineId, WordTimelineId>,
+) {
+    for artifact in &mut document.artifacts {
+        if artifact.kind != "rhythm_word_acoustic_cues" {
+            continue;
+        }
+        let Some(payload) = artifact.payload.as_object_mut() else {
+            continue;
+        };
+        if let Some(original) = payload
+            .get("timeline_id")
+            .and_then(serde_json::Value::as_str)
+            .and_then(|value| WordTimelineId::parse(value.to_owned()).ok())
+            && let Some(remapped) = word_timeline_ids.get(&original)
+        {
+            payload.insert(
+                "timeline_id".into(),
+                serde_json::Value::String(remapped.as_str().to_owned()),
+            );
+        }
+        let Some(cues) = payload
+            .get_mut("cues")
+            .and_then(serde_json::Value::as_array_mut)
+        else {
+            continue;
+        };
+        for cue in cues {
+            let Some(cue) = cue.as_object_mut() else {
+                continue;
+            };
+            if let Some(original) = cue
+                .get("sentence_id")
+                .and_then(serde_json::Value::as_str)
+                .and_then(|value| SubtitleSentenceId::parse(value.to_owned()).ok())
+                && let Some(remapped) = sentence_ids.get(&original)
+            {
+                cue.insert(
+                    "sentence_id".into(),
+                    serde_json::Value::String(remapped.as_str().to_owned()),
+                );
+            }
+        }
     }
 }
 
