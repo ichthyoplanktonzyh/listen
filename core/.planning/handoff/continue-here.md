@@ -135,12 +135,25 @@ Phase 2.21 的关键约束：
     并给 phrase-final content 小幅 focus boost。
   - 该 prior 仍只算 `TextPrior`，不会把缺少 timing/energy/pitch/phone evidence 的 claim
     升级成 `AudioSupported`。
+- Phase 2.21 W8 product QA tooling：
+  - RhythmFrame QA schema/scorer/template 已把 `nuclei` 和
+    `connected_speech_refs` 纳入 first-class manual-label fields。
+  - `scripts/evaluate-rhythm-frame.py --emit-template` 现在支持
+    `--template-require-rhythm-frame` 和 `--limit`；quality gates 新增
+    `--min-rhythm-frame-sentences`、`--min-word-timeline-rhythm-sentences`、
+    `--min-energy-prominence-sentences`。
+  - 本机已生成 `.tmp/rhythm-frame-qa/w8-product-template.jsonl`，但当前
+    Phase 2.17 real-media artifacts 只有 1 条旧 v0 phone-timeline RhythmFrame；
+    readiness summary 为 WordTimeline RhythmFrame = 0、energy prominence = 0、
+    manual labels = 0，所以 W8 还没有 closeout。
 
 ## Next Concrete Work
 
 从 Phase 2.21 review backlog 继续：
 
-1. W8 product QA loop：用 5-10 条真实句子校准/验证 W4 RMS energy cue。
+1. W8 product QA loop：先用当前 production pipeline regenerate/prepare 5-10 条
+   WordTimeline + `rhythm_word_acoustic_cues` 的真实句，再生成 template、人工标注
+   anchors/nuclei/weak groups/reductions，并跑 scorer gate。
 2. 继续降级/移除 `phone_timeline_transitional` 对 L1-L3 的 fallback ownership，并用
    manual QA / Helsinki scorer 验证 provenance-aware scoring。
 

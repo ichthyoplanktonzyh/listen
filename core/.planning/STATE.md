@@ -244,8 +244,18 @@ progress:
     会轻微降低重复 content word 的 text-prior prominence，并给 phrase-final content
     一个小 focus boost；该 cue 仍属于 `TextPrior`，不会在缺少 timing/energy/pitch/phone
     evidence 时升级 claim status。
+  - W8 product QA tooling 已推进但未 closeout：
+    `scripts/evaluate-rhythm-frame.py` / `annotation.schema.json` / fixture labels
+    现在把 `nuclei` 和 `connected_speech_refs` 纳入一等 manual QA 字段；scorer 新增
+    `--template-require-rhythm-frame` / `--limit` template 输出，以及
+    `--min-rhythm-frame-sentences`、`--min-word-timeline-rhythm-sentences`、
+    `--min-energy-prominence-sentences` gates。当前本地 Phase 2.17 real-media manifest
+    readiness 为 47 句中仅 1 个旧 v0 phone-timeline RhythmFrame，0 个 WordTimeline
+    RhythmFrame，0 个 energy prominence RhythmFrame，0 条 manual labels；因此 W8
+    仍需先用当前 production pipeline regenerate 5-10 条真实句，再人工标注。
 - 下一步：
-  1. 推进 W8：用 5-10 条真实句子做 manual QA，校准/验证 W4 RMS energy cue。
+  1. 推进 W8：先 regenerate/prepare 5-10 条当前 product-path 真实句，再做 manual QA，
+     校准/验证 W4 RMS energy cue。
   2. 继续用 manual QA / Helsinki scorer 验证 provenance-aware scoring，而不是调旧 v0
      duration/RMS 阈值。
 - 规划文档：

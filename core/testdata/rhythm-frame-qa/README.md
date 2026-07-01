@@ -24,11 +24,17 @@ media and generated full timelines out of git.
 ```bash
 python3 scripts/evaluate-rhythm-frame.py \
   --manifest testdata/sound-line-real-media/manifest.jsonl \
-  --emit-template > testdata/rhythm-frame-qa/annotations.local.jsonl
+  --emit-template \
+  --template-require-rhythm-frame \
+  --limit 10 > testdata/rhythm-frame-qa/annotations.local.jsonl
 ```
 
 Current Phase 2.17 artifacts may predate `rhythm_frame`; those rows will show
 `system.status = "missing_rhythm_frame"` until the case is regenerated.
+`--template-require-rhythm-frame` is recommended for Phase 2.21 W8 so manual QA
+only spends attention on sentences with system RhythmFrame output. Template rows
+include empty `nuclei` and `connected_speech_refs` lists because W8 labels phrase
+nuclei and reductions as first-class checks, not just stress anchors.
 
 ## Generate A Duration/RMS Comparison Template
 
@@ -113,6 +119,9 @@ python3 scripts/evaluate-rhythm-frame.py \
   --annotations testdata/rhythm-frame-qa/annotations.local.jsonl \
   --strict-annotations \
   --min-rhythm-coverage 1.0 \
+  --min-rhythm-frame-sentences 10 \
+  --min-word-timeline-rhythm-sentences 10 \
+  --min-energy-prominence-sentences 10 \
   --min-annotated-sentences 10 \
   --min-overall-useful-rate 0.7 \
   --max-hotspot-misleading-rate 0.1 \
@@ -121,7 +130,10 @@ python3 scripts/evaluate-rhythm-frame.py \
 ```
 
 The output includes `quality_gates.passed` and one entry per configured gate.
-With `--fail-on-quality-gate`, failures exit with code `4`.
+With `--fail-on-quality-gate`, failures exit with code `4`. For Phase 2.21 W8,
+`word_timeline_rhythm_sentence_count` and `energy_prominence_sentence_count` are
+the promotion checks for the new WordTimeline + acoustic cue path; old v0 phone
+RhythmFrames do not satisfy those counters.
 
 ## Manual Rubric
 
@@ -137,3 +149,8 @@ Use the same score vocabulary for hotspot and overall judgments:
 
 Mark `phone_detail_needed` when a default rhythm explanation is not enough and
 phone-level evidence should be opened to explain the issue.
+
+Every annotation row must include `stress_anchors`, `nuclei`, `weak_groups`,
+`compression_spans`, `phrase_boundaries`, `connected_speech_refs`, and
+`listening_hotspots`. Use empty arrays when a category is not audible or not
+present; do not omit the field.

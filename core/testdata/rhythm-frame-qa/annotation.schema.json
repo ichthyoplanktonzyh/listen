@@ -7,9 +7,11 @@
     "sentence_id",
     "transcript",
     "stress_anchors",
+    "nuclei",
     "weak_groups",
     "compression_spans",
     "phrase_boundaries",
+    "connected_speech_refs",
     "listening_hotspots"
   ],
   "properties": {
@@ -34,6 +36,12 @@
         "$ref": "#/$defs/rhythm_item"
       }
     },
+    "nuclei": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/rhythm_item"
+      }
+    },
     "weak_groups": {
       "type": "array",
       "items": {
@@ -50,6 +58,12 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/phrase_boundary"
+      }
+    },
+    "connected_speech_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/rhythm_span"
       }
     },
     "listening_hotspots": {

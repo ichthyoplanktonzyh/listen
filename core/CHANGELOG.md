@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- 2026-07-01 00:18 CST: Phase 2.21 W8 product QA tooling checkpoint。
+  (1) **Manual QA contract**: RhythmFrame annotation schema, sample labels,
+  committed fixture labels, and scorer now include `nuclei` and
+  `connected_speech_refs` as first-class manual QA fields.
+  (2) **W8 gates**: `evaluate-rhythm-frame.py` can emit capped templates that
+  skip missing RhythmFrame rows and can gate minimum RhythmFrame sentence count,
+  WordTimeline RhythmFrame count, and energy-prominence RhythmFrame count.
+  (3) **Readiness honesty**: current local Phase 2.17 real-media artifacts are
+  measurable but not closeout-ready: 47 selected sentences have only 1 old v0
+  phone-timeline RhythmFrame, 0 WordTimeline RhythmFrames, 0 energy-prominence
+  RhythmFrames, and 0 manual labels. Next step is regeneration with the current
+  production pipeline, then manual labels.
+  验证: `python3 scripts/test_evaluate_rhythm_frame.py` 通过；fixture W8 gate 通过。
+
 - 2026-06-30 23:32 CST: Phase 2.21 review backlog W6 information-structure
   prominence prior。
   (1) **Text prior**: RhythmFrame anchor scoring now lightly down-weights repeated

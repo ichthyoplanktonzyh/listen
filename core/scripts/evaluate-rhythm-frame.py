@@ -28,23 +28,29 @@ ANNOTATION_REQUIRED_FIELDS = {
     "sentence_id",
     "transcript",
     "stress_anchors",
+    "nuclei",
     "weak_groups",
     "compression_spans",
     "phrase_boundaries",
+    "connected_speech_refs",
     "listening_hotspots",
 }
 ANNOTATION_LIST_FIELDS = {
     "stress_anchors",
+    "nuclei",
     "weak_groups",
     "compression_spans",
     "phrase_boundaries",
+    "connected_speech_refs",
     "listening_hotspots",
 }
 MANUAL_SCORE_FIELDS = (
     "stress_anchors",
+    "nuclei",
     "weak_groups",
     "compression_spans",
     "phrase_boundaries",
+    "connected_speech_refs",
     "listening_hotspots",
 )
 
@@ -468,6 +474,8 @@ def sentence_score(
             "sentence_id": sentence_id,
             "status": "missing_sound_analysis",
             "text": (segment or {}).get("text", ""),
+            "start_ms": (segment or {}).get("start_ms"),
+            "end_ms": (segment or {}).get("end_ms"),
         }
     frame = sound_analysis.get("rhythm_frame")
     if not isinstance(frame, dict):
@@ -475,6 +483,8 @@ def sentence_score(
             "sentence_id": sentence_id,
             "status": "missing_rhythm_frame",
             "text": (segment or {}).get("text", ""),
+            "start_ms": (segment or {}).get("start_ms"),
+            "end_ms": (segment or {}).get("end_ms"),
             "learning_phone_count": len(safe_list(sound_analysis.get("learning_phones"))),
             "connected_speech_count": len(safe_list(sound_analysis.get("connected_speech"))),
         }
@@ -499,6 +509,11 @@ def sentence_score(
                 manual_items(annotation, "stress_anchors", "anchors"),
                 "anchor",
             ),
+            "nuclei": score_items(
+                nuclei,
+                manual_items(annotation, "nuclei"),
+                "anchor",
+            ),
             "weak_groups": score_items(
                 weak_groups,
                 manual_items(annotation, "weak_groups"),
@@ -513,6 +528,11 @@ def sentence_score(
                 boundaries,
                 manual_items(annotation, "phrase_boundaries"),
                 "boundary",
+            ),
+            "connected_speech_refs": score_items(
+                connected_refs,
+                manual_items(annotation, "connected_speech_refs", "reductions"),
+                "span",
             ),
             "listening_hotspots": score_hotspot_labels(annotation, hotspots),
             "overall_manual_score": (annotation.get("overall") or {}).get("manual_score")
@@ -632,18 +652,41 @@ def aggregate_results(results: list[dict[str, Any]]) -> dict[str, Any]:
     rhythm_sentences = sum(int(result.get("rhythm_frame_sentence_count") or 0) for result in results)
     missing_timelines = sum(1 for result in results if result.get("status") == "missing_timeline")
     by_dataset: dict[str, dict[str, int]] = {}
+    generated_from_counts: dict[str, int] = {}
+    prominence_source_sentence_counts: dict[str, int] = {}
+    word_timeline_rhythm_sentences = 0
+    energy_prominence_sentences = 0
     for result in results:
         dataset = str(result.get("dataset") or "unknown")
         bucket = by_dataset.setdefault(dataset, {"cases": 0, "sentences": 0, "rhythm_frames": 0})
         bucket["cases"] += 1
         bucket["sentences"] += int(result.get("phone_timeline_sentence_count") or 0)
         bucket["rhythm_frames"] += int(result.get("rhythm_frame_sentence_count") or 0)
+        for sentence in result.get("sentences") or []:
+            if not isinstance(sentence, dict) or sentence.get("status") != "scored":
+                continue
+            generated_from = str(sentence.get("generated_from") or "unknown")
+            generated_from_counts[generated_from] = generated_from_counts.get(generated_from, 0) + 1
+            quality = sentence.get("quality") if isinstance(sentence.get("quality"), dict) else {}
+            prominence_sources = [str(source) for source in safe_list(quality.get("prominence_sources"))]
+            for source in sorted(set(prominence_sources)):
+                prominence_source_sentence_counts[source] = (
+                    prominence_source_sentence_counts.get(source, 0) + 1
+                )
+            if quality.get("timing_source") == "word_timeline" or generated_from.startswith("wordtimeline_"):
+                word_timeline_rhythm_sentences += 1
+            if "energy" in prominence_sources:
+                energy_prominence_sentences += 1
     return {
         "case_count": len(results),
         "missing_timeline_case_count": missing_timelines,
         "phone_timeline_sentence_count": total_sentences,
         "rhythm_frame_sentence_count": rhythm_sentences,
         "rhythm_frame_coverage": ratio(rhythm_sentences, total_sentences) or 0.0,
+        "word_timeline_rhythm_sentence_count": word_timeline_rhythm_sentences,
+        "energy_prominence_sentence_count": energy_prominence_sentences,
+        "generated_from_counts": dict(sorted(generated_from_counts.items())),
+        "prominence_source_sentence_counts": dict(sorted(prominence_source_sentence_counts.items())),
         "by_dataset": {
             key: {
                 **value,
@@ -661,9 +704,11 @@ def aggregate_manual_qa(results: list[dict[str, Any]]) -> dict[str, Any]:
     invalid_hotspot_scores: set[str] = set()
     f1_values: dict[str, list[float]] = {
         "stress_anchors": [],
+        "nuclei": [],
         "weak_groups": [],
         "compression_spans": [],
         "phrase_boundaries": [],
+        "connected_speech_refs": [],
         "listening_hotspots": [],
     }
     annotated_sentence_count = 0
@@ -678,7 +723,14 @@ def aggregate_manual_qa(results: list[dict[str, Any]]) -> dict[str, Any]:
             overall_score = manual.get("overall_manual_score")
             if overall_score in overall_score_counts:
                 overall_score_counts[overall_score] += 1
-            for field in ("stress_anchors", "weak_groups", "compression_spans", "phrase_boundaries"):
+            for field in (
+                "stress_anchors",
+                "nuclei",
+                "weak_groups",
+                "compression_spans",
+                "phrase_boundaries",
+                "connected_speech_refs",
+            ):
                 metric = manual.get(field)
                 if isinstance(metric, dict) and isinstance(metric.get("f1"), (int, float)):
                     f1_values[field].append(float(metric["f1"]))
@@ -722,6 +774,9 @@ def quality_gates(
     annotation_validation: dict[str, Any],
     *,
     min_rhythm_coverage: float | None = None,
+    min_rhythm_frame_sentences: int | None = None,
+    min_word_timeline_rhythm_sentences: int | None = None,
+    min_energy_prominence_sentences: int | None = None,
     min_annotated_sentences: int | None = None,
     min_overall_useful_rate: float | None = None,
     max_hotspot_misleading_rate: float | None = None,
@@ -759,6 +814,21 @@ def quality_gates(
 
     manual_qa = summary.get("manual_qa") if isinstance(summary.get("manual_qa"), dict) else {}
     add_min("rhythm_frame_coverage", as_float(summary.get("rhythm_frame_coverage")), min_rhythm_coverage)
+    add_min(
+        "rhythm_frame_sentence_count",
+        as_int(summary.get("rhythm_frame_sentence_count")),
+        min_rhythm_frame_sentences,
+    )
+    add_min(
+        "word_timeline_rhythm_sentence_count",
+        as_int(summary.get("word_timeline_rhythm_sentence_count")),
+        min_word_timeline_rhythm_sentences,
+    )
+    add_min(
+        "energy_prominence_sentence_count",
+        as_int(summary.get("energy_prominence_sentence_count")),
+        min_energy_prominence_sentences,
+    )
     add_min(
         "annotated_sentence_count",
         as_int(manual_qa.get("annotated_sentence_count")),
@@ -808,29 +878,34 @@ def sentence_keys_from_results(results: list[dict[str, Any]]) -> set[tuple[str, 
     return keys
 
 
-def annotation_template_rows(case: dict[str, Any], repo_root: Path) -> list[dict[str, Any]]:
-    path = timeline_path(case, repo_root)
-    if path is None:
-        return []
-    document = read_json(path)
-    segments = segments_by_id(document)
+def annotation_template_rows(
+    case: dict[str, Any],
+    repo_root: Path,
+    *,
+    require_rhythm_frame: bool = False,
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     case_id = str(case.get("case_id") or "")
-    for sentence_id, timeline in phone_timelines_by_sentence(document).items():
-        segment = segments.get(sentence_id) or {}
-        scored = sentence_score(case_id, segment, timeline, None)
+    result = evaluate_case(case, repo_root, {})
+    for scored in result.get("sentences") or []:
+        if not isinstance(scored, dict):
+            continue
+        if require_rhythm_frame and scored.get("status") != "scored":
+            continue
         rows.append(
             {
                 "case_id": case_id,
-                "sentence_id": sentence_id,
-                "transcript": segment.get("text", ""),
-                "media_start_ms": segment.get("start_ms"),
-                "media_end_ms": segment.get("end_ms"),
+                "sentence_id": scored.get("sentence_id"),
+                "transcript": scored.get("text", ""),
+                "media_start_ms": scored.get("start_ms"),
+                "media_end_ms": scored.get("end_ms"),
                 "system": scored if scored.get("status") == "scored" else {"status": scored.get("status")},
                 "stress_anchors": [],
+                "nuclei": [],
                 "weak_groups": [],
                 "compression_spans": [],
                 "phrase_boundaries": [],
+                "connected_speech_refs": [],
                 "listening_hotspots": [],
                 "overall": {
                     "manual_score": None,
@@ -861,6 +936,16 @@ def main() -> int:
         help="Emit annotation-template JSONL rows instead of score JSON.",
     )
     parser.add_argument(
+        "--limit",
+        type=int,
+        help="Maximum template rows to emit. Scoring mode ignores this option.",
+    )
+    parser.add_argument(
+        "--template-require-rhythm-frame",
+        action="store_true",
+        help="When emitting a template, skip rows whose selected timeline has no rhythm_frame.",
+    )
+    parser.add_argument(
         "--fail-on-missing-rhythm",
         action="store_true",
         help="Return non-zero when any selected phone timeline lacks rhythm_frame.",
@@ -871,6 +956,9 @@ def main() -> int:
         help="Return non-zero when annotation validation reports errors.",
     )
     parser.add_argument("--min-rhythm-coverage", type=float)
+    parser.add_argument("--min-rhythm-frame-sentences", type=int)
+    parser.add_argument("--min-word-timeline-rhythm-sentences", type=int)
+    parser.add_argument("--min-energy-prominence-sentences", type=int)
     parser.add_argument("--min-annotated-sentences", type=int)
     parser.add_argument("--min-overall-useful-rate", type=float)
     parser.add_argument("--max-hotspot-misleading-rate", type=float)
@@ -888,9 +976,17 @@ def main() -> int:
     cases = [case for case in manifest if not selected or case.get("case_id") in selected]
 
     if args.emit_template:
+        emitted = 0
         for case in cases:
-            for row in annotation_template_rows(case, repo_root):
+            for row in annotation_template_rows(
+                case,
+                repo_root,
+                require_rhythm_frame=args.template_require_rhythm_frame,
+            ):
+                if args.limit is not None and emitted >= args.limit:
+                    return 0
                 print(json.dumps(row, ensure_ascii=False, sort_keys=True))
+                emitted += 1
         return 0
 
     annotation_path = expand_path(args.annotations, repo_root)
@@ -907,6 +1003,9 @@ def main() -> int:
         summary,
         annotation_validation,
         min_rhythm_coverage=args.min_rhythm_coverage,
+        min_rhythm_frame_sentences=args.min_rhythm_frame_sentences,
+        min_word_timeline_rhythm_sentences=args.min_word_timeline_rhythm_sentences,
+        min_energy_prominence_sentences=args.min_energy_prominence_sentences,
         min_annotated_sentences=args.min_annotated_sentences,
         min_overall_useful_rate=args.min_overall_useful_rate,
         max_hotspot_misleading_rate=args.max_hotspot_misleading_rate,

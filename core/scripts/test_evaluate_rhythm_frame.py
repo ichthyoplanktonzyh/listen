@@ -213,9 +213,11 @@ class RhythmFrameEvaluationTest(unittest.TestCase):
                     "case_id": "case-1",
                     "sentence_id": "s1",
                     "stress_anchors": [{"token_index": 2, "label": "market"}],
+                    "nuclei": [{"token_index": 2, "label": "market"}],
                     "weak_groups": [{"token_start": 0, "token_end": 1}],
                     "compression_spans": [{"token_start": 0, "token_end": 2}],
                     "phrase_boundaries": [{"at_ms": 310}],
+                    "connected_speech_refs": [{"token_start": 0, "token_end": 1}],
                     "listening_hotspots": [
                         {
                             "token_start": 0,
@@ -234,13 +236,50 @@ class RhythmFrameEvaluationTest(unittest.TestCase):
             self.assertEqual(result["rhythm_frame_sentence_count"], 1)
             self.assertEqual(sentence["quality"]["rhythm_confidence"], 0.77)
             self.assertEqual(sentence["manual"]["stress_anchors"]["f1"], 1.0)
+            self.assertEqual(sentence["manual"]["nuclei"]["f1"], 1.0)
             self.assertEqual(sentence["manual"]["weak_groups"]["f1"], 1.0)
             self.assertEqual(sentence["manual"]["compression_spans"]["f1"], 1.0)
             self.assertEqual(sentence["manual"]["phrase_boundaries"]["f1"], 1.0)
+            self.assertEqual(sentence["manual"]["connected_speech_refs"]["f1"], 1.0)
             self.assertEqual(
                 sentence["manual"]["listening_hotspots"]["manual_score_counts"]["correct"],
                 1,
             )
+
+    def test_template_rows_include_document_level_rhythm_frames(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            document = base_document(with_rhythm=True)
+            phone_timeline = document["phone_timelines"][0]  # type: ignore[index]
+            sound_analysis = phone_timeline["sound_analysis"]  # type: ignore[index]
+            document["phone_timelines"] = []
+            document["rhythm_frames"] = [
+                {
+                    "id": "rf1",
+                    "sentence_id": "s1",
+                    "rhythm_frame": sound_analysis["rhythm_frame"],  # type: ignore[index]
+                }
+            ]
+            timeline = root / "case.lltimeline.json"
+            write_json(timeline, document)
+            case = {
+                "case_id": "case-1",
+                "title": "Case 1",
+                "dataset": "fixture",
+                "layer": "product_media",
+                "lltimeline": {"local_path": str(timeline)},
+            }
+
+            rows = evaluate_rhythm_frame.annotation_template_rows(
+                case,
+                root,
+                require_rhythm_frame=True,
+            )
+
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["system"]["resource_kind"], "rhythm_frame")
+            self.assertEqual(rows[0]["nuclei"], [])
+            self.assertEqual(rows[0]["connected_speech_refs"], [])
 
     def test_validates_annotation_shape_and_scores(self) -> None:
         rows = [
@@ -295,9 +334,11 @@ class RhythmFrameEvaluationTest(unittest.TestCase):
                     "case_id": "case-1",
                     "sentence_id": "s1",
                     "stress_anchors": [{"token_index": 2}],
+                    "nuclei": [{"token_index": 2}],
                     "weak_groups": [{"token_start": 0, "token_end": 1}],
                     "compression_spans": [{"token_start": 0, "token_end": 2}],
                     "phrase_boundaries": [{"at_ms": 300}],
+                    "connected_speech_refs": [{"token_start": 0, "token_end": 1}],
                     "listening_hotspots": [
                         {
                             "token_start": 0,
@@ -323,11 +364,16 @@ class RhythmFrameEvaluationTest(unittest.TestCase):
             self.assertEqual(manual["hotspot_useful_or_correct_rate"], 1.0)
             self.assertEqual(manual["hotspot_misleading_rate"], 0.0)
             self.assertEqual(manual["mean_f1"]["stress_anchors"], 1.0)
+            self.assertEqual(manual["mean_f1"]["nuclei"], 1.0)
+            self.assertEqual(manual["mean_f1"]["connected_speech_refs"], 1.0)
             self.assertEqual(manual["mean_f1"]["listening_hotspots"], 1.0)
 
     def test_quality_gates_report_pass_and_failure(self) -> None:
         summary = {
             "rhythm_frame_coverage": 0.75,
+            "rhythm_frame_sentence_count": 4,
+            "word_timeline_rhythm_sentence_count": 3,
+            "energy_prominence_sentence_count": 2,
             "manual_qa": {
                 "annotated_sentence_count": 4,
                 "overall_useful_or_correct_rate": 0.8,
@@ -341,6 +387,9 @@ class RhythmFrameEvaluationTest(unittest.TestCase):
             summary,
             validation,
             min_rhythm_coverage=0.5,
+            min_rhythm_frame_sentences=3,
+            min_word_timeline_rhythm_sentences=2,
+            min_energy_prominence_sentences=1,
             min_annotated_sentences=3,
             min_overall_useful_rate=0.75,
             max_hotspot_misleading_rate=0.2,
@@ -350,6 +399,9 @@ class RhythmFrameEvaluationTest(unittest.TestCase):
             summary,
             {"error_count": 1},
             min_rhythm_coverage=0.9,
+            min_rhythm_frame_sentences=5,
+            min_word_timeline_rhythm_sentences=4,
+            min_energy_prominence_sentences=3,
             min_annotated_sentences=5,
             min_overall_useful_rate=0.9,
             max_hotspot_misleading_rate=0.05,
@@ -358,7 +410,7 @@ class RhythmFrameEvaluationTest(unittest.TestCase):
 
         self.assertTrue(passing["passed"])
         self.assertFalse(failing["passed"])
-        self.assertEqual(failing["gate_count"], 6)
+        self.assertEqual(failing["gate_count"], 9)
         self.assertTrue(
             any(gate["name"] == "annotation_validation_errors" for gate in failing["gates"])
         )
@@ -376,6 +428,12 @@ class RhythmFrameEvaluationTest(unittest.TestCase):
                 "--strict-annotations",
                 "--min-rhythm-coverage",
                 "1.0",
+                "--min-rhythm-frame-sentences",
+                "3",
+                "--min-word-timeline-rhythm-sentences",
+                "3",
+                "--min-energy-prominence-sentences",
+                "2",
                 "--min-annotated-sentences",
                 "2",
                 "--min-overall-useful-rate",
@@ -395,6 +453,9 @@ class RhythmFrameEvaluationTest(unittest.TestCase):
         output = json.loads(result.stdout)
         self.assertEqual(output["summary"]["rhythm_frame_coverage"], 1.0)
         self.assertEqual(output["summary"]["phone_timeline_sentence_count"], 3)
+        self.assertEqual(output["summary"]["rhythm_frame_sentence_count"], 3)
+        self.assertEqual(output["summary"]["word_timeline_rhythm_sentence_count"], 3)
+        self.assertEqual(output["summary"]["energy_prominence_sentence_count"], 2)
         self.assertEqual(output["summary"]["manual_qa"]["annotated_sentence_count"], 2)
         self.assertTrue(output["quality_gates"]["passed"])
         no_phone = next(
