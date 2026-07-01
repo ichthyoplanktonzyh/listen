@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- 2026-07-01 14:25 CST: Phase 2.22 frontend workflow semantics closeout slice。
+  (1) **Typed task feedback**: 新增 `UserTaskStatus`，把本机 Whisper 字幕生成和
+  Phone evidence/audio-analysis job 映射为 `working/success/warning/error/cancelled/unknown`
+  等前端状态；`BackendEventCoordinator` 先写 typed task state，再保留摘要文字。
+  (2) **Playback controls**: 底部控制栏显示字幕生成与音素证据分析 task chip，
+  不再只依赖自由字符串表达 ASR/audio-analysis 进度；切换媒体会清除旧任务状态。
+  (3) **Closeout docs**: 新增
+  `.planning/phases/2.22-user-facing-workflow-semantics/2.22-BACKEND-CONTRACT-GAPS.md`
+  和 `2.22-FRONTEND-E2E-QA.md`，把前端语义审计暴露的后端契约缺口记录为后续输入，
+  同时固定前端端到端 smoke 路径。
+  验证: `cd apps/desktop && dart format ...`、
+  `cd apps/desktop && flutter analyze`、focused
+  `flutter test test/backend_event_coordinator_test.dart test/task_status_test.dart`、
+  full `flutter test`、`git diff --check` 通过。
+
 - 2026-07-01 14:15 CST: Phase 2.22 Step 3 subtitle resource capability-first。
   字幕资源 tile 现在以用户能力为主，直接展示 Subtitles、Word sync、Chunk replay、
   Phone evidence 的可用/不可用状态和数量；Listening structure 不再被假装成逐资源已知事实，

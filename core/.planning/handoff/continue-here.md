@@ -1,6 +1,6 @@
 # Continue Here — Phase 2.22 User-Facing Workflow Semantics
 
-> 最后更新：2026-07-01 CST
+> 最后更新：2026-07-01 14:25 CST
 > 单一接续入口。先读 `AGENT.md` 和 `.planning/STATE.md`，再读本文件。
 
 ## 当前结论
@@ -11,19 +11,21 @@ Phase 2.21 的 audible-structure 主体架构已经能支撑当前产品方向�
 在字幕层显示当前句子的实际可听结构，但不把 text prior 伪装成 measured audio。
 ```
 
-现在端到端使用路径暴露出的主要问题已经转到前端语义和工作流：
+端到端使用路径暴露出的主要问题已经转到前端语义和工作流：
 
 ```text
 功能已经存在，但用户不知道该从哪里打开、何时可用、为什么不可用、下一步该做什么。
 ```
 
-因此当前工程主线切到 Phase 2.22：
+因此工程主线切到 Phase 2.22：
 
 ```text
 把当前所有用户功能组织成清晰、可发现、可降级、可验证的用户路径
 ```
 
-Phase 2.21 的 W8 manual listening QA 仍未完成，作为模型质量/校准并行待办保留；但下一步代码方向优先推进 Phase 2.22 的 UI/workflow 收敛。
+Phase 2.22 的前端 closeout slice 已完成：当前 Flutter 用户功能的入口、状态、降级和端到端路径已经审计并收敛到 typed readiness / task feedback / QA checklist。前端语义暴露出的后端闭环问题已经记录到 backend contract gap log，本切片暂不修后端。
+
+Phase 2.21 的 W8 manual listening QA 仍未完成，作为模型质量/校准并行待办保留。
 
 ## 上位文档
 
@@ -204,18 +206,20 @@ Phase 2.21 的关键约束：
   - 新增 `2.22-CURRENT-FEATURE-INVENTORY.md`：参考 `uiworktree` 的功能描述，覆盖媒体、字幕、播放、资源、词汇、诊断、听感/音素、设置和任务反馈等当前全部功能。
   - 新增 `2.22-PLAN.md`：按 UI audit、capability readiness、本机 Whisper 默认路径、资源面板、Listening structure 语义、typed status、布局入口和端到端 QA 推进。
   - PROJECT / ROADMAP / REQUIREMENTS / STATE 已同步 Phase 2.22 与 `UX-001` 至 `UX-008`。
+- Phase 2.22 frontend closeout:
+  - `2.22-STEP0-UI-AUDIT.md` 已按当前 `main` 审计媒体/播放、URL/下载、字幕获取、字幕资源、Timeline 资源、字幕显示、Word sync、Chunk replay、Listening structure、Phone evidence、词汇、诊断、设置、任务中心和全局状态反馈。
+  - Flutter 已新增 typed capability readiness 与 typed task status：资源/时间线面板、Local Whisper 默认路径、download bar、ASR/audio-analysis task chips、overlay missing states、no-media controls、side-panel visibility、secondary/chunk controls 均已完成 P0 前端语义收敛。
+  - `2.22-BACKEND-CONTRACT-GAPS.md` 记录前端语义暴露出的后端 contract 缺口：per-resource Listening structure readiness、job result capability summary、稳定 task lifecycle enum、批量资源能力摘要、Practice/Review readiness 等。
+  - `2.22-FRONTEND-E2E-QA.md` 固定后续手工 smoke 路径；自动验证包含 `flutter analyze`、`flutter test` 和 `git diff --check`。
 
 ## Next Concrete Work
 
-工程主线从 Phase 2.22 Step 0 开始：
+下一步不要先修后端。优先顺序：
 
-1. 审计当前 Flutter 全部功能入口、标签、状态和用户可见状态机，重点文件是 `main.dart`、
-   `transcription_ui.dart`、AppBar、资源面板、settings、本地化文案和 subtitle overlay。
-2. 设计并实现 app/session/media/subtitle 级 capability readiness model。
-3. 优先修本机 Whisper 默认路径：生成字幕后，用户能看到 generated track、Word sync、
-   Listening structure、Phone evidence 的可用状态和下一步行动。
-4. 将 `sound pattern` 语义收敛为 Listening structure / Phone evidence，并修正文案中
-   仍暗示必须有 `sound_analysis` 的旧描述。
+1. 按 `2.22-FRONTEND-E2E-QA.md` 用真实媒体跑一轮手工 smoke，确认当前前端路径在本机可用。
+2. 如果要继续工程实现，开新 backend/product phase 读取 `2.22-BACKEND-CONTRACT-GAPS.md`，
+   先补后端 product-level capability/task contracts，再回头删减前端派生逻辑。
+3. Phase 3.0 practice/review 前端入口应等待 backend readiness contract 明确后再闭环。
 
 并行保留 Phase 2.21 W8：
 

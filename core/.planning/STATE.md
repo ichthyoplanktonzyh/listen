@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: active
-last_updated: "2026-07-01T12:59:00.000+08:00"
+last_updated: "2026-07-01T14:25:00.000+08:00"
 progress:
   total_phases: 11
   completed_phases: 1
@@ -29,6 +29,10 @@ progress:
 > 当前所有用户功能的前端语义、入口、状态和降级路径不够清晰，新增 Phase 2.22
 > User-Facing Workflow Semantics，专门收敛本机 Whisper 默认路径、资源能力可用性、
 > Listening structure / Phone evidence 语义分层、typed status 和端到端 QA。
+> 2026-07-01 14:25 CST Phase 2.22 前端 closeout slice 已完成：
+> Step 0 audit、capability readiness、资源能力面板、Local Whisper 默认路径、typed
+> download/task feedback、布局入口和前端 E2E QA 清单已落地；前端语义暴露出的后端闭环问题
+> 已记录到 backend contract gap log，暂不在本切片修后端。
 
 ## 当前位置
 
@@ -44,7 +48,7 @@ progress:
   Phase 2.19 ⏳ 真实 benchmark scoring 初始评估已落地 +
   Phase 2.20 ⏳ Rhythm-first 真实听感分析已启动 +
   Phase 2.21 ⏳ Audible Structure Architecture 已启动 +
-  Phase 2.22 ⏳ User-Facing Workflow Semantics 已启动 +
+  Phase 2.22 ⏳ User-Facing Workflow Semantics 前端 closeout 已完成 +
   Phase 3.0 🧭 英语听力学习闭环方向已建档 +
   Phase 3.0.1 ✅ backend 学习行为架构地基已落地
 - **分支**：`main`
@@ -57,7 +61,7 @@ progress:
 | 路线 | 目标 | 当前状态 |
 |---|---|---|
 | 本地重装生产引擎 | 生成精准 WordTimeline / ChunkTimeline / LLTimeline JSON | ✅ 阶段性收口，转长期研究 |
-| 轻量消费端 LLPlayerNext | 稳定读取 `.lltimeline.json` 并播放学习 | ⏳ Phase 2.22 正在收敛用户可见工作流 |
+| 轻量消费端 LLPlayerNext | 稳定读取 `.lltimeline.json` 并播放学习 | ⏳ Phase 2.22 前端语义已收敛，后端契约缺口已记录 |
 
 ## 后续产品方向
 
@@ -279,7 +283,7 @@ progress:
   - `.planning/phases/2.21-audible-structure-architecture/2.21-PLAN.md`
   - `.planning/phases/2.21-audible-structure-architecture/2.21-AUDIBLE-STRUCTURE-MODEL.md`
 
-### Phase 2.22: User-Facing Workflow Semantics ⏳ Active
+### Phase 2.22: User-Facing Workflow Semantics ⏳ Frontend Closeout Complete
 
 - 目标：把当前所有用户功能组织成清晰、可发现、可降级、可验证的用户路径，包括媒体播放、
   URL/下载、拖拽、字幕获取、资源管理、Word sync、Chunk replay、Listening structure、
@@ -317,16 +321,32 @@ progress:
     的功能图建立全功能审计种子清单，并要求后续按当前 main 校验。
   - 新增 `2.22-PLAN.md`，按 UI audit、capability readiness、本机 Whisper 默认路径、
     资源面板、Listening structure 语义、typed status、布局入口和端到端 QA 分步推进。
+  - Step 0 audit 已完成，覆盖媒体/播放、URL/下载、字幕获取、字幕资源、Timeline 资源、
+    字幕显示、Word sync、Chunk replay、Listening structure、Phone evidence、词汇、
+    诊断、设置、任务中心和全局状态反馈。
+  - Flutter 前端已落地 typed `CapabilityReadinessSnapshot` 与 `UserTaskStatus`，
+    资源/时间线面板和底部控制栏可表达能力可用性、降级和 ASR/audio-analysis 任务状态。
+  - Local Whisper 默认路径、plain SRT/VTT 降级路径、LLTimeline 资源路径、overlay
+    Listening structure / Phone evidence 缺失状态、no-media/side-panel/secondary/chunk
+    controls 和 download status 已完成 P0 前端语义收敛。
+  - 新增 `2.22-BACKEND-CONTRACT-GAPS.md`，记录 per-resource Listening structure readiness、
+    job result capability summary、稳定 task lifecycle enum、批量资源能力摘要和
+    Practice/Review readiness contract 等后端缺口；本阶段不修后端。
+  - 新增 `2.22-FRONTEND-E2E-QA.md`，固定本地可重复的前端端到端 smoke checklist。
   - PROJECT / ROADMAP / REQUIREMENTS 已新增 Phase 2.22 与 `UX-001` 至 `UX-008` 需求。
 - 下一步：
-  1. 从 Step 0 开始审计当前 Flutter 全部功能入口、标签、状态和用户可见状态机。
-  2. 实现 app/session/media/subtitle 级 capability readiness model。
-  3. 先修 P0 本机 Whisper 默认路径和 Listening structure / Phone evidence 语义。
+  1. 暂不修后端；先按 `2.22-FRONTEND-E2E-QA.md` 做真实媒体手工 smoke。
+  2. 后续 backend/product phase 按 `2.22-BACKEND-CONTRACT-GAPS.md` 逐项补契约，
+     再反向简化前端派生逻辑。
+  3. Phase 3.0 practice/review 前端入口应等待 backend readiness contract 明确后再闭环。
 - 规划文档：
   - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-CONTEXT.md`
   - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-FEATURE-SEMANTICS-MODEL.md`
   - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-CURRENT-FEATURE-INVENTORY.md`
   - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-PLAN.md`
+  - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-STEP0-UI-AUDIT.md`
+  - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-BACKEND-CONTRACT-GAPS.md`
+  - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-FRONTEND-E2E-QA.md`
 
 ### Phase 3.0: English Listening Learning Loop 🧭 已建档
 
