@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-01 23:11 CST: 重构 Rhythm B/C 字幕视图的学习语义与视觉层级。
+  B `Common speech` 不再把规则拆成卡片列表，而是按原句 token range 就地显示弧线、
+  下划线、规则名和 A → B IPA 变化，未变化文本退为上下文；C `This audio` 从诊断标签集合
+  收敛为可听前景/背景：用词典音素标记音频支持的重音与 nucleus，弱读音团低对比显示，
+  phrase boundary 仅作分隔，compression/hotspot 不再占用默认表面，详细 phone evidence
+  仍由 C 内按需展开；音频支持的 C 视图会逐项排除仅有 text-prior 的预测 anchor，防止预测项
+  混入真实听感。同步更新中英文提示和 Flutter widget 回归测试，并完成真实桌面渲染检查。
+
 - 2026-07-01 21:30 CST: 声音线彻底解耦为独立后台工作流。
   新增 `SoundLineCoordinator`（`crates/api-http/src/sound_line.rs`）：拥有自己的 job
   生命周期（queued/running/completed/cancelled/failed）、独立 temp 目录与独立音频提取，
