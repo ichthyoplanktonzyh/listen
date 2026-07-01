@@ -502,57 +502,96 @@ class _AudibleNode extends StatelessWidget {
         : 0.82;
     final labelSize = weak
         ? math.max(9.0, fontSize * 0.78)
-        : math.max(12.0, fontSize * (nucleus ? 1.3 : 1.12));
+        : math.max(12.0, fontSize * (nucleus ? 1.18 : 1.02));
+    final meaningLabel = item.caption.isEmpty ? item.label : item.caption;
+    final soundLabel = item.caption.isEmpty ? '' : '/${item.label}/';
+    final foreground = !weak;
+    final foregroundNode = Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: math.max(7, fontSize * 0.68),
+        vertical: math.max(4, height * 0.1),
+      ),
+      decoration: BoxDecoration(
+        color: color.withAlpha(active ? 48 : 30),
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(
+          color: color.withAlpha(nucleus ? 175 : 115),
+          width: nucleus ? 1.2 : 0.9,
+        ),
+        boxShadow: active
+            ? [BoxShadow(color: color.withAlpha(90), blurRadius: 9)]
+            : null,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (nucleus)
+            Container(
+              width: math.max(20, labelSize * 1.7),
+              height: 2,
+              margin: const EdgeInsets.only(bottom: 3),
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: [
+                  BoxShadow(color: color.withAlpha(130), blurRadius: 5),
+                ],
+              ),
+            ),
+          Text(
+            meaningLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withAlpha(nucleus ? 242 : 228),
+              fontSize: labelSize,
+              height: 1.02,
+              fontWeight: nucleus ? FontWeight.w900 : FontWeight.w800,
+              letterSpacing: 0.2,
+              shadows: active
+                  ? [Shadow(color: color.withAlpha(120), blurRadius: 6)]
+                  : null,
+            ),
+          ),
+          if (soundLabel.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                soundLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: color.withAlpha(nucleus ? 235 : 205),
+                  fontSize: math.max(8.0, fontSize * 0.68),
+                  height: 1.0,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.35,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
     final node = AnimatedOpacity(
       duration: const Duration(milliseconds: 120),
       opacity: opacity,
       child: AnimatedScale(
         duration: const Duration(milliseconds: 120),
         scale: active && !weak ? 1.08 : 1,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (nucleus)
-              Container(
-                width: math.max(15, labelSize * 1.35),
-                height: 2,
-                margin: const EdgeInsets.only(bottom: 2),
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(999),
-                  boxShadow: [
-                    BoxShadow(color: color.withAlpha(120), blurRadius: 5),
-                  ],
-                ),
-              ),
-            Text(
-              weak ? item.label : '/${item.label}/',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: color,
-                fontSize: labelSize,
-                height: 1,
-                fontWeight: weak ? FontWeight.w400 : FontWeight.w800,
-                letterSpacing: weak ? 0.2 : 0.5,
-                shadows: active && !weak
-                    ? [Shadow(color: color.withAlpha(150), blurRadius: 7)]
-                    : null,
-              ),
-            ),
-            if (item.caption.isNotEmpty)
-              Text(
-                item.caption,
+        child: foreground
+            ? foregroundNode
+            : Text(
+                item.label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: color.withAlpha(weak ? 105 : 155),
-                  fontSize: math.max(7.0, fontSize * 0.58),
-                  height: 1.05,
+                  color: color,
+                  fontSize: labelSize,
+                  height: 1,
+                  fontWeight: FontWeight.w400,
+                  letterSpacing: 0.2,
                 ),
               ),
-          ],
-        ),
       ),
     );
     final interactive = onLoopCue == null

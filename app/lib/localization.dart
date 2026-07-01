@@ -259,7 +259,7 @@ class AppLocalizations {
       'rhythmReferenceConnectedTooltip':
           'B · Common connected-speech changes predicted by language rules',
       'rhythmReferenceActualTooltip':
-          'C · Listening structure supported by this audio',
+          'C · Heard information anchors supported by this audio',
       'connectedSpeechReference': 'Common speech',
       'connectedSpeechReferenceTooltip':
           'Rule annotations on the sentence: common weak forms, linking and reductions.',
@@ -280,7 +280,7 @@ class AppLocalizations {
           'Phone evidence appears after audio analysis or an imported timeline provides it for the current sentence.',
       'rhythmFrameUnavailable': 'No listening structure for this line',
       'rhythmRibbonHint':
-          'Audible structure: catch the foreground stress sounds; let the faint weak groups recede.',
+          'Heard structure: meaning anchors you can catch from this audio; faint weak groups recede into the path.',
       'expectedPronunciationReference': 'Expected',
       'expectedPronunciationTooltip':
           'Dictionary pronunciation reference for the current sentence.',
@@ -293,7 +293,7 @@ class AppLocalizations {
       'listeningPredictedBadge': 'predicted',
       'listeningPredictedTooltip':
           'Predicted from text, not measured from this audio. Listening structure becomes audio-supported once word timing, energy or pitch evidence exists.',
-      'stressAnchors': 'Anchors',
+      'stressAnchors': 'Heard anchors',
       'weakGroups': 'Weak groups',
       'compressedSpans': 'Compressed',
       'listeningHotspots': 'Hotspots',
@@ -657,7 +657,7 @@ class AppLocalizations {
       'rhythmReferenceActual': 'C · 当前听感',
       'rhythmReferenceCitationTooltip': 'A · 来自字典的读音与词汇重音',
       'rhythmReferenceConnectedTooltip': 'B · 根据语言规则预测的常见连续语流变化',
-      'rhythmReferenceActualTooltip': 'C · 当前音频支持的实际听感结构',
+      'rhythmReferenceActualTooltip': 'C · 当前音频支持的可听信息锚点',
       'connectedSpeechReference': '常见语流',
       'connectedSpeechReferenceTooltip': '直接标注在原句上的常见弱读、连读与缩约规则。',
       'connectedSpeechUnavailable': '当前句没有常见语流变化',
@@ -672,7 +672,7 @@ class AppLocalizations {
       'soundPatternUnavailable': '当前句暂无音素证据',
       'soundPatternUnavailableTooltip': '音素证据需要当前句已有音频分析，或导入的时间轴资源提供对应证据。',
       'rhythmFrameUnavailable': '当前句暂无听感结构',
-      'rhythmRibbonHint': '可听结构：抓住前景中的重音音素，让微弱的弱读音团退到背景。',
+      'rhythmRibbonHint': '可听结构：抓住当前音频里能听到的信息锚点，微弱的弱读音团退到背景路径。',
       'expectedPronunciationReference': '预期',
       'expectedPronunciationTooltip': '当前句的词典发音参考。',
       'analyzeRealPronunciation': '分析真实发音',
@@ -683,7 +683,7 @@ class AppLocalizations {
       'listeningRhythm': '听感结构',
       'listeningPredictedBadge': '预测',
       'listeningPredictedTooltip': '基于文本预测，非本段音频实测。听感结构需有词级时长、能量或音高证据才算音频支持。',
-      'stressAnchors': '声音锚点',
+      'stressAnchors': '可听信息锚点',
       'weakGroups': '弱读音团',
       'compressedSpans': '压缩区',
       'listeningHotspots': '听感热点',
