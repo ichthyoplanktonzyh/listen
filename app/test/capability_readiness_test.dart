@@ -42,6 +42,23 @@ void main() {
     expect(snapshot.phoneEvidence.detailKey, 'capPhoneEvidenceUnavailable');
   });
 
+  test('generated word timings count as available word sync', () {
+    final snapshot = CapabilityReadinessSnapshot.fromResources(
+      activeTrack: _track,
+      document: null,
+      wordTimelineSummaries: const [],
+      chunkTimelineSummaries: const [],
+      phoneTimelineSummaries: const [],
+      activeWordTimingCount: 703,
+    );
+
+    expect(snapshot.wordSync.state, CapabilityReadinessState.available);
+    expect(snapshot.wordSync.detailKey, 'capWordSyncGeneratedTimings');
+    expect(snapshot.wordSync.count, 703);
+    expect(snapshot.chunkReplay.detailKey, 'capChunkReplayUnavailable');
+    expect(snapshot.listeningStructure.detailKey, 'capListeningUnavailable');
+  });
+
   test('active timelines and audio-supported rhythm are available', () {
     final snapshot = CapabilityReadinessSnapshot.fromResources(
       activeTrack: _track,

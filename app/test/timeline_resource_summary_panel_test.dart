@@ -108,6 +108,7 @@ void main() {
               canDelete: true,
             ),
           ],
+          activeWordTimingCount: 0,
           error: null,
           onImport: () async {},
           onRefresh: () async {},
@@ -155,6 +156,67 @@ void main() {
     expect(activated, 'timeline-mfa');
   });
 
+  testWidgets('generated word timings keep workflow actions available', (
+    tester,
+  ) async {
+    var chunkGenerations = 0;
+    var exports = 0;
+    await tester.pumpWidget(
+      _Harness(
+        child: TimelineResourceSummaryPanel(
+          activeTrack: _track,
+          document: const LLTimelineDocument(
+            schema: 'llplayer.timeline.v1',
+            metadata: LLTimelineMetadata(
+              createdAt: Duration(milliseconds: 1),
+              generatorId: 'llplayernext',
+              generatorVersion: '0.7.0',
+              generatorMode: 'production_engine',
+              mediaTitle: 'Fixture',
+              mediaFingerprint: 'fingerprint',
+              humanReviewed: false,
+              extra: {'track_source': 'ASR-small-en.srt'},
+            ),
+            activeWordTimelineId: null,
+            activePhoneTimelineId: null,
+            activeChunkTimelineId: null,
+            rhythmFrames: [],
+            artifacts: [],
+          ),
+          summaries: const [],
+          phoneSummaries: const [],
+          chunkSummaries: const [],
+          activeWordTimingCount: 703,
+          error: null,
+          onImport: () async {},
+          onRefresh: () async {},
+          onActivate: (_) async {},
+          onManualReview: () async {},
+          onActivatePhoneTimeline: (_) async {},
+          onArchivePhoneTimeline: (_) async {},
+          onDeletePhoneTimeline: (_) async {},
+          onGenerateChunkTimeline: () async => chunkGenerations++,
+          onActivateChunkTimeline: (_) async {},
+          onArchiveChunkTimeline: (_) async {},
+          onDeleteChunkTimeline: (_) async {},
+          onExportLLTimeline: () async => exports++,
+        ),
+      ),
+    );
+
+    expect(find.text('LLTimeline present'), findsOneWidget);
+    expect(find.textContaining('Generated word timings'), findsWidgets);
+    expect(find.textContaining('703'), findsWidgets);
+
+    await tester.tap(find.text('Generate chunks'));
+    await tester.pump();
+    expect(chunkGenerations, 1);
+
+    await tester.tap(find.text('Export LLTimeline JSON'));
+    await tester.pump();
+    expect(exports, 1);
+  });
+
   testWidgets('timeline resource summary shows legacy fallback', (
     tester,
   ) async {
@@ -166,6 +228,7 @@ void main() {
           summaries: const [],
           phoneSummaries: const [],
           chunkSummaries: const [],
+          activeWordTimingCount: 0,
           error: null,
           onImport: () async {},
           onRefresh: () async {},

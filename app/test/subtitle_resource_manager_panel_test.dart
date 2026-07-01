@@ -48,6 +48,7 @@ void main() {
           wordTimelineSummaries: const [],
           phoneTimelineSummaries: const [],
           chunkTimelineSummaries: const [],
+          activeWordTimingCount: 0,
           timelineResourceError: null,
           onImportSubtitle: () async {},
           onImportLLTimeline: () async {},

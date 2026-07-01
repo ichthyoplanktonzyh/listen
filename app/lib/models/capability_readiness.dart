@@ -69,6 +69,7 @@ class CapabilityReadinessSnapshot {
     required List<WordTimelineSummary> wordTimelineSummaries,
     required List<ChunkTimelineSummary> chunkTimelineSummaries,
     required List<PhoneTimelineSummary> phoneTimelineSummaries,
+    int activeWordTimingCount = 0,
     String? timelineResourceError,
   }) {
     final activeWord = _firstActive(wordTimelineSummaries);
@@ -76,11 +77,15 @@ class CapabilityReadinessSnapshot {
     final activePhone = _firstActive(phoneTimelineSummaries);
     final activeFrames = _activeRhythmFrames(document);
     final hasTrack = activeTrack != null;
-    final hasWordSync = activeWord != null && activeWord.wordCount > 0;
-    final wordSyncAudioBacked = _hasAudioBackedTiming(
-      activeWord?.timingSources ?? const [],
-    );
-    final wordSyncEstimated = hasWordSync && !wordSyncAudioBacked;
+    final hasGeneratedWordTimings = activeWordTimingCount > 0;
+    final hasWordSync =
+        (activeWord != null && activeWord.wordCount > 0) ||
+        hasGeneratedWordTimings;
+    final wordSyncAudioBacked =
+        _hasAudioBackedTiming(activeWord?.timingSources ?? const []) ||
+        hasGeneratedWordTimings;
+    final wordSyncEstimated =
+        activeWord != null && hasWordSync && !wordSyncAudioBacked;
     final timelineError = timelineResourceError?.trim().isNotEmpty == true;
 
     final subtitles = hasTrack
@@ -105,6 +110,7 @@ class CapabilityReadinessSnapshot {
     final wordSync = _wordSyncReadiness(
       hasTrack: hasTrack,
       activeWord: activeWord,
+      activeWordTimingCount: activeWordTimingCount,
       estimated: wordSyncEstimated,
       timelineError: timelineError,
     );
@@ -161,6 +167,7 @@ class CapabilityReadinessSnapshot {
 CapabilityReadiness _wordSyncReadiness({
   required bool hasTrack,
   required WordTimelineSummary? activeWord,
+  required int activeWordTimingCount,
   required bool estimated,
   required bool timelineError,
 }) {
@@ -172,6 +179,16 @@ CapabilityReadiness _wordSyncReadiness({
     );
   }
   if (activeWord == null || activeWord.wordCount == 0) {
+    if (activeWordTimingCount > 0) {
+      return CapabilityReadiness(
+        capability: UserCapability.wordSync,
+        state: CapabilityReadinessState.available,
+        detailKey: 'capWordSyncGeneratedTimings',
+        count: activeWordTimingCount,
+        countLabelKey: 'words',
+        technicalDetail: 'generated word timings',
+      );
+    }
     return CapabilityReadiness(
       capability: UserCapability.wordSync,
       state: timelineError

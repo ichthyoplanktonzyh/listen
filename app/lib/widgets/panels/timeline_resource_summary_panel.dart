@@ -13,6 +13,7 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
     required this.summaries,
     required this.phoneSummaries,
     required this.chunkSummaries,
+    required this.activeWordTimingCount,
     required this.error,
     required this.onImport,
     required this.onRefresh,
@@ -33,6 +34,7 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
   final List<WordTimelineSummary> summaries;
   final List<PhoneTimelineSummary> phoneSummaries;
   final List<ChunkTimelineSummary> chunkSummaries;
+  final int activeWordTimingCount;
   final String? error;
   final Future<void> Function() onImport;
   final Future<void> Function() onRefresh;
@@ -63,10 +65,12 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
       wordTimelineSummaries: summaries,
       chunkTimelineSummaries: chunkSummaries,
       phoneTimelineSummaries: phoneSummaries,
+      activeWordTimingCount: activeWordTimingCount,
       timelineResourceError: error,
     );
+    final hasWordSync = active != null || activeWordTimingCount > 0;
     final hasResource =
-        document?.importedResource == true ||
+        document != null ||
         summaries.isNotEmpty ||
         phoneSummaries.isNotEmpty ||
         chunkSummaries.isNotEmpty;
@@ -164,7 +168,10 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
               const SizedBox(height: 10),
               _CapabilityReadinessGrid(snapshot: readiness),
               const SizedBox(height: 10),
-              _ActiveTimelineLine(active: active),
+              _ActiveTimelineLine(
+                active: active,
+                fallbackWordTimingCount: activeWordTimingCount,
+              ),
               const SizedBox(height: 6),
               _ActivePhoneLine(active: activePhone),
               const SizedBox(height: 6),
@@ -182,7 +189,7 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                   FilledButton.tonalIcon(
                     icon: const Icon(Icons.auto_awesome_motion_outlined),
                     label: Text(l.text('generateChunks')),
-                    onPressed: active == null ? null : onGenerateChunkTimeline,
+                    onPressed: hasWordSync ? onGenerateChunkTimeline : null,
                   ),
                   FilledButton.tonalIcon(
                     icon: const Icon(Icons.file_download_outlined),
@@ -436,24 +443,36 @@ class _StateBadge extends StatelessWidget {
 }
 
 class _ActiveTimelineLine extends StatelessWidget {
-  const _ActiveTimelineLine({required this.active});
+  const _ActiveTimelineLine({
+    required this.active,
+    required this.fallbackWordTimingCount,
+  });
 
   final WordTimelineSummary? active;
+  final int fallbackWordTimingCount;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final hasFallback = fallbackWordTimingCount > 0;
     final text = active == null
-        ? l.text('activeTimelineLegacy')
+        ? hasFallback
+              ? '${l.text('activeTimelineGeneratedTiming')} · '
+                    '$fallbackWordTimingCount ${l.text('words')}'
+              : l.text('activeTimelineLegacy')
         : '${active!.algorithmId} ${active!.algorithmVersion} · '
               '${active!.wordCount} ${l.text('words')} · '
               '${active!.timingSources.join(', ')}';
     return Row(
       children: [
         Icon(
-          active == null ? Icons.history : Icons.radio_button_checked,
+          active == null
+              ? hasFallback
+                    ? Icons.check_circle_outline
+                    : Icons.history
+              : Icons.radio_button_checked,
           size: 16,
-          color: active == null
+          color: active == null && !hasFallback
               ? const Color(0xff8fa1b3)
               : const Color(0xff6dd6c3),
         ),

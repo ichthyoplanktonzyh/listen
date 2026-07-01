@@ -92,6 +92,7 @@ class _SubtitleResourcesScreenState extends State<SubtitleResourcesScreen> {
             widget.subtitleController.phoneTimelineSummaries,
         chunkTimelineSummaries:
             widget.subtitleController.chunkTimelineSummaries,
+        activeWordTimingCount: _activeWordTimingCount(),
         timelineResourceError: widget.subtitleController.timelineResourceError,
         onImportSubtitle: widget.onImportSubtitle,
         onImportLLTimeline: widget.onImportLLTimeline,
@@ -116,4 +117,10 @@ class _SubtitleResourcesScreenState extends State<SubtitleResourcesScreen> {
       ),
     ),
   );
+
+  int _activeWordTimingCount() => widget
+      .subtitleController
+      .timingsBySentence
+      .values
+      .fold<int>(0, (total, timings) => total + timings.length);
 }

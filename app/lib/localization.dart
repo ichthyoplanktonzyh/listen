@@ -384,6 +384,7 @@ class AppLocalizations {
           'Load subtitles before word sync can run.',
       'capWordSyncUnavailable':
           'Needs an active Word sync timeline or generated word timings.',
+      'capWordSyncGeneratedTimings': 'Generated word timings are loaded.',
       'capChunkReplayAvailable': 'Chunk replay is ready.',
       'capChunkReplayUnavailableNoSubtitle':
           'Load subtitles before chunk replay can run.',
@@ -418,6 +419,7 @@ class AppLocalizations {
       'noPhoneTimelineCandidates': 'No Phone evidence candidates',
       'noChunkTimelineCandidates': 'No Chunk replay candidates',
       'activeTimelineLegacy': 'Word sync: legacy word timings',
+      'activeTimelineGeneratedTiming': 'Word sync: generated word timings',
       'activePhoneTimelineMissing':
           'Phone evidence: unavailable until audio analysis runs',
       'activeChunkTimelineMissing': 'Chunk replay: unavailable until generated',
@@ -748,6 +750,7 @@ class AppLocalizations {
       'capWordSyncEstimated': '词级时间为估计值，高亮可能不精确。',
       'capWordSyncUnavailableNoSubtitle': '需要先加载字幕，才能进行单词同步。',
       'capWordSyncUnavailable': '需要可用的单词同步时间轴或生成的词级时间。',
+      'capWordSyncGeneratedTimings': '已加载生成的词级时间。',
       'capChunkReplayAvailable': '语块复听已就绪。',
       'capChunkReplayUnavailableNoSubtitle': '需要先加载字幕，才能进行语块复听。',
       'capChunkReplayUnavailableNoWord': '需要先生成或挂载单词同步。',
@@ -773,6 +776,7 @@ class AppLocalizations {
       'noPhoneTimelineCandidates': '暂无音素证据候选',
       'noChunkTimelineCandidates': '暂无语块复听候选',
       'activeTimelineLegacy': '单词同步：旧词级时间',
+      'activeTimelineGeneratedTiming': '单词同步：已生成词级时间',
       'activePhoneTimelineMissing': '音素证据：需要先运行音频分析',
       'activeChunkTimelineMissing': '语块复听：需要先生成语块',
       'activeTimeline': '当前时间轴',

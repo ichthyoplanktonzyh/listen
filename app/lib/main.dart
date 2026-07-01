@@ -693,8 +693,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
         wordTimelineSummaries: subtitleController.wordTimelineSummaries,
         chunkTimelineSummaries: subtitleController.chunkTimelineSummaries,
         phoneTimelineSummaries: subtitleController.phoneTimelineSummaries,
+        activeWordTimingCount: _activeWordTimingCount(),
         timelineResourceError: subtitleController.timelineResourceError,
       );
+
+  int _activeWordTimingCount() => subtitleController.timingsBySentence.values
+      .fold<int>(0, (total, timings) => total + timings.length);
 
   String _capabilityStatusSegment(CapabilityReadiness readiness) =>
       '${l.text(readiness.titleKey)}: ${l.text(readiness.stateKey)}';
@@ -3192,6 +3196,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     wordTimelineSummaries: subtitleController.wordTimelineSummaries,
     phoneTimelineSummaries: subtitleController.phoneTimelineSummaries,
     chunkTimelineSummaries: subtitleController.chunkTimelineSummaries,
+    activeWordTimingCount: _activeWordTimingCount(),
     timelineResourceError: subtitleController.timelineResourceError,
     onImportSubtitle: () async => _openSubtitle(secondary: false),
     onImportLLTimeline: _openLLTimelineResource,

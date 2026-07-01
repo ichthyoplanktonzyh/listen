@@ -146,6 +146,10 @@ class SidePanel extends StatelessWidget {
           summaries: sc.wordTimelineSummaries,
           phoneSummaries: sc.phoneTimelineSummaries,
           chunkSummaries: sc.chunkTimelineSummaries,
+          activeWordTimingCount: sc.timingsBySentence.values.fold<int>(
+            0,
+            (total, timings) => total + timings.length,
+          ),
           error: sc.timelineResourceError,
           onImport: onImportTimeline,
           onRefresh: onRefreshTimeline,

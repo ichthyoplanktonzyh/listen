@@ -15,6 +15,7 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
     required this.wordTimelineSummaries,
     required this.phoneTimelineSummaries,
     required this.chunkTimelineSummaries,
+    required this.activeWordTimingCount,
     required this.timelineResourceError,
     required this.onImportSubtitle,
     required this.onImportLLTimeline,
@@ -46,6 +47,7 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
   final List<WordTimelineSummary> wordTimelineSummaries;
   final List<PhoneTimelineSummary> phoneTimelineSummaries;
   final List<ChunkTimelineSummary> chunkTimelineSummaries;
+  final int activeWordTimingCount;
   final String? timelineResourceError;
   final Future<void> Function() onImportSubtitle;
   final Future<void> Function() onImportLLTimeline;
@@ -72,6 +74,12 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final resourceWordTimingCount = activeTrack == null
+        ? 0
+        : capabilities[activeTrack!.id]?.wordTimingCount ?? 0;
+    final visibleWordTimingCount = activeWordTimingCount > 0
+        ? activeWordTimingCount
+        : resourceWordTimingCount;
     return Material(
       color: const Color(0xff121820),
       child: Column(
@@ -156,6 +164,7 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
             summaries: wordTimelineSummaries,
             phoneSummaries: phoneTimelineSummaries,
             chunkSummaries: chunkTimelineSummaries,
+            activeWordTimingCount: visibleWordTimingCount,
             error: timelineResourceError,
             onImport: onImportLLTimeline,
             onRefresh: onRefreshResources,
