@@ -100,7 +100,14 @@ class LearningWorkflowController {
     required bool Function() isMounted,
   }) async {
     final lemma = token.normalized;
-    if (lemma == null || api == null) return;
+    if (lemma == null) return;
+    if (isMounted()) {
+      learning.setSelectedToken(token);
+      learning.setSelectedCue(cue);
+      learning.selectWord(null);
+      learning.selectSidePanel(2);
+    }
+    if (api == null) return;
     var entry = learning.wordEntries[lemma];
     late final LexicalEntryDetails details;
     if (entry == null) {
@@ -129,13 +136,10 @@ class LearningWorkflowController {
         LanguageProfile.fromJson(await api.lookupLanguageProfile(language));
     if (!isMounted()) return;
     learning.updateSingleWordEntry(lemma, entry);
-    learning.setSelectedToken(token);
-    learning.setSelectedCue(cue);
     learning.selectWord(details);
     learning.setSelectedDictionary(dictionary);
     learning.setSelectedPronunciation(pronunciation);
     learning.setLanguageProfile(languageProfile);
-    learning.selectSidePanel(2);
   }
 
   Future<LexicalEntryDetails?> markFirstWord({
