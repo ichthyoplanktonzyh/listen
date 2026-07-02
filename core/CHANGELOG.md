@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-02 23:14 CST: Phase 2.23 handoff T7 — 新增 Dart LLTimeline contract
+  解析安全网与 codegen 调研。`apps/desktop/test/contract/lltimeline_parse_test.dart`
+  直接读取 2 个 committed rhythm LLTimeline fixtures，覆盖 segments、WordTimeline、
+  document-level `rhythm_frames`、`PhoneTimeline.sound_analysis.rhythm_frame` fallback
+  与 audible-structure references/provenance/quality 关键字段。负向实验确认改坏
+  `rhythm_frames` 字段会让测试变红。新增
+  `design-notes/timeline-dart-codegen-research.md`，评估 json_serializable/freezed
+  收益、成本和对现有手写容错语义的影响；本批不做迁移、不写 ADR。
+  验证：`flutter analyze` 无问题、`flutter test` 158 passed。
+
 - 2026-07-02 23:06 CST: Phase 2.23 handoff T6 — 完成剩余 SSE event payload
   typed 化。新增/扩展 `event_payloads.rs` 中 lexical-observation-cleared、
   vocabulary-assets-imported、pronunciation provider diagnostic、
