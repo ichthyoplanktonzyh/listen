@@ -10,10 +10,18 @@ use domain::{
 /// comprehension axis and are language-agnostic. Per-language listening *reasons*
 /// are layered on by the caller (see `AppServices::diagnose_sentence`), keeping
 /// this core free of language-specific knowledge.
+///
+/// `lexical_keys` maps a token's `normalized` form to the authoritative lexical
+/// entry key (provider lemmatization, user overrides). Token normalization is
+/// surface-level lowercasing, while `LexicalEntry.normalized_form` comes from
+/// the language's normalization provider — the two only coincide for
+/// uninflected words, so the caller must supply the mapping ("went" -> "go").
+/// Tokens missing from the map fall back to their own normalized form.
 pub fn diagnose(
     sentence: &SubtitleSentence,
     entries: &[LexicalEntry],
     observations: &[LexicalObservation],
+    lexical_keys: &HashMap<String, String>,
 ) -> SentenceDiagnosis {
     let by_key = entries
         .iter()
@@ -34,8 +42,12 @@ pub fn diagnose(
     let mut recognition = Vec::new();
     let mut unclassified = Vec::new();
     for lemma in &lemmas {
+        let key = lexical_keys
+            .get(*lemma)
+            .map(String::as_str)
+            .unwrap_or(*lemma);
         match by_key
-            .get(lemma)
+            .get(key)
             .and_then(|entry| entry.status.map(|s| (entry, s)))
         {
             Some((entry, LearningStatus::UnknownMeaning)) => meaning.push(entry.id.clone()),
@@ -94,6 +106,16 @@ pub fn diagnose(
 mod tests {
     use super::*;
     use domain::*;
+
+    /// Most tests use tokens whose normalized form equals the entry key, so no
+    /// provider mapping is needed; inflection-mapping tests pass a real map.
+    fn diagnose_plain(
+        sentence: &SubtitleSentence,
+        entries: &[LexicalEntry],
+        observations: &[LexicalObservation],
+    ) -> SentenceDiagnosis {
+        diagnose(sentence, entries, observations, &HashMap::new())
+    }
 
     fn sentence() -> SubtitleSentence {
         SubtitleSentence {
@@ -208,11 +230,37 @@ mod tests {
         }
     }
 
+    // ── Lexical key mapping (provider lemmatization) ────────────────
+
+    #[test]
+    fn inflected_token_resolves_through_lexical_key_map() {
+        // Token "went" (surface-normalized) must classify against the "go"
+        // entry when the caller supplies the provider lemma mapping.
+        let sent = sentence_with_tokens(&[("went", SubtitleTokenKind::Word)]);
+        let entries = [entry("go", LearningStatus::KnownNotRecognized)];
+        let keys = HashMap::from([("went".to_owned(), "go".to_owned())]);
+        let result = diagnose(&sent, &entries, &[], &keys);
+        assert!(result.unclassified_lemmas.is_empty());
+        assert_eq!(result.hints.len(), 1);
+        assert_eq!(result.hints[0].kind, DiagnosisKind::RecognitionBarrier);
+        assert_eq!(result.hints[0].lexical_entry_ids, vec![entries[0].id.clone()]);
+    }
+
+    #[test]
+    fn inflected_token_without_key_map_stays_unclassified_by_surface_form() {
+        // Without the mapping the token cannot be classified; it must surface
+        // as its own normalized form so the UI shows the word the user heard.
+        let sent = sentence_with_tokens(&[("went", SubtitleTokenKind::Word)]);
+        let entries = [entry("go", LearningStatus::KnownNotRecognized)];
+        let result = diagnose_plain(&sent, &entries, &[]);
+        assert_eq!(result.unclassified_lemmas, vec!["went".to_owned()]);
+    }
+
     // ── MeaningBarrier ──────────────────────────────────────────────
 
     #[test]
     fn unknown_meaning_triggers_meaning_barrier() {
-        let result = diagnose(
+        let result = diagnose_plain(
             &sentence(),
             &[entry("alpha", LearningStatus::UnknownMeaning)],
             &[],
@@ -228,7 +276,7 @@ mod tests {
 
     #[test]
     fn multiple_unknown_meanings_grouped_in_one_hint() {
-        let result = diagnose(
+        let result = diagnose_plain(
             &sentence(),
             &[
                 entry("alpha", LearningStatus::UnknownMeaning),
@@ -248,7 +296,7 @@ mod tests {
 
     #[test]
     fn known_not_recognized_triggers_recognition_barrier() {
-        let result = diagnose(
+        let result = diagnose_plain(
             &sentence(),
             &[entry("alpha", LearningStatus::KnownNotRecognized)],
             &[],
@@ -263,7 +311,7 @@ mod tests {
 
     #[test]
     fn known_recognized_but_not_in_context_triggers_recognition_barrier() {
-        let result = diagnose(
+        let result = diagnose_plain(
             &sentence(),
             &[entry("alpha", LearningStatus::KnownRecognized)],
             &[observation(
@@ -283,7 +331,7 @@ mod tests {
     fn known_recognized_without_observation_no_recognition_barrier() {
         // KnownRecognized only triggers recognition barrier when the
         // observation says NotRecognizedInContext.
-        let result = diagnose(
+        let result = diagnose_plain(
             &sentence(),
             &[entry("alpha", LearningStatus::KnownRecognized)],
             &[],
@@ -301,7 +349,7 @@ mod tests {
         // If the profile has UnknownMeaning, the NotRecognizedInContext
         // observation should not trigger a RecognitionBarrier — the word
         // first needs meaning.
-        let result = diagnose(
+        let result = diagnose_plain(
             &sentence(),
             &[entry("alpha", LearningStatus::UnknownMeaning)],
             &[observation(
@@ -321,14 +369,14 @@ mod tests {
 
     #[test]
     fn unclassified_words_trigger_insufficient_information() {
-        let result = diagnose(&sentence(), &[], &[]);
+        let result = diagnose_plain(&sentence(), &[], &[]);
         assert_eq!(result.hints[0].kind, DiagnosisKind::InsufficientInformation);
         assert_eq!(result.unclassified_lemmas.len(), 2);
     }
 
     #[test]
     fn profile_without_status_treated_as_unclassified() {
-        let result = diagnose(&sentence(), &[entry_without_status("alpha")], &[]);
+        let result = diagnose_plain(&sentence(), &[entry_without_status("alpha")], &[]);
         // alpha has a profile but no status → treated as unclassified
         assert!(result.unclassified_lemmas.contains(&"alpha".to_owned()));
         // beta is also unclassified (no profile)
@@ -343,7 +391,7 @@ mod tests {
 
     #[test]
     fn partial_classification_shows_insufficient_information() {
-        let result = diagnose(
+        let result = diagnose_plain(
             &sentence(),
             &[entry("alpha", LearningStatus::KnownRecognized)],
             &[],
@@ -362,7 +410,7 @@ mod tests {
 
     #[test]
     fn all_words_classified_without_barriers_suggests_other_factors() {
-        let result = diagnose(
+        let result = diagnose_plain(
             &sentence(),
             &[
                 entry("alpha", LearningStatus::KnownRecognized),
@@ -378,7 +426,7 @@ mod tests {
 
     #[test]
     fn mixed_meaning_and_recognition_barriers() {
-        let result = diagnose(
+        let result = diagnose_plain(
             &sentence(),
             &[
                 entry("alpha", LearningStatus::UnknownMeaning),
@@ -409,7 +457,7 @@ mod tests {
             (",", SubtitleTokenKind::Punctuation),
             ("world", SubtitleTokenKind::Word),
         ]);
-        let result = diagnose(
+        let result = diagnose_plain(
             &sent,
             &[
                 entry("hello", LearningStatus::KnownRecognized),
@@ -428,7 +476,7 @@ mod tests {
             (".", SubtitleTokenKind::Punctuation),
             ("!", SubtitleTokenKind::Punctuation),
         ]);
-        let result = diagnose(&sent, &[], &[]);
+        let result = diagnose_plain(&sent, &[], &[]);
         // No word tokens → no lemmas → no hints, no unclassified
         assert!(result.hints.is_empty());
         assert!(result.unclassified_lemmas.is_empty());
@@ -438,7 +486,7 @@ mod tests {
 
     #[test]
     fn no_profiles_no_observations_all_unclassified() {
-        let result = diagnose(&sentence(), &[], &[]);
+        let result = diagnose_plain(&sentence(), &[], &[]);
         assert_eq!(result.unclassified_lemmas.len(), 2);
         assert_eq!(result.hints[0].kind, DiagnosisKind::InsufficientInformation);
         assert!(result.hints[0].lexical_entry_ids.is_empty());
@@ -446,7 +494,7 @@ mod tests {
 
     #[test]
     fn sentence_id_is_preserved_in_diagnosis() {
-        let result = diagnose(&sentence(), &[], &[]);
+        let result = diagnose_plain(&sentence(), &[], &[]);
         assert_eq!(
             result.sentence_id,
             SubtitleSentenceId::parse("sentence").unwrap()
@@ -456,7 +504,7 @@ mod tests {
     #[test]
     fn unknown_meaning_plus_unclassified_produces_both_hints() {
         // One word known-but-unknown-meaning, one word completely unclassified
-        let result = diagnose(
+        let result = diagnose_plain(
             &sentence(),
             &[entry("alpha", LearningStatus::UnknownMeaning)],
             &[],
@@ -479,7 +527,7 @@ mod tests {
     fn known_recognized_with_different_observation_not_triggered() {
         // Observation results other than NotRecognizedInContext should not
         // trigger a RecognitionBarrier.
-        let result = diagnose(
+        let result = diagnose_plain(
             &sentence(),
             &[entry("alpha", LearningStatus::KnownRecognized)],
             &[observation("alpha", ObservationResult::RecognizedInContext)],
@@ -499,7 +547,7 @@ mod tests {
             ("the", SubtitleTokenKind::Word),
             ("the", SubtitleTokenKind::Word),
         ]);
-        let result = diagnose(&sent, &[entry("the", LearningStatus::UnknownMeaning)], &[]);
+        let result = diagnose_plain(&sent, &[entry("the", LearningStatus::UnknownMeaning)], &[]);
         // Only one MeaningBarrier hint, even though "the" appears twice
         let meaning_count = result
             .hints

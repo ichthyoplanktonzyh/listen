@@ -115,7 +115,12 @@ application use cases and provider/repository boundaries.
 ### `diagnosis-core`
 
 - Pure deterministic diagnosis engine.
-- Inputs: `SubtitleSentence`, `LexicalEntry[]`, and `LexicalObservation[]`.
+- Inputs: `SubtitleSentence`, `LexicalEntry[]`, `LexicalObservation[]`, and a
+  token→lexical-key map. Token normalization is surface-level lowercasing while
+  entry keys come from the language's normalization provider; the caller
+  (`AppServices::diagnose_sentence`) resolves each token through the provider
+  chain and passes the mapping so inflected forms classify against their lemma
+  entries.
 - Outputs: meaning barrier, recognition barrier, insufficient evidence, and
   reason hints using lexical entry IDs.
 

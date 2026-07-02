@@ -321,7 +321,11 @@ fn remap_lltimeline_ids_rewrites_rhythm_word_acoustic_cues_artifact() {
         }],
     };
 
-    remap_lltimeline_sentence_ids(&mut document, &new_track_id);
+    remap_lltimeline_identity(
+        &mut document,
+        &new_track_id,
+        &MediaId::parse("media-new").unwrap(),
+    );
 
     let remapped_timeline_id = document.active_word_timeline_id.as_ref().unwrap().as_str();
     let remapped_sentence_id = document.segments[0].id.as_str();
@@ -336,6 +340,146 @@ fn remap_lltimeline_ids_rewrites_rhythm_word_acoustic_cues_artifact() {
     );
     assert_ne!(remapped_timeline_id, old_timeline_id.as_str());
     assert_ne!(remapped_sentence_id, old_sentence_id.as_str());
+}
+
+#[test]
+fn remap_lltimeline_identity_leaves_no_original_ids() {
+    // Invariant guard for the identity-remap owner: after remapping onto a new
+    // track/media, no original embedded ID may survive anywhere in the
+    // serialized document. A failure here means a new ID-bearing field was
+    // added to `LLTimelineDocument` without extending
+    // `remap_lltimeline_identity` — the W8 acoustic-cue desync bug class.
+    let fixture = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../testdata/rhythm-frame-qa/fixture-no-phone-rhythm.lltimeline.json"
+    ))
+    .expect("committed fixture exists");
+    let mut document: LLTimelineDocument =
+        serde_json::from_str(&fixture).expect("fixture parses as LLTimelineDocument");
+    assert!(!document.segments.is_empty());
+    assert!(!document.word_timelines.is_empty());
+    assert!(!document.rhythm_frames.is_empty());
+
+    // Extend the committed fixture with the resource kinds it lacks so the
+    // invariant covers the full document shape.
+    let base_timeline = document.word_timelines[0].clone();
+    let old_sentence_id = document.segments[0].id.clone();
+    let mut derived_timeline = base_timeline.clone();
+    derived_timeline.id = WordTimelineId::parse("OLD-DERIVED-WORD-TIMELINE").unwrap();
+    derived_timeline.parent_timeline_id = Some(base_timeline.id.clone());
+    document.word_timelines.push(derived_timeline);
+    document.chunk_timelines.push(ChunkTimeline {
+        id: ChunkTimelineId::parse("OLD-CHUNK-TIMELINE").unwrap(),
+        track_id: base_timeline.track_id.clone(),
+        media_id: base_timeline.media_id.clone(),
+        parent_word_timeline_id: Some(base_timeline.id.clone()),
+        provider_id: "fixture".into(),
+        provider_version: "v1".into(),
+        algorithm: "fixture".into(),
+        precision: ChunkTimelinePrecision::Approximate,
+        created_by: TimelineCreator::Algorithm,
+        status: TimelineStatus::Candidate,
+        metrics_json: TimelineMetrics::empty(),
+        chunks: vec![ChunkTimelineChunk {
+            id: ChunkId::parse("OLD-CHUNK").unwrap(),
+            sentence_id: old_sentence_id.clone(),
+            chunk_index: 0,
+            start_word_index: 0,
+            end_word_index: 1,
+            start_ms: 0,
+            end_ms: 500,
+            text: "chunk".into(),
+            boundary_sources: Vec::new(),
+            confidence: 1.0,
+            warnings: Vec::new(),
+            evidence_json: ChunkEvidence::empty(),
+        }],
+        created_at_ms: 1,
+        updated_at_ms: 1,
+    });
+    document.active_chunk_timeline_id =
+        Some(ChunkTimelineId::parse("OLD-CHUNK-TIMELINE").unwrap());
+    document.phone_timelines.push(PhoneTimeline {
+        id: PhoneTimelineId::parse("OLD-PHONE-TIMELINE").unwrap(),
+        track_id: base_timeline.track_id.clone(),
+        media_id: base_timeline.media_id.clone(),
+        sentence_id: Some(old_sentence_id.clone()),
+        parent_word_timeline_id: Some(base_timeline.id.clone()),
+        parent_phonetic_analysis_id: None,
+        provider_id: "fixture".into(),
+        provider_version: "v1".into(),
+        model_id: None,
+        model_revision: None,
+        phone_set: "ipa".into(),
+        precision: PhoneTimelinePrecision::Approximate,
+        created_by: TimelineCreator::Algorithm,
+        status: TimelineStatus::Candidate,
+        metrics_json: TimelineMetrics::empty(),
+        phones: Vec::new(),
+        alignments: Vec::new(),
+        findings: Vec::new(),
+        sound_analysis: None,
+        created_at_ms: 1,
+        updated_at_ms: 1,
+    });
+    document.active_phone_timeline_id =
+        Some(PhoneTimelineId::parse("OLD-PHONE-TIMELINE").unwrap());
+    document.artifacts.push(LLTimelineArtifact {
+        kind: "rhythm_word_acoustic_cues".into(),
+        provider_id: Some("fixture".into()),
+        provider_version: Some("v1".into()),
+        payload: serde_json::json!({
+            "timeline_id": base_timeline.id.as_str(),
+            "cues": [{
+                "sentence_id": old_sentence_id.as_str(),
+                "token_index": 0,
+                "energy_prominence": 0.5
+            }]
+        }),
+    });
+
+    // Collect every original embedded identity before remapping.
+    let mut original_ids: Vec<String> = Vec::new();
+    for segment in &document.segments {
+        original_ids.push(segment.id.as_str().to_owned());
+    }
+    for timeline in &document.word_timelines {
+        original_ids.push(timeline.id.as_str().to_owned());
+        original_ids.push(timeline.track_id.as_str().to_owned());
+        original_ids.push(timeline.media_id.as_str().to_owned());
+    }
+    for timeline in &document.chunk_timelines {
+        original_ids.push(timeline.id.as_str().to_owned());
+        for chunk in &timeline.chunks {
+            original_ids.push(chunk.id.as_str().to_owned());
+        }
+    }
+    for timeline in &document.phone_timelines {
+        original_ids.push(timeline.id.as_str().to_owned());
+    }
+    for frame in &document.rhythm_frames {
+        original_ids.push(frame.id.as_str().to_owned());
+    }
+
+    // Metadata is caller-owned and replaced before the remap in the real
+    // import flow; mirror that here so the scan only covers remap ownership.
+    document.metadata.media.id = MediaId::parse("NEW-MEDIA").unwrap();
+    document.metadata.media.fingerprint = "new-fingerprint".into();
+    document.metadata.extra = serde_json::json!({});
+
+    remap_lltimeline_identity(
+        &mut document,
+        &SubtitleTrackId::parse("NEW-TRACK").unwrap(),
+        &MediaId::parse("NEW-MEDIA").unwrap(),
+    );
+
+    let serialized = serde_json::to_string(&document).expect("document serializes");
+    for original in original_ids {
+        assert!(
+            !serialized.contains(&format!("\"{original}\"")),
+            "original id {original:?} survived remap_lltimeline_identity"
+        );
+    }
 }
 
 #[test]

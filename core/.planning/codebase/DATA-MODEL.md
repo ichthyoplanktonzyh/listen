@@ -15,7 +15,7 @@ do not contain database row numbers or player-library identifiers.
 | Subtitle sentence | Deterministic track/cue identity from subtitle-core |
 | Lexical entry | `language + granularity + normalization + normalized_key` |
 | Lexical occurrence | Lexical entry + durable source snapshot key |
-| Lexical observation | Lexical entry + sentence + original form |
+| Lexical observation | Lexical entry + sentence (deterministic id via `domain::lexical_observation_id`; latest result wins) |
 | Dictionary cache entry | Language + normalized form + provider |
 | Timeline resource | Resource namespace + track/media/config fingerprint |
 | Practice session | `sha256("practice-session:" + mode/media/track/timestamp)` |
@@ -58,9 +58,14 @@ Lexical learning state is split by purpose:
 | `lexical_occurrences` | Durable source sentence/media snapshot |
 | `lexical_observations` | Sentence-specific heard/not-heard result |
 
-Updating a global status never rewrites historical observations. Diagnosis reads
-current lexical entries plus the latest relevant lexical observation for the
-sentence.
+Updating a global status never rewrites historical observations. An observation
+is the current per-(entry, sentence) verdict, not an append-only log: its id is
+deterministic on those two axes and a newer observation replaces the stored
+result under the same id, so durable references from practice attempts never
+dangle. Diagnosis reads current lexical entries plus the latest relevant
+lexical observation for the sentence; token forms are resolved to entry keys
+through the language's normalization provider before matching, so inflected
+forms ("went") classify against their lemma entry ("go").
 
 ## Learning Loop Foundation
 

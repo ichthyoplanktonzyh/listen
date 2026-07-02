@@ -23,6 +23,11 @@
 > 2026-07-01 产品路线更新：新增 Phase 2.22 User-Facing Workflow Semantics，在继续
 > Phase 2.21 模型质量闭环的同时，专门收敛当前所有用户功能的前端语义、入口、状态、降级和端到端
 > 使用路径；后续学习闭环工作必须先经过这条用户路径治理。
+> 2026-07-02 产品路线更新：Phase 2.19/2.20/2.21 speech-analysis 算法线整体搁置，
+> 主线转入 Phase 3.x 英语听力学习闭环（英语先行）；学习闭环完成后再重启算法线提升体验。
+> audible-structure v1 contract 保持为当前权威 shape，3.x 按现状消费。同日新增
+> Phase 2.23 Architecture Debt Paydown 作为 3.x 前置工程治理：main.dart 收缩为
+> Flutter practice UI 的直接前置，sound_analysis 机械拆分落在算法线静默窗口内。
 > 完成报告见 `docs/release/milestone-1.md`。
 
 ## 1. 路线图目标

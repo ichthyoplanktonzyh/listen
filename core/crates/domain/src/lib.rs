@@ -178,6 +178,8 @@ pub enum DomainError {
     InvalidDetectedPhoneTimeline,
     #[error("phonetic finding range, confidence, or status is invalid")]
     InvalidPhoneticFinding,
+    #[error("lexical entry {0} projection diverges from its lexical unit identity")]
+    LexicalUnitMismatch(&'static str),
 }
 
 pub fn normalize_lemma(value: &str) -> String {

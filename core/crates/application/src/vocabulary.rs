@@ -46,14 +46,7 @@ impl AppServices {
         let observation = self
             .learning_assets
             .create_lexical_observation(&LexicalObservation {
-                id: LexicalObservationId::from_fingerprint(
-                    "lexical-observation",
-                    &format!(
-                        "{}:{}:{created_at_ms}",
-                        input.lexical_entry_id.as_str(),
-                        input.sentence_id.as_str()
-                    ),
-                ),
+                id: domain::lexical_observation_id(&input.lexical_entry_id, &input.sentence_id),
                 lexical_entry_id: input.lexical_entry_id,
                 sentence_id: input.sentence_id,
                 original_form: input.original_form,

@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: milestone
 status: active
-last_updated: "2026-07-01T18:34:00.000+08:00"
+last_updated: "2026-07-02T13:35:00.000+08:00"
 progress:
   total_phases: 11
   completed_phases: 1
@@ -43,6 +43,13 @@ progress:
 > 2026-07-01 18:34 CST 字幕层完成 Rhythm A/B/C 视图：A 词典独立读音、B 规则预测语流、
 > C 当前实际听感；Phones 不再占用一级模式，只在 C 内作为 L4 evidence 按需展开。旧
 > `rhythm` / `phones` 设置统一迁移到 `actual`，避免升级后丢失可用视图。
+> 2026-07-02 13:35 CST 全库架构审核后新增 Phase 2.23 Architecture Debt Paydown（🧭 已建档未开工）：
+> 收口 main.dart god file / sound_analysis.rs 单文件膨胀 / 文档事实源漂移 /
+> Dart 手写解析无契约守卫 / 巨型测试文件五项债务，只做机械治理不改行为。
+> 2026-07-02 13:50 CST 方向决策：Phase 2.19/2.20/2.21 speech-analysis 算法线整体搁置，
+> 主线转入 Phase 3.x 英语听力学习闭环（英语先行）；闭环完成后再回到算法质量提升。
+> Phase 2.23 相应调整：main.dart 收缩（A1）升为最高优先（3.x Flutter 工作前置），
+> sound_analysis 拆分（A2）改在算法线静默窗口内做、零并行冲突。
 
 ## 当前位置
 
@@ -55,11 +62,12 @@ progress:
   Phase 2.16 ✅ 真实语流模型 v1 收口完成 +
   Phase 2.17 ✅ 真实媒体声音线 QA 已收口 +
   Phase 2.18 ✅ 代码架构全面重构已收口 +
-  Phase 2.19 ⏳ 真实 benchmark scoring 初始评估已落地 +
-  Phase 2.20 ⏳ Rhythm-first 真实听感分析已启动 +
-  Phase 2.21 ⏳ Audible Structure Architecture 已启动 +
+  Phase 2.19 ⏸ 真实 benchmark scoring 已搁置（初始评估已落地）+
+  Phase 2.20 ⏸ Rhythm-first 真实听感分析已搁置 +
+  Phase 2.21 ⏸ Audible Structure Architecture 已搁置 +
   Phase 2.22 ✅ User-Facing Workflow Semantics 已收口（手工 smoke 待跑）+
-  Phase 3.0 🧭 英语听力学习闭环方向已建档 +
+  Phase 2.23 🧭 Architecture Debt Paydown 已建档 +
+  Phase 3.0 ⏳ 英语听力学习闭环（当前主线，2026-07-02 起）+
   Phase 3.0.1 ✅ backend 学习行为架构地基已落地
 - **分支**：`main`
 - **版本**：0.7.0
@@ -75,7 +83,10 @@ progress:
 
 ## 后续产品方向
 
-### Phase 2.20: Rhythm-first Listening Analysis ⏳ Active
+### Phase 2.20: Rhythm-first Listening Analysis ⏸ 已搁置（2026-07-02）
+
+> 2026-07-02 起搁置：speech-analysis 算法线整体暂停，主线转入 Phase 3.x 学习闭环；
+> 本 phase 未尽项（scorer、benchmark adapter 等继续作为脚手架保留）在算法线重启时续推。
 
 - 目标：把真实语流分析从 phone-level 默认展示转为 rhythm-first listening frame，
   先回答“这句话实际怎么听、该抓哪些声音锚点、哪些区域被弱读/压缩/连起来”。
@@ -184,7 +195,11 @@ progress:
   - `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-ACOUSTIC-FEATURE-PATH.md`
   - `.planning/phases/2.20-rhythm-first-listening-analysis/2.20-EVALUATION.md`
 
-### Phase 2.21: Audible Structure Architecture ⏳ Active
+### Phase 2.21: Audible Structure Architecture ⏸ 已搁置（2026-07-02）
+
+> 2026-07-02 起搁置：speech-analysis 算法线整体暂停，主线转入 Phase 3.x 学习闭环；
+> W8 人工标注/阈值校准与端到端回归在算法线重启时续推。audible-structure v1 contract
+> 保持为当前权威 shape，Phase 3.x 按现状消费，不在搁置期内改动。
 
 - 目标：把 Phase 2.20 的 rhythm-first UI/实验铺垫上升为正式 actual audible structure
   architecture，并重写 `RhythmFrame` 的权威 contract。
@@ -387,7 +402,38 @@ progress:
   - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-FRONTEND-E2E-QA.md`
   - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-CLOSEOUT.md`
 
-### Phase 3.0: English Listening Learning Loop 🧭 已建档
+### Phase 2.23: Architecture Debt Paydown 🧭 已建档（未开工）
+
+- 目标：收口 2026-07-02 架构审核确认的五项累积债务（A1-A5），全部用可测量
+  指标验收，不改产品行为 / API contract / SQLite schema / 算法语义：
+  - A1 `main.dart` 3601 行 + 107 setState、UI 状态双轨制 → 收缩为 composition
+    root（≤ 1500 行、setState ≤ 30、状态模式单轨化）。
+  - A2 `sound_analysis.rs` 3383 行单文件（contract 已锁 v1 但实现仍在单文件里长）
+    → 机械拆分为模块目录，并把"单文件 >1500 行必拆"写入 AGENT.md。
+  - A3 文档事实源漂移（ARCHITECTURE.md dictionary-provider 方向画反、STATE.md
+    1149 行 frontmatter 与正文矛盾）→ 修图 + STATE 瘦身至 ≤ 400 行 +
+    MAINTENANCE.md 防复发规则。
+  - A4 `models/timeline.dart` 2596 行手写解析无契约守卫 → committed fixture
+    驱动的 Dart contract 解析测试 + codegen 决策 ADR（只决策不迁移）。
+  - A5 `persistence-sqlite`/`api-http` 巨型 tests.rs → 按表域/route group 机械拆分。
+- Step 执行顺序（2026-07-02 随算法线搁置调整）：基线快照 → 文档修复 →
+  main.dart 收缩（3.x Flutter 工作前置，升为 P0）→ sound_analysis 拆分
+  （算法线静默窗口内做，零并行冲突）→ Dart contract 安全网 → 测试拆分 → closeout。
+- 2026-07-02 数据模型/业务模型两轮审核后的缺陷收口（先于 Step 0-6 执行）：
+  五项高优先级架构缺陷已修——诊断归一化接缝（"went"/"go" 屈折形式误判 unclassified）、
+  观察身份统一（`domain::lexical_observation_id` 单源、attempt 引用不再悬挂）、
+  SSE 事件枚举 parity（补 sound-line 漂移 + 双向 parity 测试）、LLTimeline 导入
+  身份重写所有权归一（`remap_lltimeline_identity` + 全文档零残留不变量测试）、
+  LexicalEntry 双身份轴一致性校验。`cargo test --workspace` 357 passed、
+  contract validation 通过；API/JSON shape 零变化，Flutter 无需改动。
+  其余简单项（僵尸表、双家退役条件、文档漂移等）与 3.x 归属项全部登记在
+  `2.23-REVIEW-FINDINGS-REGISTER.md`，进入 3.x 前清零。
+- 规划文档：
+  - `.planning/phases/2.23-architecture-debt-paydown/2.23-CONTEXT.md`
+  - `.planning/phases/2.23-architecture-debt-paydown/2.23-PLAN.md`
+  - `.planning/phases/2.23-architecture-debt-paydown/2.23-REVIEW-FINDINGS-REGISTER.md`
+
+### Phase 3.0: English Listening Learning Loop ⏳ 当前主线（2026-07-02 启动）
 
 - 目标：在 Phase 2 的真实声音流资源和 Phase 2.18 的新学习资产架构之上，把英语作为第一门语言
   做成完整学习闭环。
@@ -398,9 +444,11 @@ progress:
   - 常见语言学习功能必须重写为听力本位能力。
   - L1 与 L2 理论进入诊断层，首个真实组合为 Mandarin L1 -> English L2。
   - Cloze、听写、字幕渐隐、chunk replay 和本地 YouGlish-like 个人语料库是 Phase 3.0 的关键体验。
-- 近期顺序以 Phase 2.21 audible-structure correctness 和 Phase 2.22 user-facing workflow
-  semantics 为前置依据，然后再推进输入难度、精听/泛听、主动验证、听力驱动词汇、
-  L1-aware diagnosis、shadowing 和诊断型 dashboard。
+- 前置调整（2026-07-02）：Phase 2.19/2.20/2.21 算法线已搁置，不再作为前置；
+  Phase 2.22 用户工作流语义已收口。3.x 直接在当前 audible-structure v1 contract 和
+  2.22 用户语义之上推进输入难度、精听/泛听、主动验证、听力驱动词汇、
+  L1-aware diagnosis、shadowing 和诊断型 dashboard；Flutter 侧开工前先过
+  Phase 2.23 的 main.dart 收缩（A1），避免新 practice UI 继续堆在 god file 上。
 - 规划文档：
   - `.planning/phases/3.0-english-listening-learning-loop/3.0-CONTEXT.md`
   - `.planning/phases/3.0-english-listening-learning-loop/3.0-PLAN.md`
@@ -1053,7 +1101,7 @@ progress:
   - `.planning/phases/2.17-real-media-sound-line-qa/2.17-CTC-MISMATCH-FINDINGS.md`
   - `.planning/phases/2.17-real-media-sound-line-qa/2.17-CLOSEOUT.md`
 
-### Phase 2.19: Real Benchmark Scoring ⏳ 初始评估已落地
+### Phase 2.19: Real Benchmark Scoring ⏸ 已搁置（初始评估已落地，2026-07-02）
 
 - 目标：把 Phase 2.17 QA artifacts 与 benchmark reference/gold 做量化对比，回答 pipeline
   真实效果，而不只验证资源形状。

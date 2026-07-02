@@ -611,23 +611,7 @@ impl AppServices {
             &track_fingerprint,
             &source,
         );
-        remap_lltimeline_sentence_ids(&mut document, &track_id);
-        for timeline in &mut document.word_timelines {
-            timeline.media_id = media.id.clone();
-            timeline.track_id = track_id.clone();
-        }
-        for timeline in &mut document.chunk_timelines {
-            timeline.media_id = media.id.clone();
-            timeline.track_id = track_id.clone();
-        }
-        for timeline in &mut document.phone_timelines {
-            timeline.media_id = media.id.clone();
-            timeline.track_id = track_id.clone();
-        }
-        for frame in &mut document.rhythm_frames {
-            frame.media_id = media.id.clone();
-            frame.track_id = track_id.clone();
-        }
+        remap_lltimeline_identity(&mut document, &track_id, &media.id);
         self.import_lltimeline_document(document)
     }
 

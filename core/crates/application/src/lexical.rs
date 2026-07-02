@@ -181,13 +181,9 @@ pub(crate) fn lexical_unit_for_entry(
     display_form: &str,
 ) -> LexicalUnit {
     let profile = domain::profile_for(language);
-    let granularity = match kind {
-        LexicalEntryKind::Word => LexicalUnit::GRANULARITY_WORD,
-        LexicalEntryKind::Phrase => LexicalUnit::GRANULARITY_PHRASE,
-    };
     LexicalUnit::new(
         language.clone(),
-        granularity,
+        kind.granularity(),
         profile.lexical_normalization,
         normalized_form,
         display_form,

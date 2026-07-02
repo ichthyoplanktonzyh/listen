@@ -1873,7 +1873,7 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
     assert_eq!(details.history.len(), 2);
     assert_eq!(details.occurrences[0].encounter_count, 2);
 
-    services
+    let first_observation = services
         .create_lexical_observation(application::CreateLexicalObservation {
             lexical_entry_id: entry.entry.id.clone(),
             sentence_id: sentence.id.clone(),
@@ -1882,7 +1882,7 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
             source: None,
         })
         .unwrap();
-    services
+    let second_observation = services
         .create_lexical_observation(application::CreateLexicalObservation {
             lexical_entry_id: entry.entry.id.clone(),
             sentence_id: sentence.id.clone(),
@@ -1891,12 +1891,20 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
             source: None,
         })
         .unwrap();
+    // Observation identity is deterministic on (entry, sentence): a newer
+    // observation replaces the result but keeps the same id, so durable
+    // references (e.g. practice attempts) never dangle.
     assert_eq!(
-        repo.list_lexical_observations_by_sentence(&sentence.id)
-            .unwrap()[0]
-            .result,
-        ObservationResult::NotRecognizedInContext
+        first_observation.id,
+        domain::lexical_observation_id(&entry.entry.id, &sentence.id)
     );
+    assert_eq!(first_observation.id, second_observation.id);
+    let stored = repo
+        .list_lexical_observations_by_sentence(&sentence.id)
+        .unwrap();
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0].id, first_observation.id);
+    assert_eq!(stored[0].result, ObservationResult::NotRecognizedInContext);
     services
         .clear_lexical_observation(&entry.entry.id, &sentence.id)
         .unwrap();

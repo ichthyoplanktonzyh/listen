@@ -21,6 +21,8 @@
         "pronunciation-analysis-completed",
         "word-timings-progress",
         "word-timings-completed",
+        "sound-line-changed",
+        "sound-line-completed",
         "speech-cache-invalidated",
         "pronunciation-provider-unavailable",
         "pronunciation-provider-degraded",

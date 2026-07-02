@@ -115,15 +115,7 @@ impl AppServices {
                     .clone()
                     .unwrap_or_else(|| lexical_entry_id.as_str().to_owned());
                 let observation = LexicalObservation {
-                    id: LexicalObservationId::from_fingerprint(
-                        "lexical-observation",
-                        &format!(
-                            "{}:{}:{}",
-                            lexical_entry_id.as_str(),
-                            sentence_id.as_str(),
-                            attempt.id.as_str()
-                        ),
-                    ),
+                    id: domain::lexical_observation_id(lexical_entry_id, sentence_id),
                     lexical_entry_id: lexical_entry_id.clone(),
                     sentence_id: sentence_id.clone(),
                     original_form,

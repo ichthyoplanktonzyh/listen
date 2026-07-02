@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+- 2026-07-02 20:13 CST: Phase 2.23 审核缺陷收口 — 修复五项高优先级架构缺陷（Rust 内部契约，
+  API/JSON shape 零变化）。(1) 诊断归一化接缝：`diagnosis-core::diagnose` 新增 token→词条 key
+  映射参数，application 用 provider 归一化链解析后传入，屈折形式（"went"）不再误判 unclassified；
+  (2) 观察身份统一：新增 `domain::lexical_observation_id(entry, sentence)` 确定性单源函数，
+  三处生成点（API/practice/import）收敛，同句新观察覆盖 result 但 ID 稳定，
+  `generated_observation_ids` 不再悬挂，import 幂等改善；(3) SSE 事件契约：schema 补
+  `sound-line-changed/completed` 漂移，api-events 新增 `EventName::ALL` + 编译期穷尽守卫 +
+  双向 parity 测试；(4) LLTimeline 导入身份重写所有权归一：`remap_lltimeline_sentence_ids`
+  更名 `remap_lltimeline_identity` 并吸收调用方 track/media 重写循环，新增全文档
+  "原始 ID 零残留"不变量测试（覆盖 W8 脱钩 bug 类）；(5) `LexicalEntry` 双身份轴硬化：
+  kind↔granularity 映射收进 domain，`validate_unit_coherence()` 在 persistence 写读两侧
+  强制四轴一致。新增 `2.23-REVIEW-FINDINGS-REGISTER.md` 登记全部审核发现的归属
+  （已修/交接他人/归 3.x/defer）；同步 `DATA-MODEL.md`（观察身份语义）与
+  `ARCHITECTURE.md`（diagnosis-core 输入契约）。
+  验证：`cargo test --workspace` 357 passed、`./scripts/validate-contracts.sh` 通过、
+  clippy 无新增警告；Flutter 未运行（shape 不变，无需改动）。
+
+- 2026-07-02 13:50 CST: 方向决策 — speech-analysis 算法线搁置，主线转入 Phase 3.x 学习闭环。
+  Phase 2.19/2.20/2.21 整体搁置（STATE.md 标记 ⏸ 并注明重启条件；audible-structure v1
+  contract 保持权威 shape，3.x 按现状消费）；Phase 3.0 升为当前主线。Phase 2.23 相应调整：
+  Step 3（main.dart 收缩）升为 P0 并提前到 Rust 拆分之前执行（3.x Flutter practice UI 前置），
+  Step 2（sound_analysis 拆分）降为 P1、改在算法线静默窗口内零冲突完成。同步更新
+  ROADMAP.md 路线注记、`2.23-CONTEXT.md` / `2.23-PLAN.md`。仅规划文档，无代码变更。
+
+- 2026-07-02 13:35 CST: 新增 Phase 2.23 Architecture Debt Paydown（建档，未开工）。
+  基于 2026-07-02 全库架构审核（依赖方向 / api-http 越层 / 端口-适配器 / 测试基线均验证成立），
+  立案五项累积债务：A1 `main.dart` god file + UI 状态双轨（3601 行 / 107 setState）、
+  A2 `sound_analysis.rs` 单文件膨胀（3383 行，contract 已锁 v1）、A3 文档事实源漂移
+  （ARCHITECTURE.md dictionary-provider 依赖方向画反、STATE.md 1149 行且 frontmatter 与正文矛盾）、
+  A4 Dart 手写模型解析无契约守卫（timeline.dart 2596 行）、A5 巨型 tests.rs（2534/2021 行）。
+  新增 `2.23-CONTEXT.md` / `2.23-PLAN.md`（6 步、全可测量验收、机械治理不改行为），
+  STATE.md 登记 Phase 2.23 section。仅规划文档，无代码变更。
+
 - 2026-07-02 10:45 CST: Phase 2.22 defer 清零 (2/5) — SM-04 下载栏消失行为。
   Failed 下载栏在可配置延时后自动消失（`DownloadController.failedAutoDismiss`，默认 10s，
   因失败态无可留操作）；Completed 栏保留以保住 “Open”，点 Open 时顺带 dismiss 消栏。旧 failed

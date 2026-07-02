@@ -170,15 +170,7 @@ impl SqliteRepository {
             let lexical_entry_id = imported_ids
                 .get(&value.lexical_entry_id)
                 .unwrap_or(&value.lexical_entry_id);
-            let id = LexicalObservationId::from_fingerprint(
-                "lexical-observation",
-                &format!(
-                    "{}:{}:{}",
-                    lexical_entry_id.as_str(),
-                    value.sentence_id.as_str(),
-                    value.created_at_ms
-                ),
-            );
+            let id = lexical_observation_id(lexical_entry_id, &value.sentence_id);
             tx.execute(
                 "INSERT OR IGNORE INTO lexical_observations
                  (id,lexical_entry_id,sentence_id,sentence_id_snapshot,original_form,result,
@@ -228,11 +220,7 @@ impl LearningAssetRepository for SqliteRepository {
         source: Option<&LexicalSourceContext>,
         change_source: LearningChangeSource,
     ) -> Result<LexicalEntryDetails, ApplicationError> {
-        if entry.unit.language.as_str() != entry.language.as_str()
-            || entry.unit.normalized_key.as_str() != entry.normalized_form.as_str()
-        {
-            return Err(ApplicationError::Validation("lexical unit identity"));
-        }
+        entry.validate_unit_coherence()?;
         let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
         let tx = conn.transaction().map_err(repo)?;
         let effective_id = tx
@@ -721,7 +709,7 @@ fn lexical_entry_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LexicalEntry> 
     let normalization = row.get::<_, String>(4)?;
     let normalized_key = row.get::<_, String>(5)?;
     let display_form = row.get::<_, String>(8)?;
-    Ok(LexicalEntry {
+    let entry = LexicalEntry {
         id: LexicalEntryId::parse(row.get::<_, String>(0)?).map_err(super::domain_sql)?,
         unit: LexicalUnit::new(
             language.clone(),
@@ -746,7 +734,11 @@ fn lexical_entry_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LexicalEntry> 
         user_corrected: row.get(14)?,
         updated_at_ms: row.get(15)?,
         learning_updated_at_ms: row.get(16)?,
-    })
+    };
+    // Reject rows whose stored kind/normalized_form projections have drifted
+    // from the authoritative unit columns instead of returning divergent data.
+    entry.validate_unit_coherence().map_err(super::domain_sql)?;
+    Ok(entry)
 }
 
 fn lexical_history_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LexicalStatusHistory> {

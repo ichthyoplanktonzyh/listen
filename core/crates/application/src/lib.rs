@@ -524,10 +524,35 @@ pub(crate) fn lltimeline_track_fingerprint(document: &LLTimelineDocument) -> Str
         })
 }
 
-pub(crate) fn remap_lltimeline_sentence_ids(
+/// Remap every embedded identity in an imported LLTimeline document onto the
+/// destination track/media: segment/sentence ids, word/chunk/phone timeline
+/// ids (including active/parent references), rhythm frame ids, chunk ids,
+/// artifact payload references, and the `track_id`/`media_id` carried on each
+/// resource. This function is the single owner of import identity rewriting:
+/// any new ID-bearing field added to `LLTimelineDocument` must be remapped
+/// here and covered by `remap_lltimeline_identity_leaves_no_original_ids`.
+/// Document `metadata` stays caller-owned (it is replaced, not remapped).
+pub(crate) fn remap_lltimeline_identity(
     document: &mut LLTimelineDocument,
     track_id: &SubtitleTrackId,
+    media_id: &MediaId,
 ) {
+    for timeline in &mut document.word_timelines {
+        timeline.media_id = media_id.clone();
+        timeline.track_id = track_id.clone();
+    }
+    for timeline in &mut document.chunk_timelines {
+        timeline.media_id = media_id.clone();
+        timeline.track_id = track_id.clone();
+    }
+    for timeline in &mut document.phone_timelines {
+        timeline.media_id = media_id.clone();
+        timeline.track_id = track_id.clone();
+    }
+    for frame in &mut document.rhythm_frames {
+        frame.media_id = media_id.clone();
+        frame.track_id = track_id.clone();
+    }
     let mut sentence_ids = HashMap::new();
     for segment in &mut document.segments {
         let original = segment.id.clone();
