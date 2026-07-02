@@ -434,10 +434,16 @@ progress:
   Flutter typed 消费的 6 个事件）已修。剩余待修项：B-1/B-2/B-3/B-5（简单项，
   交接）与 C-7 零散小事件（3.x 前/早期）。`cargo test` 358 passed、
   `flutter test` 156 passed。
+- 分工（2026-07-02 定）：剩余待修项 + PLAN Step 0/2/4/5 已整理为交接任务包
+  `2.23-HANDOFF-TASKS.md`（T1-T9），交其他执行人；Step 3（main.dart 收缩）
+  由原审核会话执行人负责。Step 3 的"状态模式定调"决策已消解：核实
+  `state/store.dart` 的 `Store<T>` 已被 player/learning/subtitle 三大控制器
+  使用（非死雏形），controller + Store 转正为唯一 UI 状态模式。
 - 规划文档：
   - `.planning/phases/2.23-architecture-debt-paydown/2.23-CONTEXT.md`
   - `.planning/phases/2.23-architecture-debt-paydown/2.23-PLAN.md`
   - `.planning/phases/2.23-architecture-debt-paydown/2.23-REVIEW-FINDINGS-REGISTER.md`
+  - `.planning/phases/2.23-architecture-debt-paydown/2.23-HANDOFF-TASKS.md`
 
 ### Phase 3.0: English Listening Learning Loop ⏳ 当前主线（2026-07-02 启动）
 

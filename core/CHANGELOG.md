@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-02 20:52 CST: Phase 2.23 分工落定 — 新增交接任务包 `2.23-HANDOFF-TASKS.md`。
+  剩余待修项（B-1 僵尸表、B-2 文档漂移、B-3 双家退役条件、B-5 小项）与 PLAN
+  Step 0/2/4/5（基线、sound_analysis 拆分、Dart contract 安全网、tests 拆分）整理为
+  T1-T9 自包含任务（步骤/验收/铁律/依赖冲突提示），交其他执行人；Step 3（main.dart
+  收缩）由原审核会话执行人负责。顺带核实并修正一处事实：`state/store.dart` 的
+  `Store<T>` 已被 player/learning/subtitle 三大控制器使用（非死雏形），Step 3 的
+  "状态模式定调"决策消解为 controller + Store 转正唯一模式（PLAN/CONTEXT 已同步修正）。
+  仅规划文档，无代码变更。
+
 - 2026-07-02 20:36 CST: Phase 2.23 审核缺陷收口第二批 — B-4 与 C-7 主切片。
   (1) **B-4 learning-loop 双表示写入收敛**：五个 upsert 的 `ON CONFLICT DO UPDATE` 从
   只更新 `*_json`（practice_items/practice_attempts/review_attempts 完全不更新查询列）
