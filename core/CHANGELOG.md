@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-02 10:45 CST: Phase 2.22 defer 清零 (2/5) — SM-04 下载栏消失行为。
+  Failed 下载栏在可配置延时后自动消失（`DownloadController.failedAutoDismiss`，默认 10s，
+  因失败态无可留操作）；Completed 栏保留以保住 “Open”，点 Open 时顺带 dismiss 消栏。旧 failed
+  timer 被 generation 守卫，不会误清后续新下载。新增 3 个单测。
+  验证: `flutter analyze` 无问题、`flutter test` 150 passed。
+
 - 2026-07-02 10:15 CST: Phase 2.22 defer 清零 (1/5) — SM-05 副字幕缺失提示。
   副字幕开启但根本没有副字幕轨道（`secondaryTrack == null`）时，overlay 显示克制的
   “No secondary subtitle / 无副字幕”提示；已有轨道内的空档保持空（字幕空档正常，不提示）。
