@@ -3137,6 +3137,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                     ),
                                   ),
                                 ),
+                              )
+                            // Secondary enabled but no track at all: say so, so an
+                            // empty secondary line is not silently confusing.
+                            // A gap within an existing track stays intentionally
+                            // empty.
+                            else if (subtitleController.secondaryVisible &&
+                                subtitleController.secondaryTrack == null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  l.text('noSecondarySubtitle'),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: secondarySize * 0.7,
+                                    fontFamily: _subtitleFont(
+                                      subtitleController.secondaryFontFamily,
+                                    ),
+                                    color: settingsController.secondaryColor
+                                        .withAlpha(140),
+                                  ),
+                                ),
                               ),
                           ],
                         ),
