@@ -632,15 +632,21 @@ impl PhoneticAnalysisCoordinator {
                 .create_phone_timeline_from_analysis(analysis, Some(TimelineStatus::Candidate))?;
             phone_timeline_ids.push(timeline.id);
         }
-        let _ = self.events.send(EventEnvelope::v1(
-            EventName::PhoneticAnalysisCompleted,
-            serde_json::json!({
-                "job_id": job.id.as_str(),
-                "track_id": job.track_id.as_str(),
-                "analysis_ids": analyses.iter().map(|analysis| analysis.id.as_str()).collect::<Vec<_>>(),
-                "phone_timeline_ids": phone_timeline_ids.iter().map(|timeline_id| timeline_id.as_str()).collect::<Vec<_>>(),
-            }),
-        ));
+        let _ = self.events.send(
+            crate::event_payloads::PhoneticAnalysisCompletedPayload {
+                job_id: job.id.as_str().to_owned(),
+                track_id: job.track_id.as_str().to_owned(),
+                analysis_ids: analyses
+                    .iter()
+                    .map(|analysis| analysis.id.as_str().to_owned())
+                    .collect(),
+                phone_timeline_ids: phone_timeline_ids
+                    .iter()
+                    .map(|timeline_id| timeline_id.as_str().to_owned())
+                    .collect(),
+            }
+            .envelope(),
+        );
         job.status = PhoneticAnalysisJobStatus::Completed;
         job.phase_progress = 100;
         job.analysis_id = analyses.first().map(|analysis| analysis.id.clone());

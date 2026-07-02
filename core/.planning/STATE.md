@@ -428,6 +428,12 @@ progress:
   contract validation 通过；API/JSON shape 零变化，Flutter 无需改动。
   其余简单项（僵尸表、双家退役条件、文档漂移等）与 3.x 归属项全部登记在
   `2.23-REVIEW-FINDINGS-REGISTER.md`，进入 3.x 前清零。
+- 2026-07-02 晚第二批：B-4 learning-loop 双表示写入收敛（upsert 全列更新 +
+  列/JSON 一致性测试）与 C-7 主切片（SSE payload 生产端 typed struct、
+  `contracts/events/examples.json` golden 信封、Rust/Dart 双端契约测试锁定
+  Flutter typed 消费的 6 个事件）已修。剩余待修项：B-1/B-2/B-3/B-5（简单项，
+  交接）与 C-7 零散小事件（3.x 前/早期）。`cargo test` 358 passed、
+  `flutter test` 156 passed。
 - 规划文档：
   - `.planning/phases/2.23-architecture-debt-paydown/2.23-CONTEXT.md`
   - `.planning/phases/2.23-architecture-debt-paydown/2.23-PLAN.md`

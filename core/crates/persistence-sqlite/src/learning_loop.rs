@@ -13,10 +13,17 @@ impl PracticeRepository for SqliteRepository {
     ) -> Result<PracticeSession, ApplicationError> {
         let conn = self.connection.lock().expect("sqlite mutex poisoned");
         conn.execute(
+            // Query columns are projections of the JSON snapshot; every upsert
+            // must rewrite all of them together or column-filtered queries
+            // diverge from the stored document.
             "INSERT INTO practice_sessions
              (id,mode,media_id,track_id,started_at_ms,ended_at_ms,session_json)
              VALUES (?1,?2,?3,?4,?5,?6,?7)
              ON CONFLICT(id) DO UPDATE SET
+               mode=excluded.mode,
+               media_id=excluded.media_id,
+               track_id=excluded.track_id,
+               started_at_ms=excluded.started_at_ms,
                ended_at_ms=excluded.ended_at_ms,
                session_json=excluded.session_json",
             params![
@@ -53,7 +60,12 @@ impl PracticeRepository for SqliteRepository {
             "INSERT INTO practice_items
              (id,session_id,kind,target_kind,created_at_ms,item_json)
              VALUES (?1,?2,?3,?4,?5,?6)
-             ON CONFLICT(id) DO UPDATE SET item_json=excluded.item_json",
+             ON CONFLICT(id) DO UPDATE SET
+               session_id=excluded.session_id,
+               kind=excluded.kind,
+               target_kind=excluded.target_kind,
+               created_at_ms=excluded.created_at_ms,
+               item_json=excluded.item_json",
             params![
                 item.id.as_str(),
                 item.session_id.as_ref().map(|value| value.as_str()),
@@ -90,7 +102,11 @@ impl PracticeRepository for SqliteRepository {
             "INSERT INTO practice_attempts
              (id,item_id,result,submitted_at_ms,attempt_json)
              VALUES (?1,?2,?3,?4,?5)
-             ON CONFLICT(id) DO UPDATE SET attempt_json=excluded.attempt_json",
+             ON CONFLICT(id) DO UPDATE SET
+               item_id=excluded.item_id,
+               result=excluded.result,
+               submitted_at_ms=excluded.submitted_at_ms,
+               attempt_json=excluded.attempt_json",
             params![
                 attempt.id.as_str(),
                 attempt.item_id.as_str(),
@@ -126,7 +142,9 @@ impl ReviewRepository for SqliteRepository {
              (id,source_kind,status,created_at_ms,updated_at_ms,item_json)
              VALUES (?1,?2,?3,?4,?5,?6)
              ON CONFLICT(id) DO UPDATE SET
+               source_kind=excluded.source_kind,
                status=excluded.status,
+               created_at_ms=excluded.created_at_ms,
                updated_at_ms=excluded.updated_at_ms,
                item_json=excluded.item_json",
             params![
@@ -203,7 +221,11 @@ impl ReviewRepository for SqliteRepository {
             "INSERT INTO review_attempts
              (id,item_id,reviewed_at_ms,rating,attempt_json)
              VALUES (?1,?2,?3,?4,?5)
-             ON CONFLICT(id) DO UPDATE SET attempt_json=excluded.attempt_json",
+             ON CONFLICT(id) DO UPDATE SET
+               item_id=excluded.item_id,
+               reviewed_at_ms=excluded.reviewed_at_ms,
+               rating=excluded.rating,
+               attempt_json=excluded.attempt_json",
             params![
                 attempt.id.as_str(),
                 attempt.item_id.as_str(),

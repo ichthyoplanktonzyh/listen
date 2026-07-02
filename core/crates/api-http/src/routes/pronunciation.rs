@@ -61,10 +61,15 @@ pub(crate) async fn analyze_pronunciation_sentence(
     let sentence_id =
         SubtitleSentenceId::parse(request.sentence_id).map_err(ApplicationError::from)?;
     if state.services.pronunciation_cache_state(&sentence_id)? == Some(false) {
-        let _ = state.events.send(EventEnvelope::v1(
-            EventName::SpeechCacheInvalidated,
-            serde_json::json!({"kind": "pronunciation_analysis", "sentence_id": sentence_id}),
-        ));
+        let _ = state.events.send(
+            crate::event_payloads::SpeechCacheInvalidatedPayload {
+                job_id: None,
+                track_id: None,
+                kind: crate::speech_jobs::SpeechBatchKind::PronunciationAnalysis,
+                sentence_id: sentence_id.as_str().to_owned(),
+            }
+            .envelope(),
+        );
     }
     let value = state.services.analyze_pronunciation(&sentence_id)?;
     let _ = state.events.send(EventEnvelope::v1(

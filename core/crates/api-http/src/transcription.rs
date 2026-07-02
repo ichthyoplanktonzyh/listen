@@ -554,15 +554,18 @@ impl TranscriptionCoordinator {
                     .store_transcription_text_word_timeline(&track.id, &json_bytes)
                     .await
             {
-                let _ = self.events.send(EventEnvelope::v1(
-                    EventName::WordTimingsCompleted,
-                    serde_json::json!({
-                        "track_id": track.id.as_str(),
-                        "line": "text",
-                        "count": result.extracted_word_count,
-                        "timeline_id": result.final_timeline_id.as_ref().map(|id| id.as_str()),
-                    }),
-                ));
+                let _ = self.events.send(
+                    crate::event_payloads::WordTimingsCompletedPayload {
+                        track_id: track.id.as_str().to_owned(),
+                        line: "text".to_owned(),
+                        count: result.extracted_word_count,
+                        timeline_id: result
+                            .final_timeline_id
+                            .as_ref()
+                            .map(|id| id.as_str().to_owned()),
+                    }
+                    .envelope(),
+                );
             }
         }
         self.repository.save_provenance(&SubtitleTrackProvenance {

@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- 2026-07-02 20:36 CST: Phase 2.23 审核缺陷收口第二批 — B-4 与 C-7 主切片。
+  (1) **B-4 learning-loop 双表示写入收敛**：五个 upsert 的 `ON CONFLICT DO UPDATE` 从
+  只更新 `*_json`（practice_items/practice_attempts/review_attempts 完全不更新查询列）
+  改为完整非主键列更新，列与 JSON 永远出自同一 struct 同一语句；round-trip 测试扩展
+  覆盖改 kind/result/status 后列值与 JSON 投影一致、按 status 过滤正确。
+  (2) **C-7 SSE payload 生产端 typed 化 + 跨语言 golden 契约**：新增
+  `api-http/src/event_payloads.rs`（6 个 typed payload struct，统一
+  `speech-cache-invalidated` 两处不一致形状），迁移 6 处 ad-hoc `json!` 发射点；
+  新增 `contracts/events/examples.json` golden 信封，Rust 侧
+  `event_contract_examples_match_producers`（`UPDATE_EVENT_EXAMPLES=1` 再生成）与
+  Dart 侧 `test/contract/backend_event_contract_test.dart` 双端锁定 Flutter typed
+  消费的全部 6 个事件的 wire shape。register 同步更新（B-4→A-6、C-7→A-7+剩余项）。
+  验证：`cargo test --workspace` 358 passed、`flutter analyze` 无问题、
+  `flutter test` 156 passed（+6 契约测试）、`./scripts/validate-contracts.sh` 通过。
+
 - 2026-07-02 20:13 CST: Phase 2.23 审核缺陷收口 — 修复五项高优先级架构缺陷（Rust 内部契约，
   API/JSON shape 零变化）。(1) 诊断归一化接缝：`diagnosis-core::diagnose` 新增 token→词条 key
   映射参数，application 用 provider 归一化链解析后传入，屈折形式（"went"）不再误判 unclassified；

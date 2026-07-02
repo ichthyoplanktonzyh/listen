@@ -2539,4 +2539,62 @@ fn learning_loop_practice_review_and_events_round_trip() {
     };
     repo.append_learning_event(&event).unwrap();
     assert_eq!(repo.list_learning_events(10, 0).unwrap(), vec![event]);
+
+    // Query columns are projections of the JSON snapshot: re-upserting the
+    // same id with changed fields must rewrite the columns together with the
+    // JSON, or column-filtered queries diverge from the stored document.
+    let mut updated_item = item.clone();
+    updated_item.kind = PracticeKind::Cloze;
+    repo.create_practice_item(&updated_item).unwrap();
+    let kind_column: String = repo
+        .connection
+        .lock()
+        .unwrap()
+        .query_row(
+            "SELECT kind FROM practice_items WHERE id=?1",
+            [updated_item.id.as_str()],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        kind_column,
+        serde_json::to_string(&PracticeKind::Cloze).unwrap()
+    );
+    assert_eq!(
+        repo.get_practice_item(&updated_item.id).unwrap(),
+        Some(updated_item)
+    );
+
+    let mut updated_attempt = attempt.clone();
+    updated_attempt.result = PracticeResult::Correct;
+    repo.create_practice_attempt(&updated_attempt).unwrap();
+    let result_column: String = repo
+        .connection
+        .lock()
+        .unwrap()
+        .query_row(
+            "SELECT result FROM practice_attempts WHERE id=?1",
+            [updated_attempt.id.as_str()],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        result_column,
+        serde_json::to_string(&PracticeResult::Correct).unwrap()
+    );
+
+    let mut archived_review = review.clone();
+    archived_review.status = ReviewItemStatus::Archived;
+    archived_review.updated_at_ms = 6;
+    repo.create_review_item(&archived_review).unwrap();
+    assert_eq!(
+        repo.list_review_items(Some(ReviewItemStatus::Active), 10, 0)
+            .unwrap(),
+        Vec::<ReviewItem>::new()
+    );
+    assert_eq!(
+        repo.list_review_items(Some(ReviewItemStatus::Archived), 10, 0)
+            .unwrap(),
+        vec![archived_review]
+    );
 }

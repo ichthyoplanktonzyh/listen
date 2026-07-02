@@ -240,10 +240,14 @@ impl SpeechBatchCoordinator {
             SpeechBatchKind::PronunciationAnalysis => EventName::PronunciationAnalysisCompleted,
             SpeechBatchKind::WordTimings => EventName::WordTimingsCompleted,
         };
-        let _ = self.events.send(EventEnvelope::v1(
-            event,
-            serde_json::json!({"job_id": job.id, "track_id": job.track_id, "count": result_count}),
-        ));
+        let _ = self.events.send(
+            crate::event_payloads::SpeechBatchCompletedPayload {
+                job_id: job.id.clone(),
+                track_id: job.track_id.clone(),
+                count: result_count,
+            }
+            .envelope(event),
+        );
         Ok(())
     }
 
@@ -272,27 +276,27 @@ impl SpeechBatchCoordinator {
             SpeechBatchKind::PronunciationAnalysis => EventName::PronunciationAnalysisProgress,
             SpeechBatchKind::WordTimings => EventName::WordTimingsProgress,
         };
-        let _ = self.events.send(EventEnvelope::v1(
-            event,
-            serde_json::json!({
-                "job_id": job.id,
-                "track_id": job.track_id,
-                "processed": job.processed,
-                "total": job.total,
-            }),
-        ));
+        let _ = self.events.send(
+            crate::event_payloads::SpeechBatchProgressPayload {
+                job_id: job.id.clone(),
+                track_id: job.track_id.clone(),
+                processed: job.processed,
+                total: job.total,
+            }
+            .envelope(event),
+        );
     }
 
     fn emit_cache_invalidated(&self, job: &SpeechBatchJob, sentence_id: &str) {
-        let _ = self.events.send(EventEnvelope::v1(
-            EventName::SpeechCacheInvalidated,
-            serde_json::json!({
-                "job_id": job.id,
-                "track_id": job.track_id,
-                "kind": job.kind,
-                "sentence_id": sentence_id,
-            }),
-        ));
+        let _ = self.events.send(
+            crate::event_payloads::SpeechCacheInvalidatedPayload {
+                job_id: Some(job.id.clone()),
+                track_id: Some(job.track_id.clone()),
+                kind: job.kind,
+                sentence_id: sentence_id.to_owned(),
+            }
+            .envelope(),
+        );
     }
 
     fn lock_jobs(

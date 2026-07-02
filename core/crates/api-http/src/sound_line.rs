@@ -326,15 +326,15 @@ impl SoundLineCoordinator {
             job.clone()
         };
         self.emit_changed(&job);
-        let _ = self.events.send(EventEnvelope::v1(
-            EventName::SoundLineCompleted,
-            serde_json::json!({
-                "job_id": job.id,
-                "track_id": job.track_id,
-                "timeline_id": job.timeline_id,
-                "acoustic_cue_count": job.acoustic_cue_count,
-            }),
-        ));
+        let _ = self.events.send(
+            crate::event_payloads::SoundLineCompletedPayload {
+                job_id: job.id.clone(),
+                track_id: job.track_id.clone(),
+                timeline_id: job.timeline_id.clone(),
+                acoustic_cue_count: job.acoustic_cue_count,
+            }
+            .envelope(),
+        );
         Ok(())
     }
 

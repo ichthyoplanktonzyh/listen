@@ -1,0 +1,129 @@
+{
+  "$comment": "Golden SSE envelopes for events the Flutter client parses typed. Producer side: cargo test -p api-http event_contract. Consumer side: apps/desktop/test/contract/backend_event_contract_test.dart. Regenerate: UPDATE_EVENT_EXAMPLES=1 cargo test -p api-http event_contract.",
+  "examples": [
+    {
+      "event": "service-started",
+      "payload": {},
+      "version": 1
+    },
+    {
+      "event": "word-timings-completed",
+      "payload": {
+        "count": 12,
+        "line": "text",
+        "timeline_id": "word-timeline-1",
+        "track_id": "track-1"
+      },
+      "version": 1
+    },
+    {
+      "event": "sound-line-completed",
+      "payload": {
+        "acoustic_cue_count": 34,
+        "job_id": "sound-line-job-1",
+        "timeline_id": "word-timeline-1",
+        "track_id": "track-1"
+      },
+      "version": 1
+    },
+    {
+      "event": "transcription-job-changed",
+      "payload": {
+        "archived_at_ms": null,
+        "audio_track": null,
+        "completed_at_ms": null,
+        "created_at_ms": 1,
+        "destination": "primary",
+        "detected_language": "en",
+        "error_code": null,
+        "error_message": null,
+        "generated_track_id": "track-1",
+        "id": "job-transcribe-1",
+        "input_fingerprint": "input-fingerprint",
+        "media_fingerprint": "media-fingerprint",
+        "media_id": "media-1",
+        "media_title": "Example Media",
+        "model_checksum_sha256": "checksum",
+        "model_id": "model-base",
+        "model_revision": "r1",
+        "phase_progress": 42,
+        "provider_id": "whisper.cpp",
+        "provider_version": "v1",
+        "purpose": "transcribe",
+        "requested_language": "en",
+        "retry_of_job_id": null,
+        "runtime_id": "local",
+        "runtime_version": "v1",
+        "settings_json": "{}",
+        "started_at_ms": 2,
+        "status": "transcribing",
+        "updated_at_ms": 3
+      },
+      "version": 1
+    },
+    {
+      "event": "phonetic-analysis-job-changed",
+      "payload": {
+        "analysis_id": null,
+        "audio_end_ms": 1000,
+        "audio_start_ms": 0,
+        "completed_at_ms": null,
+        "created_at_ms": 1,
+        "error_code": null,
+        "error_message": null,
+        "id": "job-phonetic-1",
+        "input_fingerprint": "input-fingerprint",
+        "media_id": "media-1",
+        "model_checksum_sha256": "checksum",
+        "model_id": "phone-model",
+        "model_revision": "r1",
+        "phase_progress": 60,
+        "provider_id": "phonetic-provider",
+        "provider_version": "v1",
+        "requested_phone_set": "ipa",
+        "retry_of_job_id": null,
+        "runtime_id": "local",
+        "runtime_version": "v1",
+        "scope": "track",
+        "sentence_id": null,
+        "settings_json": "{}",
+        "started_at_ms": 2,
+        "status": "analyzing",
+        "track_id": "track-1",
+        "updated_at_ms": 3
+      },
+      "version": 1
+    },
+    {
+      "event": "lexical-entry-changed",
+      "payload": {
+        "entry": {
+          "canonical_form": "go",
+          "display_form": "go",
+          "id": "entry-1",
+          "kind": "word",
+          "language": "en",
+          "learning_updated_at_ms": 1,
+          "normalization_provider": "ecdict",
+          "normalization_version": "v1",
+          "normalized_form": "go",
+          "personal_note": null,
+          "status": "known_not_recognized",
+          "unit": {
+            "display_form": "go",
+            "granularity": "core.word",
+            "language": "en",
+            "normalization": "core.lemma",
+            "normalized_key": "go"
+          },
+          "updated_at_ms": 1,
+          "user_corrected": false,
+          "user_definition": null
+        },
+        "history": [],
+        "occurrences": []
+      },
+      "version": 1
+    }
+  ]
+}

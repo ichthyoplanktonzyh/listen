@@ -27,6 +27,7 @@ use domain::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
+mod event_payloads;
 mod m18;
 mod phonetic_analysis;
 mod routes;
