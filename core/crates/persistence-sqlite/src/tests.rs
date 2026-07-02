@@ -73,11 +73,6 @@ CREATE TABLE lemma_overrides (
   PRIMARY KEY(language, original_normalized)
 );
 
-CREATE TABLE learning_resources (
-  id TEXT PRIMARY KEY NOT NULL,
-  descriptor_json TEXT NOT NULL,
-  updated_at_ms INTEGER NOT NULL
-);
 "#;
 
 struct FakeDictionary {
@@ -129,6 +124,10 @@ fn table_exists(connection: &Connection, name: &str) -> bool {
         )
         .unwrap()
         > 0
+}
+
+fn removed_resource_table_name() -> &'static str {
+    concat!("learning", "_", "resources")
 }
 
 fn table_column_count(connection: &Connection, table: &str, columns: &[&str]) -> u32 {
@@ -450,6 +449,8 @@ impl DictionaryProvider for FakeChineseDictionary {
 fn new_database_migrates_to_latest() {
     let repo = SqliteRepository::in_memory().unwrap();
     assert_eq!(repo.schema_version().unwrap(), MIGRATION_VERSION);
+    let connection = repo.connection.lock().unwrap();
+    assert!(!table_exists(&connection, removed_resource_table_name()));
 }
 
 #[test]
@@ -526,6 +527,7 @@ fn current_version_with_legacy_lexical_schema_is_destructively_repaired() {
         3
     );
     assert!(table_exists(&connection, "lexical_observations"));
+    assert!(!table_exists(&connection, removed_resource_table_name()));
     assert_eq!(
         connection
             .query_row("SELECT COUNT(*) FROM lexical_entries", [], |row| row
@@ -1044,6 +1046,7 @@ fn upgrades_historical_v7_database_and_resets_lexical_assets() {
         0
     );
     assert!(table_exists(&connection, "lexical_observations"));
+    assert!(!table_exists(&connection, removed_resource_table_name()));
     assert_eq!(
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))

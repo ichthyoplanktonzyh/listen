@@ -108,6 +108,8 @@ application use cases and provider/repository boundaries.
 - Schema v16 destructively resets lexical/learning-resource tables to the
   authoritative `LexicalEntry + LexicalUnit + LexicalObservation` shape for
   local databases that had already run the old v7 lexical migration.
+- Schema v17 drops the unused SQLite `learning_resources` table; downloadable
+  learning resources remain an API/filesystem resource-manager concern.
 - Learning-loop persistence stores JSON snapshots plus query columns for kind,
   status, subject, result, and timestamps. Corpus/difficulty/recording persistence
   is not yet implemented.

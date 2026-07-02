@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-02 22:52 CST: Phase 2.23 handoff T1/T8/T9 — SQLite schema v17 drops
+  the unused `learning_resources` table without touching historical migrations;
+  migration tests now assert upgraded databases no longer contain that table.
+  `DATA-MODEL.md` records WordTimeline vs legacy `word_timings` authority,
+  document-level `rhythm_frames` vs transitional `PhoneTimeline.sound_analysis`
+  rhythm frames, and the JSON-quoted `status = '"active"'` partial-index coupling.
+  `ARCHITECTURE.md` / `STACK.md` now reflect schema v17 and the removed table;
+  the 2.23 review register marks B-1, B-3, and B-5 closed.
+
 - 2026-07-02 20:52 CST: Phase 2.23 分工落定 — 新增交接任务包 `2.23-HANDOFF-TASKS.md`。
   剩余待修项（B-1 僵尸表、B-2 文档漂移、B-3 双家退役条件、B-5 小项）与 PLAN
   Step 0/2/4/5（基线、sound_analysis 拆分、Dart contract 安全网、tests 拆分）整理为
