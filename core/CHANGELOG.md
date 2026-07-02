@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-02 23:52 CST: Phase 2.23 handoff T5 — 机械拆分巨型 Rust
+  测试文件。`crates/persistence-sqlite/src/tests.rs` 拆为 `tests/`
+  模块目录（migrations/timelines/lexical/subtitles_dictionary/vocabulary/
+  phonetic_analysis/learning_loop + shared `mod.rs`），最大文件 507 行；
+  `crates/api-http/src/tests.rs` 拆为 route-group 模块目录
+  （general/media_subtitles/timelines/phonetic_analysis/speech_language/practice/
+  openapi + shared `mod.rs`），OpenAPI parity 单独成文件，最大文件 902 行。
+  仅调整测试模块相对 `include_*` 路径与模块开头 test attribute 边界，断言不改。
+  验证：`cargo test -p persistence-sqlite --quiet` 46 passed、
+  `cargo test -p api-http --quiet` 40 passed、`cargo test --workspace --quiet`
+  358 passed、`./scripts/validate-contracts.sh` 通过。
+
 - 2026-07-02 23:46 CST: Phase 2.23 handoff T4 — `sound_analysis.rs`
   机械拆分为 `crates/speech-analysis/src/sound_analysis/` 模块目录。
   `mod.rs` 仅保留 module declarations 与 public re-export，对外
