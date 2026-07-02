@@ -301,7 +301,7 @@ void main() {
 
     expect(find.text('Listening structure'), findsOneWidget);
     expect(find.text('Nucleus:'), findsOneWidget);
-    expect(find.text('Anchors:'), findsOneWidget);
+    expect(find.text('Heard anchors:'), findsOneWidget);
     expect(find.text('market 82% audible'), findsWidgets);
     expect(find.text('could have 70% audible'), findsOneWidget);
     expect(find.text('could have been 74% audible'), findsOneWidget);

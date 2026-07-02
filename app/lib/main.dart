@@ -121,6 +121,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   // ── Local UI state (not managed by controllers) ──
   String status = 'Starting local core...';
+  // True while the manual-review status text has not been superseded by a more
+  // specific message (e.g. a save result). Replaces a fragile magic-string
+  // comparison so that a free-form status string no longer drives behavior.
+  bool _manualReviewStatusPristine = false;
   final taskStatuses = <UserTaskKind, UserTaskStatus>{};
   bool dragging = false;
   bool connectingApi = true;
@@ -1149,7 +1153,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final track = subtitleController.primaryTrack;
     if (service == null || track == null) return;
     try {
-      setState(() => status = 'Loading manual review timeline...');
+      setState(() {
+        status = 'Loading manual review timeline...';
+        _manualReviewStatusPristine = true;
+      });
       await _loadTimelineResource(track.id);
       final active = subtitleController.wordTimelineSummaries
           .where((summary) => summary.isActive)
@@ -1192,7 +1199,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       } finally {
         playerController.setSourceLoop(previousLoopStart, previousLoopEnd);
       }
-      if (mounted && status == 'Loading manual review timeline...') {
+      if (mounted && _manualReviewStatusPristine) {
         setState(() => status = 'Manual review closed');
       }
     } catch (error) {
@@ -1226,7 +1233,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (errors.isNotEmpty) {
       throw StateError(errors.join('; '));
     }
-    setState(() => status = 'Saving manual review timeline...');
+    setState(() {
+      status = 'Saving manual review timeline...';
+      _manualReviewStatusPristine = false;
+    });
     await service.createTrackWordTimeline(trackId, draft.createPayload());
     if (!mounted || subtitleController.primaryTrack?.id != trackId) return;
     await _loadSpeechEnhancements(trackId);
