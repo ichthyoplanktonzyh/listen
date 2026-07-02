@@ -3581,7 +3581,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         },
         onOpenMediaPath: () {
           final path = downloadStatus.downloadedMediaPath;
-          if (path != null) unawaited(_openMediaPath(path));
+          if (path != null) {
+            downloadController.dismiss();
+            unawaited(_openMediaPath(path));
+          }
         },
         onDismiss: downloadController.dismiss,
       );

@@ -25,8 +25,16 @@ import '../widgets/player/download_status_bar.dart';
 /// checks). The controller depends only on plain `Stream`/`Future` primitives,
 /// not on the concrete download service, so it is unit-testable.
 class DownloadController extends ChangeNotifier {
+  DownloadController({this.failedAutoDismiss = const Duration(seconds: 10)});
+
+  /// How long a `failed` bar stays before it auto-dismisses. A `completed` bar
+  /// intentionally persists so its "Open" action stays available (opening the
+  /// media dismisses it).
+  final Duration failedAutoDismiss;
+
   void Function()? _cancelActive;
   final _subscriptions = <StreamSubscription<dynamic>>[];
+  Timer? _autoDismissTimer;
   int _generation = 0;
   bool _disposed = false;
   DownloadStatusSnapshot? _snapshot;
@@ -85,6 +93,7 @@ class DownloadController extends ChangeNotifier {
         if (_stale(generation)) return;
         _cancelActive = null;
         _setSnapshot(DownloadStatusSnapshot.failed(error.toString()));
+        _scheduleFailedAutoDismiss();
         onFailed?.call(error.toString());
       },
     );
@@ -94,6 +103,16 @@ class DownloadController extends ChangeNotifier {
   void fail(String error) {
     _cancelActive = null;
     _setSnapshot(DownloadStatusSnapshot.failed(error));
+    _scheduleFailedAutoDismiss();
+  }
+
+  void _scheduleFailedAutoDismiss() {
+    _autoDismissTimer?.cancel();
+    final generation = _generation;
+    _autoDismissTimer = Timer(failedAutoDismiss, () {
+      if (_stale(generation)) return;
+      if (_snapshot?.kind == DownloadStatusKind.failed) _setSnapshot(null);
+    });
   }
 
   /// Cancel an in-flight download and hide the bar.
@@ -114,6 +133,8 @@ class DownloadController extends ChangeNotifier {
   }
 
   void _disposeActive() {
+    _autoDismissTimer?.cancel();
+    _autoDismissTimer = null;
     _cancelActive?.call();
     _cancelActive = null;
     for (final subscription in _subscriptions) {

@@ -118,5 +118,64 @@ void main() {
       // No notifications (and no throw) after dispose.
       expect(notified, notifiedAtAttach);
     });
+
+    test('failed bar auto-dismisses after the configured delay', () async {
+      final controller = DownloadController(
+        failedAutoDismiss: const Duration(milliseconds: 30),
+      );
+      addTearDown(controller.dispose);
+
+      controller.fail('boom');
+      expect(controller.snapshot?.kind, DownloadStatusKind.failed);
+
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(controller.snapshot, isNull);
+    });
+
+    test('a new download cancels a pending failed auto-dismiss', () async {
+      final controller = DownloadController(
+        failedAutoDismiss: const Duration(milliseconds: 30),
+      );
+      addTearDown(controller.dispose);
+      final progress = StreamController<double>();
+      final completed = Completer<String?>();
+
+      controller.fail('boom');
+      controller.starting();
+      controller.attach(
+        progress: progress.stream,
+        completed: completed.future,
+        cancel: () {},
+      );
+      expect(controller.snapshot?.kind, DownloadStatusKind.downloading);
+
+      // The stale failed timer must not clear the new downloading bar.
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(controller.snapshot?.kind, DownloadStatusKind.downloading);
+
+      await progress.close();
+    });
+
+    test('completed bar persists (Open stays available)', () async {
+      final controller = DownloadController(
+        failedAutoDismiss: const Duration(milliseconds: 30),
+      );
+      addTearDown(controller.dispose);
+      final progress = StreamController<double>();
+      final completed = Completer<String?>();
+
+      controller.attach(
+        progress: progress.stream,
+        completed: completed.future,
+        cancel: () {},
+      );
+      completed.complete('/tmp/video.mp4');
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      // Completed never auto-dismisses; only Open/dismiss clears it.
+      expect(controller.snapshot?.kind, DownloadStatusKind.completed);
+
+      await progress.close();
+    });
   });
 }
