@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-02 23:46 CST: Phase 2.23 handoff T4 — `sound_analysis.rs`
+  机械拆分为 `crates/speech-analysis/src/sound_analysis/` 模块目录。
+  `mod.rs` 仅保留 module declarations 与 public re-export，对外
+  `speech_analysis::sound_analysis::*` 路径不变；实现切为 build/config/phones/
+  connected/tokens/anchors/nuclei/grouping/boundaries/references/hotspots/quality/
+  helpers/constants/tests，最大文件为 `tests.rs` 901 行，所有实现文件低于
+  1500 行。字符串字面量 multiset 对比旧单文件保持 534/534 完全一致，
+  provenance / signal-source / evidence 文案未改值；`AGENT.md` 新增
+  >1500 行或多子域文件先拆模块的触发规则。验证：`cargo test -p speech-analysis
+  --quiet` 152 passed、`cargo test --workspace --quiet` 358 passed、
+  `./scripts/validate-contracts.sh` 通过。
+
 - 2026-07-02 23:38 CST: Phase 2.23 handoff T3 — 建立基线快照
   `.planning/phases/2.23-architecture-debt-paydown/2.23-BASELINE.md`。
   记录 main.dart 3601 行 / 107 个 `setState`、`sound_analysis.rs` 3383 行、
