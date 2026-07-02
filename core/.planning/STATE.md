@@ -58,7 +58,7 @@ progress:
   Phase 2.19 ⏳ 真实 benchmark scoring 初始评估已落地 +
   Phase 2.20 ⏳ Rhythm-first 真实听感分析已启动 +
   Phase 2.21 ⏳ Audible Structure Architecture 已启动 +
-  Phase 2.22 ⏳ User-Facing Workflow Semantics 建模已重建 / 前端 P0 部分完成 +
+  Phase 2.22 ✅ User-Facing Workflow Semantics 已收口（手工 smoke 待跑）+
   Phase 3.0 🧭 英语听力学习闭环方向已建档 +
   Phase 3.0.1 ✅ backend 学习行为架构地基已落地
 - **分支**：`main`
@@ -71,7 +71,7 @@ progress:
 | 路线 | 目标 | 当前状态 |
 |---|---|---|
 | 本地重装生产引擎 | 生成精准 WordTimeline / ChunkTimeline / LLTimeline JSON | ✅ 阶段性收口，转长期研究 |
-| 轻量消费端 LLPlayerNext | 稳定读取 `.lltimeline.json` 并播放学习 | ⏳ Phase 2.22 建模已重建；前端 P0 部分完成，OPEN 项见状态机 Defect Register |
+| 轻量消费端 LLPlayerNext | 稳定读取 `.lltimeline.json` 并播放学习 | ✅ Phase 2.22 已收口（手工 smoke 待跑）；剩余 SM 项已明确 defer |
 
 ## 后续产品方向
 
@@ -294,7 +294,7 @@ progress:
   - `.planning/phases/2.21-audible-structure-architecture/2.21-PLAN.md`
   - `.planning/phases/2.21-audible-structure-architecture/2.21-AUDIBLE-STRUCTURE-MODEL.md`
 
-### Phase 2.22: User-Facing Workflow Semantics ⏳ 建模已重建 / 前端 P0 部分完成
+### Phase 2.22: User-Facing Workflow Semantics ✅ 已收口（手工 smoke 待跑）
 
 - 目标：把当前所有用户功能组织成清晰、可发现、可降级、可验证的用户路径，包括媒体播放、
   URL/下载、拖拽、字幕获取、资源管理、Word sync、Chunk replay、Listening structure、
@@ -360,15 +360,22 @@ progress:
   - download 仍是 `activeDownload` + `downloadedMediaPath` 双字段派生，未统一为单一 owned state。
   - `widgets/layout/side_panel.dart` 的 `SidePanel` 为死代码，main.dart 仍用重复内联 `_sidePanel()`。
   - 自由字符串 `status` 仍承载大部分工作流状态（~99 setState）。
-  - 真实进度：建模基座已重建 + 一批 P0 前端切片已落地（SM-F1..F8），但“前端 closeout”尚未达成。
-- 下一步：
-  1. 按 `2.22-USER-VISIBLE-STATE-MACHINE.md` 的 Defect Register（SM-01..SM-08）推进真正的前端
-     重构：合并 side panel 死代码、download 收敛为单一 owned state、把 readiness 接入
-     overlay/bottom controls/diagnosis、补 media/vocabulary/diagnosis/task readiness lane、
-     status typed 化；重构中暴露的后端问题追加到 `2.22-BACKEND-CONTRACT-GAPS.md`。
-  2. 用 `2.22-FRONTEND-E2E-QA.md` 做真实媒体手工 smoke 验证。
-  3. 后续 backend/product phase 按 `2.22-BACKEND-CONTRACT-GAPS.md` 逐项补契约，再反向简化前端派生逻辑。
-  4. Phase 3.0 practice/review 前端入口应等待 backend readiness contract 明确后再闭环。
+  - 真实进度：建模基座已重建 + 一批 P0 前端切片已落地（SM-F1..F8）。
+- 收口（2026-07-02，判定达成，详见 `2.22-CLOSEOUT.md`）：
+  - 阶段三目标按 journey/状态机层面判定达成（用户确认）：用户可见状态机已建（R0-R8 + Section C lane）、
+    基于状态机的问题识别已产出 Defect Register、工作流/路径在 18 条 journey + 全 surface 区域确认。
+  - “建状态机 → 找问题 → 修问题”闭环已跑通：SM-01（status 缩范围）、SM-02（死 side_panel）、
+    SM-03（DownloadController）、SM-07b（predicted 徽标）已修——上面“记账纠正”里列的 download 双字段、
+    side_panel 死代码、status 驱动行为已分别被 SM-03/02/01 修复。
+  - 剩余 OPEN 明确 defer：SM-04（待 UX）、SM-05（polish）、SM-06（YAGNI，无消费方）、
+    SM-07 剩余（polish）、SM-08（候选下一后端/声音线阶段）。
+  - 逐功能模板化（约 40 个 checklist 功能）journey 层已覆盖、价值低，刻意不做。
+  - 自动化：`flutter analyze` 无问题、`flutter test` 147 passed。
+  - 唯一待办：按 `2.22-FRONTEND-E2E-QA.md` 在真实媒体上跑手工 smoke（归用户），回填后完全收口。
+- 下一步（阶段外）：
+  1. 用户跑真实媒体手工 smoke，回填结果。
+  2. Phase 2.21 audible-structure / sound-line / ASR 解耦继续（本分支已承载）。
+  3. 后续 backend/product phase 按 `2.22-BACKEND-CONTRACT-GAPS.md` 逐项补契约。
 - 规划文档：
   - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-CONTEXT.md`
   - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-FEATURE-SEMANTICS-MODEL.md`
@@ -378,6 +385,7 @@ progress:
   - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-STEP0-UI-AUDIT.md`
   - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-BACKEND-CONTRACT-GAPS.md`
   - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-FRONTEND-E2E-QA.md`
+  - `.planning/phases/2.22-user-facing-workflow-semantics/2.22-CLOSEOUT.md`
 
 ### Phase 3.0: English Listening Learning Loop 🧭 已建档
 

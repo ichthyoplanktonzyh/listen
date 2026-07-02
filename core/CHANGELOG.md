@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-02 09:45 CST: Phase 2.22 判定达成、转收口。
+  阶段三目标（确认功能工作流/路径、建立用户可见状态机、据状态机找出问题）按 journey/状态机层面
+  判定达成：`2.22-USER-VISIBLE-STATE-MACHINE.md`（R0-R8 + Section C 就绪 lane）已建，Defect
+  Register 产出并闭环修复 SM-01/02/03/07b（+ 记录 F1-F8）。剩余 SM-04/05/06/07剩余/08 明确 defer
+  （待 UX / polish / YAGNI / 候选下一后端阶段）。新增
+  `2.22-CLOSEOUT.md`，`STATE.md` 标记 Phase 2.22 ✅ 已收口（真实媒体手工 smoke 待用户跑）。
+  逐功能模板化（约 40 个 checklist 功能）journey 层已覆盖、价值低，刻意不做。
+  自动化：`flutter analyze` 无问题、`flutter test` 147 passed。
+
 - 2026-07-02 09:15 CST: Phase 2.22 转绿 + SM-01 缩范围收口。
   (1) **转绿**: `diagnosis_card_test` 的 `rhythm frame renders before phone evidence`
   因 `stressAnchors` 文案由 `Anchors` 改为 `Heard anchors`（information-anchors 语义重构）
