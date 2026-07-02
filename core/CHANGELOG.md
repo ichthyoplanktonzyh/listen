@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-02 09:15 CST: Phase 2.22 转绿 + SM-01 缩范围收口。
+  (1) **转绿**: `diagnosis_card_test` 的 `rhythm frame renders before phone evidence`
+  因 `stressAnchors` 文案由 `Anchors` 改为 `Heard anchors`（information-anchors 语义重构）
+  而断言过时，更新为 `Heard anchors:`；其余断言仍匹配当前诊断卡渲染。
+  (2) **SM-01（缩范围，收口标准 #5）**: 全量审计确认自由字符串 `status` 只有一处被读值驱动
+  行为（manual-review 关闭守卫的 `status == 'Loading manual review timeline...'` 魔法字符串），
+  其余全是写入/显示。该处改为 typed `_manualReviewStatusPristine` 标志，自由字符串不再驱动
+  任何行为（行为由 typed lane 驱动：readiness / `DownloadController` / `UserTaskStatus`）。
+  ~99 处显示型 `status` 写入的全量枚举化判定为镀金，未做。
+  验证: `cd apps/desktop && flutter analyze` 无问题、full `flutter test` 147 passed。
+
 - 2026-07-02 00:52 CST: 为 Rhythm C 正式引入 `information_anchors`。
   `RhythmFrame` 新增兼容字段 `information_anchors`，用于建模“人耳实际抓到哪些音素/声音点并据此推断句义”，
   不再把 `stress_anchors` 当作 C 的核心语义；生成器会从 phone timing 或 word timing + canonical phones
