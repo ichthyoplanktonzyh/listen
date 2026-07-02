@@ -1,6 +1,6 @@
 # LLPlayerNext System Architecture
 
-Last updated: 2026-06-28. Reflects Phase 3.0.1 learning-loop architecture foundation.
+Last updated: 2026-07-02. Reflects Phase 3.0.1 plus Phase 2.23 documentation cleanup.
 
 ## Overview
 
@@ -11,27 +11,24 @@ Flutter desktop app
         | HTTP REST + SSE on localhost
         v
 api-http
-  Axum transport, auth, route composition, event stream
+  Axum transport, auth, route composition, event stream, adapter composition
         |
-        v
-application
-  use-case orchestration, repository/provider traits, DTO mapping
+        +--> application
+        |     use-case orchestration, repository/provider traits, DTO mapping
+        |       |
+        |       +--> domain              # stable domain types
+        |       +--> subtitle-core       # subtitle import/tokenization
+        |       +--> diagnosis-core      # pure learning diagnosis
+        |       +--> speech-analysis     # ASR timing/chunk/phone analysis engines
         |
-        +--> domain              # stable domain types
-        +--> subtitle-core       # subtitle import/tokenization
-        +--> diagnosis-core      # pure learning diagnosis
-        +--> speech-analysis     # ASR timing/chunk/phone analysis engines
-        +--> dictionary-provider # dictionary + lexical normalization providers
-        |
-        v
-persistence-sqlite
-  SQLite repository implementation and migrations
+        +--> dictionary-provider         # application provider adapter
+        +--> persistence-sqlite          # application repository adapter
 ```
 
 Dependency direction is intentionally boring:
 
 ```text
-domain <- core engines <- application <- api-http / persistence-sqlite
+domain <- core engines <- application <- api-http / persistence-sqlite / dictionary-provider
 ```
 
 `api-http` does not call algorithm crates directly. Algorithms enter through

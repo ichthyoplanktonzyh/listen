@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-02 22:59 CST: Phase 2.23 handoff T2 — 修复文档事实源漂移。
+  `ARCHITECTURE.md` 依赖图改为 `dictionary-provider` 与 `persistence-sqlite`
+  同级适配器（均依赖 `application` 并实现其 trait），依赖方向图同步为
+  `domain <- core engines <- application <- api-http / persistence-sqlite / dictionary-provider`。
+  `STATE.md` 从 1208 行压缩为当前状态机 + 活跃/搁置 phase + 已完成 phase 索引，
+  删除静态分支字段和不一致 progress 账；`MAINTENANCE.md` 增加 STATE ≤400 行、
+  phase 收口压缩索引、不记录瞬时 git 事实等防复发规则。
+
 - 2026-07-02 22:52 CST: Phase 2.23 handoff T1/T8/T9 — SQLite schema v17 drops
   the unused `learning_resources` table without touching historical migrations;
   migration tests now assert upgraded databases no longer contain that table.
