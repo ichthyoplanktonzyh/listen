@@ -397,8 +397,7 @@ fn remap_lltimeline_identity_leaves_no_original_ids() {
         created_at_ms: 1,
         updated_at_ms: 1,
     });
-    document.active_chunk_timeline_id =
-        Some(ChunkTimelineId::parse("OLD-CHUNK-TIMELINE").unwrap());
+    document.active_chunk_timeline_id = Some(ChunkTimelineId::parse("OLD-CHUNK-TIMELINE").unwrap());
     document.phone_timelines.push(PhoneTimeline {
         id: PhoneTimelineId::parse("OLD-PHONE-TIMELINE").unwrap(),
         track_id: base_timeline.track_id.clone(),
@@ -422,8 +421,7 @@ fn remap_lltimeline_identity_leaves_no_original_ids() {
         created_at_ms: 1,
         updated_at_ms: 1,
     });
-    document.active_phone_timeline_id =
-        Some(PhoneTimelineId::parse("OLD-PHONE-TIMELINE").unwrap());
+    document.active_phone_timeline_id = Some(PhoneTimelineId::parse("OLD-PHONE-TIMELINE").unwrap());
     document.artifacts.push(LLTimelineArtifact {
         kind: "rhythm_word_acoustic_cues".into(),
         provider_id: Some("fixture".into()),

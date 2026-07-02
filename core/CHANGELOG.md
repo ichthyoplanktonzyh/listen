@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-02 23:38 CST: Phase 2.23 handoff T3 — 建立基线快照
+  `.planning/phases/2.23-architecture-debt-paydown/2.23-BASELINE.md`。
+  记录 main.dart 3601 行 / 107 个 `setState`、`sound_analysis.rs` 3383 行、
+  `timeline.dart` 2596 行、persistence/api-http 巨型测试文件 2603/2024 行、
+  各 Rust crate 测试计数合计 358、Flutter 测试 158 passed。T3 预检先发现
+  既有 `cargo fmt` drift，本批先用 workspace `cargo fmt` 修复 4 个 Rust 文件的
+  formatter-only 差异，再完成基线记录。验证：
+  `./scripts/test.sh --quick --low-memory` 4/7 passed（3 skipped，lib tests
+  325 passed）、`cargo test --workspace --quiet` 358 passed、
+  `./scripts/validate-contracts.sh` 通过、`flutter analyze` 无问题、
+  `flutter test` 158 passed。
+
 - 2026-07-02 23:14 CST: Phase 2.23 handoff T7 — 新增 Dart LLTimeline contract
   解析安全网与 codegen 调研。`apps/desktop/test/contract/lltimeline_parse_test.dart`
   直接读取 2 个 committed rhythm LLTimeline fixtures，覆盖 segments、WordTimeline、

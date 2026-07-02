@@ -746,7 +746,10 @@ async fn sound_line_resources_never_disturb_active_text_timeline() {
         )
         .await
         .unwrap();
-    assert!(result.is_some(), "sound line should still produce a timeline");
+    assert!(
+        result.is_some(),
+        "sound line should still produce a timeline"
+    );
 
     let after = export(app.clone(), track_id_str.clone()).await;
     assert_eq!(
