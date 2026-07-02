@@ -84,10 +84,12 @@ pub(crate) async fn import_vocabulary(
     Json(bundle): Json<VocabularyAssetBundle>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     state.services.import_vocabulary(&bundle)?;
-    let _ = state.events.send(EventEnvelope::v1(
-        EventName::VocabularyAssetsImported,
-        serde_json::json!({"lexical_entries": bundle.lexical_entries.len()}),
-    ));
+    let _ = state.events.send(
+        crate::event_payloads::VocabularyAssetsImportedPayload {
+            lexical_entries: bundle.lexical_entries.len(),
+        }
+        .envelope(),
+    );
     Ok(Json(serde_json::json!({"imported": true})))
 }
 

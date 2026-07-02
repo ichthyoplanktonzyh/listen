@@ -634,13 +634,13 @@ pub async fn create_lexical_observation(
         state
             .services
             .clear_lexical_observation(&lexical_entry_id, &sentence_id)?;
-        let _ = state.events.send(EventEnvelope::v1(
-            EventName::LexicalObservationCleared,
-            serde_json::json!({
-                "lexical_entry_id": lexical_entry_id,
-                "sentence_id": sentence_id,
-            }),
-        ));
+        let _ = state.events.send(
+            crate::event_payloads::LexicalObservationClearedPayload {
+                lexical_entry_id: lexical_entry_id.as_str().to_owned(),
+                sentence_id: sentence_id.as_str().to_owned(),
+            }
+            .envelope(),
+        );
         return Ok(StatusCode::NO_CONTENT.into_response());
     }
     let observation = state

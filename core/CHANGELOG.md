@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-02 23:06 CST: Phase 2.23 handoff T6 — 完成剩余 SSE event payload
+  typed 化。新增/扩展 `event_payloads.rs` 中 lexical-observation-cleared、
+  vocabulary-assets-imported、pronunciation provider diagnostic、
+  pronunciation-analysis-completed 与 route/job 共用 progress/completed payload；
+  迁移 m18、pronunciation、timeline word-timing route、vocabulary import 和
+  speech batch emit sites，生产发射点不再用 ad-hoc `json!` map 构造 event payload。
+  验证：`cargo test -p api-http --quiet` 通过；专门 grep 仅剩 contract test 的
+  `service-started` 示例。
+
 - 2026-07-02 22:59 CST: Phase 2.23 handoff T2 — 修复文档事实源漂移。
   `ARCHITECTURE.md` 依赖图改为 `dictionary-provider` 与 `persistence-sqlite`
   同级适配器（均依赖 `application` 并实现其 trait），依赖方向图同步为

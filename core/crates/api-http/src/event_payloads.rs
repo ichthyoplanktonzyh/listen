@@ -26,8 +26,11 @@ fn envelope<T: Serialize>(event: EventName, payload: &T) -> EventEnvelope {
 /// `word-timings-completed` from the transcription text-line pipeline.
 #[derive(Debug, Clone, Serialize)]
 pub struct WordTimingsCompletedPayload {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub job_id: Option<String>,
     pub track_id: String,
-    pub line: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<String>,
     pub count: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeline_id: Option<String>,
@@ -39,29 +42,33 @@ impl WordTimingsCompletedPayload {
     }
 }
 
-/// Completion payload for speech batch jobs. The event name depends on the
-/// batch kind (`word-timings-completed` or `pronunciation-analysis-completed`);
-/// the word-timings variant is a valid reduced shape of
-/// [`WordTimingsCompletedPayload`] for the Flutter consumer (optional fields
-/// absent).
+/// `pronunciation-analysis-completed` from either a single-sentence route,
+/// whole-track route, or background speech batch job.
 #[derive(Debug, Clone, Serialize)]
-pub struct SpeechBatchCompletedPayload {
-    pub job_id: String,
-    pub track_id: String,
-    pub count: usize,
+pub struct PronunciationAnalysisCompletedPayload {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub job_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub track_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sentence_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub count: Option<usize>,
 }
 
-impl SpeechBatchCompletedPayload {
-    pub fn envelope(&self, event: EventName) -> EventEnvelope {
-        envelope(event, self)
+impl PronunciationAnalysisCompletedPayload {
+    pub fn envelope(&self) -> EventEnvelope {
+        envelope(EventName::PronunciationAnalysisCompleted, self)
     }
 }
 
-/// Progress payload for speech batch jobs (`word-timings-progress` or
-/// `pronunciation-analysis-progress`).
+/// Progress payload for `word-timings-progress` or
+/// `pronunciation-analysis-progress`. Background jobs include `job_id`; route
+/// handlers emit the same shape without it.
 #[derive(Debug, Clone, Serialize)]
 pub struct SpeechBatchProgressPayload {
-    pub job_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub job_id: Option<String>,
     pub track_id: String,
     pub processed: usize,
     pub total: usize,
@@ -70,6 +77,31 @@ pub struct SpeechBatchProgressPayload {
 impl SpeechBatchProgressPayload {
     pub fn envelope(&self, event: EventName) -> EventEnvelope {
         envelope(event, self)
+    }
+}
+
+/// `lexical-observation-cleared`.
+#[derive(Debug, Clone, Serialize)]
+pub struct LexicalObservationClearedPayload {
+    pub lexical_entry_id: String,
+    pub sentence_id: String,
+}
+
+impl LexicalObservationClearedPayload {
+    pub fn envelope(&self) -> EventEnvelope {
+        envelope(EventName::LexicalObservationCleared, self)
+    }
+}
+
+/// `vocabulary-assets-imported`.
+#[derive(Debug, Clone, Serialize)]
+pub struct VocabularyAssetsImportedPayload {
+    pub lexical_entries: usize,
+}
+
+impl VocabularyAssetsImportedPayload {
+    pub fn envelope(&self) -> EventEnvelope {
+        envelope(EventName::VocabularyAssetsImported, self)
     }
 }
 
@@ -88,6 +120,22 @@ pub struct SpeechCacheInvalidatedPayload {
 impl SpeechCacheInvalidatedPayload {
     pub fn envelope(&self) -> EventEnvelope {
         envelope(EventName::SpeechCacheInvalidated, self)
+    }
+}
+
+/// Provider availability diagnostics shared by
+/// `pronunciation-provider-unavailable` and `pronunciation-provider-degraded`.
+#[derive(Debug, Clone, Serialize)]
+pub struct PronunciationProviderDiagnosticPayload {
+    pub provider_id: String,
+    pub provider_version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub diagnostic: Option<String>,
+}
+
+impl PronunciationProviderDiagnosticPayload {
+    pub fn envelope(&self, event: EventName) -> EventEnvelope {
+        envelope(event, self)
     }
 }
 
@@ -226,8 +274,9 @@ mod tests {
         vec![
             EventEnvelope::v1(EventName::ServiceStarted, serde_json::json!({})),
             WordTimingsCompletedPayload {
+                job_id: None,
                 track_id: "track-1".into(),
-                line: "text".into(),
+                line: Some("text".into()),
                 count: 12,
                 timeline_id: Some("word-timeline-1".into()),
             }
@@ -275,13 +324,12 @@ mod tests {
             )
             .expect("write event examples");
         }
-        let committed: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(EXAMPLES_PATH).expect(
+        let committed: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(EXAMPLES_PATH).expect(
                 "contracts/events/examples.json missing; regenerate with \
                  UPDATE_EVENT_EXAMPLES=1 cargo test -p api-http event_contract",
-            ),
-        )
-        .expect("event examples parse");
+            ))
+            .expect("event examples parse");
         assert_eq!(
             committed, produced,
             "event payload wire shape changed; regenerate contracts/events/examples.json \

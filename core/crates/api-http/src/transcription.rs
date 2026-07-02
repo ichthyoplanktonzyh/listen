@@ -556,8 +556,9 @@ impl TranscriptionCoordinator {
             {
                 let _ = self.events.send(
                     crate::event_payloads::WordTimingsCompletedPayload {
+                        job_id: None,
                         track_id: track.id.as_str().to_owned(),
-                        line: "text".to_owned(),
+                        line: Some("text".to_owned()),
                         count: result.extracted_word_count,
                         timeline_id: result
                             .final_timeline_id
