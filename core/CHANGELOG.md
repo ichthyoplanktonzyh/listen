@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-02 10:15 CST: Phase 2.22 defer 清零 (1/5) — SM-05 副字幕缺失提示。
+  副字幕开启但根本没有副字幕轨道（`secondaryTrack == null`）时，overlay 显示克制的
+  “No secondary subtitle / 无副字幕”提示；已有轨道内的空档保持空（字幕空档正常，不提示）。
+  用 `secondaryTrack` vs `currentSecondaryCue` 区分两种情况。顺带删除第二个死代码 overlay
+  widget `widgets/layout/subtitle_overlay.dart`（与旧 side_panel 同型孤儿，main.dart 用内联渲染）。
+  验证: `flutter analyze` 无问题、`flutter test` 147 passed。
+
 - 2026-07-02 09:45 CST: Phase 2.22 判定达成、转收口。
   阶段三目标（确认功能工作流/路径、建立用户可见状态机、据状态机找出问题）按 journey/状态机层面
   判定达成：`2.22-USER-VISIBLE-STATE-MACHINE.md`（R0-R8 + Section C 就绪 lane）已建，Defect
