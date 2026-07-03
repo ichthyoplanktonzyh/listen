@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- 2026-07-03 16:07 CST: Phase 2.23 Step 3 完成 — main.dart 收缩为 composition root + UI 状态单轨化。
+  硬指标达成：main.dart 3601 → **1457 行**（gate ≤1500）、setState 107 → **10**（gate ≤30，
+  剩余均为局部 UI 状态）。六刀切法：(1) status 单源化——删除与 `PlayerController.status`
+  重复的宿主字段（含一处双写），~95 处 setState 迁到 controller；(2) 新增
+  `ResourceActionsCoordinator`（资源动作，8 个重复 timeline 方法收敛为共享骨架）；
+  (3) 新增 `MediaSessionCoordinator`（媒体/字幕/LLTimeline 导入、生成轨、speech enhancements）；
+  (4) 新增 `PlaybackActionsCoordinator`（chunk 导航/循环/occurrence 回放，顺带去除
+  `_openVocabulary`/`_playOccurrence` 重复源解析块）；(5) Widget 提取 `PlayerStage`（491 行
+  stage+overlay，phone-evidence 展开态内化）、`SidePanel`、`PlaybackBar`；(6) Flow 函数提取
+  settings/online/embedded/OpenSubtitles/manual review（pristine 标志降级为流内局部变量）。
+  coordinator 均 context-free，宿主经 `bind()` 注入运行时钩子；对话框留在宿主薄包装。
+  controller + Store 定调为唯一 UI 状态模式并写入 `ARCHITECTURE.md` Flutter 节；
+  `SubtitleController` 新增 `activeWordTimingCount` 派生 getter。新增
+  `test/coordinators_test.dart`（6 测试）。验证：`flutter analyze` 无问题、`flutter test`
+  **162 passed**（基线 156）、每刀独立全绿。待办（归用户）：按 `2.22-FRONTEND-E2E-QA.md`
+  P0 路径跑真实媒体手工 smoke。
+
 - 2026-07-02 20:52 CST: Phase 2.23 分工落定 — 新增交接任务包 `2.23-HANDOFF-TASKS.md`。
   剩余待修项（B-1 僵尸表、B-2 文档漂移、B-3 双家退役条件、B-5 小项）与 PLAN
   Step 0/2/4/5（基线、sound_analysis 拆分、Dart contract 安全网、tests 拆分）整理为

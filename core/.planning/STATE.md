@@ -439,6 +439,14 @@ progress:
   由原审核会话执行人负责。Step 3 的"状态模式定调"决策已消解：核实
   `state/store.dart` 的 `Store<T>` 已被 player/learning/subtitle 三大控制器
   使用（非死雏形），controller + Store 转正为唯一 UI 状态模式。
+- **Step 3 ✅ 完成（2026-07-03）**：main.dart 3601 → 1457 行（gate ≤1500）、
+  setState 107 → 10（gate ≤30）。新增三个 context-free coordinator
+  （resource_actions / media_session / playback_actions，宿主 `bind()` 注入
+  钩子）、三个 layout widget（PlayerStage/SidePanel/PlaybackBar）、五组
+  flow 函数（settings/媒体导入/OpenSubtitles/manual review）；status 单源化
+  到 `PlayerController.status`。`flutter analyze` 无问题、`flutter test`
+  162 passed（基线 156）；切法与指标实录见 `2.23-PLAN.md` Step 3 回填。
+  待办：用户按 `2.22-FRONTEND-E2E-QA.md` P0 路径跑真实媒体手工 smoke。
 - 规划文档：
   - `.planning/phases/2.23-architecture-debt-paydown/2.23-CONTEXT.md`
   - `.planning/phases/2.23-architecture-debt-paydown/2.23-PLAN.md`

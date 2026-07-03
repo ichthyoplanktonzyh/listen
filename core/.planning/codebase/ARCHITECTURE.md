@@ -147,9 +147,33 @@ one primary fallback vowel, later fallback vowels unstressed.
 
 ### Flutter Desktop
 
-- `main.dart` remains the composition screen, but event parsing and learning
-  workflows plus speech-enhancement/timeline-resource refresh have been pulled
-  into controllers/coordinators.
+- **UI state pattern (single track)**: `controller + Store<T>` is the only UI
+  state model. Controllers (`PlayerController`, `SubtitleController`,
+  `LearningController`, ...) wrap a `state/store.dart` `Store<T>` with
+  fine-grained selectors; widgets rebuild via `ListenableBuilder`/
+  `StoreBuilder`. `setState` in `main.dart` is reserved for genuinely local
+  UI state (connect spinner, drag hover, task-status map) — 10 call sites
+  after Phase 2.23 Step 3 (was 107). App-level status text lives in
+  `PlayerController.status`; no duplicated host field.
+- `main.dart` is a composition root (~1.46k lines after Phase 2.23 Step 3,
+  was 3.6k): controller/coordinator construction and binding, top-level
+  layout, dialog wrappers, and thin wiring only. Business workflows live in:
+  - `controllers/resource_actions_coordinator.dart` — subtitle/timeline
+    resource actions (activate/archive/restore/delete/export, word/chunk/
+    phone timeline lifecycle, capability loading).
+  - `controllers/media_session_coordinator.dart` — media open, subtitle and
+    LLTimeline import, primary-track activation, generated tracks, speech
+    enhancements.
+  - `controllers/playback_actions_coordinator.dart` — chunk navigation and
+    loops, source-loop ranges, occurrence playback with fingerprint
+    resolution, vocabulary export/import, finding feedback.
+  - Coordinators are context-free; hosts inject runtime hooks once via
+    `bind(...)` (api handle, mounted check, dialogs, localization).
+- Large layout regions are widgets under `widgets/layout/` (`PlayerStage`
+  with ephemeral phone-evidence expansion state, `SidePanel`, `PlaybackBar`),
+  and dialog-driven workflows are flow functions under `widgets/flows/`
+  (media import, OpenSubtitles search, manual review) plus
+  `widgets/settings/settings_flow.dart`.
 - `LearningController` stores typed lexical entries, phrase candidates,
   selected lexical details, dictionary lookup, word pronunciation, language
   profile, and diagnosis.
