@@ -387,24 +387,40 @@ pub(crate) async fn generate_track_word_timings(
         .ok_or(ApplicationError::NotFound("subtitle track"))?
         .sentences
         .len();
-    let _ = state.events.send(EventEnvelope::v1(
-        EventName::WordTimingsProgress,
-        serde_json::json!({"track_id": track_id, "processed": 0, "total": total}),
-    ));
+    let _ = state.events.send(
+        crate::event_payloads::SpeechBatchProgressPayload {
+            job_id: None,
+            track_id: track_id.clone(),
+            processed: 0,
+            total,
+        }
+        .envelope(EventName::WordTimingsProgress),
+    );
     let values = match request {
         Some(Json(request)) if !request.timings.is_empty() => state
             .services
             .store_word_timings(&parsed_track_id, &request.timings)?,
         _ => state.services.word_timings_for_track(&parsed_track_id)?,
     };
-    let _ = state.events.send(EventEnvelope::v1(
-        EventName::WordTimingsProgress,
-        serde_json::json!({"track_id": track_id, "processed": total, "total": total}),
-    ));
-    let _ = state.events.send(EventEnvelope::v1(
-        EventName::WordTimingsCompleted,
-        serde_json::json!({"track_id": track_id, "count": values.len()}),
-    ));
+    let _ = state.events.send(
+        crate::event_payloads::SpeechBatchProgressPayload {
+            job_id: None,
+            track_id: track_id.clone(),
+            processed: total,
+            total,
+        }
+        .envelope(EventName::WordTimingsProgress),
+    );
+    let _ = state.events.send(
+        crate::event_payloads::WordTimingsCompletedPayload {
+            job_id: None,
+            track_id,
+            line: None,
+            count: values.len(),
+            timeline_id: None,
+        }
+        .envelope(),
+    );
     Ok(Json(values))
 }
 

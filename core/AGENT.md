@@ -72,6 +72,9 @@ Local QA media:
 - Learning language and UI language are separate concepts. Language-specific
   behavior should enter through profiles/providers/capability checks and degrade
   cleanly.
+- Single `.rs` or `.dart` implementation files over roughly 1500 lines, or files
+  carrying more than one clear subdomain, should be split into modules before
+  adding more feature work there. Mechanical splits do not need their own phase.
 
 ## Code Placement
 

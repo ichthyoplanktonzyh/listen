@@ -12,9 +12,7 @@ use serde_json::Value;
 use tokio::process::Command;
 use tokio::sync::{Semaphore, broadcast};
 
-use crate::transcription::{
-    ffmpeg_wav_args, io_error, resolve_forced_align_sidecar, resolve_tool,
-};
+use crate::transcription::{ffmpeg_wav_args, io_error, resolve_forced_align_sidecar, resolve_tool};
 
 static JOB_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
@@ -115,7 +113,10 @@ impl SoundLineCoordinator {
             let job = jobs
                 .get_mut(id)
                 .ok_or(ApplicationError::NotFound("sound line job"))?;
-            if matches!(job.status, SoundLineStatus::Queued | SoundLineStatus::Running) {
+            if matches!(
+                job.status,
+                SoundLineStatus::Queued | SoundLineStatus::Running
+            ) {
                 job.status = SoundLineStatus::Cancelled;
                 job.updated_at_ms = now_ms();
             }
@@ -129,7 +130,10 @@ impl SoundLineCoordinator {
         let old = self
             .get(id)?
             .ok_or(ApplicationError::NotFound("sound line job"))?;
-        if matches!(old.status, SoundLineStatus::Queued | SoundLineStatus::Running) {
+        if matches!(
+            old.status,
+            SoundLineStatus::Queued | SoundLineStatus::Running
+        ) {
             return Err(ApplicationError::Conflict("sound line job is active"));
         }
         let track_id = SubtitleTrackId::parse(old.track_id.clone())?;
@@ -141,13 +145,19 @@ impl SoundLineCoordinator {
         Ok(job)
     }
 
-    fn enqueue(self: &Arc<Self>, track_id: SubtitleTrackId) -> Result<SoundLineJob, ApplicationError> {
+    fn enqueue(
+        self: &Arc<Self>,
+        track_id: SubtitleTrackId,
+    ) -> Result<SoundLineJob, ApplicationError> {
         let created_at_ms = now_ms();
         let job = {
             let mut jobs = self.lock_jobs()?;
             if let Some(existing) = jobs.values().find(|job| {
                 job.track_id == track_id.as_str()
-                    && matches!(job.status, SoundLineStatus::Queued | SoundLineStatus::Running)
+                    && matches!(
+                        job.status,
+                        SoundLineStatus::Queued | SoundLineStatus::Running
+                    )
             }) {
                 return Ok(existing.clone());
             }

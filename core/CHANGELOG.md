@@ -18,6 +18,77 @@
   `test/coordinators_test.dart`（6 测试）。验证：`flutter analyze` 无问题、`flutter test`
   **162 passed**（基线 156）、每刀独立全绿。待办（归用户）：按 `2.22-FRONTEND-E2E-QA.md`
   P0 路径跑真实媒体手工 smoke。
+- 2026-07-02 23:52 CST: Phase 2.23 handoff T5 — 机械拆分巨型 Rust
+  测试文件。`crates/persistence-sqlite/src/tests.rs` 拆为 `tests/`
+  模块目录（migrations/timelines/lexical/subtitles_dictionary/vocabulary/
+  phonetic_analysis/learning_loop + shared `mod.rs`），最大文件 507 行；
+  `crates/api-http/src/tests.rs` 拆为 route-group 模块目录
+  （general/media_subtitles/timelines/phonetic_analysis/speech_language/practice/
+  openapi + shared `mod.rs`），OpenAPI parity 单独成文件，最大文件 902 行。
+  仅调整测试模块相对 `include_*` 路径与模块开头 test attribute 边界，断言不改。
+  验证：`cargo test -p persistence-sqlite --quiet` 46 passed、
+  `cargo test -p api-http --quiet` 40 passed、`cargo test --workspace --quiet`
+  358 passed、`./scripts/validate-contracts.sh` 通过。
+
+- 2026-07-02 23:46 CST: Phase 2.23 handoff T4 — `sound_analysis.rs`
+  机械拆分为 `crates/speech-analysis/src/sound_analysis/` 模块目录。
+  `mod.rs` 仅保留 module declarations 与 public re-export，对外
+  `speech_analysis::sound_analysis::*` 路径不变；实现切为 build/config/phones/
+  connected/tokens/anchors/nuclei/grouping/boundaries/references/hotspots/quality/
+  helpers/constants/tests，最大文件为 `tests.rs` 901 行，所有实现文件低于
+  1500 行。字符串字面量 multiset 对比旧单文件保持 534/534 完全一致，
+  provenance / signal-source / evidence 文案未改值；`AGENT.md` 新增
+  >1500 行或多子域文件先拆模块的触发规则。验证：`cargo test -p speech-analysis
+  --quiet` 152 passed、`cargo test --workspace --quiet` 358 passed、
+  `./scripts/validate-contracts.sh` 通过。
+
+- 2026-07-02 23:38 CST: Phase 2.23 handoff T3 — 建立基线快照
+  `.planning/phases/2.23-architecture-debt-paydown/2.23-BASELINE.md`。
+  记录 main.dart 3601 行 / 107 个 `setState`、`sound_analysis.rs` 3383 行、
+  `timeline.dart` 2596 行、persistence/api-http 巨型测试文件 2603/2024 行、
+  各 Rust crate 测试计数合计 358、Flutter 测试 158 passed。T3 预检先发现
+  既有 `cargo fmt` drift，本批先用 workspace `cargo fmt` 修复 4 个 Rust 文件的
+  formatter-only 差异，再完成基线记录。验证：
+  `./scripts/test.sh --quick --low-memory` 4/7 passed（3 skipped，lib tests
+  325 passed）、`cargo test --workspace --quiet` 358 passed、
+  `./scripts/validate-contracts.sh` 通过、`flutter analyze` 无问题、
+  `flutter test` 158 passed。
+
+- 2026-07-02 23:14 CST: Phase 2.23 handoff T7 — 新增 Dart LLTimeline contract
+  解析安全网与 codegen 调研。`apps/desktop/test/contract/lltimeline_parse_test.dart`
+  直接读取 2 个 committed rhythm LLTimeline fixtures，覆盖 segments、WordTimeline、
+  document-level `rhythm_frames`、`PhoneTimeline.sound_analysis.rhythm_frame` fallback
+  与 audible-structure references/provenance/quality 关键字段。负向实验确认改坏
+  `rhythm_frames` 字段会让测试变红。新增
+  `design-notes/timeline-dart-codegen-research.md`，评估 json_serializable/freezed
+  收益、成本和对现有手写容错语义的影响；本批不做迁移、不写 ADR。
+  验证：`flutter analyze` 无问题、`flutter test` 158 passed。
+
+- 2026-07-02 23:06 CST: Phase 2.23 handoff T6 — 完成剩余 SSE event payload
+  typed 化。新增/扩展 `event_payloads.rs` 中 lexical-observation-cleared、
+  vocabulary-assets-imported、pronunciation provider diagnostic、
+  pronunciation-analysis-completed 与 route/job 共用 progress/completed payload；
+  迁移 m18、pronunciation、timeline word-timing route、vocabulary import 和
+  speech batch emit sites，生产发射点不再用 ad-hoc `json!` map 构造 event payload。
+  验证：`cargo test -p api-http --quiet` 通过；专门 grep 仅剩 contract test 的
+  `service-started` 示例。
+
+- 2026-07-02 22:59 CST: Phase 2.23 handoff T2 — 修复文档事实源漂移。
+  `ARCHITECTURE.md` 依赖图改为 `dictionary-provider` 与 `persistence-sqlite`
+  同级适配器（均依赖 `application` 并实现其 trait），依赖方向图同步为
+  `domain <- core engines <- application <- api-http / persistence-sqlite / dictionary-provider`。
+  `STATE.md` 从 1208 行压缩为当前状态机 + 活跃/搁置 phase + 已完成 phase 索引，
+  删除静态分支字段和不一致 progress 账；`MAINTENANCE.md` 增加 STATE ≤400 行、
+  phase 收口压缩索引、不记录瞬时 git 事实等防复发规则。
+
+- 2026-07-02 22:52 CST: Phase 2.23 handoff T1/T8/T9 — SQLite schema v17 drops
+  the unused `learning_resources` table without touching historical migrations;
+  migration tests now assert upgraded databases no longer contain that table.
+  `DATA-MODEL.md` records WordTimeline vs legacy `word_timings` authority,
+  document-level `rhythm_frames` vs transitional `PhoneTimeline.sound_analysis`
+  rhythm frames, and the JSON-quoted `status = '"active"'` partial-index coupling.
+  `ARCHITECTURE.md` / `STACK.md` now reflect schema v17 and the removed table;
+  the 2.23 review register marks B-1, B-3, and B-5 closed.
 
 - 2026-07-02 20:52 CST: Phase 2.23 分工落定 — 新增交接任务包 `2.23-HANDOFF-TASKS.md`。
   剩余待修项（B-1 僵尸表、B-2 文档漂移、B-3 双家退役条件、B-5 小项）与 PLAN

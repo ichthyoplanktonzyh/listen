@@ -1,6 +1,6 @@
 # LLPlayerNext — 文档体系维护规则
 
-> 最后更新：2026-06-28
+> 最后更新：2026-07-02
 > 基于 GSD 文件结构体系，结合本项目实践制定
 
 ---
@@ -104,6 +104,8 @@ X.X-feature-name/
 | ❌ 同一 milestone 的文档散落在 3 个目录 | 一个 phase 的所有产物放在一个 phase 文件夹下 |
 | ❌ 修改已冻结的 phase 文件 | 冻结即历史事实。新发现写入新 phase 的 CONTEXT.md |
 | ❌ STATE.md 写得像 CHANGELOG | STATE 是当前状态机，不是历史列表 |
+| ❌ STATE.md 长期堆积已完成 phase 全文 | STATE 目标 ≤ 400 行；已完成 phase 只保留索引行，详情归 phase 文件夹/CLOSEOUT |
+| ❌ STATE.md 记录 git 分支等瞬时事实 | 分支、领先提交数、worktree 状态以 `git status` / `git log` 为准，不进 STATE |
 | ❌ codebase/ 写成了 README 的翻版 | codebase/ 是架构骨架（数据模型+依赖图+边界+测试体系），不是使用说明 |
 | ❌ timeline-production 的目录直接塞入外部讨论文件 | 讨论文件放入 phase 级的 `design-notes/` |
 | ❌ handoff 文件堆积过多 | 精简为一个 `continue-here.md`，核心交接信息已在 STATE.md 中 |
@@ -118,6 +120,7 @@ X.X-feature-name/
 ### 每次 phase 完成
 - [ ] 撰写 `X.X-CLOSEOUT.md`
 - [ ] 更新 `STATE.md`：当前位置、下一步、最近决策
+- [ ] 将该 phase 的 STATE section 压缩为一行已完成索引，链接 CLOSEOUT/PLAN；不要把完成细节继续留在 STATE
 - [ ] 更新 `MILESTONES.md`（如果涉及里程碑收口）
 
 ### 产品方向/需求变化

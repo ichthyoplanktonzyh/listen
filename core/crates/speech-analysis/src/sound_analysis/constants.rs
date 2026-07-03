@@ -1,0 +1,11 @@
+pub(super) const PAUSE_BOUNDARY_MS: u64 = 100;
+pub(super) const COMPRESSION_UNIT_MS: f32 = 75.0;
+pub(super) const COMPRESSION_WORD_MS: f32 = 170.0;
+pub(super) const LENGTHENING_BOUNDARY_MIN_WORD_MS: u64 = 220;
+pub(super) const LENGTHENING_BOUNDARY_MIN_REFERENCES: usize = 3;
+pub(super) const LENGTHENING_BOUNDARY_REFERENCE_BEFORE: usize = 3;
+pub(super) const LENGTHENING_BOUNDARY_REFERENCE_AFTER: usize = 2;
+pub(super) const LENGTHENING_BOUNDARY_RATIO: f32 = 1.75;
+pub(super) const LENGTHENING_BOUNDARY_RATIO_MAX: f32 = 2.75;
+pub(super) const PITCH_RESET_BOUNDARY_MIN: f32 = 0.5;
+pub(super) const MIN_AUDIBLE_ANCHOR_MS: u64 = 70;

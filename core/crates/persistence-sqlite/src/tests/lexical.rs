@@ -1,0 +1,267 @@
+use super::*;
+
+#[test]
+fn services_are_idempotent_and_persist_state() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
+    let input = RegisterMedia {
+        path: "/tmp/a.mp4".into(),
+        fingerprint: "same-content".into(),
+        title: "A".into(),
+        kind: MediaKind::Video,
+        duration_ms: Some(10_000),
+    };
+    let first = services.register_media(input.clone()).unwrap();
+    let second = services.register_media(input).unwrap();
+    assert_eq!(first.id, second.id);
+    services.update_progress(&first.id, 1250).unwrap();
+    assert_eq!(
+        services.read_progress(&first.id).unwrap(),
+        Some(TimeMs::new(1250))
+    );
+
+    let word = upsert_word_asset(
+        &services,
+        "en",
+        "Hello",
+        "Hello",
+        Some(LearningStatus::KnownRecognized),
+        None,
+    );
+    assert_eq!(read_word_asset(&services, "EN", "hello"), Some(word.entry));
+
+    let subtitle = ImportSubtitle {
+        media_id: first.id,
+        source_name: "timeline.srt".into(),
+        content: include_bytes!("../../../../testdata/subtitles/timeline.srt").to_vec(),
+        language: Some("en".into()),
+        identity_salt: None,
+    };
+    let first_track = services.import_subtitle(subtitle.clone()).unwrap();
+    let second_track = services.import_subtitle(subtitle).unwrap();
+    assert_eq!(first_track.id, second_track.id);
+    assert_eq!(
+        services.read_subtitle_track(&first_track.id).unwrap(),
+        Some(first_track)
+    );
+}
+
+#[test]
+fn lexical_words_and_phrases_keep_independent_state_and_sources() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo,
+    );
+    let phrase = services
+        .create_lexical_entry(UpsertLexicalEntry {
+            language: "en".into(),
+            kind: LexicalEntryKind::Phrase,
+            canonical_form: "give up".into(),
+            display_form: "give up".into(),
+            status: Some(LearningStatus::KnownNotRecognized),
+            user_definition: Some("stop trying".into()),
+            personal_note: None,
+            source: Some(application::LexicalSourceContext {
+                media_id: None,
+                sentence_id: None,
+                original_form: "give up".into(),
+                sentence_text: "Never give up.".into(),
+                media_title: "Lesson".into(),
+                media_fingerprint: "lesson".into(),
+                start_ms: 10,
+                end_ms: 20,
+                token_start: Some(1),
+                token_end: Some(2),
+            }),
+        })
+        .unwrap();
+    let word = services
+        .create_lexical_entry(UpsertLexicalEntry {
+            language: "en".into(),
+            kind: LexicalEntryKind::Word,
+            canonical_form: "give".into(),
+            display_form: "give".into(),
+            status: Some(LearningStatus::KnownRecognized),
+            user_definition: None,
+            personal_note: None,
+            source: None,
+        })
+        .unwrap();
+    assert_ne!(phrase.entry.id, word.entry.id);
+    assert_eq!(phrase.occurrences.len(), 1);
+    assert_eq!(
+        phrase.entry.status,
+        Some(LearningStatus::KnownNotRecognized)
+    );
+    assert_eq!(word.entry.status, Some(LearningStatus::KnownRecognized));
+    upsert_word_asset(
+        &services,
+        "en",
+        "give",
+        "give",
+        Some(LearningStatus::UnknownMeaning),
+        None,
+    );
+    let words = services
+        .list_lexical_entries("en", Some(LexicalEntryKind::Word), None, "give", 10, 0)
+        .unwrap();
+    assert_eq!(words.len(), 1);
+    assert_eq!(words[0].entry.status, Some(LearningStatus::UnknownMeaning));
+    assert_eq!(
+        services
+            .normalize_lexical_form("en", "went")
+            .unwrap()
+            .normalized,
+        "go"
+    );
+    services.correct_lemma("en", "went", "walk").unwrap();
+    assert_eq!(
+        services
+            .normalize_lexical_form("en", "went")
+            .unwrap()
+            .normalized,
+        "walk"
+    );
+    services
+        .create_lexical_entry(UpsertLexicalEntry {
+            language: "en".into(),
+            kind: LexicalEntryKind::Word,
+            canonical_form: "run".into(),
+            display_form: "run".into(),
+            status: Some(LearningStatus::KnownRecognized),
+            user_definition: None,
+            personal_note: None,
+            source: None,
+        })
+        .unwrap();
+    services
+        .create_lexical_entry(UpsertLexicalEntry {
+            language: "en".into(),
+            kind: LexicalEntryKind::Word,
+            canonical_form: "jog".into(),
+            display_form: "jog".into(),
+            status: Some(LearningStatus::UnknownMeaning),
+            user_definition: None,
+            personal_note: None,
+            source: None,
+        })
+        .unwrap();
+    assert!(matches!(
+        services.correct_lemma("en", "run", "jog"),
+        Err(application::ApplicationError::Conflict(_))
+    ));
+}
+
+#[test]
+fn lexical_asset_import_merges_newest_fields_and_remaps_sources() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
+    let local = services
+        .create_lexical_entry(UpsertLexicalEntry {
+            language: "en".into(),
+            kind: LexicalEntryKind::Phrase,
+            canonical_form: "give up".into(),
+            display_form: "give up".into(),
+            status: Some(LearningStatus::KnownRecognized),
+            user_definition: Some("local definition".into()),
+            personal_note: Some("local note".into()),
+            source: Some(application::LexicalSourceContext {
+                media_id: None,
+                sentence_id: None,
+                original_form: "give up".into(),
+                sentence_text: "Never give up.".into(),
+                media_title: "Local lesson".into(),
+                media_fingerprint: "lesson".into(),
+                start_ms: 10,
+                end_ms: 20,
+                token_start: Some(1),
+                token_end: Some(2),
+            }),
+        })
+        .unwrap();
+    let imported_id = LexicalEntryId::from_fingerprint("import", "give up");
+    let mut imported_entry = local.entry.clone();
+    imported_entry.id = imported_id.clone();
+    imported_entry.status = Some(LearningStatus::UnknownMeaning);
+    imported_entry.updated_at_ms = local.entry.updated_at_ms;
+    imported_entry.user_definition = Some("newer imported definition".into());
+    imported_entry.personal_note = Some("newer imported note".into());
+    imported_entry.learning_updated_at_ms = local.entry.learning_updated_at_ms + 100;
+    let mut imported_occurrence = local.occurrences[0].clone();
+    imported_occurrence.lexical_entry_id = imported_id.clone();
+    imported_occurrence.first_seen_at_ms = imported_occurrence.first_seen_at_ms.saturating_sub(5);
+    imported_occurrence.last_seen_at_ms += 100;
+    imported_occurrence.encounter_count = 9;
+    let imported_history = LexicalStatusHistory {
+        id: LexicalStatusHistoryId::from_fingerprint("import-history", "give up"),
+        lexical_entry_id: imported_id,
+        previous_status: None,
+        new_status: Some(LearningStatus::UnknownMeaning),
+        changed_at_ms: local.entry.updated_at_ms.saturating_sub(1),
+        change_source: LearningChangeSource::Import,
+    };
+
+    repo.import_lexical_assets(
+        std::slice::from_ref(&imported_entry),
+        std::slice::from_ref(&imported_history),
+        std::slice::from_ref(&imported_occurrence),
+        &[],
+    )
+    .unwrap();
+    repo.import_lexical_assets(
+        std::slice::from_ref(&imported_entry),
+        std::slice::from_ref(&imported_history),
+        std::slice::from_ref(&imported_occurrence),
+        &[],
+    )
+    .unwrap();
+    let merged = services.lexical_details(&local.entry.id).unwrap().unwrap();
+    assert_eq!(merged.entry.status, Some(LearningStatus::KnownRecognized));
+    assert_eq!(
+        merged.entry.user_definition.as_deref(),
+        Some("newer imported definition")
+    );
+    assert_eq!(merged.occurrences.len(), 1);
+    assert_eq!(merged.occurrences[0].encounter_count, 9);
+    assert_eq!(
+        merged
+            .history
+            .iter()
+            .filter(|value| value.change_source == LearningChangeSource::Import)
+            .count(),
+        1
+    );
+    assert_eq!(
+        merged
+            .history
+            .iter()
+            .find(|value| value.change_source == LearningChangeSource::Import)
+            .map(|value| &value.lexical_entry_id),
+        Some(&local.entry.id)
+    );
+}

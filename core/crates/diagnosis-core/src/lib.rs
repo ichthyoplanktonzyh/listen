@@ -243,7 +243,10 @@ mod tests {
         assert!(result.unclassified_lemmas.is_empty());
         assert_eq!(result.hints.len(), 1);
         assert_eq!(result.hints[0].kind, DiagnosisKind::RecognitionBarrier);
-        assert_eq!(result.hints[0].lexical_entry_ids, vec![entries[0].id.clone()]);
+        assert_eq!(
+            result.hints[0].lexical_entry_ids,
+            vec![entries[0].id.clone()]
+        );
     }
 
     #[test]

@@ -5,24 +5,24 @@ pub(crate) async fn pronunciation_providers(
 ) -> Json<Vec<domain::PronunciationProviderInfo>> {
     let providers = state.services.pronunciation_providers();
     for provider in providers.iter().filter(|provider| !provider.available) {
-        let _ = state.events.send(EventEnvelope::v1(
-            EventName::PronunciationProviderUnavailable,
-            serde_json::json!({
-                "provider_id": provider.id,
-                "provider_version": provider.version,
-                "diagnostic": provider.diagnostic,
-            }),
-        ));
+        let _ = state.events.send(
+            crate::event_payloads::PronunciationProviderDiagnosticPayload {
+                provider_id: provider.id.clone(),
+                provider_version: provider.version.clone(),
+                diagnostic: provider.diagnostic.clone(),
+            }
+            .envelope(EventName::PronunciationProviderUnavailable),
+        );
     }
     for provider in providers.iter().filter(|provider| provider.degraded) {
-        let _ = state.events.send(EventEnvelope::v1(
-            EventName::PronunciationProviderDegraded,
-            serde_json::json!({
-                "provider_id": provider.id,
-                "provider_version": provider.version,
-                "diagnostic": provider.diagnostic,
-            }),
-        ));
+        let _ = state.events.send(
+            crate::event_payloads::PronunciationProviderDiagnosticPayload {
+                provider_id: provider.id.clone(),
+                provider_version: provider.version.clone(),
+                diagnostic: provider.diagnostic.clone(),
+            }
+            .envelope(EventName::PronunciationProviderDegraded),
+        );
     }
     Json(providers)
 }
@@ -72,10 +72,15 @@ pub(crate) async fn analyze_pronunciation_sentence(
         );
     }
     let value = state.services.analyze_pronunciation(&sentence_id)?;
-    let _ = state.events.send(EventEnvelope::v1(
-        EventName::PronunciationAnalysisCompleted,
-        serde_json::json!({"sentence_id": value.sentence_id}),
-    ));
+    let _ = state.events.send(
+        crate::event_payloads::PronunciationAnalysisCompletedPayload {
+            job_id: None,
+            track_id: None,
+            sentence_id: Some(value.sentence_id.as_str().to_owned()),
+            count: None,
+        }
+        .envelope(),
+    );
     Ok(Json(value))
 }
 
@@ -91,21 +96,36 @@ pub(crate) async fn track_pronunciation(
         .ok_or(ApplicationError::NotFound("subtitle track"))?
         .sentences
         .len();
-    let _ = state.events.send(EventEnvelope::v1(
-        EventName::PronunciationAnalysisProgress,
-        serde_json::json!({"track_id": track_id, "processed": 0, "total": total}),
-    ));
+    let _ = state.events.send(
+        crate::event_payloads::SpeechBatchProgressPayload {
+            job_id: None,
+            track_id: track_id.clone(),
+            processed: 0,
+            total,
+        }
+        .envelope(EventName::PronunciationAnalysisProgress),
+    );
     let values = state
         .services
         .analyze_pronunciation_track(&parsed_track_id)?;
-    let _ = state.events.send(EventEnvelope::v1(
-        EventName::PronunciationAnalysisProgress,
-        serde_json::json!({"track_id": track_id, "processed": total, "total": total}),
-    ));
-    let _ = state.events.send(EventEnvelope::v1(
-        EventName::PronunciationAnalysisCompleted,
-        serde_json::json!({"track_id": track_id, "count": values.len()}),
-    ));
+    let _ = state.events.send(
+        crate::event_payloads::SpeechBatchProgressPayload {
+            job_id: None,
+            track_id: track_id.clone(),
+            processed: total,
+            total,
+        }
+        .envelope(EventName::PronunciationAnalysisProgress),
+    );
+    let _ = state.events.send(
+        crate::event_payloads::PronunciationAnalysisCompletedPayload {
+            job_id: None,
+            track_id: Some(track_id),
+            sentence_id: None,
+            count: Some(values.len()),
+        }
+        .envelope(),
+    );
     Ok(Json(values))
 }
 

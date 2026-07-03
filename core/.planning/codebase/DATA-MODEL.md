@@ -138,6 +138,12 @@ SQLite enforces one active resource per track/resource kind with partial unique
 indexes. `created_by`, parent IDs, publication markers, and model/provider
 metadata are provenance/revision metadata, not lifecycle state.
 
+The partial unique indexes for `word_timeline_runs`, `chunk_timeline_runs`, and
+`phone_timeline_runs` are defined as `WHERE status = '"active"'`: the JSON quotes
+are intentional because `TimelineResourceStatus` is serde-serialized before
+storage. Changing that serialization would silently invalidate the active-run
+guard unless the migrations and schema tests are updated together.
+
 `metrics_json` and `evidence_json` remain object-shaped JSON at the API/storage
 boundary, but the Rust and Flutter models now wrap them in typed envelopes:
 
@@ -149,6 +155,29 @@ boundary, but the Rust and Flutter models now wrap them in typed envelopes:
 | `ChunkTimelineChunk.evidence_json` | `ChunkEvidence` | boundary/evidence payload |
 | `PhoneTimeline.sound_analysis.rhythm_frame` | `RhythmFrame` | audible-structure map: A/B/C references, prominence anchors, phrase-scoped nuclei, weak groups, compression spans, phrase boundaries, connected-speech refs, hotspots, and signal-source quality |
 | `LLTimelineDocument.rhythm_frames[].rhythm_frame` | `RhythmFrame` | first-class WordTimeline-derived rhythm resource keyed by sentence for WordTimeline-only imports/exports |
+
+### Word Timing Authority
+
+`word_timeline_runs` is the authoritative word-timing store: it versions complete
+WordTimeline resources and uses the active-run lifecycle to select the current
+timeline for a subtitle track. The legacy `word_timings` table is a sentence-keyed
+fallback cache for older API paths such as `trackWordTimings()`.
+
+Retire `word_timings` only after all consumers read active WordTimeline resources
+and the transcription pipeline no longer writes the legacy
+`stored_legacy_word_timings` path.
+
+### Rhythm Frame Authority
+
+`LLTimelineDocument.rhythm_frames` is the authoritative document-level rhythm
+resource for WordTimeline-first exports/imports.
+`PhoneTimeline.sound_analysis.rhythm_frame` is transitional compatibility data
+for phone-timeline-backed consumers and older resources.
+
+Retire `PhoneTimeline.sound_analysis.rhythm_frame` only after Flutter consumes
+document-level rhythm frames exclusively and phonetic-analysis no longer wraps
+rhythm frames inside `SoundAnalysis`. Removing that field is a contract change
+and needs its own planned migration.
 
 Non-object metrics/evidence input is normalized to an empty object.
 `SoundAnalysis.rhythm_frame` is optional for older PhoneTimeline resources. Active
@@ -208,10 +237,13 @@ expansion is ephemeral overlay state, not a fourth persisted Rhythm mode.
   authoritative `LexicalEntry + LexicalUnit + LexicalObservation` shape when
   upgrading older local databases; old lexical learning data is intentionally
   discarded under the Phase 2.18 compatibility policy.
+- Schema v17 drops the unused `learning_resources` table. Downloadable learning
+  resources are served by the API resource manager, not SQLite persistence.
 - Subtitle replacement deletes and inserts its sentence timeline in one
   transaction.
 - Unique constraints enforce idempotent media, subtitle, lexical, dictionary
   cache, active timeline identities, and learning-loop IDs.
 - Vocabulary export/import is version 5 and contains only lexical assets plus
   phonetic finding feedback.
-- SQLite schema version is 16 after the destructive lexical schema repair.
+- SQLite schema version is 17 after removing the unused `learning_resources`
+  table.

@@ -96,6 +96,8 @@
 | `transcription_ui_test.dart` | 转写 UI |
 | `m18_ui_test.dart` | M1.8 学习质量功能 UI |
 | `phonetic_analysis_ui_test.dart` | 音素分析 UI |
+| `contract/backend_event_contract_test.dart` | SSE producer golden envelopes 的 Flutter typed 解析契约 |
+| `contract/lltimeline_parse_test.dart` | committed LLTimeline rhythm fixtures 的 Flutter typed 解析契约，覆盖 segments、WordTimeline、document-level rhythm_frames 与 PhoneTimeline.sound_analysis fallback |
 | `diagnosis_card_test.dart` rhythm case | Phase 2.21 compact rhythm frame nuclei、anchors、weak groups、compression spans、hotspots、predicted/audible provenance 和 confidence state |
 | `phoneme_ribbon_test.dart` rhythm case | Phase 2.21 subtitle-layer `RhythmFrameRibbon` timeline、nucleus/anchor/weak/compression/hotspot chips、provenance tooltip、cue loop、Rhythm A/B/C toggle、A citation reference 与 B connected-speech A → B 音标投影 |
 
@@ -135,6 +137,7 @@ Phase 2.20 LibriTTS/Helsinki prep 也已有 `scripts/test_prepare_helsinki_libri
 | OpenAPI 规范 | CI 验证 spec 与实现一致 |
 | 事件 Schema | `api-events` JSON Schema 文件 + 自动化验证 |
 | LLTimeline JSON v1 | `scripts/validate-contracts.sh` + fixtures (`testdata/lltimeline/`) |
+| LLTimeline Flutter parse | `cd apps/desktop && flutter test test/contract/lltimeline_parse_test.dart` over committed rhythm fixtures |
 
 ## 6. 测试数据
 

@@ -236,18 +236,31 @@ impl SpeechBatchCoordinator {
         job.result_count = result_count;
         job.updated_at_ms = now_ms();
         self.emit_progress(job);
-        let event = match job.kind {
-            SpeechBatchKind::PronunciationAnalysis => EventName::PronunciationAnalysisCompleted,
-            SpeechBatchKind::WordTimings => EventName::WordTimingsCompleted,
-        };
-        let _ = self.events.send(
-            crate::event_payloads::SpeechBatchCompletedPayload {
-                job_id: job.id.clone(),
-                track_id: job.track_id.clone(),
-                count: result_count,
+        match job.kind {
+            SpeechBatchKind::PronunciationAnalysis => {
+                let _ = self.events.send(
+                    crate::event_payloads::PronunciationAnalysisCompletedPayload {
+                        job_id: Some(job.id.clone()),
+                        track_id: Some(job.track_id.clone()),
+                        sentence_id: None,
+                        count: Some(result_count),
+                    }
+                    .envelope(),
+                );
             }
-            .envelope(event),
-        );
+            SpeechBatchKind::WordTimings => {
+                let _ = self.events.send(
+                    crate::event_payloads::WordTimingsCompletedPayload {
+                        job_id: Some(job.id.clone()),
+                        track_id: job.track_id.clone(),
+                        line: None,
+                        count: result_count,
+                        timeline_id: None,
+                    }
+                    .envelope(),
+                );
+            }
+        }
         Ok(())
     }
 
@@ -278,7 +291,7 @@ impl SpeechBatchCoordinator {
         };
         let _ = self.events.send(
             crate::event_payloads::SpeechBatchProgressPayload {
-                job_id: job.id.clone(),
+                job_id: Some(job.id.clone()),
                 track_id: job.track_id.clone(),
                 processed: job.processed,
                 total: job.total,
