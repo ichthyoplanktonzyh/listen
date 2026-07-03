@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-03 10:17 CST: 新增 listen 用户旅程总草案中英文双版本
+  `.planning/discuss/listen-user-journeys-current-and-planned.md` 和
+  `.planning/discuss/listen-user-journeys-current-and-planned.zh.md`，按用户意图梳理当前已可达功能
+  和 Phase 3.x 规划功能的详细使用路径，覆盖媒体打开、URL/下载、字幕获取、资源管理、
+  Word sync、Chunk replay、Listening structure、Phone evidence、词汇、诊断、设置、任务中心、
+  Practice/Review、听力词典、难度推荐、L1-aware diagnosis、shadowing、dashboard 和生产资源构建。
+  本次为 documentation-only，未修改产品代码。
+
 - 2026-07-03 16:07 CST: Phase 2.23 Step 3 完成 — main.dart 收缩为 composition root + UI 状态单轨化。
   硬指标达成：main.dart 3601 → **1457 行**（gate ≤1500）、setState 107 → **10**（gate ≤30，
   剩余均为局部 UI 状态）。六刀切法：(1) status 单源化——删除与 `PlayerController.status`
