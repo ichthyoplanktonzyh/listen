@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-03 21:15 CST: 合入 listen brand 视觉概念与用户旅程文档。
+  恢复并保留 `docs/brand/listen/` 品牌说明和 6 张视觉概念资产，同时将
+  `.planning/discuss/listen-user-journeys-current-and-planned.md` 与中文版本
+  `.planning/discuss/listen-user-journeys-current-and-planned.zh.md` 纳入 main；两份旅程文档覆盖
+  当前已可达功能和 Phase 3.x 规划功能的用户路径。documentation-only，无产品代码变更。
+
 - 2026-07-03 21:08 CST: Phase 2.23 正式收口 + ADR 0014。
   真实媒体手工 smoke 通过（owner 确认）后新增 `2.23-CLOSEOUT.md`：全部硬指标达成
   （main.dart 1457 行 / setState 10、sound_analysis 14 模块、schema v17、STATE 瘦身、
