@@ -231,6 +231,11 @@ class SubtitleController extends ChangeNotifier {
       _store.state.pronunciationBySentence;
   Map<String, List<WordTiming>> get timingsBySentence =>
       _store.state.timingsBySentence;
+
+  /// Total word timings across the active track's sentences; the capability
+  /// readiness and resource panels read this as the word-sync signal.
+  int get activeWordTimingCount => _store.state.timingsBySentence.values
+      .fold<int>(0, (total, timings) => total + timings.length);
   Map<String, SentenceChunkPartition> get chunkPartitionsBySentence =>
       _store.state.chunkPartitionsBySentence;
   List<PronunciationProvider> get pronunciationProviders =>

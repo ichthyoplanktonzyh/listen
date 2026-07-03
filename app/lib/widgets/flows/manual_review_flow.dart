@@ -1,0 +1,128 @@
+import 'package:flutter/material.dart';
+
+import '../../controllers/manual_review_controller.dart';
+import '../../controllers/media_session_coordinator.dart';
+import '../../controllers/player_controller.dart';
+import '../../controllers/resource_actions_coordinator.dart';
+import '../../controllers/subtitle_controller.dart';
+import '../../models/timeline.dart';
+import '../../player_adapter.dart';
+import '../../services/api_service.dart';
+import '../panels/manual_timeline_review_dialog.dart';
+
+/// Opens the sentence-level manual word-timing review dialog for the active
+/// WordTimeline and saves the user-adjusted revision. Extracted from the
+/// composition root. The "status pristine" flag (whether the review status
+/// text has not been superseded by a save result) lives entirely within one
+/// flow invocation, so it is a local here rather than host state.
+Future<void> openManualReviewFlow({
+  required BuildContext context,
+  required LocalApi? api,
+  required DesktopPlayerAdapter adapter,
+  required PlayerController playerController,
+  required SubtitleController subtitleController,
+  required ResourceActionsCoordinator resourceActions,
+  required MediaSessionCoordinator mediaSession,
+}) async {
+  final service = api;
+  final track = subtitleController.primaryTrack;
+  if (service == null || track == null) return;
+  var statusPristine = false;
+
+  Future<void> playRange(Duration start, Duration end) async {
+    if (end <= start) return;
+    playerController.setSourceLoop(start, end);
+    subtitleController.setLoopCue(false);
+    await adapter.seek(start);
+    await adapter.play();
+  }
+
+  Future<void> saveDraft(ManualReviewDraft draft) async {
+    final trackId = subtitleController.primaryTrack?.id;
+    if (trackId == null) return;
+    final errors = draft.validateAll();
+    if (errors.isNotEmpty) {
+      throw StateError(errors.join('; '));
+    }
+    playerController.setStatus('Saving manual review timeline...');
+    statusPristine = false;
+    await service.createTrackWordTimeline(trackId, draft.createPayload());
+    if (!context.mounted || subtitleController.primaryTrack?.id != trackId) {
+      return;
+    }
+    await mediaSession.loadSpeechEnhancements(trackId);
+    if (context.mounted) {
+      playerController.setStatus('Manual review timeline saved');
+    }
+  }
+
+  try {
+    playerController.setStatus('Loading manual review timeline...');
+    statusPristine = true;
+    await resourceActions.loadTimelineResource(track.id);
+    final active = subtitleController.wordTimelineSummaries
+        .where((summary) => summary.isActive)
+        .firstOrNull;
+    final activeTimelineId =
+        active?.id ??
+        subtitleController.llTimelineDocument?.activeWordTimelineId;
+    if (activeTimelineId == null) {
+      if (context.mounted) {
+        playerController.setStatus('No active WordTimeline to review');
+      }
+      return;
+    }
+    final timeline = WordTimeline.fromJson(
+      await service.wordTimeline(activeTimelineId),
+    );
+    final initialCue = _initialCue(subtitleController, track, timeline);
+    if (initialCue == null) {
+      if (context.mounted) {
+        playerController.setStatus('No sentence words to review');
+      }
+      return;
+    }
+    final draft = ManualReviewDraft(
+      track: track,
+      sourceTimeline: timeline,
+      words: timeline.words,
+      initialCue: initialCue,
+    );
+    if (!context.mounted) return;
+    final previousLoopStart = playerController.sourceLoopStart;
+    final previousLoopEnd = playerController.sourceLoopEnd;
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => ManualTimelineReviewDialog(
+          draft: draft,
+          onPlayRange: playRange,
+          onSave: saveDraft,
+        ),
+      );
+    } finally {
+      playerController.setSourceLoop(previousLoopStart, previousLoopEnd);
+    }
+    if (context.mounted && statusPristine) {
+      playerController.setStatus('Manual review closed');
+    }
+  } catch (error) {
+    if (context.mounted) {
+      playerController.setStatus('Manual review failed: $error');
+    }
+  }
+}
+
+Cue? _initialCue(
+  SubtitleController subtitleController,
+  SubtitleTrack track,
+  WordTimeline timeline,
+) {
+  final sentenceIds = timeline.words.map((word) => word.sentenceId).toSet();
+  final current = subtitleController.currentPrimaryCue;
+  if (current != null && sentenceIds.contains(current.id)) return current;
+  for (final cue in track.cues) {
+    if (sentenceIds.contains(cue.id)) return cue;
+  }
+  return null;
+}
