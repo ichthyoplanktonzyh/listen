@@ -2,13 +2,15 @@
 
 ## Unreleased
 
-- 2026-07-03 10:17 CST: 新增 listen 用户旅程总草案中英文双版本
-  `.planning/discuss/listen-user-journeys-current-and-planned.md` 和
-  `.planning/discuss/listen-user-journeys-current-and-planned.zh.md`，按用户意图梳理当前已可达功能
-  和 Phase 3.x 规划功能的详细使用路径，覆盖媒体打开、URL/下载、字幕获取、资源管理、
-  Word sync、Chunk replay、Listening structure、Phone evidence、词汇、诊断、设置、任务中心、
-  Practice/Review、听力词典、难度推荐、L1-aware diagnosis、shadowing、dashboard 和生产资源构建。
-  本次为 documentation-only，未修改产品代码。
+- 2026-07-03 21:08 CST: Phase 2.23 正式收口 + ADR 0014。
+  真实媒体手工 smoke 通过（owner 确认）后新增 `2.23-CLOSEOUT.md`：全部硬指标达成
+  （main.dart 1457 行 / setState 10、sound_analysis 14 模块、schema v17、STATE 瘦身、
+  cargo 358 / flutter 164 passed），A-1..A-7 + Step 3 + T1-T9 全部完成，C 类归 3.x、
+  D 类明确 defer，phase 文件夹冻结。T7 决策落定为 **ADR 0014**：Dart 模型解析保持手写，
+  fixture 契约测试为防漂移标准机制；存量 `timeline.dart` 不做 codegen 迁移，3.x 新 DTO
+  默认手写 + 契约测试，新模型家族体量显著增长时再做仅新代码试点（新 ADR）。
+  STATE.md 按维护规则把 2.23 压缩为已完成索引行（152 行），主线全面转入 Phase 3.x。
+  仅规划/决策文档，无代码变更。
 
 - 2026-07-03 16:07 CST: Phase 2.23 Step 3 完成 — main.dart 收缩为 composition root + UI 状态单轨化。
   硬指标达成：main.dart 3601 → **1457 行**（gate ≤1500）、setState 107 → **10**（gate ≤30，

@@ -3,19 +3,19 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-02T22:59:00.000+08:00"
+last_updated: "2026-07-03T17:20:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-02 22:59 CST
-> 更新原因：Phase 2.23 T2 文档事实源修复。STATE.md 从历史流水账压缩为当前状态机；
-> 已完成 phase 只保留索引，分支等瞬时事实改由 git 命令读取。
+> 最后更新：2026-07-03 17:20 CST
+> 更新原因：Phase 2.23 收口（手工 smoke 通过、ADR 0014 落定），section 按维护规则
+> 压缩为索引行；主线全面转入 Phase 3.x。
 
 ## 当前位置
 
 - **当前产品主线**：Phase 3.x 英语听力学习闭环（英语先行）。
-- **当前治理线**：Phase 2.23 Architecture Debt Paydown，进入 3.x 前清理架构债。
+- **治理线状态**：Phase 2.23 Architecture Debt Paydown 已于 2026-07-03 收口（详见其 CLOSEOUT）；3.x 开工前置全部就绪。
 - **算法线状态**：Phase 2.19 / 2.20 / 2.21 已于 2026-07-02 搁置；audible-structure v1
   contract 保持当前权威 shape，后续质量提升等学习闭环完成后再回到算法线。
 - **当前版本**：0.7.0。
@@ -65,30 +65,6 @@ last_updated: "2026-07-02T22:59:00.000+08:00"
 - 搁置原因：W8 人工标注/阈值校准与端到端回归待算法线重启。
 - 规划文档：`.planning/phases/2.21-audible-structure-architecture/2.21-PLAN.md`
 
-### Phase 2.23: Architecture Debt Paydown 🧭 当前治理线
-
-- 目标：在不改产品行为 / API contract / 算法语义的前提下，偿还 2026-07-02 架构审核确认的债务：
-  `main.dart` god file、`sound_analysis.rs` 单文件膨胀、文档事实源漂移、Dart 手写解析无契约守卫、
-  巨型测试文件。
-- 已修：A-1..A-7 高优先级审核缺陷；T1/B-1 删除 unused SQLite `learning_resources` 表并升
-  schema v17；T8/B-3 双家退役条件入档；T9/B-5 active partial index JSON 引号耦合入档。
-- Handoff tasks T1-T7 已由交接执行人完成（T2 文档事实源修复、T3 基线、
-  T4 sound_analysis 模块拆分、T5 巨型测试拆分、T6 零散 payload typed 化、
-  T7 Dart LLTimeline 解析测试 + codegen 调研）；T8/T9 前批已入档。
-- **Step 3 ✅ 完成（2026-07-03）**：main.dart 3601 → 1457 行（gate ≤1500）、
-  setState 107 → 10（gate ≤30）。新增 ResourceActions/MediaSession/
-  PlaybackActions 三个 context-free coordinator、PlayerStage/SidePanel/
-  PlaybackBar layout widget、settings/媒体导入/OpenSubtitles/manual review
-  flow 函数；status 单源化到 `PlayerController.status`；controller + Store
-  定调为唯一 UI 状态模式（详见 `2.23-PLAN.md` Step 3 回填）。
-  `flutter test` 162 passed。待办：用户按 `2.22-FRONTEND-E2E-QA.md` P0 路径
-  跑真实媒体手工 smoke。
-- 剩余：Step 6 closeout（待手工 smoke 回填后收口）。
-- 规划文档：
-  - `.planning/phases/2.23-architecture-debt-paydown/2.23-PLAN.md`
-  - `.planning/phases/2.23-architecture-debt-paydown/2.23-HANDOFF-TASKS.md`
-  - `.planning/phases/2.23-architecture-debt-paydown/2.23-REVIEW-FINDINGS-REGISTER.md`
-
 ### Phase 3.0: English Listening Learning Loop ⏳ 当前产品主线
 
 - 目标：在 Phase 2 的真实声音流资源和 Phase 2.18 的学习资产架构上，把英语先做成完整学习闭环。
@@ -98,7 +74,7 @@ last_updated: "2026-07-02T22:59:00.000+08:00"
   - 常见语言学习功能重写为听力本位能力。
   - 首个真实组合为 Mandarin L1 → English L2，L1/L2 理论进入诊断层。
   - Cloze、听写、字幕渐隐、chunk replay、本地 YouGlish-like 个人语料库是关键体验。
-- 前置：Flutter 侧新 practice UI 开工前先完成 Phase 2.23 的 `main.dart` 收缩，避免继续堆入 god file。
+- 前置已就绪：Phase 2.23 已收口，`main.dart` 为 composition root（1457 行），controller + Store 为唯一 UI 状态模式，practice UI 可直接开工。
 - 规划文档：`.planning/phases/3.0-english-listening-learning-loop/3.0-PLAN.md`
 
 ### Phase 3.0.1: Learning Loop Architecture Foundation ✅ 后端地基完成
@@ -137,20 +113,23 @@ last_updated: "2026-07-02T22:59:00.000+08:00"
 | 2.16 Real Connected Speech Model v1 | 真实语流解释层完成 | `.planning/phases/2.16-real-connected-speech-model-v1/2.16-CLOSEOUT.md` |
 | 2.17 Real Media Sound-Line QA | 真实媒体 sound-line QA pack 完成 | `.planning/phases/2.17-real-media-sound-line-qa/2.17-CLOSEOUT.md` |
 | 2.18 Codebase Architecture Refactor | 代码架构全面重构完成 | `.planning/phases/2.18-codebase-architecture-refactor/2.18-CLOSEOUT.md` |
-| 2.22 User-Facing Workflow Semantics | 用户可见工作流语义收口，真实媒体 smoke 待用户跑 | `.planning/phases/2.22-user-facing-workflow-semantics/2.22-CLOSEOUT.md` |
+| 2.22 User-Facing Workflow Semantics | 用户可见工作流语义收口（真实媒体 smoke 已于 2026-07-03 通过） | `.planning/phases/2.22-user-facing-workflow-semantics/2.22-CLOSEOUT.md` |
+| 2.23 Architecture Debt Paydown | 架构债集中偿还完成：main.dart 1457 行 / setState 10、sound_analysis 模块化、schema v17、契约测试安全网、ADR 0014 | `.planning/phases/2.23-architecture-debt-paydown/2.23-CLOSEOUT.md` |
 
 ## 最近重要决策
 
-1. **2026-07-02** — speech-analysis 算法线（2.19/2.20/2.21）搁置，主线转入 Phase 3.x
+1. **2026-07-03** — ADR 0014：Dart 模型解析保持手写，fixture 契约测试为防漂移标准；
+   存量 `timeline.dart` 不做 codegen 迁移，3.x 新 DTO 手写 + 契约测试，体量大再试点。
+2. **2026-07-02** — speech-analysis 算法线（2.19/2.20/2.21）搁置，主线转入 Phase 3.x
    英语听力学习闭环；audible-structure v1 contract 保持当前权威 shape。
-2. **2026-07-02** — Phase 2.23 只做机械治理，不改产品行为；`main.dart` 收缩是 3.x
+3. **2026-07-02** — Phase 2.23 只做机械治理，不改产品行为；`main.dart` 收缩是 3.x
    Flutter practice UI 的前置。
-3. **2026-07-01** — consumer self-contained invariant：bundled whisper.cpp 产出的
+4. **2026-07-01** — consumer self-contained invariant：bundled whisper.cpp 产出的
    WordTimeline 必须解锁基础功能，sidecar 只升级质量。
-4. **2026-07-01** — 字幕层声音模式统一为 Rhythm A/B/C；phones 是 C 内 L4 evidence，不再是一级模式。
-5. **2026-06-30** — 算法/指标/阈值变更必须记录 evidence class，不能把小样本 smoke 或自动标签当真理。
-6. **2026-06-27** — 稳定教学标签优先：CTC 是 audio evidence，不是默认 teaching label truth。
-7. **2026-06-18** — 产品拆为本地重装生产引擎 + 轻量消费端两条协同路线。
+5. **2026-07-01** — 字幕层声音模式统一为 Rhythm A/B/C；phones 是 C 内 L4 evidence，不再是一级模式。
+6. **2026-06-30** — 算法/指标/阈值变更必须记录 evidence class，不能把小样本 smoke 或自动标签当真理。
+7. **2026-06-27** — 稳定教学标签优先：CTC 是 audio evidence，不是默认 teaching label truth。
+8. **2026-06-18** — 产品拆为本地重装生产引擎 + 轻量消费端两条协同路线。
 
 ## 当前阻塞项
 
@@ -158,11 +137,12 @@ last_updated: "2026-07-02T22:59:00.000+08:00"
 
 ## 下一步工作
 
-1. Phase 2.23：继续 T2 收口验证；随后推进 T6 SSE payload typed 化余项、T7 Dart contract
-   解析安全网、T4/T5 机械拆分。
-2. Phase 2.23 Step 3：由原审核会话推进 `main.dart` 收缩，避免 3.x practice UI 继续进入 god file。
-3. Phase 3.x：在当前 audible-structure v1 和 2.22 用户语义上推进输入难度、精听/泛听、
-   主动验证、听力驱动词汇、L1-aware diagnosis、shadowing 和 dashboard。
+1. Phase 3.x 正式开工：第一切片建议为 Flutter practice controller/UI（后端
+   vertical slice 已就绪），同步把 C-1（词组进诊断）、C-2（声音证据流入诊断）
+   纳入 3.x 计划——它们是"先诊断再练习"闭环的核心兑现点。
+2. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
+   新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
+3. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）。
 
 ## 指标
 
