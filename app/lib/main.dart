@@ -21,6 +21,7 @@ import 'controllers/learning_workflow_controller.dart';
 import 'controllers/media_session_coordinator.dart';
 import 'controllers/playback_actions_coordinator.dart';
 import 'controllers/player_controller.dart';
+import 'controllers/practice_controller.dart';
 import 'controllers/resource_actions_coordinator.dart';
 import 'controllers/speech_enhancement_workflow_controller.dart';
 import 'controllers/subtitle_controller.dart';
@@ -106,6 +107,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final playerController = PlayerController();
   final subtitleController = SubtitleController();
   final learningController = LearningController();
+  final practiceController = PracticeController();
   final learningWorkflowController = LearningWorkflowController();
   final speechEnhancementWorkflowController =
       SpeechEnhancementWorkflowController();
@@ -160,7 +162,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         await mediaSession.loadSpeechEnhancements(trackId);
       },
       activatePrimaryTrack: (track, {required nextStatus}) async {
-        await mediaSession.usePrimarySubtitleTrack(track, nextStatus: nextStatus);
+        await mediaSession.usePrimarySubtitleTrack(
+          track,
+          nextStatus: nextStatus,
+        );
       },
       reloadLearningEntries: () async {
         await _loadWordEntries();
@@ -348,8 +353,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
         Platform.environment['LLPLAYERNEXT_SMOKE_SECONDARY_SUBTITLE'];
     if (media == null) return;
     await mediaSession.openMediaPath(media);
-    if (subtitle != null) await mediaSession.openSubtitlePath(subtitle, secondary: false);
-    if (secondary != null) await mediaSession.openSubtitlePath(secondary, secondary: true);
+    if (subtitle != null) {
+      await mediaSession.openSubtitlePath(subtitle, secondary: false);
+    }
+    if (secondary != null) {
+      await mediaSession.openSubtitlePath(secondary, secondary: true);
+    }
   }
 
   void _onEvent(Map<String, dynamic> event) {
@@ -659,8 +668,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (api == null) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) =>
-            TranscriptionCenter(api: api!, loadTrack: mediaSession.loadGeneratedTrack),
+        builder: (_) => TranscriptionCenter(
+          api: api!,
+          loadTrack: mediaSession.loadGeneratedTrack,
+        ),
       ),
     );
   }
@@ -967,6 +978,102 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await _refreshDiagnosis();
   }
 
+  Future<void> _startClozePractice() async {
+    learningController.selectSidePanel(4);
+    final cue = subtitleController.currentPrimaryCue;
+    await practiceController.startCloze(
+      api: api,
+      cue: cue,
+      mediaId: playerController.mediaId,
+      trackId: subtitleController.primaryTrack?.id,
+      wordTimings: cue == null
+          ? const []
+          : subtitleController.timingsBySentence[cue.id] ?? const [],
+      wordEntries: learningController.wordEntries,
+      mediaTimeMs: _mediaTimeMs,
+    );
+    if (practiceController.item != null) {
+      await _replayPracticeWindow();
+    }
+  }
+
+  Future<void> _startChunkDictationPractice() async {
+    learningController.selectSidePanel(4);
+    await practiceController.startChunkDictation(
+      api: api,
+      cue: subtitleController.currentPrimaryCue,
+      chunk: _currentPracticeChunk(),
+      mediaId: playerController.mediaId,
+      trackId: subtitleController.primaryTrack?.id,
+      mediaTimeMs: _mediaTimeMs,
+    );
+    if (practiceController.item != null) {
+      await _replayPracticeWindow();
+    }
+  }
+
+  Future<void> _startSentenceDictationPractice() async {
+    learningController.selectSidePanel(4);
+    await practiceController.startSentenceDictation(
+      api: api,
+      cue: subtitleController.currentPrimaryCue,
+      mediaId: playerController.mediaId,
+      trackId: subtitleController.primaryTrack?.id,
+      mediaTimeMs: _mediaTimeMs,
+    );
+    if (practiceController.item != null) {
+      await _replayPracticeWindow();
+    }
+  }
+
+  Future<void> _replayPracticeWindow() async {
+    final draft = practiceController.draft;
+    if (draft == null) return;
+    await playbackActions.loopRange(
+      draft.playbackStartMs,
+      draft.playbackEndMs,
+      'Looping practice window',
+    );
+  }
+
+  Future<void> _submitPractice() async {
+    await practiceController.submit(api);
+    final attempt = practiceController.attempt;
+    if (attempt != null && mounted) {
+      playerController.setStatus(
+        'Practice ${attempt.result}; ${attempt.evaluation.summary}',
+      );
+    }
+    await _refreshDiagnosis();
+  }
+
+  Future<void> _savePracticeReview() async {
+    await practiceController.saveCurrentFailureToReview(api);
+    if (practiceController.attempt?.generatedReviewItemIds.isNotEmpty == true &&
+        mounted) {
+      playerController.setStatus('Practice failure saved to review');
+    }
+  }
+
+  int _mediaTimeMs(Duration subtitleTime) =>
+      playbackActions.mediaTime(subtitleTime).inMilliseconds;
+
+  DisplayChunk? _currentPracticeChunk() {
+    final cue = subtitleController.currentPrimaryCue;
+    if (cue == null) return null;
+    final current = playbackActions.currentChunkRef();
+    if (current?.cue.id == cue.id) return current!.chunk;
+    final partition = subtitleController.chunkPartitionsBySentence[cue.id];
+    if (partition == null || partition.chunks.isEmpty) return null;
+    final currentIndex = subtitleController.currentChunkIndex;
+    if (currentIndex != null) {
+      for (final chunk in partition.chunks) {
+        if (chunk.index == currentIndex) return chunk;
+      }
+    }
+    return partition.chunks.first;
+  }
+
   /// Resolves the learning language for vocabulary, dictionary, source-snapshot
   /// and diagnosis queries. Priority: user setting > active subtitle track
   /// language > en fallback.
@@ -1224,6 +1331,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     playerController.dispose();
     subtitleController.dispose();
     learningController.dispose();
+    practiceController.dispose();
     settingsController.dispose();
     super.dispose();
   }
@@ -1256,6 +1364,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         playerController,
         subtitleController,
         learningController,
+        practiceController,
         settingsController,
         downloadController,
       ]),
@@ -1263,6 +1372,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         player: playerController,
         subtitle: subtitleController,
         learning: learningController,
+        practice: practiceController,
         settings: settingsController,
         api: api!,
         child: CallbackShortcuts(
@@ -1316,10 +1426,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     unawaited(_importEmbeddedSubtitle()),
                 onOpenSettings: () => unawaited(_openSettings()),
                 onExportLogs: () => unawaited(_exportLogs()),
-                onExportVocabulary: () => unawaited(playbackActions.exportVocabulary()),
-                onImportVocabulary: () => unawaited(playbackActions.importVocabulary()),
+                onExportVocabulary: () =>
+                    unawaited(playbackActions.exportVocabulary()),
+                onImportVocabulary: () =>
+                    unawaited(playbackActions.importVocabulary()),
                 onImportWordList: () => unawaited(_importWordList()),
-                onArchiveMedia: () => unawaited(playbackActions.archiveCurrentMedia()),
+                onArchiveMedia: () =>
+                    unawaited(playbackActions.archiveCurrentMedia()),
                 onOpenTranscriptionCenter: () =>
                     unawaited(_openTranscriptionCenter()),
                 onOpenPhoneticAnalysisCenter: () =>
@@ -1361,7 +1474,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             if (subtitleController.primaryTrack != null ||
                                 learningController.selectedLexicalDetails !=
                                     null ||
-                                learningController.sidePanel == 1)
+                                learningController.sidePanel == 1 ||
+                                learningController.sidePanel == 4 ||
+                                practiceController.draft != null)
                               SizedBox(
                                 width: settingsController.transcriptWidth,
                                 child: _sidePanel(),
@@ -1409,6 +1524,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     playerController: playerController,
     subtitleController: subtitleController,
     learningController: learningController,
+    practiceController: practiceController,
     settingsController: settingsController,
     resourceActions: resourceActions,
     mediaSession: mediaSession,
@@ -1424,6 +1540,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     onDeleteSubtitle: _deleteSubtitleResource,
     onExportSubtitle: _exportSubtitleResource,
     onAnalyzePhonetics: _analyzePhonetics,
+    onStartClozePractice: _startClozePractice,
+    onStartChunkDictationPractice: _startChunkDictationPractice,
+    onStartSentenceDictationPractice: _startSentenceDictationPractice,
+    onReplayPracticeWindow: _replayPracticeWindow,
+    onSubmitPractice: _submitPractice,
+    onSavePracticeReview: _savePracticeReview,
     timingQuality: _timingQuality,
   );
 

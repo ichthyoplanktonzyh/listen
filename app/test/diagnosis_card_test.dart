@@ -308,4 +308,74 @@ void main() {
     expect(find.text('weak group 70% audible'), findsOneWidget);
     expect(find.textContaining('Rhythm confidence: 77%'), findsOneWidget);
   });
+
+  testWidgets('document rhythm hotspot can trigger evidence loop', (
+    tester,
+  ) async {
+    ListeningHotspot? looped;
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: DiagnosisCard(
+            diagnosis: const Diagnosis(),
+            rhythmFrame: const RhythmFrame(
+              generatedFrom: 'wordtimeline_timing_acoustic_prominence_v1',
+              references: RhythmFrameReferences(
+                citation: RhythmReference(
+                  label: 'citation_form',
+                  source: 'dictionary_lexical_stress',
+                  evidenceClass: 'heuristic_proxy',
+                ),
+                actual: RhythmReference(
+                  label: 'actual_delivery',
+                  source: 'word_timeline_duration_energy',
+                  evidenceClass: 'heuristic_proxy',
+                ),
+              ),
+              stressAnchors: [],
+              nuclei: [],
+              weakGroups: [],
+              compressionSpans: [],
+              phraseBoundaries: [],
+              connectedSpeechRefs: [],
+              listeningHotspots: [
+                ListeningHotspot(
+                  id: 'hs1',
+                  kind: 'compressed_span',
+                  start: Duration(milliseconds: 120),
+                  end: Duration(milliseconds: 260),
+                  label: 'packed words',
+                  hint: 'compressed function words',
+                  signalSources: ['timing'],
+                  evidenceClass: 'heuristic_proxy',
+                  claimStatus: 'audio_supported',
+                  confidence: 0.72,
+                ),
+              ],
+              quality: RhythmFrameQuality(
+                timingSource: 'word_timeline',
+                prominenceSources: ['timing'],
+                boundarySources: ['timing'],
+                connectedSpeechSource: 'timing',
+                phoneEvidenceCoverage: 0,
+                rhythmConfidence: 0.6,
+              ),
+            ),
+            onLoopHotspot: (value) => looped = value,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('packed words 72% audible'), findsOneWidget);
+    await tester.tap(find.text('packed words 72% audible'));
+    expect(looped?.id, 'hs1');
+  });
 }

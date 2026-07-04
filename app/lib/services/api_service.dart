@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 
+import '../models/practice.dart';
+
 Future<String> computeOpenSubtitlesMovieHash(String path) async {
   final file = File(path);
   final size = await file.length();
@@ -759,6 +761,46 @@ class LocalApi {
               ))
               as List<dynamic>)
           .cast<Map<String, dynamic>>();
+
+  Future<PracticeSession> createPracticeSession(
+    CreatePracticeSession input,
+  ) async => PracticeSession.fromJson(
+    (await _request('POST', '/v1/practice/sessions', input.toJson()))
+        as Map<String, dynamic>,
+  );
+
+  Future<PracticeItem> createPracticeItem(CreatePracticeItem input) async =>
+      PracticeItem.fromJson(
+        (await _request('POST', '/v1/practice/items', input.toJson()))
+            as Map<String, dynamic>,
+      );
+
+  Future<PracticeAttempt> submitPracticeAttempt(
+    SubmitPracticeAttempt input,
+  ) async => PracticeAttempt.fromJson(
+    (await _request('POST', '/v1/practice/attempts', input.toJson()))
+        as Map<String, dynamic>,
+  );
+
+  Future<PracticeAttempt> practiceAttempt(String id) async =>
+      PracticeAttempt.fromJson(
+        (await _request(
+              'GET',
+              '/v1/practice/attempts/${Uri.encodeComponent(id)}',
+            ))
+            as Map<String, dynamic>,
+      );
+
+  Future<ReviewItem> createReviewItem(CreateReviewItem input) async =>
+      ReviewItem.fromJson(
+        (await _request('POST', '/v1/review/items', input.toJson()))
+            as Map<String, dynamic>,
+      );
+
+  Future<ReviewItem> reviewItem(String id) async => ReviewItem.fromJson(
+    (await _request('GET', '/v1/review/items/${Uri.encodeComponent(id)}'))
+        as Map<String, dynamic>,
+  );
 
   Future<List<Map<String, dynamic>>> learningResources() async =>
       ((await _request('GET', '/v1/learning-resources')) as List<dynamic>)

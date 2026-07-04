@@ -6,12 +6,14 @@ import '../../controllers/learning_controller.dart';
 import '../../controllers/media_session_coordinator.dart';
 import '../../controllers/playback_actions_coordinator.dart';
 import '../../controllers/player_controller.dart';
+import '../../controllers/practice_controller.dart';
 import '../../controllers/resource_actions_coordinator.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
 import '../../localization.dart';
 import '../../models/timeline.dart';
 import '../panels/diagnosis_card.dart';
+import '../panels/practice_panel.dart';
 import '../panels/subtitle_resource_manager_panel.dart';
 import '../panels/transcript_panel.dart';
 import '../panels/word_learning_panel.dart';
@@ -26,6 +28,7 @@ class SidePanel extends StatefulWidget {
     required this.playerController,
     required this.subtitleController,
     required this.learningController,
+    required this.practiceController,
     required this.settingsController,
     required this.resourceActions,
     required this.mediaSession,
@@ -41,12 +44,19 @@ class SidePanel extends StatefulWidget {
     required this.onDeleteSubtitle,
     required this.onExportSubtitle,
     required this.onAnalyzePhonetics,
+    required this.onStartClozePractice,
+    required this.onStartChunkDictationPractice,
+    required this.onStartSentenceDictationPractice,
+    required this.onReplayPracticeWindow,
+    required this.onSubmitPractice,
+    required this.onSavePracticeReview,
     required this.timingQuality,
   });
 
   final PlayerController playerController;
   final SubtitleController subtitleController;
   final LearningController learningController;
+  final PracticeController practiceController;
   final SettingsController settingsController;
   final ResourceActionsCoordinator resourceActions;
   final MediaSessionCoordinator mediaSession;
@@ -63,6 +73,12 @@ class SidePanel extends StatefulWidget {
   final Future<void> Function(SubtitleTrack track) onDeleteSubtitle;
   final Future<void> Function(SubtitleTrack track) onExportSubtitle;
   final Future<void> Function({required bool wholeTrack}) onAnalyzePhonetics;
+  final Future<void> Function() onStartClozePractice;
+  final Future<void> Function() onStartChunkDictationPractice;
+  final Future<void> Function() onStartSentenceDictationPractice;
+  final Future<void> Function() onReplayPracticeWindow;
+  final Future<void> Function() onSubmitPractice;
+  final Future<void> Function() onSavePracticeReview;
   final String Function(String sentenceId) timingQuality;
 
   @override
@@ -73,6 +89,7 @@ class _SidePanelState extends State<SidePanel> {
   PlayerController get playerController => widget.playerController;
   SubtitleController get subtitleController => widget.subtitleController;
   LearningController get learningController => widget.learningController;
+  PracticeController get practiceController => widget.practiceController;
   SettingsController get settingsController => widget.settingsController;
   ResourceActionsCoordinator get resourceActions => widget.resourceActions;
   MediaSessionCoordinator get mediaSession => widget.mediaSession;
@@ -96,7 +113,51 @@ class _SidePanelState extends State<SidePanel> {
       widget.onExportSubtitle(track);
   Future<void> _analyzePhonetics({required bool wholeTrack}) =>
       widget.onAnalyzePhonetics(wholeTrack: wholeTrack);
+  Future<void> _startClozePractice() => widget.onStartClozePractice();
+  Future<void> _startChunkDictationPractice() =>
+      widget.onStartChunkDictationPractice();
+  Future<void> _startSentenceDictationPractice() =>
+      widget.onStartSentenceDictationPractice();
+  Future<void> _replayPracticeWindow() => widget.onReplayPracticeWindow();
+  Future<void> _submitPractice() => widget.onSubmitPractice();
+  Future<void> _savePracticeReview() => widget.onSavePracticeReview();
   String _timingQuality(String sentenceId) => widget.timingQuality(sentenceId);
+
+  bool get _canCloze {
+    final cue = subtitleController.currentPrimaryCue;
+    return cue != null &&
+        (subtitleController.timingsBySentence[cue.id] ?? const []).isNotEmpty;
+  }
+
+  bool get _canChunkDictation {
+    final cue = subtitleController.currentPrimaryCue;
+    return cue != null &&
+        (subtitleController
+                .chunkPartitionsBySentence[cue.id]
+                ?.chunks
+                .isNotEmpty ??
+            false);
+  }
+
+  bool get _hasEstimatedWordTiming {
+    final cue = subtitleController.currentPrimaryCue;
+    if (cue == null) return false;
+    return (subtitleController.timingsBySentence[cue.id] ?? const []).any(
+      (value) => value.source == 'estimated',
+    );
+  }
+
+  RhythmFrame? get _currentRhythmFrame {
+    final cue = subtitleController.currentPrimaryCue;
+    if (cue == null) return null;
+    return subtitleController.llTimelineDocument?.rhythmFrameForSentence(
+          cue.id,
+        ) ??
+        subtitleController
+            .phoneticAnalysisBySentence[cue.id]
+            ?.soundAnalysis
+            ?.rhythmFrame;
+  }
 
   @override
   Widget build(BuildContext context) => Material(
@@ -125,12 +186,18 @@ class _SidePanelState extends State<SidePanel> {
               icon: const Icon(Icons.analytics_outlined),
               label: Text(l.text('diagnosis')),
             ),
+            ButtonSegment(
+              value: 4,
+              icon: const Icon(Icons.fact_check_outlined),
+              label: Text(l.text('practice')),
+            ),
           ],
           selected: {learningController.sidePanel},
           onSelectionChanged: (value) =>
               learningController.selectSidePanel(value.first),
           showSelectedIcon: false,
         ),
+        _postureActions(),
         Expanded(
           child: switch (learningController.sidePanel) {
             1 => _subtitleResources(),
@@ -153,6 +220,7 @@ class _SidePanelState extends State<SidePanel> {
               learningController.diagnosis == null
                   ? Center(child: Text(l.text('diagnosis')))
                   : _diagnosisCard(),
+            4 => _practicePanel(),
             _ => _transcript(),
           },
         ),
@@ -223,6 +291,7 @@ class _SidePanelState extends State<SidePanel> {
                 .isEmpty
         ? null
         : _timingQuality(subtitleController.currentPrimaryCue!.id),
+    rhythmFrame: _currentRhythmFrame,
     phoneticAnalysis: subtitleController.currentPrimaryCue == null
         ? null
         : subtitleController.phoneticAnalysisBySentence[subtitleController
@@ -243,6 +312,13 @@ class _SidePanelState extends State<SidePanel> {
         'Looping detected phone ${phone.displayIpa}',
       ),
     ),
+    onLoopHotspot: (hotspot) => unawaited(
+      playbackActions.loopRange(
+        hotspot.start.inMilliseconds,
+        hotspot.end.inMilliseconds,
+        'Looping listening hotspot ${hotspot.label}',
+      ),
+    ),
     onLoopFinding: (finding) => unawaited(
       playbackActions.loopRange(
         finding.audioStartMs,
@@ -252,5 +328,112 @@ class _SidePanelState extends State<SidePanel> {
     ),
     onFindingFeedback: (finding, value) =>
         unawaited(playbackActions.savePhoneticFindingFeedback(finding, value)),
+  );
+
+  Widget _postureActions() {
+    final hasCue = subtitleController.currentPrimaryCue != null;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 8,
+        runSpacing: 6,
+        children: [
+          OutlinedButton.icon(
+            onPressed: hasCue
+                ? () => learningController.selectSidePanel(3)
+                : null,
+            icon: const Icon(Icons.analytics_outlined),
+            label: Text(l.text('understandPosture')),
+          ),
+          PopupMenuButton<String>(
+            enabled: hasCue,
+            tooltip: l.text('testPosture'),
+            onSelected: (value) {
+              learningController.selectSidePanel(4);
+              switch (value) {
+                case 'cloze':
+                  unawaited(_startClozePractice());
+                case 'chunk':
+                  unawaited(_startChunkDictationPractice());
+                case 'sentence':
+                  unawaited(_startSentenceDictationPractice());
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'cloze',
+                enabled: _canCloze,
+                child: ListTile(
+                  leading: const Icon(Icons.text_fields),
+                  title: Text(l.text('clozePractice')),
+                  subtitle: Text(
+                    _canCloze
+                        ? l.text('practiceClozeTooltip')
+                        : l.text('practiceClozeUnavailable'),
+                  ),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'chunk',
+                child: ListTile(
+                  leading: const Icon(Icons.segment),
+                  title: Text(l.text('chunkDictation')),
+                  subtitle: Text(
+                    _canChunkDictation
+                        ? l.text('practiceChunkTooltip')
+                        : l.text('practiceChunkFallbackTooltip'),
+                  ),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'sentence',
+                child: ListTile(
+                  leading: const Icon(Icons.short_text),
+                  title: Text(l.text('sentenceDictation')),
+                ),
+              ),
+            ],
+            child: Chip(
+              avatar: Icon(
+                Icons.fact_check_outlined,
+                size: 18,
+                color: hasCue ? null : Theme.of(context).disabledColor,
+              ),
+              label: Text(
+                l.text('testPosture'),
+                style: TextStyle(
+                  color: hasCue ? null : Theme.of(context).disabledColor,
+                ),
+              ),
+            ),
+          ),
+          Tooltip(
+            message: l.text('shadowingPlannedTooltip'),
+            child: OutlinedButton.icon(
+              onPressed: null,
+              icon: const Icon(Icons.mic_none),
+              label: Text(l.text('shadowPosture')),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _practicePanel() => PracticePanel(
+    controller: practiceController,
+    currentCue: subtitleController.currentPrimaryCue,
+    diagnosis: learningController.diagnosis,
+    canCloze: _canCloze,
+    canChunkDictation: _canChunkDictation,
+    hasEstimatedWordTiming: _hasEstimatedWordTiming,
+    onStartCloze: _startClozePractice,
+    onStartChunkDictation: _startChunkDictationPractice,
+    onStartSentenceDictation: _startSentenceDictationPractice,
+    onReplay: _replayPracticeWindow,
+    onSubmit: _submitPractice,
+    onSaveReview: _savePracticeReview,
+    onOpenDiagnosis: () => learningController.selectSidePanel(3),
   );
 }

@@ -12,11 +12,13 @@ class DiagnosisCard extends StatelessWidget {
     this.ruleHintsLevel = 'likely',
     this.pronunciationProviders = const [],
     this.timingQuality,
+    this.rhythmFrame,
     this.phoneticAnalysis,
     this.currentDetectedPhone,
     this.onAnalyzePhonetics,
     this.onAnalyzeTrackPhonetics,
     this.onLoopDetectedPhone,
+    this.onLoopHotspot,
     this.onLoopFinding,
     this.onFindingFeedback,
   });
@@ -26,17 +28,21 @@ class DiagnosisCard extends StatelessWidget {
   final String ruleHintsLevel;
   final List<PronunciationProvider> pronunciationProviders;
   final String? timingQuality;
+  final RhythmFrame? rhythmFrame;
   final PhoneticAnalysis? phoneticAnalysis;
   final DetectedPhone? currentDetectedPhone;
   final VoidCallback? onAnalyzePhonetics;
   final VoidCallback? onAnalyzeTrackPhonetics;
   final ValueChanged<DetectedPhone>? onLoopDetectedPhone;
+  final ValueChanged<ListeningHotspot>? onLoopHotspot;
   final ValueChanged<PhoneticFinding>? onLoopFinding;
   final void Function(PhoneticFinding finding, String value)? onFindingFeedback;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final activeRhythmFrame =
+        rhythmFrame ?? phoneticAnalysis?.soundAnalysis?.rhythmFrame;
     return Container(
       width: double.infinity,
       constraints: const BoxConstraints(maxHeight: 190),
@@ -84,6 +90,8 @@ class DiagnosisCard extends StatelessWidget {
                   ),
               ],
             ),
+          if (activeRhythmFrame != null)
+            _rhythmFrame(context, activeRhythmFrame),
           if (phoneticAnalysis != null) ...[
             _section(
               l.text('audioDetectionExperimental'),
@@ -91,11 +99,6 @@ class DiagnosisCard extends StatelessWidget {
               '${phoneticAnalysis!.modelRevision} · '
               '${phoneticAnalysis!.phoneSet}',
             ),
-            if (phoneticAnalysis!.soundAnalysis?.rhythmFrame != null)
-              _rhythmFrame(
-                context,
-                phoneticAnalysis!.soundAnalysis!.rhythmFrame!,
-              ),
             Wrap(
               spacing: 4,
               runSpacing: 4,
@@ -239,19 +242,7 @@ class DiagnosisCard extends StatelessWidget {
               const Color(0xffffbf69),
             ),
           if (frame.listeningHotspots.isNotEmpty)
-            _chipLine(
-              l.text('listeningHotspots'),
-              frame.listeningHotspots
-                  .take(4)
-                  .map(
-                    (hotspot) => _confidenceLabel(
-                      hotspot.label,
-                      hotspot.confidence,
-                      hotspot.claimStatus,
-                    ),
-                  ),
-              const Color(0xffffd166),
-            ),
+            _hotspotLine(context, frame.listeningHotspots.take(4)),
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text(
@@ -294,6 +285,53 @@ class DiagnosisCard extends StatelessWidget {
         children: [
           Text('$label:', style: const TextStyle(fontSize: 12)),
           ...chips,
+        ],
+      ),
+    );
+  }
+
+  Widget _hotspotLine(BuildContext context, Iterable<ListeningHotspot> values) {
+    final l = AppLocalizations.of(context);
+    final hotspots = values.toList(growable: false);
+    if (hotspots.isEmpty) return const SizedBox.shrink();
+    const color = Color(0xffffd166);
+    return Padding(
+      padding: const EdgeInsets.only(top: 5),
+      child: Wrap(
+        spacing: 5,
+        runSpacing: 5,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(
+            '${l.text('listeningHotspots')}:',
+            style: const TextStyle(fontSize: 12),
+          ),
+          for (final hotspot in hotspots)
+            Tooltip(
+              message: [
+                if (hotspot.hint.isNotEmpty) hotspot.hint,
+                '${hotspot.kind.replaceAll('_', ' ')} · '
+                    '${(hotspot.confidence * 100).round()}%',
+              ].join('\n'),
+              child: ActionChip(
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                backgroundColor: color.withAlpha(42),
+                side: BorderSide(color: color.withAlpha(115)),
+                label: Text(
+                  _confidenceLabel(
+                    hotspot.label,
+                    hotspot.confidence,
+                    hotspot.claimStatus,
+                  ),
+                  style: const TextStyle(fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onPressed: onLoopHotspot == null
+                    ? null
+                    : () => onLoopHotspot!(hotspot),
+              ),
+            ),
         ],
       ),
     );
