@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- 2026-07-04 21:15 CST: 修复精听听写输入与播放器字幕快捷键冲突。
+  新增 `PlayerGlobalShortcuts`，当焦点位于 `EditableText` 文本输入控件时临时让播放器级快捷键让路，
+  避免真实听写中输入 `h` 被全局 `H` 隐藏字幕快捷键截获；无文本输入焦点时原播放器快捷键行为保持不变。
+  新增 widget 回归测试覆盖 `H` 在输入态与非输入态的分发差异。
+
 - 2026-07-04 16:38 CST: Phase 3.2 卡点与 session summary 切片落地。
   后端新增卡点/诊断查看/完成 session 事件流与 session summary API，卡点状态由
   `learning_events`、practice attempts、review items 派生，不引入新的持久化状态表；
