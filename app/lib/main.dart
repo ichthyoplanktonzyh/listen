@@ -12,6 +12,7 @@ import 'm18_ui.dart';
 import 'player_adapter.dart';
 import 'settings.dart';
 import 'transcription_ui.dart';
+import 'theme/listen_theme.dart';
 
 import 'controllers/app_controllers.dart';
 import 'controllers/backend_event_coordinator.dart';
@@ -44,8 +45,10 @@ import 'widgets/app_bar/player_app_bar.dart';
 import 'widgets/flows/manual_review_flow.dart';
 import 'widgets/flows/media_import_flows.dart';
 import 'widgets/layout/playback_bar.dart';
+import 'widgets/layout/media_workbench.dart';
 import 'widgets/layout/player_stage.dart';
 import 'widgets/layout/side_panel.dart';
+import 'widgets/home/listening_home.dart';
 import 'widgets/player/player_global_shortcuts.dart';
 import 'widgets/settings/settings_flow.dart';
 
@@ -80,13 +83,7 @@ class ListenApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xff6dd6c3),
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
+      theme: ListenTheme.light(),
       home: const PlayerScreen(),
     ),
   );
@@ -1686,21 +1683,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   child: Column(
                     children: [
                       Expanded(
-                        child: Row(
-                          children: [
-                            Expanded(flex: 3, child: _playerStage()),
-                            if (subtitleController.primaryTrack != null ||
-                                learningController.selectedLexicalDetails !=
-                                    null ||
-                                learningController.sidePanel == 1 ||
-                                learningController.sidePanel == 4 ||
-                                practiceController.draft != null)
-                              SizedBox(
-                                width: settingsController.transcriptWidth,
-                                child: _sidePanel(),
+                        child: playerController.mediaPath == null
+                            ? ListeningHome(
+                                onOpenMedia: mediaSession.openMedia,
+                                onOpenOnline: _openOnline,
+                                onOpenSubtitleResources: () =>
+                                    unawaited(_openSubtitleResources()),
+                                onOpenVocabulary: _openVocabulary,
+                                onOpenSettings: () =>
+                                    unawaited(_openSettings()),
+                              )
+                            : MediaWorkbench(
+                                mediaTitle: playerController.mediaPath!
+                                    .split(Platform.pathSeparator)
+                                    .last,
+                                playerStage: _playerStage(),
+                                learningPanel: _sidePanel(),
                               ),
-                          ],
-                        ),
                       ),
                       if (downloadController.snapshot != null)
                         _downloadStatusBar(downloadController.snapshot!),

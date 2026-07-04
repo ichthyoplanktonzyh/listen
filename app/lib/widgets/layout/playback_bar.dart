@@ -174,30 +174,47 @@ class _PlaybackBarState extends State<PlaybackBar> {
     );
   }
 
-  Widget _noMediaControls() => Material(
-    color: const Color(0xff11161c),
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-      child: Row(
-        children: [
-          const Icon(Icons.info_outline, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '${l.text('noMediaControlsHint')} · $status',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: Theme.of(context).colorScheme.secondary),
+  Widget _noMediaControls() {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.surfaceContainerLowest,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: colors.outlineVariant)),
+        ),
+        child: SizedBox(
+          height: 72,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: Row(
+              children: [
+                for (final icon in const [
+                  Icons.skip_previous,
+                  Icons.play_arrow,
+                  Icons.skip_next,
+                  Icons.volume_up_outlined,
+                ])
+                  IconButton(onPressed: null, icon: Icon(icon)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    l.text('noMediaSelected'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: colors.onSurfaceVariant),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                FilledButton.icon(
+                  onPressed: mediaSession.openMedia,
+                  icon: const Icon(Icons.folder_open_outlined),
+                  label: Text(l.text('openVideoAudio')),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 12),
-          FilledButton.tonalIcon(
-            onPressed: mediaSession.openMedia,
-            icon: const Icon(Icons.folder_open),
-            label: Text(l.text('openVideoAudio')),
-          ),
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }

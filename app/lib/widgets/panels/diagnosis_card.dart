@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../theme/listen_theme.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
 
@@ -47,7 +48,7 @@ class DiagnosisCard extends StatelessWidget {
       width: double.infinity,
       constraints: const BoxConstraints(maxHeight: 190),
       padding: const EdgeInsets.all(12),
-      color: const Color(0xff202832),
+      color: ListenColors.surface,
       child: ListView(
         shrinkWrap: true,
         children: [
@@ -142,7 +143,7 @@ class DiagnosisCard extends StatelessWidget {
                         '${hint.reasons.map(l.diagnosisReason).join(' · ')}',
                         style: const TextStyle(
                           fontSize: 12,
-                          color: Color(0xffaab4c0),
+                          color: ListenColors.muted,
                         ),
                       ),
                     ),
@@ -203,7 +204,7 @@ class DiagnosisCard extends StatelessWidget {
                   nucleus.claimStatus,
                 ),
               ),
-              const Color(0xffff7da8),
+              ListenColors.error,
             ),
           if (frame.stressAnchors.isNotEmpty)
             _chipLine(
@@ -215,7 +216,7 @@ class DiagnosisCard extends StatelessWidget {
                   anchor.claimStatus,
                 ),
               ),
-              const Color(0xff6fb6ff),
+              ListenColors.info,
             ),
           if (frame.weakGroups.isNotEmpty)
             _chipLine(
@@ -227,7 +228,7 @@ class DiagnosisCard extends StatelessWidget {
                   group.claimStatus,
                 ),
               ),
-              const Color(0xff9fb0bd),
+              ListenColors.muted,
             ),
           if (frame.compressionSpans.isNotEmpty)
             _chipLine(
@@ -239,7 +240,7 @@ class DiagnosisCard extends StatelessWidget {
                   span.claimStatus,
                 ),
               ),
-              const Color(0xffffbf69),
+              ListenColors.accent,
             ),
           if (frame.listeningHotspots.isNotEmpty)
             _hotspotLine(context, frame.listeningHotspots.take(4)),
@@ -250,7 +251,7 @@ class DiagnosisCard extends StatelessWidget {
               '${frame.quality.timingSource.replaceAll('_', ' ')} · '
               'prominence ${_sourceLabel(frame.quality.prominenceSources)} · '
               'boundary ${_sourceLabel(frame.quality.boundarySources)}',
-              style: const TextStyle(fontSize: 12, color: Color(0xffaab4c0)),
+              style: const TextStyle(fontSize: 12, color: ListenColors.muted),
             ),
           ),
         ],
@@ -294,7 +295,7 @@ class DiagnosisCard extends StatelessWidget {
     final l = AppLocalizations.of(context);
     final hotspots = values.toList(growable: false);
     if (hotspots.isEmpty) return const SizedBox.shrink();
-    const color = Color(0xffffd166);
+    const color = ListenColors.accent;
     return Padding(
       padding: const EdgeInsets.only(top: 5),
       child: Wrap(

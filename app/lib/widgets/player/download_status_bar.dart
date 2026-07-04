@@ -46,7 +46,7 @@ class DownloadStatusBar extends StatelessWidget {
     final downloading = status.kind == DownloadStatusKind.downloading;
     final completed = status.kind == DownloadStatusKind.completed;
     return Material(
-      color: const Color(0xff18232b),
+      color: Theme.of(context).colorScheme.surfaceContainerHigh,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(

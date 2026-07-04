@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/manual_review_controller.dart';
 import '../../models/timeline.dart';
+import '../../theme/listen_theme.dart';
 
 class ManualTimelineReviewDialog extends StatefulWidget {
   const ManualTimelineReviewDialog({
@@ -95,7 +96,7 @@ class _ManualTimelineReviewDialogState
             else
               const _MessageBox(
                 icon: Icons.check_circle_outline,
-                color: Color(0xff6dd6c3),
+                color: ListenColors.primary,
                 messages: ['Current sentence boundaries are valid.'],
               ),
             if (_saveError != null) ...[
@@ -161,9 +162,9 @@ class _ManualTimelineReviewDialogState
       borderRadius: BorderRadius.circular(8),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: selected ? const Color(0xff18332f) : const Color(0xff171f28),
+          color: selected ? ListenColors.selected : ListenColors.fog,
           border: Border.all(
-            color: selected ? const Color(0xff38b88f) : const Color(0xff2b3642),
+            color: selected ? ListenColors.primary : ListenColors.border,
           ),
           borderRadius: BorderRadius.circular(8),
         ),

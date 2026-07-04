@@ -63,94 +63,95 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     return AppBar(
-      title: const Text('listen'),
+      titleSpacing: 20,
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.graphic_eq, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: 9),
+          const Text('listen', style: TextStyle(fontWeight: FontWeight.w700)),
+        ],
+      ),
+      shape: Border(
+        bottom: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
       actions: [
-        TextButton.icon(
-          onPressed: onOpenSubtitleResources,
-          icon: const Icon(Icons.inventory_2_outlined),
-          label: Text(l.text('subtitleResources')),
-        ),
-        TextButton.icon(
-          onPressed: onOpenVocabulary,
-          icon: const Icon(Icons.menu_book_outlined),
-          label: Text(l.text('vocabulary')),
-        ),
-        TextButton.icon(
+        IconButton(
+          tooltip: l.text('openMedia'),
           onPressed: onOpenMedia,
           icon: const Icon(Icons.video_file_outlined),
-          label: Text(l.text('openMedia')),
         ),
-        TextButton.icon(
+        IconButton(
+          tooltip: l.text('openUrl'),
           onPressed: onOpenOnline,
-          icon: const Icon(Icons.language),
-          label: Text(l.text('openUrl')),
+          icon: const Icon(Icons.language_outlined),
+        ),
+        IconButton(
+          tooltip: l.text('subtitleResources'),
+          onPressed: onOpenSubtitleResources,
+          icon: const Icon(Icons.inventory_2_outlined),
+        ),
+        IconButton(
+          tooltip: l.text('vocabulary'),
+          onPressed: onOpenVocabulary,
+          icon: const Icon(Icons.menu_book_outlined),
         ),
         PopupMenuButton<String>(
+          tooltip: l.text('subtitles'),
+          icon: const Icon(Icons.subtitles_outlined),
           onSelected: (value) {
-            if (value == 'import') onImportPrimarySubtitle();
-            if (value == 'generate') onGeneratePrimarySubtitles();
-            if (value == 'opensubtitles') onSearchPrimarySubtitles();
+            if (value == 'primary-import') onImportPrimarySubtitle();
+            if (value == 'primary-generate') onGeneratePrimarySubtitles();
+            if (value == 'primary-search') onSearchPrimarySubtitles();
+            if (value == 'secondary-import') onImportSecondarySubtitle();
+            if (value == 'secondary-generate') onGenerateSecondarySubtitles();
+            if (value == 'secondary-search') onSearchSecondarySubtitles();
           },
           itemBuilder: (_) => [
             PopupMenuItem(
-              value: 'import',
+              enabled: false,
+              child: Text(l.text('primarySubtitle')),
+            ),
+            PopupMenuItem(
+              value: 'primary-import',
               child: Text(l.text('importSubtitleHint')),
             ),
             PopupMenuItem(
-              value: 'generate',
+              value: 'primary-generate',
               child: Text(l.text('generateSubtitles')),
             ),
             PopupMenuItem(
-              value: 'opensubtitles',
+              value: 'primary-search',
               child: Text(l.text('openSubtitles')),
             ),
-          ],
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                const Icon(Icons.subtitles_outlined),
-                const SizedBox(width: 8),
-                Text(l.text('primarySubtitle')),
-              ],
-            ),
-          ),
-        ),
-        PopupMenuButton<String>(
-          onSelected: (value) {
-            if (value == 'import') onImportSecondarySubtitle();
-            if (value == 'generate') onGenerateSecondarySubtitles();
-            if (value == 'opensubtitles') onSearchSecondarySubtitles();
-          },
-          itemBuilder: (_) => [
+            const PopupMenuDivider(),
             PopupMenuItem(
-              value: 'import',
+              enabled: false,
+              child: Text(l.text('secondarySubtitle')),
+            ),
+            PopupMenuItem(
+              value: 'secondary-import',
               child: Text(l.text('importSubtitleHint')),
             ),
             PopupMenuItem(
-              value: 'generate',
+              value: 'secondary-generate',
               child: Text(l.text('generateSubtitles')),
             ),
             PopupMenuItem(
-              value: 'opensubtitles',
+              value: 'secondary-search',
               child: Text(l.text('openSubtitles')),
             ),
           ],
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                const Icon(Icons.closed_caption_outlined),
-                const SizedBox(width: 8),
-                Text(l.text('secondarySubtitle')),
-              ],
-            ),
-          ),
+        ),
+        IconButton(
+          tooltip: l.text('settings'),
+          onPressed: onOpenSettings,
+          icon: const Icon(Icons.settings_outlined),
         ),
         PopupMenuButton<String>(
+          tooltip: l.text('moreActions'),
           onSelected: (value) {
             if (value == 'embedded') onImportEmbeddedSubtitle();
-            if (value == 'settings') onOpenSettings();
             if (value == 'logs') onExportLogs();
             if (value == 'export-vocabulary') onExportVocabulary();
             if (value == 'import-vocabulary') onImportVocabulary();
@@ -169,7 +170,6 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
               value: 'embedded',
               child: Text(l.text('importEmbeddedText')),
             ),
-            PopupMenuItem(value: 'settings', child: Text(l.text('settings'))),
             PopupMenuItem(value: 'logs', child: Text(l.text('exportLogs'))),
             PopupMenuItem(
               value: 'export-vocabulary',
@@ -217,7 +217,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
             ),
           ],
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 8),
       ],
     );
   }

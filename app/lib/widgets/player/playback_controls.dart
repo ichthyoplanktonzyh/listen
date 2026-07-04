@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/task_status.dart';
 import '../../player_adapter.dart';
+import '../../theme/listen_theme.dart';
 import '../../utils/format_duration.dart';
 
 class PlaybackControls extends StatelessWidget {
@@ -117,328 +118,498 @@ class PlaybackControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
     return Material(
-      color: const Color(0xff11161c),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-        child: Column(
-          children: [
-            Row(
+      color: colors.surfaceContainerLowest,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: colors.outlineVariant)),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final roomy = constraints.maxWidth >= 1080;
+            final veryRoomy = constraints.maxWidth >= 1320;
+            return Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(formatDuration(position)),
-                Expanded(
-                  child: Slider(
-                    value: position.inMilliseconds
-                        .clamp(0, duration.inMilliseconds.clamp(1, 1 << 31))
-                        .toDouble(),
-                    max: duration.inMilliseconds.clamp(1, 1 << 31).toDouble(),
-                    onChanged: (value) =>
-                        onSeek(Duration(milliseconds: value.round())),
-                  ),
-                ),
-                Text(formatDuration(duration)),
-              ],
-            ),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  IconButton(
-                    tooltip: l.text('previousSentence'),
-                    onPressed: onSeekToPreviousCue,
-                    icon: const Icon(Icons.skip_previous),
-                  ),
-                  IconButton(
-                    tooltip: l.text('restartMedia'),
-                    onPressed: onSeekToZero,
-                    icon: const Icon(Icons.restart_alt),
-                  ),
-                  IconButton.filled(
-                    tooltip: l.text('playPause'),
-                    onPressed: onPlayPause,
-                    icon: Icon(playing ? Icons.pause : Icons.play_arrow),
-                  ),
-                  IconButton(
-                    tooltip: l.text('stop'),
-                    onPressed: onStop,
-                    icon: const Icon(Icons.stop),
-                  ),
-                  IconButton(
-                    tooltip: l.text('nextSentence'),
-                    onPressed: onSeekToNextCue,
-                    icon: const Icon(Icons.skip_next),
-                  ),
-                  IconButton(
-                    tooltip: extensiveListeningActive
-                        ? l.text('finishExtensiveListening')
-                        : l.text('startExtensiveListening'),
-                    onPressed: onToggleExtensiveListening,
-                    icon: Icon(
-                      extensiveListeningActive
-                          ? Icons.hearing
-                          : Icons.hearing_disabled,
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: l.text('markListeningInbox'),
-                    onPressed: listeningMarkEnabled
-                        ? onCaptureListeningInbox
-                        : null,
-                    icon: Badge.count(
-                      count: listeningInboxCount,
-                      isLabelVisible: listeningInboxCount > 0,
-                      child: const Icon(Icons.bookmark_add_outlined),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: l.text('hardInterruptListening'),
-                    onPressed: listeningMarkEnabled
-                        ? onHardInterruptListening
-                        : null,
-                    icon: const Icon(Icons.pause_circle_outline),
-                  ),
-                  FilterChip(
-                    label: Text(l.text('loopSentence')),
-                    selected: loopCue,
-                    onSelected: onLoopCueChanged,
-                  ),
-                  IconButton(
-                    tooltip: chunkControlsEnabled
-                        ? l.text('previousChunk')
-                        : l.text('chunkReplayUnavailableControl'),
-                    onPressed: chunkControlsEnabled
-                        ? onSeekToPreviousChunk
-                        : null,
-                    icon: const Icon(Icons.keyboard_double_arrow_left),
-                  ),
-                  IconButton(
-                    tooltip: chunkControlsEnabled
-                        ? l.text('nextChunk')
-                        : l.text('chunkReplayUnavailableControl'),
-                    onPressed: chunkControlsEnabled ? onSeekToNextChunk : null,
-                    icon: const Icon(Icons.keyboard_double_arrow_right),
-                  ),
-                  Tooltip(
-                    message: chunkControlsEnabled
-                        ? l.text('loopChunk')
-                        : l.text('chunkReplayUnavailableControl'),
-                    child: FilterChip(
-                      label: Text(l.text('loopChunk')),
-                      selected: chunkLoopActive,
-                      onSelected: chunkControlsEnabled
-                          ? (_) => onLoopCurrentChunk()
-                          : null,
-                    ),
-                  ),
-                  Tooltip(
-                    message: chunkControlsEnabled
-                        ? l.text('expandChunk')
-                        : l.text('chunkReplayUnavailableControl'),
-                    child: TextButton.icon(
-                      onPressed: chunkControlsEnabled
-                          ? onLoopExpandedChunk
-                          : null,
-                      icon: const Icon(Icons.unfold_more),
-                      label: Text(l.text('expandChunk')),
-                    ),
-                  ),
-                  if (sourceLoopStart != null)
-                    TextButton(
-                      onPressed: onStopSourceLoop,
-                      child: Text(l.text('stopSourceLoop')),
-                    ),
-                  const SizedBox(width: 8),
-                  FilterChip(
-                    label: Text(l.text('wordStyles')),
-                    selected: statusStylesVisible,
-                    onSelected: onStatusStylesChanged,
-                  ),
-                  const SizedBox(width: 8),
-                  FilterChip(
-                    label: Text(l.text('subtitles')),
-                    selected: subtitlesVisible,
-                    onSelected: onSubtitlesVisibleChanged,
-                  ),
-                  const SizedBox(width: 8),
-                  Tooltip(
-                    message: secondarySubtitlesAvailable
-                        ? l.text('secondary')
-                        : l.text('secondarySubtitleUnavailable'),
-                    child: FilterChip(
-                      label: Text(l.text('secondary')),
-                      selected:
-                          secondarySubtitlesAvailable &&
-                          secondarySubtitlesVisible,
-                      onSelected: secondarySubtitlesAvailable
-                          ? onSecondaryVisibleChanged
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  DropdownButton<double>(
-                    value: rate,
-                    items: [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
-                        .map(
-                          (value) => DropdownMenuItem(
-                            value: value,
-                            child: Text('${value}x'),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value == null) return;
-                      onRateChanged(value);
-                    },
-                  ),
-                  const SizedBox(width: 12),
-                  if (audioTracks.length > 1)
-                    DropdownButton<String>(
-                      hint: Text(l.text('audioTrack')),
-                      value:
-                          audioTracks.any(
-                            (track) => track.id == selectedAudioId,
-                          )
-                          ? selectedAudioId
-                          : null,
-                      items: audioTracks
-                          .map(
-                            (track) => DropdownMenuItem(
-                              value: track.id,
-                              child: Text(
-                                track.title ??
-                                    track.language ??
-                                    'Audio ${track.id}',
-                              ),
-                            ),
-                          )
-                          .toList(growable: false),
-                      onChanged: (id) {
-                        final matches = audioTracks.where(
-                          (track) => track.id == id,
-                        );
-                        if (matches.isEmpty) return;
-                        onAudioTrackChanged(matches.first);
-                      },
-                    ),
-                  if (audioTracks.length > 1) const SizedBox(width: 12),
-                  if (embeddedSubtitleTracks.isNotEmpty)
-                    DropdownButton<String>(
-                      hint: Text(l.text('embeddedSubtitles')),
-                      value:
-                          embeddedSubtitleTracks.any(
-                            (track) => track.id == selectedEmbeddedSubtitleId,
-                          )
-                          ? selectedEmbeddedSubtitleId
-                          : null,
-                      items: embeddedSubtitleTracks
-                          .map(
-                            (track) => DropdownMenuItem(
-                              value: track.id,
-                              child: Text(
-                                track.title ??
-                                    track.language ??
-                                    'Subtitle ${track.id}',
-                              ),
-                            ),
-                          )
-                          .toList(growable: false),
-                      onChanged: (id) {
-                        final matches = embeddedSubtitleTracks.where(
-                          (track) => track.id == id,
-                        );
-                        if (matches.isEmpty) return;
-                        onEmbeddedSubtitleTrackChanged(matches.first);
-                      },
-                    ),
-                  if (embeddedSubtitleTracks.isNotEmpty)
-                    const SizedBox(width: 12),
-                  IconButton(
-                    tooltip: muted ? 'Unmute' : 'Mute',
-                    onPressed: onMuteToggle,
-                    icon: Icon(muted ? Icons.volume_off : Icons.volume_up),
-                  ),
-                  SizedBox(
-                    width: 120,
-                    child: Slider(
-                      value: volume,
-                      max: 100,
-                      onChanged: onVolumeChanged,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(l.text('primaryOffset')),
-                  IconButton(
-                    onPressed: () => onPrimaryOffsetChanged(
-                      primarySubtitleOffset - const Duration(milliseconds: 100),
-                    ),
-                    icon: const Icon(Icons.remove),
-                  ),
-                  Text('${primarySubtitleOffset.inMilliseconds} ms'),
-                  IconButton(
-                    onPressed: () => onPrimaryOffsetChanged(
-                      primarySubtitleOffset + const Duration(milliseconds: 100),
-                    ),
-                    icon: const Icon(Icons.add),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(l.text('secondaryOffset')),
-                  IconButton(
-                    onPressed: secondarySubtitlesAvailable
-                        ? () => onSecondaryOffsetChanged(
-                            secondarySubtitleOffset -
-                                const Duration(milliseconds: 100),
-                          )
-                        : null,
-                    icon: const Icon(Icons.remove),
-                  ),
-                  Text('${secondarySubtitleOffset.inMilliseconds} ms'),
-                  IconButton(
-                    onPressed: secondarySubtitlesAvailable
-                        ? () => onSecondaryOffsetChanged(
-                            secondarySubtitleOffset +
-                                const Duration(milliseconds: 100),
-                          )
-                        : null,
-                    icon: const Icon(Icons.add),
-                  ),
-                ],
-              ),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Flexible(
-                    child: Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      alignment: WrapAlignment.end,
+                SizedBox(
+                  height: 38,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    child: Row(
                       children: [
-                        for (final task in taskStatuses)
-                          _TaskStatusChip(status: task),
+                        SizedBox(
+                          width: 54,
+                          child: Text(
+                            formatDuration(position),
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                        ),
+                        Expanded(
+                          child: Slider(
+                            value: position.inMilliseconds
+                                .clamp(
+                                  0,
+                                  duration.inMilliseconds.clamp(1, 1 << 31),
+                                )
+                                .toDouble(),
+                            max: duration.inMilliseconds
+                                .clamp(1, 1 << 31)
+                                .toDouble(),
+                            onChanged: (value) =>
+                                onSeek(Duration(milliseconds: value.round())),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 54,
+                          child: Text(
+                            formatDuration(duration),
+                            textAlign: TextAlign.end,
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  if (taskStatuses.isNotEmpty) const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      status,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.secondary,
+                ),
+                SizedBox(
+                  height: 58,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          tooltip: l.text('previousSentence'),
+                          onPressed: onSeekToPreviousCue,
+                          icon: const Icon(Icons.skip_previous),
+                        ),
+                        if (roomy)
+                          IconButton(
+                            tooltip: l.text('restartMedia'),
+                            onPressed: onSeekToZero,
+                            icon: const Icon(Icons.restart_alt),
+                          ),
+                        IconButton.filled(
+                          tooltip: l.text('playPause'),
+                          onPressed: onPlayPause,
+                          icon: Icon(playing ? Icons.pause : Icons.play_arrow),
+                        ),
+                        IconButton(
+                          tooltip: l.text('nextSentence'),
+                          onPressed: onSeekToNextCue,
+                          icon: const Icon(Icons.skip_next),
+                        ),
+                        const SizedBox(width: 8),
+                        _ToggleIcon(
+                          tooltip: l.text('loopSentence'),
+                          selected: loopCue,
+                          onPressed: () => onLoopCueChanged(!loopCue),
+                          icon: Icons.repeat_one,
+                        ),
+                        if (roomy) ...[
+                          IconButton(
+                            tooltip: extensiveListeningActive
+                                ? l.text('finishExtensiveListening')
+                                : l.text('startExtensiveListening'),
+                            onPressed: onToggleExtensiveListening,
+                            icon: Icon(
+                              extensiveListeningActive
+                                  ? Icons.hearing
+                                  : Icons.hearing_disabled,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: l.text('markListeningInbox'),
+                            onPressed: listeningMarkEnabled
+                                ? onCaptureListeningInbox
+                                : null,
+                            icon: Badge.count(
+                              count: listeningInboxCount,
+                              isLabelVisible: listeningInboxCount > 0,
+                              child: const Icon(Icons.bookmark_add_outlined),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: l.text('hardInterruptListening'),
+                            onPressed: listeningMarkEnabled
+                                ? onHardInterruptListening
+                                : null,
+                            icon: const Icon(Icons.pause_circle_outline),
+                          ),
+                          const SizedBox(width: 6),
+                          IconButton(
+                            tooltip: l.text('previousChunk'),
+                            onPressed: chunkControlsEnabled
+                                ? onSeekToPreviousChunk
+                                : null,
+                            icon: const Icon(Icons.keyboard_double_arrow_left),
+                          ),
+                          _ToggleIcon(
+                            tooltip: l.text('loopChunk'),
+                            selected: chunkLoopActive,
+                            onPressed: chunkControlsEnabled
+                                ? onLoopCurrentChunk
+                                : null,
+                            icon: Icons.segment,
+                          ),
+                          IconButton(
+                            tooltip: l.text('nextChunk'),
+                            onPressed: chunkControlsEnabled
+                                ? onSeekToNextChunk
+                                : null,
+                            icon: const Icon(Icons.keyboard_double_arrow_right),
+                          ),
+                          if (veryRoomy)
+                            IconButton(
+                              tooltip: l.text('expandChunk'),
+                              onPressed: chunkControlsEnabled
+                                  ? onLoopExpandedChunk
+                                  : null,
+                              icon: const Icon(Icons.unfold_more),
+                            ),
+                        ] else
+                          IconButton(
+                            tooltip: l.text('markListeningInbox'),
+                            onPressed: listeningMarkEnabled
+                                ? onCaptureListeningInbox
+                                : null,
+                            icon: Badge.count(
+                              count: listeningInboxCount,
+                              isLabelVisible: listeningInboxCount > 0,
+                              child: const Icon(Icons.bookmark_add_outlined),
+                            ),
+                          ),
+                        const Spacer(),
+                        _ToggleIcon(
+                          tooltip: l.text('subtitles'),
+                          selected: subtitlesVisible,
+                          onPressed: () =>
+                              onSubtitlesVisibleChanged(!subtitlesVisible),
+                          icon: Icons.subtitles_outlined,
+                        ),
+                        if (roomy)
+                          _ToggleIcon(
+                            tooltip: secondarySubtitlesAvailable
+                                ? l.text('secondary')
+                                : l.text('secondarySubtitleUnavailable'),
+                            selected:
+                                secondarySubtitlesAvailable &&
+                                secondarySubtitlesVisible,
+                            onPressed: secondarySubtitlesAvailable
+                                ? () => onSecondaryVisibleChanged(
+                                    !secondarySubtitlesVisible,
+                                  )
+                                : null,
+                            icon: Icons.closed_caption_outlined,
+                          ),
+                        const SizedBox(width: 4),
+                        DropdownButtonHideUnderline(
+                          child: DropdownButton<double>(
+                            value: rate,
+                            borderRadius: BorderRadius.circular(8),
+                            items: [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+                                .map(
+                                  (value) => DropdownMenuItem(
+                                    value: value,
+                                    child: Text('${value}x'),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (value) {
+                              if (value != null) onRateChanged(value);
+                            },
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: muted ? 'Unmute' : 'Mute',
+                          onPressed: onMuteToggle,
+                          icon: Icon(
+                            muted
+                                ? Icons.volume_off_outlined
+                                : Icons.volume_up_outlined,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: l.text('playbackSettings'),
+                          onPressed: () => _showPlaybackSettings(context),
+                          icon: const Icon(Icons.tune),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (taskStatuses.isNotEmpty || status.isNotEmpty)
+                  SizedBox(
+                    height: 28,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 0, 18, 6),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          if (taskStatuses.isNotEmpty)
+                            Flexible(
+                              child: Wrap(
+                                spacing: 6,
+                                children: [
+                                  for (final task in taskStatuses)
+                                    _TaskStatusChip(status: task),
+                                ],
+                              ),
+                            ),
+                          if (taskStatuses.isNotEmpty && status.isNotEmpty)
+                            const SizedBox(width: 8),
+                          if (status.isNotEmpty)
+                            Flexible(
+                              child: Text(
+                                status,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.end,
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(color: colors.onSurfaceVariant),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showPlaybackSettings(BuildContext context) async {
+    final l = AppLocalizations.of(context);
+    var localWordStyles = statusStylesVisible;
+    var localSubtitles = subtitlesVisible;
+    var localSecondary = secondarySubtitlesVisible;
+    var localVolume = volume;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(l.text('playbackSettings')),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520, maxHeight: 620),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SwitchListTile(
+                    value: localWordStyles,
+                    title: Text(l.text('wordStyles')),
+                    onChanged: (value) {
+                      setDialogState(() => localWordStyles = value);
+                      onStatusStylesChanged(value);
+                    },
+                  ),
+                  SwitchListTile(
+                    value: localSubtitles,
+                    title: Text(l.text('subtitles')),
+                    onChanged: (value) {
+                      setDialogState(() => localSubtitles = value);
+                      onSubtitlesVisibleChanged(value);
+                    },
+                  ),
+                  SwitchListTile(
+                    value: secondarySubtitlesAvailable && localSecondary,
+                    title: Text(l.text('secondarySubtitle')),
+                    onChanged: secondarySubtitlesAvailable
+                        ? (value) {
+                            setDialogState(() => localSecondary = value);
+                            onSecondaryVisibleChanged(value);
+                          }
+                        : null,
+                  ),
+                  ListTile(
+                    title: Text(l.text('rate')),
+                    trailing: DropdownButton<double>(
+                      value: rate,
+                      items: [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+                          .map(
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text('${value}x'),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) onRateChanged(value);
+                      },
+                    ),
+                  ),
+                  ListTile(
+                    leading: Icon(
+                      muted ? Icons.volume_off : Icons.volume_up_outlined,
+                    ),
+                    title: Slider(
+                      value: localVolume,
+                      max: 100,
+                      onChanged: (value) {
+                        setDialogState(() => localVolume = value);
+                        onVolumeChanged(value);
+                      },
+                    ),
+                  ),
+                  if (audioTracks.length > 1)
+                    _TrackSelector(
+                      label: l.text('audioTrack'),
+                      tracks: audioTracks,
+                      selectedId: selectedAudioId,
+                      onChanged: onAudioTrackChanged,
+                    ),
+                  if (embeddedSubtitleTracks.isNotEmpty)
+                    _TrackSelector(
+                      label: l.text('embeddedSubtitles'),
+                      tracks: embeddedSubtitleTracks,
+                      selectedId: selectedEmbeddedSubtitleId,
+                      onChanged: onEmbeddedSubtitleTrackChanged,
+                    ),
+                  _OffsetControl(
+                    label: l.text('primaryOffset'),
+                    value: primarySubtitleOffset,
+                    enabled: true,
+                    onChanged: onPrimaryOffsetChanged,
+                  ),
+                  _OffsetControl(
+                    label: l.text('secondaryOffset'),
+                    value: secondarySubtitleOffset,
+                    enabled: secondarySubtitlesAvailable,
+                    onChanged: onSecondaryOffsetChanged,
+                  ),
+                  if (sourceLoopStart != null)
+                    ListTile(
+                      leading: const Icon(Icons.stop_circle_outlined),
+                      title: Text(l.text('stopSourceLoop')),
+                      onTap: () {
+                        onStopSourceLoop();
+                        Navigator.of(context).pop();
+                      },
+                    ),
+                  ListTile(
+                    leading: const Icon(Icons.stop),
+                    title: Text(l.text('stop')),
+                    onTap: () {
+                      onStop();
+                      Navigator.of(context).pop();
+                    },
+                  ),
                 ],
               ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l.text('close')),
             ),
           ],
         ),
       ),
     );
   }
+}
+
+class _ToggleIcon extends StatelessWidget {
+  const _ToggleIcon({
+    required this.tooltip,
+    required this.selected,
+    required this.onPressed,
+    required this.icon,
+  });
+
+  final String tooltip;
+  final bool selected;
+  final VoidCallback? onPressed;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: tooltip,
+    isSelected: selected,
+    onPressed: onPressed,
+    icon: Icon(icon),
+    selectedIcon: Icon(icon, color: Theme.of(context).colorScheme.primary),
+    style: selected
+        ? IconButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+          )
+        : null,
+  );
+}
+
+class _TrackSelector extends StatelessWidget {
+  const _TrackSelector({
+    required this.label,
+    required this.tracks,
+    required this.selectedId,
+    required this.onChanged,
+  });
+
+  final String label;
+  final List<PlayerTrack> tracks;
+  final String? selectedId;
+  final ValueChanged<PlayerTrack> onChanged;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    title: Text(label),
+    trailing: DropdownButton<String>(
+      value: tracks.any((track) => track.id == selectedId) ? selectedId : null,
+      items: tracks
+          .map(
+            (track) => DropdownMenuItem(
+              value: track.id,
+              child: Text(track.title ?? track.language ?? track.id),
+            ),
+          )
+          .toList(growable: false),
+      onChanged: (id) {
+        final matches = tracks.where((track) => track.id == id);
+        if (matches.isNotEmpty) onChanged(matches.first);
+      },
+    ),
+  );
+}
+
+class _OffsetControl extends StatelessWidget {
+  const _OffsetControl({
+    required this.label,
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final String label;
+  final Duration value;
+  final bool enabled;
+  final ValueChanged<Duration> onChanged;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    title: Text(label),
+    subtitle: Text('${value.inMilliseconds} ms'),
+    trailing: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          onPressed: enabled
+              ? () => onChanged(value - const Duration(milliseconds: 100))
+              : null,
+          icon: const Icon(Icons.remove),
+        ),
+        IconButton(
+          onPressed: enabled
+              ? () => onChanged(value + const Duration(milliseconds: 100))
+              : null,
+          icon: const Icon(Icons.add),
+        ),
+      ],
+    ),
+  );
 }
 
 class _TaskStatusChip extends StatelessWidget {
@@ -452,32 +623,27 @@ class _TaskStatusChip extends StatelessWidget {
     final color = _stateColor(status.state);
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        border: Border.all(color: color.withValues(alpha: 0.55)),
-        borderRadius: BorderRadius.circular(999),
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
         child: Text(
-          '${l.text(status.titleKey)} · ${l.text(status.stateKey)} · '
-          '${status.progress.clamp(0, 100)}%',
+          '${l.text(status.titleKey)} · ${status.progress.clamp(0, 100)}%',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: color,
-            fontWeight: FontWeight.w700,
-          ),
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color),
         ),
       ),
     );
   }
 
   Color _stateColor(UserTaskState state) => switch (state) {
-    UserTaskState.working => const Color(0xff6da8e8),
-    UserTaskState.success => const Color(0xff38b88f),
-    UserTaskState.warning => const Color(0xffd89a4a),
-    UserTaskState.error => const Color(0xffe06c75),
-    UserTaskState.cancelled => const Color(0xff8fa1b3),
-    UserTaskState.unknown => const Color(0xff8fa1b3),
+    UserTaskState.working => ListenColors.info,
+    UserTaskState.success => ListenColors.primary,
+    UserTaskState.warning => ListenColors.accent,
+    UserTaskState.error => ListenColors.error,
+    UserTaskState.cancelled => ListenColors.muted,
+    UserTaskState.unknown => ListenColors.muted,
   };
 }

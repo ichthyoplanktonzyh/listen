@@ -33,8 +33,12 @@ class TranscriptPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    final effectiveBaseColor = baseColor.computeLuminance() > 0.75
+        ? colors.onSurface
+        : baseColor;
     return Material(
-      color: const Color(0xff151a20),
+      color: colors.surfaceContainerLowest,
       child: Column(
         children: [
           Expanded(
@@ -42,22 +46,33 @@ class TranscriptPanel extends StatelessWidget {
                 ? Center(child: Text(l.text('importSubtitleHint')))
                 : ListView.builder(
                     controller: scrollController,
-                    itemExtent: itemExtent,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
                     itemCount: track!.cues.length,
                     itemBuilder: (context, index) {
                       final cue = track!.cues[index];
                       final selected = cue.id == currentCue?.id;
                       return ListTile(
                         selected: selected,
-                        selectedTileColor: Theme.of(
-                          context,
-                        ).colorScheme.primaryContainer.withValues(alpha: 0.55),
-                        leading: Text(formatDuration(cue.start)),
+                        selectedTileColor: colors.primaryContainer.withValues(
+                          alpha: 0.5,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 8,
+                        ),
+                        leading: SizedBox(
+                          width: 58,
+                          child: Text(
+                            formatDuration(cue.start),
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(color: colors.onSurfaceVariant),
+                          ),
+                        ),
                         title: TokenLine(
                           cue: cue,
                           profiles: wordEntries,
                           showStyles: showStyles,
-                          baseColor: baseColor,
+                          baseColor: effectiveBaseColor,
                           onWord: onWord,
                         ),
                         onTap: () => onSeekCue(cue),

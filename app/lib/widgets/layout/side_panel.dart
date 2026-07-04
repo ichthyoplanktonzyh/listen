@@ -204,53 +204,10 @@ class _SidePanelState extends State<SidePanel> {
 
   @override
   Widget build(BuildContext context) => Material(
-    color: const Color(0xff151a20),
+    color: Theme.of(context).colorScheme.surfaceContainerLowest,
     child: Column(
       children: [
-        SegmentedButton<int>(
-          segments: [
-            ButtonSegment(
-              value: 0,
-              icon: const Icon(Icons.subtitles),
-              label: Text(l.text('transcript')),
-            ),
-            ButtonSegment(
-              value: 1,
-              icon: const Icon(Icons.inventory_2_outlined),
-              label: Text(l.text('subtitleResources')),
-            ),
-            ButtonSegment(
-              value: 2,
-              icon: const Icon(Icons.menu_book),
-              label: Text(l.text('wordLearning')),
-            ),
-            ButtonSegment(
-              value: 3,
-              icon: const Icon(Icons.analytics_outlined),
-              label: Text(l.text('diagnosis')),
-            ),
-            ButtonSegment(
-              value: 4,
-              icon: const Icon(Icons.fact_check_outlined),
-              label: Text(l.text('practice')),
-            ),
-            ButtonSegment(
-              value: 5,
-              icon: const Icon(Icons.inbox_outlined),
-              label: Text(l.text('listeningInbox')),
-            ),
-          ],
-          selected: {learningController.sidePanel},
-          onSelectionChanged: (value) {
-            final selected = value.first;
-            if (selected == 3) {
-              unawaited(_openDiagnosisView());
-            } else {
-              learningController.selectSidePanel(selected);
-            }
-          },
-          showSelectedIcon: false,
-        ),
+        _panelNavigation(),
         _postureActions(),
         Expanded(
           child: switch (learningController.sidePanel) {
@@ -287,6 +244,69 @@ class _SidePanelState extends State<SidePanel> {
       ],
     ),
   );
+
+  Widget _panelNavigation() {
+    final colors = Theme.of(context).colorScheme;
+    final destinations = [
+      (Icons.subtitles_outlined, l.text('transcript')),
+      (Icons.inventory_2_outlined, l.text('subtitleResources')),
+      (Icons.menu_book_outlined, l.text('wordLearning')),
+      (Icons.analytics_outlined, l.text('diagnosis')),
+      (Icons.fact_check_outlined, l.text('practice')),
+      (Icons.inbox_outlined, l.text('listeningInbox')),
+    ];
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: colors.outlineVariant)),
+      ),
+      child: SizedBox(
+        height: 52,
+        child: Row(
+          children: [
+            for (var index = 0; index < destinations.length; index++)
+              Expanded(
+                child: Tooltip(
+                  message: destinations[index].$2,
+                  child: InkWell(
+                    onTap: () {
+                      if (index == 3) {
+                        unawaited(_openDiagnosisView());
+                      } else {
+                        learningController.selectSidePanel(index);
+                      }
+                    },
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: learningController.sidePanel == index
+                            ? colors.primaryContainer
+                            : Colors.transparent,
+                        border: Border(
+                          bottom: BorderSide(
+                            color: learningController.sidePanel == index
+                                ? colors.primary
+                                : Colors.transparent,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                      child: Center(
+                        child: Icon(
+                          destinations[index].$1,
+                          size: 21,
+                          color: learningController.sidePanel == index
+                              ? colors.primary
+                              : colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _transcript() => TranscriptPanel(
     track: subtitleController.primaryTrack,

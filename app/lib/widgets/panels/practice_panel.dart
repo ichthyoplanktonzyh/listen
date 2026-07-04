@@ -7,6 +7,7 @@ import '../../localization.dart';
 import '../../models/practice.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
+import '../../theme/listen_theme.dart';
 
 class PracticePanel extends StatefulWidget {
   const PracticePanel({
@@ -87,7 +88,7 @@ class _PracticePanelState extends State<PracticePanel> {
   Widget build(BuildContext context) {
     final state = controller.state;
     return Material(
-      color: const Color(0xff151a20),
+      color: ListenColors.surface,
       child: ListView(
         padding: const EdgeInsets.all(14),
         children: [
@@ -175,7 +176,7 @@ class _PracticePanelState extends State<PracticePanel> {
     widget.currentCue == null
         ? l.text('practiceNeedsSentence')
         : l.text('practiceChoosePrompt'),
-    style: const TextStyle(color: Color(0xffaab4c0)),
+    style: const TextStyle(color: ListenColors.muted),
   );
 
   Widget _prompt(PracticeState state) {
@@ -189,7 +190,7 @@ class _PracticePanelState extends State<PracticePanel> {
             padding: const EdgeInsets.only(top: 8),
             child: Text(
               draft.degradedMessage ?? l.text('practiceEstimatedTiming'),
-              style: const TextStyle(fontSize: 12, color: Color(0xffffc857)),
+              style: const TextStyle(fontSize: 12, color: ListenColors.accent),
             ),
           ),
         Padding(
@@ -206,7 +207,7 @@ class _PracticePanelState extends State<PracticePanel> {
             padding: const EdgeInsets.only(top: 8),
             child: Text(
               l.text('practiceHiddenText'),
-              style: const TextStyle(fontSize: 12, color: Color(0xffaab4c0)),
+              style: const TextStyle(fontSize: 12, color: ListenColors.muted),
             ),
           ),
         Padding(
@@ -276,7 +277,7 @@ class _PracticePanelState extends State<PracticePanel> {
           padding: const EdgeInsets.only(top: 6),
           child: Text(
             attempt.evaluation.summary,
-            style: const TextStyle(color: Color(0xffaab4c0)),
+            style: const TextStyle(color: ListenColors.muted),
           ),
         ),
         if (attempt.evaluation.tokenResults.isNotEmpty) _diff(attempt),
@@ -338,7 +339,7 @@ class _PracticePanelState extends State<PracticePanel> {
       padding: const EdgeInsets.only(top: 18),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xff2e3742)),
+          border: Border.all(color: ListenColors.border),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Padding(
@@ -417,7 +418,7 @@ class _PracticePanelState extends State<PracticePanel> {
                   padding: const EdgeInsets.only(top: 10),
                   child: Text(
                     l.text('familiarMaterialMarked'),
-                    style: const TextStyle(color: Color(0xff7bd88f)),
+                    style: const TextStyle(color: ListenColors.primary),
                   ),
                 ),
             ],
@@ -439,7 +440,7 @@ class _PracticePanelState extends State<PracticePanel> {
             point.label ?? point.targetKey,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Color(0xffd7dee8)),
+            style: const TextStyle(color: ListenColors.text),
           ),
         ),
         IconButton(
@@ -479,7 +480,7 @@ class _PracticePanelState extends State<PracticePanel> {
         Text(
           draft.focusLabel!,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: Color(0xffaab4c0)),
+          style: const TextStyle(color: ListenColors.muted),
         ),
     ],
   );
@@ -523,7 +524,7 @@ class _PracticePanelState extends State<PracticePanel> {
         for (final hint in widget.diagnosis!.hints.take(3))
           Text(
             '• ${l.diagnosis(hint.kind)}',
-            style: const TextStyle(color: Color(0xffaab4c0)),
+            style: const TextStyle(color: ListenColors.muted),
           ),
       ],
     ),
@@ -547,10 +548,10 @@ class _PracticePanelState extends State<PracticePanel> {
   };
 
   Color _resultColor(String result) => switch (result) {
-    'correct' => Colors.greenAccent,
-    'missing' => Colors.orangeAccent,
-    'extra' => Colors.lightBlueAccent,
-    'mismatch' => Colors.redAccent,
-    _ => Colors.white70,
+    'correct' => ListenColors.primary,
+    'missing' => ListenColors.accent,
+    'extra' => ListenColors.info,
+    'mismatch' => ListenColors.error,
+    _ => ListenColors.muted,
   };
 }

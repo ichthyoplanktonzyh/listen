@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/timeline.dart';
+import '../../theme/listen_theme.dart';
 import 'timeline_resource_summary_panel.dart';
 
 class SubtitleResourceManagerPanel extends StatelessWidget {
@@ -81,7 +82,7 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
         ? activeWordTimingCount
         : resourceWordTimingCount;
     return Material(
-      color: const Color(0xff121820),
+      color: ListenColors.surface,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -157,7 +158,7 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
                     },
                   ),
           ),
-          const Divider(height: 1, color: Color(0xff26313c)),
+          const Divider(height: 1, color: ListenColors.border),
           TimelineResourceSummaryPanel(
             activeTrack: activeTrack,
             document: timelineDocument,
@@ -217,9 +218,9 @@ class _SubtitleResourceTile extends StatelessWidget {
     final l = AppLocalizations.of(context);
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: active ? const Color(0xff18332f) : const Color(0xff171f28),
+        color: active ? ListenColors.selected : ListenColors.fog,
         border: Border.all(
-          color: active ? const Color(0xff38b88f) : const Color(0xff2b3642),
+          color: active ? ListenColors.primary : ListenColors.border,
         ),
         borderRadius: BorderRadius.circular(8),
       ),
@@ -230,7 +231,7 @@ class _SubtitleResourceTile extends StatelessWidget {
             Icon(
               active ? Icons.check_circle : Icons.subtitles_outlined,
               size: 18,
-              color: active ? const Color(0xff6dd6c3) : const Color(0xff8fa1b3),
+              color: active ? ListenColors.primary : ListenColors.muted,
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -259,7 +260,7 @@ class _SubtitleResourceTile extends StatelessWidget {
                   Text(
                     l.text('resourceLearningCapabilities'),
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: const Color(0xffa9b7c5),
+                      color: ListenColors.muted,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -412,12 +413,12 @@ class _CapabilityChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? const Color(0xff6dd6c3) : const Color(0xff778391);
+    final color = active ? ListenColors.primary : ListenColors.muted;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: active ? const Color(0xff12322f) : const Color(0xff202933),
+        color: active ? ListenColors.selected : ListenColors.fog,
         border: Border.all(
-          color: active ? const Color(0xff2f9e82) : const Color(0xff34414f),
+          color: active ? ListenColors.primary : ListenColors.border,
         ),
         borderRadius: BorderRadius.circular(999),
       ),
@@ -482,8 +483,8 @@ class _LanguageChip extends StatelessWidget {
       ],
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: const Color(0xff1a2535),
-          border: Border.all(color: const Color(0xff3a7bd5)),
+          color: ListenColors.infoSurface,
+          border: Border.all(color: ListenColors.info),
           borderRadius: BorderRadius.circular(999),
         ),
         child: Padding(
@@ -491,12 +492,12 @@ class _LanguageChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.language, size: 12, color: Color(0xff6da8e8)),
+              const Icon(Icons.language, size: 12, color: ListenColors.info),
               const SizedBox(width: 3),
               Text(
                 label,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: const Color(0xff6da8e8),
+                  color: ListenColors.info,
                   fontWeight: FontWeight.w600,
                 ),
               ),
