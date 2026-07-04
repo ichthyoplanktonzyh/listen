@@ -63,7 +63,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     return AppBar(
-      title: const Text('LLPlayerNext'),
+      title: const Text('listen'),
       actions: [
         TextButton.icon(
           onPressed: onOpenSubtitleResources,

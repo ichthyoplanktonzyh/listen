@@ -8,7 +8,7 @@ void main() {
     final candidates = sidecarCandidatesFrom(
       Directory(
         '/tmp/LLPlayerNext/apps/desktop/build/macos/Build/Products/Debug/'
-        'LLPlayerNext.app/Contents/MacOS',
+        'listen.app/Contents/MacOS',
       ),
     );
 

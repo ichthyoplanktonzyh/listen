@@ -1,4 +1,4 @@
-# LLPlayerNext Desktop
+# listen Desktop
 
 Formal macOS Apple Silicon desktop client using Flutter and fvp/libmdk.
 

@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
+const _appSupportDirectoryName = 'listen';
+const _legacyAppSupportDirectoryName = 'LLPlayerNext';
+
 class AppSettings {
   const AppSettings({
     this.version = 8,
@@ -214,33 +217,24 @@ class AppSettings {
   final String phoneticCachePolicy;
   final String learningLanguage;
 
-  static File get file => File(
-    '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v8.json',
+  static String get _home => Platform.environment['HOME'] ?? '';
+
+  static Directory get _supportDirectory =>
+      Directory('$_home/Library/Application Support/$_appSupportDirectoryName');
+
+  static Directory get _legacySupportDirectory => Directory(
+    '$_home/Library/Application Support/$_legacyAppSupportDirectoryName',
   );
+
+  static File get file => File('${_supportDirectory.path}/settings-v8.json');
 
   static Future<AppSettings> load() async {
     for (final candidate in [
       file,
-      File(
-        '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v7.json',
-      ),
-      File(
-        '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v6.json',
-      ),
-      File(
-        '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v5.json',
-      ),
-      File(
-        '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v4.json',
-      ),
-      File(
-        '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v3.json',
-      ),
-      File(
-        '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v2.json',
-      ),
-      File(
-        '${Platform.environment['HOME']}/Library/Application Support/LLPlayerNext/settings-v1.json',
+      ...List.generate(
+        8,
+        (index) =>
+            File('${_legacySupportDirectory.path}/settings-v${8 - index}.json'),
       ),
     ]) {
       try {

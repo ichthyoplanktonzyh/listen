@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the LLPlayerNext desktop app.
+All notable changes to the listen desktop app.
 
 ---
 

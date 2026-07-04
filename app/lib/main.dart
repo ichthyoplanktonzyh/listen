@@ -56,18 +56,18 @@ void main() {
       'global': {'ffmpeg': bundledFfmpeg, 'libffmpeg': bundledFfmpeg},
     },
   );
-  runApp(const LLPlayerNextApp());
+  runApp(const ListenApp());
 }
 
-class LLPlayerNextApp extends StatelessWidget {
-  const LLPlayerNextApp({super.key});
+class ListenApp extends StatelessWidget {
+  const ListenApp({super.key});
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<String>(
     valueListenable: appLanguage,
     builder: (context, language, _) => MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'LLPlayerNext',
+      title: 'listen',
       locale: language == 'system' ? null : Locale(language),
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [
@@ -888,9 +888,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       playerController.setStatus('No core log is available yet');
       return;
     }
-    final location = await getSaveLocation(
-      suggestedName: 'LLPlayerNext-core.log',
-    );
+    final location = await getSaveLocation(suggestedName: 'listen-core.log');
     if (location == null) return;
     await File(source).copy(location.path);
     playerController.setStatus('Exported diagnostics to ${location.path}');

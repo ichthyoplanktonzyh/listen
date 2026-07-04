@@ -89,7 +89,7 @@ class LocalApi {
         throw const FormatException('invalid local API handshake');
       }
       final logs = Directory(
-        '${Platform.environment['HOME']}/Library/Logs/LLPlayerNext',
+        '${Platform.environment['HOME']}/Library/Logs/listen',
       );
       await logs.create(recursive: true);
       final logPath = '${logs.path}/core.log';

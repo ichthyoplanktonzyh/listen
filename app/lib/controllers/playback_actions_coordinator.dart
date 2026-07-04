@@ -266,7 +266,7 @@ class PlaybackActionsCoordinator {
     final service = getApi();
     if (service == null) return;
     final location = await getSaveLocation(
-      suggestedName: 'LLPlayerNext-vocabulary-v1.json',
+      suggestedName: 'listen-vocabulary-v1.json',
     );
     if (location == null) return;
     final bundle = await service.exportVocabulary();

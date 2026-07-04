@@ -77,7 +77,7 @@ class ExternalTools {
     }
     final executable = await _resolve(ffmpegPath, 'ffmpeg');
     final directory = Directory(
-      '${Platform.environment['HOME']}/Library/Caches/LLPlayerNext/subtitles',
+      '${Platform.environment['HOME']}/Library/Caches/listen/subtitles',
     );
     await directory.create(recursive: true);
     final output =
