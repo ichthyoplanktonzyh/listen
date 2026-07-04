@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- 2026-07-04 12:46 CST: Phase 3.x 产品形态与执行序列全部落地（documentation-only）。
+  新增 `.planning/discuss/listen-learning-activity-path.zh.md`：完整用户学习活动路径
+  （冷启动 -> 材料供给 -> 泛听 -> 精听 -> 整理 -> 回访 -> 教练）与一级产品原则 P1-P6
+  （精听/泛听一级心智、功能按场景分不按设备分且生产端唯一 PC-only、可组合不强制流程、
+  泛听默认零打扰、不课程化不游戏化、硬件北极星约束），并定义核心概念（三姿态、双维
+  难度、卡点、悬案区、Listening Inbox、微精听、片段收藏、熟料回听、猎词单、理解度
+  自报、升级建议等）。新增 `3.0-PHASE-BREAKDOWN.md` 确立 Phase 3.1 ~ 3.10 执行序列、
+  全局设计规则（可组合性、capability gating、guardrails 继承、evidence class、先派生
+  后建模）与依赖图；新增十个 phase 目录及 PLAN：3.1 练习切片（含 C-1/C-2 进诊断）、
+  3.2 卡点与 session summary、3.3 泛听 Inbox、3.4 audio-first 复习与升级建议、
+  3.5 双维难度分拣、3.6 听力词典 MVP、3.7 猎词单、3.8 shadowing、3.9 L1-aware 诊断、
+  3.10 教练 dashboard。同步更新 PROJECT.md（2026-07-04 产品定义更新 + §15.6 原则）、
+  ROADMAP.md（头部路线注记 + §14.12 执行序列）、STATE.md（Phase 3.0 执行序列、
+  最近决策、下一步改为 Phase 3.1 开工）、3.0-PLAN.md（breakdown 指针）。
+  无产品代码变更。
+
 - 2026-07-03 21:20 CST: 恢复误删的 listen brand 与用户旅程资源。
   最新一次 cleanup 提交误删了 `docs/brand/listen/` 品牌说明和 6 张视觉概念资产，
   以及 `.planning/discuss/listen-user-journeys-current-and-planned.md` / `.zh.md` 两份用户旅程文档；

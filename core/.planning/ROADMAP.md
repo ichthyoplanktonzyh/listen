@@ -28,6 +28,9 @@
 > audible-structure v1 contract 保持为当前权威 shape，3.x 按现状消费。同日新增
 > Phase 2.23 Architecture Debt Paydown 作为 3.x 前置工程治理：main.dart 收缩为
 > Flutter practice UI 的直接前置，sound_analysis 机械拆分落在算法线静默窗口内。
+> 2026-07-04 产品路线更新：Phase 3.x 执行序列确立为 Phase 3.1 ~ 3.10，并确立精听/泛听
+> 一级心智、可组合不强制流程、功能按场景分不按设备分（生产端唯一 PC-only）等原则；
+> 见 §14.12 与 `.planning/phases/3.0-english-listening-learning-loop/3.0-PHASE-BREAKDOWN.md`。
 > 完成报告见 `docs/release/milestone-1.md`。
 
 ## 1. 路线图目标
@@ -1378,23 +1381,30 @@ Phase 3.0 的第一个架构地基阶段为：
   cloze + chunk dictation 作为第一条 backend vertical slice。参考
   `.planning/phases/3.0.1-learning-loop-architecture-foundation/`。
 
-Phase 3.0 的近期建议顺序：
+Phase 3.0 的执行序列（2026-07-04 确立，取代早期建议顺序）：
 
 ```text
-Phase 2.17 真实声音线 QA
-  -> Phase 2.19 phone evidence benchmark scoring
-  -> Phase 2.20 rhythm-first listening analysis
-  -> Phase 2.21 audible-structure architecture
-  -> Phase 2.22 user-facing workflow semantics
-  -> Phase 3.0.1 学习行为架构地基
-  -> 输入难度信号与精听/泛听模式
-  -> 字幕渐隐、cloze、chunk dictation
-  -> 本地 YouGlish-like 个人语料搜索
-  -> 听力驱动词汇详情与 native SRS
-  -> Mandarin -> English L1-aware diagnosis v1
-  -> Chunk-level shadowing 和录音 A-B 对比
-  -> 诊断型 dashboard
+3.1  Intensive Listening Practice Slice   三姿态入口 + cloze/听写 UI + phrase/声音证据进诊断
+3.2  Stuck Points & Session Summary       卡点状态、session summary、悬案区、熟料标记
+3.3  Extensive Listening & Inbox          泛听会话、软/硬打断、理解度自报、Listening Inbox
+3.4  Audio-first Review Queue             声音卡复习 + 状态升级建议引擎
+3.5  Difficulty & Content Triage          Meaning/Sound fit 双维难度 + 三队列分拣 + 熟料回听
+3.6  Listening Dictionary MVP             本地语料索引/搜索、逐例识别标记、外链兜底
+3.7  Hunting List                         猎词单：泛听狩猎模式（显式开启 + 提示预算）
+3.8  Shadowing & Recording Comparison     chunk 跟读、录音、A/B 对比
+3.9  L1-aware Diagnosis v1                Mandarin -> English 难点 profile + 专项聚合
+3.10 Coach Dashboard                      诊断型统计与下一步建议
 ```
+
+配套一级产品原则（详见 breakdown 与 discuss 文档）：精听/泛听为一级心智模型，
+复习/词典/dashboard 是资产消费层与回访动线；功能按场景分不按设备分，生产端
+（重模型）是唯一 PC-only 能力；闭环是推荐路径不是强制流程，每个功能必须可独立
+使用；泛听默认零打扰。
+
+- Phase 分解与依赖：`.planning/phases/3.0-english-listening-learning-loop/3.0-PHASE-BREAKDOWN.md`
+- 完整学习活动路径：`.planning/discuss/listen-learning-activity-path.zh.md`
+- 各 phase 计划：`.planning/phases/3.1-intensive-listening-practice-slice/` ~
+  `.planning/phases/3.10-coach-dashboard/`
 
 ### 14.13 Phase 2.20：Rhythm-first Listening Analysis
 

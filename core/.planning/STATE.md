@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-03T17:20:00.000+08:00"
+last_updated: "2026-07-04T12:45:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-03 17:20 CST
-> 更新原因：Phase 2.23 收口（手工 smoke 通过、ADR 0014 落定），section 按维护规则
-> 压缩为索引行；主线全面转入 Phase 3.x。
+> 最后更新：2026-07-04 12:45 CST
+> 更新原因：Phase 3.x 产品形态与执行序列确立，3.1 ~ 3.10 phase 计划全部落地；
+> 产品原则新增精听/泛听一级心智、可组合不强制流程、功能按场景分不按设备分。
 
 ## 当前位置
 
@@ -74,8 +74,13 @@ last_updated: "2026-07-03T17:20:00.000+08:00"
   - 常见语言学习功能重写为听力本位能力。
   - 首个真实组合为 Mandarin L1 → English L2，L1/L2 理论进入诊断层。
   - Cloze、听写、字幕渐隐、chunk replay、本地 YouGlish-like 个人语料库是关键体验。
+  - 2026-07-04 新增：精听/泛听一级心智；复习/词典/dashboard 是资产消费层；可组合
+    不强制流程；功能按场景分不按设备分（生产端唯一 PC-only）；泛听默认零打扰。
 - 前置已就绪：Phase 2.23 已收口，`main.dart` 为 composition root（1457 行），controller + Store 为唯一 UI 状态模式，practice UI 可直接开工。
 - 规划文档：`.planning/phases/3.0-english-listening-learning-loop/3.0-PLAN.md`
+- 执行序列：Phase 3.1 ~ 3.10 已全部立 PLAN（2026-07-04），分解与依赖见
+  `.planning/phases/3.0-english-listening-learning-loop/3.0-PHASE-BREAKDOWN.md`；
+  产品输入见 `.planning/discuss/listen-learning-activity-path.zh.md`。
 
 ### Phase 3.0.1: Learning Loop Architecture Foundation ✅ 后端地基完成
 
@@ -118,18 +123,22 @@ last_updated: "2026-07-03T17:20:00.000+08:00"
 
 ## 最近重要决策
 
-1. **2026-07-03** — ADR 0014：Dart 模型解析保持手写，fixture 契约测试为防漂移标准；
+1. **2026-07-04** — Phase 3.x 产品形态确立：精听/泛听一级心智，复习/词典/dashboard
+   为资产消费层；功能按场景分不按设备分（生产端唯一 PC-only）；可组合不强制流程
+   （每个功能可独立使用）；泛听默认零打扰。执行序列落为 Phase 3.1 ~ 3.10；双维难度
+   （Meaning/Sound fit）直接实现，换取条件是分数可解释 + heuristic_proxy 标注。
+2. **2026-07-03** — ADR 0014：Dart 模型解析保持手写，fixture 契约测试为防漂移标准；
    存量 `timeline.dart` 不做 codegen 迁移，3.x 新 DTO 手写 + 契约测试，体量大再试点。
-2. **2026-07-02** — speech-analysis 算法线（2.19/2.20/2.21）搁置，主线转入 Phase 3.x
+3. **2026-07-02** — speech-analysis 算法线（2.19/2.20/2.21）搁置，主线转入 Phase 3.x
    英语听力学习闭环；audible-structure v1 contract 保持当前权威 shape。
-3. **2026-07-02** — Phase 2.23 只做机械治理，不改产品行为；`main.dart` 收缩是 3.x
+4. **2026-07-02** — Phase 2.23 只做机械治理，不改产品行为；`main.dart` 收缩是 3.x
    Flutter practice UI 的前置。
-4. **2026-07-01** — consumer self-contained invariant：bundled whisper.cpp 产出的
+5. **2026-07-01** — consumer self-contained invariant：bundled whisper.cpp 产出的
    WordTimeline 必须解锁基础功能，sidecar 只升级质量。
-5. **2026-07-01** — 字幕层声音模式统一为 Rhythm A/B/C；phones 是 C 内 L4 evidence，不再是一级模式。
-6. **2026-06-30** — 算法/指标/阈值变更必须记录 evidence class，不能把小样本 smoke 或自动标签当真理。
-7. **2026-06-27** — 稳定教学标签优先：CTC 是 audio evidence，不是默认 teaching label truth。
-8. **2026-06-18** — 产品拆为本地重装生产引擎 + 轻量消费端两条协同路线。
+6. **2026-07-01** — 字幕层声音模式统一为 Rhythm A/B/C；phones 是 C 内 L4 evidence，不再是一级模式。
+7. **2026-06-30** — 算法/指标/阈值变更必须记录 evidence class，不能把小样本 smoke 或自动标签当真理。
+8. **2026-06-27** — 稳定教学标签优先：CTC 是 audio evidence，不是默认 teaching label truth。
+9. **2026-06-18** — 产品拆为本地重装生产引擎 + 轻量消费端两条协同路线。
 
 ## 当前阻塞项
 
@@ -137,12 +146,14 @@ last_updated: "2026-07-03T17:20:00.000+08:00"
 
 ## 下一步工作
 
-1. Phase 3.x 正式开工：第一切片建议为 Flutter practice controller/UI（后端
-   vertical slice 已就绪），同步把 C-1（词组进诊断）、C-2（声音证据流入诊断）
-   纳入 3.x 计划——它们是"先诊断再练习"闭环的核心兑现点。
-2. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
+1. Phase 3.1 开工（Intensive Listening Practice Slice）：按
+   `.planning/phases/3.1-intensive-listening-practice-slice/3.1-PLAN.md` 执行；
+   C-1（词组进诊断）、C-2（声音证据流入诊断）已纳入其范围。
+2. 后续按 `3.0-PHASE-BREAKDOWN.md` 推荐顺序逐个 phase 交人执行；3.3（泛听 Inbox）、
+   3.6（听力词典）无硬依赖，可与主线并行开工。
+3. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
-3. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）。
+4. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）。
 
 ## 指标
 

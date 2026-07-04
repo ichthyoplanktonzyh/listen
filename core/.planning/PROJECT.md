@@ -26,6 +26,11 @@
   Listening structure、Phone evidence、词汇、诊断、设置、任务中心和 practice/review backend
   readiness，都必须被组织成清晰、可发现、可降级、可验证的用户工作流；“功能完成”不再只等于
   模型/API/局部 UI 完成，也必须包含入口、状态、下一步行动和端到端验证。
+- 产品定义更新：2026-07-04，Phase 3.x 学习闭环产品形态确立：精听/泛听为一级心智模型，
+  复习/听力词典/dashboard 为资产消费层与回访动线；功能按场景分、不按设备分，各端功能
+  全量，生产端（重模型精炼）是唯一 PC-only 能力；闭环是推荐路径不是强制流程，所有功能
+  可独立使用；泛听默认零打扰。执行序列 Phase 3.1 ~ 3.10 见
+  `.planning/phases/3.0-english-listening-learning-loop/3.0-PHASE-BREAKDOWN.md`。
 
 ## 2. 产品愿景
 
@@ -836,9 +841,19 @@ Phase 2.18 新学习资产架构之上，把英语作为第一门语言做成完
 - Dashboard 应解释听力障碍变化和下一步练习，而不是做泛泛打卡统计。
 - 进入具体功能扩张前，先通过 Phase 3.0.1 把 Practice / Review / LearningEvent /
   Corpus / Difficulty / LearnerProfile 等学习行为架构立为一等边界。
+- 精听 / 泛听是一级心智模型：精听是“发现卡点 -> 诊断 -> 主动验证 -> 处理完毕”，
+  泛听是“低摩擦捕获 -> 事后整理”；复习、听力词典、dashboard 是两类场景沉淀出的
+  资产消费层与回访动线，不是第三类输入场景。
+- 功能按场景分，不按设备分：精听/泛听/复习/词典/整理在所有端全量；生产端
+  （重模型精炼）是唯一 PC-only 能力。
+- 可组合，不强制流程：闭环是推荐路径；每个功能有独立入口、独立价值，可单独使用。
+- 泛听默认零打扰：猎词单等增强必须显式开启并有打扰预算。
+- 不课程化、不游戏化：教练只建议不指派；无打卡、无徽章。
 
 后续工作参考：
 
 - `.planning/phases/3.0-english-listening-learning-loop/3.0-CONTEXT.md`
 - `.planning/phases/3.0-english-listening-learning-loop/3.0-PLAN.md`
+- `.planning/phases/3.0-english-listening-learning-loop/3.0-PHASE-BREAKDOWN.md`
 - `.planning/phases/3.0.1-learning-loop-architecture-foundation/3.0.1-ARCHITECTURE.md`
+- `.planning/discuss/listen-learning-activity-path.zh.md`
