@@ -11,6 +11,7 @@ import '../../controllers/resource_actions_coordinator.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
 import '../../localization.dart';
+import '../../models/practice.dart';
 import '../../models/timeline.dart';
 import '../panels/diagnosis_card.dart';
 import '../panels/practice_panel.dart';
@@ -47,9 +48,15 @@ class SidePanel extends StatefulWidget {
     required this.onStartClozePractice,
     required this.onStartChunkDictationPractice,
     required this.onStartSentenceDictationPractice,
+    required this.onMarkStuckPoint,
+    required this.onSkipStuckPoint,
     required this.onReplayPracticeWindow,
     required this.onSubmitPractice,
     required this.onSavePracticeReview,
+    required this.onCompletePracticeSession,
+    required this.onReplayStuckPoint,
+    required this.onCloseStuckPoint,
+    required this.onOpenDiagnosisView,
     required this.timingQuality,
   });
 
@@ -76,9 +83,15 @@ class SidePanel extends StatefulWidget {
   final Future<void> Function() onStartClozePractice;
   final Future<void> Function() onStartChunkDictationPractice;
   final Future<void> Function() onStartSentenceDictationPractice;
+  final Future<void> Function() onMarkStuckPoint;
+  final Future<void> Function() onSkipStuckPoint;
   final Future<void> Function() onReplayPracticeWindow;
   final Future<void> Function() onSubmitPractice;
   final Future<void> Function() onSavePracticeReview;
+  final Future<void> Function() onCompletePracticeSession;
+  final Future<void> Function(StuckPointSummary point) onReplayStuckPoint;
+  final Future<void> Function(StuckPointSummary point) onCloseStuckPoint;
+  final Future<void> Function() onOpenDiagnosisView;
   final String Function(String sentenceId) timingQuality;
 
   @override
@@ -118,9 +131,17 @@ class _SidePanelState extends State<SidePanel> {
       widget.onStartChunkDictationPractice();
   Future<void> _startSentenceDictationPractice() =>
       widget.onStartSentenceDictationPractice();
+  Future<void> _markStuckPoint() => widget.onMarkStuckPoint();
+  Future<void> _skipStuckPoint() => widget.onSkipStuckPoint();
   Future<void> _replayPracticeWindow() => widget.onReplayPracticeWindow();
   Future<void> _submitPractice() => widget.onSubmitPractice();
   Future<void> _savePracticeReview() => widget.onSavePracticeReview();
+  Future<void> _completePracticeSession() => widget.onCompletePracticeSession();
+  Future<void> _replayStuckPoint(StuckPointSummary point) =>
+      widget.onReplayStuckPoint(point);
+  Future<void> _closeStuckPoint(StuckPointSummary point) =>
+      widget.onCloseStuckPoint(point);
+  Future<void> _openDiagnosisView() => widget.onOpenDiagnosisView();
   String _timingQuality(String sentenceId) => widget.timingQuality(sentenceId);
 
   bool get _canCloze {
@@ -193,8 +214,14 @@ class _SidePanelState extends State<SidePanel> {
             ),
           ],
           selected: {learningController.sidePanel},
-          onSelectionChanged: (value) =>
-              learningController.selectSidePanel(value.first),
+          onSelectionChanged: (value) {
+            final selected = value.first;
+            if (selected == 3) {
+              unawaited(_openDiagnosisView());
+            } else {
+              learningController.selectSidePanel(selected);
+            }
+          },
           showSelectedIcon: false,
         ),
         _postureActions(),
@@ -340,9 +367,7 @@ class _SidePanelState extends State<SidePanel> {
         runSpacing: 6,
         children: [
           OutlinedButton.icon(
-            onPressed: hasCue
-                ? () => learningController.selectSidePanel(3)
-                : null,
+            onPressed: hasCue ? () => unawaited(_openDiagnosisView()) : null,
             icon: const Icon(Icons.analytics_outlined),
             label: Text(l.text('understandPosture')),
           ),
@@ -431,9 +456,14 @@ class _SidePanelState extends State<SidePanel> {
     onStartCloze: _startClozePractice,
     onStartChunkDictation: _startChunkDictationPractice,
     onStartSentenceDictation: _startSentenceDictationPractice,
+    onMarkStuckPoint: _markStuckPoint,
+    onSkipStuckPoint: _skipStuckPoint,
     onReplay: _replayPracticeWindow,
     onSubmit: _submitPractice,
     onSaveReview: _savePracticeReview,
-    onOpenDiagnosis: () => learningController.selectSidePanel(3),
+    onCompleteSession: _completePracticeSession,
+    onReplayStuckPoint: _replayStuckPoint,
+    onCloseStuckPoint: _closeStuckPoint,
+    onOpenDiagnosis: _openDiagnosisView,
   );
 }

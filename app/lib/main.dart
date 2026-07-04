@@ -27,6 +27,7 @@ import 'controllers/speech_enhancement_workflow_controller.dart';
 import 'controllers/subtitle_controller.dart';
 import 'controllers/settings_controller.dart';
 import 'models/capability_readiness.dart';
+import 'models/practice.dart';
 import 'models/task_status.dart';
 import 'models/timeline.dart';
 import 'models/types.dart';
@@ -1053,6 +1054,99 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  Future<void> _markStuckPoint() async {
+    final marked = await practiceController.markCurrentStuckPoint(
+      api: api,
+      cue: subtitleController.currentPrimaryCue,
+      chunk: _currentPracticeChunk(),
+      mediaId: playerController.mediaId,
+      trackId: subtitleController.primaryTrack?.id,
+      mediaTimeMs: _mediaTimeMs,
+      diagnosis: learningController.diagnosis,
+    );
+    if (marked && mounted) playerController.setStatus('Stuck point marked');
+  }
+
+  Future<void> _skipStuckPoint() async {
+    final skipped = await practiceController.skipCurrentStuckPoint(
+      api: api,
+      cue: subtitleController.currentPrimaryCue,
+      chunk: _currentPracticeChunk(),
+      mediaId: playerController.mediaId,
+      trackId: subtitleController.primaryTrack?.id,
+      mediaTimeMs: _mediaTimeMs,
+      diagnosis: learningController.diagnosis,
+    );
+    if (skipped && mounted) playerController.setStatus('Stuck point skipped');
+  }
+
+  Future<void> _openDiagnosisView() async {
+    learningController.selectSidePanel(3);
+    await _refreshDiagnosis();
+    final recorded = await practiceController.recordDiagnosisView(
+      api: api,
+      cue: subtitleController.currentPrimaryCue,
+      chunk: _currentPracticeChunk(),
+      mediaId: playerController.mediaId,
+      trackId: subtitleController.primaryTrack?.id,
+      mediaTimeMs: _mediaTimeMs,
+      diagnosis: learningController.diagnosis,
+    );
+    if (recorded && mounted) {
+      playerController.setStatus('Diagnosis view recorded');
+    }
+  }
+
+  Future<void> _completePracticeSession() async {
+    final openCount = practiceController.summary?.openCount ?? 0;
+    if (openCount > 0) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(l.text('finishIntensive')),
+          content: Text(
+            l
+                .text('finishIntensiveWithOpen')
+                .replaceFirst('{count}', '$openCount'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(l.text('close')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(l.text('finishIntensive')),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    final completed = await practiceController.completeSession(api);
+    if (completed && mounted) {
+      playerController.setStatus('Intensive session completed');
+    }
+  }
+
+  Future<void> _replayStuckPoint(StuckPointSummary point) async {
+    final start = point.playbackStartMs;
+    final end = point.playbackEndMs;
+    if (start == null || end == null) {
+      playerController.setStatus('No playable range for this stuck point');
+      return;
+    }
+    await playbackActions.loopRange(start, end, 'Looping stuck point');
+  }
+
+  Future<void> _closeStuckPoint(StuckPointSummary point) async {
+    final closed = await practiceController.closeStuckPoint(
+      api,
+      point.targetKey,
+    );
+    if (closed && mounted) playerController.setStatus('Stuck point closed');
+  }
+
   int _mediaTimeMs(Duration subtitleTime) =>
       playbackActions.mediaTime(subtitleTime).inMilliseconds;
 
@@ -1541,9 +1635,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     onStartClozePractice: _startClozePractice,
     onStartChunkDictationPractice: _startChunkDictationPractice,
     onStartSentenceDictationPractice: _startSentenceDictationPractice,
+    onMarkStuckPoint: _markStuckPoint,
+    onSkipStuckPoint: _skipStuckPoint,
     onReplayPracticeWindow: _replayPracticeWindow,
     onSubmitPractice: _submitPractice,
     onSavePracticeReview: _savePracticeReview,
+    onCompletePracticeSession: _completePracticeSession,
+    onReplayStuckPoint: _replayStuckPoint,
+    onCloseStuckPoint: _closeStuckPoint,
+    onOpenDiagnosisView: _openDiagnosisView,
     timingQuality: _timingQuality,
   );
 

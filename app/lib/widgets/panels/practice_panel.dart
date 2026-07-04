@@ -20,9 +20,14 @@ class PracticePanel extends StatefulWidget {
     required this.onStartCloze,
     required this.onStartChunkDictation,
     required this.onStartSentenceDictation,
+    required this.onMarkStuckPoint,
+    required this.onSkipStuckPoint,
     required this.onReplay,
     required this.onSubmit,
     required this.onSaveReview,
+    required this.onCompleteSession,
+    required this.onReplayStuckPoint,
+    required this.onCloseStuckPoint,
     required this.onOpenDiagnosis,
   });
 
@@ -35,10 +40,15 @@ class PracticePanel extends StatefulWidget {
   final Future<void> Function() onStartCloze;
   final Future<void> Function() onStartChunkDictation;
   final Future<void> Function() onStartSentenceDictation;
+  final Future<void> Function() onMarkStuckPoint;
+  final Future<void> Function() onSkipStuckPoint;
   final Future<void> Function() onReplay;
   final Future<void> Function() onSubmit;
   final Future<void> Function() onSaveReview;
-  final VoidCallback onOpenDiagnosis;
+  final Future<void> Function() onCompleteSession;
+  final Future<void> Function(StuckPointSummary point) onReplayStuckPoint;
+  final Future<void> Function(StuckPointSummary point) onCloseStuckPoint;
+  final Future<void> Function() onOpenDiagnosis;
 
   @override
   State<PracticePanel> createState() => _PracticePanelState();
@@ -102,6 +112,7 @@ class _PracticePanelState extends State<PracticePanel> {
             _prompt(state)
           else
             _result(state),
+          _summary(state),
         ],
       ),
     );
@@ -142,6 +153,20 @@ class _PracticePanelState extends State<PracticePanel> {
             : () => unawaited(widget.onStartSentenceDictation()),
         icon: const Icon(Icons.short_text),
         label: Text(l.text('sentenceDictation')),
+      ),
+      OutlinedButton.icon(
+        onPressed: controller.busy || widget.currentCue == null
+            ? null
+            : () => unawaited(widget.onMarkStuckPoint()),
+        icon: const Icon(Icons.flag_outlined),
+        label: Text(l.text('markStuckPoint')),
+      ),
+      OutlinedButton.icon(
+        onPressed: controller.busy || widget.currentCue == null
+            ? null
+            : () => unawaited(widget.onSkipStuckPoint()),
+        icon: const Icon(Icons.skip_next),
+        label: Text(l.text('skipStuckPoint')),
       ),
     ],
   );
@@ -276,7 +301,9 @@ class _PracticePanelState extends State<PracticePanel> {
               label: Text(l.text('retryPractice')),
             ),
             OutlinedButton.icon(
-              onPressed: controller.busy ? null : widget.onOpenDiagnosis,
+              onPressed: controller.busy
+                  ? null
+                  : () => unawaited(widget.onOpenDiagnosis()),
               icon: const Icon(Icons.analytics_outlined),
               label: Text(l.text('openDiagnosis')),
             ),
@@ -296,6 +323,143 @@ class _PracticePanelState extends State<PracticePanel> {
       ],
     );
   }
+
+  Widget _summary(PracticeState state) {
+    final summary = state.summary;
+    if (summary == null) {
+      return const SizedBox.shrink();
+    }
+    final openPoints = summary.stuckPoints
+        .where(
+          (point) => point.status == 'unexplained' || point.status == 'marked',
+        )
+        .toList(growable: false);
+    return Padding(
+      padding: const EdgeInsets.only(top: 18),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xff2e3742)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.summarize_outlined, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      l.text('sessionSummary'),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: controller.busy
+                        ? null
+                        : () => unawaited(widget.onCompleteSession()),
+                    icon: const Icon(Icons.done_all, size: 18),
+                    label: Text(
+                      summary.session.endedAtMs == null
+                          ? l.text('finishIntensive')
+                          : l.text('intensiveFinished'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  _countChip(l.text('summaryStuck'), summary.stuckCount),
+                  _countChip(l.text('summaryResolved'), summary.resolvedCount),
+                  _countChip(
+                    l.text('summaryVerified'),
+                    summary.activeVerifiedCount,
+                  ),
+                  _countChip(l.text('summaryReview'), summary.reviewCount),
+                  _countChip(
+                    l.text('summaryUnexplained'),
+                    summary.unexplainedCount,
+                  ),
+                ],
+              ),
+              if (summary.attributionCounts.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final item in summary.attributionCounts.take(3))
+                      Chip(
+                        visualDensity: VisualDensity.compact,
+                        label: Text(
+                          '${l.diagnosisReason(item.reason ?? item.kind)} · ${item.count}',
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+              if (openPoints.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  l.text('openStuckPoints'),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                for (final point in openPoints) _openPointRow(point),
+              ],
+              if (summary.familiarMaterialMarked)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(
+                    l.text('familiarMaterialMarked'),
+                    style: const TextStyle(color: Color(0xff7bd88f)),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _countChip(String label, int value) =>
+      Chip(visualDensity: VisualDensity.compact, label: Text('$label $value'));
+
+  Widget _openPointRow(StuckPointSummary point) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            point.label ?? point.targetKey,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Color(0xffd7dee8)),
+          ),
+        ),
+        IconButton(
+          tooltip: l.text('replay'),
+          onPressed:
+              point.playbackStartMs == null || point.playbackEndMs == null
+              ? null
+              : () => unawaited(widget.onReplayStuckPoint(point)),
+          icon: const Icon(Icons.replay),
+        ),
+        IconButton(
+          tooltip: l.text('closeStuckPoint'),
+          onPressed: controller.busy
+              ? null
+              : () => unawaited(widget.onCloseStuckPoint(point)),
+          icon: const Icon(Icons.check_circle_outline),
+        ),
+      ],
+    ),
+  );
 
   Widget _header(PracticeDraft draft) => Row(
     children: [

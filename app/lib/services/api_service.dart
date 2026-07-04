@@ -769,6 +769,27 @@ class LocalApi {
         as Map<String, dynamic>,
   );
 
+  Future<PracticeSessionSummary> practiceSessionSummary(String id) async =>
+      PracticeSessionSummary.fromJson(
+        (await _request(
+              'GET',
+              '/v1/practice/sessions/${Uri.encodeComponent(id)}/summary',
+            ))
+            as Map<String, dynamic>,
+      );
+
+  Future<PracticeSessionSummary> completePracticeSession(
+    String id,
+    CompletePracticeSessionInput input,
+  ) async => PracticeSessionSummary.fromJson(
+    (await _request(
+          'POST',
+          '/v1/practice/sessions/${Uri.encodeComponent(id)}/complete',
+          input.toJson(),
+        ))
+        as Map<String, dynamic>,
+  );
+
   Future<PracticeItem> createPracticeItem(CreatePracticeItem input) async =>
       PracticeItem.fromJson(
         (await _request('POST', '/v1/practice/items', input.toJson()))
@@ -790,6 +811,22 @@ class LocalApi {
             ))
             as Map<String, dynamic>,
       );
+
+  Future<void> markStuckPoint(RecordStuckPointInput input) async {
+    await _request('POST', '/v1/practice/stuck-points/mark', input.toJson());
+  }
+
+  Future<void> skipStuckPoint(RecordStuckPointInput input) async {
+    await _request('POST', '/v1/practice/stuck-points/skip', input.toJson());
+  }
+
+  Future<void> closeStuckPoint(CloseStuckPointInput input) async {
+    await _request('POST', '/v1/practice/stuck-points/close', input.toJson());
+  }
+
+  Future<void> recordDiagnosisView(RecordDiagnosisViewInput input) async {
+    await _request('POST', '/v1/practice/diagnosis-viewed', input.toJson());
+  }
 
   Future<ReviewItem> createReviewItem(CreateReviewItem input) async =>
       ReviewItem.fromJson(
