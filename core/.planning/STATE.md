@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-04T15:50:00.000+08:00"
+last_updated: "2026-07-04T16:38:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-04 15:50 CST
-> 更新原因：Phase 3.1 精听练习切片收口；Test posture 首个竖切片、C-1 phrase-aware
-> diagnosis、C-2 rhythm hotspot loop 已落地，下一步转入 Phase 3.2。
+> 最后更新：2026-07-04 16:38 CST
+> 更新原因：Phase 3.2 卡点与 session summary 切片收口；精听卡点、悬案区 v0、
+> 精听完毕与熟料标记已落地，下一步转入 Phase 3.3 / 3.4。
 
 ## 当前位置
 
@@ -105,6 +105,18 @@ last_updated: "2026-07-04T15:50:00.000+08:00"
   `cargo test -p application`、`cargo test -p api-http`、`validate-contracts`、`git diff --check`。
 - 收口文档：`.planning/phases/3.1-intensive-listening-practice-slice/3.1-CLOSEOUT.md`
 
+### Phase 3.2: Stuck Points & Session Summary ✅ 卡点闭环切片完成
+
+- 已完成：显式标记卡点 / 跳过、诊断查看事件、读侧 session summary 聚合、悬案区 v0
+  回听与手动关闭、精听完毕确认、熟料标记持久化。
+- 架构决策：卡点状态继续由 `LearningEvent` + `PracticeAttempt` + `ReviewItem` 派生；
+  未升格为独立 domain 状态机实体。手动 review 关联以 `ReviewItem.source.practice_attempt_id`
+  为准，不反向改写 attempt JSON。
+- 验证：`cargo test -p application -p persistence-sqlite -p api-http`、`cargo clippy -p application
+  -p persistence-sqlite -p api-http --all-targets`、`flutter analyze`、`flutter test`（170 passed）、
+  `validate-contracts`、`git diff --check`。真实媒体 GUI 手工 QA 仍需 owner 最终确认。
+- 收口文档：`.planning/phases/3.2-stuck-points-session-summary/3.2-CLOSEOUT.md`
+
 ## 已完成 Phase 索引
 
 | Phase | 结论 | 文档 |
@@ -134,25 +146,27 @@ last_updated: "2026-07-04T15:50:00.000+08:00"
 
 ## 最近重要决策
 
-1. **2026-07-04** — Phase 3.1 收口：Test posture 首个精听练习竖切片落地，包含
+1. **2026-07-04** — Phase 3.2 收口：精听卡点闭环落地，包含标记卡点 / 跳过、
+   diagnosis viewed evidence、session summary、悬案区 v0、精听完毕确认与
+   `familiar_material_marked` 熟料事件；卡点状态保持读侧派生，不新增权威状态机表。
+2. **2026-07-04** — Phase 3.1 收口：Test posture 首个精听练习竖切片落地，包含
    cloze / chunk dictation / sentence dictation、失败项 review、phrase-aware diagnosis
    和 rhythm hotspot evidence loop；练习失败继续作为 evidence，不静默修改全局 `LearningStatus`。
-2. **2026-07-04** — Phase 3.x 产品形态确立：精听/泛听一级心智，复习/词典/dashboard
+3. **2026-07-04** — Phase 3.x 产品形态确立：精听/泛听一级心智，复习/词典/dashboard
    为资产消费层；功能按场景分不按设备分（生产端唯一 PC-only）；可组合不强制流程
    （每个功能可独立使用）；泛听默认零打扰。执行序列落为 Phase 3.1 ~ 3.10；双维难度
    （Meaning/Sound fit）直接实现，换取条件是分数可解释 + heuristic_proxy 标注。
-3. **2026-07-03** — ADR 0014：Dart 模型解析保持手写，fixture 契约测试为防漂移标准；
+4. **2026-07-03** — ADR 0014：Dart 模型解析保持手写，fixture 契约测试为防漂移标准；
    存量 `timeline.dart` 不做 codegen 迁移，3.x 新 DTO 手写 + 契约测试，体量大再试点。
-4. **2026-07-02** — speech-analysis 算法线（2.19/2.20/2.21）搁置，主线转入 Phase 3.x
+5. **2026-07-02** — speech-analysis 算法线（2.19/2.20/2.21）搁置，主线转入 Phase 3.x
    英语听力学习闭环；audible-structure v1 contract 保持当前权威 shape。
-5. **2026-07-02** — Phase 2.23 只做机械治理，不改产品行为；`main.dart` 收缩是 3.x
+6. **2026-07-02** — Phase 2.23 只做机械治理，不改产品行为；`main.dart` 收缩是 3.x
    Flutter practice UI 的前置。
-6. **2026-07-01** — consumer self-contained invariant：bundled whisper.cpp 产出的
+7. **2026-07-01** — consumer self-contained invariant：bundled whisper.cpp 产出的
    WordTimeline 必须解锁基础功能，sidecar 只升级质量。
-7. **2026-07-01** — 字幕层声音模式统一为 Rhythm A/B/C；phones 是 C 内 L4 evidence，不再是一级模式。
-8. **2026-06-30** — 算法/指标/阈值变更必须记录 evidence class，不能把小样本 smoke 或自动标签当真理。
-9. **2026-06-27** — 稳定教学标签优先：CTC 是 audio evidence，不是默认 teaching label truth。
-10. **2026-06-18** — 产品拆为本地重装生产引擎 + 轻量消费端两条协同路线。
+8. **2026-07-01** — 字幕层声音模式统一为 Rhythm A/B/C；phones 是 C 内 L4 evidence，不再是一级模式。
+9. **2026-06-30** — 算法/指标/阈值变更必须记录 evidence class，不能把小样本 smoke 或自动标签当真理。
+10. **2026-06-27** — 稳定教学标签优先：CTC 是 audio evidence，不是默认 teaching label truth。
 
 ## 当前阻塞项
 
@@ -160,9 +174,8 @@ last_updated: "2026-07-04T15:50:00.000+08:00"
 
 ## 下一步工作
 
-1. Phase 3.2 开工（Sticking Points + Session Summary）：把 3.1 的 practice attempts、
-   diagnosis hints、review candidates 聚合为卡点状态与 session summary。
-2. 后续按 `3.0-PHASE-BREAKDOWN.md` 推荐顺序逐个 phase 交人执行；3.3（泛听 Inbox）、
+1. Phase 3.3 开工（Extensive Listening & Inbox）：建立泛听软/硬打断与 Listening Inbox。
+2. 后续按 `3.0-PHASE-BREAKDOWN.md` 推荐顺序逐个 phase 交人执行；3.4（audio-first review）、
    3.6（听力词典）无硬依赖，可与主线并行开工。
 3. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。

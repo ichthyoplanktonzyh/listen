@@ -689,6 +689,12 @@ pub trait PracticeRepository: Send + Sync {
         &self,
         id: &PracticeItemId,
     ) -> Result<Option<PracticeItem>, ApplicationError>;
+    fn list_practice_items_for_session(
+        &self,
+        session_id: &PracticeSessionId,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<PracticeItem>, ApplicationError>;
     fn create_practice_attempt(
         &self,
         attempt: &PracticeAttempt,
@@ -697,6 +703,12 @@ pub trait PracticeRepository: Send + Sync {
         &self,
         id: &PracticeAttemptId,
     ) -> Result<Option<PracticeAttempt>, ApplicationError>;
+    fn list_practice_attempts_for_item(
+        &self,
+        item_id: &PracticeItemId,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<PracticeAttempt>, ApplicationError>;
 }
 
 pub trait ReviewRepository: Send + Sync {
@@ -725,6 +737,12 @@ pub trait LearningEventRepository: Send + Sync {
     ) -> Result<LearningEvent, ApplicationError>;
     fn list_learning_events(
         &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<LearningEvent>, ApplicationError>;
+    fn list_learning_events_for_session(
+        &self,
+        session_id: &PracticeSessionId,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<LearningEvent>, ApplicationError>;

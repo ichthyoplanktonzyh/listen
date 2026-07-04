@@ -20,9 +20,9 @@ use dictionary_provider::{
     FreeDictionaryProvider, JapaneseDictionaryProvider,
 };
 use domain::{
-    LanguageCode, LearningStatus, MediaAvailability, MediaId, MediaKind, PracticeAttempt,
-    PracticeAttemptId, PracticeItem, PracticeSession, ReviewItem, ReviewItemId, SubtitleSentenceId,
-    SubtitleTrackId, VocabularyAssetBundle,
+    LanguageCode, LearningEvent, LearningStatus, MediaAvailability, MediaId, MediaKind,
+    PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeSession, PracticeSessionId,
+    ReviewItem, ReviewItemId, SubtitleSentenceId, SubtitleTrackId, VocabularyAssetBundle,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
@@ -294,9 +294,21 @@ pub fn router(state: ApiState) -> Router {
             get(m18::phrase_candidates),
         )
         .route("/v1/practice/sessions", post(create_practice_session))
+        .route(
+            "/v1/practice/sessions/{id}/summary",
+            get(practice_session_summary),
+        )
+        .route(
+            "/v1/practice/sessions/{id}/complete",
+            post(complete_practice_session),
+        )
         .route("/v1/practice/items", post(create_practice_item))
         .route("/v1/practice/attempts", post(submit_practice_attempt))
         .route("/v1/practice/attempts/{id}", get(practice_attempt))
+        .route("/v1/practice/stuck-points/mark", post(mark_stuck_point))
+        .route("/v1/practice/stuck-points/skip", post(skip_stuck_point))
+        .route("/v1/practice/stuck-points/close", post(close_stuck_point))
+        .route("/v1/practice/diagnosis-viewed", post(record_diagnosis_view))
         .route("/v1/review/items", post(create_review_item))
         .route("/v1/review/items/{id}", get(review_item))
         .route("/v1/learning-resources", get(m18::resources))

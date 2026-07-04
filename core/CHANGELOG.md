@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-04 16:38 CST: Phase 3.2 卡点与 session summary 切片落地。
+  后端新增卡点/诊断查看/完成 session 事件流与 session summary API，卡点状态由
+  `learning_events`、practice attempts、review items 派生，不引入新的持久化状态表；
+  OpenAPI 与 TypeScript contract 同步更新。桌面端新增精听卡点标记/跳过、悬案区 v0、
+  复习归因、诊断查看记录、完成精听 session 与熟料标记入口。新增 Rust persistence/API
+  集成测试、Flutter controller/contract 测试，并更新 planning closeout、架构、数据模型与
+  测试索引。验证：`cargo test -p application -p persistence-sqlite -p api-http`、
+  `cargo clippy -p application -p persistence-sqlite -p api-http --all-targets`、
+  `flutter analyze`、`flutter test`（170 passed）、`./scripts/validate-contracts.sh`、
+  `git diff --check` 全部通过；真实媒体 GUI 手工 QA 尚待 owner 最终确认。
+
 - 2026-07-04 16:06 CST: 桌面 app 品牌名与图标切换到 `listen`。
   根据 `docs/brand/listen/` 品牌材料，将 macOS app 产品名、Bundle ID、窗口标题、
   打包脚本产物名和用户可见导出文件名从 LLPlayerNext 切到 `listen`；使用推荐的

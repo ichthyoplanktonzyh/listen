@@ -1,6 +1,6 @@
 # Current Data Model
 
-Last updated: 2026-06-28, Phase 3.0.1.
+Last updated: 2026-07-04, Phase 3.2.
 
 All persisted time values are non-negative integer milliseconds. Public IDs are
 opaque SHA-256 strings generated from a namespace and stable fingerprint; they
@@ -79,7 +79,7 @@ assets:
 | `practice_attempts` | Historical user submission, evaluation, generated observations, and generated review links |
 | `review_items` | A schedulable review target pointing to lexical entries, chunks, sentences, practice failures, or future sound cases |
 | `review_attempts` | Historical review rating attempts |
-| `learning_events` | Append-mostly analytics facts for practice/review/listening/status events |
+| `learning_events` | Append-mostly analytics facts for practice/review/listening/status/stuck-point events |
 
 `PracticeAttempt` owns what the user tried and how it was evaluated. It may create
 `LexicalObservation` evidence, but it must not silently change global
@@ -91,6 +91,11 @@ adapt from `ReviewItem` later rather than define the internal model.
 
 `learning_events` is the intended future source for dashboard aggregation. It is
 not a substitute for status history, practice attempts, or review attempts.
+Phase 3.2 also uses it for stuck-point facts and familiar-material markers:
+`stuck_point_marked`, `stuck_point_skipped`, `diagnosis_viewed`,
+`stuck_point_closed`, and `familiar_material_marked`. Stuck-point status is a
+read-side derivation from events plus `PracticeAttempt` and `ReviewItem`; there
+is no authoritative stuck-point state table in schema v17.
 
 ## Deletion Semantics
 

@@ -1,6 +1,6 @@
 # LLPlayerNext System Architecture
 
-Last updated: 2026-07-02. Reflects Phase 3.0.1 plus Phase 2.23 documentation cleanup.
+Last updated: 2026-07-04. Reflects Phase 3.2 stuck-point/session-summary slice.
 
 ## Overview
 
@@ -67,9 +67,10 @@ application use cases and provider/repository boundaries.
 - Application-owned DTOs sit in `application::dto`; algorithm crate structs are
   mapped at the boundary instead of re-exported.
 - Learning assets use `LexicalEntry + LexicalUnit` as the authoritative model.
-- Phase 3.0.1 practice services can create practice sessions/items, evaluate
-  text attempts, persist `PracticeAttempt`, write failed lexical anchors as
-  `LexicalObservation`, optionally create `ReviewItem`, and append `LearningEvent`.
+- Practice services can create practice sessions/items, evaluate text attempts,
+  persist `PracticeAttempt`, write failed lexical anchors as `LexicalObservation`,
+  optionally create `ReviewItem`, append `LearningEvent`, complete intensive
+  sessions, and derive session summaries from events/attempts/review items.
 
 ### `api-http`
 
@@ -86,9 +87,15 @@ application use cases and provider/repository boundaries.
   - `/v1/lexical-observations`
 - Learning-loop foundation routes:
   - `/v1/practice/sessions`
+  - `/v1/practice/sessions/{id}/summary`
+  - `/v1/practice/sessions/{id}/complete`
   - `/v1/practice/items`
   - `/v1/practice/attempts`
   - `/v1/practice/attempts/{id}`
+  - `/v1/practice/stuck-points/mark`
+  - `/v1/practice/stuck-points/skip`
+  - `/v1/practice/stuck-points/close`
+  - `/v1/practice/diagnosis-viewed`
   - `/v1/review/items`
   - `/v1/review/items/{id}`
 
@@ -233,6 +240,15 @@ practice attempt submit -> text evaluation -> SQLite practice_attempts
   -> failed lexical anchors create LexicalObservation
   -> optional ReviewItem
   -> LearningEvent append
+```
+
+### Stuck Point Summary
+
+```text
+mark/skip/diagnosis view -> LearningEvent append
+practice attempts + review items + events -> application read-side aggregation
+  -> PracticeSessionSummary -> Flutter practice panel summary/open issues
+complete intensive session -> PracticeSession.ended_at_ms + familiar material event
 ```
 
 ### Timeline Resources

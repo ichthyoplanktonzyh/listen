@@ -163,6 +163,100 @@ pub struct CreateReviewItem {
     pub prompt_snapshot: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DiagnosisHintEvidence {
+    pub kind: String,
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordStuckPointInput {
+    pub session_id: PracticeSessionId,
+    pub target: PracticeTarget,
+    pub anchors: Vec<PracticeAnchor>,
+    pub label: Option<String>,
+    #[serde(default)]
+    pub diagnosis_hints: Vec<DiagnosisHintEvidence>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordDiagnosisViewInput {
+    pub session_id: PracticeSessionId,
+    pub target: PracticeTarget,
+    pub anchors: Vec<PracticeAnchor>,
+    pub label: Option<String>,
+    #[serde(default)]
+    pub diagnosis_hints: Vec<DiagnosisHintEvidence>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloseStuckPointInput {
+    pub session_id: PracticeSessionId,
+    pub target_key: String,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompletePracticeSessionInput {
+    #[serde(default = "default_mark_familiar")]
+    pub mark_familiar: bool,
+}
+
+fn default_mark_familiar() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StuckPointStatus {
+    Marked,
+    ResolvedWithHint,
+    ActivelyVerified,
+    AddedToReview,
+    Skipped,
+    Unexplained,
+    Closed,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StuckPointSummary {
+    pub target_key: String,
+    pub status: StuckPointStatus,
+    pub target: Option<PracticeTarget>,
+    pub anchors: Vec<PracticeAnchor>,
+    pub label: Option<String>,
+    pub marked_at_ms: Option<u64>,
+    pub updated_at_ms: u64,
+    pub playback_start_ms: Option<u64>,
+    pub playback_end_ms: Option<u64>,
+    pub practice_attempt_ids: Vec<PracticeAttemptId>,
+    pub review_item_ids: Vec<ReviewItemId>,
+    pub diagnosis_hints: Vec<DiagnosisHintEvidence>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StuckPointAttribution {
+    pub kind: String,
+    pub reason: Option<String>,
+    pub count: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PracticeSessionSummary {
+    pub session: PracticeSession,
+    pub stuck_points: Vec<StuckPointSummary>,
+    pub stuck_count: u32,
+    pub resolved_count: u32,
+    pub active_verified_count: u32,
+    pub review_count: u32,
+    pub unexplained_count: u32,
+    pub skipped_count: u32,
+    pub closed_count: u32,
+    pub open_count: u32,
+    pub attribution_counts: Vec<StuckPointAttribution>,
+    pub familiar_material_marked: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct LexicalSourceContext {
     pub media_id: Option<MediaId>,

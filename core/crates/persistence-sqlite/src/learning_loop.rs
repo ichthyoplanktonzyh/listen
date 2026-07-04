@@ -93,6 +93,31 @@ impl PracticeRepository for SqliteRepository {
         .map_err(repo)
     }
 
+    fn list_practice_items_for_session(
+        &self,
+        session_id: &PracticeSessionId,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<PracticeItem>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = conn
+            .prepare(
+                "SELECT item_json FROM practice_items
+                 WHERE session_id=?1
+                 ORDER BY created_at_ms ASC
+                 LIMIT ?2 OFFSET ?3",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map(
+                params![session_id.as_str(), limit.min(500), offset],
+                |row| from_json(&row.get::<_, String>(0)?),
+            )
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
     fn create_practice_attempt(
         &self,
         attempt: &PracticeAttempt,
@@ -131,6 +156,30 @@ impl PracticeRepository for SqliteRepository {
         )
         .optional()
         .map_err(repo)
+    }
+
+    fn list_practice_attempts_for_item(
+        &self,
+        item_id: &PracticeItemId,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<PracticeAttempt>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = conn
+            .prepare(
+                "SELECT attempt_json FROM practice_attempts
+                 WHERE item_id=?1
+                 ORDER BY submitted_at_ms ASC
+                 LIMIT ?2 OFFSET ?3",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map(params![item_id.as_str(), limit.min(500), offset], |row| {
+                from_json(&row.get::<_, String>(0)?)
+            })
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
     }
 }
 
@@ -294,6 +343,31 @@ impl LearningEventRepository for SqliteRepository {
             .query_map(params![limit.min(500), offset], |row| {
                 from_json(&row.get::<_, String>(0)?)
             })
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
+    fn list_learning_events_for_session(
+        &self,
+        session_id: &PracticeSessionId,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<LearningEvent>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = conn
+            .prepare(
+                "SELECT event_json FROM learning_events
+                 WHERE session_id=?1
+                 ORDER BY occurred_at_ms ASC
+                 LIMIT ?2 OFFSET ?3",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map(
+                params![session_id.as_str(), limit.min(1000), offset],
+                |row| from_json(&row.get::<_, String>(0)?),
+            )
             .map_err(repo)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(repo)

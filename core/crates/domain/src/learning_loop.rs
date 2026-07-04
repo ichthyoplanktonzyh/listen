@@ -100,6 +100,11 @@ pub enum LearningEventKind {
     PracticeCompleted,
     ReviewCompleted,
     StatusChanged,
+    StuckPointMarked,
+    StuckPointSkipped,
+    DiagnosisViewed,
+    StuckPointClosed,
+    FamiliarMaterialMarked,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -111,6 +116,7 @@ pub enum LearningEventSubjectKind {
     LexicalEntry,
     ReviewItem,
     PracticeAttempt,
+    PracticeSession,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
