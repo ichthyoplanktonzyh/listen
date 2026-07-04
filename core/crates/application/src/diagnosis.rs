@@ -42,11 +42,28 @@ impl AppServices {
             LexicalEntryKind::Word,
             &keys,
         )?;
+        let phrase_keys = self
+            .phrase_candidates(sentence_id)?
+            .into_iter()
+            .map(|candidate| candidate.normalized_form)
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let phrase_entries = self.learning_assets.lexical_entries_by_keys(
+            &language,
+            LexicalEntryKind::Phrase,
+            &phrase_keys,
+        )?;
         let observations = self
             .learning_assets
             .list_lexical_observations_by_sentence(sentence_id)?;
-        let mut diagnosis =
-            diagnosis_core::diagnose(&sentence, &entries, &observations, &lexical_keys);
+        let mut diagnosis = diagnosis_core::diagnose_with_phrases(
+            &sentence,
+            &entries,
+            &phrase_entries,
+            &observations,
+            &lexical_keys,
+        );
         // Layer the learning language's listening-factor reasons onto the
         // recognition barrier (per-profile possibilities, not audio detections).
         let reasons = domain::profile_for(&language).diagnosis_reasons;

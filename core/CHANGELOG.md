@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-04 15:50 CST: Phase 3.1 精听练习切片落地。
+  桌面端新增 Test posture 的首个竖切片：三姿态入口、cloze / chunk dictation /
+  sentence dictation 练习面板、练习 session/item/attempt/review 的 typed Dart DTO 与
+  LocalApi 客户端封装、失败项一键进入 review；练习面板支持听后作答、结果 diff、重试、
+  重放当前证据窗口和打开诊断。诊断侧完成 C-1 phrase-aware diagnosis：当前句命中的
+  Phrase lexical entries 会参与 meaning / recognition barrier 判断；C-2 rhythm hotspots
+  可从诊断卡直接 loop 对应 evidence range。新增 Flutter controller/contract/widget 测试与
+  diagnosis-core phrase 回归测试。验证：`flutter analyze`、`flutter test`（168 passed）、
+  `cargo test -p diagnosis-core`、`cargo test -p application`、`cargo test -p api-http`、
+  `./scripts/validate-contracts.sh`、`git diff --check` 全部通过。
+
 - 2026-07-04 12:46 CST: Phase 3.x 产品形态与执行序列全部落地（documentation-only）。
   新增 `.planning/discuss/listen-learning-activity-path.zh.md`：完整用户学习活动路径
   （冷启动 -> 材料供给 -> 泛听 -> 精听 -> 整理 -> 回访 -> 教练）与一级产品原则 P1-P6

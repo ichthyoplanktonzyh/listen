@@ -23,6 +23,16 @@ pub fn diagnose(
     observations: &[LexicalObservation],
     lexical_keys: &HashMap<String, String>,
 ) -> SentenceDiagnosis {
+    diagnose_with_phrases(sentence, entries, &[], observations, lexical_keys)
+}
+
+pub fn diagnose_with_phrases(
+    sentence: &SubtitleSentence,
+    entries: &[LexicalEntry],
+    phrase_entries: &[LexicalEntry],
+    observations: &[LexicalObservation],
+    lexical_keys: &HashMap<String, String>,
+) -> SentenceDiagnosis {
     let by_key = entries
         .iter()
         .map(|entry| (entry.normalized_form.as_str(), entry))
@@ -50,15 +60,31 @@ pub fn diagnose(
             .get(key)
             .and_then(|entry| entry.status.map(|s| (entry, s)))
         {
-            Some((entry, LearningStatus::UnknownMeaning)) => meaning.push(entry.id.clone()),
-            Some((entry, LearningStatus::KnownNotRecognized)) => recognition.push(entry.id.clone()),
+            Some((entry, LearningStatus::UnknownMeaning)) => {
+                push_unique(&mut meaning, entry.id.clone())
+            }
+            Some((entry, LearningStatus::KnownNotRecognized)) => {
+                push_unique(&mut recognition, entry.id.clone())
+            }
             Some((entry, LearningStatus::KnownRecognized))
                 if not_recognized.contains(&entry.id) =>
             {
-                recognition.push(entry.id.clone());
+                push_unique(&mut recognition, entry.id.clone());
             }
             Some(_) => {}
             None => unclassified.push((*lemma).to_owned()),
+        }
+    }
+    for entry in matching_phrase_entries(sentence, phrase_entries) {
+        match entry.status {
+            Some(LearningStatus::UnknownMeaning) => push_unique(&mut meaning, entry.id.clone()),
+            Some(LearningStatus::KnownNotRecognized) => {
+                push_unique(&mut recognition, entry.id.clone())
+            }
+            Some(LearningStatus::KnownRecognized) if not_recognized.contains(&entry.id) => {
+                push_unique(&mut recognition, entry.id.clone())
+            }
+            _ => {}
         }
     }
     let mut hints = Vec::new();
@@ -100,6 +126,59 @@ pub fn diagnose(
         hints,
         unclassified_lemmas: unclassified,
     }
+}
+
+fn push_unique(values: &mut Vec<domain::LexicalEntryId>, id: domain::LexicalEntryId) {
+    if !values.contains(&id) {
+        values.push(id);
+    }
+}
+
+fn matching_phrase_entries<'a>(
+    sentence: &SubtitleSentence,
+    phrase_entries: &'a [LexicalEntry],
+) -> Vec<&'a LexicalEntry> {
+    let words = sentence
+        .tokens
+        .iter()
+        .filter(|token| token.kind == SubtitleTokenKind::Word)
+        .filter_map(|token| token.normalized.as_deref())
+        .map(phrase_part)
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    if words.is_empty() {
+        return Vec::new();
+    }
+    phrase_entries
+        .iter()
+        .filter(|entry| {
+            [
+                entry.normalized_form.as_str(),
+                entry.canonical_form.as_str(),
+            ]
+            .iter()
+            .map(|value| phrase_key_parts(value))
+            .any(|parts| !parts.is_empty() && contains_phrase(&words, &parts))
+        })
+        .collect()
+}
+
+fn contains_phrase(words: &[String], phrase: &[String]) -> bool {
+    phrase.len() <= words.len() && words.windows(phrase.len()).any(|window| window == phrase)
+}
+
+fn phrase_key_parts(value: &str) -> Vec<String> {
+    value
+        .split_whitespace()
+        .map(phrase_part)
+        .filter(|part| !part.is_empty())
+        .collect()
+}
+
+fn phrase_part(value: &str) -> String {
+    value
+        .trim_matches(|ch: char| !ch.is_alphanumeric() && ch != '\'')
+        .to_ascii_lowercase()
 }
 
 #[cfg(test)]
@@ -182,6 +261,32 @@ mod tests {
             normalized_form: word.into(),
             display_form: word.into(),
             status: None,
+            user_definition: None,
+            personal_note: None,
+            normalization_provider: "test".into(),
+            normalization_version: "v1".into(),
+            user_corrected: false,
+            updated_at_ms: 0,
+            learning_updated_at_ms: 0,
+        }
+    }
+
+    fn phrase_entry(id: &str, phrase: &str, status: LearningStatus) -> LexicalEntry {
+        LexicalEntry {
+            id: LexicalEntryId::parse(id).unwrap(),
+            unit: LexicalUnit::new(
+                LanguageCode::parse("en").unwrap(),
+                LexicalUnit::GRANULARITY_PHRASE,
+                "core.lemma",
+                phrase,
+                phrase,
+            ),
+            language: LanguageCode::parse("en").unwrap(),
+            kind: LexicalEntryKind::Phrase,
+            canonical_form: phrase.into(),
+            normalized_form: phrase.into(),
+            display_form: phrase.into(),
+            status: Some(status),
             user_definition: None,
             personal_note: None,
             normalization_provider: "test".into(),
@@ -295,6 +400,26 @@ mod tests {
         assert_eq!(meaning_hint.lexical_entry_ids.len(), 2);
     }
 
+    #[test]
+    fn saved_phrase_unknown_meaning_triggers_meaning_barrier() {
+        let sent = sentence_with_tokens(&[
+            ("take", SubtitleTokenKind::Word),
+            ("care", SubtitleTokenKind::Word),
+        ]);
+        let phrase = phrase_entry(
+            "phrase-take-care",
+            "take care",
+            LearningStatus::UnknownMeaning,
+        );
+        let result = diagnose_with_phrases(&sent, &[], &[phrase.clone()], &[], &HashMap::new());
+        let meaning_hint = result
+            .hints
+            .iter()
+            .find(|h| h.kind == DiagnosisKind::MeaningBarrier)
+            .unwrap();
+        assert_eq!(meaning_hint.lexical_entry_ids, vec![phrase.id]);
+    }
+
     // ── RecognitionBarrier ──────────────────────────────────────────
 
     #[test]
@@ -310,6 +435,26 @@ mod tests {
                 .iter()
                 .any(|h| h.kind == DiagnosisKind::RecognitionBarrier)
         );
+    }
+
+    #[test]
+    fn saved_phrase_known_not_recognized_triggers_recognition_barrier() {
+        let sent = sentence_with_tokens(&[
+            ("would", SubtitleTokenKind::Word),
+            ("have", SubtitleTokenKind::Word),
+        ]);
+        let phrase = phrase_entry(
+            "phrase-would-have",
+            "would have",
+            LearningStatus::KnownNotRecognized,
+        );
+        let result = diagnose_with_phrases(&sent, &[], &[phrase.clone()], &[], &HashMap::new());
+        let recognition_hint = result
+            .hints
+            .iter()
+            .find(|h| h.kind == DiagnosisKind::RecognitionBarrier)
+            .unwrap();
+        assert_eq!(recognition_hint.lexical_entry_ids, vec![phrase.id]);
     }
 
     #[test]
