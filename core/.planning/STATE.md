@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-04T16:38:00.000+08:00"
+last_updated: "2026-07-04T23:25:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-04 16:38 CST
-> 更新原因：Phase 3.2 卡点与 session summary 切片收口；精听卡点、悬案区 v0、
-> 精听完毕与熟料标记已落地，下一步转入 Phase 3.3 / 3.4。
+> 最后更新：2026-07-04 23:25 CST
+> 更新原因：Phase 3.35 已进入实施，首页、可拖动播放工作台、播放控制与统一产品配色
+> 已完成首轮，等待 owner 截图反馈后继续视觉收口。
 
 ## 当前位置
 
@@ -19,6 +19,8 @@ last_updated: "2026-07-04T16:38:00.000+08:00"
 - **算法线状态**：Phase 2.19 / 2.20 / 2.21 已于 2026-07-02 搁置；audible-structure v1
   contract 保持当前权威 shape，后续质量提升等学习闭环完成后再回到算法线。
 - **当前版本**：0.7.0。
+- **当前产品定位补充**：本地优先不等于仅限本地；未来 YouTube 等在线来源将与本地内容
+  进入统一学习工作台，学习资产与高频播放路径仍默认本地。
 - **代码分支状态**：以 `git status` / `git log` 为准，不在 STATE 记录静态分支名。
 
 ## 项目双路线
@@ -117,6 +119,24 @@ last_updated: "2026-07-04T16:38:00.000+08:00"
   `validate-contracts`、`git diff --check`。真实媒体 GUI 手工 QA 仍需 owner 最终确认。
 - 收口文档：`.planning/phases/3.2-stuck-points-session-summary/3.2-CLOSEOUT.md`
 
+### Phase 3.3: Extensive Listening & Inbox ⏳ MVP 已落地，待收口
+
+- 已落地：泛听 session、软/硬打断、理解度自报、Listening Inbox 捕获与整理流。
+- 待完成：系统级全局热键决策、独立收藏浏览容器决策、真实媒体 30 分钟手工 QA。
+- 计划与 QA：`.planning/phases/3.3-extensive-listening-inbox/3.3-PLAN.md`、
+  `.planning/phases/3.3-extensive-listening-inbox/3.3-MANUAL-QA.md`。
+
+### Phase 3.35: Listening Workbench UI Redesign ⏳ IN_PROGRESS
+
+- 已落地首轮：来源中立首页、浅色工具栏、独立播放条、可拖动媒体/字幕工作台、窄窗口
+  上下布局、无横向拖拽的播放控制，以及冷杉绿 + 雾灰 + 暖金集中式主题。
+- 已迁移字幕资源、timeline、练习、诊断、人工校对、任务/下载状态等旧深色面板；视频
+  画布和声音可视化保留承载信息所需的深色/多色语义。
+- 验证：`flutter analyze`、`flutter test`（182 passed）、`git diff --check` 通过。
+- 待完成：owner 截图反馈、目标窗口尺寸与真实媒体手工 QA、后续视觉微调和 closeout。
+- 边界：不复制参考产品，不实现新 YouTube provider，不改变学习领域语义。
+- 规划文档：`.planning/phases/3.35-listening-workbench-ui-redesign/3.35-PLAN.md`。
+
 ## 已完成 Phase 索引
 
 | Phase | 结论 | 文档 |
@@ -146,27 +166,33 @@ last_updated: "2026-07-04T16:38:00.000+08:00"
 
 ## 最近重要决策
 
-1. **2026-07-04** — Phase 3.2 收口：精听卡点闭环落地，包含标记卡点 / 跳过、
+1. **2026-07-04** — Phase 3.35 首轮 UI 实施：来源中立首页、可拖动媒体/字幕工作台、
+   紧凑播放控制与统一 `ListenTheme` 已落地；主题采用冷杉绿 + 雾灰 + 暖金，旧学习面板
+   已迁移，等待 owner 截图反馈继续收口。
+2. **2026-07-04** — 插入 Phase 3.35：在 3.3 与 3.4 之间先重构统一听力工作台 UI；
+   参考每日英语听力成熟的内容层级与播放学习组织，但保留 listen 的诊断/证据模型且不复制品牌。
+   同时明确 local-first 不等于 local-only，未来 YouTube 等在线来源进入统一内容入口。
+3. **2026-07-04** — Phase 3.2 收口：精听卡点闭环落地，包含标记卡点 / 跳过、
    diagnosis viewed evidence、session summary、悬案区 v0、精听完毕确认与
    `familiar_material_marked` 熟料事件；卡点状态保持读侧派生，不新增权威状态机表。
-2. **2026-07-04** — Phase 3.1 收口：Test posture 首个精听练习竖切片落地，包含
+4. **2026-07-04** — Phase 3.1 收口：Test posture 首个精听练习竖切片落地，包含
    cloze / chunk dictation / sentence dictation、失败项 review、phrase-aware diagnosis
    和 rhythm hotspot evidence loop；练习失败继续作为 evidence，不静默修改全局 `LearningStatus`。
-3. **2026-07-04** — Phase 3.x 产品形态确立：精听/泛听一级心智，复习/词典/dashboard
+5. **2026-07-04** — Phase 3.x 产品形态确立：精听/泛听一级心智，复习/词典/dashboard
    为资产消费层；功能按场景分不按设备分（生产端唯一 PC-only）；可组合不强制流程
    （每个功能可独立使用）；泛听默认零打扰。执行序列落为 Phase 3.1 ~ 3.10；双维难度
    （Meaning/Sound fit）直接实现，换取条件是分数可解释 + heuristic_proxy 标注。
-4. **2026-07-03** — ADR 0014：Dart 模型解析保持手写，fixture 契约测试为防漂移标准；
+6. **2026-07-03** — ADR 0014：Dart 模型解析保持手写，fixture 契约测试为防漂移标准；
    存量 `timeline.dart` 不做 codegen 迁移，3.x 新 DTO 手写 + 契约测试，体量大再试点。
-5. **2026-07-02** — speech-analysis 算法线（2.19/2.20/2.21）搁置，主线转入 Phase 3.x
+7. **2026-07-02** — speech-analysis 算法线（2.19/2.20/2.21）搁置，主线转入 Phase 3.x
    英语听力学习闭环；audible-structure v1 contract 保持当前权威 shape。
-6. **2026-07-02** — Phase 2.23 只做机械治理，不改产品行为；`main.dart` 收缩是 3.x
+7. **2026-07-02** — Phase 2.23 只做机械治理，不改产品行为；`main.dart` 收缩是 3.x
    Flutter practice UI 的前置。
-7. **2026-07-01** — consumer self-contained invariant：bundled whisper.cpp 产出的
+8. **2026-07-01** — consumer self-contained invariant：bundled whisper.cpp 产出的
    WordTimeline 必须解锁基础功能，sidecar 只升级质量。
-8. **2026-07-01** — 字幕层声音模式统一为 Rhythm A/B/C；phones 是 C 内 L4 evidence，不再是一级模式。
-9. **2026-06-30** — 算法/指标/阈值变更必须记录 evidence class，不能把小样本 smoke 或自动标签当真理。
-10. **2026-06-27** — 稳定教学标签优先：CTC 是 audio evidence，不是默认 teaching label truth。
+9. **2026-07-01** — 字幕层声音模式统一为 Rhythm A/B/C；phones 是 C 内 L4 evidence，不再是一级模式。
+10. **2026-06-30** — 算法/指标/阈值变更必须记录 evidence class，不能把小样本 smoke 或自动标签当真理。
+11. **2026-06-27** — 稳定教学标签优先：CTC 是 audio evidence，不是默认 teaching label truth。
 
 ## 当前阻塞项
 
@@ -174,12 +200,14 @@ last_updated: "2026-07-04T16:38:00.000+08:00"
 
 ## 下一步工作
 
-1. Phase 3.3 开工（Extensive Listening & Inbox）：建立泛听软/硬打断与 Listening Inbox。
-2. 后续按 `3.0-PHASE-BREAKDOWN.md` 推荐顺序逐个 phase 交人执行；3.4（audio-first review）、
+1. 完成 Phase 3.3 真实媒体 30 分钟泛听 QA 并收口。
+2. 继续 Phase 3.35：收集 owner 截图反馈，完成多窗口真实媒体 QA，并据此微调工作台比例、
+   信息密度和局部对比度后收口。
+3. 后续按 `3.0-PHASE-BREAKDOWN.md` 推荐顺序逐个 phase 交人执行；3.4（audio-first review）、
    3.6（听力词典）无硬依赖，可与主线并行开工。
-3. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
+4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
-4. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）。
+5. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）。
 
 ## 指标
 

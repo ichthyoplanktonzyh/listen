@@ -31,6 +31,10 @@
 > 2026-07-04 产品路线更新：Phase 3.x 执行序列确立为 Phase 3.1 ~ 3.10，并确立精听/泛听
 > 一级心智、可组合不强制流程、功能按场景分不按设备分（生产端唯一 PC-only）等原则；
 > 见 §14.12 与 `.planning/phases/3.0-english-listening-learning-loop/3.0-PHASE-BREAKDOWN.md`。
+> 2026-07-04 UI 路线更新：在 3.3 与 3.4 之间插入 Phase 3.35 Listening Workbench UI
+> Redesign，参考每日英语听力的内容层级与播放学习一体化组织，统一现有精听/泛听/Inbox
+> surface 后再扩张后续功能；同时明确 local-first 不等于 local-only，未来 YouTube 等在线
+> 来源进入统一内容入口，但 3.35 不实现新 provider。
 > 完成报告见 `docs/release/milestone-1.md`。
 
 ## 1. 路线图目标
@@ -1387,6 +1391,7 @@ Phase 3.0 的执行序列（2026-07-04 确立，取代早期建议顺序）：
 3.1  Intensive Listening Practice Slice   三姿态入口 + cloze/听写 UI + phrase/声音证据进诊断
 3.2  Stuck Points & Session Summary       卡点状态、session summary、悬案区、熟料标记
 3.3  Extensive Listening & Inbox          泛听会话、软/硬打断、理解度自报、Listening Inbox
+3.35 Listening Workbench UI Redesign      统一信息架构、视觉系统、播放学习工作台与内容入口
 3.4  Audio-first Review Queue             声音卡复习 + 状态升级建议引擎
 3.5  Difficulty & Content Triage          Meaning/Sound fit 双维难度 + 三队列分拣 + 熟料回听
 3.6  Listening Dictionary MVP             本地语料索引/搜索、逐例识别标记、外链兜底
@@ -1405,6 +1410,7 @@ Phase 3.0 的执行序列（2026-07-04 确立，取代早期建议顺序）：
 - 完整学习活动路径：`.planning/discuss/listen-learning-activity-path.zh.md`
 - 各 phase 计划：`.planning/phases/3.1-intensive-listening-practice-slice/` ~
   `.planning/phases/3.10-coach-dashboard/`
+- Phase 3.35 计划：`.planning/phases/3.35-listening-workbench-ui-redesign/`
 
 ### 14.13 Phase 2.20：Rhythm-first Listening Analysis
 

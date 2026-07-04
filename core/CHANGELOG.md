@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- 2026-07-04 23:25 CST: Phase 3.35 首轮 UI 与产品配色落地。新增来源中立首页、浅色工具栏、
+  独立播放条和可拖动媒体/字幕分栏工作台；窄窗口自动上下布局，右侧导航改为等宽图标 tab，
+  文稿支持可变行高，播放控制不再依赖横向拖动。新增集中式 `ListenTheme`，采用冷杉绿、
+  雾灰、暖金与近黑媒体画布，并统一按钮、输入、弹窗、菜单、滑杆、选中/禁用状态；字幕
+  资源、timeline、练习、诊断、人工校对、任务和下载状态已从旧深色硬编码迁移。新增主题、
+  首页与工作台 widget 测试。验证：`flutter analyze`、`flutter test`（182 passed）、
+  `git diff --check` 通过；等待 owner 截图反馈与真实媒体手工 QA 后继续 Phase 3.35 收口。
+
+- 2026-07-04 22:34 CST: 新增 Phase 3.35 Listening Workbench UI Redesign 规划。
+  在 Phase 3.3 与 3.4 之间插入独立 UI 重构阶段，参考每日英语听力的内容层级、同步字幕与
+  播放学习一体化组织，计划统一 app shell、来源中立内容入口、播放器工作台、字幕、学习
+  上下文面板、design tokens 与响应式状态；明确不做像素复刻、不复制品牌，也不在本 phase
+  实现 YouTube provider。同步修正产品定位：local-first 不等于 local-only，未来 YouTube 等
+  在线来源将与本地内容进入统一学习工作台，学习资产和高频路径仍默认本地。更新 PROJECT、
+  REQUIREMENTS（UI-016/UI-017）、ROADMAP、STATE 与 Phase 3.0 breakdown。documentation-only。
+
 - 2026-07-04 21:53 CST: Phase 3.3 泛听 Listening Inbox MVP 落地。
   后端新增 `ListeningInboxItem` domain model、`ListeningInboxRepository`、SQLite schema v18
   `listening_inbox_items` 表、Inbox capture/list/process API，以及
