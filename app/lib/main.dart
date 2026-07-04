@@ -44,6 +44,7 @@ import 'widgets/flows/media_import_flows.dart';
 import 'widgets/layout/playback_bar.dart';
 import 'widgets/layout/player_stage.dart';
 import 'widgets/layout/side_panel.dart';
+import 'widgets/player/player_global_shortcuts.dart';
 import 'widgets/settings/settings_flow.dart';
 
 void main() {
@@ -1467,7 +1468,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         practice: practiceController,
         settings: settingsController,
         api: api!,
-        child: CallbackShortcuts(
+        child: PlayerGlobalShortcuts(
           bindings: {
             const SingleActivator(LogicalKeyboardKey.space):
                 adapter.playOrPause,
