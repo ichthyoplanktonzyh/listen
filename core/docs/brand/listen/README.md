@@ -40,8 +40,8 @@ The generation prompts asked for:
 
 ## Next Steps
 
-1. Pick one icon direction and generate a flatter vector-friendly pass for exact
-   app icon production.
-2. Export macOS icon sizes into `apps/desktop/macos/Runner/Assets.xcassets/AppIcon.appiconset/`.
-3. Rename the app/product surface from `LLPlayerNext` to `listen` in a separate
-   commit after the visual direction is approved.
+1. Applied 2026-07-04: macOS app iconset now uses
+   `listen-icon-concept-b-1024.png`.
+2. Applied 2026-07-04: app/product surface is now `listen`.
+3. Future refinement: generate a flatter vector-friendly pass for exact app
+   icon production.

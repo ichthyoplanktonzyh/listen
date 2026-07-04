@@ -71,22 +71,41 @@ fn database_path() -> PathBuf {
     }
     #[cfg(target_os = "macos")]
     {
-        PathBuf::from(env::var_os("HOME").expect("HOME is required"))
-            .join("Library/Application Support/LLPlayerNext/llplayernext.sqlite")
+        let home = PathBuf::from(env::var_os("HOME").expect("HOME is required"));
+        let current = home.join("Library/Application Support/listen/listen.sqlite");
+        let legacy = home.join("Library/Application Support/LLPlayerNext/llplayernext.sqlite");
+        if current.exists() || !legacy.exists() {
+            current
+        } else {
+            legacy
+        }
     }
     #[cfg(target_os = "windows")]
     {
-        PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is required"))
-            .join("LLPlayerNext/llplayernext.sqlite")
+        let local_app_data =
+            PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is required"));
+        let current = local_app_data.join("listen/listen.sqlite");
+        let legacy = local_app_data.join("LLPlayerNext/llplayernext.sqlite");
+        if current.exists() || !legacy.exists() {
+            current
+        } else {
+            legacy
+        }
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
-        PathBuf::from(env::var_os("XDG_DATA_HOME").unwrap_or_else(|| {
+        let data_home = PathBuf::from(env::var_os("XDG_DATA_HOME").unwrap_or_else(|| {
             PathBuf::from(env::var_os("HOME").expect("HOME is required"))
                 .join(".local/share")
                 .into_os_string()
-        }))
-        .join("llplayernext/llplayernext.sqlite")
+        }));
+        let current = data_home.join("listen/listen.sqlite");
+        let legacy = data_home.join("llplayernext/llplayernext.sqlite");
+        if current.exists() || !legacy.exists() {
+            current
+        } else {
+            legacy
+        }
     }
 }
 

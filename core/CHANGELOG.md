@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-04 16:06 CST: 桌面 app 品牌名与图标切换到 `listen`。
+  根据 `docs/brand/listen/` 品牌材料，将 macOS app 产品名、Bundle ID、窗口标题、
+  打包脚本产物名和用户可见导出文件名从 LLPlayerNext 切到 `listen`；使用推荐的
+  `listen-icon-concept-b-1024.png` 重新生成 AppIcon iconset。用户数据路径采用兼容策略：
+  新安装写入 `~/Library/Application Support/listen`，若旧 `LLPlayerNext` 数据库存在则继续读取旧库；
+  设置文件读取新路径并回退旧路径，保存时写入新路径。
+
 - 2026-07-04 15:50 CST: Phase 3.1 精听练习切片落地。
   桌面端新增 Test posture 的首个竖切片：三姿态入口、cloze / chunk dictation /
   sentence dictation 练习面板、练习 session/item/attempt/review 的 typed Dart DTO 与

@@ -1,4 +1,4 @@
-# LLPlayerNext
+# listen
 
 Clean-room, macOS-first rewrite of a listening-comprehension media player.
 
@@ -114,7 +114,7 @@ token in a structured startup handshake. See `docs/architecture/` for module,
 data, and lifecycle boundaries.
 
 The macOS Apple Silicon release artifact is written to
-`dist/LLPlayerNext-macos-arm64.zip`.
+`dist/listen-macos-arm64.zip`.
 
 Build and license-check the pinned ASR runtime with
 `./scripts/build-asr-runtime.sh`. Runtime provenance and redistribution notes

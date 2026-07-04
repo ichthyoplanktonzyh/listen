@@ -15,7 +15,7 @@ cd "$root"
   "$flutter_bin" build macos --release
 )
 
-app="$root/apps/desktop/build/macos/Build/Products/Release/LLPlayerNext.app"
+app="$root/apps/desktop/build/macos/Build/Products/Release/listen.app"
 cp "$root/target/release/api-http" "$app/Contents/MacOS/api-http"
 chmod +x "$app/Contents/MacOS/api-http"
 runtime="$root/third_party/runtime/macos-arm64"
@@ -37,15 +37,15 @@ xattr -cr "$app"
 touch "$app" "$app/Contents"
 
 mkdir -p "$root/dist"
-rm -f "$root/dist/LLPlayerNext-macos-arm64.zip"
+rm -f "$root/dist/listen-macos-arm64.zip"
 (
   cd "$(dirname "$app")"
   COPYFILE_DISABLE=1 /usr/bin/zip -qry -X \
-    "$root/dist/LLPlayerNext-macos-arm64.zip" "$(basename "$app")"
+    "$root/dist/listen-macos-arm64.zip" "$(basename "$app")"
 )
 
-file "$app/Contents/MacOS/LLPlayerNext" "$app/Contents/MacOS/api-http" \
+file "$app/Contents/MacOS/listen" "$app/Contents/MacOS/api-http" \
   "$app/Contents/Resources/runtime/whisper-cli" \
   "$app/Contents/Resources/runtime/ffmpeg" \
   "$app/Contents/Resources/runtime/ffprobe"
-echo "Built $root/dist/LLPlayerNext-macos-arm64.zip"
+echo "Built $root/dist/listen-macos-arm64.zip"

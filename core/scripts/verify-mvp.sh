@@ -3,8 +3,8 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 tmp="$(mktemp -d)"
-archive="$root/dist/LLPlayerNext-macos-arm64.zip"
-app="$tmp/package/LLPlayerNext.app"
+archive="$root/dist/listen-macos-arm64.zip"
+app="$tmp/package/listen.app"
 pid=""
 
 cleanup() {
@@ -74,7 +74,7 @@ LLPLAYERNEXT_DB="$tmp/mvp.sqlite" \
 LLPLAYERNEXT_SMOKE_MEDIA="$root/testdata/generated/sample-video.mp4" \
 LLPLAYERNEXT_SMOKE_SUBTITLE="$root/testdata/generated/long-timeline.srt" \
 LLPLAYERNEXT_SMOKE_SECONDARY_SUBTITLE="$root/testdata/subtitles/timeline.vtt" \
-  "$app/Contents/MacOS/LLPlayerNext" >"$tmp/desktop.log" 2>&1 &
+  "$app/Contents/MacOS/listen" >"$tmp/desktop.log" 2>&1 &
 pid=$!
 
 for _ in $(seq 1 100); do
@@ -100,7 +100,7 @@ LLPLAYERNEXT_DB="$tmp/mvp.sqlite" \
 LLPLAYERNEXT_SMOKE_MEDIA="$root/testdata/generated/sample-video.mp4" \
 LLPLAYERNEXT_SMOKE_SUBTITLE="$root/testdata/generated/long-timeline.srt" \
 LLPLAYERNEXT_SMOKE_SECONDARY_SUBTITLE="$root/testdata/subtitles/timeline.vtt" \
-  "$app/Contents/MacOS/LLPlayerNext" >>"$tmp/desktop.log" 2>&1 &
+  "$app/Contents/MacOS/listen" >>"$tmp/desktop.log" 2>&1 &
 pid=$!
 sleep 3
 assert_app_running
@@ -110,7 +110,7 @@ stop_app
 
 LLPLAYERNEXT_DB="$tmp/mvp.sqlite" \
 LLPLAYERNEXT_SMOKE_MEDIA="$root/testdata/generated/sample-audio.m4a" \
-  "$app/Contents/MacOS/LLPlayerNext" >>"$tmp/desktop.log" 2>&1 &
+  "$app/Contents/MacOS/listen" >>"$tmp/desktop.log" 2>&1 &
 pid=$!
 sleep 3
 assert_app_running
