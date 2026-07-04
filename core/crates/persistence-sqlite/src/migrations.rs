@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 use super::PersistenceError;
 
-pub const MIGRATION_VERSION: u32 = 17;
+pub const MIGRATION_VERSION: u32 = 18;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -117,6 +117,12 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
             "../migrations/0017_drop_learning_resources.sql"
         ))?;
         tx.pragma_update(None, "user_version", 17)?;
+        tx.commit()?;
+    }
+    if current < 18 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0018_listening_inbox.sql"))?;
+        tx.pragma_update(None, "user_version", 18)?;
         tx.commit()?;
     }
     Ok(())

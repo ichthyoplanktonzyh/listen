@@ -114,6 +114,52 @@ pub(crate) async fn close_stuck_point(
         .map_err(ApiError::from)
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct ListeningInboxQuery {
+    status: Option<ListeningInboxStatus>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+}
+
+pub(crate) async fn list_listening_inbox_items(
+    State(state): State<ApiState>,
+    Query(query): Query<ListeningInboxQuery>,
+) -> Result<Json<Vec<ListeningInboxItem>>, ApiError> {
+    state
+        .services
+        .list_listening_inbox_items(
+            Some(query.status.unwrap_or(ListeningInboxStatus::Active)),
+            query.limit.unwrap_or(100),
+            query.offset.unwrap_or(0),
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn capture_listening_inbox_item(
+    State(state): State<ApiState>,
+    Json(request): Json<application::CaptureListeningInboxItemInput>,
+) -> Result<Json<ListeningInboxItem>, ApiError> {
+    state
+        .services
+        .capture_listening_inbox_item(request)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn process_listening_inbox_item(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(request): Json<application::ProcessListeningInboxItemInput>,
+) -> Result<Json<ListeningInboxItem>, ApiError> {
+    let id = ListeningInboxItemId::parse(id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .process_listening_inbox_item(&id, request)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 pub(crate) async fn create_review_item(
     State(state): State<ApiState>,
     Json(request): Json<application::CreateReviewItem>,

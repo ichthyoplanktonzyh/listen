@@ -33,7 +33,7 @@ fn build_app() -> Router {
         repo.clone(),
         repo.clone(),
     )
-    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone());
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
     router(ApiState::new(services, repo, TOKEN))
 }
 

@@ -895,6 +895,50 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/LearningEvent" }
+  /v1/listening-inbox/items:
+    get:
+      operationId: listListeningInboxItems
+      parameters:
+        - { name: status, in: query, required: false, schema: { $ref: "#/components/schemas/ListeningInboxStatus" } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 0 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: Listening Inbox items
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ListeningInboxItem" }
+    post:
+      operationId: captureListeningInboxItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CaptureListeningInboxItemInput" }
+      responses:
+        "200":
+          description: Captured Listening Inbox item
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListeningInboxItem" }
+  /v1/listening-inbox/items/{id}/process:
+    post:
+      operationId: processListeningInboxItem
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProcessListeningInboxItemInput" }
+      responses:
+        "200":
+          description: Processed Listening Inbox item
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListeningInboxItem" }
   /v1/review/items:
     post:
       operationId: createReviewItem
@@ -2353,13 +2397,19 @@ components:
     PracticeTokenResult:
       enum: [correct, missing, extra, mismatch]
     ReviewSourceKind:
-      enum: [lexical_entry, practice_failure, chunk, sentence, connected_speech]
+      enum: [lexical_entry, practice_failure, listening_inbox, chunk, sentence, connected_speech]
     ReviewItemStatus:
       enum: [active, suspended, archived]
     LearningEventKind:
-      enum: [listening_started, listening_completed, practice_completed, review_completed, status_changed, stuck_point_marked, stuck_point_skipped, diagnosis_viewed, stuck_point_closed, familiar_material_marked]
+      enum: [listening_started, listening_completed, practice_completed, review_completed, status_changed, stuck_point_marked, stuck_point_skipped, diagnosis_viewed, stuck_point_closed, familiar_material_marked, listening_inbox_captured, listening_inbox_processed]
     LearningEventSubjectKind:
-      enum: [media, sentence, chunk, lexical_entry, review_item, practice_attempt, practice_session]
+      enum: [media, sentence, chunk, lexical_entry, review_item, practice_attempt, practice_session, listening_inbox_item]
+    ListeningComprehensionReport:
+      enum: [understood_all, got_the_gist, unclear]
+    ListeningInboxStatus:
+      enum: [active, archived]
+    ListeningInboxResolution:
+      enum: [review_item, micro_intensive, favorite, dismissed, expired]
     PracticeSession:
       type: object
       required: [id, mode, media_id, track_id, source, started_at_ms, ended_at_ms]
@@ -2520,6 +2570,51 @@ components:
       required: [mark_familiar]
       properties:
         mark_familiar: { type: boolean }
+        comprehension_report:
+          oneOf:
+            - { $ref: "#/components/schemas/ListeningComprehensionReport" }
+            - { type: "null" }
+    CaptureListeningInboxItemInput:
+      type: object
+      required: [session_id, target, anchors, subtitle_snapshot]
+      properties:
+        session_id: { type: string }
+        target: { $ref: "#/components/schemas/PracticeTarget" }
+        anchors: { type: array, items: { $ref: "#/components/schemas/PracticeAnchor" } }
+        label: { type: [string, "null"] }
+        subtitle_snapshot: { type: string }
+        context_before: { type: [string, "null"] }
+        context_after: { type: [string, "null"] }
+        expires_in_days: { type: [integer, "null"], minimum: 0 }
+    ProcessListeningInboxItemInput:
+      type: object
+      required: [resolution]
+      properties:
+        resolution: { $ref: "#/components/schemas/ListeningInboxResolution" }
+    ListeningInboxItem:
+      type: object
+      required: [id, session_id, media_id, track_id, target, anchors, label, subtitle_snapshot, context_before, context_after, captured_at_ms, expires_at_ms, status, resolution, review_item_ids, practice_item_id, updated_at_ms]
+      properties:
+        id: { type: string }
+        session_id: { type: [string, "null"] }
+        media_id: { type: [string, "null"] }
+        track_id: { type: [string, "null"] }
+        target: { $ref: "#/components/schemas/PracticeTarget" }
+        anchors: { type: array, items: { $ref: "#/components/schemas/PracticeAnchor" } }
+        label: { type: [string, "null"] }
+        subtitle_snapshot: { type: string }
+        context_before: { type: [string, "null"] }
+        context_after: { type: [string, "null"] }
+        captured_at_ms: { type: integer, minimum: 0 }
+        expires_at_ms: { type: [integer, "null"], minimum: 0 }
+        status: { $ref: "#/components/schemas/ListeningInboxStatus" }
+        resolution:
+          oneOf:
+            - { $ref: "#/components/schemas/ListeningInboxResolution" }
+            - { type: "null" }
+        review_item_ids: { type: array, items: { type: string } }
+        practice_item_id: { type: [string, "null"] }
+        updated_at_ms: { type: integer, minimum: 0 }
     StuckPointStatus:
       enum: [marked, resolved_with_hint, actively_verified, added_to_review, skipped, unexplained, closed]
     StuckPointSummary:

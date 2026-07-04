@@ -1,5 +1,6 @@
 use application::{
-    ApplicationError, LearningEventRepository, PracticeRepository, ReviewRepository,
+    ApplicationError, LearningEventRepository, ListeningInboxRepository, PracticeRepository,
+    ReviewRepository,
 };
 use domain::*;
 use rusqlite::{OptionalExtension, params};
@@ -371,5 +372,96 @@ impl LearningEventRepository for SqliteRepository {
             .map_err(repo)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(repo)
+    }
+}
+
+impl ListeningInboxRepository for SqliteRepository {
+    fn upsert_listening_inbox_item(
+        &self,
+        item: &ListeningInboxItem,
+    ) -> Result<ListeningInboxItem, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.execute(
+            "INSERT INTO listening_inbox_items
+             (id,session_id,media_id,track_id,status,captured_at_ms,updated_at_ms,expires_at_ms,item_json)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
+             ON CONFLICT(id) DO UPDATE SET
+               session_id=excluded.session_id,
+               media_id=excluded.media_id,
+               track_id=excluded.track_id,
+               status=excluded.status,
+               captured_at_ms=excluded.captured_at_ms,
+               updated_at_ms=excluded.updated_at_ms,
+               expires_at_ms=excluded.expires_at_ms,
+               item_json=excluded.item_json",
+            params![
+                item.id.as_str(),
+                item.session_id.as_ref().map(|value| value.as_str()),
+                item.media_id.as_ref().map(|value| value.as_str()),
+                item.track_id.as_ref().map(|value| value.as_str()),
+                json(&item.status)?,
+                item.captured_at_ms,
+                item.updated_at_ms,
+                item.expires_at_ms,
+                json(item)?,
+            ],
+        )
+        .map_err(repo)?;
+        Ok(item.clone())
+    }
+
+    fn get_listening_inbox_item(
+        &self,
+        id: &ListeningInboxItemId,
+    ) -> Result<Option<ListeningInboxItem>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.query_row(
+            "SELECT item_json FROM listening_inbox_items WHERE id=?1",
+            [id.as_str()],
+            |row| from_json(&row.get::<_, String>(0)?),
+        )
+        .optional()
+        .map_err(repo)
+    }
+
+    fn list_listening_inbox_items(
+        &self,
+        status: Option<ListeningInboxStatus>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<ListeningInboxItem>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        if let Some(status) = status {
+            let mut statement = conn
+                .prepare(
+                    "SELECT item_json FROM listening_inbox_items
+                     WHERE status=?1
+                     ORDER BY captured_at_ms DESC
+                     LIMIT ?2 OFFSET ?3",
+                )
+                .map_err(repo)?;
+            statement
+                .query_map(params![json(&status)?, limit.min(200), offset], |row| {
+                    from_json(&row.get::<_, String>(0)?)
+                })
+                .map_err(repo)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(repo)
+        } else {
+            let mut statement = conn
+                .prepare(
+                    "SELECT item_json FROM listening_inbox_items
+                     ORDER BY captured_at_ms DESC
+                     LIMIT ?1 OFFSET ?2",
+                )
+                .map_err(repo)?;
+            statement
+                .query_map(params![limit.min(200), offset], |row| {
+                    from_json(&row.get::<_, String>(0)?)
+                })
+                .map_err(repo)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(repo)
+        }
     }
 }

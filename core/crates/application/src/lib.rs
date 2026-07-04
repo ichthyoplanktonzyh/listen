@@ -10,6 +10,7 @@ mod dictionary;
 mod dto;
 mod error;
 mod lexical;
+mod listening;
 mod media;
 mod phones;
 mod phonetic_fixture;
@@ -67,6 +68,7 @@ pub struct AppServices {
     pub(crate) practice: Arc<dyn PracticeRepository>,
     pub(crate) review: Arc<dyn ReviewRepository>,
     pub(crate) learning_events: Arc<dyn LearningEventRepository>,
+    pub(crate) listening_inbox: Arc<dyn ListeningInboxRepository>,
     pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
     pub(crate) pronunciation_providers: Arc<Vec<Arc<dyn PronunciationProvider>>>,
 }
@@ -95,6 +97,7 @@ impl AppServices {
             practice: Arc::new(DisabledLearningLoopRepository),
             review: Arc::new(DisabledLearningLoopRepository),
             learning_events: Arc::new(DisabledLearningLoopRepository),
+            listening_inbox: Arc::new(DisabledLearningLoopRepository),
             lexical_normalizers: Arc::new(Vec::new()),
             pronunciation_providers: Arc::new(Vec::new()),
         }
@@ -105,10 +108,12 @@ impl AppServices {
         practice: Arc<dyn PracticeRepository>,
         review: Arc<dyn ReviewRepository>,
         learning_events: Arc<dyn LearningEventRepository>,
+        listening_inbox: Arc<dyn ListeningInboxRepository>,
     ) -> Self {
         self.practice = practice;
         self.review = review;
         self.learning_events = learning_events;
+        self.listening_inbox = listening_inbox;
         self
     }
 

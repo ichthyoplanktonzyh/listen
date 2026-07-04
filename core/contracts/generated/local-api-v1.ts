@@ -427,6 +427,7 @@ export type PracticeTokenResult = "correct" | "missing" | "extra" | "mismatch";
 export type ReviewSourceKind =
   | "lexical_entry"
   | "practice_failure"
+  | "listening_inbox"
   | "chunk"
   | "sentence"
   | "connected_speech";
@@ -441,7 +442,9 @@ export type LearningEventKind =
   | "stuck_point_skipped"
   | "diagnosis_viewed"
   | "stuck_point_closed"
-  | "familiar_material_marked";
+  | "familiar_material_marked"
+  | "listening_inbox_captured"
+  | "listening_inbox_processed";
 export type LearningEventSubjectKind =
   | "media"
   | "sentence"
@@ -449,7 +452,20 @@ export type LearningEventSubjectKind =
   | "lexical_entry"
   | "review_item"
   | "practice_attempt"
-  | "practice_session";
+  | "practice_session"
+  | "listening_inbox_item";
+
+export type ListeningComprehensionReport =
+  | "understood_all"
+  | "got_the_gist"
+  | "unclear";
+export type ListeningInboxStatus = "active" | "archived";
+export type ListeningInboxResolution =
+  | "review_item"
+  | "micro_intensive"
+  | "favorite"
+  | "dismissed"
+  | "expired";
 
 export interface PracticeSession {
   id: string;
@@ -591,6 +607,42 @@ export interface CloseStuckPointInput {
 
 export interface CompletePracticeSessionInput {
   mark_familiar: boolean;
+  comprehension_report?: ListeningComprehensionReport | null;
+}
+
+export interface CaptureListeningInboxItemInput {
+  session_id: string;
+  target: PracticeTarget;
+  anchors: PracticeAnchor[];
+  label?: string | null;
+  subtitle_snapshot: string;
+  context_before?: string | null;
+  context_after?: string | null;
+  expires_in_days?: number | null;
+}
+
+export interface ProcessListeningInboxItemInput {
+  resolution: ListeningInboxResolution;
+}
+
+export interface ListeningInboxItem {
+  id: string;
+  session_id: string | null;
+  media_id: string | null;
+  track_id: string | null;
+  target: PracticeTarget;
+  anchors: PracticeAnchor[];
+  label: string | null;
+  subtitle_snapshot: string;
+  context_before: string | null;
+  context_after: string | null;
+  captured_at_ms: number;
+  expires_at_ms: number | null;
+  status: ListeningInboxStatus;
+  resolution: ListeningInboxResolution | null;
+  review_item_ids: string[];
+  practice_item_id: string | null;
+  updated_at_ms: number;
 }
 
 export type StuckPointStatus =
@@ -1117,6 +1169,38 @@ export class LocalApiV1 {
 
   recordDiagnosisView(input: RecordDiagnosisViewInput): Promise<LearningEvent> {
     return this.request("/v1/practice/diagnosis-viewed", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  listeningInboxItems(
+    status: ListeningInboxStatus = "active",
+    limit = 100,
+    offset = 0,
+  ): Promise<ListeningInboxItem[]> {
+    const params = new URLSearchParams({
+      status,
+      limit: String(limit),
+      offset: String(offset),
+    });
+    return this.request(`/v1/listening-inbox/items?${params.toString()}`);
+  }
+
+  captureListeningInboxItem(
+    input: CaptureListeningInboxItemInput,
+  ): Promise<ListeningInboxItem> {
+    return this.request("/v1/listening-inbox/items", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  processListeningInboxItem(
+    id: string,
+    input: ProcessListeningInboxItemInput,
+  ): Promise<ListeningInboxItem> {
+    return this.request(`/v1/listening-inbox/items/${encodeURIComponent(id)}/process`, {
       method: "POST",
       body: JSON.stringify(input),
     });

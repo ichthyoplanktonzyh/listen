@@ -1,6 +1,6 @@
 # LLPlayerNext System Architecture
 
-Last updated: 2026-07-04. Reflects Phase 3.2 stuck-point/session-summary slice.
+Last updated: 2026-07-04. Reflects Phase 3.3 extensive-listening Inbox MVP.
 
 ## Overview
 
@@ -71,6 +71,10 @@ application use cases and provider/repository boundaries.
   persist `PracticeAttempt`, write failed lexical anchors as `LexicalObservation`,
   optionally create `ReviewItem`, append `LearningEvent`, complete intensive
   sessions, and derive session summaries from events/attempts/review items.
+- Extensive-listening services capture soft-interrupt moments as
+  `ListeningInboxItem`, list active/archived Inbox items, process them into
+  review items / micro-intensive practice items / favorite or dismissed
+  archival outcomes, and append durable listening events.
 
 ### `api-http`
 
@@ -96,6 +100,8 @@ application use cases and provider/repository boundaries.
   - `/v1/practice/stuck-points/skip`
   - `/v1/practice/stuck-points/close`
   - `/v1/practice/diagnosis-viewed`
+  - `/v1/listening-inbox/items`
+  - `/v1/listening-inbox/items/{id}/process`
   - `/v1/review/items`
   - `/v1/review/items/{id}`
 
@@ -114,6 +120,10 @@ application use cases and provider/repository boundaries.
   local databases that had already run the old v7 lexical migration.
 - Schema v17 drops the unused SQLite `learning_resources` table; downloadable
   learning resources remain an API/filesystem resource-manager concern.
+- Schema v18 adds `listening_inbox_items`, a queryable projection of泛听 soft
+  interrupts and整理 outcomes. The durable event stream remains the analytics
+  source; the table exists so UI does not reconstruct Inbox state from raw
+  events on every render.
 - Learning-loop persistence stores JSON snapshots plus query columns for kind,
   status, subject, result, and timestamps. Corpus/difficulty/recording persistence
   is not yet implemented.
@@ -183,6 +193,11 @@ one primary fallback vowel, later fallback vowels unstressed.
 - `LearningController` stores typed lexical entries, phrase candidates,
   selected lexical details, dictionary lookup, word pronunciation, language
   profile, and diagnosis.
+- `ExtensiveListeningController` stores the active extensive session, active
+  Listening Inbox items, and soft-interrupt/process busy/error state. It is
+  separate from `PracticeController`; hard interrupts compose playback pause,
+  diagnosis opening, and optional Inbox capture without changing the intensive
+  practice state machine.
 - `SubtitleController` stores typed pronunciation providers, sentence
   pronunciation analyses, and phonetic analyses.
 - `BackendEvent` parsing is typed; lexical change events update the typed
@@ -249,6 +264,18 @@ mark/skip/diagnosis view -> LearningEvent append
 practice attempts + review items + events -> application read-side aggregation
   -> PracticeSessionSummary -> Flutter practice panel summary/open issues
 complete intensive session -> PracticeSession.ended_at_ms + familiar material event
+```
+
+### Extensive Listening Inbox
+
+```text
+start extensive session -> LearningEvent(listening_started)
+soft interrupt -> ListeningInboxItem active projection
+  + LearningEvent(listening_inbox_captured)
+Inbox process -> ReviewItem / PracticeItem / favorite / dismissed / expired
+  + ListeningInboxItem archived projection
+  + LearningEvent(listening_inbox_processed)
+complete extensive session -> LearningEvent(listening_completed with self report)
 ```
 
 ### Timeline Resources

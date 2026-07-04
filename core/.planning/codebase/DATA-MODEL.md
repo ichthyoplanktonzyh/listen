@@ -1,6 +1,6 @@
 # Current Data Model
 
-Last updated: 2026-07-04, Phase 3.2.
+Last updated: 2026-07-04, Phase 3.3 MVP.
 
 All persisted time values are non-negative integer milliseconds. Public IDs are
 opaque SHA-256 strings generated from a namespace and stable fingerprint; they
@@ -23,6 +23,7 @@ do not contain database row numbers or player-library identifiers.
 | Practice attempt | `sha256("practice-attempt:" + item/input/timestamp)` |
 | Review item | `sha256("review-item:" + source/prompt/timestamp)` |
 | Learning event | `sha256("learning-event:" + kind/subject/timestamp)` |
+| Listening Inbox item | `sha256("listening-inbox-item:" + session/target/timestamp)` |
 
 Media path is mutable metadata, not identity. Registering the same media
 fingerprint updates path/title metadata while retaining the media ID.
@@ -80,6 +81,7 @@ assets:
 | `review_items` | A schedulable review target pointing to lexical entries, chunks, sentences, practice failures, or future sound cases |
 | `review_attempts` | Historical review rating attempts |
 | `learning_events` | Append-mostly analytics facts for practice/review/listening/status/stuck-point events |
+| `listening_inbox_items` | Queryable projection for extensive-listening soft interrupts, snapshots, expiry, and整理 outcomes |
 
 `PracticeAttempt` owns what the user tried and how it was evaluated. It may create
 `LexicalObservation` evidence, but it must not silently change global
@@ -95,7 +97,18 @@ Phase 3.2 also uses it for stuck-point facts and familiar-material markers:
 `stuck_point_marked`, `stuck_point_skipped`, `diagnosis_viewed`,
 `stuck_point_closed`, and `familiar_material_marked`. Stuck-point status is a
 read-side derivation from events plus `PracticeAttempt` and `ReviewItem`; there
-is no authoritative stuck-point state table in schema v17.
+is no authoritative stuck-point state table in schema v18.
+
+Phase 3.3 adds `ListeningInboxItem` for extensive-listening soft interrupts.
+The item stores the target time range, subtitle/context snapshot, active vs
+archived status, optional expiry time, and the processing outcome:
+`review_item`, `micro_intensive`, `favorite`, `dismissed`, or `expired`.
+Capture and processing also append `learning_events`
+(`listening_inbox_captured`, `listening_inbox_processed`) so dashboard and fit
+calibration can aggregate from durable facts later. The table is intentionally a
+read/write projection for Inbox UX; it does not make Inbox a blocking task list.
+`complete_practice_session` can carry an optional `comprehension_report`
+(`understood_all`, `got_the_gist`, `unclear`) for extensive sessions.
 
 ## Deletion Semantics
 
@@ -119,6 +132,11 @@ practice_sessions
   ├── track_id nullable, ON DELETE SET NULL
   └── practice_items
         └── practice_attempts
+
+listening_inbox_items
+  ├── session_id nullable, ON DELETE SET NULL
+  ├── media_id nullable, ON DELETE SET NULL
+  └── track_id nullable, ON DELETE SET NULL
 
 review_items
   └── review_attempts
@@ -244,11 +262,12 @@ expansion is ephemeral overlay state, not a fourth persisted Rhythm mode.
   discarded under the Phase 2.18 compatibility policy.
 - Schema v17 drops the unused `learning_resources` table. Downloadable learning
   resources are served by the API resource manager, not SQLite persistence.
+- Schema v18 adds `listening_inbox_items` for extensive-listening Inbox
+  capture, expiry, and processing outcomes.
 - Subtitle replacement deletes and inserts its sentence timeline in one
   transaction.
 - Unique constraints enforce idempotent media, subtitle, lexical, dictionary
   cache, active timeline identities, and learning-loop IDs.
 - Vocabulary export/import is version 5 and contains only lexical assets plus
   phonetic finding feedback.
-- SQLite schema version is 17 after removing the unused `learning_resources`
-  table.
+- SQLite schema version is 18 after adding the Listening Inbox projection table.

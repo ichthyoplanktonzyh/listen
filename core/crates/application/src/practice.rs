@@ -35,7 +35,27 @@ impl AppServices {
             started_at_ms: now,
             ended_at_ms: None,
         };
-        self.practice.create_practice_session(&session)
+        let saved = self.practice.create_practice_session(&session)?;
+        self.learning_events.append_learning_event(&LearningEvent {
+            id: LearningEventId::from_fingerprint(
+                "learning-event",
+                &format!("listening-started:{}:{now}", saved.id.as_str()),
+            ),
+            occurred_at_ms: now,
+            kind: LearningEventKind::ListeningStarted,
+            subject: LearningEventSubject {
+                kind: LearningEventSubjectKind::PracticeSession,
+                id: saved.id.as_str().to_owned(),
+            },
+            payload: serde_json::json!({
+                "mode": saved.mode,
+                "media_id": saved.media_id.as_ref().map(|value| value.as_str()),
+                "track_id": saved.track_id.as_ref().map(|value| value.as_str()),
+                "source": saved.source.as_str(),
+            }),
+            session_id: Some(saved.id.clone()),
+        })?;
+        Ok(saved)
     }
 
     pub fn create_practice_item(
@@ -301,6 +321,7 @@ impl AppServices {
                 "track_id": session.track_id.as_ref().map(|value| value.as_str()),
                 "open_count": before.open_count,
                 "unexplained_count": before.unexplained_count,
+                "comprehension_report": input.comprehension_report,
             }),
             session_id: Some(session.id.clone()),
         })?;
@@ -1008,6 +1029,31 @@ impl LearningEventRepository for DisabledLearningLoopRepository {
         _limit: u32,
         _offset: u32,
     ) -> Result<Vec<LearningEvent>, ApplicationError> {
+        Err(Self::disabled())
+    }
+}
+
+impl ListeningInboxRepository for DisabledLearningLoopRepository {
+    fn upsert_listening_inbox_item(
+        &self,
+        _item: &ListeningInboxItem,
+    ) -> Result<ListeningInboxItem, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn get_listening_inbox_item(
+        &self,
+        _id: &ListeningInboxItemId,
+    ) -> Result<Option<ListeningInboxItem>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn list_listening_inbox_items(
+        &self,
+        _status: Option<ListeningInboxStatus>,
+        _limit: u32,
+        _offset: u32,
+    ) -> Result<Vec<ListeningInboxItem>, ApplicationError> {
         Err(Self::disabled())
     }
 }

@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ChunkId, LanguageCode, LearningStatus, LexicalEntryId, LexicalObservationId, MediaId,
-    PracticeAttemptId, PracticeItemId, PracticeSessionId, RecordingAssetId, ReviewAttemptId,
-    ReviewItemId, SubtitleSentenceId, SubtitleTrackId,
+    ChunkId, LanguageCode, LearningStatus, LexicalEntryId, LexicalObservationId,
+    ListeningInboxItemId, MediaId, PracticeAttemptId, PracticeItemId, PracticeSessionId,
+    RecordingAssetId, ReviewAttemptId, ReviewItemId, SubtitleSentenceId, SubtitleTrackId,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -70,6 +70,7 @@ pub enum PracticeTokenResult {
 pub enum ReviewSourceKind {
     LexicalEntry,
     PracticeFailure,
+    ListeningInbox,
     Chunk,
     Sentence,
     ConnectedSpeech,
@@ -105,6 +106,8 @@ pub enum LearningEventKind {
     DiagnosisViewed,
     StuckPointClosed,
     FamiliarMaterialMarked,
+    ListeningInboxCaptured,
+    ListeningInboxProcessed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -117,6 +120,32 @@ pub enum LearningEventSubjectKind {
     ReviewItem,
     PracticeAttempt,
     PracticeSession,
+    ListeningInboxItem,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ListeningComprehensionReport {
+    UnderstoodAll,
+    GotTheGist,
+    Unclear,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ListeningInboxStatus {
+    Active,
+    Archived,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ListeningInboxResolution {
+    ReviewItem,
+    MicroIntensive,
+    Favorite,
+    Dismissed,
+    Expired,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -273,6 +302,27 @@ pub struct LearningEvent {
     pub subject: LearningEventSubject,
     pub payload: serde_json::Value,
     pub session_id: Option<PracticeSessionId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ListeningInboxItem {
+    pub id: ListeningInboxItemId,
+    pub session_id: Option<PracticeSessionId>,
+    pub media_id: Option<MediaId>,
+    pub track_id: Option<SubtitleTrackId>,
+    pub target: PracticeTarget,
+    pub anchors: Vec<PracticeAnchor>,
+    pub label: Option<String>,
+    pub subtitle_snapshot: String,
+    pub context_before: Option<String>,
+    pub context_after: Option<String>,
+    pub captured_at_ms: u64,
+    pub expires_at_ms: Option<u64>,
+    pub status: ListeningInboxStatus,
+    pub resolution: Option<ListeningInboxResolution>,
+    pub review_item_ids: Vec<ReviewItemId>,
+    pub practice_item_id: Option<PracticeItemId>,
+    pub updated_at_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

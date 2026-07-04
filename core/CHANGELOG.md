@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- 2026-07-04 21:53 CST: Phase 3.3 泛听 Listening Inbox MVP 落地。
+  后端新增 `ListeningInboxItem` domain model、`ListeningInboxRepository`、SQLite schema v18
+  `listening_inbox_items` 表、Inbox capture/list/process API，以及
+  `listening_inbox_captured` / `listening_inbox_processed` 事件；`completePracticeSession`
+  支持可选理解度自报，session 创建写入 `listening_started`。桌面端新增
+  `ExtensiveListeningController`、Listening Inbox typed DTO/API、右侧 Inbox 整理面板、
+  播放条泛听 toggle/软打断/硬打断按钮和应用内快捷键（`I`、`Shift+I`、`Shift+P`）。
+  Inbox 项可回听、存入 `ReviewItem`、升格微精听练习项、收藏片段或归档；未处理项按
+  默认 7 天过期降级归档。OpenAPI 与 handwritten TypeScript contract 已同步。
+  新增 `3.3-MANUAL-QA.md`，将真实 30 分钟泛听、软/硬打断、Inbox 整理、重启持久化、
+  过期归档和零打扰检查拆成可执行手工 QA 清单。
+  验证：`cargo test -p application -p persistence-sqlite -p api-http -- --nocapture`、
+  `cargo clippy -p application -p persistence-sqlite -p api-http --all-targets`（保留既有
+  clippy warnings）、`flutter analyze`、`flutter test`、`./scripts/validate-contracts.sh`、
+  `git diff --check` 通过。系统级全局热键、独立收藏浏览容器与 30 分钟真实媒体手工 QA
+  仍留作 3.3 closeout 前事项。
+
 - 2026-07-04 21:15 CST: 修复精听听写输入与播放器字幕快捷键冲突。
   新增 `PlayerGlobalShortcuts`，当焦点位于 `EditableText` 文本输入控件时临时让播放器级快捷键让路，
   避免真实听写中输入 `h` 被全局 `H` 隐藏字幕快捷键截获；无文本输入焦点时原播放器快捷键行为保持不变。

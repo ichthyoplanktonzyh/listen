@@ -20,9 +20,10 @@ use dictionary_provider::{
     FreeDictionaryProvider, JapaneseDictionaryProvider,
 };
 use domain::{
-    LanguageCode, LearningEvent, LearningStatus, MediaAvailability, MediaId, MediaKind,
-    PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeSession, PracticeSessionId,
-    ReviewItem, ReviewItemId, SubtitleSentenceId, SubtitleTrackId, VocabularyAssetBundle,
+    LanguageCode, LearningEvent, LearningStatus, ListeningInboxItem, ListeningInboxItemId,
+    ListeningInboxStatus, MediaAvailability, MediaId, MediaKind, PracticeAttempt,
+    PracticeAttemptId, PracticeItem, PracticeSession, PracticeSessionId, ReviewItem, ReviewItemId,
+    SubtitleSentenceId, SubtitleTrackId, VocabularyAssetBundle,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
@@ -309,6 +310,14 @@ pub fn router(state: ApiState) -> Router {
         .route("/v1/practice/stuck-points/skip", post(skip_stuck_point))
         .route("/v1/practice/stuck-points/close", post(close_stuck_point))
         .route("/v1/practice/diagnosis-viewed", post(record_diagnosis_view))
+        .route(
+            "/v1/listening-inbox/items",
+            get(list_listening_inbox_items).post(capture_listening_inbox_item),
+        )
+        .route(
+            "/v1/listening-inbox/items/{id}/process",
+            post(process_listening_inbox_item),
+        )
         .route("/v1/review/items", post(create_review_item))
         .route("/v1/review/items/{id}", get(review_item))
         .route("/v1/learning-resources", get(m18::resources))

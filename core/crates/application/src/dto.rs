@@ -200,10 +200,30 @@ pub struct CloseStuckPointInput {
 pub struct CompletePracticeSessionInput {
     #[serde(default = "default_mark_familiar")]
     pub mark_familiar: bool,
+    #[serde(default)]
+    pub comprehension_report: Option<ListeningComprehensionReport>,
 }
 
 fn default_mark_familiar() -> bool {
     true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CaptureListeningInboxItemInput {
+    pub session_id: PracticeSessionId,
+    pub target: PracticeTarget,
+    pub anchors: Vec<PracticeAnchor>,
+    pub label: Option<String>,
+    pub subtitle_snapshot: String,
+    pub context_before: Option<String>,
+    pub context_after: Option<String>,
+    #[serde(default)]
+    pub expires_in_days: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProcessListeningInboxItemInput {
+    pub resolution: ListeningInboxResolution,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

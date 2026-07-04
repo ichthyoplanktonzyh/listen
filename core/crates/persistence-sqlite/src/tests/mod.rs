@@ -1,9 +1,9 @@
 use super::*;
 use application::{
     AppServices, DictionaryProvider, DictionaryProviderError, ImportSubtitle,
-    LearningAssetRepository, LearningEventRepository, MediaRepository, PhoneticAnalysisRepository,
-    PracticeRepository, RegisterMedia, ReviewRepository, SubtitleRepository,
-    TranscriptionRepository, UpsertLexicalEntry,
+    LearningAssetRepository, LearningEventRepository, ListeningInboxRepository, MediaRepository,
+    PhoneticAnalysisRepository, PracticeRepository, RegisterMedia, ReviewRepository,
+    SubtitleRepository, TranscriptionRepository, UpsertLexicalEntry,
 };
 use async_trait::async_trait;
 use domain::*;

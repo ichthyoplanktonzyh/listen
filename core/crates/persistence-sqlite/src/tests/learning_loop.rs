@@ -97,6 +97,54 @@ fn learning_loop_practice_review_and_events_round_trip() {
         vec![review.clone()]
     );
 
+    let inbox_item = ListeningInboxItem {
+        id: ListeningInboxItemId::parse("inbox-1").unwrap(),
+        session_id: Some(session.id.clone()),
+        media_id: None,
+        track_id: None,
+        target: item.target.clone(),
+        anchors: item.anchors.clone(),
+        label: Some("hello world".into()),
+        subtitle_snapshot: "hello world".into(),
+        context_before: None,
+        context_after: Some("after".into()),
+        captured_at_ms: 5,
+        expires_at_ms: Some(7 * 24 * 60 * 60 * 1000),
+        status: ListeningInboxStatus::Active,
+        resolution: None,
+        review_item_ids: vec![],
+        practice_item_id: None,
+        updated_at_ms: 5,
+    };
+    repo.upsert_listening_inbox_item(&inbox_item).unwrap();
+    assert_eq!(
+        repo.get_listening_inbox_item(&inbox_item.id).unwrap(),
+        Some(inbox_item.clone())
+    );
+    assert_eq!(
+        repo.list_listening_inbox_items(Some(ListeningInboxStatus::Active), 10, 0)
+            .unwrap(),
+        vec![inbox_item.clone()]
+    );
+
+    let mut archived_inbox_item = inbox_item.clone();
+    archived_inbox_item.status = ListeningInboxStatus::Archived;
+    archived_inbox_item.resolution = Some(ListeningInboxResolution::ReviewItem);
+    archived_inbox_item.review_item_ids = vec![review.id.clone()];
+    archived_inbox_item.updated_at_ms = 6;
+    repo.upsert_listening_inbox_item(&archived_inbox_item)
+        .unwrap();
+    assert_eq!(
+        repo.list_listening_inbox_items(Some(ListeningInboxStatus::Active), 10, 0)
+            .unwrap(),
+        Vec::<ListeningInboxItem>::new()
+    );
+    assert_eq!(
+        repo.list_listening_inbox_items(Some(ListeningInboxStatus::Archived), 10, 0)
+            .unwrap(),
+        vec![archived_inbox_item.clone()]
+    );
+
     let event = LearningEvent {
         id: LearningEventId::parse("event-1").unwrap(),
         occurred_at_ms: 5,
@@ -183,7 +231,7 @@ fn session_summary_derives_stuck_point_statuses_from_events_attempts_and_review(
         repo.clone(),
         repo.clone(),
     )
-    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone());
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
 
     let session = services
         .create_practice_session(application::CreatePracticeSession {
@@ -298,9 +346,154 @@ fn session_summary_derives_stuck_point_statuses_from_events_attempts_and_review(
             &session.id,
             application::CompletePracticeSessionInput {
                 mark_familiar: true,
+                comprehension_report: None,
             },
         )
         .unwrap();
     assert!(completed.session.ended_at_ms.is_some());
     assert!(completed.familiar_material_marked);
+}
+
+#[test]
+fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+
+    let session = services
+        .create_practice_session(application::CreatePracticeSession {
+            mode: PracticeMode::Extensive,
+            media_id: None,
+            track_id: None,
+            source: Some("extensive_listening".into()),
+        })
+        .unwrap();
+    let sentence_id = SubtitleSentenceId::parse("sentence-inbox-1").unwrap();
+    let target = PracticeTarget {
+        kind: PracticeTargetKind::Sentence,
+        id: Some(sentence_id.as_str().into()),
+        sentence_id: Some(sentence_id.clone()),
+        chunk_id: None,
+        start_ms: Some(1_000),
+        end_ms: Some(2_400),
+    };
+    let anchors = vec![PracticeAnchor {
+        kind: PracticeAnchorKind::Sentence,
+        id: sentence_id.as_str().into(),
+        label: Some("I missed that line".into()),
+        lexical_entry_id: None,
+        sentence_id: Some(sentence_id),
+        token_start: Some(0),
+        token_end: Some(4),
+        start_ms: Some(1_000),
+        end_ms: Some(2_400),
+    }];
+
+    let first = services
+        .capture_listening_inbox_item(application::CaptureListeningInboxItemInput {
+            session_id: session.id.clone(),
+            target: target.clone(),
+            anchors: anchors.clone(),
+            label: Some("I missed that line".into()),
+            subtitle_snapshot: "I missed that line".into(),
+            context_before: Some("before".into()),
+            context_after: Some("after".into()),
+            expires_in_days: Some(7),
+        })
+        .unwrap();
+    assert_eq!(first.status, ListeningInboxStatus::Active);
+    assert_eq!(
+        services
+            .list_listening_inbox_items(Some(ListeningInboxStatus::Active), 10, 0)
+            .unwrap()
+            .len(),
+        1
+    );
+
+    let reviewed = services
+        .process_listening_inbox_item(
+            &first.id,
+            application::ProcessListeningInboxItemInput {
+                resolution: ListeningInboxResolution::ReviewItem,
+            },
+        )
+        .unwrap();
+    assert_eq!(reviewed.status, ListeningInboxStatus::Archived);
+    assert_eq!(
+        reviewed.resolution,
+        Some(ListeningInboxResolution::ReviewItem)
+    );
+    assert_eq!(reviewed.review_item_ids.len(), 1);
+    let review = repo
+        .get_review_item(&reviewed.review_item_ids[0])
+        .unwrap()
+        .unwrap();
+    assert_eq!(review.source.kind, ReviewSourceKind::ListeningInbox);
+
+    let second = services
+        .capture_listening_inbox_item(application::CaptureListeningInboxItemInput {
+            session_id: session.id.clone(),
+            target: target.clone(),
+            anchors: anchors.clone(),
+            label: Some("Still fuzzy".into()),
+            subtitle_snapshot: "Still fuzzy".into(),
+            context_before: None,
+            context_after: None,
+            expires_in_days: Some(7),
+        })
+        .unwrap();
+    let micro = services
+        .process_listening_inbox_item(
+            &second.id,
+            application::ProcessListeningInboxItemInput {
+                resolution: ListeningInboxResolution::MicroIntensive,
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        micro.resolution,
+        Some(ListeningInboxResolution::MicroIntensive)
+    );
+    let practice_item_id = micro.practice_item_id.as_ref().unwrap();
+    assert!(repo.get_practice_item(practice_item_id).unwrap().is_some());
+
+    services
+        .complete_practice_session(
+            &session.id,
+            application::CompletePracticeSessionInput {
+                mark_familiar: false,
+                comprehension_report: Some(ListeningComprehensionReport::GotTheGist),
+            },
+        )
+        .unwrap();
+    let events = repo
+        .list_learning_events_for_session(&session.id, 100, 0)
+        .unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|event| event.kind == LearningEventKind::ListeningInboxCaptured)
+    );
+    let completed = events
+        .iter()
+        .find(|event| event.kind == LearningEventKind::ListeningCompleted)
+        .unwrap();
+    assert_eq!(
+        completed.payload["comprehension_report"],
+        serde_json::json!("got_the_gist")
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| event.kind == LearningEventKind::FamiliarMaterialMarked)
+    );
 }

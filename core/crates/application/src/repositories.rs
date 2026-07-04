@@ -748,6 +748,23 @@ pub trait LearningEventRepository: Send + Sync {
     ) -> Result<Vec<LearningEvent>, ApplicationError>;
 }
 
+pub trait ListeningInboxRepository: Send + Sync {
+    fn upsert_listening_inbox_item(
+        &self,
+        item: &ListeningInboxItem,
+    ) -> Result<ListeningInboxItem, ApplicationError>;
+    fn get_listening_inbox_item(
+        &self,
+        id: &ListeningInboxItemId,
+    ) -> Result<Option<ListeningInboxItem>, ApplicationError>;
+    fn list_listening_inbox_items(
+        &self,
+        status: Option<ListeningInboxStatus>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<ListeningInboxItem>, ApplicationError>;
+}
+
 pub trait CorpusIndexRepository: Send + Sync {
     fn upsert_corpus_occurrence(
         &self,
