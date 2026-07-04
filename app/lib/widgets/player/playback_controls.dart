@@ -29,6 +29,9 @@ class PlaybackControls extends StatelessWidget {
     required this.secondarySubtitleOffset,
     required this.status,
     required this.taskStatuses,
+    required this.extensiveListeningActive,
+    required this.listeningMarkEnabled,
+    required this.listeningInboxCount,
     required this.onSeek,
     required this.onSeekToPreviousCue,
     required this.onSeekToZero,
@@ -53,6 +56,9 @@ class PlaybackControls extends StatelessWidget {
     required this.onEmbeddedSubtitleTrackChanged,
     required this.onPrimaryOffsetChanged,
     required this.onSecondaryOffsetChanged,
+    required this.onToggleExtensiveListening,
+    required this.onCaptureListeningInbox,
+    required this.onHardInterruptListening,
   });
 
   final DesktopPlayerAdapter adapter;
@@ -76,6 +82,9 @@ class PlaybackControls extends StatelessWidget {
   final Duration secondarySubtitleOffset;
   final String status;
   final List<UserTaskStatus> taskStatuses;
+  final bool extensiveListeningActive;
+  final bool listeningMarkEnabled;
+  final int listeningInboxCount;
   final bool chunkControlsEnabled;
   final bool chunkLoopActive;
 
@@ -101,6 +110,9 @@ class PlaybackControls extends StatelessWidget {
   final ValueChanged<PlayerTrack> onEmbeddedSubtitleTrackChanged;
   final ValueChanged<Duration> onPrimaryOffsetChanged;
   final ValueChanged<Duration> onSecondaryOffsetChanged;
+  final VoidCallback onToggleExtensiveListening;
+  final VoidCallback onCaptureListeningInbox;
+  final VoidCallback onHardInterruptListening;
 
   @override
   Widget build(BuildContext context) {
@@ -155,6 +167,35 @@ class PlaybackControls extends StatelessWidget {
                     tooltip: l.text('nextSentence'),
                     onPressed: onSeekToNextCue,
                     icon: const Icon(Icons.skip_next),
+                  ),
+                  IconButton(
+                    tooltip: extensiveListeningActive
+                        ? l.text('finishExtensiveListening')
+                        : l.text('startExtensiveListening'),
+                    onPressed: onToggleExtensiveListening,
+                    icon: Icon(
+                      extensiveListeningActive
+                          ? Icons.hearing
+                          : Icons.hearing_disabled,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: l.text('markListeningInbox'),
+                    onPressed: listeningMarkEnabled
+                        ? onCaptureListeningInbox
+                        : null,
+                    icon: Badge.count(
+                      count: listeningInboxCount,
+                      isLabelVisible: listeningInboxCount > 0,
+                      child: const Icon(Icons.bookmark_add_outlined),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: l.text('hardInterruptListening'),
+                    onPressed: listeningMarkEnabled
+                        ? onHardInterruptListening
+                        : null,
+                    icon: const Icon(Icons.pause_circle_outline),
                   ),
                   FilterChip(
                     label: Text(l.text('loopSentence')),

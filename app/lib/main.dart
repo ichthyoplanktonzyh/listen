@@ -16,6 +16,7 @@ import 'transcription_ui.dart';
 import 'controllers/app_controllers.dart';
 import 'controllers/backend_event_coordinator.dart';
 import 'controllers/download_controller.dart';
+import 'controllers/extensive_listening_controller.dart';
 import 'controllers/learning_controller.dart';
 import 'controllers/learning_workflow_controller.dart';
 import 'controllers/media_session_coordinator.dart';
@@ -27,6 +28,7 @@ import 'controllers/speech_enhancement_workflow_controller.dart';
 import 'controllers/subtitle_controller.dart';
 import 'controllers/settings_controller.dart';
 import 'models/capability_readiness.dart';
+import 'models/listening.dart';
 import 'models/practice.dart';
 import 'models/task_status.dart';
 import 'models/timeline.dart';
@@ -110,6 +112,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final subtitleController = SubtitleController();
   final learningController = LearningController();
   final practiceController = PracticeController();
+  final extensiveListeningController = ExtensiveListeningController();
   final learningWorkflowController = LearningWorkflowController();
   final speechEnhancementWorkflowController =
       SpeechEnhancementWorkflowController();
@@ -1130,6 +1133,119 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  Future<void> _toggleExtensiveListening() async {
+    if (!extensiveListeningController.active) {
+      final started = await extensiveListeningController.startSession(
+        api: api,
+        mediaId: playerController.mediaId,
+        trackId: subtitleController.primaryTrack?.id,
+      );
+      if (started && mounted) {
+        playerController.setStatus('Extensive listening started');
+      }
+      return;
+    }
+    final report = await showDialog<String?>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l.text('finishExtensiveListening')),
+        content: Text(l.text('comprehensionReportPrompt')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l.text('skipReport')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'unclear'),
+            child: Text(l.text('reportUnclear')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'got_the_gist'),
+            child: Text(l.text('reportGist')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, 'understood_all'),
+            child: Text(l.text('reportUnderstoodAll')),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    final finished = await extensiveListeningController.finishSession(
+      api,
+      comprehensionReport: report,
+    );
+    if (finished && mounted) {
+      playerController.setStatus('Extensive listening finished');
+    }
+  }
+
+  Future<void> _captureListeningInbox() async {
+    final cue = subtitleController.currentPrimaryCue;
+    final captured = await extensiveListeningController.captureCurrentCue(
+      api: api,
+      cue: cue,
+      previousCue: subtitleController.primaryCursor.previous(cue),
+      nextCue: subtitleController.primaryCursor.next(cue),
+      mediaId: playerController.mediaId,
+      trackId: subtitleController.primaryTrack?.id,
+      mediaTimeMs: _mediaTimeMs,
+    );
+    if (captured && mounted) {
+      playerController.setStatus('Marked in Listening Inbox');
+    }
+  }
+
+  Future<void> _hardInterruptListening() async {
+    if (playerController.playing) await adapter.playOrPause();
+    await _captureListeningInbox();
+    learningController.selectSidePanel(3);
+    await _refreshDiagnosis();
+    if (mounted) playerController.setStatus('Paused for quick listening check');
+  }
+
+  Future<void> _refreshListeningInbox() async {
+    await extensiveListeningController.refreshInbox(api);
+  }
+
+  Future<void> _replayListeningInboxItem(ListeningInboxItem item) async {
+    final start = item.playbackStartMs;
+    final end = item.playbackEndMs;
+    if (start == null || end == null) {
+      playerController.setStatus('No playable range for this Inbox item');
+      return;
+    }
+    await playbackActions.loopRange(start, end, 'Looping Listening Inbox item');
+  }
+
+  Future<void> _processListeningInboxItem(
+    ListeningInboxItem item,
+    String resolution,
+  ) async {
+    final processed = await extensiveListeningController.processItem(
+      api,
+      item,
+      resolution,
+    );
+    if (processed == null || !mounted) return;
+    switch (resolution) {
+      case 'review_item':
+        playerController.setStatus('Listening Inbox item saved to review');
+      case 'micro_intensive':
+        learningController.selectSidePanel(4);
+        await _replayListeningInboxItem(processed);
+        if (mounted) {
+          playerController.setStatus('Micro intensive item created');
+        }
+      case 'favorite':
+        playerController.setStatus('Segment saved as favorite');
+      case 'dismissed':
+        playerController.setStatus('Listening Inbox item archived');
+      default:
+        playerController.setStatus('Listening Inbox item processed');
+    }
+  }
+
   Future<void> _replayStuckPoint(StuckPointSummary point) async {
     final start = point.playbackStartMs;
     final end = point.playbackEndMs;
@@ -1425,6 +1541,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     subtitleController.dispose();
     learningController.dispose();
     practiceController.dispose();
+    extensiveListeningController.dispose();
     settingsController.dispose();
     super.dispose();
   }
@@ -1458,6 +1575,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         subtitleController,
         learningController,
         practiceController,
+        extensiveListeningController,
         settingsController,
         downloadController,
       ]),
@@ -1465,6 +1583,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         player: playerController,
         subtitle: subtitleController,
         learning: learningController,
+        extensiveListening: extensiveListeningController,
         practice: practiceController,
         settings: settingsController,
         api: api!,
@@ -1487,6 +1606,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 subtitleController.setLoopCue(!subtitleController.loopCue),
             const SingleActivator(LogicalKeyboardKey.keyH): () =>
                 subtitleController.setVisible(!subtitleController.visible),
+            const SingleActivator(LogicalKeyboardKey.keyI): () =>
+                unawaited(_captureListeningInbox()),
+            const SingleActivator(LogicalKeyboardKey.keyI, shift: true): () =>
+                unawaited(_toggleExtensiveListening()),
+            const SingleActivator(LogicalKeyboardKey.keyP, shift: true): () =>
+                unawaited(_hardInterruptListening()),
             const SingleActivator(LogicalKeyboardKey.digit1): () =>
                 _markFirstWord('unknown_meaning'),
             const SingleActivator(LogicalKeyboardKey.digit2): () =>
@@ -1617,6 +1742,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     playerController: playerController,
     subtitleController: subtitleController,
     learningController: learningController,
+    extensiveListeningController: extensiveListeningController,
     practiceController: practiceController,
     settingsController: settingsController,
     resourceActions: resourceActions,
@@ -1645,17 +1771,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
     onReplayStuckPoint: _replayStuckPoint,
     onCloseStuckPoint: _closeStuckPoint,
     onOpenDiagnosisView: _openDiagnosisView,
+    onRefreshListeningInbox: _refreshListeningInbox,
+    onReplayListeningInboxItem: _replayListeningInboxItem,
+    onProcessListeningInboxItem: _processListeningInboxItem,
     timingQuality: _timingQuality,
   );
 
   Widget _controls() => PlaybackBar(
     adapter: adapter,
     playerController: playerController,
+    extensiveListeningController: extensiveListeningController,
     subtitleController: subtitleController,
     mediaSession: mediaSession,
     playbackActions: playbackActions,
     taskStatuses: taskStatuses.values.toList(growable: false),
     onSeekCue: _seekCue,
+    onToggleExtensiveListening: _toggleExtensiveListening,
+    onCaptureListeningInbox: _captureListeningInbox,
+    onHardInterruptListening: _hardInterruptListening,
     onSaveSettings: _saveSettings,
   );
 

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/models/listening.dart';
 import 'package:llplayer_next/models/practice.dart';
 
 void main() {
@@ -83,6 +84,52 @@ void main() {
         },
       ],
     });
+  });
+
+  test('listening inbox fixture parses typed contract shape', () {
+    final item = ListeningInboxItem.fromJson({
+      'id': 'inbox-1',
+      'session_id': 'session-1',
+      'media_id': 'media-1',
+      'track_id': 'track-1',
+      'target': {
+        'kind': 'sentence',
+        'id': 'sentence-1',
+        'sentence_id': 'sentence-1',
+        'chunk_id': null,
+        'start_ms': 100,
+        'end_ms': 900,
+      },
+      'anchors': [
+        {
+          'kind': 'sentence',
+          'id': 'sentence-1',
+          'label': 'would have',
+          'lexical_entry_id': null,
+          'sentence_id': 'sentence-1',
+          'token_start': 0,
+          'token_end': 1,
+          'start_ms': 100,
+          'end_ms': 900,
+        },
+      ],
+      'label': 'would have',
+      'subtitle_snapshot': 'would have',
+      'context_before': null,
+      'context_after': 'gone',
+      'captured_at_ms': 10,
+      'expires_at_ms': 20,
+      'status': 'active',
+      'resolution': null,
+      'review_item_ids': [],
+      'practice_item_id': null,
+      'updated_at_ms': 10,
+    });
+
+    expect(item.id, 'inbox-1');
+    expect(item.status, 'active');
+    expect(item.playbackStartMs, 100);
+    expect(item.playbackEndMs, 900);
   });
 
   test('practice session summary fixture parses typed contract shape', () {

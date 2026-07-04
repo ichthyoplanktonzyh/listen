@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/media_session_coordinator.dart';
 import '../../controllers/playback_actions_coordinator.dart';
 import '../../controllers/player_controller.dart';
+import '../../controllers/extensive_listening_controller.dart';
 import '../../controllers/subtitle_controller.dart';
 import '../../localization.dart';
 import '../../models/timeline.dart';
@@ -20,21 +21,29 @@ class PlaybackBar extends StatefulWidget {
     super.key,
     required this.adapter,
     required this.playerController,
+    required this.extensiveListeningController,
     required this.subtitleController,
     required this.mediaSession,
     required this.playbackActions,
     required this.taskStatuses,
     required this.onSeekCue,
+    required this.onToggleExtensiveListening,
+    required this.onCaptureListeningInbox,
+    required this.onHardInterruptListening,
     required this.onSaveSettings,
   });
 
   final DesktopPlayerAdapter adapter;
   final PlayerController playerController;
+  final ExtensiveListeningController extensiveListeningController;
   final SubtitleController subtitleController;
   final MediaSessionCoordinator mediaSession;
   final PlaybackActionsCoordinator playbackActions;
   final List<UserTaskStatus> taskStatuses;
   final Future<void> Function(Cue? cue) onSeekCue;
+  final Future<void> Function() onToggleExtensiveListening;
+  final Future<void> Function() onCaptureListeningInbox;
+  final Future<void> Function() onHardInterruptListening;
   final Future<void> Function() onSaveSettings;
 
   @override
@@ -44,6 +53,8 @@ class PlaybackBar extends StatefulWidget {
 class _PlaybackBarState extends State<PlaybackBar> {
   DesktopPlayerAdapter get adapter => widget.adapter;
   PlayerController get playerController => widget.playerController;
+  ExtensiveListeningController get extensiveListeningController =>
+      widget.extensiveListeningController;
   SubtitleController get subtitleController => widget.subtitleController;
   MediaSessionCoordinator get mediaSession => widget.mediaSession;
   PlaybackActionsCoordinator get playbackActions => widget.playbackActions;
@@ -52,6 +63,10 @@ class _PlaybackBarState extends State<PlaybackBar> {
   List<UserTaskStatus> get taskStatuses => widget.taskStatuses;
 
   Future<void> _seekCue(Cue? cue) => widget.onSeekCue(cue);
+  Future<void> _toggleExtensiveListening() =>
+      widget.onToggleExtensiveListening();
+  Future<void> _captureListeningInbox() => widget.onCaptureListeningInbox();
+  Future<void> _hardInterruptListening() => widget.onHardInterruptListening();
   Future<void> _saveSettings() => widget.onSaveSettings();
 
   @override
@@ -80,6 +95,9 @@ class _PlaybackBarState extends State<PlaybackBar> {
       secondarySubtitleOffset: subtitleController.secondarySubtitleOffset,
       status: status,
       taskStatuses: taskStatuses,
+      extensiveListeningActive: extensiveListeningController.active,
+      listeningMarkEnabled: subtitleController.currentPrimaryCue != null,
+      listeningInboxCount: extensiveListeningController.activeItemCount,
       onSeek: (value) => adapter.seek(value),
       onSeekToPreviousCue: () => _seekCue(
         subtitleController.primaryCursor.previous(
@@ -150,6 +168,9 @@ class _PlaybackBarState extends State<PlaybackBar> {
         subtitleController.setSecondarySubtitleOffset(offset);
         unawaited(_saveSettings());
       },
+      onToggleExtensiveListening: () => unawaited(_toggleExtensiveListening()),
+      onCaptureListeningInbox: () => unawaited(_captureListeningInbox()),
+      onHardInterruptListening: () => unawaited(_hardInterruptListening()),
     );
   }
 

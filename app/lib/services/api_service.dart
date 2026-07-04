@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 
+import '../models/listening.dart';
 import '../models/practice.dart';
 
 Future<String> computeOpenSubtitlesMovieHash(String path) async {
@@ -827,6 +828,47 @@ class LocalApi {
   Future<void> recordDiagnosisView(RecordDiagnosisViewInput input) async {
     await _request('POST', '/v1/practice/diagnosis-viewed', input.toJson());
   }
+
+  Future<List<ListeningInboxItem>> listeningInboxItems({
+    String status = 'active',
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    final query = Uri(
+      queryParameters: {
+        'status': status,
+        'limit': '$limit',
+        'offset': '$offset',
+      },
+    ).query;
+    final values =
+        (await _request('GET', '/v1/listening-inbox/items?$query'))
+            as List<dynamic>;
+    return values
+        .map(
+          (value) => ListeningInboxItem.fromJson(value as Map<String, dynamic>),
+        )
+        .toList(growable: false);
+  }
+
+  Future<ListeningInboxItem> captureListeningInboxItem(
+    CaptureListeningInboxItemInput input,
+  ) async => ListeningInboxItem.fromJson(
+    (await _request('POST', '/v1/listening-inbox/items', input.toJson()))
+        as Map<String, dynamic>,
+  );
+
+  Future<ListeningInboxItem> processListeningInboxItem(
+    String id,
+    ProcessListeningInboxItemInput input,
+  ) async => ListeningInboxItem.fromJson(
+    (await _request(
+          'POST',
+          '/v1/listening-inbox/items/${Uri.encodeComponent(id)}/process',
+          input.toJson(),
+        ))
+        as Map<String, dynamic>,
+  );
 
   Future<ReviewItem> createReviewItem(CreateReviewItem input) async =>
       ReviewItem.fromJson(

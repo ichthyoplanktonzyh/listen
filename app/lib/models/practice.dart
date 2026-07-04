@@ -493,11 +493,18 @@ class CloseStuckPointInput {
 }
 
 class CompletePracticeSessionInput {
-  const CompletePracticeSessionInput({this.markFamiliar = true});
+  const CompletePracticeSessionInput({
+    this.markFamiliar = true,
+    this.comprehensionReport,
+  });
 
   final bool markFamiliar;
+  final String? comprehensionReport;
 
-  Map<String, dynamic> toJson() => {'mark_familiar': markFamiliar};
+  Map<String, dynamic> toJson() => {
+    'mark_familiar': markFamiliar,
+    'comprehension_report': comprehensionReport,
+  };
 }
 
 class StuckPointSummary {

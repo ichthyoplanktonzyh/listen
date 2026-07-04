@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../controllers/extensive_listening_controller.dart';
 import '../../controllers/learning_controller.dart';
 import '../../controllers/media_session_coordinator.dart';
 import '../../controllers/playback_actions_coordinator.dart';
@@ -11,9 +12,11 @@ import '../../controllers/resource_actions_coordinator.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
 import '../../localization.dart';
+import '../../models/listening.dart';
 import '../../models/practice.dart';
 import '../../models/timeline.dart';
 import '../panels/diagnosis_card.dart';
+import '../panels/listening_inbox_panel.dart';
 import '../panels/practice_panel.dart';
 import '../panels/subtitle_resource_manager_panel.dart';
 import '../panels/transcript_panel.dart';
@@ -29,6 +32,7 @@ class SidePanel extends StatefulWidget {
     required this.playerController,
     required this.subtitleController,
     required this.learningController,
+    required this.extensiveListeningController,
     required this.practiceController,
     required this.settingsController,
     required this.resourceActions,
@@ -57,12 +61,16 @@ class SidePanel extends StatefulWidget {
     required this.onReplayStuckPoint,
     required this.onCloseStuckPoint,
     required this.onOpenDiagnosisView,
+    required this.onRefreshListeningInbox,
+    required this.onReplayListeningInboxItem,
+    required this.onProcessListeningInboxItem,
     required this.timingQuality,
   });
 
   final PlayerController playerController;
   final SubtitleController subtitleController;
   final LearningController learningController;
+  final ExtensiveListeningController extensiveListeningController;
   final PracticeController practiceController;
   final SettingsController settingsController;
   final ResourceActionsCoordinator resourceActions;
@@ -92,6 +100,11 @@ class SidePanel extends StatefulWidget {
   final Future<void> Function(StuckPointSummary point) onReplayStuckPoint;
   final Future<void> Function(StuckPointSummary point) onCloseStuckPoint;
   final Future<void> Function() onOpenDiagnosisView;
+  final Future<void> Function() onRefreshListeningInbox;
+  final Future<void> Function(ListeningInboxItem item)
+  onReplayListeningInboxItem;
+  final Future<void> Function(ListeningInboxItem item, String resolution)
+  onProcessListeningInboxItem;
   final String Function(String sentenceId) timingQuality;
 
   @override
@@ -102,6 +115,8 @@ class _SidePanelState extends State<SidePanel> {
   PlayerController get playerController => widget.playerController;
   SubtitleController get subtitleController => widget.subtitleController;
   LearningController get learningController => widget.learningController;
+  ExtensiveListeningController get extensiveListeningController =>
+      widget.extensiveListeningController;
   PracticeController get practiceController => widget.practiceController;
   SettingsController get settingsController => widget.settingsController;
   ResourceActionsCoordinator get resourceActions => widget.resourceActions;
@@ -142,6 +157,13 @@ class _SidePanelState extends State<SidePanel> {
   Future<void> _closeStuckPoint(StuckPointSummary point) =>
       widget.onCloseStuckPoint(point);
   Future<void> _openDiagnosisView() => widget.onOpenDiagnosisView();
+  Future<void> _refreshListeningInbox() => widget.onRefreshListeningInbox();
+  Future<void> _replayListeningInboxItem(ListeningInboxItem item) =>
+      widget.onReplayListeningInboxItem(item);
+  Future<void> _processListeningInboxItem(
+    ListeningInboxItem item,
+    String resolution,
+  ) => widget.onProcessListeningInboxItem(item, resolution);
   String _timingQuality(String sentenceId) => widget.timingQuality(sentenceId);
 
   bool get _canCloze {
@@ -212,6 +234,11 @@ class _SidePanelState extends State<SidePanel> {
               icon: const Icon(Icons.fact_check_outlined),
               label: Text(l.text('practice')),
             ),
+            ButtonSegment(
+              value: 5,
+              icon: const Icon(Icons.inbox_outlined),
+              label: Text(l.text('listeningInbox')),
+            ),
           ],
           selected: {learningController.sidePanel},
           onSelectionChanged: (value) {
@@ -248,6 +275,12 @@ class _SidePanelState extends State<SidePanel> {
                   ? Center(child: Text(l.text('diagnosis')))
                   : _diagnosisCard(),
             4 => _practicePanel(),
+            5 => ListeningInboxPanel(
+              controller: extensiveListeningController,
+              onRefresh: _refreshListeningInbox,
+              onReplay: _replayListeningInboxItem,
+              onProcess: _processListeningInboxItem,
+            ),
             _ => _transcript(),
           },
         ),

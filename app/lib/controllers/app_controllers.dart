@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
+import 'extensive_listening_controller.dart';
 import 'learning_controller.dart';
 import 'player_controller.dart';
 import 'practice_controller.dart';
@@ -20,6 +21,7 @@ class AppControllers extends InheritedWidget {
     required this.player,
     required this.subtitle,
     required this.learning,
+    required this.extensiveListening,
     required this.practice,
     required this.settings,
     required this.api,
@@ -30,6 +32,7 @@ class AppControllers extends InheritedWidget {
   final PlayerController player;
   final SubtitleController subtitle;
   final LearningController learning;
+  final ExtensiveListeningController extensiveListening;
   final PracticeController practice;
   final SettingsController settings;
   final LocalApi api;
