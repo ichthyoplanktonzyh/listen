@@ -67,6 +67,7 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
           );
         }
         return _ReviewCard(
+          key: ValueKey(state.current!.item.id),
           entry: state.current!,
           audioAvailable: _canPlay(state.current!),
           revealed: state.revealed,
@@ -94,8 +95,9 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
       entry.playbackEndMs != null;
 }
 
-class _ReviewCard extends StatelessWidget {
+class _ReviewCard extends StatefulWidget {
   const _ReviewCard({
+    super.key,
     required this.entry,
     required this.audioAvailable,
     required this.revealed,
@@ -115,15 +117,30 @@ class _ReviewCard extends StatelessWidget {
   final VoidCallback onReveal;
   final Future<bool> Function(String rating) onRate;
 
+  @override
+  State<_ReviewCard> createState() => _ReviewCardState();
+}
+
+class _ReviewCardState extends State<_ReviewCard> {
+  final _clozeController = TextEditingController();
+  String? _presenceChoice;
+
+  @override
+  void dispose() {
+    _clozeController.dispose();
+    super.dispose();
+  }
+
   bool get playable {
-    final start = entry.playbackStartMs;
-    final end = entry.playbackEndMs;
-    return audioAvailable && start != null && end != null && end > start;
+    final start = widget.entry.playbackStartMs;
+    final end = widget.entry.playbackEndMs;
+    return widget.audioAvailable && start != null && end != null && end > start;
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final card = widget.entry.card;
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(28),
@@ -137,24 +154,29 @@ class _ReviewCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.graphic_eq, color: colors.primary),
+                      Icon(_kindIcon(card.kind), color: colors.primary),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          _sourceLabel(entry.item.source.kind),
+                          _kindLabel(card.kind),
                           style: Theme.of(context).textTheme.labelLarge,
                         ),
                       ),
                       Text(
-                        entry.schedule.lapseCount == 0
+                        widget.entry.schedule.lapseCount == 0
                             ? '新卡'
-                            : '重学 ${entry.schedule.lapseCount}',
+                            : '重学 ${widget.entry.schedule.lapseCount}',
                       ),
                     ],
                   ),
+                  const SizedBox(height: 14),
+                  Text(
+                    _instruction(card.kind),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   const SizedBox(height: 32),
                   FilledButton.icon(
-                    onPressed: playable ? onPlay : null,
+                    onPressed: playable ? widget.onPlay : null,
                     icon: Icon(
                       playable
                           ? Icons.volume_up_outlined
@@ -163,53 +185,15 @@ class _ReviewCard extends StatelessWidget {
                     label: Text(playable ? '播放声音片段' : '原媒体不可播放，使用文字快照'),
                   ),
                   const SizedBox(height: 26),
-                  AnimatedCrossFade(
+                  AnimatedSwitcher(
                     duration: const Duration(milliseconds: 180),
-                    crossFadeState: revealed
-                        ? CrossFadeState.showSecond
-                        : CrossFadeState.showFirst,
-                    firstChild: OutlinedButton(
-                      onPressed: busy ? null : onReveal,
-                      child: const Text('显示答案'),
-                    ),
-                    secondChild: Column(
-                      children: [
-                        Text(
-                          entry.item.promptSnapshot,
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                        const SizedBox(height: 26),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: busy ? null : () => onRate('again'),
-                                child: const Text('没听出'),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: busy ? null : () => onRate('hard'),
-                                child: const Text('模糊'),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: FilledButton(
-                                onPressed: busy ? null : () => onRate('good'),
-                                child: const Text('听出了'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                    child: widget.revealed
+                        ? _revealedContent(context)
+                        : _promptContent(context),
                   ),
-                  if (error != null) ...[
+                  if (widget.error != null) ...[
                     const SizedBox(height: 18),
-                    Text(error!, style: TextStyle(color: colors.error)),
+                    Text(widget.error!, style: TextStyle(color: colors.error)),
                   ],
                 ],
               ),
@@ -220,13 +204,163 @@ class _ReviewCard extends StatelessWidget {
     );
   }
 
-  static String _sourceLabel(String kind) => switch (kind) {
-    'practice_failure' => '精听错题',
-    'listening_inbox' => '泛听收件箱',
-    'lexical_entry' => '词汇复习',
-    'chunk' => '语块复习',
-    'sentence' => '原句回听',
+  Widget _promptContent(BuildContext context) {
+    final card = widget.entry.card;
+    return switch (card.kind) {
+      'chunk_cloze' => Column(
+        key: const ValueKey('chunk-cloze-prompt'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            card.cue ?? '____',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 18),
+          TextField(
+            controller: _clozeController,
+            enabled: !widget.busy,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              labelText: '填入听到的语块',
+            ),
+            onSubmitted: (_) => widget.busy ? null : widget.onReveal(),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: widget.busy ? null : widget.onReveal,
+            child: const Text('对照答案'),
+          ),
+        ],
+      ),
+      'phrase_presence' => Column(
+        key: const ValueKey('phrase-presence-prompt'),
+        children: [
+          Text('目标短语', style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 8),
+          Text(
+            card.cue ?? card.target ?? '',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.tonal(
+                  onPressed: widget.busy ? null : () => _choosePresence('出现'),
+                  child: const Text('出现'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: widget.busy ? null : () => _choosePresence('没出现'),
+                  child: const Text('没出现'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+      'word_recognition' => OutlinedButton(
+        key: const ValueKey('word-recognition-prompt'),
+        onPressed: widget.busy ? null : widget.onReveal,
+        child: const Text('显示听到的词'),
+      ),
+      _ => OutlinedButton(
+        key: const ValueKey('source-sentence-prompt'),
+        onPressed: widget.busy ? null : widget.onReveal,
+        child: const Text('显示原句'),
+      ),
+    };
+  }
+
+  Widget _revealedContent(BuildContext context) {
+    final card = widget.entry.card;
+    final typed = _clozeController.text.trim();
+    return Column(
+      key: const ValueKey('review-answer'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (card.kind == 'chunk_cloze' && typed.isNotEmpty) ...[
+          Text('你的填写：$typed', textAlign: TextAlign.center),
+          const SizedBox(height: 10),
+        ],
+        if (card.kind == 'phrase_presence' && _presenceChoice != null) ...[
+          Text('你的判断：$_presenceChoice · 答案：出现', textAlign: TextAlign.center),
+          const SizedBox(height: 10),
+        ],
+        if (card.target != null && card.kind == 'chunk_cloze') ...[
+          Text(
+            '目标语块：${card.target}',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 10),
+        ],
+        Text(
+          card.answer,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        const SizedBox(height: 26),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: widget.busy ? null : () => widget.onRate('again'),
+                child: const Text('没听出'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: widget.busy ? null : () => widget.onRate('hard'),
+                child: const Text('模糊'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton(
+                onPressed: widget.busy ? null : () => widget.onRate('good'),
+                child: const Text('听出了'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  void _choosePresence(String choice) {
+    setState(() => _presenceChoice = choice);
+    widget.onReveal();
+  }
+
+  static String _kindLabel(String kind) => switch (kind) {
+    'word_recognition' => '听音识词',
+    'chunk_cloze' => '语块填空',
+    'phrase_presence' => '短语判断',
+    'source_sentence_recall' => '原句回听',
     _ => '声音卡',
+  };
+
+  static String _instruction(String kind) => switch (kind) {
+    'word_recognition' => '只听声音，先回忆你听到的是哪个词。',
+    'chunk_cloze' => '听完整语块，把空白处补出来。',
+    'phrase_presence' => '听原句，判断目标短语是否真的出现。',
+    'source_sentence_recall' => '回听原句，先复述意思或原文，再翻面对照。',
+    _ => '先听声音，再翻面对照。',
+  };
+
+  static IconData _kindIcon(String kind) => switch (kind) {
+    'word_recognition' => Icons.hearing_outlined,
+    'chunk_cloze' => Icons.space_bar_outlined,
+    'phrase_presence' => Icons.rule_outlined,
+    'source_sentence_recall' => Icons.record_voice_over_outlined,
+    _ => Icons.graphic_eq,
   };
 }
 

@@ -470,8 +470,33 @@ class ReviewAttempt {
   final int? nextDueAtMs;
 }
 
+class ReviewCard {
+  const ReviewCard({
+    required this.kind,
+    required this.answer,
+    this.cue,
+    this.target,
+  });
+
+  factory ReviewCard.fromJson(Map<String, dynamic> json) => ReviewCard(
+    kind: json['kind'] as String,
+    cue: json['cue'] as String?,
+    answer: json['answer'] as String,
+    target: json['target'] as String?,
+  );
+
+  final String kind;
+  final String? cue;
+  final String answer;
+  final String? target;
+}
+
 class ReviewQueueEntry {
-  const ReviewQueueEntry({required this.item, required this.schedule});
+  const ReviewQueueEntry({
+    required this.item,
+    required this.schedule,
+    required this.card,
+  });
 
   factory ReviewQueueEntry.fromJson(Map<String, dynamic> json) =>
       ReviewQueueEntry(
@@ -479,10 +504,12 @@ class ReviewQueueEntry {
         schedule: ReviewSchedule.fromJson(
           json['schedule'] as Map<String, dynamic>,
         ),
+        card: ReviewCard.fromJson(json['card'] as Map<String, dynamic>),
       );
 
   final ReviewItem item;
   final ReviewSchedule schedule;
+  final ReviewCard card;
 
   int? get playbackStartMs => item.anchors
       .map((value) => value.startMs)
@@ -502,17 +529,32 @@ class ReviewQueueEntry {
 }
 
 class ReviewSubmission {
-  const ReviewSubmission({required this.attempt, required this.schedule});
+  const ReviewSubmission({
+    required this.attempt,
+    required this.schedule,
+    required this.generatedObservationIds,
+    required this.huntingCandidateIds,
+  });
 
   factory ReviewSubmission.fromJson(
     Map<String, dynamic> json,
   ) => ReviewSubmission(
     attempt: ReviewAttempt.fromJson(json['attempt'] as Map<String, dynamic>),
     schedule: ReviewSchedule.fromJson(json['schedule'] as Map<String, dynamic>),
+    generatedObservationIds:
+        ((json['generated_observation_ids'] as List<dynamic>?) ?? const [])
+            .cast<String>()
+            .toList(growable: false),
+    huntingCandidateIds:
+        ((json['hunting_candidate_ids'] as List<dynamic>?) ?? const [])
+            .cast<String>()
+            .toList(growable: false),
   );
 
   final ReviewAttempt attempt;
   final ReviewSchedule schedule;
+  final List<String> generatedObservationIds;
+  final List<String> huntingCandidateIds;
 }
 
 class DiagnosisHintEvidence {

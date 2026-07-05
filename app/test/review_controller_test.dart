@@ -57,6 +57,12 @@ void main() {
                     'interval_days': null,
                     'lapse_count': 0,
                   },
+                  'card': {
+                    'kind': 'phrase_presence',
+                    'cue': 'would have',
+                    'answer': 'I would have gone',
+                    'target': 'would have',
+                  },
                 },
               ]),
             );
@@ -82,6 +88,8 @@ void main() {
                   'interval_days': 1.0,
                   'lapse_count': 0,
                 },
+                'generated_observation_ids': const [],
+                'hunting_candidate_ids': const [],
               }),
             );
           }
@@ -94,6 +102,8 @@ void main() {
       expect(await controller.load(api), isTrue);
       expect(controller.state.remaining, 1);
       expect(controller.current?.playbackStartMs, 100);
+      expect(controller.current?.card.kind, 'phrase_presence');
+      expect(controller.current?.card.target, 'would have');
       controller.reveal();
       expect(controller.state.revealed, isTrue);
       expect(await controller.rate(api, 'hard'), isTrue);

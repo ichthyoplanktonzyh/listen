@@ -1,0 +1,119 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/screens/review_queue_screen.dart';
+import 'package:llplayer_next/services/api_service.dart';
+
+void main() {
+  for (final scenario
+      in <
+        ({String kind, String cue, String answer, String target, String action})
+      >[
+        (
+          kind: 'word_recognition',
+          cue: '',
+          answer: 'would',
+          target: 'would',
+          action: '显示听到的词',
+        ),
+        (
+          kind: 'chunk_cloze',
+          cue: 'I ____ gone',
+          answer: 'I would have gone',
+          target: 'would have',
+          action: '对照答案',
+        ),
+        (
+          kind: 'phrase_presence',
+          cue: 'would have',
+          answer: 'I would have gone',
+          target: 'would have',
+          action: '出现',
+        ),
+        (
+          kind: 'source_sentence_recall',
+          cue: '',
+          answer: 'I would have gone',
+          target: '',
+          action: '显示原句',
+        ),
+      ]) {
+    testWidgets('${scenario.kind} exposes its distinct review interaction', (
+      tester,
+    ) async {
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'tok',
+        transport: (method, path, body) async {
+          if (path != '/v1/review/items?limit=20') {
+            throw StateError('unexpected $method $path');
+          }
+          return (
+            statusCode: 200,
+            body: jsonEncode([
+              {
+                'item': {
+                  'id': 'review-${scenario.kind}',
+                  'source': {
+                    'kind': 'sentence',
+                    'id': 'sentence-1',
+                    'practice_attempt_id': null,
+                    'lexical_entry_id': null,
+                    'media_id': null,
+                    'track_id': null,
+                  },
+                  'anchors': const [],
+                  'prompt_snapshot': scenario.answer,
+                  'status': 'active',
+                  'created_at_ms': 1,
+                  'updated_at_ms': 1,
+                },
+                'schedule': {
+                  'item_id': 'review-${scenario.kind}',
+                  'algorithm': 'listen_review_v1_heuristic_proxy',
+                  'due_at_ms': 1,
+                  'stability': null,
+                  'difficulty': null,
+                  'interval_days': null,
+                  'lapse_count': 0,
+                },
+                'card': {
+                  'kind': scenario.kind,
+                  'cue': scenario.cue.isEmpty ? null : scenario.cue,
+                  'answer': scenario.answer,
+                  'target': scenario.target.isEmpty ? null : scenario.target,
+                },
+              },
+            ]),
+          );
+        },
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReviewQueueScreen(
+            api: api,
+            onPlayRange: (startMs, endMs) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      if (scenario.kind == 'chunk_cloze') {
+        expect(find.text(scenario.cue), findsOneWidget);
+        await tester.enterText(find.byType(TextField), 'would have');
+      } else if (scenario.kind == 'phrase_presence') {
+        expect(find.text(scenario.target), findsOneWidget);
+      }
+
+      await tester.tap(find.text(scenario.action));
+      await tester.pumpAndSettle();
+
+      expect(find.text(scenario.answer), findsOneWidget);
+      expect(find.text('没听出'), findsOneWidget);
+      expect(find.text('模糊'), findsOneWidget);
+      expect(find.text('听出了'), findsOneWidget);
+    });
+  }
+}
