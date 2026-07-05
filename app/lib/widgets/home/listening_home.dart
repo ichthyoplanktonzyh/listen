@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../utils/format_duration.dart';
 
 class ListeningHome extends StatelessWidget {
   const ListeningHome({
@@ -10,6 +11,14 @@ class ListeningHome extends StatelessWidget {
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
     required this.onOpenSettings,
+    this.currentMediaTitle,
+    this.currentMediaPath,
+    this.currentPosition = Duration.zero,
+    this.currentDuration = Duration.zero,
+    this.subtitleResourceCount = 0,
+    this.vocabularyCount = 0,
+    this.listeningInboxCount = 0,
+    this.statusText = '',
   });
 
   final VoidCallback onOpenMedia;
@@ -17,6 +26,14 @@ class ListeningHome extends StatelessWidget {
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
   final VoidCallback onOpenSettings;
+  final String? currentMediaTitle;
+  final String? currentMediaPath;
+  final Duration currentPosition;
+  final Duration currentDuration;
+  final int subtitleResourceCount;
+  final int vocabularyCount;
+  final int listeningInboxCount;
+  final String statusText;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -44,6 +61,14 @@ class ListeningHome extends StatelessWidget {
                 onOpenOnline: onOpenOnline,
                 onOpenSubtitleResources: onOpenSubtitleResources,
                 onOpenVocabulary: onOpenVocabulary,
+                currentMediaTitle: currentMediaTitle,
+                currentMediaPath: currentMediaPath,
+                currentPosition: currentPosition,
+                currentDuration: currentDuration,
+                subtitleResourceCount: subtitleResourceCount,
+                vocabularyCount: vocabularyCount,
+                listeningInboxCount: listeningInboxCount,
+                statusText: statusText,
               ),
             ),
           ],
@@ -133,6 +158,14 @@ class _HomeContent extends StatelessWidget {
     required this.onOpenOnline,
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
+    required this.currentMediaTitle,
+    required this.currentMediaPath,
+    required this.currentPosition,
+    required this.currentDuration,
+    required this.subtitleResourceCount,
+    required this.vocabularyCount,
+    required this.listeningInboxCount,
+    required this.statusText,
   });
 
   final bool compact;
@@ -140,6 +173,14 @@ class _HomeContent extends StatelessWidget {
   final VoidCallback onOpenOnline;
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
+  final String? currentMediaTitle;
+  final String? currentMediaPath;
+  final Duration currentPosition;
+  final Duration currentDuration;
+  final int subtitleResourceCount;
+  final int vocabularyCount;
+  final int listeningInboxCount;
+  final String statusText;
 
   @override
   Widget build(BuildContext context) {
@@ -165,7 +206,22 @@ class _HomeContent extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 36),
+              const SizedBox(height: 20),
+              _ContinueLearningCard(
+                mediaTitle: currentMediaTitle,
+                mediaPath: currentMediaPath,
+                position: currentPosition,
+                duration: currentDuration,
+                onOpenMedia: onOpenMedia,
+              ),
+              const SizedBox(height: 14),
+              _ResourceStatusStrip(
+                subtitleResourceCount: subtitleResourceCount,
+                vocabularyCount: vocabularyCount,
+                listeningInboxCount: listeningInboxCount,
+                statusText: statusText,
+              ),
+              const SizedBox(height: 32),
               Text(
                 l.text('startListening'),
                 style: Theme.of(
@@ -250,6 +306,233 @@ class _ResponsiveActionGrid extends StatelessWidget {
           if (index != children.length - 1) const SizedBox(width: 12),
         ],
       ],
+    );
+  }
+}
+
+class _ContinueLearningCard extends StatelessWidget {
+  const _ContinueLearningCard({
+    required this.mediaTitle,
+    required this.mediaPath,
+    required this.position,
+    required this.duration,
+    required this.onOpenMedia,
+  });
+
+  final String? mediaTitle;
+  final String? mediaPath;
+  final Duration position;
+  final Duration duration;
+  final VoidCallback onOpenMedia;
+
+  bool get _hasMedia => (mediaTitle ?? mediaPath ?? '').isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    final title = _hasMedia
+        ? mediaTitle ?? mediaPath!.split('/').last
+        : l.text('noRecentMedia');
+    final progress = duration.inMilliseconds <= 0
+        ? l.text('openMediaToContinue')
+        : '${formatDuration(position)} / ${formatDuration(duration)}';
+    return Material(
+      color: colors.primaryContainer.withValues(alpha: 0.42),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: colors.primary.withValues(alpha: 0.22)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onOpenMedia,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 16, 16, 16),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: colors.primary,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  _hasMedia
+                      ? Icons.play_circle_outline
+                      : Icons.folder_open_outlined,
+                  color: colors.onPrimary,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l.text('continueLearning'),
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: colors.primary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      progress,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: onOpenMedia,
+                icon: Icon(_hasMedia ? Icons.play_arrow : Icons.add),
+                label: Text(
+                  _hasMedia ? l.text('continuePlayback') : l.text('openMedia'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ResourceStatusStrip extends StatelessWidget {
+  const _ResourceStatusStrip({
+    required this.subtitleResourceCount,
+    required this.vocabularyCount,
+    required this.listeningInboxCount,
+    required this.statusText,
+  });
+
+  final int subtitleResourceCount;
+  final int vocabularyCount;
+  final int listeningInboxCount;
+  final String statusText;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 720;
+        final items = [
+          _StatusItem(
+            icon: Icons.subtitles_outlined,
+            label: l.text('subtitleReadiness'),
+            value: subtitleResourceCount == 0
+                ? l.text('notReadyYet')
+                : '$subtitleResourceCount',
+          ),
+          _StatusItem(
+            icon: Icons.menu_book_outlined,
+            label: l.text('savedWords'),
+            value: '$vocabularyCount',
+          ),
+          _StatusItem(
+            icon: Icons.inbox_outlined,
+            label: 'Inbox',
+            value: '$listeningInboxCount',
+          ),
+          _StatusItem(
+            icon: Icons.memory_outlined,
+            label: l.text('localCore'),
+            value: statusText.isEmpty ? l.text('coreReady') : statusText,
+          ),
+        ];
+        if (compact) {
+          return Column(
+            children: [
+              for (var index = 0; index < items.length; index++) ...[
+                _StatusTile(item: items[index]),
+                if (index != items.length - 1) const SizedBox(height: 8),
+              ],
+            ],
+          );
+        }
+        return Row(
+          children: [
+            for (var index = 0; index < items.length; index++) ...[
+              Expanded(child: _StatusTile(item: items[index])),
+              if (index != items.length - 1) const SizedBox(width: 8),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _StatusItem {
+  const _StatusItem({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+}
+
+class _StatusTile extends StatelessWidget {
+  const _StatusTile({required this.item});
+
+  final _StatusItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            Icon(item.icon, size: 18, color: colors.primary),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                item.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              item.value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

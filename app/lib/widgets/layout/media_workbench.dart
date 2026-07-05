@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
 
+import '../../localization.dart';
+
 class MediaWorkbench extends StatefulWidget {
   const MediaWorkbench({
     super.key,
     required this.mediaTitle,
     required this.playerStage,
     required this.learningPanel,
+    required this.mediaFraction,
+    required this.onMediaFractionChanged,
   });
 
   final String mediaTitle;
   final Widget playerStage;
   final Widget learningPanel;
+  final double mediaFraction;
+  final ValueChanged<double> onMediaFractionChanged;
 
   @override
   State<MediaWorkbench> createState() => _MediaWorkbenchState();
@@ -18,7 +24,32 @@ class MediaWorkbench extends StatefulWidget {
 
 class _MediaWorkbenchState extends State<MediaWorkbench> {
   static const splitterWidth = 9.0;
-  double _mediaFraction = 5 / 12;
+  static const defaultMediaFraction = 0.42;
+  static const compactMediaFraction = 0.32;
+  late double _mediaFraction;
+
+  @override
+  void initState() {
+    super.initState();
+    _mediaFraction = _normalizedFraction(widget.mediaFraction);
+  }
+
+  @override
+  void didUpdateWidget(MediaWorkbench oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.mediaFraction != oldWidget.mediaFraction &&
+        (widget.mediaFraction - _mediaFraction).abs() > 0.005) {
+      _mediaFraction = _normalizedFraction(widget.mediaFraction);
+    }
+  }
+
+  double _normalizedFraction(double value) => value.clamp(0.3, 0.62).toDouble();
+
+  void _setMediaFraction(double value) {
+    final next = _normalizedFraction(value);
+    setState(() => _mediaFraction = next);
+    widget.onMediaFractionChanged(next);
+  }
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -31,6 +62,8 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
               child: _MediaPane(
                 mediaTitle: widget.mediaTitle,
                 playerStage: widget.playerStage,
+                onCompactMedia: null,
+                onResetLayout: null,
               ),
             ),
             Divider(
@@ -59,14 +92,18 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
             child: _MediaPane(
               mediaTitle: widget.mediaTitle,
               playerStage: widget.playerStage,
+              onCompactMedia: () => _setMediaFraction(compactMediaFraction),
+              onResetLayout: () => _setMediaFraction(defaultMediaFraction),
             ),
           ),
           _WorkbenchSplitter(
             onDrag: (delta) {
-              setState(() {
-                _mediaFraction = (_mediaFraction + delta / availableWidth)
-                    .clamp(minimumFraction, maximumFraction);
-              });
+              _setMediaFraction(
+                (_mediaFraction + delta / availableWidth).clamp(
+                  minimumFraction,
+                  maximumFraction,
+                ),
+              );
             },
           ),
           Expanded(child: widget.learningPanel),
@@ -105,14 +142,22 @@ class _WorkbenchSplitter extends StatelessWidget {
 }
 
 class _MediaPane extends StatelessWidget {
-  const _MediaPane({required this.mediaTitle, required this.playerStage});
+  const _MediaPane({
+    required this.mediaTitle,
+    required this.playerStage,
+    required this.onCompactMedia,
+    required this.onResetLayout,
+  });
 
   final String mediaTitle;
   final Widget playerStage;
+  final VoidCallback? onCompactMedia;
+  final VoidCallback? onResetLayout;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final l = AppLocalizations.of(context);
     return ColoredBox(
       color: colors.surface,
       child: Column(
@@ -140,6 +185,18 @@ class _MediaPane extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (onCompactMedia != null)
+                    IconButton(
+                      tooltip: l.text('compactMediaPane'),
+                      onPressed: onCompactMedia,
+                      icon: const Icon(Icons.compress),
+                    ),
+                  if (onResetLayout != null)
+                    IconButton(
+                      tooltip: l.text('resetWorkbenchLayout'),
+                      onPressed: onResetLayout,
+                      icon: const Icon(Icons.restart_alt),
+                    ),
                 ],
               ),
             ),
@@ -147,7 +204,7 @@ class _MediaPane extends StatelessWidget {
           Divider(height: 1, color: colors.outlineVariant),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(12),
               child: Center(
                 child: AspectRatio(aspectRatio: 16 / 9, child: playerStage),
               ),

@@ -26,6 +26,7 @@ class AppSettings {
     this.primaryColor = 0xffffffff,
     this.secondaryColor = 0xffb8d8ff,
     this.transcriptWidth = 430,
+    this.workbenchMediaFraction = 0.42,
     this.ffmpegPath = '',
     this.ffprobePath = '',
     this.ytDlpPath = '',
@@ -117,6 +118,12 @@ class AppSettings {
       primaryColor: json['primary_color'] as int? ?? 0xffffffff,
       secondaryColor: json['secondary_color'] as int? ?? 0xffb8d8ff,
       transcriptWidth: _number(json['transcript_width'], 430, 260, 900),
+      workbenchMediaFraction: _number(
+        json['workbench_media_fraction'],
+        0.42,
+        0.3,
+        0.62,
+      ),
       ffmpegPath: json['ffmpeg_path'] as String? ?? '',
       ffprobePath: json['ffprobe_path'] as String? ?? '',
       ytDlpPath: json['yt_dlp_path'] as String? ?? '',
@@ -187,6 +194,7 @@ class AppSettings {
   final int primaryColor;
   final int secondaryColor;
   final double transcriptWidth;
+  final double workbenchMediaFraction;
   final String ffmpegPath;
   final String ffprobePath;
   final String ytDlpPath;
@@ -272,6 +280,7 @@ class AppSettings {
         'primary_color': primaryColor,
         'secondary_color': secondaryColor,
         'transcript_width': transcriptWidth,
+        'workbench_media_fraction': workbenchMediaFraction,
         'ffmpeg_path': ffmpegPath,
         'ffprobe_path': ffprobePath,
         'yt_dlp_path': ytDlpPath,
@@ -326,6 +335,7 @@ class AppSettings {
     int? primaryColor,
     int? secondaryColor,
     double? transcriptWidth,
+    double? workbenchMediaFraction,
     String? ffmpegPath,
     String? ffprobePath,
     String? ytDlpPath,
@@ -380,6 +390,8 @@ class AppSettings {
     primaryColor: primaryColor ?? this.primaryColor,
     secondaryColor: secondaryColor ?? this.secondaryColor,
     transcriptWidth: transcriptWidth ?? this.transcriptWidth,
+    workbenchMediaFraction:
+        workbenchMediaFraction ?? this.workbenchMediaFraction,
     ffmpegPath: ffmpegPath ?? this.ffmpegPath,
     ffprobePath: ffprobePath ?? this.ffprobePath,
     ytDlpPath: ytDlpPath ?? this.ytDlpPath,

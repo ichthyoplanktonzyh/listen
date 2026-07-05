@@ -36,6 +36,8 @@ void main() {
             key: Key('learning-panel'),
             color: Colors.white,
           ),
+          mediaFraction: 0.42,
+          onMediaFractionChanged: _noopFraction,
         ),
       ),
     );
@@ -61,6 +63,8 @@ void main() {
             color: Colors.black,
           ),
           learningPanel: ColoredBox(color: Colors.white),
+          mediaFraction: 0.42,
+          onMediaFractionChanged: _noopFraction,
         ),
       ),
     );
@@ -93,6 +97,8 @@ void main() {
           mediaTitle: 'CNN 10.mp4',
           playerStage: ColoredBox(color: Colors.black),
           learningPanel: ColoredBox(color: Colors.white),
+          mediaFraction: 0.42,
+          onMediaFractionChanged: _noopFraction,
         ),
       ),
     );
@@ -170,3 +176,5 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 }
+
+void _noopFraction(double value) {}

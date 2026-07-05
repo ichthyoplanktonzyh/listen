@@ -128,7 +128,6 @@ class PlaybackControls extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final roomy = constraints.maxWidth >= 1080;
-            final veryRoomy = constraints.maxWidth >= 1320;
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -207,66 +206,171 @@ class PlaybackControls extends StatelessWidget {
                           icon: Icons.repeat_one,
                         ),
                         if (roomy) ...[
-                          IconButton(
-                            tooltip: extensiveListeningActive
-                                ? l.text('finishExtensiveListening')
-                                : l.text('startExtensiveListening'),
-                            onPressed: onToggleExtensiveListening,
-                            icon: Icon(
-                              extensiveListeningActive
-                                  ? Icons.hearing
-                                  : Icons.hearing_disabled,
-                            ),
+                          const SizedBox(width: 10),
+                          _PlaybackMenuButton(
+                            tooltip: l.text('listeningMode'),
+                            label: l.text('listeningMode'),
+                            icon: extensiveListeningActive
+                                ? Icons.hearing
+                                : Icons.hearing_outlined,
+                            selected: extensiveListeningActive,
+                            badgeCount: listeningInboxCount,
+                            onSelected: (value) {
+                              if (value == 'toggle-listening') {
+                                onToggleExtensiveListening();
+                              }
+                              if (value == 'mark-inbox') {
+                                onCaptureListeningInbox();
+                              }
+                              if (value == 'hard-interrupt') {
+                                onHardInterruptListening();
+                              }
+                            },
+                            itemBuilder: (_) => [
+                              PopupMenuItem(
+                                value: 'toggle-listening',
+                                child: _PlaybackMenuRow(
+                                  icon: extensiveListeningActive
+                                      ? Icons.hearing
+                                      : Icons.hearing_outlined,
+                                  title: extensiveListeningActive
+                                      ? l.text('finishExtensiveListening')
+                                      : l.text('startExtensiveListening'),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'mark-inbox',
+                                enabled: listeningMarkEnabled,
+                                child: _PlaybackMenuRow(
+                                  icon: Icons.bookmark_add_outlined,
+                                  title: l.text('markListeningInbox'),
+                                  trailing: listeningInboxCount > 0
+                                      ? '$listeningInboxCount'
+                                      : null,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'hard-interrupt',
+                                enabled: listeningMarkEnabled,
+                                child: _PlaybackMenuRow(
+                                  icon: Icons.pause_circle_outline,
+                                  title: l.text('hardInterruptListening'),
+                                ),
+                              ),
+                            ],
                           ),
-                          IconButton(
-                            tooltip: l.text('markListeningInbox'),
-                            onPressed: listeningMarkEnabled
-                                ? onCaptureListeningInbox
-                                : null,
-                            icon: Badge.count(
-                              count: listeningInboxCount,
-                              isLabelVisible: listeningInboxCount > 0,
-                              child: const Icon(Icons.bookmark_add_outlined),
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: l.text('hardInterruptListening'),
-                            onPressed: listeningMarkEnabled
-                                ? onHardInterruptListening
-                                : null,
-                            icon: const Icon(Icons.pause_circle_outline),
-                          ),
-                          const SizedBox(width: 6),
-                          IconButton(
-                            tooltip: l.text('previousChunk'),
-                            onPressed: chunkControlsEnabled
-                                ? onSeekToPreviousChunk
-                                : null,
-                            icon: const Icon(Icons.keyboard_double_arrow_left),
-                          ),
-                          _ToggleIcon(
-                            tooltip: l.text('loopChunk'),
-                            selected: chunkLoopActive,
-                            onPressed: chunkControlsEnabled
-                                ? onLoopCurrentChunk
-                                : null,
+                          _PlaybackMenuButton(
+                            tooltip: l.text('chunkMode'),
+                            label: l.text('chunkMode'),
                             icon: Icons.segment,
+                            selected: chunkLoopActive,
+                            enabled: chunkControlsEnabled,
+                            onSelected: (value) {
+                              if (value == 'previous-chunk') {
+                                onSeekToPreviousChunk();
+                              }
+                              if (value == 'loop-chunk') onLoopCurrentChunk();
+                              if (value == 'next-chunk') onSeekToNextChunk();
+                              if (value == 'expand-chunk') {
+                                onLoopExpandedChunk();
+                              }
+                              if (value == 'stop-source-loop') {
+                                onStopSourceLoop();
+                              }
+                            },
+                            itemBuilder: (_) => [
+                              PopupMenuItem(
+                                value: 'previous-chunk',
+                                child: _PlaybackMenuRow(
+                                  icon: Icons.keyboard_double_arrow_left,
+                                  title: l.text('previousChunk'),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'loop-chunk',
+                                child: _PlaybackMenuRow(
+                                  icon: Icons.segment,
+                                  title: l.text('loopChunk'),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'next-chunk',
+                                child: _PlaybackMenuRow(
+                                  icon: Icons.keyboard_double_arrow_right,
+                                  title: l.text('nextChunk'),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'expand-chunk',
+                                child: _PlaybackMenuRow(
+                                  icon: Icons.unfold_more,
+                                  title: l.text('expandChunk'),
+                                ),
+                              ),
+                              if (sourceLoopStart != null) ...[
+                                const PopupMenuDivider(),
+                                PopupMenuItem(
+                                  value: 'stop-source-loop',
+                                  child: _PlaybackMenuRow(
+                                    icon: Icons.stop_circle_outlined,
+                                    title: l.text('stopSourceLoop'),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
-                          IconButton(
-                            tooltip: l.text('nextChunk'),
-                            onPressed: chunkControlsEnabled
-                                ? onSeekToNextChunk
-                                : null,
-                            icon: const Icon(Icons.keyboard_double_arrow_right),
+                          _PlaybackMenuButton(
+                            tooltip: l.text('subtitleMode'),
+                            label: l.text('subtitleMode'),
+                            icon: Icons.subtitles_outlined,
+                            selected: subtitlesVisible || statusStylesVisible,
+                            onSelected: (value) {
+                              if (value == 'toggle-primary') {
+                                onSubtitlesVisibleChanged(!subtitlesVisible);
+                              }
+                              if (value == 'toggle-secondary') {
+                                onSecondaryVisibleChanged(
+                                  !secondarySubtitlesVisible,
+                                );
+                              }
+                              if (value == 'toggle-status-styles') {
+                                onStatusStylesChanged(!statusStylesVisible);
+                              }
+                            },
+                            itemBuilder: (_) => [
+                              PopupMenuItem(
+                                value: 'toggle-primary',
+                                child: _PlaybackMenuRow(
+                                  icon: subtitlesVisible
+                                      ? Icons.check_box_outlined
+                                      : Icons.check_box_outline_blank,
+                                  title: l.text('subtitles'),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'toggle-secondary',
+                                enabled: secondarySubtitlesAvailable,
+                                child: _PlaybackMenuRow(
+                                  icon: secondarySubtitlesVisible
+                                      ? Icons.check_box_outlined
+                                      : Icons.check_box_outline_blank,
+                                  title: l.text('secondary'),
+                                  subtitle: secondarySubtitlesAvailable
+                                      ? null
+                                      : l.text('secondarySubtitleUnavailable'),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'toggle-status-styles',
+                                child: _PlaybackMenuRow(
+                                  icon: statusStylesVisible
+                                      ? Icons.check_box_outlined
+                                      : Icons.check_box_outline_blank,
+                                  title: l.text('wordStyles'),
+                                ),
+                              ),
+                            ],
                           ),
-                          if (veryRoomy)
-                            IconButton(
-                              tooltip: l.text('expandChunk'),
-                              onPressed: chunkControlsEnabled
-                                  ? onLoopExpandedChunk
-                                  : null,
-                              icon: const Icon(Icons.unfold_more),
-                            ),
                         ] else
                           IconButton(
                             tooltip: l.text('markListeningInbox'),
@@ -280,29 +384,6 @@ class PlaybackControls extends StatelessWidget {
                             ),
                           ),
                         const Spacer(),
-                        _ToggleIcon(
-                          tooltip: l.text('subtitles'),
-                          selected: subtitlesVisible,
-                          onPressed: () =>
-                              onSubtitlesVisibleChanged(!subtitlesVisible),
-                          icon: Icons.subtitles_outlined,
-                        ),
-                        if (roomy)
-                          _ToggleIcon(
-                            tooltip: secondarySubtitlesAvailable
-                                ? l.text('secondary')
-                                : l.text('secondarySubtitleUnavailable'),
-                            selected:
-                                secondarySubtitlesAvailable &&
-                                secondarySubtitlesVisible,
-                            onPressed: secondarySubtitlesAvailable
-                                ? () => onSecondaryVisibleChanged(
-                                    !secondarySubtitlesVisible,
-                                  )
-                                : null,
-                            icon: Icons.closed_caption_outlined,
-                          ),
-                        const SizedBox(width: 4),
                         DropdownButtonHideUnderline(
                           child: DropdownButton<double>(
                             value: rate,
@@ -508,6 +589,136 @@ class PlaybackControls extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _PlaybackMenuButton extends StatelessWidget {
+  const _PlaybackMenuButton({
+    required this.tooltip,
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onSelected,
+    required this.itemBuilder,
+    this.enabled = true,
+    this.badgeCount = 0,
+  });
+
+  final String tooltip;
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final bool enabled;
+  final int badgeCount;
+  final PopupMenuItemSelected<String> onSelected;
+  final PopupMenuItemBuilder<String> itemBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final foreground = enabled
+        ? selected
+              ? colors.primary
+              : colors.onSurface
+        : colors.onSurfaceVariant.withValues(alpha: 0.55);
+    final iconWidget = Icon(icon, size: 18, color: foreground);
+    return Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: PopupMenuButton<String>(
+        tooltip: tooltip,
+        enabled: enabled,
+        onSelected: onSelected,
+        itemBuilder: itemBuilder,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: selected
+                ? colors.primaryContainer
+                : colors.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(color: colors.outlineVariant),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Badge.count(
+                  count: badgeCount,
+                  isLabelVisible: badgeCount > 0,
+                  child: iconWidget,
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: foreground,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Icon(Icons.arrow_drop_down, size: 18, color: foreground),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlaybackMenuRow extends StatelessWidget {
+  const _PlaybackMenuRow({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final String? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 250),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: colors.onSurfaceVariant),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                if (subtitle != null)
+                  Text(
+                    subtitle!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (trailing != null) ...[
+            const SizedBox(width: 12),
+            Text(
+              trailing!,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: colors.primary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

@@ -23,6 +23,7 @@ class SettingsController extends ChangeNotifier {
   double get subtitlePositionY => _settings.subtitlePositionY;
   double get subtitleBackgroundOpacity => _settings.subtitleBackgroundOpacity;
   double get transcriptWidth => _settings.transcriptWidth;
+  double get workbenchMediaFraction => _settings.workbenchMediaFraction;
   double get volume => _settings.volume;
   double get rate => _settings.rate;
   bool get subtitlesVisible => _settings.subtitlesVisible;

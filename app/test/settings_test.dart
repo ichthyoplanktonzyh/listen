@@ -175,6 +175,24 @@ void main() {
     expect(settings.chunkHighlightStyle, 'bounce');
   });
 
+  test('loads workbench media split v8 with safe bounds', () {
+    final settings = AppSettings.fromJson({
+      'version': 8,
+      'workbench_media_fraction': 0.58,
+    });
+    final clamped = AppSettings.fromJson({
+      'version': 8,
+      'workbench_media_fraction': 0.9,
+    });
+
+    expect(settings.workbenchMediaFraction, 0.58);
+    expect(clamped.workbenchMediaFraction, 0.62);
+    expect(
+      settings.copyWith(workbenchMediaFraction: 0.36).workbenchMediaFraction,
+      0.36,
+    );
+  });
+
   test('loads independent sound pattern ribbon visibility v8', () {
     final settings = AppSettings.fromJson({
       'version': 8,

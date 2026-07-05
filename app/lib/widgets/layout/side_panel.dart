@@ -211,7 +211,11 @@ class _SidePanelState extends State<SidePanel> {
             1 => _subtitleResources(),
             2 =>
               learningController.selectedLexicalDetails == null
-                  ? Center(child: Text(l.text('noWordSelected')))
+                  ? _PanelEmptyState(
+                      icon: Icons.menu_book_outlined,
+                      title: l.text('noWordSelected'),
+                      message: l.text('selectWordFromTranscript'),
+                    )
                   : WordLearningPanel(
                       details: learningController.selectedLexicalDetails!,
                       dictionary: learningController.selectedDictionary,
@@ -226,7 +230,15 @@ class _SidePanelState extends State<SidePanel> {
                     ),
             3 =>
               learningController.diagnosis == null
-                  ? Center(child: Text(l.text('diagnosis')))
+                  ? _PanelEmptyState(
+                      icon: Icons.analytics_outlined,
+                      title: l.text('diagnosisUnavailable'),
+                      message: l.text('openSentenceDiagnosisHint'),
+                      actionLabel: l.text('openDiagnosis'),
+                      onAction: subtitleController.currentPrimaryCue == null
+                          ? null
+                          : () => unawaited(_openDiagnosisView()),
+                    )
                   : _diagnosisCard(),
             4 => _practicePanel(),
             5 => ListeningInboxPanel(
@@ -256,51 +268,33 @@ class _SidePanelState extends State<SidePanel> {
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: colors.outlineVariant)),
       ),
-      child: SizedBox(
-        height: 52,
-        child: Row(
-          children: [
-            for (var index = 0; index < destinations.length; index++)
-              Expanded(
-                child: Tooltip(
-                  message: destinations[index].$2,
-                  child: InkWell(
-                    onTap: () {
-                      if (index == 3) {
-                        unawaited(_openDiagnosisView());
-                      } else {
-                        learningController.selectSidePanel(index);
-                      }
-                    },
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: learningController.sidePanel == index
-                            ? colors.primaryContainer
-                            : Colors.transparent,
-                        border: Border(
-                          bottom: BorderSide(
-                            color: learningController.sidePanel == index
-                                ? colors.primary
-                                : Colors.transparent,
-                            width: 2,
-                          ),
-                        ),
-                      ),
-                      child: Center(
-                        child: Icon(
-                          destinations[index].$1,
-                          size: 21,
-                          color: learningController.sidePanel == index
-                              ? colors.primary
-                              : colors.onSurfaceVariant,
-                        ),
-                      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final showLabels = constraints.maxWidth >= 520;
+          return SizedBox(
+            height: showLabels ? 58 : 52,
+            child: Row(
+              children: [
+                for (var index = 0; index < destinations.length; index++)
+                  Expanded(
+                    child: _PanelTab(
+                      icon: destinations[index].$1,
+                      label: destinations[index].$2,
+                      selected: learningController.sidePanel == index,
+                      showLabel: showLabels,
+                      onTap: () {
+                        if (index == 3) {
+                          unawaited(_openDiagnosisView());
+                        } else {
+                          learningController.selectSidePanel(index);
+                        }
+                      },
                     ),
                   ),
-                ),
-              ),
-          ],
-        ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -515,4 +509,131 @@ class _SidePanelState extends State<SidePanel> {
     onCloseStuckPoint: _closeStuckPoint,
     onOpenDiagnosis: _openDiagnosisView,
   );
+}
+
+class _PanelTab extends StatelessWidget {
+  const _PanelTab({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.showLabel,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final bool showLabel;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: label,
+      child: InkWell(
+        onTap: onTap,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: selected ? colors.primaryContainer : Colors.transparent,
+            border: Border(
+              bottom: BorderSide(
+                color: selected ? colors.primary : Colors.transparent,
+                width: 2,
+              ),
+            ),
+          ),
+          child: Center(
+            child: showLabel
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        icon,
+                        size: 20,
+                        color: selected
+                            ? colors.primary
+                            : colors.onSurfaceVariant,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: selected
+                              ? colors.primary
+                              : colors.onSurfaceVariant,
+                          fontWeight: selected
+                              ? FontWeight.w800
+                              : FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  )
+                : Icon(
+                    icon,
+                    size: 21,
+                    color: selected ? colors.primary : colors.onSurfaceVariant,
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PanelEmptyState extends StatelessWidget {
+  const _PanelEmptyState({
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 34, color: colors.primary),
+              const SizedBox(height: 14),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+              if (actionLabel != null) ...[
+                const SizedBox(height: 16),
+                FilledButton(onPressed: onAction, child: Text(actionLabel!)),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

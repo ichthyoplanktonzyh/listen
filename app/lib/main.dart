@@ -281,6 +281,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       primaryColor: settingsController.primaryColor.toARGB32(),
       secondaryColor: settingsController.secondaryColor.toARGB32(),
       transcriptWidth: settingsController.transcriptWidth,
+      workbenchMediaFraction: settingsController.workbenchMediaFraction,
       ffmpegPath: settingsController.ffmpegPath,
       ffprobePath: settingsController.ffprobePath,
       ytDlpPath: settingsController.ytDlpPath,
@@ -303,8 +304,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
       soundPatternRibbonVisible: settingsController.soundPatternRibbonVisible,
       soundPatternDisplayMode: settingsController.soundPatternDisplayMode,
       phonemeRibbonStyle: settingsController.phonemeRibbonStyle,
+      learningLanguage: settingsController.learningLanguage,
     ),
   );
+
+  void _setWorkbenchMediaFraction(double value) {
+    settingsController.setSettings(
+      settingsController.settings.copyWith(workbenchMediaFraction: value),
+    );
+    unawaited(settingsController.save());
+  }
 
   Future<void> _connectApi() async {
     if (api != null) return;
@@ -1677,6 +1686,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 onOpenVocabulary: _openVocabulary,
                                 onOpenSettings: () =>
                                     unawaited(_openSettings()),
+                                currentMediaTitle: playerController.mediaTitle,
+                                currentMediaPath: playerController.mediaPath,
+                                currentPosition: playerController.position,
+                                currentDuration: playerController.duration,
+                                subtitleResourceCount:
+                                    subtitleController.subtitleResources.length,
+                                vocabularyCount:
+                                    learningController.wordEntries.length +
+                                    learningController.phraseEntries.length,
+                                listeningInboxCount:
+                                    extensiveListeningController
+                                        .activeItemCount,
+                                statusText: playerController.status,
                               )
                             : MediaWorkbench(
                                 mediaTitle: playerController.mediaPath!
@@ -1684,6 +1706,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                     .last,
                                 playerStage: _playerStage(),
                                 learningPanel: _sidePanel(),
+                                mediaFraction:
+                                    settingsController.workbenchMediaFraction,
+                                onMediaFractionChanged:
+                                    _setWorkbenchMediaFraction,
                               ),
                       ),
                       if (downloadController.snapshot != null)
