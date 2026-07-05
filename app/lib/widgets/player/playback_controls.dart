@@ -468,6 +468,7 @@ class PlaybackControls extends StatelessWidget {
     var localSubtitles = subtitlesVisible;
     var localSecondary = secondarySubtitlesVisible;
     var localVolume = volume;
+    var localRate = rate;
     await showDialog<void>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -508,7 +509,7 @@ class PlaybackControls extends StatelessWidget {
                   ListTile(
                     title: Text(l.text('rate')),
                     trailing: DropdownButton<double>(
-                      value: rate,
+                      value: localRate,
                       items: [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
                           .map(
                             (value) => DropdownMenuItem(
@@ -518,7 +519,9 @@ class PlaybackControls extends StatelessWidget {
                           )
                           .toList(),
                       onChanged: (value) {
-                        if (value != null) onRateChanged(value);
+                        if (value == null) return;
+                        setDialogState(() => localRate = value);
+                        onRateChanged(value);
                       },
                     ),
                   ),

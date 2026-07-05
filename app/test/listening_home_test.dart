@@ -6,7 +6,14 @@ import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/home/listening_home.dart';
 
 void main() {
-  Widget app({required VoidCallback onOpenMedia, VoidCallback? onOpenOnline}) =>
+  Widget app({
+    required VoidCallback onOpenMedia,
+    VoidCallback? onOpenOnline,
+    VoidCallback? onContinue,
+    String? recentMediaTitle,
+    Duration recentPosition = Duration.zero,
+    Duration recentDuration = Duration.zero,
+  }) =>
       MaterialApp(
         theme: ListenTheme.light(),
         locale: const Locale('zh'),
@@ -21,9 +28,13 @@ void main() {
           body: ListeningHome(
             onOpenMedia: onOpenMedia,
             onOpenOnline: onOpenOnline ?? () {},
+            onContinue: onContinue ?? () {},
             onOpenSubtitleResources: () {},
             onOpenVocabulary: () {},
             onOpenSettings: () {},
+            recentMediaTitle: recentMediaTitle,
+            recentPosition: recentPosition,
+            recentDuration: recentDuration,
           ),
         ),
       );
@@ -63,6 +74,33 @@ void main() {
     expect(find.text('首页'), findsNothing);
     await tester.tap(find.text('打开网址'));
     expect(openOnlineCalls, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('recent media surfaces a continue entry that resumes playback', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var continueCalls = 0;
+    var openMediaCalls = 0;
+
+    await tester.pumpWidget(
+      app(
+        onOpenMedia: () => openMediaCalls += 1,
+        onContinue: () => continueCalls += 1,
+        recentMediaTitle: 'BBC News Review.mp4',
+        recentPosition: const Duration(minutes: 3, seconds: 20),
+        recentDuration: const Duration(minutes: 10),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('BBC News Review.mp4'), findsOneWidget);
+
+    await tester.tap(find.text('继续播放'));
+    expect(continueCalls, 1);
+    expect(openMediaCalls, 0);
     expect(tester.takeException(), isNull);
   });
 }

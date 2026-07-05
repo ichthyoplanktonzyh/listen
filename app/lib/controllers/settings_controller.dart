@@ -24,6 +24,11 @@ class SettingsController extends ChangeNotifier {
   double get subtitleBackgroundOpacity => _settings.subtitleBackgroundOpacity;
   double get transcriptWidth => _settings.transcriptWidth;
   double get workbenchMediaFraction => _settings.workbenchMediaFraction;
+  String get lastMediaPath => _settings.lastMediaPath;
+  String get lastMediaTitle => _settings.lastMediaTitle;
+  int get lastMediaPositionMs => _settings.lastMediaPositionMs;
+  int get lastMediaDurationMs => _settings.lastMediaDurationMs;
+  int get lastMediaSubtitleCount => _settings.lastMediaSubtitleCount;
   double get volume => _settings.volume;
   double get rate => _settings.rate;
   bool get subtitlesVisible => _settings.subtitlesVisible;
@@ -60,7 +65,47 @@ class SettingsController extends ChangeNotifier {
   }
 
   /// Persist current settings to disk.
-  Future<void> save() => _settings.save();
+  Future<void> save() {
+    _saveDebounce?.cancel();
+    return _settings.save();
+  }
+
+  Timer? _saveDebounce;
+
+  /// Coalesce rapid persistence (drag ratios, playback progress) into a single
+  /// disk write so high-frequency updates do not rewrite the settings file on
+  /// every event.
+  void saveSoon({Duration delay = const Duration(milliseconds: 600)}) {
+    _saveDebounce?.cancel();
+    _saveDebounce = Timer(delay, () => unawaited(_settings.save()));
+  }
+
+  /// Record the currently playing media so the home surface can offer a real
+  /// "continue" entry and honest readiness at the next cold start. Updates in
+  /// memory silently (no rebuild storm during playback) and persists lazily.
+  void recordRecentMedia({
+    required String path,
+    required String title,
+    required int positionMs,
+    required int durationMs,
+    required int subtitleCount,
+  }) {
+    if (path.isEmpty) return;
+    _settings = _settings.copyWith(
+      lastMediaPath: path,
+      lastMediaTitle: title,
+      lastMediaPositionMs: positionMs < 0 ? 0 : positionMs,
+      lastMediaDurationMs: durationMs < 0 ? 0 : durationMs,
+      lastMediaSubtitleCount: subtitleCount < 0 ? 0 : subtitleCount,
+    );
+    saveSoon();
+  }
+
+  @override
+  void dispose() {
+    _saveDebounce?.cancel();
+    super.dispose();
+  }
 
   /// Atomically apply an update, notify listeners, and persist.
   Future<void> update(AppSettings next) async {

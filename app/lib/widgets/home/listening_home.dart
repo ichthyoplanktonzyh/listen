@@ -8,30 +8,36 @@ class ListeningHome extends StatelessWidget {
     super.key,
     required this.onOpenMedia,
     required this.onOpenOnline,
+    required this.onContinue,
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
     required this.onOpenSettings,
-    this.currentMediaTitle,
-    this.currentMediaPath,
-    this.currentPosition = Duration.zero,
-    this.currentDuration = Duration.zero,
-    this.subtitleResourceCount = 0,
+    this.recentMediaTitle,
+    this.recentMediaPath,
+    this.recentPosition = Duration.zero,
+    this.recentDuration = Duration.zero,
+    this.recentSubtitleCount = 0,
     this.vocabularyCount = 0,
+    this.vocabularyCapped = false,
+    this.vocabularyKnown = false,
     this.listeningInboxCount = 0,
     this.statusText = '',
   });
 
   final VoidCallback onOpenMedia;
   final VoidCallback onOpenOnline;
+  final VoidCallback onContinue;
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
   final VoidCallback onOpenSettings;
-  final String? currentMediaTitle;
-  final String? currentMediaPath;
-  final Duration currentPosition;
-  final Duration currentDuration;
-  final int subtitleResourceCount;
+  final String? recentMediaTitle;
+  final String? recentMediaPath;
+  final Duration recentPosition;
+  final Duration recentDuration;
+  final int recentSubtitleCount;
   final int vocabularyCount;
+  final bool vocabularyCapped;
+  final bool vocabularyKnown;
   final int listeningInboxCount;
   final String statusText;
 
@@ -59,14 +65,17 @@ class ListeningHome extends StatelessWidget {
                 compact: !showSidebar,
                 onOpenMedia: onOpenMedia,
                 onOpenOnline: onOpenOnline,
+                onContinue: onContinue,
                 onOpenSubtitleResources: onOpenSubtitleResources,
                 onOpenVocabulary: onOpenVocabulary,
-                currentMediaTitle: currentMediaTitle,
-                currentMediaPath: currentMediaPath,
-                currentPosition: currentPosition,
-                currentDuration: currentDuration,
-                subtitleResourceCount: subtitleResourceCount,
+                recentMediaTitle: recentMediaTitle,
+                recentMediaPath: recentMediaPath,
+                recentPosition: recentPosition,
+                recentDuration: recentDuration,
+                recentSubtitleCount: recentSubtitleCount,
                 vocabularyCount: vocabularyCount,
+                vocabularyCapped: vocabularyCapped,
+                vocabularyKnown: vocabularyKnown,
                 listeningInboxCount: listeningInboxCount,
                 statusText: statusText,
               ),
@@ -156,14 +165,17 @@ class _HomeContent extends StatelessWidget {
     required this.compact,
     required this.onOpenMedia,
     required this.onOpenOnline,
+    required this.onContinue,
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
-    required this.currentMediaTitle,
-    required this.currentMediaPath,
-    required this.currentPosition,
-    required this.currentDuration,
-    required this.subtitleResourceCount,
+    required this.recentMediaTitle,
+    required this.recentMediaPath,
+    required this.recentPosition,
+    required this.recentDuration,
+    required this.recentSubtitleCount,
     required this.vocabularyCount,
+    required this.vocabularyCapped,
+    required this.vocabularyKnown,
     required this.listeningInboxCount,
     required this.statusText,
   });
@@ -171,14 +183,17 @@ class _HomeContent extends StatelessWidget {
   final bool compact;
   final VoidCallback onOpenMedia;
   final VoidCallback onOpenOnline;
+  final VoidCallback onContinue;
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
-  final String? currentMediaTitle;
-  final String? currentMediaPath;
-  final Duration currentPosition;
-  final Duration currentDuration;
-  final int subtitleResourceCount;
+  final String? recentMediaTitle;
+  final String? recentMediaPath;
+  final Duration recentPosition;
+  final Duration recentDuration;
+  final int recentSubtitleCount;
   final int vocabularyCount;
+  final bool vocabularyCapped;
+  final bool vocabularyKnown;
   final int listeningInboxCount;
   final String statusText;
 
@@ -208,16 +223,20 @@ class _HomeContent extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               _ContinueLearningCard(
-                mediaTitle: currentMediaTitle,
-                mediaPath: currentMediaPath,
-                position: currentPosition,
-                duration: currentDuration,
+                mediaTitle: recentMediaTitle,
+                mediaPath: recentMediaPath,
+                position: recentPosition,
+                duration: recentDuration,
+                onContinue: onContinue,
                 onOpenMedia: onOpenMedia,
               ),
               const SizedBox(height: 14),
               _ResourceStatusStrip(
-                subtitleResourceCount: subtitleResourceCount,
+                recentSubtitleCount: recentSubtitleCount,
+                hasRecentMedia: (recentMediaPath ?? '').isNotEmpty,
                 vocabularyCount: vocabularyCount,
+                vocabularyCapped: vocabularyCapped,
+                vocabularyKnown: vocabularyKnown,
                 listeningInboxCount: listeningInboxCount,
                 statusText: statusText,
               ),
@@ -316,6 +335,7 @@ class _ContinueLearningCard extends StatelessWidget {
     required this.mediaPath,
     required this.position,
     required this.duration,
+    required this.onContinue,
     required this.onOpenMedia,
   });
 
@@ -323,6 +343,7 @@ class _ContinueLearningCard extends StatelessWidget {
   final String? mediaPath;
   final Duration position;
   final Duration duration;
+  final VoidCallback onContinue;
   final VoidCallback onOpenMedia;
 
   bool get _hasMedia => (mediaTitle ?? mediaPath ?? '').isNotEmpty;
@@ -345,7 +366,7 @@ class _ContinueLearningCard extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onOpenMedia,
+        onTap: _hasMedia ? onContinue : onOpenMedia,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(18, 16, 16, 16),
           child: Row(
@@ -399,7 +420,7 @@ class _ContinueLearningCard extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
-                onPressed: onOpenMedia,
+                onPressed: _hasMedia ? onContinue : onOpenMedia,
                 icon: Icon(_hasMedia ? Icons.play_arrow : Icons.add),
                 label: Text(
                   _hasMedia ? l.text('continuePlayback') : l.text('openMedia'),
@@ -415,14 +436,20 @@ class _ContinueLearningCard extends StatelessWidget {
 
 class _ResourceStatusStrip extends StatelessWidget {
   const _ResourceStatusStrip({
-    required this.subtitleResourceCount,
+    required this.recentSubtitleCount,
+    required this.hasRecentMedia,
     required this.vocabularyCount,
+    required this.vocabularyCapped,
+    required this.vocabularyKnown,
     required this.listeningInboxCount,
     required this.statusText,
   });
 
-  final int subtitleResourceCount;
+  final int recentSubtitleCount;
+  final bool hasRecentMedia;
   final int vocabularyCount;
+  final bool vocabularyCapped;
+  final bool vocabularyKnown;
   final int listeningInboxCount;
   final String statusText;
 
@@ -436,18 +463,24 @@ class _ResourceStatusStrip extends StatelessWidget {
           _StatusItem(
             icon: Icons.subtitles_outlined,
             label: l.text('subtitleReadiness'),
-            value: subtitleResourceCount == 0
+            value: !hasRecentMedia
+                ? '—'
+                : recentSubtitleCount == 0
                 ? l.text('notReadyYet')
-                : '$subtitleResourceCount',
+                : '$recentSubtitleCount',
           ),
           _StatusItem(
             icon: Icons.menu_book_outlined,
             label: l.text('savedWords'),
-            value: '$vocabularyCount',
+            value: !vocabularyKnown
+                ? '—'
+                : vocabularyCapped
+                ? '$vocabularyCount+'
+                : '$vocabularyCount',
           ),
           _StatusItem(
             icon: Icons.inbox_outlined,
-            label: 'Inbox',
+            label: l.text('listeningInbox'),
             value: '$listeningInboxCount',
           ),
           _StatusItem(

@@ -187,6 +187,11 @@ class _SidePanelState extends State<SidePanel> {
     );
   }
 
+  // Transcript (0), word learning (2), diagnosis (3) and practice (4) act on
+  // the current sentence; subtitle resources (1) and inbox (5) do not.
+  bool get _showsPostureActions =>
+      const {0, 2, 3, 4}.contains(learningController.sidePanel);
+
   RhythmFrame? get _currentRhythmFrame {
     final cue = subtitleController.currentPrimaryCue;
     if (cue == null) return null;
@@ -205,7 +210,10 @@ class _SidePanelState extends State<SidePanel> {
     child: Column(
       children: [
         _panelNavigation(),
-        _postureActions(),
+        // Posture actions belong to the current sentence; hide them on the
+        // resource manager and inbox tabs so they are contextual, not a
+        // permanent button wall.
+        if (_showsPostureActions) _postureActions(),
         Expanded(
           child: switch (learningController.sidePanel) {
             1 => _subtitleResources(),
@@ -308,6 +316,9 @@ class _SidePanelState extends State<SidePanel> {
     baseColor: settingsController.primaryColor,
     onWord: _openWord,
     onSeekCue: _seekCue,
+    onImportSubtitle: playerController.mediaId == null
+        ? null
+        : () async => mediaSession.openSubtitle(secondary: false),
   );
 
   Widget _subtitleResources() => SubtitleResourceManagerPanel(
@@ -462,18 +473,10 @@ class _SidePanelState extends State<SidePanel> {
                 ),
               ),
             ],
-            child: Chip(
-              avatar: Icon(
-                Icons.fact_check_outlined,
-                size: 18,
-                color: hasCue ? null : Theme.of(context).disabledColor,
-              ),
-              label: Text(
-                l.text('testPosture'),
-                style: TextStyle(
-                  color: hasCue ? null : Theme.of(context).disabledColor,
-                ),
-              ),
+            child: _MenuTriggerButton(
+              icon: Icons.fact_check_outlined,
+              label: l.text('testPosture'),
+              enabled: hasCue,
             ),
           ),
           Tooltip(
@@ -509,6 +512,52 @@ class _SidePanelState extends State<SidePanel> {
     onCloseStuckPoint: _closeStuckPoint,
     onOpenDiagnosis: _openDiagnosisView,
   );
+}
+
+/// Outlined dropdown trigger styled to match the sibling [OutlinedButton]
+/// posture actions, so the Test menu no longer reads as a stray chip. The
+/// button itself stays inert; the enclosing [PopupMenuButton] opens the menu.
+class _MenuTriggerButton extends StatelessWidget {
+  const _MenuTriggerButton({
+    required this.icon,
+    required this.label,
+    required this.enabled,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final foreground = enabled ? colors.primary : Theme.of(context).disabledColor;
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: enabled ? colors.outline : colors.outlineVariant,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: foreground),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: foreground,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Icon(Icons.arrow_drop_down, size: 20, color: foreground),
+        ],
+      ),
+    );
+  }
 }
 
 class _PanelTab extends StatelessWidget {

@@ -35,6 +35,16 @@ Future<String> computeOpenSubtitlesMovieHash(String path) async {
   }
 }
 
+/// Aggregate saved-vocabulary total for the home readiness surface. [capped]
+/// signals that at least one status page hit the backend limit, so [total]
+/// under-reports very large collections.
+class SavedVocabularyCount {
+  const SavedVocabularyCount({required this.total, required this.capped});
+
+  final int total;
+  final bool capped;
+}
+
 /// Raw HTTP exchange result used by the [LocalApi] transport seam.
 typedef ApiResponse = ({int statusCode, String body});
 
@@ -667,6 +677,30 @@ class LocalApi {
 
   Future<Map<String, dynamic>> exportVocabulary() async =>
       (await _request('GET', '/v1/vocabulary/export')) as Map<String, dynamic>;
+
+  /// Total saved vocabulary for [language], aggregated client-side across the
+  /// learning statuses. Each status page is capped by the backend, so very
+  /// large collections report the cap with [SavedVocabularyCount.capped] set.
+  Future<SavedVocabularyCount> savedVocabularyCount({
+    required String language,
+  }) async {
+    const statuses = [
+      'unknown_meaning',
+      'known_not_recognized',
+      'known_recognized',
+    ];
+    const pageLimit = 200;
+    final pages = await Future.wait(
+      statuses.map((status) => listVocabulary(status, language: language)),
+    );
+    var total = 0;
+    var capped = false;
+    for (final page in pages) {
+      total += page.length;
+      if (page.length >= pageLimit) capped = true;
+    }
+    return SavedVocabularyCount(total: total, capped: capped);
+  }
 
   Future<void> importVocabulary(Map<String, dynamic> bundle) async {
     await _request('POST', '/v1/vocabulary/import', bundle);

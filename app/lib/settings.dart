@@ -27,6 +27,11 @@ class AppSettings {
     this.secondaryColor = 0xffb8d8ff,
     this.transcriptWidth = 430,
     this.workbenchMediaFraction = 0.42,
+    this.lastMediaPath = '',
+    this.lastMediaTitle = '',
+    this.lastMediaPositionMs = 0,
+    this.lastMediaDurationMs = 0,
+    this.lastMediaSubtitleCount = 0,
     this.ffmpegPath = '',
     this.ffprobePath = '',
     this.ytDlpPath = '',
@@ -124,6 +129,11 @@ class AppSettings {
         0.3,
         0.62,
       ),
+      lastMediaPath: json['last_media_path'] as String? ?? '',
+      lastMediaTitle: json['last_media_title'] as String? ?? '',
+      lastMediaPositionMs: json['last_media_position_ms'] as int? ?? 0,
+      lastMediaDurationMs: json['last_media_duration_ms'] as int? ?? 0,
+      lastMediaSubtitleCount: json['last_media_subtitle_count'] as int? ?? 0,
       ffmpegPath: json['ffmpeg_path'] as String? ?? '',
       ffprobePath: json['ffprobe_path'] as String? ?? '',
       ytDlpPath: json['yt_dlp_path'] as String? ?? '',
@@ -195,6 +205,11 @@ class AppSettings {
   final int secondaryColor;
   final double transcriptWidth;
   final double workbenchMediaFraction;
+  final String lastMediaPath;
+  final String lastMediaTitle;
+  final int lastMediaPositionMs;
+  final int lastMediaDurationMs;
+  final int lastMediaSubtitleCount;
   final String ffmpegPath;
   final String ffprobePath;
   final String ytDlpPath;
@@ -281,6 +296,11 @@ class AppSettings {
         'secondary_color': secondaryColor,
         'transcript_width': transcriptWidth,
         'workbench_media_fraction': workbenchMediaFraction,
+        'last_media_path': lastMediaPath,
+        'last_media_title': lastMediaTitle,
+        'last_media_position_ms': lastMediaPositionMs,
+        'last_media_duration_ms': lastMediaDurationMs,
+        'last_media_subtitle_count': lastMediaSubtitleCount,
         'ffmpeg_path': ffmpegPath,
         'ffprobe_path': ffprobePath,
         'yt_dlp_path': ytDlpPath,
@@ -336,6 +356,11 @@ class AppSettings {
     int? secondaryColor,
     double? transcriptWidth,
     double? workbenchMediaFraction,
+    String? lastMediaPath,
+    String? lastMediaTitle,
+    int? lastMediaPositionMs,
+    int? lastMediaDurationMs,
+    int? lastMediaSubtitleCount,
     String? ffmpegPath,
     String? ffprobePath,
     String? ytDlpPath,
@@ -392,6 +417,12 @@ class AppSettings {
     transcriptWidth: transcriptWidth ?? this.transcriptWidth,
     workbenchMediaFraction:
         workbenchMediaFraction ?? this.workbenchMediaFraction,
+    lastMediaPath: lastMediaPath ?? this.lastMediaPath,
+    lastMediaTitle: lastMediaTitle ?? this.lastMediaTitle,
+    lastMediaPositionMs: lastMediaPositionMs ?? this.lastMediaPositionMs,
+    lastMediaDurationMs: lastMediaDurationMs ?? this.lastMediaDurationMs,
+    lastMediaSubtitleCount:
+        lastMediaSubtitleCount ?? this.lastMediaSubtitleCount,
     ffmpegPath: ffmpegPath ?? this.ffmpegPath,
     ffprobePath: ffprobePath ?? this.ffprobePath,
     ytDlpPath: ytDlpPath ?? this.ytDlpPath,

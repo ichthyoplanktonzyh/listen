@@ -55,20 +55,34 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       if (constraints.maxWidth < 820) {
+        final availableHeight = constraints.maxHeight - splitterWidth;
+        final minimumFraction = (240 / availableHeight).clamp(0.28, 0.7);
+        final maximumFraction = ((availableHeight - 260) / availableHeight)
+            .clamp(minimumFraction, 0.72);
+        final effectiveFraction = _mediaFraction.clamp(
+          minimumFraction,
+          maximumFraction,
+        );
         return Column(
           children: [
             SizedBox(
-              height: (constraints.maxHeight * 0.48).clamp(260.0, 460.0),
+              height: availableHeight * effectiveFraction,
               child: _MediaPane(
                 mediaTitle: widget.mediaTitle,
                 playerStage: widget.playerStage,
-                onCompactMedia: null,
-                onResetLayout: null,
+                onCompactMedia: () => _setMediaFraction(compactMediaFraction),
+                onResetLayout: () => _setMediaFraction(defaultMediaFraction),
               ),
             ),
-            Divider(
-              height: 1,
-              color: Theme.of(context).colorScheme.outlineVariant,
+            _WorkbenchSplitter.horizontal(
+              onDrag: (delta) {
+                _setMediaFraction(
+                  (_mediaFraction + delta / availableHeight).clamp(
+                    minimumFraction,
+                    maximumFraction,
+                  ),
+                );
+              },
             ),
             Expanded(child: widget.learningPanel),
           ],
@@ -114,31 +128,43 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
 }
 
 class _WorkbenchSplitter extends StatelessWidget {
-  const _WorkbenchSplitter({required this.onDrag});
+  const _WorkbenchSplitter({required this.onDrag}) : _vertical = false;
+  const _WorkbenchSplitter.horizontal({required this.onDrag}) : _vertical = true;
 
   final ValueChanged<double> onDrag;
+  final bool _vertical;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    label: 'Resize media and transcript',
-    child: MouseRegion(
-      cursor: SystemMouseCursors.resizeColumn,
-      child: GestureDetector(
-        key: const Key('media-workbench-splitter'),
-        behavior: HitTestBehavior.opaque,
-        onHorizontalDragUpdate: (details) => onDrag(details.delta.dx),
-        child: SizedBox(
-          width: _MediaWorkbenchState.splitterWidth,
-          child: Center(
-            child: Container(
-              width: 1,
-              color: Theme.of(context).colorScheme.outlineVariant,
-            ),
-          ),
+  Widget build(BuildContext context) {
+    final divider = Container(color: Theme.of(context).colorScheme.outlineVariant);
+    return Semantics(
+      label: 'Resize media and transcript',
+      child: MouseRegion(
+        cursor: _vertical
+            ? SystemMouseCursors.resizeRow
+            : SystemMouseCursors.resizeColumn,
+        child: GestureDetector(
+          key: const Key('media-workbench-splitter'),
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragUpdate: _vertical
+              ? null
+              : (details) => onDrag(details.delta.dx),
+          onVerticalDragUpdate: _vertical
+              ? (details) => onDrag(details.delta.dy)
+              : null,
+          child: _vertical
+              ? SizedBox(
+                  height: _MediaWorkbenchState.splitterWidth,
+                  child: Center(child: SizedBox(height: 1, child: divider)),
+                )
+              : SizedBox(
+                  width: _MediaWorkbenchState.splitterWidth,
+                  child: Center(child: SizedBox(width: 1, child: divider)),
+                ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _MediaPane extends StatelessWidget {

@@ -140,6 +140,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final taskStatuses = <UserTaskKind, UserTaskStatus>{};
   bool dragging = false;
   bool connectingApi = true;
+  // Global learning totals prefetched for the no-media home surface so the
+  // readiness strip is not misleadingly empty at cold start.
+  SavedVocabularyCount? _savedVocabulary;
 
   // ── Convenience ──
   AppLocalizations get l => AppLocalizations.of(context);
@@ -312,7 +315,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     settingsController.setSettings(
       settingsController.settings.copyWith(workbenchMediaFraction: value),
     );
-    unawaited(settingsController.save());
+    settingsController.saveSoon();
   }
 
   Future<void> _connectApi() async {
@@ -343,8 +346,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
               playerController.position,
             ),
           );
+          _recordRecentMedia();
         }
       });
+      unawaited(_prefetchHomeSummary());
       unawaited(_runSmokeIfConfigured());
     } catch (error) {
       if (mounted) {
@@ -354,6 +359,55 @@ class _PlayerScreenState extends State<PlayerScreen> {
         });
       }
     }
+  }
+
+  /// Persist the currently playing media so the no-media home can offer a real
+  /// "continue" entry and honest readiness at the next launch.
+  void _recordRecentMedia() {
+    final path = playerController.mediaPath;
+    if (path == null || path.isEmpty) return;
+    settingsController.recordRecentMedia(
+      path: path,
+      title:
+          playerController.mediaTitle ??
+          path.split(Platform.pathSeparator).last,
+      positionMs: playerController.position.inMilliseconds,
+      durationMs: playerController.duration.inMilliseconds,
+      subtitleCount: subtitleController.subtitleResources.length,
+    );
+  }
+
+  /// Prefetch global learning totals (vocabulary, listening inbox) so the home
+  /// readiness strip reflects real state instead of cold-start zeros.
+  Future<void> _prefetchHomeSummary() async {
+    final service = api;
+    if (service == null) return;
+    unawaited(extensiveListeningController.refreshInbox(service));
+    try {
+      final count = await service.savedVocabularyCount(
+        language: _learningLanguage,
+      );
+      if (mounted) setState(() => _savedVocabulary = count);
+    } catch (_) {
+      // Leave the strip on its neutral placeholder when the count is
+      // unavailable; the home must not fail because a summary query did.
+    }
+  }
+
+  /// Reopen the most recently played media from the home continue entry. The
+  /// backend restores the exact saved position during [openMediaPath].
+  Future<void> _continueRecentMedia() async {
+    final path = settingsController.lastMediaPath;
+    if (path.isEmpty) {
+      await mediaSession.openMedia();
+      return;
+    }
+    if (!File(path).existsSync()) {
+      playerController.setStatus('Recent media is no longer available');
+      await mediaSession.openMedia();
+      return;
+    }
+    await mediaSession.openMediaPath(path);
   }
 
   Future<void> _runSmokeIfConfigured() async {
@@ -1681,23 +1735,37 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             ? ListeningHome(
                                 onOpenMedia: mediaSession.openMedia,
                                 onOpenOnline: _openOnline,
+                                onContinue: () =>
+                                    unawaited(_continueRecentMedia()),
                                 onOpenSubtitleResources: () =>
                                     unawaited(_openSubtitleResources()),
                                 onOpenVocabulary: _openVocabulary,
                                 onOpenSettings: () =>
                                     unawaited(_openSettings()),
-                                currentMediaTitle: playerController.mediaTitle,
-                                currentMediaPath: playerController.mediaPath,
-                                currentPosition: playerController.position,
-                                currentDuration: playerController.duration,
-                                subtitleResourceCount:
-                                    subtitleController.subtitleResources.length,
-                                vocabularyCount:
-                                    learningController.wordEntries.length +
-                                    learningController.phraseEntries.length,
+                                recentMediaTitle:
+                                    settingsController.lastMediaTitle.isEmpty
+                                    ? null
+                                    : settingsController.lastMediaTitle,
+                                recentMediaPath:
+                                    settingsController.lastMediaPath.isEmpty
+                                    ? null
+                                    : settingsController.lastMediaPath,
+                                recentPosition: Duration(
+                                  milliseconds:
+                                      settingsController.lastMediaPositionMs,
+                                ),
+                                recentDuration: Duration(
+                                  milliseconds:
+                                      settingsController.lastMediaDurationMs,
+                                ),
+                                recentSubtitleCount:
+                                    settingsController.lastMediaSubtitleCount,
+                                vocabularyCount: _savedVocabulary?.total ?? 0,
+                                vocabularyCapped:
+                                    _savedVocabulary?.capped ?? false,
+                                vocabularyKnown: _savedVocabulary != null,
                                 listeningInboxCount:
-                                    extensiveListeningController
-                                        .activeItemCount,
+                                    extensiveListeningController.activeItemCount,
                                 statusText: playerController.status,
                               )
                             : MediaWorkbench(

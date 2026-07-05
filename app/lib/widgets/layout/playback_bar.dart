@@ -188,13 +188,11 @@ class _PlaybackBarState extends State<PlaybackBar> {
             padding: const EdgeInsets.symmetric(horizontal: 18),
             child: Row(
               children: [
-                for (final icon in const [
-                  Icons.skip_previous,
-                  Icons.play_arrow,
-                  Icons.skip_next,
-                  Icons.volume_up_outlined,
-                ])
-                  IconButton(onPressed: null, icon: Icon(icon)),
+                Icon(
+                  Icons.headset_outlined,
+                  size: 20,
+                  color: colors.onSurfaceVariant,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(

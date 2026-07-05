@@ -33,6 +33,45 @@ void main() {
 
     _expectCueVisible(tester, 'cue-9');
   });
+
+  testWidgets('manual scroll pauses following and back button resumes it', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(620, 420));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    final cues = List.generate(72, _cue);
+    final track = SubtitleTrack(id: 'track-1', cues: cues, source: 'fixture');
+
+    await tester.pumpWidget(
+      _Harness(controller: controller, track: track, currentCue: cues[4]),
+    );
+    await tester.pumpAndSettle();
+
+    // No manual interaction yet: the back-to-current affordance stays hidden.
+    expect(find.text('回到当前句'), findsNothing);
+
+    // Drag the transcript away from the current cue.
+    await tester.drag(
+      find.byKey(const ValueKey('transcript-cue-cue-4')),
+      const Offset(0, -400),
+    );
+    await tester.pumpAndSettle();
+
+    // Following is paused, so a new current cue must not scroll the list, and
+    // the resume affordance appears.
+    expect(find.text('回到当前句'), findsOneWidget);
+
+    await tester.tap(find.text('回到当前句'));
+    await tester.pumpAndSettle();
+
+    // Resuming following scrolls the current cue back into view and hides the
+    // affordance again.
+    expect(find.text('回到当前句'), findsNothing);
+    _expectCueVisible(tester, 'cue-4');
+  });
 }
 
 Cue _cue(int index) {
@@ -96,6 +135,7 @@ class _Harness extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
     theme: ListenTheme.light(),
+    locale: const Locale('zh'),
     supportedLocales: AppLocalizations.supportedLocales,
     localizationsDelegates: const [
       AppLocalizations.delegate,
