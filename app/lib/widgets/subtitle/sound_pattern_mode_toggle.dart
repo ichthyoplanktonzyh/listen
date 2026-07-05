@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../theme/listen_theme.dart';
+
 class RhythmReferenceToggle extends StatelessWidget {
   const RhythmReferenceToggle({
     super.key,
@@ -33,9 +35,9 @@ class RhythmReferenceToggle extends StatelessWidget {
       height: math.max(24.0, size),
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: const Color(0xFF111827).withAlpha(205),
+        color: ListenColors.overlaySurface,
         borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: Colors.white.withAlpha(40)),
+        border: Border.all(color: ListenColors.overlayBorder),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -45,7 +47,7 @@ class RhythmReferenceToggle extends StatelessWidget {
             selected: current == 'citation',
             tooltip: citationTooltip,
             icon: Icons.menu_book_outlined,
-            selectedColor: const Color(0xFF8FD3FF),
+            selectedColor: ListenColors.soundCitation,
             itemSize: itemSize,
             onChanged: onChanged,
           ),
@@ -55,7 +57,7 @@ class RhythmReferenceToggle extends StatelessWidget {
             selected: current == 'connected',
             tooltip: connectedTooltip,
             icon: Icons.route_outlined,
-            selectedColor: const Color(0xFF6DD6C3),
+            selectedColor: ListenColors.soundConnected,
             itemSize: itemSize,
             onChanged: onChanged,
           ),
@@ -65,7 +67,7 @@ class RhythmReferenceToggle extends StatelessWidget {
             selected: current == 'actual',
             tooltip: actualTooltip,
             icon: Icons.multiline_chart,
-            selectedColor: const Color(0xFFFFD166),
+            selectedColor: ListenColors.soundActual,
             itemSize: itemSize,
             onChanged: onChanged,
           ),
@@ -115,20 +117,20 @@ class _ModeButton extends StatelessWidget {
             decoration: BoxDecoration(
               color: selected
                   ? selectedColor.withAlpha(230)
-                  : Colors.white.withAlpha(20),
+                  : ListenColors.overlayText.withAlpha(20),
               borderRadius: BorderRadius.circular(5),
               border: Border.all(
                 color: selected
-                    ? Colors.white.withAlpha(155)
-                    : Colors.white.withAlpha(30),
+                    ? ListenColors.overlayText.withAlpha(155)
+                    : ListenColors.overlayText.withAlpha(30),
               ),
             ),
             child: Icon(
               icon,
               size: math.max(13.0, itemSize * 0.58),
               color: selected
-                  ? Colors.black.withAlpha(220)
-                  : Colors.white.withAlpha(170),
+                  ? ListenColors.overlayInk
+                  : ListenColors.overlayTextMuted,
             ),
           ),
         ),

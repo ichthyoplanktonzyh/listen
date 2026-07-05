@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../models/timeline.dart';
+import '../../theme/listen_theme.dart';
 
 /// Presents Reference B as annotations on the sentence rather than as a list of
 /// detached rule cards. The transcript remains the visual baseline; arcs,
@@ -178,7 +179,7 @@ class _ConnectedBadge extends StatelessWidget {
       Icon(
         Icons.route_outlined,
         size: math.max(13, height * 0.48),
-        color: const Color(0xFF6DD6C3),
+        color: ListenColors.soundConnected,
       ),
       const SizedBox(width: 5),
       Text(
@@ -186,7 +187,7 @@ class _ConnectedBadge extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          color: Colors.white.withAlpha(165),
+          color: ListenColors.overlayTextMuted,
           fontSize: math.max(9, fontSize * 0.82),
           height: 1,
           fontWeight: FontWeight.w700,
@@ -228,7 +229,9 @@ class _ConnectedAnnotation extends StatelessWidget {
       if (reference.family?.trim().isNotEmpty == true)
         reference.family!.replaceAll('_', ' '),
     ];
-    final accent = selected ? const Color(0xFFA7F3E8) : const Color(0xFF6DD6C3);
+    final accent = selected
+        ? ListenColors.soundConnectedStrong
+        : ListenColors.soundConnected;
 
     return Tooltip(
       message: tooltipLines.join('\n'),
@@ -268,7 +271,9 @@ class _ConnectedAnnotation extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Colors.white.withAlpha(selected ? 250 : 220),
+                      color: ListenColors.overlayText.withAlpha(
+                        selected ? 250 : 220,
+                      ),
                       fontSize: math.max(10, fontSize),
                       height: 1,
                       fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
@@ -343,7 +348,7 @@ class _PlainSentenceText extends StatelessWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
-        color: Colors.white.withAlpha(118),
+        color: ListenColors.overlayTextFaint,
         fontSize: math.max(10, fontSize),
         height: 1,
       ),

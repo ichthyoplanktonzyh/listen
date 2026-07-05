@@ -19,31 +19,133 @@ import '../../services/external_tools.dart';
 /// root: online URL open/download, embedded subtitle extraction, and
 /// OpenSubtitles search. Parameter names mirror the host's controller fields.
 
-Future<void> openOnlineMediaFlow({
-required BuildContext context,
-required DesktopPlayerAdapter adapter,
-required PlayerController playerController,
-required SubtitleController subtitleController,
-required DownloadController downloadController,
-required ExternalTools tools,
-required void Function() onMediaSwitched,
-}) async {
-final l = AppLocalizations.of(context);
-  final controller = TextEditingController();
-  final pageUrl = await showDialog<String>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(l.text('openOnlineTitle')),
+enum OnlineSourceAction { play, download }
+
+class OnlineSourceChoice {
+  const OnlineSourceChoice({required this.url, required this.action});
+
+  final String url;
+  final OnlineSourceAction action;
+}
+
+class OnlineSourceDialog extends StatefulWidget {
+  const OnlineSourceDialog({super.key});
+
+  @override
+  State<OnlineSourceDialog> createState() => _OnlineSourceDialogState();
+}
+
+class _OnlineSourceDialogState extends State<OnlineSourceDialog> {
+  final TextEditingController _controller = TextEditingController();
+  OnlineSourceAction _action = OnlineSourceAction.play;
+  bool _submitted = false;
+
+  Uri? get _uri {
+    final value = Uri.tryParse(_controller.text.trim());
+    if (value == null ||
+        (value.scheme != 'http' && value.scheme != 'https') ||
+        value.host.isEmpty) {
+      return null;
+    }
+    return value;
+  }
+
+  bool get _isYouTube {
+    final host = _uri?.host.toLowerCase();
+    return host == 'youtu.be' ||
+        host == 'youtube.com' ||
+        host?.endsWith('.youtube.com') == true;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final uri = _uri;
+    return AlertDialog(
+      title: Text(l.text('addSource')),
       content: SizedBox(
-        width: 520,
-        child: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: InputDecoration(
-            labelText: l.text('pageUrl'),
-            helperText: 'Only open content you are authorized to access.',
-          ),
-          onSubmitted: (value) => Navigator.pop(context, value.trim()),
+        width: 540,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              key: const Key('online-source-url'),
+              controller: _controller,
+              autofocus: true,
+              keyboardType: TextInputType.url,
+              decoration: InputDecoration(
+                labelText: l.text('pasteSourceLink'),
+                prefixIcon: const Icon(Icons.link),
+                errorText: _submitted && uri == null
+                    ? l.text('invalidSourceUrl')
+                    : null,
+              ),
+              onChanged: (_) => setState(() => _submitted = false),
+              onSubmitted: (_) => _submit(),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Icon(
+                  _isYouTube ? Icons.play_circle_outline : Icons.language,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text('${l.text('recognizedSource')}: '),
+                Expanded(
+                  child: Text(
+                    uri == null
+                        ? l.text('notReadyYet')
+                        : _isYouTube
+                        ? l.text('youtubeSource')
+                        : l.text('webSource'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SegmentedButton<OnlineSourceAction>(
+              segments: [
+                ButtonSegment(
+                  value: OnlineSourceAction.play,
+                  icon: const Icon(Icons.play_arrow),
+                  label: Text(l.text('playOnline')),
+                ),
+                ButtonSegment(
+                  value: OnlineSourceAction.download,
+                  icon: const Icon(Icons.download_outlined),
+                  label: Text(l.text('downloadLocal')),
+                ),
+              ],
+              selected: {_action},
+              onSelectionChanged: (value) =>
+                  setState(() => _action = value.first),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.gavel_outlined, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    l.text('sourceAuthorizationNotice'),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
       actions: [
@@ -51,28 +153,50 @@ final l = AppLocalizations.of(context);
           onPressed: () => Navigator.pop(context),
           child: Text(l.text('cancel')),
         ),
-        OutlinedButton.icon(
-          onPressed: () async {
-            final value = controller.text.trim();
-            if (value.isEmpty) return;
-            Navigator.pop(context, 'download:$value');
-          },
-          icon: const Icon(Icons.download),
-          label: Text(l.text('downloadVideo')),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, controller.text.trim()),
-          child: Text(l.text('resolvePlay')),
+        FilledButton.icon(
+          onPressed: _submit,
+          icon: Icon(
+            _action == OnlineSourceAction.play
+                ? Icons.play_arrow
+                : Icons.download_outlined,
+          ),
+          label: Text(l.text('addSource')),
         ),
       ],
-    ),
+    );
+  }
+
+  void _submit() {
+    final uri = _uri;
+    if (uri == null) {
+      setState(() => _submitted = true);
+      return;
+    }
+    Navigator.pop(
+      context,
+      OnlineSourceChoice(url: uri.toString(), action: _action),
+    );
+  }
+}
+
+Future<void> openOnlineMediaFlow({
+  required BuildContext context,
+  required DesktopPlayerAdapter adapter,
+  required PlayerController playerController,
+  required SubtitleController subtitleController,
+  required DownloadController downloadController,
+  required ExternalTools tools,
+  required void Function() onMediaSwitched,
+}) async {
+  final source = await showDialog<OnlineSourceChoice>(
+    context: context,
+    builder: (context) => const OnlineSourceDialog(),
   );
-  controller.dispose();
-  if (pageUrl == null || pageUrl.isEmpty || !context.mounted) return;
-  if (pageUrl.startsWith('download:')) {
+  if (source == null || !context.mounted) return;
+  if (source.action == OnlineSourceAction.download) {
     await _downloadOnline(
       context: context,
-      pageUrl: pageUrl.substring('download:'.length),
+      pageUrl: source.url,
       playerController: playerController,
       downloadController: downloadController,
       tools: tools,
@@ -81,10 +205,10 @@ final l = AppLocalizations.of(context);
   }
   playerController.setStatus('Resolving online media...');
   try {
-    final resolved = await tools.resolveOnlineMedia(pageUrl);
+    final resolved = await tools.resolveOnlineMedia(source.url);
     await adapter.open(resolved);
     playerController.clearMedia();
-    playerController.setMediaPath(pageUrl);
+    playerController.setMediaPath(source.url);
     subtitleController.setPrimaryTrack(null);
     subtitleController.setSecondaryTrack(null);
     subtitleController.setCurrentPrimaryCue(null);
@@ -100,13 +224,13 @@ final l = AppLocalizations.of(context);
 }
 
 Future<void> _downloadOnline({
-required BuildContext context,
-required String pageUrl,
-required PlayerController playerController,
-required DownloadController downloadController,
-required ExternalTools tools,
+  required BuildContext context,
+  required String pageUrl,
+  required PlayerController playerController,
+  required DownloadController downloadController,
+  required ExternalTools tools,
 }) async {
-final l = AppLocalizations.of(context);
+  final l = AppLocalizations.of(context);
   final directory = await getDirectoryPath(
     confirmButtonText: l.text('downloadHere'),
   );
@@ -138,14 +262,14 @@ final l = AppLocalizations.of(context);
 }
 
 Future<void> importEmbeddedSubtitleFlow({
-required BuildContext context,
-required PlayerController playerController,
-required MediaSessionCoordinator mediaSession,
-required ExternalTools tools,
-required LocalApi? api,
-required bool Function(String path) isMediaPath,
+  required BuildContext context,
+  required PlayerController playerController,
+  required MediaSessionCoordinator mediaSession,
+  required ExternalTools tools,
+  required LocalApi? api,
+  required bool Function(String path) isMediaPath,
 }) async {
-final l = AppLocalizations.of(context);
+  final l = AppLocalizations.of(context);
   final path = playerController.mediaPath;
   if (path == null ||
       !isMediaPath(path) ||
@@ -209,14 +333,14 @@ final l = AppLocalizations.of(context);
 }
 
 Future<void> searchOpenSubtitlesFlow({
-required BuildContext context,
-required PlayerController playerController,
-required SettingsController settingsController,
-required MediaSessionCoordinator mediaSession,
-required LocalApi? api,
-bool? secondary,
+  required BuildContext context,
+  required PlayerController playerController,
+  required SettingsController settingsController,
+  required MediaSessionCoordinator mediaSession,
+  required LocalApi? api,
+  bool? secondary,
 }) async {
-final l = AppLocalizations.of(context);
+  final l = AppLocalizations.of(context);
   if (api == null) return;
   if (playerController.mediaId == null) {
     await showDialog<void>(

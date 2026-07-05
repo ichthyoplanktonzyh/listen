@@ -17,6 +17,33 @@ abstract final class ListenColors {
   static const info = Color(0xff3f7399);
   static const infoSurface = Color(0xffdceaf2);
   static const disabled = Color(0xff98a39e);
+
+  // Media overlays use a separate dark-surface vocabulary so learning signals
+  // remain legible over arbitrary video frames.
+  static const overlaySurface = Color(0xd9101715);
+  static const overlaySurfaceSoft = Color(0xb8101715);
+  static const overlayBorder = Color(0x30ffffff);
+  static const overlayText = Color(0xfff2f5f4);
+  static const overlayTextMuted = Color(0xaaeef3f1);
+  static const overlayTextFaint = Color(0x76eef3f1);
+  static const overlayInk = Color(0xdc101715);
+
+  static const soundCitation = Color(0xff8fd3ff);
+  static const soundConnected = Color(0xff6dd6c3);
+  static const soundConnectedStrong = Color(0xffa7f3e8);
+  static const soundActual = Color(0xffffd166);
+  static const soundPredicted = Color(0xffffa94d);
+  static const soundPredictedText = Color(0xffffc98a);
+  static const soundNucleus = Color(0xffff8fb7);
+
+  static const phonemeTextVowel = Color(0xff5b8def);
+  static const phonemeTextApproximant = Color(0xff7bc47f);
+  static const phonemeTextConsonant = Color(0xffe8935a);
+  static const phonemeSoundVowel = Color(0xff00a8a8);
+  static const phonemeSoundApproximant = Color(0xffb76eae);
+  static const phonemeSoundConsonant = Color(0xffd79d2a);
+  static const learningNeedsReview = Color(0xffffbf47);
+  static const learningRecognized = Color(0xff68d391);
 }
 
 abstract final class ListenTheme {

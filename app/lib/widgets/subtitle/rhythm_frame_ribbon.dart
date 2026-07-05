@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/timeline.dart';
 import '../../models/types.dart';
+import '../../theme/listen_theme.dart';
 
 typedef RhythmCueLoopCallback =
     void Function(Duration start, Duration end, String label);
@@ -439,9 +440,9 @@ class _RhythmBadge extends StatelessWidget {
     height: math.max(24.0, height * 0.86),
     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
     decoration: BoxDecoration(
-      color: const Color(0xFF1E2746).withAlpha(190),
+      color: ListenColors.overlaySurface,
       borderRadius: BorderRadius.circular(7),
-      border: Border.all(color: Colors.white.withAlpha(38)),
+      border: Border.all(color: ListenColors.overlayBorder),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
@@ -449,7 +450,9 @@ class _RhythmBadge extends StatelessWidget {
         Icon(
           Icons.hearing,
           size: math.max(13.0, height * 0.42),
-          color: predicted ? const Color(0xFFFFA94D) : const Color(0xFFFFD166),
+          color: predicted
+              ? ListenColors.soundPredicted
+              : ListenColors.soundActual,
         ),
         const SizedBox(width: 5),
         Flexible(
@@ -458,7 +461,7 @@ class _RhythmBadge extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Colors.white.withAlpha(220),
+              color: ListenColors.overlayText,
               fontSize: math.max(10.0, fontSize * 0.82),
               height: 1.0,
               fontWeight: FontWeight.w700,
@@ -476,7 +479,7 @@ class _RhythmBadge extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Colors.white.withAlpha(135),
+              color: ListenColors.overlayTextMuted,
               fontSize: math.max(8.0, fontSize * 0.68),
               height: 1.0,
             ),
@@ -496,16 +499,16 @@ class _PredictedPill extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
     decoration: BoxDecoration(
-      color: const Color(0xFFFFA94D).withAlpha(58),
+      color: ListenColors.soundPredicted.withAlpha(58),
       borderRadius: BorderRadius.circular(5),
-      border: Border.all(color: const Color(0xFFFFA94D).withAlpha(160)),
+      border: Border.all(color: ListenColors.soundPredicted.withAlpha(160)),
     ),
     child: Text(
       label,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
-        color: const Color(0xFFFFC98A),
+        color: ListenColors.soundPredictedText,
         fontSize: math.max(8.0, fontSize * 0.66),
         height: 1.0,
         fontWeight: FontWeight.w700,
@@ -534,10 +537,10 @@ class _AudibleNode extends StatelessWidget {
     final nucleus = item.kind == _AudibleKind.nucleus;
     final weak = item.kind == _AudibleKind.weak;
     final color = nucleus
-        ? const Color(0xFFFF8FB7)
+        ? ListenColors.soundNucleus
         : weak
-        ? Colors.white
-        : const Color(0xFFFFD166);
+        ? ListenColors.overlayText
+        : ListenColors.soundActual;
     final opacity = weak
         ? active
               ? 0.68
@@ -588,7 +591,7 @@ class _AudibleNode extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Colors.white.withAlpha(nucleus ? 242 : 228),
+              color: ListenColors.overlayText.withAlpha(nucleus ? 242 : 228),
               fontSize: labelSize,
               height: 1.02,
               fontWeight: nucleus ? FontWeight.w900 : FontWeight.w800,
@@ -680,7 +683,7 @@ class _PhraseDivider extends StatelessWidget {
       width: 1,
       height: math.max(15, height * 0.58),
       margin: const EdgeInsets.only(left: 1, right: 8),
-      color: Colors.white.withAlpha(72),
+      color: ListenColors.overlayText.withAlpha(72),
     ),
   );
 }

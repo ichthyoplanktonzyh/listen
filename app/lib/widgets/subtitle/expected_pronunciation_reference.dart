@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../models/types.dart';
+import '../../theme/listen_theme.dart';
 
 class ExpectedPronunciationReference extends StatelessWidget {
   const ExpectedPronunciationReference({
@@ -32,9 +33,9 @@ class ExpectedPronunciationReference extends StatelessWidget {
       constraints: BoxConstraints(minHeight: math.max(22.0, height)),
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: const Color(0xFF111827).withAlpha(185),
+        color: ListenColors.overlaySurfaceSoft,
         borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: Colors.white.withAlpha(34)),
+        border: Border.all(color: ListenColors.overlayBorder),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -42,7 +43,7 @@ class ExpectedPronunciationReference extends StatelessWidget {
           Icon(
             Icons.record_voice_over,
             size: math.max(12.0, height * 0.45),
-            color: const Color(0xFFB8E1FF),
+            color: ListenColors.soundCitation,
           ),
           const SizedBox(width: 5),
           Text(
@@ -50,7 +51,7 @@ class ExpectedPronunciationReference extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Colors.white.withAlpha(170),
+              color: ListenColors.overlayTextMuted,
               fontSize: math.max(9.0, fontSize * 0.85),
               height: 1.0,
               fontWeight: FontWeight.w700,
@@ -119,7 +120,7 @@ class _FallbackText extends StatelessWidget {
     maxLines: 1,
     overflow: TextOverflow.ellipsis,
     style: TextStyle(
-      color: Colors.white.withAlpha(210),
+      color: ListenColors.overlayText,
       fontSize: math.max(9.0, fontSize),
       height: 1.0,
       fontWeight: FontWeight.w700,
@@ -152,13 +153,13 @@ class _PronunciationChip extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: active
-            ? const Color(0xFFB8E1FF).withAlpha(225)
-            : Colors.white.withAlpha(28),
+            ? ListenColors.soundCitation.withAlpha(225)
+            : ListenColors.overlayText.withAlpha(28),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
           color: active
-              ? Colors.white.withAlpha(150)
-              : Colors.white.withAlpha(42),
+              ? ListenColors.overlayText.withAlpha(150)
+              : ListenColors.overlayText.withAlpha(42),
         ),
       ),
       child: Text(
@@ -166,7 +167,9 @@ class _PronunciationChip extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          color: active ? Colors.black.withAlpha(220) : Colors.white70,
+          color: active
+              ? ListenColors.overlayInk
+              : ListenColors.overlayTextMuted,
           fontSize: math.max(9.0, fontSize),
           height: 1.0,
           fontWeight: active ? FontWeight.w800 : FontWeight.w700,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/timeline.dart';
 import '../../models/types.dart';
+import '../../theme/listen_theme.dart';
 
 /// Renders a subtitle [Cue] as a line of style-aware tokens,
 /// with clickable words and phrase underlines.
@@ -101,7 +102,7 @@ class TokenLine extends StatelessWidget {
                             context,
                           ).colorScheme.primary.withValues(alpha: 0.18)
                         : capsule
-                        ? Colors.white.withValues(alpha: 0.08)
+                        ? ListenColors.overlayText.withValues(alpha: 0.08)
                         : Colors.transparent,
                     border: capsule
                         ? Border.all(
@@ -109,7 +110,9 @@ class TokenLine extends StatelessWidget {
                                 ? Theme.of(
                                     context,
                                   ).colorScheme.primary.withValues(alpha: 0.42)
-                                : Colors.white.withValues(alpha: 0.18),
+                                : ListenColors.overlayText.withValues(
+                                    alpha: 0.18,
+                                  ),
                           )
                         : null,
                     borderRadius: BorderRadius.circular(999),
@@ -222,8 +225,8 @@ class TokenLine extends StatelessWidget {
 
   Color _phraseColor(BuildContext context, String? status) => switch (status) {
     'unknown_meaning' => Theme.of(context).colorScheme.error,
-    'known_not_recognized' => Colors.amber,
-    'known_recognized' => Colors.greenAccent,
+    'known_not_recognized' => ListenColors.learningNeedsReview,
+    'known_recognized' => ListenColors.learningRecognized,
     _ => Theme.of(context).colorScheme.primary.withValues(alpha: 0.75),
   };
 
@@ -237,7 +240,7 @@ class TokenLine extends StatelessWidget {
       fontFamily: fontFamily,
       color: current
           ? Color.lerp(
-              baseColor ?? Colors.white,
+              baseColor ?? ListenColors.overlayText,
               Theme.of(context).colorScheme.primary,
               currentWordIntensity,
             )
@@ -267,12 +270,12 @@ class TokenLine extends StatelessWidget {
         decorationStyle: TextDecorationStyle.double,
       ),
       'known_not_recognized' => base.copyWith(
-        color: Colors.amber,
+        color: ListenColors.learningNeedsReview,
         decoration: TextDecoration.underline,
         decorationStyle: TextDecorationStyle.dashed,
       ),
       'known_recognized' => base.copyWith(
-        color: Colors.greenAccent,
+        color: ListenColors.learningRecognized,
         fontWeight: FontWeight.bold,
       ),
       _ => base,

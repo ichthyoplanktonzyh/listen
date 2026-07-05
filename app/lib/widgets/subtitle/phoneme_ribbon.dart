@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../models/timeline.dart';
+import '../../theme/listen_theme.dart';
 
 enum PhonemeRibbonLane { text, sound }
 
@@ -176,7 +177,7 @@ class SoundPatternUnavailableRibbon extends StatelessWidget {
             Icon(
               Icons.graphic_eq,
               size: math.max(12, height * 0.52),
-              color: Colors.white.withAlpha(110),
+              color: ListenColors.overlayTextFaint,
             ),
             const SizedBox(width: 5),
             Flexible(
@@ -185,7 +186,7 @@ class SoundPatternUnavailableRibbon extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: Colors.white.withAlpha(135),
+                  color: ListenColors.overlayTextMuted,
                   fontSize: fontSize,
                   height: 1.0,
                 ),
@@ -430,7 +431,10 @@ class _PhoneSeparator extends StatelessWidget {
         width: math.max(5.0, gap * 4),
         height: 22,
         alignment: Alignment.center,
-        child: Container(width: 1.4, color: Colors.white.withAlpha(190)),
+        child: Container(
+          width: 1.4,
+          color: ListenColors.overlayText.withAlpha(190),
+        ),
       );
     }
     if (markers.syllableBefore(phoneIndex)) {
@@ -485,9 +489,15 @@ class _PhoneCell extends StatelessWidget {
           lane == PhonemeRibbonLane.sound ? 7 : 3,
         ),
         border: isCurrent
-            ? Border.all(color: Colors.white.withAlpha(210), width: 1.2)
+            ? Border.all(
+                color: ListenColors.overlayText.withAlpha(210),
+                width: 1.2,
+              )
             : lane == PhonemeRibbonLane.sound
-            ? Border.all(color: Colors.white.withAlpha(48), width: 0.8)
+            ? Border.all(
+                color: ListenColors.overlayText.withAlpha(48),
+                width: 0.8,
+              )
             : null,
         boxShadow: isCurrent && elevated
             ? [
@@ -508,7 +518,9 @@ class _PhoneCell extends StatelessWidget {
                 phone.displayIpa,
                 style: TextStyle(
                   fontSize: textFontSize,
-                  color: isCurrent ? Colors.white : Colors.white70,
+                  color: isCurrent
+                      ? ListenColors.overlayText
+                      : ListenColors.overlayTextMuted,
                   fontWeight: isCurrent ? FontWeight.w700 : FontWeight.normal,
                   height: 1.0,
                 ),
@@ -552,13 +564,17 @@ class _PhoneCell extends StatelessWidget {
   static Color _phoneColor(String symbol, PhonemeRibbonLane lane) {
     final s = symbol.toUpperCase();
     if (lane == PhonemeRibbonLane.sound) {
-      if (_vowels.contains(s)) return const Color(0xFF00A8A8);
-      if (_approximants.contains(s)) return const Color(0xFFB76EAE);
-      return const Color(0xFFD79D2A);
+      if (_vowels.contains(s)) return ListenColors.phonemeSoundVowel;
+      if (_approximants.contains(s)) {
+        return ListenColors.phonemeSoundApproximant;
+      }
+      return ListenColors.phonemeSoundConsonant;
     }
-    if (_vowels.contains(s)) return const Color(0xFF5B8DEF);
-    if (_approximants.contains(s)) return const Color(0xFF7BC47F);
-    return const Color(0xFFE8935A);
+    if (_vowels.contains(s)) return ListenColors.phonemeTextVowel;
+    if (_approximants.contains(s)) {
+      return ListenColors.phonemeTextApproximant;
+    }
+    return ListenColors.phonemeTextConsonant;
   }
 
   static const _vowels = {
@@ -599,8 +615,8 @@ class _FindingMarker {
     return _FindingMarker(
       strong: finding.detectedInAudio,
       color: finding.detectedInAudio
-          ? const Color(0xFFFFD166)
-          : const Color(0xFFB8E1FF).withAlpha(185),
+          ? ListenColors.soundActual
+          : ListenColors.soundCitation.withAlpha(185),
       tooltip: finding.learnerTooltip,
       finding: finding,
     );
@@ -628,7 +644,7 @@ class _SoundRibbonShell extends StatelessWidget {
       Icon(
         Icons.graphic_eq,
         size: math.max(12, height * 0.46),
-        color: Colors.white.withAlpha(170),
+        color: ListenColors.overlayTextMuted,
       ),
       const SizedBox(width: 5),
       Flexible(child: child),
