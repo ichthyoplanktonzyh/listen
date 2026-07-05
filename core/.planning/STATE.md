@@ -3,15 +3,16 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-05T08:55:00.000+08:00"
+last_updated: "2026-07-05T21:11:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-05 08:55 CST
-> 更新原因：Phase 3.35 继续根据 owner 截图反馈修复资源页和右侧资源 tab 的上下区域挤压，
-> 字幕资源列表与时间轴资源详情已改为可拖动上下分栏，右侧文稿跟随当前句已改为真实行
-> 位置同步。
+> 最后更新：2026-07-05 21:11 CST
+> 更新原因：Phase 3.35 收尾复审，修复三处走查遗留实质问题（首页继续学习死代码、
+> readiness 冷启动全零、倍速下拉不刷新）并完成一轮 UX 优化（文稿跟随暂停、窄窗口可调、
+> 姿态栏上下文显示、控件一致性、空态与播放条精简）；阶段仍保持 IN_PROGRESS，等待 owner
+> 多窗口截图与真实媒体验收。
 
 ## 当前位置
 
@@ -129,16 +130,18 @@ last_updated: "2026-07-05T08:55:00.000+08:00"
 
 ### Phase 3.35: Listening Workbench UI Redesign ⏳ IN_PROGRESS
 
-- 已落地首轮：来源中立首页、浅色工具栏、独立播放条、可拖动媒体/字幕工作台、窄窗口
-  上下布局、无横向拖拽的播放控制，以及冷杉绿 + 雾灰 + 暖金集中式主题。
-- 已迁移字幕资源、timeline、练习、诊断、人工校对、任务/下载状态等旧深色面板；视频
-  画布和声音可视化保留承载信息所需的深色/多色语义。
-- 已根据截图反馈修复资源管理密度：字幕资源列表与时间轴资源详情可上下拖拽调整，timeline
-  详情在自身区域滚动，不再用固定高度挤压底部播放区。
-- 已修复播放界面右侧文稿跟随：当前句滚动不再依赖固定行高估算，改为真实列表行
-  `ensureVisible`，长字幕可变行高下保持同步。
-- 验证：`flutter analyze`、`flutter test`（184 passed）、`git diff --check` 通过。
-- 待完成：owner 截图反馈、目标窗口尺寸与真实媒体手工 QA、后续视觉微调和 closeout。
+- 代码完成：来源中立首页、分组工具栏与播放条、可拖动且持久化的工作台、右侧学习面板、
+  资源技术详情折叠、诊断摘要/证据、词汇学习层级、六类设置导航和产品化添加来源流程。
+- 视觉系统：集中式 `ListenTheme` 已覆盖浅色工作面、media overlay、节奏、音素、学习状态、
+  loading/error/degraded/disabled 等语义色；当前句按真实列表行位置稳定跟随。
+- UX 走查 P0-P2 全部完成；参考取舍见 `3.35-REFERENCE-MATRIX.md`。
+- 收尾复审（P3）：修复首页“继续学习”死代码（持久化最近媒体，继续播放按后端进度恢复）、
+  readiness 冷启动全零（预取全局收件箱/词汇量，字幕就绪改用最近媒体）、倍速下拉不刷新、
+  分栏拖动逐帧写盘（`saveSoon` 防抖），并做文稿跟随暂停/回到当前句、窄窗口媒体区可拖动、
+  姿态栏上下文显示、Test 姿态描边化、文稿空态与无媒体播放条精简；详见 `3.35-UX-REVIEW-CHECKLIST.md` P3 节。
+- 验证：`flutter analyze`、`flutter test`（188 passed）、`git diff --check` 通过。
+- 待完成：按 `3.35-MANUAL-QA.md` 执行 owner 截图反馈、三种目标窗口尺寸和真实媒体 QA；
+  `3.35-CLOSEOUT.md` 当前为 `AWAITING_OWNER_QA`。
 - 边界：不复制参考产品，不实现新 YouTube provider，不改变学习领域语义。
 - 规划文档：`.planning/phases/3.35-listening-workbench-ui-redesign/3.35-PLAN.md`。
 
@@ -171,31 +174,35 @@ last_updated: "2026-07-05T08:55:00.000+08:00"
 
 ## 最近重要决策
 
-1. **2026-07-05** — Phase 3.35 截图反馈第二轮：右侧文稿随播放当前句同步改为基于真实
+1. **2026-07-05** — Phase 3.35 收尾复审：走查发现部分 P0 项只有 UI 壳、数据通路是断的
+   （首页继续学习、readiness），本轮补齐数据通路而非仅视觉；最近媒体经 settings 持久化，
+   词汇总量客户端聚合现有 list 查询，不新增后端端点；文稿跟随以 drag/wheel 判定用户滚动、
+   程序化滚动不触发暂停。
+2. **2026-07-05** — Phase 3.35 截图反馈第二轮：右侧文稿随播放当前句同步改为基于真实
    列表行位置，移除固定行高估算，适配长字幕可变行高。
-2. **2026-07-05** — Phase 3.35 截图反馈第一轮：字幕资源页和右侧资源 tab 的上下资源区
+3. **2026-07-05** — Phase 3.35 截图反馈第一轮：字幕资源页和右侧资源 tab 的上下资源区
    改为可拖动分栏，timeline 详情独立滚动，修复矮窗口下区域挤压和底部 overflow。
-3. **2026-07-04** — Phase 3.35 首轮 UI 实施：来源中立首页、可拖动媒体/字幕工作台、
+4. **2026-07-04** — Phase 3.35 首轮 UI 实施：来源中立首页、可拖动媒体/字幕工作台、
    紧凑播放控制与统一 `ListenTheme` 已落地；主题采用冷杉绿 + 雾灰 + 暖金，旧学习面板
    已迁移，等待 owner 截图反馈继续收口。
-4. **2026-07-04** — 插入 Phase 3.35：在 3.3 与 3.4 之间先重构统一听力工作台 UI；
+5. **2026-07-04** — 插入 Phase 3.35：在 3.3 与 3.4 之间先重构统一听力工作台 UI；
    参考每日英语听力成熟的内容层级与播放学习组织，但保留 listen 的诊断/证据模型且不复制品牌。
    同时明确 local-first 不等于 local-only，未来 YouTube 等在线来源进入统一内容入口。
-5. **2026-07-04** — Phase 3.2 收口：精听卡点闭环落地，包含标记卡点 / 跳过、
+6. **2026-07-04** — Phase 3.2 收口：精听卡点闭环落地，包含标记卡点 / 跳过、
    diagnosis viewed evidence、session summary、悬案区 v0、精听完毕确认与
    `familiar_material_marked` 熟料事件；卡点状态保持读侧派生，不新增权威状态机表。
-6. **2026-07-04** — Phase 3.1 收口：Test posture 首个精听练习竖切片落地，包含
+7. **2026-07-04** — Phase 3.1 收口：Test posture 首个精听练习竖切片落地，包含
    cloze / chunk dictation / sentence dictation、失败项 review、phrase-aware diagnosis
    和 rhythm hotspot evidence loop；练习失败继续作为 evidence，不静默修改全局 `LearningStatus`。
-7. **2026-07-04** — Phase 3.x 产品形态确立：精听/泛听一级心智，复习/词典/dashboard
+8. **2026-07-04** — Phase 3.x 产品形态确立：精听/泛听一级心智，复习/词典/dashboard
    为资产消费层；功能按场景分不按设备分（生产端唯一 PC-only）；可组合不强制流程
    （每个功能可独立使用）；泛听默认零打扰。执行序列落为 Phase 3.1 ~ 3.10；双维难度
    （Meaning/Sound fit）直接实现，换取条件是分数可解释 + heuristic_proxy 标注。
-8. **2026-07-03** — ADR 0014：Dart 模型解析保持手写，fixture 契约测试为防漂移标准；
+9. **2026-07-03** — ADR 0014：Dart 模型解析保持手写，fixture 契约测试为防漂移标准；
    存量 `timeline.dart` 不做 codegen 迁移，3.x 新 DTO 手写 + 契约测试，体量大再试点。
-9. **2026-07-02** — speech-analysis 算法线（2.19/2.20/2.21）搁置，主线转入 Phase 3.x
+10. **2026-07-02** — speech-analysis 算法线（2.19/2.20/2.21）搁置，主线转入 Phase 3.x
    英语听力学习闭环；audible-structure v1 contract 保持当前权威 shape。
-10. **2026-07-02** — Phase 2.23 只做机械治理，不改产品行为；`main.dart` 收缩是 3.x
+11. **2026-07-02** — Phase 2.23 只做机械治理，不改产品行为；`main.dart` 收缩是 3.x
    Flutter practice UI 的前置。
 8. **2026-07-01** — consumer self-contained invariant：bundled whisper.cpp 产出的
    WordTimeline 必须解锁基础功能，sidecar 只升级质量。
@@ -210,8 +217,8 @@ last_updated: "2026-07-05T08:55:00.000+08:00"
 ## 下一步工作
 
 1. 完成 Phase 3.3 真实媒体 30 分钟泛听 QA 并收口。
-2. 继续 Phase 3.35：收集 owner 截图反馈，完成多窗口真实媒体 QA，并据此微调工作台比例、
-   信息密度和局部对比度后收口。
+2. 执行 Phase 3.35 owner QA：覆盖 `1440x900`、`1280x800`、`900x700` 和真实媒体，
+   根据截图微调后将 closeout 从 `AWAITING_OWNER_QA` 改为 `COMPLETED`。
 3. 后续按 `3.0-PHASE-BREAKDOWN.md` 推荐顺序逐个 phase 交人执行；3.4（audio-first review）、
    3.6（听力词典）无硬依赖，可与主线并行开工。
 4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
