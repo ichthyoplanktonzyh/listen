@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
+import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/panels/subtitle_resource_manager_panel.dart';
 
 void main() {
@@ -29,47 +30,10 @@ void main() {
 
     await tester.pumpWidget(
       _Harness(
-        child: SubtitleResourceManagerPanel(
-          mediaId: 'media-1',
-          resources: const [track],
-          capabilities: const {
-            'track-1': SubtitleResourceCapabilities(
-              sentenceTiming: true,
-              wordTiming: true,
-              chunkTiming: true,
-              phoneTiming: false,
-              sentenceCount: 1,
-              wordTimingCount: 1,
-              chunkCount: 1,
-            ),
-          },
+        child: _resourceManager(
+          track: track,
           activeTrack: null,
-          timelineDocument: null,
-          wordTimelineSummaries: const [],
-          phoneTimelineSummaries: const [],
-          chunkTimelineSummaries: const [],
-          activeWordTimingCount: 0,
-          timelineResourceError: null,
-          onImportSubtitle: () async {},
-          onImportLLTimeline: () async {},
-          onRefreshResources: () async {},
           onActivateSubtitle: (track) async => activated = track,
-          onArchiveSubtitle: (_) async {},
-          onRestoreSubtitle: (_) async {},
-          onDeleteSubtitle: (_) async {},
-          onExportSubtitle: (_) async {},
-          onLanguageChanged: (_, _) async {},
-          availableLanguages: const ['en', 'zh', 'ja'],
-          onExportLLTimeline: (_) async {},
-          onActivateWordTimeline: (_) async {},
-          onManualReviewTimeline: () async {},
-          onActivatePhoneTimeline: (_) async {},
-          onArchivePhoneTimeline: (_) async {},
-          onDeletePhoneTimeline: (_) async {},
-          onGenerateChunkTimeline: () async {},
-          onActivateChunkTimeline: (_) async {},
-          onArchiveChunkTimeline: (_) async {},
-          onDeleteChunkTimeline: (_) async {},
         ),
       ),
     );
@@ -103,7 +67,120 @@ void main() {
     await tester.pump();
     expect(activated?.id, 'track-1');
   });
+
+  testWidgets('subtitle and timeline resource panes resize without overflow', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(620, 520));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    const cue = Cue(
+      id: 'sentence-1',
+      index: 0,
+      start: Duration.zero,
+      end: Duration(seconds: 1),
+      text: 'How a cell phone ban has transformed this Brooklyn middle school',
+      tokens: [],
+    );
+    const track = SubtitleTrack(id: 'track-1', cues: [cue], source: 'imported');
+
+    await tester.pumpWidget(
+      _Harness(
+        child: SizedBox(
+          width: 560,
+          height: 420,
+          child: _resourceManager(
+            track: track,
+            activeTrack: track,
+            document: const LLTimelineDocument(
+              schema: 'llplayer.timeline.v1',
+              metadata: LLTimelineMetadata(
+                createdAt: Duration(milliseconds: 1),
+                generatorId: 'llplayernext',
+                generatorVersion: '0.7.0',
+                generatorMode: 'production_engine',
+                mediaTitle: 'Fixture',
+                mediaFingerprint: 'fingerprint',
+                humanReviewed: false,
+                extra: {},
+              ),
+              activeWordTimelineId: null,
+              activePhoneTimelineId: null,
+              activeChunkTimelineId: null,
+              rhythmFrames: [],
+              artifacts: [],
+            ),
+            activeWordTimingCount: 1773,
+          ),
+        ),
+      ),
+    );
+
+    final listPane = find.byKey(const Key('subtitle-resource-list-pane'));
+    final timelinePane = find.byKey(const Key('timeline-resource-pane'));
+    final listHeightBefore = tester.getSize(listPane).height;
+    final timelineHeightBefore = tester.getSize(timelinePane).height;
+
+    await tester.drag(
+      find.byKey(const Key('subtitle-resource-splitter')),
+      const Offset(0, 70),
+    );
+    await tester.pump();
+
+    expect(tester.getSize(listPane).height, greaterThan(listHeightBefore));
+    expect(tester.getSize(timelinePane).height, lessThan(timelineHeightBefore));
+    expect(tester.takeException(), isNull);
+  });
 }
+
+SubtitleResourceManagerPanel _resourceManager({
+  required SubtitleTrack track,
+  required SubtitleTrack? activeTrack,
+  Future<void> Function(SubtitleTrack track)? onActivateSubtitle,
+  LLTimelineDocument? document,
+  int activeWordTimingCount = 0,
+}) => SubtitleResourceManagerPanel(
+  mediaId: 'media-1',
+  resources: [track],
+  capabilities: {
+    track.id: SubtitleResourceCapabilities(
+      sentenceTiming: true,
+      wordTiming: true,
+      chunkTiming: true,
+      phoneTiming: false,
+      sentenceCount: track.cues.length,
+      wordTimingCount: activeWordTimingCount == 0 ? 1 : activeWordTimingCount,
+      chunkCount: 1,
+    ),
+  },
+  activeTrack: activeTrack,
+  timelineDocument: document,
+  wordTimelineSummaries: const [],
+  phoneTimelineSummaries: const [],
+  chunkTimelineSummaries: const [],
+  activeWordTimingCount: activeWordTimingCount,
+  timelineResourceError: null,
+  onImportSubtitle: () async {},
+  onImportLLTimeline: () async {},
+  onRefreshResources: () async {},
+  onActivateSubtitle: onActivateSubtitle ?? (_) async {},
+  onArchiveSubtitle: (_) async {},
+  onRestoreSubtitle: (_) async {},
+  onDeleteSubtitle: (_) async {},
+  onExportSubtitle: (_) async {},
+  onLanguageChanged: (_, _) async {},
+  availableLanguages: const ['en', 'zh', 'ja'],
+  onExportLLTimeline: (_) async {},
+  onActivateWordTimeline: (_) async {},
+  onManualReviewTimeline: () async {},
+  onActivatePhoneTimeline: (_) async {},
+  onArchivePhoneTimeline: (_) async {},
+  onDeletePhoneTimeline: (_) async {},
+  onGenerateChunkTimeline: () async {},
+  onActivateChunkTimeline: (_) async {},
+  onArchiveChunkTimeline: (_) async {},
+  onDeleteChunkTimeline: (_) async {},
+);
 
 class _Harness extends StatelessWidget {
   const _Harness({required this.child});
@@ -112,6 +189,7 @@ class _Harness extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
+    theme: ListenTheme.light(),
     supportedLocales: AppLocalizations.supportedLocales,
     localizationsDelegates: const [
       AppLocalizations.delegate,

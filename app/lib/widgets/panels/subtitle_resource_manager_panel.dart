@@ -128,64 +128,170 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
                 ? Center(child: Text(l.text('openMediaForSubtitles')))
                 : resources.isEmpty
                 ? Center(child: Text(l.text('noSubtitleResources')))
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                    itemCount: resources.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final resource = resources[index];
-                      final active = resource.id == activeTrack?.id;
-                      return _SubtitleResourceTile(
-                        resource: resource,
-                        capabilities:
-                            capabilities[resource.id] ??
-                            SubtitleResourceCapabilities.fromCounts(
-                              sentenceCount: resource.cues.length,
-                              wordTimingCount: 0,
-                              chunkCount: 0,
-                              phoneCount: 0,
-                            ),
-                        active: active,
-                        onActivate: () => onActivateSubtitle(resource),
-                        onArchive: () => onArchiveSubtitle(resource),
-                        onRestore: () => onRestoreSubtitle(resource),
-                        onDelete: () => onDeleteSubtitle(resource),
-                        onExport: () => onExportSubtitle(resource),
-                        onLanguageChanged: (language) =>
-                            onLanguageChanged(resource, language),
-                        availableLanguages: availableLanguages,
-                      );
-                    },
+                : _ResizableResourceBody(
+                    subtitleList: ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                      itemCount: resources.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final resource = resources[index];
+                        final active = resource.id == activeTrack?.id;
+                        return _SubtitleResourceTile(
+                          resource: resource,
+                          capabilities:
+                              capabilities[resource.id] ??
+                              SubtitleResourceCapabilities.fromCounts(
+                                sentenceCount: resource.cues.length,
+                                wordTimingCount: 0,
+                                chunkCount: 0,
+                                phoneCount: 0,
+                              ),
+                          active: active,
+                          onActivate: () => onActivateSubtitle(resource),
+                          onArchive: () => onArchiveSubtitle(resource),
+                          onRestore: () => onRestoreSubtitle(resource),
+                          onDelete: () => onDeleteSubtitle(resource),
+                          onExport: () => onExportSubtitle(resource),
+                          onLanguageChanged: (language) =>
+                              onLanguageChanged(resource, language),
+                          availableLanguages: availableLanguages,
+                        );
+                      },
+                    ),
+                    timelineSummary: TimelineResourceSummaryPanel(
+                      activeTrack: activeTrack,
+                      document: timelineDocument,
+                      summaries: wordTimelineSummaries,
+                      phoneSummaries: phoneTimelineSummaries,
+                      chunkSummaries: chunkTimelineSummaries,
+                      activeWordTimingCount: visibleWordTimingCount,
+                      error: timelineResourceError,
+                      onImport: onImportLLTimeline,
+                      onRefresh: onRefreshResources,
+                      onActivate: onActivateWordTimeline,
+                      onManualReview: onManualReviewTimeline,
+                      onActivatePhoneTimeline: onActivatePhoneTimeline,
+                      onArchivePhoneTimeline: onArchivePhoneTimeline,
+                      onDeletePhoneTimeline: onDeletePhoneTimeline,
+                      onGenerateChunkTimeline: onGenerateChunkTimeline,
+                      onActivateChunkTimeline: onActivateChunkTimeline,
+                      onArchiveChunkTimeline: onArchiveChunkTimeline,
+                      onDeleteChunkTimeline: onDeleteChunkTimeline,
+                      onExportLLTimeline: activeTrack == null
+                          ? null
+                          : () => onExportLLTimeline(activeTrack!),
+                    ),
                   ),
-          ),
-          const Divider(height: 1, color: ListenColors.border),
-          TimelineResourceSummaryPanel(
-            activeTrack: activeTrack,
-            document: timelineDocument,
-            summaries: wordTimelineSummaries,
-            phoneSummaries: phoneTimelineSummaries,
-            chunkSummaries: chunkTimelineSummaries,
-            activeWordTimingCount: visibleWordTimingCount,
-            error: timelineResourceError,
-            onImport: onImportLLTimeline,
-            onRefresh: onRefreshResources,
-            onActivate: onActivateWordTimeline,
-            onManualReview: onManualReviewTimeline,
-            onActivatePhoneTimeline: onActivatePhoneTimeline,
-            onArchivePhoneTimeline: onArchivePhoneTimeline,
-            onDeletePhoneTimeline: onDeletePhoneTimeline,
-            onGenerateChunkTimeline: onGenerateChunkTimeline,
-            onActivateChunkTimeline: onActivateChunkTimeline,
-            onArchiveChunkTimeline: onArchiveChunkTimeline,
-            onDeleteChunkTimeline: onDeleteChunkTimeline,
-            onExportLLTimeline: activeTrack == null
-                ? null
-                : () => onExportLLTimeline(activeTrack!),
           ),
         ],
       ),
     );
   }
+}
+
+class _ResizableResourceBody extends StatefulWidget {
+  const _ResizableResourceBody({
+    required this.subtitleList,
+    required this.timelineSummary,
+  });
+
+  final Widget subtitleList;
+  final Widget timelineSummary;
+
+  @override
+  State<_ResizableResourceBody> createState() => _ResizableResourceBodyState();
+}
+
+class _ResizableResourceBodyState extends State<_ResizableResourceBody> {
+  static const _splitterHeight = 11.0;
+
+  double _subtitleFraction = 0.34;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final totalHeight = constraints.maxHeight;
+      if (!totalHeight.isFinite || totalHeight <= _splitterHeight) {
+        return Column(
+          children: [
+            Expanded(child: widget.subtitleList),
+            _ResourceSplitter(onDrag: (_) {}),
+            Expanded(child: widget.timelineSummary),
+          ],
+        );
+      }
+
+      final bodyHeight = totalHeight - _splitterHeight;
+      final canHonorMinimums = bodyHeight >= 340;
+      final subtitleHeight = canHonorMinimums
+          ? _clampHeight(bodyHeight * _subtitleFraction, 118, bodyHeight - 220)
+          : _clampHeight(bodyHeight * 0.30, 54, bodyHeight * 0.45);
+      final timelineHeight = (bodyHeight - subtitleHeight).clamp(
+        0.0,
+        double.infinity,
+      );
+
+      return Column(
+        children: [
+          SizedBox(
+            key: const Key('subtitle-resource-list-pane'),
+            height: subtitleHeight,
+            child: widget.subtitleList,
+          ),
+          _ResourceSplitter(
+            onDrag: (delta) {
+              if (bodyHeight <= 0) return;
+              setState(() {
+                final nextHeight = subtitleHeight + delta;
+                _subtitleFraction = (nextHeight / bodyHeight).clamp(0.18, 0.72);
+              });
+            },
+          ),
+          SizedBox(
+            key: const Key('timeline-resource-pane'),
+            height: timelineHeight,
+            child: widget.timelineSummary,
+          ),
+        ],
+      );
+    },
+  );
+
+  double _clampHeight(double value, double minHeight, double maxHeight) {
+    final normalizedMax = maxHeight < minHeight ? minHeight : maxHeight;
+    return value.clamp(minHeight, normalizedMax).toDouble();
+  }
+}
+
+class _ResourceSplitter extends StatelessWidget {
+  const _ResourceSplitter({required this.onDrag});
+
+  final ValueChanged<double> onDrag;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: 'Resize subtitle and timeline resources',
+    child: MouseRegion(
+      cursor: SystemMouseCursors.resizeRow,
+      child: GestureDetector(
+        key: const Key('subtitle-resource-splitter'),
+        behavior: HitTestBehavior.opaque,
+        onVerticalDragUpdate: (details) => onDrag(details.delta.dy),
+        child: SizedBox(
+          height: _ResizableResourceBodyState._splitterHeight,
+          child: Center(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: ListenColors.border,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: const SizedBox(width: 42, height: 2),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _SubtitleResourceTile extends StatelessWidget {
