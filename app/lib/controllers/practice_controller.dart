@@ -504,6 +504,8 @@ class PracticeController extends ChangeNotifier {
             id: currentAttempt.id,
             practiceAttemptId: currentAttempt.id,
             lexicalEntryId: lexicalEntryId,
+            mediaId: session?.mediaId,
+            trackId: session?.trackId,
           ),
           anchors: currentItem.anchors,
           promptSnapshot: currentItem.promptSnapshot,

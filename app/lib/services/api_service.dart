@@ -915,6 +915,28 @@ class LocalApi {
         as Map<String, dynamic>,
   );
 
+  Future<List<ReviewQueueEntry>> dueReviewItems({int limit = 20}) async {
+    final values =
+        (await _request('GET', '/v1/review/items?limit=$limit'))
+            as List<dynamic>;
+    return values
+        .map(
+          (value) => ReviewQueueEntry.fromJson(value as Map<String, dynamic>),
+        )
+        .toList(growable: false);
+  }
+
+  Future<ReviewSubmission> submitReviewAttempt(
+    String itemId,
+    String rating,
+  ) async => ReviewSubmission.fromJson(
+    (await _request('POST', '/v1/review/attempts', {
+          'item_id': itemId,
+          'rating': rating,
+        }))
+        as Map<String, dynamic>,
+  );
+
   Future<List<Map<String, dynamic>>> learningResources() async =>
       ((await _request('GET', '/v1/learning-resources')) as List<dynamic>)
           .cast<Map<String, dynamic>>();

@@ -13,31 +13,31 @@ void main() {
     String? recentMediaTitle,
     Duration recentPosition = Duration.zero,
     Duration recentDuration = Duration.zero,
-  }) =>
-      MaterialApp(
-        theme: ListenTheme.light(),
-        locale: const Locale('zh'),
-        supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        home: Scaffold(
-          body: ListeningHome(
-            onOpenMedia: onOpenMedia,
-            onOpenOnline: onOpenOnline ?? () {},
-            onContinue: onContinue ?? () {},
-            onOpenSubtitleResources: () {},
-            onOpenVocabulary: () {},
-            onOpenSettings: () {},
-            recentMediaTitle: recentMediaTitle,
-            recentPosition: recentPosition,
-            recentDuration: recentDuration,
-          ),
-        ),
-      );
+  }) => MaterialApp(
+    theme: ListenTheme.light(),
+    locale: const Locale('zh'),
+    supportedLocales: AppLocalizations.supportedLocales,
+    localizationsDelegates: const [
+      AppLocalizations.delegate,
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+    ],
+    home: Scaffold(
+      body: ListeningHome(
+        onOpenMedia: onOpenMedia,
+        onOpenOnline: onOpenOnline ?? () {},
+        onContinue: onContinue ?? () {},
+        onOpenSubtitleResources: () {},
+        onOpenVocabulary: () {},
+        onOpenReview: () {},
+        onOpenSettings: () {},
+        recentMediaTitle: recentMediaTitle,
+        recentPosition: recentPosition,
+        recentDuration: recentDuration,
+      ),
+    ),
+  );
 
   testWidgets('wide home shows navigation and opens local media', (
     tester,

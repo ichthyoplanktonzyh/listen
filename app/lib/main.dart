@@ -40,6 +40,7 @@ import 'services/external_tools.dart';
 import 'utils/word_list_parser.dart';
 import 'screens/subtitle_resources_screen.dart';
 import 'screens/vocabulary_screen.dart';
+import 'screens/review_queue_screen.dart';
 import 'widgets/player/download_status_bar.dart';
 import 'widgets/app_bar/player_app_bar.dart';
 import 'widgets/flows/manual_review_flow.dart';
@@ -1388,6 +1389,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
+  Future<void> _openReviewQueue() async {
+    final service = api;
+    if (service == null) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ReviewQueueScreen(
+          api: service,
+          currentMediaId: playerController.mediaId,
+          onPlayRange: (startMs, endMs) =>
+              playbackActions.loopRange(startMs, endMs, 'Looping review card'),
+        ),
+      ),
+    );
+  }
+
   Future<void> _openSubtitleResources() async {
     if (api == null) return;
     await resourceActions.loadSubtitleResources(updateStatus: false);
@@ -1671,6 +1688,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 onOpenSubtitleResources: () =>
                     unawaited(_openSubtitleResources()),
                 onOpenVocabulary: _openVocabulary,
+                onOpenReview: () => unawaited(_openReviewQueue()),
                 onOpenMedia: mediaSession.openMedia,
                 onOpenOnline: _openOnline,
                 onImportPrimarySubtitle: () =>
@@ -1740,6 +1758,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 onOpenSubtitleResources: () =>
                                     unawaited(_openSubtitleResources()),
                                 onOpenVocabulary: _openVocabulary,
+                                onOpenReview: () =>
+                                    unawaited(_openReviewQueue()),
                                 onOpenSettings: () =>
                                     unawaited(_openSettings()),
                                 recentMediaTitle:
@@ -1765,7 +1785,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                     _savedVocabulary?.capped ?? false,
                                 vocabularyKnown: _savedVocabulary != null,
                                 listeningInboxCount:
-                                    extensiveListeningController.activeItemCount,
+                                    extensiveListeningController
+                                        .activeItemCount,
                                 statusText: playerController.status,
                               )
                             : MediaWorkbench(

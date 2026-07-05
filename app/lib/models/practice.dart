@@ -333,6 +333,8 @@ class ReviewSource {
     this.id,
     this.practiceAttemptId,
     this.lexicalEntryId,
+    this.mediaId,
+    this.trackId,
   });
 
   factory ReviewSource.fromJson(Map<String, dynamic> json) => ReviewSource(
@@ -340,18 +342,24 @@ class ReviewSource {
     id: json['id'] as String?,
     practiceAttemptId: json['practice_attempt_id'] as String?,
     lexicalEntryId: json['lexical_entry_id'] as String?,
+    mediaId: json['media_id'] as String?,
+    trackId: json['track_id'] as String?,
   );
 
   final String kind;
   final String? id;
   final String? practiceAttemptId;
   final String? lexicalEntryId;
+  final String? mediaId;
+  final String? trackId;
 
   Map<String, dynamic> toJson() => {
     'kind': kind,
     'id': id,
     'practice_attempt_id': practiceAttemptId,
     'lexical_entry_id': lexicalEntryId,
+    'media_id': mediaId,
+    'track_id': trackId,
   };
 }
 
@@ -403,6 +411,108 @@ class CreateReviewItem {
     'anchors': anchors.map((value) => value.toJson()).toList(growable: false),
     'prompt_snapshot': promptSnapshot,
   };
+}
+
+class ReviewSchedule {
+  const ReviewSchedule({
+    required this.itemId,
+    required this.algorithm,
+    required this.dueAtMs,
+    required this.lapseCount,
+    this.stability,
+    this.difficulty,
+    this.intervalDays,
+  });
+
+  factory ReviewSchedule.fromJson(Map<String, dynamic> json) => ReviewSchedule(
+    itemId: json['item_id'] as String,
+    algorithm: json['algorithm'] as String,
+    dueAtMs: json['due_at_ms'] as int,
+    stability: (json['stability'] as num?)?.toDouble(),
+    difficulty: (json['difficulty'] as num?)?.toDouble(),
+    intervalDays: (json['interval_days'] as num?)?.toDouble(),
+    lapseCount: json['lapse_count'] as int,
+  );
+
+  final String itemId;
+  final String algorithm;
+  final int dueAtMs;
+  final double? stability;
+  final double? difficulty;
+  final double? intervalDays;
+  final int lapseCount;
+}
+
+class ReviewAttempt {
+  const ReviewAttempt({
+    required this.id,
+    required this.itemId,
+    required this.reviewedAtMs,
+    required this.rating,
+    this.practiceAttemptId,
+    this.nextDueAtMs,
+  });
+
+  factory ReviewAttempt.fromJson(Map<String, dynamic> json) => ReviewAttempt(
+    id: json['id'] as String,
+    itemId: json['item_id'] as String,
+    reviewedAtMs: json['reviewed_at_ms'] as int,
+    rating: json['rating'] as String,
+    practiceAttemptId: json['practice_attempt_id'] as String?,
+    nextDueAtMs: json['next_due_at_ms'] as int?,
+  );
+
+  final String id;
+  final String itemId;
+  final int reviewedAtMs;
+  final String rating;
+  final String? practiceAttemptId;
+  final int? nextDueAtMs;
+}
+
+class ReviewQueueEntry {
+  const ReviewQueueEntry({required this.item, required this.schedule});
+
+  factory ReviewQueueEntry.fromJson(Map<String, dynamic> json) =>
+      ReviewQueueEntry(
+        item: ReviewItem.fromJson(json['item'] as Map<String, dynamic>),
+        schedule: ReviewSchedule.fromJson(
+          json['schedule'] as Map<String, dynamic>,
+        ),
+      );
+
+  final ReviewItem item;
+  final ReviewSchedule schedule;
+
+  int? get playbackStartMs => item.anchors
+      .map((value) => value.startMs)
+      .whereType<int>()
+      .fold<int?>(
+        null,
+        (value, next) => value == null || next < value ? next : value,
+      );
+
+  int? get playbackEndMs => item.anchors
+      .map((value) => value.endMs)
+      .whereType<int>()
+      .fold<int?>(
+        null,
+        (value, next) => value == null || next > value ? next : value,
+      );
+}
+
+class ReviewSubmission {
+  const ReviewSubmission({required this.attempt, required this.schedule});
+
+  factory ReviewSubmission.fromJson(
+    Map<String, dynamic> json,
+  ) => ReviewSubmission(
+    attempt: ReviewAttempt.fromJson(json['attempt'] as Map<String, dynamic>),
+    schedule: ReviewSchedule.fromJson(json['schedule'] as Map<String, dynamic>),
+  );
+
+  final ReviewAttempt attempt;
+  final ReviewSchedule schedule;
 }
 
 class DiagnosisHintEvidence {

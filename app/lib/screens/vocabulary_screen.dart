@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../localization.dart';
 import '../models/types.dart';
+import '../models/practice.dart';
 import '../services/api_service.dart';
 import '../widgets/panels/word_learning_panel.dart';
 import '../widgets/vocabulary/vocabulary_book_view.dart';
@@ -110,6 +111,40 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
             onNotHeard: () {},
           ),
         ),
+        actions: [
+          TextButton.icon(
+            onPressed: () async {
+              try {
+                await widget.api.createReviewItem(
+                  CreateReviewItem(
+                    source: ReviewSource(
+                      kind: 'lexical_entry',
+                      id: entry.id,
+                      lexicalEntryId: entry.id,
+                    ),
+                    anchors: const [],
+                    promptSnapshot: entry.displayForm,
+                  ),
+                );
+                if (!mounted) return;
+                ScaffoldMessenger.of(
+                  this.context,
+                ).showSnackBar(const SnackBar(content: Text('已加入声音复习')));
+              } catch (error) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(
+                  this.context,
+                ).showSnackBar(SnackBar(content: Text('加入复习失败：$error')));
+              }
+            },
+            icon: const Icon(Icons.headphones_outlined),
+            label: const Text('加入复习'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+        ],
       ),
     );
   }

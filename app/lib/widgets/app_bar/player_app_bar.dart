@@ -7,6 +7,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
     super.key,
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
+    required this.onOpenReview,
     required this.onOpenMedia,
     required this.onOpenOnline,
     required this.onImportPrimarySubtitle,
@@ -33,6 +34,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
+  final VoidCallback onOpenReview;
   final VoidCallback onOpenMedia;
   final VoidCallback onOpenOnline;
   final VoidCallback onImportPrimarySubtitle;
@@ -189,6 +191,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
           onSelected: (value) {
             if (value == 'subtitle-resources') onOpenSubtitleResources();
             if (value == 'vocabulary') onOpenVocabulary();
+            if (value == 'review') onOpenReview();
             if (value == 'learning-assets') onOpenLearningAssets();
             if (value == 'learning-resources') onOpenLearningResources();
             if (value == 'phrase-candidates') onShowPhraseCandidates();
@@ -211,6 +214,14 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
                 icon: Icons.menu_book_outlined,
                 title: l.text('vocabulary'),
                 subtitle: l.text('vocabularySummary'),
+              ),
+            ),
+            PopupMenuItem(
+              value: 'review',
+              child: _MenuRow(
+                icon: Icons.headphones_outlined,
+                title: l.text('review'),
+                subtitle: l.text('audioFirstReview'),
               ),
             ),
             PopupMenuItem(

@@ -11,6 +11,7 @@ class ListeningHome extends StatelessWidget {
     required this.onContinue,
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
+    required this.onOpenReview,
     required this.onOpenSettings,
     this.recentMediaTitle,
     this.recentMediaPath,
@@ -29,6 +30,7 @@ class ListeningHome extends StatelessWidget {
   final VoidCallback onContinue;
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
+  final VoidCallback onOpenReview;
   final VoidCallback onOpenSettings;
   final String? recentMediaTitle;
   final String? recentMediaPath;
@@ -57,6 +59,7 @@ class ListeningHome extends StatelessWidget {
                   onOpenOnline: onOpenOnline,
                   onOpenSubtitleResources: onOpenSubtitleResources,
                   onOpenVocabulary: onOpenVocabulary,
+                  onOpenReview: onOpenReview,
                   onOpenSettings: onOpenSettings,
                 ),
               ),
@@ -68,6 +71,7 @@ class ListeningHome extends StatelessWidget {
                 onContinue: onContinue,
                 onOpenSubtitleResources: onOpenSubtitleResources,
                 onOpenVocabulary: onOpenVocabulary,
+                onOpenReview: onOpenReview,
                 recentMediaTitle: recentMediaTitle,
                 recentMediaPath: recentMediaPath,
                 recentPosition: recentPosition,
@@ -93,6 +97,7 @@ class _HomeSidebar extends StatelessWidget {
     required this.onOpenOnline,
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
+    required this.onOpenReview,
     required this.onOpenSettings,
   });
 
@@ -100,6 +105,7 @@ class _HomeSidebar extends StatelessWidget {
   final VoidCallback onOpenOnline;
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
+  final VoidCallback onOpenReview;
   final VoidCallback onOpenSettings;
 
   @override
@@ -147,6 +153,11 @@ class _HomeSidebar extends StatelessWidget {
               label: l.text('vocabulary'),
               onTap: onOpenVocabulary,
             ),
+            _SidebarItem(
+              icon: Icons.headphones_outlined,
+              label: l.text('review'),
+              onTap: onOpenReview,
+            ),
             const Spacer(),
             _SidebarItem(
               icon: Icons.settings_outlined,
@@ -168,6 +179,7 @@ class _HomeContent extends StatelessWidget {
     required this.onContinue,
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
+    required this.onOpenReview,
     required this.recentMediaTitle,
     required this.recentMediaPath,
     required this.recentPosition,
@@ -186,6 +198,7 @@ class _HomeContent extends StatelessWidget {
   final VoidCallback onContinue;
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
+  final VoidCallback onOpenReview;
   final String? recentMediaTitle;
   final String? recentMediaPath;
   final Duration recentPosition;
@@ -288,6 +301,12 @@ class _HomeContent extends StatelessWidget {
                     label: l.text('vocabulary'),
                     sourceLabel: l.text('vocabularySummary'),
                     onTap: onOpenVocabulary,
+                  ),
+                  _SourceAction(
+                    icon: Icons.headphones_outlined,
+                    label: l.text('review'),
+                    sourceLabel: l.text('audioFirstReview'),
+                    onTap: onOpenReview,
                   ),
                 ],
               ),
