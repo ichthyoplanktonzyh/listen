@@ -81,6 +81,7 @@ assets:
 | `review_items` | A schedulable review target pointing to lexical entries, chunks, sentences, practice failures, or future sound cases |
 | `review_attempts` | Historical review rating attempts |
 | `review_schedules` | Current due projection per review item; v1 is explicitly `heuristic_proxy` and replaceable |
+| `hunting_candidates` | Queryable lexical targets produced by failed reviews for later hunting-list consumption |
 | `learning_events` | Append-mostly analytics facts for practice/review/listening/status/stuck-point events |
 | `listening_inbox_items` | Queryable projection for extensive-listening soft interrupts, snapshots, expiry, and整理 outcomes |
 
@@ -92,13 +93,18 @@ assets:
 the authoritative vocabulary learning asset. Anki export or AnkiConnect should
 adapt from `ReviewItem` later rather than define the internal model.
 
+The four audio-first card kinds are not persisted on `review_items`.
+`ReviewCard` is an application read model derived from `ReviewItem.source`,
+anchors, and `prompt_snapshot`; presentation can evolve without rewriting
+historical scheduling data.
+
 `learning_events` is the intended future source for dashboard aggregation. It is
 not a substitute for status history, practice attempts, or review attempts.
 Phase 3.2 also uses it for stuck-point facts and familiar-material markers:
 `stuck_point_marked`, `stuck_point_skipped`, `diagnosis_viewed`,
 `stuck_point_closed`, and `familiar_material_marked`. Stuck-point status is a
 read-side derivation from events plus `PracticeAttempt` and `ReviewItem`; there
-is no authoritative stuck-point state table in schema v19.
+is no authoritative stuck-point state table in schema v20.
 
 Phase 3.3 adds `ListeningInboxItem` for extensive-listening soft interrupts.
 The item stores the target time range, subtitle/context snapshot, active vs
@@ -141,7 +147,8 @@ listening_inbox_items
 
 review_items
   ├── review_attempts
-  └── review_schedules (one current due projection per item)
+  ├── review_schedules (one current due projection per item)
+  └── hunting_candidates (failed lexical targets, source snapshots, counts)
 
 learning_events
   └── session_id nullable, ON DELETE SET NULL
@@ -272,7 +279,7 @@ expansion is ephemeral overlay state, not a fourth persisted Rhythm mode.
   cache, active timeline identities, and learning-loop IDs.
 - Vocabulary export/import is version 5 and contains only lexical assets plus
   phonetic finding feedback.
-- SQLite schema version is 19 after adding the audio-first review schedule projection.
+- SQLite schema version is 20 after adding the failed-review hunting candidate pool.
 - Review scheduling v1 is recorded as `listen_review_v1_heuristic_proxy`: `again` returns in
   10 minutes, `hard` in one day, and successful intervals grow from 3 to 7 days before doubling.
   The durable attempts remain the evidence history; the schedule row is a replaceable read model.

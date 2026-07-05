@@ -107,6 +107,7 @@ string_id!(PracticeItemId);
 string_id!(PracticeAttemptId);
 string_id!(ReviewItemId);
 string_id!(ReviewAttemptId);
+string_id!(HuntingCandidateId);
 string_id!(LearningEventId);
 string_id!(ListeningInboxItemId);
 string_id!(CorpusOccurrenceId);

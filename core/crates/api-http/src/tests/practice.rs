@@ -96,6 +96,8 @@ async fn practice_routes_create_and_read_attempts() {
         due[0]["schedule"]["algorithm"],
         "listen_review_v1_heuristic_proxy"
     );
+    assert_eq!(due[0]["card"]["kind"], "source_sentence_recall");
+    assert_eq!(due[0]["card"]["answer"], "hello world");
 
     let review_response = app
         .clone()
@@ -119,6 +121,14 @@ async fn practice_routes_create_and_read_attempts() {
     .unwrap();
     assert_eq!(review_submission["attempt"]["rating"], "good");
     assert_eq!(review_submission["schedule"]["interval_days"], 3.0);
+    assert_eq!(
+        review_submission["generated_observation_ids"],
+        serde_json::json!([])
+    );
+    assert_eq!(
+        review_submission["hunting_candidate_ids"],
+        serde_json::json!([])
+    );
 
     let read_response = app
         .oneshot(

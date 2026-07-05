@@ -433,6 +433,11 @@ export type ReviewSourceKind =
   | "connected_speech";
 export type ReviewItemStatus = "active" | "suspended" | "archived";
 export type ReviewRating = "again" | "hard" | "good" | "easy";
+export type ReviewCardKind =
+  | "word_recognition"
+  | "chunk_cloze"
+  | "phrase_presence"
+  | "source_sentence_recall";
 export type LearningEventKind =
   | "listening_started"
   | "listening_completed"
@@ -600,9 +605,17 @@ export interface ReviewAttempt {
   next_due_at_ms: number | null;
 }
 
+export interface ReviewCard {
+  kind: ReviewCardKind;
+  cue: string | null;
+  answer: string;
+  target: string | null;
+}
+
 export interface ReviewQueueEntry {
   item: ReviewItem;
   schedule: ReviewSchedule;
+  card: ReviewCard;
 }
 
 export interface SubmitReviewAttempt {
@@ -613,6 +626,8 @@ export interface SubmitReviewAttempt {
 export interface ReviewSubmission {
   attempt: ReviewAttempt;
   schedule: ReviewSchedule;
+  generated_observation_ids: string[];
+  hunting_candidate_ids: string[];
 }
 
 export interface DiagnosisHintEvidence {

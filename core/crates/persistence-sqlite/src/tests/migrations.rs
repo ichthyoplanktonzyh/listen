@@ -6,6 +6,7 @@ fn new_database_migrates_to_latest() {
     assert_eq!(repo.schema_version().unwrap(), MIGRATION_VERSION);
     let connection = repo.connection.lock().unwrap();
     assert!(!table_exists(&connection, removed_resource_table_name()));
+    assert!(table_exists(&connection, "hunting_candidates"));
 }
 
 #[test]

@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ChunkId, LanguageCode, LearningStatus, LexicalEntryId, LexicalObservationId,
-    ListeningInboxItemId, MediaId, PracticeAttemptId, PracticeItemId, PracticeSessionId,
-    RecordingAssetId, ReviewAttemptId, ReviewItemId, SubtitleSentenceId, SubtitleTrackId,
+    ChunkId, HuntingCandidateId, LanguageCode, LearningStatus, LexicalEntryId,
+    LexicalObservationId, ListeningInboxItemId, MediaId, PracticeAttemptId, PracticeItemId,
+    PracticeSessionId, RecordingAssetId, ReviewAttemptId, ReviewItemId, SubtitleSentenceId,
+    SubtitleTrackId,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -91,6 +92,14 @@ pub enum ReviewRating {
     Hard,
     Good,
     Easy,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HuntingCandidateStatus {
+    Active,
+    Consumed,
+    Dismissed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -290,6 +299,22 @@ pub struct ReviewAttempt {
     pub rating: ReviewRating,
     pub practice_attempt_id: Option<PracticeAttemptId>,
     pub next_due_at_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HuntingCandidate {
+    pub id: HuntingCandidateId,
+    pub lexical_entry_id: LexicalEntryId,
+    pub review_item_id: ReviewItemId,
+    pub sentence_id: Option<SubtitleSentenceId>,
+    pub media_id: Option<MediaId>,
+    pub track_id: Option<SubtitleTrackId>,
+    pub target_snapshot: String,
+    pub prompt_snapshot: String,
+    pub failure_count: u32,
+    pub status: HuntingCandidateStatus,
+    pub created_at_ms: u64,
+    pub last_failed_at_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

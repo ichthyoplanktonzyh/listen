@@ -71,6 +71,9 @@ application use cases and provider/repository boundaries.
   persist `PracticeAttempt`, write failed lexical anchors as `LexicalObservation`,
   optionally create `ReviewItem`, append `LearningEvent`, complete intensive
   sessions, and derive session summaries from events/attempts/review items.
+- Due-review queries derive an application-owned `ReviewCard` read model from
+  durable `ReviewItem` source/anchors. Card kind and cue/answer presentation are
+  not persisted, so historical review rows remain compatible as card UX evolves.
 - Extensive-listening services capture soft-interrupt moments as
   `ListeningInboxItem`, list active/archived Inbox items, process them into
   review items / micro-intensive practice items / favorite or dismissed
@@ -114,7 +117,7 @@ application use cases and provider/repository boundaries.
 - Partial unique indexes enforce one active word/chunk/phone timeline per track.
 - Lexical export/import version 5 is lexical-only.
 - Schema v15 adds `practice_sessions`, `practice_items`, `practice_attempts`,
-  `review_items`, `review_attempts`, `review_schedules`, and `learning_events`.
+  `review_items`, `review_attempts`, and `learning_events`.
 - Schema v16 destructively resets lexical/learning-resource tables to the
   authoritative `LexicalEntry + LexicalUnit + LexicalObservation` shape for
   local databases that had already run the old v7 lexical migration.
@@ -124,6 +127,11 @@ application use cases and provider/repository boundaries.
   interrupts and整理 outcomes. The durable event stream remains the analytics
   source; the table exists so UI does not reconstruct Inbox state from raw
   events on every render.
+- Schema v19 adds `review_schedules`, the replaceable current-due projection for
+  active review items.
+- Schema v20 adds `hunting_candidates`, a queryable handoff pool for repeated
+  lexical review failures. It preserves source snapshots and failure counts for
+  Phase 3.7 without treating the pool as authoritative learning status.
 - Learning-loop persistence stores JSON snapshots plus query columns for kind,
   status, subject, result, and timestamps. Corpus/difficulty/recording persistence
   is not yet implemented.

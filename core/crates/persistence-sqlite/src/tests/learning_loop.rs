@@ -376,6 +376,107 @@ fn session_summary_derives_stuck_point_statuses_from_events_attempts_and_review(
 }
 
 #[test]
+fn failed_review_records_context_evidence_and_hunting_candidate_without_status_change() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    let media = services
+        .register_media(RegisterMedia {
+            path: "/tmp/review-evidence.mp4".into(),
+            fingerprint: "review-evidence".into(),
+            title: "Review evidence".into(),
+            kind: MediaKind::Video,
+            duration_ms: Some(5_000),
+        })
+        .unwrap();
+    let track = services
+        .import_subtitle(ImportSubtitle {
+            media_id: media.id.clone(),
+            source_name: "timeline.srt".into(),
+            content: include_bytes!("../../../../testdata/subtitles/timeline.srt").to_vec(),
+            language: Some("en".into()),
+            identity_salt: None,
+        })
+        .unwrap();
+    let sentence = &track.sentences[0];
+    let lexical = upsert_word_asset(
+        &services,
+        "en",
+        "hello",
+        "Hello",
+        Some(LearningStatus::KnownNotRecognized),
+        None,
+    );
+    let review = services
+        .create_review_item(application::CreateReviewItem {
+            source: ReviewSource {
+                kind: ReviewSourceKind::PracticeFailure,
+                id: None,
+                practice_attempt_id: None,
+                lexical_entry_id: Some(lexical.entry.id.clone()),
+                media_id: Some(media.id),
+                track_id: Some(track.id.clone()),
+            },
+            anchors: vec![PracticeAnchor {
+                kind: PracticeAnchorKind::LexicalEntry,
+                id: lexical.entry.id.as_str().into(),
+                label: Some("Hello".into()),
+                lexical_entry_id: Some(lexical.entry.id.clone()),
+                sentence_id: Some(sentence.id.clone()),
+                token_start: Some(0),
+                token_end: Some(0),
+                start_ms: Some(sentence.start.get()),
+                end_ms: Some(sentence.end.get()),
+            }],
+            prompt_snapshot: sentence.display_text.clone(),
+        })
+        .unwrap();
+
+    let submission = services
+        .submit_review_attempt(application::SubmitReviewAttempt {
+            item_id: review.id.clone(),
+            rating: ReviewRating::Again,
+        })
+        .unwrap();
+
+    assert_eq!(submission.generated_observation_ids.len(), 1);
+    assert_eq!(submission.hunting_candidate_ids.len(), 1);
+    let observations = repo
+        .list_lexical_observations_by_sentence(&sentence.id)
+        .unwrap();
+    assert_eq!(observations.len(), 1);
+    assert_eq!(
+        observations[0].result,
+        ObservationResult::NotRecognizedInContext
+    );
+    let candidates = services
+        .hunting_candidates(Some(HuntingCandidateStatus::Active), 10, 0)
+        .unwrap();
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].review_item_id, review.id);
+    assert_eq!(candidates[0].failure_count, 1);
+    assert_eq!(candidates[0].target_snapshot, "Hello");
+    assert_eq!(
+        services
+            .lexical_details(&lexical.entry.id)
+            .unwrap()
+            .unwrap()
+            .entry
+            .status,
+        Some(LearningStatus::KnownNotRecognized)
+    );
+}
+
+#[test]
 fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = AppServices::new(

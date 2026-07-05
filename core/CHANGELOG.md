@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- 2026-07-05 21:59 CST: Phase 3.4 复习失败证据与猎词候选池落地。SQLite schema v20 新增
+  `hunting_candidates`，按 lexical entry + review item 聚合失败次数并保留媒体、字幕轨、
+  句子、目标词和 prompt snapshot；`again` 评分在词条与句子仍有效时追加
+  `NotRecognizedInContext` `LexicalObservation`，来源丢失时只保留 snapshot 候选，不伪造
+  observation，也不修改 `LearningStatus`。`ReviewSubmission` 返回生成的 observation/candidate
+  IDs，`ReviewCompleted` 事件同步记录证据引用。为遵守单文件 1500 行护栏，将复习调度与卡型
+  派生机械拆到 `practice/review.rs`。验证：`cargo test -p application -p
+  persistence-sqlite -p api-http`、`flutter analyze`、`flutter test`（193 passed）、
+  `validate-contracts`、`cargo clippy -p application -p persistence-sqlite -p api-http
+  --all-targets`、`git diff --check` 通过；clippy 仅报告既有跨 crate warnings。
+
+- 2026-07-05 21:51 CST: Phase 3.4 四类 audio-first 卡型差异化落地。到期队列新增
+  application-owned `ReviewCard` 读模型，基于 `ReviewItem` 来源和锚点稳定派生听音识词、
+  chunk cloze、phrase 出现判断、原句回听四类卡；卡型不写入 SQLite，历史复习项无需迁移。
+  Flutter 队列分别提供翻词、文本填空、二选一判断和原句对照交互，完成后继续复用三档自评
+  与既有调度器。同步 OpenAPI、TypeScript/Dart DTO、契约校验与架构/数据模型文档，并新增
+  Rust 派生规则测试、API 断言和四类 Flutter widget 回归测试。验证：`cargo test -p
+  application -p api-http`、`flutter analyze`、`flutter test`（193 passed）、
+  `validate-contracts`、`git diff --check` 全部通过。
+
 - 2026-07-05 21:33 CST: 启动 Phase 3.4 Audio-first Review Queue。新增 SQLite schema v19
   `review_schedules` 并为历史复习项回填立即到期计划；补齐到期队列与三档评分 API，评分写入
   `ReviewAttempt`、推进 heuristic_proxy 调度并追加 `ReviewCompleted` 事件。Flutter 新增

@@ -373,6 +373,90 @@ impl ReviewRepository for SqliteRepository {
             .collect::<Result<Vec<_>, _>>()
             .map_err(repo)
     }
+
+    fn upsert_hunting_candidate(
+        &self,
+        candidate: &HuntingCandidate,
+    ) -> Result<HuntingCandidate, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.execute(
+            "INSERT INTO hunting_candidates
+             (id,lexical_entry_id,review_item_id,status,failure_count,last_failed_at_ms,candidate_json)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)
+             ON CONFLICT(lexical_entry_id,review_item_id) DO UPDATE SET
+               id=excluded.id,
+               status=excluded.status,
+               failure_count=excluded.failure_count,
+               last_failed_at_ms=excluded.last_failed_at_ms,
+               candidate_json=excluded.candidate_json",
+            params![
+                candidate.id.as_str(),
+                candidate.lexical_entry_id.as_str(),
+                candidate.review_item_id.as_str(),
+                json(&candidate.status)?,
+                candidate.failure_count,
+                candidate.last_failed_at_ms,
+                json(candidate)?,
+            ],
+        )
+        .map_err(repo)?;
+        Ok(candidate.clone())
+    }
+
+    fn get_hunting_candidate(
+        &self,
+        id: &HuntingCandidateId,
+    ) -> Result<Option<HuntingCandidate>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.query_row(
+            "SELECT candidate_json FROM hunting_candidates WHERE id=?1",
+            [id.as_str()],
+            |row| from_json(&row.get::<_, String>(0)?),
+        )
+        .optional()
+        .map_err(repo)
+    }
+
+    fn list_hunting_candidates(
+        &self,
+        status: Option<HuntingCandidateStatus>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<HuntingCandidate>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        if let Some(status) = status {
+            let mut statement = conn
+                .prepare(
+                    "SELECT candidate_json FROM hunting_candidates
+                     WHERE status=?1
+                     ORDER BY last_failed_at_ms DESC
+                     LIMIT ?2 OFFSET ?3",
+                )
+                .map_err(repo)?;
+            statement
+                .query_map(params![json(&status)?, limit.min(500), offset], |row| {
+                    from_json(&row.get::<_, String>(0)?)
+                })
+                .map_err(repo)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(repo)
+        } else {
+            let mut statement = conn
+                .prepare(
+                    "SELECT candidate_json FROM hunting_candidates
+                     ORDER BY last_failed_at_ms DESC
+                     LIMIT ?1 OFFSET ?2",
+                )
+                .map_err(repo)?;
+            statement
+                .query_map(params![limit.min(500), offset], |row| {
+                    from_json(&row.get::<_, String>(0)?)
+                })
+                .map_err(repo)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(repo)
+        }
+    }
 }
 
 impl LearningEventRepository for SqliteRepository {

@@ -741,6 +741,20 @@ pub trait ReviewRepository: Send + Sync {
         due_at_or_before_ms: u64,
         limit: u32,
     ) -> Result<Vec<(ReviewItem, ReviewSchedule)>, ApplicationError>;
+    fn upsert_hunting_candidate(
+        &self,
+        candidate: &HuntingCandidate,
+    ) -> Result<HuntingCandidate, ApplicationError>;
+    fn get_hunting_candidate(
+        &self,
+        id: &HuntingCandidateId,
+    ) -> Result<Option<HuntingCandidate>, ApplicationError>;
+    fn list_hunting_candidates(
+        &self,
+        status: Option<HuntingCandidateStatus>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<HuntingCandidate>, ApplicationError>;
 }
 
 pub trait LearningEventRepository: Send + Sync {

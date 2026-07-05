@@ -163,10 +163,28 @@ pub struct CreateReviewItem {
     pub prompt_snapshot: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewCardKind {
+    WordRecognition,
+    ChunkCloze,
+    PhrasePresence,
+    SourceSentenceRecall,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewCard {
+    pub kind: ReviewCardKind,
+    pub cue: Option<String>,
+    pub answer: String,
+    pub target: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReviewQueueEntry {
     pub item: ReviewItem,
     pub schedule: ReviewSchedule,
+    pub card: ReviewCard,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -179,6 +197,8 @@ pub struct SubmitReviewAttempt {
 pub struct ReviewSubmission {
     pub attempt: ReviewAttempt,
     pub schedule: ReviewSchedule,
+    pub generated_observation_ids: Vec<LexicalObservationId>,
+    pub hunting_candidate_ids: Vec<HuntingCandidateId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

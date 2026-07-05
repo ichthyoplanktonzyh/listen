@@ -2,48 +2,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::*;
 
-const REVIEW_ALGORITHM: &str = "listen_review_v1_heuristic_proxy";
-const MINUTE_MS: u64 = 60_000;
-const DAY_MS: u64 = 24 * 60 * MINUTE_MS;
-
-fn next_review_schedule(
-    current: &ReviewSchedule,
-    rating: ReviewRating,
-    reviewed_at_ms: u64,
-) -> ReviewSchedule {
-    let previous_days = current.interval_days.unwrap_or(0.0);
-    let (interval_days, delay_ms, lapse_count) = match rating {
-        ReviewRating::Again => (0.0, 10 * MINUTE_MS, current.lapse_count.saturating_add(1)),
-        ReviewRating::Hard => (1.0, DAY_MS, current.lapse_count),
-        ReviewRating::Good => {
-            let days = if previous_days < 1.0 {
-                3.0
-            } else if previous_days <= 3.0 {
-                7.0
-            } else {
-                (previous_days * 2.0).min(60.0)
-            };
-            (days, (days * DAY_MS as f32) as u64, current.lapse_count)
-        }
-        ReviewRating::Easy => {
-            let days = if previous_days < 1.0 {
-                7.0
-            } else {
-                (previous_days * 2.5).clamp(7.0, 90.0)
-            };
-            (days, (days * DAY_MS as f32) as u64, current.lapse_count)
-        }
-    };
-    ReviewSchedule {
-        item_id: current.item_id.clone(),
-        algorithm: REVIEW_ALGORITHM.into(),
-        due_at_ms: reviewed_at_ms.saturating_add(delay_ms),
-        stability: None,
-        difficulty: None,
-        interval_days: Some(interval_days),
-        lapse_count,
-    }
-}
+mod review;
+use review::{REVIEW_ALGORITHM, next_review_schedule, review_card};
 
 impl AppServices {
     pub fn create_practice_session(
@@ -305,7 +265,14 @@ impl AppServices {
             .map(|entries| {
                 entries
                     .into_iter()
-                    .map(|(item, schedule)| ReviewQueueEntry { item, schedule })
+                    .map(|(item, schedule)| {
+                        let card = review_card(&item);
+                        ReviewQueueEntry {
+                            item,
+                            schedule,
+                            card,
+                        }
+                    })
                     .collect()
             })
     }
@@ -345,6 +312,12 @@ impl AppServices {
             next_due_at_ms: Some(schedule.due_at_ms),
         })?;
         let schedule = self.review.save_review_schedule(&schedule)?;
+        let (generated_observation_ids, hunting_candidate_ids) =
+            if input.rating == ReviewRating::Again {
+                self.record_review_failure(&item, now)?
+            } else {
+                (Vec::new(), Vec::new())
+            };
         self.learning_events.append_learning_event(&LearningEvent {
             id: LearningEventId::from_fingerprint("learning-event", &fingerprint),
             occurred_at_ms: now,
@@ -358,10 +331,127 @@ impl AppServices {
                 "next_due_at_ms": schedule.due_at_ms,
                 "algorithm": schedule.algorithm,
                 "evidence_class": "heuristic_proxy",
+                "generated_observation_ids": generated_observation_ids
+                    .iter()
+                    .map(|id| id.as_str())
+                    .collect::<Vec<_>>(),
+                "hunting_candidate_ids": hunting_candidate_ids
+                    .iter()
+                    .map(|id| id.as_str())
+                    .collect::<Vec<_>>(),
             }),
             session_id: None,
         })?;
-        Ok(ReviewSubmission { attempt, schedule })
+        Ok(ReviewSubmission {
+            attempt,
+            schedule,
+            generated_observation_ids,
+            hunting_candidate_ids,
+        })
+    }
+
+    pub fn hunting_candidates(
+        &self,
+        status: Option<HuntingCandidateStatus>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<HuntingCandidate>, ApplicationError> {
+        self.review
+            .list_hunting_candidates(status, limit.min(500), offset)
+    }
+
+    fn record_review_failure(
+        &self,
+        item: &ReviewItem,
+        failed_at_ms: u64,
+    ) -> Result<(Vec<LexicalObservationId>, Vec<HuntingCandidateId>), ApplicationError> {
+        let mut targets = Vec::<(LexicalEntryId, String, Option<SubtitleSentenceId>)>::new();
+        if let Some(lexical_entry_id) = item.source.lexical_entry_id.clone() {
+            let matching_anchor = item
+                .anchors
+                .iter()
+                .find(|anchor| anchor.lexical_entry_id.as_ref() == Some(&lexical_entry_id));
+            targets.push((
+                lexical_entry_id,
+                matching_anchor
+                    .and_then(|anchor| anchor.label.clone())
+                    .unwrap_or_else(|| item.prompt_snapshot.clone()),
+                matching_anchor
+                    .and_then(|anchor| anchor.sentence_id.clone())
+                    .or_else(|| {
+                        item.anchors
+                            .iter()
+                            .find_map(|anchor| anchor.sentence_id.clone())
+                    }),
+            ));
+        }
+        for anchor in &item.anchors {
+            let Some(lexical_entry_id) = anchor.lexical_entry_id.clone() else {
+                continue;
+            };
+            targets.push((
+                lexical_entry_id,
+                anchor
+                    .label
+                    .clone()
+                    .unwrap_or_else(|| item.prompt_snapshot.clone()),
+                anchor.sentence_id.clone(),
+            ));
+        }
+
+        let mut seen = BTreeSet::new();
+        let mut generated_observation_ids = Vec::new();
+        let mut hunting_candidate_ids = Vec::new();
+        for (lexical_entry_id, target_snapshot, sentence_id) in targets {
+            if !seen.insert(lexical_entry_id.as_str().to_owned()) {
+                continue;
+            }
+            if let Some(sentence_id) = sentence_id.as_ref()
+                && self
+                    .learning_assets
+                    .lexical_details(&lexical_entry_id)?
+                    .is_some()
+                && self.subtitle_tracks.get_sentence(sentence_id)?.is_some()
+            {
+                let observation =
+                    self.learning_assets
+                        .create_lexical_observation(&LexicalObservation {
+                            id: domain::lexical_observation_id(&lexical_entry_id, sentence_id),
+                            lexical_entry_id: lexical_entry_id.clone(),
+                            sentence_id: sentence_id.clone(),
+                            original_form: target_snapshot.clone(),
+                            result: ObservationResult::NotRecognizedInContext,
+                            created_at_ms: failed_at_ms,
+                        })?;
+                generated_observation_ids.push(observation.id);
+            }
+
+            let id = HuntingCandidateId::from_fingerprint(
+                "hunting-candidate",
+                &format!("{}:{}", item.id.as_str(), lexical_entry_id.as_str()),
+            );
+            let existing = self.review.get_hunting_candidate(&id)?;
+            let candidate = self.review.upsert_hunting_candidate(&HuntingCandidate {
+                id,
+                lexical_entry_id,
+                review_item_id: item.id.clone(),
+                sentence_id,
+                media_id: item.source.media_id.clone(),
+                track_id: item.source.track_id.clone(),
+                target_snapshot,
+                prompt_snapshot: item.prompt_snapshot.clone(),
+                failure_count: existing
+                    .as_ref()
+                    .map_or(1, |value| value.failure_count.saturating_add(1)),
+                status: HuntingCandidateStatus::Active,
+                created_at_ms: existing
+                    .as_ref()
+                    .map_or(failed_at_ms, |value| value.created_at_ms),
+                last_failed_at_ms: failed_at_ms,
+            })?;
+            hunting_candidate_ids.push(candidate.id);
+        }
+        Ok((generated_observation_ids, hunting_candidate_ids))
     }
 
     pub fn mark_stuck_point(
@@ -1174,6 +1264,29 @@ impl ReviewRepository for DisabledLearningLoopRepository {
     ) -> Result<Vec<(ReviewItem, ReviewSchedule)>, ApplicationError> {
         Err(Self::disabled())
     }
+
+    fn upsert_hunting_candidate(
+        &self,
+        _candidate: &HuntingCandidate,
+    ) -> Result<HuntingCandidate, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn get_hunting_candidate(
+        &self,
+        _id: &HuntingCandidateId,
+    ) -> Result<Option<HuntingCandidate>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn list_hunting_candidates(
+        &self,
+        _status: Option<HuntingCandidateStatus>,
+        _limit: u32,
+        _offset: u32,
+    ) -> Result<Vec<HuntingCandidate>, ApplicationError> {
+        Err(Self::disabled())
+    }
 }
 
 impl LearningEventRepository for DisabledLearningLoopRepository {
@@ -1244,26 +1357,5 @@ mod tests {
             evaluation.token_results[1].result,
             PracticeTokenResult::Mismatch
         );
-    }
-
-    #[test]
-    fn review_scheduler_uses_short_failure_and_growing_success_intervals() {
-        let current = ReviewSchedule {
-            item_id: ReviewItemId::parse("review-schedule-test").unwrap(),
-            algorithm: REVIEW_ALGORITHM.into(),
-            due_at_ms: 0,
-            stability: None,
-            difficulty: None,
-            interval_days: None,
-            lapse_count: 0,
-        };
-        let failed = next_review_schedule(&current, ReviewRating::Again, 1_000);
-        assert_eq!(failed.due_at_ms, 1_000 + 10 * MINUTE_MS);
-        assert_eq!(failed.lapse_count, 1);
-
-        let first_success = next_review_schedule(&current, ReviewRating::Good, 1_000);
-        assert_eq!(first_success.interval_days, Some(3.0));
-        let later_success = next_review_schedule(&first_success, ReviewRating::Good, 1_000);
-        assert_eq!(later_success.interval_days, Some(7.0));
     }
 }

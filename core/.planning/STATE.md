@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-05T21:33:00.000+08:00"
+last_updated: "2026-07-05T21:59:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-05 21:33 CST
-> 更新原因：启动 Phase 3.4，完成声音复习第一条端到端竖切片（到期计划、队列、三档评分、
-> 历史事件、Flutter 入口与词汇本手动入队）；阶段保持 IN_PROGRESS，下一步实现卡型差异化、
-> 失败证据/猎词候选池和升级建议引擎。
+> 最后更新：2026-07-05 21:59 CST
+> 更新原因：Phase 3.4 四类声音卡与复习失败证据链完成；“没听出”会追加有效语境
+> `LexicalObservation` 并进入 schema v20 猎词候选池，但不改变全局学习状态。阶段保持
+> IN_PROGRESS，下一步实现升级建议引擎与确认/拒绝冷却。
 
 ## 当前位置
 
@@ -148,10 +148,15 @@ last_updated: "2026-07-05T21:33:00.000+08:00"
 
 - 已完成第一条竖切片：schema v19 `review_schedules`、历史卡回填、到期查询、三档评分调度、
   `ReviewAttempt` / `ReviewCompleted` 事件、Flutter ReviewController/Store 与声音卡页面。
+- 四类卡型已完成：后端 `ReviewCard` 读模型根据来源和锚点派生听音识词、chunk cloze、
+  phrase 出现判断、原句回听；Flutter 分别提供翻词、填写空白、二选一判断和原句对照交互。
+  卡型不是持久化权威字段，历史 `ReviewItem` 无需 schema 迁移。
+- schema v20 新增 `hunting_candidates`。复习评为 `again` 时，有效词条+句子语境写入
+  `NotRecognizedInContext` observation，同时按词条/复习项聚合候选与失败次数；来源已丢失时
+  仍保留 snapshot 候选，不伪造 observation，也不静默修改 `LearningStatus`。
 - 复习入口已进入 3.35 工作台首页和学习工具菜单；词汇本可手动入队，来源媒体不匹配时不会
   误播当前媒体，而是使用 prompt snapshot 降级。
-- 待完成：四类卡型差异化、失败 observation 与猎词候选池、状态升级建议/拒绝冷却、真实媒体
-  ≥8 卡 QA。
+- 待完成：状态升级建议/拒绝冷却、真实媒体 ≥8 卡 QA。
 - 规划文档：`.planning/phases/3.4-audio-first-review-queue/3.4-PLAN.md`。
 
 ## 已完成 Phase 索引
@@ -225,7 +230,7 @@ last_updated: "2026-07-05T21:33:00.000+08:00"
 
 ## 下一步工作
 
-1. 继续 Phase 3.4：实现四类卡型差异化和 review 失败 evidence / 猎词候选池。
+1. 继续 Phase 3.4：实现升级建议引擎、确认/拒绝冷却与历史查询。
 2. 执行 Phase 3.35 owner QA：覆盖 `1440x900`、`1280x800`、`900x700` 和真实媒体，
    根据截图微调后将 closeout 从 `AWAITING_OWNER_QA` 改为 `COMPLETED`。
 3. 完成 Phase 3.3 真实媒体 30 分钟泛听 QA 并收口；3.6（听力词典）可与 3.4 并行开工。

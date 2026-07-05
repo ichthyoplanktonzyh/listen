@@ -2586,12 +2586,24 @@ components:
         rating: { $ref: "#/components/schemas/ReviewRating" }
         practice_attempt_id: { type: [string, "null"] }
         next_due_at_ms: { type: [integer, "null"], minimum: 0 }
+    ReviewCardKind:
+      type: string
+      enum: [word_recognition, chunk_cloze, phrase_presence, source_sentence_recall]
+    ReviewCard:
+      type: object
+      required: [kind, cue, answer, target]
+      properties:
+        kind: { $ref: "#/components/schemas/ReviewCardKind" }
+        cue: { type: [string, "null"] }
+        answer: { type: string }
+        target: { type: [string, "null"] }
     ReviewQueueEntry:
       type: object
-      required: [item, schedule]
+      required: [item, schedule, card]
       properties:
         item: { $ref: "#/components/schemas/ReviewItem" }
         schedule: { $ref: "#/components/schemas/ReviewSchedule" }
+        card: { $ref: "#/components/schemas/ReviewCard" }
     SubmitReviewAttempt:
       type: object
       required: [item_id, rating]
@@ -2600,10 +2612,12 @@ components:
         rating: { $ref: "#/components/schemas/ReviewRating" }
     ReviewSubmission:
       type: object
-      required: [attempt, schedule]
+      required: [attempt, schedule, generated_observation_ids, hunting_candidate_ids]
       properties:
         attempt: { $ref: "#/components/schemas/ReviewAttempt" }
         schedule: { $ref: "#/components/schemas/ReviewSchedule" }
+        generated_observation_ids: { type: array, items: { type: string } }
+        hunting_candidate_ids: { type: array, items: { type: string } }
     DiagnosisHintEvidence:
       type: object
       required: [kind, reasons]
