@@ -228,8 +228,24 @@ void main() {
       expect(find.text('Provider A'), findsOneWidget);
       expect(find.text('həˈloʊ'), findsOneWidget);
       expect(find.byTooltip('Play pronunciation'), findsOneWidget);
-      await tester.enterText(find.byType(TextField).first, 'greeting');
-      await tester.enterText(find.byType(TextField).last, 'remember this');
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('word-user-definition')),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.enterText(
+        find.byKey(const Key('word-user-definition')),
+        'greeting',
+      );
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('word-personal-note')),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.enterText(
+        find.byKey(const Key('word-personal-note')),
+        'remember this',
+      );
       await tester.scrollUntilVisible(
         find.text('Save'),
         300,

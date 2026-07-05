@@ -134,6 +134,10 @@ void main() {
       find.textContaining('Document listening structure is ready'),
       findsOneWidget,
     );
+    expect(find.text('Production report ready'), findsNothing);
+    expect(find.textContaining('whisperx 1.0'), findsNothing);
+    await tester.tap(find.text('Technical details'));
+    await tester.pumpAndSettle();
     expect(find.text('Production report ready'), findsOneWidget);
     expect(find.textContaining('whisperx 1.0'), findsWidgets);
     expect(find.textContaining('mfa 2.0'), findsOneWidget);
@@ -205,6 +209,8 @@ void main() {
     );
 
     expect(find.text('LLTimeline present'), findsOneWidget);
+    await tester.tap(find.text('Technical details'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('Generated word timings'), findsWidgets);
     expect(find.textContaining('703'), findsWidgets);
 
@@ -252,6 +258,9 @@ void main() {
       find.textContaining('Needs an active Word sync timeline'),
       findsOneWidget,
     );
+    expect(find.text('No Word sync candidates'), findsNothing);
+    await tester.tap(find.text('Technical details'));
+    await tester.pumpAndSettle();
     expect(find.text('No Word sync candidates'), findsOneWidget);
   });
 }

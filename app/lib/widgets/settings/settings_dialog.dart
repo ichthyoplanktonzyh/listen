@@ -156,6 +156,9 @@ class SettingsDialog extends StatefulWidget {
 }
 
 class _SettingsDialogState extends State<SettingsDialog> {
+  final ScrollController _settingsScrollController = ScrollController();
+  final List<GlobalKey> _categoryKeys = List.generate(6, (_) => GlobalKey());
+  int _selectedCategory = 2;
   late String language;
   late String subtitlePreset;
   late double primaryFontSize;
@@ -243,6 +246,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   @override
   void dispose() {
+    _settingsScrollController.dispose();
     ffmpegController.dispose();
     ffprobeController.dispose();
     ytDlpController.dispose();
@@ -257,517 +261,630 @@ class _SettingsDialogState extends State<SettingsDialog> {
       builder: (context, refresh) => AlertDialog(
         title: Text(l.text('settings')),
         content: SizedBox(
-          width: 620,
+          width: 820,
           height: 650,
-          child: ListView(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              DropdownButtonFormField<String>(
-                initialValue: learningLanguage,
-                decoration: InputDecoration(
-                  labelText: l.text('learningLanguage'),
-                ),
-                items: [
-                  DropdownMenuItem(
-                    value: 'auto',
-                    child: Text(l.text('automatic')),
-                  ),
-                  for (final code in widget.availableLanguages)
-                    DropdownMenuItem(
-                      value: code,
-                      child: Text(_languageLabel(l, code)),
-                    ),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  learningLanguage = value;
-                  widget.onLearningLanguageChanged(value);
-                  refresh(() {});
-                },
-              ),
-              const Divider(),
-              Text(
-                l.text('subtitles'),
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              SwitchListTile(
-                value: wordSyncVisible,
-                title: Text(l.text('highlightCurrentWord')),
-                onChanged: (value) {
-                  wordSyncVisible = value;
-                  widget.onWordSyncVisibleChanged(value);
-                  refresh(() {});
-                },
-              ),
-              SwitchListTile(
-                value: showChunkGrouping,
-                title: Text(l.text('showChunkGrouping')),
-                onChanged: (value) {
-                  showChunkGrouping = value;
-                  widget.onShowChunkGroupingChanged(value);
-                  refresh(() {});
-                },
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: chunkDisplayStyle,
-                decoration: InputDecoration(
-                  labelText: l.text('chunkDisplayStyle'),
-                ),
-                items: [
-                  DropdownMenuItem(
-                    value: 'capsule',
-                    child: Text(l.text('chunkDisplayCapsule')),
-                  ),
-                  DropdownMenuItem(
-                    value: 'spacing',
-                    child: Text(l.text('chunkDisplaySpacing')),
-                  ),
-                ],
-                onChanged: showChunkGrouping
-                    ? (value) {
-                        if (value == null) return;
-                        chunkDisplayStyle = value;
-                        widget.onChunkDisplayStyleChanged(value);
-                        refresh(() {});
-                      }
-                    : null,
-              ),
-              SwitchListTile(
-                value: highlightCurrentChunk,
-                title: Text(l.text('highlightCurrentChunk')),
-                onChanged: showChunkGrouping
-                    ? (value) {
-                        highlightCurrentChunk = value;
-                        widget.onHighlightCurrentChunkChanged(value);
-                        refresh(() {});
-                      }
-                    : null,
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: chunkHighlightStyle,
-                decoration: InputDecoration(
-                  labelText: l.text('chunkHighlightStyle'),
-                ),
-                items: [
-                  DropdownMenuItem(
-                    value: 'background',
-                    child: Text(l.text('chunkHighlightBackground')),
-                  ),
-                  DropdownMenuItem(
-                    value: 'bounce',
-                    child: Text(l.text('chunkHighlightBounce')),
-                  ),
-                  DropdownMenuItem(
-                    value: 'glow',
-                    child: Text(l.text('chunkHighlightGlow')),
-                  ),
-                ],
-                onChanged: showChunkGrouping && highlightCurrentChunk
-                    ? (value) {
-                        if (value == null) return;
-                        chunkHighlightStyle = value;
-                        widget.onChunkHighlightStyleChanged(value);
-                        refresh(() {});
-                      }
-                    : null,
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: wordHighlightStyle,
-                decoration: InputDecoration(
-                  labelText: l.text('wordHighlightStyle'),
-                ),
-                items: [
-                  DropdownMenuItem(
-                    value: 'background',
-                    child: Text(l.text('wordHighlightBackground')),
-                  ),
-                  DropdownMenuItem(
-                    value: 'bounce',
-                    child: Text(l.text('wordHighlightBounce')),
-                  ),
-                  DropdownMenuItem(
-                    value: 'glow',
-                    child: Text(l.text('wordHighlightGlow')),
-                  ),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  wordHighlightStyle = value;
-                  widget.onWordHighlightStyleChanged(value);
-                  refresh(() {});
-                },
-              ),
-              _settingSlider(
-                l.text('wordHighlightIntensity'),
-                wordAnimationIntensity,
-                0,
-                1,
-                (value) {
-                  wordAnimationIntensity = value;
-                  widget.onWordAnimationIntensityChanged(value);
-                },
-                refresh,
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: ruleHintsLevel,
-                decoration: InputDecoration(labelText: l.text('ruleHints')),
-                items: [
-                  DropdownMenuItem(
-                    value: 'off',
-                    child: Text(l.text('ruleHintsOff')),
-                  ),
-                  DropdownMenuItem(
-                    value: 'likely',
-                    child: Text(l.text('ruleHintsLikely')),
-                  ),
-                  DropdownMenuItem(
-                    value: 'all',
-                    child: Text(l.text('ruleHintsAll')),
-                  ),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  ruleHintsLevel = value;
-                  widget.onRuleHintsLevelChanged(value);
-                  refresh(() {});
-                },
-              ),
-              const Divider(),
-              Text(
-                l.text('phoneticAnalysis'),
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              SwitchListTile(
-                value: phonemeRibbonVisible,
-                title: Text(l.text('phonemeRibbonVisible')),
-                onChanged: (value) {
-                  phonemeRibbonVisible = value;
-                  widget.onPhonemeRibbonVisibleChanged(value);
-                  refresh(() {});
-                },
-              ),
-              SwitchListTile(
-                value: soundPatternRibbonVisible,
-                title: Text(l.text('soundPatternRibbonVisible')),
-                onChanged: (value) {
-                  soundPatternRibbonVisible = value;
-                  widget.onSoundPatternRibbonVisibleChanged(value);
-                  refresh(() {});
-                },
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: soundPatternDisplayMode,
-                decoration: InputDecoration(
-                  labelText: l.text('soundPatternDisplayMode'),
-                ),
-                items: [
-                  DropdownMenuItem(
-                    value: 'citation',
-                    child: Text(l.text('rhythmReferenceCitation')),
-                  ),
-                  DropdownMenuItem(
-                    value: 'connected',
-                    child: Text(l.text('rhythmReferenceConnected')),
-                  ),
-                  DropdownMenuItem(
-                    value: 'actual',
-                    child: Text(l.text('rhythmReferenceActual')),
-                  ),
-                ],
-                onChanged: soundPatternRibbonVisible
-                    ? (value) {
-                        if (value == null) return;
-                        soundPatternDisplayMode = value;
-                        widget.onSoundPatternDisplayModeChanged(value);
-                        refresh(() {});
-                      }
-                    : null,
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: phonemeRibbonStyle,
-                decoration: InputDecoration(
-                  labelText: l.text('phonemeRibbonStyle'),
-                ),
-                items: [
-                  DropdownMenuItem(
-                    value: 'window',
-                    child: Text(l.text('phonemeRibbonWindow')),
-                  ),
-                  DropdownMenuItem(
-                    value: 'wave',
-                    child: Text(l.text('phonemeRibbonWave')),
-                  ),
-                ],
-                onChanged: phonemeRibbonVisible
-                    ? (value) {
-                        if (value == null) return;
-                        phonemeRibbonStyle = value;
-                        widget.onPhonemeRibbonStyleChanged(value);
-                        refresh(() {});
-                      }
-                    : null,
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: phoneticAnalysisPreference,
-                decoration: InputDecoration(
-                  labelText: l.text('phoneticAnalysisPreference'),
-                ),
-                items: [
-                  DropdownMenuItem(
-                    value: 'on_demand',
-                    child: Text(l.text('phoneticOnDemand')),
-                  ),
-                  DropdownMenuItem(
-                    value: 'batch',
-                    child: Text(l.text('phoneticBatch')),
-                  ),
-                  DropdownMenuItem(
-                    value: 'off',
-                    child: Text(l.text('disabled')),
-                  ),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  phoneticAnalysisPreference = value;
-                  widget.onPhoneticAnalysisPreferenceChanged(value);
-                  refresh(() {});
-                },
-              ),
-              const Divider(),
-              DropdownButtonFormField<String>(
-                initialValue: language,
-                decoration: InputDecoration(labelText: l.text('language')),
-                items: [
-                  DropdownMenuItem(
-                    value: 'system',
-                    child: Text(l.text('system')),
-                  ),
-                  DropdownMenuItem(value: 'en', child: Text(l.text('english'))),
-                  DropdownMenuItem(value: 'zh', child: Text(l.text('chinese'))),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  language = value;
-                  widget.onLanguageChanged(value);
-                  refresh(() {});
-                },
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: subtitlePreset,
-                decoration: InputDecoration(
-                  labelText: l.text('subtitlePreset'),
-                ),
-                items: [
-                  DropdownMenuItem(
-                    value: 'watching',
-                    child: Text(l.text('watching')),
-                  ),
-                  DropdownMenuItem(
-                    value: 'learning',
-                    child: Text(l.text('learning')),
-                  ),
-                  DropdownMenuItem(
-                    value: 'compact',
-                    child: Text(l.text('compact')),
-                  ),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  subtitlePreset = value;
-                  widget.onSubtitlePresetChanged(value);
-                  refresh(() {});
-                },
-              ),
-              _settingSlider(l.text('subtitleScale'), primaryFontSize, 0.5, 2, (
-                v,
-              ) {
-                primaryFontSize = v;
-                widget.onPrimaryFontSizeChanged(v);
-              }, refresh),
-              _fontSelector(l.text('primaryFont'), primaryFontFamily, (v) {
-                primaryFontFamily = v;
-                widget.onPrimaryFontFamilyChanged(v);
-              }, refresh),
-              _settingSlider(
-                l.text('secondaryScale'),
-                secondaryFontSize,
-                0.5,
-                2,
-                (v) {
-                  secondaryFontSize = v;
-                  widget.onSecondaryFontSizeChanged(v);
-                },
-                refresh,
-              ),
-              _fontSelector(l.text('secondaryFont'), secondaryFontFamily, (v) {
-                secondaryFontFamily = v;
-                widget.onSecondaryFontFamilyChanged(v);
-              }, refresh),
-              Text(
-                l.text('dragSubtitleHint'),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              _settingSlider(
-                l.text('horizontalPosition'),
-                subtitlePositionX,
-                0,
-                1,
-                (v) {
-                  subtitlePositionX = v;
-                  widget.onSubtitlePositionXChanged(v);
-                },
-                refresh,
-              ),
-              _settingSlider(
-                l.text('verticalPosition'),
-                subtitlePositionY,
-                0,
-                1,
-                (v) {
-                  subtitlePositionY = v;
-                  widget.onSubtitlePositionYChanged(v);
-                },
-                refresh,
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () {
-                    subtitlePositionX = 0.5;
-                    subtitlePositionY = 0.82;
-                    widget.onSubtitlePositionReset();
+              SizedBox(
+                width: 178,
+                child: NavigationRail(
+                  extended: true,
+                  minExtendedWidth: 178,
+                  selectedIndex: _selectedCategory,
+                  groupAlignment: -1,
+                  onDestinationSelected: (index) {
+                    _selectedCategory = index;
                     refresh(() {});
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      final target = _categoryKeys[index].currentContext;
+                      if (target == null) return;
+                      Scrollable.ensureVisible(
+                        target,
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOut,
+                        alignment: 0,
+                      );
+                    });
                   },
-                  icon: const Icon(Icons.restart_alt),
-                  label: Text(l.text('resetSubtitlePosition')),
+                  destinations: [
+                    NavigationRailDestination(
+                      icon: const Icon(Icons.tune),
+                      label: Text(l.text('general')),
+                    ),
+                    NavigationRailDestination(
+                      icon: const Icon(Icons.subtitles_outlined),
+                      label: Text(l.text('subtitles')),
+                    ),
+                    NavigationRailDestination(
+                      icon: const Icon(Icons.school_outlined),
+                      label: Text(l.text('learning')),
+                    ),
+                    NavigationRailDestination(
+                      icon: const Icon(Icons.inventory_2_outlined),
+                      label: Text(l.text('resourceSettings')),
+                    ),
+                    NavigationRailDestination(
+                      icon: const Icon(Icons.build_outlined),
+                      label: Text(l.text('externalToolsShort')),
+                    ),
+                    NavigationRailDestination(
+                      icon: const Icon(Icons.science_outlined),
+                      label: Text(l.text('experimental')),
+                    ),
+                  ],
                 ),
               ),
-              _settingSlider(
-                l.text('backgroundOpacity'),
-                subtitleBackgroundOpacity,
-                0,
-                1,
-                (v) {
-                  subtitleBackgroundOpacity = v;
-                  widget.onBackgroundOpacityChanged(v);
-                },
-                refresh,
-              ),
-              _settingSlider(
-                l.text('transcriptWidth'),
-                transcriptWidth,
-                260,
-                900,
-                (v) {
-                  transcriptWidth = v;
-                  widget.onTranscriptWidthChanged(v);
-                },
-                refresh,
-              ),
-              const SizedBox(height: 8),
-              Text(l.text('primaryColor')),
-              _colorChoices(primaryColor, (v) {
-                primaryColor = v;
-                widget.onPrimaryColorChanged(v);
-                refresh(() {});
-              }),
-              Text(l.text('secondaryColor')),
-              _colorChoices(secondaryColor, (v) {
-                secondaryColor = v;
-                widget.onSecondaryColorChanged(v);
-                refresh(() {});
-              }),
-              const Divider(),
-              Text(
-                l.text('transcriptionDefaults'),
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: transcriptionQuality,
-                decoration: InputDecoration(
-                  labelText: l.text('preferredQuality'),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'fast', child: Text('Fast')),
-                  DropdownMenuItem(value: 'balanced', child: Text('Balanced')),
-                  DropdownMenuItem(value: 'accurate', child: Text('Accurate')),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  transcriptionQuality = value;
-                  widget.onTranscriptionQualityChanged(value);
-                  refresh(() {});
-                },
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: transcriptionLanguage,
-                decoration: InputDecoration(
-                  labelText: l.text('transcriptionLanguage'),
-                ),
-                items: [
-                  DropdownMenuItem(
-                    value: 'auto',
-                    child: Text(l.text('automatic')),
-                  ),
-                  const DropdownMenuItem(value: 'en', child: Text('English')),
-                  const DropdownMenuItem(value: 'zh', child: Text('中文')),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  transcriptionLanguage = value;
-                  widget.onTranscriptionLanguageChanged(value);
-                  refresh(() {});
-                },
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: transcriptionDestination,
-                decoration: InputDecoration(
-                  labelText: l.text('defaultDestination'),
-                ),
-                items: [
-                  DropdownMenuItem(
-                    value: 'primary',
-                    child: Text(l.text('primarySubtitle')),
-                  ),
-                  DropdownMenuItem(
-                    value: 'secondary',
-                    child: Text(l.text('secondarySubtitle')),
-                  ),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  transcriptionDestination = value;
-                  widget.onTranscriptionDestinationChanged(value);
-                  refresh(() {});
-                },
-              ),
-              const Divider(),
-              Text(
-                l.text('externalTools'),
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              TextField(
-                controller: ffmpegController,
-                decoration: const InputDecoration(
-                  labelText: 'ffmpeg path (auto-detect when empty)',
-                ),
-              ),
-              TextField(
-                controller: ffprobeController,
-                decoration: const InputDecoration(
-                  labelText: 'ffprobe path (auto-detect when empty)',
-                ),
-              ),
-              TextField(
-                controller: ytDlpController,
-                decoration: const InputDecoration(
-                  labelText: 'yt-dlp path (auto-detect when empty)',
-                ),
-              ),
-              TextField(
-                controller: openSubtitlesController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: l.text('openSubtitlesApiKey'),
+              const VerticalDivider(width: 1),
+              const SizedBox(width: 18),
+              Expanded(
+                child: ListView(
+                  controller: _settingsScrollController,
+                  padding: const EdgeInsets.only(right: 8),
+                  children: [
+                    Text(
+                      key: _categoryKeys[2],
+                      l.text('learning'),
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      initialValue: learningLanguage,
+                      decoration: InputDecoration(
+                        labelText: l.text('learningLanguage'),
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'auto',
+                          child: Text(l.text('automatic')),
+                        ),
+                        for (final code in widget.availableLanguages)
+                          DropdownMenuItem(
+                            value: code,
+                            child: Text(_languageLabel(l, code)),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        learningLanguage = value;
+                        widget.onLearningLanguageChanged(value);
+                        refresh(() {});
+                      },
+                    ),
+                    const Divider(),
+                    Text(
+                      l.text('subtitles'),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    SwitchListTile(
+                      value: wordSyncVisible,
+                      title: Text(l.text('highlightCurrentWord')),
+                      onChanged: (value) {
+                        wordSyncVisible = value;
+                        widget.onWordSyncVisibleChanged(value);
+                        refresh(() {});
+                      },
+                    ),
+                    SwitchListTile(
+                      value: showChunkGrouping,
+                      title: Text(l.text('showChunkGrouping')),
+                      onChanged: (value) {
+                        showChunkGrouping = value;
+                        widget.onShowChunkGroupingChanged(value);
+                        refresh(() {});
+                      },
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: chunkDisplayStyle,
+                      decoration: InputDecoration(
+                        labelText: l.text('chunkDisplayStyle'),
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'capsule',
+                          child: Text(l.text('chunkDisplayCapsule')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'spacing',
+                          child: Text(l.text('chunkDisplaySpacing')),
+                        ),
+                      ],
+                      onChanged: showChunkGrouping
+                          ? (value) {
+                              if (value == null) return;
+                              chunkDisplayStyle = value;
+                              widget.onChunkDisplayStyleChanged(value);
+                              refresh(() {});
+                            }
+                          : null,
+                    ),
+                    SwitchListTile(
+                      value: highlightCurrentChunk,
+                      title: Text(l.text('highlightCurrentChunk')),
+                      onChanged: showChunkGrouping
+                          ? (value) {
+                              highlightCurrentChunk = value;
+                              widget.onHighlightCurrentChunkChanged(value);
+                              refresh(() {});
+                            }
+                          : null,
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: chunkHighlightStyle,
+                      decoration: InputDecoration(
+                        labelText: l.text('chunkHighlightStyle'),
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'background',
+                          child: Text(l.text('chunkHighlightBackground')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'bounce',
+                          child: Text(l.text('chunkHighlightBounce')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'glow',
+                          child: Text(l.text('chunkHighlightGlow')),
+                        ),
+                      ],
+                      onChanged: showChunkGrouping && highlightCurrentChunk
+                          ? (value) {
+                              if (value == null) return;
+                              chunkHighlightStyle = value;
+                              widget.onChunkHighlightStyleChanged(value);
+                              refresh(() {});
+                            }
+                          : null,
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: wordHighlightStyle,
+                      decoration: InputDecoration(
+                        labelText: l.text('wordHighlightStyle'),
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'background',
+                          child: Text(l.text('wordHighlightBackground')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'bounce',
+                          child: Text(l.text('wordHighlightBounce')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'glow',
+                          child: Text(l.text('wordHighlightGlow')),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        wordHighlightStyle = value;
+                        widget.onWordHighlightStyleChanged(value);
+                        refresh(() {});
+                      },
+                    ),
+                    _settingSlider(
+                      l.text('wordHighlightIntensity'),
+                      wordAnimationIntensity,
+                      0,
+                      1,
+                      (value) {
+                        wordAnimationIntensity = value;
+                        widget.onWordAnimationIntensityChanged(value);
+                      },
+                      refresh,
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: ruleHintsLevel,
+                      decoration: InputDecoration(
+                        labelText: l.text('ruleHints'),
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'off',
+                          child: Text(l.text('ruleHintsOff')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'likely',
+                          child: Text(l.text('ruleHintsLikely')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'all',
+                          child: Text(l.text('ruleHintsAll')),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        ruleHintsLevel = value;
+                        widget.onRuleHintsLevelChanged(value);
+                        refresh(() {});
+                      },
+                    ),
+                    const Divider(),
+                    Text(
+                      key: _categoryKeys[5],
+                      l.text('phoneticAnalysis'),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    SwitchListTile(
+                      value: phonemeRibbonVisible,
+                      title: Text(l.text('phonemeRibbonVisible')),
+                      onChanged: (value) {
+                        phonemeRibbonVisible = value;
+                        widget.onPhonemeRibbonVisibleChanged(value);
+                        refresh(() {});
+                      },
+                    ),
+                    SwitchListTile(
+                      value: soundPatternRibbonVisible,
+                      title: Text(l.text('soundPatternRibbonVisible')),
+                      onChanged: (value) {
+                        soundPatternRibbonVisible = value;
+                        widget.onSoundPatternRibbonVisibleChanged(value);
+                        refresh(() {});
+                      },
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: soundPatternDisplayMode,
+                      decoration: InputDecoration(
+                        labelText: l.text('soundPatternDisplayMode'),
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'citation',
+                          child: Text(l.text('rhythmReferenceCitation')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'connected',
+                          child: Text(l.text('rhythmReferenceConnected')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'actual',
+                          child: Text(l.text('rhythmReferenceActual')),
+                        ),
+                      ],
+                      onChanged: soundPatternRibbonVisible
+                          ? (value) {
+                              if (value == null) return;
+                              soundPatternDisplayMode = value;
+                              widget.onSoundPatternDisplayModeChanged(value);
+                              refresh(() {});
+                            }
+                          : null,
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: phonemeRibbonStyle,
+                      decoration: InputDecoration(
+                        labelText: l.text('phonemeRibbonStyle'),
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'window',
+                          child: Text(l.text('phonemeRibbonWindow')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'wave',
+                          child: Text(l.text('phonemeRibbonWave')),
+                        ),
+                      ],
+                      onChanged: phonemeRibbonVisible
+                          ? (value) {
+                              if (value == null) return;
+                              phonemeRibbonStyle = value;
+                              widget.onPhonemeRibbonStyleChanged(value);
+                              refresh(() {});
+                            }
+                          : null,
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: phoneticAnalysisPreference,
+                      decoration: InputDecoration(
+                        labelText: l.text('phoneticAnalysisPreference'),
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'on_demand',
+                          child: Text(l.text('phoneticOnDemand')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'batch',
+                          child: Text(l.text('phoneticBatch')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'off',
+                          child: Text(l.text('disabled')),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        phoneticAnalysisPreference = value;
+                        widget.onPhoneticAnalysisPreferenceChanged(value);
+                        refresh(() {});
+                      },
+                    ),
+                    const Divider(),
+                    Text(
+                      key: _categoryKeys[0],
+                      l.text('general'),
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      initialValue: language,
+                      decoration: InputDecoration(
+                        labelText: l.text('language'),
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'system',
+                          child: Text(l.text('system')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'en',
+                          child: Text(l.text('english')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'zh',
+                          child: Text(l.text('chinese')),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        language = value;
+                        widget.onLanguageChanged(value);
+                        refresh(() {});
+                      },
+                    ),
+                    const Divider(),
+                    Text(
+                      key: _categoryKeys[1],
+                      l.text('subtitles'),
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      initialValue: subtitlePreset,
+                      decoration: InputDecoration(
+                        labelText: l.text('subtitlePreset'),
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'watching',
+                          child: Text(l.text('watching')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'learning',
+                          child: Text(l.text('learning')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'compact',
+                          child: Text(l.text('compact')),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        subtitlePreset = value;
+                        widget.onSubtitlePresetChanged(value);
+                        refresh(() {});
+                      },
+                    ),
+                    _settingSlider(
+                      l.text('subtitleScale'),
+                      primaryFontSize,
+                      0.5,
+                      2,
+                      (v) {
+                        primaryFontSize = v;
+                        widget.onPrimaryFontSizeChanged(v);
+                      },
+                      refresh,
+                    ),
+                    _fontSelector(l.text('primaryFont'), primaryFontFamily, (
+                      v,
+                    ) {
+                      primaryFontFamily = v;
+                      widget.onPrimaryFontFamilyChanged(v);
+                    }, refresh),
+                    _settingSlider(
+                      l.text('secondaryScale'),
+                      secondaryFontSize,
+                      0.5,
+                      2,
+                      (v) {
+                        secondaryFontSize = v;
+                        widget.onSecondaryFontSizeChanged(v);
+                      },
+                      refresh,
+                    ),
+                    _fontSelector(
+                      l.text('secondaryFont'),
+                      secondaryFontFamily,
+                      (v) {
+                        secondaryFontFamily = v;
+                        widget.onSecondaryFontFamilyChanged(v);
+                      },
+                      refresh,
+                    ),
+                    Text(
+                      l.text('dragSubtitleHint'),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    _settingSlider(
+                      l.text('horizontalPosition'),
+                      subtitlePositionX,
+                      0,
+                      1,
+                      (v) {
+                        subtitlePositionX = v;
+                        widget.onSubtitlePositionXChanged(v);
+                      },
+                      refresh,
+                    ),
+                    _settingSlider(
+                      l.text('verticalPosition'),
+                      subtitlePositionY,
+                      0,
+                      1,
+                      (v) {
+                        subtitlePositionY = v;
+                        widget.onSubtitlePositionYChanged(v);
+                      },
+                      refresh,
+                    ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () {
+                          subtitlePositionX = 0.5;
+                          subtitlePositionY = 0.82;
+                          widget.onSubtitlePositionReset();
+                          refresh(() {});
+                        },
+                        icon: const Icon(Icons.restart_alt),
+                        label: Text(l.text('resetSubtitlePosition')),
+                      ),
+                    ),
+                    _settingSlider(
+                      l.text('backgroundOpacity'),
+                      subtitleBackgroundOpacity,
+                      0,
+                      1,
+                      (v) {
+                        subtitleBackgroundOpacity = v;
+                        widget.onBackgroundOpacityChanged(v);
+                      },
+                      refresh,
+                    ),
+                    _settingSlider(
+                      l.text('transcriptWidth'),
+                      transcriptWidth,
+                      260,
+                      900,
+                      (v) {
+                        transcriptWidth = v;
+                        widget.onTranscriptWidthChanged(v);
+                      },
+                      refresh,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(l.text('primaryColor')),
+                    _colorChoices(primaryColor, (v) {
+                      primaryColor = v;
+                      widget.onPrimaryColorChanged(v);
+                      refresh(() {});
+                    }),
+                    Text(l.text('secondaryColor')),
+                    _colorChoices(secondaryColor, (v) {
+                      secondaryColor = v;
+                      widget.onSecondaryColorChanged(v);
+                      refresh(() {});
+                    }),
+                    const Divider(),
+                    Text(
+                      key: _categoryKeys[3],
+                      l.text('transcriptionDefaults'),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: transcriptionQuality,
+                      decoration: InputDecoration(
+                        labelText: l.text('preferredQuality'),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'fast', child: Text('Fast')),
+                        DropdownMenuItem(
+                          value: 'balanced',
+                          child: Text('Balanced'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'accurate',
+                          child: Text('Accurate'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        transcriptionQuality = value;
+                        widget.onTranscriptionQualityChanged(value);
+                        refresh(() {});
+                      },
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: transcriptionLanguage,
+                      decoration: InputDecoration(
+                        labelText: l.text('transcriptionLanguage'),
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'auto',
+                          child: Text(l.text('automatic')),
+                        ),
+                        const DropdownMenuItem(
+                          value: 'en',
+                          child: Text('English'),
+                        ),
+                        const DropdownMenuItem(value: 'zh', child: Text('中文')),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        transcriptionLanguage = value;
+                        widget.onTranscriptionLanguageChanged(value);
+                        refresh(() {});
+                      },
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: transcriptionDestination,
+                      decoration: InputDecoration(
+                        labelText: l.text('defaultDestination'),
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'primary',
+                          child: Text(l.text('primarySubtitle')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'secondary',
+                          child: Text(l.text('secondarySubtitle')),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        transcriptionDestination = value;
+                        widget.onTranscriptionDestinationChanged(value);
+                        refresh(() {});
+                      },
+                    ),
+                    const Divider(),
+                    Text(
+                      key: _categoryKeys[4],
+                      l.text('externalTools'),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    TextField(
+                      controller: ffmpegController,
+                      decoration: const InputDecoration(
+                        labelText: 'ffmpeg path (auto-detect when empty)',
+                      ),
+                    ),
+                    TextField(
+                      controller: ffprobeController,
+                      decoration: const InputDecoration(
+                        labelText: 'ffprobe path (auto-detect when empty)',
+                      ),
+                    ),
+                    TextField(
+                      controller: ytDlpController,
+                      decoration: const InputDecoration(
+                        labelText: 'yt-dlp path (auto-detect when empty)',
+                      ),
+                    ),
+                    TextField(
+                      controller: openSubtitlesController,
+                      obscureText: true,
+                      decoration: InputDecoration(
+                        labelText: l.text('openSubtitlesApiKey'),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

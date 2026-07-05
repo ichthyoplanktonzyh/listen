@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/types.dart';
+import '../../theme/listen_theme.dart';
+import '../../utils/format_duration.dart';
 import '../vocabulary/pronunciation_button.dart';
 
 class WordLearningPanel extends StatefulWidget {
@@ -137,13 +139,40 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
     return ListView(
       padding: const EdgeInsets.all(14),
       children: [
-        Text(
-          entry.displayForm,
-          style: Theme.of(context).textTheme.headlineMedium,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                entry.displayForm,
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+            ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: ListenColors.selected,
+                border: Border.all(color: ListenColors.primary),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                child: Text(
+                  l.status(entry.status),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: ListenColors.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
-        Text('${l.text('currentStatus')}: ${l.status(entry.status)}'),
+        const SizedBox(height: 14),
+        _sectionHeader(context, l.text('learningState'), Icons.school_outlined),
+        const SizedBox(height: 8),
         Wrap(
           spacing: 6,
+          runSpacing: 6,
           children: [
             for (final value in const [
               null,
@@ -158,8 +187,31 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
               ),
           ],
         ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            TextButton.icon(
+              icon: const Icon(Icons.hearing, size: 18),
+              onPressed: widget.onHeard,
+              label: Text(l.text('heard')),
+            ),
+            TextButton.icon(
+              icon: const Icon(Icons.hearing_disabled, size: 18),
+              onPressed: widget.onNotHeard,
+              label: Text(l.text('notHeard')),
+            ),
+          ],
+        ),
         const Divider(),
+        _sectionHeader(
+          context,
+          l.text('meaningAndPronunciation'),
+          Icons.record_voice_over_outlined,
+        ),
         if (characterBreakdown.isNotEmpty) ...[
+          const SizedBox(height: 10),
           Text(
             l.text('characters'),
             style: const TextStyle(fontWeight: FontWeight.bold),
@@ -196,9 +248,9 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
               ],
             ),
           ),
-          const Divider(),
         ],
         if (pronunciationVariants.isNotEmpty) ...[
+          const SizedBox(height: 10),
           Text(
             l.text('pronunciation'),
             style: const TextStyle(fontWeight: FontWeight.bold),
@@ -212,13 +264,13 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
                 '${variant.phonemes.map((value) => value.symbol).join(' ')}',
               ),
             ),
-          const Divider(),
         ],
-        Text(
-          l.text('dictionary'),
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        if (results.isEmpty) Text(l.text('noDictionary')),
+        const SizedBox(height: 10),
+        if (results.isEmpty)
+          Text(
+            l.text('noDictionary'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         for (final result in results)
           Builder(
             builder: (context) {
@@ -254,41 +306,48 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
             },
           ),
         TextField(
+          key: const Key('word-user-definition'),
           controller: definition,
           maxLines: 3,
           decoration: InputDecoration(labelText: l.text('userDefinition')),
         ),
         TextField(
+          key: const Key('word-personal-note'),
           controller: note,
           maxLines: 4,
           decoration: InputDecoration(labelText: l.text('personalNote')),
         ),
         Align(
           alignment: Alignment.centerRight,
-          child: FilledButton(
+          child: FilledButton.icon(
+            icon: const Icon(Icons.save_outlined, size: 18),
             onPressed: () => widget.onSave(definition.text, note.text),
-            child: Text(l.text('save')),
+            label: Text(l.text('save')),
           ),
         ),
-        Row(
-          children: [
-            TextButton(onPressed: widget.onHeard, child: Text(l.text('heard'))),
-            TextButton(
-              onPressed: widget.onNotHeard,
-              child: Text(l.text('notHeard')),
-            ),
-          ],
-        ),
         const Divider(),
-        Text(
-          l.text('sources'),
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        _sectionHeader(
+          context,
+          l.text('sourceSentences'),
+          Icons.format_quote_outlined,
         ),
+        if (occurrences.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(l.text('noSourceSentences')),
+          ),
         for (final occurrence in occurrences)
           ListTile(
+            contentPadding: EdgeInsets.zero,
             title: Text(occurrence.sentenceTextSnapshot),
             subtitle: Text(
-              '${occurrence.mediaTitleSnapshot} · ${l.text('encountered')} ${occurrence.encounterCount} ${l.text('times')}',
+              [
+                occurrence.mediaTitleSnapshot,
+                formatDuration(
+                  Duration(milliseconds: occurrence.startMsSnapshot),
+                ),
+                '${l.text('encountered')} ${occurrence.encounterCount} ${l.text('times')}',
+              ].join(' · '),
             ),
             trailing: Icon(
               occurrence.mediaId == null ? Icons.link_off : Icons.play_arrow,
@@ -296,19 +355,65 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
             onTap: () => widget.onSource(occurrence.toJson()),
           ),
         const Divider(),
-        Text(
-          l.text('statusHistory'),
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        for (final item in history)
-          ListTile(
-            dense: true,
-            title: Text(
-              '${l.status(item.previousStatus)} → ${l.status(item.newStatus)}',
-            ),
-            subtitle: Text('${item.changeSource} · ${item.changedAtMs}'),
+        Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            key: const Key('word-learning-history'),
+            tilePadding: EdgeInsets.zero,
+            leading: const Icon(Icons.history),
+            title: Text(l.text('learningHistory')),
+            subtitle: history.isEmpty ? null : Text('${history.length}'),
+            children: [
+              if (history.isEmpty)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(l.text('noLearningHistory')),
+                  ),
+                ),
+              for (final item in history)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: Text(
+                    '${l.status(item.previousStatus)} → ${l.status(item.newStatus)}',
+                  ),
+                  subtitle: Text(
+                    [
+                      _humanizeSource(item.changeSource),
+                      _formatHistoryTime(item.changedAtMs, l),
+                    ].where((value) => value.isNotEmpty).join(' · '),
+                  ),
+                ),
+            ],
           ),
+        ),
       ],
     );
+  }
+
+  Widget _sectionHeader(BuildContext context, String title, IconData icon) =>
+      Row(
+        children: [
+          Icon(icon, size: 18, color: ListenColors.primary),
+          const SizedBox(width: 8),
+          Text(title, style: Theme.of(context).textTheme.titleSmall),
+        ],
+      );
+
+  String _humanizeSource(String value) => value
+      .replaceAll('_', ' ')
+      .split(' ')
+      .where((part) => part.isNotEmpty)
+      .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+      .join(' ');
+
+  String _formatHistoryTime(int milliseconds, AppLocalizations l) {
+    if (milliseconds < 946684800000) return l.text('earlier');
+    final value = DateTime.fromMillisecondsSinceEpoch(milliseconds).toLocal();
+    String twoDigits(int part) => part.toString().padLeft(2, '0');
+    return '${value.year}-${twoDigits(value.month)}-${twoDigits(value.day)} '
+        '${twoDigits(value.hour)}:${twoDigits(value.minute)}';
   }
 }

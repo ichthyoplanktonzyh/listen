@@ -44,128 +44,172 @@ class DiagnosisCard extends StatelessWidget {
     final l = AppLocalizations.of(context);
     final activeRhythmFrame =
         rhythmFrame ?? phoneticAnalysis?.soundAnalysis?.rhythmFrame;
-    return Container(
-      width: double.infinity,
-      constraints: const BoxConstraints(maxHeight: 190),
-      padding: const EdgeInsets.all(12),
+    return Material(
       color: ListenColors.surface,
       child: ListView(
-        shrinkWrap: true,
+        padding: const EdgeInsets.all(12),
         children: [
           Text(
             l.text('currentSentenceDiagnosis'),
-            style: TextStyle(fontWeight: FontWeight.bold),
+            style: Theme.of(context).textTheme.titleSmall,
           ),
-          for (final provider in pronunciationProviders)
+          const SizedBox(height: 10),
+          Text(
+            l.text('diagnosisSummary'),
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          if (diagnosis.hints.isEmpty)
             Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                '${l.text('pronunciationProvider')}: '
-                '${provider.displayName} ${provider.version} · '
-                '${provider.degraded ? l.text('degraded') : l.text('ready')}'
-                '${provider.diagnostic == null ? '' : ' · ${provider.diagnostic}'}',
-              ),
-            ),
-          if (timingQuality != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text('${l.text('wordTimingSource')}: $timingQuality'),
-            ),
-          if (pronunciation != null)
-            _section(
-              l.text('canonicalPronunciation'),
-              '${l.text('pronunciationCache')}: ${l.text('cacheReusable')}',
-            ),
-          if (onAnalyzePhonetics != null)
-            Wrap(
-              spacing: 8,
-              children: [
-                OutlinedButton(
-                  onPressed: onAnalyzePhonetics,
-                  child: Text(l.text('analyzeRealPronunciation')),
-                ),
-                if (onAnalyzeTrackPhonetics != null)
-                  OutlinedButton(
-                    onPressed: onAnalyzeTrackPhonetics,
-                    child: Text(l.text('analyzeSubtitleTrack')),
-                  ),
-              ],
-            ),
-          if (activeRhythmFrame != null)
-            _rhythmFrame(context, activeRhythmFrame),
-          if (phoneticAnalysis != null) ...[
-            _section(
-              l.text('audioDetectionExperimental'),
-              '${phoneticAnalysis!.providerId} · '
-              '${phoneticAnalysis!.modelRevision} · '
-              '${phoneticAnalysis!.phoneSet}',
-            ),
-            Wrap(
-              spacing: 4,
-              runSpacing: 4,
-              children: [
-                for (final phone in phoneticAnalysis!.detectedPhones)
-                  ActionChip(
-                    label: Text(
-                      '${phone.displayIpa} '
-                      '${((phone.confidence ?? 0) * 100).round()}%',
-                    ),
-                    onPressed: onLoopDetectedPhone == null
-                        ? null
-                        : () => onLoopDetectedPhone!(phone),
-                  ),
-              ],
-            ),
-            if (currentDetectedPhone != null)
+              padding: const EdgeInsets.only(top: 6, bottom: 4),
+              child: Text(l.text('diagnosisNoConclusion')),
+            )
+          else
+            for (final hint in diagnosis.hints)
               Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '${l.text('currentDetectedPhone')}: '
-                  '${currentDetectedPhone!.displayIpa} '
-                  '(${((currentDetectedPhone!.confidence ?? 0) * 100).round()}%)',
-                ),
-              ),
-            for (final finding in phoneticAnalysis!.findings)
-              _finding(context, finding, onLoopFinding, onFindingFeedback),
-          ],
-          for (final hint in diagnosis.hints)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('• ${l.diagnosis(hint.kind)}'),
-                  if (hint.reasons.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 12, top: 2),
-                      child: Text(
-                        '${l.text('possibleListeningFactors')} '
-                        '${hint.reasons.map(l.diagnosisReason).join(' · ')}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: ListenColors.muted,
+                padding: const EdgeInsets.only(top: 6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('• ${l.diagnosis(hint.kind)}'),
+                    if (hint.reasons.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 12, top: 2),
+                        child: Text(
+                          '${l.text('possibleListeningFactors')} '
+                          '${hint.reasons.map(l.diagnosisReason).join(' · ')}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: ListenColors.muted,
+                          ),
                         ),
                       ),
+                  ],
+                ),
+              ),
+          if (onAnalyzePhonetics != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.graphic_eq, size: 18),
+                    onPressed: onAnalyzePhonetics,
+                    label: Text(l.text('analyzeRealPronunciation')),
+                  ),
+                  if (onAnalyzeTrackPhonetics != null)
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.library_music_outlined, size: 18),
+                      onPressed: onAnalyzeTrackPhonetics,
+                      label: Text(l.text('analyzeSubtitleTrack')),
                     ),
                 ],
               ),
             ),
-          if (ruleHintsLevel != 'off' &&
-              (pronunciation?.rules.isNotEmpty ?? false))
-            _section(
-              l.text('rulePrediction'),
-              l.text('rulePredictionDisclaimer'),
-            ),
-          if (ruleHintsLevel != 'off')
-            for (final rule in pronunciation?.rules ?? const [])
-              if (ruleHintsLevel == 'all' || rule.status == 'likely_by_context')
-                Padding(
-                  padding: const EdgeInsets.only(top: 5),
-                  child: Text(
-                    '• ${rule.ruleFamily}: ${rule.reason} '
-                    '(${(rule.confidence * 100).round()}%)',
+          const SizedBox(height: 8),
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              key: const Key('diagnosis-evidence-section'),
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 8),
+              title: Text(l.text('diagnosisEvidence')),
+              leading: const Icon(Icons.manage_search_outlined),
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final provider in pronunciationProviders)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            '${l.text('pronunciationProvider')}: '
+                            '${provider.displayName} ${provider.version} · '
+                            '${provider.degraded ? l.text('degraded') : l.text('ready')}'
+                            '${provider.diagnostic == null ? '' : ' · ${provider.diagnostic}'}',
+                          ),
+                        ),
+                      if (timingQuality != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            '${l.text('wordTimingSource')}: $timingQuality',
+                          ),
+                        ),
+                      if (pronunciation != null)
+                        _section(
+                          l.text('canonicalPronunciation'),
+                          '${l.text('pronunciationCache')}: ${l.text('cacheReusable')}',
+                        ),
+                      if (activeRhythmFrame != null)
+                        _rhythmFrame(context, activeRhythmFrame),
+                      if (phoneticAnalysis != null) ...[
+                        _section(
+                          l.text('audioDetectionExperimental'),
+                          '${phoneticAnalysis!.providerId} · '
+                          '${phoneticAnalysis!.modelRevision} · '
+                          '${phoneticAnalysis!.phoneSet}',
+                        ),
+                        Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: [
+                            for (final phone
+                                in phoneticAnalysis!.detectedPhones)
+                              ActionChip(
+                                label: Text(
+                                  '${phone.displayIpa} '
+                                  '${((phone.confidence ?? 0) * 100).round()}%',
+                                ),
+                                onPressed: onLoopDetectedPhone == null
+                                    ? null
+                                    : () => onLoopDetectedPhone!(phone),
+                              ),
+                          ],
+                        ),
+                        if (currentDetectedPhone != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              '${l.text('currentDetectedPhone')}: '
+                              '${currentDetectedPhone!.displayIpa} '
+                              '(${((currentDetectedPhone!.confidence ?? 0) * 100).round()}%)',
+                            ),
+                          ),
+                        for (final finding in phoneticAnalysis!.findings)
+                          _finding(
+                            context,
+                            finding,
+                            onLoopFinding,
+                            onFindingFeedback,
+                          ),
+                      ],
+                      if (ruleHintsLevel != 'off' &&
+                          (pronunciation?.rules.isNotEmpty ?? false))
+                        _section(
+                          l.text('rulePrediction'),
+                          l.text('rulePredictionDisclaimer'),
+                        ),
+                      if (ruleHintsLevel != 'off')
+                        for (final rule in pronunciation?.rules ?? const [])
+                          if (ruleHintsLevel == 'all' ||
+                              rule.status == 'likely_by_context')
+                            Padding(
+                              padding: const EdgeInsets.only(top: 5),
+                              child: Text(
+                                '• ${rule.ruleFamily}: ${rule.reason} '
+                                '(${(rule.confidence * 100).round()}%)',
+                              ),
+                            ),
+                    ],
                   ),
                 ),
+              ],
+            ),
+          ),
         ],
       ),
     );

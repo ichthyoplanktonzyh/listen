@@ -353,10 +353,12 @@ class _SubtitleResourceTile extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     [
-                      resource.source,
-                      resource.status,
+                      active
+                          ? l.text('activeSubtitle')
+                          : resource.archived
+                          ? l.text('resourceArchived')
+                          : l.text('resourceReady'),
                       '${capabilities.sentenceCount} ${l.text('cues')}',
-                      resource.id,
                     ].join(' · '),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -433,6 +435,37 @@ class _SubtitleResourceTile extends StatelessWidget {
                           ),
                         ),
                     ],
+                  ),
+                  Material(
+                    color: Colors.transparent,
+                    child: Theme(
+                      data: Theme.of(context).copyWith(
+                        dividerColor: Colors.transparent,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      child: ExpansionTile(
+                        tilePadding: EdgeInsets.zero,
+                        childrenPadding: const EdgeInsets.only(bottom: 4),
+                        title: Text(
+                          l.text('technicalDetails'),
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(color: ListenColors.muted),
+                        ),
+                        children: [
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: SelectableText(
+                              [
+                                resource.source,
+                                resource.status,
+                                resource.id,
+                              ].join(' · '),
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),

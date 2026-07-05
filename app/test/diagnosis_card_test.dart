@@ -140,6 +140,9 @@ void main() {
       ),
     );
 
+    expect(find.text('Canonical pronunciation'), findsNothing);
+    await tester.tap(find.text('Evidence and analysis'));
+    await tester.pumpAndSettle();
     expect(find.text('Canonical pronunciation'), findsOneWidget);
     expect(find.text('Audio detection (experimental)'), findsOneWidget);
     await tester.tap(find.text('AH 50%'));
@@ -299,6 +302,9 @@ void main() {
       ),
     );
 
+    expect(find.text('Listening structure'), findsNothing);
+    await tester.tap(find.text('Evidence and analysis'));
+    await tester.pumpAndSettle();
     expect(find.text('Listening structure'), findsOneWidget);
     expect(find.text('Nucleus:'), findsOneWidget);
     expect(find.text('Heard anchors:'), findsOneWidget);
@@ -374,6 +380,9 @@ void main() {
       ),
     );
 
+    expect(find.text('packed words 72% audible'), findsNothing);
+    await tester.tap(find.text('Evidence and analysis'));
+    await tester.pumpAndSettle();
     expect(find.text('packed words 72% audible'), findsOneWidget);
     await tester.tap(find.text('packed words 72% audible'));
     expect(looped?.id, 'hs1');
