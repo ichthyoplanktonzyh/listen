@@ -149,7 +149,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     ffprobePath: settingsController.ffprobePath,
     ytDlpPath: settingsController.ytDlpPath,
   );
-  double get transcriptItemExtent => 76;
 
   // Tracks the last primary cue id for de-duplicating async calls in _onPosition.
   String? _lastPrimaryCueId;
@@ -427,7 +426,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     if (primaryCue?.id != _lastPrimaryCueId) {
       _lastPrimaryCueId = primaryCue?.id;
-      _keepCurrentVisible(primaryCue);
       unawaited(_refreshDiagnosis());
       unawaited(_loadPhraseCandidates(primaryCue));
       unawaited(_ensureCurrentPronunciation(primaryCue));
@@ -1505,19 +1503,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await adapter.seek(subtitleController.primaryCursor.mediaStart(cue));
   }
 
-  void _keepCurrentVisible(Cue? cue) {
-    if (cue == null || !transcriptController.hasClients) return;
-    final target = (cue.index * transcriptItemExtent).clamp(
-      0,
-      transcriptController.position.maxScrollExtent,
-    );
-    transcriptController.animateTo(
-      target.toDouble(),
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
-    );
-  }
-
   @override
   void dispose() {
     final currentMediaId = playerController.mediaId;
@@ -1748,7 +1733,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     mediaSession: mediaSession,
     playbackActions: playbackActions,
     transcriptController: transcriptController,
-    transcriptItemExtent: transcriptItemExtent,
     onOpenWord: _openWord,
     onSeekCue: _seekCue,
     onSetSelectedWordStatus: _setSelectedWordStatus,

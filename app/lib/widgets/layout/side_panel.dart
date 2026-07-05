@@ -39,7 +39,6 @@ class SidePanel extends StatefulWidget {
     required this.mediaSession,
     required this.playbackActions,
     required this.transcriptController,
-    required this.transcriptItemExtent,
     required this.onOpenWord,
     required this.onSeekCue,
     required this.onSetSelectedWordStatus,
@@ -77,7 +76,6 @@ class SidePanel extends StatefulWidget {
   final MediaSessionCoordinator mediaSession;
   final PlaybackActionsCoordinator playbackActions;
   final ScrollController transcriptController;
-  final double transcriptItemExtent;
   final Future<void> Function(SubtitleToken token, Cue cue) onOpenWord;
   final Future<void> Function(Cue? cue) onSeekCue;
   final Future<void> Function(String? selected) onSetSelectedWordStatus;
@@ -123,7 +121,6 @@ class _SidePanelState extends State<SidePanel> {
   MediaSessionCoordinator get mediaSession => widget.mediaSession;
   PlaybackActionsCoordinator get playbackActions => widget.playbackActions;
   ScrollController get transcriptController => widget.transcriptController;
-  double get transcriptItemExtent => widget.transcriptItemExtent;
   AppLocalizations get l => AppLocalizations.of(context);
 
   Future<void> _openWord(SubtitleToken token, Cue cue) =>
@@ -311,7 +308,6 @@ class _SidePanelState extends State<SidePanel> {
   Widget _transcript() => TranscriptPanel(
     track: subtitleController.primaryTrack,
     scrollController: transcriptController,
-    itemExtent: transcriptItemExtent,
     currentCue: subtitleController.currentPrimaryCue,
     wordEntries: learningController.wordEntries,
     showStyles: subtitleController.statusStylesVisible,
