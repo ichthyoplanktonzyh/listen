@@ -728,6 +728,19 @@ pub trait ReviewRepository: Send + Sync {
         &self,
         id: &ReviewAttemptId,
     ) -> Result<Option<ReviewAttempt>, ApplicationError>;
+    fn save_review_schedule(
+        &self,
+        schedule: &ReviewSchedule,
+    ) -> Result<ReviewSchedule, ApplicationError>;
+    fn get_review_schedule(
+        &self,
+        item_id: &ReviewItemId,
+    ) -> Result<Option<ReviewSchedule>, ApplicationError>;
+    fn list_due_review_items(
+        &self,
+        due_at_or_before_ms: u64,
+        limit: u32,
+    ) -> Result<Vec<(ReviewItem, ReviewSchedule)>, ApplicationError>;
 }
 
 pub trait LearningEventRepository: Send + Sync {

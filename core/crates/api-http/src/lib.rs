@@ -318,8 +318,12 @@ pub fn router(state: ApiState) -> Router {
             "/v1/listening-inbox/items/{id}/process",
             post(process_listening_inbox_item),
         )
-        .route("/v1/review/items", post(create_review_item))
+        .route(
+            "/v1/review/items",
+            get(list_due_review_items).post(create_review_item),
+        )
         .route("/v1/review/items/{id}", get(review_item))
+        .route("/v1/review/attempts", post(submit_review_attempt))
         .route("/v1/learning-resources", get(m18::resources))
         .route(
             "/v1/learning-resources/{id}/install",

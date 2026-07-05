@@ -171,6 +171,34 @@ pub(crate) async fn create_review_item(
         .map_err(ApiError::from)
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct ReviewQueueQuery {
+    at_ms: Option<u64>,
+    limit: Option<u32>,
+}
+
+pub(crate) async fn list_due_review_items(
+    State(state): State<ApiState>,
+    Query(query): Query<ReviewQueueQuery>,
+) -> Result<Json<Vec<application::ReviewQueueEntry>>, ApiError> {
+    state
+        .services
+        .due_review_items(query.at_ms, query.limit.unwrap_or(20))
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn submit_review_attempt(
+    State(state): State<ApiState>,
+    Json(request): Json<application::SubmitReviewAttempt>,
+) -> Result<Json<application::ReviewSubmission>, ApiError> {
+    state
+        .services
+        .submit_review_attempt(request)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 pub(crate) async fn review_item(
     State(state): State<ApiState>,
     Path(id): Path<String>,

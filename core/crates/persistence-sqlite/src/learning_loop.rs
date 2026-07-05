@@ -301,6 +301,78 @@ impl ReviewRepository for SqliteRepository {
         .optional()
         .map_err(repo)
     }
+
+    fn save_review_schedule(
+        &self,
+        schedule: &ReviewSchedule,
+    ) -> Result<ReviewSchedule, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.execute(
+            "INSERT INTO review_schedules (item_id,due_at_ms,algorithm,schedule_json)
+             VALUES (?1,?2,?3,?4)
+             ON CONFLICT(item_id) DO UPDATE SET
+               due_at_ms=excluded.due_at_ms,
+               algorithm=excluded.algorithm,
+               schedule_json=excluded.schedule_json",
+            params![
+                schedule.item_id.as_str(),
+                schedule.due_at_ms,
+                schedule.algorithm,
+                json(schedule)?,
+            ],
+        )
+        .map_err(repo)?;
+        Ok(schedule.clone())
+    }
+
+    fn get_review_schedule(
+        &self,
+        item_id: &ReviewItemId,
+    ) -> Result<Option<ReviewSchedule>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.query_row(
+            "SELECT schedule_json FROM review_schedules WHERE item_id=?1",
+            [item_id.as_str()],
+            |row| from_json(&row.get::<_, String>(0)?),
+        )
+        .optional()
+        .map_err(repo)
+    }
+
+    fn list_due_review_items(
+        &self,
+        due_at_or_before_ms: u64,
+        limit: u32,
+    ) -> Result<Vec<(ReviewItem, ReviewSchedule)>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = conn
+            .prepare(
+                "SELECT i.item_json, s.schedule_json
+                 FROM review_schedules s
+                 JOIN review_items i ON i.id=s.item_id
+                 WHERE i.status=?1 AND s.due_at_ms<=?2
+                 ORDER BY s.due_at_ms ASC, i.created_at_ms ASC
+                 LIMIT ?3",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map(
+                params![
+                    json(&ReviewItemStatus::Active)?,
+                    due_at_or_before_ms,
+                    limit.min(100)
+                ],
+                |row| {
+                    Ok((
+                        from_json(&row.get::<_, String>(0)?)?,
+                        from_json(&row.get::<_, String>(1)?)?,
+                    ))
+                },
+            )
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
 }
 
 impl LearningEventRepository for SqliteRepository {

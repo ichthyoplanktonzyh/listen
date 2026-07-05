@@ -940,6 +940,19 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ListeningInboxItem" }
   /v1/review/items:
+    get:
+      operationId: listDueReviewItems
+      parameters:
+        - { name: at_ms, in: query, required: false, schema: { type: integer, minimum: 0 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: Due review queue ordered by due time
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ReviewQueueEntry" }
     post:
       operationId: createReviewItem
       requestBody:
@@ -964,6 +977,20 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ReviewItem" }
+  /v1/review/attempts:
+    post:
+      operationId: submitReviewAttempt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SubmitReviewAttempt" }
+      responses:
+        "200":
+          description: Recorded review result and updated schedule
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewSubmission" }
   /v1/learning-resources:
     get:
       operationId: learningResources
@@ -2400,6 +2427,8 @@ components:
       enum: [lexical_entry, practice_failure, listening_inbox, chunk, sentence, connected_speech]
     ReviewItemStatus:
       enum: [active, suspended, archived]
+    ReviewRating:
+      enum: [again, hard, good, easy]
     LearningEventKind:
       enum: [listening_started, listening_completed, practice_completed, review_completed, status_changed, stuck_point_marked, stuck_point_skipped, diagnosis_viewed, stuck_point_closed, familiar_material_marked, listening_inbox_captured, listening_inbox_processed]
     LearningEventSubjectKind:
@@ -2510,12 +2539,14 @@ components:
         create_review_item_on_failure: { type: boolean }
     ReviewSource:
       type: object
-      required: [kind, id, practice_attempt_id, lexical_entry_id]
+      required: [kind, id, practice_attempt_id, lexical_entry_id, media_id, track_id]
       properties:
         kind: { $ref: "#/components/schemas/ReviewSourceKind" }
         id: { type: [string, "null"] }
         practice_attempt_id: { type: [string, "null"] }
         lexical_entry_id: { type: [string, "null"] }
+        media_id: { type: [string, "null"] }
+        track_id: { type: [string, "null"] }
     ReviewItem:
       type: object
       required: [id, source, anchors, prompt_snapshot, status, created_at_ms, updated_at_ms]
@@ -2534,6 +2565,45 @@ components:
         source: { $ref: "#/components/schemas/ReviewSource" }
         anchors: { type: array, items: { $ref: "#/components/schemas/PracticeAnchor" } }
         prompt_snapshot: { type: string }
+    ReviewSchedule:
+      type: object
+      required: [item_id, algorithm, due_at_ms, stability, difficulty, interval_days, lapse_count]
+      properties:
+        item_id: { type: string }
+        algorithm: { type: string }
+        due_at_ms: { type: integer, minimum: 0 }
+        stability: { type: [number, "null"] }
+        difficulty: { type: [number, "null"] }
+        interval_days: { type: [number, "null"], minimum: 0 }
+        lapse_count: { type: integer, minimum: 0 }
+    ReviewAttempt:
+      type: object
+      required: [id, item_id, reviewed_at_ms, rating, practice_attempt_id, next_due_at_ms]
+      properties:
+        id: { type: string }
+        item_id: { type: string }
+        reviewed_at_ms: { type: integer, minimum: 0 }
+        rating: { $ref: "#/components/schemas/ReviewRating" }
+        practice_attempt_id: { type: [string, "null"] }
+        next_due_at_ms: { type: [integer, "null"], minimum: 0 }
+    ReviewQueueEntry:
+      type: object
+      required: [item, schedule]
+      properties:
+        item: { $ref: "#/components/schemas/ReviewItem" }
+        schedule: { $ref: "#/components/schemas/ReviewSchedule" }
+    SubmitReviewAttempt:
+      type: object
+      required: [item_id, rating]
+      properties:
+        item_id: { type: string }
+        rating: { $ref: "#/components/schemas/ReviewRating" }
+    ReviewSubmission:
+      type: object
+      required: [attempt, schedule]
+      properties:
+        attempt: { $ref: "#/components/schemas/ReviewAttempt" }
+        schedule: { $ref: "#/components/schemas/ReviewSchedule" }
     DiagnosisHintEvidence:
       type: object
       required: [kind, reasons]

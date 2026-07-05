@@ -108,6 +108,8 @@ impl AppServices {
                             .anchors
                             .iter()
                             .find_map(|anchor| anchor.lexical_entry_id.clone()),
+                        media_id: item.media_id.clone(),
+                        track_id: item.track_id.clone(),
                     },
                     anchors: item.anchors.clone(),
                     prompt_snapshot: item.subtitle_snapshot.clone(),

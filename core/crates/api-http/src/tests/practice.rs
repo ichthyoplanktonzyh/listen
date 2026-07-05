@@ -74,6 +74,52 @@ async fn practice_routes_create_and_read_attempts() {
     );
     let attempt_id = attempt["id"].as_str().unwrap();
 
+    let due_response = app
+        .clone()
+        .oneshot(
+            Request::get("/v1/review/items?limit=8")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(due_response.status(), StatusCode::OK);
+    let due: serde_json::Value = serde_json::from_slice(
+        &to_bytes(due_response.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let review_id = due[0]["item"]["id"].as_str().unwrap();
+    assert_eq!(
+        due[0]["schedule"]["algorithm"],
+        "listen_review_v1_heuristic_proxy"
+    );
+
+    let review_response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/review/attempts")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({"item_id": review_id, "rating": "good"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(review_response.status(), StatusCode::OK);
+    let review_submission: serde_json::Value = serde_json::from_slice(
+        &to_bytes(review_response.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(review_submission["attempt"]["rating"], "good");
+    assert_eq!(review_submission["schedule"]["interval_days"], 3.0);
+
     let read_response = app
         .oneshot(
             Request::get(format!("/v1/practice/attempts/{attempt_id}"))

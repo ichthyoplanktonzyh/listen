@@ -3,16 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-05T21:11:00.000+08:00"
+last_updated: "2026-07-05T21:33:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-05 21:11 CST
-> 更新原因：Phase 3.35 收尾复审，修复三处走查遗留实质问题（首页继续学习死代码、
-> readiness 冷启动全零、倍速下拉不刷新）并完成一轮 UX 优化（文稿跟随暂停、窄窗口可调、
-> 姿态栏上下文显示、控件一致性、空态与播放条精简）；阶段仍保持 IN_PROGRESS，等待 owner
-> 多窗口截图与真实媒体验收。
+> 最后更新：2026-07-05 21:33 CST
+> 更新原因：启动 Phase 3.4，完成声音复习第一条端到端竖切片（到期计划、队列、三档评分、
+> 历史事件、Flutter 入口与词汇本手动入队）；阶段保持 IN_PROGRESS，下一步实现卡型差异化、
+> 失败证据/猎词候选池和升级建议引擎。
 
 ## 当前位置
 
@@ -145,6 +144,16 @@ last_updated: "2026-07-05T21:11:00.000+08:00"
 - 边界：不复制参考产品，不实现新 YouTube provider，不改变学习领域语义。
 - 规划文档：`.planning/phases/3.35-listening-workbench-ui-redesign/3.35-PLAN.md`。
 
+### Phase 3.4: Audio-first Review Queue ⏳ IN_PROGRESS
+
+- 已完成第一条竖切片：schema v19 `review_schedules`、历史卡回填、到期查询、三档评分调度、
+  `ReviewAttempt` / `ReviewCompleted` 事件、Flutter ReviewController/Store 与声音卡页面。
+- 复习入口已进入 3.35 工作台首页和学习工具菜单；词汇本可手动入队，来源媒体不匹配时不会
+  误播当前媒体，而是使用 prompt snapshot 降级。
+- 待完成：四类卡型差异化、失败 observation 与猎词候选池、状态升级建议/拒绝冷却、真实媒体
+  ≥8 卡 QA。
+- 规划文档：`.planning/phases/3.4-audio-first-review-queue/3.4-PLAN.md`。
+
 ## 已完成 Phase 索引
 
 | Phase | 结论 | 文档 |
@@ -216,11 +225,10 @@ last_updated: "2026-07-05T21:11:00.000+08:00"
 
 ## 下一步工作
 
-1. 完成 Phase 3.3 真实媒体 30 分钟泛听 QA 并收口。
+1. 继续 Phase 3.4：实现四类卡型差异化和 review 失败 evidence / 猎词候选池。
 2. 执行 Phase 3.35 owner QA：覆盖 `1440x900`、`1280x800`、`900x700` 和真实媒体，
    根据截图微调后将 closeout 从 `AWAITING_OWNER_QA` 改为 `COMPLETED`。
-3. 后续按 `3.0-PHASE-BREAKDOWN.md` 推荐顺序逐个 phase 交人执行；3.4（audio-first review）、
-   3.6（听力词典）无硬依赖，可与主线并行开工。
+3. 完成 Phase 3.3 真实媒体 30 分钟泛听 QA 并收口；3.6（听力词典）可与 3.4 并行开工。
 4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
 5. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）。

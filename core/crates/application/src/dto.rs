@@ -163,6 +163,24 @@ pub struct CreateReviewItem {
     pub prompt_snapshot: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewQueueEntry {
+    pub item: ReviewItem,
+    pub schedule: ReviewSchedule,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubmitReviewAttempt {
+    pub item_id: ReviewItemId,
+    pub rating: ReviewRating,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewSubmission {
+    pub attempt: ReviewAttempt,
+    pub schedule: ReviewSchedule,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DiagnosisHintEvidence {
     pub kind: String,

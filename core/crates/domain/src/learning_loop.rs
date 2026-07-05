@@ -254,6 +254,10 @@ pub struct ReviewSource {
     pub id: Option<String>,
     pub practice_attempt_id: Option<PracticeAttemptId>,
     pub lexical_entry_id: Option<LexicalEntryId>,
+    #[serde(default)]
+    pub media_id: Option<MediaId>,
+    #[serde(default)]
+    pub track_id: Option<SubtitleTrackId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

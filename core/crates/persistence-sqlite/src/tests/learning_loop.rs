@@ -79,6 +79,8 @@ fn learning_loop_practice_review_and_events_round_trip() {
             id: Some(attempt.id.as_str().into()),
             practice_attempt_id: Some(attempt.id.clone()),
             lexical_entry_id: None,
+            media_id: None,
+            track_id: None,
         },
         anchors: item.anchors.clone(),
         prompt_snapshot: item.prompt_snapshot.clone(),
@@ -95,6 +97,25 @@ fn learning_loop_practice_review_and_events_round_trip() {
         repo.list_review_items(Some(ReviewItemStatus::Active), 10, 0)
             .unwrap(),
         vec![review.clone()]
+    );
+    let schedule = ReviewSchedule {
+        item_id: review.id.clone(),
+        algorithm: "listen_review_v1_heuristic_proxy".into(),
+        due_at_ms: 10,
+        stability: None,
+        difficulty: None,
+        interval_days: None,
+        lapse_count: 0,
+    };
+    repo.save_review_schedule(&schedule).unwrap();
+    assert_eq!(
+        repo.get_review_schedule(&review.id).unwrap(),
+        Some(schedule.clone())
+    );
+    assert_eq!(repo.list_due_review_items(9, 10).unwrap(), vec![]);
+    assert_eq!(
+        repo.list_due_review_items(10, 10).unwrap(),
+        vec![(review.clone(), schedule)]
     );
 
     let inbox_item = ListeningInboxItem {

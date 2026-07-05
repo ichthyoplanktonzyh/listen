@@ -2,6 +2,49 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::*;
 
+const REVIEW_ALGORITHM: &str = "listen_review_v1_heuristic_proxy";
+const MINUTE_MS: u64 = 60_000;
+const DAY_MS: u64 = 24 * 60 * MINUTE_MS;
+
+fn next_review_schedule(
+    current: &ReviewSchedule,
+    rating: ReviewRating,
+    reviewed_at_ms: u64,
+) -> ReviewSchedule {
+    let previous_days = current.interval_days.unwrap_or(0.0);
+    let (interval_days, delay_ms, lapse_count) = match rating {
+        ReviewRating::Again => (0.0, 10 * MINUTE_MS, current.lapse_count.saturating_add(1)),
+        ReviewRating::Hard => (1.0, DAY_MS, current.lapse_count),
+        ReviewRating::Good => {
+            let days = if previous_days < 1.0 {
+                3.0
+            } else if previous_days <= 3.0 {
+                7.0
+            } else {
+                (previous_days * 2.0).min(60.0)
+            };
+            (days, (days * DAY_MS as f32) as u64, current.lapse_count)
+        }
+        ReviewRating::Easy => {
+            let days = if previous_days < 1.0 {
+                7.0
+            } else {
+                (previous_days * 2.5).clamp(7.0, 90.0)
+            };
+            (days, (days * DAY_MS as f32) as u64, current.lapse_count)
+        }
+    };
+    ReviewSchedule {
+        item_id: current.item_id.clone(),
+        algorithm: REVIEW_ALGORITHM.into(),
+        due_at_ms: reviewed_at_ms.saturating_add(delay_ms),
+        stability: None,
+        difficulty: None,
+        interval_days: Some(interval_days),
+        lapse_count,
+    }
+}
+
 impl AppServices {
     pub fn create_practice_session(
         &self,
@@ -150,6 +193,12 @@ impl AppServices {
                 attempt.generated_observation_ids.push(saved.id);
             }
             if input.create_review_item_on_failure {
+                let source_session = item
+                    .session_id
+                    .as_ref()
+                    .map(|id| self.practice.get_practice_session(id))
+                    .transpose()?
+                    .flatten();
                 let review = self.create_review_item(CreateReviewItem {
                     source: ReviewSource {
                         kind: ReviewSourceKind::PracticeFailure,
@@ -159,6 +208,12 @@ impl AppServices {
                             .anchors
                             .iter()
                             .find_map(|anchor| anchor.lexical_entry_id.clone()),
+                        media_id: source_session
+                            .as_ref()
+                            .and_then(|session| session.media_id.clone()),
+                        track_id: source_session
+                            .as_ref()
+                            .and_then(|session| session.track_id.clone()),
                     },
                     anchors: item.anchors.clone(),
                     prompt_snapshot: item.prompt_snapshot.clone(),
@@ -194,6 +249,19 @@ impl AppServices {
         input: CreateReviewItem,
     ) -> Result<ReviewItem, ApplicationError> {
         let prompt_snapshot = clean_required(input.prompt_snapshot, "review prompt")?;
+        if input.source.kind == ReviewSourceKind::LexicalEntry {
+            let existing = self
+                .review
+                .list_review_items(Some(ReviewItemStatus::Active), 200, 0)?
+                .into_iter()
+                .find(|item| {
+                    item.source.lexical_entry_id == input.source.lexical_entry_id
+                        && item.prompt_snapshot == prompt_snapshot
+                });
+            if let Some(existing) = existing {
+                return Ok(existing);
+            }
+        }
         let now = now_ms();
         let fingerprint = format!(
             "{:?}:{}:{}:{now}",
@@ -210,11 +278,90 @@ impl AppServices {
             created_at_ms: now,
             updated_at_ms: now,
         };
-        self.review.create_review_item(&item)
+        let saved = self.review.create_review_item(&item)?;
+        self.review.save_review_schedule(&ReviewSchedule {
+            item_id: saved.id.clone(),
+            algorithm: REVIEW_ALGORITHM.into(),
+            due_at_ms: now,
+            stability: None,
+            difficulty: None,
+            interval_days: None,
+            lapse_count: 0,
+        })?;
+        Ok(saved)
     }
 
     pub fn review_item(&self, id: &ReviewItemId) -> Result<Option<ReviewItem>, ApplicationError> {
         self.review.get_review_item(id)
+    }
+
+    pub fn due_review_items(
+        &self,
+        at_ms: Option<u64>,
+        limit: u32,
+    ) -> Result<Vec<ReviewQueueEntry>, ApplicationError> {
+        self.review
+            .list_due_review_items(at_ms.unwrap_or_else(now_ms), limit.min(100))
+            .map(|entries| {
+                entries
+                    .into_iter()
+                    .map(|(item, schedule)| ReviewQueueEntry { item, schedule })
+                    .collect()
+            })
+    }
+
+    pub fn submit_review_attempt(
+        &self,
+        input: SubmitReviewAttempt,
+    ) -> Result<ReviewSubmission, ApplicationError> {
+        let item = self
+            .review
+            .get_review_item(&input.item_id)?
+            .ok_or(ApplicationError::NotFound("review item"))?;
+        if item.status != ReviewItemStatus::Active {
+            return Err(ApplicationError::Conflict("review item is not active"));
+        }
+        let now = now_ms();
+        let current = self
+            .review
+            .get_review_schedule(&item.id)?
+            .unwrap_or(ReviewSchedule {
+                item_id: item.id.clone(),
+                algorithm: REVIEW_ALGORITHM.into(),
+                due_at_ms: now,
+                stability: None,
+                difficulty: None,
+                interval_days: None,
+                lapse_count: 0,
+            });
+        let schedule = next_review_schedule(&current, input.rating, now);
+        let fingerprint = format!("{}:{now}:{:?}", item.id.as_str(), input.rating);
+        let attempt = self.review.create_review_attempt(&ReviewAttempt {
+            id: ReviewAttemptId::from_fingerprint("review-attempt", &fingerprint),
+            item_id: item.id.clone(),
+            reviewed_at_ms: now,
+            rating: input.rating,
+            practice_attempt_id: None,
+            next_due_at_ms: Some(schedule.due_at_ms),
+        })?;
+        let schedule = self.review.save_review_schedule(&schedule)?;
+        self.learning_events.append_learning_event(&LearningEvent {
+            id: LearningEventId::from_fingerprint("learning-event", &fingerprint),
+            occurred_at_ms: now,
+            kind: LearningEventKind::ReviewCompleted,
+            subject: LearningEventSubject {
+                kind: LearningEventSubjectKind::ReviewItem,
+                id: item.id.as_str().to_owned(),
+            },
+            payload: serde_json::json!({
+                "rating": input.rating,
+                "next_due_at_ms": schedule.due_at_ms,
+                "algorithm": schedule.algorithm,
+                "evidence_class": "heuristic_proxy",
+            }),
+            session_id: None,
+        })?;
+        Ok(ReviewSubmission { attempt, schedule })
     }
 
     pub fn mark_stuck_point(
@@ -1005,6 +1152,28 @@ impl ReviewRepository for DisabledLearningLoopRepository {
     ) -> Result<Option<ReviewAttempt>, ApplicationError> {
         Err(Self::disabled())
     }
+
+    fn save_review_schedule(
+        &self,
+        _schedule: &ReviewSchedule,
+    ) -> Result<ReviewSchedule, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn get_review_schedule(
+        &self,
+        _item_id: &ReviewItemId,
+    ) -> Result<Option<ReviewSchedule>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn list_due_review_items(
+        &self,
+        _due_at_or_before_ms: u64,
+        _limit: u32,
+    ) -> Result<Vec<(ReviewItem, ReviewSchedule)>, ApplicationError> {
+        Err(Self::disabled())
+    }
 }
 
 impl LearningEventRepository for DisabledLearningLoopRepository {
@@ -1075,5 +1244,26 @@ mod tests {
             evaluation.token_results[1].result,
             PracticeTokenResult::Mismatch
         );
+    }
+
+    #[test]
+    fn review_scheduler_uses_short_failure_and_growing_success_intervals() {
+        let current = ReviewSchedule {
+            item_id: ReviewItemId::parse("review-schedule-test").unwrap(),
+            algorithm: REVIEW_ALGORITHM.into(),
+            due_at_ms: 0,
+            stability: None,
+            difficulty: None,
+            interval_days: None,
+            lapse_count: 0,
+        };
+        let failed = next_review_schedule(&current, ReviewRating::Again, 1_000);
+        assert_eq!(failed.due_at_ms, 1_000 + 10 * MINUTE_MS);
+        assert_eq!(failed.lapse_count, 1);
+
+        let first_success = next_review_schedule(&current, ReviewRating::Good, 1_000);
+        assert_eq!(first_success.interval_days, Some(3.0));
+        let later_success = next_review_schedule(&first_success, ReviewRating::Good, 1_000);
+        assert_eq!(later_success.interval_days, Some(7.0));
     }
 }

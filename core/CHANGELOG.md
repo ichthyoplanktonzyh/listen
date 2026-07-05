@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-05 21:33 CST: 启动 Phase 3.4 Audio-first Review Queue。新增 SQLite schema v19
+  `review_schedules` 并为历史复习项回填立即到期计划；补齐到期队列与三档评分 API，评分写入
+  `ReviewAttempt`、推进 heuristic_proxy 调度并追加 `ReviewCompleted` 事件。Flutter 新增
+  ReviewController/Store、首页及学习工具入口、声音优先翻面卡和 snapshot 降级；复习音频仅在
+  来源 media 与当前 media 匹配时播放，避免错播。词汇本详情新增手动加入复习，使队列无需
+  精听/泛听前置也可独立使用。同步 OpenAPI、TypeScript/Dart DTO、架构与数据模型文档及
+  Rust/Flutter 回归测试。验证：相关 Rust tests 全通过，`flutter analyze` 与 `flutter test`
+  （189 passed）、`validate-contracts`、`git diff --check` 通过；strict clippy 被当前工具链新报的
+  存量 `speech-analysis` / `application` lint 阻断，本阶段改动未引入对应告警。
+
 - 2026-07-05 21:11 CST: Phase 3.35 收尾复审修复与 UX 优化。修复三处走查遗留实质问题：
   (1) 首页“继续学习”原本是死代码（媒体信息与 mediaPath 同生同灭），改为持久化最近媒体
   路径/标题/进度/字幕数到 settings，“继续播放”真正重开并按后端进度恢复位置；(2) 首页

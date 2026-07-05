@@ -432,6 +432,7 @@ export type ReviewSourceKind =
   | "sentence"
   | "connected_speech";
 export type ReviewItemStatus = "active" | "suspended" | "archived";
+export type ReviewRating = "again" | "hard" | "good" | "easy";
 export type LearningEventKind =
   | "listening_started"
   | "listening_completed"
@@ -560,6 +561,8 @@ export interface ReviewSource {
   id: string | null;
   practice_attempt_id: string | null;
   lexical_entry_id: string | null;
+  media_id: string | null;
+  track_id: string | null;
 }
 
 export interface ReviewItem {
@@ -576,6 +579,40 @@ export interface CreateReviewItem {
   source: ReviewSource;
   anchors: PracticeAnchor[];
   prompt_snapshot: string;
+}
+
+export interface ReviewSchedule {
+  item_id: string;
+  algorithm: string;
+  due_at_ms: number;
+  stability: number | null;
+  difficulty: number | null;
+  interval_days: number | null;
+  lapse_count: number;
+}
+
+export interface ReviewAttempt {
+  id: string;
+  item_id: string;
+  reviewed_at_ms: number;
+  rating: ReviewRating;
+  practice_attempt_id: string | null;
+  next_due_at_ms: number | null;
+}
+
+export interface ReviewQueueEntry {
+  item: ReviewItem;
+  schedule: ReviewSchedule;
+}
+
+export interface SubmitReviewAttempt {
+  item_id: string;
+  rating: ReviewRating;
+}
+
+export interface ReviewSubmission {
+  attempt: ReviewAttempt;
+  schedule: ReviewSchedule;
 }
 
 export interface DiagnosisHintEvidence {
@@ -1208,6 +1245,19 @@ export class LocalApiV1 {
 
   createReviewItem(input: CreateReviewItem): Promise<ReviewItem> {
     return this.request("/v1/review/items", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  listDueReviewItems(limit = 20, atMs?: number): Promise<ReviewQueueEntry[]> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (atMs !== undefined) params.set("at_ms", String(atMs));
+    return this.request(`/v1/review/items?${params.toString()}`);
+  }
+
+  submitReviewAttempt(input: SubmitReviewAttempt): Promise<ReviewSubmission> {
+    return this.request("/v1/review/attempts", {
       method: "POST",
       body: JSON.stringify(input),
     });

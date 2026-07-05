@@ -114,7 +114,7 @@ application use cases and provider/repository boundaries.
 - Partial unique indexes enforce one active word/chunk/phone timeline per track.
 - Lexical export/import version 5 is lexical-only.
 - Schema v15 adds `practice_sessions`, `practice_items`, `practice_attempts`,
-  `review_items`, `review_attempts`, and `learning_events`.
+  `review_items`, `review_attempts`, `review_schedules`, and `learning_events`.
 - Schema v16 destructively resets lexical/learning-resource tables to the
   authoritative `LexicalEntry + LexicalUnit + LexicalObservation` shape for
   local databases that had already run the old v7 lexical migration.
