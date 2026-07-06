@@ -494,10 +494,12 @@ impl LearningAssetRepository for SqliteRepository {
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(repo)?
         };
+        let capability_profile = self.lexical_capability_profile(&id, None)?;
         Ok(Some(LexicalEntryDetails {
             entry,
             history,
             occurrences,
+            capability_profile,
         }))
     }
 

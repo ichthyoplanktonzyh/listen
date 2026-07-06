@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- 2026-07-06 CST: 完成 Phase 3.4.1 Slice 5 API, events and Flutter。OpenAPI additive capability
+  profile GET/PUT contract（`/v1/lexical-entries/{id}/capability-profile` 和
+  `/v1/lexical-entries/{id}/capability/{capability}`）。SSE 新增 `lexical-capability-changed` event，
+  `LexicalCapabilityChangedPayload` 含 entry ID、capability 和 effective assessment。Dart 手写
+  DTO：`CapabilityProjection`、`CapabilityOverride`、`CapabilityDimensionState`（effectiveAssessment
+  getter：override > projection > unassessed）、`LexicalCapabilityProfile`；`LexicalEntryDetails`
+  新增可选 `capabilityProfile` 字段。`LearningState` 新增 `capabilityProfiles` map，
+  `LearningController.updateCapabilityProfile` 维护；`BackendEventCoordinator` 处理
+  `LexicalEntryChangedEvent` 时提取 profile，`LearningWorkflowController.openWord` 加载时存储；
+  新增 `setCapabilityOverride` 方法通过 API 设置/清除单通道 override。词汇面板四通道显示
+  （reading/listening/speaking/writing），每通道 acquired/not_acquired ChoiceChip + unassessed 独立
+  italic 表达 + override 标识；字幕 `TokenLine` 从 `capabilityProfiles` 派生 display status
+  （reading not_acquired → unknown_meaning、reading acquired + listening not_acquired →
+  known_not_recognized、both acquired → known_recognized）。复习结束页/词汇详情 suggestion
+  按钮改用 localization keys（`confirmListeningAcquired`/`deferUpgrade`/`listeningUpgradeSuggestion`）。
+  新增 `capability_profile_contract_test.dart`（6 tests）和 `backend_event_contract_test.dart` 扩展
+  （2 tests）。验证：`flutter analyze` 0 issues、`flutter test` 204 passed、`cargo check --workspace`
+  clean、api-events schema parity 3 passed、event contract examples regenerated。
+
 - 2026-07-06 13:30 CST: 完成 Phase 3.4.1 Slice 4 diagnosis and review suggestion migration。
   diagnosis-core 新增 `diagnose_with_profiles()`，meaning barrier 改用 reading effective
   assessment、recognition barrier 改用 listening effective assessment + sentence observation，

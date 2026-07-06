@@ -156,6 +156,8 @@ pub struct LexicalEntryDetails {
     pub entry: LexicalEntry,
     pub history: Vec<LexicalStatusHistory>,
     pub occurrences: Vec<LexicalOccurrence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_profile: Option<crate::LexicalCapabilityProfile>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

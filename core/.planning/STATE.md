@@ -175,13 +175,16 @@ last_updated: "2026-07-06T13:30:00.000+08:00"
   来源的近似映射回填，迁移前备份/重复打开/失败恢复测试通过。
 - 后续：3.4.2 新增 SenseGroup 语义层且保留现有声音组；3.4.3 验证 Construction 身份。
 - 共享上下文：`.planning/phases/3.0-english-listening-learning-loop/3.4.X-LEARNING-DOMAIN-V2-SHARED-CONTEXT.md`。
-- Slice 0-4 已完成：domain contract、schema v22 persistence、application use case（profile 读取、
+- Slice 0-5 已完成：domain contract、schema v22 persistence、application use case（profile 读取、
   per-channel override、双向 compatibility adapter）、VocabularyAssetBundle v6 导入导出（v5 向后
   兼容、imported projection 不覆盖 local override）、diagnosis 改用 reading/listening capability
   assessment（unassessed 严格 insufficient 不触发 barrier）、upgrade suggestion 改为 listening
   capability proposal（capability-aware confirm 直接更新 listening projection + sync legacy，旧
-  suggestion 保留走 legacy 路径）。
-- 下一步：Slice 5 API, events and Flutter。
+  suggestion 保留走 legacy 路径）、OpenAPI additive capability profile/update contract、SSE
+  `lexical-capability-changed` event、Dart 手写 DTO + committed fixture contract tests、
+  词汇面板四通道显示（unassessed 独立表达）、字幕状态样式从 capability profile 派生、
+  复习结束页/词汇详情 suggestion 改用 listening localization keys。
+- 下一步：Slice 6 authority switch and closeout。
 
 ## 已完成 Phase 索引
 
@@ -258,10 +261,9 @@ last_updated: "2026-07-06T13:30:00.000+08:00"
 
 ## 下一步工作
 
-1. 执行 Phase 3.4.1 Slice 5：OpenAPI additive capability profile、SSE event、Dart DTO、
-   词汇面板四通道显示、字幕状态样式改为 reading/listening 视图。
-2. 保持 `lexical_entries.status` 不删除；新 profile 已可持久化、双向同步且诊断/升级建议已
-   切换为 capability 权威，但 Flutter UI 和 API 尚未暴露。
+1. 执行 Phase 3.4.1 Slice 6：新 profile 成为 active authority，legacy status 只作为兼容投影；
+   全仓审计不再用 legacy enum 驱动新业务；完成自动化/真实数据库 QA；更新 codebase docs 和 closeout。
+2. 保持 `lexical_entries.status` 不删除；新 profile 已全栈暴露（API + SSE + Flutter UI）。
 3. 3.4.1 收口后恢复 Phase 3.4/3.35 手工 QA，并重新基线化新能力 UI。
 4. 完成 Phase 3.3 真实媒体 30 分钟泛听 QA并收口；3.5/3.6 等待 3.4.1。
 5. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
