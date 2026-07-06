@@ -53,8 +53,10 @@ known_recognized
 Phase 3.4.1 is the accepted transition to reading/listening/speaking/writing
 capability assessments (`unassessed / not_acquired / acquired`) with evidence,
 system projection, and user override kept separate. ADR 0015 is authoritative
-for the target model. Until the v22 authority-switch slice lands, the following
-tables and enum remain current runtime facts rather than the future target.
+for the target model. The domain contract and conservative legacy conversion
+functions now exist, but have no persistence or runtime consumers yet. Until the
+v22 authority-switch slice lands, the following tables and enum remain current
+runtime facts rather than the future target.
 
 Lexical learning state is split by purpose:
 

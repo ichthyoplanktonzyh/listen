@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-06 11:07 CST: 完成 Phase 3.4.1 Slice 1 domain contract。新增 reading/listening/
+  speaking/writing `LexicalCapability`、三值 `CapabilityAssessment`、不可持久化 unassessed 的
+  concrete conclusion、带 provenance 的 system projection、user override 与 effective profile
+  优先级；新增可选 `LexicalSenseId` seam。实现 ADR 0015 固定的 legacy status 回填和保守反向
+  view，覆盖四种旧状态、productive channel 保持 unassessed、override 不删除 projection、
+  无法表达组合不强制降级及 snake_case 序列化。当前切片不修改 SQLite/API/运行行为。验证：
+  `cargo test -p domain`（25 passed）、`cargo clippy -p domain --all-targets -- -D warnings`、
+  `cargo fmt --all`、`git diff --check` 通过。
+
 - 2026-07-06 11:00 CST: 启动 Phase 3.4.x Learning Domain Model v2。Phase 3.4 与
   3.35 暂停最终真实媒体/owner QA，保留已完成代码与自动化结果；建立
   `baseline/learning-model-v1` 迁移基线。新增 3.4.1~3.4.3 共享上下文和分阶段 PLAN，

@@ -43,6 +43,9 @@ pub use phonetic_analysis::*;
 mod learning;
 pub use learning::*;
 
+mod capability;
+pub use capability::*;
+
 mod learning_loop;
 pub use learning_loop::*;
 
@@ -98,6 +101,7 @@ string_id!(PhoneTimelineId);
 string_id!(RhythmFrameId);
 string_id!(LLTimelineId);
 string_id!(LexicalEntryId);
+string_id!(LexicalSenseId);
 string_id!(LexicalObservationId);
 string_id!(LexicalOccurrenceId);
 string_id!(LexicalStatusHistoryId);
