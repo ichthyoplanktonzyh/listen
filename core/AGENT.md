@@ -62,10 +62,12 @@ Local QA media:
   incompatible changes require a schema/version decision.
 - Vocabulary and learning assets outlive replaceable media/subtitle records.
   Do not casually cascade-delete durable learning history.
-- After Phase 2.18, the authoritative learning asset model is
-  `LexicalEntry + LexicalUnit + LearningStatus`. Do not reintroduce
-  `WordProfile` / `WordObservation` or legacy learning-asset adapters unless a
-  new phase explicitly changes the architecture.
+- Phase 2.18 established `LexicalEntry + LexicalUnit + LearningStatus`; Phase
+  3.4.1 now explicitly migrates the status axis to a four-channel capability
+  profile with evidence/projection/override separation (ADR 0015). Until its
+  authority-switch slice lands, `LearningStatus` remains the runtime active
+  path. Do not reintroduce `WordProfile` / `WordObservation`, and do not bypass
+  the additive compatibility plan in the 3.4.x shared context.
 - Phase 2.18 intentionally does not preserve historical compatibility for old
   SQLite data, old LLTimeline resources, old learning assets, or old API/UI
   adapters.

@@ -59,8 +59,10 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | 播放器适配器 | 将具体平台播放器能力映射为统一播放契约的模块 |
 | 字幕句 | 一个带开始时间、结束时间和文本的标准化字幕单元 |
 | token | 从字幕文本中拆分出的单词、空白、标点或其他文本片段 |
-| 全局词汇状态 | 用户通常是否认识并能听出某个词的长期状态 |
-| 上下文观察 | 用户在某个具体字幕句中是否听出某个词的一次记录 |
+| 词汇能力画像 | 用户对某词汇对象在 reading / listening / speaking / writing 四通道上的长期能力结论 |
+| 能力评估 | 单个能力通道的 `unassessed / not_acquired / acquired` 结论 |
+| 上下文观察 | 用户在某个具体任务、通道与上下文中的一次表现记录，不等于长期能力画像 |
+| 用户覆盖 | 用户对单个能力通道的显式声明；优先于系统投影但不删除历史证据 |
 | 来源快照 | 用户主动记录词汇时保存的原句、媒体标题与时间范围持久化副本 |
 | 动态词汇本 | 按当前全局状态查询得到的词汇集合，不复制词汇 Profile |
 | 当前句诊断 | 根据当前字幕句中的词汇状态生成的可解释诊断线索 |
@@ -667,6 +669,10 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 
 ## 9. 词汇状态需求
 
+> 2026-07-06 更新：WORD-001 至 WORD-018 记录已发布/已实现的 legacy
+> `LearningStatus` 能力与兼容要求。Phase 3.4.1 起，长期权威模型由 §18.6 的 CAP-001 至
+> CAP-010 取代；旧状态在 additive migration 兼容窗口内保留，不再作为新业务建模依据。
+
 ### WORD-001：全局状态枚举
 
 - 优先级：P0
@@ -676,6 +682,8 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - API、数据库和客户端使用相同语义。
   - 状态具有向后兼容的序列化值。
 - 依赖：ARCH-008。
+
+> Superseded for new work by CAP-001/CAP-002；保留用于 legacy 数据、API 与导入兼容。
 
 ### WORD-002：上下文观察枚举
 
@@ -944,16 +952,17 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 
 - 优先级：P0
 - 阶段：M5
-- 需求：诊断输入包含当前字幕句 token、全局状态和当前句观察。
+- 需求：诊断输入包含当前字幕句 token、词汇有效能力画像和当前句通道化观察；兼容窗口内可从
+  legacy 全局状态投影。
 - 验收标准：
   - 输入不依赖 UI 控件状态。
-- 依赖：TXT-001、WORD-001、WORD-002。
+- 依赖：TXT-001、CAP-001、CAP-004。
 
 ### DIAG-002：词义障碍识别
 
 - 优先级：P0
 - 阶段：M5
-- 需求：诊断列出 `UnknownMeaning` 词并提示可能存在词义理解障碍。
+- 需求：诊断根据 reading `not_acquired` 列出可能存在词义理解障碍的词。
 - 验收标准：
   - 结果包含依据词列表。
   - 未知词为空时不显示该结论。
@@ -963,7 +972,8 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 
 - 优先级：P0
 - 阶段：M5
-- 需求：诊断列出 `KnownNotRecognized` 或当前句未听出的词，并提示可能存在声音识别障碍。
+- 需求：诊断根据 listening `not_acquired` 或当前句未听出的 listening evidence，提示可能存在
+  声音识别障碍。
 - 验收标准：
   - 全局状态和上下文观察来源可区分。
 - 依赖：DIAG-001。
@@ -972,7 +982,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 
 - 优先级：P0
 - 阶段：M5
-- 需求：未分类词过多或缺少状态时，诊断明确提示信息不足。
+- 需求：相关能力为 `unassessed` 或缺少必要 evidence 时，诊断明确提示信息不足。
 - 验收标准：
   - 不在信息不足时生成确定性结论。
 - 依赖：DIAG-001。
@@ -1251,11 +1261,13 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 
 - 优先级：P0
 - 阶段：M1
-- 需求：保存语言、lemma、规范化 lemma、展示词形和全局状态。
+- 需求：保存语言、规范化词汇身份、展示词形及四通道能力 projection/override；兼容窗口内保留
+  legacy 全局状态。
 - 验收标准：
-  - `Language + NormalizedLemma` 唯一。
-  - 状态更新具有时间戳。
-- 依赖：WORD-001、WORD-007。
+  - 词汇身份遵守 `LexicalUnit` coherence。
+  - 每个通道的 projection、override 与更新时间可区分。
+  - 未评估不存成尚未掌握。
+- 依赖：CAP-001 至 CAP-003、WORD-007。
 
 ### DATA-008：上下文观察
 
@@ -1317,8 +1329,9 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 
 - 优先级：P0
 - 阶段：M1.5
-- 需求：保存每次用户状态选择的前后状态、时间、来源和可选来源快照。
-- 验收标准：状态更新与历史写入位于同一事务。
+- 需求：保存 legacy 状态历史，并新增每次通道 projection/override 变化的前后 assessment、时间、
+  来源和可选证据引用。
+- 验收标准：能力更新与对应历史写入位于同一事务；清除 override 不删除 projection/evidence。
 - 依赖：DATA-007、DATA-013。
 
 ### DATA-015：媒体可用状态与重新定位
@@ -2575,12 +2588,13 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 
 - 优先级：P0
 - 阶段：M2-LANG
-- 需求：全局词汇状态枚举保持语言无关、跨语言复用；诊断**理由** taxonomy 按 profile 扩展
-  （en: weak_form/liaison；zh: tone_confusion/word_boundary/homophone）。
+- 需求：reading/listening/speaking/writing 能力维度及 assessment 语义保持语言无关、跨语言复用；
+  诊断**理由** taxonomy 按 profile 扩展（en: weak_form/liaison；zh:
+  tone_confusion/word_boundary/homophone）。
 - 验收标准：
-  - 中文不需要独立全局状态枚举。
-  - 新增语言只扩展诊断理由，不改动状态枚举与既有语言代码。
-- 依赖：WORD-001、DIAG-001。
+  - 中文不需要独立能力 assessment 枚举。
+  - 新增语言只扩展诊断理由，不改动能力维度/assessment 语义与既有语言代码。
+- 依赖：CAP-001、CAP-002、DIAG-001。
 
 ### LANG-009：母语（L1）诊断 seam
 
@@ -2724,6 +2738,121 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - L1-aware 难点分布。
   - 同一材料二刷/三刷理解度提升。
 
+## 18.6 Phase 3.4.x Learning Domain Model v2 需求
+
+> 共享上下文：
+> `.planning/phases/3.0-english-listening-learning-loop/3.4.X-LEARNING-DOMAIN-V2-SHARED-CONTEXT.md`。
+> ADR 0015 取代 ADR 0012 中“单一 LearningStatus 为长期权威资产”的决定，但不改变
+> Token / LexicalUnit / ListeningUnit 分层和语言 provider 原则。
+
+### CAP-001：四通道词汇能力画像
+
+- 优先级：P0
+- 阶段：Phase 3.4.1
+- 需求：每个词汇学习对象分别表达 reading、listening、speaking、writing 能力。
+- 验收标准：
+  - 四个通道可独立变化。
+  - 不存在隐式单向升级或降级链。
+  - 第一阶段锚定 LexicalEntry，并预留可选 sense identity seam。
+
+### CAP-002：三值能力评估
+
+- 优先级：P0
+- 阶段：Phase 3.4.1
+- 需求：每个通道使用 `unassessed / not_acquired / acquired`，不得用 bool 混淆无数据和不会。
+- 验收标准：
+  - 新词条默认四通道 unassessed。
+  - unassessed 不进入“不认识/不会”查询和诊断。
+  - 用户清除选择后恢复无 override，而不是写入负面评估。
+
+### CAP-003：Evidence / Projection / Override 分层
+
+- 优先级：P0
+- 阶段：Phase 3.4.1
+- 需求：上下文 evidence、系统 projection、用户 override 和 effective assessment 可区分。
+- 验收标准：
+  - effective assessment 优先 override，其次 projection，否则 unassessed。
+  - 自动证据不静默覆盖用户 override。
+  - 清除 override 后可以重新显示既有 projection。
+  - 所有自动 projection 记录算法/source provenance。
+
+### CAP-004：通道化学习证据
+
+- 优先级：P0
+- 阶段：Phase 3.4.1
+- 需求：新学习证据能表达 capability、task type、result、assistance/context 和时间；既有 evidence
+  通过 adapter 保持 durable。
+- 验收标准：
+  - 现有 Recognized/NotRecognizedInContext 明确属于 listening。
+  - PracticeAttempt、ReviewAttempt 和 recognition evidence 不因迁移丢失。
+  - 同一次上下文表现不直接等于全局能力 override。
+
+### CAP-005：Legacy LearningStatus 兼容迁移
+
+- 优先级：P0
+- 阶段：Phase 3.4.1
+- 需求：schema v21 的 legacy status 按 ADR 0015 映射到 capability projection，且迁移来源可查。
+- 验收标准：
+  - null -> 全 unassessed。
+  - unknown_meaning -> reading not_acquired，其余 unassessed。
+  - known_not_recognized -> reading acquired + listening not_acquired。
+  - known_recognized -> reading acquired + listening acquired。
+  - speaking/writing 不从旧数据伪造结论。
+
+### CAP-006：Additive persistence 与恢复
+
+- 优先级：P0
+- 阶段：Phase 3.4.1
+- 需求：schema v22 以 additive migration 增加能力数据，不在本阶段删除 legacy status。
+- 验收标准：
+  - v21 -> v22 fixture migration、幂等打开和失败备份恢复通过。
+  - migration 进入 main 后不原地修改。
+  - git revert 不作为数据库降级方案。
+
+### CAP-007：API、事件与可移植资产兼容
+
+- 优先级：P0
+- 阶段：Phase 3.4.1
+- 需求：API additive 暴露能力画像，事件表达单通道变化；新 vocabulary bundle 保存
+  projection/override/source，旧 bundle 仍可导入。
+- 验收标准：
+  - Dart 手写 DTO 有 committed fixture contract test。
+  - 老 bundle 走与 SQLite 一致的 legacy mapping。
+  - 较旧迁移 projection 不覆盖较新的本地 override。
+  - 不支持新 bundle 的程序明确拒绝，不静默丢字段。
+
+### CAP-008：能力驱动诊断与复习建议
+
+- 优先级：P0
+- 阶段：Phase 3.4.1
+- 需求：meaning barrier 使用 reading，recognition barrier 使用 listening + context evidence；
+  Phase 3.4 upgrade suggestion 迁移为 listening capability proposal。
+- 验收标准：
+  - unassessed 产生 information insufficient，而非 barrier。
+  - 某句 listening failure 不静默降级长期 acquired。
+  - 用户确认建议只改变目标通道。
+
+### CAP-009：Semantic / Prosodic Group 双层模型
+
+- 优先级：P0
+- 阶段：Phase 3.4.2
+- 需求：SenseGroup token span 与音频/韵律 time span 独立存在，并支持非一一 alignment。
+- 验收标准：
+  - 新语义分析不覆盖现有 ChunkTimeline 声学信息。
+  - SenseGroup 默认作为 annotation/practice target，不自动成为全局 mastery asset。
+  - 缺少语义 parser 时现有 chunk replay 不回退。
+
+### CAP-010：Construction 身份 Spike
+
+- 优先级：P1
+- 阶段：Phase 3.4.3
+- 需求：在进入生产 schema 前验证 SentenceExemplar、Construction、Occurrence、slots 与
+  UserSentencePattern 的身份和归并规则。
+- 验收标准：
+  - 具体句和抽象构式不共享身份。
+  - recognition/production evidence 记录 modality。
+  - 证据不足时允许以“不建生产表”收口。
+
 ## 19. MVP 发布追踪矩阵
 
 | 发布能力 | 必须满足的需求 |
@@ -2747,4 +2876,5 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | Phase 2.22 用户可见工作流语义 | UX-001 至 UX-008 |
 | Milestone 2 多语言学习基础 | LANG-001 至 LANG-010 |
 | Phase 3.0 英语听力学习闭环 | LOOP-000 至 LOOP-009 |
+| Phase 3.4.x Learning Domain Model v2 | CAP-001 至 CAP-010 |
 | Phase 3.35 听力工作台 UI 重构 | UI-016 至 UI-017 |

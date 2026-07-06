@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-06 11:00 CST: 启动 Phase 3.4.x Learning Domain Model v2。Phase 3.4 与
+  3.35 暂停最终真实媒体/owner QA，保留已完成代码与自动化结果；建立
+  `baseline/learning-model-v1` 迁移基线。新增 3.4.1~3.4.3 共享上下文和分阶段 PLAN，
+  锁定四通道词汇能力画像、`unassessed / not_acquired / acquired`、evidence/system
+  projection/user override 分层、SenseGroup 与声音/韵律组双层模型及 Construction identity
+  spike。ADR 0015 取代 ADR 0012 的单值 `LearningStatus` 长期权威决定，并固定 schema v21
+  legacy 映射、v22 additive migration 与 conservative legacy view；同步更新 ROADMAP、
+  REQUIREMENTS、STATE、phase breakdown、AGENT 和 codebase 架构/数据模型事实源。
+
 - 2026-07-06 10:17 CST: Phase 3.4 升级建议引擎 v1 落地。SQLite schema v21 新增
   `recognition_evidence` 与 `upgrade_suggestions`；practice 正确、review `good/easy` 和逐例
   `RecognizedInContext` 证据按 lexical entry + sentence（无 sentence 时按 media）去重，累计

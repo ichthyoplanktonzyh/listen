@@ -67,6 +67,10 @@ application use cases and provider/repository boundaries.
 - Application-owned DTOs sit in `application::dto`; algorithm crate structs are
   mapped at the boundary instead of re-exported.
 - Learning assets use `LexicalEntry + LexicalUnit` as the authoritative model.
+- Schema v21 still reads `LearningStatus`; Phase 3.4.1 is migrating this axis to
+  a four-channel capability profile with evidence/projection/override separation
+  under ADR 0015. The rollout is additive; old status remains a compatibility
+  view until all active consumers switch.
 - Practice services can create practice sessions/items, evaluate text attempts,
   persist `PracticeAttempt`, write failed lexical anchors as `LexicalObservation`,
   optionally create `ReviewItem`, append `LearningEvent`, complete intensive
