@@ -19,6 +19,8 @@ pub fn lexical_observation_id(
     )
 }
 
+/// Deprecated: superseded by `LexicalCapabilityProfile` (ADR 0015).
+/// Retained for schema compatibility and legacy API consumers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LearningStatus {
@@ -79,6 +81,7 @@ pub struct LexicalEntry {
     pub canonical_form: String,
     pub normalized_form: String,
     pub display_form: String,
+    /// Deprecated: compatibility projection from `LexicalCapabilityProfile`.
     pub status: Option<LearningStatus>,
     pub user_definition: Option<String>,
     pub personal_note: Option<String>,

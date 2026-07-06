@@ -324,6 +324,9 @@ impl AppServices {
                 None,
                 LearningChangeSource::Import,
             )?;
+            if status.is_some() {
+                self.sync_capability_from_legacy_status(&entry.id, status, imported_at_ms)?;
+            }
             if existing.is_some() {
                 summary.overwritten += 1;
             } else if status.is_some() {

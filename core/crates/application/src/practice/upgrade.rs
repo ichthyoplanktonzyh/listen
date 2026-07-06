@@ -220,45 +220,20 @@ impl AppServices {
             ));
         }
         let now = now_ms();
-        if suggestion.capability == Some(LexicalCapability::Listening) {
-            let profile = self.learning_assets.set_lexical_capability_projection(
-                &suggestion.lexical_entry_id,
-                None,
-                LexicalCapability::Listening,
-                Some(CapabilityProjection {
-                    conclusion: CapabilityConclusion::Acquired,
-                    source: CapabilityProjectionSource::EvidenceProjection,
-                    algorithm_version: UPGRADE_EVIDENCE_CLASS.into(),
-                    updated_at_ms: now,
-                }),
-                now,
-            )?;
-            self.sync_legacy_status_from_profile(&suggestion.lexical_entry_id, &profile)?;
-        } else {
-            let mut details = self
-                .learning_assets
-                .lexical_details(&suggestion.lexical_entry_id)?
-                .ok_or(ApplicationError::NotFound("lexical entry"))?;
-            if details.entry.status == Some(LearningStatus::KnownNotRecognized) {
-                details.entry.status = Some(LearningStatus::KnownRecognized);
-                details.entry.updated_at_ms = now;
-                details.entry.learning_updated_at_ms = now;
-                self.learning_assets.upsert_lexical_entry(
-                    &details.entry,
-                    None,
-                    LearningChangeSource::UpgradeSuggestionConfirmation,
-                )?;
-                self.sync_capability_from_legacy_status(
-                    &details.entry.id,
-                    details.entry.status,
-                    now,
-                )?;
-            } else if details.entry.status != Some(LearningStatus::KnownRecognized) {
-                return Err(ApplicationError::Conflict(
-                    "lexical entry is no longer eligible for recognition upgrade",
-                ));
-            }
-        }
+        let capability = suggestion.capability.unwrap_or(LexicalCapability::Listening);
+        let profile = self.learning_assets.set_lexical_capability_projection(
+            &suggestion.lexical_entry_id,
+            None,
+            capability,
+            Some(CapabilityProjection {
+                conclusion: CapabilityConclusion::Acquired,
+                source: CapabilityProjectionSource::EvidenceProjection,
+                algorithm_version: UPGRADE_EVIDENCE_CLASS.into(),
+                updated_at_ms: now,
+            }),
+            now,
+        )?;
+        self.sync_legacy_status_from_profile(&suggestion.lexical_entry_id, &profile)?;
         suggestion.status = UpgradeSuggestionStatus::Accepted;
         suggestion.resolved_at_ms = Some(now);
         suggestion.cooldown_until_ms = None;

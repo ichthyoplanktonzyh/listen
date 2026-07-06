@@ -863,7 +863,7 @@ fn upgrade_suggestion_confirm_updates_listening_projection() {
 }
 
 #[test]
-fn legacy_suggestion_without_capability_still_confirms_via_old_path() {
+fn legacy_suggestion_without_capability_confirms_via_profile_authority() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = AppServices::new(
         repo.clone(),
@@ -918,6 +918,14 @@ fn legacy_suggestion_without_capability_still_confirms_via_old_path() {
     assert_eq!(details.entry.status, Some(LearningStatus::KnownRecognized));
     assert_eq!(
         details.history[0].change_source,
-        LearningChangeSource::UpgradeSuggestionConfirmation
+        LearningChangeSource::CapabilityOverrideSync,
+    );
+    let profile = services
+        .lexical_capability_profile(&entry.entry.id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        profile.effective_assessment(LexicalCapability::Listening),
+        CapabilityAssessment::Acquired,
     );
 }

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-06 CST: 完成 Phase 3.4.1 Slice 6 authority switch and closeout。capability profile
+  成为唯一权威决策来源：diagnosis-core `classify_entry()` 移除 legacy `LearningStatus` 回退
+  分支，只使用 capability profile 进行 meaning/recognition barrier 分类；upgrade suggestion
+  `confirm_upgrade_suggestion()` 统一为 capability-first 路径（旧无 `capability` 字段的
+  suggestion 默认走 listening projection），移除 legacy status 双写路径；external vocabulary
+  import 补齐 capability profile sync（修复导入后 profile 缺失导致诊断降级为 insufficient
+  的 bug）。`LearningStatus` enum 和 `LexicalEntry.status` 字段标记 deprecated，保留用于
+  schema 兼容和 legacy API 消费者。Phase 3.4.1 全部 6 个 slice 完成，PLAN 标记 COMPLETED。
+  验证：`cargo test --workspace` 395 passed、`flutter test` 204 passed。
+
 - 2026-07-06 CST: 修复 persistence-sqlite 关键死锁：`lexical_details()` 持有
   `self.connection.lock()` 后调用 `self.lexical_capability_profile()` 导致 Mutex 不可重入死锁，
   改为直接调用 `read_capability_profile(&conn, ...)` 复用已持有的连接。全量 Rust 测试通过

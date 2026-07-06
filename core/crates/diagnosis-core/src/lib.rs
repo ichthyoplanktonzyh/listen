@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use domain::{
-    CapabilityAssessment, DiagnosisHint, DiagnosisKind, LearningStatus, LexicalCapability,
+    CapabilityAssessment, DiagnosisHint, DiagnosisKind, LexicalCapability,
     LexicalCapabilityProfile, LexicalEntry, LexicalEntryId, LexicalObservation,
     ObservationResult, SentenceDiagnosis, SubtitleSentence, SubtitleTokenKind,
 };
@@ -188,15 +188,6 @@ fn classify_entry(
             CapabilityAssessment::Unassessed => {
                 push_unique(insufficient, entry.id.clone());
             }
-        }
-    } else if let Some(status) = entry.status {
-        match status {
-            LearningStatus::UnknownMeaning => push_unique(meaning, entry.id.clone()),
-            LearningStatus::KnownNotRecognized => push_unique(recognition, entry.id.clone()),
-            LearningStatus::KnownRecognized if not_recognized.contains(&entry.id) => {
-                push_unique(recognition, entry.id.clone());
-            }
-            _ => {}
         }
     } else {
         push_unique(insufficient, entry.id.clone());
