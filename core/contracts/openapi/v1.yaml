@@ -991,6 +991,55 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ReviewSubmission" }
+  /v1/review/upgrade-suggestions:
+    get:
+      operationId: listUpgradeSuggestions
+      parameters:
+        - { name: lexical_entry_id, in: query, required: false, schema: { type: string } }
+        - { name: status, in: query, required: false, schema: { $ref: "#/components/schemas/UpgradeSuggestionStatus" } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 500 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: Pending recognition upgrade suggestions by default
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/UpgradeSuggestion" } }
+  /v1/review/upgrade-suggestions/history:
+    get:
+      operationId: upgradeSuggestionHistory
+      parameters:
+        - { name: lexical_entry_id, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 500 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: Recognition upgrade suggestion history
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/UpgradeSuggestion" } }
+  /v1/review/upgrade-suggestions/{id}/confirm:
+    post:
+      operationId: confirmUpgradeSuggestion
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: User-confirmed recognition status upgrade
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UpgradeSuggestion" }
+  /v1/review/upgrade-suggestions/{id}/reject:
+    post:
+      operationId: rejectUpgradeSuggestion
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Rejected suggestion with cooldown
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UpgradeSuggestion" }
   /v1/learning-resources:
     get:
       operationId: learningResources
@@ -2287,7 +2336,7 @@ components:
         previous_status: { type: [string, "null"] }
         new_status: { type: [string, "null"] }
         changed_at_ms: { type: integer, minimum: 0 }
-        change_source: { enum: [user_selection, import] }
+        change_source: { enum: [user_selection, import, upgrade_suggestion_confirmation] }
     LexicalEntryDetails:
       type: object
       required: [entry, history, occurrences]
@@ -2612,12 +2661,33 @@ components:
         rating: { $ref: "#/components/schemas/ReviewRating" }
     ReviewSubmission:
       type: object
-      required: [attempt, schedule, generated_observation_ids, hunting_candidate_ids]
+      required: [attempt, schedule, generated_observation_ids, hunting_candidate_ids, upgrade_suggestions]
       properties:
         attempt: { $ref: "#/components/schemas/ReviewAttempt" }
         schedule: { $ref: "#/components/schemas/ReviewSchedule" }
         generated_observation_ids: { type: array, items: { type: string } }
         hunting_candidate_ids: { type: array, items: { type: string } }
+        upgrade_suggestions: { type: array, items: { $ref: "#/components/schemas/UpgradeSuggestion" } }
+    UpgradeSuggestionStatus:
+      type: string
+      enum: [pending, accepted, rejected, obsolete]
+    UpgradeSuggestion:
+      type: object
+      required: [id, lexical_entry_id, lexical_display_form, previous_status, suggested_status, status, evidence_context_count, evidence_ids, threshold, evidence_class, created_at_ms, resolved_at_ms, cooldown_until_ms]
+      properties:
+        id: { type: string }
+        lexical_entry_id: { type: string }
+        lexical_display_form: { type: string }
+        previous_status: { $ref: "#/components/schemas/LearningStatus" }
+        suggested_status: { $ref: "#/components/schemas/LearningStatus" }
+        status: { $ref: "#/components/schemas/UpgradeSuggestionStatus" }
+        evidence_context_count: { type: integer, minimum: 0 }
+        evidence_ids: { type: array, items: { type: string } }
+        threshold: { type: integer, minimum: 1 }
+        evidence_class: { type: string }
+        created_at_ms: { type: integer, minimum: 0 }
+        resolved_at_ms: { type: [integer, "null"], minimum: 0 }
+        cooldown_until_ms: { type: [integer, "null"], minimum: 0 }
     DiagnosisHintEvidence:
       type: object
       required: [kind, reasons]

@@ -82,6 +82,8 @@ assets:
 | `review_attempts` | Historical review rating attempts |
 | `review_schedules` | Current due projection per review item; v1 is explicitly `heuristic_proxy` and replaceable |
 | `hunting_candidates` | Queryable lexical targets produced by failed reviews for later hunting-list consumption |
+| `recognition_evidence` | Successful listening-recognition evidence, unique per lexical entry + sentence/media context |
+| `upgrade_suggestions` | Pending/resolved `known_not_recognized -> known_recognized` proposals with evidence snapshot and rejection cooldown |
 | `learning_events` | Append-mostly analytics facts for practice/review/listening/status/stuck-point events |
 | `listening_inbox_items` | Queryable projection for extensive-listening soft interrupts, snapshots, expiry, and整理 outcomes |
 
@@ -98,13 +100,21 @@ The four audio-first card kinds are not persisted on `review_items`.
 anchors, and `prompt_snapshot`; presentation can evolve without rewriting
 historical scheduling data.
 
+Recognition evidence is a durable success fact, not a status write. Its context
+key prefers `sentence:<id>` and falls back to `media:<id>`; facts without either
+axis do not count toward the v1 threshold. Five distinct contexts produce a
+`heuristic_proxy` `UpgradeSuggestion`. Only explicit confirmation updates the
+lexical entry and `lexical_status_history`; rejection leaves status unchanged and
+sets a 30-day cooldown. `upgrade_suggestions` retains the confirmation/rejection
+history even after status history has advanced.
+
 `learning_events` is the intended future source for dashboard aggregation. It is
 not a substitute for status history, practice attempts, or review attempts.
 Phase 3.2 also uses it for stuck-point facts and familiar-material markers:
 `stuck_point_marked`, `stuck_point_skipped`, `diagnosis_viewed`,
 `stuck_point_closed`, and `familiar_material_marked`. Stuck-point status is a
 read-side derivation from events plus `PracticeAttempt` and `ReviewItem`; there
-is no authoritative stuck-point state table in schema v20.
+is no authoritative stuck-point state table in schema v21.
 
 Phase 3.3 adds `ListeningInboxItem` for extensive-listening soft interrupts.
 The item stores the target time range, subtitle/context snapshot, active vs
@@ -149,6 +159,10 @@ review_items
   ├── review_attempts
   ├── review_schedules (one current due projection per item)
   └── hunting_candidates (failed lexical targets, source snapshots, counts)
+
+lexical_entries (logical reference; no delete cascade)
+  ├── recognition_evidence (unique lexical entry + context key)
+  └── upgrade_suggestions (pending/resolved proposal history)
 
 learning_events
   └── session_id nullable, ON DELETE SET NULL

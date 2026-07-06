@@ -477,6 +477,258 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
 }
 
 #[test]
+fn recognition_evidence_deduplicates_context_and_upgrade_history_round_trips() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let lexical_entry_id = LexicalEntryId::parse("lexical-upgrade-1").unwrap();
+    let first = RecognitionEvidence {
+        id: RecognitionEvidenceId::parse("evidence-1").unwrap(),
+        lexical_entry_id: lexical_entry_id.clone(),
+        context_key: "sentence:one".into(),
+        sentence_id: Some(SubtitleSentenceId::parse("one").unwrap()),
+        media_id: None,
+        source_kind: RecognitionEvidenceSourceKind::Review,
+        source_id: "review-attempt-1".into(),
+        occurred_at_ms: 10,
+    };
+    repo.upsert_recognition_evidence(&first).unwrap();
+    let mut replacement = first.clone();
+    replacement.id = RecognitionEvidenceId::parse("evidence-replacement").unwrap();
+    replacement.source_id = "review-attempt-2".into();
+    replacement.occurred_at_ms = 20;
+    let saved = repo.upsert_recognition_evidence(&replacement).unwrap();
+    assert_eq!(saved.source_id, "review-attempt-2");
+    assert_eq!(
+        repo.list_recognition_evidence(&lexical_entry_id, 10, 0)
+            .unwrap()
+            .len(),
+        1
+    );
+
+    let suggestion = UpgradeSuggestion {
+        id: UpgradeSuggestionId::parse("suggestion-1").unwrap(),
+        lexical_entry_id: lexical_entry_id.clone(),
+        lexical_display_form: "would have".into(),
+        previous_status: LearningStatus::KnownNotRecognized,
+        suggested_status: LearningStatus::KnownRecognized,
+        status: UpgradeSuggestionStatus::Pending,
+        evidence_context_count: 5,
+        evidence_ids: vec![first.id],
+        threshold: 5,
+        evidence_class: "heuristic_proxy".into(),
+        created_at_ms: 30,
+        resolved_at_ms: None,
+        cooldown_until_ms: None,
+    };
+    repo.save_upgrade_suggestion(&suggestion).unwrap();
+    assert_eq!(
+        repo.list_upgrade_suggestions(
+            Some(&lexical_entry_id),
+            Some(UpgradeSuggestionStatus::Pending),
+            10,
+            0,
+        )
+        .unwrap(),
+        vec![suggestion]
+    );
+}
+
+#[test]
+fn five_distinct_review_contexts_require_confirmation_before_status_upgrade() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    let lexical = upsert_word_asset(
+        &services,
+        "en",
+        "would",
+        "would",
+        Some(LearningStatus::KnownNotRecognized),
+        None,
+    );
+    let mut generated = Vec::new();
+    for index in 0..5 {
+        let sentence_id = SubtitleSentenceId::parse(format!("upgrade-context-{index}")).unwrap();
+        let review = services
+            .create_review_item(application::CreateReviewItem {
+                source: ReviewSource {
+                    kind: ReviewSourceKind::Sentence,
+                    id: Some(sentence_id.as_str().into()),
+                    practice_attempt_id: None,
+                    lexical_entry_id: Some(lexical.entry.id.clone()),
+                    media_id: None,
+                    track_id: None,
+                },
+                anchors: vec![PracticeAnchor {
+                    kind: PracticeAnchorKind::LexicalEntry,
+                    id: lexical.entry.id.as_str().into(),
+                    label: Some("would".into()),
+                    lexical_entry_id: Some(lexical.entry.id.clone()),
+                    sentence_id: Some(sentence_id),
+                    token_start: None,
+                    token_end: None,
+                    start_ms: None,
+                    end_ms: None,
+                }],
+                prompt_snapshot: format!("context {index}"),
+            })
+            .unwrap();
+        generated = services
+            .submit_review_attempt(application::SubmitReviewAttempt {
+                item_id: review.id,
+                rating: ReviewRating::Good,
+            })
+            .unwrap()
+            .upgrade_suggestions;
+    }
+    assert_eq!(generated.len(), 1);
+    assert_eq!(generated[0].evidence_context_count, 5);
+    assert_eq!(
+        services
+            .lexical_details(&lexical.entry.id)
+            .unwrap()
+            .unwrap()
+            .entry
+            .status,
+        Some(LearningStatus::KnownNotRecognized)
+    );
+
+    let confirmed = services
+        .confirm_upgrade_suggestion(&generated[0].id)
+        .unwrap();
+    assert_eq!(confirmed.status, UpgradeSuggestionStatus::Accepted);
+    let details = services
+        .lexical_details(&lexical.entry.id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(details.entry.status, Some(LearningStatus::KnownRecognized));
+    assert_eq!(
+        details.history[0].change_source,
+        LearningChangeSource::UpgradeSuggestionConfirmation
+    );
+}
+
+#[test]
+fn rejecting_upgrade_suggestion_sets_cooldown_without_status_change() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    let lexical = upsert_word_asset(
+        &services,
+        "en",
+        "could",
+        "could",
+        Some(LearningStatus::KnownNotRecognized),
+        None,
+    );
+    for index in 0..5 {
+        repo.upsert_recognition_evidence(&RecognitionEvidence {
+            id: RecognitionEvidenceId::parse(format!("reject-evidence-{index}")).unwrap(),
+            lexical_entry_id: lexical.entry.id.clone(),
+            context_key: format!("sentence:reject-{index}"),
+            sentence_id: Some(SubtitleSentenceId::parse(format!("reject-{index}")).unwrap()),
+            media_id: None,
+            source_kind: RecognitionEvidenceSourceKind::Review,
+            source_id: format!("attempt-{index}"),
+            occurred_at_ms: index,
+        })
+        .unwrap();
+    }
+    let final_review = services
+        .create_review_item(application::CreateReviewItem {
+            source: ReviewSource {
+                kind: ReviewSourceKind::Sentence,
+                id: Some("reject-4".into()),
+                practice_attempt_id: None,
+                lexical_entry_id: Some(lexical.entry.id.clone()),
+                media_id: None,
+                track_id: None,
+            },
+            anchors: vec![PracticeAnchor {
+                kind: PracticeAnchorKind::LexicalEntry,
+                id: lexical.entry.id.as_str().into(),
+                label: Some("could".into()),
+                lexical_entry_id: Some(lexical.entry.id.clone()),
+                sentence_id: Some(SubtitleSentenceId::parse("reject-4").unwrap()),
+                token_start: None,
+                token_end: None,
+                start_ms: None,
+                end_ms: None,
+            }],
+            prompt_snapshot: "reject context".into(),
+        })
+        .unwrap();
+    let suggestion = services
+        .submit_review_attempt(application::SubmitReviewAttempt {
+            item_id: final_review.id,
+            rating: ReviewRating::Good,
+        })
+        .unwrap()
+        .upgrade_suggestions
+        .remove(0);
+    let rejected = services.reject_upgrade_suggestion(&suggestion.id).unwrap();
+    assert_eq!(rejected.status, UpgradeSuggestionStatus::Rejected);
+    assert!(rejected.cooldown_until_ms > rejected.resolved_at_ms);
+    assert_eq!(
+        services
+            .lexical_details(&lexical.entry.id)
+            .unwrap()
+            .unwrap()
+            .entry
+            .status,
+        Some(LearningStatus::KnownNotRecognized)
+    );
+    let next_review = services
+        .create_review_item(application::CreateReviewItem {
+            source: ReviewSource {
+                kind: ReviewSourceKind::Sentence,
+                id: Some("reject-next".into()),
+                practice_attempt_id: None,
+                lexical_entry_id: Some(lexical.entry.id.clone()),
+                media_id: None,
+                track_id: None,
+            },
+            anchors: vec![PracticeAnchor {
+                kind: PracticeAnchorKind::LexicalEntry,
+                id: lexical.entry.id.as_str().into(),
+                label: Some("could".into()),
+                lexical_entry_id: Some(lexical.entry.id.clone()),
+                sentence_id: Some(SubtitleSentenceId::parse("reject-next").unwrap()),
+                token_start: None,
+                token_end: None,
+                start_ms: None,
+                end_ms: None,
+            }],
+            prompt_snapshot: "new context during cooldown".into(),
+        })
+        .unwrap();
+    let during_cooldown = services
+        .submit_review_attempt(application::SubmitReviewAttempt {
+            item_id: next_review.id,
+            rating: ReviewRating::Good,
+        })
+        .unwrap();
+    assert!(during_cooldown.upgrade_suggestions.is_empty());
+}
+
+#[test]
 fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = AppServices::new(

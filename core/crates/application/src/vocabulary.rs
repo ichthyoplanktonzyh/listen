@@ -61,6 +61,19 @@ impl AppServices {
                 LearningChangeSource::UserSelection,
             )?;
         }
+        if observation.result == ObservationResult::RecognizedInContext {
+            self.record_context_recognition_evidence(
+                observation.lexical_entry_id.clone(),
+                Some(observation.sentence_id.clone()),
+                input
+                    .source
+                    .as_ref()
+                    .and_then(|source| source.media_id.clone()),
+                RecognitionEvidenceSourceKind::LexicalObservation,
+                observation.id.as_str(),
+                created_at_ms,
+            )?;
+        }
         Ok(observation)
     }
 

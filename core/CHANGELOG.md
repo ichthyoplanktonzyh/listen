@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-06 10:17 CST: Phase 3.4 升级建议引擎 v1 落地。SQLite schema v21 新增
+  `recognition_evidence` 与 `upgrade_suggestions`；practice 正确、review `good/easy` 和逐例
+  `RecognizedInContext` 证据按 lexical entry + sentence（无 sentence 时按 media）去重，累计
+  5 个不同语境后生成 `heuristic_proxy` 建议。建议只在用户确认后执行
+  `known_not_recognized -> known_recognized`，并写入 `lexical_status_history` 与
+  `StatusChanged` event；拒绝保持原状态并冷却 30 天。新增 pending/history/confirm/reject API、
+  OpenAPI/TypeScript/Dart 契约，复习结束页与词汇详情提供非打断式确认/拒绝入口；补齐阈值、
+  状态护栏、冷却、持久化、HTTP 和 Flutter 回归测试。验证：`cargo test -p application -p
+  persistence-sqlite -p api-http`、`flutter analyze`、`flutter test`（194 passed）、
+  `validate-contracts`、目标文件格式检查与 `git diff --check` 通过；clippy 仅报告既有跨 crate
+  warnings。
+
 - 2026-07-05 21:59 CST: Phase 3.4 复习失败证据与猎词候选池落地。SQLite schema v20 新增
   `hunting_candidates`，按 lexical entry + review item 聚合失败次数并保留媒体、字幕轨、
   句子、目标词和 prompt snapshot；`again` 评分在词条与句子仍有效时追加

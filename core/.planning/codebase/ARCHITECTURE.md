@@ -74,6 +74,11 @@ application use cases and provider/repository boundaries.
 - Due-review queries derive an application-owned `ReviewCard` read model from
   durable `ReviewItem` source/anchors. Card kind and cue/answer presentation are
   not persisted, so historical review rows remain compatible as card UX evolves.
+- Recognition-upgrade services deduplicate successful practice/review/context
+  observations by sentence (or media when no sentence exists), create a pending
+  suggestion at five contexts, and keep status mutation behind explicit user
+  confirmation. Rejection records a 30-day cooldown instead of mutating the
+  lexical entry.
 - Extensive-listening services capture soft-interrupt moments as
   `ListeningInboxItem`, list active/archived Inbox items, process them into
   review items / micro-intensive practice items / favorite or dismissed
@@ -132,6 +137,11 @@ application use cases and provider/repository boundaries.
 - Schema v20 adds `hunting_candidates`, a queryable handoff pool for repeated
   lexical review failures. It preserves source snapshots and failure counts for
   Phase 3.7 without treating the pool as authoritative learning status.
+- Schema v21 adds `recognition_evidence` and `upgrade_suggestions`. Evidence is
+  deduplicated by lexical entry + context key; suggestions preserve pending,
+  accepted, rejected, and obsolete history independently of lexical status
+  history. Accepted suggestions still write the authoritative lexical status
+  through `LearningAssetRepository`.
 - Learning-loop persistence stores JSON snapshots plus query columns for kind,
   status, subject, result, and timestamps. Corpus/difficulty/recording persistence
   is not yet implemented.

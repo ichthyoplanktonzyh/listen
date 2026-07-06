@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-05T21:59:00.000+08:00"
+last_updated: "2026-07-06T10:17:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-05 21:59 CST
-> 更新原因：Phase 3.4 四类声音卡与复习失败证据链完成；“没听出”会追加有效语境
-> `LexicalObservation` 并进入 schema v20 猎词候选池，但不改变全局学习状态。阶段保持
-> IN_PROGRESS，下一步实现升级建议引擎与确认/拒绝冷却。
+> 最后更新：2026-07-06 10:17 CST
+> 更新原因：Phase 3.4 升级建议闭环完成。schema v21 持久化去重后的识别语境证据和建议历史，
+> 达到 5 个不同语境只生成建议；用户确认才升级状态，拒绝后冷却 30 天。阶段保持
+> IN_PROGRESS，下一步执行真实媒体 ≥8 卡手工验收并收口。
 
 ## 当前位置
 
@@ -156,7 +156,11 @@ last_updated: "2026-07-05T21:59:00.000+08:00"
   仍保留 snapshot 候选，不伪造 observation，也不静默修改 `LearningStatus`。
 - 复习入口已进入 3.35 工作台首页和学习工具菜单；词汇本可手动入队，来源媒体不匹配时不会
   误播当前媒体，而是使用 prompt snapshot 降级。
-- 待完成：状态升级建议/拒绝冷却、真实媒体 ≥8 卡 QA。
+- schema v21 新增 `recognition_evidence` / `upgrade_suggestions`：practice、review 和逐例
+  `RecognizedInContext` 成功证据按不同句子/媒体去重，5 个语境生成 `heuristic_proxy` 建议；
+  复习结束页与词汇详情可确认/拒绝，确认写入既有状态历史和 `StatusChanged` 事件，拒绝冷却
+  30 天；pending 与完整历史均有查询 API。
+- 待完成：真实媒体 ≥8 卡 QA 与阶段收口。
 - 规划文档：`.planning/phases/3.4-audio-first-review-queue/3.4-PLAN.md`。
 
 ## 已完成 Phase 索引
@@ -230,7 +234,7 @@ last_updated: "2026-07-05T21:59:00.000+08:00"
 
 ## 下一步工作
 
-1. 继续 Phase 3.4：实现升级建议引擎、确认/拒绝冷却与历史查询。
+1. 继续 Phase 3.4：用真实媒体完成 ≥8 张声音卡队列手工验收，并形成 closeout。
 2. 执行 Phase 3.35 owner QA：覆盖 `1440x900`、`1280x800`、`900x700` 和真实媒体，
    根据截图微调后将 closeout 从 `AWAITING_OWNER_QA` 改为 `COMPLETED`。
 3. 完成 Phase 3.3 真实媒体 30 分钟泛听 QA 并收口；3.6（听力词典）可与 3.4 并行开工。

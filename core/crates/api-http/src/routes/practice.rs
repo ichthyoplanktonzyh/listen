@@ -199,6 +199,87 @@ pub(crate) async fn submit_review_attempt(
         .map_err(ApiError::from)
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpgradeSuggestionQuery {
+    lexical_entry_id: Option<String>,
+    status: Option<UpgradeSuggestionStatus>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+}
+
+pub(crate) async fn list_upgrade_suggestions(
+    State(state): State<ApiState>,
+    Query(query): Query<UpgradeSuggestionQuery>,
+) -> Result<Json<Vec<UpgradeSuggestion>>, ApiError> {
+    let lexical_entry_id = query
+        .lexical_entry_id
+        .map(LexicalEntryId::parse)
+        .transpose()
+        .map_err(ApplicationError::from)?;
+    state
+        .services
+        .upgrade_suggestions(
+            lexical_entry_id.as_ref(),
+            Some(query.status.unwrap_or(UpgradeSuggestionStatus::Pending)),
+            query.limit.unwrap_or(100),
+            query.offset.unwrap_or(0),
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpgradeSuggestionHistoryQuery {
+    lexical_entry_id: Option<String>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+}
+
+pub(crate) async fn upgrade_suggestion_history(
+    State(state): State<ApiState>,
+    Query(query): Query<UpgradeSuggestionHistoryQuery>,
+) -> Result<Json<Vec<UpgradeSuggestion>>, ApiError> {
+    let lexical_entry_id = query
+        .lexical_entry_id
+        .map(LexicalEntryId::parse)
+        .transpose()
+        .map_err(ApplicationError::from)?;
+    state
+        .services
+        .upgrade_suggestions(
+            lexical_entry_id.as_ref(),
+            None,
+            query.limit.unwrap_or(100),
+            query.offset.unwrap_or(0),
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn confirm_upgrade_suggestion(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> Result<Json<UpgradeSuggestion>, ApiError> {
+    state
+        .services
+        .confirm_upgrade_suggestion(
+            &UpgradeSuggestionId::parse(id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn reject_upgrade_suggestion(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> Result<Json<UpgradeSuggestion>, ApiError> {
+    state
+        .services
+        .reject_upgrade_suggestion(&UpgradeSuggestionId::parse(id).map_err(ApplicationError::from)?)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 pub(crate) async fn review_item(
     State(state): State<ApiState>,
     Path(id): Path<String>,

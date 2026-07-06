@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use crate::*;
 
 mod review;
+mod upgrade;
 use review::{REVIEW_ALGORITHM, next_review_schedule, review_card};
 
 impl AppServices {
@@ -183,6 +184,9 @@ impl AppServices {
         }
 
         let saved = self.practice.create_practice_attempt(&attempt)?;
+        if saved.result == PracticeResult::Correct {
+            self.record_practice_recognition_evidence(&item, &saved, now)?;
+        }
         self.learning_events.append_learning_event(&LearningEvent {
             id: LearningEventId::from_fingerprint(
                 "learning-event",
@@ -312,11 +316,18 @@ impl AppServices {
             next_due_at_ms: Some(schedule.due_at_ms),
         })?;
         let schedule = self.review.save_review_schedule(&schedule)?;
-        let (generated_observation_ids, hunting_candidate_ids) =
+        let (generated_observation_ids, hunting_candidate_ids, upgrade_suggestions) =
             if input.rating == ReviewRating::Again {
-                self.record_review_failure(&item, now)?
+                let (observations, candidates) = self.record_review_failure(&item, now)?;
+                (observations, candidates, Vec::new())
             } else {
-                (Vec::new(), Vec::new())
+                let suggestions = if matches!(input.rating, ReviewRating::Good | ReviewRating::Easy)
+                {
+                    self.record_review_recognition_evidence(&item, &attempt, now)?
+                } else {
+                    Vec::new()
+                };
+                (Vec::new(), Vec::new(), suggestions)
             };
         self.learning_events.append_learning_event(&LearningEvent {
             id: LearningEventId::from_fingerprint("learning-event", &fingerprint),
@@ -339,6 +350,10 @@ impl AppServices {
                     .iter()
                     .map(|id| id.as_str())
                     .collect::<Vec<_>>(),
+                "upgrade_suggestion_ids": upgrade_suggestions
+                    .iter()
+                    .map(|suggestion| suggestion.id.as_str())
+                    .collect::<Vec<_>>(),
             }),
             session_id: None,
         })?;
@@ -347,6 +362,7 @@ impl AppServices {
             schedule,
             generated_observation_ids,
             hunting_candidate_ids,
+            upgrade_suggestions,
         })
     }
 
@@ -1286,6 +1302,46 @@ impl ReviewRepository for DisabledLearningLoopRepository {
         _offset: u32,
     ) -> Result<Vec<HuntingCandidate>, ApplicationError> {
         Err(Self::disabled())
+    }
+
+    fn upsert_recognition_evidence(
+        &self,
+        evidence: &RecognitionEvidence,
+    ) -> Result<RecognitionEvidence, ApplicationError> {
+        Ok(evidence.clone())
+    }
+
+    fn list_recognition_evidence(
+        &self,
+        _lexical_entry_id: &LexicalEntryId,
+        _limit: u32,
+        _offset: u32,
+    ) -> Result<Vec<RecognitionEvidence>, ApplicationError> {
+        Ok(Vec::new())
+    }
+
+    fn save_upgrade_suggestion(
+        &self,
+        suggestion: &UpgradeSuggestion,
+    ) -> Result<UpgradeSuggestion, ApplicationError> {
+        Ok(suggestion.clone())
+    }
+
+    fn get_upgrade_suggestion(
+        &self,
+        _id: &UpgradeSuggestionId,
+    ) -> Result<Option<UpgradeSuggestion>, ApplicationError> {
+        Ok(None)
+    }
+
+    fn list_upgrade_suggestions(
+        &self,
+        _lexical_entry_id: Option<&LexicalEntryId>,
+        _status: Option<UpgradeSuggestionStatus>,
+        _limit: u32,
+        _offset: u32,
+    ) -> Result<Vec<UpgradeSuggestion>, ApplicationError> {
+        Ok(Vec::new())
     }
 }
 

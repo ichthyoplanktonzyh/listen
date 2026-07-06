@@ -628,6 +628,25 @@ export interface ReviewSubmission {
   schedule: ReviewSchedule;
   generated_observation_ids: string[];
   hunting_candidate_ids: string[];
+  upgrade_suggestions: UpgradeSuggestion[];
+}
+
+export type UpgradeSuggestionStatus = "pending" | "accepted" | "rejected" | "obsolete";
+
+export interface UpgradeSuggestion {
+  id: string;
+  lexical_entry_id: string;
+  lexical_display_form: string;
+  previous_status: LearningStatus;
+  suggested_status: LearningStatus;
+  status: UpgradeSuggestionStatus;
+  evidence_context_count: number;
+  evidence_ids: string[];
+  threshold: number;
+  evidence_class: string;
+  created_at_ms: number;
+  resolved_at_ms: number | null;
+  cooldown_until_ms: number | null;
 }
 
 export interface DiagnosisHintEvidence {
@@ -1275,6 +1294,39 @@ export class LocalApiV1 {
     return this.request("/v1/review/attempts", {
       method: "POST",
       body: JSON.stringify(input),
+    });
+  }
+
+  listUpgradeSuggestions(
+    status: UpgradeSuggestionStatus = "pending",
+    lexicalEntryId?: string,
+    limit = 100,
+    offset = 0,
+  ): Promise<UpgradeSuggestion[]> {
+    const params = new URLSearchParams({ status, limit: String(limit), offset: String(offset) });
+    if (lexicalEntryId !== undefined) params.set("lexical_entry_id", lexicalEntryId);
+    return this.request(`/v1/review/upgrade-suggestions?${params.toString()}`);
+  }
+
+  upgradeSuggestionHistory(
+    lexicalEntryId?: string,
+    limit = 100,
+    offset = 0,
+  ): Promise<UpgradeSuggestion[]> {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (lexicalEntryId !== undefined) params.set("lexical_entry_id", lexicalEntryId);
+    return this.request(`/v1/review/upgrade-suggestions/history?${params.toString()}`);
+  }
+
+  confirmUpgradeSuggestion(id: string): Promise<UpgradeSuggestion> {
+    return this.request(`/v1/review/upgrade-suggestions/${encodeURIComponent(id)}/confirm`, {
+      method: "POST",
+    });
+  }
+
+  rejectUpgradeSuggestion(id: string): Promise<UpgradeSuggestion> {
+    return this.request(`/v1/review/upgrade-suggestions/${encodeURIComponent(id)}/reject`, {
+      method: "POST",
     });
   }
 

@@ -108,6 +108,8 @@ string_id!(PracticeAttemptId);
 string_id!(ReviewItemId);
 string_id!(ReviewAttemptId);
 string_id!(HuntingCandidateId);
+string_id!(RecognitionEvidenceId);
+string_id!(UpgradeSuggestionId);
 string_id!(LearningEventId);
 string_id!(ListeningInboxItemId);
 string_id!(CorpusOccurrenceId);

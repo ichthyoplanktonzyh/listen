@@ -755,6 +755,31 @@ pub trait ReviewRepository: Send + Sync {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<HuntingCandidate>, ApplicationError>;
+    fn upsert_recognition_evidence(
+        &self,
+        evidence: &RecognitionEvidence,
+    ) -> Result<RecognitionEvidence, ApplicationError>;
+    fn list_recognition_evidence(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<RecognitionEvidence>, ApplicationError>;
+    fn save_upgrade_suggestion(
+        &self,
+        suggestion: &UpgradeSuggestion,
+    ) -> Result<UpgradeSuggestion, ApplicationError>;
+    fn get_upgrade_suggestion(
+        &self,
+        id: &UpgradeSuggestionId,
+    ) -> Result<Option<UpgradeSuggestion>, ApplicationError>;
+    fn list_upgrade_suggestions(
+        &self,
+        lexical_entry_id: Option<&LexicalEntryId>,
+        status: Option<UpgradeSuggestionStatus>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<UpgradeSuggestion>, ApplicationError>;
 }
 
 pub trait LearningEventRepository: Send + Sync {

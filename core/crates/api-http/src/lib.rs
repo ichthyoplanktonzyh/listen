@@ -20,10 +20,11 @@ use dictionary_provider::{
     FreeDictionaryProvider, JapaneseDictionaryProvider,
 };
 use domain::{
-    LanguageCode, LearningEvent, LearningStatus, ListeningInboxItem, ListeningInboxItemId,
-    ListeningInboxStatus, MediaAvailability, MediaId, MediaKind, PracticeAttempt,
-    PracticeAttemptId, PracticeItem, PracticeSession, PracticeSessionId, ReviewItem, ReviewItemId,
-    SubtitleSentenceId, SubtitleTrackId, VocabularyAssetBundle,
+    LanguageCode, LearningEvent, LearningStatus, LexicalEntryId, ListeningInboxItem,
+    ListeningInboxItemId, ListeningInboxStatus, MediaAvailability, MediaId, MediaKind,
+    PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeSession, PracticeSessionId,
+    ReviewItem, ReviewItemId, SubtitleSentenceId, SubtitleTrackId, UpgradeSuggestion,
+    UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
@@ -324,6 +325,22 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/v1/review/items/{id}", get(review_item))
         .route("/v1/review/attempts", post(submit_review_attempt))
+        .route(
+            "/v1/review/upgrade-suggestions",
+            get(list_upgrade_suggestions),
+        )
+        .route(
+            "/v1/review/upgrade-suggestions/history",
+            get(upgrade_suggestion_history),
+        )
+        .route(
+            "/v1/review/upgrade-suggestions/{id}/confirm",
+            post(confirm_upgrade_suggestion),
+        )
+        .route(
+            "/v1/review/upgrade-suggestions/{id}/reject",
+            post(reject_upgrade_suggestion),
+        )
         .route("/v1/learning-resources", get(m18::resources))
         .route(
             "/v1/learning-resources/{id}/install",

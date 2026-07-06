@@ -457,6 +457,142 @@ impl ReviewRepository for SqliteRepository {
                 .map_err(repo)
         }
     }
+
+    fn upsert_recognition_evidence(
+        &self,
+        evidence: &RecognitionEvidence,
+    ) -> Result<RecognitionEvidence, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.execute(
+            "INSERT INTO recognition_evidence
+             (id,lexical_entry_id,context_key,source_kind,occurred_at_ms,evidence_json)
+             VALUES (?1,?2,?3,?4,?5,?6)
+             ON CONFLICT(lexical_entry_id,context_key) DO UPDATE SET
+               id=CASE WHEN excluded.occurred_at_ms>=occurred_at_ms
+                       THEN excluded.id ELSE id END,
+               source_kind=CASE WHEN excluded.occurred_at_ms>=occurred_at_ms
+                                THEN excluded.source_kind ELSE source_kind END,
+               occurred_at_ms=MAX(occurred_at_ms,excluded.occurred_at_ms),
+               evidence_json=CASE WHEN excluded.occurred_at_ms>=occurred_at_ms
+                                  THEN excluded.evidence_json ELSE evidence_json END",
+            params![
+                evidence.id.as_str(),
+                evidence.lexical_entry_id.as_str(),
+                evidence.context_key,
+                json(&evidence.source_kind)?,
+                evidence.occurred_at_ms,
+                json(evidence)?,
+            ],
+        )
+        .map_err(repo)?;
+        conn.query_row(
+            "SELECT evidence_json FROM recognition_evidence
+             WHERE lexical_entry_id=?1 AND context_key=?2",
+            params![evidence.lexical_entry_id.as_str(), evidence.context_key],
+            |row| from_json(&row.get::<_, String>(0)?),
+        )
+        .map_err(repo)
+    }
+
+    fn list_recognition_evidence(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<RecognitionEvidence>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = conn
+            .prepare(
+                "SELECT evidence_json FROM recognition_evidence
+                 WHERE lexical_entry_id=?1
+                 ORDER BY occurred_at_ms DESC
+                 LIMIT ?2 OFFSET ?3",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map(
+                params![lexical_entry_id.as_str(), limit.min(1000), offset],
+                |row| from_json(&row.get::<_, String>(0)?),
+            )
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
+    fn save_upgrade_suggestion(
+        &self,
+        suggestion: &UpgradeSuggestion,
+    ) -> Result<UpgradeSuggestion, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.execute(
+            "INSERT INTO upgrade_suggestions
+             (id,lexical_entry_id,status,created_at_ms,resolved_at_ms,cooldown_until_ms,suggestion_json)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)
+             ON CONFLICT(id) DO UPDATE SET
+               status=excluded.status,
+               resolved_at_ms=excluded.resolved_at_ms,
+               cooldown_until_ms=excluded.cooldown_until_ms,
+               suggestion_json=excluded.suggestion_json",
+            params![
+                suggestion.id.as_str(),
+                suggestion.lexical_entry_id.as_str(),
+                json(&suggestion.status)?,
+                suggestion.created_at_ms,
+                suggestion.resolved_at_ms,
+                suggestion.cooldown_until_ms,
+                json(suggestion)?,
+            ],
+        )
+        .map_err(repo)?;
+        Ok(suggestion.clone())
+    }
+
+    fn get_upgrade_suggestion(
+        &self,
+        id: &UpgradeSuggestionId,
+    ) -> Result<Option<UpgradeSuggestion>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.query_row(
+            "SELECT suggestion_json FROM upgrade_suggestions WHERE id=?1",
+            [id.as_str()],
+            |row| from_json(&row.get::<_, String>(0)?),
+        )
+        .optional()
+        .map_err(repo)
+    }
+
+    fn list_upgrade_suggestions(
+        &self,
+        lexical_entry_id: Option<&LexicalEntryId>,
+        status: Option<UpgradeSuggestionStatus>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<UpgradeSuggestion>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let status = status.map(|value| json(&value)).transpose()?;
+        let mut statement = conn
+            .prepare(
+                "SELECT suggestion_json FROM upgrade_suggestions
+                 WHERE (?1 IS NULL OR lexical_entry_id=?1)
+                   AND (?2 IS NULL OR status=?2)
+                 ORDER BY created_at_ms DESC
+                 LIMIT ?3 OFFSET ?4",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map(
+                params![
+                    lexical_entry_id.map(LexicalEntryId::as_str),
+                    status,
+                    limit.min(500),
+                    offset
+                ],
+                |row| from_json(&row.get::<_, String>(0)?),
+            )
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
 }
 
 impl LearningEventRepository for SqliteRepository {

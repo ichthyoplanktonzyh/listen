@@ -199,6 +199,7 @@ pub struct ReviewSubmission {
     pub schedule: ReviewSchedule,
     pub generated_observation_ids: Vec<LexicalObservationId>,
     pub hunting_candidate_ids: Vec<HuntingCandidateId>,
+    pub upgrade_suggestions: Vec<UpgradeSuggestion>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

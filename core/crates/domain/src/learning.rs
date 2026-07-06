@@ -39,6 +39,7 @@ pub enum ObservationResult {
 pub enum LearningChangeSource {
     UserSelection,
     Import,
+    UpgradeSuggestionConfirmation,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

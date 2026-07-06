@@ -143,6 +143,42 @@ async fn practice_routes_create_and_read_attempts() {
 }
 
 #[tokio::test]
+async fn upgrade_suggestion_routes_expose_pending_and_history_queries() {
+    let app = test_app();
+    for path in [
+        "/v1/review/upgrade-suggestions",
+        "/v1/review/upgrade-suggestions/history",
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get(path)
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let values: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), 1024 * 1024).await.unwrap())
+                .unwrap();
+        assert_eq!(values, serde_json::json!([]));
+    }
+
+    let missing = app
+        .oneshot(
+            Request::post("/v1/review/upgrade-suggestions/missing/confirm")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn practice_routes_record_stuck_points_and_complete_session() {
     let app = test_app();
     let session_response = app
