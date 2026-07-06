@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- 2026-07-06 13:30 CST: 完成 Phase 3.4.1 Slice 4 diagnosis and review suggestion migration。
+  diagnosis-core 新增 `diagnose_with_profiles()`，meaning barrier 改用 reading effective
+  assessment、recognition barrier 改用 listening effective assessment + sentence observation，
+  unassessed 维度严格不触发 barrier 只产生 InsufficientInformation（含 entry IDs）。旧
+  `diagnose_with_phrases()` 退化为从 legacy status 创建 profiles 后委托新实现。Application
+  层 `diagnose_sentence()` 批量读取 capability profiles 传给 diagnosis-core。UpgradeSuggestion
+  新增可选字段 capability/previous_assessment/suggested_assessment（serde(default) additive），
+  `evaluate_upgrade_suggestion()` 改为检查 listening.effective_assessment == NotAcquired，
+  生成的 suggestion 标记 capability=Listening。`confirm_upgrade_suggestion()` 对 capability-aware
+  suggestion 直接更新 listening projection + sync legacy，旧 suggestion 走 legacy 路径。
+  新增 6 个 diagnosis-core 测试（profile 驱动 meaning/recognition barrier、unassessed
+  insufficient、context observation override、both acquired → other factors）和 4 个集成测试
+  （capability override 影响诊断、unassessed insufficient、capability-aware 确认更新 listening
+  projection、legacy suggestion 旧路径确认）。验证：cargo test --workspace（395+ passed）、
+  clippy 无新增警告。
+
 - 2026-07-06 12:15 CST: 完成 Phase 3.4.1 Slice 3 application and portable assets。新增 application
   层 capability profile 读取、用户 per-channel override 设置/清除及双向 compatibility adapter：
   legacy status 变更同步到 capability projection（不覆盖已有 user override），capability override

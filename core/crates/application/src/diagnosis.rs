@@ -15,12 +15,6 @@ impl AppServices {
             .filter_map(|token| token.normalized.clone())
             .collect::<Vec<_>>();
         let language = self.sentence_language(sentence_id)?;
-        // Token normalization is surface-level; entry keys come from the
-        // language's normalization provider (lemmatization, user overrides).
-        // Resolve each token to its authoritative key once, and hand the same
-        // mapping to diagnosis-core so inflected forms ("went") classify
-        // against their lemma entry ("go") instead of falling out as
-        // unclassified.
         let mut lexical_keys = std::collections::HashMap::new();
         for lemma in &lemmas {
             if lexical_keys.contains_key(lemma) {
@@ -54,18 +48,26 @@ impl AppServices {
             LexicalEntryKind::Phrase,
             &phrase_keys,
         )?;
+        let mut profiles = std::collections::HashMap::new();
+        for entry in entries.iter().chain(phrase_entries.iter()) {
+            if let Some(profile) =
+                self.learning_assets
+                    .lexical_capability_profile(&entry.id, None)?
+            {
+                profiles.insert(entry.id.clone(), profile);
+            }
+        }
         let observations = self
             .learning_assets
             .list_lexical_observations_by_sentence(sentence_id)?;
-        let mut diagnosis = diagnosis_core::diagnose_with_phrases(
+        let mut diagnosis = diagnosis_core::diagnose_with_profiles(
             &sentence,
             &entries,
             &phrase_entries,
+            &profiles,
             &observations,
             &lexical_keys,
         );
-        // Layer the learning language's listening-factor reasons onto the
-        // recognition barrier (per-profile possibilities, not audio detections).
         let reasons = domain::profile_for(&language).diagnosis_reasons;
         if !reasons.is_empty() {
             for hint in &mut diagnosis.hints {

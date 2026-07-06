@@ -91,7 +91,7 @@ impl AppServices {
         Ok(())
     }
 
-    fn sync_legacy_status_from_profile(
+    pub(crate) fn sync_legacy_status_from_profile(
         &self,
         lexical_entry_id: &LexicalEntryId,
         profile: &LexicalCapabilityProfile,
