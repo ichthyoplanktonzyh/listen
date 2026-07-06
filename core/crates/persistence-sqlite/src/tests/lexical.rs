@@ -1,6 +1,102 @@
 use super::*;
 
 #[test]
+fn capability_projection_and_override_round_trip_without_losing_evidence_state() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
+    let entry = upsert_word_asset(&services, "en", "signal", "signal", None, None).entry;
+
+    let initial = repo
+        .lexical_capability_profile(&entry.id, None)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        initial.effective_assessment(LexicalCapability::Listening),
+        CapabilityAssessment::Unassessed
+    );
+
+    repo.set_lexical_capability_projection(
+        &entry.id,
+        None,
+        LexicalCapability::Reading,
+        Some(CapabilityProjection {
+            conclusion: CapabilityConclusion::Acquired,
+            source: CapabilityProjectionSource::EvidenceProjection,
+            algorithm_version: "test-projection-v1".into(),
+            updated_at_ms: 10,
+        }),
+        10,
+    )
+    .unwrap();
+    repo.set_lexical_capability_projection(
+        &entry.id,
+        None,
+        LexicalCapability::Listening,
+        Some(CapabilityProjection {
+            conclusion: CapabilityConclusion::NotAcquired,
+            source: CapabilityProjectionSource::EvidenceProjection,
+            algorithm_version: "test-projection-v1".into(),
+            updated_at_ms: 11,
+        }),
+        11,
+    )
+    .unwrap();
+    let overridden = repo
+        .set_lexical_capability_override(
+            &entry.id,
+            None,
+            LexicalCapability::Listening,
+            Some(CapabilityOverride {
+                conclusion: CapabilityConclusion::Acquired,
+                source: CapabilityOverrideSource::UserSelection,
+                updated_at_ms: 20,
+            }),
+            20,
+        )
+        .unwrap();
+    assert_eq!(
+        overridden.effective_assessment(LexicalCapability::Listening),
+        CapabilityAssessment::Acquired
+    );
+    assert_eq!(
+        overridden.listening.projection.unwrap().conclusion,
+        CapabilityConclusion::NotAcquired
+    );
+
+    let cleared = repo
+        .set_lexical_capability_override(&entry.id, None, LexicalCapability::Listening, None, 30)
+        .unwrap();
+    assert_eq!(
+        cleared.effective_assessment(LexicalCapability::Listening),
+        CapabilityAssessment::NotAcquired
+    );
+    assert_eq!(
+        cleared.legacy_status_view(),
+        Some(LearningStatus::KnownNotRecognized)
+    );
+
+    let history = repo.lexical_capability_history(&entry.id, None).unwrap();
+    assert_eq!(history.len(), 4);
+    assert_eq!(
+        history[0].change_kind,
+        CapabilityStateChangeKind::OverrideCleared
+    );
+    assert_eq!(
+        history[1].change_kind,
+        CapabilityStateChangeKind::OverrideSet
+    );
+}
+
+#[test]
 fn services_are_idempotent_and_persist_state() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = AppServices::new(

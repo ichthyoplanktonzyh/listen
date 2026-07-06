@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-06 11:14 CST: 完成 Phase 3.4.1 Slice 2 persistence foundation。SQLite schema
+  v22 新增 `lexical_capability_states` 与 `lexical_capability_history`，按 entry + optional sense +
+  capability 保存 system projection 和 user override；v21 legacy status 在同一迁移事务中按
+  ADR 0015 回填为带 `legacy_learning_status_migration` provenance 的 projection，原
+  `lexical_entries.status` 保留不删。扩展 LearningAssetRepository，支持 profile 读取、projection
+  更新、override 设置/清除和 before/after history；effective 读取保持 override 优先，清除后恢复
+  projection。新增 v21 精确回填、旧列保留、迁移前文件备份、重复打开、失败恢复和 repository
+  round-trip 回归。验证：`cargo test -p persistence-sqlite`（44 unit + 5 migration recovery +
+  6 integration passed）、`cargo clippy -p persistence-sqlite --all-targets --no-deps -- -D warnings`、
+  `cargo test -p application`（48 passed）、`cargo fmt --all`、`git diff --check` 通过；跨依赖
+  strict clippy 仍被既有 speech-analysis lint 阻断。
+
 - 2026-07-06 11:07 CST: 完成 Phase 3.4.1 Slice 1 domain contract。新增 reading/listening/
   speaking/writing `LexicalCapability`、三值 `CapabilityAssessment`、不可持久化 unassessed 的
   concrete conclusion、带 provenance 的 system projection、user override 与 effective profile

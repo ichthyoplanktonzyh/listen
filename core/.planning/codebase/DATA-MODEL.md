@@ -53,17 +53,19 @@ known_recognized
 Phase 3.4.1 is the accepted transition to reading/listening/speaking/writing
 capability assessments (`unassessed / not_acquired / acquired`) with evidence,
 system projection, and user override kept separate. ADR 0015 is authoritative
-for the target model. The domain contract and conservative legacy conversion
-functions now exist, but have no persistence or runtime consumers yet. Until the
-v22 authority-switch slice lands, the following tables and enum remain current
-runtime facts rather than the future target.
+for the target model. The domain contract, conservative legacy conversion and
+schema v22 persistence now exist. Application/API/diagnosis/Flutter still use
+the legacy status path, so the following old and transitional tables coexist
+until the later authority-switch slice.
 
 Lexical learning state is split by purpose:
 
 | Table/model | Purpose |
 |---|---|
-| `lexical_entries` | Current durable user assessment and notes |
+| `lexical_entries` | Legacy current assessment compatibility field and durable notes |
 | `lexical_status_history` | Status transition audit trail |
+| `lexical_capability_states` | Per entry/sense/capability projection and optional user override |
+| `lexical_capability_history` | Before/after capability state audit trail, including override clear |
 | `lexical_occurrences` | Durable source sentence/media snapshot |
 | `lexical_observations` | Sentence-specific heard/not-heard result |
 
@@ -302,9 +304,9 @@ expansion is ephemeral overlay state, not a fourth persisted Rhythm mode.
 - Vocabulary export/import is currently version 5 and contains only lexical
   assets plus phonetic finding feedback; Phase 3.4.1 will make the next bundle
   version decision before capability data is exported.
-- SQLite schema version is 21 after adding deduplicated `recognition_evidence`
-  and `upgrade_suggestions`; schema v22 is reserved by Phase 3.4.1 for additive
-  capability persistence and must not drop legacy status in place.
+- SQLite schema version is 22. It adds `lexical_capability_states` and
+  `lexical_capability_history`, backfills v21 legacy status as sourced projection,
+  and deliberately keeps `lexical_entries.status` in place for compatibility.
 - Review scheduling v1 is recorded as `listen_review_v1_heuristic_proxy`: `again` returns in
   10 minutes, `hard` in one day, and successful intervals grow from 3 to 7 days before doubling.
   The durable attempts remain the evidence history; the schedule row is a replaceable read model.

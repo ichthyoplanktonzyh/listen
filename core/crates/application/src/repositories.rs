@@ -608,6 +608,32 @@ impl<T: SubtitleRepository + ?Sized> LLTimelineResourceRepository for T {
 }
 
 pub trait LearningAssetRepository: Send + Sync {
+    fn lexical_capability_profile(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        sense_id: Option<&LexicalSenseId>,
+    ) -> Result<Option<LexicalCapabilityProfile>, ApplicationError>;
+    fn set_lexical_capability_projection(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        sense_id: Option<&LexicalSenseId>,
+        capability: LexicalCapability,
+        projection: Option<CapabilityProjection>,
+        changed_at_ms: u64,
+    ) -> Result<LexicalCapabilityProfile, ApplicationError>;
+    fn set_lexical_capability_override(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        sense_id: Option<&LexicalSenseId>,
+        capability: LexicalCapability,
+        user_override: Option<CapabilityOverride>,
+        changed_at_ms: u64,
+    ) -> Result<LexicalCapabilityProfile, ApplicationError>;
+    fn lexical_capability_history(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        sense_id: Option<&LexicalSenseId>,
+    ) -> Result<Vec<LexicalCapabilityHistory>, ApplicationError>;
     fn upsert_lexical_entry(
         &self,
         entry: &LexicalEntry,

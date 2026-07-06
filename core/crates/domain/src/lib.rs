@@ -102,6 +102,7 @@ string_id!(RhythmFrameId);
 string_id!(LLTimelineId);
 string_id!(LexicalEntryId);
 string_id!(LexicalSenseId);
+string_id!(LexicalCapabilityHistoryId);
 string_id!(LexicalObservationId);
 string_id!(LexicalOccurrenceId);
 string_id!(LexicalStatusHistoryId);

@@ -1,8 +1,12 @@
-use rusqlite::Connection;
+use domain::{
+    CapabilityDimensionState, CapabilityStateChangeKind, LearningStatus, LexicalCapability,
+    LexicalCapabilityHistory, LexicalCapabilityHistoryId, LexicalCapabilityProfile, LexicalEntryId,
+};
+use rusqlite::{Connection, params};
 
 use super::PersistenceError;
 
-pub const MIGRATION_VERSION: u32 = 21;
+pub const MIGRATION_VERSION: u32 = 22;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -143,5 +147,139 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         tx.pragma_update(None, "user_version", 21)?;
         tx.commit()?;
     }
+    if current < 22 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0022_lexical_capabilities.sql"))?;
+        backfill_legacy_capabilities(&tx)?;
+        tx.pragma_update(None, "user_version", 22)?;
+        tx.commit()?;
+    }
     Ok(())
+}
+
+fn backfill_legacy_capabilities(connection: &Connection) -> Result<(), PersistenceError> {
+    let legacy_entries = {
+        let mut statement = connection.prepare(
+            "SELECT id,status,CASE WHEN learning_updated_at_ms>0
+                                   THEN learning_updated_at_ms ELSE updated_at_ms END
+             FROM lexical_entries WHERE status IS NOT NULL",
+        )?;
+        statement
+            .query_map([], |row| {
+                let id =
+                    LexicalEntryId::parse(row.get::<_, String>(0)?).map_err(super::domain_sql)?;
+                let status = serde_json::from_str::<LearningStatus>(&row.get::<_, String>(1)?)
+                    .map_err(|error| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            1,
+                            rusqlite::types::Type::Text,
+                            Box::new(error),
+                        )
+                    })?;
+                Ok((id, status, row.get::<_, u64>(2)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?
+    };
+
+    for (lexical_entry_id, status, migrated_at_ms) in legacy_entries {
+        let profile = LexicalCapabilityProfile::from_legacy_status(
+            lexical_entry_id.clone(),
+            Some(status),
+            migrated_at_ms,
+        );
+        for capability in LexicalCapability::ALL {
+            let state = profile.dimension(capability);
+            if state.projection.is_none() {
+                continue;
+            }
+            insert_capability_state(
+                connection,
+                &lexical_entry_id,
+                capability,
+                state,
+                migrated_at_ms,
+            )?;
+            insert_migration_history(
+                connection,
+                &lexical_entry_id,
+                capability,
+                state,
+                migrated_at_ms,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn insert_capability_state(
+    connection: &Connection,
+    lexical_entry_id: &LexicalEntryId,
+    capability: LexicalCapability,
+    state: &CapabilityDimensionState,
+    updated_at_ms: u64,
+) -> Result<(), PersistenceError> {
+    connection.execute(
+        "INSERT INTO lexical_capability_states
+         (lexical_entry_id,sense_id,capability,projection_json,override_json,updated_at_ms)
+         VALUES (?1,'',?2,?3,NULL,?4)",
+        params![
+            lexical_entry_id.as_str(),
+            serde_json::to_string(&capability).map_err(json_sql)?,
+            state
+                .projection
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()
+                .map_err(json_sql)?,
+            updated_at_ms,
+        ],
+    )?;
+    Ok(())
+}
+
+fn insert_migration_history(
+    connection: &Connection,
+    lexical_entry_id: &LexicalEntryId,
+    capability: LexicalCapability,
+    new_state: &CapabilityDimensionState,
+    changed_at_ms: u64,
+) -> Result<(), PersistenceError> {
+    let change_kind = CapabilityStateChangeKind::ProjectionUpdated;
+    let history = LexicalCapabilityHistory {
+        id: LexicalCapabilityHistoryId::from_fingerprint(
+            "lexical-capability-history",
+            &format!(
+                "{}::{}:{change_kind:?}:{changed_at_ms}",
+                lexical_entry_id.as_str(),
+                serde_json::to_string(&capability).map_err(json_sql)?
+            ),
+        ),
+        lexical_entry_id: lexical_entry_id.clone(),
+        sense_id: None,
+        capability,
+        previous_state: CapabilityDimensionState::default(),
+        new_state: new_state.clone(),
+        change_kind,
+        changed_at_ms,
+    };
+    connection.execute(
+        "INSERT INTO lexical_capability_history
+         (id,lexical_entry_id,sense_id,capability,previous_state_json,new_state_json,
+          change_kind,changed_at_ms)
+         VALUES (?1,?2,'',?3,?4,?5,?6,?7)",
+        params![
+            history.id.as_str(),
+            lexical_entry_id.as_str(),
+            serde_json::to_string(&capability).map_err(json_sql)?,
+            serde_json::to_string(&history.previous_state).map_err(json_sql)?,
+            serde_json::to_string(&history.new_state).map_err(json_sql)?,
+            serde_json::to_string(&change_kind).map_err(json_sql)?,
+            changed_at_ms,
+        ],
+    )?;
+    Ok(())
+}
+
+fn json_sql(error: serde_json::Error) -> rusqlite::Error {
+    rusqlite::Error::ToSqlConversionFailure(Box::new(error))
 }

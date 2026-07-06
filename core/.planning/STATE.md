@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-06T11:07:00.000+08:00"
+last_updated: "2026-07-06T11:14:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-06 11:07 CST
+> 最后更新：2026-07-06 11:14 CST
 > 更新原因：暂停 Phase 3.4 / 3.35 最终手工 QA，插入 Phase 3.4.1 ~ 3.4.3 Learning
 > Domain Model v2。当前主线先把单值 `LearningStatus` 迁移为四通道能力画像，并分离 evidence、
 > projection 与 user override；后续再分离 SenseGroup / ProsodicGroup 并验证 Construction 身份。
@@ -171,12 +171,12 @@ last_updated: "2026-07-06T11:07:00.000+08:00"
   区分 unassessed / not_acquired / acquired。
 - 架构：evidence、system projection、user override 和 effective assessment 分层；自动证据
   不静默覆盖用户声明。
-- 迁移：schema v22 additive migration，保留 legacy status 兼容窗口；v21 数据按带来源的
-  近似映射回填。
+- 迁移：schema v22 additive migration 已落地，保留 legacy status 兼容窗口；v21 数据按带
+  来源的近似映射回填，迁移前备份/重复打开/失败恢复测试通过。
 - 后续：3.4.2 新增 SenseGroup 语义层且保留现有声音组；3.4.3 验证 Construction 身份。
 - 共享上下文：`.planning/phases/3.0-english-listening-learning-loop/3.4.X-LEARNING-DOMAIN-V2-SHARED-CONTEXT.md`。
-- 当前切片：domain capability contract 已落地并通过 domain test/clippy；下一步进入 schema v22
-  additive persistence 和 v21 legacy backfill。
+- 当前切片：domain contract 与 schema v22 persistence 已落地；下一步进入 application use case、
+  legacy write adapter 和 portable vocabulary asset 新版本。
 
 ## 已完成 Phase 索引
 
@@ -253,8 +253,9 @@ last_updated: "2026-07-06T11:07:00.000+08:00"
 
 ## 下一步工作
 
-1. 执行 Phase 3.4.1 Slice 2：schema v22 additive persistence / v21 backfill、repository 与恢复测试。
-2. 保持 `lexical_entries.status` 不删除，新 profile 尚不切换为运行时权威。
+1. 执行 Phase 3.4.1 Slice 3：application effective-profile use case、legacy write adapter 与
+   vocabulary bundle 新版本/冲突合并。
+2. 保持 `lexical_entries.status` 不删除；新 profile 已可持久化，但尚未切换为 UI/诊断权威。
 3. 3.4.1 收口后恢复 Phase 3.4/3.35 手工 QA，并重新基线化新能力 UI。
 4. 完成 Phase 3.3 真实媒体 30 分钟泛听 QA并收口；3.5/3.6 等待 3.4.1。
 5. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；

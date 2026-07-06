@@ -9,6 +9,84 @@ fn new_database_migrates_to_latest() {
     assert!(table_exists(&connection, "hunting_candidates"));
     assert!(table_exists(&connection, "recognition_evidence"));
     assert!(table_exists(&connection, "upgrade_suggestions"));
+    assert!(table_exists(&connection, "lexical_capability_states"));
+    assert!(table_exists(&connection, "lexical_capability_history"));
+}
+
+#[test]
+fn v22_backfills_legacy_status_as_sourced_capability_projections() {
+    let connection = Connection::open_in_memory().unwrap();
+    connection
+        .execute_batch(
+            r#"
+            CREATE TABLE lexical_entries (
+              id TEXT PRIMARY KEY NOT NULL,
+              status TEXT,
+              updated_at_ms INTEGER NOT NULL,
+              learning_updated_at_ms INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO lexical_entries VALUES
+              ('none', NULL, 1, 0),
+              ('unknown', '"unknown_meaning"', 2, 20),
+              ('not-heard', '"known_not_recognized"', 3, 30),
+              ('heard', '"known_recognized"', 4, 40);
+            PRAGMA user_version=21;
+            "#,
+        )
+        .unwrap();
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        22
+    );
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM lexical_capability_states",
+                [],
+                |row| { row.get::<_, u32>(0) }
+            )
+            .unwrap(),
+        5
+    );
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM lexical_capability_history",
+                [],
+                |row| { row.get::<_, u32>(0) }
+            )
+            .unwrap(),
+        5
+    );
+    let projection: CapabilityProjection = connection
+        .query_row(
+            "SELECT projection_json FROM lexical_capability_states
+             WHERE lexical_entry_id='not-heard' AND capability='\"listening\"'",
+            [],
+            |row| from_json(&row.get::<_, String>(0)?),
+        )
+        .unwrap();
+    assert_eq!(projection.conclusion, CapabilityConclusion::NotAcquired);
+    assert_eq!(
+        projection.source,
+        CapabilityProjectionSource::LegacyLearningStatusMigration
+    );
+    assert_eq!(projection.updated_at_ms, 30);
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT status FROM lexical_entries WHERE id='not-heard'",
+                [],
+                |row| row.get::<_, String>(0)
+            )
+            .unwrap(),
+        "\"known_not_recognized\""
+    );
 }
 
 #[test]

@@ -72,6 +72,46 @@ fn pre_migration_backup_is_created_when_upgrading_an_existing_db() {
 }
 
 #[test]
+fn v21_capability_migration_preserves_a_queryable_pre_migration_backup() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("v21.sqlite");
+    {
+        let conn = Connection::open(&path).expect("create v21 db");
+        conn.execute_batch(
+            r#"
+            CREATE TABLE lexical_entries (
+              id TEXT PRIMARY KEY NOT NULL,
+              status TEXT,
+              updated_at_ms INTEGER NOT NULL,
+              learning_updated_at_ms INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO lexical_entries VALUES
+              ('entry', '"known_not_recognized"', 10, 20);
+            PRAGMA user_version=21;
+            "#,
+        )
+        .expect("seed v21 lexical data");
+    }
+
+    let repo = SqliteRepository::open(&path).expect("migrate v21");
+    assert_eq!(repo.schema_version().unwrap(), 22);
+    assert!(has_table(&path, "lexical_capability_states"));
+
+    let backup = backup_of(&path);
+    assert_eq!(user_version(&backup), 21);
+    assert!(!has_table(&backup, "lexical_capability_states"));
+    let legacy_status: String = Connection::open(&backup)
+        .unwrap()
+        .query_row(
+            "SELECT status FROM lexical_entries WHERE id='entry'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(legacy_status, "\"known_not_recognized\"");
+}
+
+#[test]
 fn no_backup_is_created_for_a_brand_new_database() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("fresh.sqlite");

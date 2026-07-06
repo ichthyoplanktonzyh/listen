@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{LearningStatus, LexicalEntryId, LexicalSenseId};
+use crate::{LearningStatus, LexicalCapabilityHistoryId, LexicalEntryId, LexicalSenseId};
 
 pub const LEGACY_STATUS_MIGRATION_ALGORITHM_VERSION: &str = "legacy-learning-status-migration-v1";
 
@@ -122,6 +122,26 @@ pub struct LexicalCapabilityProfile {
     pub listening: CapabilityDimensionState,
     pub speaking: CapabilityDimensionState,
     pub writing: CapabilityDimensionState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CapabilityStateChangeKind {
+    ProjectionUpdated,
+    OverrideSet,
+    OverrideCleared,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LexicalCapabilityHistory {
+    pub id: LexicalCapabilityHistoryId,
+    pub lexical_entry_id: LexicalEntryId,
+    pub sense_id: Option<LexicalSenseId>,
+    pub capability: LexicalCapability,
+    pub previous_state: CapabilityDimensionState,
+    pub new_state: CapabilityDimensionState,
+    pub change_kind: CapabilityStateChangeKind,
+    pub changed_at_ms: u64,
 }
 
 impl LexicalCapabilityProfile {
