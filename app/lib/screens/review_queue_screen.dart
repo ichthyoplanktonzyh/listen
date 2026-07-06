@@ -64,6 +64,11 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
           return _Finished(
             state: state,
             onRetry: () => controller.load(widget.api),
+            onResolve: (id, confirm) => controller.resolveUpgradeSuggestion(
+              widget.api,
+              id,
+              confirm: confirm,
+            ),
           );
         }
         return _ReviewCard(
@@ -365,36 +370,85 @@ class _ReviewCardState extends State<_ReviewCard> {
 }
 
 class _Finished extends StatelessWidget {
-  const _Finished({required this.state, required this.onRetry});
+  const _Finished({
+    required this.state,
+    required this.onRetry,
+    required this.onResolve,
+  });
 
   final ReviewState state;
   final Future<bool> Function() onRetry;
+  final Future<bool> Function(String id, bool confirm) onResolve;
 
   @override
   Widget build(BuildContext context) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          state.error == null
-              ? Icons.check_circle_outline
-              : Icons.error_outline,
-          size: 52,
-        ),
-        const SizedBox(height: 14),
-        Text(
-          state.error ??
-              (state.completedCount == 0
-                  ? '现在没有到期声音卡'
-                  : '本轮完成 ${state.completedCount} 张'),
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        const SizedBox(height: 8),
-        if (state.error == null)
-          const Text('到期数量只是信息，不是欠账。')
-        else
-          TextButton(onPressed: onRetry, child: const Text('重试')),
-      ],
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            state.error == null
+                ? Icons.check_circle_outline
+                : Icons.error_outline,
+            size: 52,
+          ),
+          const SizedBox(height: 14),
+          Text(
+            state.error ??
+                (state.completedCount == 0
+                    ? '现在没有到期声音卡'
+                    : '本轮完成 ${state.completedCount} 张'),
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          if (state.error == null)
+            const Text('到期数量只是信息，不是欠账。')
+          else
+            TextButton(onPressed: onRetry, child: const Text('重试')),
+          if (state.upgradeSuggestions.isNotEmpty) ...[
+            const SizedBox(height: 28),
+            Text('识别状态建议', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 10),
+            for (final suggestion in state.upgradeSuggestions)
+              Card(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          '“${suggestion.lexicalDisplayForm}” 已在 ${suggestion.evidenceContextCount} 个不同语境中听出，要标为“已掌握”吗？',
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              onPressed: state.busy
+                                  ? null
+                                  : () => onResolve(suggestion.id, false),
+                              child: const Text('暂不升级'),
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton(
+                              onPressed: state.busy
+                                  ? null
+                                  : () => onResolve(suggestion.id, true),
+                              child: const Text('确认已能听出'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
     ),
   );
 }

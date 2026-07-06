@@ -534,6 +534,7 @@ class ReviewSubmission {
     required this.schedule,
     required this.generatedObservationIds,
     required this.huntingCandidateIds,
+    required this.upgradeSuggestions,
   });
 
   factory ReviewSubmission.fromJson(
@@ -549,12 +550,71 @@ class ReviewSubmission {
         ((json['hunting_candidate_ids'] as List<dynamic>?) ?? const [])
             .cast<String>()
             .toList(growable: false),
+    upgradeSuggestions:
+        ((json['upgrade_suggestions'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) =>
+                  UpgradeSuggestion.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
   );
 
   final ReviewAttempt attempt;
   final ReviewSchedule schedule;
   final List<String> generatedObservationIds;
   final List<String> huntingCandidateIds;
+  final List<UpgradeSuggestion> upgradeSuggestions;
+}
+
+class UpgradeSuggestion {
+  const UpgradeSuggestion({
+    required this.id,
+    required this.lexicalEntryId,
+    required this.lexicalDisplayForm,
+    required this.previousStatus,
+    required this.suggestedStatus,
+    required this.status,
+    required this.evidenceContextCount,
+    required this.evidenceIds,
+    required this.threshold,
+    required this.evidenceClass,
+    required this.createdAtMs,
+    this.resolvedAtMs,
+    this.cooldownUntilMs,
+  });
+
+  factory UpgradeSuggestion.fromJson(Map<String, dynamic> json) =>
+      UpgradeSuggestion(
+        id: json['id'] as String,
+        lexicalEntryId: json['lexical_entry_id'] as String,
+        lexicalDisplayForm: json['lexical_display_form'] as String,
+        previousStatus: json['previous_status'] as String,
+        suggestedStatus: json['suggested_status'] as String,
+        status: json['status'] as String,
+        evidenceContextCount: json['evidence_context_count'] as int,
+        evidenceIds: ((json['evidence_ids'] as List<dynamic>?) ?? const [])
+            .cast<String>()
+            .toList(growable: false),
+        threshold: json['threshold'] as int,
+        evidenceClass: json['evidence_class'] as String,
+        createdAtMs: json['created_at_ms'] as int,
+        resolvedAtMs: json['resolved_at_ms'] as int?,
+        cooldownUntilMs: json['cooldown_until_ms'] as int?,
+      );
+
+  final String id;
+  final String lexicalEntryId;
+  final String lexicalDisplayForm;
+  final String previousStatus;
+  final String suggestedStatus;
+  final String status;
+  final int evidenceContextCount;
+  final List<String> evidenceIds;
+  final int threshold;
+  final String evidenceClass;
+  final int createdAtMs;
+  final int? resolvedAtMs;
+  final int? cooldownUntilMs;
 }
 
 class DiagnosisHintEvidence {

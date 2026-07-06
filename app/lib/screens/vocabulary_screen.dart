@@ -65,6 +65,14 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     final details = LexicalEntryDetails.fromJson(
       await widget.api.lexicalEntryDetails(entry.id),
     );
+    List<UpgradeSuggestion> suggestions;
+    try {
+      suggestions = await widget.api.upgradeSuggestions(
+        lexicalEntryId: entry.id,
+      );
+    } catch (_) {
+      suggestions = const [];
+    }
     final dictionary = DictionaryLookupBundle.fromJson(
       await widget.api.lookupDictionary(
         entry.normalizedForm,
@@ -112,6 +120,25 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
           ),
         ),
         actions: [
+          if (suggestions.isNotEmpty) ...[
+            TextButton(
+              onPressed: () async {
+                await widget.api.rejectUpgradeSuggestion(suggestions.first.id);
+                if (context.mounted) Navigator.pop(context);
+              },
+              child: const Text('暂不升级'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                await widget.api.confirmUpgradeSuggestion(suggestions.first.id);
+                if (context.mounted) Navigator.pop(context);
+                await _load();
+              },
+              child: Text(
+                '确认已能听出（${suggestions.first.evidenceContextCount} 个语境）',
+              ),
+            ),
+          ],
           TextButton.icon(
             onPressed: () async {
               try {

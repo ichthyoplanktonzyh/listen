@@ -937,6 +937,67 @@ class LocalApi {
         as Map<String, dynamic>,
   );
 
+  Future<List<UpgradeSuggestion>> upgradeSuggestions({
+    String status = 'pending',
+    String? lexicalEntryId,
+  }) async {
+    final query = <String, String>{
+      'status': status,
+      'limit': '100',
+      'offset': '0',
+    };
+    if (lexicalEntryId != null) query['lexical_entry_id'] = lexicalEntryId;
+    final values =
+        (await _request(
+              'GET',
+              '/v1/review/upgrade-suggestions?${Uri(queryParameters: query).query}',
+            ))
+            as List<dynamic>;
+    return values
+        .map(
+          (value) => UpgradeSuggestion.fromJson(value as Map<String, dynamic>),
+        )
+        .toList(growable: false);
+  }
+
+  Future<List<UpgradeSuggestion>> upgradeSuggestionHistory({
+    String? lexicalEntryId,
+  }) async {
+    final query = <String, String>{'limit': '100', 'offset': '0'};
+    if (lexicalEntryId != null) query['lexical_entry_id'] = lexicalEntryId;
+    final values =
+        (await _request(
+              'GET',
+              '/v1/review/upgrade-suggestions/history?${Uri(queryParameters: query).query}',
+            ))
+            as List<dynamic>;
+    return values
+        .map(
+          (value) => UpgradeSuggestion.fromJson(value as Map<String, dynamic>),
+        )
+        .toList(growable: false);
+  }
+
+  Future<UpgradeSuggestion> confirmUpgradeSuggestion(
+    String id,
+  ) async => UpgradeSuggestion.fromJson(
+    (await _request(
+          'POST',
+          '/v1/review/upgrade-suggestions/${Uri.encodeComponent(id)}/confirm',
+        ))
+        as Map<String, dynamic>,
+  );
+
+  Future<UpgradeSuggestion> rejectUpgradeSuggestion(
+    String id,
+  ) async => UpgradeSuggestion.fromJson(
+    (await _request(
+          'POST',
+          '/v1/review/upgrade-suggestions/${Uri.encodeComponent(id)}/reject',
+        ))
+        as Map<String, dynamic>,
+  );
+
   Future<List<Map<String, dynamic>>> learningResources() async =>
       ((await _request('GET', '/v1/learning-resources')) as List<dynamic>)
           .cast<Map<String, dynamic>>();

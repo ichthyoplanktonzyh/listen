@@ -11,6 +11,7 @@ class ReviewState {
     this.revealed = false,
     this.busy = false,
     this.completedCount = 0,
+    this.upgradeSuggestions = const [],
     this.error,
   });
 
@@ -19,6 +20,7 @@ class ReviewState {
   final bool revealed;
   final bool busy;
   final int completedCount;
+  final List<UpgradeSuggestion> upgradeSuggestions;
   final String? error;
 
   ReviewQueueEntry? get current => index < queue.length ? queue[index] : null;
@@ -31,6 +33,7 @@ class ReviewState {
     bool? revealed,
     bool? busy,
     int? completedCount,
+    List<UpgradeSuggestion>? upgradeSuggestions,
     String? error,
     bool clearError = false,
   }) => ReviewState(
@@ -39,6 +42,7 @@ class ReviewState {
     revealed: revealed ?? this.revealed,
     busy: busy ?? this.busy,
     completedCount: completedCount ?? this.completedCount,
+    upgradeSuggestions: upgradeSuggestions ?? this.upgradeSuggestions,
     error: clearError ? null : error ?? this.error,
   );
 }
@@ -58,7 +62,20 @@ class ReviewController extends ChangeNotifier {
     _store.update((state) => state.copyWith(busy: true, clearError: true));
     try {
       final queue = await api.dueReviewItems(limit: limit);
-      _store.replace(ReviewState(queue: queue, busy: false, completedCount: 0));
+      List<UpgradeSuggestion> suggestions;
+      try {
+        suggestions = await api.upgradeSuggestions();
+      } catch (_) {
+        suggestions = const [];
+      }
+      _store.replace(
+        ReviewState(
+          queue: queue,
+          busy: false,
+          completedCount: 0,
+          upgradeSuggestions: suggestions,
+        ),
+      );
       return true;
     } catch (error) {
       _store.update(
@@ -82,13 +99,17 @@ class ReviewController extends ChangeNotifier {
     if (current == null || state.busy) return false;
     _store.update((state) => state.copyWith(busy: true, clearError: true));
     try {
-      await api.submitReviewAttempt(current.item.id, rating);
+      final submission = await api.submitReviewAttempt(current.item.id, rating);
       _store.update(
         (state) => state.copyWith(
           index: state.index + 1,
           revealed: false,
           busy: false,
           completedCount: state.completedCount + 1,
+          upgradeSuggestions: _mergeSuggestions(
+            state.upgradeSuggestions,
+            submission.upgradeSuggestions,
+          ),
         ),
       );
       return true;
@@ -103,9 +124,53 @@ class ReviewController extends ChangeNotifier {
     }
   }
 
+  Future<bool> resolveUpgradeSuggestion(
+    LocalApi api,
+    String id, {
+    required bool confirm,
+  }) async {
+    if (state.busy) return false;
+    _store.update((state) => state.copyWith(busy: true, clearError: true));
+    try {
+      if (confirm) {
+        await api.confirmUpgradeSuggestion(id);
+      } else {
+        await api.rejectUpgradeSuggestion(id);
+      }
+      _store.update(
+        (state) => state.copyWith(
+          busy: false,
+          upgradeSuggestions: state.upgradeSuggestions
+              .where((value) => value.id != id)
+              .toList(growable: false),
+        ),
+      );
+      return true;
+    } catch (error) {
+      _store.update(
+        (state) => state.copyWith(
+          busy: false,
+          error: 'Could not update recognition status: $error',
+        ),
+      );
+      return false;
+    }
+  }
+
   @override
   void dispose() {
     _store.dispose();
     super.dispose();
   }
+}
+
+List<UpgradeSuggestion> _mergeSuggestions(
+  List<UpgradeSuggestion> current,
+  List<UpgradeSuggestion> incoming,
+) {
+  final byId = {for (final value in current) value.id: value};
+  for (final value in incoming) {
+    byId[value.id] = value;
+  }
+  return byId.values.toList(growable: false);
 }

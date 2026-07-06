@@ -46,6 +46,10 @@ void main() {
         baseUrl: 'http://test',
         token: 'tok',
         transport: (method, path, body) async {
+          if (path ==
+              '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
+            return (statusCode: 200, body: '[]');
+          }
           if (path != '/v1/review/items?limit=20') {
             throw StateError('unexpected $method $path');
           }
@@ -116,4 +120,66 @@ void main() {
       expect(find.text('听出了'), findsOneWidget);
     });
   }
+
+  testWidgets('finished queue shows a non-blocking upgrade suggestion', (
+    tester,
+  ) async {
+    final requests = <String>[];
+    final api = LocalApi.withTransport(
+      baseUrl: 'http://test',
+      token: 'tok',
+      transport: (method, path, body) async {
+        requests.add('$method $path');
+        if (path == '/v1/review/items?limit=20') {
+          return (statusCode: 200, body: '[]');
+        }
+        if (path ==
+            '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
+          return (statusCode: 200, body: jsonEncode([upgradeSuggestionJson]));
+        }
+        if (path == '/v1/review/upgrade-suggestions/suggestion-1/reject') {
+          return (
+            statusCode: 200,
+            body: jsonEncode({...upgradeSuggestionJson, 'status': 'rejected'}),
+          );
+        }
+        throw StateError('unexpected $method $path');
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReviewQueueScreen(
+          api: api,
+          onPlayRange: (startMs, endMs) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('5 个不同语境'), findsOneWidget);
+    await tester.tap(find.text('暂不升级'));
+    await tester.pumpAndSettle();
+    expect(
+      requests.last,
+      'POST /v1/review/upgrade-suggestions/suggestion-1/reject',
+    );
+    expect(find.textContaining('5 个不同语境'), findsNothing);
+  });
 }
+
+const upgradeSuggestionJson = <String, dynamic>{
+  'id': 'suggestion-1',
+  'lexical_entry_id': 'lexical-1',
+  'lexical_display_form': 'would have',
+  'previous_status': 'known_not_recognized',
+  'suggested_status': 'known_recognized',
+  'status': 'pending',
+  'evidence_context_count': 5,
+  'evidence_ids': ['evidence-1'],
+  'threshold': 5,
+  'evidence_class': 'heuristic_proxy',
+  'created_at_ms': 1,
+  'resolved_at_ms': null,
+  'cooldown_until_ms': null,
+};
