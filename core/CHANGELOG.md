@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- 2026-07-06 CST: 修复 persistence-sqlite 关键死锁：`lexical_details()` 持有
+  `self.connection.lock()` 后调用 `self.lexical_capability_profile()` 导致 Mutex 不可重入死锁，
+  改为直接调用 `read_capability_profile(&conn, ...)` 复用已持有的连接。全量 Rust 测试通过
+  （395 tests，含 persistence-sqlite 64 + api-http 43）。
+
 - 2026-07-06 CST: 完成 Phase 3.4.1 Slice 5 API, events and Flutter。OpenAPI additive capability
   profile GET/PUT contract（`/v1/lexical-entries/{id}/capability-profile` 和
   `/v1/lexical-entries/{id}/capability/{capability}`）。SSE 新增 `lexical-capability-changed` event，
