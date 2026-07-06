@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ChunkId, HuntingCandidateId, LanguageCode, LearningStatus, LexicalEntryId,
-    LexicalObservationId, ListeningInboxItemId, MediaId, PracticeAttemptId, PracticeItemId,
-    PracticeSessionId, RecognitionEvidenceId, RecordingAssetId, ReviewAttemptId, ReviewItemId,
-    SubtitleSentenceId, SubtitleTrackId, UpgradeSuggestionId,
+    CapabilityAssessment, ChunkId, HuntingCandidateId, LanguageCode, LearningStatus,
+    LexicalCapability, LexicalEntryId, LexicalObservationId, ListeningInboxItemId, MediaId,
+    PracticeAttemptId, PracticeItemId, PracticeSessionId, RecognitionEvidenceId, RecordingAssetId,
+    ReviewAttemptId, ReviewItemId, SubtitleSentenceId, SubtitleTrackId, UpgradeSuggestionId,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -362,6 +362,12 @@ pub struct UpgradeSuggestion {
     pub created_at_ms: u64,
     pub resolved_at_ms: Option<u64>,
     pub cooldown_until_ms: Option<u64>,
+    #[serde(default)]
+    pub capability: Option<LexicalCapability>,
+    #[serde(default)]
+    pub previous_assessment: Option<CapabilityAssessment>,
+    #[serde(default)]
+    pub suggested_assessment: Option<CapabilityAssessment>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

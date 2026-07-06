@@ -518,6 +518,9 @@ fn recognition_evidence_deduplicates_context_and_upgrade_history_round_trips() {
         created_at_ms: 30,
         resolved_at_ms: None,
         cooldown_until_ms: None,
+        capability: None,
+        previous_assessment: None,
+        suggested_assessment: None,
     };
     repo.save_upgrade_suggestion(&suggestion).unwrap();
     assert_eq!(
@@ -591,6 +594,11 @@ fn five_distinct_review_contexts_require_confirmation_before_status_upgrade() {
     }
     assert_eq!(generated.len(), 1);
     assert_eq!(generated[0].evidence_context_count, 5);
+    assert_eq!(generated[0].capability, Some(LexicalCapability::Listening));
+    assert_eq!(
+        generated[0].suggested_assessment,
+        Some(CapabilityAssessment::Acquired)
+    );
     assert_eq!(
         services
             .lexical_details(&lexical.entry.id)
@@ -612,7 +620,15 @@ fn five_distinct_review_contexts_require_confirmation_before_status_upgrade() {
     assert_eq!(details.entry.status, Some(LearningStatus::KnownRecognized));
     assert_eq!(
         details.history[0].change_source,
-        LearningChangeSource::UpgradeSuggestionConfirmation
+        LearningChangeSource::CapabilityOverrideSync
+    );
+    let profile = services
+        .lexical_capability_profile(&lexical.entry.id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        profile.effective_assessment(LexicalCapability::Listening),
+        CapabilityAssessment::Acquired
     );
 }
 

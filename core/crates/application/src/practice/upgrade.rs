@@ -142,7 +142,14 @@ impl AppServices {
         let Some(details) = self.learning_assets.lexical_details(lexical_entry_id)? else {
             return Ok(None);
         };
-        if details.entry.status != Some(LearningStatus::KnownNotRecognized) {
+        let profile = self
+            .learning_assets
+            .lexical_capability_profile(lexical_entry_id, None)?;
+        let listening = profile
+            .as_ref()
+            .map(|p| p.effective_assessment(LexicalCapability::Listening))
+            .unwrap_or(CapabilityAssessment::Unassessed);
+        if listening != CapabilityAssessment::NotAcquired {
             return Ok(None);
         }
         let history = self
@@ -178,6 +185,9 @@ impl AppServices {
             created_at_ms: now,
             resolved_at_ms: None,
             cooldown_until_ms: None,
+            capability: Some(LexicalCapability::Listening),
+            previous_assessment: Some(CapabilityAssessment::NotAcquired),
+            suggested_assessment: Some(CapabilityAssessment::Acquired),
         };
         self.review.save_upgrade_suggestion(&suggestion).map(Some)
     }
@@ -209,25 +219,21 @@ impl AppServices {
                 "upgrade suggestion is not pending",
             ));
         }
-        let mut details = self
-            .learning_assets
-            .lexical_details(&suggestion.lexical_entry_id)?
-            .ok_or(ApplicationError::NotFound("lexical entry"))?;
         let now = now_ms();
-        if details.entry.status == Some(LearningStatus::KnownNotRecognized) {
-            details.entry.status = Some(LearningStatus::KnownRecognized);
-            details.entry.updated_at_ms = now;
-            details.entry.learning_updated_at_ms = now;
-            self.learning_assets.upsert_lexical_entry(
-                &details.entry,
-                None,
-                LearningChangeSource::UpgradeSuggestionConfirmation,
-            )?;
-        } else if details.entry.status != Some(LearningStatus::KnownRecognized) {
-            return Err(ApplicationError::Conflict(
-                "lexical entry is no longer eligible for recognition upgrade",
-            ));
-        }
+        let capability = suggestion.capability.unwrap_or(LexicalCapability::Listening);
+        let profile = self.learning_assets.set_lexical_capability_projection(
+            &suggestion.lexical_entry_id,
+            None,
+            capability,
+            Some(CapabilityProjection {
+                conclusion: CapabilityConclusion::Acquired,
+                source: CapabilityProjectionSource::EvidenceProjection,
+                algorithm_version: UPGRADE_EVIDENCE_CLASS.into(),
+                updated_at_ms: now,
+            }),
+            now,
+        )?;
+        self.sync_legacy_status_from_profile(&suggestion.lexical_entry_id, &profile)?;
         suggestion.status = UpgradeSuggestionStatus::Accepted;
         suggestion.resolved_at_ms = Some(now);
         suggestion.cooldown_until_ms = None;

@@ -687,6 +687,45 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/LexicalEntryDetails" }
+  /v1/lexical-entries/{id}/capability-profile:
+    get:
+      operationId: getCapabilityProfile
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Lexical capability profile with per-channel assessment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LexicalCapabilityProfile" }
+  /v1/lexical-entries/{id}/capability/{capability}:
+    put:
+      operationId: setCapabilityOverride
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - name: capability
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [reading, listening, speaking, writing]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                conclusion:
+                  type: string
+                  nullable: true
+                  enum: [not_acquired, acquired, null]
+      responses:
+        "200":
+          description: Updated capability profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LexicalCapabilityProfile" }
   /v1/lexical-entries/{id}/learning-content:
     put:
       operationId: updateLexicalLearningContent
@@ -2344,6 +2383,43 @@ components:
         entry: { $ref: "#/components/schemas/LexicalEntry" }
         history: { type: array, items: { $ref: "#/components/schemas/LexicalStatusHistory" } }
         occurrences: { type: array, items: { $ref: "#/components/schemas/LexicalOccurrence" } }
+        capability_profile:
+          $ref: "#/components/schemas/LexicalCapabilityProfile"
+          nullable: true
+    LexicalCapabilityProfile:
+      type: object
+      required: [lexical_entry_id, reading, listening, speaking, writing]
+      properties:
+        lexical_entry_id: { type: string }
+        sense_id: { type: string, nullable: true }
+        reading: { $ref: "#/components/schemas/CapabilityDimensionState" }
+        listening: { $ref: "#/components/schemas/CapabilityDimensionState" }
+        speaking: { $ref: "#/components/schemas/CapabilityDimensionState" }
+        writing: { $ref: "#/components/schemas/CapabilityDimensionState" }
+    CapabilityDimensionState:
+      type: object
+      properties:
+        projection:
+          $ref: "#/components/schemas/CapabilityProjection"
+          nullable: true
+        user_override:
+          $ref: "#/components/schemas/CapabilityOverride"
+          nullable: true
+    CapabilityProjection:
+      type: object
+      required: [conclusion, source, algorithm_version, updated_at_ms]
+      properties:
+        conclusion: { type: string, enum: [not_acquired, acquired] }
+        source: { type: string, enum: [legacy_learning_status_migration, evidence_projection, import] }
+        algorithm_version: { type: string }
+        updated_at_ms: { type: integer }
+    CapabilityOverride:
+      type: object
+      required: [conclusion, source, updated_at_ms]
+      properties:
+        conclusion: { type: string, enum: [not_acquired, acquired] }
+        source: { type: string, enum: [user_selection, import] }
+        updated_at_ms: { type: integer }
     NormalizeLexicalRequest:
       type: object
       required: [language, value]

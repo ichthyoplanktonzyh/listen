@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use domain::{
-    DiagnosisHint, DiagnosisKind, LearningStatus, LexicalEntry, LexicalObservation,
+    CapabilityAssessment, DiagnosisHint, DiagnosisKind, LexicalCapability,
+    LexicalCapabilityProfile, LexicalEntry, LexicalEntryId, LexicalObservation,
     ObservationResult, SentenceDiagnosis, SubtitleSentence, SubtitleTokenKind,
 };
 
@@ -33,6 +34,42 @@ pub fn diagnose_with_phrases(
     observations: &[LexicalObservation],
     lexical_keys: &HashMap<String, String>,
 ) -> SentenceDiagnosis {
+    let profiles = profiles_from_entries(entries, phrase_entries);
+    diagnose_with_profiles(
+        sentence,
+        entries,
+        phrase_entries,
+        &profiles,
+        observations,
+        lexical_keys,
+    )
+}
+
+fn profiles_from_entries(
+    entries: &[LexicalEntry],
+    phrase_entries: &[LexicalEntry],
+) -> HashMap<LexicalEntryId, LexicalCapabilityProfile> {
+    entries
+        .iter()
+        .chain(phrase_entries.iter())
+        .filter(|e| e.status.is_some())
+        .map(|e| {
+            (
+                e.id.clone(),
+                LexicalCapabilityProfile::from_legacy_status(e.id.clone(), e.status, 0),
+            )
+        })
+        .collect()
+}
+
+pub fn diagnose_with_profiles(
+    sentence: &SubtitleSentence,
+    entries: &[LexicalEntry],
+    phrase_entries: &[LexicalEntry],
+    profiles: &HashMap<LexicalEntryId, LexicalCapabilityProfile>,
+    observations: &[LexicalObservation],
+    lexical_keys: &HashMap<String, String>,
+) -> SentenceDiagnosis {
     let by_key = entries
         .iter()
         .map(|entry| (entry.normalized_form.as_str(), entry))
@@ -51,41 +88,35 @@ pub fn diagnose_with_phrases(
     let mut meaning = Vec::new();
     let mut recognition = Vec::new();
     let mut unclassified = Vec::new();
+    let mut insufficient_entries = Vec::new();
     for lemma in &lemmas {
         let key = lexical_keys
             .get(*lemma)
             .map(String::as_str)
             .unwrap_or(*lemma);
-        match by_key
-            .get(key)
-            .and_then(|entry| entry.status.map(|s| (entry, s)))
-        {
-            Some((entry, LearningStatus::UnknownMeaning)) => {
-                push_unique(&mut meaning, entry.id.clone())
+        match by_key.get(key) {
+            Some(entry) => {
+                classify_entry(
+                    entry,
+                    profiles,
+                    &not_recognized,
+                    &mut meaning,
+                    &mut recognition,
+                    &mut insufficient_entries,
+                );
             }
-            Some((entry, LearningStatus::KnownNotRecognized)) => {
-                push_unique(&mut recognition, entry.id.clone())
-            }
-            Some((entry, LearningStatus::KnownRecognized))
-                if not_recognized.contains(&entry.id) =>
-            {
-                push_unique(&mut recognition, entry.id.clone());
-            }
-            Some(_) => {}
             None => unclassified.push((*lemma).to_owned()),
         }
     }
     for entry in matching_phrase_entries(sentence, phrase_entries) {
-        match entry.status {
-            Some(LearningStatus::UnknownMeaning) => push_unique(&mut meaning, entry.id.clone()),
-            Some(LearningStatus::KnownNotRecognized) => {
-                push_unique(&mut recognition, entry.id.clone())
-            }
-            Some(LearningStatus::KnownRecognized) if not_recognized.contains(&entry.id) => {
-                push_unique(&mut recognition, entry.id.clone())
-            }
-            _ => {}
-        }
+        classify_entry(
+            entry,
+            profiles,
+            &not_recognized,
+            &mut meaning,
+            &mut recognition,
+            &mut insufficient_entries,
+        );
     }
     let mut hints = Vec::new();
     if !meaning.is_empty() {
@@ -102,15 +133,14 @@ pub fn diagnose_with_phrases(
             kind: DiagnosisKind::RecognitionBarrier,
             message: "Some known words may not yet be recognized reliably in speech.".into(),
             lexical_entry_ids: recognition,
-            // Language reasons are layered on by the caller; empty here.
             reasons: Vec::new(),
         });
     }
-    if !unclassified.is_empty() {
+    if !unclassified.is_empty() || !insufficient_entries.is_empty() {
         hints.push(DiagnosisHint {
             kind: DiagnosisKind::InsufficientInformation,
-            message: "Classify the remaining words before drawing a firm conclusion.".into(),
-            lexical_entry_ids: vec![],
+            message: "Some words lack sufficient assessment for a firm conclusion.".into(),
+            lexical_entry_ids: insufficient_entries,
             reasons: Vec::new(),
         });
     } else if hints.is_empty() && !lemmas.is_empty() {
@@ -125,6 +155,42 @@ pub fn diagnose_with_phrases(
         sentence_id: sentence.id.clone(),
         hints,
         unclassified_lemmas: unclassified,
+    }
+}
+
+fn classify_entry(
+    entry: &LexicalEntry,
+    profiles: &HashMap<LexicalEntryId, LexicalCapabilityProfile>,
+    not_recognized: &HashSet<&LexicalEntryId>,
+    meaning: &mut Vec<LexicalEntryId>,
+    recognition: &mut Vec<LexicalEntryId>,
+    insufficient: &mut Vec<LexicalEntryId>,
+) {
+    if let Some(profile) = profiles.get(&entry.id) {
+        let reading = profile.effective_assessment(LexicalCapability::Reading);
+        let listening = profile.effective_assessment(LexicalCapability::Listening);
+        match reading {
+            CapabilityAssessment::NotAcquired => {
+                push_unique(meaning, entry.id.clone());
+            }
+            CapabilityAssessment::Acquired => match listening {
+                CapabilityAssessment::NotAcquired => {
+                    push_unique(recognition, entry.id.clone());
+                }
+                CapabilityAssessment::Acquired if not_recognized.contains(&entry.id) => {
+                    push_unique(recognition, entry.id.clone());
+                }
+                CapabilityAssessment::Unassessed => {
+                    push_unique(insufficient, entry.id.clone());
+                }
+                _ => {}
+            },
+            CapabilityAssessment::Unassessed => {
+                push_unique(insufficient, entry.id.clone());
+            }
+        }
+    } else {
+        push_unique(insufficient, entry.id.clone());
     }
 }
 
@@ -523,18 +589,20 @@ mod tests {
     }
 
     #[test]
-    fn profile_without_status_treated_as_unclassified() {
+    fn entry_without_status_is_insufficient_not_unclassified() {
         let result = diagnose_plain(&sentence(), &[entry_without_status("alpha")], &[]);
-        // alpha has a profile but no status → treated as unclassified
-        assert!(result.unclassified_lemmas.contains(&"alpha".to_owned()));
-        // beta is also unclassified (no profile)
+        // alpha has an entry but no status/profile → insufficient information
+        assert!(!result.unclassified_lemmas.contains(&"alpha".to_owned()));
+        // beta has no entry at all → unclassified
         assert!(result.unclassified_lemmas.contains(&"beta".to_owned()));
-        assert!(
-            result
-                .hints
-                .iter()
-                .any(|h| h.kind == DiagnosisKind::InsufficientInformation)
-        );
+        let insufficient = result
+            .hints
+            .iter()
+            .find(|h| h.kind == DiagnosisKind::InsufficientInformation)
+            .expect("should have InsufficientInformation hint");
+        assert!(insufficient
+            .lexical_entry_ids
+            .contains(&LexicalEntryId::parse("alpha").unwrap()));
     }
 
     #[test]
@@ -710,5 +778,198 @@ mod tests {
             .find(|h| h.kind == DiagnosisKind::MeaningBarrier)
             .unwrap();
         assert_eq!(meaning_hint.lexical_entry_ids.len(), 1);
+    }
+
+    // ── Capability-profile-based diagnosis ─────────────────────────
+
+    fn profile_with(
+        word: &str,
+        reading: CapabilityAssessment,
+        listening: CapabilityAssessment,
+    ) -> (LexicalEntryId, LexicalCapabilityProfile) {
+        let id = LexicalEntryId::parse(word).unwrap();
+        let mut profile = LexicalCapabilityProfile::unassessed(id.clone());
+        if reading != CapabilityAssessment::Unassessed {
+            profile.reading.projection = Some(CapabilityProjection::legacy(
+                match reading {
+                    CapabilityAssessment::Acquired => CapabilityConclusion::Acquired,
+                    _ => CapabilityConclusion::NotAcquired,
+                },
+                1,
+            ));
+        }
+        if listening != CapabilityAssessment::Unassessed {
+            profile.listening.projection = Some(CapabilityProjection::legacy(
+                match listening {
+                    CapabilityAssessment::Acquired => CapabilityConclusion::Acquired,
+                    _ => CapabilityConclusion::NotAcquired,
+                },
+                1,
+            ));
+        }
+        (id, profile)
+    }
+
+    #[test]
+    fn capability_reading_not_acquired_triggers_meaning_barrier() {
+        let (id, prof) = profile_with(
+            "alpha",
+            CapabilityAssessment::NotAcquired,
+            CapabilityAssessment::Unassessed,
+        );
+        let profiles = HashMap::from([(id, prof)]);
+        let result = diagnose_with_profiles(
+            &sentence(),
+            &[entry_without_status("alpha")],
+            &[],
+            &profiles,
+            &[],
+            &HashMap::new(),
+        );
+        assert!(result
+            .hints
+            .iter()
+            .any(|h| h.kind == DiagnosisKind::MeaningBarrier));
+        assert!(!result
+            .hints
+            .iter()
+            .any(|h| h.kind == DiagnosisKind::RecognitionBarrier));
+    }
+
+    #[test]
+    fn capability_listening_not_acquired_triggers_recognition_barrier() {
+        let (id, prof) = profile_with(
+            "alpha",
+            CapabilityAssessment::Acquired,
+            CapabilityAssessment::NotAcquired,
+        );
+        let profiles = HashMap::from([(id, prof)]);
+        let result = diagnose_with_profiles(
+            &sentence(),
+            &[entry_without_status("alpha")],
+            &[],
+            &profiles,
+            &[],
+            &HashMap::new(),
+        );
+        assert!(result
+            .hints
+            .iter()
+            .any(|h| h.kind == DiagnosisKind::RecognitionBarrier));
+        assert!(!result
+            .hints
+            .iter()
+            .any(|h| h.kind == DiagnosisKind::MeaningBarrier));
+    }
+
+    #[test]
+    fn unassessed_reading_is_insufficient_not_barrier() {
+        let (id, prof) = profile_with(
+            "alpha",
+            CapabilityAssessment::Unassessed,
+            CapabilityAssessment::Unassessed,
+        );
+        let profiles = HashMap::from([(id.clone(), prof)]);
+        let result = diagnose_with_profiles(
+            &sentence(),
+            &[entry_without_status("alpha")],
+            &[],
+            &profiles,
+            &[],
+            &HashMap::new(),
+        );
+        assert!(!result
+            .hints
+            .iter()
+            .any(|h| h.kind == DiagnosisKind::MeaningBarrier));
+        assert!(!result
+            .hints
+            .iter()
+            .any(|h| h.kind == DiagnosisKind::RecognitionBarrier));
+        let insufficient = result
+            .hints
+            .iter()
+            .find(|h| h.kind == DiagnosisKind::InsufficientInformation)
+            .expect("unassessed should produce InsufficientInformation");
+        assert!(insufficient.lexical_entry_ids.contains(&id));
+    }
+
+    #[test]
+    fn acquired_reading_unassessed_listening_is_insufficient() {
+        let (id, prof) = profile_with(
+            "alpha",
+            CapabilityAssessment::Acquired,
+            CapabilityAssessment::Unassessed,
+        );
+        let profiles = HashMap::from([(id.clone(), prof)]);
+        let result = diagnose_with_profiles(
+            &sentence(),
+            &[entry_without_status("alpha")],
+            &[],
+            &profiles,
+            &[],
+            &HashMap::new(),
+        );
+        assert!(!result
+            .hints
+            .iter()
+            .any(|h| h.kind == DiagnosisKind::MeaningBarrier));
+        assert!(!result
+            .hints
+            .iter()
+            .any(|h| h.kind == DiagnosisKind::RecognitionBarrier));
+        let insufficient = result
+            .hints
+            .iter()
+            .find(|h| h.kind == DiagnosisKind::InsufficientInformation)
+            .expect("unassessed listening should produce InsufficientInformation");
+        assert!(insufficient.lexical_entry_ids.contains(&id));
+    }
+
+    #[test]
+    fn context_observation_overrides_acquired_listening_profile() {
+        let (id, prof) = profile_with(
+            "alpha",
+            CapabilityAssessment::Acquired,
+            CapabilityAssessment::Acquired,
+        );
+        let profiles = HashMap::from([(id, prof)]);
+        let result = diagnose_with_profiles(
+            &sentence(),
+            &[entry_without_status("alpha")],
+            &[],
+            &profiles,
+            &[observation("alpha", ObservationResult::NotRecognizedInContext)],
+            &HashMap::new(),
+        );
+        assert!(result
+            .hints
+            .iter()
+            .any(|h| h.kind == DiagnosisKind::RecognitionBarrier));
+    }
+
+    #[test]
+    fn both_acquired_no_observation_produces_other_factors() {
+        let entries = [entry_without_status("alpha"), entry_without_status("beta")];
+        let (id_a, prof_a) = profile_with(
+            "alpha",
+            CapabilityAssessment::Acquired,
+            CapabilityAssessment::Acquired,
+        );
+        let (id_b, prof_b) = profile_with(
+            "beta",
+            CapabilityAssessment::Acquired,
+            CapabilityAssessment::Acquired,
+        );
+        let profiles = HashMap::from([(id_a, prof_a), (id_b, prof_b)]);
+        let result = diagnose_with_profiles(
+            &sentence(),
+            &entries,
+            &[],
+            &profiles,
+            &[],
+            &HashMap::new(),
+        );
+        assert_eq!(result.hints[0].kind, DiagnosisKind::OtherFactors);
     }
 }

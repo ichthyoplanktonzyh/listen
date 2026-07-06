@@ -29,7 +29,8 @@
         "phonetic-analysis-model-changed",
         "phonetic-analysis-job-changed",
         "phonetic-analysis-completed",
-        "phonetic-analysis-feedback-changed"
+        "phonetic-analysis-feedback-changed",
+        "lexical-capability-changed"
       ]
     },
     "payload": { "type": "object" }

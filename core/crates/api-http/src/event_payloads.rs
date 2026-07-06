@@ -170,6 +170,21 @@ impl PhoneticAnalysisCompletedPayload {
     }
 }
 
+/// `lexical-capability-changed` when a per-channel override or projection
+/// updates the effective assessment.
+#[derive(Debug, Clone, Serialize)]
+pub struct LexicalCapabilityChangedPayload {
+    pub lexical_entry_id: String,
+    pub capability: String,
+    pub effective_assessment: String,
+}
+
+impl LexicalCapabilityChangedPayload {
+    pub fn envelope(&self) -> EventEnvelope {
+        envelope(EventName::LexicalCapabilityChanged, self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -270,6 +285,11 @@ mod tests {
             },
             history: Vec::new(),
             occurrences: Vec::new(),
+            capability_profile: Some(LexicalCapabilityProfile::from_legacy_status(
+                LexicalEntryId::parse("entry-1").unwrap(),
+                Some(LearningStatus::KnownNotRecognized),
+                1,
+            )),
         };
         vec![
             EventEnvelope::v1(EventName::ServiceStarted, serde_json::json!({})),
@@ -300,6 +320,12 @@ mod tests {
                 EventName::LexicalEntryChanged,
                 serde_json::to_value(&lexical_details).unwrap(),
             ),
+            LexicalCapabilityChangedPayload {
+                lexical_entry_id: "entry-1".into(),
+                capability: "listening".into(),
+                effective_assessment: "acquired".into(),
+            }
+            .envelope(),
         ]
     }
 

@@ -279,6 +279,14 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/v1/lexical-entries/{id}", get(m18::lexical_details))
         .route(
+            "/v1/lexical-entries/{id}/capability-profile",
+            get(get_capability_profile),
+        )
+        .route(
+            "/v1/lexical-entries/{id}/capability/{capability}",
+            put(set_capability_override),
+        )
+        .route(
             "/v1/lexical-entries/{id}/learning-content",
             put(m18::update_lexical_learning_content),
         )

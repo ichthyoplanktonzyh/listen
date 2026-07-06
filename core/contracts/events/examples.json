@@ -97,6 +97,36 @@
     {
       "event": "lexical-entry-changed",
       "payload": {
+        "capability_profile": {
+          "lexical_entry_id": "entry-1",
+          "listening": {
+            "projection": {
+              "algorithm_version": "legacy-learning-status-migration-v1",
+              "conclusion": "not_acquired",
+              "source": "legacy_learning_status_migration",
+              "updated_at_ms": 1
+            },
+            "user_override": null
+          },
+          "reading": {
+            "projection": {
+              "algorithm_version": "legacy-learning-status-migration-v1",
+              "conclusion": "acquired",
+              "source": "legacy_learning_status_migration",
+              "updated_at_ms": 1
+            },
+            "user_override": null
+          },
+          "sense_id": null,
+          "speaking": {
+            "projection": null,
+            "user_override": null
+          },
+          "writing": {
+            "projection": null,
+            "user_override": null
+          }
+        },
         "entry": {
           "canonical_form": "go",
           "display_form": "go",
@@ -122,6 +152,15 @@
         },
         "history": [],
         "occurrences": []
+      },
+      "version": 1
+    },
+    {
+      "event": "lexical-capability-changed",
+      "payload": {
+        "capability": "listening",
+        "effective_assessment": "acquired",
+        "lexical_entry_id": "entry-1"
       },
       "version": 1
     }

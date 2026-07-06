@@ -1,4 +1,78 @@
+use domain::{CapabilityConclusion, LexicalCapability, LexicalCapabilityProfile};
+
 use crate::*;
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct SetCapabilityOverrideRequest {
+    conclusion: Option<String>,
+}
+
+pub(crate) async fn set_capability_override(
+    State(state): State<ApiState>,
+    Path((entry_id, capability_str)): Path<(String, String)>,
+    Json(request): Json<SetCapabilityOverrideRequest>,
+) -> Result<Json<LexicalCapabilityProfile>, ApiError> {
+    let entry_id = LexicalEntryId::parse(entry_id).map_err(ApplicationError::from)?;
+    let capability = parse_capability(&capability_str)?;
+    let conclusion = request
+        .conclusion
+        .as_deref()
+        .map(parse_conclusion)
+        .transpose()?;
+    let profile = state
+        .services
+        .set_lexical_capability_override(&entry_id, capability, conclusion)?;
+    let effective = profile.effective_assessment(capability);
+    let _ = state.events.send(
+        crate::event_payloads::LexicalCapabilityChangedPayload {
+            lexical_entry_id: entry_id.as_str().to_owned(),
+            capability: capability_str,
+            effective_assessment: serde_json::to_value(effective)
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .to_owned(),
+        }
+        .envelope(),
+    );
+    if let Ok(Some(details)) = state.services.lexical_details(&entry_id) {
+        let _ = state.events.send(EventEnvelope::v1(
+            EventName::LexicalEntryChanged,
+            serde_json::to_value(&details).expect("lexical details serializes"),
+        ));
+    }
+    Ok(Json(profile))
+}
+
+pub(crate) async fn get_capability_profile(
+    State(state): State<ApiState>,
+    Path(entry_id): Path<String>,
+) -> Result<Json<LexicalCapabilityProfile>, ApiError> {
+    let entry_id = LexicalEntryId::parse(entry_id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .lexical_capability_profile(&entry_id)?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("capability profile"))
+}
+
+fn parse_capability(value: &str) -> Result<LexicalCapability, ApiError> {
+    match value {
+        "reading" => Ok(LexicalCapability::Reading),
+        "listening" => Ok(LexicalCapability::Listening),
+        "speaking" => Ok(LexicalCapability::Speaking),
+        "writing" => Ok(LexicalCapability::Writing),
+        _ => Err(ApplicationError::Validation("capability").into()),
+    }
+}
+
+fn parse_conclusion(value: &str) -> Result<CapabilityConclusion, ApiError> {
+    match value {
+        "not_acquired" => Ok(CapabilityConclusion::NotAcquired),
+        "acquired" => Ok(CapabilityConclusion::Acquired),
+        _ => Err(ApplicationError::Validation("conclusion").into()),
+    }
+}
 
 pub(crate) async fn read_progress(
     State(state): State<ApiState>,

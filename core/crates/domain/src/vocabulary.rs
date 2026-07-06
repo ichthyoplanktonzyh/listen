@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    LearningResourceId, LearningStatus, LexicalEntry, LexicalObservation, LexicalOccurrence,
-    LexicalStatusHistory, PhoneticFindingFeedback,
+    LearningResourceId, LearningStatus, LexicalCapabilityProfile, LexicalEntry,
+    LexicalObservation, LexicalOccurrence, LexicalStatusHistory, PhoneticFindingFeedback,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -16,6 +16,8 @@ pub struct VocabularyAssetBundle {
     pub lexical_observations: Vec<LexicalObservation>,
     #[serde(default)]
     pub phonetic_finding_feedback: Vec<PhoneticFindingFeedback>,
+    #[serde(default)]
+    pub capability_profiles: Vec<LexicalCapabilityProfile>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

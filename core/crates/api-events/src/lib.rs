@@ -28,6 +28,7 @@ pub enum EventName {
     PhoneticAnalysisJobChanged,
     PhoneticAnalysisCompleted,
     PhoneticAnalysisFeedbackChanged,
+    LexicalCapabilityChanged,
 }
 
 impl EventName {
@@ -58,6 +59,7 @@ impl EventName {
         EventName::PhoneticAnalysisJobChanged,
         EventName::PhoneticAnalysisCompleted,
         EventName::PhoneticAnalysisFeedbackChanged,
+        EventName::LexicalCapabilityChanged,
     ];
 
     pub fn wire_name(self) -> String {
@@ -94,7 +96,8 @@ fn _exhaustiveness_guard(name: EventName) {
         | EventName::PhoneticAnalysisModelChanged
         | EventName::PhoneticAnalysisJobChanged
         | EventName::PhoneticAnalysisCompleted
-        | EventName::PhoneticAnalysisFeedbackChanged => {}
+        | EventName::PhoneticAnalysisFeedbackChanged
+        | EventName::LexicalCapabilityChanged => {}
     }
 }
 

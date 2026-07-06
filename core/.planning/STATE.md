@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-06T11:14:00.000+08:00"
+last_updated: "2026-07-06T16:00:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-06 11:14 CST
-> 更新原因：暂停 Phase 3.4 / 3.35 最终手工 QA，插入 Phase 3.4.1 ~ 3.4.3 Learning
-> Domain Model v2。当前主线先把单值 `LearningStatus` 迁移为四通道能力画像，并分离 evidence、
-> projection 与 user override；后续再分离 SenseGroup / ProsodicGroup 并验证 Construction 身份。
+> 最后更新：2026-07-06 16:00 CST
+> 更新原因：Phase 3.4.1 Learning Capability Model v2 全部完成（Slice 0-6）。四通道能力画像
+> 成为唯一权威，legacy `LearningStatus` 降级为兼容投影；诊断、升级建议、导入导出均已迁移到
+> capability profile 驱动。后续 3.4.2 / 3.4.3 待启动。
 
 ## 当前位置
 
@@ -165,18 +165,21 @@ last_updated: "2026-07-06T11:14:00.000+08:00"
   capability proposal，迁移稳定后再恢复 QA。
 - 规划文档：`.planning/phases/3.4-audio-first-review-queue/3.4-PLAN.md`。
 
-### Phase 3.4.1: Learning Capability Model v2 ⏳ IN_PROGRESS
+### Phase 3.4.1: Learning Capability Model v2 ✅ COMPLETED
 
 - 目标：以 reading / listening / speaking / writing 四通道画像替代单值线性状态；每个通道
   区分 unassessed / not_acquired / acquired。
 - 架构：evidence、system projection、user override 和 effective assessment 分层；自动证据
-  不静默覆盖用户声明。
-- 迁移：schema v22 additive migration 已落地，保留 legacy status 兼容窗口；v21 数据按带
-  来源的近似映射回填，迁移前备份/重复打开/失败恢复测试通过。
-- 后续：3.4.2 新增 SenseGroup 语义层且保留现有声音组；3.4.3 验证 Construction 身份。
-- 共享上下文：`.planning/phases/3.0-english-listening-learning-loop/3.4.X-LEARNING-DOMAIN-V2-SHARED-CONTEXT.md`。
-- 当前切片：domain contract 与 schema v22 persistence 已落地；下一步进入 application use case、
-  legacy write adapter 和 portable vocabulary asset 新版本。
+  不静默覆盖用户声明。capability profile 为唯一权威，legacy `LearningStatus` 降级为兼容投影。
+- 迁移：schema v22 additive migration，保留 legacy status 兼容窗口；v21 数据按带来源的
+  近似映射回填，迁移前备份/重复打开/失败恢复测试通过。
+- Slice 0-6 全部完成：domain contract、schema v22 persistence、application use case、
+  VocabularyAssetBundle v6、diagnosis/upgrade suggestion 迁移、OpenAPI/SSE/Dart 契约、
+  Flutter 四通道 UI、authority switch（诊断和升级建议单一 profile 路径，external import
+  补齐 capability sync，legacy 字段标记 deprecated）。
+- 验证：`cargo test --workspace` 395 passed、`flutter test` 204 passed。
+- 后续：3.4.2 新增 SenseGroup 语义层；3.4.3 验证 Construction 身份。
+- 收口文档：`.planning/phases/3.4.1-learning-capability-model-v2/3.4.1-PLAN.md`。
 
 ## 已完成 Phase 索引
 
@@ -253,14 +256,13 @@ last_updated: "2026-07-06T11:14:00.000+08:00"
 
 ## 下一步工作
 
-1. 执行 Phase 3.4.1 Slice 3：application effective-profile use case、legacy write adapter 与
-   vocabulary bundle 新版本/冲突合并。
-2. 保持 `lexical_entries.status` 不删除；新 profile 已可持久化，但尚未切换为 UI/诊断权威。
-3. 3.4.1 收口后恢复 Phase 3.4/3.35 手工 QA，并重新基线化新能力 UI。
-4. 完成 Phase 3.3 真实媒体 30 分钟泛听 QA并收口；3.5/3.6 等待 3.4.1。
-5. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
+1. Phase 3.4.1 已完成（Slice 0-6）。恢复 Phase 3.4/3.35 手工 QA，重新基线化新能力 UI。
+2. 完成 Phase 3.3 真实媒体 30 分钟泛听 QA 并收口；3.5/3.6 现可启动。
+3. 评估 Phase 3.4.2（SenseGroup 语义层）或 3.4.3（Construction spike）启动时机。
+4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
-6. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）。
+5. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）；
+   legacy `LearningStatus` 物理删除推迟到所有 active consumer 迁移后的独立 cleanup phase。
 
 ## 指标
 

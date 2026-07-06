@@ -2,6 +2,67 @@
 
 ## Unreleased
 
+- 2026-07-06 CST: 完成 Phase 3.4.1 Slice 6 authority switch and closeout。capability profile
+  成为唯一权威决策来源：diagnosis-core `classify_entry()` 移除 legacy `LearningStatus` 回退
+  分支，只使用 capability profile 进行 meaning/recognition barrier 分类；upgrade suggestion
+  `confirm_upgrade_suggestion()` 统一为 capability-first 路径（旧无 `capability` 字段的
+  suggestion 默认走 listening projection），移除 legacy status 双写路径；external vocabulary
+  import 补齐 capability profile sync（修复导入后 profile 缺失导致诊断降级为 insufficient
+  的 bug）。`LearningStatus` enum 和 `LexicalEntry.status` 字段标记 deprecated，保留用于
+  schema 兼容和 legacy API 消费者。Phase 3.4.1 全部 6 个 slice 完成，PLAN 标记 COMPLETED。
+  验证：`cargo test --workspace` 395 passed、`flutter test` 204 passed。
+
+- 2026-07-06 CST: 修复 persistence-sqlite 关键死锁：`lexical_details()` 持有
+  `self.connection.lock()` 后调用 `self.lexical_capability_profile()` 导致 Mutex 不可重入死锁，
+  改为直接调用 `read_capability_profile(&conn, ...)` 复用已持有的连接。全量 Rust 测试通过
+  （395 tests，含 persistence-sqlite 64 + api-http 43）。
+
+- 2026-07-06 CST: 完成 Phase 3.4.1 Slice 5 API, events and Flutter。OpenAPI additive capability
+  profile GET/PUT contract（`/v1/lexical-entries/{id}/capability-profile` 和
+  `/v1/lexical-entries/{id}/capability/{capability}`）。SSE 新增 `lexical-capability-changed` event，
+  `LexicalCapabilityChangedPayload` 含 entry ID、capability 和 effective assessment。Dart 手写
+  DTO：`CapabilityProjection`、`CapabilityOverride`、`CapabilityDimensionState`（effectiveAssessment
+  getter：override > projection > unassessed）、`LexicalCapabilityProfile`；`LexicalEntryDetails`
+  新增可选 `capabilityProfile` 字段。`LearningState` 新增 `capabilityProfiles` map，
+  `LearningController.updateCapabilityProfile` 维护；`BackendEventCoordinator` 处理
+  `LexicalEntryChangedEvent` 时提取 profile，`LearningWorkflowController.openWord` 加载时存储；
+  新增 `setCapabilityOverride` 方法通过 API 设置/清除单通道 override。词汇面板四通道显示
+  （reading/listening/speaking/writing），每通道 acquired/not_acquired ChoiceChip + unassessed 独立
+  italic 表达 + override 标识；字幕 `TokenLine` 从 `capabilityProfiles` 派生 display status
+  （reading not_acquired → unknown_meaning、reading acquired + listening not_acquired →
+  known_not_recognized、both acquired → known_recognized）。复习结束页/词汇详情 suggestion
+  按钮改用 localization keys（`confirmListeningAcquired`/`deferUpgrade`/`listeningUpgradeSuggestion`）。
+  新增 `capability_profile_contract_test.dart`（6 tests）和 `backend_event_contract_test.dart` 扩展
+  （2 tests）。验证：`flutter analyze` 0 issues、`flutter test` 204 passed、`cargo check --workspace`
+  clean、api-events schema parity 3 passed、event contract examples regenerated。
+
+- 2026-07-06 13:30 CST: 完成 Phase 3.4.1 Slice 4 diagnosis and review suggestion migration。
+  diagnosis-core 新增 `diagnose_with_profiles()`，meaning barrier 改用 reading effective
+  assessment、recognition barrier 改用 listening effective assessment + sentence observation，
+  unassessed 维度严格不触发 barrier 只产生 InsufficientInformation（含 entry IDs）。旧
+  `diagnose_with_phrases()` 退化为从 legacy status 创建 profiles 后委托新实现。Application
+  层 `diagnose_sentence()` 批量读取 capability profiles 传给 diagnosis-core。UpgradeSuggestion
+  新增可选字段 capability/previous_assessment/suggested_assessment（serde(default) additive），
+  `evaluate_upgrade_suggestion()` 改为检查 listening.effective_assessment == NotAcquired，
+  生成的 suggestion 标记 capability=Listening。`confirm_upgrade_suggestion()` 对 capability-aware
+  suggestion 直接更新 listening projection + sync legacy，旧 suggestion 走 legacy 路径。
+  新增 6 个 diagnosis-core 测试（profile 驱动 meaning/recognition barrier、unassessed
+  insufficient、context observation override、both acquired → other factors）和 4 个集成测试
+  （capability override 影响诊断、unassessed insufficient、capability-aware 确认更新 listening
+  projection、legacy suggestion 旧路径确认）。验证：cargo test --workspace（395+ passed）、
+  clippy 无新增警告。
+
+- 2026-07-06 12:15 CST: 完成 Phase 3.4.1 Slice 3 application and portable assets。新增 application
+  层 capability profile 读取、用户 per-channel override 设置/清除及双向 compatibility adapter：
+  legacy status 变更同步到 capability projection（不覆盖已有 user override），capability override
+  变更同步回 legacy status view。VocabularyAssetBundle 升级到 v6，携带完整 capability_profiles；
+  v5 旧 bundle 导入时通过 legacy mapping 自动生成 migration projection；v6 导入按 per-dimension
+  时间戳合并，imported projection 不能覆盖本地较新 user override。新增
+  `LearningChangeSource::CapabilityOverrideSync`。新增 5 个测试：创建词条时 capability 同步、
+  override 设置/清除影响 legacy status、v6 export/import round-trip、v5 bundle legacy mapping 导入、
+  imported projection 不覆盖 local override。验证：`cargo test --workspace`（386 passed）、
+  `cargo clippy --workspace --all-targets` 无新增警告、contract validation 无新增失败。
+
 - 2026-07-06 11:14 CST: 完成 Phase 3.4.1 Slice 2 persistence foundation。SQLite schema
   v22 新增 `lexical_capability_states` 与 `lexical_capability_history`，按 entry + optional sense +
   capability 保存 system projection 和 user override；v21 legacy status 在同一迁移事务中按

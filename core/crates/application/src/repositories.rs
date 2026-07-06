@@ -681,6 +681,9 @@ pub trait LearningAssetRepository: Send + Sync {
     ) -> Result<LexicalEntryDetails, ApplicationError>;
     fn export_assets(&self) -> Result<VocabularyAssetBundle, ApplicationError>;
     fn import_assets(&self, bundle: &VocabularyAssetBundle) -> Result<(), ApplicationError>;
+    fn export_all_capability_profiles(
+        &self,
+    ) -> Result<Vec<LexicalCapabilityProfile>, ApplicationError>;
     fn set_lemma_override(
         &self,
         language: &LanguageCode,
