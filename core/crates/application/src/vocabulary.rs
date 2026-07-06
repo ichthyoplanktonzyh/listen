@@ -2,6 +2,117 @@ use crate::lexical::lexical_unit_for_entry;
 use crate::*;
 
 impl AppServices {
+    pub fn lexical_capability_profile(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+    ) -> Result<Option<LexicalCapabilityProfile>, ApplicationError> {
+        self.learning_assets
+            .lexical_capability_profile(lexical_entry_id, None)
+    }
+
+    pub fn set_lexical_capability_override(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        capability: LexicalCapability,
+        conclusion: Option<CapabilityConclusion>,
+    ) -> Result<LexicalCapabilityProfile, ApplicationError> {
+        let now = now_ms();
+        let user_override = conclusion.map(|conclusion| CapabilityOverride {
+            conclusion,
+            source: CapabilityOverrideSource::UserSelection,
+            updated_at_ms: now,
+        });
+        let profile = self.learning_assets.set_lexical_capability_override(
+            lexical_entry_id,
+            None,
+            capability,
+            user_override,
+            now,
+        )?;
+        self.sync_legacy_status_from_profile(lexical_entry_id, &profile)?;
+        Ok(profile)
+    }
+
+    pub(crate) fn sync_capability_from_legacy_status(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        status: Option<LearningStatus>,
+        changed_at_ms: u64,
+    ) -> Result<(), ApplicationError> {
+        let target =
+            LexicalCapabilityProfile::from_legacy_status(lexical_entry_id.clone(), status, changed_at_ms);
+        for capability in [LexicalCapability::Reading, LexicalCapability::Listening] {
+            let dim = target.dimension(capability);
+            if let Some(proj) = &dim.projection {
+                let current = self
+                    .learning_assets
+                    .lexical_capability_profile(lexical_entry_id, None)?;
+                let current_dim = current
+                    .as_ref()
+                    .map(|p| p.dimension(capability))
+                    .cloned()
+                    .unwrap_or_default();
+                if current_dim.user_override.is_some() {
+                    continue;
+                }
+                self.learning_assets.set_lexical_capability_projection(
+                    lexical_entry_id,
+                    None,
+                    capability,
+                    Some(CapabilityProjection {
+                        conclusion: proj.conclusion,
+                        source: CapabilityProjectionSource::EvidenceProjection,
+                        algorithm_version: "legacy-status-compat-v1".into(),
+                        updated_at_ms: changed_at_ms,
+                    }),
+                    changed_at_ms,
+                )?;
+            } else {
+                let current = self
+                    .learning_assets
+                    .lexical_capability_profile(lexical_entry_id, None)?;
+                let current_dim = current
+                    .as_ref()
+                    .map(|p| p.dimension(capability))
+                    .cloned()
+                    .unwrap_or_default();
+                if current_dim.user_override.is_some() || current_dim.projection.is_none() {
+                    continue;
+                }
+                self.learning_assets.set_lexical_capability_projection(
+                    lexical_entry_id,
+                    None,
+                    capability,
+                    None,
+                    changed_at_ms,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    fn sync_legacy_status_from_profile(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        profile: &LexicalCapabilityProfile,
+    ) -> Result<(), ApplicationError> {
+        let legacy = profile.legacy_status_view();
+        let details = self.learning_assets.lexical_details(lexical_entry_id)?;
+        if let Some(mut details) = details {
+            if details.entry.status != legacy {
+                details.entry.status = legacy;
+                details.entry.updated_at_ms = now_ms();
+                details.entry.learning_updated_at_ms = details.entry.updated_at_ms;
+                self.learning_assets.upsert_lexical_entry(
+                    &details.entry,
+                    None,
+                    LearningChangeSource::CapabilityOverrideSync,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
     pub fn read_lexical_entries_by_forms(
         &self,
         language: &str,
@@ -112,12 +223,27 @@ impl AppServices {
         &self,
         bundle: &VocabularyAssetBundle,
     ) -> Result<(), ApplicationError> {
-        if bundle.version != 5 {
+        if bundle.version != 5 && bundle.version != 6 {
             return Err(ApplicationError::Validation(
                 "unsupported asset bundle version",
             ));
         }
-        self.learning_assets.import_assets(bundle)
+        let mut effective = bundle.clone();
+        if bundle.version == 5 && bundle.capability_profiles.is_empty() {
+            effective.capability_profiles = bundle
+                .lexical_entries
+                .iter()
+                .filter(|e| e.status.is_some())
+                .map(|e| {
+                    LexicalCapabilityProfile::from_legacy_status(
+                        e.id.clone(),
+                        e.status,
+                        e.learning_updated_at_ms,
+                    )
+                })
+                .collect();
+        }
+        self.learning_assets.import_assets(&effective)
     }
 
     pub fn update_lexical_learning_content(

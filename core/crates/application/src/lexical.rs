@@ -97,7 +97,8 @@ impl AppServices {
         let unit =
             lexical_unit_for_entry(&language, input.kind, &normalized_form, &input.display_form);
         let id = LexicalEntryId::from_fingerprint("lexical-entry", &unit.identity());
-        self.learning_assets.upsert_lexical_entry(
+        let now = now_ms();
+        let details = self.learning_assets.upsert_lexical_entry(
             &LexicalEntry {
                 id,
                 unit,
@@ -112,12 +113,20 @@ impl AppServices {
                 normalization_provider: normalization.provider,
                 normalization_version: normalization.version,
                 user_corrected: normalization.user_corrected,
-                updated_at_ms: now_ms(),
-                learning_updated_at_ms: now_ms(),
+                updated_at_ms: now,
+                learning_updated_at_ms: now,
             },
             input.source.as_ref(),
             LearningChangeSource::UserSelection,
-        )
+        )?;
+        if input.status.is_some() {
+            self.sync_capability_from_legacy_status(
+                &details.entry.id,
+                details.entry.status,
+                now,
+            )?;
+        }
+        Ok(details)
     }
 
     pub fn lexical_details(

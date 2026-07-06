@@ -223,6 +223,11 @@ impl AppServices {
                 None,
                 LearningChangeSource::UpgradeSuggestionConfirmation,
             )?;
+            self.sync_capability_from_legacy_status(
+                &details.entry.id,
+                details.entry.status,
+                now,
+            )?;
         } else if details.entry.status != Some(LearningStatus::KnownRecognized) {
             return Err(ApplicationError::Conflict(
                 "lexical entry is no longer eligible for recognition upgrade",

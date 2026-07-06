@@ -361,3 +361,281 @@ fn lexical_asset_import_merges_newest_fields_and_remaps_sources() {
         Some(&local.entry.id)
     );
 }
+
+#[test]
+fn create_lexical_entry_with_status_syncs_capability_profile() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
+    let entry = upsert_word_asset(
+        &services,
+        "en",
+        "signal",
+        "signal",
+        Some(LearningStatus::KnownNotRecognized),
+        None,
+    )
+    .entry;
+
+    let profile = services
+        .lexical_capability_profile(&entry.id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        profile.effective_assessment(LexicalCapability::Reading),
+        CapabilityAssessment::Acquired
+    );
+    assert_eq!(
+        profile.effective_assessment(LexicalCapability::Listening),
+        CapabilityAssessment::NotAcquired
+    );
+    assert_eq!(
+        profile.effective_assessment(LexicalCapability::Speaking),
+        CapabilityAssessment::Unassessed
+    );
+    assert_eq!(
+        profile.effective_assessment(LexicalCapability::Writing),
+        CapabilityAssessment::Unassessed
+    );
+}
+
+#[test]
+fn user_override_syncs_legacy_status_and_does_not_erase_projection() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
+    let entry = upsert_word_asset(
+        &services,
+        "en",
+        "focus",
+        "focus",
+        Some(LearningStatus::KnownNotRecognized),
+        None,
+    )
+    .entry;
+
+    let profile = services
+        .set_lexical_capability_override(
+            &entry.id,
+            LexicalCapability::Listening,
+            Some(CapabilityConclusion::Acquired),
+        )
+        .unwrap();
+    assert_eq!(
+        profile.effective_assessment(LexicalCapability::Listening),
+        CapabilityAssessment::Acquired
+    );
+    assert_eq!(
+        profile.listening.projection.as_ref().unwrap().conclusion,
+        CapabilityConclusion::NotAcquired
+    );
+    let details = services.lexical_details(&entry.id).unwrap().unwrap();
+    assert_eq!(
+        details.entry.status,
+        Some(LearningStatus::KnownRecognized)
+    );
+
+    let cleared = services
+        .set_lexical_capability_override(&entry.id, LexicalCapability::Listening, None)
+        .unwrap();
+    assert_eq!(
+        cleared.effective_assessment(LexicalCapability::Listening),
+        CapabilityAssessment::NotAcquired
+    );
+    let details = services.lexical_details(&entry.id).unwrap().unwrap();
+    assert_eq!(
+        details.entry.status,
+        Some(LearningStatus::KnownNotRecognized)
+    );
+}
+
+#[test]
+fn export_includes_capability_profiles_and_v6_import_merges_without_overwriting_newer_override() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
+    let entry = upsert_word_asset(
+        &services,
+        "en",
+        "merge",
+        "merge",
+        Some(LearningStatus::KnownNotRecognized),
+        None,
+    )
+    .entry;
+    services
+        .set_lexical_capability_override(
+            &entry.id,
+            LexicalCapability::Listening,
+            Some(CapabilityConclusion::Acquired),
+        )
+        .unwrap();
+
+    let bundle = services.export_vocabulary().unwrap();
+    assert_eq!(bundle.version, 6);
+    assert!(!bundle.capability_profiles.is_empty());
+    let exported_profile = bundle
+        .capability_profiles
+        .iter()
+        .find(|p| p.lexical_entry_id == entry.id)
+        .unwrap();
+    assert!(exported_profile.listening.user_override.is_some());
+
+    let target_repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let target_services = AppServices::new(
+        target_repo.clone(),
+        target_repo.clone(),
+        target_repo.clone(),
+        target_repo.clone(),
+        target_repo.clone(),
+        target_repo.clone(),
+        target_repo.clone(),
+        target_repo.clone(),
+    );
+    target_services.import_vocabulary(&bundle).unwrap();
+    let restored = target_services
+        .lexical_capability_profile(&entry.id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        restored.effective_assessment(LexicalCapability::Listening),
+        CapabilityAssessment::Acquired
+    );
+    assert!(restored.listening.user_override.is_some());
+    assert!(restored.listening.projection.is_some());
+}
+
+#[test]
+fn v5_bundle_import_generates_capability_profiles_from_legacy_mapping() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
+    let entry = upsert_word_asset(
+        &services,
+        "en",
+        "legacy",
+        "legacy",
+        Some(LearningStatus::KnownRecognized),
+        None,
+    )
+    .entry;
+    let mut bundle = services.export_vocabulary().unwrap();
+    bundle.version = 5;
+    bundle.capability_profiles.clear();
+
+    let target_repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let target_services = AppServices::new(
+        target_repo.clone(),
+        target_repo.clone(),
+        target_repo.clone(),
+        target_repo.clone(),
+        target_repo.clone(),
+        target_repo.clone(),
+        target_repo.clone(),
+        target_repo.clone(),
+    );
+    target_services.import_vocabulary(&bundle).unwrap();
+    let profile = target_services
+        .lexical_capability_profile(&entry.id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        profile.effective_assessment(LexicalCapability::Reading),
+        CapabilityAssessment::Acquired
+    );
+    assert_eq!(
+        profile.effective_assessment(LexicalCapability::Listening),
+        CapabilityAssessment::Acquired
+    );
+    assert_eq!(
+        profile.reading.projection.as_ref().unwrap().source,
+        CapabilityProjectionSource::LegacyLearningStatusMigration
+    );
+}
+
+#[test]
+fn imported_projection_cannot_overwrite_local_user_override() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
+    let entry = upsert_word_asset(
+        &services,
+        "en",
+        "protect",
+        "protect",
+        Some(LearningStatus::KnownNotRecognized),
+        None,
+    )
+    .entry;
+    services
+        .set_lexical_capability_override(
+            &entry.id,
+            LexicalCapability::Listening,
+            Some(CapabilityConclusion::Acquired),
+        )
+        .unwrap();
+
+    let mut bundle = services.export_vocabulary().unwrap();
+    for profile in &mut bundle.capability_profiles {
+        if profile.lexical_entry_id == entry.id {
+            profile.listening.user_override = None;
+            profile.listening.projection = Some(CapabilityProjection {
+                conclusion: CapabilityConclusion::NotAcquired,
+                source: CapabilityProjectionSource::LegacyLearningStatusMigration,
+                algorithm_version: "attacker-v1".into(),
+                updated_at_ms: u64::MAX,
+            });
+        }
+    }
+    services.import_vocabulary(&bundle).unwrap();
+    let profile = services
+        .lexical_capability_profile(&entry.id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        profile.effective_assessment(LexicalCapability::Listening),
+        CapabilityAssessment::Acquired,
+        "user override must survive even when imported projection is newer"
+    );
+    assert!(profile.listening.user_override.is_some());
+}

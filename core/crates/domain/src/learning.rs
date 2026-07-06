@@ -40,6 +40,7 @@ pub enum LearningChangeSource {
     UserSelection,
     Import,
     UpgradeSuggestionConfirmation,
+    CapabilityOverrideSync,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

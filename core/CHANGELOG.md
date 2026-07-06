@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-06 12:15 CST: 完成 Phase 3.4.1 Slice 3 application and portable assets。新增 application
+  层 capability profile 读取、用户 per-channel override 设置/清除及双向 compatibility adapter：
+  legacy status 变更同步到 capability projection（不覆盖已有 user override），capability override
+  变更同步回 legacy status view。VocabularyAssetBundle 升级到 v6，携带完整 capability_profiles；
+  v5 旧 bundle 导入时通过 legacy mapping 自动生成 migration projection；v6 导入按 per-dimension
+  时间戳合并，imported projection 不能覆盖本地较新 user override。新增
+  `LearningChangeSource::CapabilityOverrideSync`。新增 5 个测试：创建词条时 capability 同步、
+  override 设置/清除影响 legacy status、v6 export/import round-trip、v5 bundle legacy mapping 导入、
+  imported projection 不覆盖 local override。验证：`cargo test --workspace`（386 passed）、
+  `cargo clippy --workspace --all-targets` 无新增警告、contract validation 无新增失败。
+
 - 2026-07-06 11:14 CST: 完成 Phase 3.4.1 Slice 2 persistence foundation。SQLite schema
   v22 新增 `lexical_capability_states` 与 `lexical_capability_history`，按 entry + optional sense +
   capability 保存 system projection 和 user override；v21 legacy status 在同一迁移事务中按

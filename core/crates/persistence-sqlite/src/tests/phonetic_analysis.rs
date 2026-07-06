@@ -186,7 +186,7 @@ fn phonetic_models_jobs_analyses_and_feedback_round_trip() {
         Some(feedback.clone())
     );
     let bundle = repo.export_assets().unwrap();
-    assert_eq!(bundle.version, 5);
+    assert_eq!(bundle.version, 6);
     assert_eq!(bundle.phonetic_finding_feedback, vec![feedback.clone()]);
     let restored = SqliteRepository::in_memory().unwrap();
     restored.import_assets(&bundle).unwrap();

@@ -741,15 +741,17 @@ impl LearningAssetRepository for SqliteRepository {
     fn export_assets(&self) -> Result<VocabularyAssetBundle, ApplicationError> {
         let (lexical_entries, lexical_history, lexical_occurrences, lexical_observations) =
             self.export_lexical_assets()?;
+        let capability_profiles = self.export_all_capability_profiles()?;
         let conn = self.connection.lock().expect("sqlite mutex poisoned");
         Ok(VocabularyAssetBundle {
-            version: 5,
+            version: 6,
             exported_at_ms: application::now_ms(),
             lexical_entries,
             lexical_history,
             lexical_occurrences,
             lexical_observations,
             phonetic_finding_feedback: read_all_phonetic_feedback(&conn)?,
+            capability_profiles,
         })
     }
 
@@ -760,6 +762,9 @@ impl LearningAssetRepository for SqliteRepository {
             &bundle.lexical_occurrences,
             &bundle.lexical_observations,
         )?;
+        for profile in &bundle.capability_profiles {
+            self.import_capability_profile(profile)?;
+        }
         let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
         let tx = conn.transaction().map_err(repo)?;
         for feedback in &bundle.phonetic_finding_feedback {
@@ -781,9 +786,113 @@ impl LearningAssetRepository for SqliteRepository {
         }
         tx.commit().map_err(repo)
     }
+
+    fn export_all_capability_profiles(
+        &self,
+    ) -> Result<Vec<LexicalCapabilityProfile>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = conn
+            .prepare(
+                "SELECT lexical_entry_id,sense_id,capability,projection_json,override_json
+                 FROM lexical_capability_states
+                 ORDER BY lexical_entry_id,sense_id,capability",
+            )
+            .map_err(repo)?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    from_json::<LexicalCapability>(&row.get::<_, String>(2)?)?,
+                    row.get::<_, Option<String>>(3)?
+                        .map(|value| from_json(&value))
+                        .transpose()?,
+                    row.get::<_, Option<String>>(4)?
+                        .map(|value| from_json(&value))
+                        .transpose()?,
+                ))
+            })
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)?;
+
+        let mut profiles: Vec<LexicalCapabilityProfile> = Vec::new();
+        for (entry_id_str, sense_id_str, capability, projection, user_override) in rows {
+            let entry_id = LexicalEntryId::parse(entry_id_str)?;
+            let sense_id = if sense_id_str.is_empty() {
+                None
+            } else {
+                Some(LexicalSenseId::parse(sense_id_str)?)
+            };
+            let needs_new = profiles.last().is_none_or(|last| {
+                last.lexical_entry_id != entry_id || last.sense_id != sense_id
+            });
+            if needs_new {
+                let mut profile = LexicalCapabilityProfile::unassessed(entry_id);
+                profile.sense_id = sense_id;
+                profiles.push(profile);
+            }
+            let profile = profiles.last_mut().unwrap();
+            *profile.dimension_mut(capability) = CapabilityDimensionState {
+                projection,
+                user_override,
+            };
+        }
+        Ok(profiles)
+    }
 }
 
 impl SqliteRepository {
+    fn import_capability_profile(
+        &self,
+        imported: &LexicalCapabilityProfile,
+    ) -> Result<(), ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let exists = conn
+            .query_row(
+                "SELECT 1 FROM lexical_entries WHERE id=?1",
+                [imported.lexical_entry_id.as_str()],
+                |_| Ok(()),
+            )
+            .optional()
+            .map_err(repo)?
+            .is_some();
+        if !exists {
+            return Ok(());
+        }
+        for capability in LexicalCapability::ALL {
+            let imported_dim = imported.dimension(capability);
+            if imported_dim.projection.is_none() && imported_dim.user_override.is_none() {
+                continue;
+            }
+            let local = read_capability_state(
+                &conn,
+                &imported.lexical_entry_id,
+                imported.sense_id.as_ref(),
+                capability,
+            )?
+            .unwrap_or_default();
+            let merged = merge_capability_dimension(&local, imported_dim);
+            if merged != local {
+                let ts = merged
+                    .user_override
+                    .as_ref()
+                    .map(|value| value.updated_at_ms)
+                    .or_else(|| merged.projection.as_ref().map(|value| value.updated_at_ms))
+                    .unwrap_or(0);
+                write_capability_state(
+                    &conn,
+                    &imported.lexical_entry_id,
+                    imported.sense_id.as_ref(),
+                    capability,
+                    &merged,
+                    ts,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
     fn update_capability_state(
         &self,
         lexical_entry_id: &LexicalEntryId,
@@ -1129,6 +1238,38 @@ fn lexical_observation_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LexicalO
         result: from_json(&row.get::<_, String>(4)?)?,
         created_at_ms: row.get(5)?,
     })
+}
+
+fn merge_capability_dimension(
+    local: &CapabilityDimensionState,
+    imported: &CapabilityDimensionState,
+) -> CapabilityDimensionState {
+    let projection = match (&local.projection, &imported.projection) {
+        (None, p) => p.clone(),
+        (p, None) => p.clone(),
+        (Some(l), Some(i)) => {
+            if i.updated_at_ms > l.updated_at_ms {
+                Some(i.clone())
+            } else {
+                Some(l.clone())
+            }
+        }
+    };
+    let user_override = match (&local.user_override, &imported.user_override) {
+        (None, o) => o.clone(),
+        (o @ Some(_), None) => o.clone(),
+        (Some(l), Some(i)) => {
+            if i.updated_at_ms > l.updated_at_ms {
+                Some(i.clone())
+            } else {
+                Some(l.clone())
+            }
+        }
+    };
+    CapabilityDimensionState {
+        projection,
+        user_override,
+    }
 }
 
 fn read_all_phonetic_feedback(

@@ -453,7 +453,7 @@ fn external_import_preserves_existing_status_and_updates_learning_content() {
         )
         .unwrap();
     assert_eq!(details.entry.user_definition.as_deref(), Some("greeting"));
-    assert_eq!(services.export_vocabulary().unwrap().version, 5);
+    assert_eq!(services.export_vocabulary().unwrap().version, 6);
     let second = services
         .import_external_vocabulary(&ExternalVocabularyImport {
             language: "en".into(),
