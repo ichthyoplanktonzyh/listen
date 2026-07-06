@@ -148,6 +148,7 @@ class LexicalEntryDetails {
     required this.entry,
     this.history = const [],
     this.occurrences = const [],
+    this.capabilityProfile,
   });
 
   factory LexicalEntryDetails.fromJson(Map<String, dynamic> json) =>
@@ -165,11 +166,17 @@ class LexicalEntryDetails {
                   LexicalOccurrence.fromJson(value as Map<String, dynamic>),
             )
             .toList(growable: false),
+        capabilityProfile: json['capability_profile'] is Map
+            ? LexicalCapabilityProfile.fromJson(
+                Map<String, dynamic>.from(json['capability_profile'] as Map),
+              )
+            : null,
       );
 
   final LexicalEntry entry;
   final List<LexicalStatusHistory> history;
   final List<LexicalOccurrence> occurrences;
+  final LexicalCapabilityProfile? capabilityProfile;
 
   Map<String, dynamic> toJson() => {
     'entry': entry.toJson(),
@@ -177,8 +184,148 @@ class LexicalEntryDetails {
     'occurrences': occurrences
         .map((value) => value.toJson())
         .toList(growable: false),
+    if (capabilityProfile != null)
+      'capability_profile': capabilityProfile!.toJson(),
   };
 }
+
+// ──────────────────────────────────────────────
+// Capability Profile (Phase 3.4.1)
+// ──────────────────────────────────────────────
+
+class CapabilityProjection {
+  const CapabilityProjection({
+    required this.conclusion,
+    required this.source,
+    required this.algorithmVersion,
+    required this.updatedAtMs,
+  });
+
+  factory CapabilityProjection.fromJson(Map<String, dynamic> json) =>
+      CapabilityProjection(
+        conclusion: json['conclusion'] as String,
+        source: json['source'] as String,
+        algorithmVersion: json['algorithm_version'] as String,
+        updatedAtMs: json['updated_at_ms'] as int,
+      );
+
+  final String conclusion;
+  final String source;
+  final String algorithmVersion;
+  final int updatedAtMs;
+
+  Map<String, dynamic> toJson() => {
+    'conclusion': conclusion,
+    'source': source,
+    'algorithm_version': algorithmVersion,
+    'updated_at_ms': updatedAtMs,
+  };
+}
+
+class CapabilityOverride {
+  const CapabilityOverride({
+    required this.conclusion,
+    required this.source,
+    required this.updatedAtMs,
+  });
+
+  factory CapabilityOverride.fromJson(Map<String, dynamic> json) =>
+      CapabilityOverride(
+        conclusion: json['conclusion'] as String,
+        source: json['source'] as String,
+        updatedAtMs: json['updated_at_ms'] as int,
+      );
+
+  final String conclusion;
+  final String source;
+  final int updatedAtMs;
+
+  Map<String, dynamic> toJson() => {
+    'conclusion': conclusion,
+    'source': source,
+    'updated_at_ms': updatedAtMs,
+  };
+}
+
+class CapabilityDimensionState {
+  const CapabilityDimensionState({this.projection, this.userOverride});
+
+  factory CapabilityDimensionState.fromJson(Map<String, dynamic> json) =>
+      CapabilityDimensionState(
+        projection: json['projection'] is Map
+            ? CapabilityProjection.fromJson(
+                Map<String, dynamic>.from(json['projection'] as Map),
+              )
+            : null,
+        userOverride: json['user_override'] is Map
+            ? CapabilityOverride.fromJson(
+                Map<String, dynamic>.from(json['user_override'] as Map),
+              )
+            : null,
+      );
+
+  final CapabilityProjection? projection;
+  final CapabilityOverride? userOverride;
+
+  String get effectiveAssessment {
+    if (userOverride != null) return userOverride!.conclusion;
+    if (projection != null) return projection!.conclusion;
+    return 'unassessed';
+  }
+
+  Map<String, dynamic> toJson() => {
+    'projection': projection?.toJson(),
+    'user_override': userOverride?.toJson(),
+  };
+}
+
+class LexicalCapabilityProfile {
+  const LexicalCapabilityProfile({
+    required this.lexicalEntryId,
+    this.senseId,
+    required this.reading,
+    required this.listening,
+    required this.speaking,
+    required this.writing,
+  });
+
+  factory LexicalCapabilityProfile.fromJson(Map<String, dynamic> json) =>
+      LexicalCapabilityProfile(
+        lexicalEntryId: json['lexical_entry_id'] as String,
+        senseId: json['sense_id'] as String?,
+        reading: CapabilityDimensionState.fromJson(
+          _asMap(json['reading']),
+        ),
+        listening: CapabilityDimensionState.fromJson(
+          _asMap(json['listening']),
+        ),
+        speaking: CapabilityDimensionState.fromJson(
+          _asMap(json['speaking']),
+        ),
+        writing: CapabilityDimensionState.fromJson(
+          _asMap(json['writing']),
+        ),
+      );
+
+  final String lexicalEntryId;
+  final String? senseId;
+  final CapabilityDimensionState reading;
+  final CapabilityDimensionState listening;
+  final CapabilityDimensionState speaking;
+  final CapabilityDimensionState writing;
+
+  Map<String, dynamic> toJson() => {
+    'lexical_entry_id': lexicalEntryId,
+    'sense_id': senseId,
+    'reading': reading.toJson(),
+    'listening': listening.toJson(),
+    'speaking': speaking.toJson(),
+    'writing': writing.toJson(),
+  };
+}
+
+Map<String, dynamic> _asMap(Object? value) =>
+    value is Map ? Map<String, dynamic>.from(value) : const {};
 
 // ──────────────────────────────────────────────
 // Diagnosis

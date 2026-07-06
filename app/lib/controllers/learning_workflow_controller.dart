@@ -123,6 +123,9 @@ class LearningWorkflowController {
       entry = details.entry;
       if (!_isCurrentOpenWord(generation, isMounted)) return;
       learning.updateSingleWordEntry(lemma, entry);
+      if (details.capabilityProfile != null) {
+        learning.updateCapabilityProfile(lemma, details.capabilityProfile!);
+      }
       learning.selectWord(details);
     } else {
       if (!_isCurrentOpenWord(generation, isMounted)) return;
@@ -131,6 +134,9 @@ class LearningWorkflowController {
       if (!_isCurrentOpenWord(generation, isMounted)) return;
       entry = details.entry;
       learning.updateSingleWordEntry(lemma, entry);
+      if (details.capabilityProfile != null) {
+        learning.updateCapabilityProfile(lemma, details.capabilityProfile!);
+      }
       learning.selectWord(details);
     }
 
@@ -283,6 +289,28 @@ class LearningWorkflowController {
       source: sourceFor(token, cue),
     );
     return true;
+  }
+
+  Future<void> setCapabilityOverride({
+    required LocalApi? api,
+    required String capability,
+    required String? conclusion,
+    required LearningController learning,
+    required bool Function() isMounted,
+  }) async {
+    final entry = learning.selectedLexicalDetails?.entry;
+    if (entry == null || api == null) return;
+    await api.setCapabilityOverride(entry.id, capability, conclusion: conclusion);
+    final details = LexicalEntryDetails.fromJson(
+      await api.lexicalEntryDetails(entry.id),
+    );
+    if (!isMounted()) return;
+    final lemma = entry.normalizedForm;
+    learning.updateSingleWordEntry(lemma, details.entry);
+    if (details.capabilityProfile != null) {
+      learning.updateCapabilityProfile(lemma, details.capabilityProfile!);
+    }
+    learning.selectWord(details);
   }
 
   Future<void> refreshDiagnosis({

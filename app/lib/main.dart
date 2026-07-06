@@ -442,6 +442,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       },
       setTaskStatus: _setTaskStatus,
       updateWordEntry: learningController.updateSingleWordEntry,
+      updateCapabilityProfile: learningController.updateCapabilityProfile,
     ).handle(event);
   }
 
@@ -1010,6 +1011,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
       await _refreshDiagnosis();
     } catch (error) {
       if (mounted) playerController.setStatus('Word update failed: $error');
+    }
+  }
+
+  Future<void> _setCapabilityOverride(
+    String capability,
+    String? conclusion,
+  ) async {
+    try {
+      await learningWorkflowController.setCapabilityOverride(
+        api: api,
+        capability: capability,
+        conclusion: conclusion,
+        learning: learningController,
+        isMounted: () => mounted,
+      );
+    } catch (error) {
+      if (mounted) playerController.setStatus('Capability update failed: $error');
     }
   }
 
@@ -1851,6 +1869,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     onOpenWord: _openWord,
     onSeekCue: _seekCue,
     onSetSelectedWordStatus: _setSelectedWordStatus,
+    onSetCapabilityOverride: _setCapabilityOverride,
     onSaveSelectedLearningContent: _saveSelectedLearningContent,
     onObserveSelected: _observeSelected,
     onManualReviewTimeline: _openManualReviewTimeline,

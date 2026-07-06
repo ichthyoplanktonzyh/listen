@@ -18,6 +18,7 @@ class WordLearningPanel extends StatefulWidget {
     required this.onSource,
     required this.onHeard,
     required this.onNotHeard,
+    this.onCapabilityOverride,
   });
 
   final LexicalEntryDetails details;
@@ -29,6 +30,8 @@ class WordLearningPanel extends StatefulWidget {
   final ValueChanged<Map<String, dynamic>> onSource;
   final VoidCallback onHeard;
   final VoidCallback onNotHeard;
+  final Future<void> Function(String capability, String? conclusion)?
+      onCapabilityOverride;
 
   @override
   State<WordLearningPanel> createState() => _WordLearningPanelState();
@@ -124,6 +127,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final profile = widget.details.capabilityProfile;
     final results = widget.dictionary?.results ?? const [];
     final characterBreakdown = _hanCharacterBreakdown();
     // Only IPA-bearing variants are worth a section. Languages without an IPA
@@ -168,25 +172,32 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
           ],
         ),
         const SizedBox(height: 14),
-        _sectionHeader(context, l.text('learningState'), Icons.school_outlined),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            for (final value in const [
-              null,
-              'unknown_meaning',
-              'known_not_recognized',
-              'known_recognized',
-            ])
-              ChoiceChip(
-                label: Text(l.status(value)),
-                selected: entry.status == value,
-                onSelected: (_) => widget.onStatus(value),
-              ),
-          ],
+        _sectionHeader(
+          context,
+          l.text('capabilityProfile'),
+          Icons.school_outlined,
         ),
+        const SizedBox(height: 8),
+        if (profile != null)
+          _capabilityGrid(context, l, profile)
+        else
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final value in const [
+                null,
+                'unknown_meaning',
+                'known_not_recognized',
+                'known_recognized',
+              ])
+                ChoiceChip(
+                  label: Text(l.status(value)),
+                  selected: entry.status == value,
+                  onSelected: (_) => widget.onStatus(value),
+                ),
+            ],
+          ),
         const SizedBox(height: 6),
         Wrap(
           spacing: 8,
@@ -401,6 +412,96 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
           Text(title, style: Theme.of(context).textTheme.titleSmall),
         ],
       );
+
+  Widget _capabilityGrid(
+    BuildContext context,
+    AppLocalizations l,
+    LexicalCapabilityProfile profile,
+  ) {
+    const channels = [
+      ('reading', 'capabilityReading', Icons.menu_book_outlined),
+      ('listening', 'capabilityListening', Icons.hearing_outlined),
+      ('speaking', 'capabilitySpeaking', Icons.record_voice_over_outlined),
+      ('writing', 'capabilityWriting', Icons.edit_outlined),
+    ];
+    CapabilityDimensionState dim(String name) => switch (name) {
+      'reading' => profile.reading,
+      'listening' => profile.listening,
+      'speaking' => profile.speaking,
+      _ => profile.writing,
+    };
+    return Column(
+      children: [
+        for (final (key, labelKey, icon) in channels)
+          _capabilityRow(context, l, key, l.text(labelKey), icon, dim(key)),
+      ],
+    );
+  }
+
+  Widget _capabilityRow(
+    BuildContext context,
+    AppLocalizations l,
+    String capability,
+    String label,
+    IconData icon,
+    CapabilityDimensionState state,
+  ) {
+    final assessment = state.effectiveAssessment;
+    final hasOverride = state.userOverride != null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: ListenColors.primary),
+          const SizedBox(width: 6),
+          SizedBox(
+            width: 48,
+            child: Text(label, style: const TextStyle(fontSize: 13)),
+          ),
+          const SizedBox(width: 8),
+          for (final value in const ['acquired', 'not_acquired'])
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: ChoiceChip(
+                label: Text(
+                  l.text(value),
+                  style: const TextStyle(fontSize: 12),
+                ),
+                selected: assessment == value,
+                visualDensity: VisualDensity.compact,
+                onSelected: widget.onCapabilityOverride == null
+                    ? null
+                    : (_) => widget.onCapabilityOverride!(
+                        capability,
+                        assessment == value ? null : value,
+                      ),
+              ),
+            ),
+          if (assessment == 'unassessed')
+            Text(
+              l.text('unassessed'),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.outline,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          if (hasOverride)
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: Tooltip(
+                message: 'User override',
+                child: Icon(
+                  Icons.person_outline,
+                  size: 14,
+                  color: Theme.of(context).colorScheme.outline,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 
   String _humanizeSource(String value) => value
       .replaceAll('_', ' ')

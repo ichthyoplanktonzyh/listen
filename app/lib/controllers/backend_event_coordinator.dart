@@ -16,6 +16,7 @@ class BackendEventCoordinator {
     required this.setStatus,
     required this.setTaskStatus,
     required this.updateWordEntry,
+    required this.updateCapabilityProfile,
   });
 
   final String? Function() currentMediaId;
@@ -30,6 +31,8 @@ class BackendEventCoordinator {
   final void Function(UserTaskStatus status) setTaskStatus;
   final void Function(String normalizedForm, LexicalEntry entry)
   updateWordEntry;
+  final void Function(String normalizedForm, LexicalCapabilityProfile profile)
+  updateCapabilityProfile;
 
   void handle(Map<String, dynamic> raw) {
     final event = BackendEvent.fromJson(raw);
@@ -57,6 +60,14 @@ class BackendEventCoordinator {
     }
     if (event is LexicalEntryChangedEvent) {
       updateWordEntry(event.normalizedForm, event.entry);
+      final profile = event.details.capabilityProfile;
+      if (profile != null) {
+        updateCapabilityProfile(event.normalizedForm, profile);
+      }
+      return;
+    }
+    if (event is LexicalCapabilityChangedEvent) {
+      _handleCapabilityChanged(event);
     }
   }
 
@@ -99,6 +110,10 @@ class BackendEventCoordinator {
     unawaited(loadSpeechEnhancements(event.trackId));
     setStatus('Sound line ready');
   }
+
+  // The full profile update is handled by LexicalEntryChangedEvent (which
+  // fires alongside this event).  This handler exists for future use.
+  void _handleCapabilityChanged(LexicalCapabilityChangedEvent event) {}
 
   void _handlePhoneticAnalysisJob(PhoneticAnalysisJobChangedEvent event) {
     if (event.trackId != currentPrimaryTrackId()) return;
