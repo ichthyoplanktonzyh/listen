@@ -157,14 +157,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('5 个不同语境'), findsOneWidget);
-    await tester.tap(find.text('暂不升级'));
+    expect(find.textContaining('heard in 5 contexts'), findsOneWidget);
+    await tester.tap(find.text('Not yet'));
     await tester.pumpAndSettle();
     expect(
       requests.last,
       'POST /v1/review/upgrade-suggestions/suggestion-1/reject',
     );
-    expect(find.textContaining('5 个不同语境'), findsNothing);
+    expect(find.textContaining('heard in 5 contexts'), findsNothing);
   });
 }
 

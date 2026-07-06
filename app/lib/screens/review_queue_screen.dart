@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../controllers/review_controller.dart';
+import '../localization.dart';
 import '../models/practice.dart';
 import '../services/api_service.dart';
 import '../state/builder.dart';
@@ -420,7 +421,10 @@ class _Finished extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Text(
-                          '“${suggestion.lexicalDisplayForm}” 已在 ${suggestion.evidenceContextCount} 个不同语境中听出，要标为“已掌握”吗？',
+                          AppLocalizations.of(context).text('listeningUpgradeSuggestion').replaceAll(
+                            '{count}',
+                            '${suggestion.evidenceContextCount}',
+                          ).replaceAll('{word}', suggestion.lexicalDisplayForm),
                         ),
                         const SizedBox(height: 12),
                         Row(
@@ -430,14 +434,14 @@ class _Finished extends StatelessWidget {
                               onPressed: state.busy
                                   ? null
                                   : () => onResolve(suggestion.id, false),
-                              child: const Text('暂不升级'),
+                              child: Text(AppLocalizations.of(context).text('deferUpgrade')),
                             ),
                             const SizedBox(width: 8),
                             FilledButton(
                               onPressed: state.busy
                                   ? null
                                   : () => onResolve(suggestion.id, true),
-                              child: const Text('确认已能听出'),
+                              child: Text(AppLocalizations.of(context).text('confirmListeningAcquired')),
                             ),
                           ],
                         ),

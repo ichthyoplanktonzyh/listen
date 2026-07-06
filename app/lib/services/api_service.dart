@@ -650,6 +650,18 @@ class LocalApi {
       (await _request('GET', '/v1/lexical-entries/$entryId'))
           as Map<String, dynamic>;
 
+  Future<Map<String, dynamic>> setCapabilityOverride(
+    String entryId,
+    String capability, {
+    String? conclusion,
+  }) async =>
+      (await _request(
+            'PUT',
+            '/v1/lexical-entries/${Uri.encodeComponent(entryId)}/capability/$capability',
+            {'conclusion': conclusion},
+          ))
+          as Map<String, dynamic>;
+
   Future<Map<String, dynamic>> updateLexicalLearningContent(
     String entryId, {
     String? userDefinition,

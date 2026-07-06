@@ -11,6 +11,7 @@ class TokenLine extends StatelessWidget {
     super.key,
     required this.cue,
     required this.profiles,
+    this.capabilityProfiles = const {},
     required this.showStyles,
     required this.onWord,
     this.onChunk,
@@ -31,6 +32,7 @@ class TokenLine extends StatelessWidget {
 
   final Cue cue;
   final Map<String, LexicalEntry> profiles;
+  final Map<String, LexicalCapabilityProfile> capabilityProfiles;
   final bool showStyles;
   final double fontSize;
   final String? fontFamily;
@@ -176,7 +178,9 @@ class TokenLine extends StatelessWidget {
         cursor += 1;
       }
       final canonical = candidate.canonicalForm;
-      final status = phraseEntries[canonical]?.entry.status;
+      final phraseDetails = phraseEntries[canonical];
+      final status = _statusFromProfile(phraseDetails?.capabilityProfile)
+          ?? phraseDetails?.entry.status;
       spans.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.baseline,
@@ -201,7 +205,7 @@ class TokenLine extends StatelessWidget {
 
   InlineSpan _tokenSpan(BuildContext context, SubtitleToken token) {
     final clickable = token.kind == 'word' && token.normalized != null;
-    final status = profiles[token.normalized]?.status;
+    final status = _effectiveDisplayStatus(token.normalized);
     final current = token.index == currentTokenIndex;
     final style = _style(context, status, current: current);
     if (!clickable) return TextSpan(text: token.text, style: style);
@@ -221,6 +225,27 @@ class TokenLine extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String? _effectiveDisplayStatus(String? normalized) {
+    if (normalized == null) return null;
+    final cap = capabilityProfiles[normalized];
+    if (cap != null) return _statusFromProfile(cap);
+    return profiles[normalized]?.status;
+  }
+
+  static String? _statusFromProfile(LexicalCapabilityProfile? cap) {
+    if (cap == null) return null;
+    final reading = cap.reading.effectiveAssessment;
+    final listening = cap.listening.effectiveAssessment;
+    if (reading == 'not_acquired') return 'unknown_meaning';
+    if (reading == 'acquired' && listening == 'not_acquired') {
+      return 'known_not_recognized';
+    }
+    if (reading == 'acquired' && listening == 'acquired') {
+      return 'known_recognized';
+    }
+    return null;
   }
 
   Color _phraseColor(BuildContext context, String? status) => switch (status) {

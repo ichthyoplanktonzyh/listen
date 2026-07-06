@@ -83,6 +83,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
       await widget.api.lookupPronunciation(entry.displayForm),
     );
     if (!mounted) return;
+    final l = AppLocalizations.of(context);
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -100,6 +101,15 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                 entry.displayForm,
                 value,
                 language: widget.language,
+              );
+              if (context.mounted) Navigator.pop(context);
+              await _load();
+            },
+            onCapabilityOverride: (capability, conclusion) async {
+              await widget.api.setCapabilityOverride(
+                entry.id,
+                capability,
+                conclusion: conclusion,
               );
               if (context.mounted) Navigator.pop(context);
               await _load();
@@ -126,7 +136,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                 await widget.api.rejectUpgradeSuggestion(suggestions.first.id);
                 if (context.mounted) Navigator.pop(context);
               },
-              child: const Text('暂不升级'),
+              child: Text(l.text('deferUpgrade')),
             ),
             FilledButton(
               onPressed: () async {
@@ -134,9 +144,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                 if (context.mounted) Navigator.pop(context);
                 await _load();
               },
-              child: Text(
-                '确认已能听出（${suggestions.first.evidenceContextCount} 个语境）',
-              ),
+              child: Text(l.text('confirmListeningAcquired')),
             ),
           ],
           TextButton.icon(

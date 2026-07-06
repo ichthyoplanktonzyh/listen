@@ -192,6 +192,8 @@ class _PlayerStageState extends State<PlayerStage> {
                                 child: TokenLine(
                                   cue: subtitleController.currentPrimaryCue!,
                                   profiles: learningController.wordEntries,
+                                  capabilityProfiles:
+                                      learningController.capabilityProfiles,
                                   phraseCandidates:
                                       learningController.phraseCandidates,
                                   phraseEntries:

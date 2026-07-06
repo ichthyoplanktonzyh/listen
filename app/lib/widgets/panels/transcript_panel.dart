@@ -14,6 +14,7 @@ class TranscriptPanel extends StatefulWidget {
     required this.scrollController,
     required this.currentCue,
     required this.wordEntries,
+    this.capabilityProfiles = const {},
     required this.showStyles,
     required this.baseColor,
     required this.onWord,
@@ -25,6 +26,7 @@ class TranscriptPanel extends StatefulWidget {
   final ScrollController scrollController;
   final Cue? currentCue;
   final Map<String, LexicalEntry> wordEntries;
+  final Map<String, LexicalCapabilityProfile> capabilityProfiles;
   final bool showStyles;
   final Color baseColor;
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
@@ -119,6 +121,7 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
                             title: TokenLine(
                               cue: cue,
                               profiles: widget.wordEntries,
+                              capabilityProfiles: widget.capabilityProfiles,
                               showStyles: widget.showStyles,
                               baseColor: effectiveBaseColor,
                               onWord: widget.onWord,

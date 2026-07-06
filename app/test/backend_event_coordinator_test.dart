@@ -52,6 +52,7 @@ class _Recorder {
       updatedForms.add(form);
       updatedEntries.add(entry);
     },
+    updateCapabilityProfile: (form, profile) {},
   );
 }
 

@@ -42,6 +42,7 @@ class SidePanel extends StatefulWidget {
     required this.onOpenWord,
     required this.onSeekCue,
     required this.onSetSelectedWordStatus,
+    required this.onSetCapabilityOverride,
     required this.onSaveSelectedLearningContent,
     required this.onObserveSelected,
     required this.onManualReviewTimeline,
@@ -79,6 +80,8 @@ class SidePanel extends StatefulWidget {
   final Future<void> Function(SubtitleToken token, Cue cue) onOpenWord;
   final Future<void> Function(Cue? cue) onSeekCue;
   final Future<void> Function(String? selected) onSetSelectedWordStatus;
+  final Future<void> Function(String capability, String? conclusion)
+  onSetCapabilityOverride;
   final Future<void> Function(String? definition, String? note)
   onSaveSelectedLearningContent;
   final Future<void> Function(bool heard) onObserveSelected;
@@ -131,6 +134,8 @@ class _SidePanelState extends State<SidePanel> {
   Future<void> _saveSelectedLearningContent(String? definition, String? note) =>
       widget.onSaveSelectedLearningContent(definition, note);
   Future<void> _observeSelected(bool heard) => widget.onObserveSelected(heard);
+  Future<void> _setCapabilityOverride(String capability, String? conclusion) =>
+      widget.onSetCapabilityOverride(capability, conclusion);
   Future<void> _openManualReviewTimeline() => widget.onManualReviewTimeline();
   Future<void> _deleteSubtitleResource(SubtitleTrack track) =>
       widget.onDeleteSubtitle(track);
@@ -235,6 +240,7 @@ class _SidePanelState extends State<SidePanel> {
                       onSource: playbackActions.playOccurrence,
                       onHeard: () => _observeSelected(true),
                       onNotHeard: () => _observeSelected(false),
+                      onCapabilityOverride: _setCapabilityOverride,
                     ),
             3 =>
               learningController.diagnosis == null
@@ -312,6 +318,7 @@ class _SidePanelState extends State<SidePanel> {
     scrollController: transcriptController,
     currentCue: subtitleController.currentPrimaryCue,
     wordEntries: learningController.wordEntries,
+    capabilityProfiles: learningController.capabilityProfiles,
     showStyles: subtitleController.statusStylesVisible,
     baseColor: settingsController.primaryColor,
     onWord: _openWord,

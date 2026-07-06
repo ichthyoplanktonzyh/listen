@@ -18,6 +18,8 @@ class BackendEvent {
         PhoneticAnalysisJobChangedEvent.fromJson(payload),
       'lexical-entry-changed' when payload is Map<String, dynamic> =>
         LexicalEntryChangedEvent.fromJson(payload),
+      'lexical-capability-changed' when payload is Map<String, dynamic> =>
+        LexicalCapabilityChangedEvent.fromJson(payload),
       _ => UnknownBackendEvent(
         name: name is String ? name : 'unknown',
         payload: payload,
@@ -139,4 +141,23 @@ class LexicalEntryChangedEvent extends BackendEvent {
   LexicalEntry get entry => details.entry;
 
   String get normalizedForm => entry.normalizedForm;
+}
+
+class LexicalCapabilityChangedEvent extends BackendEvent {
+  const LexicalCapabilityChangedEvent({
+    required this.lexicalEntryId,
+    required this.capability,
+    required this.effectiveAssessment,
+  });
+
+  factory LexicalCapabilityChangedEvent.fromJson(Map<String, dynamic> json) =>
+      LexicalCapabilityChangedEvent(
+        lexicalEntryId: json['lexical_entry_id'] as String? ?? '',
+        capability: json['capability'] as String? ?? '',
+        effectiveAssessment: json['effective_assessment'] as String? ?? '',
+      );
+
+  final String lexicalEntryId;
+  final String capability;
+  final String effectiveAssessment;
 }

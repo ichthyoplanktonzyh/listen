@@ -11,6 +11,7 @@ class LearningState {
   const LearningState({
     this.wordEntries = const {},
     this.phraseEntries = const {},
+    this.capabilityProfiles = const {},
     this.selectedLexicalDetails,
     this.selectedDictionary,
     this.selectedPronunciation,
@@ -23,6 +24,7 @@ class LearningState {
 
   final Map<String, LexicalEntry> wordEntries;
   final Map<String, LexicalEntryDetails> phraseEntries;
+  final Map<String, LexicalCapabilityProfile> capabilityProfiles;
   final LexicalEntryDetails? selectedLexicalDetails;
   final DictionaryLookupBundle? selectedDictionary;
   final WordPronunciation? selectedPronunciation;
@@ -35,6 +37,7 @@ class LearningState {
   LearningState copyWith({
     Map<String, LexicalEntry>? wordEntries,
     Map<String, LexicalEntryDetails>? phraseEntries,
+    Map<String, LexicalCapabilityProfile>? capabilityProfiles,
     Object? selectedLexicalDetails = _unset,
     Object? selectedDictionary = _unset,
     Object? selectedPronunciation = _unset,
@@ -46,6 +49,7 @@ class LearningState {
   }) => LearningState(
     wordEntries: wordEntries ?? this.wordEntries,
     phraseEntries: phraseEntries ?? this.phraseEntries,
+    capabilityProfiles: capabilityProfiles ?? this.capabilityProfiles,
     selectedLexicalDetails: identical(selectedLexicalDetails, _unset)
         ? this.selectedLexicalDetails
         : selectedLexicalDetails as LexicalEntryDetails?,
@@ -108,6 +112,8 @@ class LearningController extends ChangeNotifier {
   Map<String, LexicalEntry> get wordEntries => _store.state.wordEntries;
   Map<String, LexicalEntryDetails> get phraseEntries =>
       _store.state.phraseEntries;
+  Map<String, LexicalCapabilityProfile> get capabilityProfiles =>
+      _store.state.capabilityProfiles;
   LexicalEntryDetails? get selectedLexicalDetails =>
       _store.state.selectedLexicalDetails;
   DictionaryLookupBundle? get selectedDictionary =>
@@ -182,6 +188,14 @@ class LearningController extends ChangeNotifier {
     final entries = Map<String, LexicalEntry>.from(s.wordEntries);
     entries[lemma] = entry;
     _store.update((st) => st.copyWith(wordEntries: entries));
+  }
+
+  void updateCapabilityProfile(String normalizedForm, LexicalCapabilityProfile profile) {
+    final profiles = Map<String, LexicalCapabilityProfile>.from(
+      _store.state.capabilityProfiles,
+    );
+    profiles[normalizedForm] = profile;
+    _store.update((s) => s.copyWith(capabilityProfiles: profiles));
   }
 
   void updateSinglePhraseEntry(String canonical, LexicalEntryDetails details) {
