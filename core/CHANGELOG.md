@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-07 15:35 CST: Phase 3.4.4 Slice 1 domain 契约。新增
+  `crates/domain/src/learning_observation.rs`：`LearningObservation`（追加式身份 =
+  entry + task + source_ref + occurred_at 指纹）、ObservationTaskType / ObservationOutcome /
+  AssistanceLevel / ObservationOrigin 枚举、ADR 0017 任务→通道映射 v1 的单点定义
+  （observation_spec_for_marking / _practice / _review，Skipped 不产证据）。
+  5 个单元测试（身份不可覆盖、映射表、snake_case 契约与 round-trip）。
+
 - 2026-07-07 15:20 CST: 启动 Phase 3.4.4 Learning Evidence Channelization（Slice 0）。
   新增 ADR 0017：通道化追加式 LearningObservation（capability/task_type/assistance/
   surface_form/origin，禁止 latest-wins 身份）；任务→通道映射 v1 表；投影写入者互斥
