@@ -55,6 +55,7 @@ class SettingsController extends ChangeNotifier {
   String get soundPatternDisplayMode => _settings.soundPatternDisplayMode;
   String get phonemeRibbonStyle => _settings.phonemeRibbonStyle;
   String get learningLanguage => _settings.learningLanguage;
+  bool get familiarMaterialSuggestions => _settings.familiarMaterialSuggestions;
   Color get primaryColor => Color(_settings.primaryColor);
   Color get secondaryColor => Color(_settings.secondaryColor);
 

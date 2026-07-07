@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../models/types.dart';
 import '../../utils/format_duration.dart';
+import 'media_library_section.dart';
 
 class ListeningHome extends StatelessWidget {
   const ListeningHome({
@@ -13,6 +15,13 @@ class ListeningHome extends StatelessWidget {
     required this.onOpenVocabulary,
     required this.onOpenReview,
     required this.onOpenSettings,
+    this.mediaLibrary,
+    this.familiarSupplyEnabled = true,
+    this.onOpenLibraryEntry,
+    this.onStartExtensiveEntry,
+    this.onStartIntensiveEntry,
+    this.onSetLibraryIntent,
+    this.onToggleFamiliarSupply,
     this.recentMediaTitle,
     this.recentMediaPath,
     this.recentPosition = Duration.zero,
@@ -32,6 +41,14 @@ class ListeningHome extends StatelessWidget {
   final VoidCallback onOpenVocabulary;
   final VoidCallback onOpenReview;
   final VoidCallback onOpenSettings;
+  final List<MediaLibraryEntry>? mediaLibrary;
+  final bool familiarSupplyEnabled;
+  final void Function(MediaLibraryEntry entry)? onOpenLibraryEntry;
+  final void Function(MediaLibraryEntry entry)? onStartExtensiveEntry;
+  final void Function(MediaLibraryEntry entry)? onStartIntensiveEntry;
+  final void Function(MediaLibraryEntry entry, String? intent)?
+  onSetLibraryIntent;
+  final void Function(bool enabled)? onToggleFamiliarSupply;
   final String? recentMediaTitle;
   final String? recentMediaPath;
   final Duration recentPosition;
@@ -72,6 +89,13 @@ class ListeningHome extends StatelessWidget {
                 onOpenSubtitleResources: onOpenSubtitleResources,
                 onOpenVocabulary: onOpenVocabulary,
                 onOpenReview: onOpenReview,
+                mediaLibrary: mediaLibrary,
+                familiarSupplyEnabled: familiarSupplyEnabled,
+                onOpenLibraryEntry: onOpenLibraryEntry,
+                onStartExtensiveEntry: onStartExtensiveEntry,
+                onStartIntensiveEntry: onStartIntensiveEntry,
+                onSetLibraryIntent: onSetLibraryIntent,
+                onToggleFamiliarSupply: onToggleFamiliarSupply,
                 recentMediaTitle: recentMediaTitle,
                 recentMediaPath: recentMediaPath,
                 recentPosition: recentPosition,
@@ -180,6 +204,13 @@ class _HomeContent extends StatelessWidget {
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
     required this.onOpenReview,
+    required this.mediaLibrary,
+    required this.familiarSupplyEnabled,
+    required this.onOpenLibraryEntry,
+    required this.onStartExtensiveEntry,
+    required this.onStartIntensiveEntry,
+    required this.onSetLibraryIntent,
+    required this.onToggleFamiliarSupply,
     required this.recentMediaTitle,
     required this.recentMediaPath,
     required this.recentPosition,
@@ -199,6 +230,14 @@ class _HomeContent extends StatelessWidget {
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
   final VoidCallback onOpenReview;
+  final List<MediaLibraryEntry>? mediaLibrary;
+  final bool familiarSupplyEnabled;
+  final void Function(MediaLibraryEntry entry)? onOpenLibraryEntry;
+  final void Function(MediaLibraryEntry entry)? onStartExtensiveEntry;
+  final void Function(MediaLibraryEntry entry)? onStartIntensiveEntry;
+  final void Function(MediaLibraryEntry entry, String? intent)?
+  onSetLibraryIntent;
+  final void Function(bool enabled)? onToggleFamiliarSupply;
   final String? recentMediaTitle;
   final String? recentMediaPath;
   final Duration recentPosition;
@@ -279,6 +318,23 @@ class _HomeContent extends StatelessWidget {
                   ),
                 ],
               ),
+              if (mediaLibrary != null &&
+                  onOpenLibraryEntry != null &&
+                  onStartExtensiveEntry != null &&
+                  onStartIntensiveEntry != null &&
+                  onSetLibraryIntent != null &&
+                  onToggleFamiliarSupply != null) ...[
+                const SizedBox(height: 36),
+                MediaLibrarySection(
+                  entries: mediaLibrary,
+                  familiarSupplyEnabled: familiarSupplyEnabled,
+                  onOpen: onOpenLibraryEntry!,
+                  onStartExtensive: onStartExtensiveEntry!,
+                  onStartIntensive: onStartIntensiveEntry!,
+                  onSetIntent: onSetLibraryIntent!,
+                  onToggleFamiliarSupply: onToggleFamiliarSupply!,
+                ),
+              ],
               const SizedBox(height: 36),
               Text(
                 l.text('learningTools'),

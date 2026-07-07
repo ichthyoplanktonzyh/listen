@@ -200,6 +200,22 @@ class LocalApi {
       (await _request('GET', '/v1/subtitles/${Uri.encodeComponent(trackId)}'))
           as Map<String, dynamic>;
 
+  /// Media library for triage (Phase 3.5): every registered media with
+  /// cached fit facts, user triage intent, and familiar-material mark.
+  Future<List<dynamic>> listMediaLibrary() async =>
+      (await _request('GET', '/v1/media')) as List<dynamic>;
+
+  /// Stores (or clears, with null) the explicit triage intent for one media
+  /// and returns the refreshed library entry.
+  Future<Map<String, dynamic>> setMediaTriageIntent(
+    String mediaId,
+    String? intent,
+  ) async =>
+      (await _request('PUT', '/v1/media/${Uri.encodeComponent(mediaId)}/triage-intent', {
+            'intent': intent,
+          }))
+          as Map<String, dynamic>;
+
   /// Dual-dimension content fit for the track's media (ADR 0018). Served
   /// from the backend cache; safe to call on every resource refresh.
   Future<Map<String, dynamic>> trackContentFit(String trackId) async =>

@@ -1238,3 +1238,129 @@ class ContentDifficultyProfile {
     'input_fingerprint': inputFingerprint,
   };
 }
+
+/// Registered media as served by `GET /v1/media` (nested in
+/// [MediaLibraryEntry]).
+class MediaItem {
+  const MediaItem({
+    required this.id,
+    required this.path,
+    required this.fingerprint,
+    required this.title,
+    required this.kind,
+    required this.durationMs,
+    required this.availability,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+  });
+
+  factory MediaItem.fromJson(Map<String, dynamic> json) => MediaItem(
+    id: json['id'] as String,
+    path: json['path'] as String,
+    fingerprint: json['fingerprint'] as String,
+    title: json['title'] as String,
+    kind: json['kind'] as String,
+    durationMs: json['duration'] as int?,
+    availability: json['availability'] as String,
+    createdAtMs: json['created_at_ms'] as int,
+    updatedAtMs: json['updated_at_ms'] as int,
+  );
+
+  final String id;
+  final String path;
+  final String fingerprint;
+  final String title;
+  final String kind;
+  final int? durationMs;
+  final String availability;
+  final int createdAtMs;
+  final int updatedAtMs;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'path': path,
+    'fingerprint': fingerprint,
+    'title': title,
+    'kind': kind,
+    'duration': durationMs,
+    'availability': availability,
+    'created_at_ms': createdAtMs,
+    'updated_at_ms': updatedAtMs,
+  };
+}
+
+/// Triage queue names derived client-side from [MediaLibraryEntry] facts.
+abstract final class TriageQueue {
+  static const extensive = 'extensive';
+  static const intensive = 'intensive';
+  static const deferred = 'deferred';
+}
+
+/// One media-library row for triage (Phase 3.5 Slice 5): media plus the
+/// facts queue grouping derives from. Queues only suggest — ignoring them
+/// changes nothing about playback or learning behavior (P3/P5 red lines).
+class MediaLibraryEntry {
+  const MediaLibraryEntry({
+    required this.media,
+    required this.primaryTrackId,
+    required this.fit,
+    required this.triageIntent,
+    required this.familiarMaterial,
+  });
+
+  factory MediaLibraryEntry.fromJson(Map<String, dynamic> json) =>
+      MediaLibraryEntry(
+        media: MediaItem.fromJson(Map<String, dynamic>.from(json['media'] as Map)),
+        primaryTrackId: json['primary_track_id'] as String?,
+        fit: json['fit'] == null
+            ? null
+            : ContentDifficultyProfile.fromJson(
+                Map<String, dynamic>.from(json['fit'] as Map),
+              ),
+        triageIntent: json['triage_intent'] as String?,
+        familiarMaterial: json['familiar_material'] as bool? ?? false,
+      );
+
+  final MediaItem media;
+  final String? primaryTrackId;
+  final ContentDifficultyProfile? fit;
+
+  /// 'pin_extensive' | 'pin_intensive' | 'defer' | null.
+  final String? triageIntent;
+  final bool familiarMaterial;
+
+  /// Golden target material: readable meaning, hard decoding.
+  bool get isGoldenTarget => fit?.isIntensiveListeningTarget ?? false;
+
+  /// Derives the suggested queue (ADR 0018 decision 6, all rules
+  /// heuristic_proxy): explicit user intent wins, then the familiar-material
+  /// relisten supply (when enabled), then fit bands — golden targets go to
+  /// intensive, any too_hard dimension defers, everything else is extensive
+  /// material. Returns null when no fact supports a suggestion.
+  String? triageQueue({bool familiarSupply = true}) {
+    switch (triageIntent) {
+      case 'pin_extensive':
+        return TriageQueue.extensive;
+      case 'pin_intensive':
+        return TriageQueue.intensive;
+      case 'defer':
+        return TriageQueue.deferred;
+    }
+    if (familiarSupply && familiarMaterial) return TriageQueue.extensive;
+    final fit = this.fit;
+    if (fit == null) return null;
+    if (fit.isIntensiveListeningTarget) return TriageQueue.intensive;
+    if (fit.meaning.fit == 'too_hard' || fit.sound.fit == 'too_hard') {
+      return TriageQueue.deferred;
+    }
+    return TriageQueue.extensive;
+  }
+
+  Map<String, dynamic> toJson() => {
+    'media': media.toJson(),
+    'primary_track_id': primaryTrackId,
+    'fit': fit?.toJson(),
+    'triage_intent': triageIntent,
+    'familiar_material': familiarMaterial,
+  };
+}

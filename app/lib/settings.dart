@@ -61,6 +61,7 @@ class AppSettings {
     this.phonemeRibbonStyle = 'window',
     this.phoneticCachePolicy = 'keep_completed',
     this.learningLanguage = 'auto',
+    this.familiarMaterialSuggestions = true,
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
@@ -181,6 +182,8 @@ class AppSettings {
       phoneticCachePolicy:
           json['phonetic_cache_policy'] as String? ?? 'keep_completed',
       learningLanguage: json['learning_language'] as String? ?? 'auto',
+      familiarMaterialSuggestions:
+          json['familiar_material_suggestions'] as bool? ?? true,
     );
   }
 
@@ -239,6 +242,10 @@ class AppSettings {
   final String phonemeRibbonStyle;
   final String phoneticCachePolicy;
   final String learningLanguage;
+
+  /// Whether familiar-material marks (3.2) feed the extensive-listening
+  /// queue suggestion on the home media library (restrained, off-switchable).
+  final bool familiarMaterialSuggestions;
 
   static String get _home => Platform.environment['HOME'] ?? '';
 
@@ -330,6 +337,7 @@ class AppSettings {
         'phoneme_ribbon_style': phonemeRibbonStyle,
         'phonetic_cache_policy': phoneticCachePolicy,
         'learning_language': learningLanguage,
+        'familiar_material_suggestions': familiarMaterialSuggestions,
       }),
       flush: true,
     );
@@ -390,6 +398,7 @@ class AppSettings {
     String? phonemeRibbonStyle,
     String? phoneticCachePolicy,
     String? learningLanguage,
+    bool? familiarMaterialSuggestions,
   }) => AppSettings(
     version: version,
     rate: rate ?? this.rate,
@@ -460,6 +469,8 @@ class AppSettings {
     phonemeRibbonStyle: phonemeRibbonStyle ?? this.phonemeRibbonStyle,
     phoneticCachePolicy: phoneticCachePolicy ?? this.phoneticCachePolicy,
     learningLanguage: learningLanguage ?? this.learningLanguage,
+    familiarMaterialSuggestions:
+        familiarMaterialSuggestions ?? this.familiarMaterialSuggestions,
   );
 
   static double _number(

@@ -144,6 +144,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // Global learning totals prefetched for the no-media home surface so the
   // readiness strip is not misleadingly empty at cold start.
   SavedVocabularyCount? _savedVocabulary;
+  List<MediaLibraryEntry>? _mediaLibrary;
 
   // ── Convenience ──
   AppLocalizations get l => AppLocalizations.of(context);
@@ -384,6 +385,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final service = api;
     if (service == null) return;
     unawaited(extensiveListeningController.refreshInbox(service));
+    unawaited(_loadMediaLibrary());
     try {
       final count = await service.savedVocabularyCount(
         language: _learningLanguage,
@@ -393,6 +395,96 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // Leave the strip on its neutral placeholder when the count is
       // unavailable; the home must not fail because a summary query did.
     }
+  }
+
+  /// Media library facts for the home triage list. Failures leave the
+  /// section on its previous state: the library is a suggestion surface,
+  /// never a gate on playback or learning.
+  Future<void> _loadMediaLibrary() async {
+    final service = api;
+    if (service == null) return;
+    try {
+      final entries = (await service.listMediaLibrary())
+          .whereType<Map>()
+          .map(
+            (value) =>
+                MediaLibraryEntry.fromJson(Map<String, dynamic>.from(value)),
+          )
+          .toList();
+      if (mounted) setState(() => _mediaLibrary = entries);
+    } catch (_) {
+      // Keep whatever the section had; the home must not fail on a summary.
+    }
+  }
+
+  /// Opens a library row like any other media — triage never changes what
+  /// opening a file does.
+  Future<void> _openLibraryEntry(MediaLibraryEntry entry) async {
+    if (!File(entry.media.path).existsSync()) {
+      playerController.setStatus(l.text('mediaFileMissing'));
+      return;
+    }
+    await mediaSession.openMediaPath(entry.media.path);
+  }
+
+  /// One-click extensive listening: open the media, then start the ambient
+  /// session with the loaded primary track.
+  Future<void> _startExtensiveFromLibrary(MediaLibraryEntry entry) async {
+    if (!File(entry.media.path).existsSync()) {
+      playerController.setStatus(l.text('mediaFileMissing'));
+      return;
+    }
+    await mediaSession.openMediaPath(entry.media.path);
+    if (!mounted || extensiveListeningController.active) return;
+    final started = await extensiveListeningController.startSession(
+      api: api,
+      mediaId: playerController.mediaId,
+      trackId: subtitleController.primaryTrack?.id ?? entry.primaryTrackId,
+    );
+    if (started && mounted) {
+      playerController.setStatus('Extensive listening started');
+    }
+  }
+
+  /// One-click intensive listening: open the media and land on the practice
+  /// panel where the intensive workflow lives.
+  Future<void> _startIntensiveFromLibrary(MediaLibraryEntry entry) async {
+    if (!File(entry.media.path).existsSync()) {
+      playerController.setStatus(l.text('mediaFileMissing'));
+      return;
+    }
+    await mediaSession.openMediaPath(entry.media.path);
+    if (mounted) learningController.selectSidePanel(4);
+  }
+
+  Future<void> _setLibraryTriageIntent(
+    MediaLibraryEntry entry,
+    String? intent,
+  ) async {
+    final service = api;
+    if (service == null) return;
+    try {
+      final updated = MediaLibraryEntry.fromJson(
+        await service.setMediaTriageIntent(entry.media.id, intent),
+      );
+      if (!mounted) return;
+      setState(() {
+        final library = _mediaLibrary;
+        if (library == null) return;
+        final index = library.indexWhere(
+          (item) => item.media.id == updated.media.id,
+        );
+        if (index >= 0) library[index] = updated;
+      });
+    } catch (error) {
+      playerController.setStatus('Could not save triage intent: $error');
+    }
+  }
+
+  Future<void> _toggleFamiliarSupply(bool enabled) async {
+    await settingsController.update(
+      settingsController.settings.copyWith(familiarMaterialSuggestions: enabled),
+    );
   }
 
   /// Reopen the most recently played media from the home continue entry. The
@@ -1780,6 +1872,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                     unawaited(_openReviewQueue()),
                                 onOpenSettings: () =>
                                     unawaited(_openSettings()),
+                                mediaLibrary: _mediaLibrary,
+                                familiarSupplyEnabled: settingsController
+                                    .familiarMaterialSuggestions,
+                                onOpenLibraryEntry: (entry) =>
+                                    unawaited(_openLibraryEntry(entry)),
+                                onStartExtensiveEntry: (entry) => unawaited(
+                                  _startExtensiveFromLibrary(entry),
+                                ),
+                                onStartIntensiveEntry: (entry) => unawaited(
+                                  _startIntensiveFromLibrary(entry),
+                                ),
+                                onSetLibraryIntent: (entry, intent) => unawaited(
+                                  _setLibraryTriageIntent(entry, intent),
+                                ),
+                                onToggleFamiliarSupply: (enabled) =>
+                                    unawaited(_toggleFamiliarSupply(enabled)),
                                 recentMediaTitle:
                                     settingsController.lastMediaTitle.isEmpty
                                     ? null
