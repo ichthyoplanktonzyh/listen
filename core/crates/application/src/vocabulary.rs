@@ -76,6 +76,8 @@ impl AppServices {
                         conclusion: proj.conclusion,
                         source,
                         algorithm_version: LEGACY_STATUS_COMPAT_ALGORITHM_VERSION.into(),
+                        confidence: None,
+                        evidence_as_of_ms: None,
                         updated_at_ms: changed_at_ms,
                     }),
                     changed_at_ms,

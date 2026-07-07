@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-07 13:10 CST: `CapabilityProjection` 预留分级能力 seam 字段（精化评审 §4.1）：
+  `confidence: Option<f32>`（0.0..=1.0 结论强度）与 `evidence_as_of_ms: Option<u64>`
+  （投影所依据证据窗口截止时间），serde default + None 不序列化，旧 JSON/DB 行/资产包
+  完全兼容；真证据投影算法上线前保持 None。受 f32 影响，capability 结构链
+  （CapabilityProjection/DimensionState/Profile/History、VocabularyAssetBundle、
+  LexicalEntryDetails）从 Eq 降为 PartialEq。OpenAPI CapabilityProjection schema 增加
+  两个 optional 属性。Flutter 不改：字段为 None 时线上 JSON 形状不变，Dart fromJson
+  对未知键安全。新增 serde 兼容性测试。验证：`cargo test --workspace` 全部通过、
+  `cargo clippy` 无新增警告；`./scripts/validate-contracts.sh` 的 4 个 CJK 分词失败为
+  本机缺 jieba 的既有环境问题，与本变更无关（已在无改动树上复现确认）。
+
 - 2026-07-07 12:40 CST: 修复 capability projection 来源标注失真（精化评审 §5.1）。
   `sync_capability_from_legacy_status` 增加 source 参数：外部词表导入
   （`import_external_vocabulary`）写 `Import`，legacy status 写路径的实时兼容同步写

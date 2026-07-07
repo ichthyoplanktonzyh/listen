@@ -2412,6 +2412,11 @@ components:
         conclusion: { type: string, enum: [not_acquired, acquired] }
         source: { type: string, enum: [legacy_learning_status_migration, evidence_projection, import] }
         algorithm_version: { type: string }
+        # Reserved seams (ADR 0015 refinement, 2026-07-07): graded conclusion
+        # strength and evidence window end. Absent until a real
+        # evidence-projection algorithm writes them.
+        confidence: { type: number, format: float, minimum: 0, maximum: 1 }
+        evidence_as_of_ms: { type: integer }
         updated_at_ms: { type: integer }
     CapabilityOverride:
       type: object

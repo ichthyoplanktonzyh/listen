@@ -5,7 +5,7 @@ use crate::{
     LexicalObservation, LexicalOccurrence, LexicalStatusHistory, PhoneticFindingFeedback,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VocabularyAssetBundle {
     pub version: u16,
     pub exported_at_ms: u64,

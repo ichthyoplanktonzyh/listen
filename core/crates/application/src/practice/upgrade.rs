@@ -229,6 +229,8 @@ impl AppServices {
                 conclusion: CapabilityConclusion::Acquired,
                 source: CapabilityProjectionSource::EvidenceProjection,
                 algorithm_version: UPGRADE_EVIDENCE_CLASS.into(),
+                confidence: None,
+                evidence_as_of_ms: None,
                 updated_at_ms: now,
             }),
             now,

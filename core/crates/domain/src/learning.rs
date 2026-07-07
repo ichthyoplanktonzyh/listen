@@ -154,7 +154,7 @@ pub struct LexicalObservation {
     pub created_at_ms: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LexicalEntryDetails {
     pub entry: LexicalEntry,
     pub history: Vec<LexicalStatusHistory>,

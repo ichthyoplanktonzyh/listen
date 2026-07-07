@@ -32,6 +32,8 @@ fn capability_projection_and_override_round_trip_without_losing_evidence_state()
             conclusion: CapabilityConclusion::Acquired,
             source: CapabilityProjectionSource::EvidenceProjection,
             algorithm_version: "test-projection-v1".into(),
+            confidence: None,
+            evidence_as_of_ms: None,
             updated_at_ms: 10,
         }),
         10,
@@ -45,6 +47,8 @@ fn capability_projection_and_override_round_trip_without_losing_evidence_state()
             conclusion: CapabilityConclusion::NotAcquired,
             source: CapabilityProjectionSource::EvidenceProjection,
             algorithm_version: "test-projection-v1".into(),
+            confidence: None,
+            evidence_as_of_ms: None,
             updated_at_ms: 11,
         }),
         11,
@@ -629,6 +633,8 @@ fn imported_projection_cannot_overwrite_local_user_override() {
                 conclusion: CapabilityConclusion::NotAcquired,
                 source: CapabilityProjectionSource::LegacyLearningStatusMigration,
                 algorithm_version: "attacker-v1".into(),
+                confidence: None,
+                evidence_as_of_ms: None,
                 updated_at_ms: u64::MAX,
             });
         }
