@@ -1,0 +1,105 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/localization.dart';
+import 'package:llplayer_next/models/types.dart';
+import 'package:llplayer_next/widgets/panels/content_fit_card.dart';
+
+ContentDifficultyProfile _profile({
+  String meaningFit = 'comprehensible',
+  String soundFit = 'challenging',
+  double assessedTokenRatio = 0.95,
+  String evidenceGrade = 'initial_estimate',
+}) => ContentDifficultyProfile.fromJson({
+  'subject_kind': 'media',
+  'subject_id': 'media-1',
+  'language': 'en',
+  'meaning': {
+    'fit': meaningFit,
+    'signals': [
+      {'kind': 'unknown_meaning_density', 'value': 0.03, 'decisive': true},
+      {'kind': 'unassessed_density', 'value': 0.02, 'decisive': true},
+    ],
+  },
+  'sound': {
+    'fit': soundFit,
+    'signals': [
+      {
+        'kind': 'known_not_recognized_density',
+        'value': 0.06,
+        'decisive': true,
+      },
+      {'kind': 'speech_rate_wpm', 'value': 152.0, 'decisive': false},
+    ],
+  },
+  'assessed_token_ratio': assessedTokenRatio,
+  'evidence_grade': evidenceGrade,
+  'algorithm_version': 'content-fit-v1',
+  'computed_at_ms': 1700000000000,
+  'input_fingerprint': 'fp',
+});
+
+Widget _host(ContentDifficultyProfile profile) => MaterialApp(
+  locale: const Locale('en'),
+  localizationsDelegates: const [AppLocalizations.delegate],
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(body: ContentFitCard(profile: profile)),
+);
+
+void main() {
+  testWidgets('renders both dimension bands and the golden-target note', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(_profile()));
+    expect(find.text('Content fit'), findsOneWidget);
+    expect(find.text('Comfortable'), findsOneWidget);
+    expect(find.text('Challenging'), findsOneWidget);
+    // meaning comprehensible x sound challenging = intensive target
+    expect(
+      find.textContaining('good intensive listening material'),
+      findsOneWidget,
+    );
+    expect(find.text('Initial estimate'), findsOneWidget);
+  });
+
+  testWidgets('hides the golden-target note when sound is easy', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(_profile(soundFit: 'too_easy')));
+    expect(
+      find.textContaining('good intensive listening material'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('shows the honest-degradation notice on a thin profile', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(_profile(assessedTokenRatio: 0.2)));
+    expect(find.textContaining('conservative guess'), findsOneWidget);
+    // Bands stay visible: fit is never hidden, only reframed.
+    expect(find.text('Comfortable'), findsOneWidget);
+  });
+
+  testWidgets('detail dialog explains the bands from signals', (tester) async {
+    await tester.pumpWidget(_host(_profile()));
+    await tester.tap(find.byIcon(Icons.info_outline));
+    await tester.pumpAndSettle();
+    expect(find.text('Why this rating'), findsOneWidget);
+    expect(find.text('Known but not yet caught by ear'), findsOneWidget);
+    expect(find.text('6.0%'), findsOneWidget);
+    expect(find.text('Speech rate'), findsOneWidget);
+    expect(find.text('152'), findsOneWidget);
+    // decisive markers appear only for band-driving signals
+    expect(find.text('Drove the rating'), findsNWidgets(3));
+  });
+
+  testWidgets('calibrated grade replaces the initial-estimate label', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(_profile(evidenceGrade: 'usage_calibrated')),
+    );
+    expect(find.text('Calibrated by your usage'), findsOneWidget);
+    expect(find.text('Initial estimate'), findsNothing);
+  });
+}

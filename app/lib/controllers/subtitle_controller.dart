@@ -44,6 +44,7 @@ class SubtitleState {
     this.phoneticAnalysisBySentence = const {},
     this.currentDetectedPhone,
     this.currentChunkIndex,
+    this.contentFit,
   });
 
   final SubtitleTrack? primaryTrack;
@@ -80,6 +81,7 @@ class SubtitleState {
   final Map<String, PhoneticAnalysis> phoneticAnalysisBySentence;
   final DetectedPhone? currentDetectedPhone;
   final int? currentChunkIndex;
+  final ContentDifficultyProfile? contentFit;
 
   SubtitleState copyWith({
     Object? primaryTrack = _unset,
@@ -116,6 +118,7 @@ class SubtitleState {
     Map<String, PhoneticAnalysis>? phoneticAnalysisBySentence,
     Object? currentDetectedPhone = _unset,
     Object? currentChunkIndex = _unset,
+    Object? contentFit = _unset,
   }) => SubtitleState(
     primaryTrack: identical(primaryTrack, _unset)
         ? this.primaryTrack
@@ -179,6 +182,9 @@ class SubtitleState {
     currentChunkIndex: identical(currentChunkIndex, _unset)
         ? this.currentChunkIndex
         : currentChunkIndex as int?,
+    contentFit: identical(contentFit, _unset)
+        ? this.contentFit
+        : contentFit as ContentDifficultyProfile?,
   );
 
   TimelineCursor get primaryCursor => TimelineCursor(
@@ -395,6 +401,7 @@ class SubtitleController extends ChangeNotifier {
       phoneticAnalysisBySentence: const {},
       currentDetectedPhone: null,
       currentChunkIndex: null,
+      contentFit: null,
     ),
   );
 
@@ -416,6 +423,11 @@ class SubtitleController extends ChangeNotifier {
 
   void setTimelineResourceError(String error) =>
       _store.update((s) => s.copyWith(timelineResourceError: error));
+
+  ContentDifficultyProfile? get contentFit => _store.state.contentFit;
+
+  void setContentFit(ContentDifficultyProfile? profile) =>
+      _store.update((s) => s.copyWith(contentFit: profile));
 
   void clearTimelineResource() => _store.update(
     (s) => s.copyWith(

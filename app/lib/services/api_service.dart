@@ -200,6 +200,15 @@ class LocalApi {
       (await _request('GET', '/v1/subtitles/${Uri.encodeComponent(trackId)}'))
           as Map<String, dynamic>;
 
+  /// Dual-dimension content fit for the track's media (ADR 0018). Served
+  /// from the backend cache; safe to call on every resource refresh.
+  Future<Map<String, dynamic>> trackContentFit(String trackId) async =>
+      (await _request(
+            'GET',
+            '/v1/subtitles/${Uri.encodeComponent(trackId)}/content-fit',
+          ))
+          as Map<String, dynamic>;
+
   Future<Map<String, dynamic>> archiveSubtitle(String trackId) async =>
       (await _request(
             'POST',

@@ -1112,3 +1112,129 @@ class PhoneticFinding {
     'status': status,
   };
 }
+
+/// One explainability datum behind a content-fit band (ADR 0018). `decisive`
+/// marks the signals that selected or escalated the band; the rest are
+/// informational context.
+class FitSignal {
+  const FitSignal({
+    required this.kind,
+    required this.value,
+    required this.decisive,
+  });
+
+  factory FitSignal.fromJson(Map<String, dynamic> json) => FitSignal(
+    kind: json['kind'] as String,
+    value: (json['value'] as num).toDouble(),
+    decisive: json['decisive'] as bool? ?? false,
+  );
+
+  final String kind;
+  final double value;
+  final bool decisive;
+
+  Map<String, dynamic> toJson() => {
+    'kind': kind,
+    'value': value,
+    'decisive': decisive,
+  };
+}
+
+class DifficultyDimension {
+  const DifficultyDimension({required this.fit, required this.signals});
+
+  factory DifficultyDimension.fromJson(Map<String, dynamic> json) =>
+      DifficultyDimension(
+        fit: json['fit'] as String,
+        signals: (json['signals'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((value) => FitSignal.fromJson(Map<String, dynamic>.from(value)))
+            .toList(),
+      );
+
+  final String fit;
+  final List<FitSignal> signals;
+
+  List<FitSignal> get decisiveSignals =>
+      signals.where((signal) => signal.decisive).toList();
+
+  Map<String, dynamic> toJson() => {
+    'fit': fit,
+    'signals': signals.map((signal) => signal.toJson()).toList(),
+  };
+}
+
+/// Media-level dual-dimension content fit (ADR 0018). Bands are expectation
+/// management, never gates: the UI may render them but must not hide, lock,
+/// or discourage any material because of them.
+class ContentDifficultyProfile {
+  const ContentDifficultyProfile({
+    required this.subjectKind,
+    required this.subjectId,
+    required this.language,
+    required this.meaning,
+    required this.sound,
+    required this.assessedTokenRatio,
+    required this.evidenceGrade,
+    required this.algorithmVersion,
+    required this.computedAtMs,
+    required this.inputFingerprint,
+  });
+
+  factory ContentDifficultyProfile.fromJson(Map<String, dynamic> json) =>
+      ContentDifficultyProfile(
+        subjectKind: json['subject_kind'] as String,
+        subjectId: json['subject_id'] as String,
+        language: json['language'] as String,
+        meaning: DifficultyDimension.fromJson(
+          Map<String, dynamic>.from(json['meaning'] as Map),
+        ),
+        sound: DifficultyDimension.fromJson(
+          Map<String, dynamic>.from(json['sound'] as Map),
+        ),
+        assessedTokenRatio: (json['assessed_token_ratio'] as num).toDouble(),
+        evidenceGrade: json['evidence_grade'] as String,
+        algorithmVersion: json['algorithm_version'] as String,
+        computedAtMs: json['computed_at_ms'] as int,
+        inputFingerprint: json['input_fingerprint'] as String,
+      );
+
+  final String subjectKind;
+  final String subjectId;
+  final String language;
+  final DifficultyDimension meaning;
+  final DifficultyDimension sound;
+  final double assessedTokenRatio;
+  final String evidenceGrade;
+  final String algorithmVersion;
+  final int computedAtMs;
+  final String inputFingerprint;
+
+  /// Mirrors the backend honesty threshold (MIN_ASSESSED_TOKEN_RATIO): below
+  /// it the bands are a conservative guess and the degraded-estimate state
+  /// must be shown instead of confident copy.
+  bool get hasSufficientVocabularyProfile => assessedTokenRatio >= 0.5;
+
+  bool get usageCalibrated => evidenceGrade == 'usage_calibrated';
+
+  /// Golden target material: meaning is accessible but decoding is not
+  /// (meaning comprehensible-or-easier, sound challenging-or-harder).
+  bool get isIntensiveListeningTarget {
+    const easier = {'too_easy', 'comprehensible'};
+    const harder = {'challenging', 'too_hard'};
+    return easier.contains(meaning.fit) && harder.contains(sound.fit);
+  }
+
+  Map<String, dynamic> toJson() => {
+    'subject_kind': subjectKind,
+    'subject_id': subjectId,
+    'language': language,
+    'meaning': meaning.toJson(),
+    'sound': sound.toJson(),
+    'assessed_token_ratio': assessedTokenRatio,
+    'evidence_grade': evidenceGrade,
+    'algorithm_version': algorithmVersion,
+    'computed_at_ms': computedAtMs,
+    'input_fingerprint': inputFingerprint,
+  };
+}

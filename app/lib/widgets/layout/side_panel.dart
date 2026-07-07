@@ -329,6 +329,7 @@ class _SidePanelState extends State<SidePanel> {
   );
 
   Widget _subtitleResources() => SubtitleResourceManagerPanel(
+    contentFit: subtitleController.contentFit,
     mediaId: playerController.mediaId,
     resources: subtitleController.subtitleResources,
     capabilities: subtitleController.subtitleResourceCapabilities,

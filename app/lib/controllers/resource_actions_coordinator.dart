@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:file_selector/file_selector.dart';
 
 import '../models/timeline.dart';
+import '../models/types.dart';
 import '../services/api_service.dart';
 import 'player_controller.dart';
 import 'speech_enhancement_workflow_controller.dart';
@@ -64,6 +65,24 @@ class ResourceActionsCoordinator {
     );
     if (!isMounted() || subtitle.primaryTrack?.id != trackId) return;
     applyTimelineResource(result);
+    await loadContentFit(trackId);
+  }
+
+  /// Content fit is decoration, never a gate (ADR 0018): failures clear the
+  /// card silently instead of surfacing as a resource error.
+  Future<void> loadContentFit(String trackId) async {
+    final service = getApi();
+    if (service == null) return;
+    ContentDifficultyProfile? profile;
+    try {
+      profile = ContentDifficultyProfile.fromJson(
+        await service.trackContentFit(trackId),
+      );
+    } catch (_) {
+      profile = null;
+    }
+    if (!isMounted() || subtitle.primaryTrack?.id != trackId) return;
+    subtitle.setContentFit(profile);
   }
 
   /// Snapshot of the currently-loaded timeline resource state; also used by

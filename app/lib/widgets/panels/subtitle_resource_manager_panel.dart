@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/timeline.dart';
+import '../../models/types.dart';
 import '../../theme/listen_theme.dart';
+import 'content_fit_card.dart';
 import 'timeline_resource_summary_panel.dart';
 
 class SubtitleResourceManagerPanel extends StatelessWidget {
   const SubtitleResourceManagerPanel({
     super.key,
     required this.mediaId,
+    this.contentFit,
     required this.resources,
     required this.capabilities,
     required this.activeTrack,
@@ -41,6 +44,7 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
   });
 
   final String? mediaId;
+  final ContentDifficultyProfile? contentFit;
   final List<SubtitleTrack> resources;
   final Map<String, SubtitleResourceCapabilities> capabilities;
   final SubtitleTrack? activeTrack;
@@ -123,6 +127,11 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
               ],
             ),
           ),
+          if (contentFit != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: ContentFitCard(profile: contentFit!),
+            ),
           Expanded(
             child: mediaId == null
                 ? Center(child: Text(l.text('openMediaForSubtitles')))

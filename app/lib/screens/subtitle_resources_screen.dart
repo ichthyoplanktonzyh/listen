@@ -83,6 +83,7 @@ class _SubtitleResourcesScreenState extends State<SubtitleResourcesScreen> {
       ),
       body: SubtitleResourceManagerPanel(
         mediaId: widget.playerController.mediaId,
+        contentFit: widget.subtitleController.contentFit,
         resources: widget.subtitleController.subtitleResources,
         capabilities: widget.subtitleController.subtitleResourceCapabilities,
         activeTrack: widget.subtitleController.primaryTrack,
