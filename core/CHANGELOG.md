@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-07 15:20 CST: 启动 Phase 3.4.4 Learning Evidence Channelization（Slice 0）。
+  新增 ADR 0017：通道化追加式 LearningObservation（capability/task_type/assistance/
+  surface_form/origin，禁止 latest-wins 身份）；任务→通道映射 v1 表；投影写入者互斥
+  （upgrade 确认声明为过渡直写）；legacy LexicalObservation 以 legacy_backfill 来源回填；
+  资产包 additive 携带 observation。新增 3.4.4-PLAN（Slice 0-4，明确 Non-Goals：不做
+  投影算法、不迁移 diagnosis、不加 API/UI）。占用 schema v23,3.4.2 迁移号协调至 v24。
+  STATE.md 同步。
+
 - 2026-07-07 13:10 CST: `CapabilityProjection` 预留分级能力 seam 字段（精化评审 §4.1）：
   `confidence: Option<f32>`（0.0..=1.0 结论强度）与 `evidence_as_of_ms: Option<u64>`
   （投影所依据证据窗口截止时间），serde default + None 不序列化，旧 JSON/DB 行/资产包

@@ -264,8 +264,8 @@ last_updated: "2026-07-07T12:00:00.000+08:00"
 1. Phase 3.4.1 已完成（Slice 0-6）。恢复 Phase 3.4/3.35 手工 QA，重新基线化新能力 UI。
 2. 完成 Phase 3.3 真实媒体 30 分钟泛听 QA 并收口。
 3. Phase 3.4.2 已启动（Slice 0-1 完成，独立分支）；3.4.3 待排期。
-4. 3.5 启动前置：证据层 slice（observation 通道化 + surface_form + 投影写入者互斥，
-   见共享上下文 §14）；3.6 启动前置：sense 身份 spike。
+4. Phase 3.4.4 证据层已启动（ADR 0017，3.5 前置）：通道化追加式 LearningObservation +
+   四条写入路径接线；3.6 启动前置：sense 身份 spike。
 5. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
 6. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）；
