@@ -304,6 +304,8 @@ fn remap_lltimeline_ids_rewrites_rhythm_word_acoustic_cues_artifact() {
         rhythm_frames: Vec::new(),
         chunk_timelines: Vec::new(),
         active_chunk_timeline_id: None,
+        sense_group_analyses: Vec::new(),
+        active_sense_group_analysis_id: None,
         artifacts: vec![LLTimelineArtifact {
             kind: "rhythm_word_acoustic_cues".into(),
             provider_id: Some("fixture".into()),

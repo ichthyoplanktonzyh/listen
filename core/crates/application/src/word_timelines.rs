@@ -425,6 +425,8 @@ impl AppServices {
             rhythm_frames,
             chunk_timelines,
             active_chunk_timeline_id,
+            sense_group_analyses: vec![],
+            active_sense_group_analysis_id: None,
             artifacts,
         })
     }
