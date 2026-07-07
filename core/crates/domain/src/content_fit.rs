@@ -11,10 +11,19 @@
 //! [`CONTENT_FIT_ALGORITHM_VERSION`].
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::LanguageCode;
 
 pub const CONTENT_FIT_ALGORITHM_VERSION: &str = "content-fit-v1";
+
+/// Stable fingerprint over the canonical input-identity string composed by
+/// the computation service (timeline identities + vocabulary watermark +
+/// algorithm version). Same inputs must yield the same fingerprint so cached
+/// profiles can be reused; any component change must change it.
+pub fn content_fit_fingerprint(canonical_input: &str) -> String {
+    hex::encode(Sha256::digest(format!("content-fit:{canonical_input}")))
+}
 
 /// Meaning coverage bands. Anchors: ~98% coverage for unassisted reading
 /// comprehension (Hu & Nation 2000; Nation 2006), ~95% for adequate listening

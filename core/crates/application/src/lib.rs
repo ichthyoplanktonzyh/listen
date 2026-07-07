@@ -5,6 +5,7 @@ use domain::*;
 use serde::Serialize;
 
 mod chunks;
+mod content_fit;
 mod diagnosis;
 mod dictionary;
 mod dto;

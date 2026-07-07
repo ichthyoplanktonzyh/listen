@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- 2026-07-07 20:20 CST: Phase 3.5 Slice 2 application fit 计算服务。新增
+  `crates/application/src/content_fit.rs`:`compute_content_fit_for_track` 从
+  `export_lltimeline_document` 单点组装输入,词义知识经 `LexicalEntry::status`
+  (= `legacy_status_view` 保守折叠视图,override 已折入)读取;transcript word token
+  经 `normalize_lexical_form` 归一(空归一 token 排除出分子分母)后批量查询;信号:
+  unknown/unassessed/KNR 密度、语速(仅句内 speech time,排除句间静默)、弱读/压缩
+  密度(rhythm frames 派生自 active word timeline,缺失则省略)、平均 chunk 长度;
+  `input_fingerprint` = 算法版本 + track 指纹 + active word/chunk timeline 身份 +
+  词汇水位(条目数 + max learning_updated_at)的 SHA-256(domain 新增
+  `content_fit_fingerprint` 助手)。测试:语速排除句间空隙/零时长单测 2 项;sqlite
+  集成 4 项(双维密度与档位、快语速升档且 rhythm 信号在场、指纹稳定性与词汇变更
+  失效、语言缺失/无 word token 校验错误)。验证:workspace 418 passed / 0 failed,
+  touched crates clippy 无新增告警。
+
 - 2026-07-07 19:40 CST: Phase 3.5 Slice 1 domain 双维难度契约。新增
   `crates/domain/src/content_fit.rs`:`ContentDifficultyProfile` v2(meaning/sound 双
   `DifficultyDimension` + 结构化 `FitSignal`(kind/value/decisive)+
