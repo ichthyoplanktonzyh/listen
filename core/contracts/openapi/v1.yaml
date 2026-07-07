@@ -23,6 +23,22 @@ paths:
               schema:
                 $ref: "#/components/schemas/Health"
   /v1/media:
+    get:
+      operationId: listMediaLibrary
+      responses:
+        "200":
+          description: >
+            Media library for triage (Phase 3.5): every registered media with
+            cached content fit, user triage intent, and familiar-material
+            mark. Queue grouping is derived client-side; nothing here gates
+            access to any media.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MediaLibraryEntry" }
+        default:
+          $ref: "#/components/responses/Error"
     post:
       operationId: registerMedia
       requestBody:
@@ -38,6 +54,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MediaItem"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/media/{media_id}/triage-intent:
+    parameters:
+      - $ref: "#/components/parameters/MediaId"
+    put:
+      operationId: setMediaTriageIntent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetTriageIntentRequest"
+      responses:
+        "200":
+          description: Updated library entry after storing or clearing intent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaLibraryEntry"
         default:
           $ref: "#/components/responses/Error"
   /v1/lltimeline/import:
@@ -1481,6 +1517,31 @@ components:
         availability: { enum: [available, missing, archived] }
         created_at_ms: { type: integer, minimum: 0 }
         updated_at_ms: { type: integer, minimum: 0 }
+    MediaLibraryEntry:
+      type: object
+      required: [media, primary_track_id, fit, triage_intent, familiar_material]
+      properties:
+        media: { $ref: "#/components/schemas/MediaItem" }
+        # Track the fit was resolved from (first available track with a
+        # language); also the natural track for one-click session starts.
+        primary_track_id: { type: [string, "null"] }
+        fit:
+          oneOf:
+            - $ref: "#/components/schemas/ContentDifficultyProfile"
+            - type: "null"
+        # Explicit user judgment; outranks fit-derived queue suggestions.
+        triage_intent:
+          type: [string, "null"]
+          enum: [pin_extensive, pin_intensive, defer, null]
+        familiar_material: { type: boolean }
+    SetTriageIntentRequest:
+      type: object
+      required: [intent]
+      properties:
+        # null clears the stored intent.
+        intent:
+          type: [string, "null"]
+          enum: [pin_extensive, pin_intensive, defer, null]
     Progress:
       type: object
       required: [position_ms]

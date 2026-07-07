@@ -22,6 +22,7 @@ use dictionary_provider::{
 use domain::{
     LanguageCode, LearningEvent, LearningStatus, LexicalEntryId, ListeningInboxItem,
     ListeningInboxItemId, ListeningInboxStatus, MediaAvailability, MediaId, MediaKind,
+    MediaTriageIntent,
     PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeSession, PracticeSessionId,
     ReviewItem, ReviewItemId, SubtitleSentenceId, SubtitleTrackId, UpgradeSuggestion,
     UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle,
@@ -117,7 +118,11 @@ impl ApiState {
 
 pub fn router(state: ApiState) -> Router {
     let protected = Router::new()
-        .route("/v1/media", post(register_media))
+        .route("/v1/media", post(register_media).get(list_media_library))
+        .route(
+            "/v1/media/{media_id}/triage-intent",
+            put(set_media_triage_intent),
+        )
         .route("/v1/lltimeline/import", post(import_lltimeline))
         .route("/v1/media/{media_id}", get(read_media))
         .route(

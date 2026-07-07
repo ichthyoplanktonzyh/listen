@@ -72,6 +72,21 @@ impl InputFit {
     }
 }
 
+/// Explicit user triage intent for one media (ADR 0018 decision 6). Intent is
+/// durable user judgment, not derived state: it always outranks fit-derived
+/// queue suggestions but never blocks anything — ignoring triage entirely
+/// leaves every feature behaving identically (P3/P5 red lines).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MediaTriageIntent {
+    /// Keep this media in the extensive-listening queue.
+    PinExtensive,
+    /// Keep this media in the intensive-listening target list.
+    PinIntensive,
+    /// Set this media aside for now (暂缓区).
+    Defer,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FitEvidenceGrade {

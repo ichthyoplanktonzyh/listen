@@ -7,7 +7,9 @@ use rusqlite::{Connection, params};
 
 use super::PersistenceError;
 
-pub const MIGRATION_VERSION: u32 = 24;
+// v25 is reserved by Phase 3.4.2 (independent branch); this repository jumps
+// 24 -> 26 per the "later lander renumbers" rule recorded in the 3.5 plan.
+pub const MIGRATION_VERSION: u32 = 26;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -168,6 +170,14 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
             "../migrations/0024_content_difficulty_profiles.sql"
         ))?;
         tx.pragma_update(None, "user_version", 24)?;
+        tx.commit()?;
+    }
+    // The v25 slot belongs to Phase 3.4.2 and must be inserted above this
+    // block when that branch lands.
+    if current < 26 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0026_media_triage_intents.sql"))?;
+        tx.pragma_update(None, "user_version", 26)?;
         tx.commit()?;
     }
     Ok(())

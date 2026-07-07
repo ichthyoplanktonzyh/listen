@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- 2026-07-08 07:55 CST: Phase 3.5 Slice 5 三队列分拣 + 首页媒体库列表。后端:
+  `GET /v1/media` 媒体库读模型(每个媒体 + primary 语言轨的缓存 fit +
+  用户分拣意图 + 3.2 熟料标记;逐媒体 fit 失败静默降级为无徽标不掉行)、
+  `PUT /v1/media/{media_id}/triage-intent` 持久化 pin 泛听 / pin 精听 / 暂缓
+  (null 清除);迁移 v26 `media_triage_intents`(v25 槽位留给 3.4.2,
+  "后落地方顺延"规则记录在迁移文件与 migrations.rs 注释);
+  `MediaRepository` 增 list/意图三方法,`LearningEventRepository` 增
+  `list_event_subject_ids`(熟料媒体查询);openapi 同步
+  (MediaLibraryEntry/SetTriageIntentRequest)。队列本身保持派生视图
+  (ADR 0018 决策 6):派生规则放客户端展示层(与 isIntensiveListeningTarget
+  同先例),服务端只存意图、只供事实。Flutter:首页"开始听"下方新增媒体库列表
+  (`media_library_section.dart`),按 精听靶单 / 泛听队列 / 暂缓区 / 未分级 分组,
+  黄金靶置顶并挂"精听靶"徽标,行内双维 fit mini chips 复用 fit_* 档位语汇;
+  派生阶梯:用户意图 > 熟料回听供给(设置可关,`familiar_material_suggestions`,
+  默认开、徽标克制)> 黄金靶 → 精听 > 任一维 too_hard → 暂缓 > 其余泛听,无事实
+  不建议;行点击 = 普通打开(红线:完全无视分拣行为不变),一键泛听(打开 + 起
+  extensive session)/ 一键精听(打开 + 落 practice 面板)。测试:persistence 4 项
+  (意图 roundtrip/列表事实/熟料回流/校验+返回)、api-http 端点 1 项(列表含 fit +
+  意图存取清除)、Dart contract fixture 7 项(wire shape/容错/round-trip/队列派生
+  真值表)+ widget 5 项(分组排序/意图覆盖/熟料开关迁移/回调/空态)。验证:
+  cargo test --workspace 432 passed / 0 failed,flutter analyze 干净,flutter test
+  226 passed,clippy 四 crate 零新增,validate-contracts 仅本机既有 4 个 CJK
+  jieba 失败。
+
 - 2026-07-08 02:00 CST: Phase 3.5 剩余工作编排(owner 决策)。Slice 8 冷启动快速标注流
   交接:新增 `3.5-SLICE8-COLDSTART-GUIDE.md`(自包含实施指南——抽样端点镜像 content_fit
   的归一化统计、标注复用现有词条路径零新写入面、fit 卡降级态挂入口、五个坑位:归一化

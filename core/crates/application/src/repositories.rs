@@ -5,11 +5,25 @@ use crate::{ApplicationError, LexicalSourceContext};
 pub trait MediaRepository: Send + Sync {
     fn upsert(&self, media: &MediaItem) -> Result<MediaItem, ApplicationError>;
     fn get(&self, id: &MediaId) -> Result<Option<MediaItem>, ApplicationError>;
+    fn list(&self) -> Result<Vec<MediaItem>, ApplicationError>;
     fn set_availability(
         &self,
         id: &MediaId,
         availability: MediaAvailability,
     ) -> Result<MediaItem, ApplicationError>;
+    /// Stores the user's explicit triage judgment for one media; `None`
+    /// clears it. Intent rows are durable user data, not derived state.
+    fn set_triage_intent(
+        &self,
+        media_id: &MediaId,
+        intent: Option<MediaTriageIntent>,
+        updated_at_ms: u64,
+    ) -> Result<(), ApplicationError>;
+    fn get_triage_intent(
+        &self,
+        media_id: &MediaId,
+    ) -> Result<Option<MediaTriageIntent>, ApplicationError>;
+    fn list_triage_intents(&self) -> Result<Vec<(MediaId, MediaTriageIntent)>, ApplicationError>;
 }
 
 pub trait SubtitleRepository: Send + Sync {
@@ -848,6 +862,13 @@ pub trait LearningEventRepository: Send + Sync {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<LearningEvent>, ApplicationError>;
+    /// Distinct subject ids that carry at least one event of `kind` on
+    /// `subject_kind` — e.g. media marked as familiar material.
+    fn list_event_subject_ids(
+        &self,
+        kind: LearningEventKind,
+        subject_kind: LearningEventSubjectKind,
+    ) -> Result<Vec<String>, ApplicationError>;
 }
 
 pub trait ListeningInboxRepository: Send + Sync {

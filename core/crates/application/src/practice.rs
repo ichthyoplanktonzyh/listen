@@ -1445,6 +1445,14 @@ impl LearningEventRepository for DisabledLearningLoopRepository {
     ) -> Result<Vec<LearningEvent>, ApplicationError> {
         Err(Self::disabled())
     }
+
+    fn list_event_subject_ids(
+        &self,
+        _kind: LearningEventKind,
+        _subject_kind: LearningEventSubjectKind,
+    ) -> Result<Vec<String>, ApplicationError> {
+        Err(Self::disabled())
+    }
 }
 
 impl ListeningInboxRepository for DisabledLearningLoopRepository {

@@ -310,3 +310,109 @@ async fn content_fit_endpoint_serves_dual_dimension_profile() {
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(cached, profile);
 }
+
+#[tokio::test]
+async fn media_library_lists_entries_and_persists_triage_intent() {
+    let app = test_app();
+    let media = serde_json::json!({
+        "path": "/tmp/library.mp4",
+        "fingerprint": "library-media",
+        "title": "Library",
+        "kind": "video"
+    })
+    .to_string();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/media")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(media))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let media: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let media_id = media["id"].as_str().unwrap();
+    let fixture = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../testdata/subtitles/timeline.srt"
+    );
+    let request = serde_json::json!({"path": fixture, "language": "en"}).to_string();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post(format!("/v1/media/{media_id}/subtitles"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(request))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let track: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/v1/media")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let library: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let entry = library
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["media"]["id"] == media_id)
+        .expect("registered media appears in the library");
+    assert_eq!(entry["primary_track_id"], track["id"]);
+    // Fit resolves through the cached track path and stays media-scoped.
+    assert_eq!(entry["fit"]["subject_kind"], "media");
+    assert_eq!(entry["fit"]["subject_id"], media_id);
+    assert_eq!(entry["triage_intent"], serde_json::Value::Null);
+    assert_eq!(entry["familiar_material"], false);
+
+    // Pin the media; the returned entry and later listings agree.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::put(format!("/v1/media/{media_id}/triage-intent"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({"intent": "pin_intensive"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let updated: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(updated["triage_intent"], "pin_intensive");
+
+    // Clearing with null removes the stored intent.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::put(format!("/v1/media/{media_id}/triage-intent"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::json!({"intent": null}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let cleared: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(cleared["triage_intent"], serde_json::Value::Null);
+}
