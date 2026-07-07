@@ -249,6 +249,21 @@ paths:
         - { name: format, in: query, schema: { type: string, default: srt } }
       responses:
         "200": { description: Generated SRT subtitle }
+  /v1/subtitles/{track_id}/content-fit:
+    get:
+      operationId: trackContentFit
+      description: >-
+        Dual-dimension content fit (ADR 0018) for the track's media, served
+        from a fingerprint-validated cache. Bands are expectation management,
+        never gates; signals explain each band.
+      parameters:
+        - { name: track_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Media-level dual-dimension content difficulty profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContentDifficultyProfile" }
   /v1/pronunciation/providers:
     get:
       operationId: pronunciationProviders
@@ -2425,6 +2440,44 @@ components:
         conclusion: { type: string, enum: [not_acquired, acquired] }
         source: { type: string, enum: [user_selection, import] }
         updated_at_ms: { type: integer }
+    FitSignal:
+      type: object
+      required: [kind, value, decisive]
+      properties:
+        kind:
+          type: string
+          enum: [unknown_meaning_density, unassessed_density, known_not_recognized_density,
+                 speech_rate_wpm, weak_form_density, compression_density, mean_chunk_length]
+        value: { type: number, format: float }
+        # True when this signal selected or escalated the band (vs informational).
+        decisive: { type: boolean }
+    DifficultyDimension:
+      type: object
+      required: [fit, signals]
+      properties:
+        fit: { type: string, enum: [too_easy, comprehensible, challenging, too_hard] }
+        signals:
+          type: array
+          items: { $ref: "#/components/schemas/FitSignal" }
+    ContentDifficultyProfile:
+      type: object
+      required: [subject_kind, subject_id, language, meaning, sound,
+                 assessed_token_ratio, evidence_grade, algorithm_version,
+                 computed_at_ms, input_fingerprint]
+      properties:
+        # "media" today; "sentence" is a reserved seam (ADR 0018 decision 5).
+        subject_kind: { type: string }
+        subject_id: { type: string }
+        language: { type: string }
+        meaning: { $ref: "#/components/schemas/DifficultyDimension" }
+        sound: { $ref: "#/components/schemas/DifficultyDimension" }
+        # Share of word tokens with any vocabulary assessment; below the
+        # honesty threshold the UI must show the degraded-estimate state.
+        assessed_token_ratio: { type: number, format: float, minimum: 0, maximum: 1 }
+        evidence_grade: { type: string, enum: [initial_estimate, usage_calibrated] }
+        algorithm_version: { type: string }
+        computed_at_ms: { type: integer }
+        input_fingerprint: { type: string }
     NormalizeLexicalRequest:
       type: object
       required: [language, value]

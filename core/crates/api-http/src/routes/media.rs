@@ -151,6 +151,20 @@ pub(crate) async fn read_subtitle(
         .ok_or_else(|| ApiError::not_found("subtitle track"))
 }
 
+/// Dual-dimension content fit for one track's media (ADR 0018). Served from
+/// the fingerprint-validated cache; recomputes only when transcript,
+/// timelines, or the vocabulary profile changed.
+pub(crate) async fn track_content_fit(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<domain::ContentDifficultyProfile>, ApiError> {
+    state
+        .services
+        .content_fit_for_track(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 pub(crate) async fn archive_subtitle(
     State(state): State<ApiState>,
     Path(track_id): Path<String>,

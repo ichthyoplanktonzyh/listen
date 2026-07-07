@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- 2026-07-07 22:00 CST: Phase 3.5 Slice 4 API + 当前媒体 fit 展示。后端:
+  `GET /v1/subtitles/{track_id}/content-fit`(track-scoped,走 Slice 3 缓存读路径)+
+  openapi path/schema(FitSignal/DifficultyDimension/ContentDifficultyProfile);
+  api-http 端点测试(未标注词汇时诚实报 too_hard + assessed 0 + unassessed decisive,
+  二次读命中缓存返回一致)。Flutter:手写 DTO(ADR 0014)+ contract fixture 测试 5 项
+  (wire shape、黄金靶派生 meaning 易 × sound 难、诚实阈值镜像后端 0.5、round-trip、
+  缺 signals 容错);`ContentFitCard` 落字幕资源面板(当前媒体摘要面):双维档位
+  chips(轻松/合适/有挑战/需要辅助——预期管理文案守 guardrail)+ 黄金靶提示 +
+  详情弹窗(信号→文案,decisive 标记,不见公式)+ 词汇画像不足的诚实降级提示
+  (档位不隐藏只重新框定);fit 拉取挂 timeline 资源加载,失败静默清卡不阻塞;
+  widget 测试 5 项。媒体库列表徽标推迟到 Slice 5(队列 UI 才有媒体列表)。验证:
+  workspace 420 passed / 0 failed;flutter analyze 无 issue;flutter test 214 全过;
+  api-http clippy 无新增告警。
+
 - 2026-07-07 21:10 CST: Phase 3.5 Slice 3 persistence 难度缓存。schema v24:
   `0024_content_difficulty_profiles.sql`(每 subject 一行的可重算缓存,无 FK,
   靠 fingerprint 自失效);`DifficultyRepository` sqlite 实现(JSON 快照 + 投影查询列

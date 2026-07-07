@@ -214,3 +214,99 @@ async fn imports_and_reads_complete_subtitle_timeline() {
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert!(resources.as_array().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn content_fit_endpoint_serves_dual_dimension_profile() {
+    let app = test_app();
+    let media = serde_json::json!({
+        "path": "/tmp/fit.mp4",
+        "fingerprint": "content-fit-media",
+        "title": "Fit",
+        "kind": "video"
+    })
+    .to_string();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/media")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(media))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let media: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let fixture = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../testdata/subtitles/timeline.srt"
+    );
+    let request = serde_json::json!({"path": fixture, "language": "en"}).to_string();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post(format!(
+                "/v1/media/{}/subtitles",
+                media["id"].as_str().unwrap()
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .header(CONTENT_TYPE, "application/json")
+            .body(Body::from(request))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let track: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/v1/subtitles/{}/content-fit",
+                track["id"].as_str().unwrap()
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let profile: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(profile["subject_kind"], "media");
+    assert_eq!(profile["subject_id"], media["id"]);
+    assert_eq!(profile["language"], "en");
+    assert_eq!(profile["algorithm_version"], "content-fit-v1");
+    assert_eq!(profile["evidence_grade"], "initial_estimate");
+    // Nothing is marked yet: the whole transcript is unassessed, so the
+    // conservative estimate reports too_hard with an honest zero ratio.
+    assert_eq!(profile["meaning"]["fit"], "too_hard");
+    assert!((profile["assessed_token_ratio"].as_f64().unwrap()).abs() < 1e-6);
+    let signals = profile["meaning"]["signals"].as_array().unwrap();
+    assert!(signals.iter().any(|signal| {
+        signal["kind"] == "unassessed_density" && signal["decisive"] == true
+    }));
+    assert!(profile["input_fingerprint"].as_str().unwrap().len() == 64);
+
+    // Second read is served from cache and stays identical.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/v1/subtitles/{}/content-fit",
+                track["id"].as_str().unwrap()
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let cached: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(cached, profile);
+}
