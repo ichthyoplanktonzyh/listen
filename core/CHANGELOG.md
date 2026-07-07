@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-07 19:00 CST: Phase 3.5 Difficulty & Content Triage 立项（Slice 0）。新增
+  ADR 0018 双维 fit 定义：meaning/sound 双维 `ContentDifficultyProfile` v2 形状、
+  信号集 v1（unknown/unassessed/known_not_recognized 密度、语速、弱读/压缩密度、
+  chunk 长度）、研究锚点（听力 95% 词汇覆盖 van Zeeland & Schmitt 2013、阅读 98%
+  Hu & Nation 2000、语速 Tauroza & Allison 1990 / Griffiths 1992、弱读瓶颈
+  Field 2008）与映射告诫、分档规则（阈值全部 heuristic_proxy，常量单点定义，改常量
+  必须升 algorithm_version）、诚实降级（assessed_token_ratio + evidence_grade）、
+  三队列为派生视图、listening-projection-v1 随本 phase 落地并移除升级确认投影直写
+  （ADR 0017 决策 4 到期义务）。3.5-PLAN.md 重写为 9-slice 版（句级画像裁剪出 v1，
+  subject_kind 留 seam）；STATE.md 更新阻塞项与下一步；迁移编号协调：3.4.2 预留
+  v24，3.5 名义 v25，后落地方顺延。
+
 - 2026-07-07 17:30 CST: Phase 3.4.4 Learning Evidence Channelization 收口（Slice 4）。
   新增 3.4.4-CLOSEOUT.md（交付清单、outcome 入身份指纹的关键修正记录、Non-Goals 兑现、
   Exit Signals 核验）；PLAN 标 COMPLETED；共享上下文 §14 标记证据层完成；STATE.md 更新

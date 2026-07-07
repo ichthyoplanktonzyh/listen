@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-07T17:30:00.000+08:00"
+last_updated: "2026-07-07T19:00:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-07 17:30 CST
-> 更新原因：Phase 3.4.4 Learning Evidence Channelization 完成（ADR 0017，schema v23）：
-> 通道化追加式 LearningObservation、四条写入路径接线、legacy backfill、便携资产携带。
+> 最后更新：2026-07-07 19:00 CST
+> 更新原因：Phase 3.5 Difficulty & Content Triage 立项（ADR 0018 双维 fit 定义，
+> 9-slice 计划，分支 codex/3.5-difficulty-content-triage）。
 > 3.4.2 由独立分支按实施指南推进（Slice 0-1 完成）。
 
 ## 当前位置
@@ -256,17 +256,21 @@ last_updated: "2026-07-07T17:30:00.000+08:00"
 
 ## 当前阻塞项
 
-- Phase 3.5 及依赖全局词汇状态的新业务等待 Phase 3.4.1 权威模型切换。
 - Phase 3.4 / 3.35 手工 QA 主动暂停，不是外部阻塞。
+- （已解除）3.5 的前置 3.4.1 权威模型切换与 3.4.4 证据层均已完成，3.5 已于
+  2026-07-07 立项启动。
 
 ## 下一步工作
 
 1. Phase 3.4.1 已完成（Slice 0-6）。恢复 Phase 3.4/3.35 手工 QA，重新基线化新能力 UI。
 2. 完成 Phase 3.3 真实媒体 30 分钟泛听 QA 并收口。
 3. Phase 3.4.2 已启动（Slice 0-1 完成，独立分支）；3.4.3 待排期。
-4. Phase 3.4.4 证据层已完成（2026-07-07，ADR 0017，schema v23）：通道化追加式
-   LearningObservation、四条写入路径接线、便携资产携带。3.5 可启动（首个证据投影算法
-   随 3.5 fit 定义实现）；3.6 启动前置：sense 身份 spike。
+4. Phase 3.4.4 证据层已完成（2026-07-07，ADR 0017，schema v23）。
+   **Phase 3.5 已立项启动**（2026-07-07，ADR 0018，9-slice 计划见
+   `.planning/phases/3.5-difficulty-content-triage/3.5-PLAN.md`）：双维 fit +
+   三队列分拣；`listening-projection-v1` 作为 Slice 6 落地并移除升级确认投影直写
+   （ADR 0017 决策 4 到期义务）。3.6 启动前置：sense 身份 spike。
+   迁移编号协调：3.4.2 预留 v24，3.5 持久化名义 v25，后落地方顺延。
 5. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
 6. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）；
