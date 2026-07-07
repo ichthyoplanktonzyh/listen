@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-07 12:20 CST: ADR 0016 增补决策 9（2026-07-07 修正案）：用户意群修正是独立
+  per-sentence overlay 层，provider analysis 持久化行内不得出现 `User` source，重新生成
+  分析不得毁坏用户修正；schema v23 不得排除 overlay（本阶段无编辑 UI，不建 overlay 机制）。
+  3.4.2-PLAN 同步：勾选已完成的 Slice 0/1 项、Slice 3 增加 overlay 不排除性约束项、
+  Guardrails 增补 overlay 纪律。裁决来源：主线 discuss
+  learning-domain-model-v2-refinement-review.zh.md §4.5。
+
 - 2026-07-07 CST: 启动 Phase 3.4.2 Semantic / Prosodic Group Separation（Slice 0）。
   新增 ADR 0016：SenseGroup 为 token-span 句子级文本标注，与 ChunkTimeline（韵律组）独立
   共存；SenseGroup 不存储时间，播放范围通过 WordTimeline 投影；本阶段采用扁平分组，目标

@@ -134,6 +134,23 @@ The rule-based fallback is intentionally simple. Its purpose is to establish the
 (domain → persistence → application → API → Flutter) so that higher-quality providers can be
 plugged in later without architectural changes.
 
+### 9. User corrections are an overlay, never analysis mutations (2026-07-07 amendment)
+
+Provider-generated analyses are rebuildable artifacts; user corrections are durable user assets
+(shared-context invariant 13). The two must not share physical rows:
+
+- A persisted `SenseGroupAnalysis` produced by a provider never contains `User`-sourced groups.
+  Regenerating or replacing an analysis must not be able to destroy user work.
+- When sense-group editing ships (a later phase — Phase 3.4.2 has no editing UI and therefore,
+  per the field razor in the refinement review, builds no overlay machinery), user corrections
+  are stored as a separate per-sentence overlay keyed by `(track_id, sentence_id)`, and read
+  models merge overlay over the active analysis. `SenseGroupSource::User` is reserved for
+  groups contributed by that overlay in merged read models.
+- Schema v23 (Slice 3) must not preclude this: no schema element may assume that all groups of
+  a sentence come from a single analysis row.
+
+Reference: `.planning/discuss/learning-domain-model-v2-refinement-review.zh.md` §4.5.
+
 ## Consequences
 
 - Consumers that need semantic grouping use `SenseGroupAnalysis`; consumers that need
