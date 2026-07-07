@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 2026-07-07 15:00 CST: 迁移号协调：schema v23（0023_learning_observations）由 main 上的
+  Phase 3.4.4 证据层占用，本阶段 Slice 3 的 sense_group_analyses 迁移改用 v24/0024；
+  PLAN 与实施指南同步更新，并注明合并时编号再冲突的顺延规则。
+
 - 2026-07-07 14:00 CST: 新增 3.4.2-IMPLEMENTATION-GUIDE.md（Slice 2-6 交接实施指南）。
   难度评估为"不难、工作量大"：各层均有 ChunkTimeline 1:1 模板可镜像。指南钉死五个全局
   陷阱（SenseGroup 用原始 token index 而非 chunk 的 word 序数、active partial unique
