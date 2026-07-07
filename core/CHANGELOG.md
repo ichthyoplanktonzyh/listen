@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- 2026-07-07 17:30 CST: Phase 3.4.4 Learning Evidence Channelization 收口（Slice 4）。
+  新增 3.4.4-CLOSEOUT.md（交付清单、outcome 入身份指纹的关键修正记录、Non-Goals 兑现、
+  Exit Signals 核验）；PLAN 标 COMPLETED；共享上下文 §14 标记证据层完成；STATE.md 更新
+  当前位置与下一步（3.5 可启动，首个证据投影算法随 fit 定义实现）。
+
 - 2026-07-07 17:00 CST: Phase 3.4.4 Slice 3 写入路径接线与便携资产。四条路径全部产出
   通道化 observation：上下文标记（双写，legacy 最新覆盖行为不变但通道化流保留每次判断）、
   练习提交（成功与失败均记录，修复失败偏置；无句子锚点也可记录）、复习提交（按 rating
