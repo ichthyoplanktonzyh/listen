@@ -697,6 +697,71 @@ impl LearningAssetRepository for SqliteRepository {
             .map_err(repo)
     }
 
+    fn append_learning_observation(
+        &self,
+        observation: &LearningObservation,
+    ) -> Result<LearningObservation, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "INSERT OR IGNORE INTO learning_observations
+                 (id,lexical_entry_id,sense_id,capability,task_type,outcome,assistance,
+                  surface_form,sentence_id,media_id,origin,source_ref,occurred_at_ms)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+                params![
+                    observation.id.as_str(),
+                    observation.lexical_entry_id.as_str(),
+                    observation
+                        .sense_id
+                        .as_ref()
+                        .map(|value| value.as_str())
+                        .unwrap_or(""),
+                    json(&observation.capability)?,
+                    json(&observation.task_type)?,
+                    json(&observation.outcome)?,
+                    json(&observation.assistance)?,
+                    observation.surface_form,
+                    observation.sentence_id.as_ref().map(|value| value.as_str()),
+                    observation.media_id.as_ref().map(|value| value.as_str()),
+                    json(&observation.origin)?,
+                    observation.source_ref,
+                    observation.occurred_at_ms,
+                ],
+            )
+            .map_err(repo)?;
+        Ok(observation.clone())
+    }
+
+    fn list_learning_observations(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        capability: Option<LexicalCapability>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<LearningObservation>, ApplicationError> {
+        let capability_json = capability.map(|value| json(&value)).transpose()?;
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = conn
+            .prepare(
+                "SELECT id,lexical_entry_id,sense_id,capability,task_type,outcome,assistance,
+                        surface_form,sentence_id,media_id,origin,source_ref,occurred_at_ms
+                 FROM learning_observations
+                 WHERE lexical_entry_id=?1 AND (?2 IS NULL OR capability=?2)
+                 ORDER BY occurred_at_ms DESC, id
+                 LIMIT ?3 OFFSET ?4",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map(
+                params![lexical_entry_id.as_str(), capability_json, limit, offset],
+                learning_observation_row,
+            )
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
     fn clear_lexical_observation(
         &self,
         lexical_entry_id: &LexicalEntryId,
@@ -1239,6 +1304,38 @@ fn lexical_observation_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LexicalO
         original_form: row.get(3)?,
         result: from_json(&row.get::<_, String>(4)?)?,
         created_at_ms: row.get(5)?,
+    })
+}
+
+fn learning_observation_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LearningObservation> {
+    let sense_id = row.get::<_, String>(2)?;
+    Ok(LearningObservation {
+        id: LearningObservationId::parse(row.get::<_, String>(0)?).map_err(super::domain_sql)?,
+        lexical_entry_id: LexicalEntryId::parse(row.get::<_, String>(1)?)
+            .map_err(super::domain_sql)?,
+        sense_id: if sense_id.is_empty() {
+            None
+        } else {
+            Some(LexicalSenseId::parse(sense_id).map_err(super::domain_sql)?)
+        },
+        capability: from_json(&row.get::<_, String>(3)?)?,
+        task_type: from_json(&row.get::<_, String>(4)?)?,
+        outcome: from_json(&row.get::<_, String>(5)?)?,
+        assistance: from_json(&row.get::<_, String>(6)?)?,
+        surface_form: row.get(7)?,
+        sentence_id: row
+            .get::<_, Option<String>>(8)?
+            .map(SubtitleSentenceId::parse)
+            .transpose()
+            .map_err(super::domain_sql)?,
+        media_id: row
+            .get::<_, Option<String>>(9)?
+            .map(MediaId::parse)
+            .transpose()
+            .map_err(super::domain_sql)?,
+        origin: from_json(&row.get::<_, String>(10)?)?,
+        source_ref: row.get(11)?,
+        occurred_at_ms: row.get(12)?,
     })
 }
 

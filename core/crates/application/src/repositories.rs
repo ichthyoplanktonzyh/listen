@@ -667,6 +667,19 @@ pub trait LearningAssetRepository: Send + Sync {
         &self,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<Vec<LexicalObservation>, ApplicationError>;
+    /// Append-only channelized evidence (ADR 0017). Idempotent on id; never
+    /// replaces an existing row.
+    fn append_learning_observation(
+        &self,
+        observation: &LearningObservation,
+    ) -> Result<LearningObservation, ApplicationError>;
+    fn list_learning_observations(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        capability: Option<LexicalCapability>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<LearningObservation>, ApplicationError>;
     fn clear_lexical_observation(
         &self,
         lexical_entry_id: &LexicalEntryId,

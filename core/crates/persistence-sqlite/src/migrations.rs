@@ -1,12 +1,13 @@
 use domain::{
     CapabilityDimensionState, CapabilityStateChangeKind, LearningStatus, LexicalCapability,
     LexicalCapabilityHistory, LexicalCapabilityHistoryId, LexicalCapabilityProfile, LexicalEntryId,
+    ObservationOrigin, ObservationResult, learning_observation_id, observation_spec_for_marking,
 };
 use rusqlite::{Connection, params};
 
 use super::PersistenceError;
 
-pub const MIGRATION_VERSION: u32 = 22;
+pub const MIGRATION_VERSION: u32 = 23;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -153,6 +154,61 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         backfill_legacy_capabilities(&tx)?;
         tx.pragma_update(None, "user_version", 22)?;
         tx.commit()?;
+    }
+    if current < 23 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0023_learning_observations.sql"))?;
+        backfill_legacy_observations(&tx)?;
+        tx.pragma_update(None, "user_version", 23)?;
+        tx.commit()?;
+    }
+    Ok(())
+}
+
+/// ADR 0017 decision 5: one channelized observation per legacy uncleared
+/// LexicalObservation, marked `legacy_backfill` because the latest-wins legacy
+/// table mixed user markings with practice failures and kept no history.
+pub(crate) fn backfill_legacy_observations(connection: &Connection) -> Result<(), PersistenceError> {
+    let mut statement = connection.prepare(
+        "SELECT id,lexical_entry_id,sentence_id_snapshot,original_form,result,created_at_ms
+         FROM lexical_observations WHERE cleared_at_ms IS NULL",
+    )?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                serde_json::from_str::<ObservationResult>(&row.get::<_, String>(4)?)
+                    .map_err(json_sql)?,
+                row.get::<_, u64>(5)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    for (legacy_id, entry_id, sentence_id, original_form, result, created_at_ms) in rows {
+        let entry_id = LexicalEntryId::parse(entry_id).map_err(super::domain_sql)?;
+        let spec = observation_spec_for_marking(result);
+        let id = learning_observation_id(&entry_id, spec.task_type, Some(&legacy_id), created_at_ms);
+        connection.execute(
+            "INSERT OR IGNORE INTO learning_observations
+             (id,lexical_entry_id,sense_id,capability,task_type,outcome,assistance,
+              surface_form,sentence_id,media_id,origin,source_ref,occurred_at_ms)
+             VALUES (?1,?2,'',?3,?4,?5,?6,?7,?8,NULL,?9,?10,?11)",
+            params![
+                id.as_str(),
+                entry_id.as_str(),
+                serde_json::to_string(&spec.capability).map_err(json_sql)?,
+                serde_json::to_string(&spec.task_type).map_err(json_sql)?,
+                serde_json::to_string(&spec.outcome).map_err(json_sql)?,
+                serde_json::to_string(&spec.assistance).map_err(json_sql)?,
+                original_form,
+                sentence_id,
+                serde_json::to_string(&ObservationOrigin::LegacyBackfill).map_err(json_sql)?,
+                legacy_id,
+                created_at_ms,
+            ],
+        )?;
     }
     Ok(())
 }

@@ -1,6 +1,70 @@
 use super::*;
 
 #[test]
+fn learning_observations_append_without_replacing_prior_rows() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
+    let entry = upsert_word_asset(&services, "en", "signal", "signal", None, None).entry;
+    let sentence = SubtitleSentenceId::parse("s1").unwrap();
+
+    let base = LearningObservation {
+        id: learning_observation_id(&entry.id, ObservationTaskType::Dictation, Some("a1"), 100),
+        lexical_entry_id: entry.id.clone(),
+        sense_id: None,
+        capability: LexicalCapability::Listening,
+        task_type: ObservationTaskType::Dictation,
+        outcome: ObservationOutcome::Failure,
+        assistance: AssistanceLevel::None,
+        surface_form: Some("signals".into()),
+        sentence_id: Some(sentence.clone()),
+        media_id: None,
+        origin: ObservationOrigin::PracticeTask,
+        source_ref: Some("a1".into()),
+        occurred_at_ms: 100,
+    };
+    repo.append_learning_observation(&base).unwrap();
+
+    // Same (entry, sentence), later attempt: must be a second row, not a
+    // replacement (the legacy LexicalObservation latest-wins defect).
+    let second = LearningObservation {
+        id: learning_observation_id(&entry.id, ObservationTaskType::Dictation, Some("a2"), 200),
+        outcome: ObservationOutcome::Success,
+        source_ref: Some("a2".into()),
+        occurred_at_ms: 200,
+        ..base.clone()
+    };
+    repo.append_learning_observation(&second).unwrap();
+
+    // Re-appending the identical row is idempotent.
+    repo.append_learning_observation(&base).unwrap();
+
+    let all = repo
+        .list_learning_observations(&entry.id, None, 10, 0)
+        .unwrap();
+    assert_eq!(all.len(), 2);
+    assert_eq!(all[0], second);
+    assert_eq!(all[1], base);
+
+    let listening = repo
+        .list_learning_observations(&entry.id, Some(LexicalCapability::Listening), 10, 0)
+        .unwrap();
+    assert_eq!(listening.len(), 2);
+    let reading = repo
+        .list_learning_observations(&entry.id, Some(LexicalCapability::Reading), 10, 0)
+        .unwrap();
+    assert!(reading.is_empty());
+}
+
+#[test]
 fn capability_projection_and_override_round_trip_without_losing_evidence_state() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = AppServices::new(

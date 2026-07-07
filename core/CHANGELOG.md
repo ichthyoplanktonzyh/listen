@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-07 16:00 CST: Phase 3.4.4 Slice 2 持久化 schema v23。新增
+  `0023_learning_observations.sql`（追加式表，entry 级联删除，
+  entry+capability+occurred_at 索引）；迁移回填：未清除的 legacy LexicalObservation
+  逐行转为 listening/context_marking observation（origin=legacy_backfill、
+  source_ref=旧 id、surface_form=original_form），已清除的标记视为撤回不回填，
+  回填幂等（INSERT OR IGNORE）。LearningAssetRepository 新增
+  append_learning_observation / list_learning_observations（按通道过滤、时间倒序分页）。
+  测试：v23 回填断言（含 cleared 排除与幂等）、追加语义（同 (entry, sentence) 两行共存、
+  重复追加幂等）；migration_recovery_test 种子补 lexical_observations 表并断言 v23。
+  验证：`cargo test -p persistence-sqlite` 67 tests 全过。
+
 - 2026-07-07 15:35 CST: Phase 3.4.4 Slice 1 domain 契约。新增
   `crates/domain/src/learning_observation.rs`：`LearningObservation`（追加式身份 =
   entry + task + source_ref + occurred_at 指纹）、ObservationTaskType / ObservationOutcome /
