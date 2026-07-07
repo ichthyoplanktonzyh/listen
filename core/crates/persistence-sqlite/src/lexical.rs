@@ -645,6 +645,20 @@ impl LearningAssetRepository for SqliteRepository {
             .map_err(repo)
     }
 
+    fn lexical_vocabulary_watermark(
+        &self,
+        language: &LanguageCode,
+    ) -> Result<(u64, u64), ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.query_row(
+            "SELECT COUNT(*), COALESCE(MAX(learning_updated_at_ms), 0)
+             FROM lexical_entries WHERE language=?1",
+            [language.as_str()],
+            |row| Ok((row.get::<_, u64>(0)?, row.get::<_, u64>(1)?)),
+        )
+        .map_err(repo)
+    }
+
     fn create_lexical_observation(
         &self,
         observation: &LexicalObservation,

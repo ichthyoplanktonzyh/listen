@@ -7,7 +7,7 @@
 
 use std::path::{Path, PathBuf};
 
-use persistence_sqlite::SqliteRepository;
+use persistence_sqlite::{MIGRATION_VERSION, SqliteRepository};
 use rusqlite::Connection;
 
 fn user_version(path: &Path) -> u32 {
@@ -104,9 +104,10 @@ fn v21_capability_migration_preserves_a_queryable_pre_migration_backup() {
     }
 
     let repo = SqliteRepository::open(&path).expect("migrate v21");
-    assert_eq!(repo.schema_version().unwrap(), 23);
+    assert_eq!(repo.schema_version().unwrap(), MIGRATION_VERSION);
     assert!(has_table(&path, "lexical_capability_states"));
     assert!(has_table(&path, "learning_observations"));
+    assert!(has_table(&path, "content_difficulty_profiles"));
 
     let backup = backup_of(&path);
     assert_eq!(user_version(&backup), 21);

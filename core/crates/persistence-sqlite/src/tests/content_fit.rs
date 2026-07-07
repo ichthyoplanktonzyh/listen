@@ -16,6 +16,7 @@ fn fit_services(repo: &Arc<SqliteRepository>) -> AppServices {
         repo.clone(),
         repo.clone(),
     )
+    .with_difficulty_repository(repo.clone())
 }
 
 fn fit_track(language: Option<&str>) -> SubtitleTrack {
@@ -230,6 +231,60 @@ fn content_fit_fingerprint_is_stable_until_vocabulary_changes() {
     assert_ne!(first.input_fingerprint, third.input_fingerprint);
     assert!((third.assessed_token_ratio - 1.0).abs() < 1e-6);
     assert_eq!(third.meaning.fit, InputFit::Comprehensible);
+}
+
+#[test]
+fn cached_content_fit_reuses_profile_until_inputs_change() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = fit_services(&repo);
+    MediaRepository::upsert(repo.as_ref(), &transcription_media()).unwrap();
+    let track = fit_track(Some("en"));
+    repo.save_track(&track).unwrap();
+    seed_vocabulary(&services);
+
+    let first = services.content_fit_for_track(&track.id).unwrap();
+    let stored = application::DifficultyRepository::get_difficulty_profile(
+        repo.as_ref(),
+        "media",
+        track.media_id.as_str(),
+    )
+    .unwrap()
+    .expect("profile persisted on first read");
+    assert_eq!(stored, first);
+
+    // Tamper the cached row: if the second read really hits the cache, the
+    // tampered value comes back; a silent recompute would erase it.
+    let mut tampered = stored.clone();
+    tampered.assessed_token_ratio = 0.123;
+    application::DifficultyRepository::save_difficulty_profile(repo.as_ref(), &tampered).unwrap();
+    let second = services.content_fit_for_track(&track.id).unwrap();
+    assert!((second.assessed_token_ratio - 0.123).abs() < 1e-6);
+
+    // A vocabulary change moves the watermark: the tampered cache is stale
+    // and must be recomputed and re-persisted.
+    services
+        .create_lexical_entry(UpsertLexicalEntry {
+            language: "en".into(),
+            kind: LexicalEntryKind::Word,
+            canonical_form: "tango".into(),
+            display_form: "tango".into(),
+            status: Some(LearningStatus::KnownRecognized),
+            user_definition: None,
+            personal_note: None,
+            source: None,
+        })
+        .unwrap();
+    let third = services.content_fit_for_track(&track.id).unwrap();
+    assert!((third.assessed_token_ratio - 1.0).abs() < 1e-6);
+    assert_ne!(third.input_fingerprint, first.input_fingerprint);
+    let restored = application::DifficultyRepository::get_difficulty_profile(
+        repo.as_ref(),
+        "media",
+        track.media_id.as_str(),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(restored, third);
 }
 
 #[test]

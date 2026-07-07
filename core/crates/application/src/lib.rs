@@ -71,6 +71,7 @@ pub struct AppServices {
     pub(crate) review: Arc<dyn ReviewRepository>,
     pub(crate) learning_events: Arc<dyn LearningEventRepository>,
     pub(crate) listening_inbox: Arc<dyn ListeningInboxRepository>,
+    pub(crate) difficulty: Arc<dyn DifficultyRepository>,
     pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
     pub(crate) pronunciation_providers: Arc<Vec<Arc<dyn PronunciationProvider>>>,
 }
@@ -100,6 +101,7 @@ impl AppServices {
             review: Arc::new(DisabledLearningLoopRepository),
             learning_events: Arc::new(DisabledLearningLoopRepository),
             listening_inbox: Arc::new(DisabledLearningLoopRepository),
+            difficulty: Arc::new(DisabledDifficultyRepository),
             lexical_normalizers: Arc::new(Vec::new()),
             pronunciation_providers: Arc::new(Vec::new()),
         }
@@ -116,6 +118,11 @@ impl AppServices {
         self.review = review;
         self.learning_events = learning_events;
         self.listening_inbox = listening_inbox;
+        self
+    }
+
+    pub fn with_difficulty_repository(mut self, difficulty: Arc<dyn DifficultyRepository>) -> Self {
+        self.difficulty = difficulty;
         self
     }
 
@@ -141,6 +148,29 @@ struct DisabledLearningLoopRepository;
 impl DisabledLearningLoopRepository {
     fn disabled() -> ApplicationError {
         ApplicationError::Repository("learning loop repository is not configured".into())
+    }
+}
+
+struct DisabledDifficultyRepository;
+
+impl DifficultyRepository for DisabledDifficultyRepository {
+    fn save_difficulty_profile(
+        &self,
+        _profile: &ContentDifficultyProfile,
+    ) -> Result<ContentDifficultyProfile, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "difficulty repository is not configured".into(),
+        ))
+    }
+
+    fn get_difficulty_profile(
+        &self,
+        _subject_kind: &str,
+        _subject_id: &str,
+    ) -> Result<Option<ContentDifficultyProfile>, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "difficulty repository is not configured".into(),
+        ))
     }
 }
 

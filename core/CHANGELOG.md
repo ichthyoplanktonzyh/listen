@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- 2026-07-07 21:10 CST: Phase 3.5 Slice 3 persistence 难度缓存。schema v24:
+  `0024_content_difficulty_profiles.sql`(每 subject 一行的可重算缓存,无 FK,
+  靠 fingerprint 自失效);`DifficultyRepository` sqlite 实现(JSON 快照 + 投影查询列
+  整体重写)。缓存读路径 `content_fit_for_track`:廉价指纹校验(track 指纹 + active
+  word/chunk timeline 身份 + 语言级词汇水位,不做归一化不组装文档),命中返回缓存,
+  失效重算并回存;指纹组装收敛为单一定义点,compute 路径共用(词汇水位从"匹配条目
+  max"改为语言级 `lexical_vocabulary_watermark`(count, max_learning_updated_at)新
+  仓储方法——语言内任何标记使该语言全部缓存失效,粗粒度但绝不陈旧)。AppServices 增
+  `difficulty` 仓储(Disabled 默认 + `with_difficulty_repository`,api-http main 已接线)。
+  **迁移编号协调**:3.5 先落地取 v24,worktree 中未动工的 3.4.2 顺延 v25(其 PLAN/
+  实施指南/CHANGELOG 已在 worktree 分支同步改号,commit 271e87c1)。测试:缓存命中
+  (篡改行回读证明)、词汇变更失效重算并回存、迁移恢复测试断言 content_difficulty_profiles
+  表与 MIGRATION_VERSION。验证:workspace 419 passed / 0 failed,clippy 前后 15 告警
+  零新增。
+
 - 2026-07-07 20:20 CST: Phase 3.5 Slice 2 application fit 计算服务。新增
   `crates/application/src/content_fit.rs`:`compute_content_fit_for_track` 从
   `export_lltimeline_document` 单点组装输入,词义知识经 `LexicalEntry::status`

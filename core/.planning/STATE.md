@@ -270,7 +270,8 @@ last_updated: "2026-07-07T19:00:00.000+08:00"
    `.planning/phases/3.5-difficulty-content-triage/3.5-PLAN.md`）：双维 fit +
    三队列分拣；`listening-projection-v1` 作为 Slice 6 落地并移除升级确认投影直写
    （ADR 0017 决策 4 到期义务）。3.6 启动前置：sense 身份 spike。
-   迁移编号协调：3.4.2 预留 v24，3.5 持久化名义 v25，后落地方顺延。
+   迁移编号协调：3.5 先落地取 v24（content_difficulty_profiles），3.4.2 顺延 v25
+   （其实施指南已同步改号）。
 5. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
 6. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）；

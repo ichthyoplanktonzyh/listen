@@ -659,6 +659,14 @@ pub trait LearningAssetRepository: Send + Sync {
         kind: LexicalEntryKind,
         normalized_forms: &[String],
     ) -> Result<Vec<LexicalEntry>, ApplicationError>;
+    /// Cheap vocabulary-snapshot watermark for one language:
+    /// `(entry_count, max_learning_updated_at_ms)`. Any marking or import
+    /// moves at least one component, so cache fingerprints built from it
+    /// (ADR 0018 decision 5) invalidate on every vocabulary change.
+    fn lexical_vocabulary_watermark(
+        &self,
+        language: &LanguageCode,
+    ) -> Result<(u64, u64), ApplicationError>;
     fn create_lexical_observation(
         &self,
         observation: &LexicalObservation,

@@ -1,4 +1,5 @@
 mod connection;
+mod content_fit;
 mod dictionary;
 mod learning_loop;
 mod lexical;

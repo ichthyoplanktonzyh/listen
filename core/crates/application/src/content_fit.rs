@@ -3,6 +3,67 @@ use std::collections::HashMap;
 use crate::*;
 
 impl AppServices {
+    /// Cached read path: returns the stored profile when its fingerprint
+    /// still matches the current inputs, otherwise recomputes and saves.
+    /// The fingerprint check is cheap (no transcript normalization, no
+    /// document assembly); a vocabulary change anywhere in the language
+    /// invalidates every cached profile of that language — coarse but never
+    /// stale (ADR 0018 decision 5).
+    pub fn content_fit_for_track(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<ContentDifficultyProfile, ApplicationError> {
+        let track = self
+            .subtitle_tracks
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let language = track
+            .language
+            .clone()
+            .ok_or(ApplicationError::Validation("subtitle track language"))?;
+        let fingerprint = self.content_fit_input_fingerprint(track_id, &track, &language)?;
+        if let Some(cached) = self
+            .difficulty
+            .get_difficulty_profile("media", track.media_id.as_str())?
+            && cached.input_fingerprint == fingerprint
+            && cached.algorithm_version == CONTENT_FIT_ALGORITHM_VERSION
+        {
+            return Ok(cached);
+        }
+        let profile = self.compute_content_fit_for_track(track_id)?;
+        self.difficulty.save_difficulty_profile(&profile)
+    }
+
+    /// Canonical input identity for cache invalidation: algorithm version,
+    /// track content, active word/chunk timeline identities, and the
+    /// language-wide vocabulary watermark. Must stay the single composition
+    /// point shared by the cached and compute paths.
+    fn content_fit_input_fingerprint(
+        &self,
+        track_id: &SubtitleTrackId,
+        track: &SubtitleTrack,
+        language: &LanguageCode,
+    ) -> Result<String, ApplicationError> {
+        let word_timeline = self.timelines.active_word_timeline(track_id)?;
+        let chunk_timeline = self.timelines.active_chunk_timeline(track_id)?;
+        let (vocab_count, vocab_watermark_ms) =
+            self.learning_assets.lexical_vocabulary_watermark(language)?;
+        let canonical_input = format!(
+            "{}|lang:{}|track:{}:{}|wt:{}:{}|ct:{}:{}|vocab:{}:{}",
+            CONTENT_FIT_ALGORITHM_VERSION,
+            language.as_str(),
+            track.id.as_str(),
+            track.fingerprint,
+            word_timeline.as_ref().map(|t| t.id.as_str()).unwrap_or(""),
+            word_timeline.as_ref().map(|t| t.updated_at_ms).unwrap_or(0),
+            chunk_timeline.as_ref().map(|t| t.id.as_str()).unwrap_or(""),
+            chunk_timeline.as_ref().map(|t| t.updated_at_ms).unwrap_or(0),
+            vocab_count,
+            vocab_watermark_ms,
+        );
+        Ok(content_fit_fingerprint(&canonical_input))
+    }
+
     /// Computes the media-level dual-dimension content fit profile from a
     /// track's transcript, timelines, and the learner's vocabulary profile
     /// (ADR 0018). Deterministic in (timeline document, vocabulary snapshot,
@@ -17,12 +78,16 @@ impl AppServices {
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<ContentDifficultyProfile, ApplicationError> {
-        let document = self.export_lltimeline_document(track_id)?;
-        let language = document
-            .metadata
+        let track = self
+            .subtitle_tracks
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let language = track
             .language
             .clone()
             .ok_or(ApplicationError::Validation("subtitle track language"))?;
+        let input_fingerprint = self.content_fit_input_fingerprint(track_id, &track, &language)?;
+        let document = self.export_lltimeline_document(track_id)?;
 
         // Count word tokens per normalized lexical key. Tokens that normalize
         // to nothing (bare digits, stray symbols the tokenizer still labels
@@ -124,26 +189,6 @@ impl AppServices {
             Some(words as f32 / timeline.chunks.len() as f32)
         });
 
-        // Vocabulary snapshot watermark: any marking creates or touches an
-        // entry, moving either the count or the max learning timestamp.
-        let vocab_watermark_ms = entries
-            .iter()
-            .map(|entry| entry.learning_updated_at_ms)
-            .max()
-            .unwrap_or(0);
-        let canonical_input = format!(
-            "{}|lang:{}|track:{}|wt:{}:{}|ct:{}:{}|vocab:{}:{}",
-            CONTENT_FIT_ALGORITHM_VERSION,
-            language.as_str(),
-            lltimeline_track_fingerprint(&document),
-            active_word_timeline.map(|t| t.id.as_str()).unwrap_or(""),
-            active_word_timeline.map(|t| t.updated_at_ms).unwrap_or(0),
-            active_chunk_timeline.map(|t| t.id.as_str()).unwrap_or(""),
-            active_chunk_timeline.map(|t| t.updated_at_ms).unwrap_or(0),
-            entries.len(),
-            vocab_watermark_ms,
-        );
-
         Ok(ContentDifficultyProfile {
             subject_kind: "media".into(),
             subject_id: document.metadata.media.id.as_str().to_owned(),
@@ -163,7 +208,7 @@ impl AppServices {
             evidence_grade: FitEvidenceGrade::InitialEstimate,
             algorithm_version: CONTENT_FIT_ALGORITHM_VERSION.into(),
             computed_at_ms: now_ms(),
-            input_fingerprint: content_fit_fingerprint(&canonical_input),
+            input_fingerprint,
         })
     }
 }
