@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- 2026-07-08 01:40 CST: Phase 3.5 Slice 6 listening-projection-v1(ADR 0019)。首个证据
+  投影算法,确认门控的保守规则:acquired 只由升级确认事件从证据流导出(裸任务成功与
+  上下文标记只作辅助,护住 3.4 "5 语境→建议→确认"管线);无辅助任务失败降档,已确认
+  词有单次 lapse 保护(SRS lapse 惯例),任务成功可重固确认词并打断失败连击;
+  confidence(0.85 task 级 / 0.40 弱化)与 evidence_as_of_ms 填充 3.4.x 预留 seam。
+  触发:append_channelized_observation 内同步重算(限读最新 200 条)+ recency guard
+  (更新的兼容/导入写入压过更旧的证据结论)。写入者阶梯:override(读时)> task 级
+  证据 > 兼容/导入 > 弱化证据——兼容同步不得以 acquired 覆盖 task 级证据结论(A 方案:
+  自报"认识"不能翻任务失败的盘),降档与清除始终放行(无失败棘轮);兼容同步尾部统一
+  从画像重导 status 列,堵住 create/import 直写 entry.status 的绕行。升级确认对
+  listening 的投影直写移除(ADR 0017 决策 4 兑现),非 listening 通道保留过渡直写。
+  两个刻意的行为变化(记录于 ADR 0019 决策 4):仅标记/导入支撑的词单次听写/复习
+  失败即翻为 KnownNotRecognized;任务失败后经 status 面板重标"认识"不再翻回。共享
+  上下文 §14、3.5-PLAN、STATE 同步。测试:domain 规则真值表 6 项;集成 2 项(五语境
+  确认后投影出处为 listening-projection-v1 + conf 0.85;任务失败翻档 + 阶梯拦截自报
+  升级 + reading 通道不受影响);既有升级/复习/资产测试全数保持通过。验证:workspace
+  427 passed / 0 failed,clippy 15 告警与基线持平零新增。
+
 - 2026-07-07 22:00 CST: Phase 3.5 Slice 4 API + 当前媒体 fit 展示。后端:
   `GET /v1/subtitles/{track_id}/content-fit`(track-scoped,走 Slice 3 缓存读路径)+
   openapi path/schema(FitSignal/DifficultyDimension/ContentDifficultyProfile);

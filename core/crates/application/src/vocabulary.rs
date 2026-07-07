@@ -6,6 +6,10 @@ use crate::*;
 /// (`LEGACY_STATUS_MIGRATION_ALGORITHM_VERSION`).
 pub(crate) const LEGACY_STATUS_COMPAT_ALGORITHM_VERSION: &str = "legacy-status-compat-v1";
 
+/// Bounded evidence read for `listening-projection-v1` recomputes (ADR 0019).
+/// The rule only inspects recent decisive events; 200 newest rows is ample.
+pub(crate) const LISTENING_PROJECTION_EVIDENCE_LIMIT: u32 = 200;
+
 /// Where a channelized observation happened (ADR 0017). Kept as a struct so
 /// writer call sites stay within argument-count discipline.
 pub(crate) struct ObservationContext {
@@ -76,6 +80,21 @@ impl AppServices {
                 if current_dim.user_override.is_some() {
                     continue;
                 }
+                // Writer ladder (ADR 0019 decision 3): compat may not upgrade
+                // over a task-grade evidence conclusion (a self-reported
+                // "认识" cannot overturn task failure). Downgrades and clears
+                // stay allowed, and weakened evidence conclusions may be
+                // overwritten by explicit user judgment.
+                if proj.conclusion == CapabilityConclusion::Acquired
+                    && current_dim.projection.as_ref().is_some_and(|value| {
+                        value.source == CapabilityProjectionSource::EvidenceProjection
+                            && value
+                                .confidence
+                                .is_some_and(|c| c >= LISTENING_CONFIDENCE_TASK)
+                    })
+                {
+                    continue;
+                }
                 self.learning_assets.set_lexical_capability_projection(
                     lexical_entry_id,
                     None,
@@ -110,6 +129,15 @@ impl AppServices {
                     changed_at_ms,
                 )?;
             }
+        }
+        // Re-derive the legacy status column from the profile: the writer
+        // ladder may have kept a task-grade evidence conclusion, and callers
+        // write the raw status onto the entry row before syncing.
+        if let Some(profile) = self
+            .learning_assets
+            .lexical_capability_profile(lexical_entry_id, None)?
+        {
+            self.sync_legacy_status_from_profile(lexical_entry_id, &profile)?;
         }
         Ok(())
     }
@@ -196,6 +224,54 @@ impl AppServices {
         };
         self.learning_assets
             .append_learning_observation(&observation)?;
+        if spec.capability == LexicalCapability::Listening {
+            self.reproject_listening_from_evidence(lexical_entry_id, occurred_at_ms)?;
+        }
+        Ok(())
+    }
+
+    /// Recomputes the listening projection from the channelized evidence
+    /// stream (ADR 0019, `listening-projection-v1`) and refreshes the legacy
+    /// status compat view. Runs after every listening observation append —
+    /// all writers funnel through [`Self::append_channelized_observation`].
+    pub(crate) fn reproject_listening_from_evidence(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        now: u64,
+    ) -> Result<(), ApplicationError> {
+        let observations = self.learning_assets.list_learning_observations(
+            lexical_entry_id,
+            Some(LexicalCapability::Listening),
+            LISTENING_PROJECTION_EVIDENCE_LIMIT,
+            0,
+        )?;
+        let Some(projection) = listening_projection_v1(&observations, now) else {
+            return Ok(());
+        };
+        // Recency guard (ADR 0019 decision 2): a non-evidence writer (compat
+        // downgrade, import) newer than our newest decisive evidence wins
+        // until newer evidence arrives.
+        let current = self
+            .learning_assets
+            .lexical_capability_profile(lexical_entry_id, None)?;
+        if let Some(existing) = current
+            .as_ref()
+            .and_then(|profile| profile.dimension(LexicalCapability::Listening).projection.as_ref())
+            && existing.source != CapabilityProjectionSource::EvidenceProjection
+            && projection
+                .evidence_as_of_ms
+                .is_some_and(|as_of| existing.updated_at_ms > as_of)
+        {
+            return Ok(());
+        }
+        let profile = self.learning_assets.set_lexical_capability_projection(
+            lexical_entry_id,
+            None,
+            LexicalCapability::Listening,
+            Some(projection),
+            now,
+        )?;
+        self.sync_legacy_status_from_profile(lexical_entry_id, &profile)?;
         Ok(())
     }
 

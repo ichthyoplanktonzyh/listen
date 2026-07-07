@@ -55,6 +55,9 @@ pub use learning_loop::*;
 mod learning_observation;
 pub use learning_observation::*;
 
+mod listening_projection;
+pub use listening_projection::*;
+
 mod dictionary;
 pub use dictionary::*;
 

@@ -3,15 +3,16 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-07T19:00:00.000+08:00"
+last_updated: "2026-07-08T01:30:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-07 19:00 CST
-> 更新原因：Phase 3.5 Difficulty & Content Triage 立项（ADR 0018 双维 fit 定义，
-> 9-slice 计划，分支 codex/3.5-difficulty-content-triage）。
-> 3.4.2 由独立分支按实施指南推进（Slice 0-1 完成）。
+> 最后更新：2026-07-08 01:30 CST
+> 更新原因：Phase 3.5 Slice 0-4、6 完成（ADR 0018 双维 fit + ADR 0019
+> listening-projection-v1，升级确认直写移除，schema v24，当前媒体 fit 卡片）。
+> 剩余 Slice 5（三队列 UI）、7-8（回流/冷启动）、9（真实素材 QA）。
+> 3.4.2 由独立分支按实施指南推进（Slice 0-1 完成，迁移号顺延 v25）。
 
 ## 当前位置
 

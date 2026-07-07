@@ -742,6 +742,117 @@ fn five_distinct_review_contexts_require_confirmation_before_status_upgrade() {
         profile.effective_assessment(LexicalCapability::Listening),
         CapabilityAssessment::Acquired
     );
+    // ADR 0019: the conclusion is derived from the observation stream by
+    // listening-projection-v1, not written directly by the confirm handler.
+    let projection = profile.listening.projection.as_ref().unwrap();
+    assert_eq!(
+        projection.algorithm_version,
+        LISTENING_PROJECTION_ALGORITHM_VERSION
+    );
+    assert_eq!(
+        projection.source,
+        CapabilityProjectionSource::EvidenceProjection
+    );
+    assert_eq!(projection.confidence, Some(LISTENING_CONFIDENCE_TASK));
+    assert!(projection.evidence_as_of_ms.is_some());
+}
+
+#[test]
+fn listening_projection_flips_on_task_failure_and_blocks_self_report_upgrade() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    // Word the user believes they can catch by ear (self-report / panel set).
+    let lexical = upsert_word_asset(
+        &services,
+        "en",
+        "gonna",
+        "gonna",
+        Some(LearningStatus::KnownRecognized),
+        None,
+    );
+
+    // One failed audio review on a never-confirmed word flips the listening
+    // view — the "看得懂听不出" discovery (ADR 0019 accepted behavior change).
+    let review = services
+        .create_review_item(application::CreateReviewItem {
+            source: ReviewSource {
+                kind: ReviewSourceKind::LexicalEntry,
+                id: Some(lexical.entry.id.as_str().into()),
+                practice_attempt_id: None,
+                lexical_entry_id: Some(lexical.entry.id.clone()),
+                media_id: None,
+                track_id: None,
+            },
+            anchors: vec![PracticeAnchor {
+                kind: PracticeAnchorKind::LexicalEntry,
+                id: lexical.entry.id.as_str().into(),
+                label: Some("gonna".into()),
+                lexical_entry_id: Some(lexical.entry.id.clone()),
+                sentence_id: None,
+                token_start: None,
+                token_end: None,
+                start_ms: None,
+                end_ms: None,
+            }],
+            prompt_snapshot: "gonna".into(),
+        })
+        .unwrap();
+    services
+        .submit_review_attempt(application::SubmitReviewAttempt {
+            item_id: review.id,
+            rating: ReviewRating::Again,
+        })
+        .unwrap();
+    let details = services.lexical_details(&lexical.entry.id).unwrap().unwrap();
+    assert_eq!(
+        details.entry.status,
+        Some(LearningStatus::KnownNotRecognized)
+    );
+    let profile = services
+        .lexical_capability_profile(&lexical.entry.id)
+        .unwrap()
+        .unwrap();
+    let projection = profile.listening.projection.as_ref().unwrap();
+    assert_eq!(
+        projection.algorithm_version,
+        LISTENING_PROJECTION_ALGORITHM_VERSION
+    );
+    assert_eq!(projection.confidence, Some(LISTENING_CONFIDENCE_TASK));
+
+    // Writer ladder: re-declaring "认识" through the legacy status path may
+    // not upgrade over the task-grade evidence conclusion (option A).
+    upsert_word_asset(
+        &services,
+        "en",
+        "gonna",
+        "gonna",
+        Some(LearningStatus::KnownRecognized),
+        None,
+    );
+    let details = services.lexical_details(&lexical.entry.id).unwrap().unwrap();
+    assert_eq!(
+        details.entry.status,
+        Some(LearningStatus::KnownNotRecognized)
+    );
+    // Reading is not evidence-owned: the self-report still lands there.
+    let profile = services
+        .lexical_capability_profile(&lexical.entry.id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        profile.effective_assessment(LexicalCapability::Reading),
+        CapabilityAssessment::Acquired
+    );
 }
 
 #[test]

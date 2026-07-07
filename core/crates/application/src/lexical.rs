@@ -126,6 +126,12 @@ impl AppServices {
                 now,
                 CapabilityProjectionSource::LegacyLearningStatusMigration,
             )?;
+            // The writer ladder may have kept a task-grade evidence
+            // conclusion; return the effective view, not the raw write.
+            return self
+                .learning_assets
+                .lexical_details(&details.entry.id)?
+                .ok_or(ApplicationError::NotFound("lexical entry"));
         }
         Ok(details)
     }
