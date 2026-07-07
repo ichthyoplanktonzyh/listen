@@ -236,6 +236,21 @@ impl AppServices {
             now,
         )?;
         self.sync_legacy_status_from_profile(&suggestion.lexical_entry_id, &profile)?;
+        // ADR 0017 decision 4: confirmation also lands in the observation
+        // stream so the future evidence-projection algorithm can replace the
+        // direct projection write above without losing this signal.
+        self.append_channelized_observation(
+            &suggestion.lexical_entry_id,
+            observation_spec_for_upgrade_confirmation(capability),
+            ObservationContext {
+                surface_form: Some(suggestion.lexical_display_form.clone()),
+                sentence_id: None,
+                media_id: None,
+            },
+            ObservationOrigin::UserMarking,
+            Some(suggestion.id.as_str().to_owned()),
+            now,
+        )?;
         suggestion.status = UpgradeSuggestionStatus::Accepted;
         suggestion.resolved_at_ms = Some(now);
         suggestion.cooldown_until_ms = None;

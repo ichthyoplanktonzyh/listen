@@ -31,6 +31,7 @@ pub use pronunciation_providers::*;
 pub use providers::*;
 pub use repositories::*;
 pub use util::now_ms;
+pub(crate) use vocabulary::ObservationContext;
 pub(crate) use util::{
     clean_optional, clean_required, normalize_american_english, normalize_phrase,
     phrase_candidates, require_text,

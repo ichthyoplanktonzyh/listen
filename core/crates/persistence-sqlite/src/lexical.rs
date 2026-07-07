@@ -809,6 +809,7 @@ impl LearningAssetRepository for SqliteRepository {
         let (lexical_entries, lexical_history, lexical_occurrences, lexical_observations) =
             self.export_lexical_assets()?;
         let capability_profiles = self.export_all_capability_profiles()?;
+        let learning_observations = self.export_all_learning_observations()?;
         let conn = self.connection.lock().expect("sqlite mutex poisoned");
         Ok(VocabularyAssetBundle {
             version: 6,
@@ -819,6 +820,7 @@ impl LearningAssetRepository for SqliteRepository {
             lexical_observations,
             phonetic_finding_feedback: read_all_phonetic_feedback(&conn)?,
             capability_profiles,
+            learning_observations,
         })
     }
 
@@ -831,6 +833,25 @@ impl LearningAssetRepository for SqliteRepository {
         )?;
         for profile in &bundle.capability_profiles {
             self.import_capability_profile(profile)?;
+        }
+        // Append-only ids make observation merge trivially idempotent
+        // (ADR 0017 decision 6); rows for entries absent locally are skipped
+        // by the same existence rule as capability profiles.
+        for observation in &bundle.learning_observations {
+            let exists = {
+                let conn = self.connection.lock().expect("sqlite mutex poisoned");
+                conn.query_row(
+                    "SELECT 1 FROM lexical_entries WHERE id=?1",
+                    [observation.lexical_entry_id.as_str()],
+                    |_| Ok(()),
+                )
+                .optional()
+                .map_err(repo)?
+                .is_some()
+            };
+            if exists {
+                self.append_learning_observation(observation)?;
+            }
         }
         let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
         let tx = conn.transaction().map_err(repo)?;
@@ -910,6 +931,25 @@ impl LearningAssetRepository for SqliteRepository {
 }
 
 impl SqliteRepository {
+    fn export_all_learning_observations(
+        &self,
+    ) -> Result<Vec<LearningObservation>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = conn
+            .prepare(
+                "SELECT id,lexical_entry_id,sense_id,capability,task_type,outcome,assistance,
+                        surface_form,sentence_id,media_id,origin,source_ref,occurred_at_ms
+                 FROM learning_observations
+                 ORDER BY occurred_at_ms, id",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map([], learning_observation_row)
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
     fn import_capability_profile(
         &self,
         imported: &LexicalCapabilityProfile,

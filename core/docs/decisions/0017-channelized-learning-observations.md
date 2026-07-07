@@ -31,7 +31,10 @@ richness is cheap and irreversible, so it lands before any consumer algorithm.
 
 ```text
 LearningObservation {
-  id                    fingerprint of (target, task, source ref, occurred_at)
+  id                    fingerprint of (target, task, outcome, source ref, occurred_at);
+                        outcome participates because context marking reuses a
+                        stable source ref — two judgments in the same
+                        millisecond must stay two rows
   lexical_entry_id      current mastery-target identity
   sense_id              optional, reserved (ADR 0015 decision 4)
   capability            reading | listening | speaking | writing

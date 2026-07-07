@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-07 17:00 CST: Phase 3.4.4 Slice 3 写入路径接线与便携资产。四条路径全部产出
+  通道化 observation：上下文标记（双写，legacy 最新覆盖行为不变但通道化流保留每次判断）、
+  练习提交（成功与失败均记录，修复失败偏置；无句子锚点也可记录）、复习提交（按 rating
+  映射，source 与 anchors 去重）、升级确认（ADR 0017 决策 4 过渡条款，确认本身入证据流）。
+  `VocabularyAssetBundle` 追加 optional `learning_observations`（版本仍 6，旧包缺字段
+  兼容），导出全量、导入按 id 幂等追加并跳过本地不存在的 entry。修复身份设计缺陷：
+  outcome 纳入 id 指纹（context marking 的 source_ref 按 (entry, sentence) 恒定，同毫秒
+  不同判断必须是两行）。测试：练习成功/失败通道化断言、复习失败通道化断言、标记双写
+  与资产包 round-trip（3 条 observation 幂等导入）、升级确认入流断言。
+  验证：`cargo test --workspace` 405 passed、0 failed；clippy 无新增警告。
+
 - 2026-07-07 16:00 CST: Phase 3.4.4 Slice 2 持久化 schema v23。新增
   `0023_learning_observations.sql`（追加式表，entry 级联删除，
   entry+capability+occurred_at 索引）；迁移回填：未清除的 legacy LexicalObservation

@@ -74,18 +74,23 @@ pub struct LearningObservation {
     pub occurred_at_ms: u64,
 }
 
+/// Outcome participates in identity because some writers (context marking)
+/// reuse a stable source ref: two different judgments in the same millisecond
+/// must stay two rows, while a byte-identical replay stays idempotent.
 pub fn learning_observation_id(
     lexical_entry_id: &LexicalEntryId,
     task_type: ObservationTaskType,
+    outcome: ObservationOutcome,
     source_ref: Option<&str>,
     occurred_at_ms: u64,
 ) -> LearningObservationId {
     LearningObservationId::from_fingerprint(
         "learning-observation",
         &format!(
-            "{}:{}:{}:{occurred_at_ms}",
+            "{}:{}:{}:{}:{occurred_at_ms}",
             lexical_entry_id.as_str(),
             serde_json::to_string(&task_type).expect("task type serializes"),
+            serde_json::to_string(&outcome).expect("outcome serializes"),
             source_ref.unwrap_or(""),
         ),
     )
@@ -155,6 +160,17 @@ pub fn observation_spec_for_practice(
     })
 }
 
+/// The user accepting an upgrade suggestion is itself a declaration-grade
+/// success signal for the suggested capability (ADR 0017 decision 4).
+pub fn observation_spec_for_upgrade_confirmation(capability: LexicalCapability) -> ObservationSpec {
+    ObservationSpec {
+        task_type: ObservationTaskType::UpgradeConfirmation,
+        capability,
+        assistance: AssistanceLevel::None,
+        outcome: ObservationOutcome::Success,
+    }
+}
+
 pub fn observation_spec_for_review(rating: ReviewRating) -> ObservationSpec {
     ObservationSpec {
         task_type: ObservationTaskType::ReviewRecall,
@@ -182,28 +198,42 @@ mod tests {
         let a = learning_observation_id(
             &same_entry,
             ObservationTaskType::Dictation,
+            ObservationOutcome::Failure,
             Some("attempt-1"),
             100,
         );
         let b = learning_observation_id(
             &same_entry,
             ObservationTaskType::Dictation,
+            ObservationOutcome::Failure,
             Some("attempt-2"),
             100,
         );
         let c = learning_observation_id(
             &same_entry,
             ObservationTaskType::Dictation,
+            ObservationOutcome::Failure,
             Some("attempt-1"),
             200,
         );
+        // A different judgment behind the same stable source ref (context
+        // marking) in the same millisecond is still distinct evidence.
+        let d = learning_observation_id(
+            &same_entry,
+            ObservationTaskType::Dictation,
+            ObservationOutcome::Success,
+            Some("attempt-1"),
+            100,
+        );
         assert_ne!(a, b);
         assert_ne!(a, c);
+        assert_ne!(a, d);
         assert_eq!(
             a,
             learning_observation_id(
                 &same_entry,
                 ObservationTaskType::Dictation,
+                ObservationOutcome::Failure,
                 Some("attempt-1"),
                 100,
             )

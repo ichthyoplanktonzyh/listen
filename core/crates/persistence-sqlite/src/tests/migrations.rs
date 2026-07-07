@@ -54,7 +54,7 @@ fn v23_backfills_uncleared_legacy_observations_with_explicit_provenance() {
                  FROM learning_observations ORDER BY occurred_at_ms",
             )
             .unwrap();
-        let collected = statement
+        statement
             .query_map([], |row| {
                 Ok((
                     row.get(0)?,
@@ -67,8 +67,7 @@ fn v23_backfills_uncleared_legacy_observations_with_explicit_provenance() {
             })
             .unwrap()
             .collect::<Result<Vec<_>, _>>()
-            .unwrap();
-        collected
+            .unwrap()
     };
     // Cleared legacy markings are retracted judgments, not evidence.
     assert_eq!(rows.len(), 2);

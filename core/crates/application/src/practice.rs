@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use crate::*;
 
@@ -124,6 +124,32 @@ impl AppServices {
             generated_observation_ids: Vec::new(),
             generated_review_item_ids: Vec::new(),
         };
+
+        // Channelized evidence records success and failure alike (ADR 0017
+        // decision 3); the legacy failure-only block below is unchanged.
+        if let Some(spec) = observation_spec_for_practice(item.kind, result) {
+            for anchor in item
+                .anchors
+                .iter()
+                .filter(|value| value.kind == PracticeAnchorKind::LexicalEntry)
+            {
+                let Some(lexical_entry_id) = &anchor.lexical_entry_id else {
+                    continue;
+                };
+                self.append_channelized_observation(
+                    lexical_entry_id,
+                    spec,
+                    ObservationContext {
+                        surface_form: anchor.label.clone(),
+                        sentence_id: anchor.sentence_id.clone(),
+                        media_id: None,
+                    },
+                    ObservationOrigin::PracticeTask,
+                    Some(attempt.id.as_str().to_owned()),
+                    now,
+                )?;
+            }
+        }
 
         if result != PracticeResult::Correct && result != PracticeResult::Skipped {
             for anchor in item
@@ -316,6 +342,56 @@ impl AppServices {
             next_due_at_ms: Some(schedule.due_at_ms),
         })?;
         let schedule = self.review.save_review_schedule(&schedule)?;
+        {
+            let spec = observation_spec_for_review(input.rating);
+            let fallback_sentence = item
+                .anchors
+                .iter()
+                .find_map(|anchor| anchor.sentence_id.clone());
+            let mut observed = HashSet::new();
+            for anchor in item
+                .anchors
+                .iter()
+                .filter(|value| value.kind == PracticeAnchorKind::LexicalEntry)
+            {
+                let Some(lexical_entry_id) = &anchor.lexical_entry_id else {
+                    continue;
+                };
+                if !observed.insert(lexical_entry_id.clone()) {
+                    continue;
+                }
+                self.append_channelized_observation(
+                    lexical_entry_id,
+                    spec,
+                    ObservationContext {
+                        surface_form: anchor.label.clone(),
+                        sentence_id: anchor.sentence_id.clone().or_else(|| {
+                            fallback_sentence.clone()
+                        }),
+                        media_id: item.source.media_id.clone(),
+                    },
+                    ObservationOrigin::ReviewTask,
+                    Some(attempt.id.as_str().to_owned()),
+                    now,
+                )?;
+            }
+            if let Some(lexical_entry_id) = item.source.lexical_entry_id.as_ref()
+                && observed.insert(lexical_entry_id.clone())
+            {
+                self.append_channelized_observation(
+                    lexical_entry_id,
+                    spec,
+                    ObservationContext {
+                        surface_form: None,
+                        sentence_id: fallback_sentence.clone(),
+                        media_id: item.source.media_id.clone(),
+                    },
+                    ObservationOrigin::ReviewTask,
+                    Some(attempt.id.as_str().to_owned()),
+                    now,
+                )?;
+            }
+        }
         let (generated_observation_ids, hunting_candidate_ids, upgrade_suggestions) =
             if input.rating == ReviewRating::Again {
                 let (observations, candidates) = self.record_review_failure(&item, now)?;

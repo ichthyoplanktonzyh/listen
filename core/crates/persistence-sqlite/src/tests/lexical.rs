@@ -17,7 +17,13 @@ fn learning_observations_append_without_replacing_prior_rows() {
     let sentence = SubtitleSentenceId::parse("s1").unwrap();
 
     let base = LearningObservation {
-        id: learning_observation_id(&entry.id, ObservationTaskType::Dictation, Some("a1"), 100),
+        id: learning_observation_id(
+            &entry.id,
+            ObservationTaskType::Dictation,
+            ObservationOutcome::Failure,
+            Some("a1"),
+            100,
+        ),
         lexical_entry_id: entry.id.clone(),
         sense_id: None,
         capability: LexicalCapability::Listening,
@@ -36,7 +42,13 @@ fn learning_observations_append_without_replacing_prior_rows() {
     // Same (entry, sentence), later attempt: must be a second row, not a
     // replacement (the legacy LexicalObservation latest-wins defect).
     let second = LearningObservation {
-        id: learning_observation_id(&entry.id, ObservationTaskType::Dictation, Some("a2"), 200),
+        id: learning_observation_id(
+            &entry.id,
+            ObservationTaskType::Dictation,
+            ObservationOutcome::Success,
+            Some("a2"),
+            200,
+        ),
         outcome: ObservationOutcome::Success,
         source_ref: Some("a2".into()),
         occurred_at_ms: 200,
@@ -936,6 +948,24 @@ fn upgrade_suggestion_confirm_updates_listening_projection() {
         .unwrap()
         .unwrap();
     assert_eq!(details.entry.status, Some(LearningStatus::KnownRecognized));
+
+    // ADR 0017 decision 4: the confirmation itself joins the observation
+    // stream so the transitional direct projection write can be replaced later.
+    let confirmations: Vec<_> = repo
+        .list_learning_observations(&entry.entry.id, Some(LexicalCapability::Listening), 10, 0)
+        .unwrap()
+        .into_iter()
+        .filter(|observation| {
+            observation.task_type == ObservationTaskType::UpgradeConfirmation
+        })
+        .collect();
+    assert_eq!(confirmations.len(), 1);
+    assert_eq!(confirmations[0].outcome, ObservationOutcome::Success);
+    assert_eq!(confirmations[0].origin, ObservationOrigin::UserMarking);
+    assert_eq!(
+        confirmations[0].source_ref.as_deref(),
+        Some(suggestion.id.as_str())
+    );
 }
 
 #[test]

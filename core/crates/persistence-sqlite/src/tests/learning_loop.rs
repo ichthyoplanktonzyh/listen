@@ -474,6 +474,118 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
             .status,
         Some(LearningStatus::KnownNotRecognized)
     );
+
+    // ADR 0017: the same failed review also lands one channelized
+    // listening observation, deduplicated across source and anchors.
+    let channelized = repo
+        .list_learning_observations(&lexical.entry.id, Some(LexicalCapability::Listening), 10, 0)
+        .unwrap();
+    assert_eq!(channelized.len(), 1);
+    assert_eq!(channelized[0].task_type, ObservationTaskType::ReviewRecall);
+    assert_eq!(channelized[0].outcome, ObservationOutcome::Failure);
+    assert_eq!(channelized[0].assistance, AssistanceLevel::None);
+    assert_eq!(channelized[0].origin, ObservationOrigin::ReviewTask);
+    assert_eq!(channelized[0].surface_form.as_deref(), Some("Hello"));
+    assert_eq!(
+        channelized[0].source_ref.as_deref(),
+        Some(submission.attempt.id.as_str())
+    );
+}
+
+#[test]
+fn practice_attempts_append_channelized_observations_for_success_and_failure() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    let lexical = upsert_word_asset(&services, "en", "signal", "signals", None, None);
+    // Anchor without a sentence: channelized evidence must still be recorded
+    // even where the legacy (entry, sentence)-keyed path cannot write.
+    let anchors = vec![PracticeAnchor {
+        kind: PracticeAnchorKind::LexicalEntry,
+        id: lexical.entry.id.as_str().into(),
+        label: Some("signals".into()),
+        lexical_entry_id: Some(lexical.entry.id.clone()),
+        sentence_id: None,
+        token_start: None,
+        token_end: None,
+        start_ms: None,
+        end_ms: None,
+    }];
+    let target = PracticeTarget {
+        kind: PracticeTargetKind::Lexical,
+        id: Some(lexical.entry.id.as_str().into()),
+        sentence_id: None,
+        chunk_id: None,
+        start_ms: None,
+        end_ms: None,
+    };
+    let correct_item = services
+        .create_practice_item(application::CreatePracticeItem {
+            session_id: None,
+            kind: PracticeKind::Dictation,
+            target: target.clone(),
+            prompt_snapshot: "signals".into(),
+            expected_text: "signals".into(),
+            anchors: anchors.clone(),
+        })
+        .unwrap();
+    let correct = services
+        .submit_practice_attempt(application::SubmitPracticeAttempt {
+            item_id: correct_item.id,
+            text_answer: "signals".into(),
+            create_review_item_on_failure: false,
+        })
+        .unwrap();
+    assert_eq!(correct.result, PracticeResult::Correct);
+
+    let failed_item = services
+        .create_practice_item(application::CreatePracticeItem {
+            session_id: None,
+            kind: PracticeKind::Dictation,
+            target,
+            prompt_snapshot: "signals".into(),
+            expected_text: "signals".into(),
+            anchors,
+        })
+        .unwrap();
+    let failed = services
+        .submit_practice_attempt(application::SubmitPracticeAttempt {
+            item_id: failed_item.id,
+            text_answer: "single".into(),
+            create_review_item_on_failure: false,
+        })
+        .unwrap();
+    assert_ne!(failed.result, PracticeResult::Correct);
+    // Legacy path stays failure-only and sentence-keyed: nothing there.
+    assert!(failed.generated_observation_ids.is_empty());
+
+    let channelized = repo
+        .list_learning_observations(&lexical.entry.id, None, 10, 0)
+        .unwrap();
+    assert_eq!(channelized.len(), 2);
+    let outcomes: Vec<_> = channelized
+        .iter()
+        .map(|observation| observation.outcome)
+        .collect();
+    assert!(outcomes.contains(&ObservationOutcome::Success));
+    assert!(outcomes.iter().any(|o| *o != ObservationOutcome::Success));
+    for observation in &channelized {
+        assert_eq!(observation.capability, LexicalCapability::Listening);
+        assert_eq!(observation.task_type, ObservationTaskType::Dictation);
+        assert_eq!(observation.assistance, AssistanceLevel::None);
+        assert_eq!(observation.origin, ObservationOrigin::PracticeTask);
+        assert_eq!(observation.surface_form.as_deref(), Some("signals"));
+        assert!(observation.sentence_id.is_none());
+    }
 }
 
 #[test]

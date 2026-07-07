@@ -189,7 +189,13 @@ pub(crate) fn backfill_legacy_observations(connection: &Connection) -> Result<()
     for (legacy_id, entry_id, sentence_id, original_form, result, created_at_ms) in rows {
         let entry_id = LexicalEntryId::parse(entry_id).map_err(super::domain_sql)?;
         let spec = observation_spec_for_marking(result);
-        let id = learning_observation_id(&entry_id, spec.task_type, Some(&legacy_id), created_at_ms);
+        let id = learning_observation_id(
+            &entry_id,
+            spec.task_type,
+            spec.outcome,
+            Some(&legacy_id),
+            created_at_ms,
+        );
         connection.execute(
             "INSERT OR IGNORE INTO learning_observations
              (id,lexical_entry_id,sense_id,capability,task_type,outcome,assistance,

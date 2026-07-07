@@ -12,6 +12,7 @@ mod transcription;
 
 pub use connection::SqliteRepository;
 pub use migrations::{MIGRATION_VERSION, migrate};
+#[cfg(test)]
 pub(crate) use migrations::backfill_legacy_observations;
 pub use support::PersistenceError;
 pub(crate) use support::{domain_sql, from_json, json, repo};

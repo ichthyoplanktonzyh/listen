@@ -6,6 +6,14 @@ use crate::*;
 /// (`LEGACY_STATUS_MIGRATION_ALGORITHM_VERSION`).
 pub(crate) const LEGACY_STATUS_COMPAT_ALGORITHM_VERSION: &str = "legacy-status-compat-v1";
 
+/// Where a channelized observation happened (ADR 0017). Kept as a struct so
+/// writer call sites stay within argument-count discipline.
+pub(crate) struct ObservationContext {
+    pub surface_form: Option<String>,
+    pub sentence_id: Option<SubtitleSentenceId>,
+    pub media_id: Option<MediaId>,
+}
+
 impl AppServices {
     pub fn lexical_capability_profile(
         &self,
@@ -153,6 +161,44 @@ impl AppServices {
             .lexical_entries_by_keys(&language, kind, &normalized)
     }
 
+    /// Single writer entry for channelized evidence: builds the append-only
+    /// identity and defers channel semantics to the domain mapping (ADR 0017
+    /// guardrail: call sites must not inline channel judgments).
+    pub(crate) fn append_channelized_observation(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        spec: ObservationSpec,
+        context: ObservationContext,
+        origin: ObservationOrigin,
+        source_ref: Option<String>,
+        occurred_at_ms: u64,
+    ) -> Result<(), ApplicationError> {
+        let observation = LearningObservation {
+            id: learning_observation_id(
+                lexical_entry_id,
+                spec.task_type,
+                spec.outcome,
+                source_ref.as_deref(),
+                occurred_at_ms,
+            ),
+            lexical_entry_id: lexical_entry_id.clone(),
+            sense_id: None,
+            capability: spec.capability,
+            task_type: spec.task_type,
+            outcome: spec.outcome,
+            assistance: spec.assistance,
+            surface_form: context.surface_form,
+            sentence_id: context.sentence_id,
+            media_id: context.media_id,
+            origin,
+            source_ref,
+            occurred_at_ms,
+        };
+        self.learning_assets
+            .append_learning_observation(&observation)?;
+        Ok(())
+    }
+
     pub fn create_lexical_observation(
         &self,
         input: CreateLexicalObservation,
@@ -187,6 +233,21 @@ impl AppServices {
                 LearningChangeSource::UserSelection,
             )?;
         }
+        self.append_channelized_observation(
+            &observation.lexical_entry_id,
+            observation_spec_for_marking(observation.result),
+            ObservationContext {
+                surface_form: Some(observation.original_form.clone()),
+                sentence_id: Some(observation.sentence_id.clone()),
+                media_id: input
+                    .source
+                    .as_ref()
+                    .and_then(|source| source.media_id.clone()),
+            },
+            ObservationOrigin::UserMarking,
+            Some(observation.id.as_str().to_owned()),
+            created_at_ms,
+        )?;
         if observation.result == ObservationResult::RecognizedInContext {
             self.record_context_recognition_evidence(
                 observation.lexical_entry_id.clone(),
