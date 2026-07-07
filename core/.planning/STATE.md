@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-06T16:00:00.000+08:00"
+last_updated: "2026-07-07T10:00:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-06 16:00 CST
-> 更新原因：Phase 3.4.1 Learning Capability Model v2 全部完成（Slice 0-6）。四通道能力画像
-> 成为唯一权威，legacy `LearningStatus` 降级为兼容投影；诊断、升级建议、导入导出均已迁移到
-> capability profile 驱动。后续 3.4.2 / 3.4.3 待启动。
+> 最后更新：2026-07-07 10:00 CST
+> 更新原因：Phase 3.4.2 Semantic / Prosodic Group Separation 启动。ADR 0016 已定稿：
+> SenseGroup 为 token-span 句子级文本标注，与 ChunkTimeline（韵律组）独立共存；播放范围
+> 通过 WordTimeline 投影；规则回退 provider 先行，UD/LLM 后续。
 
 ## 当前位置
 
@@ -181,6 +181,14 @@ last_updated: "2026-07-06T16:00:00.000+08:00"
 - 后续：3.4.2 新增 SenseGroup 语义层；3.4.3 验证 Construction 身份。
 - 收口文档：`.planning/phases/3.4.1-learning-capability-model-v2/3.4.1-PLAN.md`。
 
+### Phase 3.4.2: Semantic / Prosodic Group Separation ⏳ IN_PROGRESS
+
+- 目标：新增 SenseGroup（意群）语义加工层，保留 ChunkTimeline 韵律层独立共存。
+- 架构：SenseGroup 是 token-span 句子级文本标注，不是全局学习资产。播放范围通过
+  WordTimeline 投影。两层独立管理，对齐关系推迟。ADR 0016 已定稿。
+- 当前进度：Slice 0（Planning + ADR）进行中。
+- 规划文档：`.planning/phases/3.4.2-semantic-prosodic-group-separation/3.4.2-PLAN.md`。
+
 ## 已完成 Phase 索引
 
 | Phase | 结论 | 文档 |
@@ -251,17 +259,17 @@ last_updated: "2026-07-06T16:00:00.000+08:00"
 
 ## 当前阻塞项
 
-- Phase 3.5 及依赖全局词汇状态的新业务等待 Phase 3.4.1 权威模型切换。
 - Phase 3.4 / 3.35 手工 QA 主动暂停，不是外部阻塞。
 
 ## 下一步工作
 
-1. Phase 3.4.1 已完成（Slice 0-6）。恢复 Phase 3.4/3.35 手工 QA，重新基线化新能力 UI。
-2. 完成 Phase 3.3 真实媒体 30 分钟泛听 QA 并收口；3.5/3.6 现可启动。
-3. 评估 Phase 3.4.2（SenseGroup 语义层）或 3.4.3（Construction spike）启动时机。
-4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
+1. Phase 3.4.2 进行中（Slice 0 完成，继续 Slice 1 domain contract）。
+2. 恢复 Phase 3.4/3.35 手工 QA，重新基线化新能力 UI。
+3. 完成 Phase 3.3 真实媒体 30 分钟泛听 QA 并收口；3.5/3.6 现可启动。
+4. Phase 3.4.3（Construction spike）待 3.4.2 稳定后启动。
+5. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
-5. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）；
+6. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）；
    legacy `LearningStatus` 物理删除推迟到所有 active consumer 迁移后的独立 cleanup phase。
 
 ## 指标

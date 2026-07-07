@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-07 CST: 启动 Phase 3.4.2 Semantic / Prosodic Group Separation（Slice 0）。
+  新增 ADR 0016：SenseGroup 为 token-span 句子级文本标注，与 ChunkTimeline（韵律组）独立
+  共存；SenseGroup 不存储时间，播放范围通过 WordTimeline 投影；本阶段采用扁平分组，目标
+  粒度 3-5 组/句；规则回退 provider 先行（标点+长度+短语保护），UD/LLM 后续接入；
+  ChunkTimeline 不重命名；语义/韵律对齐推迟。细化 3.4.2-PLAN.md 为 7 个可检查 slice。
+
 - 2026-07-06 CST: 完成 Phase 3.4.1 Slice 6 authority switch and closeout。capability profile
   成为唯一权威决策来源：diagnosis-core `classify_entry()` 移除 legacy `LearningStatus` 回退
   分支，只使用 capability profile 进行 meaning/recognition barrier 分类；upgrade suggestion
