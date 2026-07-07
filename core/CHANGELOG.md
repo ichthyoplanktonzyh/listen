@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 2026-07-07 21:00 CST: 迁移号第二次协调：v24（0024_content_difficulty_profiles）由
+  main 上先落地的 Phase 3.5 Slice 3 占用，本阶段 sense_group_analyses 迁移顺延为
+  v25/0025；PLAN 与实施指南同步改号（顺延规则不变）。
+
 - 2026-07-07 15:00 CST: 迁移号协调：schema v23（0023_learning_observations）由 main 上的
   Phase 3.4.4 证据层占用，本阶段 Slice 3 的 sense_group_analyses 迁移改用 v24/0024；
   PLAN 与实施指南同步更新，并注明合并时编号再冲突的顺延规则。
