@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-07 12:10 CST: Learning Domain Model v2 第二轮精化评审裁决落档。新增
+  `.planning/discuss/learning-domain-model-v2-refinement-review.zh.md`（八项优化空间、
+  复杂度分层原则、字段裁决标准、砍掉项与排期）；共享上下文新增不变量 16-18（listening
+  acquired 条件语义、投影写入者互斥、精细度不泄漏交互层）、§5.3 evidence shape 增补
+  `surface_form`、新增 §14 Refinement Addendum；STATE.md 记录决策并更新下一步
+  （证据层 slice 为 3.5 前置、sense 身份 spike 为 3.6 前置）。
+
 - 2026-07-06 CST: 完成 Phase 3.4.1 Slice 6 authority switch and closeout。capability profile
   成为唯一权威决策来源：diagnosis-core `classify_entry()` 移除 legacy `LearningStatus` 回退
   分支，只使用 capability profile 进行 meaning/recognition barrier 分类；upgrade suggestion
