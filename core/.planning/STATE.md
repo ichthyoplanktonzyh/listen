@@ -11,7 +11,9 @@ last_updated: "2026-07-08T01:30:00.000+08:00"
 > 最后更新：2026-07-08 01:30 CST
 > 更新原因：Phase 3.5 Slice 0-4、6 完成（ADR 0018 双维 fit + ADR 0019
 > listening-projection-v1，升级确认直写移除，schema v24，当前媒体 fit 卡片）。
-> 剩余 Slice 5（三队列 UI）、7-8（回流/冷启动）、9（真实素材 QA）。
+> 剩余推进顺序（owner 2026-07-08）：Slice 5（三队列 + 首页媒体库列表，UI 方向已定：
+> 不做独立页面，首页列表按队列分组、黄金靶置顶）→ Slice 7（反馈回流）；
+> Slice 8 已写交接指南（3.5-SLICE8-COLDSTART-GUIDE.md）交独立实现者；Slice 9 owner QA。
 > 3.4.2 由独立分支按实施指南推进（Slice 0-1 完成，迁移号顺延 v25）。
 
 ## 当前位置
