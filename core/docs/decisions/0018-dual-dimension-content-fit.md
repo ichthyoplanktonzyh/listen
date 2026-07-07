@@ -74,7 +74,8 @@ ContentDifficultyProfile {
   algorithm_version      "content-fit-v1"
   computed_at_ms, input_fingerprint
 }
-FitSignal { kind: FitSignalKind, value: f32, weight_note: Option<String> }
+FitSignal { kind: FitSignalKind, value: f32, decisive: bool }
+  // decisive = this signal selected or escalated the band (vs informational)
 ```
 
 - `InputFit` (too_easy / comprehensible / challenging / too_hard) is reused per dimension.

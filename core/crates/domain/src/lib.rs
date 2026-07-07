@@ -46,6 +46,9 @@ pub use learning::*;
 mod capability;
 pub use capability::*;
 
+mod content_fit;
+pub use content_fit::*;
+
 mod learning_loop;
 pub use learning_loop::*;
 

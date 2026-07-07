@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- 2026-07-07 19:40 CST: Phase 3.5 Slice 1 domain 双维难度契约。新增
+  `crates/domain/src/content_fit.rs`:`ContentDifficultyProfile` v2(meaning/sound 双
+  `DifficultyDimension` + 结构化 `FitSignal`(kind/value/decisive)+
+  `assessed_token_ratio` + `evidence_grade` + `algorithm_version`)、banding 纯函数
+  (`meaning_fit` 覆盖率分档、`sound_fit` KNR 基档 + 语速/弱读单向升档饱和于 too_hard)、
+  全部阈值常量单点定义(heuristic_proxy,注研究锚点);诚实降级判定
+  `has_sufficient_vocabulary_profile`(MIN_ASSESSED_TOKEN_RATIO=0.5)。旧单维
+  `ContentDifficultyProfile`/`InputFit` 壳从 learning_loop.rs 移除(零外部引用,原地
+  重塑无兼容负担);`InputFit` 迁入新模块,glob re-export 路径不变。测试 7 项:阈值
+  端点、unassessed 保守折算与 decisive 标记、KNR 基档、升档与饱和、慢速交付信号仅
+  informational、缺失可选信号省略、画像充分性阈值。验证:workspace 412 passed / 0
+  failed,domain clippy 零告警。ADR 0018 FitSignal 形状同步为 decisive 标记。
+
 - 2026-07-07 19:00 CST: Phase 3.5 Difficulty & Content Triage 立项（Slice 0）。新增
   ADR 0018 双维 fit 定义：meaning/sound 双维 `ContentDifficultyProfile` v2 形状、
   信号集 v1（unknown/unassessed/known_not_recognized 密度、语速、弱读/压缩密度、

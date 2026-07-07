@@ -193,15 +193,6 @@ pub enum PlayableSegmentAvailability {
     MissingTimeline,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum InputFit {
-    TooEasy,
-    Comprehensible,
-    Challenging,
-    TooHard,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PracticeSession {
     pub id: PracticeSessionId,
@@ -430,22 +421,6 @@ pub struct PlayableSegment {
     pub label: String,
     pub subtitle_snapshot: String,
     pub availability: PlayableSegmentAvailability,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ContentDifficultyProfile {
-    pub subject_kind: String,
-    pub subject_id: String,
-    pub language: LanguageCode,
-    pub unknown_density: f32,
-    pub known_not_recognized_density: f32,
-    pub speech_rate_wpm: Option<f32>,
-    pub chunk_complexity: Option<f32>,
-    pub connected_speech_density: Option<f32>,
-    pub resource_quality: Option<f32>,
-    pub fit: InputFit,
-    pub computed_at_ms: u64,
-    pub input_fingerprint: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
