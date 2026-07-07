@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-07 14:00 CST: 新增 3.4.2-IMPLEMENTATION-GUIDE.md（Slice 2-6 交接实施指南）。
+  难度评估为"不难、工作量大"：各层均有 ChunkTimeline 1:1 模板可镜像。指南钉死五个全局
+  陷阱（SenseGroup 用原始 token index 而非 chunk 的 word 序数、active partial unique
+  index 的 JSON 字面量写法、生成不依赖 active word timeline、ADR 0016 决策 9 overlay
+  不排除性、本机 jieba 缺失的既有校验失败），并给出逐 slice 的模板文件行号参照、
+  规则算法要求、测试清单与收口验收清单。
+
 - 2026-07-07 12:20 CST: ADR 0016 增补决策 9（2026-07-07 修正案）：用户意群修正是独立
   per-sentence overlay 层，provider analysis 持久化行内不得出现 `User` source，重新生成
   分析不得毁坏用户修正；schema v23 不得排除 overlay（本阶段无编辑 UI，不建 overlay 机制）。
