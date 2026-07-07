@@ -475,6 +475,43 @@ fn external_import_preserves_existing_status_and_updates_learning_content() {
     );
 }
 
+#[test]
+fn external_import_marks_capability_projection_with_import_source() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo,
+    );
+    services
+        .import_external_vocabulary(&ExternalVocabularyImport {
+            language: "en".into(),
+            entries: vec![ExternalVocabularyEntry {
+                word: "signal".into(),
+                status: Some(LearningStatus::KnownNotRecognized),
+            }],
+            default_status: None,
+            overwrite_existing: false,
+        })
+        .unwrap();
+    let entry = read_word_asset(&services, "en", "signal").unwrap();
+    let profile = services
+        .lexical_capability_profile(&entry.id)
+        .unwrap()
+        .unwrap();
+    for dimension in [&profile.reading, &profile.listening] {
+        let projection = dimension.projection.as_ref().unwrap();
+        assert_eq!(projection.source, CapabilityProjectionSource::Import);
+        assert_eq!(projection.algorithm_version, "legacy-status-compat-v1");
+        assert!(dimension.user_override.is_none());
+    }
+}
+
 #[tokio::test]
 async fn dictionary_aggregation_isolates_provider_failure() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());

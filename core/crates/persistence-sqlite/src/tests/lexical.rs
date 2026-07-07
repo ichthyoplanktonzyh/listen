@@ -405,6 +405,12 @@ fn create_lexical_entry_with_status_syncs_capability_profile() {
         profile.effective_assessment(LexicalCapability::Writing),
         CapabilityAssessment::Unassessed
     );
+    let reading = profile.reading.projection.as_ref().unwrap();
+    assert_eq!(
+        reading.source,
+        CapabilityProjectionSource::LegacyLearningStatusMigration
+    );
+    assert_eq!(reading.algorithm_version, "legacy-status-compat-v1");
 }
 
 #[test]

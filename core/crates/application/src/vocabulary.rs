@@ -1,6 +1,11 @@
 use crate::lexical::lexical_unit_for_entry;
 use crate::*;
 
+/// Marks capability projections inferred from a legacy linear status write,
+/// as opposed to the one-shot v22 backfill
+/// (`LEGACY_STATUS_MIGRATION_ALGORITHM_VERSION`).
+pub(crate) const LEGACY_STATUS_COMPAT_ALGORITHM_VERSION: &str = "legacy-status-compat-v1";
+
 impl AppServices {
     pub fn lexical_capability_profile(
         &self,
@@ -33,11 +38,19 @@ impl AppServices {
         Ok(profile)
     }
 
+    /// Projects a legacy linear status write into the capability profile.
+    ///
+    /// `source` must state where the legacy status came from
+    /// (`LegacyLearningStatusMigration` for live compat syncs of user-facing
+    /// legacy writes, `Import` for external vocabulary imports); the shared
+    /// algorithm version marks the mapping as a compat inference either way.
+    /// `EvidenceProjection` is reserved for real evidence-derived projections.
     pub(crate) fn sync_capability_from_legacy_status(
         &self,
         lexical_entry_id: &LexicalEntryId,
         status: Option<LearningStatus>,
         changed_at_ms: u64,
+        source: CapabilityProjectionSource,
     ) -> Result<(), ApplicationError> {
         let target =
             LexicalCapabilityProfile::from_legacy_status(lexical_entry_id.clone(), status, changed_at_ms);
@@ -61,8 +74,8 @@ impl AppServices {
                     capability,
                     Some(CapabilityProjection {
                         conclusion: proj.conclusion,
-                        source: CapabilityProjectionSource::EvidenceProjection,
-                        algorithm_version: "legacy-status-compat-v1".into(),
+                        source,
+                        algorithm_version: LEGACY_STATUS_COMPAT_ALGORITHM_VERSION.into(),
                         updated_at_ms: changed_at_ms,
                     }),
                     changed_at_ms,
@@ -325,7 +338,12 @@ impl AppServices {
                 LearningChangeSource::Import,
             )?;
             if status.is_some() {
-                self.sync_capability_from_legacy_status(&entry.id, status, imported_at_ms)?;
+                self.sync_capability_from_legacy_status(
+                    &entry.id,
+                    status,
+                    imported_at_ms,
+                    CapabilityProjectionSource::Import,
+                )?;
             }
             if existing.is_some() {
                 summary.overwritten += 1;

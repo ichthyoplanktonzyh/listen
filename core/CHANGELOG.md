@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-07 12:40 CST: 修复 capability projection 来源标注失真（精化评审 §5.1）。
+  `sync_capability_from_legacy_status` 增加 source 参数：外部词表导入
+  （`import_external_vocabulary`）写 `Import`，legacy status 写路径的实时兼容同步写
+  `LegacyLearningStatusMigration`（与 v22 一次性回填共享来源语义，以 algorithm_version
+  `legacy-status-compat-v1` 区分）；`EvidenceProjection` 保留给真证据路径（升级确认）。
+  新增两个来源断言测试。历史已写入的旧标签不回溯迁移。
+  验证：`cargo test -p application -p persistence-sqlite` 全部通过。
+
 - 2026-07-07 12:10 CST: Learning Domain Model v2 第二轮精化评审裁决落档。新增
   `.planning/discuss/learning-domain-model-v2-refinement-review.zh.md`（八项优化空间、
   复杂度分层原则、字段裁决标准、砍掉项与排期）；共享上下文新增不变量 16-18（listening

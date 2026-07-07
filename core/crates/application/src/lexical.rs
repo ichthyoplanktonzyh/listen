@@ -124,6 +124,7 @@ impl AppServices {
                 &details.entry.id,
                 details.entry.status,
                 now,
+                CapabilityProjectionSource::LegacyLearningStatusMigration,
             )?;
         }
         Ok(details)
