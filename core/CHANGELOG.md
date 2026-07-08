@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- 2026-07-08 08:15 CST: Phase 3.5 Slice 7 反馈回流 → 个人 sound fit 校准项。
+  校准项 = 独立持久表 `content_fit_calibrations`(迁移 v27)中的反馈计数记录
+  (理解度自报三档计数 + 计分练习尝试/正确计数),是学习者证据不是缓存:
+  与 fit 缓存分离、在任何 fit 重算后存活;原始材料信号永不改写。写路径:
+  complete practice session 尾部把本 session 的理解度自报(3.3 泛听)与计分
+  练习表现(跳过不计)累加进对应媒体的校准记录(无 media 或无反馈不写;
+  已结束 session 重复 complete 不重复计数;best-effort——fit 是装饰,校准存储
+  不可用不能挡 session 完成)。读路径:fit 计算末尾以纯函数从计数导出修正
+  (`sound_fit_calibration_outcome`,domain 单点定义,全部 heuristic_proxy:
+  自报 ≥2 条按多数方向 ±1 档、平票取谨慎向 harder;练习 ≥5 次尝试正确率
+  ≥0.85 → 易一档 / ≤0.5 → 难一档;双通道相加 clamp 到 ±1 档),只平移 sound
+  档位并追加两个可解释校准信号(comprehension_report_unclear_ratio /
+  practice_correct_rate,decisive 标记);任一通道证据足够即
+  `evidence_grade → usage_calibrated`(零修正也算校准:使用验证了档位)。
+  算法版本 content-fit-v1 → v2(管线加入校准输入;分档常量未动),
+  fingerprint 纳入校准水位(新反馈自动失效缓存)。openapi FitSignal kind
+  枚举 + Dart 本地化(en/zh)+ contract fixture 校准态测试同步;UI 无需改动
+  (usage_calibrated 文案与信号渲染 Slice 4 已就位)。测试:domain 校准
+  真值表 5 项(最小证据/多数与平票/正确率端点/双通道合成与 clamp/应用后
+  材料信号不动 + 饱和);persistence 集成 3 项(自报两次 unclear → 难一档 +
+  usage_calibrated + 换词汇强制重算后校准存活;无 media/无反馈不写;
+  精听 1/6 正确 → 难一档 + decisive 信号)。验证:cargo test --workspace
+  440 passed / 0 failed,flutter analyze 干净,flutter test 227 passed,
+  clippy 四 crate 零新增(20 处告警全在既有文件),validate-contracts 仅
+  本机既有 4 个 CJK jieba 失败。
+
 - 2026-07-08 07:55 CST: Phase 3.5 Slice 5 三队列分拣 + 首页媒体库列表。后端:
   `GET /v1/media` 媒体库读模型(每个媒体 + primary 语言轨的缓存 fit +
   用户分拣意图 + 3.2 熟料标记;逐媒体 fit 失败静默降级为无徽标不掉行)、

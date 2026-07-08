@@ -912,6 +912,17 @@ pub trait DifficultyRepository: Send + Sync {
         subject_kind: &str,
         subject_id: &str,
     ) -> Result<Option<ContentDifficultyProfile>, ApplicationError>;
+    /// Durable usage-feedback record (Phase 3.5 Slice 7) — evidence, not
+    /// cache: it must survive profile recomputes and cache invalidation.
+    fn save_fit_calibration(
+        &self,
+        calibration: &SoundFitCalibration,
+    ) -> Result<SoundFitCalibration, ApplicationError>;
+    fn get_fit_calibration(
+        &self,
+        subject_kind: &str,
+        subject_id: &str,
+    ) -> Result<Option<SoundFitCalibration>, ApplicationError>;
 }
 
 pub trait LearnerProfileRepository: Send + Sync {

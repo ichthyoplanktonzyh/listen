@@ -48,8 +48,16 @@ impl AppServices {
         let chunk_timeline = self.timelines.active_chunk_timeline(track_id)?;
         let (vocab_count, vocab_watermark_ms) =
             self.learning_assets.lexical_vocabulary_watermark(language)?;
+        // The calibration watermark makes new usage feedback invalidate the
+        // cached profile; the record itself is durable evidence and is never
+        // touched by recomputes (Slice 7).
+        let calibration_watermark_ms = self
+            .difficulty
+            .get_fit_calibration("media", track.media_id.as_str())?
+            .map(|calibration| calibration.updated_at_ms)
+            .unwrap_or(0);
         let canonical_input = format!(
-            "{}|lang:{}|track:{}:{}|wt:{}:{}|ct:{}:{}|vocab:{}:{}",
+            "{}|lang:{}|track:{}:{}|wt:{}:{}|ct:{}:{}|vocab:{}:{}|cal:{}",
             CONTENT_FIT_ALGORITHM_VERSION,
             language.as_str(),
             track.id.as_str(),
@@ -60,6 +68,7 @@ impl AppServices {
             chunk_timeline.as_ref().map(|t| t.updated_at_ms).unwrap_or(0),
             vocab_count,
             vocab_watermark_ms,
+            calibration_watermark_ms,
         );
         Ok(content_fit_fingerprint(&canonical_input))
     }
@@ -189,23 +198,38 @@ impl AppServices {
             Some(words as f32 / timeline.chunks.len() as f32)
         });
 
+        let media_id = document.metadata.media.id.as_str().to_owned();
+        let mut sound = sound_fit(SoundFitInputs {
+            known_not_recognized_density,
+            speech_rate_wpm: speech_rate,
+            weak_form_density,
+            compression_density,
+            mean_chunk_length,
+        });
+        // Usage-feedback calibration (Slice 7): the recorded correction term
+        // shifts only the presented band and appends its own signals; the
+        // material signals above stay raw. Only this path may report
+        // `usage_calibrated` (ADR 0018 decision 1).
+        let mut evidence_grade = FitEvidenceGrade::InitialEstimate;
+        if let Some(calibration) = self.difficulty.get_fit_calibration("media", &media_id)? {
+            let outcome = sound_fit_calibration_outcome(&calibration);
+            if outcome.informative {
+                sound = apply_sound_fit_calibration(sound, &outcome);
+                evidence_grade = FitEvidenceGrade::UsageCalibrated;
+            }
+        }
+
         Ok(ContentDifficultyProfile {
             subject_kind: "media".into(),
-            subject_id: document.metadata.media.id.as_str().to_owned(),
+            subject_id: media_id,
             language,
             meaning: meaning_fit(MeaningFitInputs {
                 unknown_meaning_density,
                 unassessed_density,
             }),
-            sound: sound_fit(SoundFitInputs {
-                known_not_recognized_density,
-                speech_rate_wpm: speech_rate,
-                weak_form_density,
-                compression_density,
-                mean_chunk_length,
-            }),
+            sound,
             assessed_token_ratio: 1.0 - unassessed_density,
-            evidence_grade: FitEvidenceGrade::InitialEstimate,
+            evidence_grade,
             algorithm_version: CONTENT_FIT_ALGORITHM_VERSION.into(),
             computed_at_ms: now_ms(),
             input_fingerprint,

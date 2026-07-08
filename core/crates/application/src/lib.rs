@@ -172,6 +172,25 @@ impl DifficultyRepository for DisabledDifficultyRepository {
             "difficulty repository is not configured".into(),
         ))
     }
+
+    fn save_fit_calibration(
+        &self,
+        _calibration: &SoundFitCalibration,
+    ) -> Result<SoundFitCalibration, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "difficulty repository is not configured".into(),
+        ))
+    }
+
+    fn get_fit_calibration(
+        &self,
+        _subject_kind: &str,
+        _subject_id: &str,
+    ) -> Result<Option<SoundFitCalibration>, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "difficulty repository is not configured".into(),
+        ))
+    }
 }
 
 pub(crate) fn timing_priority(source: TimingSource) -> u8 {

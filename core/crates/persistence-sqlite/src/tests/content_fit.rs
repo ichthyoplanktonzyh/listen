@@ -317,3 +317,228 @@ fn content_fit_requires_language_and_word_tokens() {
         ))
     ));
 }
+
+#[test]
+fn comprehension_feedback_calibrates_sound_fit_and_survives_recompute() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = fit_services(&repo)
+        .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    MediaRepository::upsert(repo.as_ref(), &transcription_media()).unwrap();
+    let track = fit_track(Some("en"));
+    repo.save_track(&track).unwrap();
+    seed_vocabulary(&services);
+
+    // Baseline: 0.05 knr => challenging, initial estimate.
+    let baseline = services.content_fit_for_track(&track.id).unwrap();
+    assert_eq!(baseline.sound.fit, InputFit::Challenging);
+    assert_eq!(baseline.evidence_grade, FitEvidenceGrade::InitialEstimate);
+
+    // Two extensive sessions self-reported "unclear" on this media.
+    for _ in 0..2 {
+        let session = services
+            .create_practice_session(application::CreatePracticeSession {
+                mode: PracticeMode::Extensive,
+                media_id: Some(track.media_id.clone()),
+                track_id: Some(track.id.clone()),
+                source: Some("test".into()),
+            })
+            .unwrap();
+        services
+            .complete_practice_session(
+                &session.id,
+                application::CompletePracticeSessionInput {
+                    mark_familiar: false,
+                    comprehension_report: Some(ListeningComprehensionReport::Unclear),
+                },
+            )
+            .unwrap();
+    }
+
+    // The calibration record is durable evidence, not a cache row.
+    let calibration = application::DifficultyRepository::get_fit_calibration(
+        repo.as_ref(),
+        "media",
+        track.media_id.as_str(),
+    )
+    .unwrap()
+    .expect("feedback recorded a calibration");
+    assert_eq!(calibration.reports_unclear, 2);
+
+    // The calibration watermark invalidates the cached profile: the next
+    // read re-bands one step harder and reports usage_calibrated, with the
+    // calibration signal attached and material signals untouched.
+    let calibrated = services.content_fit_for_track(&track.id).unwrap();
+    assert_ne!(calibrated.input_fingerprint, baseline.input_fingerprint);
+    assert_eq!(calibrated.sound.fit, InputFit::TooHard);
+    assert_eq!(calibrated.evidence_grade, FitEvidenceGrade::UsageCalibrated);
+    let signal = calibrated
+        .sound
+        .signals
+        .iter()
+        .find(|signal| signal.kind == FitSignalKind::ComprehensionReportUnclearRatio)
+        .expect("calibration signal present");
+    assert!(signal.decisive);
+    assert!((signal.value - 1.0).abs() < 1e-6);
+    assert_eq!(
+        signal_value(&calibrated.sound, FitSignalKind::KnownNotRecognizedDensity),
+        signal_value(&baseline.sound, FitSignalKind::KnownNotRecognizedDensity),
+    );
+
+    // Vocabulary changes force a full recompute; the calibration survives it
+    // because it lives outside the profile cache.
+    services
+        .create_lexical_entry(UpsertLexicalEntry {
+            language: "en".into(),
+            kind: LexicalEntryKind::Word,
+            canonical_form: "tango".into(),
+            display_form: "tango".into(),
+            status: Some(LearningStatus::KnownRecognized),
+            user_definition: None,
+            personal_note: None,
+            source: None,
+        })
+        .unwrap();
+    let recomputed = services.content_fit_for_track(&track.id).unwrap();
+    assert_ne!(recomputed.input_fingerprint, calibrated.input_fingerprint);
+    assert_eq!(recomputed.evidence_grade, FitEvidenceGrade::UsageCalibrated);
+    assert_eq!(recomputed.sound.fit, InputFit::TooHard);
+}
+
+#[test]
+fn sessions_without_media_or_feedback_leave_no_calibration() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = fit_services(&repo)
+        .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    MediaRepository::upsert(repo.as_ref(), &transcription_media()).unwrap();
+
+    // No media on the session: nothing to calibrate.
+    let session = services
+        .create_practice_session(application::CreatePracticeSession {
+            mode: PracticeMode::Extensive,
+            media_id: None,
+            track_id: None,
+            source: Some("test".into()),
+        })
+        .unwrap();
+    services
+        .complete_practice_session(
+            &session.id,
+            application::CompletePracticeSessionInput {
+                mark_familiar: false,
+                comprehension_report: Some(ListeningComprehensionReport::Unclear),
+            },
+        )
+        .unwrap();
+
+    // Media session without report or scored attempts: also nothing.
+    let media_id = MediaId::parse("media-1").unwrap();
+    let session = services
+        .create_practice_session(application::CreatePracticeSession {
+            mode: PracticeMode::Extensive,
+            media_id: Some(media_id.clone()),
+            track_id: None,
+            source: Some("test".into()),
+        })
+        .unwrap();
+    services
+        .complete_practice_session(
+            &session.id,
+            application::CompletePracticeSessionInput {
+                mark_familiar: false,
+                comprehension_report: None,
+            },
+        )
+        .unwrap();
+    assert!(
+        application::DifficultyRepository::get_fit_calibration(
+            repo.as_ref(),
+            "media",
+            media_id.as_str(),
+        )
+        .unwrap()
+        .is_none()
+    );
+}
+
+#[test]
+fn practice_accuracy_feedback_calibrates_sound_fit() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = fit_services(&repo)
+        .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    MediaRepository::upsert(repo.as_ref(), &transcription_media()).unwrap();
+    let track = fit_track(Some("en"));
+    repo.save_track(&track).unwrap();
+    seed_vocabulary(&services);
+
+    let session = services
+        .create_practice_session(application::CreatePracticeSession {
+            mode: PracticeMode::Intensive,
+            media_id: Some(track.media_id.clone()),
+            track_id: Some(track.id.clone()),
+            source: Some("test".into()),
+        })
+        .unwrap();
+    let sentence_id = track.sentences[0].id.clone();
+    // Six dictation attempts, one correct: 1/6 <= 0.5 shifts one band
+    // harder once enough attempts exist.
+    for index in 0..6 {
+        let item = services
+            .create_practice_item(application::CreatePracticeItem {
+                session_id: Some(session.id.clone()),
+                kind: PracticeKind::Dictation,
+                target: PracticeTarget {
+                    kind: PracticeTargetKind::Sentence,
+                    id: Some(sentence_id.as_str().into()),
+                    sentence_id: Some(sentence_id.clone()),
+                    chunk_id: None,
+                    start_ms: Some(0),
+                    end_ms: Some(6_000),
+                },
+                prompt_snapshot: format!("prompt {index}"),
+                expected_text: "alpha bravo".into(),
+                anchors: Vec::new(),
+            })
+            .unwrap();
+        services
+            .submit_practice_attempt(application::SubmitPracticeAttempt {
+                item_id: item.id,
+                text_answer: if index == 0 {
+                    "alpha bravo".into()
+                } else {
+                    "zulu yankee".into()
+                },
+                create_review_item_on_failure: false,
+            })
+            .unwrap();
+    }
+    services
+        .complete_practice_session(
+            &session.id,
+            application::CompletePracticeSessionInput {
+                mark_familiar: false,
+                comprehension_report: None,
+            },
+        )
+        .unwrap();
+
+    let calibration = application::DifficultyRepository::get_fit_calibration(
+        repo.as_ref(),
+        "media",
+        track.media_id.as_str(),
+    )
+    .unwrap()
+    .expect("practice feedback recorded");
+    assert_eq!(calibration.practice_attempts, 6);
+    assert_eq!(calibration.practice_correct, 1);
+
+    let profile = services.content_fit_for_track(&track.id).unwrap();
+    assert_eq!(profile.evidence_grade, FitEvidenceGrade::UsageCalibrated);
+    assert_eq!(profile.sound.fit, InputFit::TooHard);
+    assert!(
+        profile
+            .sound
+            .signals
+            .iter()
+            .any(|signal| signal.kind == FitSignalKind::PracticeCorrectRate && signal.decisive)
+    );
+}

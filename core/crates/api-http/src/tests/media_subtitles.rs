@@ -279,7 +279,7 @@ async fn content_fit_endpoint_serves_dual_dimension_profile() {
     assert_eq!(profile["subject_kind"], "media");
     assert_eq!(profile["subject_id"], media["id"]);
     assert_eq!(profile["language"], "en");
-    assert_eq!(profile["algorithm_version"], "content-fit-v1");
+    assert_eq!(profile["algorithm_version"], "content-fit-v2");
     assert_eq!(profile["evidence_grade"], "initial_estimate");
     // Nothing is marked yet: the whole transcript is unassessed, so the
     // conservative estimate reports too_hard with an honest zero ratio.

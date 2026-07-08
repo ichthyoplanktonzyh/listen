@@ -1,5 +1,5 @@
 use application::{ApplicationError, DifficultyRepository};
-use domain::ContentDifficultyProfile;
+use domain::{ContentDifficultyProfile, SoundFitCalibration};
 use rusqlite::{OptionalExtension, params};
 
 use super::{SqliteRepository, from_json, json, repo};
@@ -46,6 +46,47 @@ impl DifficultyRepository for SqliteRepository {
         let conn = self.connection.lock().expect("sqlite mutex poisoned");
         conn.query_row(
             "SELECT profile_json FROM content_difficulty_profiles
+             WHERE subject_kind=?1 AND subject_id=?2",
+            params![subject_kind, subject_id],
+            |row| from_json(&row.get::<_, String>(0)?),
+        )
+        .optional()
+        .map_err(repo)
+    }
+
+    fn save_fit_calibration(
+        &self,
+        calibration: &SoundFitCalibration,
+    ) -> Result<SoundFitCalibration, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.execute(
+            // Durable evidence, one row per subject; unlike the profile
+            // cache above this table is never invalidated, only updated.
+            "INSERT INTO content_fit_calibrations
+             (subject_kind,subject_id,calibration_json,updated_at_ms)
+             VALUES (?1,?2,?3,?4)
+             ON CONFLICT(subject_kind,subject_id) DO UPDATE SET
+               calibration_json=excluded.calibration_json,
+               updated_at_ms=excluded.updated_at_ms",
+            params![
+                calibration.subject_kind,
+                calibration.subject_id,
+                json(calibration)?,
+                calibration.updated_at_ms,
+            ],
+        )
+        .map_err(repo)?;
+        Ok(calibration.clone())
+    }
+
+    fn get_fit_calibration(
+        &self,
+        subject_kind: &str,
+        subject_id: &str,
+    ) -> Result<Option<SoundFitCalibration>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.query_row(
+            "SELECT calibration_json FROM content_fit_calibrations
              WHERE subject_kind=?1 AND subject_id=?2",
             params![subject_kind, subject_id],
             |row| from_json(&row.get::<_, String>(0)?),

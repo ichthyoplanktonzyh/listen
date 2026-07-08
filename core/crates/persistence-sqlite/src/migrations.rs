@@ -9,7 +9,7 @@ use super::PersistenceError;
 
 // v25 is reserved by Phase 3.4.2 (independent branch); this repository jumps
 // 24 -> 26 per the "later lander renumbers" rule recorded in the 3.5 plan.
-pub const MIGRATION_VERSION: u32 = 26;
+pub const MIGRATION_VERSION: u32 = 27;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -178,6 +178,14 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         let tx = connection.unchecked_transaction()?;
         tx.execute_batch(include_str!("../migrations/0026_media_triage_intents.sql"))?;
         tx.pragma_update(None, "user_version", 26)?;
+        tx.commit()?;
+    }
+    if current < 27 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!(
+            "../migrations/0027_content_fit_calibrations.sql"
+        ))?;
+        tx.pragma_update(None, "user_version", 27)?;
         tx.commit()?;
     }
     Ok(())

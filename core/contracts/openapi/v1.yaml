@@ -2508,7 +2508,8 @@ components:
         kind:
           type: string
           enum: [unknown_meaning_density, unassessed_density, known_not_recognized_density,
-                 speech_rate_wpm, weak_form_density, compression_density, mean_chunk_length]
+                 speech_rate_wpm, weak_form_density, compression_density, mean_chunk_length,
+                 comprehension_report_unclear_ratio, practice_correct_rate]
         value: { type: number, format: float }
         # True when this signal selected or escalated the band (vs informational).
         decisive: { type: boolean }

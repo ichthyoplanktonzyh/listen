@@ -3,18 +3,22 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-08T01:30:00.000+08:00"
+last_updated: "2026-07-08T08:20:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-08 01:30 CST
-> 更新原因：Phase 3.5 Slice 0-4、6 完成（ADR 0018 双维 fit + ADR 0019
-> listening-projection-v1，升级确认直写移除，schema v24，当前媒体 fit 卡片）。
-> 剩余推进顺序（owner 2026-07-08）：Slice 5（三队列 + 首页媒体库列表，UI 方向已定：
-> 不做独立页面，首页列表按队列分组、黄金靶置顶）→ Slice 7（反馈回流）；
-> Slice 8 已写交接指南（3.5-SLICE8-COLDSTART-GUIDE.md）交独立实现者；Slice 9 owner QA。
-> 3.4.2 由独立分支按实施指南推进（Slice 0-1 完成，迁移号顺延 v25）。
+> 最后更新：2026-07-08 08:20 CST
+> 更新原因：Phase 3.5 Slice 5、7 完成。Slice 5：`GET /v1/media` 媒体库读模型 +
+> pin/暂缓意图持久化（迁移 v26）+ 首页媒体库列表按三队列分组（黄金靶置顶、
+> 熟料回听供给可关、一键泛听/精听，队列派生在客户端展示层，红线保持）。
+> Slice 7：反馈回流——理解度自报 + 练习表现累加进独立持久表
+> content_fit_calibrations（迁移 v27，证据不是缓存、重算后存活），fit 计算
+> 纯函数导出 ±1 档 sound 修正 + usage_calibrated，算法版本 content-fit-v2。
+> 剩余：Slice 8（冷启动标注流，已交独立实现者，指南
+> 3.5-SLICE8-COLDSTART-GUIDE.md）+ Slice 9（owner 真实素材 QA）。
+> 3.4.2 由独立分支按实施指南推进（Slice 0-1 完成，迁移号 v25 保留给它，
+> 本仓已用到 v26/v27，后落地方顺延）。
 
 ## 当前位置
 
