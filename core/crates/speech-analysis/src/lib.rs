@@ -9,6 +9,7 @@ pub mod phone_recognition;
 pub mod phonetic_alignment;
 pub mod phonetic_findings;
 pub mod rich_acoustic_evidence;
+pub mod sense_group_partition;
 pub mod sound_analysis;
 pub mod text_chunk_detection;
 pub mod word_acoustics;

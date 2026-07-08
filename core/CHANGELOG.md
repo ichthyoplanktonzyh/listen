@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-08 10:30 CST: Phase 3.4.2 Slice 2 — 规则回退 partition provider 落地。新增
+  `crates/speech-analysis/src/sense_group_partition.rs`（`partition_sentence` 纯文本分组，
+  标点+长度+短语保护规则），在 `lib.rs` 注册模块。14 个单元测试覆盖英文 ≥5 句、中文 ≥3 句、
+  边界情况及不变量断言（组不重叠、连续覆盖全部 Word token、每组 ≥1 Word）。合入
+  `codex/3.4.2-sense-group-separation` 获取 Slice 1 domain contract。
+
 - 2026-07-07 21:00 CST: 迁移号第二次协调：v24（0024_content_difficulty_profiles）由
   main 上先落地的 Phase 3.5 Slice 3 占用，本阶段 sense_group_analyses 迁移顺延为
   v25/0025；PLAN 与实施指南同步改号（顺延规则不变）。
