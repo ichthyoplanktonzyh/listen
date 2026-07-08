@@ -108,6 +108,7 @@ fn v21_capability_migration_preserves_a_queryable_pre_migration_backup() {
     assert!(has_table(&path, "lexical_capability_states"));
     assert!(has_table(&path, "learning_observations"));
     assert!(has_table(&path, "content_difficulty_profiles"));
+    assert!(has_table(&path, "sense_group_analysis_runs"));
 
     let backup = backup_of(&path);
     assert_eq!(user_version(&backup), 21);

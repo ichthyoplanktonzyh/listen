@@ -130,6 +130,11 @@ fn timeline_active_uniqueness_is_schema_enforced() {
     );
     repo.save_phone_timeline(&phone_active).unwrap();
     assert!(repo.save_phone_timeline(&phone_duplicate).is_err());
+
+    let sg_active = sense_group_analysis("sg-active-unique-1", &track, TimelineStatus::Active);
+    let sg_duplicate = sense_group_analysis("sg-active-unique-2", &track, TimelineStatus::Active);
+    repo.save_sense_group_analysis(&sg_active).unwrap();
+    assert!(repo.save_sense_group_analysis(&sg_duplicate).is_err());
 }
 
 #[test]
@@ -359,4 +364,129 @@ fn lltimeline_resource_metadata_and_artifacts_round_trip() {
     assert!(saved_metadata.human_reviewed);
     assert_eq!(saved_artifacts.len(), 1);
     assert_eq!(saved_artifacts[0].kind, "production_report");
+}
+
+fn sense_group_analysis(
+    id: &str,
+    track: &SubtitleTrack,
+    status: TimelineStatus,
+) -> SenseGroupAnalysis {
+    SenseGroupAnalysis {
+        id: SenseGroupAnalysisId::parse(id).unwrap(),
+        track_id: track.id.clone(),
+        media_id: track.media_id.clone(),
+        parent_word_timeline_id: None,
+        provider_id: "rule-based-sense-group".into(),
+        provider_version: "v1".into(),
+        algorithm: "punctuation_length_rule_v1".into(),
+        status,
+        created_by: TimelineCreator::Algorithm,
+        metrics_json: serde_json::json!({}).into(),
+        groups: vec![SenseGroup {
+            id: SenseGroupId::parse(format!("{id}-sg-1")).unwrap(),
+            sentence_id: track.sentences[0].id.clone(),
+            group_index: 0,
+            start_token_index: 0,
+            end_token_index: 0,
+            text: "hello".into(),
+            label: None,
+            head_token_index: None,
+            confidence: 0.5,
+            sources: vec![SenseGroupSource::Rule],
+        }],
+        created_at_ms: 1,
+        updated_at_ms: 1,
+    }
+}
+
+#[test]
+fn activating_sense_group_analysis_updates_active_resource() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let track = word_timeline_track();
+    repo.save_track(&track).unwrap();
+    let older = sense_group_analysis("sg-analysis-1", &track, TimelineStatus::Active);
+    let newer = sense_group_analysis("sg-analysis-2", &track, TimelineStatus::Candidate);
+    repo.save_sense_group_analysis(&older).unwrap();
+    repo.save_sense_group_analysis(&newer).unwrap();
+
+    let active = repo.activate_sense_group_analysis(&newer.id).unwrap();
+    assert_eq!(active.status, TimelineStatus::Active);
+    assert_eq!(
+        repo.active_sense_group_analysis(&track.id)
+            .unwrap()
+            .unwrap()
+            .id,
+        newer.id
+    );
+    assert_eq!(
+        repo.get_sense_group_analysis(&older.id)
+            .unwrap()
+            .unwrap()
+            .status,
+        TimelineStatus::Candidate
+    );
+    assert_eq!(
+        repo.list_sense_group_analyses(&track.id).unwrap().len(),
+        2
+    );
+}
+
+#[test]
+fn archiving_and_deleting_sense_group_analysis_updates_repository() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let track = word_timeline_track();
+    repo.save_track(&track).unwrap();
+    let analysis = sense_group_analysis("sg-analysis-delete", &track, TimelineStatus::Candidate);
+    repo.save_sense_group_analysis(&analysis).unwrap();
+
+    let archived = repo.archive_sense_group_analysis(&analysis.id).unwrap();
+    assert_eq!(archived.status, TimelineStatus::Archived);
+    let deleted = repo.delete_sense_group_analysis(&analysis.id).unwrap();
+    assert_eq!(deleted.id, analysis.id);
+    assert!(
+        repo.get_sense_group_analysis(&analysis.id)
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn sense_group_analysis_json_round_trip() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let track = word_timeline_track();
+    repo.save_track(&track).unwrap();
+
+    let mut analysis = sense_group_analysis("sg-roundtrip", &track, TimelineStatus::Candidate);
+    analysis.groups.push(SenseGroup {
+        id: SenseGroupId::parse("sg-roundtrip-sg-2").unwrap(),
+        sentence_id: track.sentences[0].id.clone(),
+        group_index: 1,
+        start_token_index: 1,
+        end_token_index: 3,
+        text: "round trip test".into(),
+        label: Some("NP".into()),
+        head_token_index: Some(2),
+        confidence: 0.8,
+        sources: vec![SenseGroupSource::Punctuation, SenseGroupSource::LengthLimit],
+    });
+    repo.save_sense_group_analysis(&analysis).unwrap();
+
+    let loaded = repo
+        .get_sense_group_analysis(&analysis.id)
+        .unwrap()
+        .expect("analysis should be saved");
+    assert_eq!(loaded.id, analysis.id);
+    assert_eq!(loaded.provider_id, "rule-based-sense-group");
+    assert_eq!(loaded.algorithm, "punctuation_length_rule_v1");
+    assert_eq!(loaded.groups.len(), 2);
+    assert_eq!(loaded.groups[0].text, "hello");
+    assert_eq!(loaded.groups[1].text, "round trip test");
+    assert_eq!(loaded.groups[1].label, Some("NP".into()));
+    assert_eq!(
+        loaded.groups[1].sources,
+        vec![SenseGroupSource::Punctuation, SenseGroupSource::LengthLimit]
+    );
 }

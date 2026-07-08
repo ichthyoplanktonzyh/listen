@@ -137,6 +137,34 @@ pub trait SubtitleRepository: Send + Sync {
         &self,
         id: &ChunkTimelineId,
     ) -> Result<ChunkTimeline, ApplicationError>;
+    fn save_sense_group_analysis(
+        &self,
+        analysis: &SenseGroupAnalysis,
+    ) -> Result<SenseGroupAnalysis, ApplicationError>;
+    fn list_sense_group_analyses(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<SenseGroupAnalysis>, ApplicationError>;
+    fn get_sense_group_analysis(
+        &self,
+        id: &SenseGroupAnalysisId,
+    ) -> Result<Option<SenseGroupAnalysis>, ApplicationError>;
+    fn active_sense_group_analysis(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<SenseGroupAnalysis>, ApplicationError>;
+    fn activate_sense_group_analysis(
+        &self,
+        id: &SenseGroupAnalysisId,
+    ) -> Result<SenseGroupAnalysis, ApplicationError>;
+    fn archive_sense_group_analysis(
+        &self,
+        id: &SenseGroupAnalysisId,
+    ) -> Result<SenseGroupAnalysis, ApplicationError>;
+    fn delete_sense_group_analysis(
+        &self,
+        id: &SenseGroupAnalysisId,
+    ) -> Result<SenseGroupAnalysis, ApplicationError>;
     fn save_phone_timeline(
         &self,
         timeline: &PhoneTimeline,
@@ -402,6 +430,34 @@ pub trait TimelineResourceRepository: Send + Sync {
         &self,
         id: &ChunkTimelineId,
     ) -> Result<ChunkTimeline, ApplicationError>;
+    fn save_sense_group_analysis(
+        &self,
+        analysis: &SenseGroupAnalysis,
+    ) -> Result<SenseGroupAnalysis, ApplicationError>;
+    fn list_sense_group_analyses(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<SenseGroupAnalysis>, ApplicationError>;
+    fn get_sense_group_analysis(
+        &self,
+        id: &SenseGroupAnalysisId,
+    ) -> Result<Option<SenseGroupAnalysis>, ApplicationError>;
+    fn active_sense_group_analysis(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<SenseGroupAnalysis>, ApplicationError>;
+    fn activate_sense_group_analysis(
+        &self,
+        id: &SenseGroupAnalysisId,
+    ) -> Result<SenseGroupAnalysis, ApplicationError>;
+    fn archive_sense_group_analysis(
+        &self,
+        id: &SenseGroupAnalysisId,
+    ) -> Result<SenseGroupAnalysis, ApplicationError>;
+    fn delete_sense_group_analysis(
+        &self,
+        id: &SenseGroupAnalysisId,
+    ) -> Result<SenseGroupAnalysis, ApplicationError>;
     fn save_phone_timeline(
         &self,
         timeline: &PhoneTimeline,
@@ -538,6 +594,55 @@ impl<T: SubtitleRepository + ?Sized> TimelineResourceRepository for T {
         id: &ChunkTimelineId,
     ) -> Result<ChunkTimeline, ApplicationError> {
         SubtitleRepository::delete_chunk_timeline(self, id)
+    }
+
+    fn save_sense_group_analysis(
+        &self,
+        analysis: &SenseGroupAnalysis,
+    ) -> Result<SenseGroupAnalysis, ApplicationError> {
+        SubtitleRepository::save_sense_group_analysis(self, analysis)
+    }
+
+    fn list_sense_group_analyses(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<SenseGroupAnalysis>, ApplicationError> {
+        SubtitleRepository::list_sense_group_analyses(self, track_id)
+    }
+
+    fn get_sense_group_analysis(
+        &self,
+        id: &SenseGroupAnalysisId,
+    ) -> Result<Option<SenseGroupAnalysis>, ApplicationError> {
+        SubtitleRepository::get_sense_group_analysis(self, id)
+    }
+
+    fn active_sense_group_analysis(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<SenseGroupAnalysis>, ApplicationError> {
+        SubtitleRepository::active_sense_group_analysis(self, track_id)
+    }
+
+    fn activate_sense_group_analysis(
+        &self,
+        id: &SenseGroupAnalysisId,
+    ) -> Result<SenseGroupAnalysis, ApplicationError> {
+        SubtitleRepository::activate_sense_group_analysis(self, id)
+    }
+
+    fn archive_sense_group_analysis(
+        &self,
+        id: &SenseGroupAnalysisId,
+    ) -> Result<SenseGroupAnalysis, ApplicationError> {
+        SubtitleRepository::archive_sense_group_analysis(self, id)
+    }
+
+    fn delete_sense_group_analysis(
+        &self,
+        id: &SenseGroupAnalysisId,
+    ) -> Result<SenseGroupAnalysis, ApplicationError> {
+        SubtitleRepository::delete_sense_group_analysis(self, id)
     }
 
     fn save_phone_timeline(
