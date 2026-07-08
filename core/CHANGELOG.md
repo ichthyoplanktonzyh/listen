@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-08 11:45 CST: Phase 3.4.2 Slice 4 — Application use cases + API routes + LLTimeline 集成。
+  新增 `crates/application/src/sense_groups.rs`（generate/list/summarize/get/activate/archive/delete，
+  generate 无 word timeline 硬依赖，纯文本 partition → SenseGroup 组装含 char-span text 切片）。
+  API 7 个 handler（`timelines.rs`）+ 6 条路由注册（`lib.rs`）覆盖 GET/POST/DELETE/activate/archive。
+  LLTimeline 导出填充 `sense_group_analyses` + `active_sense_group_analysis_id`，导入镜像
+  chunk_timelines 保存+激活流程。`remap_lltimeline_identity` 扩展 5 处（media/track remap、
+  sentence_id remap、parent_word_timeline_id remap、analysis id remap + group id remap、
+  active id remap）。OpenAPI spec 新增 5 paths + 5 component schemas（SenseGroupAnalysis/
+  SenseGroupAnalysisSummary/SenseGroup/SenseGroupSource/GenerateSenseGroupAnalysis）。
+
 - 2026-07-08 11:15 CST: Phase 3.4.2 Slice 3 — SenseGroupAnalysis 持久化层落地。新增
   `migrations/0025_sense_group_analyses.sql`（`sense_group_analysis_runs` 表，4 索引含
   active 唯一约束，镜像 chunk_timeline_runs 模式），在 `migrations.rs` 注册 v25 slot。

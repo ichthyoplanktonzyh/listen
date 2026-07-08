@@ -445,3 +445,103 @@ pub(crate) struct CreateWordTimelineRequest {
 pub(crate) struct GenerateChunkTimelineRequest {
     status: Option<domain::TimelineStatus>,
 }
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct GenerateSenseGroupAnalysisRequest {
+    status: Option<domain::TimelineStatus>,
+}
+
+pub(crate) async fn track_sense_group_analyses(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<Vec<domain::SenseGroupAnalysis>>, ApiError> {
+    state
+        .services
+        .list_sense_group_analyses(
+            &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn track_sense_group_analysis_summaries(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<Vec<domain::SenseGroupAnalysisSummary>>, ApiError> {
+    state
+        .services
+        .summarize_sense_group_analyses(
+            &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn generate_sense_group_analysis(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+    request: Option<Json<GenerateSenseGroupAnalysisRequest>>,
+) -> Result<Json<domain::SenseGroupAnalysis>, ApiError> {
+    let status = request.and_then(|Json(request)| request.status);
+    state
+        .services
+        .generate_sense_group_analysis(
+            &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
+            status,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn sense_group_analysis(
+    State(state): State<ApiState>,
+    Path(analysis_id): Path<String>,
+) -> Result<Json<domain::SenseGroupAnalysis>, ApiError> {
+    state
+        .services
+        .get_sense_group_analysis(
+            &domain::SenseGroupAnalysisId::parse(analysis_id).map_err(ApplicationError::from)?,
+        )?
+        .ok_or(ApplicationError::NotFound("sense group analysis"))
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn activate_sense_group_analysis(
+    State(state): State<ApiState>,
+    Path(analysis_id): Path<String>,
+) -> Result<Json<domain::SenseGroupAnalysis>, ApiError> {
+    state
+        .services
+        .activate_sense_group_analysis(
+            &domain::SenseGroupAnalysisId::parse(analysis_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn archive_sense_group_analysis(
+    State(state): State<ApiState>,
+    Path(analysis_id): Path<String>,
+) -> Result<Json<domain::SenseGroupAnalysis>, ApiError> {
+    state
+        .services
+        .archive_sense_group_analysis(
+            &domain::SenseGroupAnalysisId::parse(analysis_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn delete_sense_group_analysis(
+    State(state): State<ApiState>,
+    Path(analysis_id): Path<String>,
+) -> Result<Json<domain::SenseGroupAnalysis>, ApiError> {
+    state
+        .services
+        .delete_sense_group_analysis(
+            &domain::SenseGroupAnalysisId::parse(analysis_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}

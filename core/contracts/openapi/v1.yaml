@@ -565,6 +565,82 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ChunkTimeline"
+  /v1/subtitles/{track_id}/sense-group-analyses:
+    get:
+      operationId: trackSenseGroupAnalyses
+      responses:
+        "200":
+          description: Sense group analysis resources for a subtitle track
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SenseGroupAnalysis" }
+    post:
+      operationId: generateSenseGroupAnalysis
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateSenseGroupAnalysis"
+      responses:
+        "200":
+          description: Generated sense group analysis from rule-based partition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SenseGroupAnalysis"
+  /v1/subtitles/{track_id}/sense-group-analyses/summary:
+    get:
+      operationId: trackSenseGroupAnalysisSummaries
+      responses:
+        "200":
+          description: Summaries for sense group analysis resources
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SenseGroupAnalysisSummary" }
+  /v1/sense-group-analyses/{analysis_id}:
+    get:
+      operationId: senseGroupAnalysis
+      responses:
+        "200":
+          description: Sense group analysis resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SenseGroupAnalysis"
+    delete:
+      operationId: deleteSenseGroupAnalysis
+      responses:
+        "200":
+          description: Deleted sense group analysis resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SenseGroupAnalysis"
+  /v1/sense-group-analyses/{analysis_id}/activate:
+    post:
+      operationId: activateSenseGroupAnalysis
+      responses:
+        "200":
+          description: Activated sense group analysis resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SenseGroupAnalysis"
+  /v1/sense-group-analyses/{analysis_id}/archive:
+    post:
+      operationId: archiveSenseGroupAnalysis
+      responses:
+        "200":
+          description: Archived sense group analysis resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SenseGroupAnalysis"
   /v1/subtitles/{track_id}/phone-timelines:
     get:
       operationId: trackPhoneTimelines
@@ -2196,6 +2272,70 @@ components:
           anyOf:
             - $ref: "#/components/schemas/TimelineStatus"
             - type: "null"
+    GenerateSenseGroupAnalysis:
+      type: object
+      properties:
+        status:
+          anyOf:
+            - $ref: "#/components/schemas/TimelineStatus"
+            - type: "null"
+    SenseGroupAnalysis:
+      type: object
+      required: [id, track_id, media_id, parent_word_timeline_id, provider_id, provider_version, algorithm, status, created_by, metrics_json, groups, created_at_ms, updated_at_ms]
+      properties:
+        id: { type: string }
+        track_id: { type: string }
+        media_id: { type: string }
+        parent_word_timeline_id: { type: [string, "null"] }
+        provider_id: { type: string }
+        provider_version: { type: string }
+        algorithm: { type: string }
+        status: { $ref: "#/components/schemas/TimelineStatus" }
+        created_by: { $ref: "#/components/schemas/TimelineCreator" }
+        metrics_json: { type: object, additionalProperties: true }
+        groups:
+          type: array
+          items: { $ref: "#/components/schemas/SenseGroup" }
+        created_at_ms: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
+    SenseGroupAnalysisSummary:
+      type: object
+      required: [id, track_id, media_id, parent_word_timeline_id, provider_id, provider_version, algorithm, status, created_by, group_count, created_at_ms, updated_at_ms, can_activate, can_archive, can_delete]
+      properties:
+        id: { type: string }
+        track_id: { type: string }
+        media_id: { type: string }
+        parent_word_timeline_id: { type: [string, "null"] }
+        provider_id: { type: string }
+        provider_version: { type: string }
+        algorithm: { type: string }
+        status: { $ref: "#/components/schemas/TimelineStatus" }
+        created_by: { $ref: "#/components/schemas/TimelineCreator" }
+        group_count: { type: integer, minimum: 0 }
+        created_at_ms: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
+        can_activate: { type: boolean }
+        can_archive: { type: boolean }
+        can_delete: { type: boolean }
+    SenseGroup:
+      type: object
+      required: [id, sentence_id, group_index, start_token_index, end_token_index, text, label, head_token_index, confidence, sources]
+      properties:
+        id: { type: string }
+        sentence_id: { type: string }
+        group_index: { type: integer, minimum: 0 }
+        start_token_index: { type: integer, minimum: 0 }
+        end_token_index: { type: integer, minimum: 0 }
+        text: { type: string }
+        label: { type: [string, "null"] }
+        head_token_index: { type: [integer, "null"], minimum: 0 }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/SenseGroupSource" }
+    SenseGroupSource:
+      type: string
+      enum: [dependency_parse, phrase_structure, punctuation, length_limit, rule, user]
     ChunkTimelinePrecision:
       type: string
       enum: [precise, approximate, text_only]

@@ -20,6 +20,7 @@ mod pronunciation;
 mod pronunciation_providers;
 mod providers;
 mod repositories;
+mod sense_groups;
 mod subtitles;
 mod transcription_pipeline;
 mod util;
@@ -605,6 +606,10 @@ pub(crate) fn remap_lltimeline_identity(
         timeline.media_id = media_id.clone();
         timeline.track_id = track_id.clone();
     }
+    for analysis in &mut document.sense_group_analyses {
+        analysis.media_id = media_id.clone();
+        analysis.track_id = track_id.clone();
+    }
     for frame in &mut document.rhythm_frames {
         frame.media_id = media_id.clone();
         frame.track_id = track_id.clone();
@@ -630,6 +635,13 @@ pub(crate) fn remap_lltimeline_identity(
         for chunk in &mut chunk_timeline.chunks {
             if let Some(sentence_id) = sentence_ids.get(&chunk.sentence_id) {
                 chunk.sentence_id = sentence_id.clone();
+            }
+        }
+    }
+    for analysis in &mut document.sense_group_analyses {
+        for group in &mut analysis.groups {
+            if let Some(sentence_id) = sentence_ids.get(&group.sentence_id) {
+                group.sentence_id = sentence_id.clone();
             }
         }
     }
@@ -729,6 +741,39 @@ pub(crate) fn remap_lltimeline_identity(
     }
     if let Some(active_id) = document.active_chunk_timeline_id.as_mut()
         && let Some(remapped) = chunk_timeline_ids.get(active_id)
+    {
+        *active_id = remapped.clone();
+    }
+    for analysis in &mut document.sense_group_analyses {
+        if let Some(word_timeline_id) = analysis.parent_word_timeline_id.as_mut()
+            && let Some(remapped) = word_timeline_ids.get(word_timeline_id)
+        {
+            *word_timeline_id = remapped.clone();
+        }
+    }
+    let mut sense_group_analysis_ids = HashMap::new();
+    for analysis in &mut document.sense_group_analyses {
+        let original = analysis.id.clone();
+        let remapped = SenseGroupAnalysisId::from_fingerprint(
+            "sense-group-analysis",
+            &format!("{}:{}", track_id.as_str(), original.as_str()),
+        );
+        analysis.id = remapped.clone();
+        sense_group_analysis_ids.insert(original, remapped.clone());
+        for group in &mut analysis.groups {
+            group.id = SenseGroupId::from_fingerprint(
+                "sense-group",
+                &format!(
+                    "{}:{}:{}",
+                    remapped.as_str(),
+                    group.sentence_id.as_str(),
+                    group.group_index
+                ),
+            );
+        }
+    }
+    if let Some(active_id) = document.active_sense_group_analysis_id.as_mut()
+        && let Some(remapped) = sense_group_analysis_ids.get(active_id)
     {
         *active_id = remapped.clone();
     }

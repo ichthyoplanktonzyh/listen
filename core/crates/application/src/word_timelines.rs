@@ -414,6 +414,11 @@ impl AppServices {
             active_word_timeline_id.as_ref(),
             &word_acoustic_cues,
         )?;
+        let sense_group_analyses = self.timelines.list_sense_group_analyses(track_id)?;
+        let active_sense_group_analysis_id = sense_group_analyses
+            .iter()
+            .find(|a| a.status == TimelineStatus::Active)
+            .map(|a| a.id.clone());
         Ok(LLTimelineDocument {
             schema: LLTIMELINE_SCHEMA_V1.to_owned(),
             metadata,
@@ -425,8 +430,8 @@ impl AppServices {
             rhythm_frames,
             chunk_timelines,
             active_chunk_timeline_id,
-            sense_group_analyses: vec![],
-            active_sense_group_analysis_id: None,
+            sense_group_analyses,
+            active_sense_group_analysis_id,
             artifacts,
         })
     }
@@ -531,6 +536,23 @@ impl AppServices {
         }
         if let Some(active_id) = document.active_chunk_timeline_id {
             self.timelines.activate_chunk_timeline(&active_id)?;
+        }
+
+        for mut analysis in document.sense_group_analyses {
+            if analysis.media_id != track.media_id || analysis.track_id != track.id {
+                return Err(ApplicationError::Validation(
+                    "lltimeline sense group analysis",
+                ));
+            }
+            if document.active_sense_group_analysis_id.as_ref() == Some(&analysis.id)
+                && analysis.status == TimelineStatus::Active
+            {
+                analysis.status = TimelineStatus::Candidate;
+            }
+            self.timelines.save_sense_group_analysis(&analysis)?;
+        }
+        if let Some(active_id) = document.active_sense_group_analysis_id {
+            self.timelines.activate_sense_group_analysis(&active_id)?;
         }
 
         Ok(track)

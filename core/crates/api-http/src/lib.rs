@@ -237,6 +237,26 @@ pub fn router(state: ApiState) -> Router {
             get(export_chunk_timeline),
         )
         .route(
+            "/v1/subtitles/{track_id}/sense-group-analyses",
+            get(track_sense_group_analyses).post(generate_sense_group_analysis),
+        )
+        .route(
+            "/v1/subtitles/{track_id}/sense-group-analyses/summary",
+            get(track_sense_group_analysis_summaries),
+        )
+        .route(
+            "/v1/sense-group-analyses/{analysis_id}",
+            get(sense_group_analysis).delete(delete_sense_group_analysis),
+        )
+        .route(
+            "/v1/sense-group-analyses/{analysis_id}/activate",
+            post(activate_sense_group_analysis),
+        )
+        .route(
+            "/v1/sense-group-analyses/{analysis_id}/archive",
+            post(archive_sense_group_analysis),
+        )
+        .route(
             "/v1/subtitles/{track_id}/phone-timelines",
             get(track_phone_timelines),
         )
