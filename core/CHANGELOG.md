@@ -8,6 +8,218 @@
   边界情况及不变量断言（组不重叠、连续覆盖全部 Word token、每组 ≥1 Word）。合入
   `codex/3.4.2-sense-group-separation` 获取 Slice 1 domain contract。
 
+- 2026-07-08 08:15 CST: Phase 3.5 Slice 7 反馈回流 → 个人 sound fit 校准项。
+  校准项 = 独立持久表 `content_fit_calibrations`(迁移 v27)中的反馈计数记录
+  (理解度自报三档计数 + 计分练习尝试/正确计数),是学习者证据不是缓存:
+  与 fit 缓存分离、在任何 fit 重算后存活;原始材料信号永不改写。写路径:
+  complete practice session 尾部把本 session 的理解度自报(3.3 泛听)与计分
+  练习表现(跳过不计)累加进对应媒体的校准记录(无 media 或无反馈不写;
+  已结束 session 重复 complete 不重复计数;best-effort——fit 是装饰,校准存储
+  不可用不能挡 session 完成)。读路径:fit 计算末尾以纯函数从计数导出修正
+  (`sound_fit_calibration_outcome`,domain 单点定义,全部 heuristic_proxy:
+  自报 ≥2 条按多数方向 ±1 档、平票取谨慎向 harder;练习 ≥5 次尝试正确率
+  ≥0.85 → 易一档 / ≤0.5 → 难一档;双通道相加 clamp 到 ±1 档),只平移 sound
+  档位并追加两个可解释校准信号(comprehension_report_unclear_ratio /
+  practice_correct_rate,decisive 标记);任一通道证据足够即
+  `evidence_grade → usage_calibrated`(零修正也算校准:使用验证了档位)。
+  算法版本 content-fit-v1 → v2(管线加入校准输入;分档常量未动),
+  fingerprint 纳入校准水位(新反馈自动失效缓存)。openapi FitSignal kind
+  枚举 + Dart 本地化(en/zh)+ contract fixture 校准态测试同步;UI 无需改动
+  (usage_calibrated 文案与信号渲染 Slice 4 已就位)。测试:domain 校准
+  真值表 5 项(最小证据/多数与平票/正确率端点/双通道合成与 clamp/应用后
+  材料信号不动 + 饱和);persistence 集成 3 项(自报两次 unclear → 难一档 +
+  usage_calibrated + 换词汇强制重算后校准存活;无 media/无反馈不写;
+  精听 1/6 正确 → 难一档 + decisive 信号)。验证:cargo test --workspace
+  440 passed / 0 failed,flutter analyze 干净,flutter test 227 passed,
+  clippy 四 crate 零新增(20 处告警全在既有文件),validate-contracts 仅
+  本机既有 4 个 CJK jieba 失败。
+
+- 2026-07-08 07:55 CST: Phase 3.5 Slice 5 三队列分拣 + 首页媒体库列表。后端:
+  `GET /v1/media` 媒体库读模型(每个媒体 + primary 语言轨的缓存 fit +
+  用户分拣意图 + 3.2 熟料标记;逐媒体 fit 失败静默降级为无徽标不掉行)、
+  `PUT /v1/media/{media_id}/triage-intent` 持久化 pin 泛听 / pin 精听 / 暂缓
+  (null 清除);迁移 v26 `media_triage_intents`(v25 槽位留给 3.4.2,
+  "后落地方顺延"规则记录在迁移文件与 migrations.rs 注释);
+  `MediaRepository` 增 list/意图三方法,`LearningEventRepository` 增
+  `list_event_subject_ids`(熟料媒体查询);openapi 同步
+  (MediaLibraryEntry/SetTriageIntentRequest)。队列本身保持派生视图
+  (ADR 0018 决策 6):派生规则放客户端展示层(与 isIntensiveListeningTarget
+  同先例),服务端只存意图、只供事实。Flutter:首页"开始听"下方新增媒体库列表
+  (`media_library_section.dart`),按 精听靶单 / 泛听队列 / 暂缓区 / 未分级 分组,
+  黄金靶置顶并挂"精听靶"徽标,行内双维 fit mini chips 复用 fit_* 档位语汇;
+  派生阶梯:用户意图 > 熟料回听供给(设置可关,`familiar_material_suggestions`,
+  默认开、徽标克制)> 黄金靶 → 精听 > 任一维 too_hard → 暂缓 > 其余泛听,无事实
+  不建议;行点击 = 普通打开(红线:完全无视分拣行为不变),一键泛听(打开 + 起
+  extensive session)/ 一键精听(打开 + 落 practice 面板)。测试:persistence 4 项
+  (意图 roundtrip/列表事实/熟料回流/校验+返回)、api-http 端点 1 项(列表含 fit +
+  意图存取清除)、Dart contract fixture 7 项(wire shape/容错/round-trip/队列派生
+  真值表)+ widget 5 项(分组排序/意图覆盖/熟料开关迁移/回调/空态)。验证:
+  cargo test --workspace 432 passed / 0 failed,flutter analyze 干净,flutter test
+  226 passed,clippy 四 crate 零新增,validate-contracts 仅本机既有 4 个 CJK
+  jieba 失败。
+
+- 2026-07-08 02:00 CST: Phase 3.5 剩余工作编排(owner 决策)。Slice 8 冷启动快速标注流
+  交接:新增 `3.5-SLICE8-COLDSTART-GUIDE.md`(自包含实施指南——抽样端点镜像 content_fit
+  的归一化统计、标注复用现有词条路径零新写入面、fit 卡降级态挂入口、五个坑位:归一化
+  同路 / 未评估≠不认识 / 零新写入面 / 不阻塞红线 / jieba 本机既有失败),由独立实现者
+  执行,可与 Slice 5/7 并行。Slice 5 UI 方向确定:不做独立页面,首页"开始听"下方加
+  媒体库列表(新 list-media 端点),按队列分组、黄金靶置顶。推进顺序:Slice 5 → 7
+  (新 session);3.5-PLAN 与 STATE 同步。
+
+- 2026-07-08 01:40 CST: Phase 3.5 Slice 6 listening-projection-v1(ADR 0019)。首个证据
+  投影算法,确认门控的保守规则:acquired 只由升级确认事件从证据流导出(裸任务成功与
+  上下文标记只作辅助,护住 3.4 "5 语境→建议→确认"管线);无辅助任务失败降档,已确认
+  词有单次 lapse 保护(SRS lapse 惯例),任务成功可重固确认词并打断失败连击;
+  confidence(0.85 task 级 / 0.40 弱化)与 evidence_as_of_ms 填充 3.4.x 预留 seam。
+  触发:append_channelized_observation 内同步重算(限读最新 200 条)+ recency guard
+  (更新的兼容/导入写入压过更旧的证据结论)。写入者阶梯:override(读时)> task 级
+  证据 > 兼容/导入 > 弱化证据——兼容同步不得以 acquired 覆盖 task 级证据结论(A 方案:
+  自报"认识"不能翻任务失败的盘),降档与清除始终放行(无失败棘轮);兼容同步尾部统一
+  从画像重导 status 列,堵住 create/import 直写 entry.status 的绕行。升级确认对
+  listening 的投影直写移除(ADR 0017 决策 4 兑现),非 listening 通道保留过渡直写。
+  两个刻意的行为变化(记录于 ADR 0019 决策 4):仅标记/导入支撑的词单次听写/复习
+  失败即翻为 KnownNotRecognized;任务失败后经 status 面板重标"认识"不再翻回。共享
+  上下文 §14、3.5-PLAN、STATE 同步。测试:domain 规则真值表 6 项;集成 2 项(五语境
+  确认后投影出处为 listening-projection-v1 + conf 0.85;任务失败翻档 + 阶梯拦截自报
+  升级 + reading 通道不受影响);既有升级/复习/资产测试全数保持通过。验证:workspace
+  427 passed / 0 failed,clippy 15 告警与基线持平零新增。
+
+- 2026-07-07 22:00 CST: Phase 3.5 Slice 4 API + 当前媒体 fit 展示。后端:
+  `GET /v1/subtitles/{track_id}/content-fit`(track-scoped,走 Slice 3 缓存读路径)+
+  openapi path/schema(FitSignal/DifficultyDimension/ContentDifficultyProfile);
+  api-http 端点测试(未标注词汇时诚实报 too_hard + assessed 0 + unassessed decisive,
+  二次读命中缓存返回一致)。Flutter:手写 DTO(ADR 0014)+ contract fixture 测试 5 项
+  (wire shape、黄金靶派生 meaning 易 × sound 难、诚实阈值镜像后端 0.5、round-trip、
+  缺 signals 容错);`ContentFitCard` 落字幕资源面板(当前媒体摘要面):双维档位
+  chips(轻松/合适/有挑战/需要辅助——预期管理文案守 guardrail)+ 黄金靶提示 +
+  详情弹窗(信号→文案,decisive 标记,不见公式)+ 词汇画像不足的诚实降级提示
+  (档位不隐藏只重新框定);fit 拉取挂 timeline 资源加载,失败静默清卡不阻塞;
+  widget 测试 5 项。媒体库列表徽标推迟到 Slice 5(队列 UI 才有媒体列表)。验证:
+  workspace 420 passed / 0 failed;flutter analyze 无 issue;flutter test 214 全过;
+  api-http clippy 无新增告警。
+
+- 2026-07-07 21:10 CST: Phase 3.5 Slice 3 persistence 难度缓存。schema v24:
+  `0024_content_difficulty_profiles.sql`(每 subject 一行的可重算缓存,无 FK,
+  靠 fingerprint 自失效);`DifficultyRepository` sqlite 实现(JSON 快照 + 投影查询列
+  整体重写)。缓存读路径 `content_fit_for_track`:廉价指纹校验(track 指纹 + active
+  word/chunk timeline 身份 + 语言级词汇水位,不做归一化不组装文档),命中返回缓存,
+  失效重算并回存;指纹组装收敛为单一定义点,compute 路径共用(词汇水位从"匹配条目
+  max"改为语言级 `lexical_vocabulary_watermark`(count, max_learning_updated_at)新
+  仓储方法——语言内任何标记使该语言全部缓存失效,粗粒度但绝不陈旧)。AppServices 增
+  `difficulty` 仓储(Disabled 默认 + `with_difficulty_repository`,api-http main 已接线)。
+  **迁移编号协调**:3.5 先落地取 v24,worktree 中未动工的 3.4.2 顺延 v25(其 PLAN/
+  实施指南/CHANGELOG 已在 worktree 分支同步改号,commit 271e87c1)。测试:缓存命中
+  (篡改行回读证明)、词汇变更失效重算并回存、迁移恢复测试断言 content_difficulty_profiles
+  表与 MIGRATION_VERSION。验证:workspace 419 passed / 0 failed,clippy 前后 15 告警
+  零新增。
+
+- 2026-07-07 20:20 CST: Phase 3.5 Slice 2 application fit 计算服务。新增
+  `crates/application/src/content_fit.rs`:`compute_content_fit_for_track` 从
+  `export_lltimeline_document` 单点组装输入,词义知识经 `LexicalEntry::status`
+  (= `legacy_status_view` 保守折叠视图,override 已折入)读取;transcript word token
+  经 `normalize_lexical_form` 归一(空归一 token 排除出分子分母)后批量查询;信号:
+  unknown/unassessed/KNR 密度、语速(仅句内 speech time,排除句间静默)、弱读/压缩
+  密度(rhythm frames 派生自 active word timeline,缺失则省略)、平均 chunk 长度;
+  `input_fingerprint` = 算法版本 + track 指纹 + active word/chunk timeline 身份 +
+  词汇水位(条目数 + max learning_updated_at)的 SHA-256(domain 新增
+  `content_fit_fingerprint` 助手)。测试:语速排除句间空隙/零时长单测 2 项;sqlite
+  集成 4 项(双维密度与档位、快语速升档且 rhythm 信号在场、指纹稳定性与词汇变更
+  失效、语言缺失/无 word token 校验错误)。验证:workspace 418 passed / 0 failed,
+  touched crates clippy 无新增告警。
+
+- 2026-07-07 19:40 CST: Phase 3.5 Slice 1 domain 双维难度契约。新增
+  `crates/domain/src/content_fit.rs`:`ContentDifficultyProfile` v2(meaning/sound 双
+  `DifficultyDimension` + 结构化 `FitSignal`(kind/value/decisive)+
+  `assessed_token_ratio` + `evidence_grade` + `algorithm_version`)、banding 纯函数
+  (`meaning_fit` 覆盖率分档、`sound_fit` KNR 基档 + 语速/弱读单向升档饱和于 too_hard)、
+  全部阈值常量单点定义(heuristic_proxy,注研究锚点);诚实降级判定
+  `has_sufficient_vocabulary_profile`(MIN_ASSESSED_TOKEN_RATIO=0.5)。旧单维
+  `ContentDifficultyProfile`/`InputFit` 壳从 learning_loop.rs 移除(零外部引用,原地
+  重塑无兼容负担);`InputFit` 迁入新模块,glob re-export 路径不变。测试 7 项:阈值
+  端点、unassessed 保守折算与 decisive 标记、KNR 基档、升档与饱和、慢速交付信号仅
+  informational、缺失可选信号省略、画像充分性阈值。验证:workspace 412 passed / 0
+  failed,domain clippy 零告警。ADR 0018 FitSignal 形状同步为 decisive 标记。
+
+- 2026-07-07 19:00 CST: Phase 3.5 Difficulty & Content Triage 立项（Slice 0）。新增
+  ADR 0018 双维 fit 定义：meaning/sound 双维 `ContentDifficultyProfile` v2 形状、
+  信号集 v1（unknown/unassessed/known_not_recognized 密度、语速、弱读/压缩密度、
+  chunk 长度）、研究锚点（听力 95% 词汇覆盖 van Zeeland & Schmitt 2013、阅读 98%
+  Hu & Nation 2000、语速 Tauroza & Allison 1990 / Griffiths 1992、弱读瓶颈
+  Field 2008）与映射告诫、分档规则（阈值全部 heuristic_proxy，常量单点定义，改常量
+  必须升 algorithm_version）、诚实降级（assessed_token_ratio + evidence_grade）、
+  三队列为派生视图、listening-projection-v1 随本 phase 落地并移除升级确认投影直写
+  （ADR 0017 决策 4 到期义务）。3.5-PLAN.md 重写为 9-slice 版（句级画像裁剪出 v1，
+  subject_kind 留 seam）；STATE.md 更新阻塞项与下一步；迁移编号协调：3.4.2 预留
+  v24，3.5 名义 v25，后落地方顺延。
+
+- 2026-07-07 17:30 CST: Phase 3.4.4 Learning Evidence Channelization 收口（Slice 4）。
+  新增 3.4.4-CLOSEOUT.md（交付清单、outcome 入身份指纹的关键修正记录、Non-Goals 兑现、
+  Exit Signals 核验）；PLAN 标 COMPLETED；共享上下文 §14 标记证据层完成；STATE.md 更新
+  当前位置与下一步（3.5 可启动，首个证据投影算法随 fit 定义实现）。
+
+- 2026-07-07 17:00 CST: Phase 3.4.4 Slice 3 写入路径接线与便携资产。四条路径全部产出
+  通道化 observation：上下文标记（双写，legacy 最新覆盖行为不变但通道化流保留每次判断）、
+  练习提交（成功与失败均记录，修复失败偏置；无句子锚点也可记录）、复习提交（按 rating
+  映射，source 与 anchors 去重）、升级确认（ADR 0017 决策 4 过渡条款，确认本身入证据流）。
+  `VocabularyAssetBundle` 追加 optional `learning_observations`（版本仍 6，旧包缺字段
+  兼容），导出全量、导入按 id 幂等追加并跳过本地不存在的 entry。修复身份设计缺陷：
+  outcome 纳入 id 指纹（context marking 的 source_ref 按 (entry, sentence) 恒定，同毫秒
+  不同判断必须是两行）。测试：练习成功/失败通道化断言、复习失败通道化断言、标记双写
+  与资产包 round-trip（3 条 observation 幂等导入）、升级确认入流断言。
+  验证：`cargo test --workspace` 405 passed、0 failed；clippy 无新增警告。
+
+- 2026-07-07 16:00 CST: Phase 3.4.4 Slice 2 持久化 schema v23。新增
+  `0023_learning_observations.sql`（追加式表，entry 级联删除，
+  entry+capability+occurred_at 索引）；迁移回填：未清除的 legacy LexicalObservation
+  逐行转为 listening/context_marking observation（origin=legacy_backfill、
+  source_ref=旧 id、surface_form=original_form），已清除的标记视为撤回不回填，
+  回填幂等（INSERT OR IGNORE）。LearningAssetRepository 新增
+  append_learning_observation / list_learning_observations（按通道过滤、时间倒序分页）。
+  测试：v23 回填断言（含 cleared 排除与幂等）、追加语义（同 (entry, sentence) 两行共存、
+  重复追加幂等）；migration_recovery_test 种子补 lexical_observations 表并断言 v23。
+  验证：`cargo test -p persistence-sqlite` 67 tests 全过。
+
+- 2026-07-07 15:35 CST: Phase 3.4.4 Slice 1 domain 契约。新增
+  `crates/domain/src/learning_observation.rs`：`LearningObservation`（追加式身份 =
+  entry + task + source_ref + occurred_at 指纹）、ObservationTaskType / ObservationOutcome /
+  AssistanceLevel / ObservationOrigin 枚举、ADR 0017 任务→通道映射 v1 的单点定义
+  （observation_spec_for_marking / _practice / _review，Skipped 不产证据）。
+  5 个单元测试（身份不可覆盖、映射表、snake_case 契约与 round-trip）。
+
+- 2026-07-07 15:20 CST: 启动 Phase 3.4.4 Learning Evidence Channelization（Slice 0）。
+  新增 ADR 0017：通道化追加式 LearningObservation（capability/task_type/assistance/
+  surface_form/origin，禁止 latest-wins 身份）；任务→通道映射 v1 表；投影写入者互斥
+  （upgrade 确认声明为过渡直写）；legacy LexicalObservation 以 legacy_backfill 来源回填；
+  资产包 additive 携带 observation。新增 3.4.4-PLAN（Slice 0-4，明确 Non-Goals：不做
+  投影算法、不迁移 diagnosis、不加 API/UI）。占用 schema v23,3.4.2 迁移号协调至 v24。
+  STATE.md 同步。
+
+- 2026-07-07 13:10 CST: `CapabilityProjection` 预留分级能力 seam 字段（精化评审 §4.1）：
+  `confidence: Option<f32>`（0.0..=1.0 结论强度）与 `evidence_as_of_ms: Option<u64>`
+  （投影所依据证据窗口截止时间），serde default + None 不序列化，旧 JSON/DB 行/资产包
+  完全兼容；真证据投影算法上线前保持 None。受 f32 影响，capability 结构链
+  （CapabilityProjection/DimensionState/Profile/History、VocabularyAssetBundle、
+  LexicalEntryDetails）从 Eq 降为 PartialEq。OpenAPI CapabilityProjection schema 增加
+  两个 optional 属性。Flutter 不改：字段为 None 时线上 JSON 形状不变，Dart fromJson
+  对未知键安全。新增 serde 兼容性测试。验证：`cargo test --workspace` 全部通过、
+  `cargo clippy` 无新增警告；`./scripts/validate-contracts.sh` 的 4 个 CJK 分词失败为
+  本机缺 jieba 的既有环境问题，与本变更无关（已在无改动树上复现确认）。
+
+- 2026-07-07 12:40 CST: 修复 capability projection 来源标注失真（精化评审 §5.1）。
+  `sync_capability_from_legacy_status` 增加 source 参数：外部词表导入
+  （`import_external_vocabulary`）写 `Import`，legacy status 写路径的实时兼容同步写
+  `LegacyLearningStatusMigration`（与 v22 一次性回填共享来源语义，以 algorithm_version
+  `legacy-status-compat-v1` 区分）；`EvidenceProjection` 保留给真证据路径（升级确认）。
+  新增两个来源断言测试。历史已写入的旧标签不回溯迁移。
+  验证：`cargo test -p application -p persistence-sqlite` 全部通过。
+
+- 2026-07-07 12:10 CST: Learning Domain Model v2 第二轮精化评审裁决落档。新增
+  `.planning/discuss/learning-domain-model-v2-refinement-review.zh.md`（八项优化空间、
+  复杂度分层原则、字段裁决标准、砍掉项与排期）；共享上下文新增不变量 16-18（listening
+  acquired 条件语义、投影写入者互斥、精细度不泄漏交互层）、§5.3 evidence shape 增补
+  `surface_form`、新增 §14 Refinement Addendum；STATE.md 记录决策并更新下一步
+  （证据层 slice 为 3.5 前置、sense 身份 spike 为 3.6 前置）。
+
 - 2026-07-07 21:00 CST: 迁移号第二次协调：v24（0024_content_difficulty_profiles）由
   main 上先落地的 Phase 3.5 Slice 3 占用，本阶段 sense_group_analyses 迁移顺延为
   v25/0025；PLAN 与实施指南同步改号（顺延规则不变）。
@@ -17,24 +229,11 @@
   PLAN 与实施指南同步更新，并注明合并时编号再冲突的顺延规则。
 
 - 2026-07-07 14:00 CST: 新增 3.4.2-IMPLEMENTATION-GUIDE.md（Slice 2-6 交接实施指南）。
-  难度评估为"不难、工作量大"：各层均有 ChunkTimeline 1:1 模板可镜像。指南钉死五个全局
-  陷阱（SenseGroup 用原始 token index 而非 chunk 的 word 序数、active partial unique
-  index 的 JSON 字面量写法、生成不依赖 active word timeline、ADR 0016 决策 9 overlay
-  不排除性、本机 jieba 缺失的既有校验失败），并给出逐 slice 的模板文件行号参照、
-  规则算法要求、测试清单与收口验收清单。
 
 - 2026-07-07 12:20 CST: ADR 0016 增补决策 9（2026-07-07 修正案）：用户意群修正是独立
-  per-sentence overlay 层，provider analysis 持久化行内不得出现 `User` source，重新生成
-  分析不得毁坏用户修正；schema v23 不得排除 overlay（本阶段无编辑 UI，不建 overlay 机制）。
-  3.4.2-PLAN 同步：勾选已完成的 Slice 0/1 项、Slice 3 增加 overlay 不排除性约束项、
-  Guardrails 增补 overlay 纪律。裁决来源：主线 discuss
-  learning-domain-model-v2-refinement-review.zh.md §4.5。
+  per-sentence overlay 层。
 
-- 2026-07-07 CST: 启动 Phase 3.4.2 Semantic / Prosodic Group Separation（Slice 0）。
-  新增 ADR 0016：SenseGroup 为 token-span 句子级文本标注，与 ChunkTimeline（韵律组）独立
-  共存；SenseGroup 不存储时间，播放范围通过 WordTimeline 投影；本阶段采用扁平分组，目标
-  粒度 3-5 组/句；规则回退 provider 先行（标点+长度+短语保护），UD/LLM 后续接入；
-  ChunkTimeline 不重命名；语义/韵律对齐推迟。细化 3.4.2-PLAN.md 为 7 个可检查 slice。
+- 2026-07-07 CST: 启动 Phase 3.4.2 Semantic / Prosodic Group Separation（Slice 0-1）。
 
 - 2026-07-06 CST: 完成 Phase 3.4.1 Slice 6 authority switch and closeout。capability profile
   成为唯一权威决策来源：diagnosis-core `classify_entry()` 移除 legacy `LearningStatus` 回退

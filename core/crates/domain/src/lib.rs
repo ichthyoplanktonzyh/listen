@@ -49,8 +49,17 @@ pub use learning::*;
 mod capability;
 pub use capability::*;
 
+mod content_fit;
+pub use content_fit::*;
+
 mod learning_loop;
 pub use learning_loop::*;
+
+mod learning_observation;
+pub use learning_observation::*;
+
+mod listening_projection;
+pub use listening_projection::*;
 
 mod dictionary;
 pub use dictionary::*;
@@ -107,6 +116,7 @@ string_id!(LexicalEntryId);
 string_id!(LexicalSenseId);
 string_id!(LexicalCapabilityHistoryId);
 string_id!(LexicalObservationId);
+string_id!(LearningObservationId);
 string_id!(LexicalOccurrenceId);
 string_id!(LexicalStatusHistoryId);
 string_id!(LearningResourceId);

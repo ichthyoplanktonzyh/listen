@@ -7,7 +7,7 @@
 
 use std::path::{Path, PathBuf};
 
-use persistence_sqlite::SqliteRepository;
+use persistence_sqlite::{MIGRATION_VERSION, SqliteRepository};
 use rusqlite::Connection;
 
 fn user_version(path: &Path) -> u32 {
@@ -87,6 +87,16 @@ fn v21_capability_migration_preserves_a_queryable_pre_migration_backup() {
             );
             INSERT INTO lexical_entries VALUES
               ('entry', '"known_not_recognized"', 10, 20);
+            CREATE TABLE lexical_observations (
+              id TEXT PRIMARY KEY NOT NULL,
+              lexical_entry_id TEXT NOT NULL,
+              sentence_id TEXT,
+              sentence_id_snapshot TEXT NOT NULL,
+              original_form TEXT NOT NULL,
+              result TEXT NOT NULL,
+              created_at_ms INTEGER NOT NULL,
+              cleared_at_ms INTEGER
+            );
             PRAGMA user_version=21;
             "#,
         )
@@ -94,8 +104,10 @@ fn v21_capability_migration_preserves_a_queryable_pre_migration_backup() {
     }
 
     let repo = SqliteRepository::open(&path).expect("migrate v21");
-    assert_eq!(repo.schema_version().unwrap(), 22);
+    assert_eq!(repo.schema_version().unwrap(), MIGRATION_VERSION);
     assert!(has_table(&path, "lexical_capability_states"));
+    assert!(has_table(&path, "learning_observations"));
+    assert!(has_table(&path, "content_difficulty_profiles"));
 
     let backup = backup_of(&path);
     assert_eq!(user_version(&backup), 21);

@@ -1,6 +1,23 @@
 use crate::lexical::lexical_unit_for_entry;
 use crate::*;
 
+/// Marks capability projections inferred from a legacy linear status write,
+/// as opposed to the one-shot v22 backfill
+/// (`LEGACY_STATUS_MIGRATION_ALGORITHM_VERSION`).
+pub(crate) const LEGACY_STATUS_COMPAT_ALGORITHM_VERSION: &str = "legacy-status-compat-v1";
+
+/// Bounded evidence read for `listening-projection-v1` recomputes (ADR 0019).
+/// The rule only inspects recent decisive events; 200 newest rows is ample.
+pub(crate) const LISTENING_PROJECTION_EVIDENCE_LIMIT: u32 = 200;
+
+/// Where a channelized observation happened (ADR 0017). Kept as a struct so
+/// writer call sites stay within argument-count discipline.
+pub(crate) struct ObservationContext {
+    pub surface_form: Option<String>,
+    pub sentence_id: Option<SubtitleSentenceId>,
+    pub media_id: Option<MediaId>,
+}
+
 impl AppServices {
     pub fn lexical_capability_profile(
         &self,
@@ -33,11 +50,19 @@ impl AppServices {
         Ok(profile)
     }
 
+    /// Projects a legacy linear status write into the capability profile.
+    ///
+    /// `source` must state where the legacy status came from
+    /// (`LegacyLearningStatusMigration` for live compat syncs of user-facing
+    /// legacy writes, `Import` for external vocabulary imports); the shared
+    /// algorithm version marks the mapping as a compat inference either way.
+    /// `EvidenceProjection` is reserved for real evidence-derived projections.
     pub(crate) fn sync_capability_from_legacy_status(
         &self,
         lexical_entry_id: &LexicalEntryId,
         status: Option<LearningStatus>,
         changed_at_ms: u64,
+        source: CapabilityProjectionSource,
     ) -> Result<(), ApplicationError> {
         let target =
             LexicalCapabilityProfile::from_legacy_status(lexical_entry_id.clone(), status, changed_at_ms);
@@ -55,14 +80,31 @@ impl AppServices {
                 if current_dim.user_override.is_some() {
                     continue;
                 }
+                // Writer ladder (ADR 0019 decision 3): compat may not upgrade
+                // over a task-grade evidence conclusion (a self-reported
+                // "认识" cannot overturn task failure). Downgrades and clears
+                // stay allowed, and weakened evidence conclusions may be
+                // overwritten by explicit user judgment.
+                if proj.conclusion == CapabilityConclusion::Acquired
+                    && current_dim.projection.as_ref().is_some_and(|value| {
+                        value.source == CapabilityProjectionSource::EvidenceProjection
+                            && value
+                                .confidence
+                                .is_some_and(|c| c >= LISTENING_CONFIDENCE_TASK)
+                    })
+                {
+                    continue;
+                }
                 self.learning_assets.set_lexical_capability_projection(
                     lexical_entry_id,
                     None,
                     capability,
                     Some(CapabilityProjection {
                         conclusion: proj.conclusion,
-                        source: CapabilityProjectionSource::EvidenceProjection,
-                        algorithm_version: "legacy-status-compat-v1".into(),
+                        source,
+                        algorithm_version: LEGACY_STATUS_COMPAT_ALGORITHM_VERSION.into(),
+                        confidence: None,
+                        evidence_as_of_ms: None,
                         updated_at_ms: changed_at_ms,
                     }),
                     changed_at_ms,
@@ -87,6 +129,15 @@ impl AppServices {
                     changed_at_ms,
                 )?;
             }
+        }
+        // Re-derive the legacy status column from the profile: the writer
+        // ladder may have kept a task-grade evidence conclusion, and callers
+        // write the raw status onto the entry row before syncing.
+        if let Some(profile) = self
+            .learning_assets
+            .lexical_capability_profile(lexical_entry_id, None)?
+        {
+            self.sync_legacy_status_from_profile(lexical_entry_id, &profile)?;
         }
         Ok(())
     }
@@ -138,6 +189,92 @@ impl AppServices {
             .lexical_entries_by_keys(&language, kind, &normalized)
     }
 
+    /// Single writer entry for channelized evidence: builds the append-only
+    /// identity and defers channel semantics to the domain mapping (ADR 0017
+    /// guardrail: call sites must not inline channel judgments).
+    pub(crate) fn append_channelized_observation(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        spec: ObservationSpec,
+        context: ObservationContext,
+        origin: ObservationOrigin,
+        source_ref: Option<String>,
+        occurred_at_ms: u64,
+    ) -> Result<(), ApplicationError> {
+        let observation = LearningObservation {
+            id: learning_observation_id(
+                lexical_entry_id,
+                spec.task_type,
+                spec.outcome,
+                source_ref.as_deref(),
+                occurred_at_ms,
+            ),
+            lexical_entry_id: lexical_entry_id.clone(),
+            sense_id: None,
+            capability: spec.capability,
+            task_type: spec.task_type,
+            outcome: spec.outcome,
+            assistance: spec.assistance,
+            surface_form: context.surface_form,
+            sentence_id: context.sentence_id,
+            media_id: context.media_id,
+            origin,
+            source_ref,
+            occurred_at_ms,
+        };
+        self.learning_assets
+            .append_learning_observation(&observation)?;
+        if spec.capability == LexicalCapability::Listening {
+            self.reproject_listening_from_evidence(lexical_entry_id, occurred_at_ms)?;
+        }
+        Ok(())
+    }
+
+    /// Recomputes the listening projection from the channelized evidence
+    /// stream (ADR 0019, `listening-projection-v1`) and refreshes the legacy
+    /// status compat view. Runs after every listening observation append —
+    /// all writers funnel through [`Self::append_channelized_observation`].
+    pub(crate) fn reproject_listening_from_evidence(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        now: u64,
+    ) -> Result<(), ApplicationError> {
+        let observations = self.learning_assets.list_learning_observations(
+            lexical_entry_id,
+            Some(LexicalCapability::Listening),
+            LISTENING_PROJECTION_EVIDENCE_LIMIT,
+            0,
+        )?;
+        let Some(projection) = listening_projection_v1(&observations, now) else {
+            return Ok(());
+        };
+        // Recency guard (ADR 0019 decision 2): a non-evidence writer (compat
+        // downgrade, import) newer than our newest decisive evidence wins
+        // until newer evidence arrives.
+        let current = self
+            .learning_assets
+            .lexical_capability_profile(lexical_entry_id, None)?;
+        if let Some(existing) = current
+            .as_ref()
+            .and_then(|profile| profile.dimension(LexicalCapability::Listening).projection.as_ref())
+            && existing.source != CapabilityProjectionSource::EvidenceProjection
+            && projection
+                .evidence_as_of_ms
+                .is_some_and(|as_of| existing.updated_at_ms > as_of)
+        {
+            return Ok(());
+        }
+        let profile = self.learning_assets.set_lexical_capability_projection(
+            lexical_entry_id,
+            None,
+            LexicalCapability::Listening,
+            Some(projection),
+            now,
+        )?;
+        self.sync_legacy_status_from_profile(lexical_entry_id, &profile)?;
+        Ok(())
+    }
+
     pub fn create_lexical_observation(
         &self,
         input: CreateLexicalObservation,
@@ -172,6 +309,21 @@ impl AppServices {
                 LearningChangeSource::UserSelection,
             )?;
         }
+        self.append_channelized_observation(
+            &observation.lexical_entry_id,
+            observation_spec_for_marking(observation.result),
+            ObservationContext {
+                surface_form: Some(observation.original_form.clone()),
+                sentence_id: Some(observation.sentence_id.clone()),
+                media_id: input
+                    .source
+                    .as_ref()
+                    .and_then(|source| source.media_id.clone()),
+            },
+            ObservationOrigin::UserMarking,
+            Some(observation.id.as_str().to_owned()),
+            created_at_ms,
+        )?;
         if observation.result == ObservationResult::RecognizedInContext {
             self.record_context_recognition_evidence(
                 observation.lexical_entry_id.clone(),
@@ -325,7 +477,12 @@ impl AppServices {
                 LearningChangeSource::Import,
             )?;
             if status.is_some() {
-                self.sync_capability_from_legacy_status(&entry.id, status, imported_at_ms)?;
+                self.sync_capability_from_legacy_status(
+                    &entry.id,
+                    status,
+                    imported_at_ms,
+                    CapabilityProjectionSource::Import,
+                )?;
             }
             if existing.is_some() {
                 summary.overwritten += 1;

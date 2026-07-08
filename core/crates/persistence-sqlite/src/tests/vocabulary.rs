@@ -178,6 +178,19 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
     assert_eq!(stored.len(), 1);
     assert_eq!(stored[0].id, first_observation.id);
     assert_eq!(stored[0].result, ObservationResult::NotRecognizedInContext);
+    // ADR 0017: the channelized stream keeps both markings even though the
+    // legacy (entry, sentence) row was replaced.
+    let channelized = repo
+        .list_learning_observations(&entry.entry.id, None, 10, 0)
+        .unwrap();
+    assert_eq!(channelized.len(), 2);
+    for observation in &channelized {
+        assert_eq!(observation.task_type, ObservationTaskType::ContextMarking);
+        assert_eq!(observation.capability, LexicalCapability::Listening);
+        assert_eq!(observation.assistance, AssistanceLevel::FullText);
+        assert_eq!(observation.origin, ObservationOrigin::UserMarking);
+        assert_eq!(observation.surface_form.as_deref(), Some("Hello"));
+    }
     services
         .clear_lexical_observation(&entry.entry.id, &sentence.id)
         .unwrap();
@@ -226,6 +239,7 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
 
     let bundle = services.export_vocabulary().unwrap();
     assert_eq!(bundle.lexical_observations.len(), 1);
+    assert_eq!(bundle.learning_observations.len(), 3);
     let restored = Arc::new(SqliteRepository::in_memory().unwrap());
     let restored_services = AppServices::new(
         restored.clone(),
@@ -255,7 +269,23 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
             .len(),
         1
     );
+    assert_eq!(
+        restored_services
+            .export_vocabulary()
+            .unwrap()
+            .learning_observations
+            .len(),
+        3
+    );
     restored_services.import_vocabulary(&bundle).unwrap();
+    assert_eq!(
+        restored_services
+            .export_vocabulary()
+            .unwrap()
+            .learning_observations
+            .len(),
+        3
+    );
     assert_eq!(
         restored_services
             .lexical_details(&entry.entry.id)
@@ -473,6 +503,43 @@ fn external_import_preserves_existing_status_and_updates_learning_content() {
             .status,
         Some(LearningStatus::KnownRecognized)
     );
+}
+
+#[test]
+fn external_import_marks_capability_projection_with_import_source() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo,
+    );
+    services
+        .import_external_vocabulary(&ExternalVocabularyImport {
+            language: "en".into(),
+            entries: vec![ExternalVocabularyEntry {
+                word: "signal".into(),
+                status: Some(LearningStatus::KnownNotRecognized),
+            }],
+            default_status: None,
+            overwrite_existing: false,
+        })
+        .unwrap();
+    let entry = read_word_asset(&services, "en", "signal").unwrap();
+    let profile = services
+        .lexical_capability_profile(&entry.id)
+        .unwrap()
+        .unwrap();
+    for dimension in [&profile.reading, &profile.listening] {
+        let projection = dimension.projection.as_ref().unwrap();
+        assert_eq!(projection.source, CapabilityProjectionSource::Import);
+        assert_eq!(projection.algorithm_version, "legacy-status-compat-v1");
+        assert!(dimension.user_override.is_none());
+    }
 }
 
 #[tokio::test]

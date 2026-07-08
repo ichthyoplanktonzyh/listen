@@ -665,6 +665,29 @@ impl LearningEventRepository for SqliteRepository {
             .collect::<Result<Vec<_>, _>>()
             .map_err(repo)
     }
+
+    fn list_event_subject_ids(
+        &self,
+        kind: LearningEventKind,
+        subject_kind: LearningEventSubjectKind,
+    ) -> Result<Vec<String>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        // The kind/subject_kind columns store the serde JSON encoding
+        // (quoted strings), matching append_learning_event above.
+        let mut statement = conn
+            .prepare(
+                "SELECT DISTINCT subject_id FROM learning_events
+                 WHERE kind=?1 AND subject_kind=?2",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map(params![json(&kind)?, json(&subject_kind)?], |row| {
+                row.get::<_, String>(0)
+            })
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
 }
 
 impl ListeningInboxRepository for SqliteRepository {

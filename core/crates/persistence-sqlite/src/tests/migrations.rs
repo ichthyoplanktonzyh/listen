@@ -14,6 +14,85 @@ fn new_database_migrates_to_latest() {
 }
 
 #[test]
+fn v23_backfills_uncleared_legacy_observations_with_explicit_provenance() {
+    let connection = Connection::open_in_memory().unwrap();
+    connection
+        .execute_batch(
+            r#"
+            CREATE TABLE lexical_entries (
+              id TEXT PRIMARY KEY NOT NULL,
+              status TEXT,
+              updated_at_ms INTEGER NOT NULL,
+              learning_updated_at_ms INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO lexical_entries VALUES ('entry', NULL, 1, 0);
+            CREATE TABLE lexical_observations (
+              id TEXT PRIMARY KEY NOT NULL,
+              lexical_entry_id TEXT NOT NULL,
+              sentence_id TEXT,
+              sentence_id_snapshot TEXT NOT NULL,
+              original_form TEXT NOT NULL,
+              result TEXT NOT NULL,
+              created_at_ms INTEGER NOT NULL,
+              cleared_at_ms INTEGER
+            );
+            INSERT INTO lexical_observations VALUES
+              ('legacy-1', 'entry', 's1', 's1', 'went', '"not_recognized_in_context"', 100, NULL),
+              ('legacy-2', 'entry', 's2', 's2', 'go', '"recognized_in_context"', 200, NULL),
+              ('legacy-cleared', 'entry', 's3', 's3', 'gone', '"recognized_in_context"', 300, 400);
+            PRAGMA user_version=21;
+            "#,
+        )
+        .unwrap();
+
+    migrate(&connection).unwrap();
+
+    let rows: Vec<(String, String, String, String, String, u64)> = {
+        let mut statement = connection
+            .prepare(
+                "SELECT capability,task_type,outcome,origin,surface_form,occurred_at_ms
+                 FROM learning_observations ORDER BY occurred_at_ms",
+            )
+            .unwrap();
+        statement
+            .query_map([], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    };
+    // Cleared legacy markings are retracted judgments, not evidence.
+    assert_eq!(rows.len(), 2);
+    for (capability, task_type, _, origin, _, _) in &rows {
+        assert_eq!(capability, "\"listening\"");
+        assert_eq!(task_type, "\"context_marking\"");
+        assert_eq!(origin, "\"legacy_backfill\"");
+    }
+    assert_eq!(rows[0].2, "\"failure\"");
+    assert_eq!(rows[0].4, "went");
+    assert_eq!(rows[0].5, 100);
+    assert_eq!(rows[1].2, "\"success\"");
+
+    // Re-running the backfill must not duplicate rows.
+    backfill_legacy_observations(&connection).unwrap();
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM learning_observations", [], |row| row
+                .get::<_, u32>(0))
+            .unwrap(),
+        2
+    );
+}
+
+#[test]
 fn v22_backfills_legacy_status_as_sourced_capability_projections() {
     let connection = Connection::open_in_memory().unwrap();
     connection
@@ -30,6 +109,16 @@ fn v22_backfills_legacy_status_as_sourced_capability_projections() {
               ('unknown', '"unknown_meaning"', 2, 20),
               ('not-heard', '"known_not_recognized"', 3, 30),
               ('heard', '"known_recognized"', 4, 40);
+            CREATE TABLE lexical_observations (
+              id TEXT PRIMARY KEY NOT NULL,
+              lexical_entry_id TEXT NOT NULL,
+              sentence_id TEXT,
+              sentence_id_snapshot TEXT NOT NULL,
+              original_form TEXT NOT NULL,
+              result TEXT NOT NULL,
+              created_at_ms INTEGER NOT NULL,
+              cleared_at_ms INTEGER
+            );
             PRAGMA user_version=21;
             "#,
         )
@@ -41,7 +130,7 @@ fn v22_backfills_legacy_status_as_sourced_capability_projections() {
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
             .unwrap(),
-        22
+        MIGRATION_VERSION
     );
     assert_eq!(
         connection

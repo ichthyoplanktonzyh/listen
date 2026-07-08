@@ -91,6 +91,93 @@ impl MediaRepository for SqliteRepository {
         .map_err(repo)
     }
 
+    fn list(&self) -> Result<Vec<MediaItem>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut query = conn
+            .prepare(
+                "SELECT id, path, fingerprint, title, kind, duration_ms, created_at_ms, updated_at_ms, availability
+                 FROM media_items ORDER BY updated_at_ms DESC, id",
+            )
+            .map_err(repo)?;
+        let items = query
+            .query_map([], |r| {
+                Ok(MediaItem {
+                    id: MediaId::parse(r.get::<_, String>(0)?).map_err(domain_sql)?,
+                    path: r.get(1)?,
+                    fingerprint: r.get(2)?,
+                    title: r.get(3)?,
+                    kind: from_json(&r.get::<_, String>(4)?)?,
+                    duration: r.get::<_, Option<u64>>(5)?.map(TimeMs::new),
+                    created_at_ms: r.get(6)?,
+                    updated_at_ms: r.get(7)?,
+                    availability: from_json(&r.get::<_, String>(8)?)?,
+                })
+            })
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)?;
+        Ok(items)
+    }
+
+    fn set_triage_intent(
+        &self,
+        media_id: &MediaId,
+        intent: Option<MediaTriageIntent>,
+        updated_at_ms: u64,
+    ) -> Result<(), ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        match intent {
+            Some(intent) => conn
+                .execute(
+                    "INSERT INTO media_triage_intents (media_id, intent, updated_at_ms)
+                     VALUES (?1, ?2, ?3)
+                     ON CONFLICT(media_id) DO UPDATE SET
+                       intent=excluded.intent, updated_at_ms=excluded.updated_at_ms",
+                    params![media_id.as_str(), json(&intent)?, updated_at_ms],
+                )
+                .map_err(repo)?,
+            None => conn
+                .execute(
+                    "DELETE FROM media_triage_intents WHERE media_id=?1",
+                    [media_id.as_str()],
+                )
+                .map_err(repo)?,
+        };
+        Ok(())
+    }
+
+    fn get_triage_intent(
+        &self,
+        media_id: &MediaId,
+    ) -> Result<Option<MediaTriageIntent>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.query_row(
+            "SELECT intent FROM media_triage_intents WHERE media_id=?1",
+            [media_id.as_str()],
+            |row| from_json(&row.get::<_, String>(0)?),
+        )
+        .optional()
+        .map_err(repo)
+    }
+
+    fn list_triage_intents(&self) -> Result<Vec<(MediaId, MediaTriageIntent)>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut query = conn
+            .prepare("SELECT media_id, intent FROM media_triage_intents")
+            .map_err(repo)?;
+        let intents = query
+            .query_map([], |row| {
+                Ok((
+                    MediaId::parse(row.get::<_, String>(0)?).map_err(domain_sql)?,
+                    from_json(&row.get::<_, String>(1)?)?,
+                ))
+            })
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)?;
+        Ok(intents)
+    }
+
     fn set_availability(
         &self,
         id: &MediaId,

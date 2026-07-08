@@ -5,11 +5,25 @@ use crate::{ApplicationError, LexicalSourceContext};
 pub trait MediaRepository: Send + Sync {
     fn upsert(&self, media: &MediaItem) -> Result<MediaItem, ApplicationError>;
     fn get(&self, id: &MediaId) -> Result<Option<MediaItem>, ApplicationError>;
+    fn list(&self) -> Result<Vec<MediaItem>, ApplicationError>;
     fn set_availability(
         &self,
         id: &MediaId,
         availability: MediaAvailability,
     ) -> Result<MediaItem, ApplicationError>;
+    /// Stores the user's explicit triage judgment for one media; `None`
+    /// clears it. Intent rows are durable user data, not derived state.
+    fn set_triage_intent(
+        &self,
+        media_id: &MediaId,
+        intent: Option<MediaTriageIntent>,
+        updated_at_ms: u64,
+    ) -> Result<(), ApplicationError>;
+    fn get_triage_intent(
+        &self,
+        media_id: &MediaId,
+    ) -> Result<Option<MediaTriageIntent>, ApplicationError>;
+    fn list_triage_intents(&self) -> Result<Vec<(MediaId, MediaTriageIntent)>, ApplicationError>;
 }
 
 pub trait SubtitleRepository: Send + Sync {
@@ -659,6 +673,14 @@ pub trait LearningAssetRepository: Send + Sync {
         kind: LexicalEntryKind,
         normalized_forms: &[String],
     ) -> Result<Vec<LexicalEntry>, ApplicationError>;
+    /// Cheap vocabulary-snapshot watermark for one language:
+    /// `(entry_count, max_learning_updated_at_ms)`. Any marking or import
+    /// moves at least one component, so cache fingerprints built from it
+    /// (ADR 0018 decision 5) invalidate on every vocabulary change.
+    fn lexical_vocabulary_watermark(
+        &self,
+        language: &LanguageCode,
+    ) -> Result<(u64, u64), ApplicationError>;
     fn create_lexical_observation(
         &self,
         observation: &LexicalObservation,
@@ -667,6 +689,19 @@ pub trait LearningAssetRepository: Send + Sync {
         &self,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<Vec<LexicalObservation>, ApplicationError>;
+    /// Append-only channelized evidence (ADR 0017). Idempotent on id; never
+    /// replaces an existing row.
+    fn append_learning_observation(
+        &self,
+        observation: &LearningObservation,
+    ) -> Result<LearningObservation, ApplicationError>;
+    fn list_learning_observations(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        capability: Option<LexicalCapability>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<LearningObservation>, ApplicationError>;
     fn clear_lexical_observation(
         &self,
         lexical_entry_id: &LexicalEntryId,
@@ -827,6 +862,13 @@ pub trait LearningEventRepository: Send + Sync {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<LearningEvent>, ApplicationError>;
+    /// Distinct subject ids that carry at least one event of `kind` on
+    /// `subject_kind` — e.g. media marked as familiar material.
+    fn list_event_subject_ids(
+        &self,
+        kind: LearningEventKind,
+        subject_kind: LearningEventSubjectKind,
+    ) -> Result<Vec<String>, ApplicationError>;
 }
 
 pub trait ListeningInboxRepository: Send + Sync {
@@ -870,6 +912,17 @@ pub trait DifficultyRepository: Send + Sync {
         subject_kind: &str,
         subject_id: &str,
     ) -> Result<Option<ContentDifficultyProfile>, ApplicationError>;
+    /// Durable usage-feedback record (Phase 3.5 Slice 7) — evidence, not
+    /// cache: it must survive profile recomputes and cache invalidation.
+    fn save_fit_calibration(
+        &self,
+        calibration: &SoundFitCalibration,
+    ) -> Result<SoundFitCalibration, ApplicationError>;
+    fn get_fit_calibration(
+        &self,
+        subject_kind: &str,
+        subject_id: &str,
+    ) -> Result<Option<SoundFitCalibration>, ApplicationError>;
 }
 
 pub trait LearnerProfileRepository: Send + Sync {

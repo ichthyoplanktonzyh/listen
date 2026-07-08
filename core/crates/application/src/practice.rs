@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use crate::*;
 
@@ -124,6 +124,32 @@ impl AppServices {
             generated_observation_ids: Vec::new(),
             generated_review_item_ids: Vec::new(),
         };
+
+        // Channelized evidence records success and failure alike (ADR 0017
+        // decision 3); the legacy failure-only block below is unchanged.
+        if let Some(spec) = observation_spec_for_practice(item.kind, result) {
+            for anchor in item
+                .anchors
+                .iter()
+                .filter(|value| value.kind == PracticeAnchorKind::LexicalEntry)
+            {
+                let Some(lexical_entry_id) = &anchor.lexical_entry_id else {
+                    continue;
+                };
+                self.append_channelized_observation(
+                    lexical_entry_id,
+                    spec,
+                    ObservationContext {
+                        surface_form: anchor.label.clone(),
+                        sentence_id: anchor.sentence_id.clone(),
+                        media_id: None,
+                    },
+                    ObservationOrigin::PracticeTask,
+                    Some(attempt.id.as_str().to_owned()),
+                    now,
+                )?;
+            }
+        }
 
         if result != PracticeResult::Correct && result != PracticeResult::Skipped {
             for anchor in item
@@ -316,6 +342,56 @@ impl AppServices {
             next_due_at_ms: Some(schedule.due_at_ms),
         })?;
         let schedule = self.review.save_review_schedule(&schedule)?;
+        {
+            let spec = observation_spec_for_review(input.rating);
+            let fallback_sentence = item
+                .anchors
+                .iter()
+                .find_map(|anchor| anchor.sentence_id.clone());
+            let mut observed = HashSet::new();
+            for anchor in item
+                .anchors
+                .iter()
+                .filter(|value| value.kind == PracticeAnchorKind::LexicalEntry)
+            {
+                let Some(lexical_entry_id) = &anchor.lexical_entry_id else {
+                    continue;
+                };
+                if !observed.insert(lexical_entry_id.clone()) {
+                    continue;
+                }
+                self.append_channelized_observation(
+                    lexical_entry_id,
+                    spec,
+                    ObservationContext {
+                        surface_form: anchor.label.clone(),
+                        sentence_id: anchor.sentence_id.clone().or_else(|| {
+                            fallback_sentence.clone()
+                        }),
+                        media_id: item.source.media_id.clone(),
+                    },
+                    ObservationOrigin::ReviewTask,
+                    Some(attempt.id.as_str().to_owned()),
+                    now,
+                )?;
+            }
+            if let Some(lexical_entry_id) = item.source.lexical_entry_id.as_ref()
+                && observed.insert(lexical_entry_id.clone())
+            {
+                self.append_channelized_observation(
+                    lexical_entry_id,
+                    spec,
+                    ObservationContext {
+                        surface_form: None,
+                        sentence_id: fallback_sentence.clone(),
+                        media_id: item.source.media_id.clone(),
+                    },
+                    ObservationOrigin::ReviewTask,
+                    Some(attempt.id.as_str().to_owned()),
+                    now,
+                )?;
+            }
+        }
         let (generated_observation_ids, hunting_candidate_ids, upgrade_suggestions) =
             if input.rating == ReviewRating::Again {
                 let (observations, candidates) = self.record_review_failure(&item, now)?;
@@ -553,6 +629,7 @@ impl AppServices {
             .practice
             .get_practice_session(id)?
             .ok_or(ApplicationError::NotFound("practice session"))?;
+        let already_completed = session.ended_at_ms.is_some();
         let before = self.practice_session_summary(id)?;
         let now = now_ms();
         session.ended_at_ms = Some(now);
@@ -606,7 +683,70 @@ impl AppServices {
                 session_id: Some(session.id.clone()),
             })?;
         }
+        // Usage-feedback calibration (Phase 3.5 Slice 7): fold this
+        // session's comprehension self-report and practice accuracy into the
+        // media's durable sound-fit calibration record. Best effort by
+        // design — fit is decoration, so completing a session must never
+        // fail because the calibration store is unavailable, and re-runs of
+        // an already-completed session must not double count.
+        if !already_completed {
+            let _ = self.record_content_fit_feedback(&session, input.comprehension_report);
+        }
         self.practice_session_summary(&session.id)
+    }
+
+    /// Increments the media's recorded calibration counters from one
+    /// completed session: the self-report joins the report counters, scored
+    /// practice attempts join the accuracy counters (skips excluded). The
+    /// record is durable evidence separate from the fit cache; its watermark
+    /// invalidates cached profiles so the next fit read re-derives the band.
+    fn record_content_fit_feedback(
+        &self,
+        session: &PracticeSession,
+        report: Option<ListeningComprehensionReport>,
+    ) -> Result<(), ApplicationError> {
+        let Some(media_id) = session.media_id.as_ref() else {
+            return Ok(());
+        };
+        let mut attempts_total: u32 = 0;
+        let mut attempts_correct: u32 = 0;
+        for item in self
+            .practice
+            .list_practice_items_for_session(&session.id, 500, 0)?
+        {
+            for attempt in self.practice.list_practice_attempts_for_item(&item.id, 500, 0)? {
+                match attempt.result {
+                    PracticeResult::Correct => {
+                        attempts_total += 1;
+                        attempts_correct += 1;
+                    }
+                    PracticeResult::Partial | PracticeResult::Incorrect => attempts_total += 1,
+                    PracticeResult::Skipped => {}
+                }
+            }
+        }
+        if report.is_none() && attempts_total == 0 {
+            return Ok(());
+        }
+        let mut calibration = self
+            .difficulty
+            .get_fit_calibration("media", media_id.as_str())?
+            .unwrap_or_else(|| SoundFitCalibration::new("media", media_id.as_str()));
+        match report {
+            Some(ListeningComprehensionReport::UnderstoodAll) => {
+                calibration.reports_understood_all += 1
+            }
+            Some(ListeningComprehensionReport::GotTheGist) => {
+                calibration.reports_got_the_gist += 1
+            }
+            Some(ListeningComprehensionReport::Unclear) => calibration.reports_unclear += 1,
+            None => {}
+        }
+        calibration.practice_attempts += attempts_total;
+        calibration.practice_correct += attempts_correct;
+        calibration.updated_at_ms = now_ms();
+        self.difficulty.save_fit_calibration(&calibration)?;
+        Ok(())
     }
 
     pub fn practice_session_summary(
@@ -1367,6 +1507,14 @@ impl LearningEventRepository for DisabledLearningLoopRepository {
         _limit: u32,
         _offset: u32,
     ) -> Result<Vec<LearningEvent>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn list_event_subject_ids(
+        &self,
+        _kind: LearningEventKind,
+        _subject_kind: LearningEventSubjectKind,
+    ) -> Result<Vec<String>, ApplicationError> {
         Err(Self::disabled())
     }
 }

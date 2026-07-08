@@ -221,19 +221,42 @@ impl AppServices {
         }
         let now = now_ms();
         let capability = suggestion.capability.unwrap_or(LexicalCapability::Listening);
-        let profile = self.learning_assets.set_lexical_capability_projection(
+        if capability != LexicalCapability::Listening {
+            // Transitional direct write, only for channels that still have no
+            // projection algorithm. Listening fulfilled ADR 0017 decision 4:
+            // its projection now derives from the observation stream via
+            // listening-projection-v1 (ADR 0019).
+            let profile = self.learning_assets.set_lexical_capability_projection(
+                &suggestion.lexical_entry_id,
+                None,
+                capability,
+                Some(CapabilityProjection {
+                    conclusion: CapabilityConclusion::Acquired,
+                    source: CapabilityProjectionSource::EvidenceProjection,
+                    algorithm_version: UPGRADE_EVIDENCE_CLASS.into(),
+                    confidence: None,
+                    evidence_as_of_ms: None,
+                    updated_at_ms: now,
+                }),
+                now,
+            )?;
+            self.sync_legacy_status_from_profile(&suggestion.lexical_entry_id, &profile)?;
+        }
+        // The confirmation lands in the observation stream as an unassisted
+        // task success; for listening the projection recompute inside the
+        // append derives the acquired conclusion from it.
+        self.append_channelized_observation(
             &suggestion.lexical_entry_id,
-            None,
-            capability,
-            Some(CapabilityProjection {
-                conclusion: CapabilityConclusion::Acquired,
-                source: CapabilityProjectionSource::EvidenceProjection,
-                algorithm_version: UPGRADE_EVIDENCE_CLASS.into(),
-                updated_at_ms: now,
-            }),
+            observation_spec_for_upgrade_confirmation(capability),
+            ObservationContext {
+                surface_form: Some(suggestion.lexical_display_form.clone()),
+                sentence_id: None,
+                media_id: None,
+            },
+            ObservationOrigin::UserMarking,
+            Some(suggestion.id.as_str().to_owned()),
             now,
         )?;
-        self.sync_legacy_status_from_profile(&suggestion.lexical_entry_id, &profile)?;
         suggestion.status = UpgradeSuggestionStatus::Accepted;
         suggestion.resolved_at_ms = Some(now);
         suggestion.cooldown_until_ms = None;

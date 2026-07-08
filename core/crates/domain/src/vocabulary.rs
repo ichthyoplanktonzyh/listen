@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    LearningResourceId, LearningStatus, LexicalCapabilityProfile, LexicalEntry,
-    LexicalObservation, LexicalOccurrence, LexicalStatusHistory, PhoneticFindingFeedback,
+    LearningObservation, LearningResourceId, LearningStatus, LexicalCapabilityProfile,
+    LexicalEntry, LexicalObservation, LexicalOccurrence, LexicalStatusHistory,
+    PhoneticFindingFeedback,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VocabularyAssetBundle {
     pub version: u16,
     pub exported_at_ms: u64,
@@ -18,6 +19,10 @@ pub struct VocabularyAssetBundle {
     pub phonetic_finding_feedback: Vec<PhoneticFindingFeedback>,
     #[serde(default)]
     pub capability_profiles: Vec<LexicalCapabilityProfile>,
+    /// Channelized append-only evidence (ADR 0017). Additive: absent in
+    /// bundles from older exporters; import appends by id.
+    #[serde(default)]
+    pub learning_observations: Vec<LearningObservation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

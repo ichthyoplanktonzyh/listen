@@ -62,11 +62,21 @@ pub enum CapabilityProjectionSource {
     Import,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CapabilityProjection {
     pub conclusion: CapabilityConclusion,
     pub source: CapabilityProjectionSource,
     pub algorithm_version: String,
+    /// Reserved seam: graded strength of the conclusion (0.0..=1.0). Stays
+    /// `None` until a real evidence-projection algorithm writes it; the
+    /// tri-state effective assessment remains the product read model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f32>,
+    /// Reserved seam: end of the evidence window this projection was derived
+    /// from, for recency-aware consumers and recomputation. `None` for
+    /// legacy/compat/import projections.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_as_of_ms: Option<u64>,
     pub updated_at_ms: u64,
 }
 
@@ -76,6 +86,8 @@ impl CapabilityProjection {
             conclusion,
             source: CapabilityProjectionSource::LegacyLearningStatusMigration,
             algorithm_version: LEGACY_STATUS_MIGRATION_ALGORITHM_VERSION.into(),
+            confidence: None,
+            evidence_as_of_ms: None,
             updated_at_ms: migrated_at_ms,
         }
     }
@@ -95,7 +107,7 @@ pub struct CapabilityOverride {
     pub updated_at_ms: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct CapabilityDimensionState {
     pub projection: Option<CapabilityProjection>,
     pub user_override: Option<CapabilityOverride>,
@@ -112,7 +124,7 @@ impl CapabilityDimensionState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LexicalCapabilityProfile {
     pub lexical_entry_id: LexicalEntryId,
     /// Reserved identity seam. Phase 3.4.1 does not create lexical senses, so
@@ -132,7 +144,7 @@ pub enum CapabilityStateChangeKind {
     OverrideCleared,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LexicalCapabilityHistory {
     pub id: LexicalCapabilityHistoryId,
     pub lexical_entry_id: LexicalEntryId,
@@ -265,6 +277,8 @@ mod tests {
             conclusion: CapabilityConclusion::Acquired,
             source: CapabilityProjectionSource::EvidenceProjection,
             algorithm_version: "projection-v1".into(),
+            confidence: None,
+            evidence_as_of_ms: None,
             updated_at_ms: 10,
         };
         let mut state = CapabilityDimensionState {
@@ -369,6 +383,27 @@ mod tests {
             updated_at_ms: 2,
         });
         assert_eq!(profile.legacy_status_view(), None);
+    }
+
+    #[test]
+    fn projection_seam_fields_default_to_none_and_stay_out_of_json() {
+        let legacy_json = r#"{"conclusion":"acquired","source":"evidence_projection","algorithm_version":"v1","updated_at_ms":5}"#;
+        let projection: CapabilityProjection = serde_json::from_str(legacy_json).unwrap();
+        assert_eq!(projection.confidence, None);
+        assert_eq!(projection.evidence_as_of_ms, None);
+
+        let serialized = serde_json::to_string(&projection).unwrap();
+        assert!(!serialized.contains("confidence"));
+        assert!(!serialized.contains("evidence_as_of_ms"));
+
+        let populated = CapabilityProjection {
+            confidence: Some(0.85),
+            evidence_as_of_ms: Some(99),
+            ..projection
+        };
+        let roundtrip: CapabilityProjection =
+            serde_json::from_str(&serde_json::to_string(&populated).unwrap()).unwrap();
+        assert_eq!(roundtrip, populated);
     }
 
     #[test]

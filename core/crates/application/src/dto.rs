@@ -3,6 +3,25 @@ use std::path::PathBuf;
 use domain::*;
 use serde::{Deserialize, Serialize};
 
+/// One media-library row for triage (Phase 3.5 Slice 5): the registered
+/// media plus the facts the client groups queues from — cached content fit,
+/// explicit user triage intent, and the familiar-material mark (3.2). Queue
+/// membership itself stays a derived presentation view (ADR 0018 decision
+/// 6); the server never stores routing state.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MediaLibraryEntry {
+    pub media: MediaItem,
+    /// Track the fit profile was resolved from (first available track with a
+    /// language); also the natural track for one-click session starts.
+    pub primary_track_id: Option<SubtitleTrackId>,
+    /// Absent when no track qualifies or fit computation degrades (missing
+    /// word tokens, missing language). Fit is decoration, never a gate.
+    pub fit: Option<ContentDifficultyProfile>,
+    pub triage_intent: Option<MediaTriageIntent>,
+    /// Whether any intensive session marked this media as familiar material.
+    pub familiar_material: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SentenceWordTimingDiagnostics {
     pub sentence_id: SubtitleSentenceId,

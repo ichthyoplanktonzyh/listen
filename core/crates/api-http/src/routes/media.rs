@@ -26,6 +26,37 @@ pub(crate) async fn register_media(
         .map_err(ApiError::from)
 }
 
+/// Media library read model for triage (Phase 3.5 Slice 5): every media with
+/// cached fit facts, user triage intent, and the familiar-material mark. The
+/// client derives queue grouping from these facts; nothing here gates access.
+pub(crate) async fn list_media_library(
+    State(state): State<ApiState>,
+) -> Result<Json<Vec<application::MediaLibraryEntry>>, ApiError> {
+    state
+        .services
+        .list_media_library()
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct SetTriageIntentRequest {
+    intent: Option<MediaTriageIntent>,
+}
+
+pub(crate) async fn set_media_triage_intent(
+    State(state): State<ApiState>,
+    Path(media_id): Path<String>,
+    Json(request): Json<SetTriageIntentRequest>,
+) -> Result<Json<application::MediaLibraryEntry>, ApiError> {
+    let id = MediaId::parse(media_id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .set_media_triage_intent(&id, request.intent)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 pub(crate) async fn read_media(
     State(state): State<ApiState>,
     Path(media_id): Path<String>,
@@ -149,6 +180,20 @@ pub(crate) async fn read_subtitle(
         .read_subtitle_track(&track_id)?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("subtitle track"))
+}
+
+/// Dual-dimension content fit for one track's media (ADR 0018). Served from
+/// the fingerprint-validated cache; recomputes only when transcript,
+/// timelines, or the vocabulary profile changed.
+pub(crate) async fn track_content_fit(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<domain::ContentDifficultyProfile>, ApiError> {
+    state
+        .services
+        .content_fit_for_track(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
+        .map(Json)
+        .map_err(ApiError::from)
 }
 
 pub(crate) async fn archive_subtitle(

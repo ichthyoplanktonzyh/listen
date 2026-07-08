@@ -645,6 +645,20 @@ impl LearningAssetRepository for SqliteRepository {
             .map_err(repo)
     }
 
+    fn lexical_vocabulary_watermark(
+        &self,
+        language: &LanguageCode,
+    ) -> Result<(u64, u64), ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.query_row(
+            "SELECT COUNT(*), COALESCE(MAX(learning_updated_at_ms), 0)
+             FROM lexical_entries WHERE language=?1",
+            [language.as_str()],
+            |row| Ok((row.get::<_, u64>(0)?, row.get::<_, u64>(1)?)),
+        )
+        .map_err(repo)
+    }
+
     fn create_lexical_observation(
         &self,
         observation: &LexicalObservation,
@@ -697,6 +711,71 @@ impl LearningAssetRepository for SqliteRepository {
             .map_err(repo)
     }
 
+    fn append_learning_observation(
+        &self,
+        observation: &LearningObservation,
+    ) -> Result<LearningObservation, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "INSERT OR IGNORE INTO learning_observations
+                 (id,lexical_entry_id,sense_id,capability,task_type,outcome,assistance,
+                  surface_form,sentence_id,media_id,origin,source_ref,occurred_at_ms)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+                params![
+                    observation.id.as_str(),
+                    observation.lexical_entry_id.as_str(),
+                    observation
+                        .sense_id
+                        .as_ref()
+                        .map(|value| value.as_str())
+                        .unwrap_or(""),
+                    json(&observation.capability)?,
+                    json(&observation.task_type)?,
+                    json(&observation.outcome)?,
+                    json(&observation.assistance)?,
+                    observation.surface_form,
+                    observation.sentence_id.as_ref().map(|value| value.as_str()),
+                    observation.media_id.as_ref().map(|value| value.as_str()),
+                    json(&observation.origin)?,
+                    observation.source_ref,
+                    observation.occurred_at_ms,
+                ],
+            )
+            .map_err(repo)?;
+        Ok(observation.clone())
+    }
+
+    fn list_learning_observations(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        capability: Option<LexicalCapability>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<LearningObservation>, ApplicationError> {
+        let capability_json = capability.map(|value| json(&value)).transpose()?;
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = conn
+            .prepare(
+                "SELECT id,lexical_entry_id,sense_id,capability,task_type,outcome,assistance,
+                        surface_form,sentence_id,media_id,origin,source_ref,occurred_at_ms
+                 FROM learning_observations
+                 WHERE lexical_entry_id=?1 AND (?2 IS NULL OR capability=?2)
+                 ORDER BY occurred_at_ms DESC, id
+                 LIMIT ?3 OFFSET ?4",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map(
+                params![lexical_entry_id.as_str(), capability_json, limit, offset],
+                learning_observation_row,
+            )
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
     fn clear_lexical_observation(
         &self,
         lexical_entry_id: &LexicalEntryId,
@@ -744,6 +823,7 @@ impl LearningAssetRepository for SqliteRepository {
         let (lexical_entries, lexical_history, lexical_occurrences, lexical_observations) =
             self.export_lexical_assets()?;
         let capability_profiles = self.export_all_capability_profiles()?;
+        let learning_observations = self.export_all_learning_observations()?;
         let conn = self.connection.lock().expect("sqlite mutex poisoned");
         Ok(VocabularyAssetBundle {
             version: 6,
@@ -754,6 +834,7 @@ impl LearningAssetRepository for SqliteRepository {
             lexical_observations,
             phonetic_finding_feedback: read_all_phonetic_feedback(&conn)?,
             capability_profiles,
+            learning_observations,
         })
     }
 
@@ -766,6 +847,25 @@ impl LearningAssetRepository for SqliteRepository {
         )?;
         for profile in &bundle.capability_profiles {
             self.import_capability_profile(profile)?;
+        }
+        // Append-only ids make observation merge trivially idempotent
+        // (ADR 0017 decision 6); rows for entries absent locally are skipped
+        // by the same existence rule as capability profiles.
+        for observation in &bundle.learning_observations {
+            let exists = {
+                let conn = self.connection.lock().expect("sqlite mutex poisoned");
+                conn.query_row(
+                    "SELECT 1 FROM lexical_entries WHERE id=?1",
+                    [observation.lexical_entry_id.as_str()],
+                    |_| Ok(()),
+                )
+                .optional()
+                .map_err(repo)?
+                .is_some()
+            };
+            if exists {
+                self.append_learning_observation(observation)?;
+            }
         }
         let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
         let tx = conn.transaction().map_err(repo)?;
@@ -845,6 +945,25 @@ impl LearningAssetRepository for SqliteRepository {
 }
 
 impl SqliteRepository {
+    fn export_all_learning_observations(
+        &self,
+    ) -> Result<Vec<LearningObservation>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = conn
+            .prepare(
+                "SELECT id,lexical_entry_id,sense_id,capability,task_type,outcome,assistance,
+                        surface_form,sentence_id,media_id,origin,source_ref,occurred_at_ms
+                 FROM learning_observations
+                 ORDER BY occurred_at_ms, id",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map([], learning_observation_row)
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
     fn import_capability_profile(
         &self,
         imported: &LexicalCapabilityProfile,
@@ -1239,6 +1358,38 @@ fn lexical_observation_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LexicalO
         original_form: row.get(3)?,
         result: from_json(&row.get::<_, String>(4)?)?,
         created_at_ms: row.get(5)?,
+    })
+}
+
+fn learning_observation_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LearningObservation> {
+    let sense_id = row.get::<_, String>(2)?;
+    Ok(LearningObservation {
+        id: LearningObservationId::parse(row.get::<_, String>(0)?).map_err(super::domain_sql)?,
+        lexical_entry_id: LexicalEntryId::parse(row.get::<_, String>(1)?)
+            .map_err(super::domain_sql)?,
+        sense_id: if sense_id.is_empty() {
+            None
+        } else {
+            Some(LexicalSenseId::parse(sense_id).map_err(super::domain_sql)?)
+        },
+        capability: from_json(&row.get::<_, String>(3)?)?,
+        task_type: from_json(&row.get::<_, String>(4)?)?,
+        outcome: from_json(&row.get::<_, String>(5)?)?,
+        assistance: from_json(&row.get::<_, String>(6)?)?,
+        surface_form: row.get(7)?,
+        sentence_id: row
+            .get::<_, Option<String>>(8)?
+            .map(SubtitleSentenceId::parse)
+            .transpose()
+            .map_err(super::domain_sql)?,
+        media_id: row
+            .get::<_, Option<String>>(9)?
+            .map(MediaId::parse)
+            .transpose()
+            .map_err(super::domain_sql)?,
+        origin: from_json(&row.get::<_, String>(10)?)?,
+        source_ref: row.get(11)?,
+        occurred_at_ms: row.get(12)?,
     })
 }
 

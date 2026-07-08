@@ -474,6 +474,118 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
             .status,
         Some(LearningStatus::KnownNotRecognized)
     );
+
+    // ADR 0017: the same failed review also lands one channelized
+    // listening observation, deduplicated across source and anchors.
+    let channelized = repo
+        .list_learning_observations(&lexical.entry.id, Some(LexicalCapability::Listening), 10, 0)
+        .unwrap();
+    assert_eq!(channelized.len(), 1);
+    assert_eq!(channelized[0].task_type, ObservationTaskType::ReviewRecall);
+    assert_eq!(channelized[0].outcome, ObservationOutcome::Failure);
+    assert_eq!(channelized[0].assistance, AssistanceLevel::None);
+    assert_eq!(channelized[0].origin, ObservationOrigin::ReviewTask);
+    assert_eq!(channelized[0].surface_form.as_deref(), Some("Hello"));
+    assert_eq!(
+        channelized[0].source_ref.as_deref(),
+        Some(submission.attempt.id.as_str())
+    );
+}
+
+#[test]
+fn practice_attempts_append_channelized_observations_for_success_and_failure() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    let lexical = upsert_word_asset(&services, "en", "signal", "signals", None, None);
+    // Anchor without a sentence: channelized evidence must still be recorded
+    // even where the legacy (entry, sentence)-keyed path cannot write.
+    let anchors = vec![PracticeAnchor {
+        kind: PracticeAnchorKind::LexicalEntry,
+        id: lexical.entry.id.as_str().into(),
+        label: Some("signals".into()),
+        lexical_entry_id: Some(lexical.entry.id.clone()),
+        sentence_id: None,
+        token_start: None,
+        token_end: None,
+        start_ms: None,
+        end_ms: None,
+    }];
+    let target = PracticeTarget {
+        kind: PracticeTargetKind::Lexical,
+        id: Some(lexical.entry.id.as_str().into()),
+        sentence_id: None,
+        chunk_id: None,
+        start_ms: None,
+        end_ms: None,
+    };
+    let correct_item = services
+        .create_practice_item(application::CreatePracticeItem {
+            session_id: None,
+            kind: PracticeKind::Dictation,
+            target: target.clone(),
+            prompt_snapshot: "signals".into(),
+            expected_text: "signals".into(),
+            anchors: anchors.clone(),
+        })
+        .unwrap();
+    let correct = services
+        .submit_practice_attempt(application::SubmitPracticeAttempt {
+            item_id: correct_item.id,
+            text_answer: "signals".into(),
+            create_review_item_on_failure: false,
+        })
+        .unwrap();
+    assert_eq!(correct.result, PracticeResult::Correct);
+
+    let failed_item = services
+        .create_practice_item(application::CreatePracticeItem {
+            session_id: None,
+            kind: PracticeKind::Dictation,
+            target,
+            prompt_snapshot: "signals".into(),
+            expected_text: "signals".into(),
+            anchors,
+        })
+        .unwrap();
+    let failed = services
+        .submit_practice_attempt(application::SubmitPracticeAttempt {
+            item_id: failed_item.id,
+            text_answer: "single".into(),
+            create_review_item_on_failure: false,
+        })
+        .unwrap();
+    assert_ne!(failed.result, PracticeResult::Correct);
+    // Legacy path stays failure-only and sentence-keyed: nothing there.
+    assert!(failed.generated_observation_ids.is_empty());
+
+    let channelized = repo
+        .list_learning_observations(&lexical.entry.id, None, 10, 0)
+        .unwrap();
+    assert_eq!(channelized.len(), 2);
+    let outcomes: Vec<_> = channelized
+        .iter()
+        .map(|observation| observation.outcome)
+        .collect();
+    assert!(outcomes.contains(&ObservationOutcome::Success));
+    assert!(outcomes.iter().any(|o| *o != ObservationOutcome::Success));
+    for observation in &channelized {
+        assert_eq!(observation.capability, LexicalCapability::Listening);
+        assert_eq!(observation.task_type, ObservationTaskType::Dictation);
+        assert_eq!(observation.assistance, AssistanceLevel::None);
+        assert_eq!(observation.origin, ObservationOrigin::PracticeTask);
+        assert_eq!(observation.surface_form.as_deref(), Some("signals"));
+        assert!(observation.sentence_id.is_none());
+    }
 }
 
 #[test]
@@ -628,6 +740,117 @@ fn five_distinct_review_contexts_require_confirmation_before_status_upgrade() {
         .unwrap();
     assert_eq!(
         profile.effective_assessment(LexicalCapability::Listening),
+        CapabilityAssessment::Acquired
+    );
+    // ADR 0019: the conclusion is derived from the observation stream by
+    // listening-projection-v1, not written directly by the confirm handler.
+    let projection = profile.listening.projection.as_ref().unwrap();
+    assert_eq!(
+        projection.algorithm_version,
+        LISTENING_PROJECTION_ALGORITHM_VERSION
+    );
+    assert_eq!(
+        projection.source,
+        CapabilityProjectionSource::EvidenceProjection
+    );
+    assert_eq!(projection.confidence, Some(LISTENING_CONFIDENCE_TASK));
+    assert!(projection.evidence_as_of_ms.is_some());
+}
+
+#[test]
+fn listening_projection_flips_on_task_failure_and_blocks_self_report_upgrade() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    // Word the user believes they can catch by ear (self-report / panel set).
+    let lexical = upsert_word_asset(
+        &services,
+        "en",
+        "gonna",
+        "gonna",
+        Some(LearningStatus::KnownRecognized),
+        None,
+    );
+
+    // One failed audio review on a never-confirmed word flips the listening
+    // view — the "看得懂听不出" discovery (ADR 0019 accepted behavior change).
+    let review = services
+        .create_review_item(application::CreateReviewItem {
+            source: ReviewSource {
+                kind: ReviewSourceKind::LexicalEntry,
+                id: Some(lexical.entry.id.as_str().into()),
+                practice_attempt_id: None,
+                lexical_entry_id: Some(lexical.entry.id.clone()),
+                media_id: None,
+                track_id: None,
+            },
+            anchors: vec![PracticeAnchor {
+                kind: PracticeAnchorKind::LexicalEntry,
+                id: lexical.entry.id.as_str().into(),
+                label: Some("gonna".into()),
+                lexical_entry_id: Some(lexical.entry.id.clone()),
+                sentence_id: None,
+                token_start: None,
+                token_end: None,
+                start_ms: None,
+                end_ms: None,
+            }],
+            prompt_snapshot: "gonna".into(),
+        })
+        .unwrap();
+    services
+        .submit_review_attempt(application::SubmitReviewAttempt {
+            item_id: review.id,
+            rating: ReviewRating::Again,
+        })
+        .unwrap();
+    let details = services.lexical_details(&lexical.entry.id).unwrap().unwrap();
+    assert_eq!(
+        details.entry.status,
+        Some(LearningStatus::KnownNotRecognized)
+    );
+    let profile = services
+        .lexical_capability_profile(&lexical.entry.id)
+        .unwrap()
+        .unwrap();
+    let projection = profile.listening.projection.as_ref().unwrap();
+    assert_eq!(
+        projection.algorithm_version,
+        LISTENING_PROJECTION_ALGORITHM_VERSION
+    );
+    assert_eq!(projection.confidence, Some(LISTENING_CONFIDENCE_TASK));
+
+    // Writer ladder: re-declaring "认识" through the legacy status path may
+    // not upgrade over the task-grade evidence conclusion (option A).
+    upsert_word_asset(
+        &services,
+        "en",
+        "gonna",
+        "gonna",
+        Some(LearningStatus::KnownRecognized),
+        None,
+    );
+    let details = services.lexical_details(&lexical.entry.id).unwrap().unwrap();
+    assert_eq!(
+        details.entry.status,
+        Some(LearningStatus::KnownNotRecognized)
+    );
+    // Reading is not evidence-owned: the self-report still lands there.
+    let profile = services
+        .lexical_capability_profile(&lexical.entry.id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        profile.effective_assessment(LexicalCapability::Reading),
         CapabilityAssessment::Acquired
     );
 }
