@@ -172,8 +172,14 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         tx.pragma_update(None, "user_version", 24)?;
         tx.commit()?;
     }
-    // The v25 slot belongs to Phase 3.4.2 and must be inserted above this
-    // block when that branch lands.
+    if current < 25 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!(
+            "../migrations/0025_sense_group_analyses.sql"
+        ))?;
+        tx.pragma_update(None, "user_version", 25)?;
+        tx.commit()?;
+    }
     if current < 26 {
         let tx = connection.unchecked_transaction()?;
         tx.execute_batch(include_str!("../migrations/0026_media_triage_intents.sql"))?;

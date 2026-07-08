@@ -28,6 +28,9 @@ pub use word_timing::*;
 mod chunk_timeline;
 pub use chunk_timeline::*;
 
+mod sense_group;
+pub use sense_group::*;
+
 mod phone_timeline;
 pub use phone_timeline::*;
 
@@ -129,6 +132,8 @@ string_id!(LearningEventId);
 string_id!(ListeningInboxItemId);
 string_id!(CorpusOccurrenceId);
 string_id!(LearnerProfileId);
+string_id!(SenseGroupAnalysisId);
+string_id!(SenseGroupId);
 string_id!(RecordingAssetId);
 string_id!(PronunciationAnalysisId);
 string_id!(PhoneticAnalysisModelId);

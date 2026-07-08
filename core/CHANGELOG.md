@@ -2,6 +2,47 @@
 
 ## Unreleased
 
+- 2026-07-08 12:35 CST: Phase 3.4.2 Slice 6 — Closeout。创建 `3.4.2-CLOSEOUT.md`（exit
+  signals 逐条验证、alignment 推迟理由、ChunkTimeline 改名评估结论"继续推迟"、
+  累积文件变更清单）。`3.4.2-PLAN.md` 全部 checkbox 标记完成、状态 COMPLETED。
+  `STATE.md` 更新 Phase 3.4.2 完成记录。Phase 3.4.2（Semantic / Prosodic Group
+  Separation）全部 7 个 Slice 交付完毕。
+
+- 2026-07-08 12:15 CST: Phase 3.4.2 Slice 5 — Flutter 集成。Dart 模型三类（SenseGroup/
+  SenseGroupAnalysis/SenseGroupAnalysisSummary，手写 fromJson/toJson，ADR 0014 纪律）。
+  ApiService 6 方法（list/summaries/generate/activate/archive/delete）。SubtitleController
+  + SubtitleState 新增 `senseGroupsBySentence: Map<String, List<SenseGroup>>` 缓存 +
+  copyWith + 清除 + 便捷访问器。SpeechEnhancementWorkflowController 加载 active analysis
+  并按 sentence_id 分桶。MediaSessionCoordinator 透传。Settings 新增 `showSenseGrouping`
+  布尔（默认 off）+ 持久化 + en/zh 本地化。契约测试 7 用例
+  （SenseGroup 最小/完整/round-trip、SenseGroupAnalysis 含组/active、Summary 解析）。
+  flutter analyze 零问题，flutter test 233 passed。
+
+- 2026-07-08 11:45 CST: Phase 3.4.2 Slice 4 — Application use cases + API routes + LLTimeline 集成。
+  新增 `crates/application/src/sense_groups.rs`（generate/list/summarize/get/activate/archive/delete，
+  generate 无 word timeline 硬依赖，纯文本 partition → SenseGroup 组装含 char-span text 切片）。
+  API 7 个 handler（`timelines.rs`）+ 6 条路由注册（`lib.rs`）覆盖 GET/POST/DELETE/activate/archive。
+  LLTimeline 导出填充 `sense_group_analyses` + `active_sense_group_analysis_id`，导入镜像
+  chunk_timelines 保存+激活流程。`remap_lltimeline_identity` 扩展 5 处（media/track remap、
+  sentence_id remap、parent_word_timeline_id remap、analysis id remap + group id remap、
+  active id remap）。OpenAPI spec 新增 5 paths + 5 component schemas（SenseGroupAnalysis/
+  SenseGroupAnalysisSummary/SenseGroup/SenseGroupSource/GenerateSenseGroupAnalysis）。
+
+- 2026-07-08 11:15 CST: Phase 3.4.2 Slice 3 — SenseGroupAnalysis 持久化层落地。新增
+  `migrations/0025_sense_group_analyses.sql`（`sense_group_analysis_runs` 表，4 索引含
+  active 唯一约束，镜像 chunk_timeline_runs 模式），在 `migrations.rs` 注册 v25 slot。
+  `repositories.rs` 三处扩展（SubtitleRepository trait / TimelineResourceRepository trait /
+  blanket impl）各 7 方法（save/list/get/active/activate/archive/delete）。`subtitles.rs`
+  SQLite 实现全部 7 方法，activate 自动降级先前 active 为 Candidate。测试：lifecycle
+  全链路（candidate→active→archived、第二个 activate 顶替第一个）、active 唯一约束、
+  JSON round-trip（多组含 label/sources 字段）、迁移恢复测试验证 v25 表存在。
+
+- 2026-07-08 10:30 CST: Phase 3.4.2 Slice 2 — 规则回退 partition provider 落地。新增
+  `crates/speech-analysis/src/sense_group_partition.rs`（`partition_sentence` 纯文本分组，
+  标点+长度+短语保护规则），在 `lib.rs` 注册模块。14 个单元测试覆盖英文 ≥5 句、中文 ≥3 句、
+  边界情况及不变量断言（组不重叠、连续覆盖全部 Word token、每组 ≥1 Word）。合入
+  `codex/3.4.2-sense-group-separation` 获取 Slice 1 domain contract。
+
 - 2026-07-08 08:15 CST: Phase 3.5 Slice 7 反馈回流 → 个人 sound fit 校准项。
   校准项 = 独立持久表 `content_fit_calibrations`(迁移 v27)中的反馈计数记录
   (理解度自报三档计数 + 计分练习尝试/正确计数),是学习者证据不是缓存:
@@ -213,6 +254,21 @@
   acquired 条件语义、投影写入者互斥、精细度不泄漏交互层）、§5.3 evidence shape 增补
   `surface_form`、新增 §14 Refinement Addendum；STATE.md 记录决策并更新下一步
   （证据层 slice 为 3.5 前置、sense 身份 spike 为 3.6 前置）。
+
+- 2026-07-07 21:00 CST: 迁移号第二次协调：v24（0024_content_difficulty_profiles）由
+  main 上先落地的 Phase 3.5 Slice 3 占用，本阶段 sense_group_analyses 迁移顺延为
+  v25/0025；PLAN 与实施指南同步改号（顺延规则不变）。
+
+- 2026-07-07 15:00 CST: 迁移号协调：schema v23（0023_learning_observations）由 main 上的
+  Phase 3.4.4 证据层占用，本阶段 Slice 3 的 sense_group_analyses 迁移改用 v24/0024；
+  PLAN 与实施指南同步更新，并注明合并时编号再冲突的顺延规则。
+
+- 2026-07-07 14:00 CST: 新增 3.4.2-IMPLEMENTATION-GUIDE.md（Slice 2-6 交接实施指南）。
+
+- 2026-07-07 12:20 CST: ADR 0016 增补决策 9（2026-07-07 修正案）：用户意群修正是独立
+  per-sentence overlay 层。
+
+- 2026-07-07 CST: 启动 Phase 3.4.2 Semantic / Prosodic Group Separation（Slice 0-1）。
 
 - 2026-07-06 CST: 完成 Phase 3.4.1 Slice 6 authority switch and closeout。capability profile
   成为唯一权威决策来源：diagnosis-core `classify_entry()` 移除 legacy `LearningStatus` 回退

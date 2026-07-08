@@ -2,8 +2,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ChunkTimeline, ChunkTimelineChunk, ChunkTimelineId, LanguageCode, MediaId, PhoneTimeline,
-    PhoneTimelineId, RhythmFrame, RhythmFrameId, SubtitleSentenceId, SubtitleTokenKind,
-    SubtitleTrackId, TimelineMetrics, TimelineStatus, WordTimeline, WordTimelineId,
+    PhoneTimelineId, RhythmFrame, RhythmFrameId, SenseGroupAnalysis, SenseGroupAnalysisId,
+    SubtitleSentenceId, SubtitleTokenKind, SubtitleTrackId, TimelineMetrics, TimelineStatus,
+    WordTimeline, WordTimelineId,
 };
 
 pub const LLTIMELINE_SCHEMA_V1: &str = "llplayer.timeline.v1";
@@ -24,6 +25,10 @@ pub struct LLTimelineDocument {
     #[serde(default)]
     pub chunk_timelines: Vec<ChunkTimeline>,
     pub active_chunk_timeline_id: Option<ChunkTimelineId>,
+    #[serde(default)]
+    pub sense_group_analyses: Vec<SenseGroupAnalysis>,
+    #[serde(default)]
+    pub active_sense_group_analysis_id: Option<SenseGroupAnalysisId>,
     #[serde(default)]
     pub artifacts: Vec<LLTimelineArtifact>,
 }
