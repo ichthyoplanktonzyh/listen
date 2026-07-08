@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-08 12:15 CST: Phase 3.4.2 Slice 5 — Flutter 集成。Dart 模型三类（SenseGroup/
+  SenseGroupAnalysis/SenseGroupAnalysisSummary，手写 fromJson/toJson，ADR 0014 纪律）。
+  ApiService 6 方法（list/summaries/generate/activate/archive/delete）。SubtitleController
+  + SubtitleState 新增 `senseGroupsBySentence: Map<String, List<SenseGroup>>` 缓存 +
+  copyWith + 清除 + 便捷访问器。SpeechEnhancementWorkflowController 加载 active analysis
+  并按 sentence_id 分桶。MediaSessionCoordinator 透传。Settings 新增 `showSenseGrouping`
+  布尔（默认 off）+ 持久化 + en/zh 本地化。契约测试 7 用例
+  （SenseGroup 最小/完整/round-trip、SenseGroupAnalysis 含组/active、Summary 解析）。
+  flutter analyze 零问题，flutter test 233 passed。
+
 - 2026-07-08 11:45 CST: Phase 3.4.2 Slice 4 — Application use cases + API routes + LLTimeline 集成。
   新增 `crates/application/src/sense_groups.rs`（generate/list/summarize/get/activate/archive/delete，
   generate 无 word timeline 硬依赖，纯文本 partition → SenseGroup 组装含 char-span text 切片）。
