@@ -39,6 +39,7 @@ import 'services/api_service.dart';
 import 'services/external_tools.dart';
 import 'utils/word_list_parser.dart';
 import 'screens/subtitle_resources_screen.dart';
+import 'widgets/panels/cold_start_marking_sheet.dart';
 import 'screens/vocabulary_screen.dart';
 import 'screens/review_queue_screen.dart';
 import 'widgets/player/download_status_bar.dart';
@@ -1545,7 +1546,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
           onActivateChunkTimeline: resourceActions.activateChunkTimeline,
           onArchiveChunkTimeline: resourceActions.archiveChunkTimeline,
           onDeleteChunkTimeline: resourceActions.deleteChunkTimeline,
+          onStartColdStart: _openColdStartMarking,
         ),
+      ),
+    );
+  }
+
+  void _openColdStartMarking() {
+    final service = api;
+    final trackId = subtitleController.primaryTrack?.id;
+    final language = subtitleController.primaryTrack?.language;
+    if (service == null || trackId == null || language == null) return;
+    showDialog<void>(
+      context: context,
+      builder: (_) => ColdStartMarkingSheet(
+        api: service,
+        trackId: trackId,
+        language: language,
+        onDone: () => resourceActions.loadContentFit(trackId),
       ),
     );
   }
@@ -2000,6 +2018,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     onReplayListeningInboxItem: _replayListeningInboxItem,
     onProcessListeningInboxItem: _processListeningInboxItem,
     timingQuality: _timingQuality,
+    onStartColdStart: _openColdStartMarking,
   );
 
   Widget _controls() => PlaybackBar(

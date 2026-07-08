@@ -65,6 +65,7 @@ class SidePanel extends StatefulWidget {
     required this.onReplayListeningInboxItem,
     required this.onProcessListeningInboxItem,
     required this.timingQuality,
+    this.onStartColdStart,
   });
 
   final PlayerController playerController;
@@ -107,6 +108,7 @@ class SidePanel extends StatefulWidget {
   final Future<void> Function(ListeningInboxItem item, String resolution)
   onProcessListeningInboxItem;
   final String Function(String sentenceId) timingQuality;
+  final VoidCallback? onStartColdStart;
 
   @override
   State<SidePanel> createState() => _SidePanelState();
@@ -360,6 +362,7 @@ class _SidePanelState extends State<SidePanel> {
     onActivateChunkTimeline: resourceActions.activateChunkTimeline,
     onArchiveChunkTimeline: resourceActions.archiveChunkTimeline,
     onDeleteChunkTimeline: resourceActions.deleteChunkTimeline,
+    onStartColdStart: widget.onStartColdStart,
   );
 
   Widget _diagnosisCard() => DiagnosisCard(

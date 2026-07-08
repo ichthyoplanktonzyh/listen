@@ -1239,6 +1239,31 @@ class ContentDifficultyProfile {
   };
 }
 
+class ColdStartWordCandidate {
+  const ColdStartWordCandidate({
+    required this.displayForm,
+    required this.normalizedForm,
+    required this.occurrenceCount,
+  });
+
+  factory ColdStartWordCandidate.fromJson(Map<String, dynamic> json) =>
+      ColdStartWordCandidate(
+        displayForm: json['display_form'] as String,
+        normalizedForm: json['normalized_form'] as String,
+        occurrenceCount: json['occurrence_count'] as int,
+      );
+
+  final String displayForm;
+  final String normalizedForm;
+  final int occurrenceCount;
+
+  Map<String, dynamic> toJson() => {
+    'display_form': displayForm,
+    'normalized_form': normalizedForm,
+    'occurrence_count': occurrenceCount,
+  };
+}
+
 /// Registered media as served by `GET /v1/media` (nested in
 /// [MediaLibraryEntry]).
 class MediaItem {

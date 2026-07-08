@@ -41,10 +41,12 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
     required this.onActivateChunkTimeline,
     required this.onArchiveChunkTimeline,
     required this.onDeleteChunkTimeline,
+    this.onStartColdStart,
   });
 
   final String? mediaId;
   final ContentDifficultyProfile? contentFit;
+  final VoidCallback? onStartColdStart;
   final List<SubtitleTrack> resources;
   final Map<String, SubtitleResourceCapabilities> capabilities;
   final SubtitleTrack? activeTrack;
@@ -130,7 +132,10 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
           if (contentFit != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              child: ContentFitCard(profile: contentFit!),
+              child: ContentFitCard(
+                profile: contentFit!,
+                onStartColdStart: onStartColdStart,
+              ),
             ),
           Expanded(
             child: mediaId == null

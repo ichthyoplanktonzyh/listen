@@ -225,6 +225,17 @@ class LocalApi {
           ))
           as Map<String, dynamic>;
 
+  Future<List<Map<String, dynamic>>> coldStartWords(
+    String trackId, {
+    int limit = 20,
+  }) async =>
+      ((await _request(
+                'GET',
+                '/v1/subtitles/${Uri.encodeComponent(trackId)}/cold-start-words?limit=$limit',
+              ))
+              as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+
   Future<Map<String, dynamic>> archiveSubtitle(String trackId) async =>
       (await _request(
             'POST',

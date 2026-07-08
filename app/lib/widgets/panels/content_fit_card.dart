@@ -12,9 +12,10 @@ import '../../models/types.dart';
 /// little of the transcript the honest-degradation notice replaces confident
 /// framing.
 class ContentFitCard extends StatelessWidget {
-  const ContentFitCard({super.key, required this.profile});
+  const ContentFitCard({super.key, required this.profile, this.onStartColdStart});
 
   final ContentDifficultyProfile profile;
+  final VoidCallback? onStartColdStart;
 
   @override
   Widget build(BuildContext context) {
@@ -88,6 +89,21 @@ class ContentFitCard extends StatelessWidget {
                 text: l.text('contentFitLowProfile'),
                 color: colors.onSurfaceVariant,
               ),
+              if (onStartColdStart != null) ...[
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    icon: const Icon(Icons.bolt_outlined, size: 16),
+                    label: Text(l.text('coldStartQuickMarking')),
+                    onPressed: onStartColdStart,
+                  ),
+                ),
+              ],
             ],
           ],
         ),

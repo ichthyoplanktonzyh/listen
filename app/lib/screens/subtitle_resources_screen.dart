@@ -33,6 +33,7 @@ class SubtitleResourcesScreen extends StatefulWidget {
     required this.onActivateChunkTimeline,
     required this.onArchiveChunkTimeline,
     required this.onDeleteChunkTimeline,
+    this.onStartColdStart,
   });
 
   final PlayerController playerController;
@@ -58,6 +59,7 @@ class SubtitleResourcesScreen extends StatefulWidget {
   final Future<void> Function(String timelineId) onActivateChunkTimeline;
   final Future<void> Function(String timelineId) onArchiveChunkTimeline;
   final Future<void> Function(String timelineId) onDeleteChunkTimeline;
+  final VoidCallback? onStartColdStart;
 
   @override
   State<SubtitleResourcesScreen> createState() =>
@@ -115,6 +117,7 @@ class _SubtitleResourcesScreenState extends State<SubtitleResourcesScreen> {
         onActivateChunkTimeline: widget.onActivateChunkTimeline,
         onArchiveChunkTimeline: widget.onArchiveChunkTimeline,
         onDeleteChunkTimeline: widget.onDeleteChunkTimeline,
+        onStartColdStart: widget.onStartColdStart,
       ),
     ),
   );
