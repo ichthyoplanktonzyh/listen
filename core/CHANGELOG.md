@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-08 12:35 CST: Phase 3.4.2 Slice 6 — Closeout。创建 `3.4.2-CLOSEOUT.md`（exit
+  signals 逐条验证、alignment 推迟理由、ChunkTimeline 改名评估结论"继续推迟"、
+  累积文件变更清单）。`3.4.2-PLAN.md` 全部 checkbox 标记完成、状态 COMPLETED。
+  `STATE.md` 更新 Phase 3.4.2 完成记录。Phase 3.4.2（Semantic / Prosodic Group
+  Separation）全部 7 个 Slice 交付完毕。
+
 - 2026-07-08 12:15 CST: Phase 3.4.2 Slice 5 — Flutter 集成。Dart 模型三类（SenseGroup/
   SenseGroupAnalysis/SenseGroupAnalysisSummary，手写 fromJson/toJson，ADR 0014 纪律）。
   ApiService 6 方法（list/summaries/generate/activate/archive/delete）。SubtitleController
