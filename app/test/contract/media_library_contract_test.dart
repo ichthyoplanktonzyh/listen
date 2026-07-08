@@ -27,7 +27,7 @@ void main() {
     },
     'assessed_token_ratio': 0.99,
     'evidence_grade': 'initial_estimate',
-    'algorithm_version': 'content-fit-v1',
+    'algorithm_version': 'content-fit-v2',
     'computed_at_ms': 1700000000000,
     'input_fingerprint':
         '0000000000000000000000000000000000000000000000000000000000000000',

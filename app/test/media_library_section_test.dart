@@ -34,7 +34,7 @@ MediaLibraryEntry _entry({
           'sound': {'fit': soundFit, 'signals': <Object>[]},
           'assessed_token_ratio': 0.9,
           'evidence_grade': 'initial_estimate',
-          'algorithm_version': 'content-fit-v1',
+          'algorithm_version': 'content-fit-v2',
           'computed_at_ms': 3,
           'input_fingerprint': 'fp',
         }

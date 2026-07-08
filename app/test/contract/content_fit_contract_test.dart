@@ -30,7 +30,7 @@ void main() {
     },
     'assessed_token_ratio': 0.99,
     'evidence_grade': 'initial_estimate',
-    'algorithm_version': 'content-fit-v1',
+    'algorithm_version': 'content-fit-v2',
     'computed_at_ms': 1700000000000,
     'input_fingerprint':
         '0000000000000000000000000000000000000000000000000000000000000000',
@@ -50,7 +50,7 @@ void main() {
       ]);
       expect(profile.evidenceGrade, 'initial_estimate');
       expect(profile.usageCalibrated, isFalse);
-      expect(profile.algorithmVersion, 'content-fit-v1');
+      expect(profile.algorithmVersion, 'content-fit-v2');
     });
 
     test('golden target derivation: meaning easy x sound hard', () {
@@ -86,6 +86,37 @@ void main() {
       final roundTripped = ContentDifficultyProfile.fromJson(profile.toJson());
       expect(roundTripped.toJson(), profile.toJson());
       expect(roundTripped.sound.signals[1].value, closeTo(152.0, 1e-9));
+    });
+
+    test('usage-calibrated wire shape with calibration signals', () {
+      // Phase 3.5 Slice 7: calibration appends its own signals and flips
+      // the evidence grade; material signals stay untouched.
+      final profile = ContentDifficultyProfile.fromJson({
+        ...fixture,
+        'evidence_grade': 'usage_calibrated',
+        'sound': {
+          'fit': 'too_hard',
+          'signals': [
+            {
+              'kind': 'known_not_recognized_density',
+              'value': 0.06,
+              'decisive': true,
+            },
+            {
+              'kind': 'comprehension_report_unclear_ratio',
+              'value': 0.75,
+              'decisive': true,
+            },
+            {'kind': 'practice_correct_rate', 'value': 0.6, 'decisive': false},
+          ],
+        },
+      });
+      expect(profile.usageCalibrated, isTrue);
+      expect(profile.sound.fit, 'too_hard');
+      expect(profile.sound.decisiveSignals.map((s) => s.kind), [
+        'known_not_recognized_density',
+        'comprehension_report_unclear_ratio',
+      ]);
     });
 
     test('missing signals default to an empty list, not a crash', () {

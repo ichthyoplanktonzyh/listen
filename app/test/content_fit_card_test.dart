@@ -33,7 +33,7 @@ ContentDifficultyProfile _profile({
   },
   'assessed_token_ratio': assessedTokenRatio,
   'evidence_grade': evidenceGrade,
-  'algorithm_version': 'content-fit-v1',
+  'algorithm_version': 'content-fit-v2',
   'computed_at_ms': 1700000000000,
   'input_fingerprint': 'fp',
 });

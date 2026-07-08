@@ -326,6 +326,9 @@ class AppLocalizations {
       'fit_signal_weak_form_density': 'Weak-form density',
       'fit_signal_compression_density': 'Compression density',
       'fit_signal_mean_chunk_length': 'Average chunk length',
+      'fit_signal_comprehension_report_unclear_ratio':
+          'Sessions you reported as unclear',
+      'fit_signal_practice_correct_rate': 'Your practice accuracy',
       'noSubtitleResources': 'No subtitle resources yet',
       'activeSubtitle': 'Active subtitle',
       'activateSubtitle': 'Activate subtitle',
@@ -910,6 +913,8 @@ class AppLocalizations {
       'fit_signal_weak_form_density': '弱读密度',
       'fit_signal_compression_density': '压缩密度',
       'fit_signal_mean_chunk_length': '平均意群长度',
+      'fit_signal_comprehension_report_unclear_ratio': '你自报"没听懂"的比例',
+      'fit_signal_practice_correct_rate': '你的练习正确率',
       'noSubtitleResources': '暂无字幕资源',
       'activeSubtitle': '当前字幕',
       'activateSubtitle': '激活字幕',
