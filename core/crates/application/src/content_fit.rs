@@ -235,6 +235,92 @@ impl AppServices {
             input_fingerprint,
         })
     }
+
+    pub fn cold_start_word_candidates(
+        &self,
+        track_id: &SubtitleTrackId,
+        limit: u32,
+    ) -> Result<Vec<ColdStartWordCandidate>, ApplicationError> {
+        let limit = limit.min(50);
+        let track = self
+            .subtitle_tracks
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let language = track
+            .language
+            .clone()
+            .ok_or(ApplicationError::Validation("subtitle track language"))?;
+
+        let mut normalized_by_raw: HashMap<String, Option<String>> = HashMap::new();
+        let mut token_counts_by_key: HashMap<String, u32> = HashMap::new();
+        let mut display_counts: HashMap<String, HashMap<String, u32>> = HashMap::new();
+
+        for sentence in &track.sentences {
+            for token in &sentence.tokens {
+                if token.kind != SubtitleTokenKind::Word {
+                    continue;
+                }
+                let key = match normalized_by_raw.get(&token.text) {
+                    Some(cached) => cached.clone(),
+                    None => {
+                        let normalized = self
+                            .normalize_lexical_form(language.as_str(), &token.text)?
+                            .normalized;
+                        let value = (!normalized.is_empty()).then_some(normalized);
+                        normalized_by_raw.insert(token.text.clone(), value.clone());
+                        value
+                    }
+                };
+                let Some(key) = key else { continue };
+                *token_counts_by_key.entry(key.clone()).or_default() += 1;
+                *display_counts
+                    .entry(key)
+                    .or_default()
+                    .entry(token.text.clone())
+                    .or_default() += 1;
+            }
+        }
+
+        if token_counts_by_key.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let keys: Vec<String> = token_counts_by_key.keys().cloned().collect();
+        let entries = self.learning_assets.lexical_entries_by_keys(
+            &language,
+            LexicalEntryKind::Word,
+            &keys,
+        )?;
+        let assessed_keys: std::collections::HashSet<&str> = entries
+            .iter()
+            .filter(|entry| entry.status.is_some())
+            .map(|entry| entry.normalized_form.as_str())
+            .collect();
+
+        let mut candidates: Vec<ColdStartWordCandidate> = token_counts_by_key
+            .iter()
+            .filter(|(key, _)| !assessed_keys.contains(key.as_str()))
+            .map(|(key, count)| {
+                let best_display = display_counts
+                    .get(key)
+                    .and_then(|forms| forms.iter().max_by_key(|(_, c)| *c).map(|(f, _)| f.clone()))
+                    .unwrap_or_else(|| key.clone());
+                ColdStartWordCandidate {
+                    display_form: best_display,
+                    normalized_form: key.clone(),
+                    occurrence_count: *count,
+                }
+            })
+            .collect();
+
+        candidates.sort_by(|a, b| {
+            b.occurrence_count
+                .cmp(&a.occurrence_count)
+                .then_with(|| a.normalized_form.cmp(&b.normalized_form))
+        });
+        candidates.truncate(limit as usize);
+        Ok(candidates)
+    }
 }
 
 /// Words per minute over speech time only: per-sentence spans are summed so

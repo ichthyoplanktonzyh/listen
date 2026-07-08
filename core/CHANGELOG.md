@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- 2026-07-08 18:20 CST: Phase 3.5 Slice 8 — Cold-start quick-marking flow。后端：
+  `cold_start_word_candidates` 从 track transcript 抽样高频未评估词（共享
+  `normalize_lexical_form` 归一化路径，按频次降序、同频字典序，clamp 50）。
+  API `GET /v1/subtitles/{track_id}/cold-start-words?limit=20` + OpenAPI spec +
+  `ColdStartWordCandidate` schema。端点测试验证排序、标注后候选消失。Flutter：
+  `ColdStartWordCandidate` DTO + `coldStartWords` API method。
+  `ColdStartMarkingSheet` 弹窗逐词三选一标注（KnownRecognized/KnownNotRecognized/
+  UnknownMeaning/Skip），写入复用现有 `upsertWordLexicalEntry`，关闭后回调
+  `loadContentFit` 刷新 fit 卡。`ContentFitCard` 降级态显示"快速标注"入口，
+  回调经 `SubtitleResourceManagerPanel` → `SubtitleResourcesScreen` / `SidePanel` →
+  `main.dart` 传递。en/zh 双份本地化（coldStart* 键）。契约测试 + widget 测试覆盖。
+  `cargo test --workspace` 全绿，`flutter analyze` 零问题，`flutter test` 236 passed。
+
 - 2026-07-08 12:35 CST: Phase 3.4.2 Slice 6 — Closeout。创建 `3.4.2-CLOSEOUT.md`（exit
   signals 逐条验证、alignment 推迟理由、ChunkTimeline 改名评估结论"继续推迟"、
   累积文件变更清单）。`3.4.2-PLAN.md` 全部 checkbox 标记完成、状态 COMPLETED。

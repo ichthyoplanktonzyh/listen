@@ -349,6 +349,13 @@ pub struct LexicalSourceContext {
     pub token_end: Option<u32>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ColdStartWordCandidate {
+    pub display_form: String,
+    pub normalized_form: String,
+    pub occurrence_count: u32,
+}
+
 #[derive(Debug, Clone)]
 pub struct UpsertLexicalEntry {
     pub language: String,

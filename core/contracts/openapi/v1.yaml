@@ -300,6 +300,25 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ContentDifficultyProfile" }
+  /v1/subtitles/{track_id}/cold-start-words:
+    get:
+      operationId: coldStartWords
+      description: >-
+        High-frequency unassessed words from the track transcript, for the
+        cold-start quick-marking flow. Normalized through the same lexical
+        path as content fit so that marking a word immediately raises the
+        assessed token ratio.
+      parameters:
+        - { name: track_id, in: path, required: true, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        "200":
+          description: Candidate words sorted by occurrence count descending
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ColdStartWordCandidate" }
   /v1/pronunciation/providers:
     get:
       operationId: pronunciationProviders
@@ -2661,6 +2680,13 @@ components:
         signals:
           type: array
           items: { $ref: "#/components/schemas/FitSignal" }
+    ColdStartWordCandidate:
+      type: object
+      required: [display_form, normalized_form, occurrence_count]
+      properties:
+        display_form: { type: string }
+        normalized_form: { type: string }
+        occurrence_count: { type: integer }
     ContentDifficultyProfile:
       type: object
       required: [subject_kind, subject_id, language, meaning, sound,

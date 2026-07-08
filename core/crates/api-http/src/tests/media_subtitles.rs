@@ -216,6 +216,136 @@ async fn imports_and_reads_complete_subtitle_timeline() {
 }
 
 #[tokio::test]
+async fn cold_start_words_returns_unassessed_sorted_by_frequency() {
+    let app = test_app();
+    let media = serde_json::json!({
+        "path": "/tmp/cold-start.mp4",
+        "fingerprint": "cold-start-media",
+        "title": "ColdStart",
+        "kind": "video"
+    })
+    .to_string();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/media")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(media))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let media: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let fixture = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../testdata/subtitles/timeline.srt"
+    );
+    let request = serde_json::json!({"path": fixture, "language": "en"}).to_string();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post(format!(
+                "/v1/media/{}/subtitles",
+                media["id"].as_str().unwrap()
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .header(CONTENT_TYPE, "application/json")
+            .body(Body::from(request))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let track: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let track_id = track["id"].as_str().unwrap();
+
+    // Cold-start words should return non-empty, sorted by frequency descending.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/v1/subtitles/{track_id}/cold-start-words?limit=20"
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let candidates: Vec<serde_json::Value> =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert!(!candidates.is_empty());
+    // All three fields present.
+    for candidate in &candidates {
+        assert!(candidate["display_form"].is_string());
+        assert!(candidate["normalized_form"].is_string());
+        assert!(candidate["occurrence_count"].is_u64());
+    }
+    // Sorted by occurrence_count descending.
+    let counts: Vec<u64> = candidates
+        .iter()
+        .map(|c| c["occurrence_count"].as_u64().unwrap())
+        .collect();
+    for pair in counts.windows(2) {
+        assert!(pair[0] >= pair[1], "candidates must be sorted by frequency");
+    }
+
+    // Mark one word via the existing lexical-entry upsert endpoint.
+    let word = candidates[0]["display_form"].as_str().unwrap();
+    let upsert = serde_json::json!({
+        "language": "en",
+        "kind": "word",
+        "canonical_form": word,
+        "display_form": word,
+        "status": "known_recognized"
+    })
+    .to_string();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::put("/v1/lexical-entries")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(upsert))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // That word should now be gone from candidates.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/v1/subtitles/{track_id}/cold-start-words?limit=20"
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let after: Vec<serde_json::Value> =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let marked_normalized = candidates[0]["normalized_form"].as_str().unwrap();
+    assert!(
+        !after
+            .iter()
+            .any(|c| c["normalized_form"].as_str().unwrap() == marked_normalized),
+        "marked word must disappear from candidates"
+    );
+    assert!(
+        after.len() < candidates.len(),
+        "total candidates should decrease after marking"
+    );
+}
+
+#[tokio::test]
 async fn content_fit_endpoint_serves_dual_dimension_profile() {
     let app = test_app();
     let media = serde_json::json!({

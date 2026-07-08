@@ -148,6 +148,10 @@ pub fn router(state: ApiState) -> Router {
             "/v1/subtitles/{track_id}/content-fit",
             get(track_content_fit),
         )
+        .route(
+            "/v1/subtitles/{track_id}/cold-start-words",
+            get(cold_start_words),
+        )
         .route("/v1/pronunciation/providers", get(pronunciation_providers))
         .route("/v1/pronunciation/lookup", get(pronunciation_lookup))
         .route(

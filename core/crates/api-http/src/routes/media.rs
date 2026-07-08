@@ -196,6 +196,26 @@ pub(crate) async fn track_content_fit(
         .map_err(ApiError::from)
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct ColdStartWordsQuery {
+    limit: Option<u32>,
+}
+
+pub(crate) async fn cold_start_words(
+    State(state): State<ApiState>,
+    Path(track_id): Path<String>,
+    Query(query): Query<ColdStartWordsQuery>,
+) -> Result<Json<Vec<application::ColdStartWordCandidate>>, ApiError> {
+    state
+        .services
+        .cold_start_word_candidates(
+            &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
+            query.limit.unwrap_or(20),
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 pub(crate) async fn archive_subtitle(
     State(state): State<ApiState>,
     Path(track_id): Path<String>,
