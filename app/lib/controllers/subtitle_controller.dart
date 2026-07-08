@@ -32,6 +32,7 @@ class SubtitleState {
     this.pronunciationBySentence = const {},
     this.timingsBySentence = const {},
     this.chunkPartitionsBySentence = const {},
+    this.senseGroupsBySentence = const {},
     this.pronunciationProviders = const [],
     this.subtitleResources = const [],
     this.subtitleResourceCapabilities = const {},
@@ -69,6 +70,7 @@ class SubtitleState {
   final Map<String, PronunciationAnalysis> pronunciationBySentence;
   final Map<String, List<WordTiming>> timingsBySentence;
   final Map<String, SentenceChunkPartition> chunkPartitionsBySentence;
+  final Map<String, List<SenseGroup>> senseGroupsBySentence;
   final List<PronunciationProvider> pronunciationProviders;
   final List<SubtitleTrack> subtitleResources;
   final Map<String, SubtitleResourceCapabilities> subtitleResourceCapabilities;
@@ -106,6 +108,7 @@ class SubtitleState {
     Map<String, PronunciationAnalysis>? pronunciationBySentence,
     Map<String, List<WordTiming>>? timingsBySentence,
     Map<String, SentenceChunkPartition>? chunkPartitionsBySentence,
+    Map<String, List<SenseGroup>>? senseGroupsBySentence,
     List<PronunciationProvider>? pronunciationProviders,
     List<SubtitleTrack>? subtitleResources,
     Map<String, SubtitleResourceCapabilities>? subtitleResourceCapabilities,
@@ -155,6 +158,8 @@ class SubtitleState {
     timingsBySentence: timingsBySentence ?? this.timingsBySentence,
     chunkPartitionsBySentence:
         chunkPartitionsBySentence ?? this.chunkPartitionsBySentence,
+    senseGroupsBySentence:
+        senseGroupsBySentence ?? this.senseGroupsBySentence,
     pronunciationProviders:
         pronunciationProviders ?? this.pronunciationProviders,
     subtitleResources: subtitleResources ?? this.subtitleResources,
@@ -244,6 +249,8 @@ class SubtitleController extends ChangeNotifier {
       .fold<int>(0, (total, timings) => total + timings.length);
   Map<String, SentenceChunkPartition> get chunkPartitionsBySentence =>
       _store.state.chunkPartitionsBySentence;
+  Map<String, List<SenseGroup>> get senseGroupsBySentence =>
+      _store.state.senseGroupsBySentence;
   List<PronunciationProvider> get pronunciationProviders =>
       _store.state.pronunciationProviders;
   List<SubtitleTrack> get subtitleResources => _store.state.subtitleResources;
@@ -355,11 +362,13 @@ class SubtitleController extends ChangeNotifier {
     required List<PronunciationProvider> pronunciationProviders,
     Map<String, PhoneticAnalysis> phoneticAnalysisBySentence = const {},
     Map<String, SentenceChunkPartition> chunkPartitionsBySentence = const {},
+    Map<String, List<SenseGroup>> senseGroupsBySentence = const {},
   }) => _store.update(
     (s) => s.copyWith(
       pronunciationBySentence: pronunciationBySentence,
       timingsBySentence: timingsBySentence,
       chunkPartitionsBySentence: chunkPartitionsBySentence,
+      senseGroupsBySentence: senseGroupsBySentence,
       pronunciationProviders: pronunciationProviders,
       phoneticAnalysisBySentence: phoneticAnalysisBySentence,
     ),
@@ -391,6 +400,7 @@ class SubtitleController extends ChangeNotifier {
       pronunciationBySentence: const {},
       timingsBySentence: const {},
       chunkPartitionsBySentence: const {},
+      senseGroupsBySentence: const {},
       pronunciationProviders: const [],
       wordTimelineSummaries: const [],
       phoneTimelineSummaries: const [],

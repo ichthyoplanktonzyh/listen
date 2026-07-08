@@ -39,6 +39,7 @@ class SpeechEnhancementLoadResult {
     required this.timeline,
     this.timingsBySentence = const {},
     this.chunkPartitionsBySentence = const {},
+    this.senseGroupsBySentence = const {},
     this.pronunciationBySentence = const {},
     this.pronunciationProviders = const [],
     this.phoneticAnalysisBySentence = const {},
@@ -48,6 +49,7 @@ class SpeechEnhancementLoadResult {
   final TimelineResourceLoadResult timeline;
   final Map<String, List<WordTiming>> timingsBySentence;
   final Map<String, SentenceChunkPartition> chunkPartitionsBySentence;
+  final Map<String, List<SenseGroup>> senseGroupsBySentence;
   final Map<String, PronunciationAnalysis> pronunciationBySentence;
   final List<PronunciationProvider> pronunciationProviders;
   final Map<String, PhoneticAnalysis> phoneticAnalysisBySentence;
@@ -88,6 +90,7 @@ class SpeechEnhancementWorkflowController {
       timeline.chunkSummaries,
       errors,
     );
+    final senseGroups = await _loadSenseGroups(service, trackId, errors);
     final analyses = await _loadPronunciationEnhancements(
       service,
       trackId,
@@ -97,6 +100,7 @@ class SpeechEnhancementWorkflowController {
       timeline: timeline,
       timingsBySentence: _groupWordTimings(timings),
       chunkPartitionsBySentence: partitions,
+      senseGroupsBySentence: senseGroups,
       pronunciationBySentence: Map<String, PronunciationAnalysis>.fromEntries(
         analyses.map((value) {
           final analysis = PronunciationAnalysis.fromJson(value);
@@ -271,6 +275,29 @@ class SpeechEnhancementWorkflowController {
         return MapEntry(partition.sentenceId, partition);
       }),
     );
+  }
+
+  Future<Map<String, List<SenseGroup>>> _loadSenseGroups(
+    LocalApi service,
+    String trackId,
+    List<String> errors,
+  ) async {
+    try {
+      final rawAnalyses = await service.trackSenseGroupAnalyses(trackId);
+      final analyses = rawAnalyses
+          .map(SenseGroupAnalysis.fromJson)
+          .toList(growable: false);
+      final active = analyses.where((a) => a.isActive).firstOrNull;
+      if (active == null) return const {};
+      final grouped = <String, List<SenseGroup>>{};
+      for (final group in active.groups) {
+        grouped.putIfAbsent(group.sentenceId, () => []).add(group);
+      }
+      return grouped;
+    } catch (error) {
+      errors.add('sense groups: $error');
+      return const {};
+    }
   }
 
   Future<List<Map<String, dynamic>>> _loadOptionalResourceCapability(

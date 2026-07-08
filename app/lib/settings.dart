@@ -42,6 +42,7 @@ class AppSettings {
     this.pronunciationVisible = true,
     this.wordSyncVisible = true,
     this.showChunkGrouping = true,
+    this.showSenseGrouping = false,
     this.chunkDisplayStyle = 'capsule',
     this.highlightCurrentChunk = false,
     this.chunkHighlightStyle = 'background',
@@ -148,6 +149,7 @@ class AppSettings {
       pronunciationVisible: json['pronunciation_visible'] as bool? ?? true,
       wordSyncVisible: json['word_sync_visible'] as bool? ?? true,
       showChunkGrouping: json['show_chunk_grouping'] as bool? ?? true,
+      showSenseGrouping: json['show_sense_grouping'] as bool? ?? false,
       chunkDisplayStyle: _chunkDisplayStyle(json['chunk_display_style']),
       highlightCurrentChunk: version >= 8
           ? json['highlight_current_chunk'] as bool? ?? false
@@ -223,6 +225,7 @@ class AppSettings {
   final bool pronunciationVisible;
   final bool wordSyncVisible;
   final bool showChunkGrouping;
+  final bool showSenseGrouping;
   final String chunkDisplayStyle;
   final bool highlightCurrentChunk;
   final String chunkHighlightStyle;
@@ -318,6 +321,7 @@ class AppSettings {
         'pronunciation_visible': pronunciationVisible,
         'word_sync_visible': wordSyncVisible,
         'show_chunk_grouping': showChunkGrouping,
+        'show_sense_grouping': showSenseGrouping,
         'chunk_display_style': chunkDisplayStyle,
         'highlight_current_chunk': highlightCurrentChunk,
         'chunk_highlight_style': chunkHighlightStyle,
@@ -379,6 +383,7 @@ class AppSettings {
     bool? pronunciationVisible,
     bool? wordSyncVisible,
     bool? showChunkGrouping,
+    bool? showSenseGrouping,
     String? chunkDisplayStyle,
     bool? highlightCurrentChunk,
     String? chunkHighlightStyle,
@@ -443,6 +448,7 @@ class AppSettings {
     pronunciationVisible: pronunciationVisible ?? this.pronunciationVisible,
     wordSyncVisible: wordSyncVisible ?? this.wordSyncVisible,
     showChunkGrouping: showChunkGrouping ?? this.showChunkGrouping,
+    showSenseGrouping: showSenseGrouping ?? this.showSenseGrouping,
     chunkDisplayStyle: chunkDisplayStyle ?? this.chunkDisplayStyle,
     highlightCurrentChunk: highlightCurrentChunk ?? this.highlightCurrentChunk,
     chunkHighlightStyle: chunkHighlightStyle ?? this.chunkHighlightStyle,
