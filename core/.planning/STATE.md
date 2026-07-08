@@ -277,7 +277,7 @@ last_updated: "2026-07-08T12:30:00.000+08:00"
 ## 下一步工作
 
 1. Phase 3.4.2 已完成（Slice 0-6，SenseGroup 全栈落地）；3.4.3 待排期。
-2. Phase 3.5 已立项启动（Slice 1-7 完成，Slice 8 冷启动标注流 + Slice 9 QA 待完成）。
+2. Phase 3.5 已立项启动（Slice 1-8 完成，Slice 9 真实素材 QA 待完成）。
 3. 恢复 Phase 3.4/3.35 手工 QA，重新基线化新能力 UI。
 4. 完成 Phase 3.3 真实媒体 30 分钟泛听 QA 并收口。
 5. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
