@@ -323,6 +323,7 @@ class MediaSessionCoordinator {
     subtitle.setSpeechEnhancements(
       timingsBySentence: result.timingsBySentence,
       chunkPartitionsBySentence: result.chunkPartitionsBySentence,
+      senseGroupsBySentence: result.senseGroupsBySentence,
       pronunciationBySentence: result.pronunciationBySentence,
       pronunciationProviders: result.pronunciationProviders,
       phoneticAnalysisBySentence: result.phoneticAnalysisBySentence,

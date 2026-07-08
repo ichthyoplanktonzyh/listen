@@ -534,6 +534,164 @@ class ChunkTimelineSummary {
   bool get isActive => status == 'active';
 }
 
+class SenseGroup {
+  const SenseGroup({
+    required this.id,
+    required this.sentenceId,
+    required this.groupIndex,
+    required this.startTokenIndex,
+    required this.endTokenIndex,
+    required this.text,
+    required this.confidence,
+    required this.sources,
+    this.label,
+    this.headTokenIndex,
+  });
+
+  factory SenseGroup.fromJson(Map<String, dynamic> json) => SenseGroup(
+    id: json['id'] as String,
+    sentenceId: json['sentence_id'] as String,
+    groupIndex: json['group_index'] as int,
+    startTokenIndex: json['start_token_index'] as int,
+    endTokenIndex: json['end_token_index'] as int,
+    text: json['text'] as String,
+    label: json['label'] as String?,
+    headTokenIndex: json['head_token_index'] as int?,
+    confidence: (json['confidence'] as num).toDouble(),
+    sources: ((json['sources'] as List<dynamic>?) ?? const [])
+        .cast<String>()
+        .toList(growable: false),
+  );
+
+  final String id;
+  final String sentenceId;
+  final int groupIndex;
+  final int startTokenIndex;
+  final int endTokenIndex;
+  final String text;
+  final String? label;
+  final int? headTokenIndex;
+  final double confidence;
+  final List<String> sources;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'sentence_id': sentenceId,
+    'group_index': groupIndex,
+    'start_token_index': startTokenIndex,
+    'end_token_index': endTokenIndex,
+    'text': text,
+    'label': label,
+    'head_token_index': headTokenIndex,
+    'confidence': confidence,
+    'sources': sources,
+  };
+}
+
+class SenseGroupAnalysis {
+  const SenseGroupAnalysis({
+    required this.id,
+    required this.trackId,
+    required this.mediaId,
+    required this.providerId,
+    required this.providerVersion,
+    required this.algorithm,
+    required this.createdBy,
+    required this.status,
+    required this.metricsJson,
+    required this.groups,
+    required this.createdAt,
+    required this.updatedAt,
+    this.parentWordTimelineId,
+  });
+
+  factory SenseGroupAnalysis.fromJson(Map<String, dynamic> json) =>
+      SenseGroupAnalysis(
+        id: json['id'] as String,
+        trackId: json['track_id'] as String,
+        mediaId: json['media_id'] as String,
+        parentWordTimelineId: json['parent_word_timeline_id'] as String?,
+        providerId: json['provider_id'] as String,
+        providerVersion: json['provider_version'] as String,
+        algorithm: json['algorithm'] as String,
+        createdBy: json['created_by'] as String,
+        status: json['status'] as String,
+        metricsJson: TimelineMetrics.fromJson(json['metrics_json']),
+        groups: (json['groups'] as List<dynamic>)
+            .map((value) => SenseGroup.fromJson(value as Map<String, dynamic>))
+            .toList(growable: false),
+        createdAt: Duration(milliseconds: json['created_at_ms'] as int),
+        updatedAt: Duration(milliseconds: json['updated_at_ms'] as int),
+      );
+
+  final String id;
+  final String trackId;
+  final String mediaId;
+  final String? parentWordTimelineId;
+  final String providerId;
+  final String providerVersion;
+  final String algorithm;
+  final String createdBy;
+  final String status;
+  final TimelineMetrics metricsJson;
+  final List<SenseGroup> groups;
+  final Duration createdAt;
+  final Duration updatedAt;
+
+  bool get isActive => status == 'active';
+}
+
+class SenseGroupAnalysisSummary {
+  const SenseGroupAnalysisSummary({
+    required this.id,
+    required this.trackId,
+    required this.mediaId,
+    required this.providerId,
+    required this.providerVersion,
+    required this.algorithm,
+    required this.createdBy,
+    required this.status,
+    required this.groupCount,
+    required this.canActivate,
+    required this.canArchive,
+    required this.canDelete,
+    this.parentWordTimelineId,
+  });
+
+  factory SenseGroupAnalysisSummary.fromJson(Map<String, dynamic> json) =>
+      SenseGroupAnalysisSummary(
+        id: json['id'] as String,
+        trackId: json['track_id'] as String,
+        mediaId: json['media_id'] as String,
+        parentWordTimelineId: json['parent_word_timeline_id'] as String?,
+        providerId: json['provider_id'] as String,
+        providerVersion: json['provider_version'] as String,
+        algorithm: json['algorithm'] as String,
+        createdBy: json['created_by'] as String,
+        status: json['status'] as String,
+        groupCount: json['group_count'] as int,
+        canActivate: json['can_activate'] as bool,
+        canArchive: json['can_archive'] as bool,
+        canDelete: json['can_delete'] as bool,
+      );
+
+  final String id;
+  final String trackId;
+  final String mediaId;
+  final String? parentWordTimelineId;
+  final String providerId;
+  final String providerVersion;
+  final String algorithm;
+  final String createdBy;
+  final String status;
+  final int groupCount;
+  final bool canActivate;
+  final bool canArchive;
+  final bool canDelete;
+
+  bool get isActive => status == 'active';
+}
+
 class PhoneTimeline {
   const PhoneTimeline({
     required this.id,
