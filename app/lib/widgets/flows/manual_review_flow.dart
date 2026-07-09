@@ -31,7 +31,7 @@ Future<void> openManualReviewFlow({
 
   Future<void> playRange(Duration start, Duration end) async {
     if (end <= start) return;
-    playerController.setSourceLoop(start, end);
+    playerController.setSourceLoop(start, end, label: 'loopReview');
     subtitleController.setLoopCue(false);
     await adapter.seek(start);
     await adapter.play();

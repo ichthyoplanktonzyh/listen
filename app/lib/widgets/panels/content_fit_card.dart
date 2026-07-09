@@ -63,12 +63,12 @@ class ContentFitCard extends StatelessWidget {
             const SizedBox(height: 6),
             Row(
               children: [
-                _FitChip(
+                FitChip(
                   label: l.text('contentFitMeaning'),
                   fit: profile.meaning.fit,
                 ),
                 const SizedBox(width: 8),
-                _FitChip(
+                FitChip(
                   label: l.text('contentFitSound'),
                   fit: profile.sound.fit,
                 ),
@@ -113,12 +113,12 @@ class ContentFitCard extends StatelessWidget {
 
   Future<void> _showDetail(BuildContext context) => showDialog<void>(
     context: context,
-    builder: (context) => _ContentFitDetailDialog(profile: profile),
+    builder: (context) => ContentFitDetailDialog(profile: profile),
   );
 }
 
-class _FitChip extends StatelessWidget {
-  const _FitChip({required this.label, required this.fit});
+class FitChip extends StatelessWidget {
+  const FitChip({super.key, required this.label, required this.fit});
 
   final String label;
   final String fit;
@@ -183,8 +183,8 @@ class _NoteLine extends StatelessWidget {
   );
 }
 
-class _ContentFitDetailDialog extends StatelessWidget {
-  const _ContentFitDetailDialog({required this.profile});
+class ContentFitDetailDialog extends StatelessWidget {
+  const ContentFitDetailDialog({super.key, required this.profile});
 
   final ContentDifficultyProfile profile;
 

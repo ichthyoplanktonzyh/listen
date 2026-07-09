@@ -80,6 +80,7 @@ class _PlaybackBarState extends State<PlaybackBar> {
       playing: playerController.playing,
       loopCue: subtitleController.loopCue,
       sourceLoopStart: playerController.sourceLoopStart,
+      sourceLoopLabel: playerController.sourceLoopLabel,
       statusStylesVisible: subtitleController.statusStylesVisible,
       subtitlesVisible: subtitleController.visible,
       secondarySubtitlesVisible: subtitleController.secondaryVisible,

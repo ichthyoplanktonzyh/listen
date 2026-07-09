@@ -45,6 +45,7 @@ Future<void> showAppSettings({
         openSubtitlesApiKey: settingsController.openSubtitlesApiKey,
         wordSyncVisible: settingsController.wordSyncVisible,
         showChunkGrouping: settingsController.showChunkGrouping,
+        showSenseGrouping: settingsController.showSenseGrouping,
         chunkDisplayStyle: settingsController.chunkDisplayStyle,
         highlightCurrentChunk: settingsController.highlightCurrentChunk,
         chunkHighlightStyle: settingsController.chunkHighlightStyle,
@@ -157,6 +158,11 @@ Future<void> showAppSettings({
             playerController.position,
             enabled: settingsController.wordSyncVisible,
             chunkEnabled: v && settingsController.highlightCurrentChunk,
+          );
+        },
+        onShowSenseGroupingChanged: (v) {
+          settingsController.update(
+            settingsController.settings.copyWith(showSenseGrouping: v),
           );
         },
         onChunkDisplayStyleChanged: (v) {

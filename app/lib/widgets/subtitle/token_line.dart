@@ -28,6 +28,7 @@ class TokenLine extends StatelessWidget {
     this.chunkHighlightStyle = 'background',
     this.currentWordStyle = 'background',
     this.currentWordIntensity = 0.35,
+    this.senseGroups = const [],
   });
 
   final Cue cue;
@@ -44,6 +45,7 @@ class TokenLine extends StatelessWidget {
   final String chunkHighlightStyle;
   final String currentWordStyle;
   final double currentWordIntensity;
+  final List<SenseGroup> senseGroups;
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
   final Future<void> Function(DisplayChunk chunk)? onChunk;
   final List<PhraseCandidate> phraseCandidates;
@@ -162,9 +164,35 @@ class TokenLine extends StatelessWidget {
     final byStart = {
       for (final candidate in candidates) candidate.tokenStart: candidate,
     };
+    final senseGroupStarts = <int>{
+      for (final sg in senseGroups)
+        if (sg.groupIndex > 0) sg.startTokenIndex,
+    };
     final spans = <InlineSpan>[];
     var cursor = 0;
     while (cursor < tokens.length) {
+      if (senseGroupStarts.contains(tokens[cursor].index)) {
+        spans.add(
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: SizedBox(
+                width: 1,
+                height: fontSize * 0.9,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outline
+                        .withValues(alpha: 0.35),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
       final candidate = byStart[tokens[cursor].index];
       if (candidate == null) {
         spans.add(_tokenSpan(context, tokens[cursor]));

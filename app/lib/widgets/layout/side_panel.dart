@@ -15,6 +15,7 @@ import '../../localization.dart';
 import '../../models/listening.dart';
 import '../../models/practice.dart';
 import '../../models/timeline.dart';
+import '../panels/content_fit_card.dart';
 import '../panels/diagnosis_card.dart';
 import '../panels/listening_inbox_panel.dart';
 import '../panels/practice_panel.dart';
@@ -223,6 +224,8 @@ class _SidePanelState extends State<SidePanel> {
         // resource manager and inbox tabs so they are contextual, not a
         // permanent button wall.
         if (_showsPostureActions) _postureActions(),
+        if (_showsPostureActions && subtitleController.contentFit != null)
+          _contentFitSummary(),
         Expanded(
           child: switch (learningController.sidePanel) {
             1 => _subtitleResources(),
@@ -333,6 +336,9 @@ class _SidePanelState extends State<SidePanel> {
     onImportSubtitle: playerController.mediaId == null
         ? null
         : () async => mediaSession.openSubtitle(secondary: false),
+    senseGroupsBySentence: settingsController.showSenseGrouping
+        ? subtitleController.senseGroupsBySentence
+        : const {},
   );
 
   Widget _subtitleResources() => SubtitleResourceManagerPanel(
@@ -426,6 +432,36 @@ class _SidePanelState extends State<SidePanel> {
     onFindingFeedback: (finding, value) =>
         unawaited(playbackActions.savePhoneticFindingFeedback(finding, value)),
   );
+
+  Widget _contentFitSummary() {
+    final profile = subtitleController.contentFit!;
+    return InkWell(
+      onTap: () => showDialog<void>(
+        context: context,
+        builder: (_) => ContentFitDetailDialog(profile: profile),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+        child: Row(
+          children: [
+            Icon(Icons.tune_outlined, size: 14,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
+            const SizedBox(width: 6),
+            Text(
+              l.text('contentFit'),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(width: 8),
+            FitChip(label: l.text('contentFitMeaning'), fit: profile.meaning.fit),
+            const SizedBox(width: 6),
+            FitChip(label: l.text('contentFitSound'), fit: profile.sound.fit),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _postureActions() {
     final hasCue = subtitleController.currentPrimaryCue != null;

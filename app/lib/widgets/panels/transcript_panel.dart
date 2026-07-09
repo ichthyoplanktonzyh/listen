@@ -20,6 +20,7 @@ class TranscriptPanel extends StatefulWidget {
     required this.onWord,
     required this.onSeekCue,
     this.onImportSubtitle,
+    this.senseGroupsBySentence = const {},
   });
 
   final SubtitleTrack? track;
@@ -29,6 +30,7 @@ class TranscriptPanel extends StatefulWidget {
   final Map<String, LexicalCapabilityProfile> capabilityProfiles;
   final bool showStyles;
   final Color baseColor;
+  final Map<String, List<SenseGroup>> senseGroupsBySentence;
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
   final Future<void> Function(Cue? cue) onSeekCue;
   final Future<void> Function()? onImportSubtitle;
@@ -125,6 +127,9 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
                               showStyles: widget.showStyles,
                               baseColor: effectiveBaseColor,
                               onWord: widget.onWord,
+                              senseGroups:
+                                  widget.senseGroupsBySentence[cue.id] ??
+                                  const [],
                             ),
                             onTap: () => widget.onSeekCue(cue),
                           ),

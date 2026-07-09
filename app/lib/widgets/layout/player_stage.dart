@@ -226,6 +226,15 @@ class _PlayerStageState extends State<PlayerStage> {
                                       settingsController.wordHighlightStyle,
                                   currentWordIntensity:
                                       settingsController.wordAnimationIntensity,
+                                  senseGroups:
+                                      settingsController.showSenseGrouping
+                                      ? subtitleController
+                                              .senseGroupsBySentence[
+                                            subtitleController
+                                                .currentPrimaryCue!
+                                                .id] ??
+                                          const []
+                                      : const [],
                                   onWord: _openWord,
                                   onPhrase: _openPhrase,
                                   onChunk: _seekChunk,

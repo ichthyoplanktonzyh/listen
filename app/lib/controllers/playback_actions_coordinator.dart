@@ -128,7 +128,7 @@ class PlaybackActionsCoordinator {
     final start = mediaTime(current.chunk.start);
     final end = mediaTime(current.chunk.end);
     if (end <= start) return;
-    player.setSourceLoop(start, end);
+    player.setSourceLoop(start, end, label: 'loopChunk');
     subtitle.setLoopCue(false);
     await adapter.seek(start);
     await adapter.play();
@@ -147,7 +147,7 @@ class PlaybackActionsCoordinator {
     final start = mediaTime(current.chunk.start);
     final end = mediaTime(next?.end ?? current.cue.end);
     if (end <= start) return;
-    player.setSourceLoop(start, end);
+    player.setSourceLoop(start, end, label: 'expandChunk');
     subtitle.setLoopCue(false);
     await adapter.seek(start);
     await adapter.play();
@@ -165,7 +165,7 @@ class PlaybackActionsCoordinator {
     final start = Duration(milliseconds: startMs);
     final end = Duration(milliseconds: endMs);
     if (start >= end) return;
-    player.setSourceLoop(start, end);
+    player.setSourceLoop(start, end, label: 'loopRange');
     subtitle.setLoopCue(false);
     if (isMounted()) player.setStatus(label);
     await adapter.seek(start);
@@ -233,7 +233,7 @@ class PlaybackActionsCoordinator {
     );
     final end = Duration(milliseconds: occurrence['end_ms_snapshot'] as int);
     if (statusBeforeLoop != null) player.setStatus(statusBeforeLoop);
-    player.setSourceLoop(start, end);
+    player.setSourceLoop(start, end, label: 'loopOccurrence');
     subtitle.setLoopCue(false);
     await adapter.seek(start);
     await adapter.play();

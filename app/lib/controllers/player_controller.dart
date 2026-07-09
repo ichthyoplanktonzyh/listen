@@ -26,6 +26,7 @@ class PlayerState {
     this.selectedEmbeddedSubtitleId,
     this.sourceLoopStart,
     this.sourceLoopEnd,
+    this.sourceLoopLabel,
   });
 
   final String? mediaId;
@@ -45,6 +46,7 @@ class PlayerState {
   final String? selectedEmbeddedSubtitleId;
   final Duration? sourceLoopStart;
   final Duration? sourceLoopEnd;
+  final String? sourceLoopLabel;
 
   PlayerState copyWith({
     Object? mediaId = _unset,
@@ -64,6 +66,7 @@ class PlayerState {
     Object? selectedEmbeddedSubtitleId = _unset,
     Object? sourceLoopStart = _unset,
     Object? sourceLoopEnd = _unset,
+    Object? sourceLoopLabel = _unset,
   }) => PlayerState(
     mediaId: identical(mediaId, _unset) ? this.mediaId : mediaId as String?,
     mediaPath: identical(mediaPath, _unset)
@@ -97,6 +100,9 @@ class PlayerState {
     sourceLoopEnd: identical(sourceLoopEnd, _unset)
         ? this.sourceLoopEnd
         : sourceLoopEnd as Duration?,
+    sourceLoopLabel: identical(sourceLoopLabel, _unset)
+        ? this.sourceLoopLabel
+        : sourceLoopLabel as String?,
   );
 
   double get positionFraction => duration == Duration.zero
@@ -136,6 +142,7 @@ class PlayerController extends ChangeNotifier {
   double get volume => _store.state.volume;
   Duration? get sourceLoopStart => _store.state.sourceLoopStart;
   Duration? get sourceLoopEnd => _store.state.sourceLoopEnd;
+  String? get sourceLoopLabel => _store.state.sourceLoopLabel;
   List<PlayerTrack> get audioTracks => _store.state.audioTracks;
   String? get selectedAudioId => _store.state.selectedAudioId;
   List<PlayerTrack> get embeddedSubtitleTracks =>
@@ -205,9 +212,14 @@ class PlayerController extends ChangeNotifier {
   void setSelectedEmbeddedSubtitleId(String? id) =>
       _store.update((s) => s.copyWith(selectedEmbeddedSubtitleId: id));
 
-  void setSourceLoop(Duration? start, Duration? end) => _store.update(
-    (s) => s.copyWith(sourceLoopStart: start, sourceLoopEnd: end),
-  );
+  void setSourceLoop(Duration? start, Duration? end, {String? label}) =>
+      _store.update(
+        (s) => s.copyWith(
+          sourceLoopStart: start,
+          sourceLoopEnd: end,
+          sourceLoopLabel: start != null ? label : null,
+        ),
+      );
 
   void setMediaPath(String path) =>
       _store.update((s) => s.copyWith(mediaPath: path));

@@ -30,6 +30,7 @@ class SettingsDialog extends StatefulWidget {
     required this.openSubtitlesApiKey,
     required this.wordSyncVisible,
     required this.showChunkGrouping,
+    required this.showSenseGrouping,
     required this.chunkDisplayStyle,
     required this.highlightCurrentChunk,
     required this.chunkHighlightStyle,
@@ -62,6 +63,7 @@ class SettingsDialog extends StatefulWidget {
     required this.onTranscriptionDestinationChanged,
     required this.onWordSyncVisibleChanged,
     required this.onShowChunkGroupingChanged,
+    required this.onShowSenseGroupingChanged,
     required this.onChunkDisplayStyleChanged,
     required this.onHighlightCurrentChunkChanged,
     required this.onChunkHighlightStyleChanged,
@@ -98,6 +100,7 @@ class SettingsDialog extends StatefulWidget {
   final String openSubtitlesApiKey;
   final bool wordSyncVisible;
   final bool showChunkGrouping;
+  final bool showSenseGrouping;
   final String chunkDisplayStyle;
   final bool highlightCurrentChunk;
   final String chunkHighlightStyle;
@@ -132,6 +135,7 @@ class SettingsDialog extends StatefulWidget {
   final ValueChanged<String> onTranscriptionDestinationChanged;
   final ValueChanged<bool> onWordSyncVisibleChanged;
   final ValueChanged<bool> onShowChunkGroupingChanged;
+  final ValueChanged<bool> onShowSenseGroupingChanged;
   final ValueChanged<String> onChunkDisplayStyleChanged;
   final ValueChanged<bool> onHighlightCurrentChunkChanged;
   final ValueChanged<String> onChunkHighlightStyleChanged;
@@ -176,6 +180,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late String transcriptionDestination;
   late bool wordSyncVisible;
   late bool showChunkGrouping;
+  late bool showSenseGrouping;
   late String chunkDisplayStyle;
   late bool highlightCurrentChunk;
   late String chunkHighlightStyle;
@@ -224,6 +229,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     transcriptionDestination = widget.transcriptionDestination;
     wordSyncVisible = widget.wordSyncVisible;
     showChunkGrouping = widget.showChunkGrouping;
+    showSenseGrouping = widget.showSenseGrouping;
     chunkDisplayStyle = widget.chunkDisplayStyle;
     highlightCurrentChunk = widget.highlightCurrentChunk;
     chunkHighlightStyle = widget.chunkHighlightStyle;
@@ -371,6 +377,15 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       onChanged: (value) {
                         showChunkGrouping = value;
                         widget.onShowChunkGroupingChanged(value);
+                        refresh(() {});
+                      },
+                    ),
+                    SwitchListTile(
+                      value: showSenseGrouping,
+                      title: Text(l.text('showSenseGrouping')),
+                      onChanged: (value) {
+                        showSenseGrouping = value;
+                        widget.onShowSenseGroupingChanged(value);
                         refresh(() {});
                       },
                     ),

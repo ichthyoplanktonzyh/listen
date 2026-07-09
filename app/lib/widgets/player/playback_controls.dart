@@ -15,6 +15,7 @@ class PlaybackControls extends StatelessWidget {
     required this.playing,
     required this.loopCue,
     this.sourceLoopStart,
+    this.sourceLoopLabel,
     required this.statusStylesVisible,
     required this.subtitlesVisible,
     required this.secondarySubtitlesVisible,
@@ -68,6 +69,7 @@ class PlaybackControls extends StatelessWidget {
   final bool playing;
   final bool loopCue;
   final Duration? sourceLoopStart;
+  final String? sourceLoopLabel;
   final bool statusStylesVisible;
   final bool subtitlesVisible;
   final bool secondarySubtitlesVisible;
@@ -583,14 +585,23 @@ class PlaybackControls extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (taskStatuses.isNotEmpty || status.isNotEmpty)
+                if (sourceLoopStart != null ||
+                    taskStatuses.isNotEmpty ||
+                    status.isNotEmpty)
                   SizedBox(
                     height: 28,
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(18, 0, 18, 6),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
                         children: [
+                          if (sourceLoopStart != null)
+                            _SourceLoopChip(
+                              label: sourceLoopLabel != null
+                                  ? l.text(sourceLoopLabel!)
+                                  : l.text('loopRange'),
+                              onStop: onStopSourceLoop,
+                            ),
+                          const Spacer(),
                           if (taskStatuses.isNotEmpty)
                             Flexible(
                               child: Wrap(
@@ -988,6 +999,51 @@ class _OffsetControl extends StatelessWidget {
       ],
     ),
   );
+}
+
+class _SourceLoopChip extends StatelessWidget {
+  const _SourceLoopChip({required this.label, required this.onStop});
+
+  final String label;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: ListenColors.accent.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(left: 7),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.loop, size: 13, color: ListenColors.accent),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(color: ListenColors.accent),
+            ),
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: IconButton(
+                onPressed: onStop,
+                padding: EdgeInsets.zero,
+                iconSize: 14,
+                icon: Icon(Icons.close, color: ListenColors.accent),
+                tooltip: AppLocalizations.of(context).text('stopSourceLoop'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _TaskStatusChip extends StatelessWidget {
