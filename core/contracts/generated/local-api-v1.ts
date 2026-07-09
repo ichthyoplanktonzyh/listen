@@ -344,6 +344,8 @@ export interface SpeechBatchJob {
 }
 
 export type LexicalEntryKind = "word" | "phrase";
+export type LexicalCapability = "reading" | "listening" | "speaking" | "writing";
+export type CapabilityAssessment = "unassessed" | "not_acquired" | "acquired";
 
 export interface LexicalSource {
   media_id?: string | null;
@@ -1502,8 +1504,22 @@ export class LocalApiV1 {
     );
   }
 
-  listVocabulary(status: LearningStatus, search = ""): Promise<unknown[]> {
-    const query = new URLSearchParams({ language: "en", status, search });
+  listVocabulary(
+    options: {
+      language?: string;
+      kind?: LexicalEntryKind;
+      status?: LearningStatus;
+      capability?: LexicalCapability;
+      assessment?: CapabilityAssessment;
+      search?: string;
+    } = {},
+  ): Promise<unknown[]> {
+    const query = new URLSearchParams({ language: options.language ?? "en" });
+    if (options.kind) query.set("kind", options.kind);
+    if (options.status) query.set("status", options.status);
+    if (options.capability) query.set("capability", options.capability);
+    if (options.assessment) query.set("assessment", options.assessment);
+    if (options.search) query.set("search", options.search);
     return this.request(`/v1/vocabulary?${query}`);
   }
 

@@ -63,12 +63,12 @@ fn english_and_chinese_vocabulary_and_sources_stay_isolated() {
 
     // Vocabulary lists are isolated by language.
     let zh_vocab = services
-        .list_vocabulary("zh", LearningStatus::UnknownMeaning, "", 200, 0)
+        .list_vocabulary("zh", None, Some(LearningStatus::UnknownMeaning), None, "", 200, 0)
         .unwrap();
     assert!(zh_vocab.iter().any(|d| d.entry.normalized_form == "咖啡"));
     assert!(zh_vocab.iter().all(|d| d.entry.normalized_form != "coffee"));
     let en_vocab = services
-        .list_vocabulary("en", LearningStatus::KnownRecognized, "", 200, 0)
+        .list_vocabulary("en", None, Some(LearningStatus::KnownRecognized), None, "", 200, 0)
         .unwrap();
     assert!(en_vocab.iter().any(|d| d.entry.normalized_form == "coffee"));
     assert!(en_vocab.iter().all(|d| d.entry.normalized_form != "咖啡"));
@@ -362,6 +362,7 @@ fn vocabulary_query_handles_ten_thousand_profiles_and_fifty_thousand_sources() {
             &LanguageCode::parse("en").unwrap(),
             Some(LexicalEntryKind::Word),
             Some(LearningStatus::UnknownMeaning),
+            None,
             "asset-09",
             200,
             0,
@@ -379,6 +380,7 @@ fn vocabulary_query_handles_ten_thousand_profiles_and_fifty_thousand_sources() {
             &LanguageCode::parse("en").unwrap(),
             Some(LexicalEntryKind::Phrase),
             Some(LearningStatus::UnknownMeaning),
+            None,
             "asset-09",
             200,
             0,

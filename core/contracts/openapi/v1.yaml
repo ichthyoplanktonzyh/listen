@@ -1287,7 +1287,10 @@ paths:
       operationId: listVocabulary
       parameters:
         - { name: language, in: query, schema: { type: string, default: en } }
-        - { name: status, in: query, required: true, schema: { enum: [unknown_meaning, known_not_recognized, known_recognized] } }
+        - { name: kind, in: query, schema: { enum: [word, phrase] }, description: "Omit to include both words and phrases." }
+        - { name: status, in: query, schema: { enum: [unknown_meaning, known_not_recognized, known_recognized] }, description: "Legacy status axis; optional." }
+        - { name: capability, in: query, schema: { enum: [reading, listening, speaking, writing] }, description: "Capability-dimension filter; requires assessment." }
+        - { name: assessment, in: query, schema: { enum: [unassessed, not_acquired, acquired] }, description: "Effective assessment to match for capability; requires capability." }
         - { name: search, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 100, maximum: 200 } }
         - { name: offset, in: query, schema: { type: integer, default: 0 } }

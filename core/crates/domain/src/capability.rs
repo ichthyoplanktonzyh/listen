@@ -54,6 +54,16 @@ impl From<CapabilityConclusion> for CapabilityAssessment {
     }
 }
 
+/// A read-side vocabulary filter selecting entries whose effective assessment
+/// for one capability equals [assessment]. `Unassessed` matches entries that
+/// have no stored capability state for that dimension, since absence — not a
+/// stored conclusion — is what "unassessed" means.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CapabilityFilter {
+    pub capability: LexicalCapability,
+    pub assessment: CapabilityAssessment,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CapabilityProjectionSource {

@@ -1,4 +1,7 @@
-use domain::{CapabilityConclusion, LexicalCapability, LexicalCapabilityProfile};
+use domain::{
+    CapabilityAssessment, CapabilityConclusion, CapabilityFilter, LexicalCapability,
+    LexicalCapabilityProfile, LexicalEntryKind,
+};
 
 use crate::*;
 
@@ -109,7 +112,14 @@ pub(crate) async fn update_progress(
 #[derive(Debug, Deserialize)]
 pub(crate) struct VocabularyQuery {
     language: Option<String>,
-    status: LearningStatus,
+    /// None returns both words and phrases.
+    kind: Option<LexicalEntryKind>,
+    /// Legacy status axis; optional so the capability axis can be primary.
+    status: Option<LearningStatus>,
+    /// Capability-dimension filter; `capability` and `assessment` must both be
+    /// present to take effect (otherwise ignored).
+    capability: Option<LexicalCapability>,
+    assessment: Option<CapabilityAssessment>,
     search: Option<String>,
     limit: Option<u32>,
     offset: Option<u32>,
@@ -119,11 +129,20 @@ pub(crate) async fn list_vocabulary(
     State(state): State<ApiState>,
     Query(query): Query<VocabularyQuery>,
 ) -> Result<Json<Vec<domain::LexicalEntryDetails>>, ApiError> {
+    let capability_filter = match (query.capability, query.assessment) {
+        (Some(capability), Some(assessment)) => Some(CapabilityFilter {
+            capability,
+            assessment,
+        }),
+        _ => None,
+    };
     state
         .services
         .list_vocabulary(
             query.language.as_deref().unwrap_or("en"),
+            query.kind,
             query.status,
+            capability_filter,
             query.search.as_deref().unwrap_or(""),
             query.limit.unwrap_or(100),
             query.offset.unwrap_or(0),

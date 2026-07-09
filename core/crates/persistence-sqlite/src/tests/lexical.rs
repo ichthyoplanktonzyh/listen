@@ -177,6 +177,110 @@ fn capability_projection_and_override_round_trip_without_losing_evidence_state()
 }
 
 #[test]
+fn list_lexical_entries_filters_by_effective_capability_assessment() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
+    let lang = LanguageCode::parse("en").unwrap();
+
+    let projection = |conclusion, at| CapabilityProjection {
+        conclusion,
+        source: CapabilityProjectionSource::EvidenceProjection,
+        algorithm_version: "test-v1".into(),
+        confidence: None,
+        evidence_as_of_ms: None,
+        updated_at_ms: at,
+    };
+
+    // alpha: listening projection NotAcquired, but a user override says Acquired
+    // -> effective Acquired (override must win over the projection).
+    let alpha = upsert_word_asset(&services, "en", "alpha", "alpha", None, None).entry;
+    repo.set_lexical_capability_projection(
+        &alpha.id,
+        None,
+        LexicalCapability::Listening,
+        Some(projection(CapabilityConclusion::NotAcquired, 10)),
+        10,
+    )
+    .unwrap();
+    repo.set_lexical_capability_override(
+        &alpha.id,
+        None,
+        LexicalCapability::Listening,
+        Some(CapabilityOverride {
+            conclusion: CapabilityConclusion::Acquired,
+            source: CapabilityOverrideSource::UserSelection,
+            updated_at_ms: 20,
+        }),
+        20,
+    )
+    .unwrap();
+
+    // bravo: listening projection NotAcquired, no override -> effective NotAcquired.
+    let bravo = upsert_word_asset(&services, "en", "bravo", "bravo", None, None).entry;
+    repo.set_lexical_capability_projection(
+        &bravo.id,
+        None,
+        LexicalCapability::Listening,
+        Some(projection(CapabilityConclusion::NotAcquired, 11)),
+        11,
+    )
+    .unwrap();
+
+    // charlie: only a reading state, no listening state -> listening Unassessed.
+    // Proves the filter is per-capability, not "any state present".
+    let charlie = upsert_word_asset(&services, "en", "charlie", "charlie", None, None).entry;
+    repo.set_lexical_capability_projection(
+        &charlie.id,
+        None,
+        LexicalCapability::Reading,
+        Some(projection(CapabilityConclusion::Acquired, 12)),
+        12,
+    )
+    .unwrap();
+
+    let listening = |assessment| -> Vec<String> {
+        repo.list_lexical_entries(
+            &lang,
+            None,
+            None,
+            Some(CapabilityFilter {
+                capability: LexicalCapability::Listening,
+                assessment,
+            }),
+            "",
+            50,
+            0,
+        )
+        .unwrap()
+        .into_iter()
+        .map(|details| details.entry.normalized_form)
+        .collect()
+    };
+
+    assert_eq!(
+        listening(CapabilityAssessment::Acquired),
+        vec!["alpha".to_string()]
+    );
+    assert_eq!(
+        listening(CapabilityAssessment::NotAcquired),
+        vec!["bravo".to_string()]
+    );
+    assert_eq!(
+        listening(CapabilityAssessment::Unassessed),
+        vec!["charlie".to_string()]
+    );
+}
+
+#[test]
 fn services_are_idempotent_and_persist_state() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = AppServices::new(

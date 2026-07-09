@@ -508,40 +508,95 @@ impl LearningAssetRepository for SqliteRepository {
         language: &LanguageCode,
         kind: Option<LexicalEntryKind>,
         status: Option<LearningStatus>,
+        capability_filter: Option<CapabilityFilter>,
         search: &str,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<LexicalEntryDetails>, ApplicationError> {
-        let ids = {
+        let ids: Vec<String> = {
             let conn = self.connection.lock().expect("sqlite mutex poisoned");
-            let mut statement = conn
-                .prepare(
-                    "SELECT e.id FROM lexical_entries e
-                     LEFT JOIN lexical_occurrences o ON o.lexical_entry_id=e.id
-                     WHERE e.language=?1
-                       AND (?2 IS NULL OR e.kind=?2)
-                       AND (?3 IS NULL OR e.status=?3)
-                       AND (?4='' OR e.normalized_key LIKE '%'||?4||'%' OR e.display_form LIKE '%'||?4||'%')
-                     GROUP BY e.id
-                     ORDER BY COALESCE(MAX(o.last_seen_at_ms),e.updated_at_ms) DESC,e.normalized_key
-                     LIMIT ?5 OFFSET ?6",
-                )
-                .map_err(repo)?;
-            statement
-                .query_map(
-                    params![
-                        language.as_str(),
-                        kind.map(|value| json(&value)).transpose()?,
-                        status.map(|value| json(&value)).transpose()?,
-                        search,
-                        limit,
-                        offset,
-                    ],
-                    |row| row.get::<_, String>(0),
-                )
-                .map_err(repo)?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(repo)?
+            match capability_filter {
+                None => {
+                    let mut statement = conn
+                        .prepare(
+                            "SELECT e.id FROM lexical_entries e
+                             LEFT JOIN lexical_occurrences o ON o.lexical_entry_id=e.id
+                             WHERE e.language=?1
+                               AND (?2 IS NULL OR e.kind=?2)
+                               AND (?3 IS NULL OR e.status=?3)
+                               AND (?4='' OR e.normalized_key LIKE '%'||?4||'%' OR e.display_form LIKE '%'||?4||'%')
+                             GROUP BY e.id
+                             ORDER BY COALESCE(MAX(o.last_seen_at_ms),e.updated_at_ms) DESC,e.normalized_key
+                             LIMIT ?5 OFFSET ?6",
+                        )
+                        .map_err(repo)?;
+                    statement
+                        .query_map(
+                            params![
+                                language.as_str(),
+                                kind.map(|value| json(&value)).transpose()?,
+                                status.map(|value| json(&value)).transpose()?,
+                                search,
+                                limit,
+                                offset,
+                            ],
+                            |row| row.get::<_, String>(0),
+                        )
+                        .map_err(repo)?
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(repo)?
+                }
+                Some(filter) => {
+                    // The effective assessment is override-over-projection, with
+                    // absence meaning unassessed. The conclusion lives inside the
+                    // JSON state blobs, so it is compared via json_extract rather
+                    // than a first-class column. Entry-level state uses sense_id=''.
+                    let assessment = match filter.assessment {
+                        CapabilityAssessment::Unassessed => "unassessed",
+                        CapabilityAssessment::NotAcquired => "not_acquired",
+                        CapabilityAssessment::Acquired => "acquired",
+                    };
+                    let mut statement = conn
+                        .prepare(
+                            "SELECT e.id FROM lexical_entries e
+                             LEFT JOIN lexical_occurrences o ON o.lexical_entry_id=e.id
+                             LEFT JOIN lexical_capability_states c
+                               ON c.lexical_entry_id=e.id AND c.sense_id='' AND c.capability=?7
+                             WHERE e.language=?1
+                               AND (?2 IS NULL OR e.kind=?2)
+                               AND (?3 IS NULL OR e.status=?3)
+                               AND (?4='' OR e.normalized_key LIKE '%'||?4||'%' OR e.display_form LIKE '%'||?4||'%')
+                               AND (
+                                 (?8='unassessed' AND c.lexical_entry_id IS NULL)
+                                 OR (?8<>'unassessed' AND COALESCE(
+                                       json_extract(c.override_json,'$.conclusion'),
+                                       json_extract(c.projection_json,'$.conclusion')
+                                     )=?8)
+                               )
+                             GROUP BY e.id
+                             ORDER BY COALESCE(MAX(o.last_seen_at_ms),e.updated_at_ms) DESC,e.normalized_key
+                             LIMIT ?5 OFFSET ?6",
+                        )
+                        .map_err(repo)?;
+                    statement
+                        .query_map(
+                            params![
+                                language.as_str(),
+                                kind.map(|value| json(&value)).transpose()?,
+                                status.map(|value| json(&value)).transpose()?,
+                                search,
+                                limit,
+                                offset,
+                                json(&filter.capability)?,
+                                assessment,
+                            ],
+                            |row| row.get::<_, String>(0),
+                        )
+                        .map_err(repo)?
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(repo)?
+                }
+            }
         };
         ids.into_iter()
             .map(|id| {

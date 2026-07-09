@@ -768,6 +768,7 @@ pub trait LearningAssetRepository: Send + Sync {
         language: &LanguageCode,
         kind: Option<LexicalEntryKind>,
         status: Option<LearningStatus>,
+        capability_filter: Option<CapabilityFilter>,
         search: &str,
         limit: u32,
         offset: u32,

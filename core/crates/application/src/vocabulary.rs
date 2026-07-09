@@ -349,18 +349,25 @@ impl AppServices {
             .clear_lexical_observation(lexical_entry_id, sentence_id)
     }
 
+    /// Lists the vocabulary book. `kind` `None` returns both words and phrases;
+    /// `status` and `capability_filter` are optional, additive filters (the
+    /// legacy status axis stays available while the four-channel capability axis
+    /// becomes the primary lens).
     pub fn list_vocabulary(
         &self,
         language: &str,
-        status: LearningStatus,
+        kind: Option<LexicalEntryKind>,
+        status: Option<LearningStatus>,
+        capability_filter: Option<CapabilityFilter>,
         search: &str,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<LexicalEntryDetails>, ApplicationError> {
         self.learning_assets.list_lexical_entries(
             &LanguageCode::parse(language)?,
-            Some(LexicalEntryKind::Word),
-            Some(status),
+            kind,
+            status,
+            capability_filter,
             search,
             limit.min(200),
             offset,

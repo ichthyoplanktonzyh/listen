@@ -2,6 +2,87 @@
 
 ## Unreleased
 
+- 2026-07-09 23:43 CST: Phase 3.5.5 词汇本升级 Slice 2-4 完成（能力过滤为主 + 四通道
+  摘要 + 纳入 Phrase）。**Slice 2 后端 API**：application `list_vocabulary` 暴露
+  `kind`/`status`/`capability_filter`（去掉 `Some(Word)` 硬编码，`kind=None` 返回词+短语）;
+  路由 `VocabularyQuery` status 改可选、新增 `kind`/`capability`/`assessment`（后两者同时
+  present 才构成 `CapabilityFilter`）;OpenAPI 加性更新（status 去 required + 4 个新 param）;
+  2 处测试调用适配。**Slice 3 Flutter 数据**：`api_service.listVocabulary` 改命名可选参数
+  （status 可选 + capability/assessment/kind），2 处调用方（`savedVocabularyCount` 等）适配。
+  **Slice 4 词汇本 UI**：`VocabularyBookView` 列表项渲染四通道能力摘要（复用
+  `effectiveAssessment`，acquired=绿/not_acquired=琥珀/unassessed=灰，带 tooltip）+ word/phrase
+  徽标 + 来源快照;`VocabularyScreen` 过滤器从旧三态换为能力维度选择（reading/listening/
+  speaking/writing）+ 状态过滤（全部/已掌握/未掌握/未评估），legacy status 后端保留;详情弹窗
+  查词典/发音对 Phrase 做 null 容错。共享配色 helper `capabilityAssessmentColor` 统一列表与
+  过滤器。新增 l10n 键 vocabFilterAll/vocabFilterCapabilityHint;新增 widget 测试验证四通道
+  图标 + phrase 徽标渲染。契约工件 `local-api-v1.ts` 同步更新。`flutter analyze` 零问题、
+  `flutter test` 236 passed、`cargo test -p persistence-sqlite/-p api-http` 全绿、
+  `validate-contracts.sh` 通过。留待独立 phase：问题 3（统一学习对象抽象、句子/构式/搭配
+  作为资产）、旧状态 ChoiceChips 移除。
+
+- 2026-07-09 23:05 CST: Phase 3.5.5 词汇本升级 Slice 1（后端能力过滤持久化，A+B 计划）。
+  `LearningAssetRepository::list_lexical_entries` 新增 `Option<CapabilityFilter>` 参数
+  （domain 新增 `CapabilityFilter{capability, assessment}`）。SQLite impl 分两分支：无过滤
+  走原查询;有过滤时 `LEFT JOIN lexical_capability_states`(sense_id='' 条目级)并按有效结论
+  过滤——`COALESCE(json_extract(override_json,'$.conclusion'), json_extract(projection_json,
+  '$.conclusion'))`,`unassessed` 匹配无状态行(override 优先于 projection,缺失=未评估)。
+  三处调用方传 `None`(application 通用 wrapper 与 vocabulary 暂不暴露,slice 2 再接);两处
+  持久化测试补 `None`。新增测试 `list_lexical_entries_filters_by_effective_capability_assessment`
+  验证 acquired/not_acquired/unassessed 三态过滤 + override 覆盖 projection + per-capability
+  语义。`cargo test -p persistence-sqlite` 74+5+6 全绿。后续 slice：application/route/OpenAPI
+  加性暴露过滤 → Flutter 数据层 → 词汇本 UI（四通道摘要 + 能力过滤器 + Phrase + ListenTheme）。
+
+- 2026-07-09 22:38 CST: Phase 3.5.5 收尾（既有失败测试 + 溢出菜单阈值）。①修复
+  `content_fit_card_test.dart > renders both dimension bands...` 的既有失败：de4bc2e7
+  把 `contentFit` 文案从 'Content fit' 改成 'Difficulty'（'难度适配'）时漏更新测试，
+  第 53 行仍断言旧文案 'Content fit'；改为当前 'Difficulty'（测试陈旧，非代码 bug）。
+  ②底部工具栏溢出菜单阈值 `roomy` 从 1080 降到 900（方案建议 840~900）：平铺功能按钮
+  （泛听/Chunk/字幕菜单）撑到 900px 才收进 `more_horiz` 溢出菜单，功能区约 800px 仍舒适。
+  `flutter analyze` 零问题，全量 `flutter test` 235 passed（此前唯一的既有失败已消除）。
+
+- 2026-07-09 22:33 CST: Phase 3.5.5 —"听懂了吗"方案第 4 项落地（C 视图按需加载 +
+  移除技术分析按钮）。此前只做了文案改名，方案核心结构未动。本次：DiagnosisCard 移除
+  "分析真实发音 / 分析整条字幕"两个技术按钮及 `onAnalyzePhonetics`/`onAnalyzeTrackPhonetics`
+  参数（那是"作用范围"这一纯技术决策塞给用户）；改为在 C·本次音频听感参照位置
+  (`player_stage.dart` mode=='actual' 且无 rhythmFrame) 原位显示加载提示
+  `_SoundReferenceLoadPrompt`，提供[加载当前句][加载全部字幕]两个力度选项，语义从技术
+  动作转为"看这一句 / 一次分析整轨后切句免等"。`PlayerStage` 新增 `onLoadSoundReference`
+  回调，`main.dart` 接 `_analyzePhonetics`（preference=='off' 时为 null 退回旧不可用
+  提示）。清理传递链：移除 `SidePanel.onAnalyzePhonetics` 参数/字段/本地包装。新增
+  en/zh 键 soundReferenceNoData/loadCurrentSentence/loadWholeTrack/soundReferenceLoadHint，
+  删除废弃键 analyzeRealPronunciation/analyzeSubtitleTrack。`diagnosis_card_test.dart`
+  移除测两个已删按钮的用例（其余 4 用例仍绿）。`flutter analyze` 零问题，全量
+  `flutter test` 除 1 个先前既有失败（`content_fit_card_test.dart` 的 golden-target
+  用例，在 clean HEAD 上同样失败、与本次改动无关）外全部通过。
+
+- 2026-07-09 22:07 CST: Phase 3.5.5 UX 修复（词汇来源记录竞态）。fc70949d 的自动来源
+  记录走 `unawaited` 发 occurrence 写入后紧接着 reload/fetch details，两个 HTTP 请求
+  无序，reload 可能先于写入返回，导致"刚遇到的来源句在面板上不立即出现"（需重开词汇
+  才显示），且写入错误被吞。`LearningWorkflowController.openWord`（已存在词分支）与
+  `setCapabilityOverride`（`not_acquired` 时）均改为 `await` occurrence 写入并 try/catch
+  兜底，保证 details 重载能看到新记录、且写入失败不影响能力覆盖结果；手动"记录当前句"
+  按钮原本就是 awaited，无需改。移除不再使用的 `dart:async` 导入。`flutter analyze`
+  零问题，`learning_workflow_controller_test.dart` 11 passed。注：fc70949d 的"听懂了吗"
+  方案仅落地文案改名，方案第 4 项（把"分析真实发音/分析整条字幕"移出 DiagnosisCard、
+  改 C 视图按需加载）尚未实现，待定。
+
+- 2026-07-09 22:00 CST: Phase 3.5.5 UX 修复（循环标注 + 内容匹配度入口）。
+  **循环标注 bug**：`PlaybackActionsCoordinator.loopRange` 此前把 chip 标签硬编码为
+  `'loopRange'`，调用方传入的场景描述只进了瞬时状态文本，导致收件箱/卡点/复查/
+  声音线证据/音素/热点/节奏/练习等所有 range 循环在循环 chip 上全部显示同一个
+  "范围循环"，提交声称的"区分场景"未生效。改为新增 `loopRange(..., {String labelKey})`
+  命名参数，chip 用 `labelKey`、状态文本仍用 `label`；9 个调用点（main.dart×6、
+  side_panel.dart×3）各传对应场景 key。新增 en/zh 本地化键 loopPractice/loopInbox/
+  loopStuckPoint/loopRhythm/loopPhone/loopHotspot（loopEvidence 复用已有键）。
+  **内容匹配度入口**：de4bc2e7 在侧栏姿态区加的 `_contentFitSummary` 只是完整
+  `ContentFitCard` 的有损单行复制（仅两个 fit chip + 弹窗），而带冷启动补标注按钮、
+  精听目标提示、校准状态的完整卡片仍埋在"字幕资源"技术 tab 里，空词汇画像新用户
+  最需要的冷启动入口在默认转写 tab 不可达。改为在转写 tab（浏览/决策主面）直接渲染
+  完整 `ContentFitCard`（透传 `onStartColdStart`），移除有损的 `_contentFitSummary`，
+  不再在词汇/诊断/练习深度 tab 上重复堆叠。命名语义（内容匹配度/理解/听辨）与意群一样
+  留待单独的语义重设计，本次不碰。`flutter analyze` 零问题，`flutter test
+  coordinators_test.dart` 7 passed。
+
 - 2026-07-08 18:20 CST: Phase 3.5 Slice 8 — Cold-start quick-marking flow。后端：
   `cold_start_word_candidates` 从 track transcript 抽样高频未评估词（共享
   `normalize_lexical_form` 归一化路径，按频次降序、同频字典序，clamp 50）。
