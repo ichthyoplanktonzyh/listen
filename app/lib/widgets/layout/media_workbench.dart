@@ -10,6 +10,7 @@ class MediaWorkbench extends StatefulWidget {
     required this.learningPanel,
     required this.mediaFraction,
     required this.onMediaFractionChanged,
+    this.onCollapse,
   });
 
   final String mediaTitle;
@@ -17,6 +18,7 @@ class MediaWorkbench extends StatefulWidget {
   final Widget learningPanel;
   final double mediaFraction;
   final ValueChanged<double> onMediaFractionChanged;
+  final VoidCallback? onCollapse;
 
   @override
   State<MediaWorkbench> createState() => _MediaWorkbenchState();
@@ -72,6 +74,7 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
                 playerStage: widget.playerStage,
                 onCompactMedia: () => _setMediaFraction(compactMediaFraction),
                 onResetLayout: () => _setMediaFraction(defaultMediaFraction),
+                onCollapse: widget.onCollapse,
               ),
             ),
             _WorkbenchSplitter.horizontal(
@@ -173,12 +176,14 @@ class _MediaPane extends StatelessWidget {
     required this.playerStage,
     required this.onCompactMedia,
     required this.onResetLayout,
+    this.onCollapse,
   });
 
   final String mediaTitle;
   final Widget playerStage;
   final VoidCallback? onCompactMedia;
   final VoidCallback? onResetLayout;
+  final VoidCallback? onCollapse;
 
   @override
   Widget build(BuildContext context) {
@@ -195,6 +200,15 @@ class _MediaPane extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
                 children: [
+                  if (onCollapse != null)
+                    IconButton(
+                      tooltip: l.text('backToHome'),
+                      onPressed: onCollapse,
+                      icon: Icon(
+                        Icons.keyboard_arrow_down,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
                   Icon(
                     Icons.play_circle_outline,
                     size: 20,

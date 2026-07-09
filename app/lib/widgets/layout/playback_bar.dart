@@ -31,6 +31,9 @@ class PlaybackBar extends StatefulWidget {
     required this.onCaptureListeningInbox,
     required this.onHardInterruptListening,
     required this.onSaveSettings,
+    this.isCompact = false,
+    this.mediaTitle,
+    this.onExpand,
   });
 
   final DesktopPlayerAdapter adapter;
@@ -45,6 +48,9 @@ class PlaybackBar extends StatefulWidget {
   final Future<void> Function() onCaptureListeningInbox;
   final Future<void> Function() onHardInterruptListening;
   final Future<void> Function() onSaveSettings;
+  final bool isCompact;
+  final String? mediaTitle;
+  final VoidCallback? onExpand;
 
   @override
   State<PlaybackBar> createState() => _PlaybackBarState();
@@ -172,6 +178,9 @@ class _PlaybackBarState extends State<PlaybackBar> {
       onToggleExtensiveListening: () => unawaited(_toggleExtensiveListening()),
       onCaptureListeningInbox: () => unawaited(_captureListeningInbox()),
       onHardInterruptListening: () => unawaited(_hardInterruptListening()),
+      isCompact: widget.isCompact,
+      mediaTitle: widget.mediaTitle,
+      onExpand: widget.onExpand,
     );
   }
 

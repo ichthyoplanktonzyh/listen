@@ -98,7 +98,8 @@ class PlayerScreen extends StatefulWidget {
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _PlayerScreenState extends State<PlayerScreen> {
+class _PlayerScreenState extends State<PlayerScreen>
+    with TickerProviderStateMixin {
   // ── Service / infrastructure handles ──
   final adapter = DesktopPlayerAdapter();
   final transcriptController = ScrollController();
@@ -142,6 +143,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final taskStatuses = <UserTaskKind, UserTaskStatus>{};
   bool dragging = false;
   bool connectingApi = true;
+  bool _workbenchExpanded = false;
+  late final AnimationController _workbenchAnimController;
+  late final Animation<Offset> _workbenchSlideAnimation;
   // Global learning totals prefetched for the no-media home surface so the
   // readiness strip is not misleadingly empty at cold start.
   SavedVocabularyCount? _savedVocabulary;
@@ -162,6 +166,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    _workbenchAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _workbenchSlideAnimation = Tween<Offset>(
+      begin: const Offset(0, 1),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _workbenchAnimController,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    ));
     resourceActions.bind(
       getApi: () => api,
       isMounted: () => mounted,
@@ -187,7 +203,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       onMediaSwitched: () {
         setState(() {
           taskStatuses.clear();
+          _workbenchExpanded = true;
         });
+        _workbenchAnimController.forward();
       },
       reloadLearningEntries: () async {
         await _loadWordEntries();
@@ -486,6 +504,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await settingsController.update(
       settingsController.settings.copyWith(familiarMaterialSuggestions: enabled),
     );
+  }
+
+  void _expandWorkbench() {
+    setState(() => _workbenchExpanded = true);
+    _workbenchAnimController.forward();
+  }
+
+  void _collapseWorkbench() {
+    _workbenchAnimController.reverse().then((_) {
+      if (mounted) setState(() => _workbenchExpanded = false);
+    });
   }
 
   /// Reopen the most recently played media from the home continue entry. The
@@ -884,7 +913,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     onMediaSwitched: () {
       setState(() {
         taskStatuses.clear();
+        _workbenchExpanded = true;
       });
+      _workbenchAnimController.forward();
     },
   );
 
@@ -1736,6 +1767,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (currentMediaId != null) {
       unawaited(api?.saveProgress(currentMediaId, currentPosition));
     }
+    _workbenchAnimController.dispose();
     downloadController.dispose();
     unawaited(_saveSettings());
     for (final subscription in subscriptions) {
@@ -1895,73 +1927,87 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   child: Column(
                     children: [
                       Expanded(
-                        child: playerController.mediaPath == null
-                            ? ListeningHome(
-                                onOpenMedia: mediaSession.openMedia,
-                                onOpenOnline: _openOnline,
-                                onContinue: () =>
-                                    unawaited(_continueRecentMedia()),
-                                onOpenSubtitleResources: () =>
-                                    unawaited(_openSubtitleResources()),
-                                onOpenVocabulary: _openVocabulary,
-                                onOpenReview: () =>
-                                    unawaited(_openReviewQueue()),
-                                onOpenSettings: () =>
-                                    unawaited(_openSettings()),
-                                mediaLibrary: _mediaLibrary,
-                                familiarSupplyEnabled: settingsController
-                                    .familiarMaterialSuggestions,
-                                onOpenLibraryEntry: (entry) =>
-                                    unawaited(_openLibraryEntry(entry)),
-                                onStartExtensiveEntry: (entry) => unawaited(
-                                  _startExtensiveFromLibrary(entry),
-                                ),
-                                onStartIntensiveEntry: (entry) => unawaited(
-                                  _startIntensiveFromLibrary(entry),
-                                ),
-                                onSetLibraryIntent: (entry, intent) => unawaited(
-                                  _setLibraryTriageIntent(entry, intent),
-                                ),
-                                onToggleFamiliarSupply: (enabled) =>
-                                    unawaited(_toggleFamiliarSupply(enabled)),
-                                recentMediaTitle:
-                                    settingsController.lastMediaTitle.isEmpty
-                                    ? null
-                                    : settingsController.lastMediaTitle,
-                                recentMediaPath:
-                                    settingsController.lastMediaPath.isEmpty
-                                    ? null
-                                    : settingsController.lastMediaPath,
-                                recentPosition: Duration(
-                                  milliseconds:
-                                      settingsController.lastMediaPositionMs,
-                                ),
-                                recentDuration: Duration(
-                                  milliseconds:
-                                      settingsController.lastMediaDurationMs,
-                                ),
-                                recentSubtitleCount:
-                                    settingsController.lastMediaSubtitleCount,
-                                vocabularyCount: _savedVocabulary?.total ?? 0,
-                                vocabularyCapped:
-                                    _savedVocabulary?.capped ?? false,
-                                vocabularyKnown: _savedVocabulary != null,
-                                listeningInboxCount:
-                                    extensiveListeningController
-                                        .activeItemCount,
-                                statusText: playerController.status,
-                              )
-                            : MediaWorkbench(
-                                mediaTitle: playerController.mediaPath!
-                                    .split(Platform.pathSeparator)
-                                    .last,
-                                playerStage: _playerStage(),
-                                learningPanel: _sidePanel(),
-                                mediaFraction:
-                                    settingsController.workbenchMediaFraction,
-                                onMediaFractionChanged:
-                                    _setWorkbenchMediaFraction,
+                        child: Stack(
+                          children: [
+                            ListeningHome(
+                              onOpenMedia: mediaSession.openMedia,
+                              onOpenOnline: _openOnline,
+                              onContinue: () {
+                                if (_workbenchExpanded ||
+                                    playerController.mediaPath != null) {
+                                  _expandWorkbench();
+                                } else {
+                                  unawaited(_continueRecentMedia());
+                                }
+                              },
+                              onOpenSubtitleResources: () =>
+                                  unawaited(_openSubtitleResources()),
+                              onOpenVocabulary: _openVocabulary,
+                              onOpenReview: () =>
+                                  unawaited(_openReviewQueue()),
+                              onOpenSettings: () =>
+                                  unawaited(_openSettings()),
+                              mediaLibrary: _mediaLibrary,
+                              familiarSupplyEnabled: settingsController
+                                  .familiarMaterialSuggestions,
+                              onOpenLibraryEntry: (entry) =>
+                                  unawaited(_openLibraryEntry(entry)),
+                              onStartExtensiveEntry: (entry) => unawaited(
+                                _startExtensiveFromLibrary(entry),
                               ),
+                              onStartIntensiveEntry: (entry) => unawaited(
+                                _startIntensiveFromLibrary(entry),
+                              ),
+                              onSetLibraryIntent: (entry, intent) => unawaited(
+                                _setLibraryTriageIntent(entry, intent),
+                              ),
+                              onToggleFamiliarSupply: (enabled) =>
+                                  unawaited(_toggleFamiliarSupply(enabled)),
+                              recentMediaTitle:
+                                  settingsController.lastMediaTitle.isEmpty
+                                  ? null
+                                  : settingsController.lastMediaTitle,
+                              recentMediaPath:
+                                  settingsController.lastMediaPath.isEmpty
+                                  ? null
+                                  : settingsController.lastMediaPath,
+                              recentPosition: Duration(
+                                milliseconds:
+                                    settingsController.lastMediaPositionMs,
+                              ),
+                              recentDuration: Duration(
+                                milliseconds:
+                                    settingsController.lastMediaDurationMs,
+                              ),
+                              recentSubtitleCount:
+                                  settingsController.lastMediaSubtitleCount,
+                              vocabularyCount: _savedVocabulary?.total ?? 0,
+                              vocabularyCapped:
+                                  _savedVocabulary?.capped ?? false,
+                              vocabularyKnown: _savedVocabulary != null,
+                              listeningInboxCount:
+                                  extensiveListeningController
+                                      .activeItemCount,
+                              statusText: playerController.status,
+                            ),
+                            if (playerController.mediaPath != null)
+                              SlideTransition(
+                                position: _workbenchSlideAnimation,
+                                child: MediaWorkbench(
+                                  mediaTitle: playerController.mediaPath!
+                                      .split(Platform.pathSeparator)
+                                      .last,
+                                  playerStage: _playerStage(),
+                                  learningPanel: _sidePanel(),
+                                  mediaFraction:
+                                      settingsController.workbenchMediaFraction,
+                                  onMediaFractionChanged:
+                                      _setWorkbenchMediaFraction,
+                                  onCollapse: _collapseWorkbench,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                       if (downloadController.snapshot != null)
                         _downloadStatusBar(downloadController.snapshot!),
@@ -2053,6 +2099,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     onCaptureListeningInbox: _captureListeningInbox,
     onHardInterruptListening: _hardInterruptListening,
     onSaveSettings: _saveSettings,
+    isCompact: playerController.mediaPath != null && !_workbenchExpanded,
+    mediaTitle: playerController.mediaPath
+        ?.split(Platform.pathSeparator)
+        .last,
+    onExpand: _expandWorkbench,
   );
 
   Widget _downloadStatusBar(DownloadStatusSnapshot downloadStatus) =>
