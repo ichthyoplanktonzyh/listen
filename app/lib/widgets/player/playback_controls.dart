@@ -372,16 +372,180 @@ class PlaybackControls extends StatelessWidget {
                             ],
                           ),
                         ] else
-                          IconButton(
-                            tooltip: l.text('markListeningInbox'),
-                            onPressed: listeningMarkEnabled
-                                ? onCaptureListeningInbox
-                                : null,
-                            icon: Badge.count(
-                              count: listeningInboxCount,
-                              isLabelVisible: listeningInboxCount > 0,
-                              child: const Icon(Icons.bookmark_add_outlined),
-                            ),
+                          PopupMenuButton<String>(
+                            tooltip: l.text('moreActions'),
+                            icon: const Icon(Icons.more_horiz),
+                            onSelected: (value) {
+                              switch (value) {
+                                case 'toggle-listening':
+                                  onToggleExtensiveListening();
+                                case 'mark-inbox':
+                                  onCaptureListeningInbox();
+                                case 'hard-interrupt':
+                                  onHardInterruptListening();
+                                case 'previous-chunk':
+                                  onSeekToPreviousChunk();
+                                case 'loop-chunk':
+                                  onLoopCurrentChunk();
+                                case 'next-chunk':
+                                  onSeekToNextChunk();
+                                case 'expand-chunk':
+                                  onLoopExpandedChunk();
+                                case 'stop-source-loop':
+                                  onStopSourceLoop();
+                                case 'toggle-primary':
+                                  onSubtitlesVisibleChanged(!subtitlesVisible);
+                                case 'toggle-secondary':
+                                  onSecondaryVisibleChanged(
+                                    !secondarySubtitlesVisible,
+                                  );
+                                case 'toggle-status-styles':
+                                  onStatusStylesChanged(!statusStylesVisible);
+                              }
+                            },
+                            itemBuilder: (_) => [
+                              PopupMenuItem(
+                                enabled: false,
+                                child: Text(
+                                  l.text('listeningMode'),
+                                  style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'toggle-listening',
+                                child: _PlaybackMenuRow(
+                                  icon: extensiveListeningActive
+                                      ? Icons.hearing
+                                      : Icons.hearing_outlined,
+                                  title: extensiveListeningActive
+                                      ? l.text('finishExtensiveListening')
+                                      : l.text('startExtensiveListening'),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'mark-inbox',
+                                enabled: listeningMarkEnabled,
+                                child: _PlaybackMenuRow(
+                                  icon: Icons.bookmark_add_outlined,
+                                  title: l.text('markListeningInbox'),
+                                  trailing: listeningInboxCount > 0
+                                      ? '$listeningInboxCount'
+                                      : null,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'hard-interrupt',
+                                enabled: listeningMarkEnabled,
+                                child: _PlaybackMenuRow(
+                                  icon: Icons.pause_circle_outline,
+                                  title: l.text('hardInterruptListening'),
+                                ),
+                              ),
+                              const PopupMenuDivider(),
+                              PopupMenuItem(
+                                enabled: false,
+                                child: Text(
+                                  l.text('chunkMode'),
+                                  style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'previous-chunk',
+                                enabled: chunkControlsEnabled,
+                                child: _PlaybackMenuRow(
+                                  icon: Icons.keyboard_double_arrow_left,
+                                  title: l.text('previousChunk'),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'loop-chunk',
+                                enabled: chunkControlsEnabled,
+                                child: _PlaybackMenuRow(
+                                  icon: Icons.segment,
+                                  title: l.text('loopChunk'),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'next-chunk',
+                                enabled: chunkControlsEnabled,
+                                child: _PlaybackMenuRow(
+                                  icon: Icons.keyboard_double_arrow_right,
+                                  title: l.text('nextChunk'),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'expand-chunk',
+                                enabled: chunkControlsEnabled,
+                                child: _PlaybackMenuRow(
+                                  icon: Icons.unfold_more,
+                                  title: l.text('expandChunk'),
+                                ),
+                              ),
+                              if (sourceLoopStart != null) ...[
+                                const PopupMenuDivider(),
+                                PopupMenuItem(
+                                  value: 'stop-source-loop',
+                                  child: _PlaybackMenuRow(
+                                    icon: Icons.stop_circle_outlined,
+                                    title: l.text('stopSourceLoop'),
+                                  ),
+                                ),
+                              ],
+                              const PopupMenuDivider(),
+                              PopupMenuItem(
+                                enabled: false,
+                                child: Text(
+                                  l.text('subtitleMode'),
+                                  style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'toggle-primary',
+                                child: _PlaybackMenuRow(
+                                  icon: subtitlesVisible
+                                      ? Icons.check_box_outlined
+                                      : Icons.check_box_outline_blank,
+                                  title: l.text('subtitles'),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'toggle-secondary',
+                                enabled: secondarySubtitlesAvailable,
+                                child: _PlaybackMenuRow(
+                                  icon: secondarySubtitlesVisible
+                                      ? Icons.check_box_outlined
+                                      : Icons.check_box_outline_blank,
+                                  title: l.text('secondary'),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'toggle-status-styles',
+                                child: _PlaybackMenuRow(
+                                  icon: statusStylesVisible
+                                      ? Icons.check_box_outlined
+                                      : Icons.check_box_outline_blank,
+                                  title: l.text('wordStyles'),
+                                ),
+                              ),
+                            ],
                           ),
                         const Spacer(),
                         DropdownButtonHideUnderline(

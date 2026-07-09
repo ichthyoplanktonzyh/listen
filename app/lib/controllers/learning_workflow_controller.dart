@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../models/timeline.dart';
 import '../models/types.dart';
 import '../services/api_service.dart';
@@ -99,6 +101,7 @@ class LearningWorkflowController {
     required String language,
     required LearningController learning,
     required bool Function() isMounted,
+    Map<String, dynamic>? Function(SubtitleToken token, Cue cue)? sourceFor,
   }) async {
     final lemma = token.normalized;
     if (lemma == null) return;
@@ -110,6 +113,7 @@ class LearningWorkflowController {
       learning.selectSidePanel(2);
     }
     if (api == null) return;
+    final source = sourceFor?.call(token, cue);
     var entry = learning.wordEntries[lemma];
     if (entry == null) {
       final details = LexicalEntryDetails.fromJson(
@@ -118,6 +122,7 @@ class LearningWorkflowController {
           token.text,
           null,
           language: language,
+          source: source,
         ),
       );
       entry = details.entry;
@@ -128,6 +133,15 @@ class LearningWorkflowController {
       }
       learning.selectWord(details);
     } else {
+      if (source != null) {
+        unawaited(api.upsertWordLexicalEntry(
+          lemma,
+          token.text,
+          null,
+          language: language,
+          source: source,
+        ));
+      }
       if (!_isCurrentOpenWord(generation, isMounted)) return;
       learning.selectWord(LexicalEntryDetails(entry: entry));
       final details = await _loadExistingWordDetails(api, entry);
@@ -297,10 +311,27 @@ class LearningWorkflowController {
     required String? conclusion,
     required LearningController learning,
     required bool Function() isMounted,
+    Map<String, dynamic>? Function(SubtitleToken token, Cue cue)? sourceFor,
   }) async {
     final entry = learning.selectedLexicalDetails?.entry;
     if (entry == null || api == null) return;
     await api.setCapabilityOverride(entry.id, capability, conclusion: conclusion);
+    if (conclusion == 'not_acquired' && sourceFor != null) {
+      final token = learning.selectedToken;
+      final cue = learning.selectedCue;
+      if (token?.normalized != null && cue != null) {
+        final source = sourceFor(token!, cue);
+        if (source != null) {
+          unawaited(api.upsertWordLexicalEntry(
+            token.normalized!,
+            token.text,
+            null,
+            language: entry.language,
+            source: source,
+          ));
+        }
+      }
+    }
     final details = LexicalEntryDetails.fromJson(
       await api.lexicalEntryDetails(entry.id),
     );
@@ -334,6 +365,32 @@ class LearningWorkflowController {
         setDiagnosis(null);
       }
     }
+  }
+
+  Future<void> recordCurrentSource({
+    required LocalApi? api,
+    required String language,
+    required LearningController learning,
+    required bool Function() isMounted,
+    required Map<String, dynamic>? Function(SubtitleToken token, Cue cue)
+        sourceFor,
+  }) async {
+    final token = learning.selectedToken;
+    final cue = learning.selectedCue;
+    if (token?.normalized == null || cue == null || api == null) return;
+    final source = sourceFor(token!, cue);
+    if (source == null) return;
+    final details = LexicalEntryDetails.fromJson(
+      await api.upsertWordLexicalEntry(
+        token.normalized!,
+        token.text,
+        null,
+        language: language,
+        source: source,
+      ),
+    );
+    if (!isMounted()) return;
+    learning.selectWord(details);
   }
 
   bool _isCurrent(int generation, String cueId, String? currentCueId) =>

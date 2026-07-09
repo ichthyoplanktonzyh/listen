@@ -19,6 +19,8 @@ class WordLearningPanel extends StatefulWidget {
     required this.onHeard,
     required this.onNotHeard,
     this.onCapabilityOverride,
+    this.onRecordSource,
+    this.hasSelectedCue = false,
   });
 
   final LexicalEntryDetails details;
@@ -32,6 +34,8 @@ class WordLearningPanel extends StatefulWidget {
   final VoidCallback onNotHeard;
   final Future<void> Function(String capability, String? conclusion)?
       onCapabilityOverride;
+  final VoidCallback? onRecordSource;
+  final bool hasSelectedCue;
 
   @override
   State<WordLearningPanel> createState() => _WordLearningPanelState();
@@ -337,10 +341,28 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
           ),
         ),
         const Divider(),
-        _sectionHeader(
-          context,
-          l.text('sourceSentences'),
-          Icons.format_quote_outlined,
+        Row(
+          children: [
+            Expanded(
+              child: _sectionHeader(
+                context,
+                l.text('sourceSentences'),
+                Icons.format_quote_outlined,
+              ),
+            ),
+            if (widget.onRecordSource != null)
+              TextButton.icon(
+                onPressed: widget.hasSelectedCue
+                    ? widget.onRecordSource
+                    : null,
+                icon: const Icon(Icons.add, size: 16),
+                label: Text(l.text('recordCurrentSentence')),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+              ),
+          ],
         ),
         if (occurrences.isEmpty)
           Padding(

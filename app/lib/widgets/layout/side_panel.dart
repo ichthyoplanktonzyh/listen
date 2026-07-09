@@ -66,6 +66,7 @@ class SidePanel extends StatefulWidget {
     required this.onProcessListeningInboxItem,
     required this.timingQuality,
     this.onStartColdStart,
+    this.onRecordCurrentSource,
   });
 
   final PlayerController playerController;
@@ -109,6 +110,7 @@ class SidePanel extends StatefulWidget {
   onProcessListeningInboxItem;
   final String Function(String sentenceId) timingQuality;
   final VoidCallback? onStartColdStart;
+  final VoidCallback? onRecordCurrentSource;
 
   @override
   State<SidePanel> createState() => _SidePanelState();
@@ -243,6 +245,9 @@ class _SidePanelState extends State<SidePanel> {
                       onHeard: () => _observeSelected(true),
                       onNotHeard: () => _observeSelected(false),
                       onCapabilityOverride: _setCapabilityOverride,
+                      onRecordSource: widget.onRecordCurrentSource,
+                      hasSelectedCue:
+                          subtitleController.currentPrimaryCue != null,
                     ),
             3 =>
               learningController.diagnosis == null
@@ -276,7 +281,7 @@ class _SidePanelState extends State<SidePanel> {
       (Icons.subtitles_outlined, l.text('transcript')),
       (Icons.inventory_2_outlined, l.text('subtitleResources')),
       (Icons.menu_book_outlined, l.text('wordLearning')),
-      (Icons.analytics_outlined, l.text('diagnosis')),
+      (Icons.analytics_outlined, l.text('understandPosture')),
       (Icons.fact_check_outlined, l.text('practice')),
       (Icons.inbox_outlined, l.text('listeningInbox')),
     ];

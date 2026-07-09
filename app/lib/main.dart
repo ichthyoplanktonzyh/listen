@@ -1080,6 +1080,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         language: _learningLanguage,
         learning: learningController,
         isMounted: () => mounted,
+        sourceFor: _sourceFor,
       );
     } catch (error) {
       if (mounted) playerController.setStatus('Dictionary unavailable: $error');
@@ -1118,6 +1119,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         conclusion: conclusion,
         learning: learningController,
         isMounted: () => mounted,
+        sourceFor: _sourceFor,
       );
     } catch (error) {
       if (mounted) playerController.setStatus('Capability update failed: $error');
@@ -1135,6 +1137,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
       learning: learningController,
       isMounted: () => mounted,
     );
+  }
+
+  Future<void> _recordCurrentSource() async {
+    try {
+      await learningWorkflowController.recordCurrentSource(
+        api: api,
+        language: _learningLanguage,
+        learning: learningController,
+        isMounted: () => mounted,
+        sourceFor: _sourceFor,
+      );
+    } catch (error) {
+      if (mounted) {
+        playerController.setStatus('Record source failed: $error');
+      }
+    }
   }
 
   Future<void> _observeSelected(bool heard) async {
@@ -2019,6 +2037,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     onProcessListeningInboxItem: _processListeningInboxItem,
     timingQuality: _timingQuality,
     onStartColdStart: _openColdStartMarking,
+    onRecordCurrentSource: _recordCurrentSource,
   );
 
   Widget _controls() => PlaybackBar(
