@@ -29,12 +29,13 @@ class VocabularyScreen extends StatefulWidget {
 }
 
 class _VocabularyScreenState extends State<VocabularyScreen> {
-  static const statuses = [
-    'unknown_meaning',
-    'known_not_recognized',
-    'known_recognized',
-  ];
-  String status = statuses.first;
+  static const capabilities = ['reading', 'listening', 'speaking', 'writing'];
+  static const assessmentFilters = ['acquired', 'not_acquired', 'unassessed'];
+
+  // The four-channel capability axis is the primary lens. [capability] picks the
+  // channel; [assessment] `null` means "all" (no capability filter applied).
+  String capability = 'listening';
+  String? assessment;
   String search = '';
   bool loading = true;
   List<Map<String, dynamic>> words = const [];
@@ -45,11 +46,19 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     unawaited(_load());
   }
 
+  String _capabilityLabelKey(String value) => switch (value) {
+    'reading' => 'capabilityReading',
+    'listening' => 'capabilityListening',
+    'speaking' => 'capabilitySpeaking',
+    _ => 'capabilityWriting',
+  };
+
   Future<void> _load() async {
     setState(() => loading = true);
     final values = await widget.api.listVocabulary(
-      status,
       language: widget.language,
+      capability: assessment == null ? null : capability,
+      assessment: assessment,
       search: search,
     );
     if (mounted) {
@@ -73,15 +82,27 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     } catch (_) {
       suggestions = const [];
     }
-    final dictionary = DictionaryLookupBundle.fromJson(
-      await widget.api.lookupDictionary(
-        entry.normalizedForm,
-        language: widget.language,
-      ),
-    );
-    final pronunciation = WordPronunciation.fromJson(
-      await widget.api.lookupPronunciation(entry.displayForm),
-    );
+    // Phrases may have no dictionary or pronunciation entry; degrade to null
+    // rather than failing the whole detail dialog.
+    DictionaryLookupBundle? dictionary;
+    try {
+      dictionary = DictionaryLookupBundle.fromJson(
+        await widget.api.lookupDictionary(
+          entry.normalizedForm,
+          language: widget.language,
+        ),
+      );
+    } catch (_) {
+      dictionary = null;
+    }
+    WordPronunciation? pronunciation;
+    try {
+      pronunciation = WordPronunciation.fromJson(
+        await widget.api.lookupPronunciation(entry.displayForm),
+      );
+    } catch (_) {
+      pronunciation = null;
+    }
     if (!mounted) return;
     final l = AppLocalizations.of(context);
     await showDialog<void>(
@@ -185,58 +206,95 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Text(AppLocalizations.of(context).text('vocabularyBooks')),
-      actions: [
-        VocabularyTransferActions(
-          onExport: widget.onExport,
-          onImport: widget.onImport,
-        ),
-      ],
-    ),
-    body: Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l.text('vocabularyBooks')),
+        actions: [
+          VocabularyTransferActions(
+            onExport: widget.onExport,
+            onImport: widget.onImport,
+          ),
+        ],
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+            child: TextField(
+              decoration: InputDecoration(
+                isDense: true,
+                prefixIcon: const Icon(Icons.search),
+                hintText: l.text('searchVocabulary'),
+              ),
+              onChanged: (value) {
+                search = value;
+                unawaited(_load());
+              },
+            ),
+          ),
+          // Primary lens: the four-channel capability axis. The channel picker
+          // only affects results once a specific assessment is chosen.
+          _filterRow(
             children: [
-              for (final value in statuses)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(AppLocalizations.of(context).status(value)),
-                    selected: status == value,
-                    onSelected: (_) {
-                      status = value;
-                      unawaited(_load());
-                    },
-                  ),
-                ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.search),
-                    hintText: AppLocalizations.of(
-                      context,
-                    ).text('searchVocabulary'),
-                  ),
-                  onChanged: (value) {
-                    search = value;
-                    unawaited(_load());
+              for (final cap in capabilities)
+                ChoiceChip(
+                  label: Text(l.text(_capabilityLabelKey(cap))),
+                  selected: capability == cap,
+                  onSelected: (_) {
+                    setState(() => capability = cap);
+                    if (assessment != null) unawaited(_load());
                   },
                 ),
-              ),
             ],
           ),
-        ),
-        Expanded(
-          child: loading
-              ? const Center(child: CircularProgressIndicator())
-              : VocabularyBookView(words: words, onWord: _details),
-        ),
-      ],
+          _filterRow(
+            children: [
+              _assessmentChip(l.text('vocabFilterAll'), null),
+              for (final value in assessmentFilters)
+                _assessmentChip(
+                  l.text(value),
+                  value,
+                  color: capabilityAssessmentColor(value),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Divider(height: 1, color: colors.outlineVariant),
+          Expanded(
+            child: loading
+                ? const Center(child: CircularProgressIndicator())
+                : VocabularyBookView(words: words, onWord: _details),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _filterRow({required List<Widget> children}) => SizedBox(
+    height: 44,
+    child: ListView.separated(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      itemCount: children.length,
+      separatorBuilder: (_, _) => const SizedBox(width: 8),
+      itemBuilder: (_, index) => Center(child: children[index]),
     ),
   );
+
+  Widget _assessmentChip(String label, String? value, {Color? color}) =>
+      ChoiceChip(
+        avatar: color == null
+            ? null
+            : CircleAvatar(backgroundColor: color, radius: 5),
+        label: Text(label),
+        selected: assessment == value,
+        onSelected: (_) {
+          setState(() => assessment = value);
+          unawaited(_load());
+        },
+      );
 }

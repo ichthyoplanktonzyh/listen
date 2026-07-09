@@ -16,8 +16,6 @@ class DiagnosisCard extends StatelessWidget {
     this.rhythmFrame,
     this.phoneticAnalysis,
     this.currentDetectedPhone,
-    this.onAnalyzePhonetics,
-    this.onAnalyzeTrackPhonetics,
     this.onLoopDetectedPhone,
     this.onLoopHotspot,
     this.onLoopFinding,
@@ -32,8 +30,6 @@ class DiagnosisCard extends StatelessWidget {
   final RhythmFrame? rhythmFrame;
   final PhoneticAnalysis? phoneticAnalysis;
   final DetectedPhone? currentDetectedPhone;
-  final VoidCallback? onAnalyzePhonetics;
-  final VoidCallback? onAnalyzeTrackPhonetics;
   final ValueChanged<DetectedPhone>? onLoopDetectedPhone;
   final ValueChanged<ListeningHotspot>? onLoopHotspot;
   final ValueChanged<PhoneticFinding>? onLoopFinding;
@@ -86,27 +82,6 @@ class DiagnosisCard extends StatelessWidget {
                   ],
                 ),
               ),
-          if (onAnalyzePhonetics != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.graphic_eq, size: 18),
-                    onPressed: onAnalyzePhonetics,
-                    label: Text(l.text('analyzeRealPronunciation')),
-                  ),
-                  if (onAnalyzeTrackPhonetics != null)
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.library_music_outlined, size: 18),
-                      onPressed: onAnalyzeTrackPhonetics,
-                      label: Text(l.text('analyzeSubtitleTrack')),
-                    ),
-                ],
-              ),
-            ),
           const SizedBox(height: 8),
           Theme(
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),

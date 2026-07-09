@@ -49,7 +49,6 @@ class SidePanel extends StatefulWidget {
     required this.onManualReviewTimeline,
     required this.onDeleteSubtitle,
     required this.onExportSubtitle,
-    required this.onAnalyzePhonetics,
     required this.onStartClozePractice,
     required this.onStartChunkDictationPractice,
     required this.onStartSentenceDictationPractice,
@@ -91,7 +90,6 @@ class SidePanel extends StatefulWidget {
   final Future<void> Function() onManualReviewTimeline;
   final Future<void> Function(SubtitleTrack track) onDeleteSubtitle;
   final Future<void> Function(SubtitleTrack track) onExportSubtitle;
-  final Future<void> Function({required bool wholeTrack}) onAnalyzePhonetics;
   final Future<void> Function() onStartClozePractice;
   final Future<void> Function() onStartChunkDictationPractice;
   final Future<void> Function() onStartSentenceDictationPractice;
@@ -146,8 +144,6 @@ class _SidePanelState extends State<SidePanel> {
       widget.onDeleteSubtitle(track);
   Future<void> _exportSubtitleResource(SubtitleTrack track) =>
       widget.onExportSubtitle(track);
-  Future<void> _analyzePhonetics({required bool wholeTrack}) =>
-      widget.onAnalyzePhonetics(wholeTrack: wholeTrack);
   Future<void> _startClozePractice() => widget.onStartClozePractice();
   Future<void> _startChunkDictationPractice() =>
       widget.onStartChunkDictationPractice();
@@ -224,8 +220,20 @@ class _SidePanelState extends State<SidePanel> {
         // resource manager and inbox tabs so they are contextual, not a
         // permanent button wall.
         if (_showsPostureActions) _postureActions(),
-        if (_showsPostureActions && subtitleController.contentFit != null)
-          _contentFitSummary(),
+        // Content fit is a media-level "should I watch this, and how" signal, so
+        // it belongs on the transcript tab (the browse/decide surface) rather
+        // than buried in the technical subtitle-resources panel. Showing the
+        // full card here surfaces the cold-start prompt and intensive-listening
+        // hint that a one-line summary would drop.
+        if (learningController.sidePanel == 0 &&
+            subtitleController.contentFit != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: ContentFitCard(
+              profile: subtitleController.contentFit!,
+              onStartColdStart: widget.onStartColdStart,
+            ),
+          ),
         Expanded(
           child: switch (learningController.sidePanel) {
             1 => _subtitleResources(),
@@ -401,18 +409,12 @@ class _SidePanelState extends State<SidePanel> {
               .currentPrimaryCue!
               .id],
     currentDetectedPhone: subtitleController.currentDetectedPhone,
-    onAnalyzePhonetics: settingsController.phoneticAnalysisPreference == 'off'
-        ? null
-        : () => unawaited(_analyzePhonetics(wholeTrack: false)),
-    onAnalyzeTrackPhonetics:
-        settingsController.phoneticAnalysisPreference == 'off'
-        ? null
-        : () => unawaited(_analyzePhonetics(wholeTrack: true)),
     onLoopDetectedPhone: (phone) => unawaited(
       playbackActions.loopRange(
         phone.start.inMilliseconds,
         phone.end.inMilliseconds,
         'Looping detected phone ${phone.displayIpa}',
+        labelKey: 'loopPhone',
       ),
     ),
     onLoopHotspot: (hotspot) => unawaited(
@@ -420,6 +422,7 @@ class _SidePanelState extends State<SidePanel> {
         hotspot.start.inMilliseconds,
         hotspot.end.inMilliseconds,
         'Looping listening hotspot ${hotspot.label}',
+        labelKey: 'loopHotspot',
       ),
     ),
     onLoopFinding: (finding) => unawaited(
@@ -427,41 +430,12 @@ class _SidePanelState extends State<SidePanel> {
         finding.audioStartMs,
         finding.audioEndMs,
         'Looping audio finding evidence',
+        labelKey: 'loopEvidence',
       ),
     ),
     onFindingFeedback: (finding, value) =>
         unawaited(playbackActions.savePhoneticFindingFeedback(finding, value)),
   );
-
-  Widget _contentFitSummary() {
-    final profile = subtitleController.contentFit!;
-    return InkWell(
-      onTap: () => showDialog<void>(
-        context: context,
-        builder: (_) => ContentFitDetailDialog(profile: profile),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-        child: Row(
-          children: [
-            Icon(Icons.tune_outlined, size: 14,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
-            const SizedBox(width: 6),
-            Text(
-              l.text('contentFit'),
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(width: 8),
-            FitChip(label: l.text('contentFitMeaning'), fit: profile.meaning.fit),
-            const SizedBox(width: 6),
-            FitChip(label: l.text('contentFitSound'), fit: profile.sound.fit),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _postureActions() {
     final hasCue = subtitleController.currentPrimaryCue != null;

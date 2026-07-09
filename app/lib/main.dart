@@ -1255,6 +1255,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       draft.playbackStartMs,
       draft.playbackEndMs,
       'Looping practice window',
+      labelKey: 'loopPractice',
     );
   }
 
@@ -1434,7 +1435,12 @@ class _PlayerScreenState extends State<PlayerScreen>
       playerController.setStatus('No playable range for this Inbox item');
       return;
     }
-    await playbackActions.loopRange(start, end, 'Looping Listening Inbox item');
+    await playbackActions.loopRange(
+      start,
+      end,
+      'Looping Listening Inbox item',
+      labelKey: 'loopInbox',
+    );
   }
 
   Future<void> _processListeningInboxItem(
@@ -1472,7 +1478,12 @@ class _PlayerScreenState extends State<PlayerScreen>
       playerController.setStatus('No playable range for this stuck point');
       return;
     }
-    await playbackActions.loopRange(start, end, 'Looping stuck point');
+    await playbackActions.loopRange(
+      start,
+      end,
+      'Looping stuck point',
+      labelKey: 'loopStuckPoint',
+    );
   }
 
   Future<void> _closeStuckPoint(StuckPointSummary point) async {
@@ -1559,7 +1570,12 @@ class _PlayerScreenState extends State<PlayerScreen>
           api: service,
           currentMediaId: playerController.mediaId,
           onPlayRange: (startMs, endMs) =>
-              playbackActions.loopRange(startMs, endMs, 'Looping review card'),
+              playbackActions.loopRange(
+                startMs,
+                endMs,
+                'Looping review card',
+                labelKey: 'loopReview',
+              ),
         ),
       ),
     );
@@ -1628,7 +1644,12 @@ class _PlayerScreenState extends State<PlayerScreen>
         .toInt();
     final start = phones[startIndex].start.inMilliseconds;
     final end = phones[endIndex].end.inMilliseconds;
-    await playbackActions.loopRange(start, end, 'Looping sound-line evidence');
+    await playbackActions.loopRange(
+      start,
+      end,
+      'Looping sound-line evidence',
+      labelKey: 'loopEvidence',
+    );
   }
 
   Future<void> _loopRhythmCue(
@@ -1640,6 +1661,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       start.inMilliseconds,
       end.inMilliseconds,
       'Looping listening rhythm: $label',
+      labelKey: 'loopRhythm',
     );
   }
 
@@ -2038,6 +2060,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     onSetSoundPatternDisplayMode: _setSoundPatternDisplayMode,
     onSaveSettings: _saveSettings,
     onOpenMedia: mediaSession.openMedia,
+    onLoadSoundReference:
+        settingsController.phoneticAnalysisPreference == 'off'
+        ? null
+        : _analyzePhonetics,
   );
 
   String _timingQuality(String sentenceId) {
@@ -2065,7 +2091,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     onManualReviewTimeline: _openManualReviewTimeline,
     onDeleteSubtitle: _deleteSubtitleResource,
     onExportSubtitle: _exportSubtitleResource,
-    onAnalyzePhonetics: _analyzePhonetics,
     onStartClozePractice: _startClozePractice,
     onStartChunkDictationPractice: _startChunkDictationPractice,
     onStartSentenceDictationPractice: _startSentenceDictationPractice,

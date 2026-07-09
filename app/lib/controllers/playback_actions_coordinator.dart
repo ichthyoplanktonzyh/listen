@@ -161,11 +161,20 @@ class PlaybackActionsCoordinator {
 
   // ── Source-loop ranges ──
 
-  Future<void> loopRange(int startMs, int endMs, String label) async {
+  /// [label] is the transient status text (may carry dynamic detail such as a
+  /// phoneme or hotspot name). [labelKey] is a localization key naming the loop
+  /// scenario for the persistent source-loop chip; it defaults to the generic
+  /// `loopRange` when a caller has no more specific category.
+  Future<void> loopRange(
+    int startMs,
+    int endMs,
+    String label, {
+    String labelKey = 'loopRange',
+  }) async {
     final start = Duration(milliseconds: startMs);
     final end = Duration(milliseconds: endMs);
     if (start >= end) return;
-    player.setSourceLoop(start, end, label: 'loopRange');
+    player.setSourceLoop(start, end, label: labelKey);
     subtitle.setLoopCue(false);
     if (isMounted()) player.setStatus(label);
     await adapter.seek(start);

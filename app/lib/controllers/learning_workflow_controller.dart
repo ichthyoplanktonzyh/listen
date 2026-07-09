@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import '../models/timeline.dart';
 import '../models/types.dart';
 import '../services/api_service.dart';
@@ -133,14 +131,19 @@ class LearningWorkflowController {
       }
       learning.selectWord(details);
     } else {
+      // Record the occurrence before reloading details, otherwise the
+      // fire-and-forget write races the reload and the just-encountered source
+      // sentence can be missing from the panel until the word is reopened.
       if (source != null) {
-        unawaited(api.upsertWordLexicalEntry(
-          lemma,
-          token.text,
-          null,
-          language: language,
-          source: source,
-        ));
+        try {
+          await api.upsertWordLexicalEntry(
+            lemma,
+            token.text,
+            null,
+            language: language,
+            source: source,
+          );
+        } catch (_) {}
       }
       if (!_isCurrentOpenWord(generation, isMounted)) return;
       learning.selectWord(LexicalEntryDetails(entry: entry));
@@ -322,13 +325,18 @@ class LearningWorkflowController {
       if (token?.normalized != null && cue != null) {
         final source = sourceFor(token!, cue);
         if (source != null) {
-          unawaited(api.upsertWordLexicalEntry(
-            token.normalized!,
-            token.text,
-            null,
-            language: entry.language,
-            source: source,
-          ));
+          // Awaited so the occurrence is persisted before the details fetch
+          // below reflects it; wrapped so a failed occurrence write never
+          // discards the capability override that already succeeded.
+          try {
+            await api.upsertWordLexicalEntry(
+              token.normalized!,
+              token.text,
+              null,
+              language: entry.language,
+              source: source,
+            );
+          } catch (_) {}
         }
       }
     }

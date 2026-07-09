@@ -726,17 +726,34 @@ class LocalApi {
     });
   }
 
-  Future<List<Map<String, dynamic>>> listVocabulary(
-    String status, {
+  /// Lists the vocabulary book. All filters are optional and additive: [status]
+  /// is the legacy status axis; [capability] + [assessment] together filter by a
+  /// four-channel capability dimension (both required to take effect); [kind]
+  /// omitted returns both words and phrases.
+  Future<List<Map<String, dynamic>>> listVocabulary({
     required String language,
+    String? status,
+    String? capability,
+    String? assessment,
+    String? kind,
     String search = '',
+    int limit = 200,
+    int offset = 0,
   }) async {
-    final values =
-        await _request(
-              'GET',
-              '/v1/vocabulary?language=${Uri.encodeQueryComponent(language)}&status=$status&search=${Uri.encodeQueryComponent(search)}&limit=200&offset=0',
-            )
-            as List<dynamic>;
+    final params = <String, String>{
+      'language': language,
+      'search': search,
+      'limit': '$limit',
+      'offset': '$offset',
+      'status': ?status,
+      'capability': ?capability,
+      'assessment': ?assessment,
+      'kind': ?kind,
+    };
+    final query = params.entries
+        .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
+        .join('&');
+    final values = await _request('GET', '/v1/vocabulary?$query') as List<dynamic>;
     return values.cast<Map<String, dynamic>>();
   }
 
@@ -797,7 +814,9 @@ class LocalApi {
     ];
     const pageLimit = 200;
     final pages = await Future.wait(
-      statuses.map((status) => listVocabulary(status, language: language)),
+      statuses.map(
+        (status) => listVocabulary(status: status, language: language),
+      ),
     );
     var total = 0;
     var capped = false;

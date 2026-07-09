@@ -289,7 +289,11 @@ class PlaybackControls extends StatelessWidget {
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final roomy = constraints.maxWidth >= 1080;
+            // Below this the flat function buttons (extensive listening / chunk
+            // / subtitle menus) collapse into a single overflow popup rather
+            // than disappearing. ~900 keeps the flat toolbar while the function
+            // area (roughly 800px) still fits comfortably.
+            final roomy = constraints.maxWidth >= 900;
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [

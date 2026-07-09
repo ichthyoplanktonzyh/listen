@@ -108,6 +108,33 @@ void main() {
     expect(selected, same(word));
   });
 
+  testWidgets('vocabulary book shows a four-channel snapshot and phrase badge', (
+    tester,
+  ) async {
+    final word = <String, dynamic>{
+      'entry': {'display_form': 'take care of', 'kind': 'phrase'},
+      'occurrences': const [],
+      'capability_profile': {
+        'lexical_entry_id': 'e1',
+        'reading': <String, dynamic>{},
+        'listening': <String, dynamic>{},
+        'speaking': <String, dynamic>{},
+        'writing': <String, dynamic>{},
+      },
+    };
+    await tester.pumpWidget(
+      localized(VocabularyBookView(words: [word], onWord: (_) {})),
+    );
+    expect(find.text('take care of'), findsOneWidget);
+    // Phrases are surfaced with a kind badge (the book is no longer word-only).
+    expect(find.text('Phrase'), findsOneWidget);
+    // One icon per capability channel, always shown even when unassessed.
+    expect(find.byIcon(Icons.menu_book_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.hearing_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.record_voice_over_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
+  });
+
   testWidgets('empty vocabulary book has an explicit state', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

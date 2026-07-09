@@ -7,37 +7,6 @@ import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/widgets/panels/diagnosis_card.dart';
 
 void main() {
-  testWidgets('sentence and whole-track analysis triggers remain distinct', (
-    tester,
-  ) async {
-    var sentenceRuns = 0;
-    var trackRuns = 0;
-    await tester.pumpWidget(
-      MaterialApp(
-        supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        home: Scaffold(
-          body: DiagnosisCard(
-            diagnosis: const Diagnosis(),
-            onAnalyzePhonetics: () => sentenceRuns++,
-            onAnalyzeTrackPhonetics: () => trackRuns++,
-          ),
-        ),
-      ),
-    );
-
-    await tester.tap(find.text('Analyze audio pronunciation'));
-    await tester.tap(find.text('Analyze subtitle track'));
-
-    expect(sentenceRuns, 1);
-    expect(trackRuns, 1);
-  });
-
   testWidgets('recognition barrier renders per-language listening factors', (
     tester,
   ) async {

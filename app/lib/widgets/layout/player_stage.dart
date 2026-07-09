@@ -43,6 +43,7 @@ class PlayerStage extends StatefulWidget {
     required this.onSetSoundPatternDisplayMode,
     required this.onSaveSettings,
     required this.onOpenMedia,
+    this.onLoadSoundReference,
   });
 
   final DesktopPlayerAdapter adapter;
@@ -64,6 +65,11 @@ class PlayerStage extends StatefulWidget {
   final Future<void> Function(String mode) onSetSoundPatternDisplayMode;
   final Future<void> Function() onSaveSettings;
   final Future<void> Function() onOpenMedia;
+
+  /// Loads the "this audio" (C) sound reference on demand. [wholeTrack] true
+  /// runs forced alignment across the whole subtitle track; false only the
+  /// current sentence. Null when phonetic analysis is unavailable.
+  final Future<void> Function({required bool wholeTrack})? onLoadSoundReference;
 
   @override
   State<PlayerStage> createState() => _PlayerStageState();
@@ -453,17 +459,40 @@ class _PlayerStageState extends State<PlayerStage> {
                                   }
 
                                   if (rhythmFrame == null) {
+                                    // C ("this audio") has no forced-alignment
+                                    // data yet: offer to load it in place rather
+                                    // than only reporting it missing. Suppressed
+                                    // when phonetic analysis is turned off.
+                                    final canLoad =
+                                        widget.onLoadSoundReference != null &&
+                                        settingsController
+                                                .phoneticAnalysisPreference !=
+                                            'off';
                                     return soundPatternLayer(
-                                      SoundPatternUnavailableRibbon(
-                                        message: l.text(
-                                          'rhythmFrameUnavailable',
-                                        ),
-                                        tooltip: l.text(
-                                          'soundPatternUnavailableTooltip',
-                                        ),
-                                        fontSize: primarySize * 0.34,
-                                        height: primarySize * 0.9,
-                                      ),
+                                      canLoad
+                                          ? _SoundReferenceLoadPrompt(
+                                              fontSize: primarySize * 0.32,
+                                              onLoadSentence: () => unawaited(
+                                                widget.onLoadSoundReference!(
+                                                  wholeTrack: false,
+                                                ),
+                                              ),
+                                              onLoadTrack: () => unawaited(
+                                                widget.onLoadSoundReference!(
+                                                  wholeTrack: true,
+                                                ),
+                                              ),
+                                            )
+                                          : SoundPatternUnavailableRibbon(
+                                              message: l.text(
+                                                'rhythmFrameUnavailable',
+                                              ),
+                                              tooltip: l.text(
+                                                'soundPatternUnavailableTooltip',
+                                              ),
+                                              fontSize: primarySize * 0.34,
+                                              height: primarySize * 0.9,
+                                            ),
                                       offerPhoneEvidence: true,
                                     );
                                   }
@@ -605,4 +634,89 @@ class _PlayerStageState extends State<PlayerStage> {
     'monospace' => 'Menlo',
     _ => null,
   };
+}
+
+/// In-place prompt shown in the C ("this audio") sound-reference position when
+/// no forced-alignment data exists yet. Offers a fast per-sentence load and a
+/// whole-track load, framed as an effort choice rather than a technical action.
+class _SoundReferenceLoadPrompt extends StatelessWidget {
+  const _SoundReferenceLoadPrompt({
+    required this.fontSize,
+    required this.onLoadSentence,
+    required this.onLoadTrack,
+  });
+
+  final double fontSize;
+  final VoidCallback onLoadSentence;
+  final VoidCallback onLoadTrack;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.graphic_eq,
+                  size: fontSize * 1.1,
+                  color: Colors.white70,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    l.text('soundReferenceNoData'),
+                    style: TextStyle(fontSize: fontSize, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: onLoadSentence,
+                  icon: const Icon(Icons.graphic_eq, size: 16),
+                  label: Text(l.text('loadCurrentSentence')),
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onLoadTrack,
+                  icon: const Icon(Icons.library_music_outlined, size: 16),
+                  label: Text(l.text('loadWholeTrack')),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.white38),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              l.text('soundReferenceLoadHint'),
+              style: TextStyle(
+                fontSize: fontSize * 0.82,
+                color: Colors.white60,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -50,7 +50,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(_host(_profile()));
-    expect(find.text('Content fit'), findsOneWidget);
+    expect(find.text('Difficulty'), findsOneWidget);
     expect(find.text('Comfortable'), findsOneWidget);
     expect(find.text('Challenging'), findsOneWidget);
     // meaning comprehensible x sound challenging = intensive target
