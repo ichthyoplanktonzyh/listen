@@ -111,6 +111,7 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
               playerStage: widget.playerStage,
               onCompactMedia: () => _setMediaFraction(compactMediaFraction),
               onResetLayout: () => _setMediaFraction(defaultMediaFraction),
+              onCollapse: widget.onCollapse,
             ),
           ),
           _WorkbenchSplitter(

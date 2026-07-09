@@ -127,6 +127,160 @@ class PlaybackControls extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final colors = Theme.of(context).colorScheme;
+    if (isCompact) return _buildCompact(context, l, colors);
+    return _buildFull(context, l, colors);
+  }
+
+  Widget _buildCompact(
+    BuildContext context,
+    AppLocalizations l,
+    ColorScheme colors,
+  ) {
+    final maxMs = duration.inMilliseconds.clamp(1, 1 << 31).toDouble();
+    final posMs = position.inMilliseconds.clamp(0, maxMs.toInt()).toDouble();
+    return Material(
+      color: colors.surfaceContainerLowest,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: 14,
+            child: SliderTheme(
+              data: SliderThemeData(
+                trackHeight: 2,
+                thumbShape:
+                    const RoundSliderThumbShape(enabledThumbRadius: 5),
+                overlayShape:
+                    const RoundSliderOverlayShape(overlayRadius: 10),
+                activeTrackColor: colors.primary,
+                inactiveTrackColor:
+                    colors.outlineVariant.withValues(alpha: 0.35),
+                thumbColor: colors.primary,
+              ),
+              child: Slider(
+                value: posMs,
+                max: maxMs,
+                onChanged: (value) =>
+                    onSeek(Duration(milliseconds: value.round())),
+              ),
+            ),
+          ),
+          SizedBox(
+            height: 50,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 16, right: 8, bottom: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: onExpand,
+                      behavior: HitTestBehavior.opaque,
+                      child: Row(
+                        children: [
+                          Icon(
+                            playing
+                                ? Icons.equalizer_rounded
+                                : Icons.music_note_rounded,
+                            size: 18,
+                            color: colors.primary,
+                          ),
+                          const SizedBox(width: 10),
+                          Flexible(
+                            child: Text(
+                              mediaTitle ?? '',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            '${formatDuration(position)} / ${formatDuration(duration)}',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(color: colors.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  IconButton(
+                    tooltip: l.text('previousSentence'),
+                    onPressed: onSeekToPreviousCue,
+                    iconSize: 20,
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.skip_previous_rounded),
+                  ),
+                  SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: IconButton.filled(
+                      tooltip: l.text('playPause'),
+                      onPressed: onPlayPause,
+                      iconSize: 22,
+                      padding: EdgeInsets.zero,
+                      icon: Icon(
+                        playing
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: l.text('nextSentence'),
+                    onPressed: onSeekToNextCue,
+                    iconSize: 20,
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.skip_next_rounded),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${rate}x',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: muted ? 'Unmute' : 'Mute',
+                    onPressed: onMuteToggle,
+                    iconSize: 18,
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(
+                      muted
+                          ? Icons.volume_off_outlined
+                          : Icons.volume_up_outlined,
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: l.text('expandWorkbench'),
+                    onPressed: onExpand,
+                    iconSize: 18,
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(
+                      Icons.keyboard_arrow_up_rounded,
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFull(
+    BuildContext context,
+    AppLocalizations l,
+    ColorScheme colors,
+  ) {
     return Material(
       color: colors.surfaceContainerLowest,
       child: DecoratedBox(
@@ -183,9 +337,7 @@ class PlaybackControls extends StatelessWidget {
                   height: 58,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 14),
-                    child: isCompact
-                        ? _compactControlRow(context, l, colors)
-                        : _fullControlRow(context, l, roomy),
+                    child: _fullControlRow(context, l, roomy),
                   ),
                 ),
                 if (sourceLoopStart != null ||
@@ -237,95 +389,6 @@ class PlaybackControls extends StatelessWidget {
           },
         ),
       ),
-    );
-  }
-
-  Widget _compactControlRow(
-    BuildContext context,
-    AppLocalizations l,
-    ColorScheme colors,
-  ) {
-    return Row(
-      children: [
-        Expanded(
-          child: InkWell(
-            borderRadius: BorderRadius.circular(6),
-            onTap: onExpand,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-              child: Row(
-                children: [
-                  Icon(
-                    playing
-                        ? Icons.play_circle_filled
-                        : Icons.play_circle_outline,
-                    size: 22,
-                    color: colors.primary,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      mediaTitle ?? '',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 4),
-        IconButton(
-          tooltip: l.text('previousSentence'),
-          onPressed: onSeekToPreviousCue,
-          icon: const Icon(Icons.skip_previous, size: 20),
-        ),
-        IconButton.filled(
-          tooltip: l.text('playPause'),
-          onPressed: onPlayPause,
-          icon: Icon(playing ? Icons.pause : Icons.play_arrow),
-        ),
-        IconButton(
-          tooltip: l.text('nextSentence'),
-          onPressed: onSeekToNextCue,
-          icon: const Icon(Icons.skip_next, size: 20),
-        ),
-        const SizedBox(width: 4),
-        DropdownButtonHideUnderline(
-          child: DropdownButton<double>(
-            value: rate,
-            borderRadius: BorderRadius.circular(8),
-            items: [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
-                .map(
-                  (value) => DropdownMenuItem(
-                    value: value,
-                    child: Text('${value}x'),
-                  ),
-                )
-                .toList(),
-            onChanged: (value) {
-              if (value != null) onRateChanged(value);
-            },
-          ),
-        ),
-        IconButton(
-          tooltip: muted ? 'Unmute' : 'Mute',
-          onPressed: onMuteToggle,
-          icon: Icon(
-            muted ? Icons.volume_off_outlined : Icons.volume_up_outlined,
-            size: 20,
-          ),
-        ),
-        IconButton(
-          tooltip: l.text('expandWorkbench'),
-          onPressed: onExpand,
-          icon: const Icon(Icons.keyboard_arrow_up),
-        ),
-      ],
     );
   }
 

@@ -561,7 +561,9 @@ class _ResourceStatusStrip extends StatelessWidget {
           _StatusItem(
             icon: Icons.memory_outlined,
             label: l.text('localCore'),
-            value: statusText.isEmpty ? l.text('coreReady') : statusText,
+            value: statusText.isEmpty || statusText.startsWith('Playing')
+                ? l.text('coreReady')
+                : statusText,
           ),
         ];
         if (compact) {
@@ -630,13 +632,15 @@ class _StatusTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Text(
-              item.value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+            Flexible(
+              child: Text(
+                item.value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
             ),
           ],
         ),
