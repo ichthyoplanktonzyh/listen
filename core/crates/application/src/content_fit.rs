@@ -46,8 +46,9 @@ impl AppServices {
     ) -> Result<String, ApplicationError> {
         let word_timeline = self.timelines.active_word_timeline(track_id)?;
         let chunk_timeline = self.timelines.active_chunk_timeline(track_id)?;
-        let (vocab_count, vocab_watermark_ms) =
-            self.learning_assets.lexical_vocabulary_watermark(language)?;
+        let (vocab_count, vocab_watermark_ms) = self
+            .learning_assets
+            .lexical_vocabulary_watermark(language)?;
         // The calibration watermark makes new usage feedback invalidate the
         // cached profile; the record itself is durable evidence and is never
         // touched by recomputes (Slice 7).
@@ -65,7 +66,10 @@ impl AppServices {
             word_timeline.as_ref().map(|t| t.id.as_str()).unwrap_or(""),
             word_timeline.as_ref().map(|t| t.updated_at_ms).unwrap_or(0),
             chunk_timeline.as_ref().map(|t| t.id.as_str()).unwrap_or(""),
-            chunk_timeline.as_ref().map(|t| t.updated_at_ms).unwrap_or(0),
+            chunk_timeline
+                .as_ref()
+                .map(|t| t.updated_at_ms)
+                .unwrap_or(0),
             vocab_count,
             vocab_watermark_ms,
             calibration_watermark_ms,
@@ -161,7 +165,8 @@ impl AppServices {
             .active_word_timeline_id
             .as_ref()
             .and_then(|id| document.word_timelines.iter().find(|t| &t.id == id));
-        let speech_rate = active_word_timeline.and_then(|timeline| speech_rate_wpm(&timeline.words));
+        let speech_rate =
+            active_word_timeline.and_then(|timeline| speech_rate_wpm(&timeline.words));
 
         let (weak_form_density, compression_density) = if document.rhythm_frames.is_empty() {
             (None, None)

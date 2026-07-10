@@ -636,10 +636,7 @@ fn user_override_syncs_legacy_status_and_does_not_erase_projection() {
         CapabilityConclusion::NotAcquired
     );
     let details = services.lexical_details(&entry.id).unwrap().unwrap();
-    assert_eq!(
-        details.entry.status,
-        Some(LearningStatus::KnownRecognized)
-    );
+    assert_eq!(details.entry.status, Some(LearningStatus::KnownRecognized));
 
     let cleared = services
         .set_lexical_capability_override(&entry.id, LexicalCapability::Listening, None)
@@ -904,11 +901,13 @@ fn diagnosis_uses_capability_profile_not_legacy_status() {
     let diagnosis = services.diagnose_sentence(&sentence.id).unwrap();
     // Alpha: reading=Acquired (from legacy), listening=Acquired (from override)
     // → no barrier
-    assert!(!diagnosis
-        .hints
-        .iter()
-        .filter(|h| h.kind == DiagnosisKind::RecognitionBarrier)
-        .any(|h| h.lexical_entry_ids.contains(&alpha.entry.id)));
+    assert!(
+        !diagnosis
+            .hints
+            .iter()
+            .filter(|h| h.kind == DiagnosisKind::RecognitionBarrier)
+            .any(|h| h.lexical_entry_ids.contains(&alpha.entry.id))
+    );
     // Beta: reading=NotAcquired (from override) → meaning barrier
     let meaning = diagnosis
         .hints
@@ -993,12 +992,7 @@ fn upgrade_suggestion_confirm_updates_listening_projection() {
         repo.clone(),
         repo.clone(),
     )
-    .with_learning_loop_repositories(
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-    );
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
     let entry = upsert_word_asset(
         &services,
         "en",
@@ -1047,10 +1041,7 @@ fn upgrade_suggestion_confirm_updates_listening_projection() {
         profile.effective_assessment(LexicalCapability::Listening),
         CapabilityAssessment::Acquired,
     );
-    let details = services
-        .lexical_details(&entry.entry.id)
-        .unwrap()
-        .unwrap();
+    let details = services.lexical_details(&entry.entry.id).unwrap().unwrap();
     assert_eq!(details.entry.status, Some(LearningStatus::KnownRecognized));
 
     // ADR 0017 decision 4: the confirmation itself joins the observation
@@ -1059,9 +1050,7 @@ fn upgrade_suggestion_confirm_updates_listening_projection() {
         .list_learning_observations(&entry.entry.id, Some(LexicalCapability::Listening), 10, 0)
         .unwrap()
         .into_iter()
-        .filter(|observation| {
-            observation.task_type == ObservationTaskType::UpgradeConfirmation
-        })
+        .filter(|observation| observation.task_type == ObservationTaskType::UpgradeConfirmation)
         .collect();
     assert_eq!(confirmations.len(), 1);
     assert_eq!(confirmations[0].outcome, ObservationOutcome::Success);
@@ -1085,12 +1074,7 @@ fn legacy_suggestion_without_capability_confirms_via_profile_authority() {
         repo.clone(),
         repo.clone(),
     )
-    .with_learning_loop_repositories(
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-    );
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
     let entry = upsert_word_asset(
         &services,
         "en",
@@ -1121,10 +1105,7 @@ fn legacy_suggestion_without_capability_confirms_via_profile_authority() {
 
     let confirmed = services.confirm_upgrade_suggestion(&suggestion.id).unwrap();
     assert_eq!(confirmed.status, UpgradeSuggestionStatus::Accepted);
-    let details = services
-        .lexical_details(&entry.entry.id)
-        .unwrap()
-        .unwrap();
+    let details = services.lexical_details(&entry.entry.id).unwrap().unwrap();
     assert_eq!(details.entry.status, Some(LearningStatus::KnownRecognized));
     assert_eq!(
         details.history[0].change_source,

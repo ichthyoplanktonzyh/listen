@@ -63,12 +63,28 @@ fn english_and_chinese_vocabulary_and_sources_stay_isolated() {
 
     // Vocabulary lists are isolated by language.
     let zh_vocab = services
-        .list_vocabulary("zh", None, Some(LearningStatus::UnknownMeaning), None, "", 200, 0)
+        .list_vocabulary(
+            "zh",
+            None,
+            Some(LearningStatus::UnknownMeaning),
+            None,
+            "",
+            200,
+            0,
+        )
         .unwrap();
     assert!(zh_vocab.iter().any(|d| d.entry.normalized_form == "咖啡"));
     assert!(zh_vocab.iter().all(|d| d.entry.normalized_form != "coffee"));
     let en_vocab = services
-        .list_vocabulary("en", None, Some(LearningStatus::KnownRecognized), None, "", 200, 0)
+        .list_vocabulary(
+            "en",
+            None,
+            Some(LearningStatus::KnownRecognized),
+            None,
+            "",
+            200,
+            0,
+        )
         .unwrap();
     assert!(en_vocab.iter().any(|d| d.entry.normalized_form == "coffee"));
     assert!(en_vocab.iter().all(|d| d.entry.normalized_form != "咖啡"));

@@ -1,3 +1,4 @@
+pub(crate) mod corpus;
 pub(crate) mod dictionary;
 pub(crate) mod language;
 pub(crate) mod media;

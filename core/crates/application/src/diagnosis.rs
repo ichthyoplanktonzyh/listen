@@ -50,9 +50,9 @@ impl AppServices {
         )?;
         let mut profiles = std::collections::HashMap::new();
         for entry in entries.iter().chain(phrase_entries.iter()) {
-            if let Some(profile) =
-                self.learning_assets
-                    .lexical_capability_profile(&entry.id, None)?
+            if let Some(profile) = self
+                .learning_assets
+                .lexical_capability_profile(&entry.id, None)?
             {
                 profiles.insert(entry.id.clone(), profile);
             }

@@ -1233,6 +1233,29 @@ paths:
           content:
             application/json:
               schema: { type: array, items: { $ref: "#/components/schemas/LexicalEntryDetails" } }
+  /v1/corpus/search:
+    get:
+      operationId: searchCorpus
+      parameters:
+        - { name: language, in: query, schema: { type: string, default: en } }
+        - { name: query, in: query, required: true, schema: { type: string, minLength: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 100 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: Local corpus occurrences matching an exact word or phrase text
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/CorpusOccurrence" } }
+  /v1/corpus/reindex:
+    post:
+      operationId: reindexCorpus
+      responses:
+        "200":
+          description: Rebuilds the corpus projection for every imported subtitle track
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CorpusReindexResult" }
   /v1/vocabulary/export:
     get:
       operationId: exportVocabulary
@@ -2537,6 +2560,26 @@ components:
         first_seen_at_ms: { type: integer, minimum: 0 }
         last_seen_at_ms: { type: integer, minimum: 0 }
         encounter_count: { type: integer, minimum: 1 }
+    CorpusOccurrence:
+      type: object
+      required: [id, language, kind, display_text, start_ms, end_ms, source_snapshot]
+      properties:
+        id: { type: string }
+        language: { type: string }
+        kind: { enum: [lexical, phrase, chunk, sound_pattern, connected_speech] }
+        normalized_key: { type: [string, "null"] }
+        display_text: { type: string }
+        media_id: { type: [string, "null"] }
+        track_id: { type: [string, "null"] }
+        sentence_id: { type: [string, "null"] }
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        source_snapshot: { type: string }
+    CorpusReindexResult:
+      type: object
+      required: [indexed_tracks]
+      properties:
+        indexed_tracks: { type: integer, minimum: 0 }
     LexicalStatusHistory:
       type: object
       required: [id, lexical_entry_id, previous_status, new_status, changed_at_ms, change_source]

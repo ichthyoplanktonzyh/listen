@@ -1002,7 +1002,9 @@ impl SubtitleRepository for SqliteRepository {
             .ok_or(ApplicationError::NotFound("sense group analysis"))?;
         let mut selected: SenseGroupAnalysis = from_json(&selected_json).map_err(repo)?;
         if selected.status == TimelineStatus::Archived {
-            return Err(ApplicationError::Validation("archived sense group analysis"));
+            return Err(ApplicationError::Validation(
+                "archived sense group analysis",
+            ));
         }
         let now = application::now_ms();
         let mut active_query = tx

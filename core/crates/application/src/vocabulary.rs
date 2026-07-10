@@ -64,8 +64,11 @@ impl AppServices {
         changed_at_ms: u64,
         source: CapabilityProjectionSource,
     ) -> Result<(), ApplicationError> {
-        let target =
-            LexicalCapabilityProfile::from_legacy_status(lexical_entry_id.clone(), status, changed_at_ms);
+        let target = LexicalCapabilityProfile::from_legacy_status(
+            lexical_entry_id.clone(),
+            status,
+            changed_at_ms,
+        );
         for capability in [LexicalCapability::Reading, LexicalCapability::Listening] {
             let dim = target.dimension(capability);
             if let Some(proj) = &dim.projection {
@@ -254,10 +257,12 @@ impl AppServices {
         let current = self
             .learning_assets
             .lexical_capability_profile(lexical_entry_id, None)?;
-        if let Some(existing) = current
-            .as_ref()
-            .and_then(|profile| profile.dimension(LexicalCapability::Listening).projection.as_ref())
-            && existing.source != CapabilityProjectionSource::EvidenceProjection
+        if let Some(existing) = current.as_ref().and_then(|profile| {
+            profile
+                .dimension(LexicalCapability::Listening)
+                .projection
+                .as_ref()
+        }) && existing.source != CapabilityProjectionSource::EvidenceProjection
             && projection
                 .evidence_as_of_ms
                 .is_some_and(|as_of| existing.updated_at_ms > as_of)

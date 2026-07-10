@@ -135,7 +135,9 @@ impl AppServices {
         }
         let timeline = self.timelines.save_chunk_timeline(&timeline)?;
         if requested_status == TimelineStatus::Active {
-            self.timelines.activate_chunk_timeline(&timeline.id)
+            let timeline = self.timelines.activate_chunk_timeline(&timeline.id)?;
+            self.reindex_track_corpus(&timeline.track_id)?;
+            Ok(timeline)
         } else {
             Ok(timeline)
         }
@@ -145,21 +147,27 @@ impl AppServices {
         &self,
         id: &ChunkTimelineId,
     ) -> Result<ChunkTimeline, ApplicationError> {
-        self.timelines.activate_chunk_timeline(id)
+        let timeline = self.timelines.activate_chunk_timeline(id)?;
+        self.reindex_track_corpus(&timeline.track_id)?;
+        Ok(timeline)
     }
 
     pub fn archive_chunk_timeline(
         &self,
         id: &ChunkTimelineId,
     ) -> Result<ChunkTimeline, ApplicationError> {
-        self.timelines.archive_chunk_timeline(id)
+        let timeline = self.timelines.archive_chunk_timeline(id)?;
+        self.reindex_track_corpus(&timeline.track_id)?;
+        Ok(timeline)
     }
 
     pub fn delete_chunk_timeline(
         &self,
         id: &ChunkTimelineId,
     ) -> Result<ChunkTimeline, ApplicationError> {
-        self.timelines.delete_chunk_timeline(id)
+        let timeline = self.timelines.delete_chunk_timeline(id)?;
+        self.reindex_track_corpus(&timeline.track_id)?;
+        Ok(timeline)
     }
 
     /// Detect acoustic chunk boundaries for every sentence in a subtitle track.

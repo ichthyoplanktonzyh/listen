@@ -36,6 +36,190 @@ fn subtitle_save_is_transactional_and_round_trips() {
     assert_eq!(repo.get_track(&track.id).unwrap(), Some(track));
 }
 
+#[test]
+fn imported_subtitles_rebuild_local_corpus_words_and_phrases() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_corpus_index_repository(repo.clone());
+    let media = services
+        .register_media(RegisterMedia {
+            path: "/tmp/corpus.mp4".into(),
+            fingerprint: "corpus-media".into(),
+            title: "Corpus media".into(),
+            kind: MediaKind::Video,
+            duration_ms: Some(10_000),
+        })
+        .unwrap();
+    services
+        .import_subtitle(ImportSubtitle {
+            media_id: media.id,
+            source_name: "corpus.srt".into(),
+            content: b"1\n00:00:01,000 --> 00:00:03,000\nTake care of yourself.\n".to_vec(),
+            language: Some("en".into()),
+            identity_salt: None,
+        })
+        .unwrap();
+
+    let word = services.search_corpus("en", "care", 10, 0).unwrap();
+    assert_eq!(word.len(), 1);
+    assert_eq!(word[0].kind, CorpusOccurrenceKind::Lexical);
+    assert_eq!(word[0].display_text, "care");
+    let phrase = services.search_corpus("en", "take care", 10, 0).unwrap();
+    assert_eq!(phrase.len(), 1);
+    assert_eq!(phrase[0].kind, CorpusOccurrenceKind::Phrase);
+    assert_eq!(phrase[0].source_snapshot, "Take care of yourself.");
+}
+
+#[test]
+fn active_chunk_timeline_rows_follow_chunk_lifecycle() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_corpus_index_repository(repo.clone());
+    let media = services
+        .register_media(RegisterMedia {
+            path: "/tmp/corpus-chunk.mp4".into(),
+            fingerprint: "corpus-chunk-media".into(),
+            title: "Corpus chunk media".into(),
+            kind: MediaKind::Video,
+            duration_ms: Some(10_000),
+        })
+        .unwrap();
+    let track = services
+        .import_subtitle(ImportSubtitle {
+            media_id: media.id,
+            source_name: "corpus-chunk.srt".into(),
+            content: b"1\n00:00:01,000 --> 00:00:03,000\nTake care of yourself.\n".to_vec(),
+            language: Some("en".into()),
+            identity_salt: None,
+        })
+        .unwrap();
+    let timeline = ChunkTimeline {
+        id: ChunkTimelineId::parse("corpus-chunk-timeline").unwrap(),
+        track_id: track.id.clone(),
+        media_id: track.media_id.clone(),
+        parent_word_timeline_id: None,
+        provider_id: "test".into(),
+        provider_version: "v1".into(),
+        algorithm: "test".into(),
+        precision: ChunkTimelinePrecision::Precise,
+        created_by: TimelineCreator::Algorithm,
+        status: TimelineStatus::Candidate,
+        metrics_json: serde_json::json!({}).into(),
+        chunks: vec![ChunkTimelineChunk {
+            id: ChunkId::parse("corpus-chunk-1").unwrap(),
+            sentence_id: track.sentences[0].id.clone(),
+            chunk_index: 0,
+            start_word_index: 0,
+            end_word_index: 1,
+            start_ms: 1200,
+            end_ms: 1800,
+            text: "Take care".into(),
+            boundary_sources: Vec::new(),
+            confidence: 0.9,
+            warnings: Vec::new(),
+            evidence_json: serde_json::json!({}).into(),
+        }],
+        created_at_ms: 1,
+        updated_at_ms: 1,
+    };
+    repo.save_chunk_timeline(&timeline).unwrap();
+    services.activate_chunk_timeline(&timeline.id).unwrap();
+
+    let hits = services.search_corpus("en", "take care", 10, 0).unwrap();
+    let chunks: Vec<_> = hits
+        .iter()
+        .filter(|hit| hit.kind == CorpusOccurrenceKind::Chunk)
+        .collect();
+    assert_eq!(chunks.len(), 1);
+    assert_eq!(chunks[0].start_ms, 1200);
+    assert_eq!(chunks[0].end_ms, 1800);
+    assert_eq!(chunks[0].source_snapshot, "Take care");
+    assert!(
+        hits.iter()
+            .any(|hit| hit.kind == CorpusOccurrenceKind::Phrase)
+    );
+
+    services.archive_chunk_timeline(&timeline.id).unwrap();
+    let hits = services.search_corpus("en", "take care", 10, 0).unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].kind, CorpusOccurrenceKind::Phrase);
+}
+
+#[test]
+fn rebuild_corpus_index_backfills_preexisting_tracks() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    // Import through services without a corpus repository, modelling a library
+    // created before the projection existed (schema < v28).
+    let without_corpus = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
+    let media = without_corpus
+        .register_media(RegisterMedia {
+            path: "/tmp/corpus-rebuild.mp4".into(),
+            fingerprint: "corpus-rebuild-media".into(),
+            title: "Corpus rebuild media".into(),
+            kind: MediaKind::Video,
+            duration_ms: Some(10_000),
+        })
+        .unwrap();
+    without_corpus
+        .import_subtitle(ImportSubtitle {
+            media_id: media.id,
+            source_name: "corpus-rebuild.srt".into(),
+            content: b"1\n00:00:01,000 --> 00:00:03,000\nTake care of yourself.\n".to_vec(),
+            language: Some("en".into()),
+            identity_salt: None,
+        })
+        .unwrap();
+
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_corpus_index_repository(repo.clone());
+    assert!(
+        services
+            .search_corpus("en", "care", 10, 0)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(services.rebuild_corpus_index().unwrap(), 1);
+    let hits = services.search_corpus("en", "care", 10, 0).unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].display_text, "care");
+}
+
 #[tokio::test]
 async fn dictionary_lookup_uses_persistent_cache() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());

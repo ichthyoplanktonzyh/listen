@@ -522,14 +522,8 @@ fn practice_accuracy_feedback_calibrates_sound_fit() {
             })
             .unwrap();
     }
-    services
-        .complete_listening_session(
-            &session.id,
-            application::CompleteListeningSessionInput {
-                comprehension_report: None,
-            },
-        )
-        .unwrap();
+    // Intensive sessions are never "completed" after 3.5.6, so accuracy must
+    // already be folded in at attempt-submission time.
 
     let calibration = application::DifficultyRepository::get_fit_calibration(
         repo.as_ref(),

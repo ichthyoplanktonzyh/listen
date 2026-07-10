@@ -6,6 +6,7 @@ use serde::Serialize;
 
 mod chunks;
 mod content_fit;
+mod corpus;
 mod diagnosis;
 mod dictionary;
 mod dto;
@@ -33,11 +34,11 @@ pub use pronunciation_providers::*;
 pub use providers::*;
 pub use repositories::*;
 pub use util::now_ms;
-pub(crate) use vocabulary::ObservationContext;
 pub(crate) use util::{
     clean_optional, clean_required, normalize_american_english, normalize_phrase,
     phrase_candidates, require_text,
 };
+pub(crate) use vocabulary::ObservationContext;
 
 const DICTIONARY_CACHE_TTL_MS: u64 = 30 * 24 * 60 * 60 * 1000;
 
@@ -72,6 +73,7 @@ pub struct AppServices {
     pub(crate) review: Arc<dyn ReviewRepository>,
     pub(crate) learning_events: Arc<dyn LearningEventRepository>,
     pub(crate) listening_inbox: Arc<dyn ListeningInboxRepository>,
+    pub(crate) corpus: Arc<dyn CorpusIndexRepository>,
     pub(crate) difficulty: Arc<dyn DifficultyRepository>,
     pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
     pub(crate) pronunciation_providers: Arc<Vec<Arc<dyn PronunciationProvider>>>,
@@ -102,6 +104,7 @@ impl AppServices {
             review: Arc::new(DisabledLearningLoopRepository),
             learning_events: Arc::new(DisabledLearningLoopRepository),
             listening_inbox: Arc::new(DisabledLearningLoopRepository),
+            corpus: Arc::new(DisabledCorpusIndexRepository),
             difficulty: Arc::new(DisabledDifficultyRepository),
             lexical_normalizers: Arc::new(Vec::new()),
             pronunciation_providers: Arc::new(Vec::new()),
@@ -124,6 +127,11 @@ impl AppServices {
 
     pub fn with_difficulty_repository(mut self, difficulty: Arc<dyn DifficultyRepository>) -> Self {
         self.difficulty = difficulty;
+        self
+    }
+
+    pub fn with_corpus_index_repository(mut self, corpus: Arc<dyn CorpusIndexRepository>) -> Self {
+        self.corpus = corpus;
         self
     }
 
@@ -153,6 +161,37 @@ impl DisabledLearningLoopRepository {
 }
 
 struct DisabledDifficultyRepository;
+
+struct DisabledCorpusIndexRepository;
+
+impl CorpusIndexRepository for DisabledCorpusIndexRepository {
+    fn replace_corpus_occurrences_for_track(
+        &self,
+        _track_id: &SubtitleTrackId,
+        _occurrences: &[CorpusOccurrence],
+    ) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+
+    fn upsert_corpus_occurrence(
+        &self,
+        _occurrence: &CorpusOccurrence,
+    ) -> Result<CorpusOccurrence, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "corpus index repository is not configured".into(),
+        ))
+    }
+
+    fn search_corpus_occurrences(
+        &self,
+        _language: &LanguageCode,
+        _query: &str,
+        _limit: u32,
+        _offset: u32,
+    ) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
+        Ok(Vec::new())
+    }
+}
 
 impl DifficultyRepository for DisabledDifficultyRepository {
     fn save_difficulty_profile(

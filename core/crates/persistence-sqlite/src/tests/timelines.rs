@@ -426,10 +426,7 @@ fn activating_sense_group_analysis_updates_active_resource() {
             .status,
         TimelineStatus::Candidate
     );
-    assert_eq!(
-        repo.list_sense_group_analyses(&track.id).unwrap().len(),
-        2
-    );
+    assert_eq!(repo.list_sense_group_analyses(&track.id).unwrap().len(), 2);
 }
 
 #[test]

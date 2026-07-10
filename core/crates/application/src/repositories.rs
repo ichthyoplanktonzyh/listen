@@ -995,6 +995,14 @@ pub trait ListeningInboxRepository: Send + Sync {
 }
 
 pub trait CorpusIndexRepository: Send + Sync {
+    /// Atomically replaces the rebuildable projection for one subtitle track.
+    /// The source subtitle remains authoritative; callers never patch single
+    /// rows in response to a learning action.
+    fn replace_corpus_occurrences_for_track(
+        &self,
+        track_id: &SubtitleTrackId,
+        occurrences: &[CorpusOccurrence],
+    ) -> Result<(), ApplicationError>;
     fn upsert_corpus_occurrence(
         &self,
         occurrence: &CorpusOccurrence,

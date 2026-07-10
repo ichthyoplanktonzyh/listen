@@ -13,10 +13,7 @@ impl AppServices {
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<SenseGroupAnalysisSummary>, ApplicationError> {
         let analyses = self.timelines.list_sense_group_analyses(track_id)?;
-        Ok(analyses
-            .iter()
-            .map(sense_group_analysis_summary)
-            .collect())
+        Ok(analyses.iter().map(sense_group_analysis_summary).collect())
     }
 
     pub fn get_sense_group_analysis(

@@ -3,14 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-10T15:46:00.000+08:00"
+last_updated: "2026-07-10T19:58:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-10 15:46 CST
-> 更新原因：Phase 3.5.7 切片回听播放器由 owner 确认收口；双 fvp 实例 spike、独立切片窗、
-> 入口迁移与自动化验证完成。下一主线为 3.6 听力词典 v2 第一刀。
+> 最后更新：2026-07-10 19:58 CST
+> 更新原因：Phase 3.6 Slice 1–3 自动化落地：资产词典页（词汇本演进 + 页内切片窗）、逐例
+> 识别标记、corpus 索引（词/句/chunk）与搜索、全库重建入口、找更多例句 + 试听 + 收为来源
+> 切片。附带修复 3.5.6/3.5 接缝回归：练习准确率校准改为 attempt 提交时折算。
 
 ## 当前位置
 
@@ -234,6 +235,29 @@ last_updated: "2026-07-10T15:46:00.000+08:00"
   `git diff --check` 通过，零后端/契约改动。owner 确认以该证据收口；多切片浏览 UI 留给 3.6。
 - 收口：`.planning/phases/3.5.7-slice-playback-window/3.5.7-CLOSEOUT.md`；计划已冻结。
 
+### Phase 3.6: Listening Dictionary MVP ⏳ ACTIVE（Slice 1–3 自动化完成）
+
+- Slice 1（资产词典页）：词汇本演进为词典页（master-detail 页内详情，不再是弹窗），
+  学习对象 → 切片列表 + 四通道摘要 + 覆盖度诚实展示；词典页自持第二解码切片窗，
+  播放例句不离开词典、不触碰主播放器（进入词典路由时经回调暂停主播放器）。
+- Slice 2（逐例识别标记）：每切片"听出了/没听出"经 `create_lexical_observation` 走
+  ADR 0017 单写入口与 ADR 0019 listening 重投影；无 sentence 关联的旧切片明确禁用。
+- Slice 3（corpus 索引与搜索）：schema v28 `corpus_occurrences` 可重建投影（词 token/
+  句子/active chunk timeline 的 chunk 三类），导入、改语言、chunk timeline
+  activate/archive/delete 均触发重建；`GET /v1/corpus/search` + `POST /v1/corpus/reindex`
+  （存量库回填入口，词典页工具栏按钮）；词条详情"在我的媒体库中搜索"支持试听（经切片窗）
+  与一键收为该词条来源切片（复用 upsert source 口径）；词汇本零结果时词典退化为纯查询
+  工具（corpus 搜索 + 试听）。"加入复习"动作出口已回补到词典详情。
+- 接缝回归修复：3.5.6 extensive-only completion 使精听 session 永不完成，3.5 的练习准确率
+  校准（content-fit-v2）失去触发点——已改为 attempt 提交时增量折算，completion 只折算
+  理解度自报（`record_practice_accuracy_feedback`）。
+- 验证：`cargo test -p application -p persistence-sqlite -p api-http` 全绿、
+  `validate-contracts.sh` 通过、`flutter analyze` 零问题、`flutter test` 259 passed。
+- 待完成（Slice 3 尾部 + Slice 4）：外链兜底（YouGlish/词典发音）、大词条截断采样策略、
+  按语速分组、从例句生成 cloze/听写出口、真实媒体手工 QA；词汇本详情的 capability
+  override / 释义笔记 / 升级建议确认在词典化后尚未回补（侧面板仍有完整功能）。
+- 规划文档：`.planning/phases/3.6-listening-dictionary-mvp/3.6-PLAN.md`（v2）。
+
 ## 已完成 Phase 索引
 
 | Phase | 结论 | 文档 |
@@ -329,8 +353,9 @@ last_updated: "2026-07-10T15:46:00.000+08:00"
 
 ## 下一步工作
 
-1. 按 3.6-PLAN v2 启动听力词典第一刀（零新后端资产词典页）；义项 spike
-   排在义项切片（3.6.x）前，图谱视图推迟。
+1. 完成 3.6 收尾：外链兜底、大词条截断采样、语速分组、例句生成 cloze/听写出口、
+   词汇本详情能力编辑回补、真实媒体手工 QA，然后 CLOSEOUT。义项 spike 排在义项切片
+   （3.6.x）前，图谱视图推迟。
 2. Phase 3.4.3 已完成（纯领域建模 spike，不建设生产 schema）；下一步在独立产品 slice 验证
    “收藏句 → 个人模板”的用户价值，再决定 SentenceExemplar/UserSentencePattern 持久化范围。
 3. Phase 3.5 已立项启动（Slice 1-8 完成，Slice 9 真实素材 QA 待完成）。

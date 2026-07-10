@@ -24,6 +24,7 @@ impl AppServices {
             return Ok(existing);
         }
         self.subtitle_tracks.save_track(&track)?;
+        self.reindex_subtitle_track(&track)?;
         Ok(track)
     }
 
@@ -32,7 +33,11 @@ impl AppServices {
         track_id: &SubtitleTrackId,
         language: &LanguageCode,
     ) -> Result<SubtitleTrack, ApplicationError> {
-        self.subtitle_tracks.set_track_language(track_id, language)
+        let track = self
+            .subtitle_tracks
+            .set_track_language(track_id, language)?;
+        self.reindex_subtitle_track(&track)?;
+        Ok(track)
     }
 
     pub fn read_subtitle_track(

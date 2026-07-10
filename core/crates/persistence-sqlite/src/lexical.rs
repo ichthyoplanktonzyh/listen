@@ -981,9 +981,9 @@ impl LearningAssetRepository for SqliteRepository {
             } else {
                 Some(LexicalSenseId::parse(sense_id_str)?)
             };
-            let needs_new = profiles.last().is_none_or(|last| {
-                last.lexical_entry_id != entry_id || last.sense_id != sense_id
-            });
+            let needs_new = profiles
+                .last()
+                .is_none_or(|last| last.lexical_entry_id != entry_id || last.sense_id != sense_id);
             if needs_new {
                 let mut profile = LexicalCapabilityProfile::unassessed(entry_id);
                 profile.sense_id = sense_id;

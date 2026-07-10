@@ -9,7 +9,7 @@ use super::PersistenceError;
 
 // v25 is reserved by Phase 3.4.2 (independent branch); this repository jumps
 // 24 -> 26 per the "later lander renumbers" rule recorded in the 3.5 plan.
-pub const MIGRATION_VERSION: u32 = 27;
+pub const MIGRATION_VERSION: u32 = 28;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -174,9 +174,7 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     }
     if current < 25 {
         let tx = connection.unchecked_transaction()?;
-        tx.execute_batch(include_str!(
-            "../migrations/0025_sense_group_analyses.sql"
-        ))?;
+        tx.execute_batch(include_str!("../migrations/0025_sense_group_analyses.sql"))?;
         tx.pragma_update(None, "user_version", 25)?;
         tx.commit()?;
     }
@@ -194,13 +192,21 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         tx.pragma_update(None, "user_version", 27)?;
         tx.commit()?;
     }
+    if current < 28 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0028_corpus_occurrences.sql"))?;
+        tx.pragma_update(None, "user_version", 28)?;
+        tx.commit()?;
+    }
     Ok(())
 }
 
 /// ADR 0017 decision 5: one channelized observation per legacy uncleared
 /// LexicalObservation, marked `legacy_backfill` because the latest-wins legacy
 /// table mixed user markings with practice failures and kept no history.
-pub(crate) fn backfill_legacy_observations(connection: &Connection) -> Result<(), PersistenceError> {
+pub(crate) fn backfill_legacy_observations(
+    connection: &Connection,
+) -> Result<(), PersistenceError> {
     let mut statement = connection.prepare(
         "SELECT id,lexical_entry_id,sentence_id_snapshot,original_form,result,created_at_ms
          FROM lexical_observations WHERE cleared_at_ms IS NULL",

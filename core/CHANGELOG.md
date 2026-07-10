@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+- 2026-07-10 19:58 CST: Phase 3.6 Slice 3 收尾接线 + Slice 1 体验修正。后端：corpus 索引纳入
+  active chunk timeline 的 chunk 行（含空格查询同时命中句子与 chunk），chunk timeline
+  activate/archive/delete 与激活式生成触发该轨重建；新增 `rebuild_corpus_index` 全库回填
+  use case 与 `POST /v1/corpus/reindex` 契约（存量媒体库的主动重建入口）。Flutter：词典页
+  从弹窗改为 master-detail 页内详情并自持第二解码切片窗——播放例句不再退出词典、不触碰主
+  播放器（入路由时暂停）；深链改为按 entry id 直取详情；词条详情新增"在我的媒体库中搜索"
+  （corpus 命中经切片窗试听、一键收为该词条来源切片，去重已保存句子）；词汇本零结果时降级
+  为 corpus 纯查询；词典页工具栏新增重建索引入口；"加入复习"回补到词典详情；新增
+  `CorpusOccurrence` 手写 DTO + fixture 契约测试与 library-section widget 测试。
+  回归修复（3.5/3.5.6 接缝）：精听 session 在 extensive-only completion 后永不完成，练习
+  准确率校准失去触发点——改为 attempt 提交时增量折算（`record_practice_accuracy_feedback`），
+  completion 仅折算理解度自报。验证：`cargo test -p application -p persistence-sqlite
+  -p api-http` 全绿、`validate-contracts.sh` 通过、`flutter analyze` 零问题、`flutter test`
+  259 passed、`git diff --check` 通过。
+
+- 2026-07-10 16:26 CST: Phase 3.6 Slice 3 后端索引基础。新增 SQLite schema v28 的
+  `corpus_occurrences` 可重建本地投影、`CorpusIndexRepository` 实现与
+  `GET /v1/corpus/search` OpenAPI 契约；字幕导入和轨道语言修改会替换该轨道的索引。首批
+  索引精确 lexical token 与句级 phrase occurrence：单词精确命中不与句级行重复，含空格短语
+  查询只返回句级上下文。chunk / connected-speech index 与 Flutter 搜索/收例句交互仍在 Slice 3
+  后续接线范围内。
+
+- 2026-07-10 16:10 CST: Phase 3.6 Slice 2 接线。词典每个带稳定 sentence ID 的来源切片在
+  “先听 → 显示文本”后可单键标记“这次听出/没听出”；复用既有 lexical-observation API，
+  因而保持 sentence-level diagnosis 兼容记录，并自动追加 ADR 0017 的 listening
+  context-marking evidence、既有识别证据/建议与 projection 链路。旧切片若无稳定句子链接，
+  明确仅可试听、不伪造证据。
+
+- 2026-07-10 15:56 CST: 启动 Phase 3.6 Listening Dictionary MVP 第一刀（Flutter-only，零新
+  后端表/字段/契约）：词汇本详情演进为“学习对象 → 来源切片”的听力词典视图，显示四通道
+  画像与诚实的本地切片覆盖度；每条切片默认隐藏句子文本、可手动揭示目标词高亮，并复用
+  3.5.7 独立切片播放器（含未关联来源的既有指纹恢复路径）。词汇学习面板与诊断 lexical
+  barrier 可直达指定词条；新增中英文文案和 widget tests。corpus index/搜索、逐例听出标记、
+  义项文件夹与复习/练习出口仍按 3.6 后续 slices 推进。
+
 - 2026-07-10 15:46 CST: Phase 3.5.7 Slice Playback Window 收口。Flutter-only：以独立
   fvp/video_player 第二实例取代词汇来源句的主播放器劫持；新增可注入
   `OccurrenceMediaResolver`（关联媒体/文件定位/指纹验证/注册）、默认音频优先且可展开视频的

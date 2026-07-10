@@ -86,7 +86,9 @@ fn v23_backfills_uncleared_legacy_observations_with_explicit_provenance() {
     assert_eq!(
         connection
             .query_row("SELECT COUNT(*) FROM learning_observations", [], |row| row
-                .get::<_, u32>(0))
+                .get::<_, u32>(
+                0
+            ))
             .unwrap(),
         2
     );

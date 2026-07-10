@@ -213,6 +213,11 @@ impl AppServices {
         if saved.result == PracticeResult::Correct {
             self.record_practice_recognition_evidence(&item, &saved, now)?;
         }
+        // Usage-feedback calibration (Phase 3.5 Slice 7, revised after 3.5.6):
+        // intensive sessions are never "completed" anymore, so scored attempts
+        // fold into the media's sound-fit calibration at submission time. Best
+        // effort by design — fit is decoration, a submission must not fail on it.
+        let _ = self.record_practice_accuracy_feedback(item.session_id.as_ref(), saved.result);
         self.learning_events.append_learning_event(&LearningEvent {
             id: LearningEventId::from_fingerprint(
                 "learning-event",
@@ -599,10 +604,12 @@ impl AppServices {
     }
 
     /// Increments the media's recorded calibration counters from one
-    /// completed session: the self-report joins the report counters, scored
-    /// practice attempts join the accuracy counters (skips excluded). The
-    /// record is durable evidence separate from the fit cache; its watermark
-    /// invalidates cached profiles so the next fit read re-derives the band.
+    /// completed extensive session's self-report. Scored practice attempts
+    /// join the accuracy counters at submission time instead (see
+    /// [`Self::record_practice_accuracy_feedback`]) because intensive
+    /// sessions no longer complete. The record is durable evidence separate
+    /// from the fit cache; its watermark invalidates cached profiles so the
+    /// next fit read re-derives the band.
     fn record_content_fit_feedback(
         &self,
         session: &PracticeSession,
@@ -611,43 +618,51 @@ impl AppServices {
         let Some(media_id) = session.media_id.as_ref() else {
             return Ok(());
         };
-        let mut attempts_total: u32 = 0;
-        let mut attempts_correct: u32 = 0;
-        for item in self
-            .practice
-            .list_practice_items_for_session(&session.id, 500, 0)?
-        {
-            for attempt in self
-                .practice
-                .list_practice_attempts_for_item(&item.id, 500, 0)?
-            {
-                match attempt.result {
-                    PracticeResult::Correct => {
-                        attempts_total += 1;
-                        attempts_correct += 1;
-                    }
-                    PracticeResult::Partial | PracticeResult::Incorrect => attempts_total += 1,
-                    PracticeResult::Skipped => {}
-                }
-            }
-        }
-        if report.is_none() && attempts_total == 0 {
+        let Some(report) = report else {
             return Ok(());
-        }
+        };
         let mut calibration = self
             .difficulty
             .get_fit_calibration("media", media_id.as_str())?
             .unwrap_or_else(|| SoundFitCalibration::new("media", media_id.as_str()));
         match report {
-            Some(ListeningComprehensionReport::UnderstoodAll) => {
-                calibration.reports_understood_all += 1
-            }
-            Some(ListeningComprehensionReport::GotTheGist) => calibration.reports_got_the_gist += 1,
-            Some(ListeningComprehensionReport::Unclear) => calibration.reports_unclear += 1,
-            None => {}
+            ListeningComprehensionReport::UnderstoodAll => calibration.reports_understood_all += 1,
+            ListeningComprehensionReport::GotTheGist => calibration.reports_got_the_gist += 1,
+            ListeningComprehensionReport::Unclear => calibration.reports_unclear += 1,
         }
-        calibration.practice_attempts += attempts_total;
-        calibration.practice_correct += attempts_correct;
+        calibration.updated_at_ms = now_ms();
+        self.difficulty.save_fit_calibration(&calibration)?;
+        Ok(())
+    }
+
+    /// One scored practice attempt joins its media's calibration counters
+    /// (skips excluded). Attempt-time accounting cannot double count: each
+    /// attempt is folded exactly once, when it is created.
+    fn record_practice_accuracy_feedback(
+        &self,
+        session_id: Option<&PracticeSessionId>,
+        result: PracticeResult,
+    ) -> Result<(), ApplicationError> {
+        if result == PracticeResult::Skipped {
+            return Ok(());
+        }
+        let Some(session_id) = session_id else {
+            return Ok(());
+        };
+        let Some(session) = self.practice.get_practice_session(session_id)? else {
+            return Ok(());
+        };
+        let Some(media_id) = session.media_id.as_ref() else {
+            return Ok(());
+        };
+        let mut calibration = self
+            .difficulty
+            .get_fit_calibration("media", media_id.as_str())?
+            .unwrap_or_else(|| SoundFitCalibration::new("media", media_id.as_str()));
+        calibration.practice_attempts += 1;
+        if result == PracticeResult::Correct {
+            calibration.practice_correct += 1;
+        }
         calibration.updated_at_ms = now_ms();
         self.difficulty.save_fit_calibration(&calibration)?;
         Ok(())

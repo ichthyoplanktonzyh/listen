@@ -38,6 +38,7 @@ mod speech_jobs;
 mod transcription;
 use m18::M18Coordinator;
 use phonetic_analysis::{CreatePhoneticJobRequest, PhoneticAnalysisCoordinator};
+use routes::corpus::*;
 use routes::dictionary::*;
 use routes::language::*;
 use routes::media::*;
@@ -385,6 +386,8 @@ pub fn router(state: ApiState) -> Router {
         .route("/v1/subtitle-search", post(m18::search_subtitles))
         .route("/v1/subtitle-search/download", post(m18::download_subtitle))
         .route("/v1/vocabulary", get(list_vocabulary))
+        .route("/v1/corpus/search", get(search_corpus))
+        .route("/v1/corpus/reindex", post(reindex_corpus))
         .route("/v1/vocabulary/export", get(export_vocabulary))
         .route("/v1/vocabulary/import", post(import_vocabulary))
         .route(
