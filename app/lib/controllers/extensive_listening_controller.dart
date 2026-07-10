@@ -102,17 +102,14 @@ class ExtensiveListeningController extends ChangeNotifier {
     }
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      final summary = await api.completePracticeSession(
+      final session = await api.completeListeningSession(
         current.id,
-        CompletePracticeSessionInput(
-          markFamiliar: false,
-          comprehensionReport: comprehensionReport,
-        ),
+        comprehensionReport: comprehensionReport,
       );
       final items = await api.listeningInboxItems();
       _store.update(
         (s) => s.copyWith(
-          session: summary.session,
+          session: session,
           items: items,
           busy: false,
           error: null,

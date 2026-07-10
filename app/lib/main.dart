@@ -30,7 +30,6 @@ import 'controllers/subtitle_controller.dart';
 import 'controllers/settings_controller.dart';
 import 'models/capability_readiness.dart';
 import 'models/listening.dart';
-import 'models/practice.dart';
 import 'models/task_status.dart';
 import 'models/timeline.dart';
 import 'models/types.dart';
@@ -40,6 +39,7 @@ import 'services/external_tools.dart';
 import 'utils/word_list_parser.dart';
 import 'screens/subtitle_resources_screen.dart';
 import 'widgets/panels/cold_start_marking_sheet.dart';
+import 'widgets/panels/intensive_practice_window.dart';
 import 'screens/vocabulary_screen.dart';
 import 'screens/review_queue_screen.dart';
 import 'widgets/player/download_status_bar.dart';
@@ -170,14 +170,14 @@ class _PlayerScreenState extends State<PlayerScreen>
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-    _workbenchSlideAnimation = Tween<Offset>(
-      begin: const Offset(0, 1),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _workbenchAnimController,
-      curve: Curves.easeOutCubic,
-      reverseCurve: Curves.easeInCubic,
-    ));
+    _workbenchSlideAnimation =
+        Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _workbenchAnimController,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          ),
+        );
     resourceActions.bind(
       getApi: () => api,
       isMounted: () => mounted,
@@ -465,15 +465,15 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  /// One-click intensive listening: open the media and land on the practice
-  /// panel where the intensive workflow lives.
+  /// One-click intensive listening opens the material; a concrete current
+  /// sentence is still required before the user chooses a practice type.
   Future<void> _startIntensiveFromLibrary(MediaLibraryEntry entry) async {
     if (!File(entry.media.path).existsSync()) {
       playerController.setStatus(l.text('mediaFileMissing'));
       return;
     }
     await mediaSession.openMediaPath(entry.media.path);
-    if (mounted) learningController.selectSidePanel(4);
+    if (mounted) learningController.selectSidePanel(0);
   }
 
   Future<void> _setLibraryTriageIntent(
@@ -502,7 +502,9 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _toggleFamiliarSupply(bool enabled) async {
     await settingsController.update(
-      settingsController.settings.copyWith(familiarMaterialSuggestions: enabled),
+      settingsController.settings.copyWith(
+        familiarMaterialSuggestions: enabled,
+      ),
     );
   }
 
@@ -512,6 +514,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _collapseWorkbench() {
+    unawaited(_closePracticeWindow());
     _workbenchAnimController.reverse().then((_) {
       if (mounted) setState(() => _workbenchExpanded = false);
     });
@@ -1151,7 +1154,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         sourceFor: _sourceFor,
       );
     } catch (error) {
-      if (mounted) playerController.setStatus('Capability update failed: $error');
+      if (mounted) {
+        playerController.setStatus('Capability update failed: $error');
+      }
     }
   }
 
@@ -1199,7 +1204,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _startClozePractice() async {
-    learningController.selectSidePanel(4);
     final cue = subtitleController.currentPrimaryCue;
     await practiceController.startCloze(
       api: api,
@@ -1218,7 +1222,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _startChunkDictationPractice() async {
-    learningController.selectSidePanel(4);
     await practiceController.startChunkDictation(
       api: api,
       cue: subtitleController.currentPrimaryCue,
@@ -1233,7 +1236,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _startSentenceDictationPractice() async {
-    learningController.selectSidePanel(4);
     await practiceController.startSentenceDictation(
       api: api,
       cue: subtitleController.currentPrimaryCue,
@@ -1276,79 +1278,34 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  Future<void> _markStuckPoint() async {
-    final marked = await practiceController.markCurrentStuckPoint(
-      api: api,
-      cue: subtitleController.currentPrimaryCue,
-      chunk: _currentPracticeChunk(),
-      mediaId: playerController.mediaId,
-      trackId: subtitleController.primaryTrack?.id,
-      mediaTimeMs: _mediaTimeMs,
-      diagnosis: learningController.diagnosis,
-    );
-    if (marked && mounted) playerController.setStatus('Stuck point marked');
+  Future<void> _navigatePracticeSentence(int delta) async {
+    final current = subtitleController.currentPrimaryCue;
+    final target = delta < 0
+        ? subtitleController.primaryCursor.previous(current)
+        : subtitleController.primaryCursor.next(current);
+    if (target == null) return;
+    final draft = practiceController.draft;
+    await _seekCue(target);
+    if (draft == null) return;
+    if (draft.kind == 'cloze') {
+      await _startClozePractice();
+    } else if (draft.targetKind == 'chunk') {
+      await _startChunkDictationPractice();
+    } else {
+      await _startSentenceDictationPractice();
+    }
   }
 
-  Future<void> _skipStuckPoint() async {
-    final skipped = await practiceController.skipCurrentStuckPoint(
-      api: api,
-      cue: subtitleController.currentPrimaryCue,
-      chunk: _currentPracticeChunk(),
-      mediaId: playerController.mediaId,
-      trackId: subtitleController.primaryTrack?.id,
-      mediaTimeMs: _mediaTimeMs,
-      diagnosis: learningController.diagnosis,
-    );
-    if (skipped && mounted) playerController.setStatus('Stuck point skipped');
+  Future<void> _closePracticeWindow() async {
+    if (playerController.sourceLoopLabel == 'loopPractice') {
+      playerController.setSourceLoop(null, null);
+    }
+    practiceController.clear();
   }
 
   Future<void> _openDiagnosisView() async {
     learningController.selectSidePanel(3);
     await _refreshDiagnosis();
-    final recorded = await practiceController.recordDiagnosisView(
-      api: api,
-      cue: subtitleController.currentPrimaryCue,
-      chunk: _currentPracticeChunk(),
-      mediaId: playerController.mediaId,
-      trackId: subtitleController.primaryTrack?.id,
-      mediaTimeMs: _mediaTimeMs,
-      diagnosis: learningController.diagnosis,
-    );
-    if (recorded && mounted) {
-      playerController.setStatus('Diagnosis view recorded');
-    }
-  }
-
-  Future<void> _completePracticeSession() async {
-    final openCount = practiceController.summary?.openCount ?? 0;
-    if (openCount > 0) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(l.text('finishIntensive')),
-          content: Text(
-            l
-                .text('finishIntensiveWithOpen')
-                .replaceFirst('{count}', '$openCount'),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: Text(l.text('close')),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(l.text('finishIntensive')),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true) return;
-    }
-    final completed = await practiceController.completeSession(api);
-    if (completed && mounted) {
-      playerController.setStatus('Intensive session completed');
-    }
   }
 
   Future<void> _toggleExtensiveListening() async {
@@ -1455,7 +1412,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       case 'review_item':
         playerController.setStatus('Listening Inbox item saved to review');
       case 'micro_intensive':
-        learningController.selectSidePanel(4);
         await _replayListeningInboxItem(processed);
         if (mounted) {
           playerController.setStatus('Micro intensive item created');
@@ -1467,29 +1423,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       default:
         playerController.setStatus('Listening Inbox item processed');
     }
-  }
-
-  Future<void> _replayStuckPoint(StuckPointSummary point) async {
-    final start = point.playbackStartMs;
-    final end = point.playbackEndMs;
-    if (start == null || end == null) {
-      playerController.setStatus('No playable range for this stuck point');
-      return;
-    }
-    await playbackActions.loopRange(
-      start,
-      end,
-      'Looping stuck point',
-      labelKey: 'loopStuckPoint',
-    );
-  }
-
-  Future<void> _closeStuckPoint(StuckPointSummary point) async {
-    final closed = await practiceController.closeStuckPoint(
-      api,
-      point.targetKey,
-    );
-    if (closed && mounted) playerController.setStatus('Stuck point closed');
   }
 
   int _mediaTimeMs(Duration subtitleTime) =>
@@ -1567,13 +1500,12 @@ class _PlayerScreenState extends State<PlayerScreen>
         builder: (_) => ReviewQueueScreen(
           api: service,
           currentMediaId: playerController.mediaId,
-          onPlayRange: (startMs, endMs) =>
-              playbackActions.loopRange(
-                startMs,
-                endMs,
-                'Looping review card',
-                labelKey: 'loopReview',
-              ),
+          onPlayRange: (startMs, endMs) => playbackActions.loopRange(
+            startMs,
+            endMs,
+            'Looping review card',
+            labelKey: 'loopReview',
+          ),
         ),
       ),
     );
@@ -1851,17 +1783,10 @@ class _PlayerScreenState extends State<PlayerScreen>
           bindings: {
             const SingleActivator(LogicalKeyboardKey.space):
                 adapter.playOrPause,
-            const SingleActivator(LogicalKeyboardKey.arrowLeft): () => _seekCue(
-              subtitleController.primaryCursor.previous(
-                subtitleController.currentPrimaryCue,
-              ),
-            ),
+            const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
+                unawaited(_navigatePracticeSentence(-1)),
             const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
-                _seekCue(
-                  subtitleController.primaryCursor.next(
-                    subtitleController.currentPrimaryCue,
-                  ),
-                ),
+                unawaited(_navigatePracticeSentence(1)),
             const SingleActivator(LogicalKeyboardKey.keyL): () =>
                 subtitleController.setLoopCue(!subtitleController.loopCue),
             const SingleActivator(LogicalKeyboardKey.keyH): () =>
@@ -1963,21 +1888,17 @@ class _PlayerScreenState extends State<PlayerScreen>
                               onOpenSubtitleResources: () =>
                                   unawaited(_openSubtitleResources()),
                               onOpenVocabulary: _openVocabulary,
-                              onOpenReview: () =>
-                                  unawaited(_openReviewQueue()),
-                              onOpenSettings: () =>
-                                  unawaited(_openSettings()),
+                              onOpenReview: () => unawaited(_openReviewQueue()),
+                              onOpenSettings: () => unawaited(_openSettings()),
                               mediaLibrary: _mediaLibrary,
                               familiarSupplyEnabled: settingsController
                                   .familiarMaterialSuggestions,
                               onOpenLibraryEntry: (entry) =>
                                   unawaited(_openLibraryEntry(entry)),
-                              onStartExtensiveEntry: (entry) => unawaited(
-                                _startExtensiveFromLibrary(entry),
-                              ),
-                              onStartIntensiveEntry: (entry) => unawaited(
-                                _startIntensiveFromLibrary(entry),
-                              ),
+                              onStartExtensiveEntry: (entry) =>
+                                  unawaited(_startExtensiveFromLibrary(entry)),
+                              onStartIntensiveEntry: (entry) =>
+                                  unawaited(_startIntensiveFromLibrary(entry)),
                               onSetLibraryIntent: (entry, intent) => unawaited(
                                 _setLibraryTriageIntent(entry, intent),
                               ),
@@ -2006,8 +1927,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                                   _savedVocabulary?.capped ?? false,
                               vocabularyKnown: _savedVocabulary != null,
                               listeningInboxCount:
-                                  extensiveListeningController
-                                      .activeItemCount,
+                                  extensiveListeningController.activeItemCount,
                               statusText: playerController.status,
                             ),
                             if (playerController.mediaPath != null)
@@ -2025,6 +1945,39 @@ class _PlayerScreenState extends State<PlayerScreen>
                                       _setWorkbenchMediaFraction,
                                   onCollapse: _collapseWorkbench,
                                 ),
+                              ),
+                            if (practiceController.item != null)
+                              IntensivePracticeWindow(
+                                controller: practiceController,
+                                currentSentence:
+                                    (subtitleController
+                                            .currentPrimaryCue
+                                            ?.index ??
+                                        0) +
+                                    1,
+                                totalSentences:
+                                    subtitleController
+                                        .primaryTrack
+                                        ?.cues
+                                        .length ??
+                                    0,
+                                canGoPrevious:
+                                    subtitleController.primaryCursor.previous(
+                                      subtitleController.currentPrimaryCue,
+                                    ) !=
+                                    null,
+                                canGoNext:
+                                    subtitleController.primaryCursor.next(
+                                      subtitleController.currentPrimaryCue,
+                                    ) !=
+                                    null,
+                                isPlaying: playerController.playing,
+                                onReplay: _replayPracticeWindow,
+                                onTogglePlayback: adapter.playOrPause,
+                                onNavigate: _navigatePracticeSentence,
+                                onSubmit: _submitPractice,
+                                onSaveReview: _savePracticeReview,
+                                onClose: _closePracticeWindow,
                               ),
                           ],
                         ),
@@ -2058,8 +2011,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     onSetSoundPatternDisplayMode: _setSoundPatternDisplayMode,
     onSaveSettings: _saveSettings,
     onOpenMedia: mediaSession.openMedia,
-    onLoadSoundReference:
-        settingsController.phoneticAnalysisPreference == 'off'
+    onLoadSoundReference: settingsController.phoneticAnalysisPreference == 'off'
         ? null
         : _analyzePhonetics,
   );
@@ -2074,7 +2026,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     subtitleController: subtitleController,
     learningController: learningController,
     extensiveListeningController: extensiveListeningController,
-    practiceController: practiceController,
     settingsController: settingsController,
     resourceActions: resourceActions,
     mediaSession: mediaSession,
@@ -2092,14 +2043,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     onStartClozePractice: _startClozePractice,
     onStartChunkDictationPractice: _startChunkDictationPractice,
     onStartSentenceDictationPractice: _startSentenceDictationPractice,
-    onMarkStuckPoint: _markStuckPoint,
-    onSkipStuckPoint: _skipStuckPoint,
-    onReplayPracticeWindow: _replayPracticeWindow,
-    onSubmitPractice: _submitPractice,
-    onSavePracticeReview: _savePracticeReview,
-    onCompletePracticeSession: _completePracticeSession,
-    onReplayStuckPoint: _replayStuckPoint,
-    onCloseStuckPoint: _closeStuckPoint,
     onOpenDiagnosisView: _openDiagnosisView,
     onRefreshListeningInbox: _refreshListeningInbox,
     onReplayListeningInboxItem: _replayListeningInboxItem,
@@ -2123,9 +2066,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     onHardInterruptListening: _hardInterruptListening,
     onSaveSettings: _saveSettings,
     isCompact: playerController.mediaPath != null && !_workbenchExpanded,
-    mediaTitle: playerController.mediaPath
-        ?.split(Platform.pathSeparator)
-        .last,
+    mediaTitle: playerController.mediaPath?.split(Platform.pathSeparator).last,
     onExpand: _expandWorkbench,
   );
 

@@ -34,25 +34,12 @@ class PracticeDraft {
   final String? degradedMessage;
 }
 
-class _StuckPointDraft {
-  const _StuckPointDraft({
-    required this.target,
-    required this.anchors,
-    required this.label,
-  });
-
-  final PracticeTarget target;
-  final List<PracticeAnchor> anchors;
-  final String label;
-}
-
 class PracticeState {
   const PracticeState({
     this.session,
     this.draft,
     this.item,
     this.attempt,
-    this.summary,
     this.answer = '',
     this.createReviewOnFailure = true,
     this.busy = false,
@@ -63,7 +50,6 @@ class PracticeState {
   final PracticeDraft? draft;
   final PracticeItem? item;
   final PracticeAttempt? attempt;
-  final PracticeSessionSummary? summary;
   final String answer;
   final bool createReviewOnFailure;
   final bool busy;
@@ -77,7 +63,6 @@ class PracticeState {
     Object? draft = _unset,
     Object? item = _unset,
     Object? attempt = _unset,
-    Object? summary = _unset,
     String? answer,
     bool? createReviewOnFailure,
     bool? busy,
@@ -91,9 +76,6 @@ class PracticeState {
     attempt: identical(attempt, _unset)
         ? this.attempt
         : attempt as PracticeAttempt?,
-    summary: identical(summary, _unset)
-        ? this.summary
-        : summary as PracticeSessionSummary?,
     answer: answer ?? this.answer,
     createReviewOnFailure: createReviewOnFailure ?? this.createReviewOnFailure,
     busy: busy ?? this.busy,
@@ -115,7 +97,6 @@ class PracticeController extends ChangeNotifier {
   PracticeDraft? get draft => _store.state.draft;
   PracticeItem? get item => _store.state.item;
   PracticeAttempt? get attempt => _store.state.attempt;
-  PracticeSessionSummary? get summary => _store.state.summary;
   String get answer => _store.state.answer;
   bool get createReviewOnFailure => _store.state.createReviewOnFailure;
   bool get busy => _store.state.busy;
@@ -130,145 +111,15 @@ class PracticeController extends ChangeNotifier {
   void setCreateReviewOnFailure(bool value) =>
       _store.update((s) => s.copyWith(createReviewOnFailure: value));
 
-  void clear() => _store.replace(const PracticeState());
+  void clear() {
+    // Ignore any in-flight item creation that resolves after the floating
+    // practice window has been closed.
+    _generation++;
+    _store.replace(const PracticeState());
+  }
 
   void clearResultForRetry() =>
       _store.update((s) => s.copyWith(attempt: null, answer: '', error: null));
-
-  Future<bool> refreshSummary(LocalApi? api) async {
-    final currentSession = session;
-    if (api == null || currentSession == null) return false;
-    try {
-      final value = await api.practiceSessionSummary(currentSession.id);
-      _store.update(
-        (s) => s.copyWith(session: value.session, summary: value, error: null),
-      );
-      return true;
-    } catch (error) {
-      _setError('Could not load session summary: $error');
-      return false;
-    }
-  }
-
-  Future<bool> markCurrentStuckPoint({
-    required LocalApi? api,
-    required Cue? cue,
-    required DisplayChunk? chunk,
-    required String? mediaId,
-    required String? trackId,
-    required int Function(Duration subtitleTime) mediaTimeMs,
-    Diagnosis? diagnosis,
-  }) async => _recordCurrentStuckPoint(
-    api: api,
-    cue: cue,
-    chunk: chunk,
-    mediaId: mediaId,
-    trackId: trackId,
-    mediaTimeMs: mediaTimeMs,
-    diagnosis: diagnosis,
-    skip: false,
-  );
-
-  Future<bool> skipCurrentStuckPoint({
-    required LocalApi? api,
-    required Cue? cue,
-    required DisplayChunk? chunk,
-    required String? mediaId,
-    required String? trackId,
-    required int Function(Duration subtitleTime) mediaTimeMs,
-    Diagnosis? diagnosis,
-  }) async => _recordCurrentStuckPoint(
-    api: api,
-    cue: cue,
-    chunk: chunk,
-    mediaId: mediaId,
-    trackId: trackId,
-    mediaTimeMs: mediaTimeMs,
-    diagnosis: diagnosis,
-    skip: true,
-  );
-
-  Future<bool> recordDiagnosisView({
-    required LocalApi? api,
-    required Cue? cue,
-    required DisplayChunk? chunk,
-    required String? mediaId,
-    required String? trackId,
-    required int Function(Duration subtitleTime) mediaTimeMs,
-    Diagnosis? diagnosis,
-  }) async {
-    final draft = _stuckPointDraft(cue, chunk: chunk, mediaTimeMs: mediaTimeMs);
-    if (api == null || draft == null) return false;
-    try {
-      final currentSession = await _ensureSession(
-        api,
-        mediaId: mediaId,
-        trackId: trackId,
-      );
-      await api.recordDiagnosisView(
-        RecordDiagnosisViewInput(
-          sessionId: currentSession.id,
-          target: draft.target,
-          anchors: draft.anchors,
-          label: draft.label,
-          diagnosisHints: _diagnosisHints(diagnosis),
-        ),
-      );
-      await refreshSummary(api);
-      return true;
-    } catch (error) {
-      _setError('Could not record diagnosis view: $error');
-      return false;
-    }
-  }
-
-  Future<bool> closeStuckPoint(LocalApi? api, String targetKey) async {
-    final currentSession = session;
-    if (api == null || currentSession == null) return false;
-    try {
-      await api.closeStuckPoint(
-        CloseStuckPointInput(
-          sessionId: currentSession.id,
-          targetKey: targetKey,
-        ),
-      );
-      await refreshSummary(api);
-      return true;
-    } catch (error) {
-      _setError('Could not close stuck point: $error');
-      return false;
-    }
-  }
-
-  Future<bool> completeSession(
-    LocalApi? api, {
-    bool markFamiliar = true,
-  }) async {
-    final currentSession = session;
-    if (api == null || currentSession == null) {
-      _setError('No intensive listening session is active.');
-      return false;
-    }
-    _store.update((s) => s.copyWith(busy: true, error: null));
-    try {
-      final value = await api.completePracticeSession(
-        currentSession.id,
-        CompletePracticeSessionInput(markFamiliar: markFamiliar),
-      );
-      _store.update(
-        (s) => s.copyWith(
-          session: value.session,
-          summary: value,
-          busy: false,
-          error: null,
-        ),
-      );
-      return true;
-    } catch (error) {
-      _setError('Could not complete session: $error');
-      return false;
-    }
-  }
 
   Future<void> startCloze({
     required LocalApi? api,
@@ -476,7 +327,6 @@ class PracticeController extends ChangeNotifier {
         ),
       );
       _store.update((s) => s.copyWith(attempt: value, busy: false));
-      await refreshSummary(api);
     } catch (error) {
       _setError('Practice submission failed: $error');
     }
@@ -518,56 +368,8 @@ class PracticeController extends ChangeNotifier {
           busy: false,
         ),
       );
-      await refreshSummary(api);
     } catch (error) {
       _setError('Could not save review item: $error');
-    }
-  }
-
-  Future<bool> _recordCurrentStuckPoint({
-    required LocalApi? api,
-    required Cue? cue,
-    required DisplayChunk? chunk,
-    required String? mediaId,
-    required String? trackId,
-    required int Function(Duration subtitleTime) mediaTimeMs,
-    required Diagnosis? diagnosis,
-    required bool skip,
-  }) async {
-    final draft = _stuckPointDraft(cue, chunk: chunk, mediaTimeMs: mediaTimeMs);
-    if (api == null || draft == null) {
-      _setError('Open a subtitle sentence before marking a stuck point.');
-      return false;
-    }
-    _store.update((s) => s.copyWith(busy: true, error: null));
-    try {
-      final currentSession = await _ensureSession(
-        api,
-        mediaId: mediaId,
-        trackId: trackId,
-      );
-      final input = RecordStuckPointInput(
-        sessionId: currentSession.id,
-        target: draft.target,
-        anchors: draft.anchors,
-        label: draft.label,
-        diagnosisHints: _diagnosisHints(diagnosis),
-      );
-      if (skip) {
-        await api.skipStuckPoint(input);
-      } else {
-        await api.markStuckPoint(input);
-      }
-      _store.update((s) => s.copyWith(session: currentSession, busy: false));
-      await refreshSummary(api);
-      return true;
-    } catch (error) {
-      _setError(
-        skip
-            ? 'Could not skip stuck point: $error'
-            : 'Could not mark stuck point: $error',
-      );
-      return false;
     }
   }
 
@@ -636,67 +438,6 @@ class PracticeController extends ChangeNotifier {
       ),
     );
   }
-
-  _StuckPointDraft? _stuckPointDraft(
-    Cue? cue, {
-    required DisplayChunk? chunk,
-    required int Function(Duration subtitleTime) mediaTimeMs,
-  }) {
-    if (cue == null) return null;
-    if (chunk != null) {
-      final startMs = mediaTimeMs(chunk.start);
-      final endMs = mediaTimeMs(chunk.end);
-      final chunkId = '${cue.id}:chunk-${chunk.index}';
-      final anchors = _baseSentenceAnchors(cue, startMs: startMs, endMs: endMs);
-      anchors.add(
-        PracticeAnchor(
-          kind: 'chunk',
-          id: chunkId,
-          label: chunk.text,
-          sentenceId: cue.id,
-          tokenStart: chunk.tokenStart,
-          tokenEnd: chunk.tokenEnd,
-          startMs: startMs,
-          endMs: endMs,
-        ),
-      );
-      return _StuckPointDraft(
-        target: PracticeTarget(
-          kind: 'chunk',
-          id: chunkId,
-          sentenceId: cue.id,
-          chunkId: chunkId,
-          startMs: startMs,
-          endMs: endMs,
-        ),
-        anchors: anchors,
-        label: chunk.text,
-      );
-    }
-    final startMs = mediaTimeMs(cue.start);
-    final endMs = mediaTimeMs(cue.end);
-    return _StuckPointDraft(
-      target: PracticeTarget(
-        kind: 'sentence',
-        id: cue.id,
-        sentenceId: cue.id,
-        startMs: startMs,
-        endMs: endMs,
-      ),
-      anchors: _baseSentenceAnchors(cue, startMs: startMs, endMs: endMs),
-      label: cue.text,
-    );
-  }
-
-  List<DiagnosisHintEvidence> _diagnosisHints(Diagnosis? diagnosis) =>
-      diagnosis == null
-      ? const []
-      : diagnosis.hints
-            .map(
-              (hint) =>
-                  DiagnosisHintEvidence(kind: hint.kind, reasons: hint.reasons),
-            )
-            .toList(growable: false);
 
   void _setError(String message) =>
       _store.update((s) => s.copyWith(busy: false, error: message));

@@ -211,9 +211,11 @@ class LocalApi {
     String mediaId,
     String? intent,
   ) async =>
-      (await _request('PUT', '/v1/media/${Uri.encodeComponent(mediaId)}/triage-intent', {
-            'intent': intent,
-          }))
+      (await _request(
+            'PUT',
+            '/v1/media/${Uri.encodeComponent(mediaId)}/triage-intent',
+            {'intent': intent},
+          ))
           as Map<String, dynamic>;
 
   /// Dual-dimension content fit for the track's media (ADR 0018). Served
@@ -753,7 +755,8 @@ class LocalApi {
     final query = params.entries
         .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
         .join('&');
-    final values = await _request('GET', '/v1/vocabulary?$query') as List<dynamic>;
+    final values =
+        await _request('GET', '/v1/vocabulary?$query') as List<dynamic>;
     return values.cast<Map<String, dynamic>>();
   }
 
@@ -929,23 +932,14 @@ class LocalApi {
         as Map<String, dynamic>,
   );
 
-  Future<PracticeSessionSummary> practiceSessionSummary(String id) async =>
-      PracticeSessionSummary.fromJson(
-        (await _request(
-              'GET',
-              '/v1/practice/sessions/${Uri.encodeComponent(id)}/summary',
-            ))
-            as Map<String, dynamic>,
-      );
-
-  Future<PracticeSessionSummary> completePracticeSession(
-    String id,
-    CompletePracticeSessionInput input,
-  ) async => PracticeSessionSummary.fromJson(
+  Future<PracticeSession> completeListeningSession(
+    String id, {
+    String? comprehensionReport,
+  }) async => PracticeSession.fromJson(
     (await _request(
           'POST',
-          '/v1/practice/sessions/${Uri.encodeComponent(id)}/complete',
-          input.toJson(),
+          '/v1/listening/sessions/${Uri.encodeComponent(id)}/complete',
+          {'comprehension_report': comprehensionReport},
         ))
         as Map<String, dynamic>,
   );
@@ -971,22 +965,6 @@ class LocalApi {
             ))
             as Map<String, dynamic>,
       );
-
-  Future<void> markStuckPoint(RecordStuckPointInput input) async {
-    await _request('POST', '/v1/practice/stuck-points/mark', input.toJson());
-  }
-
-  Future<void> skipStuckPoint(RecordStuckPointInput input) async {
-    await _request('POST', '/v1/practice/stuck-points/skip', input.toJson());
-  }
-
-  Future<void> closeStuckPoint(CloseStuckPointInput input) async {
-    await _request('POST', '/v1/practice/stuck-points/close', input.toJson());
-  }
-
-  Future<void> recordDiagnosisView(RecordDiagnosisViewInput input) async {
-    await _request('POST', '/v1/practice/diagnosis-viewed', input.toJson());
-  }
 
   Future<List<ListeningInboxItem>> listeningInboxItems({
     String status = 'active',

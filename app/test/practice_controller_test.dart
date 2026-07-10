@@ -75,12 +75,6 @@ void main() {
             }),
           );
         }
-        if (path == '/v1/practice/sessions/session-1/summary') {
-          return (
-            statusCode: 200,
-            body: jsonEncode(_summaryJson(stuckCount: 0)),
-          );
-        }
         return (statusCode: 404, body: 'unexpected $method $path');
       },
     );
@@ -149,8 +143,11 @@ void main() {
     await controller.saveCurrentFailureToReview(api);
 
     expect(controller.attempt?.generatedReviewItemIds, ['review-1']);
-    expect(controller.summary?.stuckCount, 0);
     expect(controller.error, isNull);
+    expect(
+      requests.where((request) => request.path.contains('/summary')),
+      isEmpty,
+    );
     final itemRequest = requests.firstWhere(
       (r) => r.path == '/v1/practice/items',
     );
@@ -159,111 +156,4 @@ void main() {
       'heard',
     );
   });
-
-  test('practice controller marks current sentence as a stuck point', () async {
-    final requests = <({String method, String path, Object? body})>[];
-    final api = LocalApi.withTransport(
-      baseUrl: 'http://test',
-      token: 'tok',
-      transport: (method, path, body) async {
-        final decoded = body == null ? null : jsonDecode(body);
-        requests.add((method: method, path: path, body: decoded));
-        if (path == '/v1/practice/sessions') {
-          return (
-            statusCode: 200,
-            body:
-                '{"id":"session-1","mode":"intensive","media_id":"media-1","track_id":"track-1","source":"current_sentence_practice","started_at_ms":1,"ended_at_ms":null}',
-          );
-        }
-        if (path == '/v1/practice/stuck-points/mark') {
-          return (
-            statusCode: 200,
-            body: jsonEncode({
-              'id': 'event-1',
-              'occurred_at_ms': 2,
-              'kind': 'stuck_point_marked',
-              'subject': {'kind': 'sentence', 'id': 'sentence-1'},
-              'payload': decoded,
-              'session_id': 'session-1',
-            }),
-          );
-        }
-        if (path == '/v1/practice/sessions/session-1/summary') {
-          return (
-            statusCode: 200,
-            body: jsonEncode(_summaryJson(stuckCount: 1, openCount: 1)),
-          );
-        }
-        return (statusCode: 404, body: 'unexpected $method $path');
-      },
-    );
-    final controller = PracticeController();
-    const cue = Cue(
-      id: 'sentence-1',
-      index: 0,
-      start: Duration(milliseconds: 100),
-      end: Duration(milliseconds: 900),
-      text: 'would have',
-      tokens: [
-        SubtitleToken(
-          index: 0,
-          kind: 'word',
-          text: 'would ',
-          normalized: 'would',
-        ),
-        SubtitleToken(index: 1, kind: 'word', text: 'have', normalized: 'have'),
-      ],
-    );
-
-    final marked = await controller.markCurrentStuckPoint(
-      api: api,
-      cue: cue,
-      chunk: null,
-      mediaId: 'media-1',
-      trackId: 'track-1',
-      mediaTimeMs: (value) => value.inMilliseconds,
-      diagnosis: const Diagnosis(
-        hints: [
-          DiagnosisHint(kind: 'recognition_barrier', reasons: ['weak_form']),
-        ],
-      ),
-    );
-
-    expect(marked, true);
-    expect(controller.summary?.stuckCount, 1);
-    expect(controller.summary?.openCount, 1);
-    final markRequest = requests.firstWhere(
-      (r) => r.path == '/v1/practice/stuck-points/mark',
-    );
-    final body = markRequest.body as Map<String, dynamic>;
-    expect(body['session_id'], 'session-1');
-    expect(body['target']['kind'], 'sentence');
-    expect(body['diagnosis_hints'][0]['reasons'], ['weak_form']);
-  });
 }
-
-Map<String, dynamic> _summaryJson({
-  required int stuckCount,
-  int openCount = 0,
-}) => {
-  'session': {
-    'id': 'session-1',
-    'mode': 'intensive',
-    'media_id': 'media-1',
-    'track_id': 'track-1',
-    'source': 'current_sentence_practice',
-    'started_at_ms': 1,
-    'ended_at_ms': null,
-  },
-  'stuck_points': [],
-  'stuck_count': stuckCount,
-  'resolved_count': 0,
-  'active_verified_count': 0,
-  'review_count': 0,
-  'unexplained_count': 0,
-  'skipped_count': 0,
-  'closed_count': 0,
-  'open_count': openCount,
-  'attribution_counts': [],
-  'familiar_material_marked': false,
-};

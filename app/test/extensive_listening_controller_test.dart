@@ -62,30 +62,17 @@ void main() {
           activeItems.clear();
           return (statusCode: 200, body: jsonEncode(item));
         }
-        if (path == '/v1/practice/sessions/session-1/complete') {
+        if (path == '/v1/listening/sessions/session-1/complete') {
           return (
             statusCode: 200,
             body: jsonEncode({
-              'session': {
-                'id': 'session-1',
-                'mode': 'extensive',
-                'media_id': 'media-1',
-                'track_id': 'track-1',
-                'source': 'extensive_listening',
-                'started_at_ms': 1,
-                'ended_at_ms': 5,
-              },
-              'stuck_points': [],
-              'stuck_count': 0,
-              'resolved_count': 0,
-              'active_verified_count': 0,
-              'review_count': 0,
-              'unexplained_count': 0,
-              'skipped_count': 0,
-              'closed_count': 0,
-              'open_count': 0,
-              'attribution_counts': [],
-              'familiar_material_marked': false,
+              'id': 'session-1',
+              'mode': 'extensive',
+              'media_id': 'media-1',
+              'track_id': 'track-1',
+              'source': 'extensive_listening',
+              'started_at_ms': 1,
+              'ended_at_ms': 5,
             }),
           );
         }
@@ -146,7 +133,7 @@ void main() {
     expect(
       requests.any(
         (request) =>
-            request.path == '/v1/practice/sessions/session-1/complete' &&
+            request.path == '/v1/listening/sessions/session-1/complete' &&
             (request.body as Map<String, dynamic>)['comprehension_report'] ==
                 'got_the_gist',
       ),

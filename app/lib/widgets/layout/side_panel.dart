@@ -7,18 +7,15 @@ import '../../controllers/learning_controller.dart';
 import '../../controllers/media_session_coordinator.dart';
 import '../../controllers/playback_actions_coordinator.dart';
 import '../../controllers/player_controller.dart';
-import '../../controllers/practice_controller.dart';
 import '../../controllers/resource_actions_coordinator.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
 import '../../localization.dart';
 import '../../models/listening.dart';
-import '../../models/practice.dart';
 import '../../models/timeline.dart';
 import '../panels/content_fit_card.dart';
 import '../panels/diagnosis_card.dart';
 import '../panels/listening_inbox_panel.dart';
-import '../panels/practice_panel.dart';
 import '../panels/subtitle_resource_manager_panel.dart';
 import '../panels/transcript_panel.dart';
 import '../panels/word_learning_panel.dart';
@@ -34,7 +31,6 @@ class SidePanel extends StatefulWidget {
     required this.subtitleController,
     required this.learningController,
     required this.extensiveListeningController,
-    required this.practiceController,
     required this.settingsController,
     required this.resourceActions,
     required this.mediaSession,
@@ -52,14 +48,6 @@ class SidePanel extends StatefulWidget {
     required this.onStartClozePractice,
     required this.onStartChunkDictationPractice,
     required this.onStartSentenceDictationPractice,
-    required this.onMarkStuckPoint,
-    required this.onSkipStuckPoint,
-    required this.onReplayPracticeWindow,
-    required this.onSubmitPractice,
-    required this.onSavePracticeReview,
-    required this.onCompletePracticeSession,
-    required this.onReplayStuckPoint,
-    required this.onCloseStuckPoint,
     required this.onOpenDiagnosisView,
     required this.onRefreshListeningInbox,
     required this.onReplayListeningInboxItem,
@@ -73,7 +61,6 @@ class SidePanel extends StatefulWidget {
   final SubtitleController subtitleController;
   final LearningController learningController;
   final ExtensiveListeningController extensiveListeningController;
-  final PracticeController practiceController;
   final SettingsController settingsController;
   final ResourceActionsCoordinator resourceActions;
   final MediaSessionCoordinator mediaSession;
@@ -93,14 +80,6 @@ class SidePanel extends StatefulWidget {
   final Future<void> Function() onStartClozePractice;
   final Future<void> Function() onStartChunkDictationPractice;
   final Future<void> Function() onStartSentenceDictationPractice;
-  final Future<void> Function() onMarkStuckPoint;
-  final Future<void> Function() onSkipStuckPoint;
-  final Future<void> Function() onReplayPracticeWindow;
-  final Future<void> Function() onSubmitPractice;
-  final Future<void> Function() onSavePracticeReview;
-  final Future<void> Function() onCompletePracticeSession;
-  final Future<void> Function(StuckPointSummary point) onReplayStuckPoint;
-  final Future<void> Function(StuckPointSummary point) onCloseStuckPoint;
   final Future<void> Function() onOpenDiagnosisView;
   final Future<void> Function() onRefreshListeningInbox;
   final Future<void> Function(ListeningInboxItem item)
@@ -121,7 +100,6 @@ class _SidePanelState extends State<SidePanel> {
   LearningController get learningController => widget.learningController;
   ExtensiveListeningController get extensiveListeningController =>
       widget.extensiveListeningController;
-  PracticeController get practiceController => widget.practiceController;
   SettingsController get settingsController => widget.settingsController;
   ResourceActionsCoordinator get resourceActions => widget.resourceActions;
   MediaSessionCoordinator get mediaSession => widget.mediaSession;
@@ -144,21 +122,6 @@ class _SidePanelState extends State<SidePanel> {
       widget.onDeleteSubtitle(track);
   Future<void> _exportSubtitleResource(SubtitleTrack track) =>
       widget.onExportSubtitle(track);
-  Future<void> _startClozePractice() => widget.onStartClozePractice();
-  Future<void> _startChunkDictationPractice() =>
-      widget.onStartChunkDictationPractice();
-  Future<void> _startSentenceDictationPractice() =>
-      widget.onStartSentenceDictationPractice();
-  Future<void> _markStuckPoint() => widget.onMarkStuckPoint();
-  Future<void> _skipStuckPoint() => widget.onSkipStuckPoint();
-  Future<void> _replayPracticeWindow() => widget.onReplayPracticeWindow();
-  Future<void> _submitPractice() => widget.onSubmitPractice();
-  Future<void> _savePracticeReview() => widget.onSavePracticeReview();
-  Future<void> _completePracticeSession() => widget.onCompletePracticeSession();
-  Future<void> _replayStuckPoint(StuckPointSummary point) =>
-      widget.onReplayStuckPoint(point);
-  Future<void> _closeStuckPoint(StuckPointSummary point) =>
-      widget.onCloseStuckPoint(point);
   Future<void> _openDiagnosisView() => widget.onOpenDiagnosisView();
   Future<void> _refreshListeningInbox() => widget.onRefreshListeningInbox();
   Future<void> _replayListeningInboxItem(ListeningInboxItem item) =>
@@ -185,18 +148,10 @@ class _SidePanelState extends State<SidePanel> {
             false);
   }
 
-  bool get _hasEstimatedWordTiming {
-    final cue = subtitleController.currentPrimaryCue;
-    if (cue == null) return false;
-    return (subtitleController.timingsBySentence[cue.id] ?? const []).any(
-      (value) => value.source == 'estimated',
-    );
-  }
-
-  // Transcript (0), word learning (2), diagnosis (3) and practice (4) act on
-  // the current sentence; subtitle resources (1) and inbox (5) do not.
+  // Transcript (0), word learning (2), and diagnosis (3) act on the current
+  // sentence; subtitle resources (1) and inbox (4) do not.
   bool get _showsPostureActions =>
-      const {0, 2, 3, 4}.contains(learningController.sidePanel);
+      const {0, 2, 3}.contains(learningController.sidePanel);
 
   RhythmFrame? get _currentRhythmFrame {
     final cue = subtitleController.currentPrimaryCue;
@@ -272,8 +227,7 @@ class _SidePanelState extends State<SidePanel> {
                           : () => unawaited(_openDiagnosisView()),
                     )
                   : _diagnosisCard(),
-            4 => _practicePanel(),
-            5 => ListeningInboxPanel(
+            4 => ListeningInboxPanel(
               controller: extensiveListeningController,
               onRefresh: _refreshListeningInbox,
               onReplay: _replayListeningInboxItem,
@@ -293,7 +247,6 @@ class _SidePanelState extends State<SidePanel> {
       (Icons.inventory_2_outlined, l.text('subtitleResources')),
       (Icons.menu_book_outlined, l.text('wordLearning')),
       (Icons.analytics_outlined, l.text('understandPosture')),
-      (Icons.fact_check_outlined, l.text('practice')),
       (Icons.inbox_outlined, l.text('listeningInbox')),
     ];
     return DecoratedBox(
@@ -458,14 +411,13 @@ class _SidePanelState extends State<SidePanel> {
             enabled: hasCue,
             tooltip: l.text('testPosture'),
             onSelected: (value) {
-              learningController.selectSidePanel(4);
               switch (value) {
                 case 'cloze':
-                  unawaited(_startClozePractice());
+                  unawaited(widget.onStartClozePractice());
                 case 'chunk':
-                  unawaited(_startChunkDictationPractice());
+                  unawaited(widget.onStartChunkDictationPractice());
                 case 'sentence':
-                  unawaited(_startSentenceDictationPractice());
+                  unawaited(widget.onStartSentenceDictationPractice());
               }
             },
             itemBuilder: (context) => [
@@ -520,27 +472,6 @@ class _SidePanelState extends State<SidePanel> {
       ),
     );
   }
-
-  Widget _practicePanel() => PracticePanel(
-    controller: practiceController,
-    currentCue: subtitleController.currentPrimaryCue,
-    diagnosis: learningController.diagnosis,
-    canCloze: _canCloze,
-    canChunkDictation: _canChunkDictation,
-    hasEstimatedWordTiming: _hasEstimatedWordTiming,
-    onStartCloze: _startClozePractice,
-    onStartChunkDictation: _startChunkDictationPractice,
-    onStartSentenceDictation: _startSentenceDictationPractice,
-    onMarkStuckPoint: _markStuckPoint,
-    onSkipStuckPoint: _skipStuckPoint,
-    onReplay: _replayPracticeWindow,
-    onSubmit: _submitPractice,
-    onSaveReview: _savePracticeReview,
-    onCompleteSession: _completePracticeSession,
-    onReplayStuckPoint: _replayStuckPoint,
-    onCloseStuckPoint: _closeStuckPoint,
-    onOpenDiagnosis: _openDiagnosisView,
-  );
 }
 
 /// Outlined dropdown trigger styled to match the sibling [OutlinedButton]
@@ -560,7 +491,9 @@ class _MenuTriggerButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final foreground = enabled ? colors.primary : Theme.of(context).disabledColor;
+    final foreground = enabled
+        ? colors.primary
+        : Theme.of(context).disabledColor;
     return Container(
       height: 40,
       padding: const EdgeInsets.symmetric(horizontal: 16),
