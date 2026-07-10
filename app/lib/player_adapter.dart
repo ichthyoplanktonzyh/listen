@@ -178,6 +178,8 @@ class DesktopPlayerAdapter {
 
   Future<void> play() async => _controller?.play();
 
+  Future<void> pause() async => _controller?.pause();
+
   Future<void> stop() async {
     final value = _controller;
     if (value == null) return;

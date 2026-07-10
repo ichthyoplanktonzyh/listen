@@ -105,6 +105,7 @@ class LexicalOccurrence {
     required this.startMsSnapshot,
     required this.endMsSnapshot,
     required this.encounterCount,
+    this.originalForm,
     this.mediaId,
     this.sentenceId,
   });
@@ -117,6 +118,7 @@ class LexicalOccurrence {
         startMsSnapshot: json['start_ms_snapshot'] as int,
         endMsSnapshot: json['end_ms_snapshot'] as int,
         encounterCount: json['encounter_count'] as int,
+        originalForm: json['original_form'] as String?,
         mediaId: json['media_id'] as String?,
         sentenceId: json['sentence_id'] as String?,
       );
@@ -127,6 +129,7 @@ class LexicalOccurrence {
   final int startMsSnapshot;
   final int endMsSnapshot;
   final int encounterCount;
+  final String? originalForm;
   final String? mediaId;
   final String? sentenceId;
 
@@ -137,6 +140,7 @@ class LexicalOccurrence {
     'start_ms_snapshot': startMsSnapshot,
     'end_ms_snapshot': endMsSnapshot,
     'encounter_count': encounterCount,
+    'original_form': originalForm,
     'media_id': mediaId,
     'sentence_id': sentenceId,
   };

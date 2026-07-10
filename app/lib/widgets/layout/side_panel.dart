@@ -49,6 +49,7 @@ class SidePanel extends StatefulWidget {
     required this.onStartChunkDictationPractice,
     required this.onStartSentenceDictationPractice,
     required this.onOpenDiagnosisView,
+    required this.onOpenSlicePlayback,
     required this.onRefreshListeningInbox,
     required this.onReplayListeningInboxItem,
     required this.onProcessListeningInboxItem,
@@ -81,6 +82,8 @@ class SidePanel extends StatefulWidget {
   final Future<void> Function() onStartChunkDictationPractice;
   final Future<void> Function() onStartSentenceDictationPractice;
   final Future<void> Function() onOpenDiagnosisView;
+  final Future<void> Function(Map<String, dynamic> occurrence)
+  onOpenSlicePlayback;
   final Future<void> Function() onRefreshListeningInbox;
   final Future<void> Function(ListeningInboxItem item)
   onReplayListeningInboxItem;
@@ -207,7 +210,7 @@ class _SidePanelState extends State<SidePanel> {
                           learningController.currentLanguageProfile,
                       onStatus: _setSelectedWordStatus,
                       onSave: _saveSelectedLearningContent,
-                      onSource: playbackActions.playOccurrence,
+                      onSource: widget.onOpenSlicePlayback,
                       onHeard: () => _observeSelected(true),
                       onNotHeard: () => _observeSelected(false),
                       onCapabilityOverride: _setCapabilityOverride,

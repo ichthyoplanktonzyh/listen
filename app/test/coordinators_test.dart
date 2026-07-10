@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/playback_actions_coordinator.dart';
+import 'package:llplayer_next/controllers/occurrence_media_resolver.dart';
 import 'package:llplayer_next/controllers/player_controller.dart';
 import 'package:llplayer_next/controllers/resource_actions_coordinator.dart';
 import 'package:llplayer_next/controllers/speech_enhancement_workflow_controller.dart';
@@ -22,7 +23,6 @@ void main() {
         getApi: () => null,
         isMounted: () => true,
         reloadLearningEntries: () async {},
-        openMediaPath: (_) async {},
       );
       return coordinator;
     }
@@ -48,31 +48,37 @@ void main() {
       expect(player.sourceLoopEnd, isNull);
     });
 
-    test('chunk navigation returns null without a current cue or partition',
-        () {
-      final subtitle = SubtitleController();
-      final coordinator = build(subtitle: subtitle);
-      expect(coordinator.currentChunkRef(), isNull);
-      final cue = Cue(
-        id: 'cue-1',
-        index: 0,
-        start: Duration.zero,
-        end: const Duration(seconds: 1),
-        text: 'hello',
-        tokens: const [],
-      );
-      expect(coordinator.chunkRefAt(cue, 0), isNull);
-    });
+    test(
+      'chunk navigation returns null without a current cue or partition',
+      () {
+        final subtitle = SubtitleController();
+        final coordinator = build(subtitle: subtitle);
+        expect(coordinator.currentChunkRef(), isNull);
+        final cue = Cue(
+          id: 'cue-1',
+          index: 0,
+          start: Duration.zero,
+          end: const Duration(seconds: 1),
+          text: 'hello',
+          tokens: const [],
+        );
+        expect(coordinator.chunkRefAt(cue, 0), isNull);
+      },
+    );
 
-    test('playOccurrence without an api is a no-op', () async {
+    test('occurrence resolution reports an unavailable core', () async {
       final player = PlayerController();
       final coordinator = build(player: player);
-      await coordinator.playOccurrence({
+      final result = await coordinator.resolveOccurrenceMedia({
         'media_fingerprint_snapshot': 'other',
         'start_ms_snapshot': 0,
         'end_ms_snapshot': 100,
       });
-      expect(player.sourceLoopStart, isNull);
+      expect(result, isA<UnresolvedOccurrenceMedia>());
+      expect(
+        (result as UnresolvedOccurrenceMedia).failure,
+        OccurrenceMediaResolutionFailure.coreUnavailable,
+      );
     });
   });
 
@@ -96,34 +102,36 @@ void main() {
       expect(subtitle.subtitleResourceCapabilities, isEmpty);
     });
 
-    test('activateSubtitleResource routes through the primary-track hook',
-        () async {
-      SubtitleTrack? activated;
-      String? statusUsed;
-      final coordinator = ResourceActionsCoordinator(
-        player: PlayerController(),
-        subtitle: SubtitleController(),
-        speechEnhancement: SpeechEnhancementWorkflowController(),
-      );
-      coordinator.bind(
-        getApi: () => null,
-        isMounted: () => true,
-        reloadSpeechEnhancements: (_) async {},
-        activatePrimaryTrack: (track, {required nextStatus}) async {
-          activated = track;
-          statusUsed = nextStatus;
-        },
-        reloadLearningEntries: () async {},
-      );
-      final track = SubtitleTrack(
-        id: 'track-1',
-        mediaId: 'media-1',
-        source: 'import',
-        cues: const [],
-      );
-      await coordinator.activateSubtitleResource(track);
-      expect(activated?.id, 'track-1');
-      expect(statusUsed, 'Activated subtitle resource');
-    });
+    test(
+      'activateSubtitleResource routes through the primary-track hook',
+      () async {
+        SubtitleTrack? activated;
+        String? statusUsed;
+        final coordinator = ResourceActionsCoordinator(
+          player: PlayerController(),
+          subtitle: SubtitleController(),
+          speechEnhancement: SpeechEnhancementWorkflowController(),
+        );
+        coordinator.bind(
+          getApi: () => null,
+          isMounted: () => true,
+          reloadSpeechEnhancements: (_) async {},
+          activatePrimaryTrack: (track, {required nextStatus}) async {
+            activated = track;
+            statusUsed = nextStatus;
+          },
+          reloadLearningEntries: () async {},
+        );
+        final track = SubtitleTrack(
+          id: 'track-1',
+          mediaId: 'media-1',
+          source: 'import',
+          cues: const [],
+        );
+        await coordinator.activateSubtitleResource(track);
+        expect(activated?.id, 'track-1');
+        expect(statusUsed, 'Activated subtitle resource');
+      },
+    );
   });
 }

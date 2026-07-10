@@ -21,6 +21,7 @@ import 'controllers/extensive_listening_controller.dart';
 import 'controllers/learning_controller.dart';
 import 'controllers/learning_workflow_controller.dart';
 import 'controllers/media_session_coordinator.dart';
+import 'controllers/occurrence_media_resolver.dart';
 import 'controllers/playback_actions_coordinator.dart';
 import 'controllers/player_controller.dart';
 import 'controllers/practice_controller.dart';
@@ -28,6 +29,7 @@ import 'controllers/resource_actions_coordinator.dart';
 import 'controllers/speech_enhancement_workflow_controller.dart';
 import 'controllers/subtitle_controller.dart';
 import 'controllers/settings_controller.dart';
+import 'controllers/slice_player_controller.dart';
 import 'models/capability_readiness.dart';
 import 'models/listening.dart';
 import 'models/task_status.dart';
@@ -40,6 +42,7 @@ import 'utils/word_list_parser.dart';
 import 'screens/subtitle_resources_screen.dart';
 import 'widgets/panels/cold_start_marking_sheet.dart';
 import 'widgets/panels/intensive_practice_window.dart';
+import 'widgets/panels/slice_playback_window.dart';
 import 'screens/vocabulary_screen.dart';
 import 'screens/review_queue_screen.dart';
 import 'widgets/player/download_status_bar.dart';
@@ -112,6 +115,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   final subtitleController = SubtitleController();
   final learningController = LearningController();
   final practiceController = PracticeController();
+  final slicePlayerController = SlicePlayerController();
   final extensiveListeningController = ExtensiveListeningController();
   final learningWorkflowController = LearningWorkflowController();
   final speechEnhancementWorkflowController =
@@ -201,6 +205,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       text: (key) => l.text(key),
       confirmLLTimelineMismatch: _confirmLLTimelineMismatch,
       onMediaSwitched: () {
+        unawaited(slicePlayerController.close());
         setState(() {
           taskStatuses.clear();
           _workbenchExpanded = true;
@@ -221,7 +226,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         await _loadWordEntries();
         await _loadPhraseEntries();
       },
-      openMediaPath: mediaSession.openMediaPath,
     );
     unawaited(_connectApi());
     unawaited(_loadSettings());
@@ -946,7 +950,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             LearningAssetsScreen(api: api!, language: _learningLanguage),
       ),
     );
-    if (occurrence != null) await playbackActions.playOccurrence(occurrence);
+    if (occurrence != null) await _openSlicePlayback(occurrence);
   }
 
   Future<void> _openLearningResources() async {
@@ -1251,6 +1255,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _replayPracticeWindow() async {
     final draft = practiceController.draft;
     if (draft == null) return;
+    await slicePlayerController.pause();
     await playbackActions.loopRange(
       draft.playbackStartMs,
       draft.playbackEndMs,
@@ -1302,6 +1307,34 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     practiceController.clear();
   }
+
+  Future<void> _openSlicePlayback(Map<String, dynamic> occurrence) async {
+    final result = await playbackActions.resolveOccurrenceMedia(
+      occurrence,
+      filterMediaExtensions: true,
+    );
+    if (result is UnresolvedOccurrenceMedia) {
+      playerController.setStatus(result.message);
+      await slicePlayerController.showError(
+        result.message,
+        occurrence: occurrence,
+      );
+      return;
+    }
+    final resolved = result as ResolvedOccurrenceMedia;
+    // The slice owns audio focus. Pausing preserves the primary media,
+    // position, and any practice loop so closing is non-destructive.
+    await adapter.pause();
+    await slicePlayerController.open(
+      path: resolved.path,
+      occurrence: occurrence,
+    );
+    if (slicePlayerController.state.error != null) {
+      playerController.setStatus(slicePlayerController.state.error!);
+    }
+  }
+
+  Future<void> _closeSlicePlayback() => slicePlayerController.close();
 
   Future<void> _openDiagnosisView() async {
     learningController.selectSidePanel(3);
@@ -1484,11 +1517,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       ),
     );
     if (occurrence == null) return;
-    await playbackActions.playOccurrence(
-      occurrence,
-      statusBeforeLoop: 'Looping vocabulary source sentence',
-      filterMediaExtensions: true,
-    );
+    await _openSlicePlayback(occurrence);
   }
 
   Future<void> _openReviewQueue() async {
@@ -1733,6 +1762,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     subtitleController.dispose();
     learningController.dispose();
     practiceController.dispose();
+    slicePlayerController.dispose();
     extensiveListeningController.dispose();
     settingsController.dispose();
     super.dispose();
@@ -1979,6 +2009,16 @@ class _PlayerScreenState extends State<PlayerScreen>
                                 onSaveReview: _savePracticeReview,
                                 onClose: _closePracticeWindow,
                               ),
+                            ListenableBuilder(
+                              listenable: slicePlayerController.store,
+                              builder: (context, _) =>
+                                  slicePlayerController.state.open
+                                  ? SlicePlaybackWindow(
+                                      controller: slicePlayerController,
+                                      onClose: _closeSlicePlayback,
+                                    )
+                                  : const SizedBox.shrink(),
+                            ),
                           ],
                         ),
                       ),
@@ -2044,6 +2084,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     onStartChunkDictationPractice: _startChunkDictationPractice,
     onStartSentenceDictationPractice: _startSentenceDictationPractice,
     onOpenDiagnosisView: _openDiagnosisView,
+    onOpenSlicePlayback: _openSlicePlayback,
     onRefreshListeningInbox: _refreshListeningInbox,
     onReplayListeningInboxItem: _replayListeningInboxItem,
     onProcessListeningInboxItem: _processListeningInboxItem,

@@ -7,6 +7,7 @@ import '../models/timeline.dart';
 import '../models/types.dart';
 import '../player_adapter.dart';
 import '../services/api_service.dart';
+import 'occurrence_media_resolver.dart';
 import 'player_controller.dart';
 import 'subtitle_controller.dart';
 
@@ -41,18 +42,15 @@ class PlaybackActionsCoordinator {
   late LocalApi? Function() getApi;
   late bool Function() isMounted;
   late Future<void> Function() reloadLearningEntries;
-  late Future<void> Function(String path) openMediaPath;
 
   void bind({
     required LocalApi? Function() getApi,
     required bool Function() isMounted,
     required Future<void> Function() reloadLearningEntries,
-    required Future<void> Function(String path) openMediaPath,
   }) {
     this.getApi = getApi;
     this.isMounted = isMounted;
     this.reloadLearningEntries = reloadLearningEntries;
-    this.openMediaPath = openMediaPath;
   }
 
   // ── Chunk navigation ──
@@ -183,69 +181,32 @@ class PlaybackActionsCoordinator {
 
   // ── Occurrence playback ──
 
-  /// Plays a lexical occurrence from its source media. If the occurrence
-  /// belongs to a different media file, resolves it via the linked media
-  /// record or asks the user to locate the file, verifying its fingerprint
-  /// before registering it.
-  Future<void> playOccurrence(
+  /// Resolves a durable occurrence snapshot without changing the primary
+  /// player. Slice playback and any later occurrence consumer must use this
+  /// one path for linked-media lookup and user-assisted file recovery.
+  Future<OccurrenceMediaResolution> resolveOccurrenceMedia(
     Map<String, dynamic> occurrence, {
-    String? statusBeforeLoop,
     bool filterMediaExtensions = false,
   }) async {
     final api = getApi();
-    if (api == null) return;
-    final expectedFingerprint =
-        occurrence['media_fingerprint_snapshot'] as String;
-    if (expectedFingerprint != player.mediaFingerprint) {
-      String? sourcePath;
-      final linkedMediaId = occurrence['media_id'] as String?;
-      if (linkedMediaId != null) {
-        try {
-          final linkedMedia = await api.readMedia(linkedMediaId);
-          final linkedPath = linkedMedia['path'] as String;
-          if (await File(linkedPath).exists()) sourcePath = linkedPath;
-        } catch (_) {
-          sourcePath = null;
-        }
-      }
-      if (sourcePath == null) {
-        final group = filterMediaExtensions
-            ? const XTypeGroup(
-                label: 'source media',
-                extensions: [
-                  'mp4',
-                  'mkv',
-                  'mov',
-                  'webm',
-                  'm4a',
-                  'mp3',
-                  'wav',
-                  'flac',
-                ],
-              )
-            : const XTypeGroup(label: 'source media');
-        final file = await openFile(acceptedTypeGroups: [group]);
-        if (file == null) return;
-        if (await api.fingerprintFile(file.path) != expectedFingerprint) {
-          player.setStatus(
-            'Selected file does not match the source fingerprint',
-          );
-          return;
-        }
-        await api.registerMedia(file.path);
-        sourcePath = file.path;
-      }
-      await openMediaPath(sourcePath);
+    if (api == null) {
+      return const UnresolvedOccurrenceMedia(
+        OccurrenceMediaResolutionFailure.coreUnavailable,
+      );
     }
-    final start = Duration(
-      milliseconds: occurrence['start_ms_snapshot'] as int,
+    return OccurrenceMediaResolver(
+      readMedia: api.readMedia,
+      fingerprintFile: api.fingerprintFile,
+      registerMedia: (path) async {
+        await api.registerMedia(path);
+      },
+      pickFile: (groups) => openFile(acceptedTypeGroups: groups),
+    ).resolve(
+      occurrence,
+      currentMediaFingerprint: player.mediaFingerprint,
+      currentMediaPath: player.mediaPath,
+      filterMediaExtensions: filterMediaExtensions,
     );
-    final end = Duration(milliseconds: occurrence['end_ms_snapshot'] as int);
-    if (statusBeforeLoop != null) player.setStatus(statusBeforeLoop);
-    player.setSourceLoop(start, end, label: 'loopOccurrence');
-    subtitle.setLoopCue(false);
-    await adapter.seek(start);
-    await adapter.play();
   }
 
   // ── Feedback / vocabulary / media record ──
