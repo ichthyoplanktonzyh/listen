@@ -134,8 +134,8 @@ Capture and processing also append `learning_events`
 (`listening_inbox_captured`, `listening_inbox_processed`) so dashboard and fit
 calibration can aggregate from durable facts later. The table is intentionally a
 read/write projection for Inbox UX; it does not make Inbox a blocking task list.
-`complete_practice_session` can carry an optional `comprehension_report`
-(`understood_all`, `got_the_gist`, `unclear`) for extensive sessions.
+`complete_listening_session` carries an optional `comprehension_report`
+(`understood_all`, `got_the_gist`, `unclear`) for extensive sessions only.
 
 ## Deletion Semantics
 

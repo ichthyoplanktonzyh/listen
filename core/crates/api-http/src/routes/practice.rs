@@ -22,27 +22,15 @@ pub(crate) async fn create_practice_item(
         .map_err(ApiError::from)
 }
 
-pub(crate) async fn practice_session_summary(
+pub(crate) async fn complete_listening_session(
     State(state): State<ApiState>,
     Path(id): Path<String>,
-) -> Result<Json<application::PracticeSessionSummary>, ApiError> {
+    Json(request): Json<application::CompleteListeningSessionInput>,
+) -> Result<Json<PracticeSession>, ApiError> {
     let id = PracticeSessionId::parse(id).map_err(ApplicationError::from)?;
     state
         .services
-        .practice_session_summary(&id)
-        .map(Json)
-        .map_err(ApiError::from)
-}
-
-pub(crate) async fn complete_practice_session(
-    State(state): State<ApiState>,
-    Path(id): Path<String>,
-    Json(request): Json<application::CompletePracticeSessionInput>,
-) -> Result<Json<application::PracticeSessionSummary>, ApiError> {
-    let id = PracticeSessionId::parse(id).map_err(ApplicationError::from)?;
-    state
-        .services
-        .complete_practice_session(&id, request)
+        .complete_listening_session(&id, request)
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -68,50 +56,6 @@ pub(crate) async fn practice_attempt(
         .practice_attempt(&id)?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("practice attempt"))
-}
-
-pub(crate) async fn mark_stuck_point(
-    State(state): State<ApiState>,
-    Json(request): Json<application::RecordStuckPointInput>,
-) -> Result<Json<LearningEvent>, ApiError> {
-    state
-        .services
-        .mark_stuck_point(request)
-        .map(Json)
-        .map_err(ApiError::from)
-}
-
-pub(crate) async fn skip_stuck_point(
-    State(state): State<ApiState>,
-    Json(request): Json<application::RecordStuckPointInput>,
-) -> Result<Json<LearningEvent>, ApiError> {
-    state
-        .services
-        .skip_stuck_point(request)
-        .map(Json)
-        .map_err(ApiError::from)
-}
-
-pub(crate) async fn record_diagnosis_view(
-    State(state): State<ApiState>,
-    Json(request): Json<application::RecordDiagnosisViewInput>,
-) -> Result<Json<LearningEvent>, ApiError> {
-    state
-        .services
-        .record_diagnosis_view(request)
-        .map(Json)
-        .map_err(ApiError::from)
-}
-
-pub(crate) async fn close_stuck_point(
-    State(state): State<ApiState>,
-    Json(request): Json<application::CloseStuckPointInput>,
-) -> Result<Json<LearningEvent>, ApiError> {
-    state
-        .services
-        .close_stuck_point(request)
-        .map(Json)
-        .map_err(ApiError::from)
 }
 
 #[derive(Debug, Deserialize)]

@@ -651,35 +651,7 @@ export interface UpgradeSuggestion {
   cooldown_until_ms: number | null;
 }
 
-export interface DiagnosisHintEvidence {
-  kind: string;
-  reasons: string[];
-}
-
-export interface RecordStuckPointInput {
-  session_id: string;
-  target: PracticeTarget;
-  anchors: PracticeAnchor[];
-  label: string | null;
-  diagnosis_hints: DiagnosisHintEvidence[];
-}
-
-export interface RecordDiagnosisViewInput {
-  session_id: string;
-  target: PracticeTarget;
-  anchors: PracticeAnchor[];
-  label: string | null;
-  diagnosis_hints: DiagnosisHintEvidence[];
-}
-
-export interface CloseStuckPointInput {
-  session_id: string;
-  target_key: string;
-  reason: string | null;
-}
-
-export interface CompletePracticeSessionInput {
-  mark_familiar: boolean;
+export interface CompleteListeningSessionInput {
   comprehension_report?: ListeningComprehensionReport | null;
 }
 
@@ -716,51 +688,6 @@ export interface ListeningInboxItem {
   review_item_ids: string[];
   practice_item_id: string | null;
   updated_at_ms: number;
-}
-
-export type StuckPointStatus =
-  | "marked"
-  | "resolved_with_hint"
-  | "actively_verified"
-  | "added_to_review"
-  | "skipped"
-  | "unexplained"
-  | "closed";
-
-export interface StuckPointSummary {
-  target_key: string;
-  status: StuckPointStatus;
-  target: PracticeTarget | null;
-  anchors: PracticeAnchor[];
-  label: string | null;
-  marked_at_ms: number | null;
-  updated_at_ms: number;
-  playback_start_ms: number | null;
-  playback_end_ms: number | null;
-  practice_attempt_ids: string[];
-  review_item_ids: string[];
-  diagnosis_hints: DiagnosisHintEvidence[];
-}
-
-export interface StuckPointAttribution {
-  kind: string;
-  reason: string | null;
-  count: number;
-}
-
-export interface PracticeSessionSummary {
-  session: PracticeSession;
-  stuck_points: StuckPointSummary[];
-  stuck_count: number;
-  resolved_count: number;
-  active_verified_count: number;
-  review_count: number;
-  unexplained_count: number;
-  skipped_count: number;
-  closed_count: number;
-  open_count: number;
-  attribution_counts: StuckPointAttribution[];
-  familiar_material_marked: boolean;
 }
 
 export interface LearningEventSubject {
@@ -1187,15 +1114,11 @@ export class LocalApiV1 {
     });
   }
 
-  practiceSessionSummary(id: string): Promise<PracticeSessionSummary> {
-    return this.request(`/v1/practice/sessions/${encodeURIComponent(id)}/summary`);
-  }
-
-  completePracticeSession(
+  completeListeningSession(
     id: string,
-    input: CompletePracticeSessionInput,
-  ): Promise<PracticeSessionSummary> {
-    return this.request(`/v1/practice/sessions/${encodeURIComponent(id)}/complete`, {
+    input: CompleteListeningSessionInput,
+  ): Promise<PracticeSession> {
+    return this.request(`/v1/listening/sessions/${encodeURIComponent(id)}/complete`, {
       method: "POST",
       body: JSON.stringify(input),
     });
@@ -1217,34 +1140,6 @@ export class LocalApiV1 {
 
   practiceAttempt(id: string): Promise<PracticeAttempt> {
     return this.request(`/v1/practice/attempts/${encodeURIComponent(id)}`);
-  }
-
-  markStuckPoint(input: RecordStuckPointInput): Promise<LearningEvent> {
-    return this.request("/v1/practice/stuck-points/mark", {
-      method: "POST",
-      body: JSON.stringify(input),
-    });
-  }
-
-  skipStuckPoint(input: RecordStuckPointInput): Promise<LearningEvent> {
-    return this.request("/v1/practice/stuck-points/skip", {
-      method: "POST",
-      body: JSON.stringify(input),
-    });
-  }
-
-  closeStuckPoint(input: CloseStuckPointInput): Promise<LearningEvent> {
-    return this.request("/v1/practice/stuck-points/close", {
-      method: "POST",
-      body: JSON.stringify(input),
-    });
-  }
-
-  recordDiagnosisView(input: RecordDiagnosisViewInput): Promise<LearningEvent> {
-    return this.request("/v1/practice/diagnosis-viewed", {
-      method: "POST",
-      body: JSON.stringify(input),
-    });
   }
 
   listeningInboxItems(

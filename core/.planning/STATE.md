@@ -3,17 +3,16 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-10T09:27:00.000+08:00"
+last_updated: "2026-07-10T14:19:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-10 09:27 CST
-> 更新原因：Phase 3.5.5 Intensive Listening UX Fix 收口。交付 9 组走查问题中的 8 组
-> （回退首页、循环标注、内容匹配度入口、词汇来源竞态、听懂了吗、溢出菜单、词汇本升级 A+B、
-> 意群/chunk 表达统一），全程守住 ADR 0016 数据双层分离。最大的一块独立功能"精听浮动练习
-> 小窗"（含 P0）如实切出到 Phase 3.5.6 单独做。验证：`flutter analyze` 零问题、`flutter test`
-> 247 passed、后端 persistence/api-http 全绿、`validate-contracts.sh` 通过。
+> 最后更新：2026-07-10 14:19 CST
+> 更新原因：Phase 3.5.6 自动化切片完成：精听浮窗、公开卡点/summary 契约和 3.2 内部聚合代码
+> 均已移除；泛听结束收敛为 extensive-only `complete_listening_session`。浮窗 widget 测试发现并
+> 修复 `Positioned` 被 `LayoutBuilder` 包裹造成的运行时 Stack parent-data 断言。真实媒体手工 QA
+> 仍按 owner 决定暂不执行。
 
 ## 当前位置
 
@@ -222,13 +221,16 @@ last_updated: "2026-07-10T09:27:00.000+08:00"
   74+5+6 / `-p api-http` 35+11、`validate-contracts.sh` 通过。
 - 收口文档：`.planning/phases/3.5.5-intensive-listening-ux-fix/3.5.5-CLOSEOUT.md`。
 
-### Phase 3.5.6: Intensive Practice Floating Window ⏳ 下一步（CONTEXT 就绪，PLAN 待写）
+### Phase 3.5.6: Intensive Practice Floating Window ⏳ ACTIVE（自动化完成，待真实媒体 QA）
 
-- 从 3.5.5 切出的精听 practice UX 重设计：浮动可拖动小窗 + 迷你播放器，移除跳过/悬案区/
-  Session Summary/精听完毕/卡点等被定为"过度设计"的机制（`practice_panel.dart` 现仍全保留）。
-- 是 3.5.5 里唯一含 P0 却完全未动的项;将由独立会话开工。
+- 从 3.5.5 切出的精听 practice UX 重设计已完成自动化部分：可拖动浮窗 + 迷你控制器、三题型
+  连续换句、关闭清理练习循环；右侧 Practice tab、跳过/悬案/session summary/精听完毕/卡点
+  都已删除。3.2 内部卡点聚合与对应历史测试已物理移除，历史原始事件保留但不再有读侧投影。
+- 泛听结束改为 extensive-only `POST /v1/listening/sessions/{id}/complete`，理解度自报和内容
+  匹配度校准保留。自动验证通过；仅剩真实媒体手工 QA（owner 已要求暂缓）。
 - 上下文文档：`.planning/phases/3.5.6-intensive-practice-window/3.5.6-CONTEXT.md`
-  （引用上游 `3.5.5-.../精听模块UX问题与方案.md`）。
+  （引用上游 `3.5.5-.../精听模块UX问题与方案.md`）；执行计划：
+  `.planning/phases/3.5.6-intensive-practice-window/3.5.6-PLAN.md`。
 
 ## 已完成 Phase 索引
 

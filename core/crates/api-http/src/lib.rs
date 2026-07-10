@@ -20,9 +20,8 @@ use dictionary_provider::{
     FreeDictionaryProvider, JapaneseDictionaryProvider,
 };
 use domain::{
-    LanguageCode, LearningEvent, LearningStatus, LexicalEntryId, ListeningInboxItem,
-    ListeningInboxItemId, ListeningInboxStatus, MediaAvailability, MediaId, MediaKind,
-    MediaTriageIntent,
+    LanguageCode, LearningStatus, LexicalEntryId, ListeningInboxItem, ListeningInboxItemId,
+    ListeningInboxStatus, MediaAvailability, MediaId, MediaKind, MediaTriageIntent,
     PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeSession, PracticeSessionId,
     ReviewItem, ReviewItemId, SubtitleSentenceId, SubtitleTrackId, UpgradeSuggestion,
     UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle,
@@ -338,20 +337,12 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/v1/practice/sessions", post(create_practice_session))
         .route(
-            "/v1/practice/sessions/{id}/summary",
-            get(practice_session_summary),
-        )
-        .route(
-            "/v1/practice/sessions/{id}/complete",
-            post(complete_practice_session),
+            "/v1/listening/sessions/{id}/complete",
+            post(complete_listening_session),
         )
         .route("/v1/practice/items", post(create_practice_item))
         .route("/v1/practice/attempts", post(submit_practice_attempt))
         .route("/v1/practice/attempts/{id}", get(practice_attempt))
-        .route("/v1/practice/stuck-points/mark", post(mark_stuck_point))
-        .route("/v1/practice/stuck-points/skip", post(skip_stuck_point))
-        .route("/v1/practice/stuck-points/close", post(close_stuck_point))
-        .route("/v1/practice/diagnosis-viewed", post(record_diagnosis_view))
         .route(
             "/v1/listening-inbox/items",
             get(list_listening_inbox_items).post(capture_listening_inbox_item),

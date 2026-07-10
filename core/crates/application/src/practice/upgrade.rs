@@ -220,7 +220,9 @@ impl AppServices {
             ));
         }
         let now = now_ms();
-        let capability = suggestion.capability.unwrap_or(LexicalCapability::Listening);
+        let capability = suggestion
+            .capability
+            .unwrap_or(LexicalCapability::Listening);
         if capability != LexicalCapability::Listening {
             // Transitional direct write, only for channels that still have no
             // projection algorithm. Listening fulfilled ADR 0017 decision 4:

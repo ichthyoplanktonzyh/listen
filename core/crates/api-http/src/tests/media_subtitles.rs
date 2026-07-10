@@ -416,9 +416,11 @@ async fn content_fit_endpoint_serves_dual_dimension_profile() {
     assert_eq!(profile["meaning"]["fit"], "too_hard");
     assert!((profile["assessed_token_ratio"].as_f64().unwrap()).abs() < 1e-6);
     let signals = profile["meaning"]["signals"].as_array().unwrap();
-    assert!(signals.iter().any(|signal| {
-        signal["kind"] == "unassessed_density" && signal["decisive"] == true
-    }));
+    assert!(
+        signals
+            .iter()
+            .any(|signal| { signal["kind"] == "unassessed_density" && signal["decisive"] == true })
+    );
     assert!(profile["input_fingerprint"].as_str().unwrap().len() == 64);
 
     // Second read is served from cache and stays identical.

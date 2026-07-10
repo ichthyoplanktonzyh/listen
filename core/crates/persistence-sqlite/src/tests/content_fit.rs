@@ -307,7 +307,9 @@ fn content_fit_requires_language_and_word_tokens() {
     empty_track.fingerprint = "fit-track-empty-fp".into();
     for sentence in &mut empty_track.sentences {
         sentence.id = SubtitleSentenceId::parse("fit-sentence-empty").unwrap();
-        sentence.tokens.retain(|token| token.kind != SubtitleTokenKind::Word);
+        sentence
+            .tokens
+            .retain(|token| token.kind != SubtitleTokenKind::Word);
     }
     repo.save_track(&empty_track).unwrap();
     assert!(matches!(
@@ -321,8 +323,12 @@ fn content_fit_requires_language_and_word_tokens() {
 #[test]
 fn comprehension_feedback_calibrates_sound_fit_and_survives_recompute() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
-    let services = fit_services(&repo)
-        .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    let services = fit_services(&repo).with_learning_loop_repositories(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
     MediaRepository::upsert(repo.as_ref(), &transcription_media()).unwrap();
     let track = fit_track(Some("en"));
     repo.save_track(&track).unwrap();
@@ -344,10 +350,9 @@ fn comprehension_feedback_calibrates_sound_fit_and_survives_recompute() {
             })
             .unwrap();
         services
-            .complete_practice_session(
+            .complete_listening_session(
                 &session.id,
-                application::CompletePracticeSessionInput {
-                    mark_familiar: false,
+                application::CompleteListeningSessionInput {
                     comprehension_report: Some(ListeningComprehensionReport::Unclear),
                 },
             )
@@ -407,8 +412,12 @@ fn comprehension_feedback_calibrates_sound_fit_and_survives_recompute() {
 #[test]
 fn sessions_without_media_or_feedback_leave_no_calibration() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
-    let services = fit_services(&repo)
-        .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    let services = fit_services(&repo).with_learning_loop_repositories(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
     MediaRepository::upsert(repo.as_ref(), &transcription_media()).unwrap();
 
     // No media on the session: nothing to calibrate.
@@ -421,10 +430,9 @@ fn sessions_without_media_or_feedback_leave_no_calibration() {
         })
         .unwrap();
     services
-        .complete_practice_session(
+        .complete_listening_session(
             &session.id,
-            application::CompletePracticeSessionInput {
-                mark_familiar: false,
+            application::CompleteListeningSessionInput {
                 comprehension_report: Some(ListeningComprehensionReport::Unclear),
             },
         )
@@ -441,10 +449,9 @@ fn sessions_without_media_or_feedback_leave_no_calibration() {
         })
         .unwrap();
     services
-        .complete_practice_session(
+        .complete_listening_session(
             &session.id,
-            application::CompletePracticeSessionInput {
-                mark_familiar: false,
+            application::CompleteListeningSessionInput {
                 comprehension_report: None,
             },
         )
@@ -463,8 +470,12 @@ fn sessions_without_media_or_feedback_leave_no_calibration() {
 #[test]
 fn practice_accuracy_feedback_calibrates_sound_fit() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
-    let services = fit_services(&repo)
-        .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    let services = fit_services(&repo).with_learning_loop_repositories(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
     MediaRepository::upsert(repo.as_ref(), &transcription_media()).unwrap();
     let track = fit_track(Some("en"));
     repo.save_track(&track).unwrap();
@@ -512,10 +523,9 @@ fn practice_accuracy_feedback_calibrates_sound_fit() {
             .unwrap();
     }
     services
-        .complete_practice_session(
+        .complete_listening_session(
             &session.id,
-            application::CompletePracticeSessionInput {
-                mark_familiar: false,
+            application::CompleteListeningSessionInput {
                 comprehension_report: None,
             },
         )

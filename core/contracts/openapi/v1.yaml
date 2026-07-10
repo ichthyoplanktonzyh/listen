@@ -958,33 +958,22 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PracticeSession" }
-  /v1/practice/sessions/{id}/summary:
-    get:
-      operationId: practiceSessionSummary
-      parameters:
-        - { name: id, in: path, required: true, schema: { type: string } }
-      responses:
-        "200":
-          description: Derived intensive-listening session summary
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/PracticeSessionSummary" }
-  /v1/practice/sessions/{id}/complete:
+  /v1/listening/sessions/{id}/complete:
     post:
-      operationId: completePracticeSession
+      operationId: completeListeningSession
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/CompletePracticeSessionInput" }
+            schema: { $ref: "#/components/schemas/CompleteListeningSessionInput" }
       responses:
         "200":
-          description: Completed intensive-listening session summary
+          description: Completed extensive-listening session
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/PracticeSessionSummary" }
+              schema: { $ref: "#/components/schemas/PracticeSession" }
   /v1/practice/items:
     post:
       operationId: createPracticeItem
@@ -1024,62 +1013,6 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PracticeAttempt" }
-  /v1/practice/stuck-points/mark:
-    post:
-      operationId: markStuckPoint
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/RecordStuckPointInput" }
-      responses:
-        "200":
-          description: Persisted stuck-point mark event
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/LearningEvent" }
-  /v1/practice/stuck-points/skip:
-    post:
-      operationId: skipStuckPoint
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/RecordStuckPointInput" }
-      responses:
-        "200":
-          description: Persisted stuck-point skip event
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/LearningEvent" }
-  /v1/practice/stuck-points/close:
-    post:
-      operationId: closeStuckPoint
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/CloseStuckPointInput" }
-      responses:
-        "200":
-          description: Persisted manual stuck-point close event
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/LearningEvent" }
-  /v1/practice/diagnosis-viewed:
-    post:
-      operationId: recordDiagnosisView
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/RecordDiagnosisViewInput" }
-      responses:
-        "200":
-          description: Persisted diagnosis-view evidence event
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/LearningEvent" }
   /v1/listening-inbox/items:
     get:
       operationId: listListeningInboxItems
@@ -3053,42 +2986,9 @@ components:
         created_at_ms: { type: integer, minimum: 0 }
         resolved_at_ms: { type: [integer, "null"], minimum: 0 }
         cooldown_until_ms: { type: [integer, "null"], minimum: 0 }
-    DiagnosisHintEvidence:
+    CompleteListeningSessionInput:
       type: object
-      required: [kind, reasons]
       properties:
-        kind: { type: string }
-        reasons: { type: array, items: { type: string } }
-    RecordStuckPointInput:
-      type: object
-      required: [session_id, target, anchors, label, diagnosis_hints]
-      properties:
-        session_id: { type: string }
-        target: { $ref: "#/components/schemas/PracticeTarget" }
-        anchors: { type: array, items: { $ref: "#/components/schemas/PracticeAnchor" } }
-        label: { type: [string, "null"] }
-        diagnosis_hints: { type: array, items: { $ref: "#/components/schemas/DiagnosisHintEvidence" } }
-    RecordDiagnosisViewInput:
-      type: object
-      required: [session_id, target, anchors, label, diagnosis_hints]
-      properties:
-        session_id: { type: string }
-        target: { $ref: "#/components/schemas/PracticeTarget" }
-        anchors: { type: array, items: { $ref: "#/components/schemas/PracticeAnchor" } }
-        label: { type: [string, "null"] }
-        diagnosis_hints: { type: array, items: { $ref: "#/components/schemas/DiagnosisHintEvidence" } }
-    CloseStuckPointInput:
-      type: object
-      required: [session_id, target_key, reason]
-      properties:
-        session_id: { type: string }
-        target_key: { type: string }
-        reason: { type: [string, "null"] }
-    CompletePracticeSessionInput:
-      type: object
-      required: [mark_familiar]
-      properties:
-        mark_familiar: { type: boolean }
         comprehension_report:
           oneOf:
             - { $ref: "#/components/schemas/ListeningComprehensionReport" }
@@ -3134,50 +3034,6 @@ components:
         review_item_ids: { type: array, items: { type: string } }
         practice_item_id: { type: [string, "null"] }
         updated_at_ms: { type: integer, minimum: 0 }
-    StuckPointStatus:
-      enum: [marked, resolved_with_hint, actively_verified, added_to_review, skipped, unexplained, closed]
-    StuckPointSummary:
-      type: object
-      required: [target_key, status, target, anchors, label, marked_at_ms, updated_at_ms, playback_start_ms, playback_end_ms, practice_attempt_ids, review_item_ids, diagnosis_hints]
-      properties:
-        target_key: { type: string }
-        status: { $ref: "#/components/schemas/StuckPointStatus" }
-        target:
-          oneOf:
-            - { $ref: "#/components/schemas/PracticeTarget" }
-            - { type: "null" }
-        anchors: { type: array, items: { $ref: "#/components/schemas/PracticeAnchor" } }
-        label: { type: [string, "null"] }
-        marked_at_ms: { type: [integer, "null"], minimum: 0 }
-        updated_at_ms: { type: integer, minimum: 0 }
-        playback_start_ms: { type: [integer, "null"], minimum: 0 }
-        playback_end_ms: { type: [integer, "null"], minimum: 0 }
-        practice_attempt_ids: { type: array, items: { type: string } }
-        review_item_ids: { type: array, items: { type: string } }
-        diagnosis_hints: { type: array, items: { $ref: "#/components/schemas/DiagnosisHintEvidence" } }
-    StuckPointAttribution:
-      type: object
-      required: [kind, reason, count]
-      properties:
-        kind: { type: string }
-        reason: { type: [string, "null"] }
-        count: { type: integer, minimum: 0 }
-    PracticeSessionSummary:
-      type: object
-      required: [session, stuck_points, stuck_count, resolved_count, active_verified_count, review_count, unexplained_count, skipped_count, closed_count, open_count, attribution_counts, familiar_material_marked]
-      properties:
-        session: { $ref: "#/components/schemas/PracticeSession" }
-        stuck_points: { type: array, items: { $ref: "#/components/schemas/StuckPointSummary" } }
-        stuck_count: { type: integer, minimum: 0 }
-        resolved_count: { type: integer, minimum: 0 }
-        active_verified_count: { type: integer, minimum: 0 }
-        review_count: { type: integer, minimum: 0 }
-        unexplained_count: { type: integer, minimum: 0 }
-        skipped_count: { type: integer, minimum: 0 }
-        closed_count: { type: integer, minimum: 0 }
-        open_count: { type: integer, minimum: 0 }
-        attribution_counts: { type: array, items: { $ref: "#/components/schemas/StuckPointAttribution" } }
-        familiar_material_marked: { type: boolean }
     LearningEventSubject:
       type: object
       required: [kind, id]

@@ -240,142 +240,6 @@ fn learning_loop_practice_review_and_events_round_trip() {
 }
 
 #[test]
-fn session_summary_derives_stuck_point_statuses_from_events_attempts_and_review() {
-    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
-    let services = AppServices::new(
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-        repo.clone(),
-    )
-    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
-
-    let session = services
-        .create_practice_session(application::CreatePracticeSession {
-            mode: PracticeMode::Intensive,
-            media_id: None,
-            track_id: None,
-            source: Some("test".into()),
-        })
-        .unwrap();
-    let sentence_id = SubtitleSentenceId::parse("sentence-summary-1").unwrap();
-    let target = PracticeTarget {
-        kind: PracticeTargetKind::Sentence,
-        id: Some(sentence_id.as_str().into()),
-        sentence_id: Some(sentence_id.clone()),
-        chunk_id: None,
-        start_ms: Some(100),
-        end_ms: Some(900),
-    };
-    let anchors = vec![PracticeAnchor {
-        kind: PracticeAnchorKind::Sentence,
-        id: sentence_id.as_str().into(),
-        label: Some("would have gone".into()),
-        lexical_entry_id: None,
-        sentence_id: Some(sentence_id),
-        token_start: Some(0),
-        token_end: Some(2),
-        start_ms: Some(100),
-        end_ms: Some(900),
-    }];
-
-    services
-        .mark_stuck_point(application::RecordStuckPointInput {
-            session_id: session.id.clone(),
-            target: target.clone(),
-            anchors: anchors.clone(),
-            label: Some("would have gone".into()),
-            diagnosis_hints: vec![],
-        })
-        .unwrap();
-    services
-        .record_diagnosis_view(application::RecordDiagnosisViewInput {
-            session_id: session.id.clone(),
-            target: target.clone(),
-            anchors: anchors.clone(),
-            label: Some("would have gone".into()),
-            diagnosis_hints: vec![application::DiagnosisHintEvidence {
-                kind: "recognition_barrier".into(),
-                reasons: vec!["weak_form".into()],
-            }],
-        })
-        .unwrap();
-    let item = services
-        .create_practice_item(application::CreatePracticeItem {
-            session_id: Some(session.id.clone()),
-            kind: PracticeKind::Dictation,
-            target: target.clone(),
-            prompt_snapshot: "would have gone".into(),
-            expected_text: "would have gone".into(),
-            anchors: anchors.clone(),
-        })
-        .unwrap();
-    services
-        .submit_practice_attempt(application::SubmitPracticeAttempt {
-            item_id: item.id.clone(),
-            text_answer: "would have gone".into(),
-            create_review_item_on_failure: false,
-        })
-        .unwrap();
-
-    let failed_item = services
-        .create_practice_item(application::CreatePracticeItem {
-            session_id: Some(session.id.clone()),
-            kind: PracticeKind::Dictation,
-            target: PracticeTarget {
-                kind: PracticeTargetKind::Chunk,
-                id: Some("chunk-summary-1".into()),
-                sentence_id: target.sentence_id.clone(),
-                chunk_id: Some(ChunkId::parse("chunk-summary-1").unwrap()),
-                start_ms: Some(1000),
-                end_ms: Some(1400),
-            },
-            prompt_snapshot: "going to".into(),
-            expected_text: "going to".into(),
-            anchors,
-        })
-        .unwrap();
-    services
-        .submit_practice_attempt(application::SubmitPracticeAttempt {
-            item_id: failed_item.id,
-            text_answer: "gonna".into(),
-            create_review_item_on_failure: true,
-        })
-        .unwrap();
-
-    let summary = services.practice_session_summary(&session.id).unwrap();
-    assert_eq!(summary.stuck_count, 2);
-    assert_eq!(summary.resolved_count, 1);
-    assert_eq!(summary.active_verified_count, 1);
-    assert_eq!(summary.review_count, 1);
-    assert_eq!(summary.open_count, 0);
-    assert_eq!(
-        summary.stuck_points[0].status,
-        application::StuckPointStatus::ActivelyVerified
-    );
-    assert_eq!(
-        summary.attribution_counts[0].reason.as_deref(),
-        Some("weak_form")
-    );
-
-    let completed = services
-        .complete_practice_session(
-            &session.id,
-            application::CompletePracticeSessionInput {
-                mark_familiar: true,
-                comprehension_report: None,
-            },
-        )
-        .unwrap();
-    assert!(completed.session.ended_at_ms.is_some());
-    assert!(completed.familiar_material_marked);
-}
-
-#[test]
 fn failed_review_records_context_evidence_and_hunting_candidate_without_status_change() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = AppServices::new(
@@ -813,7 +677,10 @@ fn listening_projection_flips_on_task_failure_and_blocks_self_report_upgrade() {
             rating: ReviewRating::Again,
         })
         .unwrap();
-    let details = services.lexical_details(&lexical.entry.id).unwrap().unwrap();
+    let details = services
+        .lexical_details(&lexical.entry.id)
+        .unwrap()
+        .unwrap();
     assert_eq!(
         details.entry.status,
         Some(LearningStatus::KnownNotRecognized)
@@ -839,7 +706,10 @@ fn listening_projection_flips_on_task_failure_and_blocks_self_report_upgrade() {
         Some(LearningStatus::KnownRecognized),
         None,
     );
-    let details = services.lexical_details(&lexical.entry.id).unwrap().unwrap();
+    let details = services
+        .lexical_details(&lexical.entry.id)
+        .unwrap()
+        .unwrap();
     assert_eq!(
         details.entry.status,
         Some(LearningStatus::KnownNotRecognized)
@@ -1080,10 +950,9 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
     assert!(repo.get_practice_item(practice_item_id).unwrap().is_some());
 
     services
-        .complete_practice_session(
+        .complete_listening_session(
             &session.id,
-            application::CompletePracticeSessionInput {
-                mark_familiar: false,
+            application::CompleteListeningSessionInput {
                 comprehension_report: Some(ListeningComprehensionReport::GotTheGist),
             },
         )

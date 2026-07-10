@@ -279,13 +279,14 @@ practice attempt submit -> text evaluation -> SQLite practice_attempts
   -> LearningEvent append
 ```
 
-### Stuck Point Summary
+### Intensive Practice / Extensive Completion
 
 ```text
-mark/skip/diagnosis view -> LearningEvent append
-practice attempts + review items + events -> application read-side aggregation
-  -> PracticeSessionSummary -> Flutter practice panel summary/open issues
-complete intensive session -> PracticeSession.ended_at_ms + familiar material event
+practice attempts -> SQLite practice_attempts -> optional ReviewItem + LearningEvent
+Flutter floating practice window is transient and closes without completing a session
+complete extensive session -> PracticeSession.ended_at_ms
+  + LearningEvent(listening_completed with comprehension self-report)
+  + optional content-fit calibration feedback
 ```
 
 ### Extensive Listening Inbox

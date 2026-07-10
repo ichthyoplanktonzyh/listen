@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- 2026-07-10 14:19 CST: Phase 3.5.6 清理 3.2 的失效内部聚合。物理删除 application 的卡点
+  writer、`PracticeSessionSummary` read-side aggregation、`StuckPoint*` DTO/helpers 及相应
+  persistence 历史测试；既有 SQLite `learning_events`、practice attempts 与 review 数据不删，
+  但不再派生“悬案/本次总结”。泛听结束 use case 改名为 extensive-only
+  `complete_listening_session`，不再写旧的 open/unexplained/familiar-material 字段，理解度自报与
+  content-fit calibration 仍保留。同步 ARCHITECTURE / DATA-MODEL / STATE；验证 Rust
+  persistence/application/api-http、Flutter 全量测试和 contracts 均通过。
+
+- 2026-07-10 10:15 CST: Phase 3.5.6 自动化收尾补强。新增
+  `intensive_practice_window_test.dart` 覆盖浮窗 mini-player 收起/恢复、相邻句导航和关闭回调；
+  测试暴露并修复了 `IntensivePracticeWindow` 将 `Positioned` 包在 `LayoutBuilder` 下导致的
+  `StackParentData` 运行时断言——现改为以 viewport 尺寸计算浮窗位置，使 `Positioned` 保持为
+  workbench Stack 的直接子项。`flutter analyze` 与新 widget test 通过。
+
+- 2026-07-10 10:00 CST: Phase 3.5.6 Slice 0–3 首轮落地。精听从右侧 `PracticePanel` 移至新建、
+  可拖动的 `IntensivePracticeWindow`：姿态栏“测一下”直接打开，支持迷你播放控制收起/展开、
+  复听、相邻句连续换题、结果 diff、retry 与加入复习队列；关闭会清理 `loopPractice` 与 transient
+  practice state。移除右侧 Practice tab、精听 mark/skip/悬案/session summary/精听完毕 UI，
+  `PracticeController` 不再加载 summary 或写卡点/diagnosis-viewed 事件。公开契约移除 summary/
+  stuck-point/diagnosis-viewed/通用 practice complete routes 和 DTO；泛听结束收敛为
+  `POST /v1/listening/sessions/{id}/complete`，应用层只允许 `extensive` session，保留理解度自报
+  与 `ListeningCompleted` 写入。同步 OpenAPI、generated client、Flutter DTO/测试和契约 gate。
+  定向 `flutter analyze`、Flutter practice tests、`cargo test -p application -p api-http`、
+  `validate-contracts.sh` 已通过；浮窗 widget 交互与真实媒体 QA 待 Slice 4。
+
+- 2026-07-10 09:44 CST: 启动 Phase 3.5.6 Intensive Practice Floating Window，新增
+  `3.5.6-PLAN.md`，将浮窗、迷你播放器、相邻句导航、精听卡点/session 机制撤回及测试顺序
+  拆成独立 slices。计划明确关键边界：`completePracticeSession` 也服务 Phase 3.3 泛听的
+  comprehension report / `ListeningCompleted`，因此精听 UI 不再调用它，但不能无差别删除；
+  卡点专属契约可移除，泛听结束语义须保留或迁为专名 API。同步更新 `STATE.md` 当前阶段与时间戳。
+
 - 2026-07-10 09:27 CST: Phase 3.5.5 Intensive Listening UX Fix 收口。撰写
   `3.5.5-CLOSEOUT.md`（如实记录 delivered 8 组 + carved-out 1 组 + deferred 6 项）;9 组走查
   问题交付 8 组（回退首页、循环标注、内容匹配度入口、词汇来源竞态、听懂了吗含 C 视图第 4 项、
