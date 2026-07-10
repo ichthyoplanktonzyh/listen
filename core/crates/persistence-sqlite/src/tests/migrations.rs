@@ -582,3 +582,28 @@ fn upgrades_historical_v10_database_and_adds_lltimeline_resources() {
         0
     );
 }
+
+#[test]
+fn upgrades_v29_database_with_empty_optional_sense_folders() {
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    connection
+        .execute_batch(
+            "DROP TRIGGER validate_lexical_sense_folder_occurrence_parent;
+             DROP TABLE lexical_sense_folder_occurrences;
+             DROP TABLE lexical_sense_folders;
+             PRAGMA user_version=29;",
+        )
+        .unwrap();
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    assert!(table_exists(&connection, "lexical_sense_folders"));
+    assert!(table_exists(&connection, "lexical_sense_folder_occurrences"));
+}

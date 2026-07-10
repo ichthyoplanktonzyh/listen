@@ -13,6 +13,57 @@ type LexicalAssets = (
 );
 
 impl SqliteRepository {
+    fn import_lexical_sense_folder_assets(
+        &self,
+        folders: &[LexicalSenseFolder],
+        assignments: &[LexicalSenseFolderOccurrence],
+    ) -> Result<(), ApplicationError> {
+        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let tx = conn.transaction().map_err(repo)?;
+        for folder in folders {
+            let entry_exists = tx
+                .query_row(
+                    "SELECT 1 FROM lexical_entries WHERE id=?1",
+                    [folder.lexical_entry_id.as_str()],
+                    |_| Ok(()),
+                )
+                .optional()
+                .map_err(repo)?
+                .is_some();
+            if !entry_exists {
+                continue;
+            }
+            tx.execute(
+                "INSERT OR IGNORE INTO lexical_sense_folders
+                 (id,lexical_entry_id,label,definition,gloss,external_ref,created_at_ms,updated_at_ms)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+                params![
+                    folder.id.as_str(), folder.lexical_entry_id.as_str(), folder.label,
+                    folder.definition, folder.gloss, folder.external_ref, folder.created_at_ms,
+                    folder.updated_at_ms,
+                ],
+            )
+            .map_err(repo)?;
+        }
+        for assignment in assignments {
+            // The migration trigger validates entry-parent agreement; invalid or
+            // missing imported edges are ignored rather than fabricating data.
+            tx.execute(
+                "INSERT OR IGNORE INTO lexical_sense_folder_occurrences
+                 (lexical_sense_id,lexical_occurrence_id)
+                 SELECT ?1,?2
+                 WHERE EXISTS(SELECT 1 FROM lexical_sense_folders WHERE id=?1)
+                   AND EXISTS(SELECT 1 FROM lexical_occurrences WHERE id=?2)",
+                params![
+                    assignment.lexical_sense_id.as_str(),
+                    assignment.lexical_occurrence_id.as_str(),
+                ],
+            )
+            .map_err(repo)?;
+        }
+        tx.commit().map_err(repo)
+    }
+
     pub(super) fn export_lexical_assets(&self) -> Result<LexicalAssets, ApplicationError> {
         let conn = self.connection.lock().expect("sqlite mutex poisoned");
         let entries = {
@@ -495,10 +546,12 @@ impl LearningAssetRepository for SqliteRepository {
                 .map_err(repo)?
         };
         let capability_profile = read_capability_profile(&conn, &id, None)?;
+        let sense_folders = read_lexical_sense_folder_details(&conn, id)?;
         Ok(Some(LexicalEntryDetails {
             entry,
             history,
             occurrences,
+            sense_folders,
             capability_profile,
         }))
     }
@@ -874,18 +927,153 @@ impl LearningAssetRepository for SqliteRepository {
             .ok_or(ApplicationError::NotFound("lexical entry"))
     }
 
+    fn create_lexical_sense_folder(
+        &self,
+        folder: &LexicalSenseFolder,
+    ) -> Result<LexicalSenseFolder, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "INSERT INTO lexical_sense_folders
+                 (id,lexical_entry_id,label,definition,gloss,external_ref,created_at_ms,updated_at_ms)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+                params![
+                    folder.id.as_str(),
+                    folder.lexical_entry_id.as_str(),
+                    folder.label,
+                    folder.definition,
+                    folder.gloss,
+                    folder.external_ref,
+                    folder.created_at_ms,
+                    folder.updated_at_ms,
+                ],
+            )
+            .map_err(repo)?;
+        Ok(folder.clone())
+    }
+
+    fn update_lexical_sense_folder(
+        &self,
+        folder: &LexicalSenseFolder,
+    ) -> Result<LexicalSenseFolder, ApplicationError> {
+        let changed = self
+            .connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "UPDATE lexical_sense_folders
+                 SET label=?3,definition=?4,gloss=?5,external_ref=?6,updated_at_ms=?7
+                 WHERE id=?1 AND lexical_entry_id=?2",
+                params![
+                    folder.id.as_str(),
+                    folder.lexical_entry_id.as_str(),
+                    folder.label,
+                    folder.definition,
+                    folder.gloss,
+                    folder.external_ref,
+                    folder.updated_at_ms,
+                ],
+            )
+            .map_err(repo)?;
+        if changed == 0 {
+            return Err(ApplicationError::NotFound("lexical sense folder"));
+        }
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        read_lexical_sense_folder(&conn, &folder.id)?
+            .ok_or(ApplicationError::NotFound("lexical sense folder"))
+    }
+
+    fn delete_lexical_sense_folder(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        sense_id: &LexicalSenseId,
+    ) -> Result<(), ApplicationError> {
+        let changed = self
+            .connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "DELETE FROM lexical_sense_folders WHERE id=?1 AND lexical_entry_id=?2",
+                params![sense_id.as_str(), lexical_entry_id.as_str()],
+            )
+            .map_err(repo)?;
+        if changed == 0 {
+            return Err(ApplicationError::NotFound("lexical sense folder"));
+        }
+        Ok(())
+    }
+
+    fn assign_occurrence_to_lexical_sense_folder(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        sense_id: &LexicalSenseId,
+        occurrence_id: &LexicalOccurrenceId,
+    ) -> Result<(), ApplicationError> {
+        let changed = self
+            .connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "INSERT INTO lexical_sense_folder_occurrences(lexical_sense_id,lexical_occurrence_id)
+                 SELECT ?1,?2
+                 WHERE EXISTS(SELECT 1 FROM lexical_sense_folders WHERE id=?1 AND lexical_entry_id=?3)
+                   AND EXISTS(SELECT 1 FROM lexical_occurrences WHERE id=?2 AND lexical_entry_id=?3)
+                 ON CONFLICT(lexical_occurrence_id)
+                 DO UPDATE SET lexical_sense_id=excluded.lexical_sense_id",
+                params![sense_id.as_str(), occurrence_id.as_str(), lexical_entry_id.as_str()],
+            )
+            .map_err(repo)?;
+        if changed == 0 {
+            return Err(ApplicationError::NotFound("lexical sense folder or occurrence"));
+        }
+        Ok(())
+    }
+
+    fn unassign_occurrence_from_lexical_sense_folder(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        sense_id: &LexicalSenseId,
+        occurrence_id: &LexicalOccurrenceId,
+    ) -> Result<(), ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let folder_exists = conn
+            .query_row(
+                "SELECT 1 FROM lexical_sense_folders WHERE id=?1 AND lexical_entry_id=?2",
+                params![sense_id.as_str(), lexical_entry_id.as_str()],
+                |_| Ok(()),
+            )
+            .optional()
+            .map_err(repo)?
+            .is_some();
+        if !folder_exists {
+            return Err(ApplicationError::NotFound("lexical sense folder"));
+        }
+        conn.execute(
+            "DELETE FROM lexical_sense_folder_occurrences
+             WHERE lexical_sense_id=?1 AND lexical_occurrence_id=?2",
+            params![sense_id.as_str(), occurrence_id.as_str()],
+        )
+        .map_err(repo)?;
+        Ok(())
+    }
+
     fn export_assets(&self) -> Result<VocabularyAssetBundle, ApplicationError> {
         let (lexical_entries, lexical_history, lexical_occurrences, lexical_observations) =
             self.export_lexical_assets()?;
         let capability_profiles = self.export_all_capability_profiles()?;
         let learning_observations = self.export_all_learning_observations()?;
         let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let lexical_sense_folders = read_all_lexical_sense_folders(&conn)?;
+        let lexical_sense_folder_occurrences = read_all_lexical_sense_folder_occurrences(&conn)?;
         Ok(VocabularyAssetBundle {
-            version: 6,
+            version: 7,
             exported_at_ms: application::now_ms(),
             lexical_entries,
             lexical_history,
             lexical_occurrences,
+            lexical_sense_folders,
+            lexical_sense_folder_occurrences,
             lexical_observations,
             phonetic_finding_feedback: read_all_phonetic_feedback(&conn)?,
             capability_profiles,
@@ -899,6 +1087,10 @@ impl LearningAssetRepository for SqliteRepository {
             &bundle.lexical_history,
             &bundle.lexical_occurrences,
             &bundle.lexical_observations,
+        )?;
+        self.import_lexical_sense_folder_assets(
+            &bundle.lexical_sense_folders,
+            &bundle.lexical_sense_folder_occurrences,
         )?;
         for profile in &bundle.capability_profiles {
             self.import_capability_profile(profile)?;
@@ -1401,6 +1593,116 @@ fn lexical_occurrence_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LexicalOc
         last_seen_at_ms: row.get(14)?,
         encounter_count: row.get(15)?,
     })
+}
+
+fn lexical_sense_folder_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<LexicalSenseFolder> {
+    Ok(LexicalSenseFolder {
+        id: LexicalSenseId::parse(row.get::<_, String>(0)?).map_err(super::domain_sql)?,
+        lexical_entry_id: LexicalEntryId::parse(row.get::<_, String>(1)?)
+            .map_err(super::domain_sql)?,
+        label: row.get(2)?,
+        definition: row.get(3)?,
+        gloss: row.get(4)?,
+        external_ref: row.get(5)?,
+        created_at_ms: row.get(6)?,
+        updated_at_ms: row.get(7)?,
+    })
+}
+
+fn read_lexical_sense_folder(
+    conn: &rusqlite::Connection,
+    sense_id: &LexicalSenseId,
+) -> Result<Option<LexicalSenseFolder>, ApplicationError> {
+    conn.query_row(
+        "SELECT id,lexical_entry_id,label,definition,gloss,external_ref,created_at_ms,updated_at_ms
+         FROM lexical_sense_folders WHERE id=?1",
+        [sense_id.as_str()],
+        lexical_sense_folder_row,
+    )
+    .optional()
+    .map_err(repo)
+}
+
+fn read_lexical_sense_folder_details(
+    conn: &rusqlite::Connection,
+    lexical_entry_id: &LexicalEntryId,
+) -> Result<Vec<LexicalSenseFolderDetails>, ApplicationError> {
+    let folders = {
+        let mut statement = conn
+            .prepare(
+                "SELECT id,lexical_entry_id,label,definition,gloss,external_ref,created_at_ms,updated_at_ms
+                 FROM lexical_sense_folders WHERE lexical_entry_id=?1 ORDER BY created_at_ms ASC",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map([lexical_entry_id.as_str()], lexical_sense_folder_row)
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)?
+    };
+    folders
+        .into_iter()
+        .map(|folder| {
+            let mut statement = conn
+                .prepare(
+                    "SELECT o.id,o.source_key,o.lexical_entry_id,o.media_id,o.sentence_id,o.original_form,
+                            o.sentence_text_snapshot,o.media_title_snapshot,o.media_fingerprint_snapshot,
+                            o.start_ms_snapshot,o.end_ms_snapshot,o.token_start,o.token_end,o.first_seen_at_ms,
+                            o.last_seen_at_ms,o.encounter_count
+                     FROM lexical_sense_folder_occurrences a
+                     JOIN lexical_occurrences o ON o.id=a.lexical_occurrence_id
+                     WHERE a.lexical_sense_id=?1 ORDER BY o.last_seen_at_ms DESC",
+                )
+                .map_err(repo)?;
+            let occurrences = statement
+                .query_map([folder.id.as_str()], lexical_occurrence_row)
+                .map_err(repo)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(repo)?;
+            Ok(LexicalSenseFolderDetails { folder, occurrences })
+        })
+        .collect()
+}
+
+fn read_all_lexical_sense_folders(
+    conn: &rusqlite::Connection,
+) -> Result<Vec<LexicalSenseFolder>, ApplicationError> {
+    let mut statement = conn
+        .prepare(
+            "SELECT id,lexical_entry_id,label,definition,gloss,external_ref,created_at_ms,updated_at_ms
+             FROM lexical_sense_folders ORDER BY created_at_ms ASC",
+        )
+        .map_err(repo)?;
+    statement
+        .query_map([], lexical_sense_folder_row)
+        .map_err(repo)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(repo)
+}
+
+fn read_all_lexical_sense_folder_occurrences(
+    conn: &rusqlite::Connection,
+) -> Result<Vec<LexicalSenseFolderOccurrence>, ApplicationError> {
+    let mut statement = conn
+        .prepare(
+            "SELECT lexical_sense_id,lexical_occurrence_id
+             FROM lexical_sense_folder_occurrences",
+        )
+        .map_err(repo)?;
+    statement
+        .query_map([], |row| {
+            Ok(LexicalSenseFolderOccurrence {
+                lexical_sense_id: LexicalSenseId::parse(row.get::<_, String>(0)?)
+                    .map_err(super::domain_sql)?,
+                lexical_occurrence_id: LexicalOccurrenceId::parse(row.get::<_, String>(1)?)
+                    .map_err(super::domain_sql)?,
+            })
+        })
+        .map_err(repo)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(repo)
 }
 
 fn lexical_observation_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LexicalObservation> {

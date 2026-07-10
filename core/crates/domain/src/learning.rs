@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     DomainError, LanguageCode, LexicalEntryId, LexicalObservationId, LexicalOccurrenceId,
-    LexicalStatusHistoryId, LexicalUnit, MediaId, SubtitleSentenceId,
+    LexicalSenseId, LexicalStatusHistoryId, LexicalUnit, MediaId, SubtitleSentenceId,
 };
 
 /// Deterministic observation identity: one observation per (entry, sentence),
@@ -134,6 +134,38 @@ pub struct LexicalOccurrence {
     pub encounter_count: u64,
 }
 
+/// A learner-owned optional folder for one meaning of a lexical entry.
+///
+/// Its ID is local identity. `external_ref` is deliberately opaque alignment
+/// metadata for a future published semantic source; it never has authority to
+/// rename, merge, or otherwise mutate the local folder.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LexicalSenseFolder {
+    pub id: LexicalSenseId,
+    pub lexical_entry_id: LexicalEntryId,
+    pub label: String,
+    pub definition: Option<String>,
+    pub gloss: Option<String>,
+    pub external_ref: Option<String>,
+    pub created_at_ms: u64,
+    pub updated_at_ms: u64,
+}
+
+/// A durable manual organization edge. It intentionally carries no evidence,
+/// capability, or automatic disambiguation claim.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LexicalSenseFolderOccurrence {
+    pub lexical_sense_id: LexicalSenseId,
+    pub lexical_occurrence_id: LexicalOccurrenceId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LexicalSenseFolderDetails {
+    pub folder: LexicalSenseFolder,
+    #[serde(default)]
+    pub occurrences: Vec<LexicalOccurrence>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LexicalStatusHistory {
     pub id: LexicalStatusHistoryId,
@@ -159,6 +191,10 @@ pub struct LexicalEntryDetails {
     pub entry: LexicalEntry,
     pub history: Vec<LexicalStatusHistory>,
     pub occurrences: Vec<LexicalOccurrence>,
+    /// Optional user organization. The entry-level occurrence list remains
+    /// complete, including every unassigned occurrence.
+    #[serde(default)]
+    pub sense_folders: Vec<LexicalSenseFolderDetails>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capability_profile: Option<crate::LexicalCapabilityProfile>,
 }

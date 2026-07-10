@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     LearningObservation, LearningResourceId, LearningStatus, LexicalCapabilityProfile,
-    LexicalEntry, LexicalObservation, LexicalOccurrence, LexicalStatusHistory,
-    PhoneticFindingFeedback,
+    LexicalEntry, LexicalObservation, LexicalOccurrence, LexicalSenseFolder,
+    LexicalSenseFolderOccurrence, LexicalStatusHistory, PhoneticFindingFeedback,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -13,6 +13,12 @@ pub struct VocabularyAssetBundle {
     pub lexical_entries: Vec<LexicalEntry>,
     pub lexical_history: Vec<LexicalStatusHistory>,
     pub lexical_occurrences: Vec<LexicalOccurrence>,
+    /// Additive v7 export fields. Folder identity stays local even when an
+    /// optional external semantic alignment is present.
+    #[serde(default)]
+    pub lexical_sense_folders: Vec<LexicalSenseFolder>,
+    #[serde(default)]
+    pub lexical_sense_folder_occurrences: Vec<LexicalSenseFolderOccurrence>,
     #[serde(default)]
     pub lexical_observations: Vec<LexicalObservation>,
     #[serde(default)]

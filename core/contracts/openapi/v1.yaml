@@ -888,6 +888,35 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/LexicalEntryDetails" }
+  /v1/lexical-entries/{entry_id}/sense-folders:
+    post:
+      operationId: createLexicalSenseFolder
+      parameters: [{ name: entry_id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/UpsertLexicalSenseFolder" } } }
+      responses: { "200": { description: Updated lexical entry details, content: { application/json: { schema: { $ref: "#/components/schemas/LexicalEntryDetails" } } } } }
+  /v1/lexical-entries/{entry_id}/sense-folders/{sense_id}:
+    put:
+      operationId: updateLexicalSenseFolder
+      parameters: [{ name: entry_id, in: path, required: true, schema: { type: string } }, { name: sense_id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/UpsertLexicalSenseFolder" } } }
+      responses: { "200": { description: Updated lexical entry details, content: { application/json: { schema: { $ref: "#/components/schemas/LexicalEntryDetails" } } } } }
+    delete:
+      operationId: deleteLexicalSenseFolder
+      parameters: [{ name: entry_id, in: path, required: true, schema: { type: string } }, { name: sense_id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Updated lexical entry details, content: { application/json: { schema: { $ref: "#/components/schemas/LexicalEntryDetails" } } } } }
+  /v1/lexical-entries/{entry_id}/sense-folders/{sense_id}/occurrences/{occurrence_id}:
+    put:
+      operationId: assignLexicalSenseFolderOccurrence
+      parameters: [{ name: entry_id, in: path, required: true, schema: { type: string } }, { name: sense_id, in: path, required: true, schema: { type: string } }, { name: occurrence_id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Updated lexical entry details, content: { application/json: { schema: { $ref: "#/components/schemas/LexicalEntryDetails" } } } } }
+    delete:
+      operationId: unassignLexicalSenseFolderOccurrence
+      parameters: [{ name: entry_id, in: path, required: true, schema: { type: string } }, { name: sense_id, in: path, required: true, schema: { type: string } }, { name: occurrence_id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Updated lexical entry details, content: { application/json: { schema: { $ref: "#/components/schemas/LexicalEntryDetails" } } } } }
   /v1/lexical-observations:
     post:
       operationId: createLexicalObservation
@@ -2592,14 +2621,41 @@ components:
         change_source: { enum: [user_selection, import, upgrade_suggestion_confirmation] }
     LexicalEntryDetails:
       type: object
-      required: [entry, history, occurrences]
+      required: [entry, history, occurrences, sense_folders]
       properties:
         entry: { $ref: "#/components/schemas/LexicalEntry" }
         history: { type: array, items: { $ref: "#/components/schemas/LexicalStatusHistory" } }
         occurrences: { type: array, items: { $ref: "#/components/schemas/LexicalOccurrence" } }
+        sense_folders: { type: array, items: { $ref: "#/components/schemas/LexicalSenseFolderDetails" } }
         capability_profile:
           $ref: "#/components/schemas/LexicalCapabilityProfile"
           nullable: true
+    UpsertLexicalSenseFolder:
+      type: object
+      required: [label]
+      properties:
+        label: { type: string, minLength: 1 }
+        definition: { type: [string, "null"] }
+        gloss: { type: [string, "null"] }
+        external_ref: { type: [string, "null"] }
+    LexicalSenseFolder:
+      type: object
+      required: [id, lexical_entry_id, label, definition, gloss, external_ref, created_at_ms, updated_at_ms]
+      properties:
+        id: { type: string }
+        lexical_entry_id: { type: string }
+        label: { type: string }
+        definition: { type: [string, "null"] }
+        gloss: { type: [string, "null"] }
+        external_ref: { type: [string, "null"] }
+        created_at_ms: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
+    LexicalSenseFolderDetails:
+      type: object
+      required: [folder, occurrences]
+      properties:
+        folder: { $ref: "#/components/schemas/LexicalSenseFolder" }
+        occurrences: { type: array, items: { $ref: "#/components/schemas/LexicalOccurrence" } }
     LexicalCapabilityProfile:
       type: object
       required: [lexical_entry_id, reading, listening, speaking, writing]
@@ -3097,11 +3153,20 @@ components:
       type: object
       required: [version, exported_at_ms, lexical_entries, lexical_history, lexical_occurrences, lexical_observations, phonetic_finding_feedback]
       properties:
-        version: { enum: [5] }
+        version: { enum: [5, 6, 7] }
         exported_at_ms: { type: integer, minimum: 0 }
         lexical_entries: { type: array, items: { $ref: "#/components/schemas/LexicalEntry" } }
         lexical_history: { type: array, items: { $ref: "#/components/schemas/LexicalStatusHistory" } }
         lexical_occurrences: { type: array, items: { $ref: "#/components/schemas/LexicalOccurrence" } }
+        lexical_sense_folders: { type: array, items: { $ref: "#/components/schemas/LexicalSenseFolder" } }
+        lexical_sense_folder_occurrences:
+          type: array
+          items:
+            type: object
+            required: [lexical_sense_id, lexical_occurrence_id]
+            properties:
+              lexical_sense_id: { type: string }
+              lexical_occurrence_id: { type: string }
         lexical_observations: { type: array, items: { $ref: "#/components/schemas/LexicalObservation" } }
         phonetic_finding_feedback: { type: array, items: { type: object } }
     DictionaryLookup:

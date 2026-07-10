@@ -705,13 +705,31 @@ export interface LearningEvent {
 }
 
 export interface VocabularyAssetBundle {
-  version: 5;
+  version: 5 | 6 | 7;
   exported_at_ms: number;
   lexical_entries: LexicalEntry[];
   lexical_history: unknown[];
   lexical_occurrences: unknown[];
+  lexical_sense_folders?: LexicalSenseFolder[];
+  lexical_sense_folder_occurrences?: LexicalSenseFolderOccurrence[];
   lexical_observations: LexicalObservation[];
   phonetic_finding_feedback: unknown[];
+}
+
+export interface LexicalSenseFolder {
+  id: string;
+  lexical_entry_id: string;
+  label: string;
+  definition: string | null;
+  gloss: string | null;
+  external_ref: string | null;
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
+export interface LexicalSenseFolderOccurrence {
+  lexical_sense_id: string;
+  lexical_occurrence_id: string;
 }
 
 export interface LexicalNormalization {

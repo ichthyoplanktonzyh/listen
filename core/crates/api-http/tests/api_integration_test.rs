@@ -468,3 +468,61 @@ async fn lexical_entry_upsert_list_detail_and_update_lifecycle() {
     assert_eq!(updated["entry"]["user_definition"], "found everywhere");
     assert_eq!(updated["entry"]["personal_note"], "GRE word");
 }
+
+#[tokio::test]
+async fn sense_folder_http_lifecycle_keeps_entry_occurrences_and_assigns_manually() {
+    let app = build_app();
+    let (status, entry) = send(
+        &app,
+        put_json(
+            "/v1/lexical-entries",
+            Some(TOKEN),
+            &json!({
+                "language": "en", "kind": "word", "canonical_form": "run", "display_form": "run",
+                "source": {
+                    "original_form": "runs", "sentence_text": "She runs a business.",
+                    "media_title": "Personal media", "media_fingerprint": "fp-run",
+                    "start_ms": 100, "end_ms": 900, "token_start": 1, "token_end": 1
+                }
+            }),
+        ),
+    ).await;
+    assert_eq!(status, StatusCode::OK, "{entry}");
+    let entry_id = entry["entry"]["id"].as_str().unwrap();
+    let occurrence_id = entry["occurrences"][0]["id"].as_str().unwrap();
+
+    let (status, created) = send(
+        &app,
+        post_json(
+            &format!("/v1/lexical-entries/{entry_id}/sense-folders"),
+            Some(TOKEN),
+            &json!({"label": "operate a business", "external_ref": "scenelex:run-03"}),
+        ),
+    ).await;
+    assert_eq!(status, StatusCode::OK, "{created}");
+    assert_eq!(created["occurrences"].as_array().unwrap().len(), 1);
+    let sense_id = created["sense_folders"][0]["folder"]["id"].as_str().unwrap();
+
+    let (status, assigned) = send(
+        &app,
+        put_json(
+            &format!("/v1/lexical-entries/{entry_id}/sense-folders/{sense_id}/occurrences/{occurrence_id}"),
+            Some(TOKEN),
+            &json!({}),
+        ),
+    ).await;
+    assert_eq!(status, StatusCode::OK, "{assigned}");
+    assert_eq!(assigned["sense_folders"][0]["occurrences"].as_array().unwrap().len(), 1);
+
+    let (status, deleted) = send(
+        &app,
+        method_no_body(
+            "DELETE",
+            &format!("/v1/lexical-entries/{entry_id}/sense-folders/{sense_id}"),
+            Some(TOKEN),
+        ),
+    ).await;
+    assert_eq!(status, StatusCode::OK, "{deleted}");
+    assert!(deleted["sense_folders"].as_array().unwrap().is_empty());
+    assert_eq!(deleted["occurrences"].as_array().unwrap().len(), 1);
+}

@@ -1,6 +1,85 @@
 use super::*;
 
 #[test]
+fn sense_folders_are_optional_local_organizers_with_entry_scoped_assignments() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(), repo.clone(), repo.clone(), repo.clone(), repo.clone(), repo.clone(),
+        repo.clone(), repo,
+    );
+    let source = application::LexicalSourceContext {
+        media_id: None,
+        sentence_id: None,
+        original_form: "runs".into(),
+        sentence_text: "She runs a business.".into(),
+        media_title: "Source".into(),
+        media_fingerprint: "source".into(),
+        start_ms: 10,
+        end_ms: 20,
+        token_start: Some(1),
+        token_end: Some(1),
+    };
+    let entry = upsert_word_asset(&services, "en", "run", "run", None, Some(source));
+    let occurrence = entry.occurrences[0].clone();
+
+    let folder = services
+        .create_lexical_sense_folder(
+            &entry.entry.id,
+            "operate a business".into(),
+            Some("manage a company".into()),
+            Some("经营".into()),
+            Some("scenelex:run-03".into()),
+        )
+        .unwrap();
+    services
+        .assign_occurrence_to_lexical_sense_folder(&entry.entry.id, &folder.id, &occurrence.id)
+        .unwrap();
+
+    let details = services.lexical_details(&entry.entry.id).unwrap().unwrap();
+    assert_eq!(details.occurrences.len(), 1, "entry list remains complete");
+    assert_eq!(details.sense_folders.len(), 1);
+    assert_eq!(details.sense_folders[0].folder.external_ref.as_deref(), Some("scenelex:run-03"));
+    assert_eq!(details.sense_folders[0].occurrences, vec![occurrence.clone()]);
+    assert!(details.capability_profile.is_some(), "entry capability remains present");
+
+    let bundle = services.export_vocabulary().unwrap();
+    assert_eq!(bundle.version, 7);
+    assert_eq!(bundle.lexical_sense_folders, vec![folder.clone()]);
+    assert_eq!(bundle.lexical_sense_folder_occurrences.len(), 1);
+    let restored_repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let restored = AppServices::new(
+        restored_repo.clone(), restored_repo.clone(), restored_repo.clone(), restored_repo.clone(),
+        restored_repo.clone(), restored_repo.clone(), restored_repo.clone(), restored_repo,
+    );
+    restored.import_vocabulary(&bundle).unwrap();
+    assert_eq!(
+        restored
+            .lexical_details(&entry.entry.id)
+            .unwrap()
+            .unwrap()
+            .sense_folders[0]
+            .occurrences,
+        vec![occurrence.clone()]
+    );
+
+    services
+        .unassign_occurrence_from_lexical_sense_folder(&entry.entry.id, &folder.id, &occurrence.id)
+        .unwrap();
+    assert!(services
+        .lexical_details(&entry.entry.id)
+        .unwrap()
+        .unwrap()
+        .sense_folders[0]
+        .occurrences
+        .is_empty());
+
+    let other = upsert_word_asset(&services, "en", "walk", "walk", None, None);
+    assert!(services
+        .assign_occurrence_to_lexical_sense_folder(&other.entry.id, &folder.id, &occurrence.id)
+        .is_err());
+}
+
+#[test]
 fn learning_observations_append_without_replacing_prior_rows() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = AppServices::new(
@@ -683,7 +762,7 @@ fn export_includes_capability_profiles_and_v6_import_merges_without_overwriting_
         .unwrap();
 
     let bundle = services.export_vocabulary().unwrap();
-    assert_eq!(bundle.version, 6);
+    assert_eq!(bundle.version, 7);
     assert!(!bundle.capability_profiles.is_empty());
     let exported_profile = bundle
         .capability_profiles

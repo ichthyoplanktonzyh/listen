@@ -19,6 +19,90 @@ pub(crate) struct ObservationContext {
 }
 
 impl AppServices {
+    pub fn create_lexical_sense_folder(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        label: String,
+        definition: Option<String>,
+        gloss: Option<String>,
+        external_ref: Option<String>,
+    ) -> Result<LexicalSenseFolder, ApplicationError> {
+        if self.learning_assets.lexical_details(lexical_entry_id)?.is_none() {
+            return Err(ApplicationError::NotFound("lexical entry"));
+        }
+        let label = clean_required(label, "sense folder label")?;
+        let now = now_ms();
+        let folder = LexicalSenseFolder {
+            id: LexicalSenseId::from_fingerprint(
+                "lexical-sense-folder",
+                &format!("{}:{label}:{now}", lexical_entry_id.as_str()),
+            ),
+            lexical_entry_id: lexical_entry_id.clone(),
+            label,
+            definition: clean_optional(definition),
+            gloss: clean_optional(gloss),
+            external_ref: clean_optional(external_ref),
+            created_at_ms: now,
+            updated_at_ms: now,
+        };
+        self.learning_assets.create_lexical_sense_folder(&folder)
+    }
+
+    pub fn update_lexical_sense_folder(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        sense_id: &LexicalSenseId,
+        label: String,
+        definition: Option<String>,
+        gloss: Option<String>,
+        external_ref: Option<String>,
+    ) -> Result<LexicalSenseFolder, ApplicationError> {
+        let folder = LexicalSenseFolder {
+            id: sense_id.clone(),
+            lexical_entry_id: lexical_entry_id.clone(),
+            label: clean_required(label, "sense folder label")?,
+            definition: clean_optional(definition),
+            gloss: clean_optional(gloss),
+            external_ref: clean_optional(external_ref),
+            created_at_ms: 0,
+            updated_at_ms: now_ms(),
+        };
+        self.learning_assets.update_lexical_sense_folder(&folder)
+    }
+
+    pub fn delete_lexical_sense_folder(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        sense_id: &LexicalSenseId,
+    ) -> Result<(), ApplicationError> {
+        self.learning_assets
+            .delete_lexical_sense_folder(lexical_entry_id, sense_id)
+    }
+
+    pub fn assign_occurrence_to_lexical_sense_folder(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        sense_id: &LexicalSenseId,
+        occurrence_id: &LexicalOccurrenceId,
+    ) -> Result<(), ApplicationError> {
+        self.learning_assets
+            .assign_occurrence_to_lexical_sense_folder(lexical_entry_id, sense_id, occurrence_id)
+    }
+
+    pub fn unassign_occurrence_from_lexical_sense_folder(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        sense_id: &LexicalSenseId,
+        occurrence_id: &LexicalOccurrenceId,
+    ) -> Result<(), ApplicationError> {
+        self.learning_assets
+            .unassign_occurrence_from_lexical_sense_folder(
+                lexical_entry_id,
+                sense_id,
+                occurrence_id,
+            )
+    }
+
     pub fn lexical_capability_profile(
         &self,
         lexical_entry_id: &LexicalEntryId,
@@ -387,7 +471,7 @@ impl AppServices {
         &self,
         bundle: &VocabularyAssetBundle,
     ) -> Result<(), ApplicationError> {
-        if bundle.version != 5 && bundle.version != 6 {
+        if bundle.version != 5 && bundle.version != 6 && bundle.version != 7 {
             return Err(ApplicationError::Validation(
                 "unsupported asset bundle version",
             ));

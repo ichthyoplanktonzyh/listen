@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-10T21:05:00.000+08:00"
+last_updated: "2026-07-10T23:25:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-10 21:05 CST
-> 更新原因：Phase 3.6 收口。债务清偿：schema v29 FTS5 短语搜索取代 LIKE 全扫、词索引键与
-> 查询双向 lemma 归一。真实媒体手工 QA 按 owner 决定豁免，CLOSEOUT 已写，phase 冻结。
+> 最后更新：2026-07-10 23:25 CST
+> 更新原因：Phase 3.6.1 收口。听力词典增加本地义项文件夹；schema v30、手动切片归类、
+> external semantic reference seam 已验证，SceneLex/API/自动消歧刻意未接入。
 
 ## 当前位置
 
@@ -268,6 +268,13 @@ last_updated: "2026-07-10T21:05:00.000+08:00"
   计划已冻结：`3.6-PLAN.md`（v2，含 Progress）。
 - 后续（不在本 phase）：3.6.x 义项文件夹（spike 把门三问题）、图谱视图（数据密度足够后）、
   词典页与侧面板功能重叠的 UI 整合决策。
+
+### Phase 3.6.1: Sense Folders ✅ 已收口（2026-07-10）
+
+- 本地义项文件夹 + 手动切片归类已落地：用户文件夹为身份权威，external reference 仅为
+  可选对齐注释；词条级能力/证据/字幕热路径不变。schema v30 与资产 bundle v7 已验证。
+- 自动化验证与 owner 真实媒体桌面 QA 均通过；收口：
+  `.planning/phases/3.6.1-sense-folders/3.6.1-CLOSEOUT.md`。
 
 ## 已完成 Phase 索引
 

@@ -1,6 +1,7 @@
 use domain::{
     CapabilityAssessment, CapabilityConclusion, CapabilityFilter, LexicalCapability,
-    LexicalCapabilityProfile, LexicalEntryKind,
+    LexicalCapabilityProfile, LexicalEntryKind, LexicalEntryDetails, LexicalOccurrenceId,
+    LexicalSenseId,
 };
 
 use crate::*;
@@ -57,6 +58,103 @@ pub(crate) async fn get_capability_profile(
         .lexical_capability_profile(&entry_id)?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("capability profile"))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpsertSenseFolderRequest {
+    label: String,
+    definition: Option<String>,
+    gloss: Option<String>,
+    external_ref: Option<String>,
+}
+
+pub(crate) async fn create_sense_folder(
+    State(state): State<ApiState>,
+    Path(entry_id): Path<String>,
+    Json(request): Json<UpsertSenseFolderRequest>,
+) -> Result<Json<LexicalEntryDetails>, ApiError> {
+    let entry_id = LexicalEntryId::parse(entry_id).map_err(ApplicationError::from)?;
+    state.services.create_lexical_sense_folder(
+        &entry_id,
+        request.label,
+        request.definition,
+        request.gloss,
+        request.external_ref,
+    )?;
+    lexical_details_after_sense_folder_change(&state, &entry_id)
+}
+
+pub(crate) async fn update_sense_folder(
+    State(state): State<ApiState>,
+    Path((entry_id, sense_id)): Path<(String, String)>,
+    Json(request): Json<UpsertSenseFolderRequest>,
+) -> Result<Json<LexicalEntryDetails>, ApiError> {
+    let entry_id = LexicalEntryId::parse(entry_id).map_err(ApplicationError::from)?;
+    let sense_id = LexicalSenseId::parse(sense_id).map_err(ApplicationError::from)?;
+    state.services.update_lexical_sense_folder(
+        &entry_id,
+        &sense_id,
+        request.label,
+        request.definition,
+        request.gloss,
+        request.external_ref,
+    )?;
+    lexical_details_after_sense_folder_change(&state, &entry_id)
+}
+
+pub(crate) async fn delete_sense_folder(
+    State(state): State<ApiState>,
+    Path((entry_id, sense_id)): Path<(String, String)>,
+) -> Result<Json<LexicalEntryDetails>, ApiError> {
+    let entry_id = LexicalEntryId::parse(entry_id).map_err(ApplicationError::from)?;
+    let sense_id = LexicalSenseId::parse(sense_id).map_err(ApplicationError::from)?;
+    state.services.delete_lexical_sense_folder(&entry_id, &sense_id)?;
+    lexical_details_after_sense_folder_change(&state, &entry_id)
+}
+
+pub(crate) async fn assign_sense_folder_occurrence(
+    State(state): State<ApiState>,
+    Path((entry_id, sense_id, occurrence_id)): Path<(String, String, String)>,
+) -> Result<Json<LexicalEntryDetails>, ApiError> {
+    let entry_id = LexicalEntryId::parse(entry_id).map_err(ApplicationError::from)?;
+    let sense_id = LexicalSenseId::parse(sense_id).map_err(ApplicationError::from)?;
+    let occurrence_id = LexicalOccurrenceId::parse(occurrence_id).map_err(ApplicationError::from)?;
+    state.services.assign_occurrence_to_lexical_sense_folder(
+        &entry_id,
+        &sense_id,
+        &occurrence_id,
+    )?;
+    lexical_details_after_sense_folder_change(&state, &entry_id)
+}
+
+pub(crate) async fn unassign_sense_folder_occurrence(
+    State(state): State<ApiState>,
+    Path((entry_id, sense_id, occurrence_id)): Path<(String, String, String)>,
+) -> Result<Json<LexicalEntryDetails>, ApiError> {
+    let entry_id = LexicalEntryId::parse(entry_id).map_err(ApplicationError::from)?;
+    let sense_id = LexicalSenseId::parse(sense_id).map_err(ApplicationError::from)?;
+    let occurrence_id = LexicalOccurrenceId::parse(occurrence_id).map_err(ApplicationError::from)?;
+    state.services.unassign_occurrence_from_lexical_sense_folder(
+        &entry_id,
+        &sense_id,
+        &occurrence_id,
+    )?;
+    lexical_details_after_sense_folder_change(&state, &entry_id)
+}
+
+fn lexical_details_after_sense_folder_change(
+    state: &ApiState,
+    entry_id: &LexicalEntryId,
+) -> Result<Json<LexicalEntryDetails>, ApiError> {
+    let details = state
+        .services
+        .lexical_details(entry_id)?
+        .ok_or_else(|| ApiError::not_found("lexical entry"))?;
+    let _ = state.events.send(EventEnvelope::v1(
+        EventName::LexicalEntryChanged,
+        serde_json::to_value(&details).expect("lexical details serializes"),
+    ));
+    Ok(Json(details))
 }
 
 fn parse_capability(value: &str) -> Result<LexicalCapability, ApiError> {

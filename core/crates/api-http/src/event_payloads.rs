@@ -285,6 +285,7 @@ mod tests {
             },
             history: Vec::new(),
             occurrences: Vec::new(),
+            sense_folders: Vec::new(),
             capability_profile: Some(LexicalCapabilityProfile::from_legacy_status(
                 LexicalEntryId::parse("entry-1").unwrap(),
                 Some(LearningStatus::KnownNotRecognized),

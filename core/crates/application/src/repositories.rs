@@ -820,6 +820,31 @@ pub trait LearningAssetRepository: Send + Sync {
         personal_note: Option<String>,
         updated_at_ms: u64,
     ) -> Result<LexicalEntryDetails, ApplicationError>;
+    fn create_lexical_sense_folder(
+        &self,
+        folder: &LexicalSenseFolder,
+    ) -> Result<LexicalSenseFolder, ApplicationError>;
+    fn update_lexical_sense_folder(
+        &self,
+        folder: &LexicalSenseFolder,
+    ) -> Result<LexicalSenseFolder, ApplicationError>;
+    fn delete_lexical_sense_folder(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        sense_id: &LexicalSenseId,
+    ) -> Result<(), ApplicationError>;
+    fn assign_occurrence_to_lexical_sense_folder(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        sense_id: &LexicalSenseId,
+        occurrence_id: &LexicalOccurrenceId,
+    ) -> Result<(), ApplicationError>;
+    fn unassign_occurrence_from_lexical_sense_folder(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        sense_id: &LexicalSenseId,
+        occurrence_id: &LexicalOccurrenceId,
+    ) -> Result<(), ApplicationError>;
     fn export_assets(&self) -> Result<VocabularyAssetBundle, ApplicationError>;
     fn import_assets(&self, bundle: &VocabularyAssetBundle) -> Result<(), ApplicationError>;
     fn export_all_capability_profiles(

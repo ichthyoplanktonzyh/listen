@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-10 23:25 CST: Phase 3.6.1 Sense Folders 收口。Owner 已接受真实媒体桌面 QA；
+  CLOSEOUT、STATE 与冻结计划已同步。下一步建议为独立的 SceneLex 消费契约 spike，只定义
+  已发布外部义项/资源的版本与发布状态，以及与本地文件夹 `external_ref` 的对齐，不实现
+  下载、生成或自动消歧。
+
+- 2026-07-10 23:25 CST: 开始 Phase 3.6.1 Sense Folders。新增本地义项文件夹的领域模型、
+  schema v30、词典详情 API 与桌面端手动归类界面：文件夹是用户身份权威，外部 semantic
+  reference 仅为可选不透明对齐字段；切片归类不写入学习证据、不改变词条级四通道画像，
+  未归类切片仍完整显示。词典资产导出升级至 v7 并保留 v5/v6 导入。SceneLex/API/自动消歧
+  均未接入。自动验证：Rust application 50、persistence 81、api-http 35 + HTTP integration 12
+  全绿；Flutter analyze 与 widget test 全绿。真实桌面 owner QA 待执行。
+
 - 2026-07-10 21:05 CST: Phase 3.6 债务清偿并收口。SQLite schema v29 新增
   `corpus_occurrences_fts` FTS5 伴生索引（rowid 镜像、触发器维护、迁移回填），多词 corpus
   查询从 `LIKE '%…%'` 全表扫描升级为分词短语匹配；`delete_track` 在 FK cascade 前显式清理

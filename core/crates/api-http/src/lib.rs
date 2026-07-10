@@ -324,6 +324,18 @@ pub fn router(state: ApiState) -> Router {
             put(m18::update_lexical_learning_content),
         )
         .route(
+            "/v1/lexical-entries/{entry_id}/sense-folders",
+            post(create_sense_folder),
+        )
+        .route(
+            "/v1/lexical-entries/{entry_id}/sense-folders/{sense_id}",
+            put(update_sense_folder).delete(delete_sense_folder),
+        )
+        .route(
+            "/v1/lexical-entries/{entry_id}/sense-folders/{sense_id}/occurrences/{occurrence_id}",
+            put(assign_sense_folder_occurrence).delete(unassign_sense_folder_occurrence),
+        )
+        .route(
             "/v1/lexical-observations",
             post(m18::create_lexical_observation),
         )
