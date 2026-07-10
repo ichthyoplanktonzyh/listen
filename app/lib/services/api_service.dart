@@ -816,6 +816,78 @@ class LocalApi {
           }))
           as Map<String, dynamic>;
 
+  Future<Map<String, dynamic>> createLexicalSenseFolder(
+    String entryId, {
+    required String label,
+    String? definition,
+    String? gloss,
+    String? externalRef,
+  }) async =>
+      (await _request(
+            'POST',
+            '/v1/lexical-entries/${Uri.encodeComponent(entryId)}/sense-folders',
+            {
+              'label': label,
+              'definition': definition,
+              'gloss': gloss,
+              'external_ref': externalRef,
+            },
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> updateLexicalSenseFolder(
+    String entryId,
+    String senseId, {
+    required String label,
+    String? definition,
+    String? gloss,
+    String? externalRef,
+  }) async =>
+      (await _request(
+            'PUT',
+            '/v1/lexical-entries/${Uri.encodeComponent(entryId)}/sense-folders/${Uri.encodeComponent(senseId)}',
+            {
+              'label': label,
+              'definition': definition,
+              'gloss': gloss,
+              'external_ref': externalRef,
+            },
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> deleteLexicalSenseFolder(
+    String entryId,
+    String senseId,
+  ) async =>
+      (await _request(
+            'DELETE',
+            '/v1/lexical-entries/${Uri.encodeComponent(entryId)}/sense-folders/${Uri.encodeComponent(senseId)}',
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> assignLexicalSenseFolderOccurrence(
+    String entryId,
+    String senseId,
+    String occurrenceId,
+  ) async =>
+      (await _request(
+            'PUT',
+            '/v1/lexical-entries/${Uri.encodeComponent(entryId)}/sense-folders/${Uri.encodeComponent(senseId)}/occurrences/${Uri.encodeComponent(occurrenceId)}',
+            const {},
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> unassignLexicalSenseFolderOccurrence(
+    String entryId,
+    String senseId,
+    String occurrenceId,
+  ) async =>
+      (await _request(
+            'DELETE',
+            '/v1/lexical-entries/${Uri.encodeComponent(entryId)}/sense-folders/${Uri.encodeComponent(senseId)}/occurrences/${Uri.encodeComponent(occurrenceId)}',
+          ))
+          as Map<String, dynamic>;
+
   Future<Map<String, dynamic>> importExternalVocabulary(
     List<Map<String, dynamic>> entries, {
     required String language,

@@ -350,6 +350,89 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     }
   }
 
+  Future<void> _createSenseFolder(
+    LexicalEntry entry,
+    String label,
+    String? definition,
+    String? gloss,
+    String? externalRef,
+  ) => _saveSenseFolderChange(
+    entry,
+    () => widget.api.createLexicalSenseFolder(
+      entry.id,
+      label: label,
+      definition: definition,
+      gloss: gloss,
+      externalRef: externalRef,
+    ),
+  );
+
+  Future<void> _updateSenseFolder(
+    LexicalEntry entry,
+    String senseId,
+    String label,
+    String? definition,
+    String? gloss,
+    String? externalRef,
+  ) => _saveSenseFolderChange(
+    entry,
+    () => widget.api.updateLexicalSenseFolder(
+      entry.id,
+      senseId,
+      label: label,
+      definition: definition,
+      gloss: gloss,
+      externalRef: externalRef,
+    ),
+  );
+
+  Future<void> _deleteSenseFolder(LexicalEntry entry, String senseId) =>
+      _saveSenseFolderChange(
+        entry,
+        () => widget.api.deleteLexicalSenseFolder(entry.id, senseId),
+      );
+
+  Future<void> _assignSenseFolder(
+    LexicalEntry entry,
+    String senseId,
+    LexicalOccurrence occurrence,
+  ) => _saveSenseFolderChange(
+    entry,
+    () => widget.api.assignLexicalSenseFolderOccurrence(
+      entry.id,
+      senseId,
+      occurrence.id,
+    ),
+  );
+
+  Future<void> _unassignSenseFolder(
+    LexicalEntry entry,
+    String senseId,
+    LexicalOccurrence occurrence,
+  ) => _saveSenseFolderChange(
+    entry,
+    () => widget.api.unassignLexicalSenseFolderOccurrence(
+      entry.id,
+      senseId,
+      occurrence.id,
+    ),
+  );
+
+  Future<void> _saveSenseFolderChange(
+    LexicalEntry entry,
+    Future<Map<String, dynamic>> Function() action,
+  ) async {
+    final l = AppLocalizations.of(context);
+    try {
+      final value = LexicalEntryDetails.fromJson(await action());
+      if (mounted) setState(() => details = value);
+    } catch (error) {
+      if (mounted) {
+        _snack(l.text('dictionaryUpdateFailed').replaceAll('{error}', '$error'));
+      }
+    }
+  }
+
   Future<void> _confirmSuggestion(
     LexicalEntry entry,
     UpgradeSuggestion suggestion,
@@ -593,6 +676,15 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
             _setOverride(value.entry, capability, conclusion),
         onSaveContent: (definition, note) =>
             _saveContent(value.entry, definition, note),
+        onCreateSenseFolder: (label, definition, gloss, externalRef) =>
+            _createSenseFolder(value.entry, label, definition, gloss, externalRef),
+        onUpdateSenseFolder: (id, label, definition, gloss, externalRef) =>
+            _updateSenseFolder(value.entry, id, label, definition, gloss, externalRef),
+        onDeleteSenseFolder: (id) => _deleteSenseFolder(value.entry, id),
+        onAssignSenseFolder: (senseId, occurrence) =>
+            _assignSenseFolder(value.entry, senseId, occurrence),
+        onUnassignSenseFolder: (senseId, occurrence) =>
+            _unassignSenseFolder(value.entry, senseId, occurrence),
         onReviewClip: (occurrence) => _reviewClip(value.entry, occurrence),
         externalLookupUrl: _externalLookupUrlFor(
           value.entry.displayForm,

@@ -197,6 +197,65 @@ void main() {
     },
   );
 
+  testWidgets('sense folders stay optional and create through the detail view', (
+    tester,
+  ) async {
+    String? createdLabel;
+    const assigned = LexicalOccurrence(
+      id: 'occurrence-1',
+      mediaTitleSnapshot: 'Personal media',
+      mediaFingerprintSnapshot: 'fp-1',
+      sentenceTextSnapshot: 'She runs a business.',
+      startMsSnapshot: 1200,
+      endMsSnapshot: 2400,
+      encounterCount: 1,
+      originalForm: 'runs',
+    );
+    const unassigned = LexicalOccurrence(
+      id: 'occurrence-2',
+      mediaTitleSnapshot: 'Personal media',
+      mediaFingerprintSnapshot: 'fp-2',
+      sentenceTextSnapshot: 'She runs every morning.',
+      startMsSnapshot: 2500,
+      endMsSnapshot: 3600,
+      encounterCount: 1,
+      originalForm: 'runs',
+    );
+    await tester.pumpWidget(
+      localized(
+        ListeningDictionaryEntryView(
+          details: const LexicalEntryDetails(
+            entry: LexicalEntry(
+              id: 'run', normalizedForm: 'run', displayForm: 'run', kind: 'word', language: 'en',
+            ),
+            occurrences: [assigned, unassigned],
+            senseFolders: [
+              LexicalSenseFolderDetails(
+                folder: LexicalSenseFolder(
+                  id: 'sense-1', lexicalEntryId: 'run', label: 'operate a business',
+                  createdAtMs: 1, updatedAtMs: 1,
+                ),
+                occurrences: [assigned],
+              ),
+            ],
+          ),
+          onPlay: (_) {},
+          onMark: (_, _) async => true,
+          onCreateSenseFolder: (label, _, _, _) async => createdLabel = label,
+        ),
+      ),
+    );
+
+    expect(find.text('Meaning folders'), findsOneWidget);
+    expect(find.text('Unassigned clips'), findsOneWidget);
+    await tester.tap(find.byTooltip('Add meaning folder'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'physical running');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(createdLabel, 'physical running');
+  });
+
   testWidgets(
     'listening dictionary searches the library, dedupes saved clips, and collects',
     (tester) async {

@@ -23,10 +23,9 @@ int? clipSpeechRateWpm(String sentence, int startMs, int endMs) {
   return (words * 60000 / durationMs).round();
 }
 
-/// The first listening-dictionary detail surface.  It deliberately consumes
-/// the durable lexical-asset snapshots first: an occurrence stays directly
-/// under its entry (sense folders arrive in a later phase).  The optional
-/// callbacks light up Slice 3/4 behaviour — corpus enrichment, capability
+/// The listening-dictionary detail surface keeps the complete entry-level
+/// occurrence list authoritative while offering optional user-owned sense
+/// folders for organization. The optional callbacks light up Slice 3/4 behaviour — corpus enrichment, capability
 /// override editing, definition/note editing, upgrade-suggestion resolution,
 /// per-clip review exits, and external reference fallbacks.
 class ListeningDictionaryEntryView extends StatefulWidget {
@@ -43,6 +42,11 @@ class ListeningDictionaryEntryView extends StatefulWidget {
     this.onRejectSuggestion,
     this.onCapabilityOverride,
     this.onSaveContent,
+    this.onCreateSenseFolder,
+    this.onUpdateSenseFolder,
+    this.onDeleteSenseFolder,
+    this.onAssignSenseFolder,
+    this.onUnassignSenseFolder,
     this.onReviewClip,
     this.externalLookupUrl,
     this.onOpenExternal,
@@ -74,6 +78,12 @@ class ListeningDictionaryEntryView extends StatefulWidget {
 
   /// Persists the user definition and personal note.
   final Future<void> Function(String? definition, String? note)? onSaveContent;
+
+  final Future<void> Function(String label, String? definition, String? gloss, String? externalRef)? onCreateSenseFolder;
+  final Future<void> Function(String id, String label, String? definition, String? gloss, String? externalRef)? onUpdateSenseFolder;
+  final Future<void> Function(String id)? onDeleteSenseFolder;
+  final Future<void> Function(String senseId, LexicalOccurrence occurrence)? onAssignSenseFolder;
+  final Future<void> Function(String senseId, LexicalOccurrence occurrence)? onUnassignSenseFolder;
 
   /// Queues one clip (with its sentence anchor) into the sound review queue.
   final Future<void> Function(LexicalOccurrence occurrence)? onReviewClip;
@@ -110,6 +120,7 @@ class _ListeningDictionaryEntryViewState
   late final TextEditingController _definition;
   late final TextEditingController _note;
   bool _savingContent = false;
+  bool _savingSenseFolder = false;
 
   LexicalEntry get entry => widget.details.entry;
 
@@ -229,10 +240,47 @@ class _ListeningDictionaryEntryViewState
     return sorted;
   }
 
+  Set<String> get _assignedOccurrenceIds => {
+    for (final folder in widget.details.senseFolders)
+      for (final occurrence in folder.occurrences) occurrence.id,
+  };
+
+  Future<void> _editSenseFolder([LexicalSenseFolder? existing]) async {
+    final result = await showDialog<_SenseFolderDraft>(
+      context: context,
+      builder: (context) => _SenseFolderDialog(existing: existing),
+    );
+    if (result == null) return;
+    setState(() => _savingSenseFolder = true);
+    try {
+      if (existing == null) {
+        await widget.onCreateSenseFolder?.call(
+          result.label,
+          result.definition,
+          result.gloss,
+          result.externalRef,
+        );
+      } else {
+        await widget.onUpdateSenseFolder?.call(
+          existing.id,
+          result.label,
+          result.definition,
+          result.gloss,
+          result.externalRef,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _savingSenseFolder = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final occurrences = _sortedOccurrences();
+    final unassignedOccurrences = occurrences
+        .where((occurrence) => !_assignedOccurrenceIds.contains(occurrence.id))
+        .toList(growable: false);
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
@@ -263,6 +311,10 @@ class _ListeningDictionaryEntryViewState
         if (widget.onSaveContent != null) ...[
           const SizedBox(height: 12),
           _contentEditor(l),
+        ],
+        if (widget.onCreateSenseFolder != null) ...[
+          const SizedBox(height: 20),
+          _senseFolderSection(l),
         ],
         const SizedBox(height: 20),
         Row(
@@ -306,11 +358,121 @@ class _ListeningDictionaryEntryViewState
         if (occurrences.isEmpty)
           _EmptyClips(entry: entry, external: _externalRow(l))
         else
-          for (final occurrence in occurrences) _clipTile(occurrence, l),
+          ...[
+            if (unassignedOccurrences.isNotEmpty)
+              Text(
+                l.text('dictionaryUnassignedClips'),
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            for (final occurrence in unassignedOccurrences)
+              _clipWithSenseAction(occurrence, l, null),
+          ],
         if (widget.onSearchLibrary != null) ..._librarySection(l),
       ],
     );
   }
+
+  Widget _senseFolderSection(AppLocalizations l) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              l.text('dictionarySenseFolders'),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          IconButton(
+            tooltip: l.text('dictionaryAddSenseFolder'),
+            onPressed: _savingSenseFolder ? null : () => unawaited(_editSenseFolder()),
+            icon: const Icon(Icons.create_new_folder_outlined),
+          ),
+        ],
+      ),
+      Text(
+        l.text('dictionarySenseFoldersHint'),
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: ListenColors.muted),
+      ),
+      const SizedBox(height: 8),
+      if (widget.details.senseFolders.isEmpty)
+        Text(l.text('dictionaryNoSenseFolders'), style: const TextStyle(color: ListenColors.muted))
+      else
+        for (final details in widget.details.senseFolders)
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: Text(details.folder.label),
+            subtitle: Text(
+              [
+                ?details.folder.definition,
+                l.text('dictionarySenseFolderClipCount').replaceAll('{count}', '${details.occurrences.length}'),
+              ].join(' · '),
+            ),
+            trailing: Wrap(
+              children: [
+                IconButton(
+                  tooltip: l.text('edit'),
+                  onPressed: _savingSenseFolder ? null : () => unawaited(_editSenseFolder(details.folder)),
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                ),
+                IconButton(
+                  tooltip: l.text('delete'),
+                  onPressed: _savingSenseFolder || widget.onDeleteSenseFolder == null
+                      ? null
+                      : () => unawaited(widget.onDeleteSenseFolder!(details.folder.id)),
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                ),
+              ],
+            ),
+            children: [
+              if (details.occurrences.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(l.text('dictionarySenseFolderEmpty')),
+                )
+              else
+                for (final occurrence in details.occurrences)
+                  _clipWithSenseAction(occurrence, l, details.folder.id),
+            ],
+          ),
+    ],
+  );
+
+  Widget _clipWithSenseAction(
+    LexicalOccurrence occurrence,
+    AppLocalizations l,
+    String? assignedSenseId,
+  ) => Column(
+    children: [
+      _clipTile(occurrence, l),
+      if (widget.onAssignSenseFolder != null && widget.details.senseFolders.isNotEmpty)
+        Align(
+          alignment: Alignment.centerRight,
+          child: PopupMenuButton<String>(
+            tooltip: l.text('dictionaryAssignSenseFolder'),
+            onSelected: (value) => value == assignedSenseId
+                ? unawaited(widget.onUnassignSenseFolder?.call(value, occurrence))
+                : unawaited(widget.onAssignSenseFolder!(value, occurrence)),
+            itemBuilder: (context) => [
+              for (final folder in widget.details.senseFolders)
+                PopupMenuItem(
+                  value: folder.folder.id,
+                  child: Text(
+                    folder.folder.id == assignedSenseId
+                        ? l.text('dictionaryUnassignSenseFolder').replaceAll('{label}', folder.folder.label)
+                        : folder.folder.label,
+                  ),
+                ),
+            ],
+            child: TextButton.icon(
+              onPressed: null,
+              icon: const Icon(Icons.folder_outlined, size: 16),
+              label: Text(assignedSenseId == null ? l.text('dictionaryAssignSenseFolder') : l.text('dictionaryAssignedSenseFolder')),
+            ),
+          ),
+        ),
+    ],
+  );
 
   Widget _clipTile(LexicalOccurrence occurrence, AppLocalizations l) {
     final key = _clipKey(occurrence);
@@ -642,6 +804,116 @@ class _EmptyClips extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _SenseFolderDraft {
+  const _SenseFolderDraft({
+    required this.label,
+    this.definition,
+    this.gloss,
+    this.externalRef,
+  });
+
+  final String label;
+  final String? definition;
+  final String? gloss;
+  final String? externalRef;
+}
+
+class _SenseFolderDialog extends StatefulWidget {
+  const _SenseFolderDialog({this.existing});
+
+  final LexicalSenseFolder? existing;
+
+  @override
+  State<_SenseFolderDialog> createState() => _SenseFolderDialogState();
+}
+
+class _SenseFolderDialogState extends State<_SenseFolderDialog> {
+  late final TextEditingController _label;
+  late final TextEditingController _definition;
+  late final TextEditingController _gloss;
+  late final TextEditingController _externalRef;
+
+  @override
+  void initState() {
+    super.initState();
+    final value = widget.existing;
+    _label = TextEditingController(text: value?.label ?? '');
+    _definition = TextEditingController(text: value?.definition ?? '');
+    _gloss = TextEditingController(text: value?.gloss ?? '');
+    _externalRef = TextEditingController(text: value?.externalRef ?? '');
+  }
+
+  @override
+  void dispose() {
+    _label.dispose();
+    _definition.dispose();
+    _gloss.dispose();
+    _externalRef.dispose();
+    super.dispose();
+  }
+
+  String? _optional(TextEditingController controller) {
+    final value = controller.text.trim();
+    return value.isEmpty ? null : value;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return AlertDialog(
+      title: Text(
+        widget.existing == null
+            ? l.text('dictionaryAddSenseFolder')
+            : l.text('dictionaryEditSenseFolder'),
+      ),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              autofocus: true,
+              controller: _label,
+              decoration: InputDecoration(labelText: l.text('dictionarySenseFolderLabel')),
+            ),
+            TextField(
+              controller: _definition,
+              decoration: InputDecoration(labelText: l.text('dictionarySenseFolderDefinition')),
+            ),
+            TextField(
+              controller: _gloss,
+              decoration: InputDecoration(labelText: l.text('dictionarySenseFolderGloss')),
+            ),
+            TextField(
+              controller: _externalRef,
+              decoration: InputDecoration(labelText: l.text('dictionarySenseFolderExternalRef')),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(l.text('close'))),
+        FilledButton(
+          onPressed: () {
+            final label = _label.text.trim();
+            if (label.isEmpty) return;
+            Navigator.pop(
+              context,
+              _SenseFolderDraft(
+                label: label,
+                definition: _optional(_definition),
+                gloss: _optional(_gloss),
+                externalRef: _optional(_externalRef),
+              ),
+            );
+          },
+          child: Text(l.text('save')),
+        ),
+      ],
     );
   }
 }

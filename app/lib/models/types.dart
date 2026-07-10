@@ -99,6 +99,7 @@ class LexicalStatusHistory {
 /// An occurrence/source-snapshot of a lexical asset in context.
 class LexicalOccurrence {
   const LexicalOccurrence({
+    this.id = '',
     required this.mediaTitleSnapshot,
     required this.mediaFingerprintSnapshot,
     required this.sentenceTextSnapshot,
@@ -112,6 +113,7 @@ class LexicalOccurrence {
 
   factory LexicalOccurrence.fromJson(Map<String, dynamic> json) =>
       LexicalOccurrence(
+        id: json['id'] as String? ?? '',
         mediaTitleSnapshot: json['media_title_snapshot'] as String,
         mediaFingerprintSnapshot: json['media_fingerprint_snapshot'] as String,
         sentenceTextSnapshot: json['sentence_text_snapshot'] as String,
@@ -124,6 +126,7 @@ class LexicalOccurrence {
       );
 
   final String mediaTitleSnapshot;
+  final String id;
   final String mediaFingerprintSnapshot;
   final String sentenceTextSnapshot;
   final int startMsSnapshot;
@@ -134,6 +137,7 @@ class LexicalOccurrence {
   final String? sentenceId;
 
   Map<String, dynamic> toJson() => {
+    'id': id,
     'media_title_snapshot': mediaTitleSnapshot,
     'media_fingerprint_snapshot': mediaFingerprintSnapshot,
     'sentence_text_snapshot': sentenceTextSnapshot,
@@ -152,6 +156,7 @@ class LexicalEntryDetails {
     required this.entry,
     this.history = const [],
     this.occurrences = const [],
+    this.senseFolders = const [],
     this.capabilityProfile,
   });
 
@@ -170,6 +175,14 @@ class LexicalEntryDetails {
                   LexicalOccurrence.fromJson(value as Map<String, dynamic>),
             )
             .toList(growable: false),
+        senseFolders:
+            ((json['sense_folders'] as List<dynamic>?) ?? const [])
+                .map(
+                  (value) => LexicalSenseFolderDetails.fromJson(
+                    value as Map<String, dynamic>,
+                  ),
+                )
+                .toList(growable: false),
         capabilityProfile: json['capability_profile'] is Map
             ? LexicalCapabilityProfile.fromJson(
                 Map<String, dynamic>.from(json['capability_profile'] as Map),
@@ -180,6 +193,7 @@ class LexicalEntryDetails {
   final LexicalEntry entry;
   final List<LexicalStatusHistory> history;
   final List<LexicalOccurrence> occurrences;
+  final List<LexicalSenseFolderDetails> senseFolders;
   final LexicalCapabilityProfile? capabilityProfile;
 
   Map<String, dynamic> toJson() => {
@@ -188,8 +202,76 @@ class LexicalEntryDetails {
     'occurrences': occurrences
         .map((value) => value.toJson())
         .toList(growable: false),
+    'sense_folders': senseFolders
+        .map((value) => value.toJson())
+        .toList(growable: false),
     if (capabilityProfile != null)
       'capability_profile': capabilityProfile!.toJson(),
+  };
+}
+
+class LexicalSenseFolder {
+  const LexicalSenseFolder({
+    required this.id,
+    required this.lexicalEntryId,
+    required this.label,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+    this.definition,
+    this.gloss,
+    this.externalRef,
+  });
+
+  factory LexicalSenseFolder.fromJson(Map<String, dynamic> json) =>
+      LexicalSenseFolder(
+        id: json['id'] as String,
+        lexicalEntryId: json['lexical_entry_id'] as String,
+        label: json['label'] as String,
+        definition: json['definition'] as String?,
+        gloss: json['gloss'] as String?,
+        externalRef: json['external_ref'] as String?,
+        createdAtMs: json['created_at_ms'] as int,
+        updatedAtMs: json['updated_at_ms'] as int,
+      );
+
+  final String id;
+  final String lexicalEntryId;
+  final String label;
+  final String? definition;
+  final String? gloss;
+  final String? externalRef;
+  final int createdAtMs;
+  final int updatedAtMs;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'lexical_entry_id': lexicalEntryId,
+    'label': label,
+    'definition': definition,
+    'gloss': gloss,
+    'external_ref': externalRef,
+    'created_at_ms': createdAtMs,
+    'updated_at_ms': updatedAtMs,
+  };
+}
+
+class LexicalSenseFolderDetails {
+  const LexicalSenseFolderDetails({required this.folder, this.occurrences = const []});
+
+  factory LexicalSenseFolderDetails.fromJson(Map<String, dynamic> json) =>
+      LexicalSenseFolderDetails(
+        folder: LexicalSenseFolder.fromJson(json['folder'] as Map<String, dynamic>),
+        occurrences: ((json['occurrences'] as List<dynamic>?) ?? const [])
+            .map((value) => LexicalOccurrence.fromJson(value as Map<String, dynamic>))
+            .toList(growable: false),
+      );
+
+  final LexicalSenseFolder folder;
+  final List<LexicalOccurrence> occurrences;
+
+  Map<String, dynamic> toJson() => {
+    'folder': folder.toJson(),
+    'occurrences': occurrences.map((value) => value.toJson()).toList(growable: false),
   };
 }
 
