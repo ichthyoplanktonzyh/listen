@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -54,6 +55,11 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   /// Non-null while the in-page entry detail is open (master → detail).
   LexicalEntryDetails? details;
 
+  /// Pending listening upgrade suggestions and the dictionary-provider
+  /// pronunciation audio for the open entry (both best-effort).
+  List<UpgradeSuggestion> suggestions = const [];
+  String? pronunciationAudioUrl;
+
   /// Corpus fallback when the vocabulary list has no match for [search].
   List<CorpusOccurrence>? homeResults;
   bool homeSearching = false;
@@ -105,7 +111,42 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     final value = LexicalEntryDetails.fromJson(
       await widget.api.lexicalEntryDetails(entryId),
     );
-    if (mounted) setState(() => details = value);
+    // Suggestions and dictionary audio are decorations: each degrades to
+    // absence instead of failing the detail page.
+    List<UpgradeSuggestion> pending;
+    try {
+      pending = await widget.api.upgradeSuggestions(lexicalEntryId: entryId);
+    } catch (_) {
+      pending = const [];
+    }
+    String? audio;
+    try {
+      final bundle = DictionaryLookupBundle.fromJson(
+        await widget.api.lookupDictionary(
+          value.entry.normalizedForm,
+          language: widget.language,
+        ),
+      );
+      audio = bundle.results
+          .expand(
+            (result) =>
+                result.lookup?.phonetics ?? const <DictionaryPhonetic>[],
+          )
+          .map((phonetic) => phonetic.audioUrl)
+          .firstWhere(
+            (url) => url != null && url.isNotEmpty,
+            orElse: () => null,
+          );
+    } catch (_) {
+      audio = null;
+    }
+    if (mounted) {
+      setState(() {
+        details = value;
+        suggestions = pending;
+        pronunciationAudioUrl = audio;
+      });
+    }
   }
 
   Future<void> _openDetails(Map<String, dynamic> value) async {
@@ -260,7 +301,151 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     }
   }
 
+  // ── Detail editing (restored from the pre-dictionary detail dialog) ──
+
+  Future<void> _setOverride(
+    LexicalEntry entry,
+    String capability,
+    String? conclusion,
+  ) async {
+    final l = AppLocalizations.of(context);
+    try {
+      await widget.api.setCapabilityOverride(
+        entry.id,
+        capability,
+        conclusion: conclusion,
+      );
+      await _openEntryById(entry.id);
+      // Capability filters in the book view read the same channels.
+      unawaited(_load());
+    } catch (error) {
+      if (mounted) {
+        _snack(
+          l.text('dictionaryUpdateFailed').replaceAll('{error}', '$error'),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveContent(
+    LexicalEntry entry,
+    String? definition,
+    String? note,
+  ) async {
+    final l = AppLocalizations.of(context);
+    try {
+      await widget.api.updateLexicalLearningContent(
+        entry.id,
+        userDefinition: definition,
+        personalNote: note,
+      );
+      await _openEntryById(entry.id);
+      if (mounted) _snack(l.text('dictionaryContentSaved'));
+    } catch (error) {
+      if (mounted) {
+        _snack(
+          l.text('dictionaryUpdateFailed').replaceAll('{error}', '$error'),
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmSuggestion(
+    LexicalEntry entry,
+    UpgradeSuggestion suggestion,
+  ) async {
+    final l = AppLocalizations.of(context);
+    try {
+      await widget.api.confirmUpgradeSuggestion(suggestion.id);
+      await _openEntryById(entry.id);
+      unawaited(_load());
+    } catch (error) {
+      if (mounted) {
+        _snack(
+          l.text('dictionaryUpdateFailed').replaceAll('{error}', '$error'),
+        );
+      }
+    }
+  }
+
+  Future<void> _rejectSuggestion(
+    LexicalEntry entry,
+    UpgradeSuggestion suggestion,
+  ) async {
+    final l = AppLocalizations.of(context);
+    try {
+      await widget.api.rejectUpgradeSuggestion(suggestion.id);
+      await _openEntryById(entry.id);
+    } catch (error) {
+      if (mounted) {
+        _snack(
+          l.text('dictionaryUpdateFailed').replaceAll('{error}', '$error'),
+        );
+      }
+    }
+  }
+
+  // ── External references (copyright guardrail: links only) ──
+
+  /// YouGlish covers the current learning target (English); other languages
+  /// simply hide the link instead of guessing a locale path.
+  String? _externalLookupUrlFor(String query, String language) =>
+      language == 'en' && query.trim().isNotEmpty
+      ? 'https://youglish.com/pronounce/${Uri.encodeComponent(query.trim())}/english'
+      : null;
+
+  // The consumer app is macOS-only, so the system opener is sufficient; no
+  // url_launcher dependency for one reference link.
+  void _openExternal(String url) => unawaited(Process.run('open', [url]));
+
   // ── Action exits ──
+
+  Future<void> _reviewClip(
+    LexicalEntry entry,
+    LexicalOccurrence occurrence,
+  ) async {
+    final l = AppLocalizations.of(context);
+    try {
+      await widget.api.createReviewItem(
+        CreateReviewItem(
+          source: ReviewSource(
+            kind: 'lexical_entry',
+            id: entry.id,
+            lexicalEntryId: entry.id,
+            mediaId: occurrence.mediaId,
+          ),
+          // The sentence anchor carries the clip's durable window so the
+          // review queue can derive playback/cloze-style cards from it.
+          anchors: [
+            if (occurrence.sentenceId != null)
+              PracticeAnchor(
+                kind: 'sentence',
+                id: occurrence.sentenceId!,
+                label: occurrence.sentenceTextSnapshot,
+                sentenceId: occurrence.sentenceId,
+                startMs: occurrence.startMsSnapshot,
+                endMs: occurrence.endMsSnapshot,
+              ),
+            PracticeAnchor(
+              kind: 'lexical_entry',
+              id: entry.id,
+              label: occurrence.originalForm ?? entry.displayForm,
+              lexicalEntryId: entry.id,
+              sentenceId: occurrence.sentenceId,
+            ),
+          ],
+          promptSnapshot: occurrence.sentenceTextSnapshot,
+        ),
+      );
+      if (mounted) _snack(l.text('dictionaryReviewQueued'));
+    } catch (error) {
+      if (mounted) {
+        _snack(
+          l.text('dictionaryReviewFailed').replaceAll('{error}', '$error'),
+        );
+      }
+    }
+  }
 
   Future<void> _addToReview(LexicalEntry entry) async {
     final l = AppLocalizations.of(context);
@@ -399,6 +584,22 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
         onPlayCorpus: (occurrence) => unawaited(_playCorpus(occurrence)),
         onCollectCorpus: (occurrence) =>
             _collectCorpus(value.entry, occurrence),
+        suggestions: suggestions,
+        onConfirmSuggestion: (suggestion) =>
+            _confirmSuggestion(value.entry, suggestion),
+        onRejectSuggestion: (suggestion) =>
+            _rejectSuggestion(value.entry, suggestion),
+        onCapabilityOverride: (capability, conclusion) =>
+            _setOverride(value.entry, capability, conclusion),
+        onSaveContent: (definition, note) =>
+            _saveContent(value.entry, definition, note),
+        onReviewClip: (occurrence) => _reviewClip(value.entry, occurrence),
+        externalLookupUrl: _externalLookupUrlFor(
+          value.entry.displayForm,
+          value.entry.language,
+        ),
+        onOpenExternal: _openExternal,
+        pronunciationAudioUrl: pronunciationAudioUrl,
       ),
     ),
   );
@@ -492,7 +693,23 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
       );
     }
     if (results.isEmpty) {
-      return Center(child: Text(l.text('dictionaryNoLibraryResults')));
+      final externalUrl = _externalLookupUrlFor(search, widget.language);
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(l.text('dictionaryNoLibraryResults')),
+            if (externalUrl != null) ...[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => _openExternal(externalUrl),
+                icon: const Icon(Icons.open_in_new, size: 16),
+                label: Text(l.text('dictionaryYouglish')),
+              ),
+            ],
+          ],
+        ),
+      );
     }
     return ListView(
       padding: const EdgeInsets.all(12),

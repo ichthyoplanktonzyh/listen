@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
+import 'package:llplayer_next/models/practice.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/widgets/panels/word_learning_panel.dart';
 import 'package:llplayer_next/widgets/vocabulary/vocabulary_book_view.dart';
@@ -272,6 +273,203 @@ void main() {
       expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
     },
   );
+
+  test('clip speech rate estimates wpm and refuses degenerate input', () {
+    expect(clipSpeechRateWpm('one two three four', 0, 2000), 120);
+    expect(clipSpeechRateWpm('   ', 0, 2000), isNull);
+    expect(clipSpeechRateWpm('word', 0, 100), isNull);
+  });
+
+  testWidgets('listening dictionary sorts clips by estimated speech rate', (
+    tester,
+  ) async {
+    const fast = LexicalOccurrence(
+      mediaTitleSnapshot: 'Fast clip',
+      mediaFingerprintSnapshot: 'fp-fast',
+      sentenceTextSnapshot: 'one two three four five six',
+      startMsSnapshot: 0,
+      endMsSnapshot: 1000,
+      encounterCount: 1,
+      sentenceId: 's-fast',
+    );
+    const slow = LexicalOccurrence(
+      mediaTitleSnapshot: 'Slow clip',
+      mediaFingerprintSnapshot: 'fp-slow',
+      sentenceTextSnapshot: 'one two',
+      startMsSnapshot: 0,
+      endMsSnapshot: 2000,
+      encounterCount: 1,
+      sentenceId: 's-slow',
+    );
+    await tester.pumpWidget(
+      localized(
+        ListeningDictionaryEntryView(
+          details: const LexicalEntryDetails(
+            entry: LexicalEntry(
+              id: 'hello',
+              normalizedForm: 'hello',
+              displayForm: 'hello',
+              kind: 'word',
+              language: 'en',
+            ),
+            occurrences: [fast, slow],
+          ),
+          onPlay: _ignoreOccurrence,
+          onMark: _ignoreMark,
+        ),
+      ),
+    );
+
+    // Default order keeps the stored order: fast (≈360 wpm) above slow.
+    double top(String label) =>
+        tester.getTopLeft(find.textContaining(label)).dy;
+    expect(top('≈360 wpm'), lessThan(top('≈60 wpm')));
+
+    await tester.tap(find.text('By speech rate'));
+    await tester.pump();
+    expect(top('≈60 wpm'), lessThan(top('≈360 wpm')));
+  });
+
+  testWidgets('upgrade suggestion banner resolves through its callbacks', (
+    tester,
+  ) async {
+    const suggestion = UpgradeSuggestion(
+      id: 'suggestion-1',
+      lexicalEntryId: 'hello',
+      lexicalDisplayForm: 'hello',
+      previousStatus: 'known_not_recognized',
+      suggestedStatus: 'known_recognized',
+      status: 'pending',
+      evidenceContextCount: 5,
+      evidenceIds: [],
+      threshold: 5,
+      evidenceClass: 'heuristic_proxy',
+      createdAtMs: 1,
+    );
+    UpgradeSuggestion? confirmed;
+    await tester.pumpWidget(
+      localized(
+        ListeningDictionaryEntryView(
+          details: const LexicalEntryDetails(
+            entry: LexicalEntry(
+              id: 'hello',
+              normalizedForm: 'hello',
+              displayForm: 'hello',
+              kind: 'word',
+              language: 'en',
+            ),
+          ),
+          onPlay: _ignoreOccurrence,
+          onMark: _ignoreMark,
+          suggestions: const [suggestion],
+          onConfirmSuggestion: (value) async => confirmed = value,
+          onRejectSuggestion: (_) async {},
+        ),
+      ),
+    );
+    expect(find.textContaining('5 contexts'), findsOneWidget);
+    await tester.tap(find.text('Confirm: can hear it'));
+    expect(confirmed, same(suggestion));
+  });
+
+  testWidgets('capability chips edit the channel override in place', (
+    tester,
+  ) async {
+    final records = <(String, String?)>[];
+    await tester.pumpWidget(
+      localized(
+        ListeningDictionaryEntryView(
+          details: LexicalEntryDetails(
+            entry: const LexicalEntry(
+              id: 'hello',
+              normalizedForm: 'hello',
+              displayForm: 'hello',
+              kind: 'word',
+              language: 'en',
+            ),
+            capabilityProfile: LexicalCapabilityProfile.fromJson(const {
+              'lexical_entry_id': 'hello',
+              'reading': <String, dynamic>{},
+              'listening': <String, dynamic>{},
+              'speaking': <String, dynamic>{},
+              'writing': <String, dynamic>{},
+            }),
+          ),
+          onPlay: _ignoreOccurrence,
+          onMark: _ignoreMark,
+          onCapabilityOverride: (capability, conclusion) async =>
+              records.add((capability, conclusion)),
+        ),
+      ),
+    );
+    // Four channels render an editable acquired / not-acquired pair each.
+    expect(find.text('Acquired'), findsNWidgets(4));
+    await tester.tap(find.text('Acquired').first);
+    expect(records, [('reading', 'acquired')]);
+  });
+
+  testWidgets('zero-clip state offers external references only as reference', (
+    tester,
+  ) async {
+    String? opened;
+    await tester.pumpWidget(
+      localized(
+        ListeningDictionaryEntryView(
+          details: const LexicalEntryDetails(
+            entry: LexicalEntry(
+              id: 'hello',
+              normalizedForm: 'hello',
+              displayForm: 'hello',
+              kind: 'word',
+              language: 'en',
+            ),
+          ),
+          onPlay: _ignoreOccurrence,
+          onMark: _ignoreMark,
+          externalLookupUrl: 'https://youglish.com/pronounce/hello/english',
+          onOpenExternal: (url) => opened = url,
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open on YouGlish'));
+    expect(opened, 'https://youglish.com/pronounce/hello/english');
+  });
+
+  testWidgets('each clip exposes a review-queue exit', (tester) async {
+    const occurrence = LexicalOccurrence(
+      mediaTitleSnapshot: 'Personal media',
+      mediaFingerprintSnapshot: 'fp-1',
+      sentenceTextSnapshot: 'hello in a reviewable sentence.',
+      startMsSnapshot: 1200,
+      endMsSnapshot: 2400,
+      encounterCount: 1,
+      originalForm: 'hello',
+      mediaId: 'media-1',
+      sentenceId: 'sentence-1',
+    );
+    LexicalOccurrence? queued;
+    await tester.pumpWidget(
+      localized(
+        ListeningDictionaryEntryView(
+          details: const LexicalEntryDetails(
+            entry: LexicalEntry(
+              id: 'hello',
+              normalizedForm: 'hello',
+              displayForm: 'hello',
+              kind: 'word',
+              language: 'en',
+            ),
+            occurrences: [occurrence],
+          ),
+          onPlay: _ignoreOccurrence,
+          onMark: _ignoreMark,
+          onReviewClip: (value) async => queued = value,
+        ),
+      ),
+    );
+    await tester.tap(find.byTooltip('Add this clip to review'));
+    expect(queued, same(occurrence));
+  });
 
   testWidgets('listening dictionary gives an honest zero-clip state', (
     tester,
