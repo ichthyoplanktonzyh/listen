@@ -193,6 +193,69 @@ class LexicalEntryDetails {
   };
 }
 
+/// One row of the rebuildable local corpus projection (Phase 3.6 Slice 3).
+/// Unlike [LexicalOccurrence] it is not a durable learning asset: rows are
+/// regenerated from imported subtitles/chunk timelines and may lose their
+/// media link when the media record is deleted.
+class CorpusOccurrence {
+  const CorpusOccurrence({
+    required this.id,
+    required this.language,
+    required this.kind,
+    required this.displayText,
+    required this.startMs,
+    required this.endMs,
+    required this.sourceSnapshot,
+    this.normalizedKey,
+    this.mediaId,
+    this.trackId,
+    this.sentenceId,
+  });
+
+  factory CorpusOccurrence.fromJson(Map<String, dynamic> json) =>
+      CorpusOccurrence(
+        id: json['id'] as String,
+        language: json['language'] as String,
+        kind: json['kind'] as String,
+        displayText: json['display_text'] as String,
+        startMs: json['start_ms'] as int,
+        endMs: json['end_ms'] as int,
+        sourceSnapshot: json['source_snapshot'] as String,
+        normalizedKey: json['normalized_key'] as String?,
+        mediaId: json['media_id'] as String?,
+        trackId: json['track_id'] as String?,
+        sentenceId: json['sentence_id'] as String?,
+      );
+
+  final String id;
+  final String language;
+
+  /// 'lexical' | 'phrase' | 'chunk' | 'sound_pattern' | 'connected_speech'
+  final String kind;
+  final String displayText;
+  final int startMs;
+  final int endMs;
+  final String sourceSnapshot;
+  final String? normalizedKey;
+  final String? mediaId;
+  final String? trackId;
+  final String? sentenceId;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'language': language,
+    'kind': kind,
+    'display_text': displayText,
+    'start_ms': startMs,
+    'end_ms': endMs,
+    'source_snapshot': sourceSnapshot,
+    'normalized_key': normalizedKey,
+    'media_id': mediaId,
+    'track_id': trackId,
+    'sentence_id': sentenceId,
+  };
+}
+
 // ──────────────────────────────────────────────
 // Capability Profile (Phase 3.4.1)
 // ──────────────────────────────────────────────
@@ -297,18 +360,10 @@ class LexicalCapabilityProfile {
       LexicalCapabilityProfile(
         lexicalEntryId: json['lexical_entry_id'] as String,
         senseId: json['sense_id'] as String?,
-        reading: CapabilityDimensionState.fromJson(
-          _asMap(json['reading']),
-        ),
-        listening: CapabilityDimensionState.fromJson(
-          _asMap(json['listening']),
-        ),
-        speaking: CapabilityDimensionState.fromJson(
-          _asMap(json['speaking']),
-        ),
-        writing: CapabilityDimensionState.fromJson(
-          _asMap(json['writing']),
-        ),
+        reading: CapabilityDimensionState.fromJson(_asMap(json['reading'])),
+        listening: CapabilityDimensionState.fromJson(_asMap(json['listening'])),
+        speaking: CapabilityDimensionState.fromJson(_asMap(json['speaking'])),
+        writing: CapabilityDimensionState.fromJson(_asMap(json['writing'])),
       );
 
   final String lexicalEntryId;
@@ -1152,7 +1207,9 @@ class DifficultyDimension {
         fit: json['fit'] as String,
         signals: (json['signals'] as List<dynamic>? ?? const [])
             .whereType<Map>()
-            .map((value) => FitSignal.fromJson(Map<String, dynamic>.from(value)))
+            .map(
+              (value) => FitSignal.fromJson(Map<String, dynamic>.from(value)),
+            )
             .toList(),
       );
 
@@ -1339,7 +1396,9 @@ class MediaLibraryEntry {
 
   factory MediaLibraryEntry.fromJson(Map<String, dynamic> json) =>
       MediaLibraryEntry(
-        media: MediaItem.fromJson(Map<String, dynamic>.from(json['media'] as Map)),
+        media: MediaItem.fromJson(
+          Map<String, dynamic>.from(json['media'] as Map),
+        ),
         primaryTrackId: json['primary_track_id'] as String?,
         fit: json['fit'] == null
             ? null

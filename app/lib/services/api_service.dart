@@ -764,6 +764,35 @@ class LocalApi {
       (await _request('GET', '/v1/lexical-entries/$entryId'))
           as Map<String, dynamic>;
 
+  /// Searches the rebuildable local corpus projection. A whitespace-free
+  /// query matches exact normalized word keys; a multi-word query substring
+  /// matches sentence and chunk text.
+  Future<List<Map<String, dynamic>>> searchCorpus({
+    required String language,
+    required String query,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final params = [
+      'language=${Uri.encodeQueryComponent(language)}',
+      'query=${Uri.encodeQueryComponent(query)}',
+      'limit=$limit',
+      'offset=$offset',
+    ].join('&');
+    final values =
+        await _request('GET', '/v1/corpus/search?$params') as List<dynamic>;
+    return values.cast<Map<String, dynamic>>();
+  }
+
+  /// Rebuilds the corpus projection for every imported subtitle track and
+  /// returns the number of reindexed tracks.
+  Future<int> reindexCorpus() async {
+    final result =
+        await _request('POST', '/v1/corpus/reindex', {})
+            as Map<String, dynamic>;
+    return result['indexed_tracks'] as int;
+  }
+
   Future<Map<String, dynamic>> setCapabilityOverride(
     String entryId,
     String capability, {

@@ -1502,10 +1502,17 @@ class _PlayerScreenState extends State<PlayerScreen>
     };
   }
 
-  Future<void> _openVocabulary() async {
+  Future<void> _openVocabulary() => _showVocabulary();
+
+  Future<void> _openListeningDictionaryEntry(String entryId) =>
+      _showVocabulary(initialEntryId: entryId);
+
+  Future<void> _showVocabulary({String? initialEntryId}) async {
     final service = api;
     if (service == null) return;
-    final occurrence = await Navigator.push<Map<String, dynamic>>(
+    // The dictionary hosts its own slice playback; it only needs a way to
+    // silence the primary player so a slice owns audio focus alone.
+    await Navigator.push<void>(
       context,
       MaterialPageRoute(
         builder: (_) => VocabularyScreen(
@@ -1513,11 +1520,11 @@ class _PlayerScreenState extends State<PlayerScreen>
           language: _learningLanguage,
           onExport: playbackActions.exportVocabulary,
           onImport: playbackActions.importVocabulary,
+          initialEntryId: initialEntryId,
+          onPauseBackgroundPlayback: adapter.pause,
         ),
       ),
     );
-    if (occurrence == null) return;
-    await _openSlicePlayback(occurrence);
   }
 
   Future<void> _openReviewQueue() async {
@@ -2085,6 +2092,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     onStartSentenceDictationPractice: _startSentenceDictationPractice,
     onOpenDiagnosisView: _openDiagnosisView,
     onOpenSlicePlayback: _openSlicePlayback,
+    onOpenListeningDictionary: _openListeningDictionaryEntry,
     onRefreshListeningInbox: _refreshListeningInbox,
     onReplayListeningInboxItem: _replayListeningInboxItem,
     onProcessListeningInboxItem: _processListeningInboxItem,

@@ -50,6 +50,7 @@ class SidePanel extends StatefulWidget {
     required this.onStartSentenceDictationPractice,
     required this.onOpenDiagnosisView,
     required this.onOpenSlicePlayback,
+    this.onOpenListeningDictionary,
     required this.onRefreshListeningInbox,
     required this.onReplayListeningInboxItem,
     required this.onProcessListeningInboxItem,
@@ -84,6 +85,7 @@ class SidePanel extends StatefulWidget {
   final Future<void> Function() onOpenDiagnosisView;
   final Future<void> Function(Map<String, dynamic> occurrence)
   onOpenSlicePlayback;
+  final Future<void> Function(String lexicalEntryId)? onOpenListeningDictionary;
   final Future<void> Function() onRefreshListeningInbox;
   final Future<void> Function(ListeningInboxItem item)
   onReplayListeningInboxItem;
@@ -215,6 +217,17 @@ class _SidePanelState extends State<SidePanel> {
                       onNotHeard: () => _observeSelected(false),
                       onCapabilityOverride: _setCapabilityOverride,
                       onRecordSource: widget.onRecordCurrentSource,
+                      onOpenListeningDictionary:
+                          widget.onOpenListeningDictionary == null
+                          ? null
+                          : () => unawaited(
+                              widget.onOpenListeningDictionary!(
+                                learningController
+                                    .selectedLexicalDetails!
+                                    .entry
+                                    .id,
+                              ),
+                            ),
                       hasSelectedCue:
                           subtitleController.currentPrimaryCue != null,
                     ),
@@ -394,6 +407,7 @@ class _SidePanelState extends State<SidePanel> {
     ),
     onFindingFeedback: (finding, value) =>
         unawaited(playbackActions.savePhoneticFindingFeedback(finding, value)),
+    onOpenListeningDictionary: widget.onOpenListeningDictionary,
   );
 
   Widget _postureActions() {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
@@ -20,6 +22,7 @@ class DiagnosisCard extends StatelessWidget {
     this.onLoopHotspot,
     this.onLoopFinding,
     this.onFindingFeedback,
+    this.onOpenListeningDictionary,
   });
 
   final Diagnosis diagnosis;
@@ -34,6 +37,7 @@ class DiagnosisCard extends StatelessWidget {
   final ValueChanged<ListeningHotspot>? onLoopHotspot;
   final ValueChanged<PhoneticFinding>? onLoopFinding;
   final void Function(PhoneticFinding finding, String value)? onFindingFeedback;
+  final Future<void> Function(String lexicalEntryId)? onOpenListeningDictionary;
 
   @override
   Widget build(BuildContext context) {
@@ -77,6 +81,27 @@ class DiagnosisCard extends StatelessWidget {
                             fontSize: 12,
                             color: ListenColors.muted,
                           ),
+                        ),
+                      ),
+                    if (onOpenListeningDictionary != null &&
+                        hint.lexicalEntryIds.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Wrap(
+                          spacing: 4,
+                          children: [
+                            for (final entryId in hint.lexicalEntryIds)
+                              TextButton.icon(
+                                onPressed: () => unawaited(
+                                  onOpenListeningDictionary!(entryId),
+                                ),
+                                icon: const Icon(
+                                  Icons.headphones_outlined,
+                                  size: 16,
+                                ),
+                                label: Text(l.text('openListeningDictionary')),
+                              ),
+                          ],
                         ),
                       ),
                   ],

@@ -5,6 +5,7 @@ import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/widgets/panels/word_learning_panel.dart';
 import 'package:llplayer_next/widgets/vocabulary/vocabulary_book_view.dart';
+import 'package:llplayer_next/widgets/vocabulary/listening_dictionary_entry_view.dart';
 import 'package:llplayer_next/widgets/vocabulary/vocabulary_details_view.dart';
 import 'package:llplayer_next/widgets/vocabulary/vocabulary_transfer_actions.dart';
 import 'package:llplayer_next/utils/subtitle_position.dart';
@@ -142,6 +143,158 @@ void main() {
       ),
     );
     expect(find.text('No words in this book'), findsOneWidget);
+  });
+
+  testWidgets(
+    'listening dictionary hides text until requested and plays clips',
+    (tester) async {
+      LexicalOccurrence? played;
+      const occurrence = LexicalOccurrence(
+        mediaTitleSnapshot: 'Personal media',
+        mediaFingerprintSnapshot: 'fp-1',
+        sentenceTextSnapshot: 'I heard hello in this source sentence.',
+        startMsSnapshot: 1200,
+        endMsSnapshot: 2400,
+        encounterCount: 1,
+        originalForm: 'hello',
+        mediaId: 'media-1',
+        sentenceId: 'sentence-1',
+      );
+      await tester.pumpWidget(
+        localized(
+          ListeningDictionaryEntryView(
+            details: const LexicalEntryDetails(
+              entry: LexicalEntry(
+                id: 'hello',
+                normalizedForm: 'hello',
+                displayForm: 'hello',
+                kind: 'word',
+                language: 'en',
+              ),
+              occurrences: [occurrence],
+            ),
+            onPlay: (value) => played = value,
+            onMark: (_, _) async => true,
+          ),
+        ),
+      );
+
+      expect(find.text('Reveal sentence text'), findsOneWidget);
+      expect(find.text('I heard hello in this source sentence.'), findsNothing);
+      await tester.tap(find.byTooltip('Play source clip'));
+      expect(played, same(occurrence));
+      await tester.tap(find.text('Reveal sentence text'));
+      await tester.pump();
+      expect(
+        find.text('I heard hello in this source sentence.'),
+        findsOneWidget,
+      );
+      expect(find.text('Heard it'), findsOneWidget);
+      await tester.tap(find.text('Heard it'));
+      await tester.pump();
+      expect(find.text('Marked: heard it'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'listening dictionary searches the library, dedupes saved clips, and collects',
+    (tester) async {
+      const savedOccurrence = LexicalOccurrence(
+        mediaTitleSnapshot: 'Personal media',
+        mediaFingerprintSnapshot: 'fp-1',
+        sentenceTextSnapshot: 'hello already saved here.',
+        startMsSnapshot: 0,
+        endMsSnapshot: 900,
+        encounterCount: 1,
+        originalForm: 'hello',
+        mediaId: 'media-1',
+        sentenceId: 'sentence-saved',
+      );
+      const duplicate = CorpusOccurrence(
+        id: 'corpus-dup',
+        language: 'en',
+        kind: 'lexical',
+        displayText: 'hello',
+        startMs: 0,
+        endMs: 900,
+        sourceSnapshot: 'hello already saved here.',
+        mediaId: 'media-1',
+        sentenceId: 'sentence-saved',
+      );
+      const fresh = CorpusOccurrence(
+        id: 'corpus-fresh',
+        language: 'en',
+        kind: 'chunk',
+        displayText: 'hello there',
+        startMs: 1200,
+        endMs: 1800,
+        sourceSnapshot: 'hello there from a chunk.',
+        mediaId: 'media-2',
+        sentenceId: 'sentence-fresh',
+      );
+      CorpusOccurrence? collected;
+      await tester.pumpWidget(
+        localized(
+          ListeningDictionaryEntryView(
+            details: const LexicalEntryDetails(
+              entry: LexicalEntry(
+                id: 'hello',
+                normalizedForm: 'hello',
+                displayForm: 'hello',
+                kind: 'word',
+                language: 'en',
+              ),
+              occurrences: [savedOccurrence],
+            ),
+            onPlay: (_) {},
+            onMark: (_, _) async => true,
+            onSearchLibrary: () async => const [duplicate, fresh],
+            onPlayCorpus: (_) {},
+            onCollectCorpus: (occurrence) async {
+              collected = occurrence;
+              return true;
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Search my library'));
+      await tester.pump();
+      await tester.pump();
+      // The saved sentence is filtered out; only the fresh chunk remains.
+      expect(find.text('hello there from a chunk.'), findsOneWidget);
+      expect(find.text('hello already saved here.'), findsNothing);
+      expect(find.textContaining('Chunk'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Save as source clip'));
+      await tester.pump();
+      expect(collected, same(fresh));
+      expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
+    },
+  );
+
+  testWidgets('listening dictionary gives an honest zero-clip state', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      localized(
+        const ListeningDictionaryEntryView(
+          details: LexicalEntryDetails(
+            entry: LexicalEntry(
+              id: 'hello',
+              normalizedForm: 'hello',
+              displayForm: 'hello',
+              kind: 'word',
+              language: 'en',
+            ),
+          ),
+          onPlay: _ignoreOccurrence,
+          onMark: _ignoreMark,
+        ),
+      ),
+    );
+    expect(find.text('No source clips yet'), findsOneWidget);
+    expect(find.textContaining('Open hello from a subtitle'), findsOneWidget);
   });
 
   testWidgets('status movement removes a word from the previous dynamic book', (
@@ -343,6 +496,10 @@ void main() {
     expect(AppLocalizations.of(context).text('vocabulary'), '词汇本');
   });
 }
+
+void _ignoreOccurrence(LexicalOccurrence _) {}
+
+Future<bool> _ignoreMark(LexicalOccurrence _, bool ignoredHeard) async => true;
 
 const _helloDetails = LexicalEntryDetails(
   entry: LexicalEntry(

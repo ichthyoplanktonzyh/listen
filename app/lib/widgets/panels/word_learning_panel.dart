@@ -20,6 +20,7 @@ class WordLearningPanel extends StatefulWidget {
     required this.onNotHeard,
     this.onCapabilityOverride,
     this.onRecordSource,
+    this.onOpenListeningDictionary,
     this.hasSelectedCue = false,
   });
 
@@ -33,8 +34,9 @@ class WordLearningPanel extends StatefulWidget {
   final VoidCallback onHeard;
   final VoidCallback onNotHeard;
   final Future<void> Function(String capability, String? conclusion)?
-      onCapabilityOverride;
+  onCapabilityOverride;
   final VoidCallback? onRecordSource;
+  final VoidCallback? onOpenListeningDictionary;
   final bool hasSelectedCue;
 
   @override
@@ -176,6 +178,17 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
           ],
         ),
         const SizedBox(height: 14),
+        if (widget.onOpenListeningDictionary != null)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: widget.onOpenListeningDictionary,
+              icon: const Icon(Icons.headphones_outlined, size: 18),
+              label: Text(l.text('openListeningDictionary')),
+            ),
+          ),
+        if (widget.onOpenListeningDictionary != null)
+          const SizedBox(height: 14),
         _sectionHeader(
           context,
           l.text('capabilityProfile'),
@@ -352,9 +365,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
             ),
             if (widget.onRecordSource != null)
               TextButton.icon(
-                onPressed: widget.hasSelectedCue
-                    ? widget.onRecordSource
-                    : null,
+                onPressed: widget.hasSelectedCue ? widget.onRecordSource : null,
                 icon: const Icon(Icons.add, size: 16),
                 label: Text(l.text('recordCurrentSentence')),
                 style: TextButton.styleFrom(

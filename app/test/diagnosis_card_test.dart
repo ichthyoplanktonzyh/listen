@@ -43,6 +43,39 @@ void main() {
     expect(find.textContaining('word boundary'), findsOneWidget);
   });
 
+  testWidgets('diagnosis links lexical barriers to the listening dictionary', (
+    tester,
+  ) async {
+    String? opened;
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: DiagnosisCard(
+            diagnosis: const Diagnosis(
+              hints: [
+                DiagnosisHint(
+                  kind: 'recognition_barrier',
+                  lexicalEntryIds: ['entry-1'],
+                ),
+              ],
+            ),
+            onOpenListeningDictionary: (id) async => opened = id,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Listen in dictionary'));
+    expect(opened, 'entry-1');
+  });
+
   testWidgets('audio findings expose evidence loop and feedback actions', (
     tester,
   ) async {
