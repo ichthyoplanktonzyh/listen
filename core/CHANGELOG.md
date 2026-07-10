@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-10 14:58 CST: 规划：切片播放器与听力词典 v2（纯文档，无代码）。基于
+  `.planning/discuss/personal-listening-dictionary-and-slice-player.zh.md` 的评审结论（新增 §9，
+  状态改 REVIEWED）：新增 Phase 3.5.7 Slice Playback Window 计划（独立第二解码实例浮窗取代
+  `playOccurrence` 主播放器劫持，Slice 0 为双实例可行性 spike，B 组 loopRange 不迁移）；
+  3.6 听力词典 PLAN 修订为 v2（第一刀零新后端"学习对象 → 切片"资产词典页，corpus index/搜索
+  降为第二刀，义项为 3.6.x 独立 phase 且 sense spike 从"3.6 前"改排到义项切片前，图谱视图
+  推迟，`LexicalEntry` 不改名）。STATE 记录 3.5.6 owner 收口（CLOSEOUT 待补）、新决策与
+  下一步工作。
+
 - 2026-07-10 14:19 CST: Phase 3.5.6 清理 3.2 的失效内部聚合。物理删除 application 的卡点
   writer、`PracticeSessionSummary` read-side aggregation、`StuckPoint*` DTO/helpers 及相应
   persistence 历史测试；既有 SQLite `learning_events`、practice attempts 与 review 数据不删，

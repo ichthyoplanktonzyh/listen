@@ -1,8 +1,8 @@
 # 个人听力词典与切片播放器 —— 产品讨论
 
 > 日期：2026-07-10
-> 状态：DRAFT — 待录入 ADR 或作为 Phase 3.6 的前置预研
-> 参与：owner + agent 讨论
+> 状态：REVIEWED — 评审结论见 §9；落地为 Phase 3.5.7 + Phase 3.6 v2 修订
+> 参与：owner + agent 讨论；评审：owner + supervisor agent（2026-07-10）
 
 ---
 
@@ -262,3 +262,39 @@ pub enum SenseSource {
 - [Phase 3.5.6 CONTEXT — Intensive Practice Floating Window](../phases/3.5.6-intensive-practice-window/3.5.6-CONTEXT.md)
 - [playback_actions_coordinator.dart — playOccurrence](../../apps/desktop/lib/controllers/playback_actions_coordinator.dart#L190-L249)
 - [STATE.md](../STATE.md)
+
+## 9. 评审结论（2026-07-10，供后续引用）
+
+对 §7 未解决问题的裁决：
+
+1. **不改名。** `LexicalEntry` 保留；"学习对象"是 UI/读端投影概念，不是领域超类型。
+   粒度扩展（collocation 等）走 `LexicalUnit` granularity 轴加常量；construction 按
+   ADR 0020 保持独立身份，词典页以独立卡片类型接入，不并入词条模型。
+2. **义项内容层：用户文件夹为身份权威。** 义项是用户创建的整理单元；词典 API 义项清单
+   只作为"建议新建文件夹"与"对齐注释"，永远不成为身份——与 projection/override 分层同构。
+   由此消解词典换版本/义项清单不兼容问题。草案 `LexicalSense` 的 `confidence: f32` 与裸
+   `DictionaryProvider` 变体不采纳（溯源不足、UserDefined 下无语义、破坏 Eq）。
+3. **B 组 loopRange 场景不迁移。** 语境在当前媒体内，无劫持问题；为对称性统一是无收益重构。
+4. **不引入新资源类型。** 数据层沿用 `LexicalOccurrence`（义项落地时加 `sense_id`），
+   UI 层称"切片"。
+5. **落地归属：** 切片播放器为独立 Phase 3.5.7（纯 Flutter，零契约变更）；听力词典按
+   3.6 v2 修订执行——第一刀零新后端（学习对象 → 切片，无义项），corpus index/搜索为
+   第二刀；义项文件夹为 3.6.x 独立 phase。2026-07-07"sense spike 排在 3.6 前"修订为
+   "排在义项切片前"。图谱视图推迟（纯读端推导、不落库，待数据密度足够再评估形态）。
+
+评审新增的关键问题（义项 spike 的验收问题，比 §7 更根本）：
+
+- **两级画像共存**：义项级画像出现后，词条级读端（字幕高亮、词汇本过滤）的聚合/precedence
+  规则。评审倾向：高频读端永远只读词条级，义项级仅在词典详情页展开，sense 不进热路径。
+- **证据的义项归属**：`LearningObservation` 按句子记录，义项存在后证据写入是否被迫消歧。
+  评审倾向：证据默认写词条级，归属义项后以追加式 re-attribution 表达（兼容 3.4.4
+  append-only 语义），不回改历史。
+- **核心洞察的边界**：大多数切片永远不会被归入义项——义项必须是可选文件夹，无义项词条
+  渲染为"词头 → 切片列表"，不得让未归类切片显得残缺、逼用户做分类作业。
+
+切片播放器补充决策（D1–D5 之外）：
+
+- **D6 焦点策略**：任一浮起播放源独占音频；切片窗打开暂停主播放器（含精听浮窗 range loop
+  发声），关闭后不自动恢复播放、主播放器位置不变。
+- **D7 技术前提**：第二解码实例可行性由 3.5.7 Slice 0 spike 先证实，spike 阻断即停并由
+  owner 裁决降级方案。
