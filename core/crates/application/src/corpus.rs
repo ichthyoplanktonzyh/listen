@@ -2,15 +2,24 @@ use crate::*;
 
 impl AppServices {
     /// Rebuild the local corpus projection for one subtitle track. The Slice 3
-    /// shape indexes exact word forms, sentence-level text for confirmed phrase
-    /// lookup, and — when an active chunk timeline exists — precise chunk spans;
-    /// connected-speech kinds can join this same projection when their
-    /// providers become queryable.
+    /// shape indexes lemma-keyed word forms, sentence-level text for confirmed
+    /// phrase lookup, and — when an active chunk timeline exists — precise
+    /// chunk spans; connected-speech kinds can join this same projection when
+    /// their providers become queryable.
+    ///
+    /// Word keys go through [`Self::normalize_lexical_form`] (user override →
+    /// provider lemma → baseline), the same path lexical entries use, so an
+    /// entry-driven or free-text lemma query matches inflected tokens. Tracks
+    /// indexed before this rule need one manual rebuild to gain lemma keys.
     pub(crate) fn reindex_subtitle_track(
         &self,
         track: &SubtitleTrack,
     ) -> Result<(), ApplicationError> {
         let language = track.language.clone().unwrap_or(LanguageCode::parse("en")?);
+        // One provider round per distinct surface per track; provider failure
+        // degrades to the tokenizer's baseline key instead of failing import.
+        let mut lemma_cache: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
         let mut occurrences = Vec::new();
         for sentence in &track.sentences {
             let sentence_id = sentence.id.clone();
@@ -36,6 +45,18 @@ impl AppServices {
                 .iter()
                 .filter(|token| token.kind == SubtitleTokenKind::Word && token.normalized.is_some())
             {
+                let surface_key = token.normalized.clone().expect("filtered to Some");
+                let normalized_key = match lemma_cache.get(&surface_key) {
+                    Some(hit) => hit.clone(),
+                    None => {
+                        let key = self
+                            .normalize_lexical_form(language.as_str(), &surface_key)
+                            .map(|normalization| normalization.normalized)
+                            .unwrap_or_else(|_| surface_key.clone());
+                        lemma_cache.insert(surface_key.clone(), key.clone());
+                        key
+                    }
+                };
                 occurrences.push(CorpusOccurrence {
                     id: CorpusOccurrenceId::from_fingerprint(
                         "corpus-occurrence",
@@ -43,7 +64,7 @@ impl AppServices {
                     ),
                     language: language.clone(),
                     kind: CorpusOccurrenceKind::Lexical,
-                    normalized_key: token.normalized.clone(),
+                    normalized_key: Some(normalized_key),
                     display_text: token.text.clone(),
                     media_id: Some(track.media_id.clone()),
                     track_id: Some(track.id.clone()),
@@ -114,6 +135,16 @@ impl AppServices {
     ) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
         let language = LanguageCode::parse(language)?;
         let query = clean_required(query.to_owned(), "query")?;
+        // A single-word query goes through the same normalization path as
+        // lexical entries and the index's token keys, so "Running" finds the
+        // lemma-keyed "run" rows; provider failure degrades to the raw query.
+        let query = if query.contains(char::is_whitespace) {
+            query
+        } else {
+            self.normalize_lexical_form(language.as_str(), &query)
+                .map(|normalization| normalization.normalized)
+                .unwrap_or(query)
+        };
         self.corpus
             .search_corpus_occurrences(&language, &query, limit.clamp(1, 100), offset)
     }

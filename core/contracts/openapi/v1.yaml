@@ -1243,7 +1243,7 @@ paths:
         - { name: offset, in: query, schema: { type: integer, default: 0 } }
       responses:
         "200":
-          description: Local corpus occurrences matching an exact word or phrase text
+          description: Local corpus occurrences matching a lemma-normalized word key or a tokenized FTS phrase over sentence/chunk text
           content:
             application/json:
               schema: { type: array, items: { $ref: "#/components/schemas/CorpusOccurrence" } }

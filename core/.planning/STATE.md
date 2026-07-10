@@ -3,15 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-10T20:22:00.000+08:00"
+last_updated: "2026-07-10T21:05:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-10 20:22 CST
-> 更新原因：Phase 3.6 收口批次二完成：跨媒体采样搜索、语速排序、每切片复习出口
-> （sentence anchor）、override/释义笔记/升级建议编辑回补、YouGlish + 词典发音外链兜底。
-> 自动化全部完成，仅剩真实媒体手工 QA 与 CLOSEOUT。
+> 最后更新：2026-07-10 21:05 CST
+> 更新原因：Phase 3.6 收口。债务清偿：schema v29 FTS5 短语搜索取代 LIKE 全扫、词索引键与
+> 查询双向 lemma 归一。真实媒体手工 QA 按 owner 决定豁免，CLOSEOUT 已写，phase 冻结。
 
 ## 当前位置
 
@@ -235,7 +234,7 @@ last_updated: "2026-07-10T20:22:00.000+08:00"
   `git diff --check` 通过，零后端/契约改动。owner 确认以该证据收口；多切片浏览 UI 留给 3.6。
 - 收口：`.planning/phases/3.5.7-slice-playback-window/3.5.7-CLOSEOUT.md`；计划已冻结。
 
-### Phase 3.6: Listening Dictionary MVP ⏳ ACTIVE（自动化全部完成，仅剩真实媒体 QA 与收口）
+### Phase 3.6: Listening Dictionary MVP ✅ 已收口（2026-07-10）
 
 - Slice 1（资产词典页）：词汇本演进为词典页（master-detail 页内详情，不再是弹窗），
   学习对象 → 切片列表 + 四通道摘要 + 覆盖度诚实展示；词典页自持第二解码切片窗，
@@ -259,9 +258,16 @@ last_updated: "2026-07-10T20:22:00.000+08:00"
   明示仅供参考）。
 - 验证：`cargo test -p application -p persistence-sqlite -p api-http` 全绿、
   `validate-contracts.sh` 通过、`flutter analyze` 零问题、`flutter test` 265 passed。
-- 待完成：真实媒体手工 QA 与 CLOSEOUT。已知债挂账：phrase LIKE 全扫（FTS5 备选）、
-  自由文本 lemma 归一（词条驱动查询不受影响）。
-- 规划文档：`.planning/phases/3.6-listening-dictionary-mvp/3.6-PLAN.md`（v2，含 Progress）。
+- 债务清偿（收口批次三）：schema v29 `corpus_occurrences_fts` FTS5 短语匹配取代 LIKE
+  全扫（触发器维护 + `delete_track` 显式清理，连贯性不依赖 cascade 触发器）；词 token
+  索引键与自由文本查询双向走 `normalize_lexical_form` lemma 归一（"run" 命中 "running"
+  语境；存量索引需手动重建一次以获得 lemma 匹配）。
+- 收口：真实媒体手工 QA 按 owner 决定豁免，以自动化验证收口（Rust 全绿、contracts、
+  clippy 零新增、`flutter test` 265 passed）；走查清单留作后续观察点。
+  收口文档：`.planning/phases/3.6-listening-dictionary-mvp/3.6-CLOSEOUT.md`；
+  计划已冻结：`3.6-PLAN.md`（v2，含 Progress）。
+- 后续（不在本 phase）：3.6.x 义项文件夹（spike 把门三问题）、图谱视图（数据密度足够后）、
+  词典页与侧面板功能重叠的 UI 整合决策。
 
 ## 已完成 Phase 索引
 
@@ -358,8 +364,8 @@ last_updated: "2026-07-10T20:22:00.000+08:00"
 
 ## 下一步工作
 
-1. 3.6 仅剩真实媒体手工 QA（owner）与 CLOSEOUT；已知债挂账 FTS5 与 lemma 归一。
-   义项 spike 排在义项切片（3.6.x）前，图谱视图推迟。
+1. Phase 3.6 已收口（含 FTS5 与 lemma 归一两笔债清偿）。下一主线候选：3.7 hunting list、
+   3.6.x 义项 spike（把门三问题）或恢复 3.4/3.35 手工 QA，由 owner 排期。图谱视图推迟。
 2. Phase 3.4.3 已完成（纯领域建模 spike，不建设生产 schema）；下一步在独立产品 slice 验证
    “收藏句 → 个人模板”的用户价值，再决定 SentenceExemplar/UserSentencePattern 持久化范围。
 3. Phase 3.5 已立项启动（Slice 1-8 完成，Slice 9 真实素材 QA 待完成）。

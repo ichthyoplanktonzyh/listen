@@ -230,6 +230,139 @@ fn giant_entry_search_samples_across_media() {
     assert_eq!(media_ids.len(), 2);
 }
 
+struct StubLemmaProvider;
+
+impl application::LexicalNormalizationProvider for StubLemmaProvider {
+    fn provider_id(&self) -> &'static str {
+        "stub-lemma"
+    }
+
+    fn version(&self) -> &str {
+        "v1"
+    }
+
+    fn normalize(
+        &self,
+        language: &LanguageCode,
+        value: &str,
+    ) -> Result<Option<String>, application::LexicalNormalizationProviderError> {
+        Ok((language.as_str() == "en" && value == "running").then(|| "run".to_owned()))
+    }
+
+    fn phrase_candidates(
+        &self,
+        _language: &LanguageCode,
+        _sentence: &SubtitleSentence,
+    ) -> Result<Vec<PhraseCandidate>, application::LexicalNormalizationProviderError> {
+        Ok(Vec::new())
+    }
+}
+
+#[test]
+fn corpus_word_keys_and_free_text_queries_share_lemma_normalization() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_corpus_index_repository(repo.clone())
+    .with_lexical_normalizers(vec![Arc::new(StubLemmaProvider)]);
+    let media = services
+        .register_media(RegisterMedia {
+            path: "/tmp/corpus-lemma.mp4".into(),
+            fingerprint: "corpus-lemma-media".into(),
+            title: "Corpus lemma media".into(),
+            kind: MediaKind::Video,
+            duration_ms: Some(10_000),
+        })
+        .unwrap();
+    services
+        .import_subtitle(ImportSubtitle {
+            media_id: media.id,
+            source_name: "corpus-lemma.srt".into(),
+            content: b"1\n00:00:01,000 --> 00:00:03,000\nHe is running fast.\n".to_vec(),
+            language: Some("en".into()),
+            identity_salt: None,
+        })
+        .unwrap();
+
+    // The index keys the inflected token by its provider lemma…
+    let by_lemma = services.search_corpus("en", "run", 10, 0).unwrap();
+    assert_eq!(by_lemma.len(), 1);
+    assert_eq!(by_lemma[0].display_text, "running");
+    assert_eq!(by_lemma[0].normalized_key.as_deref(), Some("run"));
+    // …and a free-text inflected query normalizes onto the same key.
+    let by_surface = services.search_corpus("en", "Running", 10, 0).unwrap();
+    assert_eq!(by_surface.len(), 1);
+    assert_eq!(by_surface[0].display_text, "running");
+}
+
+#[test]
+fn deleting_a_track_keeps_corpus_search_coherent() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_corpus_index_repository(repo.clone());
+    let media = services
+        .register_media(RegisterMedia {
+            path: "/tmp/corpus-delete.mp4".into(),
+            fingerprint: "corpus-delete-media".into(),
+            title: "Corpus delete media".into(),
+            kind: MediaKind::Video,
+            duration_ms: Some(10_000),
+        })
+        .unwrap();
+    let track = services
+        .import_subtitle(ImportSubtitle {
+            media_id: media.id,
+            source_name: "corpus-delete.srt".into(),
+            content: b"1\n00:00:01,000 --> 00:00:03,000\nTake care of yourself.\n".to_vec(),
+            language: Some("en".into()),
+            identity_salt: None,
+        })
+        .unwrap();
+    assert_eq!(
+        services
+            .search_corpus("en", "take care", 10, 0)
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        services.search_corpus("en", "care", 10, 0).unwrap().len(),
+        1
+    );
+
+    repo.delete_track(&track.id).unwrap();
+
+    assert!(
+        services
+            .search_corpus("en", "take care", 10, 0)
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        services
+            .search_corpus("en", "care", 10, 0)
+            .unwrap()
+            .is_empty()
+    );
+}
+
 #[test]
 fn rebuild_corpus_index_backfills_preexisting_tracks() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());

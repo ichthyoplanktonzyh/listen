@@ -304,9 +304,20 @@ expansion is ephemeral overlay state, not a fourth persisted Rhythm mode.
 - Vocabulary export/import is currently version 5 and contains only lexical
   assets plus phonetic finding feedback; Phase 3.4.1 will make the next bundle
   version decision before capability data is exported.
-- SQLite schema version is 22. It adds `lexical_capability_states` and
-  `lexical_capability_history`, backfills v21 legacy status as sourced projection,
-  and deliberately keeps `lexical_entries.status` in place for compatibility.
+- Schema v22 adds `lexical_capability_states` and `lexical_capability_history`,
+  backfills v21 legacy status as sourced projection, and deliberately keeps
+  `lexical_entries.status` in place for compatibility.
+- Schema v28 adds the rebuildable `corpus_occurrences` search projection
+  (lemma-keyed word tokens, sentence-level phrase rows, active-chunk-timeline
+  chunk rows). It is deliberately separate from durable `lexical_occurrences`
+  and never authoritative: subtitle import, track-language changes, chunk
+  timeline lifecycle hooks, and the manual `POST /v1/corpus/reindex` rebuild it.
+- Schema v29 adds the `corpus_occurrences_fts` FTS5 companion (rowid-mirrored,
+  trigger-maintained; `delete_track` clears its rows explicitly before the FK
+  cascade so coherence never depends on cascade-fired triggers). Multi-word
+  corpus queries are FTS phrase matches over sentence/chunk text; single-word
+  queries are exact lemma-key lookups normalized through the same
+  user-override → provider → baseline path as lexical entries.
 - Review scheduling v1 is recorded as `listen_review_v1_heuristic_proxy`: `again` returns in
   10 minutes, `hard` in one day, and successful intervals grow from 3 to 7 days before doubling.
   The durable attempts remain the evidence history; the schedule row is a replaceable read model.

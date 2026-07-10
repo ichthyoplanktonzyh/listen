@@ -195,11 +195,20 @@ impl SubtitleRepository for SqliteRepository {
         if existing.is_none() {
             return Ok(None);
         }
-        self.connection
-            .lock()
-            .expect("sqlite mutex poisoned")
-            .execute("DELETE FROM subtitle_tracks WHERE id=?1", [id.as_str()])
+        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let tx = conn.transaction().map_err(repo)?;
+        // Clear the FTS companion rows before the FK cascade removes the
+        // corpus projection rows: coherence must not depend on whether
+        // cascade deletes fire the corpus_occurrences triggers.
+        tx.execute(
+            "DELETE FROM corpus_occurrences_fts WHERE rowid IN
+               (SELECT rowid FROM corpus_occurrences WHERE track_id=?1)",
+            [id.as_str()],
+        )
+        .map_err(repo)?;
+        tx.execute("DELETE FROM subtitle_tracks WHERE id=?1", [id.as_str()])
             .map_err(repo)?;
+        tx.commit().map_err(repo)?;
         Ok(existing)
     }
 

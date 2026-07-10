@@ -4,6 +4,8 @@ use rusqlite::params;
 
 use super::{SqliteRepository, domain_sql, from_json, json, repo};
 
+const SELECT_COLUMNS: &str = "id,language,kind,normalized_key,display_text,media_id,track_id,sentence_id,start_ms,end_ms,source_snapshot";
+
 impl CorpusIndexRepository for SqliteRepository {
     fn replace_corpus_occurrences_for_track(
         &self,
@@ -41,71 +43,97 @@ impl CorpusIndexRepository for SqliteRepository {
     ) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
         let conn = self.connection.lock().expect("sqlite mutex poisoned");
         let normalized = query.trim().to_lowercase();
-        let phrase_like = format!("%{normalized}%");
         let is_phrase = normalized.contains(char::is_whitespace);
         // Giant entries ("the") are round-robin sampled across media instead
         // of returning the first minutes of one file: rows are ranked inside
         // their media and interleaved by rank, so a truncated page still
         // spans diverse sources, speeds, and speakers.
-        let mut statement = conn
-            .prepare(
-                "SELECT id,language,kind,normalized_key,display_text,media_id,track_id,sentence_id,start_ms,end_ms,source_snapshot FROM (
-                   SELECT *, ROW_NUMBER() OVER (PARTITION BY media_id ORDER BY start_ms, id) AS media_rank
-                   FROM corpus_occurrences
-                   WHERE language=?1 AND (
-                     (?3=0 AND normalized_key=?2)
-                     OR (?3=1 AND kind IN (?4,?5) AND source_snapshot LIKE ?6 COLLATE NOCASE)
-                   )
-                 )
-                 ORDER BY media_rank, start_ms, id LIMIT ?7 OFFSET ?8",
-            )
-            .map_err(repo)?;
-        statement
-            .query_map(
-                params![
-                    language.as_str(),
-                    normalized,
-                    is_phrase as u8,
-                    json(&CorpusOccurrenceKind::Phrase)?,
-                    json(&CorpusOccurrenceKind::Chunk)?,
-                    phrase_like,
-                    limit,
-                    offset
-                ],
-                |row| {
-                    Ok(CorpusOccurrence {
-                        id: CorpusOccurrenceId::parse(row.get::<_, String>(0)?)
-                            .map_err(domain_sql)?,
-                        language: LanguageCode::parse(row.get::<_, String>(1)?)
-                            .map_err(domain_sql)?,
-                        kind: from_json(&row.get::<_, String>(2)?)?,
-                        normalized_key: row.get(3)?,
-                        display_text: row.get(4)?,
-                        media_id: row
-                            .get::<_, Option<String>>(5)?
-                            .map(MediaId::parse)
-                            .transpose()
-                            .map_err(domain_sql)?,
-                        track_id: row
-                            .get::<_, Option<String>>(6)?
-                            .map(SubtitleTrackId::parse)
-                            .transpose()
-                            .map_err(domain_sql)?,
-                        sentence_id: row
-                            .get::<_, Option<String>>(7)?
-                            .map(SubtitleSentenceId::parse)
-                            .transpose()
-                            .map_err(domain_sql)?,
-                        start_ms: row.get(8)?,
-                        end_ms: row.get(9)?,
-                        source_snapshot: row.get(10)?,
-                    })
-                },
-            )
-            .map_err(repo)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(repo)
+        if is_phrase {
+            // FTS5 phrase match over sentence/chunk text (schema v29): word
+            // boundary tokenized rather than raw substring, and indexed
+            // instead of a LIKE '%…%' full scan. Interior quotes are dropped
+            // — they cannot appear in tokenized terms anyway.
+            let fts_phrase = format!("\"{}\"", normalized.replace('"', " "));
+            let mut statement = conn
+                .prepare(
+                    &format!(
+                        "SELECT {SELECT_COLUMNS} FROM (
+                           SELECT c.*, ROW_NUMBER() OVER (PARTITION BY c.media_id ORDER BY c.start_ms, c.id) AS media_rank
+                           FROM corpus_occurrences c
+                           JOIN (SELECT rowid FROM corpus_occurrences_fts WHERE corpus_occurrences_fts MATCH ?2) f
+                             ON f.rowid = c.rowid
+                           WHERE c.language=?1 AND c.kind IN (?3,?4)
+                         )
+                         ORDER BY media_rank, start_ms, id LIMIT ?5 OFFSET ?6",
+                    ),
+                )
+                .map_err(repo)?;
+            statement
+                .query_map(
+                    params![
+                        language.as_str(),
+                        fts_phrase,
+                        json(&CorpusOccurrenceKind::Phrase)?,
+                        json(&CorpusOccurrenceKind::Chunk)?,
+                        limit,
+                        offset
+                    ],
+                    occurrence_from_row,
+                )
+                .map_err(repo)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(repo)
+        } else {
+            let mut statement = conn
+                .prepare(
+                    &format!(
+                        "SELECT {SELECT_COLUMNS} FROM (
+                           SELECT *, ROW_NUMBER() OVER (PARTITION BY media_id ORDER BY start_ms, id) AS media_rank
+                           FROM corpus_occurrences
+                           WHERE language=?1 AND normalized_key=?2
+                         )
+                         ORDER BY media_rank, start_ms, id LIMIT ?3 OFFSET ?4",
+                    ),
+                )
+                .map_err(repo)?;
+            statement
+                .query_map(
+                    params![language.as_str(), normalized, limit, offset],
+                    occurrence_from_row,
+                )
+                .map_err(repo)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(repo)
+        }
     }
+}
+
+fn occurrence_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CorpusOccurrence> {
+    Ok(CorpusOccurrence {
+        id: CorpusOccurrenceId::parse(row.get::<_, String>(0)?).map_err(domain_sql)?,
+        language: LanguageCode::parse(row.get::<_, String>(1)?).map_err(domain_sql)?,
+        kind: from_json(&row.get::<_, String>(2)?)?,
+        normalized_key: row.get(3)?,
+        display_text: row.get(4)?,
+        media_id: row
+            .get::<_, Option<String>>(5)?
+            .map(MediaId::parse)
+            .transpose()
+            .map_err(domain_sql)?,
+        track_id: row
+            .get::<_, Option<String>>(6)?
+            .map(SubtitleTrackId::parse)
+            .transpose()
+            .map_err(domain_sql)?,
+        sentence_id: row
+            .get::<_, Option<String>>(7)?
+            .map(SubtitleSentenceId::parse)
+            .transpose()
+            .map_err(domain_sql)?,
+        start_ms: row.get(8)?,
+        end_ms: row.get(9)?,
+        source_snapshot: row.get(10)?,
+    })
 }
 
 fn insert_occurrence(

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-10 21:05 CST: Phase 3.6 债务清偿并收口。SQLite schema v29 新增
+  `corpus_occurrences_fts` FTS5 伴生索引（rowid 镜像、触发器维护、迁移回填），多词 corpus
+  查询从 `LIKE '%…%'` 全表扫描升级为分词短语匹配；`delete_track` 在 FK cascade 前显式清理
+  FTS 行，连贯性不依赖 cascade 触发器。词 token 索引键与自由文本单词查询双向经
+  `normalize_lexical_form`（用户纠正 → provider lemma → 基线）归一——"run" 能找到
+  "running" 的语境；v29 前的存量索引需手动"重建媒体库语料索引"一次以获得 lemma 匹配。
+  新增 lemma 归一与删轨连贯性测试；同步 DATA-MODEL（v28/v29 投影记录）与 OpenAPI 搜索
+  语义描述。验证：Rust 三 crate 全绿（persistence 79 passed）、`validate-contracts.sh`
+  通过、clippy 零新增警告、`git diff --check` 通过。真实媒体手工 QA 按 owner 决定豁免，
+  `3.6-CLOSEOUT.md` 已写，phase 冻结；STATE 与 3.6-PLAN Progress 同步。
+
 - 2026-07-10 20:19 CST: Phase 3.6 收口批次二（除真实媒体 QA 外全部剩余项）。后端：corpus
   搜索改为按 media 轮转采样（窗口函数交错排序），大词条截断页跨来源多样化，补采样测试。
   Flutter 词典详情：切片 wpm 估算标注与"默认顺序/按语速"排序（UI 状态改按 occurrence 身份
