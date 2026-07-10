@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-10 20:19 CST: Phase 3.6 收口批次二（除真实媒体 QA 外全部剩余项）。后端：corpus
+  搜索改为按 media 轮转采样（窗口函数交错排序），大词条截断页跨来源多样化，补采样测试。
+  Flutter 词典详情：切片 wpm 估算标注与"默认顺序/按语速"排序（UI 状态改按 occurrence 身份
+  键控，排序不串已揭示/已标记状态）；每切片"加入复习"出口（ReviewItem 带 sentence anchor
+  时间窗，复习队列按 3.4 卡型派生；范围裁决：不内嵌 3.1 practice 会话 UI，词典动作出口收敛
+  到复习队列）；回补词典化时移除的四通道 override 就地编辑、释义/笔记编辑与升级建议确认/
+  拒绝 banner；外链兜底（零切片/零结果态 YouGlish 外链 + 词典发音按钮，明示仅供参考不作
+  练习素材）；命中 limit 显示"已跨媒体采样"提示。新增语速估算单测与 5 个 widget 测试。
+  验证：`cargo test -p persistence-sqlite`、`flutter analyze` 零问题、`flutter test`
+  265 passed、`git diff --check` 通过。已知债挂账：phrase LIKE 全扫（FTS5 备选）、自由文本
+  lemma 归一。
+
 - 2026-07-10 19:58 CST: Phase 3.6 Slice 3 收尾接线 + Slice 1 体验修正。后端：corpus 索引纳入
   active chunk timeline 的 chunk 行（含空格查询同时命中句子与 chunk），chunk timeline
   activate/archive/delete 与激活式生成触发该轨重建；新增 `rebuild_corpus_index` 全库回填

@@ -43,15 +43,21 @@ impl CorpusIndexRepository for SqliteRepository {
         let normalized = query.trim().to_lowercase();
         let phrase_like = format!("%{normalized}%");
         let is_phrase = normalized.contains(char::is_whitespace);
+        // Giant entries ("the") are round-robin sampled across media instead
+        // of returning the first minutes of one file: rows are ranked inside
+        // their media and interleaved by rank, so a truncated page still
+        // spans diverse sources, speeds, and speakers.
         let mut statement = conn
             .prepare(
-                "SELECT id,language,kind,normalized_key,display_text,media_id,track_id,sentence_id,start_ms,end_ms,source_snapshot
-                 FROM corpus_occurrences
-                 WHERE language=?1 AND (
-                   (?3=0 AND normalized_key=?2)
-                   OR (?3=1 AND kind IN (?4,?5) AND source_snapshot LIKE ?6 COLLATE NOCASE)
+                "SELECT id,language,kind,normalized_key,display_text,media_id,track_id,sentence_id,start_ms,end_ms,source_snapshot FROM (
+                   SELECT *, ROW_NUMBER() OVER (PARTITION BY media_id ORDER BY start_ms, id) AS media_rank
+                   FROM corpus_occurrences
+                   WHERE language=?1 AND (
+                     (?3=0 AND normalized_key=?2)
+                     OR (?3=1 AND kind IN (?4,?5) AND source_snapshot LIKE ?6 COLLATE NOCASE)
+                   )
                  )
-                 ORDER BY start_ms, id LIMIT ?7 OFFSET ?8",
+                 ORDER BY media_rank, start_ms, id LIMIT ?7 OFFSET ?8",
             )
             .map_err(repo)?;
         statement

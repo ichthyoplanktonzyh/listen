@@ -164,6 +164,73 @@ fn active_chunk_timeline_rows_follow_chunk_lifecycle() {
 }
 
 #[test]
+fn giant_entry_search_samples_across_media() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_corpus_index_repository(repo.clone());
+    // Media A holds three early hits; media B one late hit. A start-time
+    // ordering would fill a 2-row page entirely from A's opening minutes.
+    let media_a = services
+        .register_media(RegisterMedia {
+            path: "/tmp/corpus-sample-a.mp4".into(),
+            fingerprint: "corpus-sample-a".into(),
+            title: "Sample A".into(),
+            kind: MediaKind::Video,
+            duration_ms: Some(60_000),
+        })
+        .unwrap();
+    services
+        .import_subtitle(ImportSubtitle {
+            media_id: media_a.id,
+            source_name: "a.srt".into(),
+            content: b"1\n00:00:01,000 --> 00:00:02,000\nTake care now.\n\n2\n00:00:03,000 --> 00:00:04,000\nI care a lot.\n\n3\n00:00:05,000 --> 00:00:06,000\nThey care too.\n"
+                .to_vec(),
+            language: Some("en".into()),
+            identity_salt: None,
+        })
+        .unwrap();
+    let media_b = services
+        .register_media(RegisterMedia {
+            path: "/tmp/corpus-sample-b.mp4".into(),
+            fingerprint: "corpus-sample-b".into(),
+            title: "Sample B".into(),
+            kind: MediaKind::Video,
+            duration_ms: Some(60_000),
+        })
+        .unwrap();
+    services
+        .import_subtitle(ImportSubtitle {
+            media_id: media_b.id.clone(),
+            source_name: "b.srt".into(),
+            content: b"1\n00:00:50,000 --> 00:00:51,000\nWe care differently.\n".to_vec(),
+            language: Some("en".into()),
+            identity_salt: None,
+        })
+        .unwrap();
+
+    let hits = services.search_corpus("en", "care", 2, 0).unwrap();
+    assert_eq!(hits.len(), 2);
+    let media_ids: std::collections::HashSet<_> = hits
+        .iter()
+        .filter_map(|hit| hit.media_id.as_ref())
+        .collect();
+    assert!(
+        media_ids.contains(&media_b.id),
+        "a truncated page must span media, not just the earliest file"
+    );
+    assert_eq!(media_ids.len(), 2);
+}
+
+#[test]
 fn rebuild_corpus_index_backfills_preexisting_tracks() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     // Import through services without a corpus repository, modelling a library

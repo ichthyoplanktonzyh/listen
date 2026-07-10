@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-10T19:58:00.000+08:00"
+last_updated: "2026-07-10T20:22:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-10 19:58 CST
-> 更新原因：Phase 3.6 Slice 1–3 自动化落地：资产词典页（词汇本演进 + 页内切片窗）、逐例
-> 识别标记、corpus 索引（词/句/chunk）与搜索、全库重建入口、找更多例句 + 试听 + 收为来源
-> 切片。附带修复 3.5.6/3.5 接缝回归：练习准确率校准改为 attempt 提交时折算。
+> 最后更新：2026-07-10 20:22 CST
+> 更新原因：Phase 3.6 收口批次二完成：跨媒体采样搜索、语速排序、每切片复习出口
+> （sentence anchor）、override/释义笔记/升级建议编辑回补、YouGlish + 词典发音外链兜底。
+> 自动化全部完成，仅剩真实媒体手工 QA 与 CLOSEOUT。
 
 ## 当前位置
 
@@ -235,7 +235,7 @@ last_updated: "2026-07-10T19:58:00.000+08:00"
   `git diff --check` 通过，零后端/契约改动。owner 确认以该证据收口；多切片浏览 UI 留给 3.6。
 - 收口：`.planning/phases/3.5.7-slice-playback-window/3.5.7-CLOSEOUT.md`；计划已冻结。
 
-### Phase 3.6: Listening Dictionary MVP ⏳ ACTIVE（Slice 1–3 自动化完成）
+### Phase 3.6: Listening Dictionary MVP ⏳ ACTIVE（自动化全部完成，仅剩真实媒体 QA 与收口）
 
 - Slice 1（资产词典页）：词汇本演进为词典页（master-detail 页内详情，不再是弹窗），
   学习对象 → 切片列表 + 四通道摘要 + 覆盖度诚实展示；词典页自持第二解码切片窗，
@@ -251,12 +251,17 @@ last_updated: "2026-07-10T19:58:00.000+08:00"
 - 接缝回归修复：3.5.6 extensive-only completion 使精听 session 永不完成，3.5 的练习准确率
   校准（content-fit-v2）失去触发点——已改为 attempt 提交时增量折算，completion 只折算
   理解度自报（`record_practice_accuracy_feedback`）。
+- 收口批次二（2026-07-10 晚）：corpus 搜索按 media 轮转采样（大词条截断页跨来源多样化 +
+  "已跨媒体采样"提示）；切片 wpm 估算与"默认顺序/按语速"排序（UI 状态按 occurrence 身份
+  键控）；每切片"加入复习"出口（sentence anchor 时间窗，复习队列按 3.4 卡型派生；范围
+  裁决：不内嵌 3.1 practice 会话 UI，词典动作出口收敛到复习队列）；回补四通道 override
+  就地编辑、释义/笔记编辑、升级建议确认/拒绝 banner；外链兜底（YouGlish + 词典发音，
+  明示仅供参考）。
 - 验证：`cargo test -p application -p persistence-sqlite -p api-http` 全绿、
-  `validate-contracts.sh` 通过、`flutter analyze` 零问题、`flutter test` 259 passed。
-- 待完成（Slice 3 尾部 + Slice 4）：外链兜底（YouGlish/词典发音）、大词条截断采样策略、
-  按语速分组、从例句生成 cloze/听写出口、真实媒体手工 QA；词汇本详情的 capability
-  override / 释义笔记 / 升级建议确认在词典化后尚未回补（侧面板仍有完整功能）。
-- 规划文档：`.planning/phases/3.6-listening-dictionary-mvp/3.6-PLAN.md`（v2）。
+  `validate-contracts.sh` 通过、`flutter analyze` 零问题、`flutter test` 265 passed。
+- 待完成：真实媒体手工 QA 与 CLOSEOUT。已知债挂账：phrase LIKE 全扫（FTS5 备选）、
+  自由文本 lemma 归一（词条驱动查询不受影响）。
+- 规划文档：`.planning/phases/3.6-listening-dictionary-mvp/3.6-PLAN.md`（v2，含 Progress）。
 
 ## 已完成 Phase 索引
 
@@ -353,9 +358,8 @@ last_updated: "2026-07-10T19:58:00.000+08:00"
 
 ## 下一步工作
 
-1. 完成 3.6 收尾：外链兜底、大词条截断采样、语速分组、例句生成 cloze/听写出口、
-   词汇本详情能力编辑回补、真实媒体手工 QA，然后 CLOSEOUT。义项 spike 排在义项切片
-   （3.6.x）前，图谱视图推迟。
+1. 3.6 仅剩真实媒体手工 QA（owner）与 CLOSEOUT；已知债挂账 FTS5 与 lemma 归一。
+   义项 spike 排在义项切片（3.6.x）前，图谱视图推迟。
 2. Phase 3.4.3 已完成（纯领域建模 spike，不建设生产 schema）；下一步在独立产品 slice 验证
    “收藏句 → 个人模板”的用户价值，再决定 SentenceExemplar/UserSentencePattern 持久化范围。
 3. Phase 3.5 已立项启动（Slice 1-8 完成，Slice 9 真实素材 QA 待完成）。
