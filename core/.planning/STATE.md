@@ -3,15 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-10T14:58:00.000+08:00"
+last_updated: "2026-07-10T15:46:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-10 14:58 CST
-> 更新原因：3.5.6 由 owner 声明收尾（CLOSEOUT 待补）。个人听力词典与切片播放器讨论完成评审
-> （讨论文档 §9）：新增 Phase 3.5.7 切片回听播放器 PLAN；3.6 听力词典 PLAN 修订为 v2
-> （第一刀零新后端资产词典页，corpus index 降为第二刀；义项/图谱推迟）。
+> 最后更新：2026-07-10 15:46 CST
+> 更新原因：Phase 3.5.7 切片回听播放器由 owner 确认收口；双 fvp 实例 spike、独立切片窗、
+> 入口迁移与自动化验证完成。下一主线为 3.6 听力词典 v2 第一刀。
 
 ## 当前位置
 
@@ -220,28 +219,20 @@ last_updated: "2026-07-10T14:58:00.000+08:00"
   74+5+6 / `-p api-http` 35+11、`validate-contracts.sh` 通过。
 - 收口文档：`.planning/phases/3.5.5-intensive-listening-ux-fix/3.5.5-CLOSEOUT.md`。
 
-### Phase 3.5.6: Intensive Practice Floating Window ✅ 已收口（2026-07-10 owner 声明；CLOSEOUT 待补）
+### Phase 3.5.6: Intensive Practice Floating Window ✅ 已收口
 
-- 从 3.5.5 切出的精听 practice UX 重设计已完成自动化部分：可拖动浮窗 + 迷你控制器、三题型
-  连续换句、关闭清理练习循环；右侧 Practice tab、跳过/悬案/session summary/精听完毕/卡点
-  都已删除。3.2 内部卡点聚合与对应历史测试已物理移除，历史原始事件保留但不再有读侧投影。
-- 泛听结束改为 extensive-only `POST /v1/listening/sessions/{id}/complete`，理解度自报和内容
-  匹配度校准保留。自动验证通过；仅剩真实媒体手工 QA（owner 已要求暂缓）。
-- 上下文文档：`.planning/phases/3.5.6-intensive-practice-window/3.5.6-CONTEXT.md`
-  （引用上游 `3.5.5-.../精听模块UX问题与方案.md`）；执行计划：
-  `.planning/phases/3.5.6-intensive-practice-window/3.5.6-PLAN.md`。
-- 收口状态：代码已全部提交（`84e11aea`）；真实媒体手工 QA 按 owner 决定豁免；
-  `3.5.6-CLOSEOUT.md` 待补（列入下一步工作），补齐后冻结 phase 文件夹。
+- 可拖动精听练习浮窗、3.2 过度设计机制与历史读侧聚合清理、extensive-only completion 均已完成；
+  真实媒体手工 QA 由 owner 豁免。收口：`.planning/phases/3.5.6-intensive-practice-window/3.5.6-CLOSEOUT.md`；
+  冻结计划：`.planning/phases/3.5.6-intensive-practice-window/3.5.6-PLAN.md`。
 
-### Phase 3.5.7: Slice Playback Window 📋 PLANNED
+### Phase 3.5.7: Slice Playback Window ✅ 已收口
 
-- 目标：独立切片回听浮窗取代 `playOccurrence` 主播放器劫持模式；独立第二解码实例、默认
-  音频、可展开视频；打开暂停主播放器，关闭不破坏学习上下文。纯 Flutter，零契约变更。
-- 关键关口：Slice 0 双实例（video_player + fvp 本地 fork）可行性 spike，阻断即停并由
-  owner 裁决降级方案。
-- 同时是 3.6 听力词典例句回听的统一播放端；B 组 loopRange 场景明确不迁移。
-- 规划文档：`.planning/phases/3.5.7-slice-playback-window/3.5.7-PLAN.md`；
-  产品输入与评审结论：`.planning/discuss/personal-listening-dictionary-and-slice-player.zh.md`（§9）。
+- 已交付独立第二解码实例、音频优先/可展开视频的可拖动切片窗、跨媒体 resolver 与所有 A 组
+  来源句入口迁移；打开暂停主播放器但保持其媒体/位置，精听重播会暂停切片；旧
+  `playOccurrence` 劫持路径已删除，B 组 `loopRange` 未动。
+- Slice 0 真实 macOS 双实例 spike 通过；`flutter analyze`、`flutter test`（252 passed）与
+  `git diff --check` 通过，零后端/契约改动。owner 确认以该证据收口；多切片浏览 UI 留给 3.6。
+- 收口：`.planning/phases/3.5.7-slice-playback-window/3.5.7-CLOSEOUT.md`；计划已冻结。
 
 ## 已完成 Phase 索引
 
@@ -338,19 +329,16 @@ last_updated: "2026-07-10T14:58:00.000+08:00"
 
 ## 下一步工作
 
-1. 补写 `3.5.6-CLOSEOUT.md`（收口由 owner 2026-07-10 声明，QA 豁免记录在案）并冻结
-   phase 文件夹。
-2. Phase 3.5.7 切片回听播放器开工：先跑 Slice 0 双实例可行性 spike，阻断即停。
-3. 3.5.7 收口后按 3.6-PLAN v2 启动听力词典第一刀（零新后端资产词典页）；义项 spike
+1. 按 3.6-PLAN v2 启动听力词典第一刀（零新后端资产词典页）；义项 spike
    排在义项切片（3.6.x）前，图谱视图推迟。
-4. Phase 3.4.3 已完成（纯领域建模 spike，不建设生产 schema）；下一步在独立产品 slice 验证
+2. Phase 3.4.3 已完成（纯领域建模 spike，不建设生产 schema）；下一步在独立产品 slice 验证
    “收藏句 → 个人模板”的用户价值，再决定 SentenceExemplar/UserSentencePattern 持久化范围。
-5. Phase 3.5 已立项启动（Slice 1-8 完成，Slice 9 真实素材 QA 待完成）。
-6. 恢复 Phase 3.4/3.35 手工 QA，重新基线化新能力 UI。
-7. 完成 Phase 3.3 真实媒体 30 分钟泛听 QA 并收口。
-8. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
+3. Phase 3.5 已立项启动（Slice 1-8 完成，Slice 9 真实素材 QA 待完成）。
+4. 恢复 Phase 3.4/3.35 手工 QA，重新基线化新能力 UI。
+5. 完成 Phase 3.3 真实媒体 30 分钟泛听 QA 并收口。
+6. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
-9. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）；
+7. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）；
    legacy `LearningStatus` 物理删除推迟到所有 active consumer 迁移后的独立 cleanup phase；
    诊断 profile 批量读取接口、资产导入补写 capability history（见精化评审 §5）。
 

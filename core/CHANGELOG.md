@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-10 15:46 CST: Phase 3.5.7 Slice Playback Window 收口。Flutter-only：以独立
+  fvp/video_player 第二实例取代词汇来源句的主播放器劫持；新增可注入
+  `OccurrenceMediaResolver`（关联媒体/文件定位/指纹验证/注册）、默认音频优先且可展开视频的
+  `SlicePlaybackWindow`、音频焦点互斥与中英文文案。所有 A 组来源句入口迁移，删除
+  `playOccurrence`/`loopOccurrence`；B 组当前媒体 `loopRange` 未迁移。真实 macOS 双实例
+  spike 通过，`flutter analyze`、`flutter test`（252 passed）与 `git diff --check` 通过；owner
+  确认收口，冻结 phase，3.6 复用该播放端承接多切片卡片浏览。
+
+- 2026-07-10 15:20 CST: Phase 3.5.6 Intensive Practice Floating Window 收口。新增
+  `3.5.6-CLOSEOUT.md`，将执行 PLAN 标为完成并冻结；STATE 从 owner 声明收尾更新为正式收口。
+  真实媒体手工 QA 按 owner 决定豁免；此 phase 不闭合 milestone，`MILESTONES.md` 不变。
+
 - 2026-07-10 14:58 CST: 规划：切片播放器与听力词典 v2（纯文档，无代码）。基于
   `.planning/discuss/personal-listening-dictionary-and-slice-player.zh.md` 的评审结论（新增 §9，
   状态改 REVIEWED）：新增 Phase 3.5.7 Slice Playback Window 计划（独立第二解码实例浮窗取代
