@@ -31,6 +31,9 @@ pub use chunk_timeline::*;
 mod sense_group;
 pub use sense_group::*;
 
+mod construction;
+pub use construction::*;
+
 mod phone_timeline;
 pub use phone_timeline::*;
 
@@ -134,6 +137,10 @@ string_id!(CorpusOccurrenceId);
 string_id!(LearnerProfileId);
 string_id!(SenseGroupAnalysisId);
 string_id!(SenseGroupId);
+string_id!(SentenceExemplarId);
+string_id!(ConstructionId);
+string_id!(ConstructionOccurrenceId);
+string_id!(UserSentencePatternId);
 string_id!(RecordingAssetId);
 string_id!(PronunciationAnalysisId);
 string_id!(PhoneticAnalysisModelId);

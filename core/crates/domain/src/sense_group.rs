@@ -136,7 +136,10 @@ mod tests {
             word_timing("s1", 3, 510, 650),
         ];
         let group = sense_group("s1", 1, 2);
-        assert_eq!(sense_group_playback_range(&group, &timings), Some((210, 500)));
+        assert_eq!(
+            sense_group_playback_range(&group, &timings),
+            Some((210, 500))
+        );
     }
 
     #[test]
@@ -146,7 +149,10 @@ mod tests {
             word_timing("s1", 1, 210, 350),
         ];
         let group = sense_group("s1", 0, 0);
-        assert_eq!(sense_group_playback_range(&group, &timings), Some((100, 200)));
+        assert_eq!(
+            sense_group_playback_range(&group, &timings),
+            Some((100, 200))
+        );
     }
 
     #[test]

@@ -260,8 +260,8 @@ mod tests {
         assert_eq!(dictation.capability, LexicalCapability::Listening);
         assert_eq!(dictation.assistance, AssistanceLevel::None);
 
-        let cloze = observation_spec_for_practice(PracticeKind::Cloze, PracticeResult::Partial)
-            .unwrap();
+        let cloze =
+            observation_spec_for_practice(PracticeKind::Cloze, PracticeResult::Partial).unwrap();
         assert_eq!(cloze.assistance, AssistanceLevel::FullText);
         assert_eq!(cloze.outcome, ObservationOutcome::Partial);
 

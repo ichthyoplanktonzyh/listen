@@ -2,6 +2,50 @@
 
 ## Unreleased
 
+- 2026-07-10 09:27 CST: Phase 3.5.5 Intensive Listening UX Fix 收口。撰写
+  `3.5.5-CLOSEOUT.md`（如实记录 delivered 8 组 + carved-out 1 组 + deferred 6 项）;9 组走查
+  问题交付 8 组（回退首页、循环标注、内容匹配度入口、词汇来源竞态、听懂了吗含 C 视图第 4 项、
+  溢出菜单、词汇本升级 A+B、意群/chunk 表达统一），全程守住 ADR 0016 数据双层分离。最大的
+  一块独立功能"精听浮动练习小窗"（含 P0）切出到新 Phase 3.5.6（建 `3.5.6-intensive-practice-window/
+  3.5.6-CONTEXT.md`，引用上游设计文档，PLAN 待独立会话撰写）。`STATE.md` 新增 3.5.5 完成条目
+  与 3.5.6 下一步、更新头部时间戳与最近决策。MILESTONES 不动（3.5.5 非里程碑）。
+
+- 2026-07-10 09:22 CST: Phase 3.4.3 Construction Modeling Spike 收口（纯 domain，未建设
+  SQLite/API/Flutter/LLTimeline schema）。新增 `construction` domain seam 和可执行 en/zh/ja
+  manual gold fixture：区分 `SentenceExemplar`（来源快照素材）、人工 canonical
+  `Construction`（`language + key + schema_version`）、可重建的
+  `ConstructionOccurrence`（token span + slots + construction-owned variant policy）及
+  `UserSentencePattern`（独立用户资产、可选 system link）。fixture 覆盖时态/语态/否定/疑问、
+  一句多构式/嵌套、recognition/production + read/listen/speak/write modality，以及从没有任何
+  system occurrence 的任意日语句子提炼个人模板。结论：证据足以锁定边界，但不足以冻结
+  canonical library、自动 provider、迁移与消费工作流，故不建生产表；下一步先验证“收藏句 →
+  个人模板”产品切片。`cargo test -p domain construction --lib` 4 passed。
+
+- 2026-07-10 09:14 CST: 字幕「分组」显示统一（Flutter-only，UX 收敛）。将原先两个
+  相互独立、可叠加显示的可见性开关 `showChunkGrouping`/`showSenseGrouping` 合并为
+  单一模式枚举 `groupingMode`（`off`/`prosodic`/`semantic`/`compare`，字符串持久化，
+  默认 `off`）。**渲染**（`token_line.dart`）：`prosodic` 复用既有语流语块胶囊（实线
+  边框）;`semantic` 用同样胶囊几何但**虚线 + 琥珀 accent 描边 + 临时标记 tooltip**，
+  明确标注其为启发式「标记」而非声学证据;`compare` 以语流胶囊为底，在每一处「语义
+  边界与语流边界不重合」的分歧点（token 间）叠加 `ListenColors.accent` 小箭标 + 虚线
+  刻度 + 「语义与语流在此不一致」tooltip——这些分歧点即听力热点。两套数据仍各自独立
+  流入 `TokenLine`（`chunkPartition` + `senseGroups`），由控件按模式择一绘制。
+  **设置**：`AppSettings` 去掉两个旧 bool、新增 `groupingMode` + 加载期迁移
+  （`show_sense_grouping==true`→`semantic`;否则 `show_chunk_grouping`(缺省视为 true)
+  →`prosodic`;否则 `off`），保持 v8 向后兼容;新增 `chunkHighlightActive` 派生
+  （仅 `prosodic`/`compare` 且开启当前分组高亮时，当前语块高亮才随播放走）。设置弹窗与
+  flow 用单个 4 选项下拉替换两个开关，子控件（分组显示方式/当前分组高亮/高亮样式）改按
+  `groupingMode != off` 联动。**改名/本地化**：面向用户不再暴露 Chunk/SenseGroup/意群，
+  统一「分组 / Grouping」;新增 en+zh 键 `groupingMode*`、`groupingSemanticProvisional`、
+  `groupingDivergenceHint`，改写 `chunkDisplayStyle`/`highlightCurrentChunk`/
+  `chunkHighlightStyle` 文案为「分组」措辞。`player_stage`/`side_panel`/`transcript_panel`
+  改为透传 `groupingMode` + 两套数据，转写列表与视频字幕同源同模式。
+  **数据模型保持分离**（不改后端/`crates/**`、不改 SenseGroup/ChunkTimeline 领域/持久化/
+  API），符合 ADR 0016：语义与语流本就会分歧，该分歧正是最有教学价值的信号。
+  **本轮延后**（follow-up）：播放循环/导航仍绑定语流语块、不随模式切换;意群算法
+  （NLP/置信度）不改，`semantic` 本轮刻意保持粗糙的「标记」。新增/更新测试：4 种模式
+  渲染（语流胶囊、语义虚线临时标记、compare 在分歧处出标记而在重合处不出、off 平铺）
+  + 6 项 `groupingMode` 迁移/派生用例。`flutter analyze` 零问题、`flutter test` 247 passed。
 - 2026-07-09 23:43 CST: Phase 3.5.5 词汇本升级 Slice 2-4 完成（能力过滤为主 + 四通道
   摘要 + 纳入 Phrase）。**Slice 2 后端 API**：application `list_vocabulary` 暴露
   `kind`/`status`/`capability_filter`（去掉 `Some(Word)` 硬编码，`kind=None` 返回词+短语）;

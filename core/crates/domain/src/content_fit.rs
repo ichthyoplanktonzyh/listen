@@ -319,7 +319,9 @@ pub fn sound_fit_calibration_outcome(
     }
     if calibration.practice_attempts >= CALIBRATION_MIN_PRACTICE_ATTEMPTS {
         informative = true;
-        let rate = calibration.practice_correct.min(calibration.practice_attempts) as f32
+        let rate = calibration
+            .practice_correct
+            .min(calibration.practice_attempts) as f32
             / calibration.practice_attempts as f32;
         let component = if rate <= CALIBRATION_PRACTICE_HARDER_MAX_CORRECT {
             1
@@ -521,7 +523,10 @@ mod tests {
             ..SoundFitInputs::default()
         });
         assert_eq!(dim.signals.len(), 1);
-        assert_eq!(dim.signals[0].kind, FitSignalKind::KnownNotRecognizedDensity);
+        assert_eq!(
+            dim.signals[0].kind,
+            FitSignalKind::KnownNotRecognizedDensity
+        );
     }
 
     fn calibration(

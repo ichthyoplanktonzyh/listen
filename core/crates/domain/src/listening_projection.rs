@@ -71,9 +71,7 @@ pub fn listening_projection_v1(
 
     for (index, (event, occurred_at_ms)) in events.iter().enumerate() {
         let (conclusion, confidence) = match event {
-            Event::ConfirmedSuccess => {
-                (CapabilityConclusion::Acquired, LISTENING_CONFIDENCE_TASK)
-            }
+            Event::ConfirmedSuccess => (CapabilityConclusion::Acquired, LISTENING_CONFIDENCE_TASK),
             Event::TaskSuccess if has_confirmation => {
                 (CapabilityConclusion::Acquired, LISTENING_CONFIDENCE_TASK)
             }
@@ -88,7 +86,10 @@ pub fn listening_projection_v1(
                 if has_confirmation && streak < 2 {
                     // SRS lapse convention: one lapse on a confirmed word
                     // weakens, does not flip.
-                    (CapabilityConclusion::Acquired, LISTENING_CONFIDENCE_WEAKENED)
+                    (
+                        CapabilityConclusion::Acquired,
+                        LISTENING_CONFIDENCE_WEAKENED,
+                    )
                 } else {
                     // Never-confirmed words flip on a real listening failure
                     // — the "看得懂听不出" discovery.
@@ -146,7 +147,12 @@ mod tests {
     }
 
     fn dictation(outcome: ObservationOutcome, at: u64) -> LearningObservation {
-        obs(ObservationTaskType::Dictation, outcome, AssistanceLevel::None, at)
+        obs(
+            ObservationTaskType::Dictation,
+            outcome,
+            AssistanceLevel::None,
+            at,
+        )
     }
 
     fn confirmation(at: u64) -> LearningObservation {
