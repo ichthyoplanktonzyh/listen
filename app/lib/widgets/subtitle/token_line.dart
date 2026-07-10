@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../localization.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
 import '../../theme/listen_theme.dart';
@@ -29,6 +30,7 @@ class TokenLine extends StatelessWidget {
     this.currentWordStyle = 'background',
     this.currentWordIntensity = 0.35,
     this.senseGroups = const [],
+    this.groupingMode = 'off',
   });
 
   final Cue cue;
@@ -46,6 +48,11 @@ class TokenLine extends StatelessWidget {
   final String currentWordStyle;
   final double currentWordIntensity;
   final List<SenseGroup> senseGroups;
+
+  /// Unified grouping presentation: `off`, `prosodic`, `semantic`, `compare`.
+  /// The prosodic ([chunkPartition]) and semantic ([senseGroups]) data both
+  /// flow in independently (ADR 0016); this only picks how one is drawn.
+  final String groupingMode;
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
   final Future<void> Function(DisplayChunk chunk)? onChunk;
   final List<PhraseCandidate> phraseCandidates;
@@ -58,10 +65,29 @@ class TokenLine extends StatelessWidget {
     textAlign: TextAlign.center,
   );
 
-  List<InlineSpan> _spans(BuildContext context) {
+  List<InlineSpan> _spans(BuildContext context) => switch (groupingMode) {
+    'prosodic' => _chunkCapsuleSpans(context, divergenceBoundaries: const {}),
+    'compare' => _chunkCapsuleSpans(
+      context,
+      divergenceBoundaries: _divergenceBoundaries(),
+    ),
+    'semantic' => _senseCapsuleSpans(context),
+    _ => _spansForTokens(context, cue.tokens),
+  };
+
+  /// Prosodic (chunk) capsules — the acoustic reality of how the line was said.
+  /// Shared by `prosodic` mode and the base layer of `compare` mode.
+  List<InlineSpan> _chunkCapsuleSpans(
+    BuildContext context, {
+    required Set<int> divergenceBoundaries,
+  }) {
     final partition = chunkPartition;
     if (partition == null || partition.chunks.isEmpty) {
-      return _spansForTokens(context, cue.tokens);
+      return _spansForTokens(
+        context,
+        cue.tokens,
+        divergenceBoundaries: divergenceBoundaries,
+      );
     }
     final spans = <InlineSpan>[];
     for (var index = 0; index < partition.chunks.length; index += 1) {
@@ -77,78 +103,181 @@ class TokenLine extends StatelessWidget {
           )
           .toList(growable: false);
       if (chunkTokens.isEmpty) continue;
-      final active = chunk.index == currentChunkIndex;
-      final capsule = chunkDisplayStyle == 'capsule';
       spans.add(
-        WidgetSpan(
-          alignment: PlaceholderAlignment.baseline,
-          baseline: TextBaseline.alphabetic,
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: capsule ? 5 : 4),
-            child: AnimatedScale(
-              key: ValueKey('chunk-scale-${chunk.index}'),
-              scale: active && chunkHighlightStyle == 'bounce' ? 1.045 : 1,
-              alignment: Alignment.bottomCenter,
-              duration: const Duration(milliseconds: 280),
-              curve: Curves.easeOutCubic,
-              child: GestureDetector(
-                onTap: onChunk == null ? null : () => onChunk!(chunk),
-                child: AnimatedContainer(
-                  key: ValueKey('chunk-container-${chunk.index}'),
-                  duration: const Duration(milliseconds: 280),
-                  padding: EdgeInsets.symmetric(
-                    horizontal: capsule ? 10 : 2,
-                    vertical: capsule ? 4 : 1,
-                  ),
-                  decoration: BoxDecoration(
-                    color: active
-                        ? Theme.of(
-                            context,
-                          ).colorScheme.primary.withValues(alpha: 0.18)
-                        : capsule
-                        ? ListenColors.overlayText.withValues(alpha: 0.08)
-                        : Colors.transparent,
-                    border: capsule
-                        ? Border.all(
-                            color: active
-                                ? Theme.of(
-                                    context,
-                                  ).colorScheme.primary.withValues(alpha: 0.42)
-                                : ListenColors.overlayText.withValues(
-                                    alpha: 0.18,
-                                  ),
-                          )
-                        : null,
-                    borderRadius: BorderRadius.circular(999),
-                    boxShadow: active && chunkHighlightStyle == 'glow'
-                        ? [
-                            BoxShadow(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.primary.withValues(alpha: 0.34),
-                              blurRadius: 12,
-                              spreadRadius: 1,
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Text.rich(
-                    TextSpan(children: _spansForTokens(context, chunkTokens)),
-                  ),
-                ),
-              ),
-            ),
-          ),
+        _capsuleSpan(
+          context,
+          keyIndex: chunk.index,
+          tokens: chunkTokens,
+          active: chunk.index == currentChunkIndex,
+          provisional: false,
+          onTap: onChunk == null ? null : () => onChunk!(chunk),
+          divergenceBoundaries: divergenceBoundaries,
         ),
       );
     }
     return spans;
   }
 
+  /// Semantic (sense-group) capsules — a provisional, heuristic "marker" of how
+  /// meaning groups the line. Rendered with the same capsule geometry but a
+  /// dashed, accent-tinted border so it never reads as acoustic evidence.
+  List<InlineSpan> _senseCapsuleSpans(BuildContext context) {
+    if (senseGroups.isEmpty) return _spansForTokens(context, cue.tokens);
+    final groups = [...senseGroups]
+      ..sort((a, b) => a.groupIndex.compareTo(b.groupIndex));
+    final spans = <InlineSpan>[];
+    for (var index = 0; index < groups.length; index += 1) {
+      final group = groups[index];
+      final nextStart = index + 1 < groups.length
+          ? groups[index + 1].startTokenIndex
+          : null;
+      final groupTokens = cue.tokens
+          .where(
+            (token) =>
+                (index == 0 || token.index >= group.startTokenIndex) &&
+                (nextStart == null || token.index < nextStart),
+          )
+          .toList(growable: false);
+      if (groupTokens.isEmpty) continue;
+      spans.add(
+        _capsuleSpan(
+          context,
+          keyIndex: group.groupIndex,
+          tokens: groupTokens,
+          active: false,
+          provisional: true,
+          onTap: null,
+          divergenceBoundaries: const {},
+        ),
+      );
+    }
+    return spans;
+  }
+
+  /// Sense-group boundaries (token index where a group starts) that do NOT
+  /// coincide with a prosodic-chunk boundary: the listening hotspots where
+  /// meaning says "split" but the speaker did not (or vice versa). Empty unless
+  /// both data layers are present.
+  Set<int> _divergenceBoundaries() {
+    final partition = chunkPartition;
+    if (partition == null || partition.chunks.isEmpty || senseGroups.isEmpty) {
+      return const {};
+    }
+    final chunkBoundaries = <int>{
+      for (var index = 1; index < partition.chunks.length; index += 1)
+        partition.chunks[index].tokenStart,
+    };
+    return <int>{
+      for (final group in senseGroups)
+        if (group.groupIndex > 0 &&
+            !chunkBoundaries.contains(group.startTokenIndex))
+          group.startTokenIndex,
+    };
+  }
+
+  /// Shared capsule renderer. [provisional] switches the prosodic solid capsule
+  /// to the semantic dashed/lighter marker; [divergenceBoundaries] threads the
+  /// compare-mode overlay into the inner token spans.
+  InlineSpan _capsuleSpan(
+    BuildContext context, {
+    required int keyIndex,
+    required List<SubtitleToken> tokens,
+    required bool active,
+    required bool provisional,
+    required VoidCallback? onTap,
+    required Set<int> divergenceBoundaries,
+  }) {
+    final primary = Theme.of(context).colorScheme.primary;
+    // Semantic markers always use capsule geometry; prosodic honors the display
+    // style setting (capsule vs spacing).
+    final capsule = provisional || chunkDisplayStyle == 'capsule';
+    final prefix = provisional ? 'sense' : 'chunk';
+    final content = Text.rich(
+      TextSpan(
+        children: _spansForTokens(
+          context,
+          tokens,
+          divergenceBoundaries: divergenceBoundaries,
+        ),
+      ),
+    );
+    Widget container = AnimatedContainer(
+      key: ValueKey('$prefix-container-$keyIndex'),
+      duration: const Duration(milliseconds: 280),
+      padding: EdgeInsets.symmetric(
+        horizontal: capsule ? 10 : 2,
+        vertical: capsule ? 4 : 1,
+      ),
+      decoration: BoxDecoration(
+        color: active
+            ? primary.withValues(alpha: 0.18)
+            : provisional
+            ? ListenColors.accent.withValues(alpha: 0.07)
+            : capsule
+            ? ListenColors.overlayText.withValues(alpha: 0.08)
+            : Colors.transparent,
+        // The dashed provisional outline is painted separately; a solid border
+        // here is only for real (prosodic) capsules.
+        border: provisional
+            ? null
+            : capsule
+            ? Border.all(
+                color: active
+                    ? primary.withValues(alpha: 0.42)
+                    : ListenColors.overlayText.withValues(alpha: 0.18),
+              )
+            : null,
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: active && chunkHighlightStyle == 'glow'
+            ? [
+                BoxShadow(
+                  color: primary.withValues(alpha: 0.34),
+                  blurRadius: 12,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
+      ),
+      child: content,
+    );
+    if (provisional) {
+      container = CustomPaint(
+        key: ValueKey('sense-provisional-$keyIndex'),
+        foregroundPainter: _DashedCapsuleBorder(
+          color: ListenColors.accent.withValues(alpha: 0.75),
+        ),
+        child: container,
+      );
+    }
+    Widget capsuleWidget = GestureDetector(onTap: onTap, child: container);
+    if (provisional) {
+      capsuleWidget = Tooltip(
+        message: AppLocalizations.of(context).text('groupingSemanticProvisional'),
+        child: capsuleWidget,
+      );
+    }
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: capsule ? 5 : 4),
+        child: AnimatedScale(
+          key: ValueKey('$prefix-scale-$keyIndex'),
+          scale: active && chunkHighlightStyle == 'bounce' ? 1.045 : 1,
+          alignment: Alignment.bottomCenter,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+          child: capsuleWidget,
+        ),
+      ),
+    );
+  }
+
   List<InlineSpan> _spansForTokens(
     BuildContext context,
-    List<SubtitleToken> tokens,
-  ) {
+    List<SubtitleToken> tokens, {
+    Set<int> divergenceBoundaries = const {},
+  }) {
     if (tokens.isEmpty) return const [];
     final firstIndex = tokens.first.index;
     final lastIndex = tokens.last.index;
@@ -164,34 +293,11 @@ class TokenLine extends StatelessWidget {
     final byStart = {
       for (final candidate in candidates) candidate.tokenStart: candidate,
     };
-    final senseGroupStarts = <int>{
-      for (final sg in senseGroups)
-        if (sg.groupIndex > 0) sg.startTokenIndex,
-    };
     final spans = <InlineSpan>[];
     var cursor = 0;
     while (cursor < tokens.length) {
-      if (senseGroupStarts.contains(tokens[cursor].index)) {
-        spans.add(
-          WidgetSpan(
-            alignment: PlaceholderAlignment.middle,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: SizedBox(
-                width: 1,
-                height: fontSize * 0.9,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .outline
-                        .withValues(alpha: 0.35),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
+      if (divergenceBoundaries.contains(tokens[cursor].index)) {
+        spans.add(_divergenceMarkerSpan(context, tokens[cursor].index));
       }
       final candidate = byStart[tokens[cursor].index];
       if (candidate == null) {
@@ -230,6 +336,24 @@ class TokenLine extends StatelessWidget {
     }
     return spans;
   }
+
+  /// Compare-mode overlay: a small accent caret + dashed tick sitting between
+  /// two tokens where the sense-group boundary diverges from the prosodic one.
+  InlineSpan _divergenceMarkerSpan(BuildContext context, int tokenIndex) =>
+      WidgetSpan(
+        alignment: PlaceholderAlignment.middle,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 1.5),
+          child: Tooltip(
+            message: AppLocalizations.of(context).text('groupingDivergenceHint'),
+            child: _DivergenceMarker(
+              key: ValueKey('divergence-marker-$tokenIndex'),
+              height: fontSize,
+              color: ListenColors.accent,
+            ),
+          ),
+        ),
+      );
 
   InlineSpan _tokenSpan(BuildContext context, SubtitleToken token) {
     final clickable = token.kind == 'word' && token.normalized != null;
@@ -402,4 +526,102 @@ class PhraseUnderlineSpan extends StatelessWidget {
       ),
     ],
   );
+}
+
+/// Paints a dashed stadium outline for provisional (semantic) capsules, so they
+/// read as a heuristic marker rather than acoustic evidence.
+class _DashedCapsuleBorder extends CustomPainter {
+  const _DashedCapsuleBorder({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    final outline = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(0.6, 0.6, size.width - 1.2, size.height - 1.2),
+          Radius.circular((size.height - 1.2) / 2),
+        ),
+      );
+    const dash = 3.0;
+    const gap = 2.5;
+    for (final metric in outline.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final next = (distance + dash).clamp(0.0, metric.length);
+        canvas.drawPath(metric.extractPath(distance, next), paint);
+        distance = next + gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedCapsuleBorder oldDelegate) =>
+      oldDelegate.color != color;
+}
+
+/// A small caret + dashed tick used as the compare-mode divergence marker.
+class _DivergenceMarker extends StatelessWidget {
+  const _DivergenceMarker({
+    super.key,
+    required this.height,
+    required this.color,
+  });
+
+  final double height;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: (height * 0.42).clamp(6.0, 12.0),
+    height: height,
+    child: CustomPaint(painter: _DivergenceMarkerPainter(color: color)),
+  );
+}
+
+class _DivergenceMarkerPainter extends CustomPainter {
+  const _DivergenceMarkerPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final cx = size.width / 2;
+    final caretHalf = size.width * 0.4;
+    // Downward chevron pointing at the divergence point.
+    canvas.drawPath(
+      Path()
+        ..moveTo(cx - caretHalf, size.height * 0.14)
+        ..lineTo(cx, size.height * 0.34)
+        ..lineTo(cx + caretHalf, size.height * 0.14),
+      paint,
+    );
+    // Dashed vertical tick beneath the caret.
+    var y = size.height * 0.42;
+    final bottom = size.height * 0.9;
+    while (y < bottom) {
+      canvas.drawLine(
+        Offset(cx, y),
+        Offset(cx, (y + 2.2).clamp(0.0, bottom)),
+        paint,
+      );
+      y += 4;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DivergenceMarkerPainter oldDelegate) =>
+      oldDelegate.color != color;
 }

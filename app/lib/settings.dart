@@ -41,8 +41,7 @@ class AppSettings {
     this.openSubtitlesApiKey = '',
     this.pronunciationVisible = true,
     this.wordSyncVisible = true,
-    this.showChunkGrouping = true,
-    this.showSenseGrouping = false,
+    this.groupingMode = 'off',
     this.chunkDisplayStyle = 'capsule',
     this.highlightCurrentChunk = false,
     this.chunkHighlightStyle = 'background',
@@ -148,8 +147,13 @@ class AppSettings {
       openSubtitlesApiKey: json['opensubtitles_api_key'] as String? ?? '',
       pronunciationVisible: json['pronunciation_visible'] as bool? ?? true,
       wordSyncVisible: json['word_sync_visible'] as bool? ?? true,
-      showChunkGrouping: json['show_chunk_grouping'] as bool? ?? true,
-      showSenseGrouping: json['show_sense_grouping'] as bool? ?? false,
+      groupingMode: _groupingMode(
+        json['grouping_mode'],
+        // Legacy independent toggles (pre-unification). Missing chunk flag
+        // preserves the historical default of showing prosodic chunks.
+        json['show_chunk_grouping'] as bool? ?? true,
+        json['show_sense_grouping'] as bool? ?? false,
+      ),
       chunkDisplayStyle: _chunkDisplayStyle(json['chunk_display_style']),
       highlightCurrentChunk: version >= 8
           ? json['highlight_current_chunk'] as bool? ?? false
@@ -224,11 +228,22 @@ class AppSettings {
   final String openSubtitlesApiKey;
   final bool pronunciationVisible;
   final bool wordSyncVisible;
-  final bool showChunkGrouping;
-  final bool showSenseGrouping;
+  /// Unified subtitle grouping presentation. One of:
+  /// `off`, `prosodic` (chunk capsules), `semantic` (provisional sense-group
+  /// capsules), `compare` (prosodic base + divergence markers). The prosodic
+  /// and semantic data layers stay separate per ADR 0016; this only unifies
+  /// how a single active grouping is drawn.
+  final String groupingMode;
   final String chunkDisplayStyle;
   final bool highlightCurrentChunk;
   final String chunkHighlightStyle;
+
+  /// The live "current group" highlight only tracks prosodic chunks, so it is
+  /// active only when chunk-based capsules are on screen (prosodic base, or the
+  /// prosodic base of compare mode).
+  bool get chunkHighlightActive =>
+      (groupingMode == 'prosodic' || groupingMode == 'compare') &&
+      highlightCurrentChunk;
   final String phonemeDisplay;
   final String wordHighlightStyle;
   final double wordAnimationIntensity;
@@ -320,8 +335,7 @@ class AppSettings {
         'opensubtitles_api_key': openSubtitlesApiKey,
         'pronunciation_visible': pronunciationVisible,
         'word_sync_visible': wordSyncVisible,
-        'show_chunk_grouping': showChunkGrouping,
-        'show_sense_grouping': showSenseGrouping,
+        'grouping_mode': groupingMode,
         'chunk_display_style': chunkDisplayStyle,
         'highlight_current_chunk': highlightCurrentChunk,
         'chunk_highlight_style': chunkHighlightStyle,
@@ -382,8 +396,7 @@ class AppSettings {
     String? openSubtitlesApiKey,
     bool? pronunciationVisible,
     bool? wordSyncVisible,
-    bool? showChunkGrouping,
-    bool? showSenseGrouping,
+    String? groupingMode,
     String? chunkDisplayStyle,
     bool? highlightCurrentChunk,
     String? chunkHighlightStyle,
@@ -447,8 +460,7 @@ class AppSettings {
     openSubtitlesApiKey: openSubtitlesApiKey ?? this.openSubtitlesApiKey,
     pronunciationVisible: pronunciationVisible ?? this.pronunciationVisible,
     wordSyncVisible: wordSyncVisible ?? this.wordSyncVisible,
-    showChunkGrouping: showChunkGrouping ?? this.showChunkGrouping,
-    showSenseGrouping: showSenseGrouping ?? this.showSenseGrouping,
+    groupingMode: groupingMode ?? this.groupingMode,
     chunkDisplayStyle: chunkDisplayStyle ?? this.chunkDisplayStyle,
     highlightCurrentChunk: highlightCurrentChunk ?? this.highlightCurrentChunk,
     chunkHighlightStyle: chunkHighlightStyle ?? this.chunkHighlightStyle,
@@ -491,6 +503,18 @@ class AppSettings {
 
   static String _chunkDisplayStyle(Object? value) =>
       value == 'spacing' ? value as String : 'capsule';
+
+  /// Resolves the unified grouping mode, migrating the two legacy independent
+  /// booleans when no explicit `grouping_mode` is persisted yet. Precedence
+  /// matches the pre-unification stacking rule: sense grouping wins, then chunk
+  /// grouping, otherwise off.
+  static String _groupingMode(Object? value, bool showChunk, bool showSense) {
+    const allowed = {'off', 'prosodic', 'semantic', 'compare'};
+    if (value is String && allowed.contains(value)) return value;
+    if (showSense) return 'semantic';
+    if (showChunk) return 'prosodic';
+    return 'off';
+  }
 
   static String _chunkHighlightStyle(Object? value) =>
       value == 'bounce' || value == 'glow' ? value as String : 'background';

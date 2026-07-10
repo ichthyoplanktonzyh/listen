@@ -23,6 +23,97 @@ Widget localized(Widget child, {Locale locale = const Locale('en')}) =>
       home: Scaffold(body: child),
     );
 
+// A line where the semantic (sense-group) and prosodic (chunk) boundaries
+// deliberately diverge, so compare mode has something to mark. Chunk edge sits
+// at token 4; sense-group edges sit at tokens 2, 4 and 6 — so 2 and 6 diverge
+// while 4 coincides.
+const _groupingCue = Cue(
+  id: 'sentence-1',
+  index: 0,
+  start: Duration.zero,
+  end: Duration(seconds: 3),
+  text: 'I think it is great',
+  tokens: [
+    SubtitleToken(index: 0, kind: 'word', text: 'I', normalized: 'i'),
+    SubtitleToken(index: 1, kind: 'whitespace', text: ' ', normalized: null),
+    SubtitleToken(index: 2, kind: 'word', text: 'think', normalized: 'think'),
+    SubtitleToken(index: 3, kind: 'whitespace', text: ' ', normalized: null),
+    SubtitleToken(index: 4, kind: 'word', text: 'it', normalized: 'it'),
+    SubtitleToken(index: 5, kind: 'whitespace', text: ' ', normalized: null),
+    SubtitleToken(index: 6, kind: 'word', text: 'is', normalized: 'is'),
+    SubtitleToken(index: 7, kind: 'whitespace', text: ' ', normalized: null),
+    SubtitleToken(index: 8, kind: 'word', text: 'great', normalized: 'great'),
+  ],
+);
+
+const _groupingPartition = SentenceChunkPartition(
+  sentenceId: 'sentence-1',
+  chunks: [
+    DisplayChunk(
+      index: 0,
+      tokenStart: 0,
+      tokenEnd: 3,
+      text: 'I think',
+      start: Duration.zero,
+      end: Duration(seconds: 1),
+    ),
+    DisplayChunk(
+      index: 1,
+      tokenStart: 4,
+      tokenEnd: 8,
+      text: 'it is great',
+      start: Duration(seconds: 1),
+      end: Duration(seconds: 3),
+    ),
+  ],
+  partitionerId: 'test',
+  partitionerVersion: 'v1',
+  timingQuality: 'estimated',
+);
+
+const _groupingSenseGroups = [
+  SenseGroup(
+    id: 'sg-0',
+    sentenceId: 'sentence-1',
+    groupIndex: 0,
+    startTokenIndex: 0,
+    endTokenIndex: 1,
+    text: 'I',
+    confidence: 0.5,
+    sources: [],
+  ),
+  SenseGroup(
+    id: 'sg-1',
+    sentenceId: 'sentence-1',
+    groupIndex: 1,
+    startTokenIndex: 2,
+    endTokenIndex: 3,
+    text: 'think',
+    confidence: 0.5,
+    sources: [],
+  ),
+  SenseGroup(
+    id: 'sg-2',
+    sentenceId: 'sentence-1',
+    groupIndex: 2,
+    startTokenIndex: 4,
+    endTokenIndex: 5,
+    text: 'it',
+    confidence: 0.5,
+    sources: [],
+  ),
+  SenseGroup(
+    id: 'sg-3',
+    sentenceId: 'sentence-1',
+    groupIndex: 3,
+    startTokenIndex: 6,
+    endTokenIndex: 8,
+    text: 'is great',
+    confidence: 0.5,
+    sources: [],
+  ),
+];
+
 void main() {
   test('OpenSubtitles media hash follows the 64-bit file algorithm', () async {
     final directory = await Directory.systemTemp.createTemp(
@@ -218,6 +309,7 @@ void main() {
           cue: cue,
           profiles: const {},
           showStyles: true,
+          groupingMode: 'prosodic',
           chunkPartition: const SentenceChunkPartition(
             sentenceId: 'sentence-1',
             chunks: [
@@ -295,6 +387,7 @@ void main() {
           cue: cue,
           profiles: const {},
           showStyles: true,
+          groupingMode: 'prosodic',
           chunkPartition: const SentenceChunkPartition(
             sentenceId: 'sentence-1',
             chunks: [
@@ -325,5 +418,100 @@ void main() {
           .scale,
       1.045,
     );
+  });
+
+  testWidgets('prosodic grouping renders chunk capsules only', (tester) async {
+    await tester.pumpWidget(
+      localized(
+        TokenLine(
+          cue: _groupingCue,
+          profiles: const {},
+          showStyles: true,
+          groupingMode: 'prosodic',
+          chunkPartition: _groupingPartition,
+          senseGroups: _groupingSenseGroups,
+          onWord: (_, _) async {},
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('chunk-container-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('chunk-container-1')), findsOneWidget);
+    // No semantic capsules and no compare overlay in a single prosodic layer.
+    expect(find.byKey(const ValueKey('sense-provisional-0')), findsNothing);
+    expect(find.byKey(const ValueKey('divergence-marker-2')), findsNothing);
+  });
+
+  testWidgets('semantic grouping renders provisional (dashed) capsules', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      localized(
+        TokenLine(
+          cue: _groupingCue,
+          profiles: const {},
+          showStyles: true,
+          groupingMode: 'semantic',
+          chunkPartition: _groupingPartition,
+          senseGroups: _groupingSenseGroups,
+          onWord: (_, _) async {},
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('sense-container-0')), findsOneWidget);
+    // The dashed provisional outline marks it as a heuristic, not evidence.
+    expect(find.byKey(const ValueKey('sense-provisional-0')), findsOneWidget);
+    // Semantic mode does not draw the prosodic chunks or divergence markers.
+    expect(find.byKey(const ValueKey('chunk-container-0')), findsNothing);
+    expect(find.byKey(const ValueKey('divergence-marker-2')), findsNothing);
+  });
+
+  testWidgets('compare grouping overlays divergence markers where layers '
+      'disagree', (tester) async {
+    await tester.pumpWidget(
+      localized(
+        TokenLine(
+          cue: _groupingCue,
+          profiles: const {},
+          showStyles: true,
+          groupingMode: 'compare',
+          chunkPartition: _groupingPartition,
+          senseGroups: _groupingSenseGroups,
+          onWord: (_, _) async {},
+        ),
+      ),
+    );
+
+    // Prosodic capsules form the acoustic base.
+    expect(find.byKey(const ValueKey('chunk-container-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('chunk-container-1')), findsOneWidget);
+    // Markers only where a sense-group edge does not coincide with a chunk edge.
+    expect(find.byKey(const ValueKey('divergence-marker-2')), findsOneWidget);
+    expect(find.byKey(const ValueKey('divergence-marker-6')), findsOneWidget);
+    // The sense edge at token 4 matches the chunk edge, so it is not marked.
+    expect(find.byKey(const ValueKey('divergence-marker-4')), findsNothing);
+  });
+
+  testWidgets('off grouping renders a flat line with no grouping affordances', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      localized(
+        TokenLine(
+          cue: _groupingCue,
+          profiles: const {},
+          showStyles: true,
+          chunkPartition: _groupingPartition,
+          senseGroups: _groupingSenseGroups,
+          onWord: (_, _) async {},
+        ),
+      ),
+    );
+
+    expect(find.text('think'), findsOneWidget);
+    expect(find.byKey(const ValueKey('chunk-container-0')), findsNothing);
+    expect(find.byKey(const ValueKey('sense-container-0')), findsNothing);
+    expect(find.byKey(const ValueKey('divergence-marker-2')), findsNothing);
   });
 }

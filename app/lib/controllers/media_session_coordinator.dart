@@ -331,8 +331,7 @@ class MediaSessionCoordinator {
     subtitle.updateCurrentWord(
       player.position,
       enabled: settings.wordSyncVisible,
-      chunkEnabled:
-          settings.showChunkGrouping && settings.highlightCurrentChunk,
+      chunkEnabled: settings.chunkHighlightActive,
     );
     subtitle.updateCurrentDetectedPhone(
       player.position,

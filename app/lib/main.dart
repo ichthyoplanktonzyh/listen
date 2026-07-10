@@ -314,7 +314,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       transcriptionDestination: settingsController.transcriptionDestination,
       openSubtitlesApiKey: settingsController.openSubtitlesApiKey,
       wordSyncVisible: settingsController.wordSyncVisible,
-      showChunkGrouping: settingsController.showChunkGrouping,
+      groupingMode: settingsController.groupingMode,
       chunkDisplayStyle: settingsController.chunkDisplayStyle,
       highlightCurrentChunk: settingsController.highlightCurrentChunk,
       chunkHighlightStyle: settingsController.chunkHighlightStyle,
@@ -585,9 +585,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     subtitleController.updateCurrentWord(
       value,
       enabled: settingsController.wordSyncVisible,
-      chunkEnabled:
-          settingsController.showChunkGrouping &&
-          settingsController.highlightCurrentChunk,
+      chunkEnabled: settingsController.chunkHighlightActive,
     );
     subtitleController.updateCurrentDetectedPhone(
       value,

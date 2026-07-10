@@ -20,7 +20,10 @@ class TranscriptPanel extends StatefulWidget {
     required this.onWord,
     required this.onSeekCue,
     this.onImportSubtitle,
+    this.groupingMode = 'off',
+    this.chunkPartitionsBySentence = const {},
     this.senseGroupsBySentence = const {},
+    this.chunkDisplayStyle = 'capsule',
   });
 
   final SubtitleTrack? track;
@@ -30,7 +33,10 @@ class TranscriptPanel extends StatefulWidget {
   final Map<String, LexicalCapabilityProfile> capabilityProfiles;
   final bool showStyles;
   final Color baseColor;
+  final String groupingMode;
+  final Map<String, SentenceChunkPartition> chunkPartitionsBySentence;
   final Map<String, List<SenseGroup>> senseGroupsBySentence;
+  final String chunkDisplayStyle;
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
   final Future<void> Function(Cue? cue) onSeekCue;
   final Future<void> Function()? onImportSubtitle;
@@ -127,6 +133,10 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
                               showStyles: widget.showStyles,
                               baseColor: effectiveBaseColor,
                               onWord: widget.onWord,
+                              groupingMode: widget.groupingMode,
+                              chunkDisplayStyle: widget.chunkDisplayStyle,
+                              chunkPartition:
+                                  widget.chunkPartitionsBySentence[cue.id],
                               senseGroups:
                                   widget.senseGroupsBySentence[cue.id] ??
                                   const [],

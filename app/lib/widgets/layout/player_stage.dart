@@ -213,15 +213,16 @@ class _PlayerStageState extends State<PlayerStage> {
                                   baseColor: settingsController.primaryColor,
                                   currentTokenIndex:
                                       subtitleController.currentWordToken,
-                                  chunkPartition:
-                                      settingsController.showChunkGrouping
-                                      ? subtitleController
-                                            .chunkPartitionsBySentence[subtitleController
-                                            .currentPrimaryCue!
-                                            .id]
-                                      : null,
+                                  groupingMode:
+                                      settingsController.groupingMode,
+                                  // Both grouping layers flow in independently
+                                  // (ADR 0016); TokenLine draws one per mode.
+                                  chunkPartition: subtitleController
+                                      .chunkPartitionsBySentence[subtitleController
+                                      .currentPrimaryCue!
+                                      .id],
                                   currentChunkIndex:
-                                      settingsController.highlightCurrentChunk
+                                      settingsController.chunkHighlightActive
                                       ? subtitleController.currentChunkIndex
                                       : null,
                                   chunkDisplayStyle:
@@ -233,14 +234,10 @@ class _PlayerStageState extends State<PlayerStage> {
                                   currentWordIntensity:
                                       settingsController.wordAnimationIntensity,
                                   senseGroups:
-                                      settingsController.showSenseGrouping
-                                      ? subtitleController
-                                              .senseGroupsBySentence[
-                                            subtitleController
-                                                .currentPrimaryCue!
-                                                .id] ??
-                                          const []
-                                      : const [],
+                                      subtitleController.senseGroupsBySentence[subtitleController
+                                              .currentPrimaryCue!
+                                              .id] ??
+                                      const [],
                                   onWord: _openWord,
                                   onPhrase: _openPhrase,
                                   onChunk: _seekChunk,

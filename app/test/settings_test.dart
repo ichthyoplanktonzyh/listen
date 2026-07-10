@@ -90,7 +90,8 @@ void main() {
     });
     expect(settings.pronunciationVisible, isFalse);
     expect(settings.wordSyncVisible, isFalse);
-    expect(settings.showChunkGrouping, isFalse);
+    // Legacy chunk grouping explicitly off, no sense grouping -> unified off.
+    expect(settings.groupingMode, 'off');
     expect(settings.chunkDisplayStyle, 'capsule');
     expect(settings.highlightCurrentChunk, isFalse);
     expect(settings.chunkHighlightStyle, 'background');
@@ -122,7 +123,7 @@ void main() {
     const settings = AppSettings(
       pronunciationVisible: false,
       wordSyncVisible: false,
-      showChunkGrouping: false,
+      groupingMode: 'off',
       chunkDisplayStyle: 'spacing',
       highlightCurrentChunk: false,
       chunkHighlightStyle: 'glow',
@@ -141,7 +142,7 @@ void main() {
 
     expect(updated.pronunciationVisible, isFalse);
     expect(updated.wordSyncVisible, isTrue);
-    expect(updated.showChunkGrouping, isFalse);
+    expect(updated.groupingMode, 'off');
     expect(updated.chunkDisplayStyle, 'spacing');
     expect(updated.highlightCurrentChunk, isFalse);
     expect(updated.chunkHighlightStyle, 'glow');
@@ -173,6 +174,69 @@ void main() {
     expect(settings.chunkDisplayStyle, 'spacing');
     expect(settings.highlightCurrentChunk, isTrue);
     expect(settings.chunkHighlightStyle, 'bounce');
+  });
+
+  test('migrates legacy chunk grouping toggle to prosodic mode', () {
+    final settings = AppSettings.fromJson({
+      'version': 8,
+      'show_chunk_grouping': true,
+    });
+
+    expect(settings.groupingMode, 'prosodic');
+    expect(settings.chunkHighlightActive, isFalse);
+  });
+
+  test('legacy sense grouping wins over chunk grouping on migration', () {
+    final settings = AppSettings.fromJson({
+      'version': 8,
+      'show_chunk_grouping': true,
+      'show_sense_grouping': true,
+    });
+
+    expect(settings.groupingMode, 'semantic');
+  });
+
+  test('legacy files with no grouping flags keep prosodic default', () {
+    final settings = AppSettings.fromJson({'version': 8});
+
+    expect(settings.groupingMode, 'prosodic');
+  });
+
+  test('explicit grouping mode is honored and drives chunk highlight', () {
+    final settings = AppSettings.fromJson({
+      'version': 8,
+      'grouping_mode': 'compare',
+      'highlight_current_chunk': true,
+    });
+
+    expect(settings.groupingMode, 'compare');
+    // Compare keeps the prosodic base, so the live current-group highlight
+    // still tracks chunks.
+    expect(settings.chunkHighlightActive, isTrue);
+  });
+
+  test('unknown grouping mode falls back through legacy toggles', () {
+    final settings = AppSettings.fromJson({
+      'version': 8,
+      'grouping_mode': 'bogus',
+      'show_sense_grouping': true,
+    });
+
+    expect(settings.groupingMode, 'semantic');
+  });
+
+  test('semantic mode does not enable chunk-based current highlight', () {
+    final settings = AppSettings.fromJson({
+      'version': 8,
+      'grouping_mode': 'semantic',
+      'highlight_current_chunk': true,
+    });
+
+    expect(settings.chunkHighlightActive, isFalse);
+  });
+
+  test('fresh default settings start with grouping off', () {
+    expect(const AppSettings().groupingMode, 'off');
   });
 
   test('loads workbench media split v8 with safe bounds', () {

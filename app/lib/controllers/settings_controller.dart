@@ -42,8 +42,8 @@ class SettingsController extends ChangeNotifier {
   String get transcriptionDestination => _settings.transcriptionDestination;
   String get openSubtitlesApiKey => _settings.openSubtitlesApiKey;
   bool get wordSyncVisible => _settings.wordSyncVisible;
-  bool get showChunkGrouping => _settings.showChunkGrouping;
-  bool get showSenseGrouping => _settings.showSenseGrouping;
+  String get groupingMode => _settings.groupingMode;
+  bool get chunkHighlightActive => _settings.chunkHighlightActive;
   String get chunkDisplayStyle => _settings.chunkDisplayStyle;
   bool get highlightCurrentChunk => _settings.highlightCurrentChunk;
   String get chunkHighlightStyle => _settings.chunkHighlightStyle;

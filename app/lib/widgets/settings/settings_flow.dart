@@ -44,8 +44,7 @@ Future<void> showAppSettings({
         ytDlpPath: settingsController.ytDlpPath,
         openSubtitlesApiKey: settingsController.openSubtitlesApiKey,
         wordSyncVisible: settingsController.wordSyncVisible,
-        showChunkGrouping: settingsController.showChunkGrouping,
-        showSenseGrouping: settingsController.showSenseGrouping,
+        groupingMode: settingsController.groupingMode,
         chunkDisplayStyle: settingsController.chunkDisplayStyle,
         highlightCurrentChunk: settingsController.highlightCurrentChunk,
         chunkHighlightStyle: settingsController.chunkHighlightStyle,
@@ -145,24 +144,17 @@ Future<void> showAppSettings({
           subtitleController.updateCurrentWord(
             playerController.position,
             enabled: v,
-            chunkEnabled:
-                settingsController.showChunkGrouping &&
-                settingsController.highlightCurrentChunk,
+            chunkEnabled: settingsController.chunkHighlightActive,
           );
         },
-        onShowChunkGroupingChanged: (v) {
+        onGroupingModeChanged: (v) {
           settingsController.update(
-            settingsController.settings.copyWith(showChunkGrouping: v),
+            settingsController.settings.copyWith(groupingMode: v),
           );
           subtitleController.updateCurrentWord(
             playerController.position,
             enabled: settingsController.wordSyncVisible,
-            chunkEnabled: v && settingsController.highlightCurrentChunk,
-          );
-        },
-        onShowSenseGroupingChanged: (v) {
-          settingsController.update(
-            settingsController.settings.copyWith(showSenseGrouping: v),
+            chunkEnabled: settingsController.chunkHighlightActive,
           );
         },
         onChunkDisplayStyleChanged: (v) {
@@ -177,7 +169,7 @@ Future<void> showAppSettings({
           subtitleController.updateCurrentWord(
             playerController.position,
             enabled: settingsController.wordSyncVisible,
-            chunkEnabled: settingsController.showChunkGrouping && v,
+            chunkEnabled: settingsController.chunkHighlightActive,
           );
         },
         onChunkHighlightStyleChanged: (v) {

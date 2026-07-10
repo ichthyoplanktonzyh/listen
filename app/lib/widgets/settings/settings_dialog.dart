@@ -29,8 +29,7 @@ class SettingsDialog extends StatefulWidget {
     required this.ytDlpPath,
     required this.openSubtitlesApiKey,
     required this.wordSyncVisible,
-    required this.showChunkGrouping,
-    required this.showSenseGrouping,
+    required this.groupingMode,
     required this.chunkDisplayStyle,
     required this.highlightCurrentChunk,
     required this.chunkHighlightStyle,
@@ -62,8 +61,7 @@ class SettingsDialog extends StatefulWidget {
     required this.onTranscriptionLanguageChanged,
     required this.onTranscriptionDestinationChanged,
     required this.onWordSyncVisibleChanged,
-    required this.onShowChunkGroupingChanged,
-    required this.onShowSenseGroupingChanged,
+    required this.onGroupingModeChanged,
     required this.onChunkDisplayStyleChanged,
     required this.onHighlightCurrentChunkChanged,
     required this.onChunkHighlightStyleChanged,
@@ -99,8 +97,7 @@ class SettingsDialog extends StatefulWidget {
   final String ytDlpPath;
   final String openSubtitlesApiKey;
   final bool wordSyncVisible;
-  final bool showChunkGrouping;
-  final bool showSenseGrouping;
+  final String groupingMode;
   final String chunkDisplayStyle;
   final bool highlightCurrentChunk;
   final String chunkHighlightStyle;
@@ -134,8 +131,7 @@ class SettingsDialog extends StatefulWidget {
   final ValueChanged<String> onTranscriptionLanguageChanged;
   final ValueChanged<String> onTranscriptionDestinationChanged;
   final ValueChanged<bool> onWordSyncVisibleChanged;
-  final ValueChanged<bool> onShowChunkGroupingChanged;
-  final ValueChanged<bool> onShowSenseGroupingChanged;
+  final ValueChanged<String> onGroupingModeChanged;
   final ValueChanged<String> onChunkDisplayStyleChanged;
   final ValueChanged<bool> onHighlightCurrentChunkChanged;
   final ValueChanged<String> onChunkHighlightStyleChanged;
@@ -179,8 +175,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late String transcriptionLanguage;
   late String transcriptionDestination;
   late bool wordSyncVisible;
-  late bool showChunkGrouping;
-  late bool showSenseGrouping;
+  late String groupingMode;
   late String chunkDisplayStyle;
   late bool highlightCurrentChunk;
   late String chunkHighlightStyle;
@@ -228,8 +223,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     transcriptionLanguage = widget.transcriptionLanguage;
     transcriptionDestination = widget.transcriptionDestination;
     wordSyncVisible = widget.wordSyncVisible;
-    showChunkGrouping = widget.showChunkGrouping;
-    showSenseGrouping = widget.showSenseGrouping;
+    groupingMode = widget.groupingMode;
     chunkDisplayStyle = widget.chunkDisplayStyle;
     highlightCurrentChunk = widget.highlightCurrentChunk;
     chunkHighlightStyle = widget.chunkHighlightStyle;
@@ -371,21 +365,35 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         refresh(() {});
                       },
                     ),
-                    SwitchListTile(
-                      value: showChunkGrouping,
-                      title: Text(l.text('showChunkGrouping')),
+                    DropdownButtonFormField<String>(
+                      initialValue: groupingMode,
+                      decoration: InputDecoration(
+                        labelText: l.text('groupingMode'),
+                        helperText: l.text('groupingModeHint'),
+                        helperMaxLines: 2,
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'off',
+                          child: Text(l.text('groupingModeOff')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'prosodic',
+                          child: Text(l.text('groupingModeProsodic')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'semantic',
+                          child: Text(l.text('groupingModeSemantic')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'compare',
+                          child: Text(l.text('groupingModeCompare')),
+                        ),
+                      ],
                       onChanged: (value) {
-                        showChunkGrouping = value;
-                        widget.onShowChunkGroupingChanged(value);
-                        refresh(() {});
-                      },
-                    ),
-                    SwitchListTile(
-                      value: showSenseGrouping,
-                      title: Text(l.text('showSenseGrouping')),
-                      onChanged: (value) {
-                        showSenseGrouping = value;
-                        widget.onShowSenseGroupingChanged(value);
+                        if (value == null) return;
+                        groupingMode = value;
+                        widget.onGroupingModeChanged(value);
                         refresh(() {});
                       },
                     ),
@@ -404,7 +412,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                           child: Text(l.text('chunkDisplaySpacing')),
                         ),
                       ],
-                      onChanged: showChunkGrouping
+                      onChanged: groupingMode != 'off'
                           ? (value) {
                               if (value == null) return;
                               chunkDisplayStyle = value;
@@ -416,7 +424,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     SwitchListTile(
                       value: highlightCurrentChunk,
                       title: Text(l.text('highlightCurrentChunk')),
-                      onChanged: showChunkGrouping
+                      onChanged: groupingMode != 'off'
                           ? (value) {
                               highlightCurrentChunk = value;
                               widget.onHighlightCurrentChunkChanged(value);
@@ -443,7 +451,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                           child: Text(l.text('chunkHighlightGlow')),
                         ),
                       ],
-                      onChanged: showChunkGrouping && highlightCurrentChunk
+                      onChanged: groupingMode != 'off' && highlightCurrentChunk
                           ? (value) {
                               if (value == null) return;
                               chunkHighlightStyle = value;

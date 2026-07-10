@@ -344,9 +344,12 @@ class _SidePanelState extends State<SidePanel> {
     onImportSubtitle: playerController.mediaId == null
         ? null
         : () async => mediaSession.openSubtitle(secondary: false),
-    senseGroupsBySentence: settingsController.showSenseGrouping
-        ? subtitleController.senseGroupsBySentence
-        : const {},
+    groupingMode: settingsController.groupingMode,
+    chunkDisplayStyle: settingsController.chunkDisplayStyle,
+    // Both grouping layers flow in independently (ADR 0016); the transcript's
+    // TokenLine honors the same mode as the on-video subtitle.
+    chunkPartitionsBySentence: subtitleController.chunkPartitionsBySentence,
+    senseGroupsBySentence: subtitleController.senseGroupsBySentence,
   );
 
   Widget _subtitleResources() => SubtitleResourceManagerPanel(
