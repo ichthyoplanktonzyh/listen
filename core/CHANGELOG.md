@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-11 11:55 CST: 新增四技能扩展讨论稿的评审结论文档
+  （`.planning/discuss/four-skills-expansion-review-and-llm-boundary.zh.md`）：
+  记录对原稿的批判性评审（P0 隐藏语义评判依赖、范围过大、缺前置 spike、引用待核实）；
+  owner 裁决正面引入 LLM API 作为语义能力 provider，并定五条架构边界（application 层
+  provider trait + ADR、判定为 heuristic_proxy 级证据带模型/prompt 快照、用户可 override、
+  结构化断言不给综合分、spike 校验后才获写证据资格）；确立"说"通道两层复述设计
+  （L1 意义复述 → L2 表达复述）及其证据归属（第一层写 listening 不写 speaking、
+  第一层为诊断工具非固定前置）。本文不改变现有 phase 排期与冻结边界。
+
 - 2026-07-11 11:25 CST: 新增四通道产品讨论稿，调研 Phase 3.7–3.10 听力主线之外的
   speaking / reading / writing 功能；提出片段复述、角色接话、媒体伴生阅读、读听差异诊断、
   dictogloss 重构、个人表达模板与分层写作反馈，并给出四通道 evidence matrix、优先级及
