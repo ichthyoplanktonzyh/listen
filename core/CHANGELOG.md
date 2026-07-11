@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-11 12:04 CST: 四通道产品方向形成最终讨论版，并将长期定位从“听力理解播放器”
+  更新为“以真实内容为共同语境、听力先行的四通道语言学习工作台”；当前 Phase 3.7–3.10
+  听力执行顺序不变，后续逐个验证 Reading/Speaking/Writing Studio。最终稿收敛两层复述、
+  clip-level attempt 与 lexical capability 的粒度边界、SemanticRubric/SemanticJudgment、
+  用户 adjudication 与 capability override 分离、LLM judge 校验门禁。新增厂商中立 LLM
+  provider 裁决：领域 trait 不依赖单一 wire format，初始协议适配覆盖 OpenAI Responses /
+  Chat Completions-compatible、Anthropic Messages、Gemini native API 与本地兼容服务；同步
+  PROJECT、REQUIREMENTS、ROADMAP 与 STATE，不修改冻结 phase 文档。
+
 - 2026-07-11 11:55 CST: 新增四技能扩展讨论稿的评审结论文档
   （`.planning/discuss/four-skills-expansion-review-and-llm-boundary.zh.md`）：
   记录对原稿的批判性评审（P0 隐藏语义评判依赖、范围过大、缺前置 spike、引用待核实）；

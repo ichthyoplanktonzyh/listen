@@ -1,4 +1,4 @@
-# 跨平台听力理解播放器 PRD
+# 真实内容驱动、听力先行的四通道语言学习工作台 PRD
 
 ## 1. 文档信息
 
@@ -35,17 +35,24 @@
   与实时播放路径仍是默认基础，但消费端后续会接入 YouTube 等在线内容来源，并与本地
   内容进入统一学习工作台。同日插入 Phase 3.35，参考每日英语听力的内容层级与播放学习
   组织，先统一桌面 UI、信息架构和视觉系统，再承接 3.4 之后的新功能 surface。
+- 产品定义更新：2026-07-11，产品从“听力理解播放器”扩展为“以真实内容为共同语境、
+  听力先行的四通道语言学习工作台”。Phase 3.x 继续以听力完成当前楔子；后续 reading、
+  speaking、writing 通过独立任务与证据逐步落地。语义反馈可使用远程或本地 LLM，但必须
+  经厂商中立 provider 接入，支持主流 API 协议适配，不绑定单一厂商。
 
 ## 2. 产品愿景
 
-构建一套面向多语言听力学习内容生产与消费的本地优先系统。当前以英语为主线，汉语为
-第一种真实扩展验收语言；架构对主流 top-15 学习语言封顶有效，不承诺世界所有语言。
+构建一套以用户真实内容为共同语境、听力先行的四通道语言学习系统。当前以英语听力为
+产品楔子，汉语为第一种真实扩展验收语言；架构对主流 top-15 学习语言封顶有效，不承诺
+世界所有语言。
 
-产品以**听力能力**为核心：真正可交流的语言能力来自学习者对真实声音流的稳定理解，
-文字、词典、语法和翻译是解释层与校准层。系统因此建模
+产品以**真实内容中的理解与迁移**为核心：稳定理解真实声音流是当前最先突破的能力，
+但学习结果还应进入独立阅读、口头表达和书面表达。文字、词典、语法和翻译首先是听力
+解释与校准层，也可以成为 reading / speaking / writing 主动任务的输入。系统因此建模
 `audio -> listening units -> meaning candidates -> lexical/text explanation`，
-而不是把声音当作文字的附属说明。多语言能力通过 language profile / capability matrix /
-provider 进入系统，缺失能力干净降级。详见 §4.4。
+并在其上扩展 `real content -> comprehension -> constructed production -> transfer`，
+而不是把声音当作文字的附属说明，也不把四通道压成一个总分。多语言与语义能力通过
+language profile / capability matrix / provider 进入系统，缺失能力干净降级。详见 §4.4。
 
 从 2026-06-18 起，项目明确具有两个身份：
 
@@ -200,18 +207,24 @@ phone-level 证据。当前 phone recognizer 的 PER 可能偏高，因此 raw p
 - **实时路径本地化**：播放、跳转、时间监听和字幕当前句计算不得依赖远程 API 往返。
 - **结果诚实**：数据不足时明确说明，不将推测表达为事实。
 
-### 4.4 多语言与听力本位
+### 4.4 多语言、听力先行与四通道
 
-产品从英语优先扩展为语言能力可插拔的听力学习底座。以下为战略级原则，具体决策见
+产品从英语优先扩展为语言能力可插拔、听力先行的四通道学习底座。既有多语言决策见
 `docs/decisions/0012-multilingual-learning-abstraction.md`。
 
-- **听力本位**：语言能力来自对真实声音流的理解；文字、词典、语法是解释层。不同语言的
-  听觉单位不同（英语偏 stress/连读、汉语偏音节/声调），架构直接建模这些差异。
+- **听力先行，不以听力为永久边界**：语言学习从真实声音流理解切入；reading、speaking、
+  writing 逐步获得独立任务、证据和用户价值。不同语言的听觉单位不同（英语偏
+  stress/连读、汉语偏音节/声调），架构直接建模这些差异。
+- **真实内容是共同语境**：同一视频、音频、文章、句子和个人语料可分别生成听、读、说、写
+  任务，但一次行为只写入它真正支持的通道和目标粒度。
+- **语义能力厂商中立**：LLM 可作为 rubric、语义判定与写作反馈 provider；领域层不得依赖
+  某个厂商的 wire format，外部 API 经可替换 adapter 接入并可离线降级。
 - **学习语言 ≠ 界面语言**：界面语言（已有中英文）与正在学习的语言是两件事，不得混同。
 - **能力矩阵优先，缺失干净降级**：每种语言声明支持哪些能力（分词、词典、发音、诊断、
   时间轴），不支持的能力显示为不可用/降级，而不是失败或假装支持。
-- **唯一不变量是理解轴**：全局词汇状态（词义是否已知 × 声音是否听出）语言无关、跨语言
-  复用，是最稳定的学习资产；按语言变化的是诊断**理由**，不是状态本身。
+- **四通道能力语义稳定**：reading / listening / speaking / writing 及其
+  unassessed / not_acquired / acquired 语言无关、跨语言复用；按语言变化的是任务、证据
+  和诊断**理由**，不是能力枚举本身。
 - **听力难度被母语过滤**：真正“听不懂”是（母语, 目标语）配对的函数；诊断模型为母语维度
   预留位置。
 - **三类单位分离**：字幕显示单位、词汇学习对象、真实听觉单位是三个独立概念。
@@ -865,3 +878,20 @@ Phase 2.18 新学习资产架构之上，把英语作为第一门语言做成完
 - `.planning/phases/3.0-english-listening-learning-loop/3.0-PHASE-BREAKDOWN.md`
 - `.planning/phases/3.0.1-learning-loop-architecture-foundation/3.0.1-ARCHITECTURE.md`
 - `.planning/discuss/listen-learning-activity-path.zh.md`
+
+### 15.7 Phase 3.x 之后：四通道与厂商中立语义能力
+
+2026-07-11 确立。Phase 3.0 的听力闭环仍是当前执行楔子；其收口后，产品以同一真实内容
+逐步建立 reading、speaking、writing 的独立任务与证据。优先候选为媒体伴生阅读与读听
+差异诊断、片段复述与角色接话、dictogloss 与摘要/回应、个人句模与跨语境迁移。
+
+语义评分尺、回答判定和写作反馈可使用 LLM，但必须满足：
+
+- application 层定义厂商中立任务契约，协议 adapter 才接 OpenAI Responses / Chat
+  Completions-compatible、Anthropic Messages、Gemini native API 或本地服务；
+- 单次片段 attempt、LLM judgment、target-level capability evidence 与 user override 分离；
+- 自动判定结构化、可纠正、可审计，未经独立人工校验不直接影响长期 capability；
+- 无 API、离线或 provider 失败时降级为客观事实与用户自评，不阻断核心学习行为。
+
+最终讨论稿：
+`.planning/discuss/four-channel-product-and-vendor-neutral-llm-final.zh.md`。

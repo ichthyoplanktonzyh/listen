@@ -3,24 +3,29 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-11T09:55:00.000+08:00"
+last_updated: "2026-07-11T12:04:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-11 09:55 CST
-> 更新原因：3.6.1 收口后审计修复（schema v31 UPDATE 触发器 + 导入脏边跳过）；
-> 3.7–3.10 计划按 3.4.x–3.6.x 落地现状修订为 v2。
+> 最后更新：2026-07-11 12:04 CST
+> 更新原因：产品长期定位扩展为真实内容驱动、听力先行的四通道语言学习工作台；
+> 厂商中立 LLM provider 与四通道证据边界形成最终讨论稿。
 
 ## 当前位置
 
-- **当前产品主线**：Phase 3.x 英语听力学习闭环（英语先行）。
+- **当前执行主线**：Phase 3.x 英语听力学习闭环（英语先行），继续完成 3.7–3.10 与真实 QA。
 - **治理线状态**：Phase 2.23 Architecture Debt Paydown 已于 2026-07-03 收口（详见其 CLOSEOUT）；3.x 开工前置全部就绪。
 - **算法线状态**：Phase 2.19 / 2.20 / 2.21 已于 2026-07-02 搁置；audible-structure v1
   contract 保持当前权威 shape，后续质量提升等学习闭环完成后再回到算法线。
 - **当前版本**：0.7.0。
-- **当前产品定位补充**：本地优先不等于仅限本地；未来 YouTube 等在线来源将与本地内容
-  进入统一学习工作台，学习资产与高频播放路径仍默认本地。
+- **当前产品定位**：以用户真实内容为共同语境、听力先行的四通道语言学习工作台。听力是
+  当前楔子而非永久边界；后续 reading / speaking / writing 逐个 phase 验证独立任务和证据。
+  本地优先不等于仅限本地；在线内容与厂商中立 LLM provider 可作为可选能力进入系统，
+  学习资产与高频播放路径仍默认本地。
+- **语义能力边界**：LLM 不绑定单一厂商或 wire format；application trait 下适配 OpenAI、
+  Anthropic、Gemini 与兼容协议。LLM judge 是可审计、可纠正的启发式来源，未经独立校验
+  不直接影响长期 capability projection。
 - **代码分支状态**：以 `git status` / `git log` 为准，不在 STATE 记录静态分支名。
 
 ## 项目双路线

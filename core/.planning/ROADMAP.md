@@ -1,4 +1,4 @@
-# 跨平台听力理解播放器 Roadmap
+# 真实内容驱动、听力先行的四通道语言学习工作台 Roadmap
 
 > Milestone 1、1.5、1.6、1.7、1.8 与 1.9 状态：已完成。Milestone 1.9
 > 发音与词级同步基础已通过完整协同功能验收；独立分发签名与公证作为后续发布
@@ -40,11 +40,17 @@
 > 3.4.3 Construction Modeling Spike。旧单值 `LearningStatus` 迁移为四通道能力画像；
 > SenseGroup 作为新增语义层，不覆盖现有音频/韵律 ChunkTimeline。共享上下文见
 > `.planning/phases/3.0-english-listening-learning-loop/3.4.X-LEARNING-DOMAIN-V2-SHARED-CONTEXT.md`。
+> 2026-07-11 产品路线更新：长期定位从“听力理解播放器”扩展为“以真实内容为共同语境、
+> 听力先行的四通道语言学习工作台”。既有 Phase 3.7–3.10 顺序不变，先完成听力楔子与
+> 真实 QA；其后逐个验证 Reading / Speaking / Writing Studio。语义能力允许使用 LLM，
+> 但经厂商中立 provider 与主流 API protocol adapter 接入，自动判断先过独立校验再获得
+> 影响长期 capability 的资格。
 > 完成报告见 `docs/release/milestone-1.md`。
 
 ## 1. 路线图目标
 
-本路线图用于指导从当前 LLPlayer Windows 代码库出发，建立一个新的跨平台听力理解播放器。
+本路线图用于指导从当前 LLPlayer Windows 代码库出发，先建立可靠的跨平台听力学习楔子，
+再演进为真实内容驱动、听力先行的四通道语言学习工作台。
 
 路线图遵循以下顺序：
 
@@ -88,7 +94,8 @@ LLTimeline JSON v1
 
 ### 2.1 已确认的产品决策
 
-- 产品核心是听力理解诊断，不是普通播放器或背单词软件。
+- 产品当前核心楔子是听力理解诊断，长期定位是以真实内容驱动听、读、说、写迁移的语言
+  学习工作台，不是普通播放器、背单词软件或四套割裂课程的拼接。
 - 用户首先需要一套完整、可靠的听力媒体播放基础设施。
 - MVP 首期用户只有项目开发者本人。
 - MVP 首先支持 macOS Apple Silicon；Windows 与 Linux 在 MVP 后实现。
@@ -1421,6 +1428,22 @@ Phase 3.0 的执行序列（2026-07-04 确立，取代早期建议顺序）：
 - 各 phase 计划：`.planning/phases/3.1-intensive-listening-practice-slice/` ~
   `.planning/phases/3.10-coach-dashboard/`
 - Phase 3.35 计划：`.planning/phases/3.35-listening-workbench-ui-redesign/`
+
+#### Phase 3.x 之后：四通道 Studio 与语义能力
+
+Phase 3.7–3.10 仍按既有计划完成，不在本轮重排。听力主线与真实 QA 收口后，后续路线采用
+“一次一个楔子”的方式验证：
+
+1. Reading Studio v1：媒体伴生阅读、段落理解与读听差异诊断；
+2. Speaking Studio v1：在 shadowing 之外增加片段复述、角色接话和按需 L1 归因；
+3. Writing Studio v1：dictogloss、摘要/回应和 revision history；
+4. Personal Expression：个人句模与跨说写的新语境迁移。
+
+具体先后在 Phase 3.10 与听力真实 QA 收口后决定。任何依赖语义理解的评价先建立版本化
+rubric / judgment contract 和 LLM-judge spike；LLM provider 必须厂商中立，初始协议适配
+覆盖 OpenAI Responses / Chat Completions-compatible、Anthropic Messages 与 Gemini native
+API，并允许本地或未来协议 adapter。完整产品与证据边界见
+`.planning/discuss/four-channel-product-and-vendor-neutral-llm-final.zh.md`。
 
 ### 14.13 Phase 2.20：Rhythm-first Listening Analysis
 

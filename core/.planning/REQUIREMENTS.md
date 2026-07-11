@@ -1,4 +1,4 @@
-# 跨平台听力理解播放器 Requirements
+# 真实内容驱动、听力先行的四通道语言学习工作台 Requirements
 
 ## 1. 文档用途
 
@@ -79,6 +79,9 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | ListeningHotspot | 解释“文字读音”和“实际听感”错配的局部区域 |
 | 用户可见能力 | 从用户角度描述某条字幕当前能做什么，如 Word sync、Chunk replay、Listening structure、Phone evidence、Vocabulary、Diagnosis |
 | 能力可用状态 | 某项用户可见能力的状态，包括 available、generating、degraded、unavailable、unsupported、stale、error |
+| 语义评分尺 | 针对一个来源片段版本化保存的 required/optional information points，供多个回答使用同一评价基准 |
+| 语义判定 | 对一次回答按固定评分尺产生的逐信息点 covered/partial/missing/uncertain 结果；不等于长期能力结论 |
+| LLM provider | 厂商中立的语义能力边界；领域任务经 adapter 映射到 OpenAI、Anthropic、Gemini 或兼容协议 |
 
 ## 3. 需求总览映射
 
@@ -102,6 +105,8 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | 轻量消费端资源读取 | 无强制 Milestone 1 发布项 | CONSUME-001 至 CONSUME-004 |
 | Rhythm-first 真实听感分析 | 无强制 Milestone 1 发布项 | RHY-001 至 RHY-008 |
 | 用户可见工作流语义 | 无强制 Milestone 1 发布项 | UX-001 至 UX-008 |
+| 真实内容驱动的四通道扩展 | 无强制当前发布项 | LOOP-010 至 LOOP-012、LOOP-015 |
+| 厂商中立语义能力 | 无强制当前发布项 | LOOP-013、LOOP-014 |
 
 ## 4. 平台需求
 
@@ -2737,6 +2742,77 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - 反复失败词和常见 connected-speech family。
   - L1-aware 难点分布。
   - 同一材料二刷/三刷理解度提升。
+
+### LOOP-010：真实内容驱动的四通道扩展
+
+- 优先级：P1
+- 阶段：FUTURE（Phase 3.7–3.10 之后逐 phase 验证）
+- 需求：系统应以同一真实内容为共同语境，分别提供 reading、listening、speaking、writing
+  的独立任务、证据和降级路径；当前听力主线是执行楔子，不是永久产品边界。
+- 验收标准：
+  - 新任务明确写入哪个通道、哪个 target 粒度及 assistance 条件。
+  - 未实现的通道保持 unassessed，不显示为 0 分或 not_acquired。
+  - 不从阅读字幕、逐字听写、shadowing 或模型改写结果伪造更强的产出能力结论。
+
+### LOOP-011：构造性口语与两层复述
+
+- 优先级：P1
+- 阶段：FUTURE Speaking Studio
+- 需求：除 shadowing 模仿外，系统应支持隐藏完整原句后的 L2 片段复述和角色接话；L1
+  复述仅作为按需理解归因工具。
+- 验收标准：
+  - 默认直接进入 L2，不强制先 L1 后 L2。
+  - L1 复述默认产生片段级理解事实，不批量写入片段内词条的 listening observation。
+  - ASR 或语义判定不可靠时 abstain，不制造失败证据。
+
+### LOOP-012：固定语义评分尺与可纠正判定
+
+- 优先级：P1
+- 阶段：FUTURE
+- 需求：片段复述、dictogloss 与写作反馈使用版本化 `SemanticRubric`；一次回答的
+  `SemanticJudgment` 与长期 capability evidence、capability override 分离。
+- 验收标准：
+  - 多次回答只有在 rubric version 相同时才直接比较。
+  - 每个 covered/partial 判断附可定位的回答证据；无法定位时标 uncertain。
+  - 用户可纠正单次判定，原始模型输出与用户 adjudication 均保留。
+  - 单次判定纠正不冒充 capability override。
+
+### LOOP-013：厂商中立 LLM provider
+
+- 优先级：P1
+- 阶段：FUTURE
+- 需求：语义评分尺、语义判定和写作反馈通过 application 层厂商中立 provider trait；
+  adapter 支持主流原生/兼容 API 格式，领域与 Flutter 不依赖单一厂商 wire contract。
+- 验收标准：
+  - 初始协议覆盖 OpenAI Responses、OpenAI Chat Completions-compatible、Anthropic Messages
+    与 Gemini native content/interaction API，具体可用能力由 descriptor 声明或探测。
+  - base URL、model ID、认证引用、费用/并发限制与允许用途可按 provider profile 配置。
+  - 新增协议 adapter 不改写 `SemanticRubric`、`SemanticJudgment` 或 capability 语义。
+  - 密钥不进入普通 SQLite、日志、LLTimeline 或 portable learning bundle。
+  - 无配置、离线、拒绝、截断或 schema 无效时干净降级，不写学习失败。
+
+### LOOP-014：LLM 判断 provenance 与资格门禁
+
+- 优先级：P1
+- 阶段：FUTURE
+- 需求：LLM 判定同时记录来源与验证等级；未经独立人工评估的 judge 只提供可纠正的
+  heuristic feedback，不直接获得长期 capability projection 写入资格。
+- 验收标准：
+  - 保存 adapter、模型、prompt、rubric/schema version、输入快照 hash、结构化输出与
+    validation class；模型升级不回写历史判断。
+  - 开发集与留出评估集分离，覆盖跨语言、同义改写、ASR 噪声和 abstain。
+  - `source_kind=llm_judgment` 与 `validation_class=heuristic_proxy/...` 分开表达。
+
+### LOOP-015：伴生阅读与意义重构写作
+
+- 优先级：P1
+- 阶段：FUTURE Reading/Writing Studio
+- 需求：Reading v1 复用 transcript 提供独立阅读与读听差异诊断；Writing v1 以
+  dictogloss、摘要和回应验证意义重构，不以逐字复制或模型改写代替用户产出。
+- 验收标准：
+  - 阅读位置与播放位置可独立存在，并能回到对应真实音频。
+  - 读听差异结论保留任务与 assistance provenance。
+  - 写作保存原稿、反馈、用户采纳/拒绝与修订稿，不删除失败或初稿事实。
 
 ## 18.6 Phase 3.4.x Learning Domain Model v2 需求
 
