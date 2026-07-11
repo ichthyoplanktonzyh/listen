@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-11T12:04:00.000+08:00"
+last_updated: "2026-07-11T12:15:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-11 12:04 CST
-> 更新原因：产品长期定位扩展为真实内容驱动、听力先行的四通道语言学习工作台；
-> 厂商中立 LLM provider 与四通道证据边界形成最终讨论稿。
+> 最后更新：2026-07-11 12:15 CST
+> 更新原因：审计 3.7–3.10 与四通道最终讨论，修订其计划边界，并建立 3.11–3.18
+> 全量落地 phase 序列。
 
 ## 当前位置
 
@@ -85,44 +85,26 @@ last_updated: "2026-07-11T12:04:00.000+08:00"
     不强制流程；功能按场景分不按设备分（生产端唯一 PC-only）；泛听默认零打扰。
 - 前置已就绪：Phase 2.23 已收口，`main.dart` 为 composition root（1457 行），controller + Store 为唯一 UI 状态模式，practice UI 可直接开工。
 - 规划文档：`.planning/phases/3.0-english-listening-learning-loop/3.0-PLAN.md`
-- 执行序列：Phase 3.1 ~ 3.10 已全部立 PLAN（2026-07-04），分解与依赖见
+- 执行序列：Phase 3.1 ~ 3.18 已全部立 PLAN（3.11–3.18 于 2026-07-11 新增），分解与依赖见
   `.planning/phases/3.0-english-listening-learning-loop/3.0-PHASE-BREAKDOWN.md`；
-  产品输入见 `.planning/discuss/listen-learning-activity-path.zh.md`。
+  产品输入见 `.planning/discuss/listen-learning-activity-path.zh.md` 与
+  `.planning/discuss/four-channel-product-and-vendor-neutral-llm-final.zh.md`。
 
 ### Phase 3.0.1: Learning Loop Architecture Foundation ✅ 后端地基完成
 
-- 已完成：domain model、application repository traits/service、SQLite schema v15、practice/review API、
-  OpenAPI/generated client、contract validation。
-- 第一条 backend vertical slice：当前 chunk → cloze/chunk dictation → PracticeAttempt →
-  LexicalObservation / ReviewItem / LearningEvent。
-- Guardrails：练习失败不静默修改全局 `LearningStatus`；Anki 是 adapter，不是内部权威复习模型；
-  dashboard 从 durable attempt / learning event 聚合；L1-aware diagnosis 走 profile/provider。
-- 后续 slice：Flutter practice controller/UI、corpus search、difficulty profile、learner profile persistence、
-  recording/shadowing 和 dashboard aggregation。
-- 收口文档：`.planning/phases/3.0.1-learning-loop-architecture-foundation/3.0.1-CLOSEOUT.md`
+- Practice/Review/LearningEvent/Corpus/Difficulty/LearnerProfile/Recording 后端边界与首条
+  cloze/dictation vertical slice 已完成；收口：
+  `.planning/phases/3.0.1-learning-loop-architecture-foundation/3.0.1-CLOSEOUT.md`。
 
 ### Phase 3.1: Intensive Listening Practice Slice ✅ 精听练习竖切片完成
 
-- 已完成：三姿态入口（Understand/Test/Shadowing planned）、cloze / chunk dictation /
-  sentence dictation practice UI、PracticeController、typed Dart DTO + LocalApi wrapper、
-  PracticeAttempt diff、失败项一键 ReviewItem、capability gating。
-- 诊断升级：C-1 phrase lexical entries 参与 meaning / recognition barrier；C-2 rhythm
-  hotspots 可从诊断卡点击复听 evidence range。
-- 验证：`flutter analyze`、`flutter test`（168 passed）、`cargo test -p diagnosis-core`、
-  `cargo test -p application`、`cargo test -p api-http`、`validate-contracts`、`git diff --check`。
-- 收口文档：`.planning/phases/3.1-intensive-listening-practice-slice/3.1-CLOSEOUT.md`
+- 三姿态入口、cloze/dictation UI、失败入复习与 phrase/rhythm 诊断接缝已完成；收口：
+  `.planning/phases/3.1-intensive-listening-practice-slice/3.1-CLOSEOUT.md`。
 
 ### Phase 3.2: Stuck Points & Session Summary ✅ 卡点闭环切片完成
 
-- 已完成：显式标记卡点 / 跳过、诊断查看事件、读侧 session summary 聚合、悬案区 v0
-  回听与手动关闭、精听完毕确认、熟料标记持久化。
-- 架构决策：卡点状态继续由 `LearningEvent` + `PracticeAttempt` + `ReviewItem` 派生；
-  未升格为独立 domain 状态机实体。手动 review 关联以 `ReviewItem.source.practice_attempt_id`
-  为准，不反向改写 attempt JSON。
-- 验证：`cargo test -p application -p persistence-sqlite -p api-http`、`cargo clippy -p application
-  -p persistence-sqlite -p api-http --all-targets`、`flutter analyze`、`flutter test`（170 passed）、
-  `validate-contracts`、`git diff --check`。真实媒体 GUI 手工 QA 仍需 owner 最终确认。
-- 收口文档：`.planning/phases/3.2-stuck-points-session-summary/3.2-CLOSEOUT.md`
+- 卡点/summary/悬案区切片曾完成；相关过度设计机制后由 3.5.6 正式撤除。历史收口：
+  `.planning/phases/3.2-stuck-points-session-summary/3.2-CLOSEOUT.md`。
 
 ### Phase 3.3: Extensive Listening & Inbox ⏳ MVP 已落地，待收口
 
@@ -171,44 +153,28 @@ last_updated: "2026-07-11T12:04:00.000+08:00"
 
 ### Phase 3.4.1: Learning Capability Model v2 ✅ COMPLETED
 
-- 目标：以 reading / listening / speaking / writing 四通道画像替代单值线性状态；每个通道
-  区分 unassessed / not_acquired / acquired。
-- 架构：evidence、system projection、user override 和 effective assessment 分层；自动证据
-  不静默覆盖用户声明。capability profile 为唯一权威，legacy `LearningStatus` 降级为兼容投影。
-- 迁移：schema v22 additive migration，保留 legacy status 兼容窗口；v21 数据按带来源的
-  近似映射回填，迁移前备份/重复打开/失败恢复测试通过。
-- Slice 0-6 全部完成：domain contract、schema v22 persistence、application use case、
-  VocabularyAssetBundle v6、diagnosis/upgrade suggestion 迁移、OpenAPI/SSE/Dart 契约、
-  Flutter 四通道 UI、authority switch（诊断和升级建议单一 profile 路径，external import
-  补齐 capability sync，legacy 字段标记 deprecated）。
-- 验证：`cargo test --workspace` 395 passed、`flutter test` 204 passed。
-- 后续：3.4.2 新增 SenseGroup 语义层；3.4.3 验证 Construction 身份。
-- 收口文档：`.planning/phases/3.4.1-learning-capability-model-v2/3.4.1-PLAN.md`。
+- 四通道 tri-state capability 与 evidence/projection/override 分层已成为权威，legacy status
+  仅为兼容投影；计划/收口：
+  `.planning/phases/3.4.1-learning-capability-model-v2/3.4.1-PLAN.md`。
 
 ### Phase 3.4.2: Semantic / Prosodic Group Separation ✅ COMPLETED
 
-- 目标：新增 SenseGroup（意群）语义加工层，保留 ChunkTimeline 韵律层独立共存。
-- 架构：SenseGroup 是 token-span 句子级文本标注，不是全局学习资产。播放范围通过
-  WordTimeline 投影。两层独立管理，对齐关系推迟。ADR 0016 已定稿。
-- 已完成：Slice 0-6 全部完成。domain contract、规则回退 partition provider（14 测试）、
-  schema v25 持久化（lifecycle + round-trip 测试）、application 7 use cases + 7 API routes +
-  LLTimeline 导出导入 + OpenAPI 5 paths、Flutter 3 模型 + 6 API + controller 缓存 +
-  showSenseGrouping 设置（默认 off）+ 7 契约测试。Alignment 推迟、ChunkTimeline 改名推迟。
-- 验证：`cargo test --workspace` 413 passed、`flutter test` 233 passed、`flutter analyze` 零问题。
-- 收口文档：`.planning/phases/3.4.2-semantic-prosodic-group-separation/3.4.2-CLOSEOUT.md`。
+- SenseGroup 语义 token span 与 ChunkTimeline 韵律 time span 已按 ADR 0016 分离共存；收口：
+  `.planning/phases/3.4.2-semantic-prosodic-group-separation/3.4.2-CLOSEOUT.md`。
 
 ### Phase 3.4.3: Construction Modeling Spike ✅ COMPLETED
 
-- 已完成：en/zh/ja manual gold fixture、纯 domain contract/validator 与 focused tests；验证
-  `SentenceExemplar`、人工 canonical `Construction`、可重建 `ConstructionOccurrence`、
-  用户 `UserSentencePattern` 的身份边界。
-- 关键结论：个人模板可从任意 sentence exemplar 提炼并保留来源快照，即使没有系统 occurrence；
-  system construction link 可选且不能覆盖用户模板。recognition/production 画像保持简洁，
-  evidence 必须记录 reading/listening/speaking/writing modality。
-- 生产决定：不在本 spike 建 SQLite/API/UI/LLTimeline schema。后续先验证“收藏句 → 个人模板”的
-  用户价值，再决定是否持久化用户资产；canonical construction library 与自动 occurrence provider
-  另行决策。
-- 收口文档：`.planning/phases/3.4.3-construction-modeling-spike/3.4.3-CLOSEOUT.md`。
+- 已验证 exemplar/construction/occurrence/UserSentencePattern 身份；用户模板权威、system ref
+  可选，生产价值由 3.16 验证。收口：
+  `.planning/phases/3.4.3-construction-modeling-spike/3.4.3-CLOSEOUT.md`。
+
+### Phase 3.5: Difficulty & Content Triage ⏳ ACTIVE，待 Slice 9 收口
+
+- Slice 1–8 已完成：双维 fit、可解释信号、三队列、listening-projection-v1、反馈校准与
+  冷启动标注均已落地。
+- 唯一剩余：在真实媒体库完成人工分档 QA，至少确认一个 meaning 高 / sound 低的精听靶
+  材料，并记录 `manual_product_qa`；纳入 Gate Q 后再启动 3.7。
+- 计划：`.planning/phases/3.5-difficulty-content-triage/3.5-PLAN.md`。
 
 ### Phase 3.5.5: Intensive Listening UX Fix ✅ COMPLETED
 
@@ -287,6 +253,20 @@ last_updated: "2026-07-11T12:04:00.000+08:00"
   横向轨道；左右滑动/箭头/左右键换片，空格播放暂停，旧重复竖向卡片已移除。
 - 收口：`.planning/phases/3.6.2-dictionary-inline-clip-ux/3.6.2-CLOSEOUT.md`；计划已冻结。
 
+### 下一执行序列：Gate Q → Phase 3.7–3.18
+
+- **Gate Q（下一步）**：先完成或逐项明确豁免 3.3 的 30 分钟泛听 QA、3.35 新 capability
+  UI 基线 QA、3.4 的 ≥8 卡真实媒体 QA、3.5 Slice 9 分档 QA；3.7 不能在这些活跃/暂停
+  phase 未收口时静默继续携带验收债。清单：
+  `.planning/phases/3.0-english-listening-learning-loop/3.7-GATE-Q-CHECKLIST.md`。
+- **3.7–3.10（计划 v3）**：3.7 保持 listening-only；3.8 是 shadowing 模仿层且非评分
+  completion 不伪造 speaking success；3.9 保持 listening L1-aware；3.10 只展示已有事实，
+  但提供 channel-ready envelope。
+- **3.11–3.18（已立 PLAN）**：Semantic evidence foundation → vendor-neutral LLM provider →
+  Reading Studio → Speaking Studio → Writing Studio → Personal Expression → four-channel
+  projection/review → Cross-modal Coach closeout。共享约束：
+  `.planning/phases/3.0-english-listening-learning-loop/3.11-3.18-FOUR-CHANNEL-SHARED-CONTEXT.md`。
+
 ## 已完成 Phase 索引
 
 | Phase | 结论 | 文档 |
@@ -316,16 +296,20 @@ last_updated: "2026-07-11T12:04:00.000+08:00"
 
 ## 最近重要决策
 
-1. **2026-07-11** — 3.7–3.10 计划修订（v2）：四份 v1 计划写于 3.4.1/3.5.x/3.6 落地前，
-   统一按现状改写。共性修订：状态语言全部换四通道 capability 口径、证据链路对齐
+1. **2026-07-11** — 3.7–3.10 计划先按落地现状修订为 v2，再对齐四通道最终讨论修订为
+   v3，并新建 3.11–3.18 全量落地计划。v2 共性修订：状态语言全部换四通道 capability
+   口径、证据链路对齐
    ADR 0017/0019、播放对齐 3.5.7 双实例架构、文案走 localization。关键个性修订：
    3.7 目标定位优先复用 corpus 投影（lemma 归一）、"没注意"不写观察证据、狩猎小结挂
    extensive-only completion；3.8 入口宿主为 3.5.6 练习浮窗第四题型、shadowing 单位
    锁定韵律层 chunk、attempt 不进 content-fit 折算；3.9 corpus family 检索明确为新增
    可重建投影工程量、LearnerProfile 收窄为补 L1；3.10 删除悬案区回访与卡点解决率
    （3.5.6 已撤机制）、精听不虚构 session 时长、数据来源对齐 v19–v31 schema。
-   同日 3.6.1 审计修复落地 schema v31（义项边 BEFORE UPDATE 触发器）与导入脏边
-   显式跳过谓词。
+   v3 裁决：3.7 不提前泛化、3.8 非评分 shadowing 不伪造 speaking success、3.9 不提前接
+   LLM/两层复述、3.10 建 channel-ready envelope；3.7 前新增 Gate Q 清偿 3.3/3.35/3.4
+   真实 QA 债。后续顺序为 semantic evidence → vendor-neutral LLM → Reading → Speaking →
+   Writing → Personal Expression → projection/review → Cross-modal Coach。同日 3.6.1 审计
+   修复落地 schema v31（义项边 BEFORE UPDATE 触发器）与导入脏边显式跳过谓词。
 2. **2026-07-10** — 个人听力词典与切片播放器评审裁决（见
    `.planning/discuss/personal-listening-dictionary-and-slice-player.zh.md` §9）：词典组织
    确立为"学习对象 →（可选义项）→ 切片"的**视图层级**；高频读端（字幕高亮/词汇本过滤）

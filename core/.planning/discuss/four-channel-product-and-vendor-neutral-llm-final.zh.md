@@ -230,12 +230,18 @@ validation_class = heuristic_proxy | manual_product_qa | ...
 
 ## 11. 行动顺序
 
-1. 完成 Phase 3.7–3.10 与听力主线真实 QA；
-2. 首个四通道 phase 前将 evidence boundary 升格为正式 ADR/contract；
-3. 定义厂商中立 provider trait、profile 和 protocol capability descriptor；
-4. 完成 recording transcription 与 LLM-judge spike；
-5. 一次只选择一个 Studio 建立竖切片；
-6. 根据真实价值逐步增加其余通道，不一次建立三套课程系统。
+1. Gate Q：关闭或逐项明确豁免 3.3/3.35/3.4/3.5 的真实媒体 QA 债务；
+2. 完成 Phase 3.7–3.10 听力主线；
+3. Phase 3.11：Semantic Task & Evidence Foundation；
+4. Phase 3.12：Vendor-neutral LLM Provider & Judge Qualification；
+5. Phase 3.13：Reading Studio v1；
+6. Phase 3.14：Speaking Studio v1；
+7. Phase 3.15：Writing Studio v1；
+8. Phase 3.16：Personal Expression；
+9. Phase 3.17：Four-channel Projection & Cross-modal Review；
+10. Phase 3.18：Cross-modal Coach & Four-channel Closeout。
+
+一次只推进一个 Studio，不把 Reading/Speaking/Writing 合并成单次大爆炸交付。
 
 ## 12. 外部协议与研究参考
 

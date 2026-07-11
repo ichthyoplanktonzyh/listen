@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-11 12:15 CST: 对照四通道最终讨论与现有 3.7–3.10 计划完成路线重排。四份计划
+  升级 v3：3.7 保持 listening-only 且新增 3.3/3.35/3.4/3.5 真实 QA Gate Q；3.8 明确为
+  shadowing 模仿层，非评分 completion 不得用 `Correct` 伪造 speaking success，并为后续
+  录音转录保留诚实 seam；3.9 不提前接 LLM/两层复述；3.10 建 channel-ready envelope，
+  无数据通道显示未评估而非 0。新建 3.11–3.18 八个 PLAN 与共享上下文，依次覆盖 semantic
+  task/evidence、厂商中立 LLM provider 与 judge 校验、Reading/Speaking/Writing Studio、
+  Personal Expression、四通道 projection/review、Cross-modal Coach closeout。同步 Phase
+  Breakdown、PROJECT、REQUIREMENTS、ROADMAP、STATE 与最终讨论稿；未修改任何已冻结 phase。
+
 - 2026-07-11 12:04 CST: 四通道产品方向形成最终讨论版，并将长期定位从“听力理解播放器”
   更新为“以真实内容为共同语境、听力先行的四通道语言学习工作台”；当前 Phase 3.7–3.10
   听力执行顺序不变，后续逐个验证 Reading/Speaking/Writing Studio。最终稿收敛两层复述、

@@ -895,3 +895,7 @@ Phase 2.18 新学习资产架构之上，把英语作为第一门语言做成完
 
 最终讨论稿：
 `.planning/discuss/four-channel-product-and-vendor-neutral-llm-final.zh.md`。
+
+落地顺序已固定为 Phase 3.11 Semantic Task & Evidence Foundation → 3.12 Vendor-neutral
+LLM Provider → 3.13 Reading Studio → 3.14 Speaking Studio → 3.15 Writing Studio →
+3.16 Personal Expression → 3.17 Four-channel Projection/Review → 3.18 Cross-modal Coach。

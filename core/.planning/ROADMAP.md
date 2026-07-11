@@ -1426,21 +1426,26 @@ Phase 3.0 的执行序列（2026-07-04 确立，取代早期建议顺序）：
   `.planning/phases/3.0-english-listening-learning-loop/3.4.X-LEARNING-DOMAIN-V2-SHARED-CONTEXT.md`
 - 完整学习活动路径：`.planning/discuss/listen-learning-activity-path.zh.md`
 - 各 phase 计划：`.planning/phases/3.1-intensive-listening-practice-slice/` ~
-  `.planning/phases/3.10-coach-dashboard/`
+  `.planning/phases/3.18-cross-modal-coach/`
 - Phase 3.35 计划：`.planning/phases/3.35-listening-workbench-ui-redesign/`
 
-#### Phase 3.x 之后：四通道 Studio 与语义能力
+#### Phase 3.11–3.18：四通道 Studio 与语义能力
 
 Phase 3.7–3.10 仍按既有计划完成，不在本轮重排。听力主线与真实 QA 收口后，后续路线采用
 “一次一个楔子”的方式验证：
 
-1. Reading Studio v1：媒体伴生阅读、段落理解与读听差异诊断；
-2. Speaking Studio v1：在 shadowing 之外增加片段复述、角色接话和按需 L1 归因；
-3. Writing Studio v1：dictogloss、摘要/回应和 revision history；
-4. Personal Expression：个人句模与跨说写的新语境迁移。
+1. 3.11 Semantic Task & Evidence Foundation；
+2. 3.12 Vendor-neutral LLM Provider & Judge Qualification；
+3. 3.13 Reading Studio v1；
+4. 3.14 Speaking Studio v1；
+5. 3.15 Writing Studio v1；
+6. 3.16 Personal Expression；
+7. 3.17 Four-channel Projection & Cross-modal Review；
+8. 3.18 Cross-modal Coach & Four-channel Closeout。
 
-具体先后在 Phase 3.10 与听力真实 QA 收口后决定。任何依赖语义理解的评价先建立版本化
-rubric / judgment contract 和 LLM-judge spike；LLM provider 必须厂商中立，初始协议适配
+上述顺序已按依赖固定；每个 Studio 开工前仍允许基于上游真实 QA 缩减范围，但不得跨 phase
+把三个 Studio 合并实施。任何依赖语义理解的评价先建立版本化 rubric / judgment contract
+和 LLM-judge spike；LLM provider 必须厂商中立，初始协议适配
 覆盖 OpenAI Responses / Chat Completions-compatible、Anthropic Messages 与 Gemini native
 API，并允许本地或未来协议 adapter。完整产品与证据边界见
 `.planning/discuss/four-channel-product-and-vendor-neutral-llm-final.zh.md`。

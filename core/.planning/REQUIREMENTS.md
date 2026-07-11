@@ -105,7 +105,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | 轻量消费端资源读取 | 无强制 Milestone 1 发布项 | CONSUME-001 至 CONSUME-004 |
 | Rhythm-first 真实听感分析 | 无强制 Milestone 1 发布项 | RHY-001 至 RHY-008 |
 | 用户可见工作流语义 | 无强制 Milestone 1 发布项 | UX-001 至 UX-008 |
-| 真实内容驱动的四通道扩展 | 无强制当前发布项 | LOOP-010 至 LOOP-012、LOOP-015 |
+| 真实内容驱动的四通道扩展 | 无强制当前发布项 | LOOP-010 至 LOOP-012、LOOP-015 至 LOOP-018 |
 | 厂商中立语义能力 | 无强制当前发布项 | LOOP-013、LOOP-014 |
 
 ## 4. 平台需求
@@ -2746,7 +2746,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 ### LOOP-010：真实内容驱动的四通道扩展
 
 - 优先级：P1
-- 阶段：FUTURE（Phase 3.7–3.10 之后逐 phase 验证）
+- 阶段：Phase 3.13–3.18
 - 需求：系统应以同一真实内容为共同语境，分别提供 reading、listening、speaking、writing
   的独立任务、证据和降级路径；当前听力主线是执行楔子，不是永久产品边界。
 - 验收标准：
@@ -2757,7 +2757,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 ### LOOP-011：构造性口语与两层复述
 
 - 优先级：P1
-- 阶段：FUTURE Speaking Studio
+- 阶段：Phase 3.14
 - 需求：除 shadowing 模仿外，系统应支持隐藏完整原句后的 L2 片段复述和角色接话；L1
   复述仅作为按需理解归因工具。
 - 验收标准：
@@ -2768,7 +2768,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 ### LOOP-012：固定语义评分尺与可纠正判定
 
 - 优先级：P1
-- 阶段：FUTURE
+- 阶段：Phase 3.11
 - 需求：片段复述、dictogloss 与写作反馈使用版本化 `SemanticRubric`；一次回答的
   `SemanticJudgment` 与长期 capability evidence、capability override 分离。
 - 验收标准：
@@ -2780,7 +2780,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 ### LOOP-013：厂商中立 LLM provider
 
 - 优先级：P1
-- 阶段：FUTURE
+- 阶段：Phase 3.12
 - 需求：语义评分尺、语义判定和写作反馈通过 application 层厂商中立 provider trait；
   adapter 支持主流原生/兼容 API 格式，领域与 Flutter 不依赖单一厂商 wire contract。
 - 验收标准：
@@ -2794,7 +2794,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 ### LOOP-014：LLM 判断 provenance 与资格门禁
 
 - 优先级：P1
-- 阶段：FUTURE
+- 阶段：Phase 3.12
 - 需求：LLM 判定同时记录来源与验证等级；未经独立人工评估的 judge 只提供可纠正的
   heuristic feedback，不直接获得长期 capability projection 写入资格。
 - 验收标准：
@@ -2806,13 +2806,49 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 ### LOOP-015：伴生阅读与意义重构写作
 
 - 优先级：P1
-- 阶段：FUTURE Reading/Writing Studio
+- 阶段：Phase 3.13 / 3.15
 - 需求：Reading v1 复用 transcript 提供独立阅读与读听差异诊断；Writing v1 以
   dictogloss、摘要和回应验证意义重构，不以逐字复制或模型改写代替用户产出。
 - 验收标准：
   - 阅读位置与播放位置可独立存在，并能回到对应真实音频。
   - 读听差异结论保留任务与 assistance provenance。
   - 写作保存原稿、反馈、用户采纳/拒绝与修订稿，不删除失败或初稿事实。
+
+### LOOP-016：个人表达模板与跨语境迁移
+
+- 优先级：P1
+- 阶段：Phase 3.16
+- 需求：系统应允许用户从任意真实句子提炼 `UserSentencePattern`，通过 slots 在自己的
+  speaking/writing 情境中复用；用户模板身份不依赖 canonical construction。
+- 验收标准：
+  - 来源媒体删除后模板、来源快照和使用历史仍保留。
+  - speaking 与 writing 使用分别写 attempt/evidence，不互相推断。
+  - system construction ref 可空且不能覆盖用户模板。
+  - 通用 FocusTarget 只有在至少三个真实 consumer 成立后才建，不提前泛化 Hunting List。
+
+### LOOP-017：分通道投影与跨通道复习
+
+- 优先级：P1
+- 阶段：Phase 3.17
+- 需求：reading/speaking/writing 各自按真实 evidence 资格建立版本化 projection proposal，
+  并从已评估的 cross-modal gap 派生合适复习任务；证据不足时保持 unassessed。
+- 验收标准：
+  - 每通道有独立算法版本、writer exclusivity、人工 QA 与确认门禁，通道之间无隐式蕴含。
+  - LLM judgment 只能作为已校验的 supporting evidence，不能单独产生 acquired。
+  - override、历史 evidence 和原始 judgment 不因重投影被改写。
+  - 复习卡能回到来源 attempt/rubric/judgment 或 snapshot。
+
+### LOOP-018：跨通道 Coach 与四通道收口
+
+- 优先级：P1
+- 阶段：Phase 3.18
+- 需求：Coach 应从 durable facts 聚合四通道与 cross-modal gap，并提供可追溯、可忽略的
+  下一步建议；Dashboard 不成为 evidence/projection 写入者。
+- 验收标准：
+  - 每个数字和建议可展开到来源事实；未评估与失败分离。
+  - 缺任一 Studio、媒体或 LLM provider 时其余区块正常工作。
+  - 不展示综合语言分、排名、streak 或伪造零值。
+  - 同一真实内容的听→读→说→写端到端路径完成 manual_product_qa。
 
 ## 18.6 Phase 3.4.x Learning Domain Model v2 需求
 
