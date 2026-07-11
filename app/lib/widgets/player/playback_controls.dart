@@ -140,138 +140,189 @@ class PlaybackControls extends StatelessWidget {
     final posMs = position.inMilliseconds.clamp(0, maxMs.toInt()).toDouble();
     return Material(
       color: colors.surfaceContainerLowest,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            height: 14,
-            child: SliderTheme(
-              data: SliderThemeData(
-                trackHeight: 2,
-                thumbShape:
-                    const RoundSliderThumbShape(enabledThumbRadius: 5),
-                overlayShape:
-                    const RoundSliderOverlayShape(overlayRadius: 10),
-                activeTrackColor: colors.primary,
-                inactiveTrackColor:
-                    colors.outlineVariant.withValues(alpha: 0.35),
-                thumbColor: colors.primary,
-              ),
-              child: Slider(
-                value: posMs,
-                max: maxMs,
-                onChanged: (value) =>
-                    onSeek(Duration(milliseconds: value.round())),
-              ),
-            ),
-          ),
-          SizedBox(
-            height: 50,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 16, right: 8, bottom: 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: onExpand,
-                      behavior: HitTestBehavior.opaque,
-                      child: Row(
-                        children: [
-                          Icon(
-                            playing
-                                ? Icons.equalizer_rounded
-                                : Icons.music_note_rounded,
-                            size: 18,
-                            color: colors.primary,
-                          ),
-                          const SizedBox(width: 10),
-                          Flexible(
-                            child: Text(
-                              mediaTitle ?? '',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(fontWeight: FontWeight.w600),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: colors.outlineVariant)),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final narrow = constraints.maxWidth < 760;
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: 12,
+                  child: SliderTheme(
+                    data: SliderThemeData(
+                      trackHeight: 3,
+                      trackShape: const RectangularSliderTrackShape(),
+                      thumbShape: const RoundSliderThumbShape(
+                        enabledThumbRadius: 4,
+                      ),
+                      overlayShape: const RoundSliderOverlayShape(
+                        overlayRadius: 10,
+                      ),
+                      activeTrackColor: colors.primary,
+                      inactiveTrackColor: colors.outlineVariant.withValues(
+                        alpha: 0.5,
+                      ),
+                      thumbColor: colors.primary,
+                    ),
+                    child: Slider(
+                      padding: EdgeInsets.zero,
+                      value: posMs,
+                      max: maxMs,
+                      onChanged: (value) =>
+                          onSeek(Duration(milliseconds: value.round())),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  height: 76,
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(narrow ? 12 : 20, 4, 8, 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            key: const Key('compact-player-media-info'),
+                            onTap: onExpand,
+                            behavior: HitTestBehavior.opaque,
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: colors.primaryContainer,
+                                  ),
+                                  child: Icon(
+                                    playing
+                                        ? Icons.equalizer_rounded
+                                        : Icons.music_note_rounded,
+                                    size: 23,
+                                    color: colors.onPrimaryContainer,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Flexible(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        mediaTitle ?? '',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        '${formatDuration(position)} / ${formatDuration(duration)}',
+                                        maxLines: 1,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall
+                                            ?.copyWith(
+                                              color: colors.onSurfaceVariant,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(width: 10),
-                          Text(
-                            '${formatDuration(position)} / ${formatDuration(duration)}',
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelSmall
-                                ?.copyWith(color: colors.onSurfaceVariant),
+                        ),
+                        IconButton(
+                          tooltip: l.text('previousSentence'),
+                          onPressed: onSeekToPreviousCue,
+                          iconSize: 24,
+                          icon: const Icon(Icons.skip_previous_rounded),
+                        ),
+                        SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: IconButton.filled(
+                            key: const Key('compact-player-play-pause'),
+                            tooltip: l.text('playPause'),
+                            onPressed: onPlayPause,
+                            iconSize: 28,
+                            padding: EdgeInsets.zero,
+                            icon: Icon(
+                              playing
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: l.text('nextSentence'),
+                          onPressed: onSeekToNextCue,
+                          iconSize: 24,
+                          icon: const Icon(Icons.skip_next_rounded),
+                        ),
+                        if (!narrow) ...[
+                          Expanded(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Text(
+                                  '${rate}x',
+                                  style: Theme.of(context).textTheme.labelMedium
+                                      ?.copyWith(
+                                        color: colors.onSurfaceVariant,
+                                      ),
+                                ),
+                                IconButton(
+                                  tooltip: muted ? 'Unmute' : 'Mute',
+                                  onPressed: onMuteToggle,
+                                  iconSize: 21,
+                                  icon: Icon(
+                                    muted
+                                        ? Icons.volume_off_outlined
+                                        : Icons.volume_up_outlined,
+                                    color: colors.onSurfaceVariant,
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: l.text('expandWorkbench'),
+                                  onPressed: onExpand,
+                                  iconSize: 22,
+                                  icon: Icon(
+                                    Icons.keyboard_arrow_up_rounded,
+                                    color: colors.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
-                      ),
+                        if (narrow)
+                          IconButton(
+                            tooltip: l.text('expandWorkbench'),
+                            onPressed: onExpand,
+                            iconSize: 22,
+                            icon: Icon(
+                              Icons.keyboard_arrow_up_rounded,
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  IconButton(
-                    tooltip: l.text('previousSentence'),
-                    onPressed: onSeekToPreviousCue,
-                    iconSize: 20,
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.skip_previous_rounded),
-                  ),
-                  SizedBox(
-                    width: 40,
-                    height: 40,
-                    child: IconButton.filled(
-                      tooltip: l.text('playPause'),
-                      onPressed: onPlayPause,
-                      iconSize: 22,
-                      padding: EdgeInsets.zero,
-                      icon: Icon(
-                        playing
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: l.text('nextSentence'),
-                    onPressed: onSeekToNextCue,
-                    iconSize: 20,
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.skip_next_rounded),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${rate}x',
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: colors.onSurfaceVariant,
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: muted ? 'Unmute' : 'Mute',
-                    onPressed: onMuteToggle,
-                    iconSize: 18,
-                    visualDensity: VisualDensity.compact,
-                    icon: Icon(
-                      muted
-                          ? Icons.volume_off_outlined
-                          : Icons.volume_up_outlined,
-                      color: colors.onSurfaceVariant,
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: l.text('expandWorkbench'),
-                    onPressed: onExpand,
-                    iconSize: 18,
-                    visualDensity: VisualDensity.compact,
-                    icon: Icon(
-                      Icons.keyboard_arrow_up_rounded,
-                      color: colors.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -396,11 +447,7 @@ class PlaybackControls extends StatelessWidget {
     );
   }
 
-  Widget _fullControlRow(
-    BuildContext context,
-    AppLocalizations l,
-    bool roomy,
-  ) {
+  Widget _fullControlRow(BuildContext context, AppLocalizations l, bool roomy) {
     return Row(
       children: [
         IconButton(
@@ -621,8 +668,7 @@ class PlaybackControls extends StatelessWidget {
                 child: Text(
                   l.text('listeningMode'),
                   style: TextStyle(
-                    color:
-                        Theme.of(context).colorScheme.onSurfaceVariant,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
                   ),
@@ -664,8 +710,7 @@ class PlaybackControls extends StatelessWidget {
                 child: Text(
                   l.text('chunkMode'),
                   style: TextStyle(
-                    color:
-                        Theme.of(context).colorScheme.onSurfaceVariant,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
                   ),
@@ -719,8 +764,7 @@ class PlaybackControls extends StatelessWidget {
                 child: Text(
                   l.text('subtitleMode'),
                   style: TextStyle(
-                    color:
-                        Theme.of(context).colorScheme.onSurfaceVariant,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
                   ),
@@ -763,10 +807,8 @@ class PlaybackControls extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             items: [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
                 .map(
-                  (value) => DropdownMenuItem(
-                    value: value,
-                    child: Text('${value}x'),
-                  ),
+                  (value) =>
+                      DropdownMenuItem(value: value, child: Text('${value}x')),
                 )
                 .toList(),
             onChanged: (value) {
@@ -1176,10 +1218,9 @@ class _SourceLoopChip extends StatelessWidget {
             const SizedBox(width: 4),
             Text(
               label,
-              style: Theme.of(context)
-                  .textTheme
-                  .labelSmall
-                  ?.copyWith(color: ListenColors.accent),
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: ListenColors.accent),
             ),
             SizedBox(
               width: 22,

@@ -175,6 +175,81 @@ void main() {
     expect(find.byIcon(Icons.tune), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('compact playback uses a three-part player layout', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 180));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final adapter = DesktopPlayerAdapter();
+    addTearDown(adapter.dispose);
+
+    await tester.pumpWidget(
+      localized(
+        PlaybackControls(
+          adapter: adapter,
+          position: const Duration(minutes: 5, seconds: 54),
+          duration: const Duration(minutes: 10, seconds: 21),
+          playing: false,
+          loopCue: false,
+          statusStylesVisible: true,
+          subtitlesVisible: true,
+          secondarySubtitlesVisible: false,
+          secondarySubtitlesAvailable: false,
+          rate: 1,
+          volume: 80,
+          muted: false,
+          audioTracks: const [],
+          selectedAudioId: null,
+          embeddedSubtitleTracks: const [],
+          selectedEmbeddedSubtitleId: null,
+          primarySubtitleOffset: Duration.zero,
+          secondarySubtitleOffset: Duration.zero,
+          status: 'Ready',
+          taskStatuses: const [],
+          extensiveListeningActive: false,
+          listeningMarkEnabled: true,
+          listeningInboxCount: 0,
+          chunkControlsEnabled: true,
+          chunkLoopActive: false,
+          onSeek: (_) {},
+          onSeekToPreviousCue: () {},
+          onSeekToZero: () {},
+          onPlayPause: () {},
+          onStop: () {},
+          onSeekToNextCue: () {},
+          onSeekToPreviousChunk: () {},
+          onSeekToNextChunk: () {},
+          onLoopCurrentChunk: () {},
+          onLoopExpandedChunk: () {},
+          onLoopCueChanged: (_) {},
+          onStopSourceLoop: () {},
+          onStatusStylesChanged: (_) {},
+          onSubtitlesVisibleChanged: (_) {},
+          onSecondaryVisibleChanged: (_) {},
+          onRateChanged: (_) {},
+          onVolumeChanged: (_) {},
+          onMuteToggle: () {},
+          onAudioTrackChanged: (_) {},
+          onEmbeddedSubtitleTrackChanged: (_) {},
+          onPrimaryOffsetChanged: (_) {},
+          onSecondaryOffsetChanged: (_) {},
+          onToggleExtensiveListening: () {},
+          onCaptureListeningInbox: () {},
+          onHardInterruptListening: () {},
+          isCompact: true,
+          mediaTitle: 'How a cell phone ban transformed this school.mp4',
+          onExpand: () {},
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('compact-player-media-info')), findsOneWidget);
+    expect(find.byKey(const Key('compact-player-play-pause')), findsOneWidget);
+    expect(find.text('00:05:54 / 00:10:21'), findsOneWidget);
+    expect(find.byIcon(Icons.volume_up_outlined), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 void _noopFraction(double value) {}
