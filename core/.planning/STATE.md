@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-10T23:25:00.000+08:00"
+last_updated: "2026-07-11T08:37:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-10 23:25 CST
-> 更新原因：Phase 3.6.1 收口。听力词典增加本地义项文件夹；schema v30、手动切片归类、
-> external semantic reference seam 已验证，SceneLex/API/自动消歧刻意未接入。
+> 最后更新：2026-07-11 08:37 CST
+> 更新原因：Phase 3.6.2 收口。词典切片改为默认视频的内嵌卡与 PageView 横向轨道，旧重复卡片
+> 移除；键盘/鼠标播放控制与迁移后的 widget 测试通过。
 
 ## 当前位置
 
@@ -275,6 +275,12 @@ last_updated: "2026-07-10T23:25:00.000+08:00"
   可选对齐注释；词条级能力/证据/字幕热路径不变。schema v30 与资产 bundle v7 已验证。
 - 自动化验证与 owner 真实媒体桌面 QA 均通过；收口：
   `.planning/phases/3.6.1-sense-folders/3.6.1-CLOSEOUT.md`。
+
+### Phase 3.6.2: Dictionary Inline Clip UX ✅ 已收口
+
+- 保留第二解码/文件 resolver，移除词典页 overlay，改为默认视频的详情内嵌卡 + PageView
+  横向轨道；左右滑动/箭头/左右键换片，空格播放暂停，旧重复竖向卡片已移除。
+- 收口：`.planning/phases/3.6.2-dictionary-inline-clip-ux/3.6.2-CLOSEOUT.md`；计划已冻结。
 
 ## 已完成 Phase 索引
 

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-11 08:37 CST: Phase 3.6.2 Dictionary Inline Clip UX 收口。词典详情移除根层
+  `SlicePlaybackWindow` overlay，保留同一第二解码核心并改为默认视频的内嵌切片卡；未归类
+  重复竖向卡片改为 PageView 横向轨道，支持触控/鼠标滑动、左右箭头/左右键切片与空格播放暂停。
+  迁移 3 个旧竖向卡片测试并新增无 `Positioned` 内嵌 renderer 覆盖；Flutter 定向测试 24 passed。
+
+- 2026-07-10 23:30 CST: 启动 Phase 3.6.2 Dictionary Inline Clip UX。owner 反馈 3.6 词典页
+  错把 3.5.7 的浮窗 renderer 复用为根层 overlay；本阶段将保留第二解码核心，改为词条详情内嵌
+  当前切片卡与水平切片浏览轨道，不改冻结的 3.6 / 3.6.1 文档或后端契约。
+
 - 2026-07-10 23:25 CST: Phase 3.6.1 Sense Folders 收口。Owner 已接受真实媒体桌面 QA；
   CLOSEOUT、STATE 与冻结计划已同步。下一步建议为独立的 SceneLex 消费契约 spike，只定义
   已发布外部义项/资源的版本与发布状态，以及与本地文件夹 `external_ref` 的对齐，不实现
