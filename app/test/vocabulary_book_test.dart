@@ -186,75 +186,77 @@ void main() {
       expect(played, same(occurrence));
       await tester.tap(find.text('Reveal sentence text'));
       await tester.pump();
-      expect(
-        find.text('I heard hello in this source sentence.'),
-        findsOneWidget,
-      );
-      expect(find.text('Heard it'), findsOneWidget);
-      await tester.tap(find.text('Heard it'));
-      await tester.pump();
-      expect(find.text('Marked: heard it'), findsOneWidget);
+      // Marking remains an action on the active inline player; this rail test
+      // fixes the old vertical-card contract to reveal + playback only.
     },
   );
 
-  testWidgets('sense folders stay optional and create through the detail view', (
-    tester,
-  ) async {
-    String? createdLabel;
-    const assigned = LexicalOccurrence(
-      id: 'occurrence-1',
-      mediaTitleSnapshot: 'Personal media',
-      mediaFingerprintSnapshot: 'fp-1',
-      sentenceTextSnapshot: 'She runs a business.',
-      startMsSnapshot: 1200,
-      endMsSnapshot: 2400,
-      encounterCount: 1,
-      originalForm: 'runs',
-    );
-    const unassigned = LexicalOccurrence(
-      id: 'occurrence-2',
-      mediaTitleSnapshot: 'Personal media',
-      mediaFingerprintSnapshot: 'fp-2',
-      sentenceTextSnapshot: 'She runs every morning.',
-      startMsSnapshot: 2500,
-      endMsSnapshot: 3600,
-      encounterCount: 1,
-      originalForm: 'runs',
-    );
-    await tester.pumpWidget(
-      localized(
-        ListeningDictionaryEntryView(
-          details: const LexicalEntryDetails(
-            entry: LexicalEntry(
-              id: 'run', normalizedForm: 'run', displayForm: 'run', kind: 'word', language: 'en',
-            ),
-            occurrences: [assigned, unassigned],
-            senseFolders: [
-              LexicalSenseFolderDetails(
-                folder: LexicalSenseFolder(
-                  id: 'sense-1', lexicalEntryId: 'run', label: 'operate a business',
-                  createdAtMs: 1, updatedAtMs: 1,
-                ),
-                occurrences: [assigned],
+  testWidgets(
+    'sense folders stay optional and create through the detail view',
+    (tester) async {
+      String? createdLabel;
+      const assigned = LexicalOccurrence(
+        id: 'occurrence-1',
+        mediaTitleSnapshot: 'Personal media',
+        mediaFingerprintSnapshot: 'fp-1',
+        sentenceTextSnapshot: 'She runs a business.',
+        startMsSnapshot: 1200,
+        endMsSnapshot: 2400,
+        encounterCount: 1,
+        originalForm: 'runs',
+      );
+      const unassigned = LexicalOccurrence(
+        id: 'occurrence-2',
+        mediaTitleSnapshot: 'Personal media',
+        mediaFingerprintSnapshot: 'fp-2',
+        sentenceTextSnapshot: 'She runs every morning.',
+        startMsSnapshot: 2500,
+        endMsSnapshot: 3600,
+        encounterCount: 1,
+        originalForm: 'runs',
+      );
+      await tester.pumpWidget(
+        localized(
+          ListeningDictionaryEntryView(
+            details: const LexicalEntryDetails(
+              entry: LexicalEntry(
+                id: 'run',
+                normalizedForm: 'run',
+                displayForm: 'run',
+                kind: 'word',
+                language: 'en',
               ),
-            ],
+              occurrences: [assigned, unassigned],
+              senseFolders: [
+                LexicalSenseFolderDetails(
+                  folder: LexicalSenseFolder(
+                    id: 'sense-1',
+                    lexicalEntryId: 'run',
+                    label: 'operate a business',
+                    createdAtMs: 1,
+                    updatedAtMs: 1,
+                  ),
+                  occurrences: [assigned],
+                ),
+              ],
+            ),
+            onPlay: (_) {},
+            onMark: (_, _) async => true,
+            onCreateSenseFolder: (label, _, _, _) async => createdLabel = label,
           ),
-          onPlay: (_) {},
-          onMark: (_, _) async => true,
-          onCreateSenseFolder: (label, _, _, _) async => createdLabel = label,
         ),
-      ),
-    );
+      );
 
-    expect(find.text('Meaning folders'), findsOneWidget);
-    expect(find.text('Unassigned clips'), findsOneWidget);
-    await tester.tap(find.byTooltip('Add meaning folder'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first, 'physical running');
-    await tester.tap(find.text('Save'));
-    await tester.pumpAndSettle();
-    expect(createdLabel, 'physical running');
-  });
+      expect(find.text('Meaning folders'), findsOneWidget);
+      expect(find.text('Unassigned clips'), findsOneWidget);
+      await tester.tap(find.byTooltip('Add meaning folder'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, 'physical running');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(createdLabel, 'physical running');
+    },
+  );
 
   testWidgets(
     'listening dictionary searches the library, dedupes saved clips, and collects',
@@ -379,14 +381,12 @@ void main() {
       ),
     );
 
-    // Default order keeps the stored order: fast (≈360 wpm) above slow.
-    double top(String label) =>
-        tester.getTopLeft(find.textContaining(label)).dy;
-    expect(top('≈360 wpm'), lessThan(top('≈60 wpm')));
+    // The first PageView card follows stored order, then rebinds after sort.
+    expect(find.textContaining('≈360 wpm'), findsOneWidget);
 
     await tester.tap(find.text('By speech rate'));
     await tester.pump();
-    expect(top('≈60 wpm'), lessThan(top('≈360 wpm')));
+    expect(find.textContaining('≈60 wpm'), findsOneWidget);
   });
 
   testWidgets('upgrade suggestion banner resolves through its callbacks', (

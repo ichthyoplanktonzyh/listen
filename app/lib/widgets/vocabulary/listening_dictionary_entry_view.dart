@@ -1,12 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../localization.dart';
 import '../../models/practice.dart';
 import '../../models/types.dart';
 import '../../theme/listen_theme.dart';
 import '../../utils/format_duration.dart';
+import '../../controllers/slice_player_controller.dart';
+import 'dictionary_inline_clip_player.dart';
 import 'pronunciation_button.dart';
 
 /// Estimated words-per-minute of one clip from its sentence snapshot and time
@@ -32,6 +35,7 @@ class ListeningDictionaryEntryView extends StatefulWidget {
   const ListeningDictionaryEntryView({
     super.key,
     required this.details,
+    this.slicePlayer,
     required this.onPlay,
     required this.onMark,
     this.onSearchLibrary,
@@ -55,6 +59,7 @@ class ListeningDictionaryEntryView extends StatefulWidget {
   });
 
   final LexicalEntryDetails details;
+  final SlicePlayerController? slicePlayer;
   final ValueChanged<LexicalOccurrence> onPlay;
   final Future<bool> Function(LexicalOccurrence occurrence, bool heard) onMark;
 
@@ -79,11 +84,26 @@ class ListeningDictionaryEntryView extends StatefulWidget {
   /// Persists the user definition and personal note.
   final Future<void> Function(String? definition, String? note)? onSaveContent;
 
-  final Future<void> Function(String label, String? definition, String? gloss, String? externalRef)? onCreateSenseFolder;
-  final Future<void> Function(String id, String label, String? definition, String? gloss, String? externalRef)? onUpdateSenseFolder;
+  final Future<void> Function(
+    String label,
+    String? definition,
+    String? gloss,
+    String? externalRef,
+  )?
+  onCreateSenseFolder;
+  final Future<void> Function(
+    String id,
+    String label,
+    String? definition,
+    String? gloss,
+    String? externalRef,
+  )?
+  onUpdateSenseFolder;
   final Future<void> Function(String id)? onDeleteSenseFolder;
-  final Future<void> Function(String senseId, LexicalOccurrence occurrence)? onAssignSenseFolder;
-  final Future<void> Function(String senseId, LexicalOccurrence occurrence)? onUnassignSenseFolder;
+  final Future<void> Function(String senseId, LexicalOccurrence occurrence)?
+  onAssignSenseFolder;
+  final Future<void> Function(String senseId, LexicalOccurrence occurrence)?
+  onUnassignSenseFolder;
 
   /// Queues one clip (with its sentence anchor) into the sound review queue.
   final Future<void> Function(LexicalOccurrence occurrence)? onReviewClip;
@@ -121,6 +141,8 @@ class _ListeningDictionaryEntryViewState
   late final TextEditingController _note;
   bool _savingContent = false;
   bool _savingSenseFolder = false;
+  LexicalOccurrence? _activeOccurrence;
+  final PageController _clipPageController = PageController();
 
   LexicalEntry get entry => widget.details.entry;
 
@@ -144,6 +166,7 @@ class _ListeningDictionaryEntryViewState
 
   @override
   void dispose() {
+    _clipPageController.dispose();
     _definition.dispose();
     _note.dispose();
     super.dispose();
@@ -219,6 +242,25 @@ class _ListeningDictionaryEntryViewState
       note.isEmpty ? null : note,
     );
     if (mounted) setState(() => _savingContent = false);
+  }
+
+  void _play(LexicalOccurrence occurrence) {
+    widget.onPlay(occurrence);
+    setState(() => _activeOccurrence = occurrence);
+  }
+
+  void _selectClip(List<LexicalOccurrence> occurrences, int index) {
+    if (index < 0 || index >= occurrences.length) return;
+    _play(occurrences[index]);
+    if (_clipPageController.hasClients) {
+      unawaited(
+        _clipPageController.animateToPage(
+          index,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+        ),
+      );
+    }
   }
 
   List<LexicalOccurrence> _sortedOccurrences() {
@@ -355,18 +397,180 @@ class _ListeningDictionaryEntryViewState
           ).textTheme.bodySmall?.copyWith(color: ListenColors.muted),
         ),
         const SizedBox(height: 10),
+        if (unassignedOccurrences.isNotEmpty)
+          Text(
+            l.text('dictionaryUnassignedClips'),
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+        if (_activeOccurrence != null && widget.slicePlayer != null)
+          DictionaryInlineClipPlayer(
+            controller: widget.slicePlayer!,
+            occurrence: _activeOccurrence!,
+            target: _activeOccurrence!.originalForm ?? entry.displayForm,
+            onClose: () {
+              unawaited(widget.slicePlayer!.close());
+              setState(() => _activeOccurrence = null);
+            },
+          ),
+        if (occurrences.isNotEmpty)
+          Focus(
+            autofocus: _activeOccurrence != null,
+            onKeyEvent: (_, event) {
+              if (event is! KeyDownEvent) return KeyEventResult.ignored;
+              if (event.logicalKey == LogicalKeyboardKey.space) {
+                unawaited(widget.slicePlayer?.togglePlayback());
+                return KeyEventResult.handled;
+              }
+              final current = _activeOccurrence == null
+                  ? 0
+                  : occurrences.indexWhere(
+                      (item) => item.id == _activeOccurrence!.id,
+                    );
+              if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                _selectClip(
+                  occurrences,
+                  current <= 0 ? occurrences.length - 1 : current - 1,
+                );
+                return KeyEventResult.handled;
+              }
+              if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                _selectClip(
+                  occurrences,
+                  current >= occurrences.length - 1 ? 0 : current + 1,
+                );
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: SizedBox(
+              key: const Key('dictionary-clip-rail'),
+              height: 112,
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => _selectClip(
+                      occurrences,
+                      _activeOccurrence == null
+                          ? 0
+                          : (occurrences.indexWhere(
+                                      (item) =>
+                                          item.id == _activeOccurrence!.id,
+                                    ) -
+                                    1) %
+                                occurrences.length,
+                    ),
+                    icon: const Icon(Icons.chevron_left),
+                  ),
+                  Expanded(
+                    child: PageView.builder(
+                      controller: _clipPageController,
+                      itemCount: occurrences.length,
+                      onPageChanged: (index) => _play(occurrences[index]),
+                      itemBuilder: (context, index) {
+                        final occurrence = occurrences[index];
+                        final selected = _activeOccurrence?.id == occurrence.id;
+                        final key = _clipKey(occurrence);
+                        final revealed = _revealed.contains(key);
+                        final wpm = clipSpeechRateWpm(
+                          occurrence.sentenceTextSnapshot,
+                          occurrence.startMsSnapshot,
+                          occurrence.endMsSnapshot,
+                        );
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Card(
+                            color: selected ? ListenColors.selected : null,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: InkWell(
+                                    onTap: () =>
+                                        _selectClip(occurrences, index),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            revealed
+                                                ? occurrence
+                                                      .sentenceTextSnapshot
+                                                : l.text(
+                                                    'dictionaryRevealSentence',
+                                                  ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            '${wpm == null ? '' : l.text('dictionaryWpm').replaceAll('{wpm}', '$wpm')} · ${index + 1}/${occurrences.length}',
+                                            style: const TextStyle(
+                                              color: ListenColors.muted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: l.text('dictionaryRevealSentence'),
+                                  onPressed: () =>
+                                      setState(() => _revealed.add(key)),
+                                  icon: const Icon(Icons.visibility_outlined),
+                                ),
+                                if (widget.onReviewClip != null)
+                                  IconButton(
+                                    tooltip: l.text('dictionaryReviewClip'),
+                                    onPressed: () => unawaited(
+                                      widget.onReviewClip!(occurrence),
+                                    ),
+                                    icon: const Icon(
+                                      Icons.playlist_add_outlined,
+                                    ),
+                                  ),
+                                IconButton.filledTonal(
+                                  tooltip: l.text('dictionaryPlayClip'),
+                                  onPressed: () =>
+                                      _selectClip(occurrences, index),
+                                  icon: const Icon(Icons.headphones_outlined),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => _selectClip(
+                      occurrences,
+                      _activeOccurrence == null
+                          ? 0
+                          : (occurrences.indexWhere(
+                                      (item) =>
+                                          item.id == _activeOccurrence!.id,
+                                    ) +
+                                    1) %
+                                occurrences.length,
+                    ),
+                    icon: const Icon(Icons.chevron_right),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (occurrences.isNotEmpty) const SizedBox(height: 10),
         if (occurrences.isEmpty)
           _EmptyClips(entry: entry, external: _externalRow(l))
-        else
-          ...[
-            if (unassignedOccurrences.isNotEmpty)
-              Text(
-                l.text('dictionaryUnassignedClips'),
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-            for (final occurrence in unassignedOccurrences)
-              _clipWithSenseAction(occurrence, l, null),
-          ],
+        else if (unassignedOccurrences.isEmpty)
+          Text(
+            l.text('dictionaryNoClips'),
+            style: const TextStyle(color: ListenColors.muted),
+          ),
         if (widget.onSearchLibrary != null) ..._librarySection(l),
       ],
     );
@@ -385,18 +589,25 @@ class _ListeningDictionaryEntryViewState
           ),
           IconButton(
             tooltip: l.text('dictionaryAddSenseFolder'),
-            onPressed: _savingSenseFolder ? null : () => unawaited(_editSenseFolder()),
+            onPressed: _savingSenseFolder
+                ? null
+                : () => unawaited(_editSenseFolder()),
             icon: const Icon(Icons.create_new_folder_outlined),
           ),
         ],
       ),
       Text(
         l.text('dictionarySenseFoldersHint'),
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: ListenColors.muted),
+        style: Theme.of(
+          context,
+        ).textTheme.bodySmall?.copyWith(color: ListenColors.muted),
       ),
       const SizedBox(height: 8),
       if (widget.details.senseFolders.isEmpty)
-        Text(l.text('dictionaryNoSenseFolders'), style: const TextStyle(color: ListenColors.muted))
+        Text(
+          l.text('dictionaryNoSenseFolders'),
+          style: const TextStyle(color: ListenColors.muted),
+        )
       else
         for (final details in widget.details.senseFolders)
           ExpansionTile(
@@ -405,21 +616,28 @@ class _ListeningDictionaryEntryViewState
             subtitle: Text(
               [
                 ?details.folder.definition,
-                l.text('dictionarySenseFolderClipCount').replaceAll('{count}', '${details.occurrences.length}'),
+                l
+                    .text('dictionarySenseFolderClipCount')
+                    .replaceAll('{count}', '${details.occurrences.length}'),
               ].join(' · '),
             ),
             trailing: Wrap(
               children: [
                 IconButton(
                   tooltip: l.text('edit'),
-                  onPressed: _savingSenseFolder ? null : () => unawaited(_editSenseFolder(details.folder)),
+                  onPressed: _savingSenseFolder
+                      ? null
+                      : () => unawaited(_editSenseFolder(details.folder)),
                   icon: const Icon(Icons.edit_outlined, size: 18),
                 ),
                 IconButton(
                   tooltip: l.text('delete'),
-                  onPressed: _savingSenseFolder || widget.onDeleteSenseFolder == null
+                  onPressed:
+                      _savingSenseFolder || widget.onDeleteSenseFolder == null
                       ? null
-                      : () => unawaited(widget.onDeleteSenseFolder!(details.folder.id)),
+                      : () => unawaited(
+                          widget.onDeleteSenseFolder!(details.folder.id),
+                        ),
                   icon: const Icon(Icons.delete_outline, size: 18),
                 ),
               ],
@@ -445,13 +663,16 @@ class _ListeningDictionaryEntryViewState
   ) => Column(
     children: [
       _clipTile(occurrence, l),
-      if (widget.onAssignSenseFolder != null && widget.details.senseFolders.isNotEmpty)
+      if (widget.onAssignSenseFolder != null &&
+          widget.details.senseFolders.isNotEmpty)
         Align(
           alignment: Alignment.centerRight,
           child: PopupMenuButton<String>(
             tooltip: l.text('dictionaryAssignSenseFolder'),
             onSelected: (value) => value == assignedSenseId
-                ? unawaited(widget.onUnassignSenseFolder?.call(value, occurrence))
+                ? unawaited(
+                    widget.onUnassignSenseFolder?.call(value, occurrence),
+                  )
                 : unawaited(widget.onAssignSenseFolder!(value, occurrence)),
             itemBuilder: (context) => [
               for (final folder in widget.details.senseFolders)
@@ -459,7 +680,9 @@ class _ListeningDictionaryEntryViewState
                   value: folder.folder.id,
                   child: Text(
                     folder.folder.id == assignedSenseId
-                        ? l.text('dictionaryUnassignSenseFolder').replaceAll('{label}', folder.folder.label)
+                        ? l
+                              .text('dictionaryUnassignSenseFolder')
+                              .replaceAll('{label}', folder.folder.label)
                         : folder.folder.label,
                   ),
                 ),
@@ -467,7 +690,11 @@ class _ListeningDictionaryEntryViewState
             child: TextButton.icon(
               onPressed: null,
               icon: const Icon(Icons.folder_outlined, size: 16),
-              label: Text(assignedSenseId == null ? l.text('dictionaryAssignSenseFolder') : l.text('dictionaryAssignedSenseFolder')),
+              label: Text(
+                assignedSenseId == null
+                    ? l.text('dictionaryAssignSenseFolder')
+                    : l.text('dictionaryAssignedSenseFolder'),
+              ),
             ),
           ),
         ),
@@ -491,7 +718,7 @@ class _ListeningDictionaryEntryViewState
       submitting: _submitting.contains(key),
       mark: _marks[key],
       onReveal: () => setState(() => _revealed.add(key)),
-      onPlay: () => widget.onPlay(occurrence),
+      onPlay: () => _play(occurrence),
       onReview: widget.onReviewClip == null
           ? null
           : () => unawaited(widget.onReviewClip!(occurrence)),
@@ -878,25 +1105,36 @@ class _SenseFolderDialogState extends State<_SenseFolderDialog> {
             TextField(
               autofocus: true,
               controller: _label,
-              decoration: InputDecoration(labelText: l.text('dictionarySenseFolderLabel')),
+              decoration: InputDecoration(
+                labelText: l.text('dictionarySenseFolderLabel'),
+              ),
             ),
             TextField(
               controller: _definition,
-              decoration: InputDecoration(labelText: l.text('dictionarySenseFolderDefinition')),
+              decoration: InputDecoration(
+                labelText: l.text('dictionarySenseFolderDefinition'),
+              ),
             ),
             TextField(
               controller: _gloss,
-              decoration: InputDecoration(labelText: l.text('dictionarySenseFolderGloss')),
+              decoration: InputDecoration(
+                labelText: l.text('dictionarySenseFolderGloss'),
+              ),
             ),
             TextField(
               controller: _externalRef,
-              decoration: InputDecoration(labelText: l.text('dictionarySenseFolderExternalRef')),
+              decoration: InputDecoration(
+                labelText: l.text('dictionarySenseFolderExternalRef'),
+              ),
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text(l.text('close'))),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(l.text('close')),
+        ),
         FilledButton(
           onPressed: () {
             final label = _label.text.trim();

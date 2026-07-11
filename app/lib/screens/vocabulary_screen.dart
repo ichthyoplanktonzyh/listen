@@ -10,7 +10,6 @@ import '../localization.dart';
 import '../models/practice.dart';
 import '../models/types.dart';
 import '../services/api_service.dart';
-import '../widgets/panels/slice_playback_window.dart';
 import '../widgets/vocabulary/vocabulary_book_view.dart';
 import '../widgets/vocabulary/listening_dictionary_entry_view.dart';
 import '../widgets/vocabulary/vocabulary_transfer_actions.dart';
@@ -185,6 +184,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
       path: (resolution as ResolvedOccurrenceMedia).path,
       occurrence: occurrence,
     );
+    slicePlayer.setShowVideo(true);
   }
 
   Future<void> _playCorpus(CorpusOccurrence occurrence) async {
@@ -428,7 +428,9 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
       if (mounted) setState(() => details = value);
     } catch (error) {
       if (mounted) {
-        _snack(l.text('dictionaryUpdateFailed').replaceAll('{error}', '$error'));
+        _snack(
+          l.text('dictionaryUpdateFailed').replaceAll('{error}', '$error'),
+        );
       }
     }
   }
@@ -634,20 +636,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
           ],
         ],
       ),
-      body: Stack(
-        children: [
-          if (openDetails == null) _bookBody(l) else _detailBody(openDetails),
-          ListenableBuilder(
-            listenable: slicePlayer.store,
-            builder: (context, _) => slicePlayer.state.open
-                ? SlicePlaybackWindow(
-                    controller: slicePlayer,
-                    onClose: slicePlayer.close,
-                  )
-                : const SizedBox.shrink(),
-          ),
-        ],
-      ),
+      body: openDetails == null ? _bookBody(l) : _detailBody(openDetails),
     );
   }
 
@@ -659,6 +648,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
         // never leaks from another word.
         key: ValueKey(value.entry.id),
         details: value,
+        slicePlayer: slicePlayer,
         onPlay: (occurrence) =>
             unawaited(_playOccurrenceMap(occurrence.toJson())),
         onMark: (occurrence, heard) =>
@@ -677,9 +667,22 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
         onSaveContent: (definition, note) =>
             _saveContent(value.entry, definition, note),
         onCreateSenseFolder: (label, definition, gloss, externalRef) =>
-            _createSenseFolder(value.entry, label, definition, gloss, externalRef),
+            _createSenseFolder(
+              value.entry,
+              label,
+              definition,
+              gloss,
+              externalRef,
+            ),
         onUpdateSenseFolder: (id, label, definition, gloss, externalRef) =>
-            _updateSenseFolder(value.entry, id, label, definition, gloss, externalRef),
+            _updateSenseFolder(
+              value.entry,
+              id,
+              label,
+              definition,
+              gloss,
+              externalRef,
+            ),
         onDeleteSenseFolder: (id) => _deleteSenseFolder(value.entry, id),
         onAssignSenseFolder: (senseId, occurrence) =>
             _assignSenseFolder(value.entry, senseId, occurrence),

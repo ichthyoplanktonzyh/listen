@@ -274,6 +274,11 @@ class SlicePlayerController extends ChangeNotifier {
   void toggleVideo() =>
       _store.update((state) => state.copyWith(showVideo: !state.showVideo));
 
+  /// Dictionary detail uses video as the default source-card surface; other
+  /// consumers may still opt into audio-first by calling this explicitly.
+  void setShowVideo(bool value) =>
+      _store.update((state) => state.copyWith(showVideo: value));
+
   Future<void> close() async {
     _generation++;
     _positionTimer?.cancel();
