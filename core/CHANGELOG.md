@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-11 09:58 CST: 3.7–3.10 计划修订为 v2（四份 v1 计划写于 3.4.1/3.5.x/3.6 落地前）。
+  共性：状态语言换四通道 capability 口径、证据链路对齐 ADR 0017/0019、播放对齐 3.5.7
+  双实例架构。个性：3.7 目标定位优先复用 corpus 投影（lemma 归一）+"没注意"不写观察
+  证据 + 狩猎小结挂 extensive-only completion + 标注 3.3 未收口前置；3.8 入口宿主改为
+  3.5.6 练习浮窗第四题型 + shadowing 锁定韵律层 chunk（ADR 0016）+ attempt 排除出
+  content-fit 折算；3.9 corpus connected-speech family 检索明确为新增可重建投影工程量 +
+  LearnerProfile 收窄为补 L1；3.10 删除悬案区回访/卡点解决率（3.5.6 已撤机制）+ 精听不
+  虚构 session 时长 + durable 事实清单对齐 v19–v31 schema + 建议引擎补猎词单联动。
+  STATE.md 同步记录决策。
+
 - 2026-07-11 09:32 CST: 3.6.1 收口后审计修复。SQLite schema v31 为
   `lexical_sense_folder_occurrences` 补 `BEFORE UPDATE` 父词条一致性触发器（0030 只防
   INSERT，assign 的 upsert UPDATE 路径此前仅靠应用层 SQL 守卫）；词典资产导入的义项边
