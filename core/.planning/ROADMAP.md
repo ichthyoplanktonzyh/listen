@@ -1435,19 +1435,22 @@ Phase 3.7–3.10 仍按既有计划完成，不在本轮重排。听力主线与
 “一次一个楔子”的方式验证：
 
 1. 3.11 Semantic Task & Evidence Foundation；
-2. 3.12 Vendor-neutral LLM Provider & Judge Qualification；
-3. 3.13 Reading Studio v1；
-4. 3.14 Speaking Studio v1；
-5. 3.15 Writing Studio v1；
-6. 3.16 Personal Expression；
-7. 3.17 Four-channel Projection & Cross-modal Review；
-8. 3.18 Cross-modal Coach & Four-channel Closeout。
+2. 3.12 Vendor-neutral LLM Provider；
+3. 3.12.1 LLM Judge Qualification（从 3.12 拆出的资格评估，可与 3.13 并行）；
+4. 3.13 Reading Studio v1；
+5. 3.14 Speaking Studio v1；
+6. 3.15 Writing Studio v1；
+7. 3.16 Personal Expression；
+8. 3.17 Four-channel Projection & Cross-modal Review；
+9. 3.18 Cross-modal Coach & Four-channel Closeout。
 
-上述顺序已按依赖固定；每个 Studio 开工前仍允许基于上游真实 QA 缩减范围，但不得跨 phase
-把三个 Studio 合并实施。任何依赖语义理解的评价先建立版本化 rubric / judgment contract
-和 LLM-judge spike；LLM provider 必须厂商中立，初始协议适配
-覆盖 OpenAI Responses / Chat Completions-compatible、Anthropic Messages 与 Gemini native
-API，并允许本地或未来协议 adapter。完整产品与证据边界见
+上述**顺序**已按依赖固定；但各 PLAN 写于 3.7–3.10 开工前，是方向承诺而非执行规格，
+每个 phase 开工前必须按上游落地现状复核修订。每个 Studio 开工前仍允许基于上游真实 QA
+缩减范围，但不得跨 phase 把三个 Studio 合并实施。任何依赖语义理解的评价先建立版本化
+rubric / judgment contract，judge 经 3.12.1 留出集校验才进入学习 surface；LLM provider
+必须厂商中立，首批以两个异构协议（OpenAI Chat Completions-compatible + Anthropic
+Messages）证明中立性，OpenAI Responses / Gemini native 及本地或未来协议 adapter 为
+增量接入。完整产品与证据边界见
 `.planning/discuss/four-channel-product-and-vendor-neutral-llm-final.zh.md`。
 
 ### 14.13 Phase 2.20：Rhythm-first Listening Analysis

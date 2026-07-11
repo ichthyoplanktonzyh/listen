@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- 2026-07-11 12:56 CST: 四通道规划落地后的评审修订。3.12 判定为超载 phase：judge 资格
+  评估（fixture + 人工 gold + 留出集 + 三级资格裁决）拆出为新 Phase 3.12.1（新建
+  `3.12.1-PLAN.md`），3.12 修订 v2 收窄为两个异构协议 adapter（OpenAI-compatible +
+  Anthropic Messages）先证厂商中立、OpenAI Responses/Gemini native 降为增量 slice。
+  统一 judge 三级资格口径（未经留出集校验不进学习 surface / 仅可显示可纠正 feedback /
+  supporting evidence），修复共享上下文 §3.5 与 final 稿 §9 的矛盾。共享上下文新增
+  §3.6 seam 预留裁决标准（解释 3.7 拒绝 FocusTarget 与 3.10 接受 channel-ready
+  envelope 的一致依据）、§3.7 过渡期证据权威与计划保鲜纪律（3.11–3.18 为方向承诺，
+  开工前须按现状修订）。final 讨论稿补修订记录（FINAL 稿改动今后走修订记录）。同步
+  PHASE-BREAKDOWN（序列表/依赖图/执行顺序/全局规则 13）、ROADMAP、REQUIREMENTS
+  （LOOP-013/014）、3.10/3.13/3.14/3.17 计划引用。STATE.md 已完成 3.x phase 条目
+  压缩入索引表（396 → 307 行，恢复 ≤400 余量）。
+
 - 2026-07-11 12:15 CST: 对照四通道最终讨论与现有 3.7–3.10 计划完成路线重排。四份计划
   升级 v3：3.7 保持 listening-only 且新增 3.3/3.35/3.4/3.5 真实 QA Gate Q；3.8 明确为
   shadowing 模仿层，非评分 completion 不得用 `Correct` 伪造 speaking success，并为后续

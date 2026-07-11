@@ -2784,8 +2784,9 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 - 需求：语义评分尺、语义判定和写作反馈通过 application 层厂商中立 provider trait；
   adapter 支持主流原生/兼容 API 格式，领域与 Flutter 不依赖单一厂商 wire contract。
 - 验收标准：
-  - 初始协议覆盖 OpenAI Responses、OpenAI Chat Completions-compatible、Anthropic Messages
-    与 Gemini native content/interaction API，具体可用能力由 descriptor 声明或探测。
+  - 首批以两个异构协议（OpenAI Chat Completions-compatible、Anthropic Messages）通过
+    同一契约测试证明中立性；OpenAI Responses 与 Gemini native content/interaction API
+    为增量 adapter，接入不得改动领域契约。具体可用能力由 descriptor 声明或探测。
   - base URL、model ID、认证引用、费用/并发限制与允许用途可按 provider profile 配置。
   - 新增协议 adapter 不改写 `SemanticRubric`、`SemanticJudgment` 或 capability 语义。
   - 密钥不进入普通 SQLite、日志、LLTimeline 或 portable learning bundle。
@@ -2794,9 +2795,11 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 ### LOOP-014：LLM 判断 provenance 与资格门禁
 
 - 优先级：P1
-- 阶段：Phase 3.12
-- 需求：LLM 判定同时记录来源与验证等级；未经独立人工评估的 judge 只提供可纠正的
-  heuristic feedback，不直接获得长期 capability projection 写入资格。
+- 阶段：Phase 3.12（provenance）/ 3.12.1（资格评估与裁决）
+- 需求：LLM 判定同时记录来源与验证等级；资格分三级——未经留出集人工校验的 judge
+  输出不进入学习 surface，通过校验后提供可纠正的 heuristic feedback，仅在更大规模
+  评估与 confirmation gate 后才可作 supporting evidence，永不直接获得长期 capability
+  projection 写入资格。
 - 验收标准：
   - 保存 adapter、模型、prompt、rubric/schema version、输入快照 hash、结构化输出与
     validation class；模型升级不回写历史判断。

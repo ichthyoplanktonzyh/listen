@@ -7,6 +7,14 @@
 > 范围：产品定位、听说读写扩展、两层复述、语义判定证据边界与厂商中立 LLM provider。
 > 本文是后续 phase / ADR 的产品输入，不修改既有冻结 phase 的历史范围。
 
+修订记录：
+
+- v3（2026-07-11）：评审后拆分——judge 资格评估独立为 Phase 3.12.1；§7.2 首批协议
+  收窄为两个异构 adapter 先证中立，其余为增量；§11 行动顺序同步。FINAL 稿今后改动
+  一律走本修订记录。
+- v2（2026-07-11）：§11 行动顺序对齐 3.11–3.18 具体 phase 编号（随全量落地 commit）。
+- v1（2026-07-11）：初版最终讨论决定。
+
 ---
 
 ## 1. 最终产品定位
@@ -161,19 +169,22 @@ protocol adapter
 不能把 OpenAI `messages`、Anthropic content blocks 或 Gemini `contents/parts` 暴露为
 application trait；否则名义上多厂商，领域仍被某一协议绑架。
 
-### 7.2 初始主流协议覆盖
+### 7.2 协议覆盖：先证中立，再增量
 
-首个实现阶段覆盖协议族，而不是硬编码厂商品牌：
+目标是覆盖协议族而不是硬编码厂商品牌，但**首批只做两个异构协议**——中立性用两个
+结构不同的协议通过同一契约测试即可证明，四个 adapter 齐发是超载（v3 修订）：
 
-1. **OpenAI Responses**；
-2. **OpenAI Chat Completions-compatible**：base URL、headers、model ID 可配置；
-3. **Anthropic Messages**；
-4. **Gemini native API**：支持 content / interaction 路径，不要求经 OpenAI 代理；
-5. **本地 OpenAI-compatible 服务**：如 Ollama，但必须探测其实际 structured output、
-   streaming 和模型能力，不能因 endpoint 兼容就假设语义完全兼容。
+- **首批（3.12 Slice 1）**：
+  1. **OpenAI Chat Completions-compatible**：base URL、headers、model ID 可配置，
+     一并覆盖本地 OpenAI-compatible 服务（如 Ollama——必须探测其实际 structured
+     output、streaming 和模型能力，不能因 endpoint 兼容就假设语义完全兼容）；
+  2. **Anthropic Messages**：结构不同的 content block 协议。
+- **增量（3.12 Slice 2，owner 按真实使用需求排期）**：
+  3. **OpenAI Responses**；
+  4. **Gemini native API**：支持 content / interaction 路径，不要求经 OpenAI 代理。
 
 外部 API 会演进，支持列表由 adapter capability descriptor 表达。新增协议只新增 adapter，
-不改变 rubric、judgment 或 capability 语义。
+不改变 rubric、judgment 或 capability 语义——这是首批两个 adapter 必须证明的性质。
 
 ### 7.3 Provider profile 与安全
 
@@ -207,7 +218,8 @@ validation_class = heuristic_proxy | manual_product_qa | ...
 
 ## 9. LLM-judge spike 与资格门禁
 
-十余条样本只足以验证管线，不能授予 capability 写入资格。Spike 必须：
+本节要求由独立的 **Phase 3.12.1** 承担（v3 修订：从 3.12 拆出）。十余条样本只足以
+验证管线，不能授予 capability 写入资格。Spike 必须：
 
 1. 先定义 Rubric/Judgment contract；
 2. 开发集与独立留出集分离；
@@ -233,13 +245,14 @@ validation_class = heuristic_proxy | manual_product_qa | ...
 1. Gate Q：关闭或逐项明确豁免 3.3/3.35/3.4/3.5 的真实媒体 QA 债务；
 2. 完成 Phase 3.7–3.10 听力主线；
 3. Phase 3.11：Semantic Task & Evidence Foundation；
-4. Phase 3.12：Vendor-neutral LLM Provider & Judge Qualification；
-5. Phase 3.13：Reading Studio v1；
-6. Phase 3.14：Speaking Studio v1；
-7. Phase 3.15：Writing Studio v1；
-8. Phase 3.16：Personal Expression；
-9. Phase 3.17：Four-channel Projection & Cross-modal Review；
-10. Phase 3.18：Cross-modal Coach & Four-channel Closeout。
+4. Phase 3.12：Vendor-neutral LLM Provider（两个异构协议先证中立）；
+5. Phase 3.12.1：LLM Judge Qualification（资格评估独立收口，可与 3.13 并行）；
+6. Phase 3.13：Reading Studio v1；
+7. Phase 3.14：Speaking Studio v1；
+8. Phase 3.15：Writing Studio v1；
+9. Phase 3.16：Personal Expression；
+10. Phase 3.17：Four-channel Projection & Cross-modal Review；
+11. Phase 3.18：Cross-modal Coach & Four-channel Closeout。
 
 一次只推进一个 Studio，不把 Reading/Speaking/Writing 合并成单次大爆炸交付。
 
