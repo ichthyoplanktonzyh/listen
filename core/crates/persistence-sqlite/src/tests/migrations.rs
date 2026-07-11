@@ -584,6 +584,38 @@ fn upgrades_historical_v10_database_and_adds_lltimeline_resources() {
 }
 
 #[test]
+fn upgrades_v30_database_with_sense_folder_update_guard() {
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    connection
+        .execute_batch(
+            "DROP TRIGGER validate_lexical_sense_folder_occurrence_parent_update;
+             PRAGMA user_version=30;",
+        )
+        .unwrap();
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger'
+                 AND name='validate_lexical_sense_folder_occurrence_parent_update'",
+                [],
+                |row| row.get::<_, u32>(0),
+            )
+            .unwrap(),
+        1
+    );
+}
+
+#[test]
 fn upgrades_v29_database_with_empty_optional_sense_folders() {
     let connection = Connection::open_in_memory().unwrap();
     migrate(&connection).unwrap();

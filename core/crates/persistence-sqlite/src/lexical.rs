@@ -46,14 +46,17 @@ impl SqliteRepository {
             .map_err(repo)?;
         }
         for assignment in assignments {
-            // The migration trigger validates entry-parent agreement; invalid or
-            // missing imported edges are ignored rather than fabricating data.
+            // Missing or cross-entry imported edges are skipped rather than
+            // fabricating data. The entry-agreement predicate must live here in
+            // the SELECT: the migration triggers RAISE(ABORT), which `OR
+            // IGNORE` does not downgrade, so relying on them would fail the
+            // whole import instead of skipping the one corrupt edge.
             tx.execute(
                 "INSERT OR IGNORE INTO lexical_sense_folder_occurrences
                  (lexical_sense_id,lexical_occurrence_id)
                  SELECT ?1,?2
-                 WHERE EXISTS(SELECT 1 FROM lexical_sense_folders WHERE id=?1)
-                   AND EXISTS(SELECT 1 FROM lexical_occurrences WHERE id=?2)",
+                 WHERE (SELECT lexical_entry_id FROM lexical_sense_folders WHERE id=?1)
+                     = (SELECT lexical_entry_id FROM lexical_occurrences WHERE id=?2)",
                 params![
                     assignment.lexical_sense_id.as_str(),
                     assignment.lexical_occurrence_id.as_str(),
@@ -545,7 +548,7 @@ impl LearningAssetRepository for SqliteRepository {
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(repo)?
         };
-        let capability_profile = read_capability_profile(&conn, &id, None)?;
+        let capability_profile = read_capability_profile(&conn, id, None)?;
         let sense_folders = read_lexical_sense_folder_details(&conn, id)?;
         Ok(Some(LexicalEntryDetails {
             entry,

@@ -80,6 +80,109 @@ fn sense_folders_are_optional_local_organizers_with_entry_scoped_assignments() {
 }
 
 #[test]
+fn sense_folder_moves_stay_entry_scoped_and_import_skips_corrupt_edges() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(), repo.clone(), repo.clone(), repo.clone(), repo.clone(), repo.clone(),
+        repo.clone(), repo.clone(),
+    );
+    let source = |form: &str, sentence: &str| application::LexicalSourceContext {
+        media_id: None,
+        sentence_id: None,
+        original_form: form.into(),
+        sentence_text: sentence.into(),
+        media_title: "Source".into(),
+        media_fingerprint: "source".into(),
+        start_ms: 10,
+        end_ms: 20,
+        token_start: Some(1),
+        token_end: Some(1),
+    };
+    let run = upsert_word_asset(
+        &services, "en", "run", "run", None,
+        Some(source("runs", "She runs a business.")),
+    );
+    let walk = upsert_word_asset(
+        &services, "en", "walk", "walk", None,
+        Some(source("walks", "He walks home.")),
+    );
+    let run_occurrence = run.occurrences[0].clone();
+    let walk_occurrence = walk.occurrences[0].clone();
+
+    let business = services
+        .create_lexical_sense_folder(&run.entry.id, "operate a business".into(), None, None, None)
+        .unwrap();
+    let physical = services
+        .create_lexical_sense_folder(&run.entry.id, "move fast on foot".into(), None, None, None)
+        .unwrap();
+    let walk_folder = services
+        .create_lexical_sense_folder(&walk.entry.id, "travel on foot".into(), None, None, None)
+        .unwrap();
+
+    // Reassigning is a move: the occurrence lives in exactly one folder.
+    services
+        .assign_occurrence_to_lexical_sense_folder(&run.entry.id, &business.id, &run_occurrence.id)
+        .unwrap();
+    services
+        .assign_occurrence_to_lexical_sense_folder(&run.entry.id, &physical.id, &run_occurrence.id)
+        .unwrap();
+    let details = services.lexical_details(&run.entry.id).unwrap().unwrap();
+    let folder_occurrences = |label: &str| {
+        details
+            .sense_folders
+            .iter()
+            .find(|candidate| candidate.folder.label == label)
+            .unwrap()
+            .occurrences
+            .clone()
+    };
+    assert!(folder_occurrences("operate a business").is_empty());
+    assert_eq!(folder_occurrences("move fast on foot"), vec![run_occurrence.clone()]);
+
+    // The 0031 UPDATE trigger rejects cross-entry moves that bypass the
+    // application-level guard.
+    let error = repo
+        .connection
+        .lock()
+        .unwrap()
+        .execute(
+            "UPDATE lexical_sense_folder_occurrences SET lexical_sense_id=?1
+             WHERE lexical_occurrence_id=?2",
+            params![walk_folder.id.as_str(), run_occurrence.id.as_str()],
+        )
+        .unwrap_err();
+    assert!(error.to_string().contains("share lexical entry"), "{error}");
+
+    // A corrupt cross-entry edge in an imported bundle is skipped, not a
+    // whole-import failure.
+    let mut bundle = services.export_vocabulary().unwrap();
+    bundle
+        .lexical_sense_folder_occurrences
+        .push(LexicalSenseFolderOccurrence {
+            lexical_sense_id: business.id.clone(),
+            lexical_occurrence_id: walk_occurrence.id.clone(),
+        });
+    let restored_repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let restored = AppServices::new(
+        restored_repo.clone(), restored_repo.clone(), restored_repo.clone(), restored_repo.clone(),
+        restored_repo.clone(), restored_repo.clone(), restored_repo.clone(), restored_repo,
+    );
+    restored.import_vocabulary(&bundle).unwrap();
+    let restored_run = restored.lexical_details(&run.entry.id).unwrap().unwrap();
+    let restored_business = restored_run
+        .sense_folders
+        .iter()
+        .find(|candidate| candidate.folder.label == "operate a business")
+        .unwrap();
+    assert!(restored_business.occurrences.is_empty(), "corrupt edge skipped");
+    let restored_walk = restored.lexical_details(&walk.entry.id).unwrap().unwrap();
+    assert!(
+        restored_walk.sense_folders[0].occurrences.is_empty(),
+        "walk occurrence stays unassigned"
+    );
+}
+
+#[test]
 fn learning_observations_append_without_replacing_prior_rows() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = AppServices::new(

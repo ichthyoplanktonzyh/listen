@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-11 09:32 CST: 3.6.1 收口后审计修复。SQLite schema v31 为
+  `lexical_sense_folder_occurrences` 补 `BEFORE UPDATE` 父词条一致性触发器（0030 只防
+  INSERT，assign 的 upsert UPDATE 路径此前仅靠应用层 SQL 守卫）；词典资产导入的义项边
+  改为显式词条一致性谓词——原实现依赖触发器 `RAISE(ABORT)` 兜底，而 `OR IGNORE` 不降级
+  ABORT，脏边会令整个导入失败而非按注释所称被跳过（已用 sqlite 实验证实）。新增测试：
+  切片跨文件夹移动语义、UPDATE 触发器拒绝跨词条改写、脏边导入被跳过、v30→v31 迁移。
+  顺手清理 lexical.rs 既有 needless_borrow clippy 警告。验证：persistence 83 +
+  application 50 + api-http 35/12 全绿，clippy persistence-sqlite 零警告。
+
 - 2026-07-11 08:48 CST: 重排底部 compact 迷你播放器为三段式布局：媒体信息改为圆形媒体标识、
   标题与时间双行展示，上一句/播放暂停/下一句居中且强化主播放按钮，倍速、静音和工作台展开
   收至右侧；进度条贴合播放器顶边，并为窄窗口保留自适应收缩。新增 compact widget 布局回归测试。
