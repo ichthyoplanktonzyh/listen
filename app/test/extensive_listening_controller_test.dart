@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/extensive_listening_controller.dart';
+import 'package:llplayer_next/models/practice.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
@@ -126,7 +127,16 @@ void main() {
     expect(processed?.resolution, 'review_item');
     expect(controller.items, isEmpty);
     expect(
-      await controller.finishSession(api, comprehensionReport: 'got_the_gist'),
+      await controller.finishSession(
+        api,
+        comprehensionReport: 'got_the_gist',
+        huntingSummary: const HuntingCompletionSummary(
+          promptedCount: 3,
+          recognizedCount: 1,
+          notRecognizedCount: 1,
+          notNoticedCount: 1,
+        ),
+      ),
       isTrue,
     );
     expect(controller.active, isFalse);
@@ -135,7 +145,19 @@ void main() {
         (request) =>
             request.path == '/v1/listening/sessions/session-1/complete' &&
             (request.body as Map<String, dynamic>)['comprehension_report'] ==
-                'got_the_gist',
+                'got_the_gist' &&
+            (request.body
+                    as Map<
+                      String,
+                      dynamic
+                    >)['hunting_summary']['prompted_count'] ==
+                3 &&
+            (request.body
+                    as Map<
+                      String,
+                      dynamic
+                    >)['hunting_summary']['recognized_count'] ==
+                1,
       ),
       isTrue,
     );

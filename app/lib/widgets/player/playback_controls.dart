@@ -32,6 +32,7 @@ class PlaybackControls extends StatelessWidget {
     required this.status,
     required this.taskStatuses,
     required this.extensiveListeningActive,
+    this.huntingActive = false,
     required this.listeningMarkEnabled,
     required this.listeningInboxCount,
     required this.onSeek,
@@ -59,6 +60,7 @@ class PlaybackControls extends StatelessWidget {
     required this.onPrimaryOffsetChanged,
     required this.onSecondaryOffsetChanged,
     required this.onToggleExtensiveListening,
+    this.onToggleHunting,
     required this.onCaptureListeningInbox,
     required this.onHardInterruptListening,
     this.isCompact = false,
@@ -89,6 +91,7 @@ class PlaybackControls extends StatelessWidget {
   final String status;
   final List<UserTaskStatus> taskStatuses;
   final bool extensiveListeningActive;
+  final bool huntingActive;
   final bool listeningMarkEnabled;
   final int listeningInboxCount;
   final bool chunkControlsEnabled;
@@ -117,6 +120,7 @@ class PlaybackControls extends StatelessWidget {
   final ValueChanged<Duration> onPrimaryOffsetChanged;
   final ValueChanged<Duration> onSecondaryOffsetChanged;
   final VoidCallback onToggleExtensiveListening;
+  final VoidCallback? onToggleHunting;
   final VoidCallback onCaptureListeningInbox;
   final VoidCallback onHardInterruptListening;
   final bool isCompact;
@@ -492,6 +496,7 @@ class PlaybackControls extends StatelessWidget {
               if (value == 'toggle-listening') {
                 onToggleExtensiveListening();
               }
+              if (value == 'toggle-hunting') onToggleHunting?.call();
               if (value == 'mark-inbox') onCaptureListeningInbox();
               if (value == 'hard-interrupt') onHardInterruptListening();
             },
@@ -508,8 +513,18 @@ class PlaybackControls extends StatelessWidget {
                 ),
               ),
               PopupMenuItem(
+                value: 'toggle-hunting',
+                enabled: listeningMarkEnabled && onToggleHunting != null,
+                child: _PlaybackMenuRow(
+                  icon: huntingActive ? Icons.gps_fixed : Icons.gps_not_fixed,
+                  title: huntingActive
+                      ? l.text('huntingStopMode')
+                      : l.text('huntingStartMode'),
+                ),
+              ),
+              PopupMenuItem(
                 value: 'mark-inbox',
-                enabled: listeningMarkEnabled,
+                enabled: listeningMarkEnabled && onToggleHunting != null,
                 child: _PlaybackMenuRow(
                   icon: Icons.bookmark_add_outlined,
                   title: l.text('markListeningInbox'),
@@ -640,6 +655,8 @@ class PlaybackControls extends StatelessWidget {
               switch (value) {
                 case 'toggle-listening':
                   onToggleExtensiveListening();
+                case 'toggle-hunting':
+                  onToggleHunting?.call();
                 case 'mark-inbox':
                   onCaptureListeningInbox();
                 case 'hard-interrupt':
@@ -683,6 +700,16 @@ class PlaybackControls extends StatelessWidget {
                   title: extensiveListeningActive
                       ? l.text('finishExtensiveListening')
                       : l.text('startExtensiveListening'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'toggle-hunting',
+                enabled: listeningMarkEnabled,
+                child: _PlaybackMenuRow(
+                  icon: huntingActive ? Icons.gps_fixed : Icons.gps_not_fixed,
+                  title: huntingActive
+                      ? l.text('huntingStopMode')
+                      : l.text('huntingStartMode'),
                 ),
               ),
               PopupMenuItem(

@@ -6,6 +6,7 @@ import '../../controllers/media_session_coordinator.dart';
 import '../../controllers/playback_actions_coordinator.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/extensive_listening_controller.dart';
+import '../../controllers/hunting_session_controller.dart';
 import '../../controllers/subtitle_controller.dart';
 import '../../localization.dart';
 import '../../models/timeline.dart';
@@ -22,12 +23,14 @@ class PlaybackBar extends StatefulWidget {
     required this.adapter,
     required this.playerController,
     required this.extensiveListeningController,
+    required this.huntingSessionController,
     required this.subtitleController,
     required this.mediaSession,
     required this.playbackActions,
     required this.taskStatuses,
     required this.onSeekCue,
     required this.onToggleExtensiveListening,
+    required this.onToggleHunting,
     required this.onCaptureListeningInbox,
     required this.onHardInterruptListening,
     required this.onSaveSettings,
@@ -39,12 +42,14 @@ class PlaybackBar extends StatefulWidget {
   final DesktopPlayerAdapter adapter;
   final PlayerController playerController;
   final ExtensiveListeningController extensiveListeningController;
+  final HuntingSessionController huntingSessionController;
   final SubtitleController subtitleController;
   final MediaSessionCoordinator mediaSession;
   final PlaybackActionsCoordinator playbackActions;
   final List<UserTaskStatus> taskStatuses;
   final Future<void> Function(Cue? cue) onSeekCue;
   final Future<void> Function() onToggleExtensiveListening;
+  final Future<void> Function() onToggleHunting;
   final Future<void> Function() onCaptureListeningInbox;
   final Future<void> Function() onHardInterruptListening;
   final Future<void> Function() onSaveSettings;
@@ -103,6 +108,7 @@ class _PlaybackBarState extends State<PlaybackBar> {
       status: status,
       taskStatuses: taskStatuses,
       extensiveListeningActive: extensiveListeningController.active,
+      huntingActive: widget.huntingSessionController.state.enabled,
       listeningMarkEnabled: subtitleController.currentPrimaryCue != null,
       listeningInboxCount: extensiveListeningController.activeItemCount,
       onSeek: (value) => adapter.seek(value),
@@ -176,6 +182,7 @@ class _PlaybackBarState extends State<PlaybackBar> {
         unawaited(_saveSettings());
       },
       onToggleExtensiveListening: () => unawaited(_toggleExtensiveListening()),
+      onToggleHunting: () => unawaited(widget.onToggleHunting()),
       onCaptureListeningInbox: () => unawaited(_captureListeningInbox()),
       onHardInterruptListening: () => unawaited(_hardInterruptListening()),
       isCompact: widget.isCompact,

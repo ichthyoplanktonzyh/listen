@@ -5,6 +5,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../controllers/occurrence_media_resolver.dart';
+import '../controllers/hunting_controller.dart';
 import '../controllers/slice_player_controller.dart';
 import '../localization.dart';
 import '../models/practice.dart';
@@ -12,6 +13,7 @@ import '../models/types.dart';
 import '../services/api_service.dart';
 import '../widgets/vocabulary/vocabulary_book_view.dart';
 import '../widgets/vocabulary/listening_dictionary_entry_view.dart';
+import '../widgets/vocabulary/hunting_list_panel.dart';
 import '../widgets/vocabulary/vocabulary_transfer_actions.dart';
 
 class VocabularyScreen extends StatefulWidget {
@@ -21,6 +23,7 @@ class VocabularyScreen extends StatefulWidget {
     required this.language,
     required this.onExport,
     required this.onImport,
+    required this.huntingController,
     this.initialEntryId,
     this.onPauseBackgroundPlayback,
   });
@@ -29,6 +32,7 @@ class VocabularyScreen extends StatefulWidget {
   final String language;
   final Future<void> Function() onExport;
   final Future<void> Function() onImport;
+  final HuntingController huntingController;
   final String? initialEntryId;
 
   /// Pauses whatever is playing behind this route (the primary player) so a
@@ -66,11 +70,13 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   /// The dictionary hosts its own second-decoder slice playback so playing an
   /// example never leaves this screen or touches the primary player.
   final SlicePlayerController slicePlayer = SlicePlayerController();
+  HuntingController get hunting => widget.huntingController;
 
   @override
   void initState() {
     super.initState();
     unawaited(_load());
+    unawaited(hunting.load(widget.api));
     final initialEntryId = widget.initialEntryId;
     if (initialEntryId != null) {
       unawaited(_openEntryById(initialEntryId));
@@ -556,6 +562,65 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     }
   }
 
+  Future<void> _openHuntingList() async {
+    await hunting.load(widget.api);
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * 0.72,
+          child: HuntingListPanel(
+            controller: hunting,
+            onRefresh: () async {
+              await hunting.load(widget.api);
+            },
+            onPromoteCandidate: (candidate) async {
+              final saved = await hunting.promoteCandidate(
+                widget.api,
+                candidate,
+              );
+              if (mounted && saved) {
+                _snack(AppLocalizations.of(context).text('huntingAdded'));
+              }
+            },
+            onArchiveTarget: (target) async {
+              final saved = await hunting.archive(widget.api, target);
+              if (mounted && saved) {
+                _snack(AppLocalizations.of(context).text('huntingArchived'));
+              }
+            },
+            onOpenEntry: (entryId) {
+              Navigator.of(sheetContext).pop();
+              unawaited(_openEntryById(entryId));
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _addToHuntingList(LexicalEntry entry) async {
+    final l = AppLocalizations.of(context);
+    if (hunting.state.containsLexicalEntry(entry.id)) {
+      _snack(l.text('huntingAlreadyAdded'));
+      return;
+    }
+    final saved = await hunting.addManual(widget.api, entry);
+    if (!mounted) return;
+    if (saved) {
+      _snack(l.text('huntingAdded'));
+    } else if (hunting.state.error != null) {
+      _snack(
+        l
+            .text('huntingUpdateFailed')
+            .replaceAll('{error}', hunting.state.error!),
+      );
+    }
+  }
+
   Future<bool> _markOccurrence(
     LexicalEntry entry,
     LexicalOccurrence occurrence,
@@ -608,35 +673,64 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final openDetails = details;
-    return Scaffold(
-      appBar: AppBar(
-        leading: openDetails == null
-            ? null
-            : BackButton(onPressed: _closeDetails),
-        title: Text(
-          openDetails?.entry.displayForm ?? l.text('listeningDictionary'),
-        ),
-        actions: [
-          if (openDetails != null)
-            TextButton.icon(
-              onPressed: () => unawaited(_addToReview(openDetails.entry)),
-              icon: const Icon(Icons.queue_music_outlined, size: 18),
-              label: Text(l.text('dictionaryAddToReview')),
-            )
-          else ...[
+    return ListenableBuilder(
+      listenable: hunting,
+      builder: (context, _) => Scaffold(
+        appBar: AppBar(
+          leading: openDetails == null
+              ? null
+              : BackButton(onPressed: _closeDetails),
+          title: Text(
+            openDetails?.entry.displayForm ?? l.text('listeningDictionary'),
+          ),
+          actions: [
             IconButton(
-              tooltip: l.text('dictionaryReindex'),
-              onPressed: () => unawaited(_reindexCorpus()),
-              icon: const Icon(Icons.manage_search_outlined),
+              tooltip: l.text('huntingOpen'),
+              onPressed: () => unawaited(_openHuntingList()),
+              icon: Badge(
+                isLabelVisible: hunting.state.targets.isNotEmpty,
+                label: Text('${hunting.state.targets.length}'),
+                child: const Icon(Icons.gps_fixed),
+              ),
             ),
-            VocabularyTransferActions(
-              onExport: widget.onExport,
-              onImport: widget.onImport,
-            ),
+            if (openDetails != null)
+              IconButton(
+                tooltip:
+                    hunting.state.containsLexicalEntry(openDetails.entry.id)
+                    ? l.text('huntingAlreadyAdded')
+                    : l.text('huntingAddCurrent'),
+                onPressed:
+                    hunting.state.busy ||
+                        hunting.state.containsLexicalEntry(openDetails.entry.id)
+                    ? null
+                    : () => unawaited(_addToHuntingList(openDetails.entry)),
+                icon: Icon(
+                  hunting.state.containsLexicalEntry(openDetails.entry.id)
+                      ? Icons.gps_fixed
+                      : Icons.add_location_alt_outlined,
+                ),
+              ),
+            if (openDetails != null)
+              TextButton.icon(
+                onPressed: () => unawaited(_addToReview(openDetails.entry)),
+                icon: const Icon(Icons.queue_music_outlined, size: 18),
+                label: Text(l.text('dictionaryAddToReview')),
+              )
+            else ...[
+              IconButton(
+                tooltip: l.text('dictionaryReindex'),
+                onPressed: () => unawaited(_reindexCorpus()),
+                icon: const Icon(Icons.manage_search_outlined),
+              ),
+              VocabularyTransferActions(
+                onExport: widget.onExport,
+                onImport: widget.onImport,
+              ),
+            ],
           ],
-        ],
+        ),
+        body: openDetails == null ? _bookBody(l) : _detailBody(openDetails),
       ),
-      body: openDetails == null ? _bookBody(l) : _detailBody(openDetails),
     );
   }
 

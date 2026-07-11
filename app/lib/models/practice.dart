@@ -1,3 +1,5 @@
+import 'types.dart';
+
 class PracticeSession {
   const PracticeSession({
     required this.id,
@@ -57,6 +59,27 @@ class CreatePracticeSession {
     'media_id': mediaId,
     'track_id': trackId,
     'source': source,
+  };
+}
+
+class HuntingCompletionSummary {
+  const HuntingCompletionSummary({
+    required this.promptedCount,
+    required this.recognizedCount,
+    required this.notRecognizedCount,
+    required this.notNoticedCount,
+  });
+
+  final int promptedCount;
+  final int recognizedCount;
+  final int notRecognizedCount;
+  final int notNoticedCount;
+
+  Map<String, dynamic> toJson() => {
+    'prompted_count': promptedCount,
+    'recognized_count': recognizedCount,
+    'not_recognized_count': notRecognizedCount,
+    'not_noticed_count': notNoticedCount,
   };
 }
 
@@ -564,6 +587,149 @@ class ReviewSubmission {
   final List<String> generatedObservationIds;
   final List<String> huntingCandidateIds;
   final List<UpgradeSuggestion> upgradeSuggestions;
+}
+
+class HuntingCandidate {
+  const HuntingCandidate({
+    required this.id,
+    required this.lexicalEntryId,
+    required this.reviewItemId,
+    required this.targetSnapshot,
+    required this.promptSnapshot,
+    required this.failureCount,
+    required this.status,
+    required this.createdAtMs,
+    required this.lastFailedAtMs,
+    this.sentenceId,
+    this.mediaId,
+    this.trackId,
+  });
+
+  factory HuntingCandidate.fromJson(Map<String, dynamic> json) =>
+      HuntingCandidate(
+        id: json['id'] as String,
+        lexicalEntryId: json['lexical_entry_id'] as String,
+        reviewItemId: json['review_item_id'] as String,
+        sentenceId: json['sentence_id'] as String?,
+        mediaId: json['media_id'] as String?,
+        trackId: json['track_id'] as String?,
+        targetSnapshot: json['target_snapshot'] as String,
+        promptSnapshot: json['prompt_snapshot'] as String,
+        failureCount: json['failure_count'] as int,
+        status: json['status'] as String,
+        createdAtMs: json['created_at_ms'] as int,
+        lastFailedAtMs: json['last_failed_at_ms'] as int,
+      );
+
+  final String id;
+  final String lexicalEntryId;
+  final String reviewItemId;
+  final String? sentenceId;
+  final String? mediaId;
+  final String? trackId;
+  final String targetSnapshot;
+  final String promptSnapshot;
+  final int failureCount;
+  final String status;
+  final int createdAtMs;
+  final int lastFailedAtMs;
+}
+
+class HuntingTarget {
+  const HuntingTarget({
+    required this.id,
+    required this.lexicalEntryId,
+    required this.sourceKind,
+    required this.targetSnapshot,
+    required this.status,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+    this.sourceId,
+  });
+
+  factory HuntingTarget.fromJson(Map<String, dynamic> json) => HuntingTarget(
+    id: json['id'] as String,
+    lexicalEntryId: json['lexical_entry_id'] as String,
+    sourceKind: json['source_kind'] as String,
+    sourceId: json['source_id'] as String?,
+    targetSnapshot: json['target_snapshot'] as String,
+    status: json['status'] as String,
+    createdAtMs: json['created_at_ms'] as int,
+    updatedAtMs: json['updated_at_ms'] as int,
+  );
+
+  final String id;
+  final String lexicalEntryId;
+  final String sourceKind;
+  final String? sourceId;
+  final String targetSnapshot;
+  final String status;
+  final int createdAtMs;
+  final int updatedAtMs;
+}
+
+class HuntingOccurrence {
+  const HuntingOccurrence({
+    required this.targetId,
+    required this.lexicalEntryId,
+    required this.targetSnapshot,
+    required this.occurrence,
+  });
+
+  factory HuntingOccurrence.fromJson(Map<String, dynamic> json) =>
+      HuntingOccurrence(
+        targetId: json['target_id'] as String,
+        lexicalEntryId: json['lexical_entry_id'] as String,
+        targetSnapshot: json['target_snapshot'] as String,
+        occurrence: CorpusOccurrence.fromJson(
+          json['occurrence'] as Map<String, dynamic>,
+        ),
+      );
+
+  final String targetId;
+  final String lexicalEntryId;
+  final String targetSnapshot;
+  final CorpusOccurrence occurrence;
+}
+
+class HuntingOccurrenceQueryResult {
+  const HuntingOccurrenceQueryResult({
+    required this.indexed,
+    required this.occurrences,
+  });
+
+  factory HuntingOccurrenceQueryResult.fromJson(Map<String, dynamic> json) =>
+      HuntingOccurrenceQueryResult(
+        indexed: json['indexed'] as bool,
+        occurrences: (json['occurrences'] as List<dynamic>)
+            .map(
+              (value) =>
+                  HuntingOccurrence.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+      );
+
+  final bool indexed;
+  final List<HuntingOccurrence> occurrences;
+}
+
+class HuntingCheckResult {
+  const HuntingCheckResult({
+    required this.answer,
+    required this.eventId,
+    this.observationId,
+  });
+
+  factory HuntingCheckResult.fromJson(Map<String, dynamic> json) =>
+      HuntingCheckResult(
+        answer: json['answer'] as String,
+        eventId: json['event_id'] as String,
+        observationId: json['observation_id'] as String?,
+      );
+
+  final String answer;
+  final String eventId;
+  final String? observationId;
 }
 
 class UpgradeSuggestion {

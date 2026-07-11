@@ -95,6 +95,7 @@ class ExtensiveListeningController extends ChangeNotifier {
   Future<bool> finishSession(
     LocalApi? api, {
     String? comprehensionReport,
+    HuntingCompletionSummary? huntingSummary,
   }) async {
     final current = session;
     if (api == null || current == null) {
@@ -105,6 +106,7 @@ class ExtensiveListeningController extends ChangeNotifier {
       final session = await api.completeListeningSession(
         current.id,
         comprehensionReport: comprehensionReport,
+        huntingSummary: huntingSummary,
       );
       final items = await api.listeningInboxItems();
       _store.update(
