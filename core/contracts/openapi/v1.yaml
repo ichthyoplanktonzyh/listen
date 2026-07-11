@@ -1086,6 +1086,86 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ListeningInboxItem" }
+  /v1/hunting/candidates:
+    get:
+      operationId: listHuntingCandidates
+      parameters:
+        - { name: status, in: query, required: false, schema: { $ref: "#/components/schemas/HuntingCandidateStatus" } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 0 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: Review-failure candidates awaiting an explicit user decision
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/HuntingCandidate" }
+  /v1/hunting/targets:
+    get:
+      operationId: listHuntingTargets
+      parameters:
+        - { name: status, in: query, required: false, schema: { $ref: "#/components/schemas/HuntingTargetStatus" } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 0 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: Learner-confirmed listening targets
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/HuntingTarget" }
+    post:
+      operationId: createHuntingTarget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateHuntingTargetInput" }
+      responses:
+        "200":
+          description: Created or reactivated hunting target
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HuntingTarget" }
+  /v1/hunting/targets/{id}:
+    delete:
+      operationId: archiveHuntingTarget
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Archived hunting target
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HuntingTarget" }
+  /v1/hunting/occurrences:
+    get:
+      operationId: listHuntingOccurrences
+      parameters:
+        - { name: media_id, in: query, required: true, schema: { type: string } }
+        - { name: track_id, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: Confirmed hunting targets located in the current media corpus
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HuntingOccurrenceQueryResult" }
+  /v1/hunting/checks:
+    post:
+      operationId: submitHuntingCheck
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SubmitHuntingCheckInput" }
+      responses:
+        "200":
+          description: Recorded a three-way hunting check answer
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HuntingCheckResult" }
   /v1/review/items:
     get:
       operationId: listDueReviewItems
@@ -2876,9 +2956,9 @@ components:
     ReviewRating:
       enum: [again, hard, good, easy]
     LearningEventKind:
-      enum: [listening_started, listening_completed, practice_completed, review_completed, status_changed, stuck_point_marked, stuck_point_skipped, diagnosis_viewed, stuck_point_closed, familiar_material_marked, listening_inbox_captured, listening_inbox_processed]
+      enum: [listening_started, listening_completed, practice_completed, review_completed, status_changed, stuck_point_marked, stuck_point_skipped, diagnosis_viewed, stuck_point_closed, familiar_material_marked, listening_inbox_captured, listening_inbox_processed, hunting_check_answered]
     LearningEventSubjectKind:
-      enum: [media, sentence, chunk, lexical_entry, review_item, practice_attempt, practice_session, listening_inbox_item]
+      enum: [media, sentence, chunk, lexical_entry, review_item, practice_attempt, practice_session, listening_inbox_item, hunting_target]
     ListeningComprehensionReport:
       enum: [understood_all, got_the_gist, unclear]
     ListeningInboxStatus:
@@ -3065,6 +3145,84 @@ components:
         generated_observation_ids: { type: array, items: { type: string } }
         hunting_candidate_ids: { type: array, items: { type: string } }
         upgrade_suggestions: { type: array, items: { $ref: "#/components/schemas/UpgradeSuggestion" } }
+    HuntingCandidateStatus:
+      type: string
+      enum: [active, consumed, dismissed]
+    HuntingCandidate:
+      type: object
+      required: [id, lexical_entry_id, review_item_id, sentence_id, media_id, track_id, target_snapshot, prompt_snapshot, failure_count, status, created_at_ms, last_failed_at_ms]
+      properties:
+        id: { type: string }
+        lexical_entry_id: { type: string }
+        review_item_id: { type: string }
+        sentence_id: { type: [string, "null"] }
+        media_id: { type: [string, "null"] }
+        track_id: { type: [string, "null"] }
+        target_snapshot: { type: string }
+        prompt_snapshot: { type: string }
+        failure_count: { type: integer, minimum: 0 }
+        status: { $ref: "#/components/schemas/HuntingCandidateStatus" }
+        created_at_ms: { type: integer, minimum: 0 }
+        last_failed_at_ms: { type: integer, minimum: 0 }
+    HuntingTargetSourceKind:
+      type: string
+      enum: [manual, review_candidate, listening_inbox]
+    HuntingTargetStatus:
+      type: string
+      enum: [active, archived]
+    CreateHuntingTargetInput:
+      type: object
+      required: [lexical_entry_id, source_kind]
+      properties:
+        lexical_entry_id: { type: string }
+        source_kind: { $ref: "#/components/schemas/HuntingTargetSourceKind" }
+        source_id: { type: [string, "null"] }
+    HuntingTarget:
+      type: object
+      required: [id, lexical_entry_id, source_kind, source_id, target_snapshot, status, created_at_ms, updated_at_ms]
+      properties:
+        id: { type: string }
+        lexical_entry_id: { type: string }
+        source_kind: { $ref: "#/components/schemas/HuntingTargetSourceKind" }
+        source_id: { type: [string, "null"] }
+        target_snapshot: { type: string }
+        status: { $ref: "#/components/schemas/HuntingTargetStatus" }
+        created_at_ms: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
+    HuntingOccurrence:
+      type: object
+      required: [target_id, lexical_entry_id, target_snapshot, occurrence]
+      properties:
+        target_id: { type: string }
+        lexical_entry_id: { type: string }
+        target_snapshot: { type: string }
+        occurrence: { $ref: "#/components/schemas/CorpusOccurrence" }
+    HuntingOccurrenceQueryResult:
+      type: object
+      required: [indexed, occurrences]
+      properties:
+        indexed: { type: boolean }
+        occurrences:
+          type: array
+          items: { $ref: "#/components/schemas/HuntingOccurrence" }
+    HuntingCheckAnswer:
+      type: string
+      enum: [recognized, not_recognized, not_noticed]
+    SubmitHuntingCheckInput:
+      type: object
+      required: [session_id, target_id, occurrence_id, answer]
+      properties:
+        session_id: { type: string }
+        target_id: { type: string }
+        occurrence_id: { type: string }
+        answer: { $ref: "#/components/schemas/HuntingCheckAnswer" }
+    HuntingCheckResult:
+      type: object
+      required: [answer, event_id, observation_id]
+      properties:
+        answer: { $ref: "#/components/schemas/HuntingCheckAnswer" }
+        event_id: { type: string }
+        observation_id: { type: [string, "null"] }
     UpgradeSuggestionStatus:
       type: string
       enum: [pending, accepted, rejected, obsolete]
@@ -3092,6 +3250,18 @@ components:
           oneOf:
             - { $ref: "#/components/schemas/ListeningComprehensionReport" }
             - { type: "null" }
+        hunting_summary:
+          oneOf:
+            - { $ref: "#/components/schemas/HuntingCompletionSummary" }
+            - { type: "null" }
+    HuntingCompletionSummary:
+      type: object
+      required: [prompted_count, recognized_count, not_recognized_count, not_noticed_count]
+      properties:
+        prompted_count: { type: integer, minimum: 0, maximum: 5 }
+        recognized_count: { type: integer, minimum: 0, maximum: 5 }
+        not_recognized_count: { type: integer, minimum: 0, maximum: 5 }
+        not_noticed_count: { type: integer, minimum: 0, maximum: 5 }
     CaptureListeningInboxItemInput:
       type: object
       required: [session_id, target, anchors, subtitle_snapshot]

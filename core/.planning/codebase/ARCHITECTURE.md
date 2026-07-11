@@ -1,6 +1,6 @@
 # LLPlayerNext System Architecture
 
-Last updated: 2026-07-04. Reflects Phase 3.3 extensive-listening Inbox MVP.
+Last updated: 2026-07-11. Reflects Phase 3.7 Hunting List backend foundation.
 
 ## Overview
 
@@ -146,6 +146,10 @@ application use cases and provider/repository boundaries.
   accepted, rejected, and obsolete history independently of lexical status
   history. Accepted suggestions still write the authoritative lexical status
   through `LearningAssetRepository`.
+- Schema v32 adds `hunting_targets`, the learner-confirmed listening target asset.
+  It is deliberately separate from v20 `hunting_candidates`: repeated review
+  failures remain suggestions until an explicit user action promotes one, and
+  at most five targets may be active through the application boundary.
 - Learning-loop persistence stores JSON snapshots plus query columns for kind,
   status, subject, result, and timestamps. Corpus/difficulty/recording persistence
   is not yet implemented.
@@ -220,6 +224,16 @@ one primary fallback vowel, later fallback vowels unstressed.
   separate from `PracticeController`; hard interrupts compose playback pause,
   diagnosis opening, and optional Inbox capture without changing the intensive
   practice state machine.
+- `HuntingController` owns learner-confirmed hunting targets and review-failure
+  candidates through `Store<HuntingState>`. The listening dictionary only hosts
+  the toolbar/detail actions and panel; it does not treat candidates as active
+  targets until the controller completes an explicit promotion request.
+- `HuntingSessionController` is transient per extensive-listening session. It
+  consumes media-scoped corpus matches from the backend and the local player
+  position stream, enforcing a five-prompt total budget and two prompts per
+  target. Priming/check presentation never pauses playback. Before completion,
+  its counters are copied into the extensive-listening completion request; media
+  switches and successful session completion then reset it completely.
 - `SubtitleController` stores typed pronunciation providers, sentence
   pronunciation analyses, and phonetic analyses.
 - `BackendEvent` parsing is typed; lexical change events update the typed
@@ -299,6 +313,17 @@ Inbox process -> ReviewItem / PracticeItem / favorite / dismissed / expired
   + ListeningInboxItem archived projection
   + LearningEvent(listening_inbox_processed)
 complete extensive session -> LearningEvent(listening_completed with self report)
+```
+
+### Hunting Mode
+
+```text
+confirmed hunting targets + current media/track
+  -> corpus lemma/FTS lookup -> sentence-linked HuntingOccurrence[]
+  -> local position-driven priming/check with 5 total / 2 per-target budget
+  -> yes/no: create_lexical_observation -> channelized evidence/projection
+  -> not noticed: HuntingCheckAnswered event only
+  -> extensive completion: optional validated counters -> ListeningCompleted payload
 ```
 
 ### Timeline Resources

@@ -11,6 +11,7 @@ mod diagnosis;
 mod dictionary;
 mod dto;
 mod error;
+mod hunting;
 mod lexical;
 mod listening;
 mod media;
@@ -190,6 +191,32 @@ impl CorpusIndexRepository for DisabledCorpusIndexRepository {
         _offset: u32,
     ) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
         Ok(Vec::new())
+    }
+
+    fn media_has_corpus_occurrences(
+        &self,
+        _media_id: &MediaId,
+        _track_id: Option<&SubtitleTrackId>,
+    ) -> Result<bool, ApplicationError> {
+        Ok(false)
+    }
+
+    fn search_corpus_occurrences_in_media(
+        &self,
+        _language: &LanguageCode,
+        _query: &str,
+        _media_id: &MediaId,
+        _track_id: Option<&SubtitleTrackId>,
+        _limit: u32,
+    ) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
+        Ok(Vec::new())
+    }
+
+    fn get_corpus_occurrence(
+        &self,
+        _id: &CorpusOccurrenceId,
+    ) -> Result<Option<CorpusOccurrence>, ApplicationError> {
+        Ok(None)
     }
 }
 

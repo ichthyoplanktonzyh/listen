@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+- 2026-07-11 20:07 CST: Owner 明确确认 Phase 3.7 Hunting List 真实媒体功能验收通过。
+  `3.7-MANUAL-QA.md` 记录 PASS，新增 `3.7-CLOSEOUT.md`，计划状态转为 COMPLETE 并冻结；
+  `STATE.md` 当前第一优先切换至 Phase 3.8。此次收口不改变 Gate Q 中 Q3（复习）与 Q4
+  （content-fit）主动延期的 QA 债归属。
+
+- 2026-07-11 19:50 CST: Phase 3.7 Slice 5a completion 统计落地。泛听理解度自报对话在狩猎
+  模式启用时显示“命中 N 次 / 听出 M 次”；typed completion request 新增可选 hunting summary，
+  application 校验总提示 ≤5 且回答数不超过提示数，并把 prompted/recognized/not-recognized/
+  not-noticed 四类计数写入 `listening_completed` event payload，不进入 content-fit。新增 Rust
+  持久化与 Flutter HTTP seam 回归，Rust API/SQLite 145 项、Flutter 274 项、analyze、OpenAPI/
+  event/player contract 与 diff check 均通过。真实媒体连续感 QA 由 owner 按新增
+  `3.7-MANUAL-QA.md` 执行，Phase 保持 ACTIVE，未提前收口。
+
+- 2026-07-11 15:31 CST: Phase 3.7 Slice 3/4 落地。后端新增当前 media/track 的猎词目标出现点
+  查询：word 复用 lemma-normalized corpus key，phrase 复用 FTS 句子匹配，所有提示要求稳定
+  sentence 关联，并以 `indexed=false` 区分未建索引与零命中。Flutter 新增会话级
+  `HuntingSessionController`，从真实播放器 position stream 驱动显式狩猎开关、前置 priming、
+  句后 check、总预算 5/每目标 2；不自动暂停或重播，切媒体/结束泛听即清零。三态作答中
+  “是/否”走 ADR 0017/0019 observation/evidence 链路，“没注意”只写
+  `hunting_check_answered` LearningEvent。新增 reindex 提示、播放菜单/浮层 UI、中英本地化及
+  Rust HTTP/application/persistence、Flutter controller/widget/contract 回归；Rust 相关全量、
+  Flutter 274 项、OpenAPI/event/player contract 均通过。
+
+- 2026-07-11 15:03 CST: Phase 3.7 Slice 2 Flutter 猎词单管理 UI 落地。新增
+  `HuntingController + Store<HuntingState>` 与 typed target/candidate API seam；听力词典工具栏
+  增加带 active 数量徽标的猎词单入口，词条详情可手动加入，管理面板支持查看/归档目标、
+  确认复习失败候选并跳回词条。补齐中英本地化、controller/widget/contract 测试；
+  `flutter analyze`、新增 6 项聚焦测试与 Flutter 全量 271 项测试通过。
+
+- 2026-07-11 14:51 CST: Phase 3.7 首个后端竖切片落地：新增 schema v32
+  `hunting_targets`，将复习失败候选与用户确认的猎词目标分离；支持 manual、review candidate
+  与 Listening Inbox 来源校验，实施最多 5 个 active 目标的硬上限、归档/重启用身份，并新增
+  候选读取及目标创建/列表/归档 API、OpenAPI/TypeScript contract 与 Rust 回归测试。确认
+  review candidate 后将候选转为 `consumed`，不自动扩容猎词单；同时修复契约校验脚本仍只
+  接受词汇资产 v5、与当前 OpenAPI v5/v6/v7 权威范围漂移的问题。
+
+- 2026-07-11 14:44 CST: Gate Q owner 裁决落地：Q1（3.3 泛听）与 Q2（3.35 工作台）明确
+  通过；Q3（3.4 复习）与 Q4（3.5 内容分档）因后续仍需调整 UX/功能而明确延期，残余 QA
+  债保留在原 phase，不转嫁给 3.7。Gate Q 据此通过，Phase 3.7 Hunting List 转为 ACTIVE。
+
 - 2026-07-11 12:56 CST: 四通道规划落地后的评审修订。3.12 判定为超载 phase：judge 资格
   评估（fixture + 人工 gold + 留出集 + 三级资格裁决）拆出为新 Phase 3.12.1（新建
   `3.12.1-PLAN.md`），3.12 修订 v2 收窄为两个异构协议 adapter（OpenAI-compatible +

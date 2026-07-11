@@ -129,6 +129,7 @@ string_id!(PracticeAttemptId);
 string_id!(ReviewItemId);
 string_id!(ReviewAttemptId);
 string_id!(HuntingCandidateId);
+string_id!(HuntingTargetId);
 string_id!(RecognitionEvidenceId);
 string_id!(UpgradeSuggestionId);
 string_id!(LearningEventId);

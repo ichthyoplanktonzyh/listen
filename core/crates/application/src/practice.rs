@@ -559,6 +559,20 @@ impl AppServices {
         id: &PracticeSessionId,
         input: CompleteListeningSessionInput,
     ) -> Result<PracticeSession, ApplicationError> {
+        if let Some(summary) = input.hunting_summary.as_ref() {
+            let answered_count = summary
+                .recognized_count
+                .checked_add(summary.not_recognized_count)
+                .and_then(|value| value.checked_add(summary.not_noticed_count))
+                .ok_or(ApplicationError::Validation(
+                    "hunting completion counts overflow",
+                ))?;
+            if summary.prompted_count > 5 || answered_count > summary.prompted_count {
+                return Err(ApplicationError::Validation(
+                    "hunting completion counts exceed the session prompt budget",
+                ));
+            }
+        }
         let mut session = self
             .practice
             .get_practice_session(id)?
@@ -588,6 +602,7 @@ impl AppServices {
                 "media_id": session.media_id.as_ref().map(|value| value.as_str()),
                 "track_id": session.track_id.as_ref().map(|value| value.as_str()),
                 "comprehension_report": input.comprehension_report,
+                "hunting_summary": input.hunting_summary,
             }),
             session_id: Some(session.id.clone()),
         })?;
@@ -882,6 +897,29 @@ impl ReviewRepository for DisabledLearningLoopRepository {
         _limit: u32,
         _offset: u32,
     ) -> Result<Vec<HuntingCandidate>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn upsert_hunting_target(
+        &self,
+        _target: &HuntingTarget,
+    ) -> Result<HuntingTarget, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn get_hunting_target(
+        &self,
+        _id: &HuntingTargetId,
+    ) -> Result<Option<HuntingTarget>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn list_hunting_targets(
+        &self,
+        _status: Option<HuntingTargetStatus>,
+        _limit: u32,
+        _offset: u32,
+    ) -> Result<Vec<HuntingTarget>, ApplicationError> {
         Err(Self::disabled())
     }
 

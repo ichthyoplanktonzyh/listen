@@ -950,6 +950,20 @@ pub trait ReviewRepository: Send + Sync {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<HuntingCandidate>, ApplicationError>;
+    fn upsert_hunting_target(
+        &self,
+        target: &HuntingTarget,
+    ) -> Result<HuntingTarget, ApplicationError>;
+    fn get_hunting_target(
+        &self,
+        id: &HuntingTargetId,
+    ) -> Result<Option<HuntingTarget>, ApplicationError>;
+    fn list_hunting_targets(
+        &self,
+        status: Option<HuntingTargetStatus>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<HuntingTarget>, ApplicationError>;
     fn upsert_recognition_evidence(
         &self,
         evidence: &RecognitionEvidence,
@@ -1039,6 +1053,23 @@ pub trait CorpusIndexRepository: Send + Sync {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<CorpusOccurrence>, ApplicationError>;
+    fn media_has_corpus_occurrences(
+        &self,
+        media_id: &MediaId,
+        track_id: Option<&SubtitleTrackId>,
+    ) -> Result<bool, ApplicationError>;
+    fn search_corpus_occurrences_in_media(
+        &self,
+        language: &LanguageCode,
+        query: &str,
+        media_id: &MediaId,
+        track_id: Option<&SubtitleTrackId>,
+        limit: u32,
+    ) -> Result<Vec<CorpusOccurrence>, ApplicationError>;
+    fn get_corpus_occurrence(
+        &self,
+        id: &CorpusOccurrenceId,
+    ) -> Result<Option<CorpusOccurrence>, ApplicationError>;
 }
 
 pub trait DifficultyRepository: Send + Sync {

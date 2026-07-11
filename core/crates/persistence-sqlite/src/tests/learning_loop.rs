@@ -329,6 +329,36 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
     assert_eq!(candidates[0].review_item_id, review.id);
     assert_eq!(candidates[0].failure_count, 1);
     assert_eq!(candidates[0].target_snapshot, "Hello");
+    let target = services
+        .create_hunting_target(application::CreateHuntingTargetInput {
+            lexical_entry_id: lexical.entry.id.clone(),
+            source_kind: HuntingTargetSourceKind::ReviewCandidate,
+            source_id: Some(candidates[0].id.as_str().into()),
+        })
+        .unwrap();
+    assert_eq!(target.target_snapshot, "Hello");
+    assert_eq!(target.status, HuntingTargetStatus::Active);
+    assert_eq!(
+        services
+            .list_hunting_targets(Some(HuntingTargetStatus::Active), 10, 0)
+            .unwrap(),
+        vec![target.clone()]
+    );
+    assert_eq!(
+        services
+            .list_hunting_candidates(Some(HuntingCandidateStatus::Consumed), 10, 0)
+            .unwrap()[0]
+            .id,
+        candidates[0].id
+    );
+    let archived = services.archive_hunting_target(&target.id).unwrap();
+    assert_eq!(archived.status, HuntingTargetStatus::Archived);
+    assert!(
+        services
+            .list_hunting_targets(Some(HuntingTargetStatus::Active), 10, 0)
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(
         services
             .lexical_details(&lexical.entry.id)
@@ -353,6 +383,173 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
     assert_eq!(
         channelized[0].source_ref.as_deref(),
         Some(submission.attempt.id.as_str())
+    );
+}
+
+#[test]
+fn hunting_list_enforces_five_active_targets_and_allows_replacement_after_archive() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    let entries = (0..6)
+        .map(|index| {
+            upsert_word_asset(
+                &services,
+                "en",
+                &format!("target-{index}"),
+                &format!("Target {index}"),
+                None,
+                None,
+            )
+            .entry
+        })
+        .collect::<Vec<_>>();
+
+    let mut targets = Vec::new();
+    for entry in entries.iter().take(5) {
+        targets.push(
+            services
+                .create_hunting_target(application::CreateHuntingTargetInput {
+                    lexical_entry_id: entry.id.clone(),
+                    source_kind: HuntingTargetSourceKind::Manual,
+                    source_id: None,
+                })
+                .unwrap(),
+        );
+    }
+    assert!(matches!(
+        services.create_hunting_target(application::CreateHuntingTargetInput {
+            lexical_entry_id: entries[5].id.clone(),
+            source_kind: HuntingTargetSourceKind::Manual,
+            source_id: None,
+        }),
+        Err(ApplicationError::Conflict(
+            "hunting list already has the maximum of 5 active targets"
+        ))
+    ));
+
+    services.archive_hunting_target(&targets[0].id).unwrap();
+    let replacement = services
+        .create_hunting_target(application::CreateHuntingTargetInput {
+            lexical_entry_id: entries[5].id.clone(),
+            source_kind: HuntingTargetSourceKind::Manual,
+            source_id: None,
+        })
+        .unwrap();
+    assert_eq!(replacement.target_snapshot, "Target 5");
+    assert_eq!(
+        services
+            .list_hunting_targets(Some(HuntingTargetStatus::Active), 10, 0)
+            .unwrap()
+            .len(),
+        5
+    );
+}
+
+#[test]
+fn hunting_occurrences_use_media_corpus_and_three_way_checks_keep_not_noticed_evidence_free() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
+    .with_corpus_index_repository(repo.clone());
+    let media = services
+        .register_media(RegisterMedia {
+            path: "/tmp/hunting.mp4".into(),
+            fingerprint: "hunting-media".into(),
+            title: "Hunting media".into(),
+            kind: MediaKind::Video,
+            duration_ms: Some(10_000),
+        })
+        .unwrap();
+    let track = services
+        .import_subtitle(ImportSubtitle {
+            media_id: media.id.clone(),
+            source_name: "timeline.srt".into(),
+            content: include_bytes!("../../../../testdata/subtitles/timeline.srt").to_vec(),
+            language: Some("en".into()),
+            identity_salt: None,
+        })
+        .unwrap();
+    let lexical = upsert_word_asset(&services, "en", "hello", "hello", None, None);
+    let target = services
+        .create_hunting_target(application::CreateHuntingTargetInput {
+            lexical_entry_id: lexical.entry.id.clone(),
+            source_kind: HuntingTargetSourceKind::Manual,
+            source_id: None,
+        })
+        .unwrap();
+
+    let located = services
+        .hunting_occurrences(&media.id, Some(&track.id))
+        .unwrap();
+    assert!(located.indexed);
+    assert_eq!(located.occurrences.len(), 1);
+    let occurrence = &located.occurrences[0];
+    assert_eq!(occurrence.target_id, target.id);
+    assert_eq!(occurrence.occurrence.display_text, "Hello");
+
+    let session = services
+        .create_practice_session(application::CreatePracticeSession {
+            mode: PracticeMode::Extensive,
+            media_id: Some(media.id.clone()),
+            track_id: Some(track.id.clone()),
+            source: Some("hunting_test".into()),
+        })
+        .unwrap();
+    let recognized = services
+        .submit_hunting_check(application::SubmitHuntingCheckInput {
+            session_id: session.id.clone(),
+            target_id: target.id.clone(),
+            occurrence_id: occurrence.occurrence.id.clone(),
+            answer: HuntingCheckAnswer::Recognized,
+        })
+        .unwrap();
+    assert!(recognized.observation_id.is_some());
+    assert_eq!(
+        repo.list_lexical_observations_by_sentence(
+            occurrence.occurrence.sentence_id.as_ref().unwrap()
+        )
+        .unwrap()[0]
+            .result,
+        ObservationResult::RecognizedInContext
+    );
+
+    let not_noticed = services
+        .submit_hunting_check(application::SubmitHuntingCheckInput {
+            session_id: session.id.clone(),
+            target_id: target.id,
+            occurrence_id: occurrence.occurrence.id.clone(),
+            answer: HuntingCheckAnswer::NotNoticed,
+        })
+        .unwrap();
+    assert!(not_noticed.observation_id.is_none());
+    let events = repo
+        .list_learning_events_for_session(&session.id, 100, 0)
+        .unwrap();
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event.kind == LearningEventKind::HuntingCheckAnswered)
+            .count(),
+        2
     );
 }
 
@@ -949,11 +1146,34 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
     let practice_item_id = micro.practice_item_id.as_ref().unwrap();
     assert!(repo.get_practice_item(practice_item_id).unwrap().is_some());
 
+    let invalid_summary = services.complete_listening_session(
+        &session.id,
+        application::CompleteListeningSessionInput {
+            comprehension_report: None,
+            hunting_summary: Some(application::HuntingCompletionSummary {
+                prompted_count: 5,
+                recognized_count: 3,
+                not_recognized_count: 2,
+                not_noticed_count: 1,
+            }),
+        },
+    );
+    assert!(matches!(
+        invalid_summary,
+        Err(application::ApplicationError::Validation(_))
+    ));
+
     services
         .complete_listening_session(
             &session.id,
             application::CompleteListeningSessionInput {
                 comprehension_report: Some(ListeningComprehensionReport::GotTheGist),
+                hunting_summary: Some(application::HuntingCompletionSummary {
+                    prompted_count: 3,
+                    recognized_count: 1,
+                    not_recognized_count: 1,
+                    not_noticed_count: 1,
+                }),
             },
         )
         .unwrap();
@@ -972,6 +1192,15 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
     assert_eq!(
         completed.payload["comprehension_report"],
         serde_json::json!("got_the_gist")
+    );
+    assert_eq!(
+        completed.payload["hunting_summary"],
+        serde_json::json!({
+            "prompted_count": 3,
+            "recognized_count": 1,
+            "not_recognized_count": 1,
+            "not_noticed_count": 1,
+        })
     );
     assert!(
         !events

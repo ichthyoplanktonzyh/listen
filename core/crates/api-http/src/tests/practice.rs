@@ -1,6 +1,242 @@
 use super::*;
 
 #[tokio::test]
+async fn hunting_occurrence_and_check_routes_round_trip_not_noticed_without_observation() {
+    let app = test_app();
+    let track = setup_phonetic_track(&app, "hunting-route").await;
+    let media_id = track["media_id"].as_str().unwrap();
+    let track_id = track["id"].as_str().unwrap();
+
+    let lexical_response = app
+        .clone()
+        .oneshot(
+            Request::put("/v1/lexical-entries")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "language": "en",
+                        "kind": "word",
+                        "canonical_form": "hello",
+                        "display_form": "hello"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let lexical: serde_json::Value = serde_json::from_slice(
+        &to_bytes(lexical_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let lexical_entry_id = lexical["entry"]["id"].as_str().unwrap();
+    let target_response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/hunting/targets")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "lexical_entry_id": lexical_entry_id,
+                        "source_kind": "manual"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let target: serde_json::Value = serde_json::from_slice(
+        &to_bytes(target_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let session_response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/practice/sessions")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "mode": "extensive",
+                        "media_id": media_id,
+                        "track_id": track_id,
+                        "source": "hunting_route_test"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let session: serde_json::Value = serde_json::from_slice(
+        &to_bytes(session_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+
+    let occurrences_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/v1/hunting/occurrences?media_id={media_id}&track_id={track_id}"
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(occurrences_response.status(), StatusCode::OK);
+    let located: serde_json::Value = serde_json::from_slice(
+        &to_bytes(occurrences_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(located["indexed"], true);
+    let occurrence_id = located["occurrences"][0]["occurrence"]["id"]
+        .as_str()
+        .unwrap();
+
+    let check_response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/hunting/checks")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "session_id": session["id"],
+                        "target_id": target["id"],
+                        "occurrence_id": occurrence_id,
+                        "answer": "not_noticed"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(check_response.status(), StatusCode::OK);
+    let check: serde_json::Value = serde_json::from_slice(
+        &to_bytes(check_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(check["answer"], "not_noticed");
+    assert!(check["observation_id"].is_null());
+}
+
+#[tokio::test]
+async fn hunting_target_routes_create_list_and_archive_manual_targets() {
+    let app = test_app();
+    let lexical_response = app
+        .clone()
+        .oneshot(
+            Request::put("/v1/lexical-entries")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "language": "en",
+                        "kind": "word",
+                        "canonical_form": "notice",
+                        "display_form": "notice"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(lexical_response.status(), StatusCode::OK);
+    let lexical: serde_json::Value = serde_json::from_slice(
+        &to_bytes(lexical_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let lexical_entry_id = lexical["entry"]["id"].as_str().unwrap();
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/hunting/targets")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "lexical_entry_id": lexical_entry_id,
+                        "source_kind": "manual"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_response.status(), StatusCode::OK);
+    let target: serde_json::Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(target["target_snapshot"], "notice");
+    assert_eq!(target["status"], "active");
+
+    let list_response = app
+        .clone()
+        .oneshot(
+            Request::get("/v1/hunting/targets")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let targets: serde_json::Value = serde_json::from_slice(
+        &to_bytes(list_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(targets.as_array().unwrap().len(), 1);
+
+    let archive_response = app
+        .clone()
+        .oneshot(
+            Request::delete(format!(
+                "/v1/hunting/targets/{}",
+                target["id"].as_str().unwrap()
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(archive_response.status(), StatusCode::OK);
+    let archived: serde_json::Value = serde_json::from_slice(
+        &to_bytes(archive_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(archived["status"], "archived");
+}
+
+#[tokio::test]
 async fn practice_routes_create_and_read_attempts() {
     let app = test_app();
     let item_response = app
@@ -238,7 +474,16 @@ async fn practice_routes_reject_retired_intensive_endpoints_and_complete_extensi
                 .header(AUTHORIZATION, "Bearer secret")
                 .header(CONTENT_TYPE, "application/json")
                 .body(Body::from(
-                    serde_json::json!({"comprehension_report": "got_the_gist"}).to_string(),
+                    serde_json::json!({
+                        "comprehension_report": "got_the_gist",
+                        "hunting_summary": {
+                            "prompted_count": 2,
+                            "recognized_count": 1,
+                            "not_recognized_count": 0,
+                            "not_noticed_count": 1
+                        }
+                    })
+                    .to_string(),
                 ))
                 .unwrap(),
         )

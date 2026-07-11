@@ -106,6 +106,110 @@ impl CorpusIndexRepository for SqliteRepository {
                 .map_err(repo)
         }
     }
+
+    fn media_has_corpus_occurrences(
+        &self,
+        media_id: &MediaId,
+        track_id: Option<&SubtitleTrackId>,
+    ) -> Result<bool, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let count = if let Some(track_id) = track_id {
+            conn.query_row(
+                "SELECT COUNT(*) FROM corpus_occurrences WHERE media_id=?1 AND track_id=?2",
+                params![media_id.as_str(), track_id.as_str()],
+                |row| row.get::<_, u32>(0),
+            )
+        } else {
+            conn.query_row(
+                "SELECT COUNT(*) FROM corpus_occurrences WHERE media_id=?1",
+                [media_id.as_str()],
+                |row| row.get::<_, u32>(0),
+            )
+        }
+        .map_err(repo)?;
+        Ok(count > 0)
+    }
+
+    fn search_corpus_occurrences_in_media(
+        &self,
+        language: &LanguageCode,
+        query: &str,
+        media_id: &MediaId,
+        track_id: Option<&SubtitleTrackId>,
+        limit: u32,
+    ) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let normalized = query.trim().to_lowercase();
+        let track_id = track_id.map(SubtitleTrackId::as_str);
+        if normalized.contains(char::is_whitespace) {
+            let fts_phrase = format!("\"{}\"", normalized.replace('"', " "));
+            let mut statement = conn
+                .prepare(&format!(
+                    "SELECT {SELECT_COLUMNS} FROM corpus_occurrences c
+                     JOIN (SELECT rowid FROM corpus_occurrences_fts WHERE corpus_occurrences_fts MATCH ?2) f
+                       ON f.rowid=c.rowid
+                     WHERE c.language=?1 AND c.media_id=?3
+                       AND (?4 IS NULL OR c.track_id=?4)
+                       AND c.kind IN (?5,?6)
+                     ORDER BY c.start_ms,c.id LIMIT ?7"
+                ))
+                .map_err(repo)?;
+            statement
+                .query_map(
+                    params![
+                        language.as_str(),
+                        fts_phrase,
+                        media_id.as_str(),
+                        track_id,
+                        json(&CorpusOccurrenceKind::Phrase)?,
+                        json(&CorpusOccurrenceKind::Chunk)?,
+                        limit.min(100)
+                    ],
+                    occurrence_from_row,
+                )
+                .map_err(repo)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(repo)
+        } else {
+            let mut statement = conn
+                .prepare(&format!(
+                    "SELECT {SELECT_COLUMNS} FROM corpus_occurrences
+                     WHERE language=?1 AND normalized_key=?2 AND media_id=?3
+                       AND (?4 IS NULL OR track_id=?4)
+                     ORDER BY start_ms,id LIMIT ?5"
+                ))
+                .map_err(repo)?;
+            statement
+                .query_map(
+                    params![
+                        language.as_str(),
+                        normalized,
+                        media_id.as_str(),
+                        track_id,
+                        limit.min(100)
+                    ],
+                    occurrence_from_row,
+                )
+                .map_err(repo)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(repo)
+        }
+    }
+
+    fn get_corpus_occurrence(
+        &self,
+        id: &CorpusOccurrenceId,
+    ) -> Result<Option<CorpusOccurrence>, ApplicationError> {
+        use rusqlite::OptionalExtension;
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.query_row(
+            &format!("SELECT {SELECT_COLUMNS} FROM corpus_occurrences WHERE id=?1"),
+            [id.as_str()],
+            occurrence_from_row,
+        )
+        .optional()
+        .map_err(repo)
+    }
 }
 
 fn occurrence_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CorpusOccurrence> {

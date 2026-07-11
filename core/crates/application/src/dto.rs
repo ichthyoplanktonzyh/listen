@@ -222,9 +222,42 @@ pub struct ReviewSubmission {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateHuntingTargetInput {
+    pub lexical_entry_id: LexicalEntryId,
+    pub source_kind: HuntingTargetSourceKind,
+    #[serde(default)]
+    pub source_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubmitHuntingCheckInput {
+    pub session_id: PracticeSessionId,
+    pub target_id: HuntingTargetId,
+    pub occurrence_id: CorpusOccurrenceId,
+    pub answer: HuntingCheckAnswer,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HuntingCheckResult {
+    pub answer: HuntingCheckAnswer,
+    pub event_id: LearningEventId,
+    pub observation_id: Option<LexicalObservationId>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HuntingCompletionSummary {
+    pub prompted_count: u32,
+    pub recognized_count: u32,
+    pub not_recognized_count: u32,
+    pub not_noticed_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompleteListeningSessionInput {
     #[serde(default)]
     pub comprehension_report: Option<ListeningComprehensionReport>,
+    #[serde(default)]
+    pub hunting_summary: Option<HuntingCompletionSummary>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

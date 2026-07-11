@@ -452,7 +452,8 @@ export type LearningEventKind =
   | "stuck_point_closed"
   | "familiar_material_marked"
   | "listening_inbox_captured"
-  | "listening_inbox_processed";
+  | "listening_inbox_processed"
+  | "hunting_check_answered";
 export type LearningEventSubjectKind =
   | "media"
   | "sentence"
@@ -461,7 +462,8 @@ export type LearningEventSubjectKind =
   | "review_item"
   | "practice_attempt"
   | "practice_session"
-  | "listening_inbox_item";
+  | "listening_inbox_item"
+  | "hunting_target";
 
 export type ListeningComprehensionReport =
   | "understood_all"
@@ -633,6 +635,83 @@ export interface ReviewSubmission {
   upgrade_suggestions: UpgradeSuggestion[];
 }
 
+export type HuntingCandidateStatus = "active" | "consumed" | "dismissed";
+export type HuntingTargetSourceKind = "manual" | "review_candidate" | "listening_inbox";
+export type HuntingTargetStatus = "active" | "archived";
+
+export interface HuntingCandidate {
+  id: string;
+  lexical_entry_id: string;
+  review_item_id: string;
+  sentence_id: string | null;
+  media_id: string | null;
+  track_id: string | null;
+  target_snapshot: string;
+  prompt_snapshot: string;
+  failure_count: number;
+  status: HuntingCandidateStatus;
+  created_at_ms: number;
+  last_failed_at_ms: number;
+}
+
+export interface CreateHuntingTargetInput {
+  lexical_entry_id: string;
+  source_kind: HuntingTargetSourceKind;
+  source_id?: string | null;
+}
+
+export interface HuntingTarget {
+  id: string;
+  lexical_entry_id: string;
+  source_kind: HuntingTargetSourceKind;
+  source_id: string | null;
+  target_snapshot: string;
+  status: HuntingTargetStatus;
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
+export interface CorpusOccurrence {
+  id: string;
+  language: string;
+  kind: "lexical" | "phrase" | "chunk" | "sound_pattern" | "connected_speech";
+  normalized_key: string | null;
+  display_text: string;
+  media_id: string | null;
+  track_id: string | null;
+  sentence_id: string | null;
+  start_ms: number;
+  end_ms: number;
+  source_snapshot: string;
+}
+
+export interface HuntingOccurrence {
+  target_id: string;
+  lexical_entry_id: string;
+  target_snapshot: string;
+  occurrence: CorpusOccurrence;
+}
+
+export interface HuntingOccurrenceQueryResult {
+  indexed: boolean;
+  occurrences: HuntingOccurrence[];
+}
+
+export type HuntingCheckAnswer = "recognized" | "not_recognized" | "not_noticed";
+
+export interface SubmitHuntingCheckInput {
+  session_id: string;
+  target_id: string;
+  occurrence_id: string;
+  answer: HuntingCheckAnswer;
+}
+
+export interface HuntingCheckResult {
+  answer: HuntingCheckAnswer;
+  event_id: string;
+  observation_id: string | null;
+}
+
 export type UpgradeSuggestionStatus = "pending" | "accepted" | "rejected" | "obsolete";
 
 export interface UpgradeSuggestion {
@@ -653,6 +732,14 @@ export interface UpgradeSuggestion {
 
 export interface CompleteListeningSessionInput {
   comprehension_report?: ListeningComprehensionReport | null;
+  hunting_summary?: HuntingCompletionSummary | null;
+}
+
+export interface HuntingCompletionSummary {
+  prompted_count: number;
+  recognized_count: number;
+  not_recognized_count: number;
+  not_noticed_count: number;
 }
 
 export interface CaptureListeningInboxItemInput {
@@ -1187,6 +1274,61 @@ export class LocalApiV1 {
     input: ProcessListeningInboxItemInput,
   ): Promise<ListeningInboxItem> {
     return this.request(`/v1/listening-inbox/items/${encodeURIComponent(id)}/process`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  listHuntingCandidates(
+    status: HuntingCandidateStatus = "active",
+    limit = 100,
+    offset = 0,
+  ): Promise<HuntingCandidate[]> {
+    const params = new URLSearchParams({
+      status,
+      limit: String(limit),
+      offset: String(offset),
+    });
+    return this.request(`/v1/hunting/candidates?${params.toString()}`);
+  }
+
+  listHuntingTargets(
+    status: HuntingTargetStatus = "active",
+    limit = 100,
+    offset = 0,
+  ): Promise<HuntingTarget[]> {
+    const params = new URLSearchParams({
+      status,
+      limit: String(limit),
+      offset: String(offset),
+    });
+    return this.request(`/v1/hunting/targets?${params.toString()}`);
+  }
+
+  createHuntingTarget(input: CreateHuntingTargetInput): Promise<HuntingTarget> {
+    return this.request("/v1/hunting/targets", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  archiveHuntingTarget(id: string): Promise<HuntingTarget> {
+    return this.request(`/v1/hunting/targets/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+  }
+
+  listHuntingOccurrences(
+    mediaId: string,
+    trackId?: string,
+  ): Promise<HuntingOccurrenceQueryResult> {
+    const params = new URLSearchParams({ media_id: mediaId });
+    if (trackId !== undefined) params.set("track_id", trackId);
+    return this.request(`/v1/hunting/occurrences?${params.toString()}`);
+  }
+
+  submitHuntingCheck(input: SubmitHuntingCheckInput): Promise<HuntingCheckResult> {
+    return this.request("/v1/hunting/checks", {
       method: "POST",
       body: JSON.stringify(input),
     });

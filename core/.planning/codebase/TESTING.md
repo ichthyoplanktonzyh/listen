@@ -90,7 +90,11 @@
 | `api_service_test.dart` | LocalApi HTTP 客户端 sidecar 路径解析 |
 | `api_service_transport_test.dart` | A1 transport seam（`LocalApi.withTransport`）：GET 解码、非 2xx → `HttpException`、body 编码经 seam 转发 |
 | `practice_controller_test.dart` | Phase 3.1/3.2 practice controller：练习 item/attempt/review flow、卡点标记与 session summary 拉取 |
-| `extensive_listening_controller_test.dart` | Phase 3.3 extensive listening controller：start/capture/process/finish 与理解度自报请求 |
+| `extensive_listening_controller_test.dart` | Phase 3.3 extensive listening start/capture/process/finish 与理解度自报请求；Phase 3.7 可选 hunting summary wire shape |
+| `hunting_controller_test.dart` | Phase 3.7 猎词单 controller：目标/候选加载、候选确认、active 目标归档与 HTTP seam |
+| `hunting_list_panel_test.dart` | Phase 3.7 猎词单面板：active 数量、目标/候选展示与确认后的响应式刷新 |
+| `hunting_session_controller_test.dart` | Phase 3.7 狩猎会话：media occurrence 加载、总预算 5、每目标 2、三态作答统计与 HTTP seam |
+| `hunting_prompt_card_test.dart` | Phase 3.7 priming → check 面板与“没注意”合法操作 |
 | `learning_workflow_controller_test.dart` | `LearningWorkflowController`：`refreshDiagnosis` generation guard（happy/null/**stale 丢弃**/切换 cue 丢弃/错误→null）+ `loadPhraseCandidates` 经 A1 seam 加载与清空 |
 | `speech_enhancement_workflow_controller_test.dart` | `SpeechEnhancementWorkflowController.loadTimelineResource` 降级：4 子资源全失败→`unavailable`、部分失败→warning（经 A1 seam） |
 | `settings_test.dart` | AppSettings 持久化与升级 |
@@ -103,9 +107,14 @@
 | `phonetic_analysis_ui_test.dart` | 音素分析 UI |
 | `contract/backend_event_contract_test.dart` | SSE producer golden envelopes 的 Flutter typed 解析契约 |
 | `contract/lltimeline_parse_test.dart` | committed LLTimeline rhythm fixtures 的 Flutter typed 解析契约，覆盖 segments、WordTimeline、document-level rhythm_frames 与 PhoneTimeline.sound_analysis fallback |
-| `contract/practice_contract_test.dart` | Practice / session summary / Listening Inbox typed DTO fixture parsing and request serialization |
+| `contract/practice_contract_test.dart` | Practice / session summary / Listening Inbox / Hunting target+candidate typed DTO fixture parsing and request serialization |
+
 | `diagnosis_card_test.dart` rhythm case | Phase 2.21 compact rhythm frame nuclei、anchors、weak groups、compression spans、hotspots、predicted/audible provenance 和 confidence state |
 | `phoneme_ribbon_test.dart` rhythm case | Phase 2.21 subtitle-layer `RhythmFrameRibbon` timeline、nucleus/anchor/weak/compression/hotspot chips、provenance tooltip、cue loop、Rhythm A/B/C toggle、A citation reference 与 B connected-speech A → B 音标投影 |
+
+Phase 3.7 的真实媒体产品验收已由 owner 确认通过，记录见
+`.planning/phases/3.7-hunting-list/3.7-MANUAL-QA.md`；自动测试覆盖预算与证据语义，人工 QA
+确认提示强度、连续感与关闭后的零残留。
 
 ### 运行
 

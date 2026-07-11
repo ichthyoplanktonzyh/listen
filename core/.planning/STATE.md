@@ -3,14 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-11T12:55:00.000+08:00"
+last_updated: "2026-07-11T20:07:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-11 12:55 CST
-> 更新原因：四通道规划评审修订——3.12 拆出 3.12.1 judge 资格 phase、seam 预留裁决
-> 标准入共享上下文、3.11–3.18 定性为方向承诺；STATE 已完成 phase 条目压缩入索引表。
+> 最后更新：2026-07-11 20:07 CST
+> 更新原因：Owner 确认真实媒体狩猎模式通过，Phase 3.7 完成收口。
 
 ## 当前位置
 
@@ -92,14 +91,15 @@ last_updated: "2026-07-11T12:55:00.000+08:00"
   产品输入见 `.planning/discuss/listen-learning-activity-path.zh.md` 与
   `.planning/discuss/four-channel-product-and-vendor-neutral-llm-final.zh.md`。
 
-### Phase 3.3: Extensive Listening & Inbox ⏳ MVP 已落地，待收口
+### Phase 3.3: Extensive Listening & Inbox ✅ Gate Q 基线通过
 
 - 已落地：泛听 session、软/硬打断、理解度自报、Listening Inbox 捕获与整理流。
-- 待完成：系统级全局热键决策、独立收藏浏览容器决策、真实媒体 30 分钟手工 QA。
+- 2026-07-11 owner 明确确认 Gate Q Q1 通过；当前泛听行为成为 3.7 的已验收基线，3.7
+  不承接 3.3 全量 QA。
 - 计划与 QA：`.planning/phases/3.3-extensive-listening-inbox/3.3-PLAN.md`、
   `.planning/phases/3.3-extensive-listening-inbox/3.3-MANUAL-QA.md`。
 
-### Phase 3.35: Listening Workbench UI Redesign ⏸ PAUSED
+### Phase 3.35: Listening Workbench UI Redesign ✅ Gate Q 基线通过
 
 - 代码完成：来源中立首页、分组工具栏与播放条、可拖动且持久化的工作台、右侧学习面板、
   资源技术详情折叠、诊断摘要/证据、词汇学习层级、六类设置导航和产品化添加来源流程。
@@ -111,9 +111,8 @@ last_updated: "2026-07-11T12:55:00.000+08:00"
   分栏拖动逐帧写盘（`saveSoon` 防抖），并做文稿跟随暂停/回到当前句、窄窗口媒体区可拖动、
   姿态栏上下文显示、Test 姿态描边化、文稿空态与无媒体播放条精简；详见 `3.35-UX-REVIEW-CHECKLIST.md` P3 节。
 - 验证：`flutter analyze`、`flutter test`（188 passed）、`git diff --check` 通过。
-- 待完成：按 `3.35-MANUAL-QA.md` 执行 owner 截图反馈、三种目标窗口尺寸和真实媒体 QA；
-  `3.35-CLOSEOUT.md` 当前为 `PAUSED — AWAITING_OWNER_QA`。待 3.4.1 新能力 UI 落地后
-  重新建立受影响 surface 的验收基线。
+- 2026-07-11 owner 明确确认 Gate Q Q2 通过；当前工作台/capability UI 成为 3.7 新入口
+  的稳定基线，不因 3.7 重新打开全面视觉改版。
 - 边界：不复制参考产品，不实现新 YouTube provider，不改变学习领域语义。
 - 规划文档：`.planning/phases/3.35-listening-workbench-ui-redesign/3.35-PLAN.md`。
 
@@ -133,24 +132,34 @@ last_updated: "2026-07-11T12:55:00.000+08:00"
   `RecognizedInContext` 成功证据按不同句子/媒体去重，5 个语境生成 `heuristic_proxy` 建议；
   复习结束页与词汇详情可确认/拒绝，确认写入既有状态历史和 `StatusChanged` 事件，拒绝冷却
   30 天；pending 与完整历史均有查询 API。
-- 待完成：真实媒体 ≥8 卡 QA 与阶段收口。旧升级建议目标将在 3.4.1 迁移为 listening
-  capability proposal，迁移稳定后再恢复 QA。
+- QA 状态：owner 明确延期 Q3；复习 UX/功能后续调整完成后再做真实媒体 ≥8 卡及完整链路
+  QA。3.7 只验证 `hunting_candidates` 候选接缝，不代替该验收。
 - 规划文档：`.planning/phases/3.4-audio-first-review-queue/3.4-PLAN.md`。
 
-### Phase 3.5: Difficulty & Content Triage ⏳ ACTIVE，待 Slice 9 收口
+### Phase 3.5: Difficulty & Content Triage ⏸ Slice 9 QA 延期
 
 - Slice 1–8 已完成：双维 fit、可解释信号、三队列、listening-projection-v1、反馈校准与
   冷启动标注均已落地。
-- 唯一剩余：在真实媒体库完成人工分档 QA，至少确认一个 meaning 高 / sound 低的精听靶
-  材料，并记录 `manual_product_qa`；纳入 Gate Q 后再启动 3.7。
+- 唯一剩余的 Slice 9 人工分档 QA 由 owner 明确延期；待内容分档 UX/功能调整完成后重做，
+  3.7 不消费分档结果，也不把狩猎作答写入 fit 校准。
 - 计划：`.planning/phases/3.5-difficulty-content-triage/3.5-PLAN.md`。
 
-### 下一执行序列：Gate Q → Phase 3.7–3.18
+### Phase 3.7: Hunting List ✅ COMPLETE
 
-- **Gate Q（下一步）**：先完成或逐项明确豁免 3.3 的 30 分钟泛听 QA、3.35 新 capability
-  UI 基线 QA、3.4 的 ≥8 卡真实媒体 QA、3.5 Slice 9 分档 QA；3.7 不能在这些活跃/暂停
-  phase 未收口时静默继续携带验收债。清单：
-  `.planning/phases/3.0-english-listening-learning-loop/3.7-GATE-Q-CHECKLIST.md`。
+- Gate Q 已于 2026-07-11 通过：Q1/Q2 明确通过，Q3/Q4 带清晰风险归属主动延期。
+- Slice 1–5a 已落地：独立资产/管理 UI；当前 media/track 的 lemma/FTS 出现点定位；无索引
+  一键重建；显式会话级狩猎模式；总预算 5、每目标最多 2；priming/check 与“是/否/没注意”
+  三态作答；completion 理解度对话展示“命中 N 次 / 听出 M 次”，四类计数随
+  `listening_completed` event 持久化且不进入 content-fit。“没注意”只记 LearningEvent，
+  不写 observation。
+- 2026-07-11 owner 明确确认真实媒体狩猎模式功能通过；阶段已创建 CLOSEOUT 并冻结。
+- 计划与结论：`.planning/phases/3.7-hunting-list/3.7-PLAN.md`、
+  `.planning/phases/3.7-hunting-list/3.7-CLOSEOUT.md`。
+
+### 下一执行序列：Phase 3.7–3.18
+
+- **Gate Q（已通过）**：Q1/Q2 通过；Q3/Q4 因后续 UX/功能调整明确延期且 QA 债留在
+  原 phase。裁决见 `3.7-GATE-Q-CHECKLIST.md`。
 - **3.7–3.10（计划 v3）**：3.7 保持 listening-only；3.8 是 shadowing 模仿层且非评分
   completion 不伪造 speaking success；3.9 保持 listening L1-aware；3.10 只展示已有事实，
   但提供 channel-ready envelope。
@@ -199,6 +208,7 @@ last_updated: "2026-07-11T12:55:00.000+08:00"
 | 3.6 Listening Dictionary MVP | 词典页 + 逐例识别标记 + corpus 索引/FTS5/lemma 搜索 | `.planning/phases/3.6-listening-dictionary-mvp/3.6-CLOSEOUT.md` |
 | 3.6.1 Sense Folders | 义项文件夹（用户文件夹为身份权威）；schema v30/v31 | `.planning/phases/3.6.1-sense-folders/3.6.1-CLOSEOUT.md` |
 | 3.6.2 Dictionary Inline Clip UX | 词典详情内嵌切片卡 + PageView 横向轨道取代 overlay | `.planning/phases/3.6.2-dictionary-inline-clip-ux/3.6.2-CLOSEOUT.md` |
+| 3.7 Hunting List | 用户确认猎词资产 + 泛听会话级预算提示 + 三态听力证据 + completion 小结 | `.planning/phases/3.7-hunting-list/3.7-CLOSEOUT.md` |
 
 ## 最近重要决策
 
@@ -288,9 +298,9 @@ last_updated: "2026-07-11T12:55:00.000+08:00"
 
 ## 下一步工作
 
-1. **Gate Q（当前第一优先）**：完成或逐项豁免 3.3 泛听 QA、3.35 基线 QA、3.4 ≥8 卡 QA、
-   3.5 Slice 9 分档 QA（清单：`3.7-GATE-Q-CHECKLIST.md`），然后开工 3.7。
-2. Gate Q 后按 3.0-PHASE-BREAKDOWN 执行 3.7 → 3.10（各 PLAN 已 v3）；3.11 起每个 phase
+1. **Phase 3.8（当前第一优先）**：开工前按 3.7 已落地的播放器/证据现状复核 shadowing
+   PLAN，再进入 chunk 跟读、录音与 A/B 对比实现。
+2. 按 3.0-PHASE-BREAKDOWN 执行 3.8 → 3.10；3.11 起每个 phase
    开工前先按上游现状修订 PLAN。
 3. "收藏句 → 个人模板"的用户价值验证收敛到 Phase 3.16（3.4.3 结论待兑现）。
 4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；

@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CapabilityAssessment, ChunkId, HuntingCandidateId, LanguageCode, LearningStatus,
-    LexicalCapability, LexicalEntryId, LexicalObservationId, ListeningInboxItemId, MediaId,
-    PracticeAttemptId, PracticeItemId, PracticeSessionId, RecognitionEvidenceId, RecordingAssetId,
-    ReviewAttemptId, ReviewItemId, SubtitleSentenceId, SubtitleTrackId, UpgradeSuggestionId,
+    CapabilityAssessment, ChunkId, HuntingCandidateId, HuntingTargetId, LanguageCode,
+    LearningStatus, LexicalCapability, LexicalEntryId, LexicalObservationId, ListeningInboxItemId,
+    MediaId, PracticeAttemptId, PracticeItemId, PracticeSessionId, RecognitionEvidenceId,
+    RecordingAssetId, ReviewAttemptId, ReviewItemId, SubtitleSentenceId, SubtitleTrackId,
+    UpgradeSuggestionId,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -104,6 +105,21 @@ pub enum HuntingCandidateStatus {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum HuntingTargetSourceKind {
+    Manual,
+    ReviewCandidate,
+    ListeningInbox,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HuntingTargetStatus {
+    Active,
+    Archived,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum RecognitionEvidenceSourceKind {
     Practice,
     Review,
@@ -135,6 +151,7 @@ pub enum LearningEventKind {
     FamiliarMaterialMarked,
     ListeningInboxCaptured,
     ListeningInboxProcessed,
+    HuntingCheckAnswered,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -148,6 +165,15 @@ pub enum LearningEventSubjectKind {
     PracticeAttempt,
     PracticeSession,
     ListeningInboxItem,
+    HuntingTarget,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HuntingCheckAnswer {
+    Recognized,
+    NotRecognized,
+    NotNoticed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -324,6 +350,34 @@ pub struct HuntingCandidate {
     pub status: HuntingCandidateStatus,
     pub created_at_ms: u64,
     pub last_failed_at_ms: u64,
+}
+
+/// A learner-confirmed listening target. Review failures remain candidates
+/// until explicitly promoted into this list.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HuntingTarget {
+    pub id: HuntingTargetId,
+    pub lexical_entry_id: LexicalEntryId,
+    pub source_kind: HuntingTargetSourceKind,
+    pub source_id: Option<String>,
+    pub target_snapshot: String,
+    pub status: HuntingTargetStatus,
+    pub created_at_ms: u64,
+    pub updated_at_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HuntingOccurrence {
+    pub target_id: HuntingTargetId,
+    pub lexical_entry_id: LexicalEntryId,
+    pub target_snapshot: String,
+    pub occurrence: CorpusOccurrence,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HuntingOccurrenceQueryResult {
+    pub indexed: bool,
+    pub occurrences: Vec<HuntingOccurrence>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

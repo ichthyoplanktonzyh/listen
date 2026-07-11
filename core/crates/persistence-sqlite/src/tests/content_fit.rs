@@ -354,6 +354,7 @@ fn comprehension_feedback_calibrates_sound_fit_and_survives_recompute() {
                 &session.id,
                 application::CompleteListeningSessionInput {
                     comprehension_report: Some(ListeningComprehensionReport::Unclear),
+                    hunting_summary: None,
                 },
             )
             .unwrap();
@@ -434,6 +435,7 @@ fn sessions_without_media_or_feedback_leave_no_calibration() {
             &session.id,
             application::CompleteListeningSessionInput {
                 comprehension_report: Some(ListeningComprehensionReport::Unclear),
+                hunting_summary: None,
             },
         )
         .unwrap();
@@ -453,6 +455,7 @@ fn sessions_without_media_or_feedback_leave_no_calibration() {
             &session.id,
             application::CompleteListeningSessionInput {
                 comprehension_report: None,
+                hunting_summary: None,
             },
         )
         .unwrap();

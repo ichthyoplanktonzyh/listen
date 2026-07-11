@@ -19,7 +19,8 @@ fn test_state() -> ApiState {
             repo.clone(),
         )
         .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
-        .with_difficulty_repository(repo.clone()),
+        .with_difficulty_repository(repo.clone())
+        .with_corpus_index_repository(repo.clone()),
         repo,
         "secret",
     )

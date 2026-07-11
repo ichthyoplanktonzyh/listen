@@ -458,6 +458,88 @@ impl ReviewRepository for SqliteRepository {
         }
     }
 
+    fn upsert_hunting_target(
+        &self,
+        target: &HuntingTarget,
+    ) -> Result<HuntingTarget, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.execute(
+            "INSERT INTO hunting_targets
+             (id,lexical_entry_id,status,created_at_ms,updated_at_ms,target_json)
+             VALUES (?1,?2,?3,?4,?5,?6)
+             ON CONFLICT(lexical_entry_id) DO UPDATE SET
+               id=excluded.id,
+               status=excluded.status,
+               updated_at_ms=excluded.updated_at_ms,
+               target_json=excluded.target_json",
+            params![
+                target.id.as_str(),
+                target.lexical_entry_id.as_str(),
+                json(&target.status)?,
+                target.created_at_ms,
+                target.updated_at_ms,
+                json(target)?,
+            ],
+        )
+        .map_err(repo)?;
+        Ok(target.clone())
+    }
+
+    fn get_hunting_target(
+        &self,
+        id: &HuntingTargetId,
+    ) -> Result<Option<HuntingTarget>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.query_row(
+            "SELECT target_json FROM hunting_targets WHERE id=?1",
+            [id.as_str()],
+            |row| from_json(&row.get::<_, String>(0)?),
+        )
+        .optional()
+        .map_err(repo)
+    }
+
+    fn list_hunting_targets(
+        &self,
+        status: Option<HuntingTargetStatus>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<HuntingTarget>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        if let Some(status) = status {
+            let mut statement = conn
+                .prepare(
+                    "SELECT target_json FROM hunting_targets
+                     WHERE status=?1
+                     ORDER BY updated_at_ms DESC, id ASC
+                     LIMIT ?2 OFFSET ?3",
+                )
+                .map_err(repo)?;
+            statement
+                .query_map(params![json(&status)?, limit.min(100), offset], |row| {
+                    from_json(&row.get::<_, String>(0)?)
+                })
+                .map_err(repo)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(repo)
+        } else {
+            let mut statement = conn
+                .prepare(
+                    "SELECT target_json FROM hunting_targets
+                     ORDER BY updated_at_ms DESC, id ASC
+                     LIMIT ?1 OFFSET ?2",
+                )
+                .map_err(repo)?;
+            statement
+                .query_map(params![limit.min(100), offset], |row| {
+                    from_json(&row.get::<_, String>(0)?)
+                })
+                .map_err(repo)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(repo)
+        }
+    }
+
     fn upsert_recognition_evidence(
         &self,
         evidence: &RecognitionEvidence,

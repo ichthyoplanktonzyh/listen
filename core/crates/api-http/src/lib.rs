@@ -20,11 +20,13 @@ use dictionary_provider::{
     FreeDictionaryProvider, JapaneseDictionaryProvider,
 };
 use domain::{
-    LanguageCode, LearningStatus, LexicalEntryId, ListeningInboxItem, ListeningInboxItemId,
-    ListeningInboxStatus, MediaAvailability, MediaId, MediaKind, MediaTriageIntent,
-    PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeSession, PracticeSessionId,
-    ReviewItem, ReviewItemId, SubtitleSentenceId, SubtitleTrackId, UpgradeSuggestion,
-    UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle,
+    HuntingCandidate, HuntingCandidateStatus, HuntingOccurrenceQueryResult, HuntingTarget,
+    HuntingTargetId, HuntingTargetStatus, LanguageCode, LearningStatus, LexicalEntryId,
+    ListeningInboxItem, ListeningInboxItemId, ListeningInboxStatus, MediaAvailability, MediaId,
+    MediaKind, MediaTriageIntent, PracticeAttempt, PracticeAttemptId, PracticeItem,
+    PracticeSession, PracticeSessionId, ReviewItem, ReviewItemId, SubtitleSentenceId,
+    SubtitleTrackId, UpgradeSuggestion, UpgradeSuggestionId, UpgradeSuggestionStatus,
+    VocabularyAssetBundle,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
@@ -364,6 +366,14 @@ pub fn router(state: ApiState) -> Router {
             "/v1/listening-inbox/items/{id}/process",
             post(process_listening_inbox_item),
         )
+        .route("/v1/hunting/candidates", get(list_hunting_candidates))
+        .route(
+            "/v1/hunting/targets",
+            get(list_hunting_targets).post(create_hunting_target),
+        )
+        .route("/v1/hunting/targets/{id}", delete(archive_hunting_target))
+        .route("/v1/hunting/occurrences", get(list_hunting_occurrences))
+        .route("/v1/hunting/checks", post(submit_hunting_check))
         .route(
             "/v1/review/items",
             get(list_due_review_items).post(create_review_item),

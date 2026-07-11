@@ -7,6 +7,7 @@ fn new_database_migrates_to_latest() {
     let connection = repo.connection.lock().unwrap();
     assert!(!table_exists(&connection, removed_resource_table_name()));
     assert!(table_exists(&connection, "hunting_candidates"));
+    assert!(table_exists(&connection, "hunting_targets"));
     assert!(table_exists(&connection, "recognition_evidence"));
     assert!(table_exists(&connection, "upgrade_suggestions"));
     assert!(table_exists(&connection, "lexical_capability_states"));
@@ -637,5 +638,8 @@ fn upgrades_v29_database_with_empty_optional_sense_folders() {
         MIGRATION_VERSION
     );
     assert!(table_exists(&connection, "lexical_sense_folders"));
-    assert!(table_exists(&connection, "lexical_sense_folder_occurrences"));
+    assert!(table_exists(
+        &connection,
+        "lexical_sense_folder_occurrences"
+    ));
 }

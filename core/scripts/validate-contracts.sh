@@ -295,7 +295,7 @@ for (const operation of ["health()", "registerMedia(", "importLLTimeline(", "imp
 for (const schema of ["WordTiming", "WordTimeline", "WordTimelineSummary", "CreateWordTimeline", "LLTimelineDocument", "PhoneTimeline", "PhoneTimelineSummary", "DetectedPhone", "PhoneAlignment", "PhoneticFinding", "LexicalEntry", "LexicalEntryDetails", "LexicalNormalization", "ReviewSchedule", "ReviewAttempt", "ReviewCardKind", "ReviewCard", "ReviewQueueEntry", "ReviewSubmission", "UpgradeSuggestionStatus", "UpgradeSuggestion", "LearningResource", "SubtitleSearchRequest", "SubtitleSearchResult"]) {
   if (!openapi.includes(`    ${schema}:`)) throw new Error(`missing OpenAPI schema ${schema}`);
 }
-if (!openapi.includes("version: { enum: [5] }")) throw new Error("vocabulary asset v5 missing");
+if (!openapi.includes("version: { enum: [5, 6, 7] }")) throw new Error("vocabulary asset versions v5-v7 missing");
 if (!openapi.includes("phonetic_finding_feedback:")) throw new Error("phonetic feedback backup missing");
 if (!openapi.includes("audio_url: { type: [string, \"null\"] }")) throw new Error("provider pronunciation audio missing");
 for (const item of examples) {

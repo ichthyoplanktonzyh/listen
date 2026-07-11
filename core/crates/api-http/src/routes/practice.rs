@@ -104,6 +104,107 @@ pub(crate) async fn process_listening_inbox_item(
         .map_err(ApiError::from)
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct HuntingCandidateQuery {
+    status: Option<HuntingCandidateStatus>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+}
+
+pub(crate) async fn list_hunting_candidates(
+    State(state): State<ApiState>,
+    Query(query): Query<HuntingCandidateQuery>,
+) -> Result<Json<Vec<HuntingCandidate>>, ApiError> {
+    state
+        .services
+        .list_hunting_candidates(
+            Some(query.status.unwrap_or(HuntingCandidateStatus::Active)),
+            query.limit.unwrap_or(100),
+            query.offset.unwrap_or(0),
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct HuntingTargetQuery {
+    status: Option<HuntingTargetStatus>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+}
+
+pub(crate) async fn list_hunting_targets(
+    State(state): State<ApiState>,
+    Query(query): Query<HuntingTargetQuery>,
+) -> Result<Json<Vec<HuntingTarget>>, ApiError> {
+    state
+        .services
+        .list_hunting_targets(
+            Some(query.status.unwrap_or(HuntingTargetStatus::Active)),
+            query.limit.unwrap_or(100),
+            query.offset.unwrap_or(0),
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn create_hunting_target(
+    State(state): State<ApiState>,
+    Json(request): Json<application::CreateHuntingTargetInput>,
+) -> Result<Json<HuntingTarget>, ApiError> {
+    state
+        .services
+        .create_hunting_target(request)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn archive_hunting_target(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> Result<Json<HuntingTarget>, ApiError> {
+    let id = HuntingTargetId::parse(id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .archive_hunting_target(&id)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct HuntingOccurrenceQuery {
+    media_id: String,
+    track_id: Option<String>,
+}
+
+pub(crate) async fn list_hunting_occurrences(
+    State(state): State<ApiState>,
+    Query(query): Query<HuntingOccurrenceQuery>,
+) -> Result<Json<HuntingOccurrenceQueryResult>, ApiError> {
+    let media_id = MediaId::parse(query.media_id).map_err(ApplicationError::from)?;
+    let track_id = query
+        .track_id
+        .map(SubtitleTrackId::parse)
+        .transpose()
+        .map_err(ApplicationError::from)?;
+    state
+        .services
+        .hunting_occurrences(&media_id, track_id.as_ref())
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn submit_hunting_check(
+    State(state): State<ApiState>,
+    Json(request): Json<application::SubmitHuntingCheckInput>,
+) -> Result<Json<application::HuntingCheckResult>, ApiError> {
+    state
+        .services
+        .submit_hunting_check(request)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 pub(crate) async fn create_review_item(
     State(state): State<ApiState>,
     Json(request): Json<application::CreateReviewItem>,

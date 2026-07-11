@@ -1,6 +1,6 @@
 # Current Data Model
 
-Last updated: 2026-07-06, Phase 3.4.1 transition planning.
+Last updated: 2026-07-11, Phase 3.7 Hunting List backend foundation.
 
 All persisted time values are non-negative integer milliseconds. Public IDs are
 opaque SHA-256 strings generated from a namespace and stable fingerprint; they
@@ -92,6 +92,7 @@ assets:
 | `review_attempts` | Historical review rating attempts |
 | `review_schedules` | Current due projection per review item; v1 is explicitly `heuristic_proxy` and replaceable |
 | `hunting_candidates` | Queryable lexical targets produced by failed reviews for later hunting-list consumption |
+| `hunting_targets` | Learner-confirmed listening targets; independent of candidate generation and capped at five active targets |
 | `recognition_evidence` | Successful listening-recognition evidence, unique per lexical entry + sentence/media context |
 | `upgrade_suggestions` | Pending/resolved `known_not_recognized -> known_recognized` proposals with evidence snapshot and rejection cooldown |
 | `learning_events` | Append-mostly analytics facts for practice/review/listening/status/stuck-point events |
@@ -125,6 +126,15 @@ Phase 3.2 also uses it for stuck-point facts and familiar-material markers:
 `stuck_point_closed`, and `familiar_material_marked`. Stuck-point status is a
 read-side derivation from events plus `PracticeAttempt` and `ReviewItem`; there
 is no authoritative stuck-point state table in schema v21.
+
+Phase 3.7 adds `hunting_check_answered` as a session-linked event. All three
+answers are recorded for session statistics; `not_noticed` deliberately creates
+no lexical observation or recognition evidence, while recognized/not-recognized
+continue through the existing single observation write path. An extensive
+`listening_completed` event may also carry a `hunting_summary` with prompted,
+recognized, not-recognized, and not-noticed counts. The application validates
+the five-prompt budget and answered-count relationship before ending the session;
+these counters are presentation/aggregation facts and do not enter content-fit.
 
 Phase 3.3 adds `ListeningInboxItem` for extensive-listening soft interrupts.
 The item stores the target time range, subtitle/context snapshot, active vs
@@ -172,7 +182,8 @@ review_items
 
 lexical_entries (logical reference; no delete cascade)
   ├── recognition_evidence (unique lexical entry + context key)
-  └── upgrade_suggestions (pending/resolved proposal history)
+  ├── upgrade_suggestions (pending/resolved proposal history)
+  └── hunting_targets (confirmed listening targets; cascade only on explicit lexical deletion)
 
 learning_events
   └── session_id nullable, ON DELETE SET NULL
@@ -318,6 +329,9 @@ expansion is ephemeral overlay state, not a fourth persisted Rhythm mode.
   corpus queries are FTS phrase matches over sentence/chunk text; single-word
   queries are exact lemma-key lookups normalized through the same
   user-override → provider → baseline path as lexical entries.
+- Schema v32 adds `hunting_targets`. One durable row exists per lexical entry;
+  archive/reactivate preserves identity and creation time. Candidate source IDs
+  are provenance only: `hunting_candidates` remain unconfirmed until promoted.
 - Review scheduling v1 is recorded as `listen_review_v1_heuristic_proxy`: `again` returns in
   10 minutes, `hard` in one day, and successful intervals grow from 3 to 7 days before doubling.
   The durable attempts remain the evidence history; the schedule row is a replaceable read model.

@@ -1,6 +1,6 @@
 use super::*;
 use application::{
-    AppServices, DictionaryProvider, DictionaryProviderError, ImportSubtitle,
+    AppServices, ApplicationError, DictionaryProvider, DictionaryProviderError, ImportSubtitle,
     LearningAssetRepository, LearningEventRepository, ListeningInboxRepository, MediaRepository,
     PhoneticAnalysisRepository, PracticeRepository, RegisterMedia, ReviewRepository,
     SubtitleRepository, TranscriptionRepository, UpsertLexicalEntry,
