@@ -440,8 +440,8 @@ mod tests {
             comma_token.index >= span.start_token_index && comma_token.index <= span.end_token_index
         });
         assert!(
-            any_span_covers || true,
-            "punctuation tokens between groups are allowed"
+            any_span_covers,
+            "a mid-sentence punctuation token is absorbed into a sense group span"
         );
     }
 

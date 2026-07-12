@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-12 19:20 CST: 清除 speech-analysis 既有 deny 级 clippy error。
+  `sense_group_partition.rs` 测试里的恒真断言 `assert!(any_span_covers || true, ...)`
+  （Phase 3.4.2 引入，触发 `overly_complex_bool_expr`）改为实义断言
+  `assert!(any_span_covers, ...)`：探查确认含中间标点的句子里逗号 token 确实被相邻
+  sense group span 吸收，断言现在真正锚定该行为并匹配测试名，注释同步纠正。
+  speech-analysis 155 项测试通过；workspace-wide `cargo clippy --all-targets` error 归零。
+
 - 2026-07-12 18:55 CST: Phase 3.11 Slice 4 收口，Semantic Task Evidence Foundation
   CODE COMPLETE。新增 ADR 0021（semantic attempt/judgment/observation/capability 四层分离、
   独立任务族 spike 裁决、rubric 身份含 purpose、abstain 一等、adjudication 非 override、
