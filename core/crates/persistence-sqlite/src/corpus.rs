@@ -196,6 +196,57 @@ impl CorpusIndexRepository for SqliteRepository {
         }
     }
 
+    fn search_corpus_family_occurrences(
+        &self,
+        language: &LanguageCode,
+        families: &[String],
+        media_id: Option<&MediaId>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
+        if families.is_empty() {
+            return Ok(Vec::new());
+        }
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        // Same round-robin-across-media ranking as word search, so one long
+        // movie cannot monopolize a specialty page.
+        let placeholders = (0..families.len())
+            .map(|index| format!("?{}", index + 5))
+            .collect::<Vec<_>>()
+            .join(",");
+        let mut statement = conn
+            .prepare(&format!(
+                "SELECT {SELECT_COLUMNS} FROM (
+                   SELECT *, ROW_NUMBER() OVER (PARTITION BY media_id ORDER BY start_ms, id) AS media_rank
+                   FROM corpus_occurrences
+                   WHERE language=?1 AND kind=?2
+                     AND (?3 IS NULL OR media_id=?3)
+                     AND normalized_key IN ({placeholders})
+                 )
+                 ORDER BY media_rank, start_ms, id LIMIT ?4 OFFSET ?{offset_index}",
+                offset_index = families.len() + 5,
+            ))
+            .map_err(repo)?;
+        use rusqlite::types::Value;
+        let mut params: Vec<Value> = vec![
+            Value::Text(language.as_str().to_owned()),
+            Value::Text(json(&CorpusOccurrenceKind::ConnectedSpeech)?),
+            media_id
+                .map(|id| Value::Text(id.as_str().to_owned()))
+                .unwrap_or(Value::Null),
+            Value::Integer(i64::from(limit)),
+        ];
+        for family in families {
+            params.push(Value::Text(family.clone()));
+        }
+        params.push(Value::Integer(i64::from(offset)));
+        statement
+            .query_map(rusqlite::params_from_iter(params), occurrence_from_row)
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
     fn get_corpus_occurrence(
         &self,
         id: &CorpusOccurrenceId,

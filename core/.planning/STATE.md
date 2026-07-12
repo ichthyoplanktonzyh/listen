@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-11T20:07:00.000+08:00"
+last_updated: "2026-07-12T10:45:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-11 20:07 CST
-> 更新原因：Owner 确认真实媒体狩猎模式通过，Phase 3.7 完成收口。
+> 最后更新：2026-07-12 10:45 CST
+> 更新原因：Phase 3.9 L1-aware Diagnosis v1 代码全量落地（独立分支，与 3.8 并行推进）。
 
 ## 当前位置
 
@@ -155,6 +155,23 @@ last_updated: "2026-07-11T20:07:00.000+08:00"
 - 2026-07-11 owner 明确确认真实媒体狩猎模式功能通过；阶段已创建 CLOSEOUT 并冻结。
 - 计划与结论：`.planning/phases/3.7-hunting-list/3.7-PLAN.md`、
   `.planning/phases/3.7-hunting-list/3.7-CLOSEOUT.md`。
+
+### Phase 3.9: L1-aware Diagnosis v1 ⏳ 代码完成，待真实媒体 QA
+
+- 2026-07-12 于独立分支 `codex/3.9-l1-aware-diagnosis` 落地（基于 3.7 tip，与 3.8 并行）：
+  LearnerProfile L1 持久化（schema v34，v33 保留给 3.8 in-flight 的 recording_assets）+
+  统一读取面 + 设置入口；diagnosis-core zh→en 九类难点 profile provider（研究依据见
+  `3.9-L1-PROFILE-EVIDENCE.md`，识别规则 evidence class 一律 heuristic_proxy）；诊断卡 L1
+  短提示（可复听 span 强制、possibilities 语气、无 L1/组合不支持/无证据三级干净降级）；
+  幂等 `l1_difficulty_hit` LearningEvent（(sentence, kind) 指纹，供 3.10 难点分布）；corpus
+  family 标注投影（kind=connected_speech 可重建行 + word timeline 生命周期/转写管线/导入的
+  reindex 触发点）；`/v1/learner/l1-specialty` 全库同类片段聚合 + corpus 缺席降级为当前
+  track 内存聚合 + 诊断卡同类片段对话框（试听走 3.5.7 切片窗，当前 track 条目可进 3.5.6
+  句听写练习）。
+- 验证：cargo test --workspace、flutter analyze/test（278）、validate-contracts 全部通过。
+- 待办：真实媒体人工 QA（exit signal 走查）；与 3.8 合流时迁移版本按
+  later-lander-renumbers 规则复核。
+- 计划：`.planning/phases/3.9-l1-aware-diagnosis-v1/3.9-PLAN.md`。
 
 ### 下一执行序列：Phase 3.7–3.18
 

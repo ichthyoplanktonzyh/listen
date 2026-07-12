@@ -2,6 +2,7 @@ mod connection;
 mod content_fit;
 mod corpus;
 mod dictionary;
+mod learner_profile;
 mod learning_loop;
 mod lexical;
 mod media;

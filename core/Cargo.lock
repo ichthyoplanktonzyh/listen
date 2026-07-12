@@ -620,6 +620,7 @@ name = "diagnosis-core"
 version = "0.7.0"
 dependencies = [
  "domain",
+ "serde_json",
 ]
 
 [[package]]

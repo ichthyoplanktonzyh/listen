@@ -12,6 +12,7 @@ mod dictionary;
 mod dto;
 mod error;
 mod hunting;
+mod learner_profile;
 mod lexical;
 mod listening;
 mod media;
@@ -31,6 +32,7 @@ mod word_timelines;
 
 pub use dto::*;
 pub use error::ApplicationError;
+pub use learner_profile::LearnerProfileView;
 pub use pronunciation_providers::*;
 pub use providers::*;
 pub use repositories::*;
@@ -76,6 +78,7 @@ pub struct AppServices {
     pub(crate) listening_inbox: Arc<dyn ListeningInboxRepository>,
     pub(crate) corpus: Arc<dyn CorpusIndexRepository>,
     pub(crate) difficulty: Arc<dyn DifficultyRepository>,
+    pub(crate) learner_profiles: Arc<dyn LearnerProfileRepository>,
     pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
     pub(crate) pronunciation_providers: Arc<Vec<Arc<dyn PronunciationProvider>>>,
 }
@@ -107,6 +110,7 @@ impl AppServices {
             listening_inbox: Arc::new(DisabledLearningLoopRepository),
             corpus: Arc::new(DisabledCorpusIndexRepository),
             difficulty: Arc::new(DisabledDifficultyRepository),
+            learner_profiles: Arc::new(DisabledLearnerProfileRepository),
             lexical_normalizers: Arc::new(Vec::new()),
             pronunciation_providers: Arc::new(Vec::new()),
         }
@@ -136,6 +140,14 @@ impl AppServices {
         self
     }
 
+    pub fn with_learner_profile_repository(
+        mut self,
+        learner_profiles: Arc<dyn LearnerProfileRepository>,
+    ) -> Self {
+        self.learner_profiles = learner_profiles;
+        self
+    }
+
     pub fn with_lexical_normalizers(
         mut self,
         providers: Vec<Arc<dyn LexicalNormalizationProvider>>,
@@ -162,6 +174,29 @@ impl DisabledLearningLoopRepository {
 }
 
 struct DisabledDifficultyRepository;
+
+/// L1 is an optional personalization: with no repository configured the
+/// profile simply reads as absent, so diagnosis stays language-neutral
+/// instead of erroring (Phase 3.9 clean-degradation guardrail).
+struct DisabledLearnerProfileRepository;
+
+impl LearnerProfileRepository for DisabledLearnerProfileRepository {
+    fn save_learner_profile(
+        &self,
+        _profile: &LearnerProfile,
+    ) -> Result<LearnerProfile, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "learner profile repository is not configured".into(),
+        ))
+    }
+
+    fn get_learner_profile(
+        &self,
+        _id: &LearnerProfileId,
+    ) -> Result<Option<LearnerProfile>, ApplicationError> {
+        Ok(None)
+    }
+}
 
 struct DisabledCorpusIndexRepository;
 
@@ -217,6 +252,17 @@ impl CorpusIndexRepository for DisabledCorpusIndexRepository {
         _id: &CorpusOccurrenceId,
     ) -> Result<Option<CorpusOccurrence>, ApplicationError> {
         Ok(None)
+    }
+
+    fn search_corpus_family_occurrences(
+        &self,
+        _language: &LanguageCode,
+        _families: &[String],
+        _media_id: Option<&MediaId>,
+        _limit: u32,
+        _offset: u32,
+    ) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
+        Ok(Vec::new())
     }
 }
 

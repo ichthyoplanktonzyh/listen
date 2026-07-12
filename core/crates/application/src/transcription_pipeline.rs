@@ -50,6 +50,9 @@ impl AppServices {
         } else {
             self.store_word_timings(&track.id, &timings).is_ok()
         };
+        // New word timelines feed rhythm frames; refresh the corpus family
+        // projection (Phase 3.9) so specialty aggregation sees this track.
+        let _ = self.reindex_track_corpus(&track.id);
 
         Ok(Some(WordTimelinePipelineResult {
             extracted_word_count: timings.len(),
@@ -201,6 +204,7 @@ impl AppServices {
             energy_prominence_cue_count = acoustic_analysis.positive_energy_cue_count();
             pitch_prominence_cue_count = acoustic_analysis.positive_pitch_cue_count();
         }
+        let _ = self.reindex_track_corpus(&track.id);
 
         Ok(Some(WordTimelinePipelineResult {
             extracted_word_count,

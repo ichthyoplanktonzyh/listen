@@ -61,6 +61,11 @@ pub trait SubtitleRepository: Send + Sync {
         &self,
         id: &SubtitleSentenceId,
     ) -> Result<Option<LanguageCode>, ApplicationError>;
+    /// Track a sentence belongs to; `None` when the sentence is unknown.
+    fn sentence_track_id(
+        &self,
+        id: &SubtitleSentenceId,
+    ) -> Result<Option<SubtitleTrackId>, ApplicationError>;
     fn save_word_pronunciation(
         &self,
         language: &str,
@@ -237,6 +242,13 @@ pub trait SubtitleTrackRepository: Send + Sync {
         &self,
         id: &SubtitleSentenceId,
     ) -> Result<Option<LanguageCode>, ApplicationError>;
+    /// Track a sentence belongs to; `None` when the sentence is unknown.
+    /// Used to reach track-scoped resources (rhythm frames) from a
+    /// sentence-scoped call such as diagnosis.
+    fn sentence_track_id(
+        &self,
+        id: &SubtitleSentenceId,
+    ) -> Result<Option<SubtitleTrackId>, ApplicationError>;
 }
 
 impl<T: SubtitleRepository + ?Sized> SubtitleTrackRepository for T {
@@ -298,6 +310,13 @@ impl<T: SubtitleRepository + ?Sized> SubtitleTrackRepository for T {
         id: &SubtitleSentenceId,
     ) -> Result<Option<LanguageCode>, ApplicationError> {
         SubtitleRepository::sentence_track_language(self, id)
+    }
+
+    fn sentence_track_id(
+        &self,
+        id: &SubtitleSentenceId,
+    ) -> Result<Option<SubtitleTrackId>, ApplicationError> {
+        SubtitleRepository::sentence_track_id(self, id)
     }
 }
 
@@ -1070,6 +1089,18 @@ pub trait CorpusIndexRepository: Send + Sync {
         &self,
         id: &CorpusOccurrenceId,
     ) -> Result<Option<CorpusOccurrence>, ApplicationError>;
+    /// Connected-speech family aggregation (Phase 3.9): occurrences of kind
+    /// `connected_speech` whose `normalized_key` is one of `families`,
+    /// round-robin interleaved across media like word search. `media_id`
+    /// narrows to one media for the current-media degraded path.
+    fn search_corpus_family_occurrences(
+        &self,
+        language: &LanguageCode,
+        families: &[String],
+        media_id: Option<&MediaId>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<CorpusOccurrence>, ApplicationError>;
 }
 
 pub trait DifficultyRepository: Send + Sync {
