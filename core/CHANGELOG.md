@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- 2026-07-12 18:40 CST: Phase 3.11 Slice 3 落地：最小 HTTP API + OpenAPI 契约。新增
+  `crates/api-http/src/routes/semantic.rs`：`/v1/semantic/rubrics`(+`/{id}`、
+  `/{id}/attempts`)、`/v1/semantic/attempts`(+`/{id}`、`/{id}/judgments`)、
+  `/v1/semantic/judgments`(+`/{id}/adjudications`)、`/v1/semantic/adjudications`
+  九条只写读面（无 update/delete，append-only；id 服务端按 fingerprint 生成）；
+  `contracts/openapi/v1.yaml` 补齐九路径与 19 个 schema（Semantic* / Rubric* /
+  AttemptResponse / PointJudgment / JudgmentAbstain 等）；domain 新增
+  `semantic_task_attempt_id` fingerprint 助手。api-http 契约测试引用 Slice 1 gold
+  fixture 走完整 HTTP 链路（好/差/abstain 三判定 + adjudication 往返、abstain 逐点为空、
+  矩阵违规与篡改哈希返回 400、未知 rubric 版本 404）。本 phase 不交 Dart DTO（推迟
+  3.13 首个真实 consumer）。api-http 53 项、workspace 25 套件、validate-contracts
+  全部通过。
+
 - 2026-07-12 18:05 CST: Phase 3.11 Slice 2 落地：schema v35 + repository + use case。
   新增 `0035_semantic_tasks.sql`（semantic_rubrics/semantic_task_attempts/
   semantic_judgments/judgment_adjudications 四表，UPDATE/DELETE 全部触发器禁止，

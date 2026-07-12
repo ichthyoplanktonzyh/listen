@@ -296,6 +296,33 @@ pub fn semantic_rubric_id(
     )
 }
 
+/// Attempt identity: the rubric it answers, when it started, and what was
+/// actually said — two different responses in the same millisecond stay two
+/// attempts, while a byte-identical replay stays idempotent.
+pub fn semantic_task_attempt_id(
+    rubric_id: &SemanticRubricId,
+    rubric_version: u32,
+    kind: SemanticTaskKind,
+    started_at_ms: u64,
+    responses: &[AttemptResponse],
+) -> SemanticTaskAttemptId {
+    let response_fingerprint = transcript_sha256(
+        &responses
+            .iter()
+            .map(|response| response.transcript.as_str())
+            .collect::<Vec<_>>()
+            .join("\u{1f}"),
+    );
+    SemanticTaskAttemptId::from_fingerprint(
+        "semantic-attempt",
+        &format!(
+            "{}:{rubric_version}:{}:{started_at_ms}:{response_fingerprint}",
+            rubric_id.as_str(),
+            serde_json::to_string(&kind).expect("kind serializes"),
+        ),
+    )
+}
+
 pub fn semantic_judgment_id(
     attempt_id: &SemanticTaskAttemptId,
     response_revision: u32,

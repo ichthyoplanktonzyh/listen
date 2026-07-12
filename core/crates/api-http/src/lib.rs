@@ -48,6 +48,7 @@ use routes::media::*;
 use routes::phonetic_analysis::*;
 use routes::practice::*;
 use routes::pronunciation::*;
+use routes::semantic::*;
 use routes::sound_line::*;
 use routes::speech::*;
 use routes::timelines::*;
@@ -444,6 +445,27 @@ pub fn router(state: ApiState) -> Router {
             get(learner_profile).put(update_learner_profile),
         )
         .route("/v1/learner/l1-specialty", get(l1_specialty_occurrences))
+        .route("/v1/semantic/rubrics", post(create_semantic_rubric))
+        .route("/v1/semantic/rubrics/{id}", get(semantic_rubric))
+        .route(
+            "/v1/semantic/rubrics/{id}/attempts",
+            get(semantic_rubric_attempts),
+        )
+        .route("/v1/semantic/attempts", post(create_semantic_attempt))
+        .route("/v1/semantic/attempts/{id}", get(semantic_attempt))
+        .route(
+            "/v1/semantic/attempts/{id}/judgments",
+            get(semantic_attempt_judgments),
+        )
+        .route("/v1/semantic/judgments", post(create_semantic_judgment))
+        .route(
+            "/v1/semantic/judgments/{id}/adjudications",
+            get(semantic_judgment_adjudications),
+        )
+        .route(
+            "/v1/semantic/adjudications",
+            post(create_judgment_adjudication),
+        )
         .route("/v1/languages", get(list_languages))
         .route("/v1/languages/{code}/profile", get(language_profile))
         .route("/v1/transcription/providers", get(transcription_providers))

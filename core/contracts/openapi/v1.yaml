@@ -1251,6 +1251,190 @@ paths:
                     id: { type: string }
                     occurred_at_ms: { type: integer, minimum: 0 }
                     result: { type: string }
+  /v1/semantic/rubrics:
+    post:
+      operationId: createSemanticRubric
+      description: >
+        Phase 3.11 semantic task fact layer (ADR 0021). Append-only: rubric
+        revisions POST a higher version, never rewriting an earlier one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, source, response_language, points, provenance]
+              properties:
+                purpose: { $ref: "#/components/schemas/SemanticTaskKind" }
+                source: { $ref: "#/components/schemas/RubricSource" }
+                response_language: { type: string }
+                points:
+                  type: array
+                  items: { $ref: "#/components/schemas/RubricPoint" }
+                version: { type: integer, minimum: 1, default: 1 }
+                provenance: { $ref: "#/components/schemas/SemanticGeneratorProvenance" }
+                revision: { $ref: "#/components/schemas/RubricRevisionNote" }
+      responses:
+        "200":
+          description: Persisted rubric version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticRubric" }
+  /v1/semantic/rubrics/{id}:
+    get:
+      operationId: semanticRubric
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: version, in: query, required: false, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: Requested (or latest) rubric version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticRubric" }
+  /v1/semantic/rubrics/{id}/attempts:
+    get:
+      operationId: semanticRubricAttempts
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Attempts recorded against this rubric, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SemanticTaskAttempt" }
+  /v1/semantic/attempts:
+    post:
+      operationId: createSemanticAttempt
+      description: >
+        Records a finished clip-level attempt. The attempt only completes or is
+        abandoned; per-point outcome lives in a separate judgment.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, target, rubric_id, rubric_version, conditions, responses, status, started_at_ms]
+              properties:
+                kind: { $ref: "#/components/schemas/SemanticTaskKind" }
+                target: { $ref: "#/components/schemas/PracticeTarget" }
+                anchors:
+                  type: array
+                  items: { $ref: "#/components/schemas/PracticeAnchor" }
+                rubric_id: { type: string }
+                rubric_version: { type: integer, minimum: 1 }
+                conditions: { $ref: "#/components/schemas/SemanticTaskConditions" }
+                responses:
+                  type: array
+                  items: { $ref: "#/components/schemas/AttemptResponse" }
+                status: { $ref: "#/components/schemas/SemanticAttemptStatus" }
+                started_at_ms: { type: integer, minimum: 0 }
+                ended_at_ms: { type: [integer, "null"], minimum: 0 }
+      responses:
+        "200":
+          description: Persisted semantic task attempt
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticTaskAttempt" }
+  /v1/semantic/attempts/{id}:
+    get:
+      operationId: semanticAttempt
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: One semantic task attempt
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticTaskAttempt" }
+  /v1/semantic/attempts/{id}/judgments:
+    get:
+      operationId: semanticAttemptJudgments
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Judgments over this attempt's responses, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SemanticJudgment" }
+  /v1/semantic/judgments:
+    post:
+      operationId: createSemanticJudgment
+      description: >
+        Records one per-point (or abstaining) judgment over one response
+        revision. Absent or failed evaluation is never synthesized.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [attempt_id, response_revision, rubric_id, rubric_version, rubric_source_sha256, response_transcript_sha256, provenance, evidence_class]
+              properties:
+                attempt_id: { type: string }
+                response_revision: { type: integer, minimum: 1 }
+                rubric_id: { type: string }
+                rubric_version: { type: integer, minimum: 1 }
+                rubric_source_sha256: { type: string }
+                response_transcript_sha256: { type: string }
+                points:
+                  type: array
+                  items: { $ref: "#/components/schemas/PointJudgment" }
+                abstain: { $ref: "#/components/schemas/JudgmentAbstain" }
+                provenance: { $ref: "#/components/schemas/SemanticGeneratorProvenance" }
+                raw_output: {}
+                evidence_class: { type: string }
+      responses:
+        "200":
+          description: Persisted judgment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticJudgment" }
+  /v1/semantic/judgments/{id}/adjudications:
+    get:
+      operationId: semanticJudgmentAdjudications
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: User adjudications of this judgment, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/JudgmentAdjudication" }
+  /v1/semantic/adjudications:
+    post:
+      operationId: createJudgmentAdjudication
+      description: >
+        User confirms or corrects one judged point. This is an adjudication of
+        one automatic assertion, not a capability override; the original
+        judgment stays byte-identical.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [judgment_id, point_id, prior_verdict, user_verdict]
+              properties:
+                judgment_id: { type: string }
+                point_id: { type: string }
+                prior_verdict: { $ref: "#/components/schemas/PointVerdict" }
+                user_verdict: { $ref: "#/components/schemas/PointVerdict" }
+                note: { type: [string, "null"] }
+      responses:
+        "200":
+          description: Persisted adjudication
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JudgmentAdjudication" }
   /v1/hunting/candidates:
     get:
       operationId: listHuntingCandidates
@@ -3245,6 +3429,152 @@ components:
         token_end: { type: [integer, "null"], minimum: 0 }
         start_ms: { type: [integer, "null"], minimum: 0 }
         end_ms: { type: [integer, "null"], minimum: 0 }
+    SemanticTaskKind:
+      enum: [reading_comprehension, l1_retelling, l2_retelling, role_reply, dictogloss, summary, pattern_production]
+    RubricPointImportance:
+      enum: [required, optional]
+    RubricPoint:
+      type: object
+      required: [point_id, importance, statement, accepted_paraphrase_notes]
+      properties:
+        point_id: { type: string }
+        importance: { $ref: "#/components/schemas/RubricPointImportance" }
+        statement: { type: string }
+        accepted_paraphrase_notes: { type: [string, "null"] }
+    SemanticGeneratorKind:
+      enum: [fixture, manual, llm]
+    SemanticGeneratorProvenance:
+      type: object
+      required: [kind, detail, model_id, prompt_version, schema_version]
+      properties:
+        kind: { $ref: "#/components/schemas/SemanticGeneratorKind" }
+        detail: { type: [string, "null"] }
+        model_id: { type: [string, "null"] }
+        prompt_version: { type: [string, "null"] }
+        schema_version: { type: [string, "null"] }
+    RubricSource:
+      type: object
+      required: [media_id, track_id, start_ms, end_ms, language, transcript_snapshot]
+      properties:
+        media_id: { type: [string, "null"] }
+        track_id: { type: [string, "null"] }
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        language: { type: string }
+        transcript_snapshot: { type: string }
+    RubricRevisionNote:
+      type: object
+      required: [revised_from_version, note, revised_at_ms]
+      properties:
+        revised_from_version: { type: integer, minimum: 1 }
+        note: { type: string }
+        revised_at_ms: { type: integer, minimum: 0 }
+    SemanticRubric:
+      type: object
+      required: [id, purpose, source, response_language, points, version, provenance, revision, created_at_ms]
+      properties:
+        id: { type: string }
+        purpose: { $ref: "#/components/schemas/SemanticTaskKind" }
+        source: { $ref: "#/components/schemas/RubricSource" }
+        response_language: { type: string }
+        points: { type: array, items: { $ref: "#/components/schemas/RubricPoint" } }
+        version: { type: integer, minimum: 1 }
+        provenance: { $ref: "#/components/schemas/SemanticGeneratorProvenance" }
+        revision: { $ref: "#/components/schemas/RubricRevisionNote" }
+        created_at_ms: { type: integer, minimum: 0 }
+    SemanticAttemptStatus:
+      enum: [completed, abandoned]
+    ResponseTranscriptSource:
+      enum: [typed, asr]
+    AsrReliability:
+      enum: [reliable, suspect, unreliable]
+    L1RetellingTrigger:
+      enum: [user_requested, l2_failed, diagnosis]
+    SemanticTaskConditions:
+      type: object
+      required: [source_text_visible, audio_play_count, notes_allowed, l1_trigger]
+      properties:
+        source_text_visible: { type: boolean }
+        audio_play_count: { type: [integer, "null"], minimum: 0 }
+        notes_allowed: { type: boolean }
+        l1_trigger: { $ref: "#/components/schemas/L1RetellingTrigger" }
+    AttemptResponse:
+      type: object
+      required: [revision, transcript, source, recording_asset_id, asr_reliability, language, recorded_at_ms]
+      properties:
+        revision: { type: integer, minimum: 1 }
+        transcript: { type: string }
+        source: { $ref: "#/components/schemas/ResponseTranscriptSource" }
+        recording_asset_id: { type: [string, "null"] }
+        asr_reliability: { $ref: "#/components/schemas/AsrReliability" }
+        language: { type: string }
+        recorded_at_ms: { type: integer, minimum: 0 }
+    SemanticTaskAttempt:
+      type: object
+      required: [id, kind, target, anchors, rubric_id, rubric_version, conditions, responses, status, started_at_ms, ended_at_ms]
+      properties:
+        id: { type: string }
+        kind: { $ref: "#/components/schemas/SemanticTaskKind" }
+        target: { $ref: "#/components/schemas/PracticeTarget" }
+        anchors: { type: array, items: { $ref: "#/components/schemas/PracticeAnchor" } }
+        rubric_id: { type: string }
+        rubric_version: { type: integer, minimum: 1 }
+        conditions: { $ref: "#/components/schemas/SemanticTaskConditions" }
+        responses: { type: array, items: { $ref: "#/components/schemas/AttemptResponse" } }
+        status: { $ref: "#/components/schemas/SemanticAttemptStatus" }
+        started_at_ms: { type: integer, minimum: 0 }
+        ended_at_ms: { type: [integer, "null"], minimum: 0 }
+    PointVerdict:
+      enum: [covered, partial, missing, uncertain]
+    ResponseSpan:
+      type: object
+      required: [start_char, end_char]
+      properties:
+        start_char: { type: integer, minimum: 0 }
+        end_char: { type: integer, minimum: 0 }
+    PointJudgment:
+      type: object
+      required: [point_id, verdict, supporting_spans]
+      properties:
+        point_id: { type: string }
+        verdict: { $ref: "#/components/schemas/PointVerdict" }
+        supporting_spans: { type: array, items: { $ref: "#/components/schemas/ResponseSpan" } }
+    AbstainReason:
+      enum: [unreliable_transcript, empty_response, generator_refused, other]
+    JudgmentAbstain:
+      type: object
+      required: [reason, note]
+      properties:
+        reason: { $ref: "#/components/schemas/AbstainReason" }
+        note: { type: [string, "null"] }
+    SemanticJudgment:
+      type: object
+      required: [id, attempt_id, response_revision, rubric_id, rubric_version, rubric_source_sha256, response_transcript_sha256, points, abstain, provenance, raw_output, evidence_class, created_at_ms]
+      properties:
+        id: { type: string }
+        attempt_id: { type: string }
+        response_revision: { type: integer, minimum: 1 }
+        rubric_id: { type: string }
+        rubric_version: { type: integer, minimum: 1 }
+        rubric_source_sha256: { type: string }
+        response_transcript_sha256: { type: string }
+        points: { type: array, items: { $ref: "#/components/schemas/PointJudgment" } }
+        abstain: { $ref: "#/components/schemas/JudgmentAbstain" }
+        provenance: { $ref: "#/components/schemas/SemanticGeneratorProvenance" }
+        raw_output: {}
+        evidence_class: { type: string }
+        created_at_ms: { type: integer, minimum: 0 }
+    JudgmentAdjudication:
+      type: object
+      required: [id, judgment_id, point_id, prior_verdict, user_verdict, note, occurred_at_ms]
+      properties:
+        id: { type: string }
+        judgment_id: { type: string }
+        point_id: { type: string }
+        prior_verdict: { $ref: "#/components/schemas/PointVerdict" }
+        user_verdict: { $ref: "#/components/schemas/PointVerdict" }
+        note: { type: [string, "null"] }
+        occurred_at_ms: { type: integer, minimum: 0 }
     PracticeItem:
       type: object
       required: [id, session_id, kind, target, prompt_snapshot, expected_answer, anchors, created_at_ms]
