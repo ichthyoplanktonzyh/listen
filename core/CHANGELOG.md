@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-12 11:52 CST: Owner 将 Phase 3.9 L1-aware Diagnosis v1 明确延期，暂不收口、
+  不创建 CLOSEOUT，亦不把当前真实媒体 QA 记为通过。已合入的实现与自动化验证保留；延期原因
+  是当前 UX 依赖词汇状态/历史 observation、基础诊断和 RhythmFrame 规则命中的多重前置，尚未
+  形成“本句没听懂 → 定位 → 回听 → 同类短练习”的自然学习闭环，且规则时间段可能来自 text
+  prior / 估算 timing。主线切换至 Phase 3.10 Coach Dashboard；3.9 数据不作为其硬依赖。
+
 - 2026-07-12 09:07 CST: Owner 明确确认 Phase 3.8 Shadowing & Recording Comparison
   真实媒体、真实麦克风及跨媒体入口 QA 全部通过。`3.8-MANUAL-QA.md` 记录首轮发现的
   跨媒体主字幕导航泄漏、修复与复验 PASS；新增 `3.8-CLOSEOUT.md`，计划状态转为 COMPLETE，

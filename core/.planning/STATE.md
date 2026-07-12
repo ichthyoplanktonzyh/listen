@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-12T10:45:00.000+08:00"
+last_updated: "2026-07-12T11:52:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-12 10:45 CST
-> 更新原因：Phase 3.9 L1-aware Diagnosis v1 代码全量落地；与已收口的 Phase 3.8 一并合入主线。
+> 最后更新：2026-07-12 11:52 CST
+> 更新原因：Owner 将 Phase 3.9 明确延期，暂不收口；当前主线切换至 Phase 3.10 Coach Dashboard。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.9 L1-aware Diagnosis v1；开工前按现有 capability authority、
-  corpus family 投影与已完成的 shadowing 入口复核计划。
+- **当前执行主线**：Phase 3.10 Coach Dashboard；开工前按现有 durable facts、capability/channel
+  分区和上游 phase 缺席降级规则复核计划。Phase 3.9 不作为 3.10 的硬依赖。
 - **治理线状态**：Phase 2.23 Architecture Debt Paydown 已于 2026-07-03 收口（详见其 CLOSEOUT）；3.x 开工前置全部就绪。
 - **算法线状态**：Phase 2.19 / 2.20 / 2.21 已于 2026-07-02 搁置；audible-structure v1
   contract 保持当前权威 shape，后续质量提升等学习闭环完成后再回到算法线。
@@ -157,7 +157,7 @@ last_updated: "2026-07-12T10:45:00.000+08:00"
 - 计划与结论：`.planning/phases/3.7-hunting-list/3.7-PLAN.md`、
   `.planning/phases/3.7-hunting-list/3.7-CLOSEOUT.md`。
 
-### Phase 3.9: L1-aware Diagnosis v1 ⏳ 代码完成，待真实媒体 QA
+### Phase 3.9: L1-aware Diagnosis v1 ⏸ 延期，未收口
 
 - 2026-07-12 于独立分支 `codex/3.9-l1-aware-diagnosis` 落地（基于 3.7 tip，与 3.8 并行）：
   LearnerProfile L1 持久化（schema v34，v33 保留给 3.8 in-flight 的 recording_assets）+
@@ -169,9 +169,15 @@ last_updated: "2026-07-12T10:45:00.000+08:00"
   reindex 触发点）；`/v1/learner/l1-specialty` 全库同类片段聚合 + corpus 缺席降级为当前
   track 内存聚合 + 诊断卡同类片段对话框（试听走 3.5.7 切片窗，当前 track 条目可进 3.5.6
   句听写练习）。
-- 验证：cargo test --workspace、flutter analyze/test（278）、validate-contracts 全部通过。
-- 待办：真实媒体人工 QA（exit signal 走查）；与 3.8 合流时迁移版本按
-  later-lander-renumbers 规则复核。
+- 已完成的实现与自动化验证保留：cargo test --workspace、flutter analyze/test（278）、
+  validate-contracts 全部通过；与 3.8 合流后的 v33/v34 迁移顺序已复核。
+- **延期裁决（2026-07-12）**：不进行当前 exit-signal QA，且不创建 CLOSEOUT。当前 UX 将
+  L1 解释置于“词汇状态/历史 observation → 基础诊断 → RhythmFrame 规则命中”的多重前置之后，
+  不是从用户明确表达“这句没听懂”自然进入；规则时间段也可能来自 text prior / 估算 timing，
+  不能在产品上表述为音频已确证的个人困难。
+- **恢复条件**：先重新设计并实现用户触发的学习闭环——“本句没听懂 → 区分词义与听辨 →
+  定位可回听片段 → 同类短练习”——并清楚呈现无结果原因和规则/音频证据边界；随后以真实媒体
+  QA 重新裁决是否收口。
 - 计划：`.planning/phases/3.9-l1-aware-diagnosis-v1/3.9-PLAN.md`。
 
 ### 下一执行序列：Phase 3.7–3.18
@@ -317,10 +323,10 @@ last_updated: "2026-07-12T10:45:00.000+08:00"
 
 ## 下一步工作
 
-1. **Phase 3.9（当前第一优先）**：按现有 capability authority、corpus family 投影现实与
-   3.8 已完成的真实音频练习入口复核 L1-aware diagnosis PLAN 后开工。
-2. 按 3.0-PHASE-BREAKDOWN 执行 3.9 → 3.10；3.11 起每个 phase
-   开工前先按上游现状修订 PLAN。
+1. **Phase 3.10（当前第一优先）**：按 durable facts、capability/channel 分区、starter
+   checklist 与上游缺席降级规则复核 Coach Dashboard PLAN 后开工。
+2. Phase 3.9 保持延期且不收口；其 L1 解释/专项入口不作为 3.10 的必需数据源。3.11 起每个
+   phase 开工前先按上游现状修订 PLAN。
 3. "收藏句 → 个人模板"的用户价值验证收敛到 Phase 3.16（3.4.3 结论待兑现）。
 4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
