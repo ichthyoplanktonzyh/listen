@@ -31,6 +31,30 @@
   `PracticeResult::Completed` 与 shadowing completion API，非评分录音完成明确不写 speaking
   observation、不生成 review、不计入 content-fit，并以 persistence/HTTP/contract 回归锁定。
 
+- 2026-07-12 10:40 CST: Phase 3.9 L1-aware Diagnosis v1 全量落地（Mandarin → English）。
+  （1）LearnerProfile L1 持久化：schema v34 `learner_profiles`（v33 按 later-lander-renumbers
+  规则保留给 3.8 in-flight 的 `recording_assets`），实现既有 `LearnerProfileRepository` trait、
+  统一读取面 `LearnerProfileView`（L1 权威 / UI 语言快照 / L2 保留位，三轴分离）、
+  GET/PUT `/v1/learner/profile`，设置对话框“学习”类新增母语（L1）下拉，未设置时全链路无感。
+  （2）L1L2 难点 profile provider：diagnosis-core 新增 `l1l2_difficulty_rules`（zh→en 九类难点，
+  weak function words / schwa / final consonants / clusters / t-d deletion / flapping / linking /
+  stress-timed rhythm / compressed forms），每类含 family 识别规则（rhythm_frames weak
+  groups/compression spans + 2.16 connected-speech 六 family，evidence class 一律
+  heuristic_proxy）与 possibilities 语气解释；无检测器的两类（final consonants/clusters）
+  声明空 family 永不虚假触发；研究依据逐条记录于 `3.9-L1-PROFILE-EVIDENCE.md`。
+  （3）诊断集成：`SentenceDiagnosis` 附加 `l1_hints`（带可复听 span，无 span 不出提示）与
+  `l1_context`（unsupported_pair 显示语言中立提示），降级阶梯为无 L1→字节不变基础诊断、
+  组合不支持→仅 context、无 sound-side 失败/无 rhythm frame→仅 context；命中写幂等
+  `l1_difficulty_hit` LearningEvent（(sentence, kind) 指纹去重，供 3.10 难点分布）。
+  （4）corpus family 标注投影：reindex 在 v28 投影上追加 kind=connected_speech、
+  normalized_key=family 的可重建行（word timeline 生命周期、转写管线、lltimeline 导入均补齐
+  reindex 触发点）；`/v1/learner/l1-specialty` 按难点聚合全库同类片段（跨媒体 round-robin），
+  corpus 缺席降级为当前 track 内存聚合（indexed=false）；Flutter 诊断卡新增母语听觉视角区
+  （复听 chip 走循环播放、同类片段对话框：试听走 3.5.7 切片窗、当前 track 条目可一键进
+  3.5.6 句听写练习）。验证：cargo test --workspace 全绿（含新增 diagnosis-core 8 项、
+  persistence L1 链路 6 项）、flutter analyze 0 issue、flutter test 278 项、
+  validate-contracts（OpenAPI/event/player）通过；clippy 仅存量告警。
+
 - 2026-07-11 20:07 CST: Owner 明确确认 Phase 3.7 Hunting List 真实媒体功能验收通过。
   `3.7-MANUAL-QA.md` 记录 PASS，新增 `3.7-CLOSEOUT.md`，计划状态转为 COMPLETE 并冻结；
   `STATE.md` 当前第一优先切换至 Phase 3.8。此次收口不改变 Gate Q 中 Q3（复习）与 Q4

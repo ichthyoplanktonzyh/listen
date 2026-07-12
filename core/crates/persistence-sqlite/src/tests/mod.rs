@@ -446,6 +446,8 @@ impl DictionaryProvider for FakeChineseDictionary {
 }
 
 mod content_fit;
+mod l1_diagnosis;
+mod learner_profile;
 mod learning_loop;
 mod lexical;
 mod media_library;

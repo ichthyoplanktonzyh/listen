@@ -155,6 +155,11 @@ pub enum LearningEventKind {
     ListeningInboxCaptured,
     ListeningInboxProcessed,
     HuntingCheckAnswered,
+    /// A diagnosed sentence hit an L1 difficulty category (Phase 3.9). Event
+    /// ids fingerprint (sentence, category) so repeats are idempotent: the
+    /// durable record reads "this sentence tripped this category", feeding
+    /// the 3.10 difficulty-distribution stats.
+    L1DifficultyHit,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

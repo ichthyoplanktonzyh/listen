@@ -329,6 +329,25 @@ impl SubtitleRepository for SqliteRepository {
             .map_err(ApplicationError::from)
     }
 
+    fn sentence_track_id(
+        &self,
+        id: &SubtitleSentenceId,
+    ) -> Result<Option<SubtitleTrackId>, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .query_row(
+                "SELECT track_id FROM subtitle_sentences WHERE id = ?1",
+                [id.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(repo)?
+            .map(SubtitleTrackId::parse)
+            .transpose()
+            .map_err(ApplicationError::from)
+    }
+
     fn save_pronunciation(&self, analysis: &SentencePronunciation) -> Result<(), ApplicationError> {
         self.connection
             .lock()

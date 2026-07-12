@@ -1,3 +1,11 @@
+mod l1l2;
+
+pub use l1l2::{
+    FAMILY_COMPRESSION, FAMILY_WEAK_GROUP, L1DifficultyEvidenceSpan, L1DifficultyHit,
+    L1L2DifficultyRule, connected_speech_family_key, l1l2_difficulty_profile,
+    l1l2_difficulty_rules, match_l1_difficulty_hits, rhythm_family_spans,
+};
+
 use std::collections::{HashMap, HashSet};
 
 use domain::{
@@ -155,6 +163,8 @@ pub fn diagnose_with_profiles(
         sentence_id: sentence.id.clone(),
         hints,
         unclassified_lemmas: unclassified,
+        l1_hints: Vec::new(),
+        l1_context: None,
     }
 }
 

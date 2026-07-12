@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::*;
 
 impl AppServices {
@@ -95,8 +97,70 @@ impl AppServices {
                 });
             }
         }
+        self.append_family_occurrences(track, &language, &mut occurrences);
         self.corpus
             .replace_corpus_occurrences_for_track(&track.id, &occurrences)
+    }
+
+    /// Connected-speech family annotation projection (Phase 3.9). One
+    /// `connected_speech` occurrence per replayable rhythm-frame span, keyed
+    /// by the family (`rhythm.weak_group`, `cs.deletion`, ...), so specialty
+    /// aggregation can pull same-family clips from the whole library.
+    ///
+    /// Rebuildable read-side data on the v28 terms: rows are replaced with
+    /// the rest of the track's projection on every reindex, and a track with
+    /// no word timeline (hence no rhythm frames) simply contributes none.
+    fn append_family_occurrences(
+        &self,
+        track: &SubtitleTrack,
+        language: &LanguageCode,
+        occurrences: &mut Vec<CorpusOccurrence>,
+    ) {
+        // Frame assembly needs media + timelines; any failure degrades to a
+        // projection without family rows rather than failing the reindex.
+        let Ok(document) = self.export_lltimeline_document(&track.id) else {
+            return;
+        };
+        let text_by_sentence = track
+            .sentences
+            .iter()
+            .map(|sentence| (sentence.id.clone(), sentence.display_text.clone()))
+            .collect::<HashMap<_, _>>();
+        for frame in &document.rhythm_frames {
+            let Some(snapshot) = text_by_sentence.get(&frame.sentence_id) else {
+                continue;
+            };
+            for (index, span) in diagnosis_core::rhythm_family_spans(&frame.rhythm_frame)
+                .into_iter()
+                .enumerate()
+            {
+                occurrences.push(CorpusOccurrence {
+                    id: CorpusOccurrenceId::from_fingerprint(
+                        "corpus-occurrence",
+                        &format!(
+                            "{}:family:{}:{}",
+                            frame.sentence_id.as_str(),
+                            span.family,
+                            index
+                        ),
+                    ),
+                    language: language.clone(),
+                    kind: CorpusOccurrenceKind::ConnectedSpeech,
+                    normalized_key: Some(span.family.clone()),
+                    display_text: if span.surface_text.is_empty() {
+                        span.label.clone()
+                    } else {
+                        span.surface_text.clone()
+                    },
+                    media_id: Some(track.media_id.clone()),
+                    track_id: Some(track.id.clone()),
+                    sentence_id: Some(frame.sentence_id.clone()),
+                    start_ms: span.start_ms,
+                    end_ms: span.end_ms,
+                    source_snapshot: snapshot.clone(),
+                });
+            }
+        }
     }
 
     /// Reindex after a lifecycle change that only knows the track id (chunk
@@ -124,6 +188,91 @@ impl AppServices {
             }
         }
         Ok(indexed_tracks)
+    }
+
+    /// Aggregate same-family clips for one L1 difficulty category (Phase
+    /// 3.9). Primary path reads the corpus family projection across the
+    /// whole library; when the projection has no rows (unindexed library)
+    /// and a track is provided, it degrades to aggregating the current
+    /// track's rhythm frames in memory (`indexed: false`).
+    pub fn l1_specialty_occurrences(
+        &self,
+        difficulty_kind: &str,
+        language: &str,
+        track_id: Option<&str>,
+        limit: u32,
+    ) -> Result<L1SpecialtyOccurrences, ApplicationError> {
+        let l2 = LanguageCode::parse(language)?;
+        let difficulty_kind = clean_required(difficulty_kind.to_owned(), "difficulty_kind")?;
+        let Some(l1) = self.learner_l1()? else {
+            return Err(ApplicationError::Validation("learner L1 setting"));
+        };
+        let Some(rules) = diagnosis_core::l1l2_difficulty_rules(&l1, &l2) else {
+            return Err(ApplicationError::NotFound("l1/l2 difficulty profile"));
+        };
+        let Some(rule) = rules.iter().find(|rule| rule.kind == difficulty_kind) else {
+            return Err(ApplicationError::NotFound("difficulty kind"));
+        };
+        let families = rule
+            .families
+            .iter()
+            .map(|family| (*family).to_owned())
+            .collect::<Vec<_>>();
+        let limit = limit.clamp(1, 100);
+        let occurrences = self
+            .corpus
+            .search_corpus_family_occurrences(&l2, &families, None, limit, 0)?;
+        if !occurrences.is_empty() {
+            return Ok(L1SpecialtyOccurrences {
+                difficulty_kind,
+                families,
+                indexed: true,
+                occurrences,
+            });
+        }
+        let Some(track_id) = track_id else {
+            return Ok(L1SpecialtyOccurrences {
+                difficulty_kind,
+                families,
+                indexed: false,
+                occurrences: Vec::new(),
+            });
+        };
+        let track_id = SubtitleTrackId::parse(track_id)?;
+        let occurrences = self
+            .current_track_family_occurrences(&track_id, &l2, &families, limit)
+            .unwrap_or_default();
+        Ok(L1SpecialtyOccurrences {
+            difficulty_kind,
+            families,
+            indexed: false,
+            occurrences,
+        })
+    }
+
+    /// Degraded aggregation over one track's rhythm frames, mirroring the
+    /// projection rows the reindex would have written for it.
+    fn current_track_family_occurrences(
+        &self,
+        track_id: &SubtitleTrackId,
+        language: &LanguageCode,
+        families: &[String],
+        limit: u32,
+    ) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
+        let track = self
+            .subtitle_tracks
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let mut occurrences = Vec::new();
+        self.append_family_occurrences(&track, language, &mut occurrences);
+        occurrences.retain(|occurrence| {
+            occurrence
+                .normalized_key
+                .as_deref()
+                .is_some_and(|key| families.iter().any(|family| family == key))
+        });
+        occurrences.truncate(limit as usize);
+        Ok(occurrences)
     }
 
     pub fn search_corpus(

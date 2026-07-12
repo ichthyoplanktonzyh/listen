@@ -43,6 +43,7 @@ use phonetic_analysis::{CreatePhoneticJobRequest, PhoneticAnalysisCoordinator};
 use routes::corpus::*;
 use routes::dictionary::*;
 use routes::language::*;
+use routes::learner::*;
 use routes::media::*;
 use routes::phonetic_analysis::*;
 use routes::practice::*;
@@ -432,6 +433,11 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/v1/events", get(events))
         .route("/v1/dictionary", get(dictionary_lookup))
+        .route(
+            "/v1/learner/profile",
+            get(learner_profile).put(update_learner_profile),
+        )
+        .route("/v1/learner/l1-specialty", get(l1_specialty_occurrences))
         .route("/v1/languages", get(list_languages))
         .route("/v1/languages/{code}/profile", get(language_profile))
         .route("/v1/transcription/providers", get(transcription_providers))

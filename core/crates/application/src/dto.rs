@@ -3,6 +3,17 @@ use std::path::PathBuf;
 use domain::*;
 use serde::{Deserialize, Serialize};
 
+/// Same-family clip aggregation for one L1 difficulty category (Phase 3.9).
+/// `indexed: false` marks the degraded current-track path (corpus family
+/// projection absent), so clients can hint that a rebuild widens the pool.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct L1SpecialtyOccurrences {
+    pub difficulty_kind: String,
+    pub families: Vec<String>,
+    pub indexed: bool,
+    pub occurrences: Vec<CorpusOccurrence>,
+}
+
 /// One media-library row for triage (Phase 3.5 Slice 5): the registered
 /// media plus the facts the client groups queues from — cached content fit,
 /// explicit user triage intent, and the familiar-material mark (3.2). Queue

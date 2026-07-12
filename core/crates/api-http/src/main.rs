@@ -33,7 +33,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .with_recording_repository(repository.clone())
     .with_difficulty_repository(repository.clone())
-    .with_corpus_index_repository(repository.clone());
+    .with_corpus_index_repository(repository.clone())
+    .with_learner_profile_repository(repository.clone());
     let token = env::var("LLPLAYERNEXT_API_TOKEN").unwrap_or_else(|_| random_token());
     let app = router(ApiState::new(services, repository, token.clone()));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;

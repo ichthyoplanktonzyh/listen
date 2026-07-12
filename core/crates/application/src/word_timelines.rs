@@ -234,25 +234,33 @@ impl AppServices {
             timeline.status = TimelineStatus::Candidate;
         }
         let timeline = self.timelines.save_word_timeline(&timeline)?;
-        if requested_status == TimelineStatus::Active {
-            self.timelines.activate_word_timeline(&timeline.id)
+        let timeline = if requested_status == TimelineStatus::Active {
+            self.timelines.activate_word_timeline(&timeline.id)?
         } else {
-            Ok(timeline)
-        }
+            timeline
+        };
+        self.reindex_track_corpus(&timeline.track_id)?;
+        Ok(timeline)
     }
 
     pub fn activate_word_timeline(
         &self,
         id: &WordTimelineId,
     ) -> Result<WordTimeline, ApplicationError> {
-        self.timelines.activate_word_timeline(id)
+        let timeline = self.timelines.activate_word_timeline(id)?;
+        // Rhythm frames derive from word timelines, so the corpus family
+        // projection (Phase 3.9) is stale after any lifecycle change here.
+        self.reindex_track_corpus(&timeline.track_id)?;
+        Ok(timeline)
     }
 
     pub fn archive_word_timeline(
         &self,
         id: &WordTimelineId,
     ) -> Result<WordTimeline, ApplicationError> {
-        self.timelines.archive_word_timeline(id)
+        let timeline = self.timelines.archive_word_timeline(id)?;
+        self.reindex_track_corpus(&timeline.track_id)?;
+        Ok(timeline)
     }
 
     pub fn publish_word_timeline(
@@ -269,14 +277,18 @@ impl AppServices {
         mark_word_timeline_published(&mut timeline);
         timeline.updated_at_ms = now_ms();
         let timeline = self.timelines.save_word_timeline(&timeline)?;
-        self.timelines.activate_word_timeline(&timeline.id)
+        let timeline = self.timelines.activate_word_timeline(&timeline.id)?;
+        self.reindex_track_corpus(&timeline.track_id)?;
+        Ok(timeline)
     }
 
     pub fn delete_word_timeline(
         &self,
         id: &WordTimelineId,
     ) -> Result<WordTimeline, ApplicationError> {
-        self.timelines.delete_word_timeline(id)
+        let timeline = self.timelines.delete_word_timeline(id)?;
+        self.reindex_track_corpus(&timeline.track_id)?;
+        Ok(timeline)
     }
 
     pub fn word_timing_diagnostics_for_track(
@@ -554,6 +566,10 @@ impl AppServices {
         if let Some(active_id) = document.active_sense_group_analysis_id {
             self.timelines.activate_sense_group_analysis(&active_id)?;
         }
+
+        // One reindex after every timeline landed, so the corpus projection
+        // (words/phrases/chunks + Phase 3.9 family rows) reflects the import.
+        self.reindex_subtitle_track(&track)?;
 
         Ok(track)
     }

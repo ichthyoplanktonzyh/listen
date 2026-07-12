@@ -1538,6 +1538,79 @@ paths:
                 $ref: "#/components/schemas/LanguageLearningProfile"
         default:
           $ref: "#/components/responses/Error"
+  /v1/learner/profile:
+    get:
+      operationId: learnerProfile
+      responses:
+        "200":
+          description: Unified learner profile read model (L1 / UI-language snapshot / reserved L2)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LearnerProfileView" }
+        default:
+          $ref: "#/components/responses/Error"
+    put:
+      operationId: updateLearnerProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                l1_language:
+                  type: [string, "null"]
+                  description: BCP-47-ish language code; null or absent clears the L1 setting.
+                ui_language:
+                  type: [string, "null"]
+                  description: Client UI-language snapshot; authority stays in client settings.
+      responses:
+        "200":
+          description: Updated learner profile view
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LearnerProfileView" }
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/learner/l1-specialty:
+    get:
+      operationId: l1SpecialtyOccurrences
+      parameters:
+        - name: difficulty_kind
+          in: query
+          required: true
+          schema: { type: string }
+        - name: language
+          in: query
+          required: true
+          schema: { type: string }
+        - name: track_id
+          in: query
+          required: false
+          schema: { type: string }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: Same-family clips aggregated from the learner's corpus for one L1 difficulty category; degrades to current-track aggregation (indexed=false) when the family projection is absent.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [difficulty_kind, families, indexed, occurrences]
+                properties:
+                  difficulty_kind: { type: string }
+                  families:
+                    type: array
+                    items: { type: string }
+                  indexed: { type: boolean }
+                  occurrences:
+                    type: array
+                    items: { $ref: "#/components/schemas/CorpusOccurrence" }
+        default:
+          $ref: "#/components/responses/Error"
   /v1/sentences/{sentence_id}/diagnosis:
     parameters:
       - name: sentence_id
@@ -3577,6 +3650,20 @@ components:
         skipped: { type: integer, minimum: 0 }
         overwritten: { type: integer, minimum: 0 }
         invalid: { type: integer, minimum: 0 }
+    LearnerProfileView:
+      type: object
+      required: [l1_language, ui_language, active_l2_language, updated_at_ms]
+      properties:
+        l1_language:
+          type: [string, "null"]
+          description: The learner's declared native language; null when never set.
+        ui_language:
+          type: [string, "null"]
+          description: Client-reported UI-language snapshot (display/statistics only).
+        active_l2_language:
+          type: [string, "null"]
+          description: Reserved; learning language is currently derived per subtitle track.
+        updated_at_ms: { type: [integer, "null"], minimum: 0 }
     SentenceDiagnosis:
       type: object
       required: [sentence_id, hints, unclassified_lemmas]
@@ -3601,6 +3688,39 @@ components:
         unclassified_lemmas:
           type: array
           items: { type: string }
+        l1_hints:
+          type: array
+          description: L1-transfer possibilities (Phase 3.9); empty unless the learner declared an L1 with a supported (L1, L2) difficulty profile and the sentence carries replayable evidence.
+          items:
+            type: object
+            required: [difficulty_kind, message, families, spans]
+            properties:
+              difficulty_kind: { type: string }
+              message: { type: string }
+              families:
+                type: array
+                items: { type: string }
+              spans:
+                type: array
+                description: Replayable audio spans from the sentence's rhythm frame; a hint always carries at least one.
+                items:
+                  type: object
+                  required: [family, start_ms, end_ms, label, surface_text]
+                  properties:
+                    family: { type: string }
+                    start_ms: { type: integer, minimum: 0 }
+                    end_ms: { type: integer, minimum: 0 }
+                    label: { type: string }
+                    surface_text: { type: string }
+        l1_context:
+          type: object
+          description: Present only when the learner declared an L1.
+          required: [l1, l2, support]
+          properties:
+            l1: { type: string }
+            l2: { type: string }
+            support:
+              enum: [supported, unsupported_pair]
     Error:
       type: object
       required: [code, message, correlation_id, retryable]
