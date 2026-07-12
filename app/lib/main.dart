@@ -48,6 +48,7 @@ import 'widgets/panels/intensive_practice_window.dart';
 import 'widgets/panels/l1_specialty_dialog.dart';
 import 'widgets/panels/hunting_prompt_card.dart';
 import 'widgets/panels/slice_playback_window.dart';
+import 'widgets/coach/coach_dashboard_screen.dart';
 import 'screens/vocabulary_screen.dart';
 import 'screens/review_queue_screen.dart';
 import 'widgets/player/download_status_bar.dart';
@@ -1892,6 +1893,21 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
+  Future<void> _openCoachDashboard() async {
+    final service = api;
+    if (service == null) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CoachDashboardScreen(
+          api: service,
+          onOpenReview: () => unawaited(_openReviewQueue()),
+          onOpenHunting: _openVocabulary,
+        ),
+      ),
+    );
+  }
+
   Future<void> _startReviewShadowing(ReviewQueueEntry entry) async {
     final mediaId = entry.item.source.mediaId;
     final startMs = entry.playbackStartMs;
@@ -2305,6 +2321,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                                   unawaited(_openSubtitleResources()),
                               onOpenVocabulary: _openVocabulary,
                               onOpenReview: () => unawaited(_openReviewQueue()),
+                              onOpenCoach: () =>
+                                  unawaited(_openCoachDashboard()),
                               onOpenSettings: () => unawaited(_openSettings()),
                               mediaLibrary: _mediaLibrary,
                               familiarSupplyEnabled: settingsController

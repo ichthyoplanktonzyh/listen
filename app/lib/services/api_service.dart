@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 
 import '../models/listening.dart';
+import '../models/coach_dashboard.dart';
 import '../models/practice.dart';
 
 Future<String> computeOpenSubtitlesMovieHash(String path) async {
@@ -994,10 +995,7 @@ class LocalApi {
       'limit': '$limit',
     };
     final encoded = query.entries
-        .map(
-          (entry) =>
-              '${entry.key}=${Uri.encodeQueryComponent(entry.value)}',
-        )
+        .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')
         .join('&');
     return (await _request('GET', '/v1/learner/l1-specialty?$encoded'))
         as Map<String, dynamic>;
@@ -1540,6 +1538,33 @@ class LocalApi {
       '.ogg',
     ].any(lower.endsWith);
   }
+
+  Future<CoachDashboard> coachDashboard({int days = 7}) async =>
+      CoachDashboard.fromJson(
+        (await _request('GET', '/v1/coach/dashboard?days=$days'))
+            as Map<String, dynamic>,
+      );
+
+  Future<void> graduateCoachMaterial(String mediaId) async {
+    await _request(
+      'POST',
+      '/v1/coach/materials/${Uri.encodeComponent(mediaId)}/graduate',
+    );
+  }
+
+  Future<List<CoachEvidenceItem>> coachEvidence(
+    String metric, {
+    int days = 7,
+  }) async =>
+      ((await _request(
+                'GET',
+                '/v1/coach/evidence?metric=${Uri.encodeQueryComponent(metric)}&days=$days',
+              ))
+              as List<dynamic>)
+          .map(
+            (item) => CoachEvidenceItem.fromJson(item as Map<String, dynamic>),
+          )
+          .toList();
 }
 
 List<String> sidecarCandidatesFrom(Directory start) {

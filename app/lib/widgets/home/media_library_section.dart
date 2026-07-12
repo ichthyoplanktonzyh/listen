@@ -121,6 +121,7 @@ class MediaLibrarySection extends StatelessWidget {
       TriageQueue.intensive,
       TriageQueue.extensive,
       TriageQueue.deferred,
+      TriageQueue.graduated,
       null,
     ]) {
       final members = byQueue[queue];
@@ -155,6 +156,7 @@ class _QueueHeader extends StatelessWidget {
       TriageQueue.intensive => (l.text('queueIntensive'), Icons.headphones_outlined),
       TriageQueue.extensive => (l.text('queueExtensive'), Icons.play_circle_outline),
       TriageQueue.deferred => (l.text('queueDeferred'), Icons.snooze_outlined),
+      TriageQueue.graduated => (l.text('queueGraduated'), Icons.check_circle_outline),
       _ => (l.text('queueUnsorted'), Icons.help_outline),
     };
     return Row(

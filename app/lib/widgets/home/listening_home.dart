@@ -14,6 +14,7 @@ class ListeningHome extends StatelessWidget {
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
     required this.onOpenReview,
+    required this.onOpenCoach,
     required this.onOpenSettings,
     this.mediaLibrary,
     this.familiarSupplyEnabled = true,
@@ -40,6 +41,7 @@ class ListeningHome extends StatelessWidget {
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
   final VoidCallback onOpenReview;
+  final VoidCallback onOpenCoach;
   final VoidCallback onOpenSettings;
   final List<MediaLibraryEntry>? mediaLibrary;
   final bool familiarSupplyEnabled;
@@ -77,6 +79,7 @@ class ListeningHome extends StatelessWidget {
                   onOpenSubtitleResources: onOpenSubtitleResources,
                   onOpenVocabulary: onOpenVocabulary,
                   onOpenReview: onOpenReview,
+                  onOpenCoach: onOpenCoach,
                   onOpenSettings: onOpenSettings,
                 ),
               ),
@@ -89,6 +92,7 @@ class ListeningHome extends StatelessWidget {
                 onOpenSubtitleResources: onOpenSubtitleResources,
                 onOpenVocabulary: onOpenVocabulary,
                 onOpenReview: onOpenReview,
+                onOpenCoach: onOpenCoach,
                 mediaLibrary: mediaLibrary,
                 familiarSupplyEnabled: familiarSupplyEnabled,
                 onOpenLibraryEntry: onOpenLibraryEntry,
@@ -122,6 +126,7 @@ class _HomeSidebar extends StatelessWidget {
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
     required this.onOpenReview,
+    required this.onOpenCoach,
     required this.onOpenSettings,
   });
 
@@ -130,6 +135,7 @@ class _HomeSidebar extends StatelessWidget {
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
   final VoidCallback onOpenReview;
+  final VoidCallback onOpenCoach;
   final VoidCallback onOpenSettings;
 
   @override
@@ -182,6 +188,11 @@ class _HomeSidebar extends StatelessWidget {
               label: l.text('review'),
               onTap: onOpenReview,
             ),
+            _SidebarItem(
+              icon: Icons.insights_outlined,
+              label: l.text('coachDashboard'),
+              onTap: onOpenCoach,
+            ),
             const Spacer(),
             _SidebarItem(
               icon: Icons.settings_outlined,
@@ -204,6 +215,7 @@ class _HomeContent extends StatelessWidget {
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
     required this.onOpenReview,
+    required this.onOpenCoach,
     required this.mediaLibrary,
     required this.familiarSupplyEnabled,
     required this.onOpenLibraryEntry,
@@ -230,6 +242,7 @@ class _HomeContent extends StatelessWidget {
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
   final VoidCallback onOpenReview;
+  final VoidCallback onOpenCoach;
   final List<MediaLibraryEntry>? mediaLibrary;
   final bool familiarSupplyEnabled;
   final void Function(MediaLibraryEntry entry)? onOpenLibraryEntry;
@@ -363,6 +376,12 @@ class _HomeContent extends StatelessWidget {
                     label: l.text('review'),
                     sourceLabel: l.text('audioFirstReview'),
                     onTap: onOpenReview,
+                  ),
+                  _SourceAction(
+                    icon: Icons.insights_outlined,
+                    label: l.text('coachDashboard'),
+                    sourceLabel: l.text('coachDashboardSummary'),
+                    onTap: onOpenCoach,
                   ),
                 ],
               ),

@@ -1580,6 +1580,7 @@ abstract final class TriageQueue {
   static const extensive = 'extensive';
   static const intensive = 'intensive';
   static const deferred = 'deferred';
+  static const graduated = 'graduated';
 }
 
 /// One media-library row for triage (Phase 3.5 Slice 5): media plus the
@@ -1613,7 +1614,7 @@ class MediaLibraryEntry {
   final String? primaryTrackId;
   final ContentDifficultyProfile? fit;
 
-  /// 'pin_extensive' | 'pin_intensive' | 'defer' | null.
+  /// 'pin_extensive' | 'pin_intensive' | 'defer' | 'graduated' | null.
   final String? triageIntent;
   final bool familiarMaterial;
 
@@ -1633,6 +1634,8 @@ class MediaLibraryEntry {
         return TriageQueue.intensive;
       case 'defer':
         return TriageQueue.deferred;
+      case 'graduated':
+        return TriageQueue.graduated;
     }
     if (familiarSupply && familiarMaterial) return TriageQueue.extensive;
     final fit = this.fit;

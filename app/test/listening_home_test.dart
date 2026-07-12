@@ -31,6 +31,7 @@ void main() {
         onOpenSubtitleResources: () {},
         onOpenVocabulary: () {},
         onOpenReview: () {},
+        onOpenCoach: () {},
         onOpenSettings: () {},
         recentMediaTitle: recentMediaTitle,
         recentPosition: recentPosition,
