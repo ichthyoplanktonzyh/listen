@@ -7,6 +7,7 @@ import '../../controllers/player_controller.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
 import '../../localization.dart';
+import '../../services/api_service.dart';
 import 'settings_dialog.dart';
 
 /// Opens the app settings dialog and applies each change to the owning
@@ -20,7 +21,20 @@ Future<void> showAppSettings({
   required PlayerController playerController,
   required LearningController learningController,
   required Future<void> Function() saveSettings,
+  LocalApi? api,
 }) async {
+    // The L1 setting is a backend asset (Phase 3.9), not a local file setting.
+    // Best-effort read: with no sidecar the field shows unset and stays inert.
+    var l1Language = '';
+    if (api != null) {
+      try {
+        final profile = await api.learnerProfile();
+        l1Language = (profile['l1_language'] as String?) ?? '';
+      } catch (_) {
+        // Sidecar unavailable — the dialog still opens with L1 unset.
+      }
+    }
+    if (!context.mounted) return;
     await showDialog<void>(
       context: context,
       builder: (_) => SettingsDialog(
@@ -59,6 +73,18 @@ Future<void> showAppSettings({
         phonemeRibbonStyle: settingsController.phonemeRibbonStyle,
         learningLanguage: settingsController.learningLanguage,
         availableLanguages: learningController.availableLanguages,
+        l1Language: l1Language,
+        onL1LanguageChanged: (v) {
+          if (api == null) return;
+          unawaited(
+            api.updateLearnerProfile(
+              l1Language: v.isEmpty ? null : v,
+              uiLanguage: settingsController.language == 'system'
+                  ? null
+                  : settingsController.language,
+            ),
+          );
+        },
         onLearningLanguageChanged: (v) {
           settingsController.update(
             settingsController.settings.copyWith(learningLanguage: v),

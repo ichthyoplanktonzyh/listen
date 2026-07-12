@@ -33,6 +33,22 @@ class AppLocalizations {
     return localized == key ? name : localized;
   }
 
+  /// Localized short hint for an L1 difficulty category (Phase 3.9). Falls
+  /// back to [fallback] (the profile's neutral English explanation) so a new
+  /// category never renders as a raw key.
+  String l1Difficulty(String kind, String fallback) {
+    final key = 'l1_difficulty_$kind';
+    final localized = text(key);
+    return localized == key ? fallback : localized;
+  }
+
+  /// Localized category name for an L1 difficulty kind.
+  String l1DifficultyName(String kind) {
+    final key = 'l1_difficulty_name_$kind';
+    final localized = text(key);
+    return localized == key ? kind.replaceAll('_', ' ') : localized;
+  }
+
   static const delegate = _AppLocalizationsDelegate();
 
   static const _values = <String, Map<String, String>>{
@@ -50,6 +66,28 @@ class AppLocalizations {
       'chinese': '简体中文',
       'japanese': '日本語',
       'learningLanguage': 'Learning language',
+      'l1Language': 'Native language (L1)',
+      'l1LanguageHint':
+          'Used only to explain listening difficulties from your L1 habits; leave unset for neutral diagnosis.',
+      'l1NotSet': 'Not set',
+      'l1HintsTitle': 'From your native-language ear',
+      'l1UnsupportedPair':
+          'No L1-aware content for this language pairing yet; baseline diagnosis shown.',
+      'l1ListenAgain': 'Listen again',
+      'l1SimilarClips': 'Similar clips',
+      'l1SpecialtyPractice': 'Practice this sentence',
+      'l1SpecialtyUnindexed':
+          'Corpus index not built; showing clips from the current media only.',
+      'l1SpecialtyEmpty': 'No matching clips in your material yet.',
+      'l1_difficulty_name_weak_function_words': 'Weak function words',
+      'l1_difficulty_name_schwa_reduction': 'Reduced vowels (schwa)',
+      'l1_difficulty_name_final_consonants': 'Final consonants',
+      'l1_difficulty_name_consonant_clusters': 'Consonant clusters',
+      'l1_difficulty_name_t_d_deletion': 't/d deletion',
+      'l1_difficulty_name_flapping': 'Flapping',
+      'l1_difficulty_name_linking': 'Linking',
+      'l1_difficulty_name_stress_timed_rhythm': 'Stress-timed rhythm',
+      'l1_difficulty_name_compressed_forms': 'Compressed forms',
       'subtitles': 'Subtitles',
       'subtitlePreset': 'Subtitle preset',
       'watching': 'Watching',
@@ -778,6 +816,38 @@ class AppLocalizations {
       'chinese': '简体中文',
       'japanese': '日本語',
       'learningLanguage': '学习语言',
+      'l1Language': '母语（L1）',
+      'l1LanguageHint': '仅用于从母语听觉习惯解释听力难点；不设置则保持中立诊断。',
+      'l1NotSet': '未设置',
+      'l1HintsTitle': '母语听觉视角',
+      'l1UnsupportedPair': '当前语言组合暂无母语难点内容，仅显示基础诊断。',
+      'l1ListenAgain': '复听',
+      'l1SimilarClips': '同类片段',
+      'l1SpecialtyPractice': '练习这句',
+      'l1SpecialtyUnindexed': '尚未建立语料索引，仅显示当前媒体内的片段。',
+      'l1SpecialtyEmpty': '你的材料里还没有同类片段。',
+      'l1_difficulty_name_weak_function_words': '弱读功能词',
+      'l1_difficulty_name_schwa_reduction': '元音弱化（schwa）',
+      'l1_difficulty_name_final_consonants': '词尾辅音',
+      'l1_difficulty_name_consonant_clusters': '辅音丛',
+      'l1_difficulty_name_t_d_deletion': '词尾 t/d 脱落',
+      'l1_difficulty_name_flapping': '弹舌音（flap）',
+      'l1_difficulty_name_linking': '连读',
+      'l1_difficulty_name_stress_timed_rhythm': '重音节奏压缩',
+      'l1_difficulty_name_compressed_forms': '口语缩合形',
+      'l1_difficulty_weak_function_words':
+          '中文听觉习惯里每个音节都足量，英语夹在重音间的功能词可能几乎听不到。',
+      'l1_difficulty_schwa_reduction':
+          '中文元音不变质，英语弱读元音会缩成含糊的 ə，听起来像另一个词。',
+      'l1_difficulty_final_consonants': '中文音节只以元音或 n/ng 结尾，词尾辅音容易被中文耳朵忽略。',
+      'l1_difficulty_consonant_clusters': '中文没有辅音丛，连续辅音可能被听成多了个元音或少了个辅音。',
+      'l1_difficulty_t_d_deletion': '连读中词尾 /t/ /d/ 常被弱化或省略，中文听觉没有补回它们的习惯。',
+      'l1_difficulty_flapping': '美音把元音之间的 /t/ /d/ 读成快速弹舌，听感接近 /d/。',
+      'l1_difficulty_linking': '中文音节边界清晰，英语把词尾辅音连进下一个元音，词边界会移动。',
+      'l1_difficulty_stress_timed_rhythm':
+          '英语为保持重音节拍会压缩非重读段，对中文节奏习惯来说快得抓不住。',
+      'l1_difficulty_compressed_forms':
+          'gonna/wanna/didja 这类缩合要当作整体来认，不能逐词去听。',
       'subtitles': '字幕',
       'subtitlePreset': '字幕预设',
       'watching': '观影模式',

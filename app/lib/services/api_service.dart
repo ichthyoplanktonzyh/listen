@@ -968,6 +968,41 @@ class LocalApi {
           ))
           as Map<String, dynamic>;
 
+  Future<Map<String, dynamic>> learnerProfile() async =>
+      (await _request('GET', '/v1/learner/profile')) as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> updateLearnerProfile({
+    String? l1Language,
+    String? uiLanguage,
+  }) async =>
+      (await _request('PUT', '/v1/learner/profile', {
+            'l1_language': l1Language,
+            'ui_language': uiLanguage,
+          }))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> l1SpecialtyOccurrences({
+    required String difficultyKind,
+    required String language,
+    String? trackId,
+    int limit = 30,
+  }) async {
+    final query = <String, String>{
+      'difficulty_kind': difficultyKind,
+      'language': language,
+      'track_id': ?trackId,
+      'limit': '$limit',
+    };
+    final encoded = query.entries
+        .map(
+          (entry) =>
+              '${entry.key}=${Uri.encodeQueryComponent(entry.value)}',
+        )
+        .join('&');
+    return (await _request('GET', '/v1/learner/l1-specialty?$encoded'))
+        as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> diagnose(String sentenceId) async =>
       (await _request(
             'GET',

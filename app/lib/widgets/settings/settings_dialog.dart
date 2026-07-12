@@ -43,7 +43,9 @@ class SettingsDialog extends StatefulWidget {
     required this.phoneticAnalysisPreference,
     required this.learningLanguage,
     required this.availableLanguages,
+    required this.l1Language,
     required this.onLearningLanguageChanged,
+    required this.onL1LanguageChanged,
     required this.onLanguageChanged,
     required this.onSubtitlePresetChanged,
     required this.onPrimaryFontSizeChanged,
@@ -112,8 +114,13 @@ class SettingsDialog extends StatefulWidget {
   final String learningLanguage;
   final List<String> availableLanguages;
 
+  /// The learner's declared L1 (native language); empty string means unset.
+  /// Persisted backend-side (Phase 3.9), unlike the local file settings above.
+  final String l1Language;
+
   // Callbacks
   final ValueChanged<String> onLearningLanguageChanged;
+  final ValueChanged<String> onL1LanguageChanged;
   final ValueChanged<String> onLanguageChanged;
   final ValueChanged<String> onSubtitlePresetChanged;
   final ValueChanged<double> onPrimaryFontSizeChanged;
@@ -188,6 +195,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late String phonemeRibbonStyle;
   late String phoneticAnalysisPreference;
   late String learningLanguage;
+  late String l1Language;
 
   late final TextEditingController ffmpegController;
   late final TextEditingController ffprobeController;
@@ -236,6 +244,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     phonemeRibbonStyle = widget.phonemeRibbonStyle;
     phoneticAnalysisPreference = widget.phoneticAnalysisPreference;
     learningLanguage = widget.learningLanguage;
+    l1Language = widget.l1Language;
     ffmpegController = TextEditingController(text: widget.ffmpegPath);
     ffprobeController = TextEditingController(text: widget.ffprobePath);
     ytDlpController = TextEditingController(text: widget.ytDlpPath);
@@ -348,6 +357,31 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         if (value == null) return;
                         learningLanguage = value;
                         widget.onLearningLanguageChanged(value);
+                        refresh(() {});
+                      },
+                    ),
+                    DropdownButtonFormField<String>(
+                      initialValue: l1Language,
+                      decoration: InputDecoration(
+                        labelText: l.text('l1Language'),
+                        helperText: l.text('l1LanguageHint'),
+                        helperMaxLines: 2,
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: '',
+                          child: Text(l.text('l1NotSet')),
+                        ),
+                        for (final code in widget.availableLanguages)
+                          DropdownMenuItem(
+                            value: code,
+                            child: Text(_languageLabel(l, code)),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        l1Language = value;
+                        widget.onL1LanguageChanged(value);
                         refresh(() {});
                       },
                     ),
