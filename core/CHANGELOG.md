@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- 2026-07-12  CST: Phase 3.10 Coach Dashboard 收口。owner 产品 QA 通过所有 QA-A ~ QA-E
+  项目：入口语义、数字来源事实可下钻、建议可执行无副作用、材料轨迹与毕业确认正确、历史不足
+  降级干净。创建 `3.10-CLOSEOUT.md`，更新 `STATE.md` 将主线切换至 Phase 3.11。
+
+- 2026-07-12 15:05 CST: Phase 3.10 自动化与代码范围完成，转 owner 产品 QA。Dashboard 新增
+  指标来源明细 API/弹窗（实际 session/attempt/event/history ID、结果与时间）、同一材料多次
+  `ListeningCompleted` 理解度轨迹、基于重复自报与练习正确率的毕业候选、确认式
+  `graduated` triage intent，以及“不清楚→转精听 / 听懂大意→保留泛听”的确认式 content-fit
+  建议；所有动作只整理内容库，不静默修改能力。新增 10,000 事件有界性能测试与材料轨迹/
+  毕业回归，建立 `3.10-MANUAL-QA.md`，PASS 前阶段不收口。最终验证中 Flutter analyze、
+  Flutter 284 项与 contracts 通过；Phase 3.10 focused Rust 测试全部通过。workspace 全量仍被
+  两项既有基线阻断：Clippy 的 `sense_group_partition.rs` deny 级恒真布尔表达式，以及
+  Phase 3.8 shadowing event 测试期望 `not_scored`、实际 payload 为 null；均与 Dashboard 改动无关。
+
+- 2026-07-12 14:44 CST: Phase 3.10 Coach Dashboard 首条完整竖切片落地。新增只读
+  `CoachDashboardRepository` 与 SQLite 周期聚合、`GET /v1/coach/dashboard` channel-ready
+  envelope、可追溯规则建议和无历史 starter checklist；reading/speaking/writing 缺少主动
+  验证时明确返回 unassessed。Flutter 新增 typed DTO、Store/controller、双语 Dashboard 页面
+  和工作台入口，展示泛听、练习、复习、listening capability history 与 L1 规则命中事实，
+  并可直达复习、猎词或返回真实输入。新增 application、SQLite、HTTP、transport/controller
+  回归与 OpenAPI 契约。Flutter 284 项、analyze、contracts 通过；workspace test 首轮仅因新增
+  路由尚未写入 OpenAPI 而失败，契约已补齐待复跑；strict clippy 仍被既有
+  `construction.rs` Rust 1.94 `collapsible_if` 阻断。
+
 - 2026-07-12 11:52 CST: Owner 将 Phase 3.9 L1-aware Diagnosis v1 明确延期，暂不收口、
   不创建 CLOSEOUT，亦不把当前真实媒体 QA 记为通过。已合入的实现与自动化验证保留；延期原因
   是当前 UX 依赖词汇状态/历史 observation、基础诊断和 RhythmFrame 规则命中的多重前置，尚未

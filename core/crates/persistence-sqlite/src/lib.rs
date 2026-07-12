@@ -1,3 +1,4 @@
+mod coach_dashboard;
 mod connection;
 mod content_fit;
 mod corpus;

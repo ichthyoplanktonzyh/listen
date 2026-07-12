@@ -1,10 +1,88 @@
 use super::*;
 use application::{
-    AppServices, ApplicationError, DictionaryProvider, DictionaryProviderError, ImportSubtitle,
-    LearningAssetRepository, LearningEventRepository, ListeningInboxRepository, MediaRepository,
-    PhoneticAnalysisRepository, PracticeRepository, RegisterMedia, ReviewRepository,
-    SubtitleRepository, TranscriptionRepository, UpsertLexicalEntry,
+    AppServices, ApplicationError, CoachDashboardRepository, DictionaryProvider,
+    DictionaryProviderError, ImportSubtitle, LearningAssetRepository, LearningEventRepository,
+    ListeningInboxRepository, MediaRepository, PhoneticAnalysisRepository, PracticeRepository,
+    RegisterMedia, ReviewRepository, SubtitleRepository, TranscriptionRepository,
+    UpsertLexicalEntry,
 };
+
+#[test]
+fn coach_dashboard_aggregates_period_facts_without_scanning_json_in_application() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let conn = repo.connection.lock().unwrap();
+    conn.execute("INSERT INTO practice_items (id,kind,target_kind,created_at_ms,item_json) VALUES ('item','\"cloze\"','\"sentence\"',100,'{}')", []).unwrap();
+    conn.execute("INSERT INTO practice_attempts (id,item_id,result,submitted_at_ms,attempt_json) VALUES ('attempt','item','\"correct\"',150,'{}')", []).unwrap();
+    conn.execute("INSERT INTO practice_sessions (id,mode,started_at_ms,ended_at_ms,session_json) VALUES ('session','\"extensive\"',100,6100,'{}')", []).unwrap();
+    drop(conn);
+    let facts = repo.coach_dashboard_facts(0, 10000, 10000).unwrap();
+    assert_eq!(facts.practice_attempts, 1);
+    assert_eq!(facts.correct_practice_attempts, 1);
+    assert_eq!(facts.extensive_sessions, 1);
+    assert_eq!(facts.extensive_listening_ms, 6000);
+    let evidence = repo
+        .coach_evidence("correct_practice_attempts", 0, 10_000, 10, 0)
+        .unwrap();
+    assert_eq!(evidence.len(), 1);
+    assert_eq!(evidence[0].id, "attempt");
+}
+
+#[test]
+fn coach_dashboard_derives_material_trajectory_and_requires_confirmed_graduation() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let conn = repo.connection.lock().unwrap();
+    conn.execute("INSERT INTO media_items (id,path,fingerprint,title,kind,created_at_ms,updated_at_ms) VALUES ('media-coach','/tmp/coach.mp4','coach-fp','Coach media','\"video\"',1,1)", []).unwrap();
+    for (id, started) in [("session-a", 100_u64), ("session-b", 200_u64)] {
+        conn.execute("INSERT INTO practice_sessions (id,mode,media_id,started_at_ms,ended_at_ms,session_json) VALUES (?1,'\"extensive\"','media-coach',?2,?3,'{}')", params![id, started, started + 50]).unwrap();
+    }
+    conn.execute("INSERT INTO learning_events (id,occurred_at_ms,kind,subject_kind,subject_id,session_id,event_json) VALUES ('event-a',150,'\"listening_completed\"','\"practice_session\"','session-a','session-a',?1)", [serde_json::json!({"payload":{"comprehension_report":"got_the_gist"}}).to_string()]).unwrap();
+    conn.execute("INSERT INTO learning_events (id,occurred_at_ms,kind,subject_kind,subject_id,session_id,event_json) VALUES ('event-b',250,'\"listening_completed\"','\"practice_session\"','session-b','session-b',?1)", [serde_json::json!({"payload":{"comprehension_report":"understood_all"}}).to_string()]).unwrap();
+    drop(conn);
+    let facts = repo.coach_dashboard_facts(0, 1000, 1000).unwrap();
+    assert_eq!(
+        facts.materials[0].first_report.as_deref(),
+        Some("got_the_gist")
+    );
+    assert_eq!(
+        facts.materials[0].latest_report.as_deref(),
+        Some("understood_all")
+    );
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
+    .with_coach_dashboard_repository(repo.clone());
+    let graduated = services
+        .graduate_coach_material(&MediaId::parse("media-coach").unwrap())
+        .unwrap();
+    assert_eq!(graduated.triage_intent, Some(MediaTriageIntent::Graduated));
+}
+
+#[test]
+fn coach_dashboard_large_event_query_stays_bounded() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let mut conn = repo.connection.lock().unwrap();
+    let tx = conn.transaction().unwrap();
+    for index in 0..10_000_u64 {
+        tx.execute(
+            "INSERT INTO learning_events (id,occurred_at_ms,kind,subject_kind,subject_id,event_json) VALUES (?1,?2,'\"l1_difficulty_hit\"','\"sentence\"',?3,'{}')",
+            params![format!("event-{index}"), index, format!("sentence-{index}")],
+        ).unwrap();
+    }
+    tx.commit().unwrap();
+    drop(conn);
+    let started = std::time::Instant::now();
+    let facts = repo.coach_dashboard_facts(0, 20_000, 20_000).unwrap();
+    assert_eq!(facts.l1_difficulty_hits, 10_000);
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+}
 use async_trait::async_trait;
 use domain::*;
 use rusqlite::{Connection, params};

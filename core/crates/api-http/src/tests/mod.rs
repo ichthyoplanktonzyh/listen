@@ -21,7 +21,8 @@ fn test_state() -> ApiState {
         .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
         .with_recording_repository(repo.clone())
         .with_difficulty_repository(repo.clone())
-        .with_corpus_index_repository(repo.clone()),
+        .with_corpus_index_repository(repo.clone())
+        .with_coach_dashboard_repository(repo.clone()),
         repo,
         "secret",
     )
@@ -29,6 +30,40 @@ fn test_state() -> ApiState {
 
 fn test_app() -> Router {
     router(test_state())
+}
+
+#[tokio::test]
+async fn coach_dashboard_is_channel_ready_and_uses_starter_state() {
+    let app = test_app();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/v1/coach/dashboard?days=7")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(body["channels"][0]["channel"], "listening");
+    assert_eq!(body["channels"][1]["status"], "unassessed");
+    assert_eq!(body["starter_checklist"].as_array().unwrap().len(), 3);
+    let evidence = app
+        .oneshot(
+            Request::get("/v1/coach/evidence?metric=practice_attempts&days=7")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(evidence.status(), StatusCode::OK);
+    let evidence_body: serde_json::Value =
+        serde_json::from_slice(&to_bytes(evidence.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(evidence_body, serde_json::json!([]));
 }
 
 async fn setup_phonetic_track(app: &Router, fingerprint: &str) -> serde_json::Value {

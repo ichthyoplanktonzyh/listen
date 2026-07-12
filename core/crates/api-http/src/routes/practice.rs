@@ -1,6 +1,58 @@
 use crate::*;
 use domain::{RecordingAsset, RecordingAssetId, ShadowingComparison};
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct CoachDashboardQuery {
+    days: Option<u32>,
+}
+
+pub(crate) async fn coach_dashboard(
+    State(state): State<ApiState>,
+    Query(query): Query<CoachDashboardQuery>,
+) -> Result<Json<application::CoachDashboard>, ApiError> {
+    state
+        .services
+        .coach_dashboard(query.days.unwrap_or(7))
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn graduate_coach_material(
+    State(state): State<ApiState>,
+    Path(media_id): Path<String>,
+) -> Result<Json<application::MediaLibraryEntry>, ApiError> {
+    let media_id = MediaId::parse(media_id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .graduate_coach_material(&media_id)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CoachEvidenceQuery {
+    metric: String,
+    days: Option<u32>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+}
+
+pub(crate) async fn coach_evidence(
+    State(state): State<ApiState>,
+    Query(query): Query<CoachEvidenceQuery>,
+) -> Result<Json<Vec<application::CoachEvidenceItem>>, ApiError> {
+    state
+        .services
+        .coach_evidence(
+            &query.metric,
+            query.days.unwrap_or(7),
+            query.limit.unwrap_or(50),
+            query.offset.unwrap_or(0),
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 pub(crate) async fn create_practice_session(
     State(state): State<ApiState>,
     Json(request): Json<application::CreatePracticeSession>,

@@ -1149,6 +1149,108 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ListeningInboxItem" }
+  /v1/coach/dashboard:
+    get:
+      operationId: coachDashboard
+      parameters:
+        - { name: days, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 365, default: 7 } }
+      responses:
+        "200":
+          description: Read-only diagnostic dashboard with channel-ready availability and traceable suggestions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [period_start_ms, period_end_ms, generated_at_ms, channels, suggestions, starter_checklist, materials]
+                properties:
+                  period_start_ms: { type: integer, minimum: 0 }
+                  period_end_ms: { type: integer, minimum: 0 }
+                  generated_at_ms: { type: integer, minimum: 0 }
+                  channels:
+                    type: array
+                    items:
+                      type: object
+                      required: [channel, status, metrics]
+                      properties:
+                        channel: { enum: [listening, reading, speaking, writing] }
+                        status: { enum: [available, unassessed] }
+                        unavailable_reason: { type: string }
+                        metrics:
+                          type: array
+                          items:
+                            type: object
+                            required: [key, value, source]
+                            properties:
+                              key: { type: string }
+                              value: { type: integer, minimum: 0 }
+                              source: { type: string }
+                  suggestions:
+                    type: array
+                    items:
+                      type: object
+                      required: [kind, title_key, reason_key, action, evidence_source, evidence_count]
+                      properties:
+                        kind: { type: string }
+                        title_key: { type: string }
+                        reason_key: { type: string }
+                        action: { type: string }
+                        evidence_source: { type: string }
+                        evidence_count: { type: integer, minimum: 0 }
+                  starter_checklist:
+                    type: array
+                    items: { type: string }
+                  materials:
+                    type: array
+                    items:
+                      type: object
+                      required: [media_id, title, report_count, reports_understood_all, reports_got_the_gist, reports_unclear, practice_attempts, practice_correct, graduation_candidate]
+                      properties:
+                        media_id: { type: string }
+                        title: { type: string }
+                        report_count: { type: integer, minimum: 0 }
+                        first_report: { type: [string, "null"] }
+                        latest_report: { type: [string, "null"] }
+                        reports_understood_all: { type: integer, minimum: 0 }
+                        reports_got_the_gist: { type: integer, minimum: 0 }
+                        reports_unclear: { type: integer, minimum: 0 }
+                        practice_attempts: { type: integer, minimum: 0 }
+                        practice_correct: { type: integer, minimum: 0 }
+                        triage_intent: { type: [string, "null"] }
+                        graduation_candidate: { type: boolean }
+                        recommended_intent: { type: [string, "null"], enum: [pin_extensive, pin_intensive, null] }
+  /v1/coach/materials/{media_id}/graduate:
+    post:
+      operationId: graduateCoachMaterial
+      parameters:
+        - { name: media_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: User-confirmed graduated material library entry
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MediaLibraryEntry" }
+  /v1/coach/evidence:
+    get:
+      operationId: coachEvidence
+      parameters:
+        - { name: metric, in: query, required: true, schema: { type: string } }
+        - { name: days, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 365, default: 7 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: Paginated durable source facts for one dashboard metric
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, occurred_at_ms, result]
+                  properties:
+                    id: { type: string }
+                    occurred_at_ms: { type: integer, minimum: 0 }
+                    result: { type: string }
   /v1/hunting/candidates:
     get:
       operationId: listHuntingCandidates
@@ -1831,7 +1933,7 @@ components:
         # Explicit user judgment; outranks fit-derived queue suggestions.
         triage_intent:
           type: [string, "null"]
-          enum: [pin_extensive, pin_intensive, defer, null]
+          enum: [pin_extensive, pin_intensive, defer, graduated, null]
         familiar_material: { type: boolean }
     SetTriageIntentRequest:
       type: object
@@ -1840,7 +1942,7 @@ components:
         # null clears the stored intent.
         intent:
           type: [string, "null"]
-          enum: [pin_extensive, pin_intensive, defer, null]
+          enum: [pin_extensive, pin_intensive, defer, graduated, null]
     Progress:
       type: object
       required: [position_ms]

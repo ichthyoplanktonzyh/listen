@@ -117,6 +117,9 @@ pub enum MediaTriageIntent {
     PinIntensive,
     /// Set this media aside for now (暂缓区).
     Defer,
+    /// User-confirmed completion after repeated comprehension improvement.
+    /// This organizes the library; it is not a capability judgment.
+    Graduated,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

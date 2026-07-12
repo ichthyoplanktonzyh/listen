@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::coach_dashboard::DisabledCoachDashboardRepository;
 use domain::*;
 use serde::Serialize;
 
 mod chunks;
+mod coach_dashboard;
 mod content_fit;
 mod corpus;
 mod diagnosis;
@@ -31,6 +33,10 @@ mod util;
 mod vocabulary;
 mod word_timelines;
 
+pub use coach_dashboard::{
+    CoachChannelStatus, CoachChannelSummary, CoachDashboard, CoachEvidenceItem,
+    CoachMaterialInsight, CoachMetric, CoachSuggestion,
+};
 pub use dto::*;
 pub use error::ApplicationError;
 pub use learner_profile::LearnerProfileView;
@@ -81,6 +87,7 @@ pub struct AppServices {
     pub(crate) corpus: Arc<dyn CorpusIndexRepository>,
     pub(crate) difficulty: Arc<dyn DifficultyRepository>,
     pub(crate) learner_profiles: Arc<dyn LearnerProfileRepository>,
+    pub(crate) coach_dashboard: Arc<dyn CoachDashboardRepository>,
     pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
     pub(crate) pronunciation_providers: Arc<Vec<Arc<dyn PronunciationProvider>>>,
 }
@@ -114,9 +121,18 @@ impl AppServices {
             corpus: Arc::new(DisabledCorpusIndexRepository),
             difficulty: Arc::new(DisabledDifficultyRepository),
             learner_profiles: Arc::new(DisabledLearnerProfileRepository),
+            coach_dashboard: Arc::new(DisabledCoachDashboardRepository),
             lexical_normalizers: Arc::new(Vec::new()),
             pronunciation_providers: Arc::new(Vec::new()),
         }
+    }
+
+    pub fn with_coach_dashboard_repository(
+        mut self,
+        repository: Arc<dyn CoachDashboardRepository>,
+    ) -> Self {
+        self.coach_dashboard = repository;
+        self
     }
 
     pub fn with_learning_loop_repositories(

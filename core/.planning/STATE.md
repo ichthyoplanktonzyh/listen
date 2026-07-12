@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-12T11:52:00.000+08:00"
+last_updated: "2026-07-12T16:00:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-12 11:52 CST
-> 更新原因：Owner 将 Phase 3.9 明确延期，暂不收口；当前主线切换至 Phase 3.10 Coach Dashboard。
+> 最后更新：2026-07-12 16:00 CST
+> 更新原因：Phase 3.10 Coach Dashboard owner 产品 QA 通过，已创建 CLOSEOUT 并收口。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.10 Coach Dashboard；开工前按现有 durable facts、capability/channel
-  分区和上游 phase 缺席降级规则复核计划。Phase 3.9 不作为 3.10 的硬依赖。
+- **当前执行主线**：Phase 3.11 Semantic Task Evidence Foundation 开工前准备；
+  Phase 3.9 仍不作为 3.11 的硬依赖。
 - **治理线状态**：Phase 2.23 Architecture Debt Paydown 已于 2026-07-03 收口（详见其 CLOSEOUT）；3.x 开工前置全部就绪。
 - **算法线状态**：Phase 2.19 / 2.20 / 2.21 已于 2026-07-02 搁置；audible-structure v1
   contract 保持当前权威 shape，后续质量提升等学习闭环完成后再回到算法线。
@@ -180,12 +180,12 @@ last_updated: "2026-07-12T11:52:00.000+08:00"
   QA 重新裁决是否收口。
 - 计划：`.planning/phases/3.9-l1-aware-diagnosis-v1/3.9-PLAN.md`。
 
-### 下一执行序列：Phase 3.7–3.18
+### 下一执行序列：Phase 3.11–3.18
 
 - **Gate Q（已通过）**：Q1/Q2 通过；Q3/Q4 因后续 UX/功能调整明确延期且 QA 债留在
   原 phase。裁决见 `3.7-GATE-Q-CHECKLIST.md`。
-- **3.7–3.10（计划 v3）**：3.7 保持 listening-only；3.8 是 shadowing 模仿层且非评分
-  completion 不伪造 speaking success；3.9 保持 listening L1-aware；3.10 只展示已有事实，
+- **3.7–3.10 已全部完成收口**：3.7 保持 listening-only；3.8 是 shadowing 模仿层且非评分
+  completion 不伪造 speaking success；3.9 保持延期且不收口；3.10 只展示已有事实，
   但提供 channel-ready envelope。
 - **3.11–3.18（已立 PLAN，方向承诺）**：Semantic evidence foundation → vendor-neutral
   LLM provider（两个异构协议先证中立）→ 3.12.1 judge 资格评估（可与 Reading 并行）→
@@ -234,6 +234,7 @@ last_updated: "2026-07-12T11:52:00.000+08:00"
 | 3.6.2 Dictionary Inline Clip UX | 词典详情内嵌切片卡 + PageView 横向轨道取代 overlay | `.planning/phases/3.6.2-dictionary-inline-clip-ux/3.6.2-CLOSEOUT.md` |
 | 3.7 Hunting List | 用户确认猎词资产 + 泛听会话级预算提示 + 三态听力证据 + completion 小结 | `.planning/phases/3.7-hunting-list/3.7-CLOSEOUT.md` |
 | 3.8 Shadowing & Recording Comparison | chunk 跟读 + 本地录音 + A/B/A + 客观波形/时长/停顿比较；非评分 completion | `.planning/phases/3.8-shadowing-recording-comparison/3.8-CLOSEOUT.md` |
+| 3.10 Coach Dashboard | 诊断型 dashboard 聚合 durable 事实 + 规则建议 + channel-ready envelope + starter 降级 | `.planning/phases/3.10-coach-dashboard/3.10-CLOSEOUT.md` |
 
 ## 最近重要决策
 
@@ -323,9 +324,9 @@ last_updated: "2026-07-12T11:52:00.000+08:00"
 
 ## 下一步工作
 
-1. **Phase 3.10（当前第一优先）**：按 durable facts、capability/channel 分区、starter
-   checklist 与上游缺席降级规则复核 Coach Dashboard PLAN 后开工。
-2. Phase 3.9 保持延期且不收口；其 L1 解释/专项入口不作为 3.10 的必需数据源。3.11 起每个
+1. **Phase 3.11（当前第一优先）**：按当前 3.10 已落地的聚合 API、channel-ready envelope
+   和上游 phase 现状修订 PLAN 后开工。
+2. Phase 3.9 保持延期且不收口；其 L1 解释/专项入口不作为 3.11 的必需数据源。3.11 起每个
    phase 开工前先按上游现状修订 PLAN。
 3. "收藏句 → 个人模板"的用户价值验证收敛到 Phase 3.16（3.4.3 结论待兑现）。
 4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；

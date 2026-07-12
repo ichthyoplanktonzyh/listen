@@ -1035,6 +1035,60 @@ pub trait LearningEventRepository: Send + Sync {
     ) -> Result<Vec<String>, ApplicationError>;
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CoachDashboardFacts {
+    pub practice_attempts: u64,
+    pub correct_practice_attempts: u64,
+    pub review_attempts: u64,
+    pub successful_review_attempts: u64,
+    pub extensive_sessions: u64,
+    pub extensive_listening_ms: u64,
+    pub due_review_items: u64,
+    pub active_hunting_candidates: u64,
+    pub l1_difficulty_hits: u64,
+    pub listening_capability_changes: u64,
+    pub materials: Vec<CoachMaterialFact>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CoachMaterialFact {
+    pub media_id: String,
+    pub title: String,
+    pub report_count: u64,
+    pub first_report: Option<String>,
+    pub latest_report: Option<String>,
+    pub reports_understood_all: u64,
+    pub reports_got_the_gist: u64,
+    pub reports_unclear: u64,
+    pub practice_attempts: u64,
+    pub practice_correct: u64,
+    pub triage_intent: Option<String>,
+}
+
+pub trait CoachDashboardRepository: Send + Sync {
+    fn coach_dashboard_facts(
+        &self,
+        period_start_ms: u64,
+        period_end_ms: u64,
+        as_of_ms: u64,
+    ) -> Result<CoachDashboardFacts, ApplicationError>;
+    fn coach_evidence(
+        &self,
+        metric: &str,
+        period_start_ms: u64,
+        period_end_ms: u64,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<CoachEvidenceFact>, ApplicationError>;
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CoachEvidenceFact {
+    pub id: String,
+    pub occurred_at_ms: u64,
+    pub result: String,
+}
+
 pub trait ListeningInboxRepository: Send + Sync {
     fn upsert_listening_inbox_item(
         &self,

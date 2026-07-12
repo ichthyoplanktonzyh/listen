@@ -352,6 +352,12 @@ pub fn router(state: ApiState) -> Router {
             get(m18::phrase_candidates),
         )
         .route("/v1/practice/sessions", post(create_practice_session))
+        .route("/v1/coach/dashboard", get(coach_dashboard))
+        .route("/v1/coach/evidence", get(coach_evidence))
+        .route(
+            "/v1/coach/materials/{media_id}/graduate",
+            post(graduate_coach_material),
+        )
         .route(
             "/v1/listening/sessions/{id}/complete",
             post(complete_listening_session),
