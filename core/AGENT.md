@@ -179,6 +179,13 @@ Follow `.planning/MAINTENANCE.md` exactly:
 - Keep handoff notes sparse. Prefer `.planning/handoff/continue-here.md` and
   `STATE.md` for live memory.
 
+## Phase Branch Workflow
+
+- Every phase must use a dedicated phase branch; do not implement phase work
+  directly on `main`.
+- After the phase functionality is complete, merge its dedicated branch into
+  `main` so `main` remains the integrated record of completed phases.
+
 ## Before Finishing Work
 
 - Check `git status --short` and avoid overwriting unrelated user changes.
