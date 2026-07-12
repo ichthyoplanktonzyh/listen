@@ -119,7 +119,8 @@ pub fn observation_spec_for_marking(result: ObservationResult) -> ObservationSpe
     }
 }
 
-/// Returns `None` for skipped attempts: skipping is not evidence.
+/// Returns `None` for skipped and non-evaluated completed attempts: neither is
+/// capability evidence.
 pub fn observation_spec_for_practice(
     kind: PracticeKind,
     result: PracticeResult,
@@ -128,7 +129,7 @@ pub fn observation_spec_for_practice(
         PracticeResult::Correct => ObservationOutcome::Success,
         PracticeResult::Partial => ObservationOutcome::Partial,
         PracticeResult::Incorrect => ObservationOutcome::Failure,
-        PracticeResult::Skipped => return None,
+        PracticeResult::Completed | PracticeResult::Skipped => return None,
     };
     let (task_type, capability, assistance) = match kind {
         PracticeKind::Cloze => (
@@ -278,6 +279,10 @@ mod tests {
 
         assert!(
             observation_spec_for_practice(PracticeKind::Cloze, PracticeResult::Skipped).is_none()
+        );
+        assert!(
+            observation_spec_for_practice(PracticeKind::Shadowing, PracticeResult::Completed)
+                .is_none()
         );
     }
 

@@ -32,7 +32,9 @@ cp "$root/third_party/runtime/THIRD_PARTY_NOTICES.md" \
 "$root/scripts/sanitize-macos-player-framework.sh" "$app"
 
 xattr -cr "$app"
-codesign --force --deep --sign - "$app"
+codesign --force --deep --sign - \
+  --entitlements "$root/apps/desktop/macos/Runner/Release.entitlements" \
+  "$app"
 xattr -cr "$app"
 touch "$app" "$app/Contents"
 

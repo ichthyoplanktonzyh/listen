@@ -240,6 +240,164 @@ fn learning_loop_practice_review_and_events_round_trip() {
 }
 
 #[test]
+fn shadowing_completion_persists_recording_without_creating_capability_evidence() {
+    let recording_path = write_shadowing_wav("recording", 900, 450, 600);
+    let reference_path = write_shadowing_wav("reference", 800, 400, 550);
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
+    .with_recording_repository(repo.clone());
+    let session = services
+        .create_practice_session(application::CreatePracticeSession {
+            mode: PracticeMode::Intensive,
+            media_id: None,
+            track_id: None,
+            source: Some("shadowing-test".into()),
+        })
+        .unwrap();
+    let target = PracticeTarget {
+        kind: PracticeTargetKind::Chunk,
+        id: Some("chunk-1".into()),
+        sentence_id: Some(SubtitleSentenceId::parse("sentence-1").unwrap()),
+        chunk_id: Some(ChunkId::parse("chunk-1").unwrap()),
+        start_ms: Some(100),
+        end_ms: Some(900),
+    };
+    let item = services
+        .create_practice_item(application::CreatePracticeItem {
+            session_id: Some(session.id.clone()),
+            kind: PracticeKind::Shadowing,
+            target: target.clone(),
+            prompt_snapshot: "follow this chunk".into(),
+            expected_text: "follow this chunk".into(),
+            anchors: vec![],
+        })
+        .unwrap();
+    let recording = services
+        .create_recording_asset(application::CreateRecordingAsset {
+            file_path: recording_path.to_string_lossy().into_owned(),
+            duration_ms: 900,
+            target,
+            source_segment: PlayableSegment {
+                media_id: None,
+                start_ms: 100,
+                end_ms: 900,
+                label: "chunk 1".into(),
+                subtitle_snapshot: "follow this chunk".into(),
+                availability: PlayableSegmentAvailability::Available,
+            },
+            language: LanguageCode::parse("en").unwrap(),
+            audio: RecordingAudioMetadata {
+                container: "wav".into(),
+                codec: "pcm_s16le".into(),
+                sample_rate_hz: 16_000,
+                channels: 1,
+                sample_format: "s16".into(),
+                byte_length: 24_960,
+                content_sha256: "a".repeat(64),
+            },
+            recorder_version: "flutter-recorder-v1".into(),
+        })
+        .unwrap();
+    let attempt = services
+        .complete_shadowing_attempt(application::CompleteShadowingAttempt {
+            item_id: item.id,
+            recording_id: recording.id.clone(),
+        })
+        .unwrap();
+
+    assert_eq!(attempt.result, PracticeResult::Completed);
+    assert_eq!(attempt.score, None);
+    assert!(attempt.generated_observation_ids.is_empty());
+    assert!(attempt.generated_review_item_ids.is_empty());
+    let linked = services.recording_asset(&recording.id).unwrap().unwrap();
+    assert_eq!(linked.practice_attempt_id, Some(attempt.id.clone()));
+    assert_eq!(
+        services
+            .complete_shadowing_attempt(application::CompleteShadowingAttempt {
+                item_id: attempt.item_id.clone(),
+                recording_id: recording.id.clone(),
+            })
+            .unwrap()
+            .id,
+        attempt.id
+    );
+    let comparison = services
+        .compare_shadowing(application::CreateShadowingComparison {
+            recording_id: recording.id.clone(),
+            reference_wav_path: reference_path.to_string_lossy().into_owned(),
+        })
+        .unwrap();
+    assert_eq!(comparison.duration_delta_ms, 100);
+    assert_eq!(comparison.pause_alignment.reference_pauses.len(), 1);
+    assert_eq!(comparison.pause_alignment.recording_pauses.len(), 1);
+    assert!(!comparison.reference_waveform.peaks.is_empty());
+    let events = repo
+        .list_learning_events_for_session(&session.id, 10, 0)
+        .unwrap();
+    assert_eq!(
+        events.last().unwrap().payload["evaluation_kind"],
+        "not_scored"
+    );
+    assert_eq!(
+        services.delete_recording_asset(&recording.id).unwrap(),
+        Some(linked)
+    );
+    assert!(services.recording_asset(&recording.id).unwrap().is_none());
+    let _ = std::fs::remove_file(recording_path);
+    let _ = std::fs::remove_file(reference_path);
+}
+
+fn write_shadowing_wav(
+    label: &str,
+    duration_ms: u64,
+    pause_start_ms: u64,
+    pause_end_ms: u64,
+) -> std::path::PathBuf {
+    let sample_rate = 16_000_u32;
+    let sample_count = duration_ms as u32 * sample_rate / 1000;
+    let data_size = sample_count * 2;
+    let mut bytes = Vec::with_capacity(44 + data_size as usize);
+    bytes.extend_from_slice(b"RIFF");
+    bytes.extend_from_slice(&(36 + data_size).to_le_bytes());
+    bytes.extend_from_slice(b"WAVEfmt \x10\0\0\0\x01\0\x01\0");
+    bytes.extend_from_slice(&sample_rate.to_le_bytes());
+    bytes.extend_from_slice(&(sample_rate * 2).to_le_bytes());
+    bytes.extend_from_slice(&2_u16.to_le_bytes());
+    bytes.extend_from_slice(&16_u16.to_le_bytes());
+    bytes.extend_from_slice(b"data");
+    bytes.extend_from_slice(&data_size.to_le_bytes());
+    for index in 0..sample_count {
+        let time_ms = index as u64 * 1000 / sample_rate as u64;
+        let sample = if (pause_start_ms..pause_end_ms).contains(&time_ms) {
+            0_i16
+        } else {
+            8_000_i16
+        };
+        bytes.extend_from_slice(&sample.to_le_bytes());
+    }
+    let path = std::env::temp_dir().join(format!(
+        "llplayer-{label}-{}-{}.wav",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::write(&path, bytes).unwrap();
+    path
+}
+
+#[test]
 fn failed_review_records_context_evidence_and_hunting_candidate_without_status_change() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = AppServices::new(

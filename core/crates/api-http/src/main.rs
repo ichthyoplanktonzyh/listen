@@ -31,6 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         repository.clone(),
         repository.clone(),
     )
+    .with_recording_repository(repository.clone())
     .with_difficulty_repository(repository.clone())
     .with_corpus_index_repository(repository.clone());
     let token = env::var("LLPLAYERNEXT_API_TOKEN").unwrap_or_else(|_| random_token());

@@ -176,6 +176,29 @@ pub struct SubmitPracticeAttempt {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateRecordingAsset {
+    pub file_path: String,
+    pub duration_ms: u64,
+    pub target: PracticeTarget,
+    pub source_segment: PlayableSegment,
+    pub language: LanguageCode,
+    pub audio: RecordingAudioMetadata,
+    pub recorder_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompleteShadowingAttempt {
+    pub item_id: PracticeItemId,
+    pub recording_id: RecordingAssetId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateShadowingComparison {
+    pub recording_id: RecordingAssetId,
+    pub reference_wav_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateReviewItem {
     pub source: ReviewSource,
     pub anchors: Vec<PracticeAnchor>,

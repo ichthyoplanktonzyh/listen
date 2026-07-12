@@ -359,6 +359,16 @@ pub fn router(state: ApiState) -> Router {
         .route("/v1/practice/attempts", post(submit_practice_attempt))
         .route("/v1/practice/attempts/{id}", get(practice_attempt))
         .route(
+            "/v1/practice/shadowing-attempts",
+            post(complete_shadowing_attempt),
+        )
+        .route("/v1/shadowing/comparisons", post(compare_shadowing))
+        .route("/v1/recordings", post(create_recording_asset))
+        .route(
+            "/v1/recordings/{id}",
+            get(recording_asset).delete(delete_recording_asset),
+        )
+        .route(
             "/v1/listening-inbox/items",
             get(list_listening_inbox_items).post(capture_listening_inbox_item),
         )

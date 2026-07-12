@@ -1042,6 +1042,69 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PracticeAttempt" }
+  /v1/practice/shadowing-attempts:
+    post:
+      operationId: completeShadowingAttempt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompleteShadowingAttempt" }
+      responses:
+        "200":
+          description: Persisted non-evaluated shadowing completion
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PracticeAttempt" }
+  /v1/recordings:
+    post:
+      operationId: createRecordingAsset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRecordingAsset" }
+      responses:
+        "200":
+          description: Persisted local recording metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingAsset" }
+  /v1/recordings/{id}:
+    get:
+      operationId: recordingAsset
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Recording metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingAsset" }
+  /v1/shadowing/comparisons:
+    post:
+      operationId: compareShadowing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateShadowingComparison" }
+      responses:
+        "200":
+          description: Objective duration, pause, and waveform comparison
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShadowingComparison" }
+    delete:
+      operationId: deleteRecordingAsset
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Deleted recording metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingAsset" }
   /v1/listening-inbox/items:
     get:
       operationId: listListeningInboxItems
@@ -2946,7 +3009,7 @@ components:
     PracticeAnchorKind:
       enum: [lexical_entry, sentence, word_timeline, chunk_timeline, chunk, phone_timeline, phone, connected_speech]
     PracticeResult:
-      enum: [correct, partial, incorrect, skipped]
+      enum: [correct, partial, incorrect, completed, skipped]
     PracticeTokenResult:
       enum: [correct, missing, extra, mismatch]
     ReviewSourceKind:
@@ -3063,6 +3126,98 @@ components:
         item_id: { type: string }
         text_answer: { type: string }
         create_review_item_on_failure: { type: boolean }
+    PlayableSegmentAvailability:
+      enum: [available, missing_media, missing_timeline]
+    PlayableSegment:
+      type: object
+      required: [media_id, start_ms, end_ms, label, subtitle_snapshot, availability]
+      properties:
+        media_id: { type: [string, "null"] }
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        label: { type: string }
+        subtitle_snapshot: { type: string }
+        availability: { $ref: "#/components/schemas/PlayableSegmentAvailability" }
+    RecordingAudioMetadata:
+      type: object
+      required: [container, codec, sample_rate_hz, channels, sample_format, byte_length, content_sha256]
+      properties:
+        container: { type: string }
+        codec: { type: string }
+        sample_rate_hz: { type: integer, minimum: 1 }
+        channels: { type: integer, minimum: 1 }
+        sample_format: { type: string }
+        byte_length: { type: integer, minimum: 1 }
+        content_sha256: { type: string, pattern: "^[0-9a-fA-F]{64}$" }
+    RecordingAsset:
+      type: object
+      required: [id, file_path, created_at_ms, duration_ms, practice_attempt_id, target, source_segment, language, audio, recorder_version]
+      properties:
+        id: { type: string }
+        file_path: { type: string }
+        created_at_ms: { type: integer, minimum: 0 }
+        duration_ms: { type: integer, minimum: 1 }
+        practice_attempt_id: { type: [string, "null"] }
+        target: { $ref: "#/components/schemas/PracticeTarget" }
+        source_segment: { $ref: "#/components/schemas/PlayableSegment" }
+        language: { type: string }
+        audio: { $ref: "#/components/schemas/RecordingAudioMetadata" }
+        recorder_version: { type: string }
+    CreateRecordingAsset:
+      type: object
+      required: [file_path, duration_ms, target, source_segment, language, audio, recorder_version]
+      properties:
+        file_path: { type: string }
+        duration_ms: { type: integer, minimum: 1 }
+        target: { $ref: "#/components/schemas/PracticeTarget" }
+        source_segment: { $ref: "#/components/schemas/PlayableSegment" }
+        language: { type: string }
+        audio: { $ref: "#/components/schemas/RecordingAudioMetadata" }
+        recorder_version: { type: string }
+    CompleteShadowingAttempt:
+      type: object
+      required: [item_id, recording_id]
+      properties:
+        item_id: { type: string }
+        recording_id: { type: string }
+    CreateShadowingComparison:
+      type: object
+      required: [recording_id, reference_wav_path]
+      properties:
+        recording_id: { type: string }
+        reference_wav_path: { type: string }
+    AudioPauseInterval:
+      type: object
+      required: [start_ms, end_ms]
+      properties:
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+    AudioWaveformSummary:
+      type: object
+      required: [duration_ms, bucket_ms, peaks, rms]
+      properties:
+        duration_ms: { type: integer, minimum: 0 }
+        bucket_ms: { type: integer, minimum: 1 }
+        peaks: { type: array, items: { type: number, minimum: 0, maximum: 1 } }
+        rms: { type: array, items: { type: number, minimum: 0, maximum: 1 } }
+    ShadowingPauseAlignment:
+      type: object
+      required: [reference_pauses, recording_pauses, mean_absolute_offset_ms]
+      properties:
+        reference_pauses: { type: array, items: { $ref: "#/components/schemas/AudioPauseInterval" } }
+        recording_pauses: { type: array, items: { $ref: "#/components/schemas/AudioPauseInterval" } }
+        mean_absolute_offset_ms: { type: [integer, "null"], minimum: 0 }
+    ShadowingComparison:
+      type: object
+      required: [attempt_id, reference_segment, recording_id, duration_delta_ms, pause_alignment, reference_waveform, recording_waveform]
+      properties:
+        attempt_id: { type: string }
+        reference_segment: { $ref: "#/components/schemas/PlayableSegment" }
+        recording_id: { type: string }
+        duration_delta_ms: { type: integer }
+        pause_alignment: { $ref: "#/components/schemas/ShadowingPauseAlignment" }
+        reference_waveform: { $ref: "#/components/schemas/AudioWaveformSummary" }
+        recording_waveform: { $ref: "#/components/schemas/AudioWaveformSummary" }
     ReviewSource:
       type: object
       required: [kind, id, practice_attempt_id, lexical_entry_id, media_id, track_id]

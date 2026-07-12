@@ -4,8 +4,14 @@ use super::*;
 fn sense_folders_are_optional_local_organizers_with_entry_scoped_assignments() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = AppServices::new(
-        repo.clone(), repo.clone(), repo.clone(), repo.clone(), repo.clone(), repo.clone(),
-        repo.clone(), repo,
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo,
     );
     let source = application::LexicalSourceContext {
         media_id: None,
@@ -38,9 +44,18 @@ fn sense_folders_are_optional_local_organizers_with_entry_scoped_assignments() {
     let details = services.lexical_details(&entry.entry.id).unwrap().unwrap();
     assert_eq!(details.occurrences.len(), 1, "entry list remains complete");
     assert_eq!(details.sense_folders.len(), 1);
-    assert_eq!(details.sense_folders[0].folder.external_ref.as_deref(), Some("scenelex:run-03"));
-    assert_eq!(details.sense_folders[0].occurrences, vec![occurrence.clone()]);
-    assert!(details.capability_profile.is_some(), "entry capability remains present");
+    assert_eq!(
+        details.sense_folders[0].folder.external_ref.as_deref(),
+        Some("scenelex:run-03")
+    );
+    assert_eq!(
+        details.sense_folders[0].occurrences,
+        vec![occurrence.clone()]
+    );
+    assert!(
+        details.capability_profile.is_some(),
+        "entry capability remains present"
+    );
 
     let bundle = services.export_vocabulary().unwrap();
     assert_eq!(bundle.version, 7);
@@ -48,8 +63,14 @@ fn sense_folders_are_optional_local_organizers_with_entry_scoped_assignments() {
     assert_eq!(bundle.lexical_sense_folder_occurrences.len(), 1);
     let restored_repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let restored = AppServices::new(
-        restored_repo.clone(), restored_repo.clone(), restored_repo.clone(), restored_repo.clone(),
-        restored_repo.clone(), restored_repo.clone(), restored_repo.clone(), restored_repo,
+        restored_repo.clone(),
+        restored_repo.clone(),
+        restored_repo.clone(),
+        restored_repo.clone(),
+        restored_repo.clone(),
+        restored_repo.clone(),
+        restored_repo.clone(),
+        restored_repo,
     );
     restored.import_vocabulary(&bundle).unwrap();
     assert_eq!(
@@ -65,26 +86,36 @@ fn sense_folders_are_optional_local_organizers_with_entry_scoped_assignments() {
     services
         .unassign_occurrence_from_lexical_sense_folder(&entry.entry.id, &folder.id, &occurrence.id)
         .unwrap();
-    assert!(services
-        .lexical_details(&entry.entry.id)
-        .unwrap()
-        .unwrap()
-        .sense_folders[0]
-        .occurrences
-        .is_empty());
+    assert!(
+        services
+            .lexical_details(&entry.entry.id)
+            .unwrap()
+            .unwrap()
+            .sense_folders[0]
+            .occurrences
+            .is_empty()
+    );
 
     let other = upsert_word_asset(&services, "en", "walk", "walk", None, None);
-    assert!(services
-        .assign_occurrence_to_lexical_sense_folder(&other.entry.id, &folder.id, &occurrence.id)
-        .is_err());
+    assert!(
+        services
+            .assign_occurrence_to_lexical_sense_folder(&other.entry.id, &folder.id, &occurrence.id)
+            .is_err()
+    );
 }
 
 #[test]
 fn sense_folder_moves_stay_entry_scoped_and_import_skips_corrupt_edges() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = AppServices::new(
-        repo.clone(), repo.clone(), repo.clone(), repo.clone(), repo.clone(), repo.clone(),
-        repo.clone(), repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
     );
     let source = |form: &str, sentence: &str| application::LexicalSourceContext {
         media_id: None,
@@ -99,11 +130,19 @@ fn sense_folder_moves_stay_entry_scoped_and_import_skips_corrupt_edges() {
         token_end: Some(1),
     };
     let run = upsert_word_asset(
-        &services, "en", "run", "run", None,
+        &services,
+        "en",
+        "run",
+        "run",
+        None,
         Some(source("runs", "She runs a business.")),
     );
     let walk = upsert_word_asset(
-        &services, "en", "walk", "walk", None,
+        &services,
+        "en",
+        "walk",
+        "walk",
+        None,
         Some(source("walks", "He walks home.")),
     );
     let run_occurrence = run.occurrences[0].clone();
@@ -137,7 +176,10 @@ fn sense_folder_moves_stay_entry_scoped_and_import_skips_corrupt_edges() {
             .clone()
     };
     assert!(folder_occurrences("operate a business").is_empty());
-    assert_eq!(folder_occurrences("move fast on foot"), vec![run_occurrence.clone()]);
+    assert_eq!(
+        folder_occurrences("move fast on foot"),
+        vec![run_occurrence.clone()]
+    );
 
     // The 0031 UPDATE trigger rejects cross-entry moves that bypass the
     // application-level guard.
@@ -164,8 +206,14 @@ fn sense_folder_moves_stay_entry_scoped_and_import_skips_corrupt_edges() {
         });
     let restored_repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let restored = AppServices::new(
-        restored_repo.clone(), restored_repo.clone(), restored_repo.clone(), restored_repo.clone(),
-        restored_repo.clone(), restored_repo.clone(), restored_repo.clone(), restored_repo,
+        restored_repo.clone(),
+        restored_repo.clone(),
+        restored_repo.clone(),
+        restored_repo.clone(),
+        restored_repo.clone(),
+        restored_repo.clone(),
+        restored_repo.clone(),
+        restored_repo,
     );
     restored.import_vocabulary(&bundle).unwrap();
     let restored_run = restored.lexical_details(&run.entry.id).unwrap().unwrap();
@@ -174,7 +222,10 @@ fn sense_folder_moves_stay_entry_scoped_and_import_skips_corrupt_edges() {
         .iter()
         .find(|candidate| candidate.folder.label == "operate a business")
         .unwrap();
-    assert!(restored_business.occurrences.is_empty(), "corrupt edge skipped");
+    assert!(
+        restored_business.occurrences.is_empty(),
+        "corrupt edge skipped"
+    );
     let restored_walk = restored.lexical_details(&walk.entry.id).unwrap().unwrap();
     assert!(
         restored_walk.sense_folders[0].occurrences.is_empty(),

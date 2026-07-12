@@ -1,6 +1,4 @@
-use domain::{
-    PhraseCandidate, SenseGroupSource, SubtitleSentence, SubtitleTokenKind,
-};
+use domain::{PhraseCandidate, SenseGroupSource, SubtitleSentence, SubtitleTokenKind};
 
 pub const PROVIDER_ID: &str = "rule-based-sense-group";
 pub const PROVIDER_VERSION: &str = "v1";
@@ -70,9 +68,9 @@ pub fn partition_sentence(
         let next_word = words[word_pos + 1];
         let punct_between = punctuation_between_tokens(sentence, word.index, next_word.index);
 
-        let in_phrase = phrase_candidates.iter().any(|pc| {
-            pc.token_start <= word.index && pc.token_end >= next_word.index
-        });
+        let in_phrase = phrase_candidates
+            .iter()
+            .any(|pc| pc.token_start <= word.index && pc.token_end >= next_word.index);
 
         if word_count_in_group >= config.hard_max_words && !in_phrase {
             boundaries.push((word_pos, vec![SenseGroupSource::LengthLimit]));
@@ -117,9 +115,10 @@ pub fn partition_sentence(
         let span_start = words[start_word_pos].index;
         let span_end = words[*boundary_word_pos].index;
         let mut span_sources = sources.clone();
-        if phrase_candidates.iter().any(|pc| {
-            pc.token_start >= span_start && pc.token_end <= span_end
-        }) {
+        if phrase_candidates
+            .iter()
+            .any(|pc| pc.token_start >= span_start && pc.token_end <= span_end)
+        {
             if !span_sources.contains(&SenseGroupSource::Rule) {
                 span_sources.push(SenseGroupSource::Rule);
             }
@@ -137,9 +136,10 @@ pub fn partition_sentence(
         let span_start = words[start_word_pos].index;
         let span_end = words[words.len() - 1].index;
         let mut sources = vec![SenseGroupSource::Rule];
-        if phrase_candidates.iter().any(|pc| {
-            pc.token_start >= span_start && pc.token_end <= span_end
-        }) {
+        if phrase_candidates
+            .iter()
+            .any(|pc| pc.token_start >= span_start && pc.token_end <= span_end)
+        {
             sources = vec![SenseGroupSource::Rule];
         }
         spans.push(SenseGroupSpan {
@@ -221,7 +221,11 @@ mod tests {
                 }
             })
             .collect();
-        let full_text: String = tokens_in.iter().map(|(t, _)| *t).collect::<Vec<_>>().join("");
+        let full_text: String = tokens_in
+            .iter()
+            .map(|(t, _)| *t)
+            .collect::<Vec<_>>()
+            .join("");
         SubtitleSentence {
             id: SubtitleSentenceId::parse(id).unwrap(),
             index: 0,
@@ -335,7 +339,11 @@ mod tests {
         let s = en_sentence("en2", "After the long meeting, we went home together.");
         let config = SenseGroupPartitionConfig::default();
         let spans = partition_sentence(&s, &[], &config);
-        assert!(spans.len() >= 2, "comma should split: got {} groups", spans.len());
+        assert!(
+            spans.len() >= 2,
+            "comma should split: got {} groups",
+            spans.len()
+        );
         assert_invariants(&s, &spans);
     }
 
@@ -408,10 +416,9 @@ mod tests {
         let config = SenseGroupPartitionConfig::default();
         let spans = partition_sentence(&s, &[phrase], &config);
         for span in &spans {
-            let contains_take = take_idx >= span.start_token_index
-                && take_idx <= span.end_token_index;
-            let contains_of = of_idx >= span.start_token_index
-                && of_idx <= span.end_token_index;
+            let contains_take =
+                take_idx >= span.start_token_index && take_idx <= span.end_token_index;
+            let contains_of = of_idx >= span.start_token_index && of_idx <= span.end_token_index;
             if contains_take || contains_of {
                 assert!(
                     contains_take && contains_of,
@@ -430,8 +437,7 @@ mod tests {
         assert_invariants(&s, &spans);
         let comma_token = s.tokens.iter().find(|t| t.text == ",").unwrap();
         let any_span_covers = spans.iter().any(|span| {
-            comma_token.index >= span.start_token_index
-                && comma_token.index <= span.end_token_index
+            comma_token.index >= span.start_token_index && comma_token.index <= span.end_token_index
         });
         assert!(
             any_span_covers || true,

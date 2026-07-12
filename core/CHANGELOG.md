@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- 2026-07-12 09:07 CST: Owner 明确确认 Phase 3.8 Shadowing & Recording Comparison
+  真实媒体、真实麦克风及跨媒体入口 QA 全部通过。`3.8-MANUAL-QA.md` 记录首轮发现的
+  跨媒体主字幕导航泄漏、修复与复验 PASS；新增 `3.8-CLOSEOUT.md`，计划状态转为 COMPLETE，
+  `STATE.md` 当前第一优先切换至 Phase 3.9。Phase 3.8 冻结后仍保持非评分 completion、
+  录音资产 outlive media 与客观比较不作发音评价的边界。
+
+- 2026-07-12 09:02 CST: 修复 Phase 3.8 跨媒体 shadowing 播放器 UX 泄漏。从复习卡或词典
+  内联片段进入“跟一下”时，练习窗现在固定为当前来源片段，隐藏主字幕上一句/下一句与句数
+  进度；播放/暂停按钮和空格键改为控制独立切片播放器，导航函数同时拒绝跨媒体调用，避免
+  任何快捷键误播主播放器。新增 widget 回归测试；`flutter analyze` 与相关测试通过。
+
+- 2026-07-12 08:33 CST: Phase 3.8 Shadowing & Recording Comparison 自动化实现完成并进入
+  owner 真实媒体 QA。macOS 端新增 `AVAudioRecorder` 权限与 mono PCM16 WAV 采集，Flutter
+  练习浮窗点亮“跟一下”第四题型，支持 chunk → 1+2 → 整句、0.75/0.9/1.0x、跨媒体入口、
+  原音/录音/A-B-A 独占播放、双波形及客观时长/停顿比较；媒体/比较失败保留录音和 snapshot，
+  权限拒绝可引导系统设置。新增 Rust DSP、HTTP/OpenAPI/Flutter typed seam 与回归测试；
+  `cargo test --workspace`、Flutter 278 项、`flutter analyze`、契约校验、包含 sidecar/runtime 的
+  macOS Release 打包及
+  `git diff --check` 通过。严格 clippy 仅被既有 `construction.rs` `collapsible_if` 阻断。
+  同时修复正式打包二次签名丢失 Runner entitlements，产物现保留麦克风输入权限键。新增
+  `3.8-MANUAL-QA.md`，Phase 保持 ACTIVE，等待 owner 裁决后再收口。
+
+- 2026-07-11 20:36 CST: Phase 3.8 首条后端竖切片落地。新增 schema v33
+  `recording_assets`、SQLite `RecordingRepository` 与 recording create/get/delete API；
+  `RecordingAsset` 保存语言、容器/codec、采样率、声道、sample format、byte length、SHA-256、
+  recorder version 和来源片段 snapshot，为 3.14 录音转录保留诚实输入。新增
+  `PracticeResult::Completed` 与 shadowing completion API，非评分录音完成明确不写 speaking
+  observation、不生成 review、不计入 content-fit，并以 persistence/HTTP/contract 回归锁定。
+
 - 2026-07-11 20:07 CST: Owner 明确确认 Phase 3.7 Hunting List 真实媒体功能验收通过。
   `3.7-MANUAL-QA.md` 记录 PASS，新增 `3.7-CLOSEOUT.md`，计划状态转为 COMPLETE 并冻结；
   `STATE.md` 当前第一优先切换至 Phase 3.8。此次收口不改变 Gate Q 中 Q3（复习）与 Q4

@@ -424,7 +424,7 @@ export type PracticeAnchorKind =
   | "phone_timeline"
   | "phone"
   | "connected_speech";
-export type PracticeResult = "correct" | "partial" | "incorrect" | "skipped";
+export type PracticeResult = "correct" | "partial" | "incorrect" | "completed" | "skipped";
 export type PracticeTokenResult = "correct" | "missing" | "extra" | "mismatch";
 export type ReviewSourceKind =
   | "lexical_entry"
@@ -563,6 +563,91 @@ export interface SubmitPracticeAttempt {
   item_id: string;
   text_answer: string;
   create_review_item_on_failure: boolean;
+}
+
+export type PlayableSegmentAvailability =
+  | "available"
+  | "missing_media"
+  | "missing_timeline";
+
+export interface PlayableSegment {
+  media_id: string | null;
+  start_ms: number;
+  end_ms: number;
+  label: string;
+  subtitle_snapshot: string;
+  availability: PlayableSegmentAvailability;
+}
+
+export interface RecordingAudioMetadata {
+  container: string;
+  codec: string;
+  sample_rate_hz: number;
+  channels: number;
+  sample_format: string;
+  byte_length: number;
+  content_sha256: string;
+}
+
+export interface RecordingAsset {
+  id: string;
+  file_path: string;
+  created_at_ms: number;
+  duration_ms: number;
+  practice_attempt_id: string | null;
+  target: PracticeTarget;
+  source_segment: PlayableSegment;
+  language: string;
+  audio: RecordingAudioMetadata;
+  recorder_version: string;
+}
+
+export interface CreateRecordingAsset {
+  file_path: string;
+  duration_ms: number;
+  target: PracticeTarget;
+  source_segment: PlayableSegment;
+  language: string;
+  audio: RecordingAudioMetadata;
+  recorder_version: string;
+}
+
+export interface CompleteShadowingAttempt {
+  item_id: string;
+  recording_id: string;
+}
+
+export interface CreateShadowingComparison {
+  recording_id: string;
+  reference_wav_path: string;
+}
+
+export interface AudioPauseInterval {
+  start_ms: number;
+  end_ms: number;
+}
+
+export interface AudioWaveformSummary {
+  duration_ms: number;
+  bucket_ms: number;
+  peaks: number[];
+  rms: number[];
+}
+
+export interface ShadowingPauseAlignment {
+  reference_pauses: AudioPauseInterval[];
+  recording_pauses: AudioPauseInterval[];
+  mean_absolute_offset_ms: number | null;
+}
+
+export interface ShadowingComparison {
+  attempt_id: string;
+  reference_segment: PlayableSegment;
+  recording_id: string;
+  duration_delta_ms: number;
+  pause_alignment: ShadowingPauseAlignment;
+  reference_waveform: AudioWaveformSummary;
+  recording_waveform: AudioWaveformSummary;
 }
 
 export interface ReviewSource {
@@ -1238,6 +1323,37 @@ export class LocalApiV1 {
 
   submitPracticeAttempt(input: SubmitPracticeAttempt): Promise<PracticeAttempt> {
     return this.request("/v1/practice/attempts", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  completeShadowingAttempt(input: CompleteShadowingAttempt): Promise<PracticeAttempt> {
+    return this.request("/v1/practice/shadowing-attempts", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  createRecordingAsset(input: CreateRecordingAsset): Promise<RecordingAsset> {
+    return this.request("/v1/recordings", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  recordingAsset(id: string): Promise<RecordingAsset> {
+    return this.request(`/v1/recordings/${encodeURIComponent(id)}`);
+  }
+
+  deleteRecordingAsset(id: string): Promise<RecordingAsset> {
+    return this.request(`/v1/recordings/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+  }
+
+  compareShadowing(input: CreateShadowingComparison): Promise<ShadowingComparison> {
+    return this.request("/v1/shadowing/comparisons", {
       method: "POST",
       body: JSON.stringify(input),
     });

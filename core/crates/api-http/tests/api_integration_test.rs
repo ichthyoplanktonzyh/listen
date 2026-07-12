@@ -486,7 +486,8 @@ async fn sense_folder_http_lifecycle_keeps_entry_occurrences_and_assigns_manuall
                 }
             }),
         ),
-    ).await;
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{entry}");
     let entry_id = entry["entry"]["id"].as_str().unwrap();
     let occurrence_id = entry["occurrences"][0]["id"].as_str().unwrap();
@@ -498,10 +499,13 @@ async fn sense_folder_http_lifecycle_keeps_entry_occurrences_and_assigns_manuall
             Some(TOKEN),
             &json!({"label": "operate a business", "external_ref": "scenelex:run-03"}),
         ),
-    ).await;
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{created}");
     assert_eq!(created["occurrences"].as_array().unwrap().len(), 1);
-    let sense_id = created["sense_folders"][0]["folder"]["id"].as_str().unwrap();
+    let sense_id = created["sense_folders"][0]["folder"]["id"]
+        .as_str()
+        .unwrap();
 
     let (status, assigned) = send(
         &app,
@@ -512,7 +516,13 @@ async fn sense_folder_http_lifecycle_keeps_entry_occurrences_and_assigns_manuall
         ),
     ).await;
     assert_eq!(status, StatusCode::OK, "{assigned}");
-    assert_eq!(assigned["sense_folders"][0]["occurrences"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        assigned["sense_folders"][0]["occurrences"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
 
     let (status, deleted) = send(
         &app,
@@ -521,7 +531,8 @@ async fn sense_folder_http_lifecycle_keeps_entry_occurrences_and_assigns_manuall
             &format!("/v1/lexical-entries/{entry_id}/sense-folders/{sense_id}"),
             Some(TOKEN),
         ),
-    ).await;
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{deleted}");
     assert!(deleted["sense_folders"].as_array().unwrap().is_empty());
     assert_eq!(deleted["occurrences"].as_array().unwrap().len(), 1);

@@ -8,6 +8,7 @@ mod media;
 mod migrations;
 mod phonetic_analysis;
 mod progress;
+mod recording;
 mod subtitles;
 mod support;
 mod transcription;

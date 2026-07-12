@@ -55,6 +55,9 @@ pub enum PracticeResult {
     Correct,
     Partial,
     Incorrect,
+    /// The activity finished without an objective evaluation. This is a
+    /// durable completion fact, not capability evidence.
+    Completed,
     Skipped,
 }
 
@@ -504,6 +507,24 @@ pub struct RecordingAsset {
     pub duration_ms: u64,
     pub practice_attempt_id: Option<PracticeAttemptId>,
     pub target: PracticeTarget,
+    pub source_segment: PlayableSegment,
+    pub language: LanguageCode,
+    pub audio: RecordingAudioMetadata,
+    pub recorder_version: String,
+}
+
+/// Transcription-ready facts about a locally recorded audio file. The hash
+/// and byte length let later consumers detect missing/replaced files without
+/// treating the mutable path as asset identity.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RecordingAudioMetadata {
+    pub container: String,
+    pub codec: String,
+    pub sample_rate_hz: u32,
+    pub channels: u16,
+    pub sample_format: String,
+    pub byte_length: u64,
+    pub content_sha256: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -511,9 +532,31 @@ pub struct ShadowingComparison {
     pub attempt_id: PracticeAttemptId,
     pub reference_segment: PlayableSegment,
     pub recording_id: RecordingAssetId,
-    pub duration_delta_ms: Option<i64>,
-    pub pause_alignment: Option<serde_json::Value>,
-    pub waveform_summary: Option<serde_json::Value>,
+    pub duration_delta_ms: i64,
+    pub pause_alignment: ShadowingPauseAlignment,
+    pub reference_waveform: AudioWaveformSummary,
+    pub recording_waveform: AudioWaveformSummary,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AudioPauseInterval {
+    pub start_ms: u64,
+    pub end_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AudioWaveformSummary {
+    pub duration_ms: u64,
+    pub bucket_ms: u64,
+    pub peaks: Vec<f32>,
+    pub rms: Vec<f32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ShadowingPauseAlignment {
+    pub reference_pauses: Vec<AudioPauseInterval>,
+    pub recording_pauses: Vec<AudioPauseInterval>,
+    pub mean_absolute_offset_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

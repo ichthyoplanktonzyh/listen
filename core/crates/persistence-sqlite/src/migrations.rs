@@ -9,7 +9,7 @@ use super::PersistenceError;
 
 // v25 is reserved by Phase 3.4.2 (independent branch); this repository jumps
 // 24 -> 26 per the "later lander renumbers" rule recorded in the 3.5 plan.
-pub const MIGRATION_VERSION: u32 = 32;
+pub const MIGRATION_VERSION: u32 = 33;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -222,6 +222,12 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         let tx = connection.unchecked_transaction()?;
         tx.execute_batch(include_str!("../migrations/0032_hunting_targets.sql"))?;
         tx.pragma_update(None, "user_version", 32)?;
+        tx.commit()?;
+    }
+    if current < 33 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0033_recording_assets.sql"))?;
+        tx.pragma_update(None, "user_version", 33)?;
         tx.commit()?;
     }
     Ok(())

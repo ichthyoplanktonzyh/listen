@@ -1,6 +1,6 @@
 use domain::{
     CapabilityAssessment, CapabilityConclusion, CapabilityFilter, LexicalCapability,
-    LexicalCapabilityProfile, LexicalEntryKind, LexicalEntryDetails, LexicalOccurrenceId,
+    LexicalCapabilityProfile, LexicalEntryDetails, LexicalEntryKind, LexicalOccurrenceId,
     LexicalSenseId,
 };
 
@@ -108,7 +108,9 @@ pub(crate) async fn delete_sense_folder(
 ) -> Result<Json<LexicalEntryDetails>, ApiError> {
     let entry_id = LexicalEntryId::parse(entry_id).map_err(ApplicationError::from)?;
     let sense_id = LexicalSenseId::parse(sense_id).map_err(ApplicationError::from)?;
-    state.services.delete_lexical_sense_folder(&entry_id, &sense_id)?;
+    state
+        .services
+        .delete_lexical_sense_folder(&entry_id, &sense_id)?;
     lexical_details_after_sense_folder_change(&state, &entry_id)
 }
 
@@ -118,7 +120,8 @@ pub(crate) async fn assign_sense_folder_occurrence(
 ) -> Result<Json<LexicalEntryDetails>, ApiError> {
     let entry_id = LexicalEntryId::parse(entry_id).map_err(ApplicationError::from)?;
     let sense_id = LexicalSenseId::parse(sense_id).map_err(ApplicationError::from)?;
-    let occurrence_id = LexicalOccurrenceId::parse(occurrence_id).map_err(ApplicationError::from)?;
+    let occurrence_id =
+        LexicalOccurrenceId::parse(occurrence_id).map_err(ApplicationError::from)?;
     state.services.assign_occurrence_to_lexical_sense_folder(
         &entry_id,
         &sense_id,
@@ -133,12 +136,11 @@ pub(crate) async fn unassign_sense_folder_occurrence(
 ) -> Result<Json<LexicalEntryDetails>, ApiError> {
     let entry_id = LexicalEntryId::parse(entry_id).map_err(ApplicationError::from)?;
     let sense_id = LexicalSenseId::parse(sense_id).map_err(ApplicationError::from)?;
-    let occurrence_id = LexicalOccurrenceId::parse(occurrence_id).map_err(ApplicationError::from)?;
-    state.services.unassign_occurrence_from_lexical_sense_folder(
-        &entry_id,
-        &sense_id,
-        &occurrence_id,
-    )?;
+    let occurrence_id =
+        LexicalOccurrenceId::parse(occurrence_id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .unassign_occurrence_from_lexical_sense_folder(&entry_id, &sense_id, &occurrence_id)?;
     lexical_details_after_sense_folder_change(&state, &entry_id)
 }
 

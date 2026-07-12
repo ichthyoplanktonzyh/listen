@@ -658,7 +658,7 @@ impl AppServices {
         session_id: Option<&PracticeSessionId>,
         result: PracticeResult,
     ) -> Result<(), ApplicationError> {
-        if result == PracticeResult::Skipped {
+        if matches!(result, PracticeResult::Completed | PracticeResult::Skipped) {
             return Ok(());
         }
         let Some(session_id) = session_id else {

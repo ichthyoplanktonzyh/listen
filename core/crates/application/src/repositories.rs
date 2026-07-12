@@ -1115,6 +1115,10 @@ pub trait RecordingRepository: Send + Sync {
         &self,
         id: &RecordingAssetId,
     ) -> Result<Option<RecordingAsset>, ApplicationError>;
+    fn delete_recording_asset(
+        &self,
+        id: &RecordingAssetId,
+    ) -> Result<Option<RecordingAsset>, ApplicationError>;
 }
 
 pub trait DictionaryCacheRepository: Send + Sync {

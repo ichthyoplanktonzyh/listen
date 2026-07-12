@@ -1,4 +1,5 @@
 use crate::*;
+use domain::{RecordingAsset, RecordingAssetId, ShadowingComparison};
 
 pub(crate) async fn create_practice_session(
     State(state): State<ApiState>,
@@ -56,6 +57,63 @@ pub(crate) async fn practice_attempt(
         .practice_attempt(&id)?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("practice attempt"))
+}
+
+pub(crate) async fn create_recording_asset(
+    State(state): State<ApiState>,
+    Json(request): Json<application::CreateRecordingAsset>,
+) -> Result<Json<RecordingAsset>, ApiError> {
+    state
+        .services
+        .create_recording_asset(request)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn recording_asset(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> Result<Json<RecordingAsset>, ApiError> {
+    let id = RecordingAssetId::parse(id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .recording_asset(&id)?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("recording asset"))
+}
+
+pub(crate) async fn delete_recording_asset(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> Result<Json<RecordingAsset>, ApiError> {
+    let id = RecordingAssetId::parse(id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .delete_recording_asset(&id)?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("recording asset"))
+}
+
+pub(crate) async fn complete_shadowing_attempt(
+    State(state): State<ApiState>,
+    Json(request): Json<application::CompleteShadowingAttempt>,
+) -> Result<Json<PracticeAttempt>, ApiError> {
+    state
+        .services
+        .complete_shadowing_attempt(request)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn compare_shadowing(
+    State(state): State<ApiState>,
+    Json(request): Json<application::CreateShadowingComparison>,
+) -> Result<Json<ShadowingComparison>, ApiError> {
+    state
+        .services
+        .compare_shadowing(request)
+        .map(Json)
+        .map_err(ApiError::from)
 }
 
 #[derive(Debug, Deserialize)]

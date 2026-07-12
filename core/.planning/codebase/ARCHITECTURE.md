@@ -1,6 +1,6 @@
 # LLPlayerNext System Architecture
 
-Last updated: 2026-07-11. Reflects Phase 3.7 Hunting List backend foundation.
+Last updated: 2026-07-11. Reflects Phase 3.8 recording-asset backend foundation.
 
 ## Overview
 
@@ -63,6 +63,7 @@ application use cases and provider/repository boundaries.
   - `PracticeRepository`
   - `ReviewRepository`
   - `LearningEventRepository`
+  - `RecordingRepository`
   - transcription, phonetic analysis, dictionary cache, playback progress
 - Application-owned DTOs sit in `application::dto`; algorithm crate structs are
   mapped at the boundary instead of re-exported.
@@ -116,6 +117,10 @@ application use cases and provider/repository boundaries.
   - `/v1/listening-inbox/items/{id}/process`
   - `/v1/review/items`
   - `/v1/review/items/{id}`
+- Phase 3.8 recording/shadowing foundation routes:
+  - `/v1/recordings`
+  - `/v1/recordings/{id}`
+  - `/v1/practice/shadowing-attempts`
 
 ### `persistence-sqlite`
 
@@ -150,9 +155,12 @@ application use cases and provider/repository boundaries.
   It is deliberately separate from v20 `hunting_candidates`: repeated review
   failures remain suggestions until an explicit user action promotes one, and
   at most five targets may be active through the application boundary.
+- Schema v33 adds `recording_assets`. Audio stays in a local file while SQLite
+  persists transcription-ready format/integrity metadata and durable prompt/source
+  snapshots. Media and practice-attempt references use `ON DELETE SET NULL`.
 - Learning-loop persistence stores JSON snapshots plus query columns for kind,
-  status, subject, result, and timestamps. Corpus/difficulty/recording persistence
-  is not yet implemented.
+  status, subject, result, and timestamps. Corpus and recording persistence are
+  implemented; learner-profile persistence remains future work.
 
 ### `diagnosis-core`
 
@@ -324,6 +332,15 @@ confirmed hunting targets + current media/track
   -> yes/no: create_lexical_observation -> channelized evidence/projection
   -> not noticed: HuntingCheckAnswered event only
   -> extensive completion: optional validated counters -> ListeningCompleted payload
+```
+
+### Shadowing Recording
+
+```text
+Flutter microphone capture -> local audio file + RecordingAsset metadata
+  -> /v1/recordings -> SQLite recording_assets
+complete shadowing -> PracticeAttempt(result=completed, score=null)
+  -> PracticeCompleted event only (no speaking observation/review/content-fit)
 ```
 
 ### Timeline Resources

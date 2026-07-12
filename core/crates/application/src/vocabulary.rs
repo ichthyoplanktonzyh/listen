@@ -27,7 +27,11 @@ impl AppServices {
         gloss: Option<String>,
         external_ref: Option<String>,
     ) -> Result<LexicalSenseFolder, ApplicationError> {
-        if self.learning_assets.lexical_details(lexical_entry_id)?.is_none() {
+        if self
+            .learning_assets
+            .lexical_details(lexical_entry_id)?
+            .is_none()
+        {
             return Err(ApplicationError::NotFound("lexical entry"));
         }
         let label = clean_required(label, "sense folder label")?;

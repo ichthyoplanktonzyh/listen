@@ -1,6 +1,6 @@
 # LLPlayerNext — 测试体系
 
-> 最后更新：2026-07-04
+> 最后更新：2026-07-11
 
 ## 1. 测试层次
 
@@ -51,7 +51,9 @@
 | `crates/persistence-sqlite/src/tests.rs::current_version_with_legacy_lexical_schema_is_destructively_repaired` | 旧 v7 lexical schema 已跑过且 `user_version=15` 的坏库回归：v16 断代重建 lexical/learning-resource 表，恢复 `lexical_observations` 与 LexicalUnit identity columns |
 | `crates/persistence-sqlite/src/tests/learning_loop.rs::session_summary_derives_stuck_point_statuses_from_events_attempts_and_review` | Phase 3.2 卡点 summary 聚合：事件、practice attempt、review item 派生状态与熟料标记 |
 | `crates/persistence-sqlite/src/tests/learning_loop.rs::listening_inbox_capture_process_review_and_micro_intensive_round_trip` | Phase 3.3 泛听 Inbox 编排：soft interrupt capture、ReviewItem 去向、micro-intensive PracticeItem 去向、理解度自报事件 |
+| `crates/persistence-sqlite/src/tests/learning_loop.rs::shadowing_completion_persists_recording_without_creating_capability_evidence` | Phase 3.8 录音资产 round trip、幂等非评价 completion、零 observation/review 与删除语义 |
 | `crates/api-http/src/tests/practice.rs::practice_routes_capture_and_process_listening_inbox_items` | Phase 3.3 HTTP 路由：Listening Inbox capture/list/process 端到端 JSON contract |
+| `crates/api-http/src/tests/practice.rs::recording_and_unscored_shadowing_routes_round_trip` | Phase 3.8 recording create/get/delete 与 `completed` shadowing HTTP contract |
 | `crates/api-http/tests/api_integration_test.rs` | 全栈 HTTP 集成：真实 `router(ApiState::new(...))` + in-memory SQLite，`tower::oneshot` 进程内驱动 `api-http → application → persistence`（鉴权拒绝、media 注册/读取/404、字幕导入往返、archive/restore/delete 生命周期、LLTimeline v1 文档导入往返、word timeline create→activate、句子 diagnosis、lexical entry upsert→list→detail→学习内容更新） |
 | `crates/api-http/src/transcription.rs::tests::*dtw*` | whisper.cpp DTW preset 解析回归：内置模型名、自定义/量化 `ggml-*` 路径、非 whisper.cpp provider 降级 |
 | `crates/speech-analysis/tests/asr_timing_integration_test.rs` | whisper.cpp JSON → 词级时间戳 |
@@ -89,7 +91,7 @@
 | `builder_test.dart` | `StoreBuilder` / `StoreBuilder2` widget：只在选中 slice 变化时重建、无关字段不重建、equal-state no-op |
 | `api_service_test.dart` | LocalApi HTTP 客户端 sidecar 路径解析 |
 | `api_service_transport_test.dart` | A1 transport seam（`LocalApi.withTransport`）：GET 解码、非 2xx → `HttpException`、body 编码经 seam 转发 |
-| `practice_controller_test.dart` | Phase 3.1/3.2 practice controller：练习 item/attempt/review flow、卡点标记与 session summary 拉取 |
+| `practice_controller_test.dart` | Phase 3.1 practice item/attempt/review flow；Phase 3.8 chunk 逐步展开、录音权限、非评分 completion、录音资产与客观比较 seam |
 | `extensive_listening_controller_test.dart` | Phase 3.3 extensive listening start/capture/process/finish 与理解度自报请求；Phase 3.7 可选 hunting summary wire shape |
 | `hunting_controller_test.dart` | Phase 3.7 猎词单 controller：目标/候选加载、候选确认、active 目标归档与 HTTP seam |
 | `hunting_list_panel_test.dart` | Phase 3.7 猎词单面板：active 数量、目标/候选展示与确认后的响应式刷新 |
@@ -115,6 +117,9 @@
 Phase 3.7 的真实媒体产品验收已由 owner 确认通过，记录见
 `.planning/phases/3.7-hunting-list/3.7-MANUAL-QA.md`；自动测试覆盖预算与证据语义，人工 QA
 确认提示强度、连续感与关闭后的零残留。
+
+Phase 3.8 自动化与完整 macOS Release 打包已通过；真实麦克风权限、A/B/A 听感和波形/停顿可理解性
+等待 owner 按 `.planning/phases/3.8-shadowing-recording-comparison/3.8-MANUAL-QA.md` 验收。
 
 ### 运行
 

@@ -1028,7 +1028,9 @@ impl LearningAssetRepository for SqliteRepository {
             )
             .map_err(repo)?;
         if changed == 0 {
-            return Err(ApplicationError::NotFound("lexical sense folder or occurrence"));
+            return Err(ApplicationError::NotFound(
+                "lexical sense folder or occurrence",
+            ));
         }
         Ok(())
     }
@@ -1598,9 +1600,7 @@ fn lexical_occurrence_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LexicalOc
     })
 }
 
-fn lexical_sense_folder_row(
-    row: &rusqlite::Row<'_>,
-) -> rusqlite::Result<LexicalSenseFolder> {
+fn lexical_sense_folder_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LexicalSenseFolder> {
     Ok(LexicalSenseFolder {
         id: LexicalSenseId::parse(row.get::<_, String>(0)?).map_err(super::domain_sql)?,
         lexical_entry_id: LexicalEntryId::parse(row.get::<_, String>(1)?)

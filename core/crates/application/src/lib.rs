@@ -21,6 +21,7 @@ mod practice;
 mod pronunciation;
 mod pronunciation_providers;
 mod providers;
+mod recording;
 mod repositories;
 mod sense_groups;
 mod subtitles;
@@ -74,6 +75,7 @@ pub struct AppServices {
     pub(crate) review: Arc<dyn ReviewRepository>,
     pub(crate) learning_events: Arc<dyn LearningEventRepository>,
     pub(crate) listening_inbox: Arc<dyn ListeningInboxRepository>,
+    pub(crate) recordings: Arc<dyn RecordingRepository>,
     pub(crate) corpus: Arc<dyn CorpusIndexRepository>,
     pub(crate) difficulty: Arc<dyn DifficultyRepository>,
     pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
@@ -105,6 +107,7 @@ impl AppServices {
             review: Arc::new(DisabledLearningLoopRepository),
             learning_events: Arc::new(DisabledLearningLoopRepository),
             listening_inbox: Arc::new(DisabledLearningLoopRepository),
+            recordings: Arc::new(DisabledLearningLoopRepository),
             corpus: Arc::new(DisabledCorpusIndexRepository),
             difficulty: Arc::new(DisabledDifficultyRepository),
             lexical_normalizers: Arc::new(Vec::new()),
@@ -128,6 +131,11 @@ impl AppServices {
 
     pub fn with_difficulty_repository(mut self, difficulty: Arc<dyn DifficultyRepository>) -> Self {
         self.difficulty = difficulty;
+        self
+    }
+
+    pub fn with_recording_repository(mut self, recordings: Arc<dyn RecordingRepository>) -> Self {
+        self.recordings = recordings;
         self
     }
 

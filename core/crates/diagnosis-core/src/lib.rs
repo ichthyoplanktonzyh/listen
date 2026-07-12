@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use domain::{
     CapabilityAssessment, DiagnosisHint, DiagnosisKind, LexicalCapability,
-    LexicalCapabilityProfile, LexicalEntry, LexicalEntryId, LexicalObservation,
-    ObservationResult, SentenceDiagnosis, SubtitleSentence, SubtitleTokenKind,
+    LexicalCapabilityProfile, LexicalEntry, LexicalEntryId, LexicalObservation, ObservationResult,
+    SentenceDiagnosis, SubtitleSentence, SubtitleTokenKind,
 };
 
 /// Diagnose why a sentence may be hard to understand from the learner's
@@ -600,9 +600,11 @@ mod tests {
             .iter()
             .find(|h| h.kind == DiagnosisKind::InsufficientInformation)
             .expect("should have InsufficientInformation hint");
-        assert!(insufficient
-            .lexical_entry_ids
-            .contains(&LexicalEntryId::parse("alpha").unwrap()));
+        assert!(
+            insufficient
+                .lexical_entry_ids
+                .contains(&LexicalEntryId::parse("alpha").unwrap())
+        );
     }
 
     #[test]
@@ -826,14 +828,18 @@ mod tests {
             &[],
             &HashMap::new(),
         );
-        assert!(result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::MeaningBarrier));
-        assert!(!result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::RecognitionBarrier));
+        assert!(
+            result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::MeaningBarrier)
+        );
+        assert!(
+            !result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::RecognitionBarrier)
+        );
     }
 
     #[test]
@@ -852,14 +858,18 @@ mod tests {
             &[],
             &HashMap::new(),
         );
-        assert!(result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::RecognitionBarrier));
-        assert!(!result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::MeaningBarrier));
+        assert!(
+            result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::RecognitionBarrier)
+        );
+        assert!(
+            !result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::MeaningBarrier)
+        );
     }
 
     #[test]
@@ -878,14 +888,18 @@ mod tests {
             &[],
             &HashMap::new(),
         );
-        assert!(!result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::MeaningBarrier));
-        assert!(!result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::RecognitionBarrier));
+        assert!(
+            !result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::MeaningBarrier)
+        );
+        assert!(
+            !result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::RecognitionBarrier)
+        );
         let insufficient = result
             .hints
             .iter()
@@ -910,14 +924,18 @@ mod tests {
             &[],
             &HashMap::new(),
         );
-        assert!(!result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::MeaningBarrier));
-        assert!(!result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::RecognitionBarrier));
+        assert!(
+            !result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::MeaningBarrier)
+        );
+        assert!(
+            !result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::RecognitionBarrier)
+        );
         let insufficient = result
             .hints
             .iter()
@@ -939,13 +957,18 @@ mod tests {
             &[entry_without_status("alpha")],
             &[],
             &profiles,
-            &[observation("alpha", ObservationResult::NotRecognizedInContext)],
+            &[observation(
+                "alpha",
+                ObservationResult::NotRecognizedInContext,
+            )],
             &HashMap::new(),
         );
-        assert!(result
-            .hints
-            .iter()
-            .any(|h| h.kind == DiagnosisKind::RecognitionBarrier));
+        assert!(
+            result
+                .hints
+                .iter()
+                .any(|h| h.kind == DiagnosisKind::RecognitionBarrier)
+        );
     }
 
     #[test]
@@ -962,14 +985,8 @@ mod tests {
             CapabilityAssessment::Acquired,
         );
         let profiles = HashMap::from([(id_a, prof_a), (id_b, prof_b)]);
-        let result = diagnose_with_profiles(
-            &sentence(),
-            &entries,
-            &[],
-            &profiles,
-            &[],
-            &HashMap::new(),
-        );
+        let result =
+            diagnose_with_profiles(&sentence(), &entries, &[], &profiles, &[], &HashMap::new());
         assert_eq!(result.hints[0].kind, DiagnosisKind::OtherFactors);
     }
 }

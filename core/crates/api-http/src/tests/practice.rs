@@ -1,6 +1,118 @@
 use super::*;
 
 #[tokio::test]
+async fn recording_and_unscored_shadowing_routes_round_trip() {
+    let app = test_app();
+    async fn post(app: &Router, path: &str, body: serde_json::Value) -> serde_json::Value {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(path)
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+    }
+
+    let session = post(
+        &app,
+        "/v1/practice/sessions",
+        serde_json::json!({"mode": "intensive", "source": "shadowing-route-test"}),
+    )
+    .await;
+    let target = serde_json::json!({
+        "kind": "chunk",
+        "id": "chunk-route-1",
+        "sentence_id": "sentence-route-1",
+        "chunk_id": "chunk-route-1",
+        "start_ms": 100,
+        "end_ms": 900
+    });
+    let item = post(
+        &app,
+        "/v1/practice/items",
+        serde_json::json!({
+            "session_id": session["id"],
+            "kind": "shadowing",
+            "target": target,
+            "prompt_snapshot": "follow this chunk",
+            "expected_text": "follow this chunk",
+            "anchors": []
+        }),
+    )
+    .await;
+    let recording = post(
+        &app,
+        "/v1/recordings",
+        serde_json::json!({
+            "file_path": "/tmp/shadowing-route.wav",
+            "duration_ms": 780,
+            "target": item["target"],
+            "source_segment": {
+                "media_id": null,
+                "start_ms": 100,
+                "end_ms": 900,
+                "label": "chunk 1",
+                "subtitle_snapshot": "follow this chunk",
+                "availability": "available"
+            },
+            "language": "en",
+            "audio": {
+                "container": "wav",
+                "codec": "pcm_s16le",
+                "sample_rate_hz": 16000,
+                "channels": 1,
+                "sample_format": "s16",
+                "byte_length": 24960,
+                "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "recorder_version": "flutter-recorder-v1"
+        }),
+    )
+    .await;
+    let attempt = post(
+        &app,
+        "/v1/practice/shadowing-attempts",
+        serde_json::json!({
+            "item_id": item["id"],
+            "recording_id": recording["id"]
+        }),
+    )
+    .await;
+    assert_eq!(attempt["result"], "completed");
+    assert!(attempt["score"].is_null());
+    assert_eq!(attempt["generated_observation_ids"], serde_json::json!([]));
+
+    let recording_id = recording["id"].as_str().unwrap();
+    let get_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/v1/recordings/{recording_id}"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(get_response.status(), StatusCode::OK);
+    let delete_response = app
+        .oneshot(
+            Request::delete(format!("/v1/recordings/{recording_id}"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(delete_response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
 async fn hunting_occurrence_and_check_routes_round_trip_not_noticed_without_observation() {
     let app = test_app();
     let track = setup_phonetic_track(&app, "hunting-route").await;

@@ -3,17 +3,18 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-11T20:07:00.000+08:00"
+last_updated: "2026-07-12T09:07:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-11 20:07 CST
-> 更新原因：Owner 确认真实媒体狩猎模式通过，Phase 3.7 完成收口。
+> 最后更新：2026-07-12 09:07 CST
+> 更新原因：Phase 3.8 真实媒体/麦克风 QA 全部通过并完成收口，主线转入 Phase 3.9。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.x 英语听力学习闭环（英语先行），继续完成 3.7–3.10 与真实 QA。
+- **当前执行主线**：Phase 3.9 L1-aware Diagnosis v1；开工前按现有 capability authority、
+  corpus family 投影与已完成的 shadowing 入口复核计划。
 - **治理线状态**：Phase 2.23 Architecture Debt Paydown 已于 2026-07-03 收口（详见其 CLOSEOUT）；3.x 开工前置全部就绪。
 - **算法线状态**：Phase 2.19 / 2.20 / 2.21 已于 2026-07-02 搁置；audible-structure v1
   contract 保持当前权威 shape，后续质量提升等学习闭环完成后再回到算法线。
@@ -209,6 +210,7 @@ last_updated: "2026-07-11T20:07:00.000+08:00"
 | 3.6.1 Sense Folders | 义项文件夹（用户文件夹为身份权威）；schema v30/v31 | `.planning/phases/3.6.1-sense-folders/3.6.1-CLOSEOUT.md` |
 | 3.6.2 Dictionary Inline Clip UX | 词典详情内嵌切片卡 + PageView 横向轨道取代 overlay | `.planning/phases/3.6.2-dictionary-inline-clip-ux/3.6.2-CLOSEOUT.md` |
 | 3.7 Hunting List | 用户确认猎词资产 + 泛听会话级预算提示 + 三态听力证据 + completion 小结 | `.planning/phases/3.7-hunting-list/3.7-CLOSEOUT.md` |
+| 3.8 Shadowing & Recording Comparison | chunk 跟读 + 本地录音 + A/B/A + 客观波形/时长/停顿比较；非评分 completion | `.planning/phases/3.8-shadowing-recording-comparison/3.8-CLOSEOUT.md` |
 
 ## 最近重要决策
 
@@ -298,9 +300,9 @@ last_updated: "2026-07-11T20:07:00.000+08:00"
 
 ## 下一步工作
 
-1. **Phase 3.8（当前第一优先）**：开工前按 3.7 已落地的播放器/证据现状复核 shadowing
-   PLAN，再进入 chunk 跟读、录音与 A/B 对比实现。
-2. 按 3.0-PHASE-BREAKDOWN 执行 3.8 → 3.10；3.11 起每个 phase
+1. **Phase 3.9（当前第一优先）**：按现有 capability authority、corpus family 投影现实与
+   3.8 已完成的真实音频练习入口复核 L1-aware diagnosis PLAN 后开工。
+2. 按 3.0-PHASE-BREAKDOWN 执行 3.9 → 3.10；3.11 起每个 phase
    开工前先按上游现状修订 PLAN。
 3. "收藏句 → 个人模板"的用户价值验证收敛到 Phase 3.16（3.4.3 结论待兑现）。
 4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；

@@ -1,6 +1,6 @@
 # Current Data Model
 
-Last updated: 2026-07-11, Phase 3.7 Hunting List backend foundation.
+Last updated: 2026-07-11, Phase 3.8 recording-asset backend foundation.
 
 All persisted time values are non-negative integer milliseconds. Public IDs are
 opaque SHA-256 strings generated from a namespace and stable fingerprint; they
@@ -24,6 +24,7 @@ do not contain database row numbers or player-library identifiers.
 | Review item | `sha256("review-item:" + source/prompt/timestamp)` |
 | Learning event | `sha256("learning-event:" + kind/subject/timestamp)` |
 | Listening Inbox item | `sha256("listening-inbox-item:" + session/target/timestamp)` |
+| Recording asset | `sha256("recording-asset:" + audio SHA-256/target/source start/timestamp)` |
 
 Media path is mutable metadata, not identity. Registering the same media
 fingerprint updates path/title metadata while retaining the media ID.
@@ -97,10 +98,15 @@ assets:
 | `upgrade_suggestions` | Pending/resolved `known_not_recognized -> known_recognized` proposals with evidence snapshot and rejection cooldown |
 | `learning_events` | Append-mostly analytics facts for practice/review/listening/status/stuck-point events |
 | `listening_inbox_items` | Queryable projection for extensive-listening soft interrupts, snapshots, expiry, and整理 outcomes |
+| `recording_assets` | Local recording path plus transcription-ready audio metadata and durable target/source snapshots |
 
 `PracticeAttempt` owns what the user tried and how it was evaluated. It may create
 `LexicalObservation` evidence, but it must not silently change global
 `LearningStatus`.
+
+Shadowing uses `PracticeResult::Completed` when a recording finishes without an
+objective evaluator. This is an activity fact with `score = null`: it creates no
+channelized observation, review item, recognition evidence, or content-fit feedback.
 
 `ReviewItem` owns scheduling targets, not lexical identity. `LexicalEntry` remains
 the authoritative vocabulary learning asset. Anki export or AnkiConnect should
@@ -187,6 +193,10 @@ lexical_entries (logical reference; no delete cascade)
 
 learning_events
   └── session_id nullable, ON DELETE SET NULL
+
+recording_assets
+  ├── practice_attempt_id nullable, ON DELETE SET NULL
+  └── media_id nullable, ON DELETE SET NULL
 ```
 
 Losing or deleting media/subtitle rows preserves lexical occurrence snapshots and
@@ -332,6 +342,9 @@ expansion is ephemeral overlay state, not a fourth persisted Rhythm mode.
 - Schema v32 adds `hunting_targets`. One durable row exists per lexical entry;
   archive/reactivate preserves identity and creation time. Candidate source IDs
   are provenance only: `hunting_candidates` remain unconfirmed until promoted.
+- Schema v33 adds `recording_assets`; mutable file paths are metadata, while byte
+  length and SHA-256 support later integrity checks and the language/format/sample
+  fields are the explicit Phase 3.14 recording-transcription seam.
 - Review scheduling v1 is recorded as `listen_review_v1_heuristic_proxy`: `again` returns in
   10 minutes, `hard` in one day, and successful intervals grow from 3 to 7 days before doubling.
   The durable attempts remain the evidence history; the schedule row is a replaceable read model.
