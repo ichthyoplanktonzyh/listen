@@ -11,6 +11,8 @@ pub enum ApplicationError {
     NotFound(&'static str),
     #[error("{0} must not be empty")]
     Validation(&'static str),
+    #[error("invalid input: {0}")]
+    Invalid(String),
     #[error(transparent)]
     Domain(#[from] DomainError),
     #[error(transparent)]

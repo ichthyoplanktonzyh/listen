@@ -531,6 +531,7 @@ mod lexical;
 mod media_library;
 mod migrations;
 mod phonetic_analysis;
+mod semantic_task;
 mod subtitles_dictionary;
 mod timelines;
 mod vocabulary;

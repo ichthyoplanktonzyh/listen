@@ -11,6 +11,7 @@ mod migrations;
 mod phonetic_analysis;
 mod progress;
 mod recording;
+mod semantic_task;
 mod subtitles;
 mod support;
 mod transcription;

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- 2026-07-12 18:05 CST: Phase 3.11 Slice 2 落地：schema v35 + repository + use case。
+  新增 `0035_semantic_tasks.sql`（semantic_rubrics/semantic_task_attempts/
+  semantic_judgments/judgment_adjudications 四表，UPDATE/DELETE 全部触发器禁止，
+  刻意不建任何指向 media 的外键）；`SemanticTaskRepository` trait + SQLite 实现
+  （queryable 列 + 全量 JSON 文档，无更新/删除方法）；AppServices 语义任务 use case
+  （rubric 版本续接校验、attempt/judgment/adjudication 全链路 domain validator 前置、
+  重复冲突与篡改哈希拒绝）；`ApplicationError::Invalid` 动态校验错误 → HTTP 400
+  `invalid_input`。负向测试：语义全流程零 lexical observation/capability 变更、
+  adjudication 后 judgment 行逐字节不变、删除媒体后全链路仍可读、四表 append-only
+  触发器生效、3.8 shadowing 完成路径延伸断言不产生任何 semantic 事实。dictogloss
+  in-progress 草稿持久化显式推迟到首个 Studio consumer（迁移文件注释记录 additive
+  路径）。workspace 测试全绿；clippy 唯一 error 为 speech-analysis 既有基线。
+
 - 2026-07-12 17:48 CST: Phase 3.11 Slice 1 落地：domain 语义任务契约层。新增
   `crates/domain/src/semantic_task.rs`：`SemanticTaskKind` 封闭枚举（七类任务）、
   `SemanticRubric`（自足来源快照 + 版本 + 修订注记 + generator provenance）、

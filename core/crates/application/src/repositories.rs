@@ -1206,6 +1206,58 @@ pub trait RecordingRepository: Send + Sync {
     ) -> Result<Option<RecordingAsset>, ApplicationError>;
 }
 
+/// Phase 3.11 semantic task fact layer (ADR 0021). Append-only end to end:
+/// there are intentionally no update or delete methods, and implementations
+/// must not add them — corrections are new rows (rubric versions, re-judging,
+/// adjudications), never rewrites.
+pub trait SemanticTaskRepository: Send + Sync {
+    fn save_semantic_rubric(
+        &self,
+        rubric: &SemanticRubric,
+    ) -> Result<SemanticRubric, ApplicationError>;
+    fn get_semantic_rubric(
+        &self,
+        id: &SemanticRubricId,
+        version: u32,
+    ) -> Result<Option<SemanticRubric>, ApplicationError>;
+    fn latest_semantic_rubric(
+        &self,
+        id: &SemanticRubricId,
+    ) -> Result<Option<SemanticRubric>, ApplicationError>;
+    fn save_semantic_attempt(
+        &self,
+        attempt: &SemanticTaskAttempt,
+    ) -> Result<SemanticTaskAttempt, ApplicationError>;
+    fn get_semantic_attempt(
+        &self,
+        id: &SemanticTaskAttemptId,
+    ) -> Result<Option<SemanticTaskAttempt>, ApplicationError>;
+    fn list_semantic_attempts_for_rubric(
+        &self,
+        rubric_id: &SemanticRubricId,
+    ) -> Result<Vec<SemanticTaskAttempt>, ApplicationError>;
+    fn save_semantic_judgment(
+        &self,
+        judgment: &SemanticJudgment,
+    ) -> Result<SemanticJudgment, ApplicationError>;
+    fn get_semantic_judgment(
+        &self,
+        id: &SemanticJudgmentId,
+    ) -> Result<Option<SemanticJudgment>, ApplicationError>;
+    fn list_semantic_judgments_for_attempt(
+        &self,
+        attempt_id: &SemanticTaskAttemptId,
+    ) -> Result<Vec<SemanticJudgment>, ApplicationError>;
+    fn save_judgment_adjudication(
+        &self,
+        adjudication: &JudgmentAdjudication,
+    ) -> Result<JudgmentAdjudication, ApplicationError>;
+    fn list_judgment_adjudications(
+        &self,
+        judgment_id: &SemanticJudgmentId,
+    ) -> Result<Vec<JudgmentAdjudication>, ApplicationError>;
+}
+
 pub trait DictionaryCacheRepository: Send + Sync {
     fn put(&self, entry: &DictionaryEntry) -> Result<(), ApplicationError>;
     fn get(

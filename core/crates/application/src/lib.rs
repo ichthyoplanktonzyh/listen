@@ -26,6 +26,7 @@ mod pronunciation_providers;
 mod providers;
 mod recording;
 mod repositories;
+mod semantic_task;
 mod sense_groups;
 mod subtitles;
 mod transcription_pipeline;
@@ -88,6 +89,7 @@ pub struct AppServices {
     pub(crate) difficulty: Arc<dyn DifficultyRepository>,
     pub(crate) learner_profiles: Arc<dyn LearnerProfileRepository>,
     pub(crate) coach_dashboard: Arc<dyn CoachDashboardRepository>,
+    pub(crate) semantic_tasks: Arc<dyn SemanticTaskRepository>,
     pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
     pub(crate) pronunciation_providers: Arc<Vec<Arc<dyn PronunciationProvider>>>,
 }
@@ -122,6 +124,7 @@ impl AppServices {
             difficulty: Arc::new(DisabledDifficultyRepository),
             learner_profiles: Arc::new(DisabledLearnerProfileRepository),
             coach_dashboard: Arc::new(DisabledCoachDashboardRepository),
+            semantic_tasks: Arc::new(DisabledSemanticTaskRepository),
             lexical_normalizers: Arc::new(Vec::new()),
             pronunciation_providers: Arc::new(Vec::new()),
         }
@@ -172,6 +175,14 @@ impl AppServices {
         self
     }
 
+    pub fn with_semantic_task_repository(
+        mut self,
+        semantic_tasks: Arc<dyn SemanticTaskRepository>,
+    ) -> Self {
+        self.semantic_tasks = semantic_tasks;
+        self
+    }
+
     pub fn with_lexical_normalizers(
         mut self,
         providers: Vec<Arc<dyn LexicalNormalizationProvider>>,
@@ -219,6 +230,96 @@ impl LearnerProfileRepository for DisabledLearnerProfileRepository {
         _id: &LearnerProfileId,
     ) -> Result<Option<LearnerProfile>, ApplicationError> {
         Ok(None)
+    }
+}
+
+/// Semantic tasks require configured persistence: silently accepting facts
+/// would lose evidence, so every method errors instead of degrading.
+struct DisabledSemanticTaskRepository;
+
+impl SemanticTaskRepository for DisabledSemanticTaskRepository {
+    fn save_semantic_rubric(
+        &self,
+        _rubric: &SemanticRubric,
+    ) -> Result<SemanticRubric, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn get_semantic_rubric(
+        &self,
+        _id: &SemanticRubricId,
+        _version: u32,
+    ) -> Result<Option<SemanticRubric>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn latest_semantic_rubric(
+        &self,
+        _id: &SemanticRubricId,
+    ) -> Result<Option<SemanticRubric>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn save_semantic_attempt(
+        &self,
+        _attempt: &SemanticTaskAttempt,
+    ) -> Result<SemanticTaskAttempt, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn get_semantic_attempt(
+        &self,
+        _id: &SemanticTaskAttemptId,
+    ) -> Result<Option<SemanticTaskAttempt>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn list_semantic_attempts_for_rubric(
+        &self,
+        _rubric_id: &SemanticRubricId,
+    ) -> Result<Vec<SemanticTaskAttempt>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn save_semantic_judgment(
+        &self,
+        _judgment: &SemanticJudgment,
+    ) -> Result<SemanticJudgment, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn get_semantic_judgment(
+        &self,
+        _id: &SemanticJudgmentId,
+    ) -> Result<Option<SemanticJudgment>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn list_semantic_judgments_for_attempt(
+        &self,
+        _attempt_id: &SemanticTaskAttemptId,
+    ) -> Result<Vec<SemanticJudgment>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn save_judgment_adjudication(
+        &self,
+        _adjudication: &JudgmentAdjudication,
+    ) -> Result<JudgmentAdjudication, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn list_judgment_adjudications(
+        &self,
+        _judgment_id: &SemanticJudgmentId,
+    ) -> Result<Vec<JudgmentAdjudication>, ApplicationError> {
+        Err(Self::disabled())
+    }
+}
+
+impl DisabledSemanticTaskRepository {
+    fn disabled() -> ApplicationError {
+        ApplicationError::Repository("semantic task repository is not configured".into())
     }
 }
 

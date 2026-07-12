@@ -319,6 +319,20 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
     assert_eq!(attempt.score, None);
     assert!(attempt.generated_observation_ids.is_empty());
     assert!(attempt.generated_review_item_ids.is_empty());
+    // Phase 3.11 boundary extension: a non-scored shadowing completion also
+    // creates no semantic fact — constructed speaking success can only come
+    // from a semantic task judgment, never from imitation completion.
+    for table in ["semantic_task_attempts", "semantic_judgments"] {
+        let semantic_rows: i64 = repo
+            .connection
+            .lock()
+            .unwrap()
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(semantic_rows, 0, "{table} must stay empty");
+    }
     let linked = services.recording_asset(&recording.id).unwrap().unwrap();
     assert_eq!(linked.practice_attempt_id, Some(attempt.id.clone()));
     assert_eq!(

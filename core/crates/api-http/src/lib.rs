@@ -657,6 +657,9 @@ impl From<ApplicationError> for ApiError {
                 format!("{field} must not be empty"),
                 false,
             ),
+            ApplicationError::Invalid(message) => {
+                Self::new(StatusCode::BAD_REQUEST, "invalid_input", message, false)
+            }
             ApplicationError::Domain(error) => Self::new(
                 StatusCode::BAD_REQUEST,
                 "domain_error",
