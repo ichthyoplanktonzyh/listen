@@ -1,0 +1,297 @@
+{
+  "fixture_version": 1,
+  "evidence_class": "gold",
+  "rubric": {
+    "id": "rubric-quake-l1-retell",
+    "purpose": "l1_retelling",
+    "source": {
+      "media_id": "media-cnn10-20260609",
+      "track_id": null,
+      "start_ms": 26200,
+      "end_ms": 53760,
+      "language": "en",
+      "transcript_snapshot": "A powerful 7.8 magnitude earthquake struck the southern Philippine region of Mindanao around 7:30 a.m. local time on Monday. Roads cracked and buildings collapsed as residents panicked. At least 19 people were killed and more than 200 injured."
+    },
+    "response_language": "zh",
+    "points": [
+      {
+        "point_id": "p1",
+        "importance": "required",
+        "statement": "事件地点：菲律宾南部（Mindanao 地区）",
+        "accepted_paraphrase_notes": "说出“菲律宾”即可覆盖国家；仅说“东南亚/某个岛国”不构成覆盖"
+      },
+      {
+        "point_id": "p2",
+        "importance": "required",
+        "statement": "事件性质：强烈地震（7.8 级）",
+        "accepted_paraphrase_notes": "“大地震/强震”配合量级为 covered；只说“地震”为 partial"
+      },
+      {
+        "point_id": "p3",
+        "importance": "required",
+        "statement": "人员伤亡：至少 19 人死亡、200 余人受伤",
+        "accepted_paraphrase_notes": "有量级（约 20 人死/200 人伤）即 covered；只说“死了人”为 partial"
+      },
+      {
+        "point_id": "p4",
+        "importance": "optional",
+        "statement": "时间：周一早晨约 7:30（当地时间）",
+        "accepted_paraphrase_notes": null
+      },
+      {
+        "point_id": "p5",
+        "importance": "optional",
+        "statement": "现场影响：道路开裂、建筑倒塌、民众恐慌",
+        "accepted_paraphrase_notes": "覆盖两类及以上现场影响为 covered，只覆盖一类为 partial"
+      }
+    ],
+    "version": 1,
+    "provenance": {
+      "kind": "manual",
+      "detail": "Phase 3.11 Slice 0 evidence matrix worked example",
+      "model_id": null,
+      "prompt_version": null,
+      "schema_version": null
+    },
+    "revision": null,
+    "created_at_ms": 1781222400000
+  },
+  "attempts": [
+    {
+      "id": "attempt-a",
+      "kind": "l1_retelling",
+      "target": {
+        "kind": "segment",
+        "id": null,
+        "sentence_id": null,
+        "chunk_id": null,
+        "start_ms": 26200,
+        "end_ms": 53760
+      },
+      "anchors": [],
+      "rubric_id": "rubric-quake-l1-retell",
+      "rubric_version": 1,
+      "conditions": {
+        "source_text_visible": false,
+        "audio_play_count": 1,
+        "notes_allowed": false,
+        "l1_trigger": "user_requested"
+      },
+      "responses": [
+        {
+          "revision": 1,
+          "transcript": "菲律宾南部发生了7.8级大地震，至少19人死亡、200多人受伤，路都裂了，有些房子也塌了。",
+          "source": "typed",
+          "recording_asset_id": null,
+          "asr_reliability": null,
+          "language": "zh",
+          "recorded_at_ms": 1781222460000
+        }
+      ],
+      "status": "completed",
+      "started_at_ms": 1781222400000,
+      "ended_at_ms": 1781222460000
+    },
+    {
+      "id": "attempt-b",
+      "kind": "l1_retelling",
+      "target": {
+        "kind": "segment",
+        "id": null,
+        "sentence_id": null,
+        "chunk_id": null,
+        "start_ms": 26200,
+        "end_ms": 53760
+      },
+      "anchors": [],
+      "rubric_id": "rubric-quake-l1-retell",
+      "rubric_version": 1,
+      "conditions": {
+        "source_text_visible": false,
+        "audio_play_count": 1,
+        "notes_allowed": false,
+        "l1_trigger": "l2_failed"
+      },
+      "responses": [
+        {
+          "revision": 1,
+          "transcript": "好像是哪里地震了，死了一些人。",
+          "source": "typed",
+          "recording_asset_id": null,
+          "asr_reliability": null,
+          "language": "zh",
+          "recorded_at_ms": 1781222520000
+        }
+      ],
+      "status": "completed",
+      "started_at_ms": 1781222500000,
+      "ended_at_ms": 1781222520000
+    },
+    {
+      "id": "attempt-c",
+      "kind": "l1_retelling",
+      "target": {
+        "kind": "segment",
+        "id": null,
+        "sentence_id": null,
+        "chunk_id": null,
+        "start_ms": 26200,
+        "end_ms": 53760
+      },
+      "anchors": [],
+      "rubric_id": "rubric-quake-l1-retell",
+      "rubric_version": 1,
+      "conditions": {
+        "source_text_visible": false,
+        "audio_play_count": 1,
+        "notes_allowed": false,
+        "l1_trigger": "diagnosis"
+      },
+      "responses": [
+        {
+          "revision": 1,
+          "transcript": "",
+          "source": "asr",
+          "recording_asset_id": null,
+          "asr_reliability": "unreliable",
+          "language": "zh",
+          "recorded_at_ms": 1781222580000
+        }
+      ],
+      "status": "completed",
+      "started_at_ms": 1781222560000,
+      "ended_at_ms": 1781222580000
+    }
+  ],
+  "judgments": [
+    {
+      "id": "judgment-a",
+      "attempt_id": "attempt-a",
+      "response_revision": 1,
+      "rubric_id": "rubric-quake-l1-retell",
+      "rubric_version": 1,
+      "rubric_source_sha256": "32ee3935fd6ddc354a1028110fdf4703ef9e6fce99a9eb3bd63a286fbec7cd5b",
+      "response_transcript_sha256": "22cb5936326a55e9e278bff69d42a29eb9d066522b2599117e945e6a496c22fd",
+      "points": [
+        {
+          "point_id": "p1",
+          "verdict": "covered",
+          "supporting_spans": [{ "start_char": 0, "end_char": 5 }]
+        },
+        {
+          "point_id": "p2",
+          "verdict": "covered",
+          "supporting_spans": [{ "start_char": 8, "end_char": 15 }]
+        },
+        {
+          "point_id": "p3",
+          "verdict": "covered",
+          "supporting_spans": [{ "start_char": 16, "end_char": 31 }]
+        },
+        {
+          "point_id": "p4",
+          "verdict": "missing",
+          "supporting_spans": []
+        },
+        {
+          "point_id": "p5",
+          "verdict": "partial",
+          "supporting_spans": [{ "start_char": 32, "end_char": 44 }]
+        }
+      ],
+      "abstain": null,
+      "provenance": {
+        "kind": "fixture",
+        "detail": "manually annotated gold judgment",
+        "model_id": null,
+        "prompt_version": null,
+        "schema_version": null
+      },
+      "raw_output": { "annotator": "owner", "pass": 1 },
+      "evidence_class": "gold",
+      "created_at_ms": 1781222470000
+    },
+    {
+      "id": "judgment-b",
+      "attempt_id": "attempt-b",
+      "response_revision": 1,
+      "rubric_id": "rubric-quake-l1-retell",
+      "rubric_version": 1,
+      "rubric_source_sha256": "32ee3935fd6ddc354a1028110fdf4703ef9e6fce99a9eb3bd63a286fbec7cd5b",
+      "response_transcript_sha256": "d8f6df7b1709d19348bc28948972c22945d6e41f80b2d6cec078fd47e969e1df",
+      "points": [
+        {
+          "point_id": "p1",
+          "verdict": "missing",
+          "supporting_spans": []
+        },
+        {
+          "point_id": "p2",
+          "verdict": "partial",
+          "supporting_spans": [{ "start_char": 5, "end_char": 8 }]
+        },
+        {
+          "point_id": "p3",
+          "verdict": "partial",
+          "supporting_spans": [{ "start_char": 9, "end_char": 14 }]
+        },
+        {
+          "point_id": "p4",
+          "verdict": "missing",
+          "supporting_spans": []
+        },
+        {
+          "point_id": "p5",
+          "verdict": "missing",
+          "supporting_spans": []
+        }
+      ],
+      "abstain": null,
+      "provenance": {
+        "kind": "fixture",
+        "detail": "manually annotated gold judgment",
+        "model_id": null,
+        "prompt_version": null,
+        "schema_version": null
+      },
+      "raw_output": { "annotator": "owner", "pass": 1 },
+      "evidence_class": "gold",
+      "created_at_ms": 1781222530000
+    },
+    {
+      "id": "judgment-c",
+      "attempt_id": "attempt-c",
+      "response_revision": 1,
+      "rubric_id": "rubric-quake-l1-retell",
+      "rubric_version": 1,
+      "rubric_source_sha256": "32ee3935fd6ddc354a1028110fdf4703ef9e6fce99a9eb3bd63a286fbec7cd5b",
+      "response_transcript_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "points": [],
+      "abstain": {
+        "reason": "unreliable_transcript",
+        "note": "ASR produced no usable transcript for the recording"
+      },
+      "provenance": {
+        "kind": "fixture",
+        "detail": "manually annotated gold judgment",
+        "model_id": null,
+        "prompt_version": null,
+        "schema_version": null
+      },
+      "raw_output": { "annotator": "owner", "pass": 1 },
+      "evidence_class": "gold",
+      "created_at_ms": 1781222590000
+    }
+  ],
+  "adjudications": [
+    {
+      "id": "adjudication-b-p3",
+      "judgment_id": "judgment-b",
+      "point_id": "p3",
+      "prior_verdict": "partial",
+      "user_verdict": "covered",
+      "note": "我说到了死了人，对我来说这就算讲到了伤亡",
+      "occurred_at_ms": 1781222600000
+    }
+  ]
+}

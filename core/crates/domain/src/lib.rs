@@ -64,6 +64,9 @@ pub use learning_observation::*;
 mod listening_projection;
 pub use listening_projection::*;
 
+mod semantic_task;
+pub use semantic_task::*;
+
 mod dictionary;
 pub use dictionary::*;
 
@@ -143,6 +146,10 @@ string_id!(ConstructionId);
 string_id!(ConstructionOccurrenceId);
 string_id!(UserSentencePatternId);
 string_id!(RecordingAssetId);
+string_id!(SemanticRubricId);
+string_id!(SemanticTaskAttemptId);
+string_id!(SemanticJudgmentId);
+string_id!(JudgmentAdjudicationId);
 string_id!(PronunciationAnalysisId);
 string_id!(PhoneticAnalysisModelId);
 string_id!(PhoneticAnalysisJobId);

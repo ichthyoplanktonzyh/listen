@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-12 17:48 CST: Phase 3.11 Slice 1 落地：domain 语义任务契约层。新增
+  `crates/domain/src/semantic_task.rs`：`SemanticTaskKind` 封闭枚举（七类任务）、
+  `SemanticRubric`（自足来源快照 + 版本 + 修订注记 + generator provenance）、
+  `SemanticTaskAttempt`（clip 级事实，仅 completed/abandoned，无对错层）、
+  `SemanticJudgment`（逐点 covered/partial/missing/uncertain + 回答内精确 char span +
+  双侧快照哈希 + abstain 一等）、`JudgmentAdjudication`（确认/纠正，不回写 judgment）；
+  validator 落实矩阵裁决（隐藏原句、L1 触发原因、dictogloss 独占多稿、ASR 可靠性、
+  span 越界/verdict-span 契约、rubric 版本一致性）与可比较性谓词。新增
+  `testdata/semantic-task/gold-fixture-v1.json`（同一 rubric 好/差/abstain 三判定 +
+  一次 adjudication）。domain 70 项、workspace 25 套件全部通过；semantic_task 无
+  clippy warning。无网络、无模型即可完整验证。
+
 - 2026-07-12 17:25 CST: Phase 3.11 Slice 0 完成并通过 owner 复核门。`3.11-PLAN.md` 按
   上游现状修订为 v2（固定 v34/ADR 0021 基线、五切片可执行粒度、Dart DTO 推迟到 3.13）；
   新增 `3.11-EVIDENCE-MATRIX.md`：七类语义任务 + 五条负向裁决的 evidence matrix（真实
