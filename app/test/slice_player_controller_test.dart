@@ -25,6 +25,9 @@ class _FakeSlicePlaybackAdapter implements SlicePlaybackAdapter {
     currentPosition = position;
     seeks.add(position);
   }
+
+  @override
+  Future<void> setRate(double rate) async {}
 }
 
 Map<String, dynamic> _occurrence() => {

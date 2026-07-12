@@ -99,6 +99,7 @@ void main() {
           home: ReviewQueueScreen(
             api: api,
             onPlayRange: (startMs, endMs) async {},
+            onStartShadowing: (_) async {},
           ),
         ),
       );
@@ -152,6 +153,7 @@ void main() {
         home: ReviewQueueScreen(
           api: api,
           onPlayRange: (startMs, endMs) async {},
+          onStartShadowing: (_) async {},
         ),
       ),
     );

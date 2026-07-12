@@ -1062,6 +1062,41 @@ class LocalApi {
         as Map<String, dynamic>,
   );
 
+  Future<RecordingAsset> createRecordingAsset(
+    CreateRecordingAsset input,
+  ) async => RecordingAsset.fromJson(
+    (await _request('POST', '/v1/recordings', input.toJson()))
+        as Map<String, dynamic>,
+  );
+
+  Future<PracticeAttempt> completeShadowingAttempt({
+    required String itemId,
+    required String recordingId,
+  }) async => PracticeAttempt.fromJson(
+    (await _request('POST', '/v1/practice/shadowing-attempts', {
+          'item_id': itemId,
+          'recording_id': recordingId,
+        }))
+        as Map<String, dynamic>,
+  );
+
+  Future<ShadowingComparison> compareShadowing({
+    required String recordingId,
+    required String referenceWavPath,
+  }) async => ShadowingComparison.fromJson(
+    (await _request('POST', '/v1/shadowing/comparisons', {
+          'recording_id': recordingId,
+          'reference_wav_path': referenceWavPath,
+        }))
+        as Map<String, dynamic>,
+  );
+
+  Future<RecordingAsset> deleteRecordingAsset(String id) async =>
+      RecordingAsset.fromJson(
+        (await _request('DELETE', '/v1/recordings/${Uri.encodeComponent(id)}'))
+            as Map<String, dynamic>,
+      );
+
   Future<PracticeAttempt> practiceAttempt(String id) async =>
       PracticeAttempt.fromJson(
         (await _request(

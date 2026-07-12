@@ -13,11 +13,13 @@ class ReviewQueueScreen extends StatefulWidget {
     super.key,
     required this.api,
     required this.onPlayRange,
+    required this.onStartShadowing,
     this.currentMediaId,
   });
 
   final LocalApi api;
   final Future<void> Function(int startMs, int endMs) onPlayRange;
+  final Future<void> Function(ReviewQueueEntry entry) onStartShadowing;
   final String? currentMediaId;
 
   @override
@@ -76,10 +78,16 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
           key: ValueKey(state.current!.item.id),
           entry: state.current!,
           audioAvailable: _canPlay(state.current!),
+          shadowAvailable: _canShadow(state.current!),
           revealed: state.revealed,
           busy: state.busy,
           error: state.error,
           onPlay: () => _play(state.current!),
+          onShadowing: () async {
+            final entry = state.current!;
+            Navigator.of(context).pop();
+            await widget.onStartShadowing(entry);
+          },
           onReveal: controller.reveal,
           onRate: (rating) => controller.rate(widget.api, rating),
         );
@@ -99,6 +107,11 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
       entry.item.source.mediaId == widget.currentMediaId &&
       entry.playbackStartMs != null &&
       entry.playbackEndMs != null;
+
+  bool _canShadow(ReviewQueueEntry entry) =>
+      entry.item.source.mediaId != null &&
+      entry.playbackStartMs != null &&
+      entry.playbackEndMs != null;
 }
 
 class _ReviewCard extends StatefulWidget {
@@ -106,9 +119,11 @@ class _ReviewCard extends StatefulWidget {
     super.key,
     required this.entry,
     required this.audioAvailable,
+    required this.shadowAvailable,
     required this.revealed,
     required this.busy,
     required this.onPlay,
+    required this.onShadowing,
     required this.onReveal,
     required this.onRate,
     this.error,
@@ -116,10 +131,12 @@ class _ReviewCard extends StatefulWidget {
 
   final ReviewQueueEntry entry;
   final bool audioAvailable;
+  final bool shadowAvailable;
   final bool revealed;
   final bool busy;
   final String? error;
   final VoidCallback onPlay;
+  final Future<void> Function() onShadowing;
   final VoidCallback onReveal;
   final Future<bool> Function(String rating) onRate;
 
@@ -189,6 +206,14 @@ class _ReviewCardState extends State<_ReviewCard> {
                           : Icons.volume_off_outlined,
                     ),
                     label: Text(playable ? '播放声音片段' : '原媒体不可播放，使用文字快照'),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: widget.shadowAvailable && !widget.busy
+                        ? () => unawaited(widget.onShadowing())
+                        : null,
+                    icon: const Icon(Icons.mic_none),
+                    label: const Text('跟一下这个片段'),
                   ),
                   const SizedBox(height: 26),
                   AnimatedSwitcher(
@@ -421,10 +446,16 @@ class _Finished extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Text(
-                          AppLocalizations.of(context).text('listeningUpgradeSuggestion').replaceAll(
-                            '{count}',
-                            '${suggestion.evidenceContextCount}',
-                          ).replaceAll('{word}', suggestion.lexicalDisplayForm),
+                          AppLocalizations.of(context)
+                              .text('listeningUpgradeSuggestion')
+                              .replaceAll(
+                                '{count}',
+                                '${suggestion.evidenceContextCount}',
+                              )
+                              .replaceAll(
+                                '{word}',
+                                suggestion.lexicalDisplayForm,
+                              ),
                         ),
                         const SizedBox(height: 12),
                         Row(
@@ -434,14 +465,22 @@ class _Finished extends StatelessWidget {
                               onPressed: state.busy
                                   ? null
                                   : () => onResolve(suggestion.id, false),
-                              child: Text(AppLocalizations.of(context).text('deferUpgrade')),
+                              child: Text(
+                                AppLocalizations.of(
+                                  context,
+                                ).text('deferUpgrade'),
+                              ),
                             ),
                             const SizedBox(width: 8),
                             FilledButton(
                               onPressed: state.busy
                                   ? null
                                   : () => onResolve(suggestion.id, true),
-                              child: Text(AppLocalizations.of(context).text('confirmListeningAcquired')),
+                              child: Text(
+                                AppLocalizations.of(
+                                  context,
+                                ).text('confirmListeningAcquired'),
+                              ),
                             ),
                           ],
                         ),

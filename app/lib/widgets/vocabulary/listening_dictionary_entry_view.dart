@@ -38,6 +38,7 @@ class ListeningDictionaryEntryView extends StatefulWidget {
     this.slicePlayer,
     required this.onPlay,
     required this.onMark,
+    this.onShadowing,
     this.onSearchLibrary,
     this.onPlayCorpus,
     this.onCollectCorpus,
@@ -62,6 +63,7 @@ class ListeningDictionaryEntryView extends StatefulWidget {
   final SlicePlayerController? slicePlayer;
   final ValueChanged<LexicalOccurrence> onPlay;
   final Future<bool> Function(LexicalOccurrence occurrence, bool heard) onMark;
+  final Future<void> Function(LexicalOccurrence occurrence)? onShadowing;
 
   /// Searches the local corpus for more contexts of this entry.
   final Future<List<CorpusOccurrence>> Function()? onSearchLibrary;
@@ -407,6 +409,9 @@ class _ListeningDictionaryEntryViewState
             controller: widget.slicePlayer!,
             occurrence: _activeOccurrence!,
             target: _activeOccurrence!.originalForm ?? entry.displayForm,
+            onShadowing: widget.onShadowing == null
+                ? null
+                : () => widget.onShadowing!(_activeOccurrence!),
             onClose: () {
               unawaited(widget.slicePlayer!.close());
               setState(() => _activeOccurrence = null);

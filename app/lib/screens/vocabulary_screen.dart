@@ -26,6 +26,7 @@ class VocabularyScreen extends StatefulWidget {
     required this.huntingController,
     this.initialEntryId,
     this.onPauseBackgroundPlayback,
+    this.onStartShadowing,
   });
 
   final LocalApi api;
@@ -38,6 +39,8 @@ class VocabularyScreen extends StatefulWidget {
   /// Pauses whatever is playing behind this route (the primary player) so a
   /// slice owns audio focus alone, matching the workbench behaviour.
   final Future<void> Function()? onPauseBackgroundPlayback;
+  final Future<void> Function(String path, Map<String, dynamic> occurrence)?
+  onStartShadowing;
 
   @override
   State<VocabularyScreen> createState() => _VocabularyScreenState();
@@ -191,6 +194,15 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
       occurrence: occurrence,
     );
     slicePlayer.setShowVideo(true);
+  }
+
+  Future<void> _startShadowingOccurrence(LexicalOccurrence occurrence) async {
+    final path = slicePlayer.state.path;
+    final callback = widget.onStartShadowing;
+    if (path == null || callback == null) return;
+    await slicePlayer.pause();
+    if (mounted) Navigator.of(context).pop();
+    await callback(path, occurrence.toJson());
   }
 
   Future<void> _playCorpus(CorpusOccurrence occurrence) async {
@@ -745,6 +757,9 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
         slicePlayer: slicePlayer,
         onPlay: (occurrence) =>
             unawaited(_playOccurrenceMap(occurrence.toJson())),
+        onShadowing: widget.onStartShadowing == null
+            ? null
+            : _startShadowingOccurrence,
         onMark: (occurrence, heard) =>
             _markOccurrence(value.entry, occurrence, heard),
         onSearchLibrary: () => _searchLibraryFor(value.entry),

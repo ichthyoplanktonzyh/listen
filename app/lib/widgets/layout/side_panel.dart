@@ -48,6 +48,7 @@ class SidePanel extends StatefulWidget {
     required this.onStartClozePractice,
     required this.onStartChunkDictationPractice,
     required this.onStartSentenceDictationPractice,
+    required this.onStartShadowingPractice,
     required this.onOpenDiagnosisView,
     required this.onOpenSlicePlayback,
     this.onOpenListeningDictionary,
@@ -82,6 +83,7 @@ class SidePanel extends StatefulWidget {
   final Future<void> Function() onStartClozePractice;
   final Future<void> Function() onStartChunkDictationPractice;
   final Future<void> Function() onStartSentenceDictationPractice;
+  final Future<void> Function() onStartShadowingPractice;
   final Future<void> Function() onOpenDiagnosisView;
   final Future<void> Function(Map<String, dynamic> occurrence)
   onOpenSlicePlayback;
@@ -478,9 +480,11 @@ class _SidePanelState extends State<SidePanel> {
             ),
           ),
           Tooltip(
-            message: l.text('shadowingPlannedTooltip'),
+            message: l.text('shadowingReadyTooltip'),
             child: OutlinedButton.icon(
-              onPressed: null,
+              onPressed: hasCue
+                  ? () => unawaited(widget.onStartShadowingPractice())
+                  : null,
               icon: const Icon(Icons.mic_none),
               label: Text(l.text('shadowPosture')),
             ),

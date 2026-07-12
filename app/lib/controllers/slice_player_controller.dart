@@ -16,6 +16,9 @@ class SlicePlayerState {
     this.looping = true,
     this.showVideo = false,
     this.path,
+    this.mediaId,
+    this.trackId,
+    this.sentenceId,
     this.wordForm,
     this.mediaTitle,
     this.sentence,
@@ -31,6 +34,9 @@ class SlicePlayerState {
   final bool looping;
   final bool showVideo;
   final String? path;
+  final String? mediaId;
+  final String? trackId;
+  final String? sentenceId;
   final String? wordForm;
   final String? mediaTitle;
   final String? sentence;
@@ -46,6 +52,9 @@ class SlicePlayerState {
     bool? looping,
     bool? showVideo,
     Object? path = _unset,
+    Object? mediaId = _unset,
+    Object? trackId = _unset,
+    Object? sentenceId = _unset,
     Object? wordForm = _unset,
     Object? mediaTitle = _unset,
     Object? sentence = _unset,
@@ -60,6 +69,11 @@ class SlicePlayerState {
     looping: looping ?? this.looping,
     showVideo: showVideo ?? this.showVideo,
     path: identical(path, _unset) ? this.path : path as String?,
+    mediaId: identical(mediaId, _unset) ? this.mediaId : mediaId as String?,
+    trackId: identical(trackId, _unset) ? this.trackId : trackId as String?,
+    sentenceId: identical(sentenceId, _unset)
+        ? this.sentenceId
+        : sentenceId as String?,
     wordForm: identical(wordForm, _unset) ? this.wordForm : wordForm as String?,
     mediaTitle: identical(mediaTitle, _unset)
         ? this.mediaTitle
@@ -79,6 +93,7 @@ abstract interface class SlicePlaybackAdapter {
   Future<void> play();
   Future<void> pause();
   Future<void> seek(Duration position);
+  Future<void> setRate(double rate);
   Future<void> dispose();
 }
 
@@ -106,6 +121,8 @@ class VideoPlayerSlicePlaybackAdapter implements SlicePlaybackAdapter {
   @override
   Future<void> seek(Duration position) => _controller.seekTo(position);
   @override
+  Future<void> setRate(double rate) => _controller.setPlaybackSpeed(rate);
+  @override
   Future<void> dispose() => _controller.dispose();
 }
 
@@ -126,6 +143,7 @@ class SlicePlayerController extends ChangeNotifier {
   SlicePlaybackAdapter? _adapter;
   Timer? _positionTimer;
   int _generation = 0;
+  double _rate = 1.0;
 
   Store<SlicePlayerState> get store => _store;
   SlicePlayerState get state => _store.state;
@@ -155,6 +173,9 @@ class SlicePlayerController extends ChangeNotifier {
         open: true,
         loading: true,
         path: path,
+        mediaId: occurrence['media_id'] as String?,
+        trackId: occurrence['track_id'] as String?,
+        sentenceId: occurrence['sentence_id'] as String?,
         wordForm: occurrence['original_form'] as String?,
         mediaTitle:
             occurrence['media_title_snapshot'] as String? ??
@@ -172,6 +193,7 @@ class SlicePlayerController extends ChangeNotifier {
         return;
       }
       _adapter = adapter;
+      await adapter.setRate(_rate);
       await adapter.seek(start);
       await adapter.play();
       if (generation != _generation) return;
@@ -270,6 +292,14 @@ class SlicePlayerController extends ChangeNotifier {
 
   void toggleLooping() =>
       _store.update((state) => state.copyWith(looping: !state.looping));
+
+  void setLooping(bool value) =>
+      _store.update((state) => state.copyWith(looping: value));
+
+  Future<void> setRate(double value) async {
+    _rate = value;
+    await _adapter?.setRate(value);
+  }
 
   void toggleVideo() =>
       _store.update((state) => state.copyWith(showVideo: !state.showVideo));

@@ -86,6 +86,74 @@ void main() {
     });
   });
 
+  test('shadowing recording and comparison keep objective typed fields', () {
+    final input = CreateRecordingAsset(
+      filePath: '/tmp/mine.wav',
+      durationMs: 880,
+      target: const PracticeTarget(
+        kind: 'chunk',
+        id: 'chunk-1',
+        sentenceId: 'sentence-1',
+        chunkId: 'chunk-1',
+        startMs: 100,
+        endMs: 900,
+      ),
+      sourceSegment: const PlayableSegment(
+        mediaId: 'media-1',
+        startMs: 100,
+        endMs: 900,
+        label: 'chunk 1',
+        subtitleSnapshot: 'follow this',
+        availability: 'available',
+      ),
+      language: 'en',
+      audio: const RecordingAudioMetadata(
+        container: 'wav',
+        codec: 'pcm_s16le',
+        sampleRateHz: 16000,
+        channels: 1,
+        sampleFormat: 's16',
+        byteLength: 28000,
+        contentSha256:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      ),
+      recorderVersion: 'macos-avfoundation-pcm16-v1',
+    );
+    expect(input.toJson()['audio'], containsPair('sample_rate_hz', 16000));
+
+    final comparison = ShadowingComparison.fromJson({
+      'attempt_id': 'attempt-1',
+      'reference_segment': input.sourceSegment.toJson(),
+      'recording_id': 'recording-1',
+      'duration_delta_ms': 80,
+      'pause_alignment': {
+        'reference_pauses': [
+          {'start_ms': 300, 'end_ms': 450},
+        ],
+        'recording_pauses': [
+          {'start_ms': 340, 'end_ms': 500},
+        ],
+        'mean_absolute_offset_ms': 45,
+      },
+      'reference_waveform': {
+        'duration_ms': 800,
+        'bucket_ms': 100,
+        'peaks': [0.2, 0.8],
+        'rms': [0.1, 0.5],
+      },
+      'recording_waveform': {
+        'duration_ms': 880,
+        'bucket_ms': 110,
+        'peaks': [0.3, 0.7],
+        'rms': [0.2, 0.4],
+      },
+    });
+    expect(comparison.durationDeltaMs, 80);
+    expect(comparison.meanAbsolutePauseOffsetMs, 45);
+    expect(comparison.referencePauses.single.startMs, 300);
+    expect(comparison.recordingWaveform.peaks, [0.3, 0.7]);
+  });
+
   test('listening inbox fixture parses typed contract shape', () {
     final item = ListeningInboxItem.fromJson({
       'id': 'inbox-1',

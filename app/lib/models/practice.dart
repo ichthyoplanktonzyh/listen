@@ -247,6 +247,251 @@ class SubmitPracticeAttempt {
   };
 }
 
+class PlayableSegment {
+  const PlayableSegment({
+    this.mediaId,
+    required this.startMs,
+    required this.endMs,
+    required this.label,
+    required this.subtitleSnapshot,
+    required this.availability,
+  });
+
+  factory PlayableSegment.fromJson(Map<String, dynamic> json) =>
+      PlayableSegment(
+        mediaId: json['media_id'] as String?,
+        startMs: json['start_ms'] as int,
+        endMs: json['end_ms'] as int,
+        label: json['label'] as String,
+        subtitleSnapshot: json['subtitle_snapshot'] as String,
+        availability: json['availability'] as String,
+      );
+
+  final String? mediaId;
+  final int startMs;
+  final int endMs;
+  final String label;
+  final String subtitleSnapshot;
+  final String availability;
+
+  Map<String, dynamic> toJson() => {
+    'media_id': mediaId,
+    'start_ms': startMs,
+    'end_ms': endMs,
+    'label': label,
+    'subtitle_snapshot': subtitleSnapshot,
+    'availability': availability,
+  };
+}
+
+class RecordingAudioMetadata {
+  const RecordingAudioMetadata({
+    required this.container,
+    required this.codec,
+    required this.sampleRateHz,
+    required this.channels,
+    required this.sampleFormat,
+    required this.byteLength,
+    required this.contentSha256,
+  });
+
+  factory RecordingAudioMetadata.fromJson(Map<String, dynamic> json) =>
+      RecordingAudioMetadata(
+        container: json['container'] as String,
+        codec: json['codec'] as String,
+        sampleRateHz: json['sample_rate_hz'] as int,
+        channels: json['channels'] as int,
+        sampleFormat: json['sample_format'] as String,
+        byteLength: json['byte_length'] as int,
+        contentSha256: json['content_sha256'] as String,
+      );
+
+  final String container;
+  final String codec;
+  final int sampleRateHz;
+  final int channels;
+  final String sampleFormat;
+  final int byteLength;
+  final String contentSha256;
+
+  Map<String, dynamic> toJson() => {
+    'container': container,
+    'codec': codec,
+    'sample_rate_hz': sampleRateHz,
+    'channels': channels,
+    'sample_format': sampleFormat,
+    'byte_length': byteLength,
+    'content_sha256': contentSha256,
+  };
+}
+
+class RecordingAsset {
+  const RecordingAsset({
+    required this.id,
+    required this.filePath,
+    required this.createdAtMs,
+    required this.durationMs,
+    this.practiceAttemptId,
+    required this.target,
+    required this.sourceSegment,
+    required this.language,
+    required this.audio,
+    required this.recorderVersion,
+  });
+
+  factory RecordingAsset.fromJson(Map<String, dynamic> json) => RecordingAsset(
+    id: json['id'] as String,
+    filePath: json['file_path'] as String,
+    createdAtMs: json['created_at_ms'] as int,
+    durationMs: json['duration_ms'] as int,
+    practiceAttemptId: json['practice_attempt_id'] as String?,
+    target: PracticeTarget.fromJson(json['target'] as Map<String, dynamic>),
+    sourceSegment: PlayableSegment.fromJson(
+      json['source_segment'] as Map<String, dynamic>,
+    ),
+    language: json['language'] as String,
+    audio: RecordingAudioMetadata.fromJson(
+      json['audio'] as Map<String, dynamic>,
+    ),
+    recorderVersion: json['recorder_version'] as String,
+  );
+
+  final String id;
+  final String filePath;
+  final int createdAtMs;
+  final int durationMs;
+  final String? practiceAttemptId;
+  final PracticeTarget target;
+  final PlayableSegment sourceSegment;
+  final String language;
+  final RecordingAudioMetadata audio;
+  final String recorderVersion;
+}
+
+class CreateRecordingAsset {
+  const CreateRecordingAsset({
+    required this.filePath,
+    required this.durationMs,
+    required this.target,
+    required this.sourceSegment,
+    required this.language,
+    required this.audio,
+    required this.recorderVersion,
+  });
+
+  final String filePath;
+  final int durationMs;
+  final PracticeTarget target;
+  final PlayableSegment sourceSegment;
+  final String language;
+  final RecordingAudioMetadata audio;
+  final String recorderVersion;
+
+  Map<String, dynamic> toJson() => {
+    'file_path': filePath,
+    'duration_ms': durationMs,
+    'target': target.toJson(),
+    'source_segment': sourceSegment.toJson(),
+    'language': language,
+    'audio': audio.toJson(),
+    'recorder_version': recorderVersion,
+  };
+}
+
+class AudioPauseInterval {
+  const AudioPauseInterval({required this.startMs, required this.endMs});
+
+  factory AudioPauseInterval.fromJson(Map<String, dynamic> json) =>
+      AudioPauseInterval(
+        startMs: json['start_ms'] as int,
+        endMs: json['end_ms'] as int,
+      );
+
+  final int startMs;
+  final int endMs;
+}
+
+class AudioWaveformSummary {
+  const AudioWaveformSummary({
+    required this.durationMs,
+    required this.bucketMs,
+    required this.peaks,
+    required this.rms,
+  });
+
+  factory AudioWaveformSummary.fromJson(Map<String, dynamic> json) =>
+      AudioWaveformSummary(
+        durationMs: json['duration_ms'] as int,
+        bucketMs: json['bucket_ms'] as int,
+        peaks: (json['peaks'] as List<dynamic>)
+            .map((value) => (value as num).toDouble())
+            .toList(growable: false),
+        rms: (json['rms'] as List<dynamic>)
+            .map((value) => (value as num).toDouble())
+            .toList(growable: false),
+      );
+
+  final int durationMs;
+  final int bucketMs;
+  final List<double> peaks;
+  final List<double> rms;
+}
+
+class ShadowingComparison {
+  const ShadowingComparison({
+    required this.attemptId,
+    required this.referenceSegment,
+    required this.recordingId,
+    required this.durationDeltaMs,
+    required this.referencePauses,
+    required this.recordingPauses,
+    this.meanAbsolutePauseOffsetMs,
+    required this.referenceWaveform,
+    required this.recordingWaveform,
+  });
+
+  factory ShadowingComparison.fromJson(Map<String, dynamic> json) {
+    final alignment = json['pause_alignment'] as Map<String, dynamic>;
+    return ShadowingComparison(
+      attemptId: json['attempt_id'] as String,
+      referenceSegment: PlayableSegment.fromJson(
+        json['reference_segment'] as Map<String, dynamic>,
+      ),
+      recordingId: json['recording_id'] as String,
+      durationDeltaMs: json['duration_delta_ms'] as int,
+      referencePauses: (alignment['reference_pauses'] as List<dynamic>)
+          .map(
+            (value) =>
+                AudioPauseInterval.fromJson(value as Map<String, dynamic>),
+          )
+          .toList(growable: false),
+      recordingPauses: (alignment['recording_pauses'] as List<dynamic>)
+          .map(
+            (value) =>
+                AudioPauseInterval.fromJson(value as Map<String, dynamic>),
+          )
+          .toList(growable: false),
+      meanAbsolutePauseOffsetMs: alignment['mean_absolute_offset_ms'] as int?,
+      referenceWaveform: AudioWaveformSummary.fromJson(
+        json['reference_waveform'] as Map<String, dynamic>,
+      ),
+      recordingWaveform: AudioWaveformSummary.fromJson(
+        json['recording_waveform'] as Map<String, dynamic>,
+      ),
+    );
+  }
+
+  final String attemptId;
+  final PlayableSegment referenceSegment;
+  final String recordingId;
+  final int durationDeltaMs;
+  final List<AudioPauseInterval> referencePauses;
+  final List<AudioPauseInterval> recordingPauses;
+  final int? meanAbsolutePauseOffsetMs;
+  final AudioWaveformSummary referenceWaveform;
+  final AudioWaveformSummary recordingWaveform;
+}
+
 class PracticeTokenEvaluation {
   const PracticeTokenEvaluation({
     this.expected,
