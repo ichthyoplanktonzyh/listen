@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-12 17:25 CST: Phase 3.11 Slice 0 完成并通过 owner 复核门。`3.11-PLAN.md` 按
+  上游现状修订为 v2（固定 v34/ADR 0021 基线、五切片可执行粒度、Dart DTO 推迟到 3.13）；
+  新增 `3.11-EVIDENCE-MATRIX.md`：七类语义任务 + 五条负向裁决的 evidence matrix（真实
+  CNN10 片段示例、Lee 1986 / Wajnryb 1990 文献核实）、typed contract spike 裁决为方案 C
+  （新封闭枚举 `SemanticTaskKind` + 独立 attempt 表族，复用 PracticeTarget/Anchor，
+  `PracticeKind` 不动、不改开放 string）；确立"3.11 不新增任何 LearningObservation
+  writer"。执行分支 `codex/3.11-semantic-task-evidence-foundation`。
+
 - 2026-07-12  CST: Phase 3.10 Coach Dashboard 收口。owner 产品 QA 通过所有 QA-A ~ QA-E
   项目：入口语义、数字来源事实可下钻、建议可执行无副作用、材料轨迹与毕业确认正确、历史不足
   降级干净。创建 `3.10-CLOSEOUT.md`，更新 `STATE.md` 将主线切换至 Phase 3.11。
