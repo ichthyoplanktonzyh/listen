@@ -45,6 +45,7 @@ import 'utils/word_list_parser.dart';
 import 'screens/subtitle_resources_screen.dart';
 import 'widgets/panels/cold_start_marking_sheet.dart';
 import 'widgets/panels/intensive_practice_window.dart';
+import 'widgets/panels/l1_specialty_dialog.dart';
 import 'widgets/panels/hunting_prompt_card.dart';
 import 'widgets/panels/slice_playback_window.dart';
 import 'screens/vocabulary_screen.dart';
@@ -949,6 +950,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     playerController: playerController,
     learningController: learningController,
     saveSettings: _saveSettings,
+    api: api,
   );
 
   Future<void> _openLearningAssets() async {
@@ -1533,6 +1535,47 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _closeSlicePlayback() => slicePlayerController.close();
+
+  /// Opens the same-family clip aggregation for one L1 difficulty hint
+  /// (Phase 3.9): listen goes through the slice playback window; practice is
+  /// available for clips of the currently loaded track and seeds the
+  /// practice window on that sentence.
+  Future<void> _openL1Specialty(L1DiagnosisHint hint) async {
+    final service = api;
+    if (service == null || !mounted) return;
+    final currentTrackId = subtitleController.primaryTrack?.id;
+    Map<String, dynamic> payload;
+    try {
+      payload = await service.l1SpecialtyOccurrences(
+        difficultyKind: hint.difficultyKind,
+        language: _learningLanguage,
+        trackId: currentTrackId,
+      );
+    } catch (error) {
+      playerController.setStatus('Specialty clips unavailable: $error');
+      return;
+    }
+    if (!mounted) return;
+    final action = await showL1SpecialtyDialog(
+      context: context,
+      difficultyKindName: AppLocalizations.of(
+        context,
+      ).l1DifficultyName(hint.difficultyKind),
+      payload: payload,
+      currentTrackId: currentTrackId,
+    );
+    if (action == null || !mounted) return;
+    if (action.action == 'play') {
+      await _openSlicePlayback(action.occurrence);
+      return;
+    }
+    final sentenceId = action.occurrence['sentence_id'] as String?;
+    final cues = subtitleController.primaryTrack?.cues ?? const <Cue>[];
+    final cueIndex = cues.indexWhere((cue) => cue.id == sentenceId);
+    if (cueIndex < 0) return;
+    await _seekCue(cues[cueIndex]);
+    await _startSentenceDictationPractice();
+  }
 
   Future<void> _openDiagnosisView() async {
     learningController.selectSidePanel(3);
@@ -2469,6 +2512,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     onOpenDiagnosisView: _openDiagnosisView,
     onOpenSlicePlayback: _openSlicePlayback,
     onOpenListeningDictionary: _openListeningDictionaryEntry,
+    onOpenL1Specialty: _openL1Specialty,
     onRefreshListeningInbox: _refreshListeningInbox,
     onReplayListeningInboxItem: _replayListeningInboxItem,
     onProcessListeningInboxItem: _processListeningInboxItem,

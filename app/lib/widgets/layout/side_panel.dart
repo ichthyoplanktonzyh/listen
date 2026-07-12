@@ -13,6 +13,7 @@ import '../../controllers/subtitle_controller.dart';
 import '../../localization.dart';
 import '../../models/listening.dart';
 import '../../models/timeline.dart';
+import '../../models/types.dart';
 import '../panels/content_fit_card.dart';
 import '../panels/diagnosis_card.dart';
 import '../panels/listening_inbox_panel.dart';
@@ -52,6 +53,7 @@ class SidePanel extends StatefulWidget {
     required this.onOpenDiagnosisView,
     required this.onOpenSlicePlayback,
     this.onOpenListeningDictionary,
+    this.onOpenL1Specialty,
     required this.onRefreshListeningInbox,
     required this.onReplayListeningInboxItem,
     required this.onProcessListeningInboxItem,
@@ -88,6 +90,7 @@ class SidePanel extends StatefulWidget {
   final Future<void> Function(Map<String, dynamic> occurrence)
   onOpenSlicePlayback;
   final Future<void> Function(String lexicalEntryId)? onOpenListeningDictionary;
+  final Future<void> Function(L1DiagnosisHint hint)? onOpenL1Specialty;
   final Future<void> Function() onRefreshListeningInbox;
   final Future<void> Function(ListeningInboxItem item)
   onReplayListeningInboxItem;
@@ -410,6 +413,17 @@ class _SidePanelState extends State<SidePanel> {
     onFindingFeedback: (finding, value) =>
         unawaited(playbackActions.savePhoneticFindingFeedback(finding, value)),
     onOpenListeningDictionary: widget.onOpenListeningDictionary,
+    onLoopL1Span: (span) => unawaited(
+      playbackActions.loopRange(
+        span.startMs,
+        span.endMs,
+        'Looping L1 difficulty evidence ${span.label}',
+        labelKey: 'l1ListenAgain',
+      ),
+    ),
+    onOpenL1Specialty: widget.onOpenL1Specialty == null
+        ? null
+        : (hint) => unawaited(widget.onOpenL1Specialty!(hint)),
   );
 
   Widget _postureActions() {

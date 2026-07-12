@@ -23,6 +23,8 @@ class DiagnosisCard extends StatelessWidget {
     this.onLoopFinding,
     this.onFindingFeedback,
     this.onOpenListeningDictionary,
+    this.onLoopL1Span,
+    this.onOpenL1Specialty,
   });
 
   final Diagnosis diagnosis;
@@ -38,6 +40,12 @@ class DiagnosisCard extends StatelessWidget {
   final ValueChanged<PhoneticFinding>? onLoopFinding;
   final void Function(PhoneticFinding finding, String value)? onFindingFeedback;
   final Future<void> Function(String lexicalEntryId)? onOpenListeningDictionary;
+
+  /// Replays one L1 difficulty evidence span (loops real audio).
+  final ValueChanged<L1DiagnosisSpan>? onLoopL1Span;
+
+  /// Opens the specialty aggregation for one difficulty category.
+  final ValueChanged<L1DiagnosisHint>? onOpenL1Specialty;
 
   @override
   Widget build(BuildContext context) {
@@ -107,6 +115,18 @@ class DiagnosisCard extends StatelessWidget {
                   ],
                 ),
               ),
+          if (diagnosis.l1Context != null && !diagnosis.l1Context!.supported)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                l.text('l1UnsupportedPair'),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: ListenColors.muted,
+                ),
+              ),
+            ),
+          if (diagnosis.l1Hints.isNotEmpty) _l1Section(context),
           const SizedBox(height: 8),
           Theme(
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -210,6 +230,87 @@ class DiagnosisCard extends StatelessWidget {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _l1Section(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return Padding(
+      key: const Key('diagnosis-l1-section'),
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l.text('l1HintsTitle'),
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          for (final hint in diagnosis.l1Hints)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '• ${l.l1DifficultyName(hint.difficultyKind)}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12, top: 2),
+                    child: Text(
+                      l.l1Difficulty(hint.difficultyKind, hint.message),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12, top: 4),
+                    child: Wrap(
+                      spacing: 5,
+                      runSpacing: 5,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        for (final span in hint.spans)
+                          Tooltip(
+                            message:
+                                '${l.text('l1ListenAgain')} · ${span.label}',
+                            child: ActionChip(
+                              visualDensity: VisualDensity.compact,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              avatar: const Icon(Icons.replay, size: 14),
+                              backgroundColor: ListenColors.info.withAlpha(42),
+                              side: BorderSide(
+                                color: ListenColors.info.withAlpha(115),
+                              ),
+                              label: Text(
+                                span.surfaceText.isEmpty
+                                    ? span.label
+                                    : span.surfaceText,
+                                style: const TextStyle(fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              onPressed: onLoopL1Span == null
+                                  ? null
+                                  : () => onLoopL1Span!(span),
+                            ),
+                          ),
+                        if (onOpenL1Specialty != null)
+                          TextButton.icon(
+                            onPressed: () => onOpenL1Specialty!(hint),
+                            icon: const Icon(Icons.grid_view_outlined, size: 14),
+                            label: Text(
+                              l.text('l1SimilarClips'),
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );

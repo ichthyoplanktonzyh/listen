@@ -494,16 +494,108 @@ class DiagnosisHint {
   final List<String> reasons;
 }
 
+/// Replayable audio span behind one L1 difficulty hint (Phase 3.9).
+class L1DiagnosisSpan {
+  const L1DiagnosisSpan({
+    required this.family,
+    required this.startMs,
+    required this.endMs,
+    required this.label,
+    required this.surfaceText,
+  });
+
+  factory L1DiagnosisSpan.fromJson(Map<String, dynamic> json) =>
+      L1DiagnosisSpan(
+        family: json['family'] as String,
+        startMs: json['start_ms'] as int,
+        endMs: json['end_ms'] as int,
+        label: json['label'] as String? ?? '',
+        surfaceText: json['surface_text'] as String? ?? '',
+      );
+
+  final String family;
+  final int startMs;
+  final int endMs;
+  final String label;
+  final String surfaceText;
+}
+
+class L1DiagnosisHint {
+  const L1DiagnosisHint({
+    required this.difficultyKind,
+    required this.message,
+    this.families = const [],
+    this.spans = const [],
+  });
+
+  factory L1DiagnosisHint.fromJson(Map<String, dynamic> json) =>
+      L1DiagnosisHint(
+        difficultyKind: json['difficulty_kind'] as String,
+        message: json['message'] as String? ?? '',
+        families: ((json['families'] as List<dynamic>?) ?? const [])
+            .cast<String>()
+            .toList(growable: false),
+        spans: ((json['spans'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) =>
+                  L1DiagnosisSpan.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+      );
+
+  final String difficultyKind;
+  final String message;
+  final List<String> families;
+  final List<L1DiagnosisSpan> spans;
+}
+
+class L1DiagnosisContext {
+  const L1DiagnosisContext({
+    required this.l1,
+    required this.l2,
+    required this.support,
+  });
+
+  factory L1DiagnosisContext.fromJson(Map<String, dynamic> json) =>
+      L1DiagnosisContext(
+        l1: json['l1'] as String,
+        l2: json['l2'] as String,
+        support: json['support'] as String? ?? 'supported',
+      );
+
+  final String l1;
+  final String l2;
+  final String support;
+
+  bool get supported => support == 'supported';
+}
+
 class Diagnosis {
-  const Diagnosis({this.hints = const []});
+  const Diagnosis({
+    this.hints = const [],
+    this.l1Hints = const [],
+    this.l1Context,
+  });
 
   factory Diagnosis.fromJson(Map<String, dynamic> json) => Diagnosis(
     hints: ((json['hints'] as List<dynamic>?) ?? const [])
         .map((value) => DiagnosisHint.fromJson(value as Map<String, dynamic>))
         .toList(growable: false),
+    l1Hints: ((json['l1_hints'] as List<dynamic>?) ?? const [])
+        .map(
+          (value) => L1DiagnosisHint.fromJson(value as Map<String, dynamic>),
+        )
+        .toList(growable: false),
+    l1Context: json['l1_context'] == null
+        ? null
+        : L1DiagnosisContext.fromJson(
+            json['l1_context'] as Map<String, dynamic>,
+          ),
   );
 
   final List<DiagnosisHint> hints;
+  final List<L1DiagnosisHint> l1Hints;
+  final L1DiagnosisContext? l1Context;
 
   Map<String, dynamic> toJson() => {
     'hints': hints
@@ -512,6 +604,32 @@ class Diagnosis {
             'kind': h.kind,
             'lexical_entry_ids': h.lexicalEntryIds,
             'reasons': h.reasons,
+          },
+        )
+        .toList(),
+    if (l1Context != null)
+      'l1_context': {
+        'l1': l1Context!.l1,
+        'l2': l1Context!.l2,
+        'support': l1Context!.support,
+      },
+    'l1_hints': l1Hints
+        .map(
+          (h) => {
+            'difficulty_kind': h.difficultyKind,
+            'message': h.message,
+            'families': h.families,
+            'spans': h.spans
+                .map(
+                  (s) => {
+                    'family': s.family,
+                    'start_ms': s.startMs,
+                    'end_ms': s.endMs,
+                    'label': s.label,
+                    'surface_text': s.surfaceText,
+                  },
+                )
+                .toList(),
           },
         )
         .toList(),
