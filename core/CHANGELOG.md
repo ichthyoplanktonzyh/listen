@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-12 18:55 CST: Phase 3.11 Slice 4 收口，Semantic Task Evidence Foundation
+  CODE COMPLETE。新增 ADR 0021（semantic attempt/judgment/observation/capability 四层分离、
+  独立任务族 spike 裁决、rubric 身份含 purpose、abstain 一等、adjudication 非 override、
+  v35 append-only、portable/export 不进 VocabularyAssetBundle、§3.7 过渡规则由本 ADR 取代）；
+  evidence matrix 标记 FINALIZED；创建 `3.11-CLOSEOUT.md`；PLAN 置为 CODE COMPLETE；
+  STATE.md 主线切换至 Phase 3.12 并登记已完成 phase 索引。修复 api-http 测试
+  needless_range_loop 告警。exit signals 全部核验通过；本 phase 无独立 UI，真实内容
+  端到端 QA 归属首个消费它的 Studio（3.13）。
+
 - 2026-07-12 18:40 CST: Phase 3.11 Slice 3 落地：最小 HTTP API + OpenAPI 契约。新增
   `crates/api-http/src/routes/semantic.rs`：`/v1/semantic/rubrics`(+`/{id}`、
   `/{id}/attempts`)、`/v1/semantic/attempts`(+`/{id}`、`/{id}/judgments`)、

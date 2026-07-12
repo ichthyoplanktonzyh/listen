@@ -3,18 +3,20 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-12T16:00:00.000+08:00"
+last_updated: "2026-07-12T18:55:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-12 16:00 CST
-> 更新原因：Phase 3.10 Coach Dashboard owner 产品 QA 通过，已创建 CLOSEOUT 并收口。
+> 最后更新：2026-07-12 18:55 CST
+> 更新原因：Phase 3.11 Semantic Task Evidence Foundation 五切片全部落地，CODE COMPLETE
+> 并创建 CLOSEOUT；主线切换至 Phase 3.12。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.11 Semantic Task Evidence Foundation 开工前准备；
-  Phase 3.9 仍不作为 3.11 的硬依赖。
+- **当前执行主线**：Phase 3.11 Semantic Task Evidence Foundation 已 CODE COMPLETE
+  （见其 CLOSEOUT）；下一执行 phase 为 Phase 3.12 Vendor-neutral LLM Provider，开工前
+  按 3.11 已落地的 rubric/judgment 契约修订 PLAN。Phase 3.9 仍不作为硬依赖。
 - **治理线状态**：Phase 2.23 Architecture Debt Paydown 已于 2026-07-03 收口（详见其 CLOSEOUT）；3.x 开工前置全部就绪。
 - **算法线状态**：Phase 2.19 / 2.20 / 2.21 已于 2026-07-02 搁置；audible-structure v1
   contract 保持当前权威 shape，后续质量提升等学习闭环完成后再回到算法线。
@@ -235,6 +237,7 @@ last_updated: "2026-07-12T16:00:00.000+08:00"
 | 3.7 Hunting List | 用户确认猎词资产 + 泛听会话级预算提示 + 三态听力证据 + completion 小结 | `.planning/phases/3.7-hunting-list/3.7-CLOSEOUT.md` |
 | 3.8 Shadowing & Recording Comparison | chunk 跟读 + 本地录音 + A/B/A + 客观波形/时长/停顿比较；非评分 completion | `.planning/phases/3.8-shadowing-recording-comparison/3.8-CLOSEOUT.md` |
 | 3.10 Coach Dashboard | 诊断型 dashboard 聚合 durable 事实 + 规则建议 + channel-ready envelope + starter 降级 | `.planning/phases/3.10-coach-dashboard/3.10-CLOSEOUT.md` |
+| 3.11 Semantic Task Evidence Foundation | 四层事实分离（attempt/judgment/observation/capability）+ 版本化 rubric + 逐点判定含 abstain + adjudication；schema v35 append-only；ADR 0021；零 observation/projection writer | `.planning/phases/3.11-semantic-task-evidence-foundation/3.11-CLOSEOUT.md` |
 
 ## 最近重要决策
 
@@ -324,9 +327,11 @@ last_updated: "2026-07-12T16:00:00.000+08:00"
 
 ## 下一步工作
 
-1. **Phase 3.11（当前第一优先）**：按当前 3.10 已落地的聚合 API、channel-ready envelope
-   和上游 phase 现状修订 PLAN 后开工。
-2. Phase 3.9 保持延期且不收口；其 L1 解释/专项入口不作为 3.11 的必需数据源。3.11 起每个
+1. **Phase 3.12（当前第一优先）**：Vendor-neutral LLM Provider，两个异构协议
+   （OpenAI-compatible + Anthropic Messages）先证中立。开工前按 3.11 已落地的
+   `SemanticRubric`/`SemanticJudgment` 契约与 application trait 边界修订 PLAN；provider
+   判定默认不获任何显示资格（资格评估属 3.12.1）。
+2. Phase 3.9 保持延期且不收口；其 L1 解释/专项入口不作为后续 phase 的必需数据源。每个
    phase 开工前先按上游现状修订 PLAN。
 3. "收藏句 → 个人模板"的用户价值验证收敛到 Phase 3.16（3.4.3 结论待兑现）。
 4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；

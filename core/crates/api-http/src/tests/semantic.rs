@@ -124,11 +124,11 @@ async fn semantic_gold_fixture_round_trips_over_http() {
     }
 
     let mut judgment_ids = Vec::new();
-    for index in 0..fixture.judgments.len() {
+    for (index, attempt_id) in attempt_ids.iter().enumerate() {
         let (status, judgment) = post_json(
             &app,
             "/v1/semantic/judgments",
-            judgment_request(&fixture, index, &rubric_id, &attempt_ids[index]),
+            judgment_request(&fixture, index, &rubric_id, attempt_id),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "judgment {index}: {judgment}");
