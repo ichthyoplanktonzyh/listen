@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-13 23:40 CST: main.dart 拆分 S1 —— 抽出 `HuntingActionsCoordinator`。把
+  `_toggleHuntingMode` / `_reindexHuntingCorpus` / `_answerHuntingCheck` 三个方法逐字搬到
+  `lib/controllers/hunting_actions_coordinator.dart`，仅做 seam 改写（`api`→`getApi()`、
+  `mounted`→`isMounted()`、`l.text`→注入 `text()`、controller 接收者按现有 coordinator 短命名）；
+  逻辑/分支/字符串不变。`_PlayerScreenState` 新增 `huntingActions` 字段 + `initState` bind，
+  3 处调用点改走 coordinator。新增 `test/hunting_actions_coordinator_test.dart`（5 例：toggle
+  启/停、reindex 成功/失败、null-api no-op），复用既有 `LocalApi.withTransport` fake。main.dart
+  2578 → 2527 行。`flutter analyze` 零问题、`flutter test` 298 全通过（293 + 5）。
+
 - 2026-07-13 23:20 CST: 立 `main.dart` Coordinator 抽取治理 mini-phase 的可执行 PLAN
   （`.planning/phases/main-dart-coordinator-extraction/PLAN.md`）。核实 `_PlayerScreenState`
   从 2.23 的 1457 行回涨至 2578 行，且无任何测试 mount `PlayerScreen`、State 无 DI，故整屏
