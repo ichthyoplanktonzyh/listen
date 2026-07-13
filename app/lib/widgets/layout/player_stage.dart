@@ -413,6 +413,12 @@ class _PlayerStageState extends State<PlayerStage> {
                                               tooltip: l.text(
                                                 'expectedPronunciationTooltip',
                                               ),
+                                              expandTooltip: l.text(
+                                                'showFullSoundStructure',
+                                              ),
+                                              collapseTooltip: l.text(
+                                                'collapseSoundStructure',
+                                              ),
                                             ),
                                     );
                                   }
@@ -451,6 +457,12 @@ class _PlayerStageState extends State<PlayerStage> {
                                               height: primarySize * 1.1,
                                               tooltip: l.text(
                                                 'connectedSpeechReferenceTooltip',
+                                              ),
+                                              expandTooltip: l.text(
+                                                'showFullSoundStructure',
+                                              ),
+                                              collapseTooltip: l.text(
+                                                'collapseSoundStructure',
                                               ),
                                             ),
                                     );
@@ -512,6 +524,12 @@ class _PlayerStageState extends State<PlayerStage> {
                                     predicted: false,
                                     predictedLabel: l.text(
                                       'listeningPredictedBadge',
+                                    ),
+                                    expandTooltip: l.text(
+                                      'showFullSoundStructure',
+                                    ),
+                                    collapseTooltip: l.text(
+                                      'collapseSoundStructure',
                                     ),
                                     onLoopCue: (start, end, label) => unawaited(
                                       _loopRhythmCue(start, end, label),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/timeline.dart';
 import '../../theme/listen_theme.dart';
+import 'following_structure_viewport.dart';
 
 /// Presents Reference B as annotations on the sentence rather than as a list of
 /// detached rule cards. The transcript remains the visual baseline; arcs,
@@ -18,6 +19,8 @@ class ConnectedSpeechReferenceRibbon extends StatelessWidget {
     this.fontSize = 11,
     this.height = 26,
     this.tooltip,
+    this.expandTooltip = 'Show full sentence',
+    this.collapseTooltip = 'Collapse sentence',
   });
 
   final List<RhythmConnectedSpeechRef> references;
@@ -27,6 +30,8 @@ class ConnectedSpeechReferenceRibbon extends StatelessWidget {
   final double fontSize;
   final double height;
   final String? tooltip;
+  final String expandTooltip;
+  final String collapseTooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -48,36 +53,36 @@ class ConnectedSpeechReferenceRibbon extends StatelessWidget {
     if (rules.isEmpty) return const SizedBox.shrink();
 
     final annotations = _annotations(rules);
+    final activeIndex = annotations.indexWhere(_annotationContainsCurrentToken);
     final content = Semantics(
       label: tooltip ?? title,
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: MainAxisSize.max,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _ConnectedBadge(title: title, fontSize: fontSize, height: height),
           const SizedBox(width: 9),
-          Flexible(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Wrap(
-                spacing: math.max(5, fontSize * 0.55),
-                crossAxisAlignment: WrapCrossAlignment.end,
-                children: [
-                  for (final annotation in annotations)
-                    annotation.rule == null
-                        ? _PlainSentenceText(
-                            text: annotation.text,
-                            fontSize: fontSize,
-                          )
-                        : _ConnectedAnnotation(
-                            reference: annotation.rule!,
-                            surface: annotation.text,
-                            selected: _containsCurrentToken(annotation.rule!),
-                            fontSize: fontSize,
-                            height: height,
-                          ),
-                ],
-              ),
+          Expanded(
+            child: FollowingStructureViewport(
+              activeIndex: activeIndex,
+              spacing: math.max(5, fontSize * 0.55),
+              expandTooltip: expandTooltip,
+              collapseTooltip: collapseTooltip,
+              children: [
+                for (final annotation in annotations)
+                  annotation.rule == null
+                      ? _PlainSentenceText(
+                          text: annotation.text,
+                          fontSize: fontSize,
+                        )
+                      : _ConnectedAnnotation(
+                          reference: annotation.rule!,
+                          surface: annotation.text,
+                          selected: _containsCurrentToken(annotation.rule!),
+                          fontSize: fontSize,
+                          height: height,
+                        ),
+              ],
             ),
           ),
         ],
@@ -113,6 +118,8 @@ class ConnectedSpeechReferenceRibbon extends StatelessWidget {
       final rule = ruleCursor < rules.length ? rules[ruleCursor] : null;
       final start = rule?.tokenStart;
       if (rule == null || start == null || start != tokens[tokenCursor].index) {
+        final plainStart = tokens[tokenCursor].index;
+        var plainEnd = plainStart;
         final plain = StringBuffer(tokens[tokenCursor].text);
         tokenCursor += 1;
         while (tokenCursor < tokens.length) {
@@ -121,11 +128,18 @@ class ConnectedSpeechReferenceRibbon extends StatelessWidget {
               : null;
           if (nextRuleStart == tokens[tokenCursor].index) break;
           plain.write(tokens[tokenCursor].text);
+          plainEnd = tokens[tokenCursor].index;
           tokenCursor += 1;
         }
         final text = plain.toString();
         if (text.trim().isNotEmpty) {
-          values.add(_SentenceAnnotation(text: text));
+          values.add(
+            _SentenceAnnotation(
+              text: text,
+              tokenStart: plainStart,
+              tokenEnd: plainEnd,
+            ),
+          );
         }
         continue;
       }
@@ -141,6 +155,8 @@ class ConnectedSpeechReferenceRibbon extends StatelessWidget {
         _SentenceAnnotation(
           text: surface.isEmpty ? rule.surfaceText : surface,
           rule: rule,
+          tokenStart: start,
+          tokenEnd: end,
         ),
       );
       ruleCursor += 1;
@@ -158,6 +174,17 @@ class ConnectedSpeechReferenceRibbon extends StatelessWidget {
     if (current == null || start == null) return false;
     final end = reference.tokenEnd ?? start;
     return current >= start && current <= end;
+  }
+
+  bool _annotationContainsCurrentToken(_SentenceAnnotation annotation) {
+    final current = currentTokenIndex;
+    final start = annotation.tokenStart;
+    final end = annotation.tokenEnd ?? start;
+    return current != null &&
+        start != null &&
+        end != null &&
+        current >= start &&
+        current <= end;
   }
 }
 
@@ -371,10 +398,17 @@ class _PlainSentenceText extends StatelessWidget {
 }
 
 class _SentenceAnnotation {
-  const _SentenceAnnotation({required this.text, this.rule});
+  const _SentenceAnnotation({
+    required this.text,
+    this.rule,
+    this.tokenStart,
+    this.tokenEnd,
+  });
 
   final String text;
   final RhythmConnectedSpeechRef? rule;
+  final int? tokenStart;
+  final int? tokenEnd;
 }
 
 String _ruleLabel(RhythmConnectedSpeechRef reference) {

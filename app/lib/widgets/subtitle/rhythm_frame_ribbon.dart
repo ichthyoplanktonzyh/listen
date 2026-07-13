@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
 import '../../theme/listen_theme.dart';
+import 'following_structure_viewport.dart';
 
 typedef RhythmCueLoopCallback =
     void Function(Duration start, Duration end, String label);
@@ -33,6 +34,8 @@ class RhythmFrameRibbon extends StatelessWidget {
     this.onLoopCue,
     this.predicted = false,
     this.predictedLabel,
+    this.expandTooltip = 'Show full sentence',
+    this.collapseTooltip = 'Collapse sentence',
   });
 
   final RhythmFrame frame;
@@ -55,6 +58,8 @@ class RhythmFrameRibbon extends StatelessWidget {
   /// text-prior prediction and must not read as measured audio.
   final bool predicted;
   final String? predictedLabel;
+  final String expandTooltip;
+  final String collapseTooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -62,11 +67,12 @@ class RhythmFrameRibbon extends StatelessWidget {
     if (items.isEmpty && frame.phraseBoundaries.isEmpty) {
       return const SizedBox.shrink();
     }
+    final sequence = _sequence(items);
 
     final content = Semantics(
       label: tooltip ?? title,
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: MainAxisSize.max,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _RhythmBadge(
@@ -78,14 +84,13 @@ class RhythmFrameRibbon extends StatelessWidget {
             predictedLabel: predictedLabel,
           ),
           const SizedBox(width: 10),
-          Flexible(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: _sequence(items),
-              ),
+          Expanded(
+            child: FollowingStructureViewport(
+              activeIndex: sequence.indexWhere((entry) => entry.active),
+              spacing: 0,
+              expandTooltip: expandTooltip,
+              collapseTooltip: collapseTooltip,
+              children: sequence.map((entry) => entry.widget).toList(),
             ),
           ),
         ],
@@ -97,8 +102,8 @@ class RhythmFrameRibbon extends StatelessWidget {
         : Tooltip(message: tooltip!, child: content);
   }
 
-  List<Widget> _sequence(List<_AudibleItem> items) {
-    final widgets = <Widget>[];
+  List<_SequenceNode> _sequence(List<_AudibleItem> items) {
+    final widgets = <_SequenceNode>[];
     var boundaryCursor = 0;
     final boundaries = [...frame.phraseBoundaries]
       ..sort((a, b) => a.at.compareTo(b.at));
@@ -108,23 +113,29 @@ class RhythmFrameRibbon extends StatelessWidget {
           boundaries[boundaryCursor].at <= item.start) {
         if (widgets.isNotEmpty) {
           widgets.add(
-            _PhraseDivider(
-              boundary: boundaries[boundaryCursor],
-              height: height,
+            _SequenceNode(
+              widget: _PhraseDivider(
+                boundary: boundaries[boundaryCursor],
+                height: height,
+              ),
             ),
           );
         }
         boundaryCursor += 1;
       }
+      final active = item.contains(position);
       widgets.add(
-        Padding(
-          padding: EdgeInsets.only(right: index == items.length - 1 ? 0 : 7),
-          child: _AudibleNode(
-            item: item,
-            active: item.contains(position),
-            fontSize: fontSize,
-            height: height,
-            onLoopCue: onLoopCue,
+        _SequenceNode(
+          active: active,
+          widget: Padding(
+            padding: EdgeInsets.only(right: index == items.length - 1 ? 0 : 7),
+            child: _AudibleNode(
+              item: item,
+              active: active,
+              fontSize: fontSize,
+              height: height,
+              onLoopCue: onLoopCue,
+            ),
           ),
         ),
       );
@@ -761,6 +772,13 @@ class _AudibleItem {
   final String tooltip;
 
   bool contains(Duration value) => value >= start && value < end;
+}
+
+class _SequenceNode {
+  const _SequenceNode({required this.widget, this.active = false});
+
+  final Widget widget;
+  final bool active;
 }
 
 String _formatPercent(double value) =>

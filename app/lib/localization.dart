@@ -657,7 +657,8 @@ class AppLocalizations {
       'llmBaseUrl': 'Base URL',
       'llmModelId': 'Model',
       'llmApiKey': 'API key (write-only)',
-      'llmApiKeyHint': 'Stored in the system keychain by the backend. Not shown again.',
+      'llmApiKeyHint':
+          'Stored in the system keychain by the backend. Not shown again.',
       'llmAllowedUses': 'Allowed uses',
       'llmUseJudgment': 'Semantic judgment',
       'llmUseRubric': 'Rubric generation',
@@ -704,6 +705,8 @@ class AppLocalizations {
           'B · How dictionary word boundaries may reorganize in connected speech',
       'rhythmReferenceActualTooltip':
           'C · Audible groups supported by phones, timing and prosody in this audio',
+      'showFullSoundStructure': 'Show full sentence',
+      'collapseSoundStructure': 'Follow current position',
       'connectedSpeechReference': 'Predicted audible',
       'connectedSpeechReferenceTooltip':
           'A → B: written word boundaries compared with the sound groups predicted by language rules.',
@@ -1462,8 +1465,7 @@ class AppLocalizations {
       'llmProviders': 'AI 服务',
       'llmProvidersDescription':
           '厂商中立的 LLM 服务，用于可选的语义反馈。你可以选择自己的云端或本地模型；没有它核心学习照常可用。',
-      'llmDataWarning':
-          '你判定的文本（转写与字幕）会发送到你配置的服务地址。自定义地址的数据处理方式由该服务器决定。',
+      'llmDataWarning': '你判定的文本（转写与字幕）会发送到你配置的服务地址。自定义地址的数据处理方式由该服务器决定。',
       'llmNotQualified': '未获显示资格：此处任何判定仅供诊断，未经独立资格评估前不会作为学习反馈出现。',
       'llmNoProviders': '尚未配置任何服务。',
       'llmAddProvider': '添加服务',
@@ -1516,6 +1518,8 @@ class AppLocalizations {
       'rhythmReferenceCitationTooltip': 'A · 来自字典的读音与词汇重音',
       'rhythmReferenceConnectedTooltip': 'B · 词典词界在连续语流中可能如何重组',
       'rhythmReferenceActualTooltip': 'C · 当前音频中由音素、时间和韵律支持的实际可听分组',
+      'showFullSoundStructure': '展开完整句结构',
+      'collapseSoundStructure': '收起并跟随当前位置',
       'connectedSpeechReference': '预测可听结构',
       'connectedSpeechReferenceTooltip': 'A → B：对比书写词界与语言规则预测的可听音组。',
       'connectedSpeechUnavailable': '当前句没有预测到可听结构变化',
