@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-13 10:47 CST: 修正 Rhythm C 证据门控。播放器不再把 text/WordTimeline 派生的
+  RhythmFrame 作为“预测 C”显示；C 现在同时要求当前句已加载音素，且 frame 自身
+  `phone_evidence_coverage > 0`。无音素证据时只提供当前句/全轨音频分析入口，A/B 仍可正常
+  使用。新增四象限回归测试锁定“有 frame 无 phones”“有 phones 无 frame phone evidence”
+  均不得显示 C。
+
 - 2026-07-13 10:30 CST: 修复导入过 LLTimeline 后刷新听感结构仍显示不可用。Flutter 资源
   加载不再用带 artifacts 的旧文档整体覆盖后端新导出文档；现在保留新导出的 WordTimeline
   派生 RhythmFrame，仅把旧 artifacts 合并回来。新增回归测试覆盖“旧文档无 rhythm frames、

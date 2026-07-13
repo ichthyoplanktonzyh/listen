@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-13T10:30:00.000+08:00"
+last_updated: "2026-07-13T10:47:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-13 10:30 CST
+> 最后更新：2026-07-13 10:47 CST
 > 更新原因：Phase 3.12 Vendor-neutral LLM Provider 已 CODE COMPLETE；Phase 3.9 A/B/C
-> audible-structure 进入真实媒体 QA，并修复导入文档覆盖新派生 RhythmFrame 的刷新缺陷。
+> audible-structure 进入真实媒体 QA；A/B 资源刷新与 C 音素证据门控缺陷均已修复。
 
 ## 当前位置
 
@@ -181,6 +181,8 @@ last_updated: "2026-07-13T10:30:00.000+08:00"
 
 ### Phase 3.9: L1-aware Diagnosis v1 ⏳ 已恢复，A/B/C 算法与 UI 重构中
 
+- 2026-07-13 真实媒体 QA 修复：C 不再接受 text/WordTimeline 预测 frame 作为降级替代；仅当
+  当前句音素已加载且 frame 的 phone evidence coverage 大于零时显示实际可听结构。
 - 2026-07-13 真实媒体 QA 修复：Flutter 刷新 LLTimeline 时以当前后端导出为权威，只从旧
   导入文档补回缺失 artifacts，不再丢弃由现有 WordTimeline 新派生的 RhythmFrame。
 - 2026-07-13 A/B/C 重构第二批完成：B 已覆盖 weak form、contraction、assimilation、
