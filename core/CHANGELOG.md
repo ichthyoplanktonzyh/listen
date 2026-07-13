@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-13 23:20 CST: 立 `main.dart` Coordinator 抽取治理 mini-phase 的可执行 PLAN
+  （`.planning/phases/main-dart-coordinator-extraction/PLAN.md`）。核实 `_PlayerScreenState`
+  从 2.23 的 1457 行回涨至 2578 行，且无任何测试 mount `PlayerScreen`、State 无 DI，故整屏
+  widget 测试不可行；测试网改建在代码库既有的 Coordinator 隔离单测层。PLAN 按现有
+  `media_session_coordinator` 模板，分 Slice 0（fakes + 前置）+ S1–S7（Hunting / Inbox /
+  Shadowing / Practice / Vocabulary / MediaLibrary / SubtitleSources），逐 Slice test-first、
+  逐字搬移、analyze+test+对拍验证；`initState`/`dispose`/`build`/视图组合与高频 `_onPosition`
+  保留在 State。属语义重构（非机械搬移），与本次 lexical/timeline 两个纯机械拆分区分。
+
 - 2026-07-13 23:05 CST: 机械拆分 `apps/desktop/lib/models/timeline.dart`（2837 → 10 行 library +
   6 个 part 文件，最大 `rhythm.dart` 965 行，均低于 AGENT.md 1500 行阈值）。采用 Dart
   `part`/`part of`：原文件零 import、完全自包含，故 43 处 `import 'models/timeline.dart'` 全部
