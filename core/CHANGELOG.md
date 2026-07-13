@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-13 14:21 CST: Phase 3.9.1 Slice 0 建立共享句法 Provider 的可执行研究边界。
+  新增 ADR 0023，锁定 provider-neutral、可重建 artifact、Unicode scalar half-open char span
+  1:N/N:1 token 映射、closed validation/abstain 降级、隔离 provider/runtime/model/config 的缓存
+  身份，以及不得填充 C、替代 ChunkTimeline 或铸造 Construction identity 的边界。新增 24 条
+  开发/锁定验证歧义 fixture（含真实 CNN10 字幕短摘录与受控最小对照）、4 条 mapping contract
+  fixture 和无 parser 依赖的 validator；预登记 alignment/关键歧义/失败/延迟/内存/体积 gate，
+  并分别审计 Stanza/spaCy runtime、model weights 与 UD/treebank 许可，未知项保持 research-only。
+
 - 2026-07-13 13:59 CST: 新建 Phase 3.9.1 Shared Syntactic Analysis Provider。确定以
   UD/CoNLL-U 语义建立共享、可重建的 token-aligned 句法 artifact，通过现有 Python sidecar
   模式先评估 Stanza/spaCy，供 Reference B、SenseGroup 与 Construction 共用；明确模型缺席

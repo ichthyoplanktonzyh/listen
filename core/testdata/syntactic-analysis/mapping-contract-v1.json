@@ -1,0 +1,73 @@
+{
+  "contract_version": 1,
+  "offset_unit": "unicode_scalar",
+  "span_semantics": "half_open",
+  "coverage_denominator": "subtitle_tokens_kind_word",
+  "cases": [
+    {
+      "case_id": "map-contraction-parser-split",
+      "text": "I'm ready.",
+      "subtitle_tokens": [
+        {"index": 0, "kind": "word", "text": "I'm", "start_char": 0, "end_char": 3},
+        {"index": 1, "kind": "whitespace", "text": " ", "start_char": 3, "end_char": 4},
+        {"index": 2, "kind": "word", "text": "ready", "start_char": 4, "end_char": 9},
+        {"index": 3, "kind": "punctuation", "text": ".", "start_char": 9, "end_char": 10}
+      ],
+      "syntactic_tokens": [
+        {"parser_token_index": 0, "surface": "I", "start_char": 0, "end_char": 1, "subtitle_token_indices": [0], "alignment_status": "split"},
+        {"parser_token_index": 1, "surface": "'m", "start_char": 1, "end_char": 3, "subtitle_token_indices": [0], "alignment_status": "split"},
+        {"parser_token_index": 2, "surface": "ready", "start_char": 4, "end_char": 9, "subtitle_token_indices": [2], "alignment_status": "exact"},
+        {"parser_token_index": 3, "surface": ".", "start_char": 9, "end_char": 10, "subtitle_token_indices": [3], "alignment_status": "exact"}
+      ]
+    },
+    {
+      "case_id": "map-abbreviation-parser-merge",
+      "text": "U. S. policy",
+      "subtitle_tokens": [
+        {"index": 0, "kind": "word", "text": "U", "start_char": 0, "end_char": 1},
+        {"index": 1, "kind": "punctuation", "text": ".", "start_char": 1, "end_char": 2},
+        {"index": 2, "kind": "whitespace", "text": " ", "start_char": 2, "end_char": 3},
+        {"index": 3, "kind": "word", "text": "S", "start_char": 3, "end_char": 4},
+        {"index": 4, "kind": "punctuation", "text": ".", "start_char": 4, "end_char": 5},
+        {"index": 5, "kind": "whitespace", "text": " ", "start_char": 5, "end_char": 6},
+        {"index": 6, "kind": "word", "text": "policy", "start_char": 6, "end_char": 12}
+      ],
+      "syntactic_tokens": [
+        {"parser_token_index": 0, "surface": "U.S.", "start_char": 0, "end_char": 5, "subtitle_token_indices": [0, 1, 3, 4], "alignment_status": "normalized_overlap"},
+        {"parser_token_index": 1, "surface": "policy", "start_char": 6, "end_char": 12, "subtitle_token_indices": [6], "alignment_status": "exact"}
+      ]
+    },
+    {
+      "case_id": "map-curly-apostrophe-unicode-scalars",
+      "text": "I’m café-ready.",
+      "subtitle_tokens": [
+        {"index": 0, "kind": "word", "text": "I’m", "start_char": 0, "end_char": 3},
+        {"index": 1, "kind": "whitespace", "text": " ", "start_char": 3, "end_char": 4},
+        {"index": 2, "kind": "word", "text": "café-ready", "start_char": 4, "end_char": 14},
+        {"index": 3, "kind": "punctuation", "text": ".", "start_char": 14, "end_char": 15}
+      ],
+      "syntactic_tokens": [
+        {"parser_token_index": 0, "surface": "I", "start_char": 0, "end_char": 1, "subtitle_token_indices": [0], "alignment_status": "split"},
+        {"parser_token_index": 1, "surface": "’m", "start_char": 1, "end_char": 3, "subtitle_token_indices": [0], "alignment_status": "split"},
+        {"parser_token_index": 2, "surface": "café", "start_char": 4, "end_char": 8, "subtitle_token_indices": [2], "alignment_status": "split"},
+        {"parser_token_index": 3, "surface": "-", "start_char": 8, "end_char": 9, "subtitle_token_indices": [2], "alignment_status": "split"},
+        {"parser_token_index": 4, "surface": "ready", "start_char": 9, "end_char": 14, "subtitle_token_indices": [2], "alignment_status": "split"},
+        {"parser_token_index": 5, "surface": ".", "start_char": 14, "end_char": 15, "subtitle_token_indices": [3], "alignment_status": "exact"}
+      ]
+    },
+    {
+      "case_id": "map-explicit-unaligned-word",
+      "text": "hello 2026",
+      "subtitle_tokens": [
+        {"index": 0, "kind": "word", "text": "hello", "start_char": 0, "end_char": 5},
+        {"index": 1, "kind": "whitespace", "text": " ", "start_char": 5, "end_char": 6},
+        {"index": 2, "kind": "word", "text": "2026", "start_char": 6, "end_char": 10}
+      ],
+      "syntactic_tokens": [
+        {"parser_token_index": 0, "surface": "hello", "start_char": 0, "end_char": 5, "subtitle_token_indices": [0], "alignment_status": "exact"}
+      ],
+      "unaligned_subtitle_token_indices": [2],
+      "expected_lexical_alignment_coverage": 0.5
+    }
+  ]
+}
