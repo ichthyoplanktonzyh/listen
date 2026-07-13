@@ -1,6 +1,6 @@
 # Current Data Model
 
-Last updated: 2026-07-11, Phase 3.8 recording-asset backend foundation.
+Last updated: 2026-07-13, Phase 3.9.1 syntactic artifact contract.
 
 All persisted time values are non-negative integer milliseconds. Public IDs are
 opaque SHA-256 strings generated from a namespace and stable fingerprint; they
@@ -210,6 +210,12 @@ Word, chunk, and phone timelines share the same resource lifecycle:
 ```text
 candidate -> active -> archived
 ```
+
+`SyntacticAnalysis` is currently an ephemeral, rebuildable analysis artifact,
+not a timeline or user asset. Its identity isolates the source text/token
+snapshot, language, contract, provider, runtime, model checksum, and profile
+configuration. Slice 1 adds no SQLite row and grants no deletion/cascade or
+learning-evidence semantics.
 
 SQLite enforces one active resource per track/resource kind with partial unique
 indexes. `created_by`, parent IDs, publication markers, and model/provider

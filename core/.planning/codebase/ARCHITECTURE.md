@@ -1,6 +1,6 @@
 # LLPlayerNext System Architecture
 
-Last updated: 2026-07-11. Reflects Phase 3.8 recording-asset backend foundation.
+Last updated: 2026-07-13. Reflects Phase 3.9.1 provider-neutral syntactic contract.
 
 ## Overview
 
@@ -49,6 +49,10 @@ application use cases and provider/repository boundaries.
 - `TimelineMetrics` and `ChunkEvidence` wrap timeline JSON extension objects
   while preserving object-shaped API/storage JSON.
 - `DomainError` is the shared validation error type.
+- Phase 3.9.1 adds a rebuildable `SyntacticAnalysis` artifact contract with
+  provider/runtime/model provenance, Unicode-scalar char spans, explicit
+  parser-token ↔ SubtitleToken many-to-many alignment, UD-compatible fields,
+  tree validation, coverage gating, and provider/model/config-isolated identity.
 
 ### `application`
 
@@ -88,6 +92,9 @@ application use cases and provider/repository boundaries.
   `ListeningInboxItem`, list active/archived Inbox items, process them into
   review items / micro-intensive practice items / favorite or dismissed
   archival outcomes, and append durable listening events.
+- `SyntacticAnalysisProvider` returns content/provenance drafts only. Application
+  assigns artifact identity and validates the draft against the exact source
+  sentence/token snapshot before a consumer may activate syntax-gated behavior.
 
 ### `api-http`
 
@@ -349,6 +356,21 @@ complete shadowing -> PracticeAttempt(result=completed, score=null)
 subtitle track -> word timeline -> rhythm frames / chunk timeline / phone timeline
   -> SpeechEnhancementWorkflowController -> Flutter timeline/pronunciation model
 ```
+
+### Shared Syntactic Analysis (Phase 3.9.1)
+
+```text
+SubtitleSentence + SubtitleToken snapshot
+  -> SyntacticAnalysisProvider draft
+  -> application identity + domain validator
+  -> validated rebuildable artifact
+       -> Reference B / syntax-aware SenseGroup / dependency matcher
+provider missing or artifact not activatable
+  -> existing conservative B + punctuation_length_rule_v1
+```
+
+The syntactic artifact is not persisted by Slice 1, is not a learning asset,
+does not replace ChunkTimeline, and cannot supply audio-backed Reference C.
 
 ### LLTimeline Import/Export
 

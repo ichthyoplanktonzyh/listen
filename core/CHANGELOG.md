@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-13 15:56 CST: Phase 3.9.1 Slice 1 建立 provider-neutral Rust 契约。
+  domain 新增版本化 `SyntacticAnalysis`、完整 provider/runtime/model/checksum provenance、
+  Unicode scalar char span 多对多映射、UD 字段、source/config/model 隔离 fingerprint，以及
+  span/coverage/HEAD/单 root/无环/sentence ownership validator；application 新增 draft-only
+  `SyntacticAnalysisProvider`、capability 与 closed error taxonomy，并由 server-side finalizer
+  铸造 artifact identity、拒绝 invalid provider 输出。fake provider、缩约 N:1、低 coverage
+  abstain、坏 span/head/cycle 和模型升级重算测试通过；本 slice 不增加持久化或 parser runtime。
+
 - 2026-07-13 14:21 CST: Phase 3.9.1 Slice 0 建立共享句法 Provider 的可执行研究边界。
   新增 ADR 0023，锁定 provider-neutral、可重建 artifact、Unicode scalar half-open char span
   1:N/N:1 token 映射、closed validation/abstain 降级、隔离 provider/runtime/model/config 的缓存

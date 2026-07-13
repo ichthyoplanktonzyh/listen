@@ -1,6 +1,6 @@
 # LLPlayerNext — 测试体系
 
-> 最后更新：2026-07-11
+> 最后更新：2026-07-13
 
 ## 1. 测试层次
 
@@ -32,11 +32,11 @@
 
 | Crate | 覆盖范围 |
 |---|---|
-| `domain` | ID 类型、枚举序列化、PhoneticAnalysis::validate() |
+| `domain` | ID 类型、枚举序列化、PhoneticAnalysis::validate()、SyntacticAnalysis span/mapping/tree/coverage validator |
 | `subtitle-core` | SRT/VTT 解析、token 化、时间轴查询（空隙/重叠/边界） |
 | `diagnosis-core` | 词义障碍、声音识别障碍、信息不足、其他因素 |
 | `speech-analysis` | 100 句发音基线测试、OOV fallback-v2 stress、information-structure prior、Reference B connected-speech rules、规则型语流检测、RhythmFrame audible-structure bridge、chunk 分区 |
-| `application` | AppServices 用例逻辑、chunk 检测 |
+| `application` | AppServices 用例逻辑、chunk 检测、SyntacticAnalysisProvider fake/finalization seam |
 | `dictionary-provider` | Provider 查询、缓存逻辑 |
 | `persistence-sqlite` | CRUD 操作、幂等、唯一约束、事务 |
 | `api-http` | 路由 handler、错误映射、认证中间件 |
