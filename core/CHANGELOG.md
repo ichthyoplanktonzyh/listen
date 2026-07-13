@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-13 19:30 CST: Phase 3.9.2 Syntax Provider Product Activation 收口。corrected v2
+  holdout、逐 query qualification、spaCy opt-in lifecycle、单 batch/逐句共享编排、真实媒体与
+  missing/corrupt/invalid/timeout 降级全部通过；contracts、句法相关 crates 与 Rust workspace
+  全绿。最终裁决为 spaCy artifact + B `going_to`/`used_to`/`have_to` + SenseGroup + matcher
+  qualified，B `want_to` fallback-only；base bundle +0B，C/ChunkTimeline/Construction identity
+  边界冻结。PLAN/STATE/CLOSEOUT 已更新，phase 转 COMPLETED。
+
 - 2026-07-13 19:22 CST: Phase 3.9.2 激活可选 spaCy 共享句法产品 capability。application
   新增单次 probe/batch、逐句 finalise 的 consumer orchestrator；同一 artifact ID 供已资格
   B（`going_to` / `used_to` / `have_to`）、syntax-aware SenseGroup 与 dependency candidate

@@ -39,6 +39,9 @@
 > 只能作为产品 abstain/block policy case，不能作为唯一 parser attachment gold；以清晰
 > subject/object 最小对照重新资格评估 spaCy，若通过则让 B、SenseGroup、Construction matcher
 > 共享一次句法 artifact，同时保留无模型 fallback 和轻量消费者边界。
+> 2026-07-13 Phase 3.9.2 完成：spaCy artifact 与 B going-to/used-to/have-to、SenseGroup、
+> dependency matcher 获逐项资格并进入可选产品 composition；want-to 保持 fallback-only，
+> runtime/model 不进入基础 bundle。
 > 2026-07-04 产品路线更新：Phase 3.x 执行序列确立为 Phase 3.1 ~ 3.10，并确立精听/泛听
 > 一级心智、可组合不强制流程、功能按场景分不按设备分（生产端唯一 PC-only）等原则；
 > 见 §14.12 与 `.planning/phases/3.0-english-listening-learning-loop/3.0-PHASE-BREAKDOWN.md`。

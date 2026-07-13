@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-13T18:45:00.000+08:00"
+last_updated: "2026-07-13T19:30:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-13 18:45 CST
-> 更新原因：新增 Phase 3.9.2，纠正句法 gold/产品保守策略混淆并推进单 Provider 产品激活。
+> 最后更新：2026-07-13 19:30 CST
+> 更新原因：Phase 3.9.2 收口；corrected qualification 后激活可选 spaCy 共享句法 Provider。
 
 ## 当前位置
 
@@ -37,8 +37,8 @@ last_updated: "2026-07-13T18:45:00.000+08:00"
 - Phase 3.11 Semantic Task Evidence Foundation 已 CODE COMPLETE（见其 CLOSEOUT）。
   Phase 3.9 不作为后续 Studio phase 的硬依赖。Phase 3.9.1 已建立共享句法契约、B/SenseGroup
   consumer 与 Construction matcher seam；后续复核发现唯一否决样本混淆歧义句产品 policy
-  与 parser gold。Phase 3.9.2 已启动，以修正版 holdout 重新资格评估 spaCy，并在通过后接入
-  单 Provider 共享产品编排；当前激活前仍保留 B/SenseGroup fallback。
+  与 parser gold。Phase 3.9.2 已完成：spaCy artifact 与 B going-to/used-to/have-to、SenseGroup、
+  matcher 获资格并接入单 batch/逐句共享产品编排；want-to 与无模型路径保留精确 fallback。
 - **治理线状态**：Phase 2.23 Architecture Debt Paydown 已于 2026-07-03 收口（详见其 CLOSEOUT）；3.x 开工前置全部就绪。
 - **算法线状态**：Phase 2.19 / 2.20 / 2.21 全局质量线仍搁置；Phase 3.9 仅恢复与 L1 学习
   价值直接相关的 A/B/C audible-structure contract、linking 结构生成和证据门控。
@@ -227,16 +227,16 @@ last_updated: "2026-07-13T18:45:00.000+08:00"
   `pick up: /pɪk | ʌp/ → /pɪ.kʌp/`，纯 B 不填充 C。
 - 计划：`.planning/phases/3.9-l1-aware-diagnosis-v1/3.9-PLAN.md`。
 
-### Phase 3.9.2: Syntax Provider Qualification Correction and Product Activation ⏳ ACTIVE
+### Phase 3.9.2: Syntax Provider Qualification Correction and Product Activation ✅ COMPLETE
 
 - 不修改已冻结的 3.9.1 fixture/report；新建 v2 holdout，将争议句改为
   `ambiguous_policy_abstain`，加入清晰 want-to subject/object 最小对照。
-- 首选 spaCy 作单一产品候选；consumer seam 已完成，主要工作是 corrected qualification、可选
-  runtime/model lifecycle、composition single-call/shared-artifact 与真实媒体降级 QA。
-- 工作量评估为小到中等；若必须捆绑 Python、大改 LLTimeline schema 或新增复杂安装 UI，则
-  另立部署 phase，不在本阶段假装成简单接线。
+- spaCy artifact、B going-to/used-to/have-to、SenseGroup 与 matcher 已逐项获资格；want-to
+  `fallback_only`，歧义 raw allow 不进入产品。
+- 可选 pinned runtime/model +0B base bundle；single batch、逐句 finalise、共享 artifact ID 与
+  missing/corrupt/invalid/timeout fallback 已验证。未新增复杂安装 UI。
 - 文档：`.planning/phases/3.9.2-syntax-provider-product-activation/3.9.2-PLAN.md`、
-  `3.9.2-CONTEXT.md`。
+  `3.9.2-CONTEXT.md`、`3.9.2-CLOSEOUT.md`。
 
 ### 下一执行序列：Phase 3.11–3.18
 
@@ -293,6 +293,7 @@ last_updated: "2026-07-13T18:45:00.000+08:00"
 | 3.7 Hunting List | 用户确认猎词资产 + 泛听会话级预算提示 + 三态听力证据 + completion 小结 | `.planning/phases/3.7-hunting-list/3.7-CLOSEOUT.md` |
 | 3.8 Shadowing & Recording Comparison | chunk 跟读 + 本地录音 + A/B/A + 客观波形/时长/停顿比较；非评分 completion | `.planning/phases/3.8-shadowing-recording-comparison/3.8-CLOSEOUT.md` |
 | 3.9.1 Shared Syntactic Analysis Provider | 中立 token-aligned artifact + B/SenseGroup/matcher seam；Stanza/spaCy 负资格，产品保持 fallback | `.planning/phases/3.9.1-shared-syntactic-analysis-provider/3.9.1-CLOSEOUT.md` |
+| 3.9.2 Syntax Provider Product Activation | corrected gold/policy qualification + 可选 spaCy 单 batch/逐句共享 artifact；want-to 精确 fallback | `.planning/phases/3.9.2-syntax-provider-product-activation/3.9.2-CLOSEOUT.md` |
 | 3.10 Coach Dashboard | 诊断型 dashboard 聚合 durable 事实 + 规则建议 + channel-ready envelope + starter 降级 | `.planning/phases/3.10-coach-dashboard/3.10-CLOSEOUT.md` |
 | 3.11 Semantic Task Evidence Foundation | 四层事实分离（attempt/judgment/observation/capability）+ 版本化 rubric + 逐点判定含 abstain + adjudication；schema v35 append-only；ADR 0021；零 observation/projection writer | `.planning/phases/3.11-semantic-task-evidence-foundation/3.11-CLOSEOUT.md` |
 | 3.12 Vendor-neutral LLM Provider | 两异构协议 adapter（OpenAI Chat + Anthropic Messages）过同一契约套件证中立；draft-not-domain-type + 四层分离经 LLM 路径成立；OS keychain + auth_ref 密钥不落普通存储；诚实降级；Flutter 设置 UI；schema v36；ADR 0022；判定默认不获显示资格（属 3.12.1）。CODE COMPLETE，owner 真实 provider 端到端 QA 待做 | `.planning/phases/3.12-vendor-neutral-llm-provider/3.12-CLOSEOUT.md` |
