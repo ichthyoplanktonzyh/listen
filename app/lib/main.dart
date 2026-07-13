@@ -23,6 +23,7 @@ import 'controllers/hunting_controller.dart';
 import 'controllers/hunting_session_controller.dart';
 import 'controllers/learning_controller.dart';
 import 'controllers/learning_workflow_controller.dart';
+import 'controllers/listening_inbox_coordinator.dart';
 import 'controllers/media_session_coordinator.dart';
 import 'controllers/occurrence_media_resolver.dart';
 import 'controllers/playback_actions_coordinator.dart';
@@ -34,7 +35,6 @@ import 'controllers/subtitle_controller.dart';
 import 'controllers/settings_controller.dart';
 import 'controllers/slice_player_controller.dart';
 import 'models/capability_readiness.dart';
-import 'models/listening.dart';
 import 'models/practice.dart';
 import 'models/task_status.dart';
 import 'models/timeline.dart';
@@ -157,6 +157,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     extensiveListening: extensiveListeningController,
     subtitle: subtitleController,
   );
+  late final inboxActions = ListeningInboxCoordinator(
+    extensiveListening: extensiveListeningController,
+    player: playerController,
+    subtitle: subtitleController,
+    playbackActions: playbackActions,
+  );
 
   // ── Local UI state (not managed by controllers) ──
   String get status => playerController.status;
@@ -248,6 +254,11 @@ class _PlayerScreenState extends State<PlayerScreen>
       getApi: () => api,
       isMounted: () => mounted,
       text: (key) => l.text(key),
+    );
+    inboxActions.bind(
+      getApi: () => api,
+      isMounted: () => mounted,
+      mediaTimeMs: _mediaTimeMs,
     );
     unawaited(_connectApi());
     unawaited(_loadSettings());
@@ -1671,74 +1682,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  Future<void> _captureListeningInbox() async {
-    final cue = subtitleController.currentPrimaryCue;
-    final captured = await extensiveListeningController.captureCurrentCue(
-      api: api,
-      cue: cue,
-      previousCue: subtitleController.primaryCursor.previous(cue),
-      nextCue: subtitleController.primaryCursor.next(cue),
-      mediaId: playerController.mediaId,
-      trackId: subtitleController.primaryTrack?.id,
-      mediaTimeMs: _mediaTimeMs,
-    );
-    if (captured && mounted) {
-      playerController.setStatus('Marked in Listening Inbox');
-    }
-  }
-
   Future<void> _hardInterruptListening() async {
     if (playerController.playing) await adapter.playOrPause();
-    await _captureListeningInbox();
+    await inboxActions.captureListeningInbox();
     learningController.selectSidePanel(3);
     await _refreshDiagnosis();
     if (mounted) playerController.setStatus('Paused for quick listening check');
-  }
-
-  Future<void> _refreshListeningInbox() async {
-    await extensiveListeningController.refreshInbox(api);
-  }
-
-  Future<void> _replayListeningInboxItem(ListeningInboxItem item) async {
-    final start = item.playbackStartMs;
-    final end = item.playbackEndMs;
-    if (start == null || end == null) {
-      playerController.setStatus('No playable range for this Inbox item');
-      return;
-    }
-    await playbackActions.loopRange(
-      start,
-      end,
-      'Looping Listening Inbox item',
-      labelKey: 'loopInbox',
-    );
-  }
-
-  Future<void> _processListeningInboxItem(
-    ListeningInboxItem item,
-    String resolution,
-  ) async {
-    final processed = await extensiveListeningController.processItem(
-      api,
-      item,
-      resolution,
-    );
-    if (processed == null || !mounted) return;
-    switch (resolution) {
-      case 'review_item':
-        playerController.setStatus('Listening Inbox item saved to review');
-      case 'micro_intensive':
-        await _replayListeningInboxItem(processed);
-        if (mounted) {
-          playerController.setStatus('Micro intensive item created');
-        }
-      case 'favorite':
-        playerController.setStatus('Segment saved as favorite');
-      case 'dismissed':
-        playerController.setStatus('Listening Inbox item archived');
-      default:
-        playerController.setStatus('Listening Inbox item processed');
-    }
   }
 
   int _mediaTimeMs(Duration subtitleTime) =>
@@ -2171,7 +2120,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             const SingleActivator(LogicalKeyboardKey.keyH): () =>
                 subtitleController.setVisible(!subtitleController.visible),
             const SingleActivator(LogicalKeyboardKey.keyI): () =>
-                unawaited(_captureListeningInbox()),
+                unawaited(inboxActions.captureListeningInbox()),
             const SingleActivator(LogicalKeyboardKey.keyI, shift: true): () =>
                 unawaited(_toggleExtensiveListening()),
             const SingleActivator(LogicalKeyboardKey.keyP, shift: true): () =>
@@ -2480,9 +2429,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     onOpenSlicePlayback: _openSlicePlayback,
     onOpenListeningDictionary: _openListeningDictionaryEntry,
     onOpenL1Specialty: _openL1Specialty,
-    onRefreshListeningInbox: _refreshListeningInbox,
-    onReplayListeningInboxItem: _replayListeningInboxItem,
-    onProcessListeningInboxItem: _processListeningInboxItem,
+    onRefreshListeningInbox: inboxActions.refreshListeningInbox,
+    onReplayListeningInboxItem: inboxActions.replayListeningInboxItem,
+    onProcessListeningInboxItem: inboxActions.processListeningInboxItem,
     timingQuality: _timingQuality,
     onStartColdStart: _openColdStartMarking,
     onRecordCurrentSource: _recordCurrentSource,
@@ -2500,7 +2449,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     onSeekCue: _seekCue,
     onToggleExtensiveListening: _toggleExtensiveListening,
     onToggleHunting: huntingActions.toggleHuntingMode,
-    onCaptureListeningInbox: _captureListeningInbox,
+    onCaptureListeningInbox: inboxActions.captureListeningInbox,
     onHardInterruptListening: _hardInterruptListening,
     onSaveSettings: _saveSettings,
     isCompact: playerController.mediaPath != null && !_workbenchExpanded,
