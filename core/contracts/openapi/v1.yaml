@@ -1435,6 +1435,117 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/JudgmentAdjudication" }
+  /v1/llm/providers:
+    get:
+      operationId: listLlmProviders
+      description: >
+        Lists configured vendor-neutral LLM provider profiles. Responses never
+        include secrets or the opaque keychain reference — only has_credential.
+      responses:
+        "200":
+          description: Provider profiles (secret-free views)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LlmProviderProfileView" }
+    post:
+      operationId: registerLlmProvider
+      description: >
+        Registers or updates a provider profile. The optional secret is
+        write-only: it is stored in the OS keychain and never returned, logged,
+        or persisted to SQLite. Identity is the (adapter, base_url, model) tuple.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterLlmProvider" }
+      responses:
+        "200":
+          description: Saved provider profile (secret-free view)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LlmProviderProfileView" }
+  /v1/llm/providers/{id}:
+    get:
+      operationId: getLlmProvider
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Provider profile (secret-free view)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LlmProviderProfileView" }
+        "404":
+          description: Provider profile not found
+    delete:
+      operationId: deleteLlmProvider
+      description: >
+        Deletes a provider profile and removes its credential from the secure
+        store, so disabling a provider leaves no key behind.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+  /v1/llm/providers/{id}/probe:
+    post:
+      operationId: probeLlmProvider
+      description: >
+        Connectivity and capability test. Actually exercises structured output
+        against the endpoint (protocol compatibility is not capability
+        equivalence). Diagnostic only — not learning feedback.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Measured capability
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [structured_output]
+                properties:
+                  structured_output: { $ref: "#/components/schemas/CapabilityClaim" }
+  /v1/llm/providers/{id}/judge:
+    post:
+      operationId: judgeViaLlmProvider
+      description: >
+        Judges one stored attempt through the provider and records the result as
+        an unqualified heuristic_proxy judgment (no observation/projection, no
+        learning surface until Phase 3.12.1). On any provider error nothing is
+        written and a standardized, secret-free error is returned.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [attempt_id, response_revision]
+              properties:
+                attempt_id: { type: string }
+                response_revision: { type: integer }
+      responses:
+        "200":
+          description: Recorded judgment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticJudgment" }
   /v1/hunting/candidates:
     get:
       operationId: listHuntingCandidates
@@ -3575,6 +3686,77 @@ components:
         user_verdict: { $ref: "#/components/schemas/PointVerdict" }
         note: { type: [string, "null"] }
         occurred_at_ms: { type: integer, minimum: 0 }
+    LlmAdapterKind:
+      type: string
+      enum: [openai_chat_completions, anthropic_messages]
+    LlmUse:
+      type: string
+      enum: [rubric_generation, semantic_judgment]
+    DataRetentionPreference:
+      type: string
+      enum: [no_retention, provider_default, unknown]
+    CostBudget:
+      type: object
+      properties:
+        max_usd: { type: [number, "null"] }
+        max_requests: { type: [integer, "null"] }
+    CapabilityClaim:
+      type: object
+      description: >
+        A capability with provenance. Only a probed:true claim is usable for a
+        hard requirement; declared is advisory; unknown is honest ignorance.
+      required: [state]
+      properties:
+        state: { type: string, enum: [declared, probed, unknown] }
+        supported: { type: boolean }
+        probed_at_ms: { type: integer, minimum: 0 }
+    ProviderCapability:
+      type: object
+      required: [structured_output, streaming, multilingual, audio_input, max_context_tokens]
+      properties:
+        structured_output: { $ref: "#/components/schemas/CapabilityClaim" }
+        streaming: { $ref: "#/components/schemas/CapabilityClaim" }
+        multilingual: { $ref: "#/components/schemas/CapabilityClaim" }
+        audio_input: { $ref: "#/components/schemas/CapabilityClaim" }
+        max_context_tokens: { type: [integer, "null"] }
+    LlmProviderProfileView:
+      type: object
+      description: >
+        Secret-free view of a provider profile. Never carries the credential or
+        the opaque keychain reference — only has_credential.
+      required: [id, display_name, adapter_kind, base_url, model_id, has_credential, timeout_ms, max_retries, retention, allowed_uses, capability, created_at_ms]
+      properties:
+        id: { type: string }
+        display_name: { type: string }
+        adapter_kind: { $ref: "#/components/schemas/LlmAdapterKind" }
+        protocol_version: { type: [string, "null"] }
+        base_url: { type: string }
+        model_id: { type: string }
+        has_credential: { type: boolean }
+        timeout_ms: { type: integer, minimum: 0 }
+        max_retries: { type: integer, minimum: 0 }
+        cost_budget: { $ref: "#/components/schemas/CostBudget" }
+        retention: { $ref: "#/components/schemas/DataRetentionPreference" }
+        allowed_uses: { type: array, items: { $ref: "#/components/schemas/LlmUse" } }
+        capability: { $ref: "#/components/schemas/ProviderCapability" }
+        created_at_ms: { type: integer, minimum: 0 }
+    RegisterLlmProvider:
+      type: object
+      required: [display_name, adapter_kind, base_url, model_id, retention, allowed_uses]
+      properties:
+        display_name: { type: string }
+        adapter_kind: { $ref: "#/components/schemas/LlmAdapterKind" }
+        protocol_version: { type: [string, "null"] }
+        base_url: { type: string }
+        model_id: { type: string }
+        secret:
+          type: [string, "null"]
+          description: Write-only; stored in the OS keychain, never returned or persisted to SQLite.
+        timeout_ms: { type: integer, minimum: 0 }
+        max_retries: { type: integer, minimum: 0 }
+        cost_budget: { $ref: "#/components/schemas/CostBudget" }
+        retention: { $ref: "#/components/schemas/DataRetentionPreference" }
+        allowed_uses: { type: array, items: { $ref: "#/components/schemas/LlmUse" } }
     PracticeItem:
       type: object
       required: [id, session_id, kind, target, prompt_snapshot, expected_answer, anchors, created_at_ms]

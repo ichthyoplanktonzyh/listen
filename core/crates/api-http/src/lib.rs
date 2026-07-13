@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use api_events::{EventEnvelope, EventName};
 use application::{
     AppServices, ApplicationError, DictionaryProvider, EnglishPronunciationProvider,
-    ImportSubtitle, RegisterMedia,
+    ImportSubtitle, InMemorySecretStore, RegisterMedia, SecretStore,
 };
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
@@ -35,15 +35,18 @@ mod event_payloads;
 mod m18;
 mod phonetic_analysis;
 mod routes;
+mod secret_store_keychain;
 mod sound_line;
 mod speech_jobs;
 mod transcription;
+pub use secret_store_keychain::KeychainSecretStore;
 use m18::M18Coordinator;
 use phonetic_analysis::{CreatePhoneticJobRequest, PhoneticAnalysisCoordinator};
 use routes::corpus::*;
 use routes::dictionary::*;
 use routes::language::*;
 use routes::learner::*;
+use routes::llm::*;
 use routes::media::*;
 use routes::phonetic_analysis::*;
 use routes::practice::*;
@@ -71,6 +74,10 @@ pub struct ApiState {
     pub speech_jobs: Arc<SpeechBatchCoordinator>,
     pub sound_line: Arc<SoundLineCoordinator>,
     pub m18: Arc<M18Coordinator>,
+    /// Phase 3.12: resolves provider credentials at dispatch time. Defaults to
+    /// an in-memory store; the composition root injects the OS keychain via
+    /// [`ApiState::with_secret_store`]. The secret never lives on `services`.
+    pub secret_store: Arc<dyn SecretStore>,
 }
 
 impl ApiState {
@@ -116,7 +123,14 @@ impl ApiState {
             speech_jobs,
             sound_line,
             m18: Arc::new(M18Coordinator::new()),
+            secret_store: Arc::new(InMemorySecretStore::new()),
         }
+    }
+
+    /// Injects the platform secret store (OS keychain in production).
+    pub fn with_secret_store(mut self, secret_store: Arc<dyn SecretStore>) -> Self {
+        self.secret_store = secret_store;
+        self
     }
 }
 
@@ -466,6 +480,16 @@ pub fn router(state: ApiState) -> Router {
             "/v1/semantic/adjudications",
             post(create_judgment_adjudication),
         )
+        .route(
+            "/v1/llm/providers",
+            get(list_llm_providers).post(register_llm_provider),
+        )
+        .route(
+            "/v1/llm/providers/{id}",
+            get(get_llm_provider).delete(delete_llm_provider),
+        )
+        .route("/v1/llm/providers/{id}/probe", post(probe_llm_provider))
+        .route("/v1/llm/providers/{id}/judge", post(judge_via_llm_provider))
         .route("/v1/languages", get(list_languages))
         .route("/v1/languages/{code}/profile", get(language_profile))
         .route("/v1/transcription/providers", get(transcription_providers))

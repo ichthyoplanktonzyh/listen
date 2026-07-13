@@ -20,10 +20,12 @@
 pub mod anthropic_messages;
 pub mod openai_chat;
 
+mod factory;
 mod semantic;
 mod wire;
 
 pub use anthropic_messages::AnthropicMessagesAdapter;
+pub use factory::BuiltSemanticProvider;
 pub use openai_chat::OpenAiChatAdapter;
 pub use semantic::LlmSemanticProvider;
 

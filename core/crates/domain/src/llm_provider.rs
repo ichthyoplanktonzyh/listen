@@ -27,6 +27,11 @@ pub enum LlmAdapterKind {
     /// OpenAI Chat Completions and any compatible service reachable by a
     /// custom base URL (Ollama, LM Studio, vLLM, ...). Endpoint compatibility
     /// is **not** capability equivalence — see [`ProviderCapability`].
+    ///
+    /// Pinned to the conventional spelling so the serde wire form matches
+    /// [`LlmAdapterKind::as_str`] (default snake_case would emit
+    /// `open_ai_chat_completions`, diverging the JSON blob from the DB column).
+    #[serde(rename = "openai_chat_completions")]
     OpenAiChatCompletions,
     /// Anthropic Messages: a different content-block protocol with different
     /// auth headers and no native `response_format` json-schema switch.

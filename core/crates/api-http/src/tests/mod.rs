@@ -23,7 +23,8 @@ fn test_state() -> ApiState {
         .with_difficulty_repository(repo.clone())
         .with_corpus_index_repository(repo.clone())
         .with_coach_dashboard_repository(repo.clone())
-        .with_semantic_task_repository(repo.clone()),
+        .with_semantic_task_repository(repo.clone())
+        .with_llm_provider_profile_repository(repo.clone()),
         repo,
         "secret",
     )
@@ -136,6 +137,7 @@ async fn wait_for_phonetic_job(app: &Router, job_id: &str, expected: &[&str]) ->
 }
 
 mod general;
+mod llm;
 mod media_subtitles;
 mod openapi;
 mod phonetic_analysis;

@@ -2,6 +2,7 @@ pub(crate) mod corpus;
 pub(crate) mod dictionary;
 pub(crate) mod language;
 pub(crate) mod learner;
+pub(crate) mod llm;
 pub(crate) mod media;
 pub(crate) mod phonetic_analysis;
 pub(crate) mod practice;

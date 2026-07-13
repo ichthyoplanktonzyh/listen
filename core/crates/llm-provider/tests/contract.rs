@@ -349,3 +349,74 @@ async fn probe_measures_structured_output_support() {
         assert!(matches!(claim, CapabilityClaim::Probed { supported: false, .. }));
     }
 }
+
+// ---------------------------------------------------------------------------
+// Factory: a stored profile maps to the right adapter; both seams + probe work.
+// ---------------------------------------------------------------------------
+
+use domain::{
+    DataRetentionPreference, LlmAdapterKind, LlmProviderProfile, LlmUse, ProviderCapability,
+    llm_provider_profile_id,
+};
+use llm_provider::BuiltSemanticProvider;
+
+fn profile_for(protocol: Protocol, base_url: &str) -> LlmProviderProfile {
+    let adapter_kind = match protocol {
+        Protocol::OpenAi => LlmAdapterKind::OpenAiChatCompletions,
+        Protocol::Anthropic => LlmAdapterKind::AnthropicMessages,
+    };
+    LlmProviderProfile {
+        id: llm_provider_profile_id(adapter_kind, base_url, "m"),
+        display_name: "t".into(),
+        adapter_kind,
+        protocol_version: None,
+        base_url: base_url.into(),
+        model_id: "m".into(),
+        auth_ref: None,
+        timeout_ms: 5000,
+        max_retries: 0,
+        cost_budget: None,
+        retention: DataRetentionPreference::Unknown,
+        allowed_uses: vec![LlmUse::SemanticJudgment],
+        capability: ProviderCapability::unknown(),
+        created_at_ms: 0,
+    }
+}
+
+#[tokio::test]
+async fn factory_builds_matching_adapter_for_each_profile() {
+    let output = serde_json::json!({ "abstain": null, "points": [] });
+    for protocol in ALL_PROTOCOLS {
+        let base = spawn(success_envelope(protocol, "semantic_judgment", output.clone())).await;
+        let provider = BuiltSemanticProvider::build(&profile_for(protocol, &base), Some("k".into()))
+            .expect("built");
+        // The chosen adapter kind matches the profile.
+        let expected = match protocol {
+            Protocol::OpenAi => LlmAdapterKind::OpenAiChatCompletions,
+            Protocol::Anthropic => LlmAdapterKind::AnthropicMessages,
+        };
+        assert_eq!(provider.as_judge().descriptor().adapter_kind, expected);
+        // The judge seam works through the factory-built provider.
+        let draft = provider.as_judge().judge(&judge_request()).await.expect("judgment");
+        assert!(draft.abstain.is_none());
+    }
+}
+
+#[tokio::test]
+async fn factory_probe_measures_capability() {
+    for protocol in ALL_PROTOCOLS {
+        let base = spawn(success_envelope(
+            protocol,
+            "capability_probe",
+            serde_json::json!({ "ok": true }),
+        ))
+        .await;
+        let provider =
+            BuiltSemanticProvider::build(&profile_for(protocol, &base), None).expect("built");
+        let claim = provider.probe_structured_output().await.expect("probe");
+        assert!(matches!(
+            claim,
+            domain::CapabilityClaim::Probed { supported: true, .. }
+        ));
+    }
+}

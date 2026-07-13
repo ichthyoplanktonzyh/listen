@@ -14,6 +14,7 @@ axum.workspace = true
 dictionary-provider = { path = "../dictionary-provider" }
 domain = { path = "../domain" }
 hex.workspace = true
+llm-provider = { path = "../llm-provider" }
 persistence-sqlite = { path = "../persistence-sqlite" }
 rand.workspace = true
 reqwest.workspace = true
@@ -22,6 +23,11 @@ serde_json.workspace = true
 sha2.workspace = true
 tokio.workspace = true
 tower.workspace = true
+
+# Composition root owns the platform-specific secret store. security-framework
+# is already in the dependency tree; the macOS keychain path is cfg-gated.
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3"
 
 [dev-dependencies]
 tower = { workspace = true, features = ["util"] }

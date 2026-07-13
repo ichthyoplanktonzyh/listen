@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- 2026-07-13 08:57 CST: Phase 3.12 Slice 2b：provider 工厂 + 真实 OS-keychain + HTTP 路由。
+  llm-provider 新增 `BuiltSemanticProvider`（按 profile.adapter_kind 建 OpenAI/Anthropic
+  adapter，暴露 as_judge/as_rubric/probe；新协议= 新 match 臂，契约不变）+ 工厂契约测试
+  （两 profile 建对应 adapter、probe 实测能力）。api-http：`crates/api-http/src/routes/llm.rs`
+  四路由 `GET/POST /v1/llm/providers`、`GET/DELETE /v1/llm/providers/{id}`、
+  `POST .../{id}/probe`（连通+能力实测）、`POST .../{id}/judge`（provider-backed 判定→
+  记为 heuristic_proxy，不进 surface）；响应用 `ProviderProfileView`（只暴露 has_credential，
+  **不含 auth_ref/secret**）；`secret` 请求字段 write-only 入 keychain。`KeychainSecretStore`
+  （`secret_store_keychain.rs`，security-framework generic password，cfg-gated macOS + 非
+  macOS 显式 unsupported，auth_ref=随机 account id）；`ApiState` 加 `secret_store`（默认
+  in-memory，`with_secret_store` 注入 keychain）；main.rs 接 profile repo + keychain。
+  OpenAPI v1.yaml 补 4 路由 + `LlmProviderProfileView`/`RegisterLlmProvider`/`CapabilityClaim`/
+  `ProviderCapability`/`LlmAdapterKind`/`LlmUse`/`DataRetentionPreference`/`CostBudget` schema。
+  api-http 集成测试（默认 in-memory store + 本地 fake endpoint）：注册不回显 secret、列表无
+  secret、probe 实测 supported、删除移除、未知 provider judge→404。
+  **修 bug**：`LlmAdapterKind` serde snake_case 会产出 `open_ai_chat_completions` 与 `as_str()`
+  的 `openai_chat_completions` 分叉（DB 列 vs JSON blob），显式 `#[serde(rename)]` 对齐。
+  验证：domain 74 / application 53+ / llm-provider 12 / persistence 109 / api-http 44+12 全通过；
+  新文件 clippy 零告警；validate-contracts OK（OpenAPI route-drift 门通过）。剩余：最小设置
+  UI（Slice 3）、增量协议 OpenAI Responses/Gemini（Slice 4）、CLOSEOUT。
+
 - 2026-07-13 08:22 CST: Phase 3.12 Vendor-neutral LLM Provider 后端优先切片落地
   （Slice 0/1/2a/2b，设置 UI 与真实 keychain 实现后置）。**中立性证明（核心 exit
   signal）成立**：新增 `crates/llm-provider/`，用 `reqwest` 手写两个异构协议 adapter
