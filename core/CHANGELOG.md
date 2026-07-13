@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-13 13:59 CST: 新建 Phase 3.9.1 Shared Syntactic Analysis Provider。确定以
+  UD/CoNLL-U 语义建立共享、可重建的 token-aligned 句法 artifact，通过现有 Python sidecar
+  模式先评估 Stanza/spaCy，供 Reference B、SenseGroup 与 Construction 共用；明确模型缺席
+  时保留现有保守 B 与标点/长度 SenseGroup，句法结果不得填充 C、替代 ChunkTimeline 或铸造
+  Construction canonical identity。新增 CAP-011/012，锁定 char-span 1:N/N:1 token 映射、
+  开发/验证集分离、真实字幕歧义评估及代码/runtime/model/treebank 分层许可证审计。
+
 - 2026-07-13 13:25 CST: Phase 3.9 英语语流规则第二批。Reference B 规则源升级为 v3；Phrase
   rule 新增上下文门控，不再把字面相邻词无条件缩约：`going to` 只接受动词补语候选并阻断
   专名/限定词/常见地点歧义，`want to` 对 wh-extraction 歧义保守缺席，`used to` 区分

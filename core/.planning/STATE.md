@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-13T13:25:00.000+08:00"
+last_updated: "2026-07-13T13:59:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-13 13:25 CST
-> 更新原因：Phase 3.9 英语语流规则第二批完成：构式敏感缩约与保守阻断进入 B v3。
+> 最后更新：2026-07-13 13:59 CST
+> 更新原因：插入 Phase 3.9.1，共享句法 Provider 成为 B、SenseGroup、Construction 的共同基础。
 
 ## 当前位置
 
@@ -35,7 +35,8 @@ last_updated: "2026-07-13T13:25:00.000+08:00"
   证伪）。判定默认**不获显示资格**（属 3.12.1）。**剩余**：增量协议 OpenAI Responses/Gemini
   （Slice 4，owner 按需，只加 adapter 不改契约）、CLOSEOUT。
 - Phase 3.11 Semantic Task Evidence Foundation 已 CODE COMPLETE（见其 CLOSEOUT）。
-  Phase 3.9 不作为后续 phase 的硬依赖，但 A/B/C 算法与 UI 已恢复推进并进入真实媒体 QA。
+  Phase 3.9 不作为后续 Studio phase 的硬依赖；A/B/C 下一批构式敏感规则暂停扩张，先进入
+  Phase 3.9.1 建立共享句法 Provider，避免 B、SenseGroup、Construction 各自堆启发式。
 - **治理线状态**：Phase 2.23 Architecture Debt Paydown 已于 2026-07-03 收口（详见其 CLOSEOUT）；3.x 开工前置全部就绪。
 - **算法线状态**：Phase 2.19 / 2.20 / 2.21 全局质量线仍搁置；Phase 3.9 仅恢复与 L1 学习
   价值直接相关的 A/B/C audible-structure contract、linking 结构生成和证据门控。
@@ -223,6 +224,15 @@ last_updated: "2026-07-13T13:25:00.000+08:00"
   音素 + timing/prosody 支持的实际可听分组；类别退为解释标签。首条竖切片聚焦
   `pick up: /pɪk | ʌp/ → /pɪ.kʌp/`，纯 B 不填充 C。
 - 计划：`.planning/phases/3.9-l1-aware-diagnosis-v1/3.9-PLAN.md`。
+
+### Phase 3.9.1: Shared Syntactic Analysis Provider ⏳ ACTIVE
+
+- 2026-07-13 插入：以 UD/CoNLL-U 定义共享、token-aligned 的可重建分析；先通过 Python
+  sidecar 评估 Stanza/spaCy，再让 B/SenseGroup 消费，Construction 只复用 matcher seam。
+- 先做 ADR、token 映射、真实字幕 fixture 与预登记；模型缺席保留当前 B/SenseGroup fallback。
+  句法不得填充 C、替代 ChunkTimeline 或铸造 Construction identity；模型许可单独审计。
+- 文档：`.planning/phases/3.9.1-shared-syntactic-analysis-provider/3.9.1-PLAN.md`、
+  `3.9.1-CONTEXT.md`。
 
 ### 下一执行序列：Phase 3.11–3.18
 

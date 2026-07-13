@@ -31,6 +31,10 @@
 > 2026-07-13 产品语义校正：Phase 3.9 并行恢复 A/B/C audible-structure 重构。A=词典标准
 > 发音与书写词界，B=文本规则预测的可听分组，C=真实音素 + timing/prosody 支持的实际分组；
 > linking/reduction 等类别退为解释标签，B 不得冒充 C。
+> 2026-07-13 算法基础插入：新增 Phase 3.9.1 Shared Syntactic Analysis Provider。以
+> UD/CoNLL-U 语义建立共享、可重建的句法 artifact，经 Python sidecar 先验证 Stanza/spaCy
+> 候选；Reference B、SenseGroup 与 Construction 共用同一 token-aligned 分析，模型缺席时
+> 保留现有保守 B 和标点/长度 SenseGroup 降级。代码、模型、treebank 许可证分别审计。
 > 2026-07-04 产品路线更新：Phase 3.x 执行序列确立为 Phase 3.1 ~ 3.10，并确立精听/泛听
 > 一级心智、可组合不强制流程、功能按场景分不按设备分（生产端唯一 PC-only）等原则；
 > 见 §14.12 与 `.planning/phases/3.0-english-listening-learning-loop/3.0-PHASE-BREAKDOWN.md`。
@@ -1418,6 +1422,7 @@ Phase 3.0 的执行序列（2026-07-04 确立，取代早期建议顺序）：
 3.7  Hunting List                         猎词单：泛听狩猎模式（显式开启 + 提示预算）
 3.8  Shadowing & Recording Comparison     chunk 跟读、录音、A/B 对比
 3.9  L1-aware Diagnosis v1                Mandarin -> English 难点 profile + 专项聚合
+3.9.1 Shared Syntactic Analysis Provider  UD 句法 artifact + B/SenseGroup/Construction 共享消费
 3.10 Coach Dashboard                      诊断型统计与下一步建议
 ```
 
