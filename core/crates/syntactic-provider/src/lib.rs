@@ -432,6 +432,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn corrupt_model_probe_is_honest_and_has_no_descriptor() {
+        let provider =
+            PythonSyntacticProvider::new(PythonSyntacticKind::Stanza, "python3", fake_script())
+                .with_model("corrupt");
+        let capability = provider
+            .probe(&LanguageCode::parse("en").unwrap())
+            .await
+            .unwrap();
+        assert_eq!(capability.status, SyntacticCapabilityStatus::ModelCorrupt);
+        assert!(capability.descriptor.is_none());
+    }
+
+    #[tokio::test]
+    async fn explicit_invalid_output_never_becomes_a_draft() {
+        let provider =
+            PythonSyntacticProvider::new(PythonSyntacticKind::Spacy, "python3", fake_script())
+                .with_model("invalid");
+        let error = provider.analyze(&request()).await.unwrap_err();
+        assert!(matches!(
+            error,
+            SyntacticProviderError::InvalidOutput { .. }
+        ));
+    }
+
+    #[tokio::test]
     async fn malformed_stdout_is_protocol_error() {
         let provider =
             PythonSyntacticProvider::new(PythonSyntacticKind::Spacy, "python3", fake_script())

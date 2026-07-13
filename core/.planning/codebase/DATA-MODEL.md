@@ -223,6 +223,12 @@ different provider runs rather than in-place upgrades. A syntax-aware run stores
 the source syntactic artifact ID/provider descriptor in `metrics_json`, while
 `chunk_timeline_dependency=false` makes the non-relationship explicit.
 
+`DependencyMatchCandidate` is an ephemeral query result over a validated,
+qualified syntactic artifact. Its matcher-local key, subtitle token span and
+bindings are diagnostics for a later curated layer; they are not a
+`ConstructionId`, canonical key, durable occurrence, capability fact, or user
+asset.
+
 SQLite enforces one active resource per track/resource kind with partial unique
 indexes. `created_by`, parent IDs, publication markers, and model/provider
 metadata are provenance/revision metadata, not lifecycle state.

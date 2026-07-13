@@ -2,6 +2,7 @@ pub mod asr_timing;
 pub mod chunk_detection;
 pub mod chunk_partition;
 pub mod connected_speech_rules;
+pub mod dependency_patterns;
 pub mod forced_align;
 pub mod learned_prosodic_provider;
 pub mod pause_refinement;

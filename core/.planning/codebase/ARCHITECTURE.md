@@ -387,6 +387,11 @@ Syntax-aware SenseGroup is a distinct `syntax-aware-sense-group/v1` analysis
 run: dependency subtrees propose boundaries/head/NP-PP-clause labels, while
 punctuation, protected phrases, min/max words and target teaching granularity
 remain authoritative. Rule and syntax runs coexist under the existing lifecycle.
+The dependency matcher is likewise provider-neutral and returns only rebuildable
+subtitle-span candidates with matcher/artifact provenance and token bindings. It
+has no Construction canonical ID, occurrence ID, capability projection, or
+persistence authority; a later curated Construction layer must review and link
+any candidate.
 
 ### LLTimeline Import/Export
 

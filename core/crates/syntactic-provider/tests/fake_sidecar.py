@@ -17,7 +17,8 @@ if args.model == "slow":
 if args.model == "malformed":
     print("not-json")
     raise SystemExit(0)
-if args.model == "missing":
+if args.model in {"missing", "corrupt"}:
+    kind = "model_missing" if args.model == "missing" else "model_corrupt"
     print(
         json.dumps(
             {
@@ -25,7 +26,7 @@ if args.model == "missing":
                 "request_id": request["request_id"],
                 "operation": request["operation"],
                 "ok": False,
-                "error": {"kind": "model_missing", "detail": "fixture model missing"},
+                "error": {"kind": kind, "detail": f"fixture model {args.model}"},
             }
         )
     )
@@ -40,6 +41,19 @@ descriptor = {
     "model_version": "1",
     "model_checksum_sha256": "c" * 64,
 }
+if args.model == "invalid" and request["operation"] == "analyze":
+    print(
+        json.dumps(
+            {
+                "protocol_version": 1,
+                "request_id": request["request_id"],
+                "operation": "analyze",
+                "ok": False,
+                "error": {"kind": "invalid_output", "detail": "fixture invalid tree"},
+            }
+        )
+    )
+    raise SystemExit(0)
 if request["operation"] == "probe":
     print(
         json.dumps(

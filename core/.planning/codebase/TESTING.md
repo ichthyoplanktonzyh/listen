@@ -35,7 +35,7 @@
 | `domain` | ID 类型、枚举序列化、PhoneticAnalysis::validate()、SyntacticAnalysis span/mapping/tree/coverage validator |
 | `subtitle-core` | SRT/VTT 解析、token 化、时间轴查询（空隙/重叠/边界） |
 | `diagnosis-core` | 词义障碍、声音识别障碍、信息不足、其他因素 |
-| `speech-analysis` | 100 句发音基线、OOV fallback-v2 stress、information-structure prior、Reference B text/syntax provenance 与未资格 fallback、syntax-aware SenseGroup clause/PP/subordinator boundary、phrase/标点保护、min/max + 3–5 教学粒度、低 coverage 精确 fallback、RhythmFrame bridge、chunk 分区 |
+| `speech-analysis` | 100 句发音基线、OOV fallback-v2 stress、information-structure prior、Reference B text/syntax provenance 与未资格 fallback、syntax-aware SenseGroup clause/PP/subordinator boundary、phrase/标点保护、min/max + 3–5 教学粒度、低 coverage 精确 fallback、provider-neutral dependency candidate matcher、RhythmFrame bridge、chunk 分区 |
 | `application` | AppServices 用例逻辑、chunk 检测、SyntacticAnalysisProvider fake/finalization seam |
 | `syntactic-provider` | Stanza/spaCy 同构 neutral contract、缺模型 capability、畸形 stdout、timeout 闭合失败 |
 | `dictionary-provider` | Provider 查询、缓存逻辑 |
@@ -61,6 +61,7 @@
 | `crates/speech-analysis/tests/asr_timing_integration_test.rs` | whisper.cpp JSON → 词级时间戳 |
 | `crates/speech-analysis/tests/chunk_detection_integration_test.rs` | 声学 chunk 检测 |
 | `crates/speech-analysis/tests/chunk_partition_golden_test.rs` | 金标准 chunk 分区 |
+| `crates/speech-analysis/tests/syntactic_real_media_qa_test.rs` | 真实 Stanza 开发报告 token 经生产 SenseGroup 分区：教学粒度与多词专名完整性 |
 
 ### 属性测试（proptest）
 
@@ -147,6 +148,8 @@ cd apps/desktop && flutter test
 | `scripts/syntactic-analysis/test_syntax_sidecar_contract.py` | JSONL stdout 洁净、missing runtime/language、Unicode scalar、1:N/N:1/unaligned mapping |
 | `scripts/syntactic-analysis/evaluate_provider.py` | Phase 3.9.1 digest-locked Stanza/spaCy correctness、alignment、tree、cold/warm/RSS/size 资格评估 |
 | `scripts/syntactic-analysis/test_evaluate_provider.py` | Rust tokenizer parity 与 future/motion、habitual/state、have-to idiom、wh-extraction 保守 query 单元测试 |
+| `scripts/syntactic-analysis/real_media_qa.py` | 对 owner 本地 SRT 分批执行 mapping/tree/determinism/phrase QA；报告仅存输入 SHA、cue 编号和统计，不复制字幕正文 |
+| `scripts/syntactic-analysis/test_real_media_qa.py` | real-media SRT 多行 cue 解析与时间戳隔离单元测试 |
 
 ### Python 评估缺少自动化单元测试
 

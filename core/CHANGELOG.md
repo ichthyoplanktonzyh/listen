@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-13 16:48 CST: Phase 3.9.1 Slice 6 建立 Construction dependency matcher seam 与真实
+  媒体 QA。matcher 只在 qualified + activatable artifact 上输出带 source artifact、subtitle
+  token span 与 bindings 的可重建候选，类型和序列化守卫证明不会铸造 Construction canonical/
+  occurrence identity 或 capability。以 owner 本地 244 cue / 1773 word 新闻字幕运行 Stanza/
+  spaCy：两者 lexical mapping 100%、exact span 98.76%、零静默错位且刷新确定；Stanza 零树错误，
+  spaCy 在一个口语残句产生双 root 并被 validator 闭合拒绝。生产 SenseGroup 对真实 Stanza
+  输出保持教学粒度和 `New York City` 多词短语完整性；missing/corrupt/invalid sidecar 均不生成
+  draft。报告不复制字幕正文，未资格候选仍不接入产品，B/SenseGroup 保留原 fallback，C 与
+  ChunkTimeline 未改动。
+
 - 2026-07-13 16:36 CST: Phase 3.9.1 Slice 5 新增独立 syntax-aware SenseGroup Provider。
   新增 `syntax-aware-sense-group/v1` / `dependency_teaching_partition_v1`，与既有
   `rule-based-sense-group/v1` 分开 fingerprint、持久化和 candidate/active/archive 生命周期；
