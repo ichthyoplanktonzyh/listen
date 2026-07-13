@@ -33,6 +33,7 @@ import 'controllers/practice_controller.dart';
 import 'controllers/resource_actions_coordinator.dart';
 import 'controllers/speech_enhancement_workflow_controller.dart';
 import 'controllers/subtitle_controller.dart';
+import 'controllers/vocabulary_actions_coordinator.dart';
 import 'controllers/settings_controller.dart';
 import 'controllers/slice_player_controller.dart';
 import 'models/capability_readiness.dart';
@@ -175,6 +176,13 @@ class _PlayerScreenState extends State<PlayerScreen>
     adapter: adapter,
     recordingAdapter: recordingAdapter,
   );
+  late final vocabularyActions = VocabularyActionsCoordinator(
+    workflow: learningWorkflowController,
+    learning: learningController,
+    subtitle: subtitleController,
+    settings: settingsController,
+    player: playerController,
+  );
 
   // ── Local UI state (not managed by controllers) ──
   String get status => playerController.status;
@@ -229,8 +237,8 @@ class _PlayerScreenState extends State<PlayerScreen>
         );
       },
       reloadLearningEntries: () async {
-        await _loadWordEntries();
-        await _loadPhraseEntries();
+        await vocabularyActions.loadWordEntries();
+        await vocabularyActions.loadPhraseEntries();
       },
     );
     mediaSession.bind(
@@ -248,18 +256,18 @@ class _PlayerScreenState extends State<PlayerScreen>
         _workbenchAnimController.forward();
       },
       reloadLearningEntries: () async {
-        await _loadWordEntries();
-        await _loadPhraseEntries();
+        await vocabularyActions.loadWordEntries();
+        await vocabularyActions.loadPhraseEntries();
       },
-      loadPhraseCandidates: _loadPhraseCandidates,
+      loadPhraseCandidates: vocabularyActions.loadPhraseCandidates,
       generatedPrimaryStatus: _generatedPrimarySubtitleStatus,
     );
     playbackActions.bind(
       getApi: () => api,
       isMounted: () => mounted,
       reloadLearningEntries: () async {
-        await _loadWordEntries();
-        await _loadPhraseEntries();
+        await vocabularyActions.loadWordEntries();
+        await vocabularyActions.loadPhraseEntries();
       },
     );
     huntingActions.bind(
@@ -273,6 +281,12 @@ class _PlayerScreenState extends State<PlayerScreen>
       isMounted: () => mounted,
       refreshDiagnosis: _refreshDiagnosis,
       seekCue: _seekCue,
+    );
+    vocabularyActions.bind(
+      getApi: () => api,
+      isMounted: () => mounted,
+      text: (key) => l.text(key),
+      refreshDiagnosis: _refreshDiagnosis,
     );
     unawaited(_connectApi());
     unawaited(_loadSettings());
@@ -608,7 +622,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     BackendEventCoordinator(
       currentMediaId: () => playerController.mediaId,
       currentPrimaryTrackId: () => subtitleController.primaryTrack?.id,
-      loadWordEntries: _loadWordEntries,
+      loadWordEntries: vocabularyActions.loadWordEntries,
       loadTimelineResource: resourceActions.loadTimelineResource,
       readSubtitle: (trackId) => api!.readSubtitle(trackId),
       loadGeneratedTrack: mediaSession.loadGeneratedTrack,
@@ -668,7 +682,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (primaryCue?.id != _lastPrimaryCueId) {
       _lastPrimaryCueId = primaryCue?.id;
       unawaited(_refreshDiagnosis());
-      unawaited(_loadPhraseCandidates(primaryCue));
+      unawaited(vocabularyActions.loadPhraseCandidates(primaryCue));
       unawaited(_ensureCurrentPronunciation(primaryCue));
     }
     playerController.setPosition(value);
@@ -1041,16 +1055,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
-  Future<void> _loadPhraseCandidates(Cue? cue) async {
-    await learningWorkflowController.loadPhraseCandidates(
-      api: api,
-      cue: cue,
-      learning: learningController,
-      isMounted: () => mounted,
-      currentCueId: () => subtitleController.currentPrimaryCue?.id,
-    );
-  }
-
   Future<void> _openPhrase(PhraseCandidate candidate, Cue cue) async {
     if (api == null || playerController.mediaFingerprint == null) return;
     final canonical = candidate.canonicalForm;
@@ -1124,21 +1128,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         secondary: secondary,
       );
 
-  Future<void> _markFirstWord(String? wordStatus) async {
-    await learningWorkflowController.markFirstWord(
-      api: api,
-      cue: subtitleController.currentPrimaryCue,
-      wordStatus: wordStatus,
-      language: settingsController.resolveLearningLanguage(
-        subtitleController.primaryTrack?.language,
-      ),
-      learning: learningController,
-      isMounted: () => mounted,
-      sourceFor: _sourceFor,
-    );
-    await _refreshDiagnosis();
-  }
-
   Future<void> _exportLogs() async {
     final source = api?.logPath;
     if (source == null || !await File(source).exists()) {
@@ -1149,135 +1138,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (location == null) return;
     await File(source).copy(location.path);
     playerController.setStatus('Exported diagnostics to ${location.path}');
-  }
-
-  Future<void> _loadWordEntries() async {
-    await learningWorkflowController.loadWordEntries(
-      api: api,
-      track: subtitleController.primaryTrack,
-      language: settingsController.resolveLearningLanguage(
-        subtitleController.primaryTrack?.language,
-      ),
-      learning: learningController,
-      isMounted: () => mounted,
-    );
-  }
-
-  Future<void> _loadPhraseEntries() async {
-    await learningWorkflowController.loadPhraseEntries(
-      api: api,
-      language: settingsController.resolveLearningLanguage(
-        subtitleController.primaryTrack?.language,
-      ),
-      learning: learningController,
-      isMounted: () => mounted,
-    );
-  }
-
-  Future<void> _openWord(SubtitleToken token, Cue cue) async {
-    try {
-      await learningWorkflowController.openWord(
-        api: api,
-        token: token,
-        cue: cue,
-        language: settingsController.resolveLearningLanguage(
-          subtitleController.primaryTrack?.language,
-        ),
-        learning: learningController,
-        isMounted: () => mounted,
-        sourceFor: _sourceFor,
-      );
-    } catch (error) {
-      if (mounted) playerController.setStatus('Dictionary unavailable: $error');
-    }
-  }
-
-  Future<void> _setSelectedWordStatus(String? selected) async {
-    try {
-      final update = await learningWorkflowController.setSelectedWordStatus(
-        api: api,
-        selected: selected,
-        language: settingsController.resolveLearningLanguage(
-          subtitleController.primaryTrack?.language,
-        ),
-        learning: learningController,
-        isMounted: () => mounted,
-        sourceFor: _sourceFor,
-      );
-      if (mounted && update != null) {
-        playerController.setStatus(
-          'Updated global status for "${update.tokenText}"',
-        );
-      }
-      await _refreshDiagnosis();
-    } catch (error) {
-      if (mounted) playerController.setStatus('Word update failed: $error');
-    }
-  }
-
-  Future<void> _setCapabilityOverride(
-    String capability,
-    String? conclusion,
-  ) async {
-    try {
-      await learningWorkflowController.setCapabilityOverride(
-        api: api,
-        capability: capability,
-        conclusion: conclusion,
-        learning: learningController,
-        isMounted: () => mounted,
-        sourceFor: _sourceFor,
-      );
-    } catch (error) {
-      if (mounted) {
-        playerController.setStatus('Capability update failed: $error');
-      }
-    }
-  }
-
-  Future<void> _saveSelectedLearningContent(
-    String? definition,
-    String? note,
-  ) async {
-    await learningWorkflowController.saveSelectedLearningContent(
-      api: api,
-      definition: definition,
-      note: note,
-      learning: learningController,
-      isMounted: () => mounted,
-    );
-  }
-
-  Future<void> _recordCurrentSource() async {
-    try {
-      await learningWorkflowController.recordCurrentSource(
-        api: api,
-        language: settingsController.resolveLearningLanguage(
-          subtitleController.primaryTrack?.language,
-        ),
-        learning: learningController,
-        isMounted: () => mounted,
-        sourceFor: _sourceFor,
-      );
-    } catch (error) {
-      if (mounted) {
-        playerController.setStatus('Record source failed: $error');
-      }
-    }
-  }
-
-  Future<void> _observeSelected(bool heard) async {
-    final observed = await learningWorkflowController.observeSelected(
-      api: api,
-      heard: heard,
-      learning: learningController,
-      sourceFor: _sourceFor,
-    );
-    if (!observed) return;
-    if (mounted) {
-      playerController.setStatus(heard ? l.text('heard') : l.text('notHeard'));
-    }
-    await _refreshDiagnosis();
   }
 
   Future<void> _openSlicePlayback(Map<String, dynamic> occurrence) async {
@@ -1438,22 +1298,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     learningController.selectSidePanel(3);
     await _refreshDiagnosis();
     if (mounted) playerController.setStatus('Paused for quick listening check');
-  }
-
-  Map<String, dynamic>? _sourceFor(SubtitleToken token, Cue cue) {
-    if (playerController.mediaFingerprint == null) return null;
-    return {
-      'media_id': playerController.mediaId,
-      'sentence_id': cue.id,
-      'original_form': token.text,
-      'sentence_text': cue.text,
-      'media_title': playerController.mediaTitle ?? '',
-      'media_fingerprint': playerController.mediaFingerprint,
-      'start_ms': cue.start.inMilliseconds,
-      'end_ms': cue.end.inMilliseconds,
-      'token_start': token.index,
-      'token_end': token.index,
-    };
   }
 
   Future<void> _openVocabulary() => _showVocabulary();
@@ -1723,7 +1567,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       defaultStatus: defaultStatus,
       overwriteExisting: overwrite,
     );
-    await _loadWordEntries();
+    await vocabularyActions.loadWordEntries();
     playerController.setStatus('Imported word list: $result');
   }
 
@@ -1845,11 +1689,11 @@ class _PlayerScreenState extends State<PlayerScreen>
             const SingleActivator(LogicalKeyboardKey.keyP, shift: true): () =>
                 unawaited(_hardInterruptListening()),
             const SingleActivator(LogicalKeyboardKey.digit1): () =>
-                _markFirstWord('unknown_meaning'),
+                vocabularyActions.markFirstWord('unknown_meaning'),
             const SingleActivator(LogicalKeyboardKey.digit2): () =>
-                _markFirstWord('known_not_recognized'),
+                vocabularyActions.markFirstWord('known_not_recognized'),
             const SingleActivator(LogicalKeyboardKey.digit3): () =>
-                _markFirstWord('known_recognized'),
+                vocabularyActions.markFirstWord('known_recognized'),
           },
           child: Focus(
             autofocus: true,
@@ -2114,7 +1958,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     settingsController: settingsController,
     onSeekCue: _seekCue,
     onSeekChunk: playbackActions.seekChunk,
-    onOpenWord: _openWord,
+    onOpenWord: vocabularyActions.openWord,
     onOpenPhrase: _openPhrase,
     onLoopSoundRibbonFinding: _loopSoundRibbonFinding,
     onLoopRhythmCue: _loopRhythmCue,
@@ -2141,12 +1985,13 @@ class _PlayerScreenState extends State<PlayerScreen>
     mediaSession: mediaSession,
     playbackActions: playbackActions,
     transcriptController: transcriptController,
-    onOpenWord: _openWord,
+    onOpenWord: vocabularyActions.openWord,
     onSeekCue: _seekCue,
-    onSetSelectedWordStatus: _setSelectedWordStatus,
-    onSetCapabilityOverride: _setCapabilityOverride,
-    onSaveSelectedLearningContent: _saveSelectedLearningContent,
-    onObserveSelected: _observeSelected,
+    onSetSelectedWordStatus: vocabularyActions.setSelectedWordStatus,
+    onSetCapabilityOverride: vocabularyActions.setCapabilityOverride,
+    onSaveSelectedLearningContent:
+        vocabularyActions.saveSelectedLearningContent,
+    onObserveSelected: vocabularyActions.observeSelected,
     onManualReviewTimeline: _openManualReviewTimeline,
     onDeleteSubtitle: _deleteSubtitleResource,
     onExportSubtitle: _exportSubtitleResource,
@@ -2164,7 +2009,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     onProcessListeningInboxItem: inboxActions.processListeningInboxItem,
     timingQuality: _timingQuality,
     onStartColdStart: _openColdStartMarking,
-    onRecordCurrentSource: _recordCurrentSource,
+    onRecordCurrentSource: vocabularyActions.recordCurrentSource,
   );
 
   Widget _controls() => PlaybackBar(
