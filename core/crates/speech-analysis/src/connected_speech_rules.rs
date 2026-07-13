@@ -5,7 +5,10 @@ use domain::{
     SubtitleSentence, SubtitleTokenKind,
 };
 
-const RULE_SOURCE: &str = "english_connected_speech_rules_v2";
+mod context;
+use context::{has_punctuation_boundary, phrase_context_allows, weak_form_context_allows};
+
+const RULE_SOURCE: &str = "english_connected_speech_rules_v3";
 
 struct WeakForm {
     word: &'static str,
@@ -281,6 +284,16 @@ struct PhraseRule {
     canonical: &'static [&'static str],
     reduced: &'static [&'static str],
     confidence: f32,
+    context: PhraseContext,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum PhraseContext {
+    Always,
+    FollowedByLikelyVerb,
+    GoingToInfinitive,
+    WantToInfinitive,
+    UsedToInfinitive,
 }
 
 const PHRASE_RULES: &[PhraseRule] = &[
@@ -294,6 +307,7 @@ const PHRASE_RULES: &[PhraseRule] = &[
         canonical: &["K", "UH", "D", "HH", "AE", "V"],
         reduced: &["K", "UH", "D", "AH", "V"],
         confidence: 0.82,
+        context: PhraseContext::Always,
     },
     PhraseRule {
         id: "weak-would-have",
@@ -305,6 +319,7 @@ const PHRASE_RULES: &[PhraseRule] = &[
         canonical: &["W", "UH", "D", "HH", "AE", "V"],
         reduced: &["W", "UH", "D", "AH", "V"],
         confidence: 0.82,
+        context: PhraseContext::Always,
     },
     PhraseRule {
         id: "weak-should-have",
@@ -316,6 +331,7 @@ const PHRASE_RULES: &[PhraseRule] = &[
         canonical: &["SH", "UH", "D", "HH", "AE", "V"],
         reduced: &["SH", "UH", "D", "AH", "V"],
         confidence: 0.82,
+        context: PhraseContext::Always,
     },
     PhraseRule {
         id: "informal-want-to",
@@ -327,6 +343,7 @@ const PHRASE_RULES: &[PhraseRule] = &[
         canonical: &["W", "AA", "N", "T", "T", "UW"],
         reduced: &["W", "AA", "N", "AH"],
         confidence: 0.78,
+        context: PhraseContext::WantToInfinitive,
     },
     PhraseRule {
         id: "informal-going-to",
@@ -338,6 +355,199 @@ const PHRASE_RULES: &[PhraseRule] = &[
         canonical: &["G", "OW", "IH", "NG", "T", "UW"],
         reduced: &["G", "AH", "N", "AH"],
         confidence: 0.78,
+        context: PhraseContext::GoingToInfinitive,
+    },
+    PhraseRule {
+        id: "informal-got-to",
+        first: "got",
+        second: "to",
+        family: ConnectedSpeechFamily::Contraction,
+        label: "possible gotta form",
+        hint: "Have got to may reduce toward gotta before a verb in informal speech.",
+        canonical: &["G", "AA", "T", "T", "UW"],
+        reduced: &["G", "AA", "DX", "AH"],
+        confidence: 0.72,
+        context: PhraseContext::FollowedByLikelyVerb,
+    },
+    PhraseRule {
+        id: "obligation-have-to",
+        first: "have",
+        second: "to",
+        family: ConnectedSpeechFamily::Contraction,
+        label: "possible hafta form",
+        hint: "Obligation have to often has /f/ plus a weak to in connected speech.",
+        canonical: &["HH", "AE", "V", "T", "UW"],
+        reduced: &["HH", "AE", "F", "T", "AH"],
+        confidence: 0.76,
+        context: PhraseContext::FollowedByLikelyVerb,
+    },
+    PhraseRule {
+        id: "obligation-has-to",
+        first: "has",
+        second: "to",
+        family: ConnectedSpeechFamily::Contraction,
+        label: "possible hasta form",
+        hint: "Obligation has to often has /s/ plus a weak to in connected speech.",
+        canonical: &["HH", "AE", "Z", "T", "UW"],
+        reduced: &["HH", "AE", "S", "T", "AH"],
+        confidence: 0.74,
+        context: PhraseContext::FollowedByLikelyVerb,
+    },
+    PhraseRule {
+        id: "obligation-had-to",
+        first: "had",
+        second: "to",
+        family: ConnectedSpeechFamily::Contraction,
+        label: "connected had-to form",
+        hint: "Had to commonly keeps the /d/ while to takes its weak vowel.",
+        canonical: &["HH", "AE", "D", "T", "UW"],
+        reduced: &["HH", "AE", "D", "T", "AH"],
+        confidence: 0.7,
+        context: PhraseContext::FollowedByLikelyVerb,
+    },
+    PhraseRule {
+        id: "habitual-used-to",
+        first: "used",
+        second: "to",
+        family: ConnectedSpeechFamily::Contraction,
+        label: "habitual used-to form",
+        hint: "Habitual used to uses /st/ plus a weak to; adjectival be used to is different.",
+        canonical: &["Y", "UW", "Z", "D", "T", "UW"],
+        reduced: &["Y", "UW", "S", "T", "AH"],
+        confidence: 0.78,
+        context: PhraseContext::UsedToInfinitive,
+    },
+    PhraseRule {
+        id: "supposed-to",
+        first: "supposed",
+        second: "to",
+        family: ConnectedSpeechFamily::Contraction,
+        label: "connected supposed-to form",
+        hint: "Supposed to commonly simplifies its boundary cluster before weak to.",
+        canonical: &["S", "AH", "P", "OW", "Z", "D", "T", "UW"],
+        reduced: &["S", "AH", "P", "OW", "S", "T", "AH"],
+        confidence: 0.7,
+        context: PhraseContext::FollowedByLikelyVerb,
+    },
+    PhraseRule {
+        id: "ought-to",
+        first: "ought",
+        second: "to",
+        family: ConnectedSpeechFamily::Contraction,
+        label: "connected ought-to form",
+        hint: "The matching /t/ boundary may be held once before weak to.",
+        canonical: &["AO", "T", "T", "UW"],
+        reduced: &["AO", "T", "AH"],
+        confidence: 0.7,
+        context: PhraseContext::FollowedByLikelyVerb,
+    },
+    PhraseRule {
+        id: "trying-to",
+        first: "trying",
+        second: "to",
+        family: ConnectedSpeechFamily::Contraction,
+        label: "connected trying-to form",
+        hint: "Trying to commonly carries a weak to; stronger tryna reduction remains audio-dependent.",
+        canonical: &["T", "R", "AY", "IH", "NG", "T", "UW"],
+        reduced: &["T", "R", "AY", "IH", "NG", "T", "AH"],
+        confidence: 0.65,
+        context: PhraseContext::FollowedByLikelyVerb,
+    },
+    PhraseRule {
+        id: "informal-let-me",
+        first: "let",
+        second: "me",
+        family: ConnectedSpeechFamily::Contraction,
+        label: "possible lemme form",
+        hint: "Let me may reduce toward lemme in informal connected speech.",
+        canonical: &["L", "EH", "T", "M", "IY"],
+        reduced: &["L", "EH", "M", "IY"],
+        confidence: 0.7,
+        context: PhraseContext::Always,
+    },
+    PhraseRule {
+        id: "informal-give-me",
+        first: "give",
+        second: "me",
+        family: ConnectedSpeechFamily::Contraction,
+        label: "possible gimme form",
+        hint: "Give me may reduce toward gimme in informal connected speech.",
+        canonical: &["G", "IH", "V", "M", "IY"],
+        reduced: &["G", "IH", "M", "IY"],
+        confidence: 0.68,
+        context: PhraseContext::Always,
+    },
+    PhraseRule {
+        id: "informal-kind-of",
+        first: "kind",
+        second: "of",
+        family: ConnectedSpeechFamily::Contraction,
+        label: "possible kinda form",
+        hint: "Kind of may lose the final /v/ of of in informal connected speech.",
+        canonical: &["K", "AY", "N", "D", "AH", "V"],
+        reduced: &["K", "AY", "N", "D", "AH"],
+        confidence: 0.66,
+        context: PhraseContext::Always,
+    },
+    PhraseRule {
+        id: "informal-sort-of",
+        first: "sort",
+        second: "of",
+        family: ConnectedSpeechFamily::Contraction,
+        label: "possible sorta form",
+        hint: "Sort of may lose the final /v/ of of in informal connected speech.",
+        canonical: &["S", "AO", "R", "T", "AH", "V"],
+        reduced: &["S", "AO", "R", "T", "AH"],
+        confidence: 0.66,
+        context: PhraseContext::Always,
+    },
+    PhraseRule {
+        id: "informal-out-of",
+        first: "out",
+        second: "of",
+        family: ConnectedSpeechFamily::Contraction,
+        label: "possible outta form",
+        hint: "Out of may flap /t/ and lose /v/ in informal American speech.",
+        canonical: &["AW", "T", "AH", "V"],
+        reduced: &["AW", "DX", "AH"],
+        confidence: 0.66,
+        context: PhraseContext::Always,
+    },
+    PhraseRule {
+        id: "informal-lot-of",
+        first: "lot",
+        second: "of",
+        family: ConnectedSpeechFamily::Contraction,
+        label: "possible lotta form",
+        hint: "Lot of may flap /t/ and lose /v/ in informal American speech.",
+        canonical: &["L", "AA", "T", "AH", "V"],
+        reduced: &["L", "AA", "DX", "AH"],
+        confidence: 0.64,
+        context: PhraseContext::Always,
+    },
+    PhraseRule {
+        id: "informal-lots-of",
+        first: "lots",
+        second: "of",
+        family: ConnectedSpeechFamily::Contraction,
+        label: "possible lotsa form",
+        hint: "Lots of may lose the final /v/ of of in informal connected speech.",
+        canonical: &["L", "AA", "T", "S", "AH", "V"],
+        reduced: &["L", "AA", "T", "S", "AH"],
+        confidence: 0.66,
+        context: PhraseContext::Always,
+    },
+    PhraseRule {
+        id: "informal-dont-know",
+        first: "don't",
+        second: "know",
+        family: ConnectedSpeechFamily::Contraction,
+        label: "possible dunno form",
+        hint: "Don't know may reduce toward dunno in informal connected speech.",
+        canonical: &["D", "OW", "N", "T", "N", "OW"],
+        reduced: &["D", "AH", "N", "OW"],
+        confidence: 0.6,
+        context: PhraseContext::Always,
     },
 ];
 
@@ -425,7 +635,7 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
     let mut values = Vec::new();
     let mut phrase_tokens = HashSet::new();
 
-    for pair in words.windows(2) {
+    for (pair_index, pair) in words.windows(2).enumerate() {
         let first = &pair[0];
         let second = &pair[1];
         if has_punctuation_boundary(sentence, first.token_index, second.token_index) {
@@ -434,6 +644,7 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
         if let Some(rule) = PHRASE_RULES
             .iter()
             .find(|rule| rule.first == first.normalized && rule.second == second.normalized)
+            .filter(|rule| phrase_context_allows(rule.context, &words, pair_index, sentence))
         {
             phrase_tokens.insert(first.token_index);
             phrase_tokens.insert(second.token_index);
@@ -465,6 +676,7 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
     for (index, word) in words.iter().enumerate() {
         if !phrase_tokens.contains(&word.token_index)
             && index + 1 < words.len()
+            && weak_form_context_allows(&words, index, sentence)
             && let Some(form) = WEAK_FORMS.iter().find(|form| form.word == word.normalized)
         {
             let expected_symbols = word.preferred_symbols(form.canonical);
@@ -676,12 +888,6 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
     values
 }
 
-fn has_punctuation_boundary(sentence: &SubtitleSentence, start: u32, end: u32) -> bool {
-    sentence.tokens.iter().any(|token| {
-        token.index > start && token.index < end && token.kind == SubtitleTokenKind::Punctuation
-    })
-}
-
 fn coalescent_yod(last: &str, next: &str) -> Option<(&'static str, &'static str, &'static str)> {
     match (last, next) {
         ("T", "Y") => Some((
@@ -829,38 +1035,38 @@ mod tests {
         }
     }
 
-    fn sentence_with_boundary_punctuation() -> SubtitleSentence {
+    fn sentence_with_boundary_punctuation(first: &str, second: &str) -> SubtitleSentence {
         SubtitleSentence {
             id: SubtitleSentenceId::parse("punctuation").unwrap(),
             index: 0,
             start: TimeMs::new(0),
             end: TimeMs::new(1000),
-            original_text: "see, it".into(),
-            display_text: "see, it".into(),
+            original_text: format!("{first}, {second}"),
+            display_text: format!("{first}, {second}"),
             tokens: vec![
                 SubtitleToken {
                     index: 0,
                     kind: SubtitleTokenKind::Word,
-                    text: "see".into(),
-                    normalized: Some("see".into()),
+                    text: first.into(),
+                    normalized: Some(crate::normalize_word(first)),
                     start_char: 0,
-                    end_char: 3,
+                    end_char: first.len() as u32,
                 },
                 SubtitleToken {
                     index: 1,
                     kind: SubtitleTokenKind::Punctuation,
                     text: ",".into(),
                     normalized: None,
-                    start_char: 3,
-                    end_char: 4,
+                    start_char: first.len() as u32,
+                    end_char: first.len() as u32 + 1,
                 },
                 SubtitleToken {
                     index: 2,
                     kind: SubtitleTokenKind::Word,
-                    text: "it".into(),
-                    normalized: Some("it".into()),
-                    start_char: 5,
-                    end_char: 7,
+                    text: second.into(),
+                    normalized: Some(crate::normalize_word(second)),
+                    start_char: first.len() as u32 + 2,
+                    end_char: (first.len() + second.len() + 2) as u32,
                 },
             ],
         }
@@ -1032,7 +1238,8 @@ mod tests {
                 .any(|pair| pair == ["IY", "Y"])
         );
 
-        let across_punctuation = predict_default_connected(&sentence_with_boundary_punctuation());
+        let across_punctuation =
+            predict_default_connected(&sentence_with_boundary_punctuation("see", "it"));
         assert!(
             !across_punctuation
                 .iter()
@@ -1070,6 +1277,144 @@ mod tests {
             !singleton
                 .iter()
                 .any(|value| value.evidence.contains("possible-t-d-deletion"))
+        );
+    }
+
+    #[test]
+    fn construction_reductions_require_a_plausible_infinitive_complement() {
+        let future = predict_default_connected(&sentence("we are going to leave"));
+        assert!(
+            future
+                .iter()
+                .any(|value| value.evidence.contains("informal-going-to"))
+        );
+
+        for literal_motion in [
+            "we are going to London",
+            "we are going to the store",
+            "we are going to work",
+        ] {
+            let values = predict_default_connected(&sentence(literal_motion));
+            assert!(
+                !values
+                    .iter()
+                    .any(|value| value.evidence.contains("informal-going-to")),
+                "literal motion must not trigger gonna: {literal_motion}"
+            );
+        }
+
+        let obligation = predict_default_connected(&sentence("we have to leave"));
+        assert!(
+            obligation
+                .iter()
+                .any(|value| value.evidence.contains("obligation-have-to"))
+        );
+        let incomplete = predict_default_connected(&sentence("we have to"));
+        assert!(
+            !incomplete
+                .iter()
+                .any(|value| value.evidence.contains("obligation-have-to"))
+        );
+    }
+
+    #[test]
+    fn wanna_prediction_conservatively_blocks_wh_extraction_ambiguity() {
+        let statement = predict_default_connected(&sentence("I want to leave"));
+        assert!(
+            statement
+                .iter()
+                .any(|value| value.evidence.contains("informal-want-to"))
+        );
+
+        let question = predict_default_connected(&sentence("Who do you want to win"));
+        assert!(
+            !question
+                .iter()
+                .any(|value| value.evidence.contains("informal-want-to"))
+        );
+    }
+
+    #[test]
+    fn habitual_used_to_is_distinct_from_adjectival_be_used_to() {
+        let habitual = predict_default_connected(&sentence("I used to swim"));
+        assert!(
+            habitual
+                .iter()
+                .any(|value| value.evidence.contains("habitual-used-to"))
+        );
+
+        let adjectival = predict_default_connected(&sentence("I am used to it"));
+        assert!(
+            !adjectival
+                .iter()
+                .any(|value| value.evidence.contains("habitual-used-to"))
+        );
+    }
+
+    #[test]
+    fn common_lexicalized_reductions_emit_complete_a_to_b_symbols() {
+        for (text, rule_id, expected) in [
+            (
+                "you got to leave",
+                "informal-got-to",
+                &["G", "AA", "DX", "AH"][..],
+            ),
+            ("let me see", "informal-let-me", &["L", "EH", "M", "IY"]),
+            ("give me that", "informal-give-me", &["G", "IH", "M", "IY"]),
+            (
+                "kind of strange",
+                "informal-kind-of",
+                &["K", "AY", "N", "D", "AH"],
+            ),
+            ("out of time", "informal-out-of", &["AW", "DX", "AH"]),
+            (
+                "lots of time",
+                "informal-lots-of",
+                &["L", "AA", "T", "S", "AH"],
+            ),
+            (
+                "I don't know",
+                "informal-dont-know",
+                &["D", "AH", "N", "OW"],
+            ),
+        ] {
+            let values = predict_default_connected(&sentence(text));
+            let reduction = values
+                .iter()
+                .find(|value| value.evidence.contains(rule_id))
+                .unwrap_or_else(|| panic!("missing {rule_id} for {text}"));
+            assert_eq!(reduction.learning_symbols, expected, "{rule_id}");
+        }
+    }
+
+    #[test]
+    fn weak_forms_respect_punctuation_initial_h_and_the_before_vowel() {
+        let punctuated = predict_default_connected(&sentence_with_boundary_punctuation("to", "it"));
+        assert!(
+            !punctuated
+                .iter()
+                .any(|value| value.evidence.contains("weak-to"))
+        );
+
+        let initial_h = predict_default_connected(&sentence("he can go"));
+        assert!(
+            !initial_h
+                .iter()
+                .any(|value| value.evidence.contains("weak-he"))
+        );
+
+        let medial_h = predict_default_connected(&sentence("tell him now"));
+        assert!(
+            medial_h
+                .iter()
+                .any(|value| value.evidence.contains("weak-him"))
+        );
+
+        let the_vowel = predict_default_connected(&sentence("the apple fell"));
+        assert!(
+            !the_vowel
+                .iter()
+                .any(|value| value.evidence.contains("weak-the"))
         );
     }
 }

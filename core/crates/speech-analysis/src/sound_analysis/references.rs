@@ -493,6 +493,27 @@ mod tests {
                 "dɪdʒu",
                 "dɪdʒu",
             ),
+            (
+                "have to leave",
+                ConnectedSpeechFamily::Contraction,
+                "hæv | tu",
+                "hæftə",
+                "hæftə",
+            ),
+            (
+                "let me see",
+                ConnectedSpeechFamily::Contraction,
+                "lɛt | mi",
+                "lɛmi",
+                "lɛmi",
+            ),
+            (
+                "out of time",
+                ConnectedSpeechFamily::Contraction,
+                "aʊt | ʌv",
+                "aʊɾə",
+                "aʊɾə",
+            ),
         ] {
             let sentence = sentence(text);
             let predictions = crate::connected_speech_rules::predict_default_connected(&sentence);

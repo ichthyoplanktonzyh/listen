@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-13T12:17:00.000+08:00"
+last_updated: "2026-07-13T13:25:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-13 12:17 CST
-> 更新原因：Phase 3.9 第 4 项启动：建立有来源的完整英语语流规则目录，并开始分批扩展 B。
+> 最后更新：2026-07-13 13:25 CST
+> 更新原因：Phase 3.9 英语语流规则第二批完成：构式敏感缩约与保守阻断进入 B v3。
 
 ## 当前位置
 
@@ -180,6 +180,11 @@ last_updated: "2026-07-13T12:17:00.000+08:00"
 
 ### Phase 3.9: L1-aware Diagnosis v1 ⏳ 已恢复，A/B/C 算法与 UI 重构中
 
+- 2026-07-13 规则第二批：B 规则源 v3 新增构式门控与 `gotta/hafta/hasta`、habitual
+  `used to`、`supposed to/ought to`、`lemme/gimme/kinda/sorta/outta/lotta/lotsa/dunno`；`gonna`
+  阻断 motion + NP/地点歧义，`wanna` 阻断 wh-extraction 歧义，`be used to` 不误判 habitual。
+  weak form 补标点、话语起始 `/h/`、`the + vowel` 阻断。下一批为 `/nt/`、syllabic-`n`、
+  schwa deletion 与 `and/of` 音段删除。
 - 2026-07-13 建立 General American 语流规则权威目录：规则按 `B-safe`、`B-context`、
   `C-only`、`dialect` 分层，全部常见规则进入目录但只有文本证据充分者进入 B。第一批新增
   `/t,d,s,z/ + /j/` coalescence、`/n/` 部位同化、V#V `[j]/[w]` 连接、跨词 flap；词内

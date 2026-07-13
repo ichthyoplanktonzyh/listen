@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-13 13:25 CST: Phase 3.9 英语语流规则第二批。Reference B 规则源升级为 v3；Phrase
+  rule 新增上下文门控，不再把字面相邻词无条件缩约：`going to` 只接受动词补语候选并阻断
+  专名/限定词/常见地点歧义，`want to` 对 wh-extraction 歧义保守缺席，`used to` 区分
+  habitual 与 `be used to + NP/gerund`。新增 `gotta`、`hafta/hasta`、`had to`、habitual
+  `used to`、`supposed to/ought to`、安全层 `trying to`，以及
+  `lemme/gimme/kinda/sorta/outta/lotta/lotsa/dunno` 的完整 A→B 音素结构；weak form 补标点、话语
+  起始 `/h/`、`the + vowel` 阻断。新增正例、motion/NP/疑问抽取/形容词 used-to 等反例和
+  UI 结构断言；speech-analysis 170 项测试全通过。规则与来源同步登记到 3.9 catalog。
+  `connected_speech_rules.rs` 达到规模线后，将构式/弱读阻断提取到 `context.rs`（主文件回落
+  到 1403 行），为下一批音节规则保留清晰模块边界。
+
 - 2026-07-13 12:17 CST: Phase 3.9 第 4 项启动：新增 General American 英语语流完整规则目录，
   按 `B-safe` / `B-context` / `C-only` / `dialect` 记录音素环境、阻断条件、口音范围、来源和
   实现状态，明确“全部纳入目录”不等于把声学渐变现象伪造成 B。首批 B 扩展：硬编码
