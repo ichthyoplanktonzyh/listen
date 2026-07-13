@@ -2501,6 +2501,26 @@ components:
         evidence_class: { $ref: "#/components/schemas/RhythmEvidenceClass" }
         claim_status: { $ref: "#/components/schemas/RhythmClaimStatus" }
         confidence: { type: number, minimum: 0, maximum: 1 }
+    RhythmAudibleGroup:
+      type: object
+      required: [symbols, display_ipa, source_token_indices]
+      properties:
+        symbols:
+          type: array
+          items: { type: string }
+        display_ipa: { type: string }
+        source_token_indices:
+          type: array
+          items: { type: integer, minimum: 0 }
+    RhythmAudibleStructure:
+      type: object
+      required: [groups, display_ipa, learner_cue]
+      properties:
+        groups:
+          type: array
+          items: { $ref: "#/components/schemas/RhythmAudibleGroup" }
+        display_ipa: { type: string }
+        learner_cue: { type: string }
     RhythmConnectedSpeechRef:
       type: object
       required: [id, connected_speech_index, token_start, token_end, phone_start, phone_end, label, divergence, signal_sources, evidence_class, confidence]
@@ -2526,6 +2546,18 @@ components:
           items: { type: string }
         expected_display_ipa: { type: string }
         default_display_ipa: { type: string }
+        citation_structure:
+          anyOf:
+            - $ref: "#/components/schemas/RhythmAudibleStructure"
+            - type: "null"
+        predicted_structure:
+          anyOf:
+            - $ref: "#/components/schemas/RhythmAudibleStructure"
+            - type: "null"
+        actual_structure:
+          anyOf:
+            - $ref: "#/components/schemas/RhythmAudibleStructure"
+            - type: "null"
         divergence: { $ref: "#/components/schemas/RhythmDivergenceKind" }
         signal_sources:
           type: array

@@ -2313,8 +2313,10 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   Rhythm reference；phone evidence 是 C 的 L4 证据，不是第四个 Rhythm reference。
 - 验收标准：
   - A 以词典独立读音和 lexical stress 作为稳定参考。
-  - B 显示规则预测、可迁移学习的语流变化，并能展示 A → B 音标差异。
-  - C 显示当前音频的重音、节奏、弱读、压缩和停顿。
+  - B 显示规则预测、可迁移学习的语流变化，并将书写词界到可听音组的 A → B 变化显式化；
+    例如 `pick up` 显示 `/pɪk | ʌp/ → /pɪ.kʌp/`，而非只显示 `linking` 类别。
+  - C 显示当前音频的实际音素分组、重音、节奏、弱读、压缩和停顿；只有真实 observed-phone
+    evidence 才能生成 segmental C，timing/prosody 不得单独发明音素变化。
   - Raw CTC phone label 不作为默认教学标签。
 - 依赖：PRON-002、LLT-004、RHY-001。
 
@@ -2351,7 +2353,8 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 - 需求：系统应把弱读、压缩、连读、删除、同化、flapping 等现象映射为学习者能理解的
   listening hotspot，而不是暴露底层 edit operation。
 - 验收标准：
-  - 每个 hotspot 包含 word/syllable span、解释类型、证据来源和 confidence。
+  - 每个 hotspot 包含 word/syllable span、A/B/C 可听结构（存在时）、解释类型、证据来源和
+    confidence；类别是结构变化的解释标签，不是主要学习输出。
   - 低置信 phone mismatch 只能作为 evidence，不能单独生成高置信教学解释。
   - 默认文案回答“这里为什么听起来不像文字/词典读音”。
 - 依赖：RHY-001、RHY-002、Phase 2.16 connected-speech model。

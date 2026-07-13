@@ -3,23 +3,24 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-12T18:55:00.000+08:00"
+last_updated: "2026-07-13T08:28:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-12 18:55 CST
-> 更新原因：Phase 3.11 Semantic Task Evidence Foundation 五切片全部落地，CODE COMPLETE
-> 并创建 CLOSEOUT；主线切换至 Phase 3.12。
+> 最后更新：2026-07-13 08:28 CST
+> 更新原因：Phase 3.12 继续推进；Phase 3.9 在独立 worktree 并行恢复 A/B/C
+> audible-structure 算法与 UI 重构。
 
 ## 当前位置
 
 - **当前执行主线**：Phase 3.11 Semantic Task Evidence Foundation 已 CODE COMPLETE
   （见其 CLOSEOUT）；下一执行 phase 为 Phase 3.12 Vendor-neutral LLM Provider，开工前
-  按 3.11 已落地的 rubric/judgment 契约修订 PLAN。Phase 3.9 仍不作为硬依赖。
+  按 3.11 已落地的 rubric/judgment 契约修订 PLAN。Phase 3.9 的 A/B/C audible-structure
+  重构已于 2026-07-13 在独立 worktree 并行恢复，仍不作为 3.12 的硬依赖。
 - **治理线状态**：Phase 2.23 Architecture Debt Paydown 已于 2026-07-03 收口（详见其 CLOSEOUT）；3.x 开工前置全部就绪。
-- **算法线状态**：Phase 2.19 / 2.20 / 2.21 已于 2026-07-02 搁置；audible-structure v1
-  contract 保持当前权威 shape，后续质量提升等学习闭环完成后再回到算法线。
+- **算法线状态**：Phase 2.19 / 2.20 / 2.21 全局质量线仍搁置；Phase 3.9 仅恢复与 L1 学习
+  价值直接相关的 A/B/C audible-structure contract、linking 结构生成和证据门控。
 - **当前版本**：0.7.0。
 - **当前产品定位**：以用户真实内容为共同语境、听力先行的四通道语言学习工作台。听力是
   当前楔子而非永久边界；后续 reading / speaking / writing 逐个 phase 验证独立任务和证据。
@@ -159,7 +160,7 @@ last_updated: "2026-07-12T18:55:00.000+08:00"
 - 计划与结论：`.planning/phases/3.7-hunting-list/3.7-PLAN.md`、
   `.planning/phases/3.7-hunting-list/3.7-CLOSEOUT.md`。
 
-### Phase 3.9: L1-aware Diagnosis v1 ⏸ 延期，未收口
+### Phase 3.9: L1-aware Diagnosis v1 ⏳ 已恢复，A/B/C 算法与 UI 重构中
 
 - 2026-07-12 于独立分支 `codex/3.9-l1-aware-diagnosis` 落地（基于 3.7 tip，与 3.8 并行）：
   LearnerProfile L1 持久化（schema v34，v33 保留给 3.8 in-flight 的 recording_assets）+
@@ -180,15 +181,19 @@ last_updated: "2026-07-12T18:55:00.000+08:00"
 - **恢复条件**：先重新设计并实现用户触发的学习闭环——“本句没听懂 → 区分词义与听辨 →
   定位可回听片段 → 同类短练习”——并清楚呈现无结果原因和规则/音频证据边界；随后以真实媒体
   QA 重新裁决是否收口。
+- **恢复裁决（2026-07-13）**：Owner 实测确认 L1 区域在语流标记准确时有显著学习价值；
+  先恢复 audible-structure 上游重构。A=词典/书写词界，B=文本规则预测的可听分组，C=真实
+  音素 + timing/prosody 支持的实际可听分组；类别退为解释标签。首条竖切片聚焦
+  `pick up: /pɪk | ʌp/ → /pɪ.kʌp/`，纯 B 不填充 C。
 - 计划：`.planning/phases/3.9-l1-aware-diagnosis-v1/3.9-PLAN.md`。
 
 ### 下一执行序列：Phase 3.11–3.18
 
 - **Gate Q（已通过）**：Q1/Q2 通过；Q3/Q4 因后续 UX/功能调整明确延期且 QA 债留在
   原 phase。裁决见 `3.7-GATE-Q-CHECKLIST.md`。
-- **3.7–3.10 已全部完成收口**：3.7 保持 listening-only；3.8 是 shadowing 模仿层且非评分
-  completion 不伪造 speaking success；3.9 保持延期且不收口；3.10 只展示已有事实，
-  但提供 channel-ready envelope。
+- **3.7 / 3.8 / 3.10 已完成收口，3.9 并行恢复**：3.7 保持 listening-only；3.8 是
+  shadowing 模仿层且非评分 completion 不伪造 speaking success；3.9 重构 A/B/C 后再做
+  真实媒体 QA；3.10 只展示已有事实，但提供 channel-ready envelope。
 - **3.11–3.18（已立 PLAN，方向承诺）**：Semantic evidence foundation → vendor-neutral
   LLM provider（两个异构协议先证中立）→ 3.12.1 judge 资格评估（可与 Reading 并行）→
   Reading Studio → Speaking Studio → Writing Studio → Personal Expression → four-channel
@@ -331,8 +336,8 @@ last_updated: "2026-07-12T18:55:00.000+08:00"
    （OpenAI-compatible + Anthropic Messages）先证中立。开工前按 3.11 已落地的
    `SemanticRubric`/`SemanticJudgment` 契约与 application trait 边界修订 PLAN；provider
    判定默认不获任何显示资格（资格评估属 3.12.1）。
-2. Phase 3.9 保持延期且不收口；其 L1 解释/专项入口不作为后续 phase 的必需数据源。每个
-   phase 开工前先按上游现状修订 PLAN。
+2. Phase 3.9 在独立 worktree 并行恢复 A/B/C audible-structure 重构，仍不收口且不作为
+   3.12 的必需数据源；完成算法/UI 与真实媒体 QA 后再裁决收口。
 3. "收藏句 → 个人模板"的用户价值验证收敛到 Phase 3.16（3.4.3 结论待兑现）。
 4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。

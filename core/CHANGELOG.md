@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-13 08:28 CST: 恢复 Phase 3.9 的 A/B/C audible-structure 算法与 UI 重构并完成
+  linking 首条竖切片。`RhythmConnectedSpeechRef` 新增向后兼容的 A citation、B predicted、
+  C actual 可听结构（音组、IPA、学习者 cue、书写 token 来源映射）；`pick up` 的文本规则现
+  输出 `/pɪk | ʌp/ → /pɪ.kʌp/` 与 `pɪ-kʌp`，不再只显示 linking 类别。C 仅在存在
+  observed phone evidence 时生成，timing/prosody 只作边界与分组证据。Flutter B ribbon
+  直接呈现书写结构到可听结构的变化，C ribbon 展示 phone-segmental 支持的实际音组；OpenAPI、
+  Dart model、Rust/Flutter/contract 回归同步扩展。Phase 3.12 继续在独立 worktree 并行推进。
+
 - 2026-07-12 19:20 CST: 清除 speech-analysis 既有 deny 级 clippy error。
   `sense_group_partition.rs` 测试里的恒真断言 `assert!(any_span_covers || true, ...)`
   （Phase 3.4.2 引入，触发 `overly_complex_bool_expr`）改为实义断言
