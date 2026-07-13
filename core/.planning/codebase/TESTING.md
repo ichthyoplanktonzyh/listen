@@ -144,6 +144,8 @@ cd apps/desktop && flutter test
 | `scripts/timeline-production/test_production_pipeline_acoustic_cues.py` | Production-side `rhythm_word_acoustic_cues` artifact generation from synthetic wav |
 | `scripts/validate-contracts.sh` | LLTimeline Schema smoke + 契约测试 |
 | `scripts/syntactic-analysis/test_syntax_sidecar_contract.py` | JSONL stdout 洁净、missing runtime/language、Unicode scalar、1:N/N:1/unaligned mapping |
+| `scripts/syntactic-analysis/evaluate_provider.py` | Phase 3.9.1 digest-locked Stanza/spaCy correctness、alignment、tree、cold/warm/RSS/size 资格评估 |
+| `scripts/syntactic-analysis/test_evaluate_provider.py` | Rust tokenizer parity 与 future/motion、habitual/state、have-to idiom、wh-extraction 保守 query 单元测试 |
 
 ### Python 评估缺少自动化单元测试
 

@@ -16,7 +16,10 @@ fi
 if [[ "${LLPLAYERNEXT_DOWNLOAD_SYNTACTIC_MODELS:-0}" == "1" ]]; then
   STANZA_RESOURCES_DIR="$venv/models/stanza" \
     "$venv/bin/python" -c 'import os, stanza; stanza.download("en", package="ewt", model_dir=os.environ["STANZA_RESOURCES_DIR"])'
-  "$venv/bin/python" -m spacy download en_core_web_sm
+  # Install into this exact venv. Recent spaCy CLIs may delegate downloads to
+  # an ambient package manager, which can report success without touching it.
+  "$venv/bin/python" -m pip install \
+    "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl"
 fi
 
 echo "Syntactic research environment ready: $venv"

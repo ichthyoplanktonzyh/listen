@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-13 16:22 CST: Phase 3.9.1 Slice 3 完成冻结评估与负资格判定。
+  开发集仅用于 neutral query/mapping 调整；随后按预登记 digest 对验证集每个候选只运行一次。
+  Stanza 1.13.0/en_ewt 与 spaCy 3.8.13/en_core_web_sm 3.8.0 均达到 100% lexical/exact
+  mapping、零静默错位/树错误，并在 future/motion `going to`、habitual/state `used to`、
+  obligation/idiom `have to` 对上满分；但两者都在 multi-token wh-extraction
+  `Which team ... want to win` 产生一项高风险 `wanna` 假阳性，依锁定零容忍 gate 判为
+  `not_qualified`，未添加 validation-specific 特例。资源 gate 均通过（Stanza/spaCy cold p95
+  2.63/1.21s、warm p95 106.4/4.1ms、RSS 0.86/0.32GB、产品包 +0B）；runtime/model/
+  treebank 分层许可证、精确 installed-tree checksum/size 和 raw case reports 已审计，Stanza
+  传递训练数据 provenance 不完整仍独立保持 research-only。
+
 - 2026-07-13 16:10 CST: Phase 3.9.1 Slice 2 新增隔离式 Python 句法研究 Provider。
   新建 `syntactic-provider` Rust crate 与版本化 JSONL sidecar，Stanza/spaCy 均只输出同一
   provider-neutral draft；进程边界保持 stdout 纯协议、stderr 诊断，lazy runtime/model
