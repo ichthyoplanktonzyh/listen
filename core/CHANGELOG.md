@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- 2026-07-13 10:30 CST: 修复导入过 LLTimeline 后刷新听感结构仍显示不可用。Flutter 资源
+  加载不再用带 artifacts 的旧文档整体覆盖后端新导出文档；现在保留新导出的 WordTimeline
+  派生 RhythmFrame，仅把旧 artifacts 合并回来。新增回归测试覆盖“旧文档无 rhythm frames、
+  新导出有 rhythm frames”的真实 QA 场景。
+
 - 2026-07-13 10:12 CST: 将 Phase 3.9 A/B/C audible-structure 两批实现合入已完成
   Phase 3.12 的 main；保留 3.12 收口事实，并将 3.9 状态切换为主工作区真实媒体 QA 与
   增量修正。后续工作从 main 新建专用阶段分支，不在 main 直接开发。
