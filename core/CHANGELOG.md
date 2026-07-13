@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-14 00:05 CST: main.dart 拆分 S2 —— 抽出 `ListeningInboxCoordinator`。把
+  `_captureListeningInbox` / `_refreshListeningInbox` / `_replayListeningInboxItem` /
+  `_processListeningInboxItem` 四个方法逐字搬到 `lib/controllers/listening_inbox_coordinator.dart`
+  （注入 `getApi`/`isMounted`/`mediaTimeMs` + 复用既有 `playbackActions`），逻辑/字符串不变。
+  `_hardInterruptListening` 与 `_toggleExtensiveListening`（含 `showDialog` 与跨 slice
+  `_refreshDiagnosis` 依赖）暂留 State，待其依赖抽出后处理；两个 `loopRange` 方法后续归入
+  `PlaybackActionsCoordinator`。新增 `test/listening_inbox_coordinator_test.dart`（3 例：process
+  review-item 分支、null-range replay 守卫、null-api no-op）。main.dart 2527 → 2476 行。
+  `flutter analyze` 零问题、`flutter test` 301 全通过（298 + 3）。
+
 - 2026-07-13 23:40 CST: main.dart 拆分 S1 —— 抽出 `HuntingActionsCoordinator`。把
   `_toggleHuntingMode` / `_reindexHuntingCorpus` / `_answerHuntingCheck` 三个方法逐字搬到
   `lib/controllers/hunting_actions_coordinator.dart`，仅做 seam 改写（`api`→`getApi()`、
