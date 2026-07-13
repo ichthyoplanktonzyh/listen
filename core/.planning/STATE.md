@@ -162,6 +162,9 @@ last_updated: "2026-07-13T08:28:00.000+08:00"
 
 ### Phase 3.9: L1-aware Diagnosis v1 ⏳ 已恢复，A/B/C 算法与 UI 重构中
 
+- 2026-07-13 A/B/C 重构第二批完成：B 已覆盖 weak form、contraction、assimilation、
+  deletion、flapping。Deletion 现在基于完整短语删除预测弱化的词尾 `/t|d/`，flapping
+  基于完整词将元音间 `/t|d/` 替换为 `/ɾ/`；所有纯文本规则仍严格不生成 C。
 - 2026-07-12 于独立分支 `codex/3.9-l1-aware-diagnosis` 落地（基于 3.7 tip，与 3.8 并行）：
   LearnerProfile L1 持久化（schema v34，v33 保留给 3.8 in-flight 的 recording_assets）+
   统一读取面 + 设置入口；diagnosis-core zh→en 九类难点 profile provider（研究依据见

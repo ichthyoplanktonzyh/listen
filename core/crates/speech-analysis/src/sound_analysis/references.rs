@@ -150,6 +150,16 @@ fn predicted_audible_structures(
         && word_groups.len() == 2
     {
         coalesce_shared_consonant(&word_groups)
+    } else if value.family == ConnectedSpeechFamily::Deletion
+        && value.evidence.contains("possible-t-d-deletion")
+        && word_groups.len() == 2
+    {
+        delete_final_t_or_d(&word_groups)
+    } else if value.family == ConnectedSpeechFamily::Flapping
+        && value.evidence.contains("american-flap-t-d")
+        && word_groups.len() == 1
+    {
+        flap_intervocalic_t_or_d(&word_groups)
     } else if !value.learning_symbols.is_empty() {
         vec![RhythmAudibleGroup {
             symbols: value.learning_symbols.clone(),
@@ -245,6 +255,38 @@ fn coalesce_shared_consonant(groups: &[RhythmAudibleGroup]) -> Vec<RhythmAudible
         .into_iter()
         .filter(|group| !group.symbols.is_empty())
         .collect()
+}
+
+fn delete_final_t_or_d(groups: &[RhythmAudibleGroup]) -> Vec<RhythmAudibleGroup> {
+    let mut predicted = groups.to_vec();
+    let first = &mut predicted[0];
+    if first
+        .symbols
+        .last()
+        .is_some_and(|symbol| matches!(strip_stress(symbol).as_str(), "T" | "D"))
+    {
+        first.symbols.pop();
+        first.display_ipa = display_ipa_for_symbols(&first.symbols, false);
+    }
+    predicted
+        .into_iter()
+        .filter(|group| !group.symbols.is_empty())
+        .collect()
+}
+
+fn flap_intervocalic_t_or_d(groups: &[RhythmAudibleGroup]) -> Vec<RhythmAudibleGroup> {
+    let mut predicted = groups.to_vec();
+    let group = &mut predicted[0];
+    for index in 1..group.symbols.len().saturating_sub(1) {
+        if matches!(strip_stress(&group.symbols[index]).as_str(), "T" | "D")
+            && crate::arpabet_is_vowel(&group.symbols[index - 1])
+            && crate::arpabet_is_vowel(&group.symbols[index + 1])
+        {
+            group.symbols[index] = "DX".into();
+        }
+    }
+    group.display_ipa = display_ipa_for_symbols(&group.symbols, false);
+    predicted
 }
 
 fn structure(groups: Vec<RhythmAudibleGroup>, separator: &str) -> RhythmAudibleStructure {
@@ -386,5 +428,91 @@ mod tests {
                 .signal_sources
                 .contains(&RhythmSignalSource::PhoneSegmental)
         );
+    }
+
+    #[test]
+    fn deletion_prediction_removes_the_boundary_phone_from_the_full_phrase() {
+        let sentence = sentence("last call");
+        let predictions = crate::connected_speech_rules::predict_default_connected(&sentence);
+        let deletion = predictions
+            .iter()
+            .find(|value| value.family == ConnectedSpeechFamily::Deletion)
+            .expect("deletion prediction");
+        let reference =
+            build_connected_speech_refs(Some(&sentence), std::slice::from_ref(deletion))
+                .pop()
+                .unwrap();
+
+        let citation = reference.citation_structure.unwrap();
+        let predicted = reference.predicted_structure.unwrap();
+        assert_eq!(citation.display_ipa, "læst | kɔl");
+        assert_eq!(predicted.display_ipa, "læs.kɔl");
+        assert_eq!(predicted.learner_cue, "læs-kɔl");
+        assert!(reference.actual_structure.is_none());
+    }
+
+    #[test]
+    fn flapping_prediction_replaces_the_phone_inside_the_full_word() {
+        let sentence = sentence("water bottle");
+        let predictions = crate::connected_speech_rules::predict_default_connected(&sentence);
+        let flapping = predictions
+            .iter()
+            .find(|value| {
+                value.family == ConnectedSpeechFamily::Flapping && value.token_start == Some(0)
+            })
+            .expect("flapping prediction");
+        let reference =
+            build_connected_speech_refs(Some(&sentence), std::slice::from_ref(flapping))
+                .pop()
+                .unwrap();
+
+        let citation = reference.citation_structure.unwrap();
+        let predicted = reference.predicted_structure.unwrap();
+        assert!(citation.display_ipa.contains('t'));
+        assert!(predicted.display_ipa.contains('ɾ'));
+        assert!(!predicted.display_ipa.contains('t'));
+        assert_eq!(predicted.groups[0].source_token_indices, [0]);
+        assert!(reference.actual_structure.is_none());
+    }
+
+    #[test]
+    fn complete_rule_symbols_render_weak_contraction_and_assimilation_structures() {
+        for (text, family, expected_a, expected_b, expected_cue) in [
+            ("to go", ConnectedSpeechFamily::WeakForm, "tu", "tə", "tə"),
+            (
+                "could have gone",
+                ConnectedSpeechFamily::Contraction,
+                "kʊd | hæv",
+                "kʊdəv",
+                "kʊdəv",
+            ),
+            (
+                "did you see",
+                ConnectedSpeechFamily::Assimilation,
+                "dɪd | ju",
+                "dɪdʒu",
+                "dɪdʒu",
+            ),
+        ] {
+            let sentence = sentence(text);
+            let predictions = crate::connected_speech_rules::predict_default_connected(&sentence);
+            let prediction = predictions
+                .iter()
+                .find(|value| value.family == family && value.token_start == Some(0))
+                .unwrap_or_else(|| panic!("{family:?} prediction for {text}"));
+            let reference =
+                build_connected_speech_refs(Some(&sentence), std::slice::from_ref(prediction))
+                    .pop()
+                    .unwrap();
+
+            assert_eq!(
+                reference.citation_structure.unwrap().display_ipa,
+                expected_a
+            );
+            let predicted = reference.predicted_structure.unwrap();
+            assert_eq!(predicted.display_ipa, expected_b);
+            assert_eq!(predicted.learner_cue, expected_cue);
+            assert!(reference.actual_structure.is_none());
+        }
     }
 }

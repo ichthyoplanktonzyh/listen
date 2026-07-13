@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-13 08:40 CST: 扩展 Phase 3.9 B 预测可听结构到 weak form、contraction、
+  assimilation、deletion 与 flapping。Deletion 由空预测改为在完整跨词结构中移除词尾
+  `/t|d/`（如 `last call`：`/læst | kɔl/ → /læs.kɔl/`）；flapping 不再只
+  输出孤立 `DX`，而是在完整词内把元音间 `/t|d/` 替换为 `/ɾ/`。其余三类使用完整规则
+  音素生成可听结构；新增测试确保所有类别都有 A/B 且纯文本规则不生成 C。
+
 - 2026-07-13 08:28 CST: 恢复 Phase 3.9 的 A/B/C audible-structure 算法与 UI 重构并完成
   linking 首条竖切片。`RhythmConnectedSpeechRef` 新增向后兼容的 A citation、B predicted、
   C actual 可听结构（音组、IPA、学习者 cue、书写 token 来源映射）；`pick up` 的文本规则现
