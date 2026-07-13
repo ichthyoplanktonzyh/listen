@@ -351,6 +351,33 @@ void main() {
                 'default_symbols': ['K', 'UH', 'D', 'AH', 'V'],
                 'expected_display_ipa': 'kʊdhæv',
                 'default_display_ipa': 'kʊdəv',
+                'citation_structure': {
+                  'groups': [
+                    {
+                      'symbols': ['K', 'UH', 'D'],
+                      'display_ipa': 'kʊd',
+                      'source_token_indices': [1],
+                    },
+                    {
+                      'symbols': ['HH', 'AE', 'V'],
+                      'display_ipa': 'hæv',
+                      'source_token_indices': [2],
+                    },
+                  ],
+                  'display_ipa': 'kʊd | hæv',
+                  'learner_cue': 'kʊd-hæv',
+                },
+                'predicted_structure': {
+                  'groups': [
+                    {
+                      'symbols': ['K', 'UH', 'D', 'AH', 'V'],
+                      'display_ipa': 'kʊdəv',
+                      'source_token_indices': [1, 2],
+                    },
+                  ],
+                  'display_ipa': 'kʊdəv',
+                  'learner_cue': 'kʊdəv',
+                },
                 'divergence': 'teachable_rule',
                 'signal_sources': ['text_prior'],
                 'evidence_class': 'heuristic_proxy',
@@ -388,6 +415,10 @@ void main() {
     expect(connectedRef.family, 'contraction');
     expect(connectedRef.expectedDisplayIpa, 'kʊdhæv');
     expect(connectedRef.defaultDisplayIpa, 'kʊdəv');
+    expect(connectedRef.citationStructure?.displayIpa, 'kʊd | hæv');
+    expect(connectedRef.predictedStructure?.learnerCue, 'kʊdəv');
+    expect(connectedRef.citationStructure?.groups.last.sourceTokenIndices, [2]);
+    expect(connectedRef.actualStructure, isNull);
     expect(document.rhythmFrameForSentence('missing'), isNull);
     expect(document.importedResource, true);
   });
