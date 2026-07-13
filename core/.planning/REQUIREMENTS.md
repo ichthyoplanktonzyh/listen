@@ -2997,6 +2997,19 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - 模型记录下载来源、版本、checksum 与许可证；非商业模型不得进入可分发产品路径。
   - 未达门槛时允许 abstain 或保持研究 Provider，不以小型 smoke 测试授予产品资格。
 
+### CAP-013：句法 Provider 纠偏资格与共享产品激活
+
+- 优先级：P0
+- 阶段：Phase 3.9.2
+- 需求：区分 parser attachment gold 与产品保守策略；以修正版 locked holdout 选择并激活一个
+  可选本地句法 Provider，使 B、SenseGroup 和 Construction candidate matcher 共享同一 artifact。
+- 验收标准：
+  - 歧义句标记为 abstain/block-by-policy，不作为唯一 attachment gold 判错 Provider。
+  - 首个产品候选通过清晰 subject/object 最小对照、真实字幕、许可、资源和 failure gate。
+  - 同一句只分析一次，三个消费者共享 artifact identity/provenance。
+  - runtime/model 不是字幕、播放或基础学习路径的硬依赖；缺席时精确 fallback。
+  - B 不填充 C，SenseGroup 不替代 ChunkTimeline，matcher 不铸造 Construction/capability identity。
+
 ## 19. MVP 发布追踪矩阵
 
 | 发布能力 | 必须满足的需求 |
@@ -3020,5 +3033,5 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | Phase 2.22 用户可见工作流语义 | UX-001 至 UX-008 |
 | Milestone 2 多语言学习基础 | LANG-001 至 LANG-010 |
 | Phase 3.0 英语听力学习闭环 | LOOP-000 至 LOOP-009 |
-| Phase 3.4.x / 3.9.1 Learning Analysis Foundation | CAP-001 至 CAP-012 |
+| Phase 3.4.x / 3.9.1–3.9.2 Learning Analysis Foundation | CAP-001 至 CAP-013 |
 | Phase 3.35 听力工作台 UI 重构 | UI-016 至 UI-017 |

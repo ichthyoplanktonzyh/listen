@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-13T16:53:00.000+08:00"
+last_updated: "2026-07-13T18:45:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-13 16:53 CST
-> 更新原因：Phase 3.9.1 以负向 Provider 资格结论完成；共享中立契约与消费者 seam 保留，产品继续 fallback。
+> 最后更新：2026-07-13 18:45 CST
+> 更新原因：新增 Phase 3.9.2，纠正句法 gold/产品保守策略混淆并推进单 Provider 产品激活。
 
 ## 当前位置
 
@@ -36,8 +36,9 @@ last_updated: "2026-07-13T16:53:00.000+08:00"
   （Slice 4，owner 按需，只加 adapter 不改契约）、CLOSEOUT。
 - Phase 3.11 Semantic Task Evidence Foundation 已 CODE COMPLETE（见其 CLOSEOUT）。
   Phase 3.9 不作为后续 Studio phase 的硬依赖。Phase 3.9.1 已建立共享句法契约、B/SenseGroup
-  consumer 与 Construction matcher seam；Stanza/spaCy 均因锁定高风险假阳性未获资格，产品
-  不激活 parser，继续保留 B/SenseGroup fallback。
+  consumer 与 Construction matcher seam；后续复核发现唯一否决样本混淆歧义句产品 policy
+  与 parser gold。Phase 3.9.2 已启动，以修正版 holdout 重新资格评估 spaCy，并在通过后接入
+  单 Provider 共享产品编排；当前激活前仍保留 B/SenseGroup fallback。
 - **治理线状态**：Phase 2.23 Architecture Debt Paydown 已于 2026-07-03 收口（详见其 CLOSEOUT）；3.x 开工前置全部就绪。
 - **算法线状态**：Phase 2.19 / 2.20 / 2.21 全局质量线仍搁置；Phase 3.9 仅恢复与 L1 学习
   价值直接相关的 A/B/C audible-structure contract、linking 结构生成和证据门控。
@@ -225,6 +226,17 @@ last_updated: "2026-07-13T16:53:00.000+08:00"
   音素 + timing/prosody 支持的实际可听分组；类别退为解释标签。首条竖切片聚焦
   `pick up: /pɪk | ʌp/ → /pɪ.kʌp/`，纯 B 不填充 C。
 - 计划：`.planning/phases/3.9-l1-aware-diagnosis-v1/3.9-PLAN.md`。
+
+### Phase 3.9.2: Syntax Provider Qualification Correction and Product Activation ⏳ ACTIVE
+
+- 不修改已冻结的 3.9.1 fixture/report；新建 v2 holdout，将争议句改为
+  `ambiguous_policy_abstain`，加入清晰 want-to subject/object 最小对照。
+- 首选 spaCy 作单一产品候选；consumer seam 已完成，主要工作是 corrected qualification、可选
+  runtime/model lifecycle、composition single-call/shared-artifact 与真实媒体降级 QA。
+- 工作量评估为小到中等；若必须捆绑 Python、大改 LLTimeline schema 或新增复杂安装 UI，则
+  另立部署 phase，不在本阶段假装成简单接线。
+- 文档：`.planning/phases/3.9.2-syntax-provider-product-activation/3.9.2-PLAN.md`、
+  `3.9.2-CONTEXT.md`。
 
 ### 下一执行序列：Phase 3.11–3.18
 

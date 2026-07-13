@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-13 18:45 CST: 新建 Phase 3.9.2 Syntax Provider Qualification Correction and Product
+  Activation。纠正 3.9.1 将 `Which team do you want to win?` 的保守 block policy 当作唯一
+  parser attachment gold 的评估错误；冻结旧报告，另建 v2 subject/object 清晰最小对照和
+  ambiguous-abstain gate。首选 spaCy 作单一产品候选；若修正版资格通过，则在不让 Python/model
+  成为基础产品硬依赖的前提下，让 B、syntax-aware SenseGroup 与 Construction candidate matcher
+  共享同一 validated artifact，并保留 C/ChunkTimeline/Construction identity 边界和无模型 fallback。
+
 - 2026-07-13 16:53 CST: Phase 3.9.1 Shared Syntactic Analysis Provider 收口。完整 contracts 与
   Rust workspace 测试通过；PLAN/STATE/CLOSEOUT 记录负向资格结论：Stanza/spaCy 共享中立契约、
   token mapping、sidecar failure taxonomy、B/SenseGroup consumer 与 Construction candidate

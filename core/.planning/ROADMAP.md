@@ -35,6 +35,10 @@
 > UD/CoNLL-U 语义建立共享、可重建的句法 artifact，经 Python sidecar 先验证 Stanza/spaCy
 > 候选；Reference B、SenseGroup 与 Construction 共用同一 token-aligned 分析，模型缺席时
 > 保留现有保守 B 和标点/长度 SenseGroup 降级。代码、模型、treebank 许可证分别审计。
+> 2026-07-13 资格纠偏插入：新增 Phase 3.9.2。3.9.1 的争议 `Which team do you want to win?`
+> 只能作为产品 abstain/block policy case，不能作为唯一 parser attachment gold；以清晰
+> subject/object 最小对照重新资格评估 spaCy，若通过则让 B、SenseGroup、Construction matcher
+> 共享一次句法 artifact，同时保留无模型 fallback 和轻量消费者边界。
 > 2026-07-04 产品路线更新：Phase 3.x 执行序列确立为 Phase 3.1 ~ 3.10，并确立精听/泛听
 > 一级心智、可组合不强制流程、功能按场景分不按设备分（生产端唯一 PC-only）等原则；
 > 见 §14.12 与 `.planning/phases/3.0-english-listening-learning-loop/3.0-PHASE-BREAKDOWN.md`。
@@ -1423,6 +1427,7 @@ Phase 3.0 的执行序列（2026-07-04 确立，取代早期建议顺序）：
 3.8  Shadowing & Recording Comparison     chunk 跟读、录音、A/B 对比
 3.9  L1-aware Diagnosis v1                Mandarin -> English 难点 profile + 专项聚合
 3.9.1 Shared Syntactic Analysis Provider  UD 句法 artifact + B/SenseGroup/Construction 共享消费
+3.9.2 Syntax Provider Product Activation  纠偏资格评估 + 单 Provider 共享产品编排
 3.10 Coach Dashboard                      诊断型统计与下一步建议
 ```
 
