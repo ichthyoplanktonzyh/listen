@@ -52,17 +52,12 @@ _wire(LocalApi? Function() getApi) {
         isMounted: () => true,
         reloadLearningEntries: () async {},
       );
-  final coordinator =
-      ListeningInboxCoordinator(
-        extensiveListening: extensive,
-        player: player,
-        subtitle: subtitle,
-        playbackActions: playback,
-      )..bind(
-        getApi: getApi,
-        isMounted: () => true,
-        mediaTimeMs: (t) => t.inMilliseconds,
-      );
+  final coordinator = ListeningInboxCoordinator(
+    extensiveListening: extensive,
+    player: player,
+    subtitle: subtitle,
+    playbackActions: playback,
+  )..bind(getApi: getApi, isMounted: () => true);
   addTearDown(adapter.dispose);
   addTearDown(extensive.dispose);
   return (coordinator: coordinator, player: player, extensive: extensive);

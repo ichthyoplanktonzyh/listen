@@ -24,16 +24,13 @@ class ListeningInboxCoordinator {
 
   late LocalApi? Function() getApi;
   late bool Function() isMounted;
-  late int Function(Duration subtitleTime) mediaTimeMs;
 
   void bind({
     required LocalApi? Function() getApi,
     required bool Function() isMounted,
-    required int Function(Duration subtitleTime) mediaTimeMs,
   }) {
     this.getApi = getApi;
     this.isMounted = isMounted;
-    this.mediaTimeMs = mediaTimeMs;
   }
 
   Future<void> captureListeningInbox() async {
@@ -45,7 +42,7 @@ class ListeningInboxCoordinator {
       nextCue: subtitle.primaryCursor.next(cue),
       mediaId: player.mediaId,
       trackId: subtitle.primaryTrack?.id,
-      mediaTimeMs: mediaTimeMs,
+      mediaTimeMs: playbackActions.mediaTimeMs,
     );
     if (captured && isMounted()) {
       player.setStatus('Marked in Listening Inbox');

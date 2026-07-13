@@ -56,6 +56,16 @@ class SettingsController extends ChangeNotifier {
   String get soundPatternDisplayMode => _settings.soundPatternDisplayMode;
   String get phonemeRibbonStyle => _settings.phonemeRibbonStyle;
   String get learningLanguage => _settings.learningLanguage;
+
+  /// Resolves the effective learning language for vocabulary, dictionary,
+  /// source-snapshot and diagnosis queries. Priority: user setting > active
+  /// subtitle track language > `en` fallback.
+  String resolveLearningLanguage(String? trackLanguage) {
+    final preferred = _settings.learningLanguage;
+    if (preferred != 'auto') return preferred;
+    return trackLanguage ?? 'en';
+  }
+
   bool get familiarMaterialSuggestions => _settings.familiarMaterialSuggestions;
   Color get primaryColor => Color(_settings.primaryColor);
   Color get secondaryColor => Color(_settings.secondaryColor);

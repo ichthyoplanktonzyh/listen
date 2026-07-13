@@ -255,11 +255,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       isMounted: () => mounted,
       text: (key) => l.text(key),
     );
-    inboxActions.bind(
-      getApi: () => api,
-      isMounted: () => mounted,
-      mediaTimeMs: _mediaTimeMs,
-    );
+    inboxActions.bind(getApi: () => api, isMounted: () => mounted);
     unawaited(_connectApi());
     unawaited(_loadSettings());
     subscriptions.addAll([
@@ -444,7 +440,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     unawaited(_loadMediaLibrary());
     try {
       final count = await service.savedVocabularyCount(
-        language: _learningLanguage,
+        language: settingsController.resolveLearningLanguage(
+          subtitleController.primaryTrack?.language,
+        ),
       );
       if (mounted) setState(() => _savedVocabulary = count);
     } catch (_) {
@@ -981,8 +979,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (api == null) return;
     final occurrence = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute(
-        builder: (_) =>
-            LearningAssetsScreen(api: api!, language: _learningLanguage),
+        builder: (_) => LearningAssetsScreen(
+          api: api!,
+          language: settingsController.resolveLearningLanguage(
+            subtitleController.primaryTrack?.language,
+          ),
+        ),
       ),
     );
     if (occurrence != null) await _openSlicePlayback(occurrence);
@@ -1007,7 +1009,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       api: api!,
       sentenceId: cue.id,
       source: {
-        'language': _learningLanguage,
+        'language': settingsController.resolveLearningLanguage(
+          subtitleController.primaryTrack?.language,
+        ),
         'media_id': playerController.mediaId,
         'sentence_id': cue.id,
         'sentence_text': cue.text,
@@ -1038,7 +1042,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       candidate: candidate.toJson(),
       initialStatus: learningController.phraseEntries[canonical]?.entry.status,
       source: {
-        'language': _learningLanguage,
+        'language': settingsController.resolveLearningLanguage(
+          subtitleController.primaryTrack?.language,
+        ),
         'media_id': playerController.mediaId,
         'sentence_id': cue.id,
         'sentence_text': cue.text,
@@ -1083,7 +1089,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     await api!.correctLemma(
       token.normalized!,
       corrected,
-      language: _learningLanguage,
+      language: settingsController.resolveLearningLanguage(
+        subtitleController.primaryTrack?.language,
+      ),
     );
     if (mounted) playerController.setStatus(l.text('lemmaCorrectionSaved'));
   }
@@ -1103,7 +1111,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       api: api,
       cue: subtitleController.currentPrimaryCue,
       wordStatus: wordStatus,
-      language: _learningLanguage,
+      language: settingsController.resolveLearningLanguage(
+        subtitleController.primaryTrack?.language,
+      ),
       learning: learningController,
       isMounted: () => mounted,
       sourceFor: _sourceFor,
@@ -1127,7 +1137,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     await learningWorkflowController.loadWordEntries(
       api: api,
       track: subtitleController.primaryTrack,
-      language: _learningLanguage,
+      language: settingsController.resolveLearningLanguage(
+        subtitleController.primaryTrack?.language,
+      ),
       learning: learningController,
       isMounted: () => mounted,
     );
@@ -1136,7 +1148,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _loadPhraseEntries() async {
     await learningWorkflowController.loadPhraseEntries(
       api: api,
-      language: _learningLanguage,
+      language: settingsController.resolveLearningLanguage(
+        subtitleController.primaryTrack?.language,
+      ),
       learning: learningController,
       isMounted: () => mounted,
     );
@@ -1148,7 +1162,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         api: api,
         token: token,
         cue: cue,
-        language: _learningLanguage,
+        language: settingsController.resolveLearningLanguage(
+          subtitleController.primaryTrack?.language,
+        ),
         learning: learningController,
         isMounted: () => mounted,
         sourceFor: _sourceFor,
@@ -1163,7 +1179,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       final update = await learningWorkflowController.setSelectedWordStatus(
         api: api,
         selected: selected,
-        language: _learningLanguage,
+        language: settingsController.resolveLearningLanguage(
+          subtitleController.primaryTrack?.language,
+        ),
         learning: learningController,
         isMounted: () => mounted,
         sourceFor: _sourceFor,
@@ -1216,7 +1234,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     try {
       await learningWorkflowController.recordCurrentSource(
         api: api,
-        language: _learningLanguage,
+        language: settingsController.resolveLearningLanguage(
+          subtitleController.primaryTrack?.language,
+        ),
         learning: learningController,
         isMounted: () => mounted,
         sourceFor: _sourceFor,
@@ -1253,7 +1273,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           ? const []
           : subtitleController.timingsBySentence[cue.id] ?? const [],
       wordEntries: learningController.wordEntries,
-      mediaTimeMs: _mediaTimeMs,
+      mediaTimeMs: playbackActions.mediaTimeMs,
     );
     if (practiceController.item != null) {
       await _replayPracticeWindow();
@@ -1264,10 +1284,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     await practiceController.startChunkDictation(
       api: api,
       cue: subtitleController.currentPrimaryCue,
-      chunk: _currentPracticeChunk(),
+      chunk: playbackActions.currentPracticeChunk(),
       mediaId: playerController.mediaId,
       trackId: subtitleController.primaryTrack?.id,
-      mediaTimeMs: _mediaTimeMs,
+      mediaTimeMs: playbackActions.mediaTimeMs,
     );
     if (practiceController.item != null) {
       await _replayPracticeWindow();
@@ -1280,7 +1300,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       cue: subtitleController.currentPrimaryCue,
       mediaId: playerController.mediaId,
       trackId: subtitleController.primaryTrack?.id,
-      mediaTimeMs: _mediaTimeMs,
+      mediaTimeMs: playbackActions.mediaTimeMs,
     );
     if (practiceController.item != null) {
       await _replayPracticeWindow();
@@ -1291,11 +1311,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     await practiceController.startShadowing(
       api: api,
       cue: subtitleController.currentPrimaryCue,
-      chunk: _currentPracticeChunk(),
-      chunks: _currentPracticeChunks(),
+      chunk: playbackActions.currentPracticeChunk(),
+      chunks: playbackActions.currentPracticeChunks(),
       mediaId: playerController.mediaId,
       trackId: subtitleController.primaryTrack?.id,
-      mediaTimeMs: _mediaTimeMs,
+      mediaTimeMs: playbackActions.mediaTimeMs,
     );
     if (practiceController.item != null) {
       await adapter.setRate(practiceController.state.shadowingRate);
@@ -1364,7 +1384,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (path == null || draft == null) return;
     await practiceController.stopShadowingRecording(
       api: api,
-      language: _learningLanguage,
+      language: settingsController.resolveLearningLanguage(
+        subtitleController.primaryTrack?.language,
+      ),
       mediaId: draft.sourceMediaId ?? playerController.mediaId,
       extractReferenceWav: () => tools.extractPcm16AudioSegment(
         path,
@@ -1572,7 +1594,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     try {
       payload = await service.l1SpecialtyOccurrences(
         difficultyKind: hint.difficultyKind,
-        language: _learningLanguage,
+        language: settingsController.resolveLearningLanguage(
+          subtitleController.primaryTrack?.language,
+        ),
         trackId: currentTrackId,
       );
     } catch (error) {
@@ -1690,41 +1714,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (mounted) playerController.setStatus('Paused for quick listening check');
   }
 
-  int _mediaTimeMs(Duration subtitleTime) =>
-      playbackActions.mediaTime(subtitleTime).inMilliseconds;
-
-  DisplayChunk? _currentPracticeChunk() {
-    final cue = subtitleController.currentPrimaryCue;
-    if (cue == null) return null;
-    final current = playbackActions.currentChunkRef();
-    if (current?.cue.id == cue.id) return current!.chunk;
-    final partition = subtitleController.chunkPartitionsBySentence[cue.id];
-    if (partition == null || partition.chunks.isEmpty) return null;
-    final currentIndex = subtitleController.currentChunkIndex;
-    if (currentIndex != null) {
-      for (final chunk in partition.chunks) {
-        if (chunk.index == currentIndex) return chunk;
-      }
-    }
-    return partition.chunks.first;
-  }
-
-  List<DisplayChunk> _currentPracticeChunks() {
-    final cue = subtitleController.currentPrimaryCue;
-    if (cue == null) return const [];
-    return subtitleController.chunkPartitionsBySentence[cue.id]?.chunks ??
-        const [];
-  }
-
-  /// Resolves the learning language for vocabulary, dictionary, source-snapshot
-  /// and diagnosis queries. Priority: user setting > active subtitle track
-  /// language > en fallback.
-  String get _learningLanguage {
-    final preferred = settingsController.learningLanguage;
-    if (preferred != 'auto') return preferred;
-    return subtitleController.primaryTrack?.language ?? 'en';
-  }
-
   Map<String, dynamic>? _sourceFor(SubtitleToken token, Cue cue) {
     if (playerController.mediaFingerprint == null) return null;
     return {
@@ -1756,7 +1745,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       MaterialPageRoute(
         builder: (_) => VocabularyScreen(
           api: service,
-          language: _learningLanguage,
+          language: settingsController.resolveLearningLanguage(
+            subtitleController.primaryTrack?.language,
+          ),
           onExport: playbackActions.exportVocabulary,
           onImport: playbackActions.importVocabulary,
           huntingController: huntingController,
@@ -2000,7 +1991,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (confirmed != true) return;
     final result = await service.importExternalVocabulary(
       entries,
-      language: _learningLanguage,
+      language: settingsController.resolveLearningLanguage(
+        subtitleController.primaryTrack?.language,
+      ),
       defaultStatus: defaultStatus,
       overwriteExisting: overwrite,
     );
