@@ -10,9 +10,11 @@ void main() {
         'progress': 0.75,
         'enabled': false,
         'runtime_version': '3.8.13',
+        'provider_version': 'jsonl-v2',
         'model_version': '3.8.0',
         'model_checksum_sha256': 'abc',
         'expected_install_bytes': 162250752,
+        'delivery_checksum_sha256': 'delivery',
         'installed_bytes': 120000000,
         'error': 'model missing',
       });

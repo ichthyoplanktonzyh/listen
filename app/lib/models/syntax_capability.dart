@@ -4,9 +4,11 @@ class SyntaxCapabilityView {
     required this.progress,
     required this.enabled,
     required this.runtimeVersion,
+    required this.providerVersion,
     required this.modelVersion,
     required this.modelChecksumSha256,
     required this.expectedInstallBytes,
+    required this.deliveryChecksumSha256,
     required this.installedBytes,
     required this.error,
   });
@@ -17,10 +19,13 @@ class SyntaxCapabilityView {
         progress: (json['progress'] as num?)?.toDouble() ?? 0,
         enabled: json['enabled'] as bool? ?? false,
         runtimeVersion: json['runtime_version'] as String? ?? '',
+        providerVersion: json['provider_version'] as String? ?? '',
         modelVersion: json['model_version'] as String? ?? '',
         modelChecksumSha256: json['model_checksum_sha256'] as String? ?? '',
         expectedInstallBytes:
             (json['expected_install_bytes'] as num?)?.toInt() ?? 0,
+        deliveryChecksumSha256:
+            json['delivery_checksum_sha256'] as String? ?? '',
         installedBytes: (json['installed_bytes'] as num?)?.toInt() ?? 0,
         error: json['error'] as String?,
       );
@@ -29,9 +34,11 @@ class SyntaxCapabilityView {
   final double progress;
   final bool enabled;
   final String runtimeVersion;
+  final String providerVersion;
   final String modelVersion;
   final String modelChecksumSha256;
   final int expectedInstallBytes;
+  final String deliveryChecksumSha256;
   final int installedBytes;
   final String? error;
 
