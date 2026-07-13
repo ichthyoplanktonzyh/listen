@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-14 00:25 CST: main.dart 拆分 S2.5 —— 把跨领域共享 glue helper 归位到自然属主，
+  为后续 coordinator 抽取降低注入面。`_mediaTimeMs` 与 `_currentPracticeChunk(s)` 迁入
+  `PlaybackActionsCoordinator`（已持 `mediaTime`/`currentChunkRef`/subtitle）；`_learningLanguage`
+  改为 `SettingsController.resolveLearningLanguage(trackLanguage)`，main.dart 16 处调用点改为
+  `settingsController.resolveLearningLanguage(subtitleController.primaryTrack?.language)`。
+  `ListeningInboxCoordinator` 随之去掉 `mediaTimeMs` 注入，直接用 `playbackActions.mediaTimeMs`。
+  `_sourceFor`（仅 vocab 使用）留待 vocab slice。逻辑逐字不变；新增 3 例测试（coordinators_test
+  的 mediaTimeMs/practice-chunk 空态、settings_test 的 resolveLearningLanguage 优先级）。
+  `flutter analyze` 零问题、`flutter test` 304 全通过（301 + 3）。
+
 - 2026-07-14 00:05 CST: main.dart 拆分 S2 —— 抽出 `ListeningInboxCoordinator`。把
   `_captureListeningInbox` / `_refreshListeningInbox` / `_replayListeningInboxItem` /
   `_processListeningInboxItem` 四个方法逐字搬到 `lib/controllers/listening_inbox_coordinator.dart`
