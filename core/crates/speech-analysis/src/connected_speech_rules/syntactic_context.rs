@@ -96,9 +96,10 @@ pub(super) fn syntactic_phrase_decision(
     sentence: &SubtitleSentence,
     syntax: &SyntacticSentenceAnalysis,
 ) -> Option<SyntacticPhraseDecision> {
-    // The locked v1 evaluation did not qualify want-to extraction. Keep its
-    // existing conservative text gate even when a future qualified artifact is
-    // present; enabling it requires a new preregistered evaluation.
+    // Corrected v2 qualifies the shared artifact but still marks the want-to
+    // query fallback-only. Keep its conservative text gate even when a
+    // qualified artifact is present; enabling it requires a new preregistered
+    // query evaluation.
     if matches!(
         context,
         PhraseContext::Always | PhraseContext::WantToInfinitive
@@ -421,7 +422,7 @@ mod tests {
     }
 
     #[test]
-    fn want_to_remains_text_heuristic_after_failed_locked_gate() {
+    fn want_to_remains_text_heuristic_after_corrected_v2_query_fallback() {
         let source = sentence("I want to leave");
         let syntax = analysis(
             &source,

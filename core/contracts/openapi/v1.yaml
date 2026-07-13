@@ -621,6 +621,27 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/SenseGroupAnalysisSummary" }
+  /v1/subtitles/{track_id}/syntactic-consumers:
+    post:
+      operationId: runSyntacticConsumers
+      description: Runs the optional qualified syntax provider once for the track and shares per-sentence artifacts across Reference B, SenseGroup, and dependency candidate matching; unavailable or invalid syntax returns explicit existing fallbacks.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                patterns:
+                  type: array
+                  items: { $ref: "#/components/schemas/SyntacticDependencyPattern" }
+      responses:
+        "200":
+          description: Shared syntax consumer batch or explicit fallback batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyntacticConsumerBatch"
   /v1/sense-group-analyses/{analysis_id}:
     get:
       operationId: senseGroupAnalysis
@@ -4310,6 +4331,76 @@ components:
           type: [string, "null"]
           description: Reserved; learning language is currently derived per subtitle track.
         updated_at_ms: { type: [integer, "null"], minimum: 0 }
+    SyntacticDependencyPattern:
+      type: object
+      required: [matcher_key, nodes]
+      properties:
+        matcher_key:
+          type: string
+          description: Matcher-local diagnostic key; never a Construction canonical identity.
+        nodes:
+          type: array
+          items:
+            type: object
+            required: [binding]
+            properties:
+              binding: { type: string }
+              lemma: { type: [string, "null"] }
+              upos: { type: [string, "null"] }
+              dependency_relation: { type: [string, "null"] }
+        edges:
+          type: array
+          items:
+            type: object
+            required: [head_binding, dependent_binding]
+            properties:
+              head_binding: { type: string }
+              dependent_binding: { type: string }
+              dependency_relation: { type: [string, "null"] }
+    SyntacticConsumerBatch:
+      type: object
+      required: [qualification, probe_request_count, analysis_request_count, sentences]
+      properties:
+        descriptor:
+          type: [object, "null"]
+          description: Complete provider/runtime/model provenance when the optional capability ran.
+        qualification:
+          type: object
+          required: [artifact, reference_b_verified_subset, sense_group, dependency_matcher]
+          properties:
+            artifact: { type: boolean }
+            reference_b_verified_subset: { type: boolean }
+            sense_group: { type: boolean }
+            dependency_matcher: { type: boolean }
+        probe_request_count: { type: integer, minimum: 0 }
+        analysis_request_count:
+          type: integer
+          minimum: 0
+          maximum: 1
+          description: One provider batch at most; all consumers reuse its per-sentence artifacts.
+        sentences:
+          type: array
+          items:
+            type: object
+            required: [sentence_id, reference_b, sense_groups, dependency_matches]
+            properties:
+              sentence_id: { type: string }
+              analysis: { type: [object, "null"] }
+              validation: { type: [object, "null"] }
+              fallback_reason:
+                anyOf:
+                  - enum: [provider_not_configured, runtime_missing, model_missing, model_corrupt, unsupported_language, timeout, invalid_output, protocol_failure, process_failure, provider_failure, artifact_unqualified, missing_sentence, invalid_sentence]
+                  - type: "null"
+              reference_b:
+                type: array
+                items: { type: object }
+              sense_groups:
+                type: array
+                items: { type: object }
+              dependency_matches:
+                type: array
+                description: Rebuildable matcher candidates only; no canonical Construction or capability identity.
+                items: { type: object }
     SentenceDiagnosis:
       type: object
       required: [sentence_id, hints, unclassified_lemmas]

@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -98,6 +99,17 @@ class FakeAdapter(subject.ProviderAdapter):
 
 
 class SidecarContractTest(unittest.TestCase):
+    def test_model_checksum_ignores_python_bytecode_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "model.bin").write_bytes(b"qualified-model")
+            before = subject._directory_sha256(root)
+            cache = root / "__pycache__"
+            cache.mkdir()
+            (cache / "model.cpython-311.pyc").write_bytes(b"runtime-specific")
+            (root / "another.pyc").write_bytes(b"runtime-specific")
+            self.assertEqual(subject._directory_sha256(root), before)
+
     def test_contraction_split_maps_two_parser_tokens_to_one_subtitle_token(self) -> None:
         text = "I'm ready."
         raw = [

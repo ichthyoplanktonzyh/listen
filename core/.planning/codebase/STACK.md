@@ -91,6 +91,7 @@ workspace: Cargo.toml (11 crates, resolver 2)
 | 强制对齐 venv | `~/Library/Caches/LLPlayerNext/research/forced-align/` |
 | ZIPA 研究 venv | `~/Library/Caches/LLPlayerNext/research/zipa/`（实验） |
 | 句法研究 venv | `~/Library/Caches/LLPlayerNext/research/syntactic-analysis/`（实验，模型可选） |
+| 可选 spaCy 产品 capability | `~/Library/Application Support/LLPlayerNext/syntax/spacy-3.8.13-en_core_web_sm-3.8.0/`（仅显式安装） |
 
 ### 依赖
 
@@ -106,6 +107,9 @@ datasets (可选，用于 TIMIT/Buckeye)
 
 # 句法 Provider 研究 (requirements.txt)
 stanza==1.13.0, spacy==3.8.13, psutil==7.2.2
+
+# 可选句法产品 capability (requirements-spacy-product.txt)
+fully pinned spaCy 3.8.13 dependency closure + en_core_web_sm 3.8.0 wheel hash
 ```
 
 ### 脚本清单
@@ -121,8 +125,9 @@ stanza==1.13.0, spacy==3.8.13, psutil==7.2.2
 | `scripts/phonetic-eval.py` | 音素分析评估引擎（实验） |
 | `scripts/phonetic-research-adapter.py` | 音素研究适配器（实验） |
 | `scripts/zipa-ctc-onnx-research.py` | ZIPA CTC ONNX 研究脚本（实验） |
-| `scripts/syntactic-analysis/syntax-sidecar.py` | Stanza/spaCy provider-neutral JSONL 研究 sidecar |
+| `scripts/syntactic-analysis/syntax-sidecar.py` | Stanza/spaCy provider-neutral JSONL sidecar；产品 composition 只选择 spaCy |
 | `scripts/syntactic-analysis/setup-venv.sh` | 隔离 runtime；模型下载须显式 opt-in |
+| `scripts/syntactic-analysis/setup-spacy-product.sh` | 安装、复制 sidecar、probe 并校验可选 spaCy 产品 capability；不修改 base bundle |
 
 ## 5. 数据库
 

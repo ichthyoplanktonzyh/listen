@@ -36,7 +36,7 @@
 | `subtitle-core` | SRT/VTT 解析、token 化、时间轴查询（空隙/重叠/边界） |
 | `diagnosis-core` | 词义障碍、声音识别障碍、信息不足、其他因素 |
 | `speech-analysis` | 100 句发音基线、OOV fallback-v2 stress、information-structure prior、Reference B text/syntax provenance 与未资格 fallback、syntax-aware SenseGroup clause/PP/subordinator boundary、phrase/标点保护、min/max + 3–5 教学粒度、低 coverage 精确 fallback、provider-neutral dependency candidate matcher、RhythmFrame bridge、chunk 分区 |
-| `application` | AppServices 用例逻辑、chunk 检测、SyntacticAnalysisProvider fake/finalization seam |
+| `application` | AppServices 用例逻辑、chunk 检测、SyntacticAnalysisProvider fake/finalization seam、共享 consumer 单 batch/artifact ID、坏句隔离、timeout 精确 fallback |
 | `syntactic-provider` | Stanza/spaCy 同构 neutral contract、缺模型 capability、畸形 stdout、timeout 闭合失败 |
 | `dictionary-provider` | Provider 查询、缓存逻辑 |
 | `persistence-sqlite` | CRUD 操作、幂等、唯一约束、事务 |
@@ -150,6 +150,9 @@ cd apps/desktop && flutter test
 | `scripts/syntactic-analysis/test_evaluate_provider.py` | Rust tokenizer parity 与 future/motion、habitual/state、have-to idiom、wh-extraction 保守 query 单元测试 |
 | `scripts/syntactic-analysis/real_media_qa.py` | 对 owner 本地 SRT 分批执行 mapping/tree/determinism/phrase QA；报告仅存输入 SHA、cue 编号和统计，不复制字幕正文 |
 | `scripts/syntactic-analysis/test_real_media_qa.py` | real-media SRT 多行 cue 解析与时间戳隔离单元测试 |
+| `scripts/syntactic-analysis/evaluate_provider_v2.py` | Phase 3.9.2 corrected artifact/query/policy 分层资格评估；validation digest locked |
+| `scripts/syntactic-analysis/test_evaluate_provider_v2.py` | v2 ambiguous-policy 与逐 query `qualified` / `fallback_only` scorer 回归 |
+| `scripts/syntactic-analysis/real_media_qa_v2.py` | corrected want-to query 下的真实媒体 mapping/tree/determinism 复核，不复制字幕正文 |
 
 ### Python 评估缺少自动化单元测试
 

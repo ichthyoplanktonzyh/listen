@@ -4,6 +4,7 @@ use domain::{
     PhraseCandidate, SenseGroupSource, SubtitleSentence, SubtitleTokenKind,
     SyntacticSentenceAnalysis,
 };
+use serde::{Deserialize, Serialize};
 
 pub const PROVIDER_ID: &str = "rule-based-sense-group";
 pub const PROVIDER_VERSION: &str = "v1";
@@ -30,7 +31,7 @@ impl Default for SenseGroupPartitionConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SenseGroupSpan {
     pub start_token_index: u32,
     pub end_token_index: u32,

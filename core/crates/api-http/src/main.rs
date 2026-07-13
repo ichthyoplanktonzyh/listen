@@ -7,6 +7,7 @@ use api_http::{ApiState, KeychainSecretStore, router};
 use application::AppServices;
 use persistence_sqlite::SqliteRepository;
 use rand::Rng;
+use syntactic_provider::{PythonSyntacticKind, PythonSyntacticProvider};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -39,10 +40,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_llm_provider_profile_repository(repository.clone());
     let services = services.with_coach_dashboard_repository(repository.clone());
     let token = env::var("LLPLAYERNEXT_API_TOKEN").unwrap_or_else(|_| random_token());
-    let app = router(
-        ApiState::new(services, repository, token.clone())
-            .with_secret_store(Arc::new(KeychainSecretStore::new())),
-    );
+    let mut state = ApiState::new(services, repository, token.clone())
+        .with_secret_store(Arc::new(KeychainSecretStore::new()));
+    if let Some(provider) = optional_syntactic_provider() {
+        state = state.with_syntactic_provider(provider);
+    }
+    let app = router(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let address = listener.local_addr()?;
 
@@ -69,6 +72,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
     );
     Ok(())
+}
+
+fn optional_syntactic_provider() -> Option<Arc<dyn application::SyntacticAnalysisProvider>> {
+    let python = env::var_os("LLPLAYERNEXT_SYNTAX_PYTHON")?;
+    let sidecar = env::var_os("LLPLAYERNEXT_SYNTAX_SIDECAR")?;
+    Some(Arc::new(PythonSyntacticProvider::new(
+        PythonSyntacticKind::Spacy,
+        PathBuf::from(python),
+        PathBuf::from(sidecar),
+    )))
 }
 
 fn random_token() -> String {

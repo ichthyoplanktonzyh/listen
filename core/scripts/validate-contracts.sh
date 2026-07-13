@@ -15,6 +15,7 @@ PYTHONPYCACHEPREFIX="$tmp/pycache" python3 -m py_compile \
   "$root/scripts/syntactic-analysis/evaluate_provider.py" \
   "$root/scripts/syntactic-analysis/evaluate_provider_v2.py" \
   "$root/scripts/syntactic-analysis/real_media_qa.py" \
+  "$root/scripts/syntactic-analysis/real_media_qa_v2.py" \
   "$root/scripts/syntactic-analysis/test_real_media_qa.py" \
   "$root/scripts/syntactic-analysis/test_evaluate_provider.py" \
   "$root/scripts/syntactic-analysis/test_evaluate_provider_v2.py" \
@@ -23,6 +24,8 @@ PYTHONPYCACHEPREFIX="$tmp/pycache" python3 -m py_compile \
   "$root/scripts/validate-syntactic-fixtures-v2.py" \
   "$root/scripts/timeline-production/production_pipeline.py" \
   "$root/scripts/timeline-production/whisperx-align-request.py"
+bash -n "$root/scripts/syntactic-analysis/setup-spacy-product.sh"
+python3 -m json.tool "$root/scripts/syntactic-analysis/product-assets-v2.json" >/dev/null
 PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/test_lltimeline_common.py"
 PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/forced-align/test_align_cli_contract.py"
 PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/forced-align/test_mfa_align_cli_contract.py"

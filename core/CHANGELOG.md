@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-13 19:22 CST: Phase 3.9.2 激活可选 spaCy 共享句法产品 capability。application
+  新增单次 probe/batch、逐句 finalise 的 consumer orchestrator；同一 artifact ID 供已资格
+  B（`going_to` / `used_to` / `have_to`）、syntax-aware SenseGroup 与 dependency candidate
+  matcher 共用，`want_to` 继续精确 text fallback。新增 HTTP/OpenAPI composition、未配置/timeout/
+  坏树逐句隔离测试；base 路径不启动 Python。fresh opt-in 安装以 fully pinned spaCy 3.8.13 +
+  `en_core_web_sm` 3.8.0 实测通过 probe 与 development v2，clean install 162,250,752 bytes，
+  base bundle +0B；runtime/model/training-data 许可与安装/刷新/停用/卸载分别审计。模型 identity
+  排除非内容 `__pycache__/*.pyc` 后在 research/fresh venv 稳定一致；真实媒体 244 cues 中唯一
+  双 root 句单独 fallback，不影响其余句，句法仍不进入 C、不替代 ChunkTimeline、不铸造
+  Construction identity。
+
 - 2026-07-13 18:57 CST: Phase 3.9.2 Slice 0 建立 corrected syntax qualification v2。冻结旧 v1
   历史，新增 development/validation v2、独立 digest 与 scorer，把 attachment gold、产品歧义
   policy 和 artifact validity 分层，并改为逐 consumer query 授权。spaCy 开发/锁定验证均达到

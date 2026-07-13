@@ -39,7 +39,15 @@ def _directory_sha256(path: Path) -> str:
     if not path.exists():
         raise ProviderFailure("model_missing", f"model path does not exist: {path}")
     hasher = hashlib.sha256()
-    files = sorted(candidate for candidate in path.rglob("*") if candidate.is_file())
+    # Importing a Python model creates interpreter-specific bytecode. It is a
+    # runtime cache, not model content, and must not change product identity.
+    files = sorted(
+        candidate
+        for candidate in path.rglob("*")
+        if candidate.is_file()
+        and "__pycache__" not in candidate.parts
+        and candidate.suffix != ".pyc"
+    )
     if not files:
         raise ProviderFailure("model_corrupt", f"model path has no files: {path}")
     for candidate in files:

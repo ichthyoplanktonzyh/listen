@@ -1,6 +1,6 @@
 # Current Data Model
 
-Last updated: 2026-07-13, Phase 3.9.1 syntactic artifact contract.
+Last updated: 2026-07-13, Phase 3.9.2 shared syntactic product composition.
 
 All persisted time values are non-negative integer milliseconds. Public IDs are
 opaque SHA-256 strings generated from a namespace and stable fingerprint; they
@@ -216,6 +216,12 @@ not a timeline or user asset. Its identity isolates the source text/token
 snapshot, language, contract, provider, runtime, model checksum, and profile
 configuration. Phase 3.9.1 adds no SQLite row and grants no deletion/cascade or
 learning-evidence semantics.
+
+The Phase 3.9.2 HTTP batch returns one independently validated artifact per
+source sentence. Reference B evidence, syntax-aware SenseGroup spans, and
+dependency matches carry/reference that same artifact ID. The batch is still
+ephemeral: no new SQLite authority, cascade, or canonical identity is created.
+Invalid/missing sentences contain an explicit fallback reason and no artifact.
 
 `SenseGroupAnalysis` retains its existing independent candidate/active/archive
 lifecycle. `rule-based-sense-group/v1` and `syntax-aware-sense-group/v1` are

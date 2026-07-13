@@ -5,7 +5,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use api_events::{EventEnvelope, EventName};
 use application::{
     AppServices, ApplicationError, DictionaryProvider, EnglishPronunciationProvider,
-    ImportSubtitle, InMemorySecretStore, RegisterMedia, SecretStore,
+    ImportSubtitle, InMemorySecretStore, RegisterMedia, SecretStore, SyntacticAnalysisProvider,
+    SyntacticConsumerOrchestrator, SyntacticProductQualification,
 };
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
@@ -39,7 +40,6 @@ mod secret_store_keychain;
 mod sound_line;
 mod speech_jobs;
 mod transcription;
-pub use secret_store_keychain::KeychainSecretStore;
 use m18::M18Coordinator;
 use phonetic_analysis::{CreatePhoneticJobRequest, PhoneticAnalysisCoordinator};
 use routes::corpus::*;
@@ -54,9 +54,11 @@ use routes::pronunciation::*;
 use routes::semantic::*;
 use routes::sound_line::*;
 use routes::speech::*;
+use routes::syntax::*;
 use routes::timelines::*;
 use routes::transcription::*;
 use routes::vocabulary::*;
+pub use secret_store_keychain::KeychainSecretStore;
 use sound_line::{CreateSoundLineJob, SoundLineCoordinator};
 use speech_jobs::{CreateSpeechBatchJob, SpeechBatchCoordinator};
 use transcription::{CreateJobRequest, TranscriptionCoordinator};
@@ -74,6 +76,9 @@ pub struct ApiState {
     pub speech_jobs: Arc<SpeechBatchCoordinator>,
     pub sound_line: Arc<SoundLineCoordinator>,
     pub m18: Arc<M18Coordinator>,
+    /// Optional Phase 3.9.2 syntax capability. The default has no runtime and
+    /// returns the exact B/rule-SenseGroup fallback without touching Python.
+    pub syntactic_consumers: Arc<SyntacticConsumerOrchestrator>,
     /// Phase 3.12: resolves provider credentials at dispatch time. Defaults to
     /// an in-memory store; the composition root injects the OS keychain via
     /// [`ApiState::with_secret_store`]. The secret never lives on `services`.
@@ -123,6 +128,10 @@ impl ApiState {
             speech_jobs,
             sound_line,
             m18: Arc::new(M18Coordinator::new()),
+            syntactic_consumers: Arc::new(SyntacticConsumerOrchestrator::new(
+                None,
+                SyntacticProductQualification::corrected_v2(),
+            )),
             secret_store: Arc::new(InMemorySecretStore::new()),
         }
     }
@@ -130,6 +139,14 @@ impl ApiState {
     /// Injects the platform secret store (OS keychain in production).
     pub fn with_secret_store(mut self, secret_store: Arc<dyn SecretStore>) -> Self {
         self.secret_store = secret_store;
+        self
+    }
+
+    pub fn with_syntactic_provider(mut self, provider: Arc<dyn SyntacticAnalysisProvider>) -> Self {
+        self.syntactic_consumers = Arc::new(SyntacticConsumerOrchestrator::new(
+            Some(provider),
+            SyntacticProductQualification::corrected_v2(),
+        ));
         self
     }
 }
@@ -261,6 +278,10 @@ pub fn router(state: ApiState) -> Router {
         .route(
             "/v1/subtitles/{track_id}/sense-group-analyses",
             get(track_sense_group_analyses).post(generate_sense_group_analysis),
+        )
+        .route(
+            "/v1/subtitles/{track_id}/syntactic-consumers",
+            post(run_syntactic_consumers),
         )
         .route(
             "/v1/subtitles/{track_id}/sense-group-analyses/summary",

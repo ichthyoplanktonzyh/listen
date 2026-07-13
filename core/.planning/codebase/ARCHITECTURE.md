@@ -1,6 +1,6 @@
 # LLPlayerNext System Architecture
 
-Last updated: 2026-07-13. Reflects Phase 3.9.1 provider-neutral syntactic contract.
+Last updated: 2026-07-13. Reflects Phase 3.9.2 optional shared syntax product composition.
 
 ## Overview
 
@@ -96,6 +96,10 @@ application use cases and provider/repository boundaries.
 - `SyntacticAnalysisProvider` returns content/provenance drafts only. Application
   assigns artifact identity and validates the draft against the exact source
   sentence/token snapshot before a consumer may activate syntax-gated behavior.
+- `SyntacticConsumerOrchestrator` probes once and analyzes a subtitle track in
+  one batch, then finalises each sentence independently. B, SenseGroup, and the
+  dependency matcher share the same per-sentence artifact; a bad sentence
+  falls back without invalidating its siblings.
 
 ### `syntactic-provider`
 
@@ -369,7 +373,7 @@ subtitle track -> word timeline -> rhythm frames / chunk timeline / phone timeli
   -> SpeechEnhancementWorkflowController -> Flutter timeline/pronunciation model
 ```
 
-### Shared Syntactic Analysis (Phase 3.9.1)
+### Shared Syntactic Analysis (Phases 3.9.1–3.9.2)
 
 ```text
 SubtitleSentence + SubtitleToken snapshot
@@ -380,6 +384,14 @@ SubtitleSentence + SubtitleToken snapshot
 provider missing, unqualified, or artifact not activatable
   -> existing conservative B + punctuation_length_rule_v1
 ```
+
+Phase 3.9.2 exposes this composition through
+`POST /v1/subtitles/{track_id}/syntactic-consumers`. The composition root may
+inject one optional provider using `LLPLAYERNEXT_SYNTAX_PYTHON` and
+`LLPLAYERNEXT_SYNTAX_SIDECAR`; absent configuration never starts Python.
+Qualification is per consumer query: spaCy artifacts, B going-to/used-to/have-to,
+SenseGroup, and matcher are activated, while B want-to stays on its exact text
+fallback because basic dependencies do not resolve its wh ambiguity reliably.
 
 The syntactic artifact is not persisted by Slice 1, is not a learning asset,
 does not replace ChunkTimeline, and cannot supply audio-backed Reference C.
