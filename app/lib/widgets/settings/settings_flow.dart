@@ -38,6 +38,7 @@ Future<void> showAppSettings({
     await showDialog<void>(
       context: context,
       builder: (_) => SettingsDialog(
+        api: api,
         language: settingsController.language,
         subtitlePreset: subtitleController.preset,
         primaryFontSize: subtitleController.primaryFontSize,

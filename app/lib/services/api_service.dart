@@ -206,6 +206,54 @@ class LocalApi {
   Future<List<dynamic>> listMediaLibrary() async =>
       (await _request('GET', '/v1/media')) as List<dynamic>;
 
+  // ── Phase 3.12 vendor-neutral LLM providers ──
+  // Secrets are write-only: `registerLlmProvider` sends the key once; it is
+  // stored in the OS keychain by the backend and never returned. All reads use
+  // the secret-free view.
+
+  /// Lists configured provider profiles (secret-free views).
+  Future<List<dynamic>> listLlmProviders() async =>
+      (await _request('GET', '/v1/llm/providers')) as List<dynamic>;
+
+  /// Registers or updates a provider. When [secret] is non-empty it is stored
+  /// in the OS keychain and never echoed back.
+  Future<Map<String, dynamic>> registerLlmProvider({
+    required String displayName,
+    required String adapterKind,
+    required String baseUrl,
+    required String modelId,
+    required List<String> allowedUses,
+    String? secret,
+    String? protocolVersion,
+    String retention = 'unknown',
+  }) async =>
+      (await _request('POST', '/v1/llm/providers', {
+        'display_name': displayName,
+        'adapter_kind': adapterKind,
+        'base_url': baseUrl,
+        'model_id': modelId,
+        'allowed_uses': allowedUses,
+        'retention': retention,
+        if (protocolVersion != null && protocolVersion.isNotEmpty)
+          'protocol_version': protocolVersion,
+        if (secret != null && secret.isNotEmpty) 'secret': secret,
+      }))
+          as Map<String, dynamic>;
+
+  /// Deletes a provider and removes its credential from the secure store.
+  Future<void> deleteLlmProvider(String id) async {
+    await _request('DELETE', '/v1/llm/providers/${Uri.encodeComponent(id)}');
+  }
+
+  /// Connectivity + capability test: actually measures structured-output
+  /// support against the endpoint. Diagnostic only, never learning feedback.
+  Future<Map<String, dynamic>> probeLlmProvider(String id) async =>
+      (await _request(
+            'POST',
+            '/v1/llm/providers/${Uri.encodeComponent(id)}/probe',
+          ))
+          as Map<String, dynamic>;
+
   /// Stores (or clears, with null) the explicit triage intent for one media
   /// and returns the refreshed library entry.
   Future<Map<String, dynamic>> setMediaTriageIntent(

@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../services/api_service.dart';
+import 'llm_provider_settings.dart';
 
 /// Settings dialog content widget. Takes all setting values via constructor
 /// and communicates changes back through callbacks.
 class SettingsDialog extends StatefulWidget {
   const SettingsDialog({
     super.key,
+    this.api,
     required this.language,
     required this.subtitlePreset,
     required this.primaryFontSize,
@@ -79,6 +82,9 @@ class SettingsDialog extends StatefulWidget {
   });
 
   // Current values
+  /// Phase 3.12: when a sidecar is connected, the AI-providers section can
+  /// manage vendor-neutral LLM providers. Null keeps that section inert.
+  final LocalApi? api;
   final String language;
   final String subtitlePreset;
   final double primaryFontSize;
@@ -164,7 +170,7 @@ class SettingsDialog extends StatefulWidget {
 
 class _SettingsDialogState extends State<SettingsDialog> {
   final ScrollController _settingsScrollController = ScrollController();
-  final List<GlobalKey> _categoryKeys = List.generate(6, (_) => GlobalKey());
+  final List<GlobalKey> _categoryKeys = List.generate(7, (_) => GlobalKey());
   int _selectedCategory = 2;
   late String language;
   late String subtitlePreset;
@@ -320,6 +326,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     NavigationRailDestination(
                       icon: const Icon(Icons.science_outlined),
                       label: Text(l.text('experimental')),
+                    ),
+                    NavigationRailDestination(
+                      icon: const Icon(Icons.smart_toy_outlined),
+                      label: Text(l.text('llmProviders')),
                     ),
                   ],
                 ),
@@ -941,6 +951,17 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         labelText: l.text('openSubtitlesApiKey'),
                       ),
                     ),
+                    const Divider(),
+                    Text(
+                      key: _categoryKeys[6],
+                      l.text('llmProviders'),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    if (widget.api != null)
+                      LlmProviderSettings(api: widget.api!)
+                    else
+                      Text(l.text('llmSidecarUnavailable')),
                   ],
                 ),
               ),
