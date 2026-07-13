@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-13 23:05 CST: 机械拆分 `apps/desktop/lib/models/timeline.dart`（2837 → 10 行 library +
+  6 个 part 文件，最大 `rhythm.dart` 965 行，均低于 AGENT.md 1500 行阈值）。采用 Dart
+  `part`/`part of`：原文件零 import、完全自包含，故 43 处 `import 'models/timeline.dart'` 全部
+  保持不变。按子领域切分：`timeline/subtitle.dart`（token/cue/track/capabilities）、`word_chunk.dart`
+  （Word/Chunk timeline + evidence + SenseGroup）、`sound.dart`（PhoneTimeline + sound 原语）、
+  `rhythm.dart`（RhythmFrame 模型全族）、`document.dart`（LLTimeline document/metadata/artifact/
+  DetectedPhone）、`display.dart`（DisplayChunk/partition/cursor）。逐字搬移，脚本验证 2618 非空行
+  与原文完全一致（仅 dart format 空行规整）。`flutter analyze` 零问题、`flutter test` 293 全通过、
+  未违反 ADR 0014（手写解析不变，仅分文件）。
+
 - 2026-07-13 22:47 CST: 机械拆分 `persistence-sqlite/src/lexical.rs`（1801 → 948 行，低于
   AGENT.md 1500 行阈值）。按子领域抽出三个子模块：`lexical/import_export.rs`（bulk
   import/export + capability-state 持久化的两个 inherent impl 块 + `merge_imported_entry`）、
