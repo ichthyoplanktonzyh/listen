@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-13 18:57 CST: Phase 3.9.2 Slice 0 建立 corrected syntax qualification v2。冻结旧 v1
+  历史，新增 development/validation v2、独立 digest 与 scorer，把 attachment gold、产品歧义
+  policy 和 artifact validity 分层，并改为逐 consumer query 授权。spaCy 开发/锁定验证均达到
+  100% lexical/exact mapping、零 silent/tree issue；`going_to`、`used_to`、`have_to` 各自 100%
+  qualified。basic dependency 无法稳定区分 want-to wh subject/object，且锁定歧义例 raw allow，
+  因而 `want_to` 明确为 `fallback_only`，不能再整体否决 artifact，也不能整体放行 provider。
+
 - 2026-07-13 18:45 CST: 新建 Phase 3.9.2 Syntax Provider Qualification Correction and Product
   Activation。纠正 3.9.1 将 `Which team do you want to win?` 的保守 block policy 当作唯一
   parser attachment gold 的评估错误；冻结旧报告，另建 v2 subject/object 清晰最小对照和
