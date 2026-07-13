@@ -18,6 +18,7 @@ import 'controllers/app_controllers.dart';
 import 'controllers/backend_event_coordinator.dart';
 import 'controllers/download_controller.dart';
 import 'controllers/extensive_listening_controller.dart';
+import 'controllers/hunting_actions_coordinator.dart';
 import 'controllers/hunting_controller.dart';
 import 'controllers/hunting_session_controller.dart';
 import 'controllers/learning_controller.dart';
@@ -150,6 +151,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     speechEnhancement: speechEnhancementWorkflowController,
     resourceActions: resourceActions,
   );
+  late final huntingActions = HuntingActionsCoordinator(
+    huntingSession: huntingSessionController,
+    player: playerController,
+    extensiveListening: extensiveListeningController,
+    subtitle: subtitleController,
+  );
 
   // ── Local UI state (not managed by controllers) ──
   String get status => playerController.status;
@@ -236,6 +243,11 @@ class _PlayerScreenState extends State<PlayerScreen>
         await _loadWordEntries();
         await _loadPhraseEntries();
       },
+    );
+    huntingActions.bind(
+      getApi: () => api,
+      isMounted: () => mounted,
+      text: (key) => l.text(key),
     );
     unawaited(_connectApi());
     unawaited(_loadSettings());
@@ -1659,71 +1671,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  Future<void> _toggleHuntingMode() async {
-    if (huntingSessionController.state.enabled) {
-      huntingSessionController.stop();
-      if (mounted) playerController.setStatus(l.text('huntingStopped'));
-      return;
-    }
-    final service = api;
-    final mediaId = playerController.mediaId;
-    if (service == null || mediaId == null) return;
-    if (!extensiveListeningController.active) {
-      final started = await extensiveListeningController.startSession(
-        api: service,
-        mediaId: mediaId,
-        trackId: subtitleController.primaryTrack?.id,
-      );
-      if (!started) return;
-    }
-    final session = extensiveListeningController.session;
-    if (session == null) return;
-    final loaded = await huntingSessionController.start(
-      api: service,
-      sessionId: session.id,
-      mediaId: mediaId,
-      trackId: subtitleController.primaryTrack?.id,
-    );
-    if (!mounted || !loaded) return;
-    final state = huntingSessionController.state;
-    playerController.setStatus(
-      !state.indexed
-          ? l.text('huntingIndexNeeded')
-          : l
-                .text('huntingStarted')
-                .replaceAll('{count}', '${state.occurrences.length}'),
-    );
-  }
-
-  Future<void> _reindexHuntingCorpus() async {
-    final service = api;
-    if (service == null) return;
-    try {
-      final count = await service.reindexCorpus();
-      await huntingSessionController.reload(service);
-      if (mounted) {
-        playerController.setStatus(
-          l.text('dictionaryReindexDone').replaceAll('{count}', '$count'),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        playerController.setStatus(
-          l.text('dictionaryReindexFailed').replaceAll('{error}', '$error'),
-        );
-      }
-    }
-  }
-
-  Future<void> _answerHuntingCheck(String answer) async {
-    final service = api;
-    if (service == null) return;
-    final saved = await huntingSessionController.answer(service, answer);
-    if (saved && mounted) {
-      playerController.setStatus(l.text('huntingAnswerSaved'));
-    }
-  }
-
   Future<void> _captureListeningInbox() async {
     final cue = subtitleController.currentPrimaryCue;
     final captured = await extensiveListeningController.captureCurrentCue(
@@ -2444,10 +2391,12 @@ class _PlayerScreenState extends State<PlayerScreen>
                               child: Center(
                                 child: HuntingPromptCard(
                                   controller: huntingSessionController,
-                                  onAnswer: (answer) =>
-                                      unawaited(_answerHuntingCheck(answer)),
-                                  onReindex: () =>
-                                      unawaited(_reindexHuntingCorpus()),
+                                  onAnswer: (answer) => unawaited(
+                                    huntingActions.answerHuntingCheck(answer),
+                                  ),
+                                  onReindex: () => unawaited(
+                                    huntingActions.reindexHuntingCorpus(),
+                                  ),
                                 ),
                               ),
                             ),
@@ -2550,7 +2499,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     taskStatuses: taskStatuses.values.toList(growable: false),
     onSeekCue: _seekCue,
     onToggleExtensiveListening: _toggleExtensiveListening,
-    onToggleHunting: _toggleHuntingMode,
+    onToggleHunting: huntingActions.toggleHuntingMode,
     onCaptureListeningInbox: _captureListeningInbox,
     onHardInterruptListening: _hardInterruptListening,
     onSaveSettings: _saveSettings,
