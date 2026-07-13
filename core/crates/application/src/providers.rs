@@ -43,3 +43,155 @@ pub trait PronunciationProvider: Send + Sync {
         serde_json::json!([])
     }
 }
+
+// ---------------------------------------------------------------------------
+// Phase 3.12 vendor-neutral LLM provider seams.
+//
+// Two layers on purpose:
+//   * `LlmChatAdapter` is the *wire seam* — each heterogeneous protocol
+//     (OpenAI Chat Completions, Anthropic Messages, ...) implements it. This is
+//     the surface where neutrality is proven: a shared contract suite drives
+//     every adapter through the same scenarios.
+//   * `SemanticRubricProvider` / `SemanticJudgeProvider` are the *application
+//     seams* that `AppServices` holds. A single generic composition
+//     (`LlmSemanticProvider<A>` in crate `llm-provider`) builds the prompt +
+//     schema, parses the output into a draft, and works over *any*
+//     `LlmChatAdapter`. Swapping the adapter must not change semantics.
+//
+// Providers return content **drafts** only. They never mint identity, version,
+// or snapshot hashes and never return a `SemanticRubric`/`SemanticJudgment`
+// with an id: Phase 3.11 keeps identity, versioning, and validation on the
+// server-side use case, so a vendor layer can never become a second identity
+// writer (ADR 0021 four-layer separation).
+// ---------------------------------------------------------------------------
+
+/// A neutral, structured-output chat request. Wire-agnostic: it names no
+/// provider message shape. Adapters translate it into their protocol and must
+/// map length/refusal/schema failures onto [`LlmProviderError`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct StructuredChatRequest {
+    pub system: String,
+    pub user: String,
+    /// JSON Schema the output text must satisfy. Adapters that support native
+    /// structured output pass it through; others fall back to strict-JSON
+    /// instruction + post-hoc validation.
+    pub json_schema: serde_json::Value,
+    pub schema_name: String,
+    pub max_output_tokens: u32,
+    pub temperature: Option<f32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TokenUsage {
+    pub prompt_tokens: Option<u32>,
+    pub completion_tokens: Option<u32>,
+}
+
+/// A clean, complete structured response. Adapters return this only on a
+/// normal stop with text; truncation, refusal, and rate limits are errors, not
+/// values, so the composition layer can never mistake a cut-off answer for a
+/// real one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StructuredChatResponse {
+    /// Raw text expected to parse as JSON matching the request schema.
+    pub json_text: String,
+    /// The most specific model identifier the provider reported. `None` is
+    /// recorded as incomplete provenance, never invented.
+    pub model_id: Option<String>,
+    pub usage: Option<TokenUsage>,
+}
+
+/// A runtime view of a configured provider: which protocol, which model, and
+/// its (declared or probed) capabilities.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LlmProviderDescriptor {
+    pub adapter_kind: LlmAdapterKind,
+    pub model_id: String,
+    pub capability: ProviderCapability,
+}
+
+/// The wire seam. One implementation per protocol family.
+#[async_trait]
+pub trait LlmChatAdapter: Send + Sync {
+    fn adapter_kind(&self) -> LlmAdapterKind;
+    fn descriptor(&self) -> LlmProviderDescriptor;
+    /// Send one structured request and return the completed JSON text.
+    async fn complete_structured(
+        &self,
+        request: &StructuredChatRequest,
+    ) -> Result<StructuredChatResponse, LlmProviderError>;
+    /// Actually exercise structured output against this endpoint (the Ollama
+    /// trap: protocol compatibility is not capability equivalence). Returns a
+    /// measured [`CapabilityClaim::Probed`].
+    async fn probe_structured_output(&self) -> Result<CapabilityClaim, LlmProviderError>;
+}
+
+/// Neutral rubric-generation request. The provider proposes information points;
+/// the use case assigns identity, version, provenance, and snapshot hashes.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RubricGenerationRequest {
+    pub purpose: SemanticTaskKind,
+    pub source_language: LanguageCode,
+    pub response_language: LanguageCode,
+    pub transcript_snapshot: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RubricPointDraft {
+    pub importance: RubricPointImportance,
+    pub statement: String,
+    pub accepted_paraphrase_notes: Option<String>,
+}
+
+/// Content-only rubric proposal. No id, no version, no source snapshot — those
+/// belong to the server-side [`domain::SemanticRubric`] the use case builds.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RubricDraft {
+    pub points: Vec<RubricPointDraft>,
+    pub model_id: Option<String>,
+    pub prompt_version: Option<String>,
+    pub schema_version: Option<String>,
+    pub raw_output: serde_json::Value,
+}
+
+/// Neutral judge request over one response against a fixed rubric version.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JudgeRequest {
+    pub rubric: SemanticRubric,
+    pub response_transcript: String,
+    pub response_language: LanguageCode,
+    pub asr_reliability: Option<AsrReliability>,
+}
+
+/// Content-only judgment proposal. Reuses the identity-free Phase 3.11
+/// [`domain::PointJudgment`] / [`domain::JudgmentAbstain`]; the use case wraps
+/// it into a versioned, hashed, validated `SemanticJudgment`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JudgmentDraft {
+    pub points: Vec<PointJudgment>,
+    pub abstain: Option<JudgmentAbstain>,
+    pub model_id: Option<String>,
+    pub prompt_version: Option<String>,
+    pub schema_version: Option<String>,
+    pub raw_output: serde_json::Value,
+}
+
+/// Application seam for generating a fixed scoring rubric from a segment.
+#[async_trait]
+pub trait SemanticRubricProvider: Send + Sync {
+    fn descriptor(&self) -> LlmProviderDescriptor;
+    async fn generate_rubric(
+        &self,
+        request: &RubricGenerationRequest,
+    ) -> Result<RubricDraft, LlmProviderError>;
+}
+
+/// Application seam for judging one response against a fixed rubric version.
+/// Dictogloss/summary writing feedback is judged through this same seam over
+/// the corresponding `SemanticTaskKind`; there is no separate writing-feedback
+/// trait until Phase 3.15 reveals its real shape (§3.6 seam discipline).
+#[async_trait]
+pub trait SemanticJudgeProvider: Send + Sync {
+    fn descriptor(&self) -> LlmProviderDescriptor;
+    async fn judge(&self, request: &JudgeRequest) -> Result<JudgmentDraft, LlmProviderError>;
+}

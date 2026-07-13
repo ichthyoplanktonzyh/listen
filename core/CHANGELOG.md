@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- 2026-07-13 08:22 CST: Phase 3.12 Vendor-neutral LLM Provider 后端优先切片落地
+  （Slice 0/1/2a/2b，设置 UI 与真实 keychain 实现后置）。**中立性证明（核心 exit
+  signal）成立**：新增 `crates/llm-provider/`，用 `reqwest` 手写两个异构协议 adapter
+  （OpenAI Chat Completions-compatible = Bearer/扁平 messages/native response_format；
+  Anthropic Messages = x-api-key+version/顶层 system/content block/tool_use 结构化输出），
+  由泛型 `LlmSemanticProvider<A>` 组合 prompt/schema/parse 一次写成；本地 axum fake-server
+  契约套件驱动**两个 adapter 过同一场景**（成功/拒绝/schema-invalid/截断/限流/超时/probe），
+  核心断言 `drafts[0]==drafts[1]`（异构 wire→相同领域输出）通过（10 契约测试）。
+  domain 新增 `llm_provider.rs`（`LlmAdapterKind`、`LlmProviderProfile`、opaque
+  `LlmAuthRef`、`ProviderCapability`/`CapabilityClaim`=Declared/Probed/Unknown、`LlmUse`、
+  `DataRetentionPreference`、标准化 secret-free `LlmProviderError` 分类学）；application
+  新增两层 seam（`LlmChatAdapter` wire seam + `SemanticRubricProvider`/`SemanticJudgeProvider`
+  application seam + `RubricDraft`/`JudgmentDraft` 仅内容草稿）。**draft-not-domain-type
+  边界**：provider 只返内容草稿，身份 fingerprint/版本/快照 hash/3.11 validator 全部
+  服务端持有（`record_llm_judgment` + `judge_semantic_attempt`）——四层分离经 LLM 路径
+  仍成立，5 种失败模式一律不写 judgment（诚实降级）。**密钥安全**：`SecretStore` trait +
+  in-memory 实现；`0036_llm_provider_profiles.sql`（只存 auth_ref，无密钥列）+
+  `LlmProviderProfileRepository` SQLite 实现 + register/delete-with-secret use case；
+  守卫测试证明**注册后 raw key 不出现在任何 DB 列或 JSON blob**、删除 provider 同删密钥、
+  密钥被外部删除时降级为 None 不报错。api-http 补 `Provider`/`SecretStore` 错误 → HTTP 映射
+  （secret-free，auth 无 payload）。新增 ADR 0022（provider 中立/draft 边界/keychain+auth_ref/
+  能力 probe/诚实降级/无显示资格）。远端对照证伪写入 PLAN v3：架构照 rust-genai 中立-类型派、
+  拒绝 LiteLLM 归一 OpenAI wire、能力描述符借 LiteLLM 分类学但对本地 endpoint 必须 probe、
+  密钥严于 genai(env)/aichat(明文)。修正 `MIGRATION_VERSION` 35→36。验证：domain 74 /
+  application 41 / llm-provider 10 契约 / persistence 109（含 4 profile + 4 LLM judgment）/
+  api-http 53 全通过；新文件 clippy 零告警；validate-contracts OK；git diff --check 通过。
+  本 phase 判定默认**不获任何显示资格**（资格评估属 3.12.1）；剩余：真实 OS-keychain
+  SecretStore 实现、provider-backed HTTP 路由与工厂、最小设置 UI、closeout。
+
 - 2026-07-12 19:20 CST: 清除 speech-analysis 既有 deny 级 clippy error。
   `sense_group_partition.rs` 测试里的恒真断言 `assert!(any_span_covers || true, ...)`
   （Phase 3.4.2 引入，触发 `overly_complex_bool_expr`）改为实义断言

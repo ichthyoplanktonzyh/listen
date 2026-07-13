@@ -721,6 +721,26 @@ impl From<ApplicationError> for ApiError {
                 message,
                 true,
             ),
+            // Phase 3.12: the standardized provider taxonomy. `to_string()` is
+            // secret-free by construction (auth carries no payload), so this
+            // never echoes a credential to the client.
+            ApplicationError::Provider(error) => {
+                use domain::LlmProviderError as E;
+                let (status, retryable) = match &error {
+                    E::RateLimit { .. } => (StatusCode::TOO_MANY_REQUESTS, true),
+                    E::Timeout => (StatusCode::GATEWAY_TIMEOUT, true),
+                    E::Offline => (StatusCode::BAD_GATEWAY, true),
+                    E::UnsupportedCapability { .. } => (StatusCode::BAD_REQUEST, false),
+                    _ => (StatusCode::BAD_GATEWAY, false),
+                };
+                Self::new(status, "llm_provider_error", error.to_string(), retryable)
+            }
+            ApplicationError::SecretStore(error) => Self::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "secret_store_error",
+                error.to_string(),
+                true,
+            ),
         }
     }
 }

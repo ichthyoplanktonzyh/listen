@@ -313,3 +313,174 @@ fn rubric_revision_appends_a_new_version_and_keeps_history() {
         fixture.rubric
     );
 }
+
+// ---------------------------------------------------------------------------
+// Phase 3.12: vendor draft -> validated judgment, with server-side identity,
+// preserved four-layer separation, and honest degradation.
+// ---------------------------------------------------------------------------
+
+use application::{JudgeRequest, JudgmentDraft, SemanticJudgeProvider};
+
+/// A fake judge returning a canned draft or a standardized provider error. It
+/// stands in for any `LlmChatAdapter`-backed provider so the use-case guarantees
+/// can be tested fully offline.
+struct FakeJudge {
+    result: Result<JudgmentDraft, LlmProviderError>,
+}
+
+#[async_trait]
+impl SemanticJudgeProvider for FakeJudge {
+    fn descriptor(&self) -> application::LlmProviderDescriptor {
+        application::LlmProviderDescriptor {
+            adapter_kind: LlmAdapterKind::OpenAiChatCompletions,
+            model_id: "fake".into(),
+            capability: ProviderCapability::unknown(),
+        }
+    }
+
+    async fn judge(&self, _request: &JudgeRequest) -> Result<JudgmentDraft, LlmProviderError> {
+        self.result.clone()
+    }
+}
+
+fn save_rubric_and_attempts(services: &AppServices, fixture: &SemanticTaskGoldFixture) {
+    services.save_semantic_rubric(fixture.rubric.clone()).unwrap();
+    for attempt in &fixture.attempts {
+        services.record_semantic_attempt(attempt.clone()).unwrap();
+    }
+}
+
+fn draft_from(judgment: &SemanticJudgment) -> JudgmentDraft {
+    JudgmentDraft {
+        points: judgment.points.clone(),
+        abstain: judgment.abstain.clone(),
+        model_id: Some("fake-model-2026".into()),
+        prompt_version: Some("judge/v1".into()),
+        schema_version: Some("semantic/v1".into()),
+        raw_output: judgment.raw_output.clone(),
+    }
+}
+
+#[test]
+fn llm_draft_becomes_validated_judgment_with_server_minted_identity() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = semantic_services(&repo);
+    let fixture = gold_fixture();
+    save_rubric_and_attempts(&services, &fixture);
+
+    // Reuse a known-valid scored judgment's content as the vendor draft.
+    let scored = fixture
+        .judgments
+        .iter()
+        .find(|judgment| judgment.abstain.is_none())
+        .expect("a scored fixture judgment");
+    let draft = draft_from(scored);
+
+    let recorded = services
+        .record_llm_judgment(&scored.attempt_id, scored.response_revision, draft, 1_800_000_000_000)
+        .unwrap();
+
+    // Identity is minted server-side, not carried from any client/vendor value.
+    let expected_id = domain::semantic_judgment_id(
+        &scored.attempt_id,
+        scored.response_revision,
+        recorded.rubric_version,
+        SemanticGeneratorKind::Llm,
+        1_800_000_000_000,
+    );
+    assert_eq!(recorded.id, expected_id);
+    assert_ne!(recorded.id, scored.id);
+    // Provenance and snapshot hashes are authoritative, evidence class honest.
+    assert_eq!(recorded.provenance.kind, SemanticGeneratorKind::Llm);
+    assert_eq!(recorded.provenance.model_id.as_deref(), Some("fake-model-2026"));
+    assert_eq!(recorded.evidence_class, "heuristic_proxy");
+    assert_eq!(
+        recorded.rubric_source_sha256,
+        domain::transcript_sha256(&fixture.rubric.source.transcript_snapshot)
+    );
+
+    // It is directly comparable to any other judgment on the same rubric version.
+    let other_scored = fixture
+        .judgments
+        .iter()
+        .find(|judgment| judgment.abstain.is_none() && judgment.id != scored.id);
+    if let Some(other) = other_scored {
+        // Same rubric identity/version/source hash => comparable scale.
+        assert_eq!(recorded.rubric_id, other.rubric_id);
+        assert_eq!(recorded.rubric_version, other.rubric_version);
+        assert_eq!(recorded.rubric_source_sha256, other.rubric_source_sha256);
+    }
+}
+
+#[test]
+fn llm_judgment_path_writes_no_lexical_or_capability_evidence() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = semantic_services(&repo);
+    let fixture = gold_fixture();
+    save_rubric_and_attempts(&services, &fixture);
+
+    let scored = fixture
+        .judgments
+        .iter()
+        .find(|judgment| judgment.abstain.is_none())
+        .unwrap();
+    services
+        .record_llm_judgment(&scored.attempt_id, scored.response_revision, draft_from(scored), 1_800_000_000_001)
+        .unwrap();
+
+    // The vendor path is still structurally incapable of leaking into the
+    // lexical evidence or capability channels (ADR 0021 holds through LLM).
+    assert_eq!(count(&repo, "semantic_judgments"), 1);
+    assert_eq!(count(&repo, "learning_observations"), 0);
+    assert_eq!(count(&repo, "lexical_observations"), 0);
+    assert_eq!(count(&repo, "lexical_capability_history"), 0);
+    assert_eq!(count(&repo, "lexical_capability_states"), 0);
+    assert_eq!(count(&repo, "upgrade_suggestions"), 0);
+}
+
+#[tokio::test]
+async fn provider_failure_writes_no_judgment_honest_degradation() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = semantic_services(&repo);
+    let fixture = gold_fixture();
+    save_rubric_and_attempts(&services, &fixture);
+
+    let attempt = &fixture.attempts[0];
+    for error in [
+        LlmProviderError::Offline,
+        LlmProviderError::Auth,
+        LlmProviderError::Truncated,
+        LlmProviderError::Refusal { reason: "no".into() },
+        LlmProviderError::SchemaInvalid { detail: "bad".into() },
+    ] {
+        let provider = FakeJudge { result: Err(error) };
+        let outcome = services
+            .judge_semantic_attempt(&attempt.id, 1, &provider, 1_800_000_000_002)
+            .await;
+        assert!(matches!(outcome, Err(ApplicationError::Provider(_))));
+    }
+    // Not a single judgment row was written for any failure mode.
+    assert_eq!(count(&repo, "semantic_judgments"), 0);
+}
+
+#[tokio::test]
+async fn provider_success_orchestration_records_judgment() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = semantic_services(&repo);
+    let fixture = gold_fixture();
+    save_rubric_and_attempts(&services, &fixture);
+
+    let scored = fixture
+        .judgments
+        .iter()
+        .find(|judgment| judgment.abstain.is_none())
+        .unwrap();
+    let provider = FakeJudge { result: Ok(draft_from(scored)) };
+
+    let recorded = services
+        .judge_semantic_attempt(&scored.attempt_id, scored.response_revision, &provider, 1_800_000_000_003)
+        .await
+        .unwrap();
+    assert_eq!(recorded.provenance.kind, SemanticGeneratorKind::Llm);
+    assert_eq!(count(&repo, "semantic_judgments"), 1);
+}

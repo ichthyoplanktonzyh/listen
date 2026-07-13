@@ -528,6 +528,7 @@ mod l1_diagnosis;
 mod learner_profile;
 mod learning_loop;
 mod lexical;
+mod llm_provider;
 mod media_library;
 mod migrations;
 mod phonetic_analysis;

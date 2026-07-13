@@ -8,15 +8,25 @@ last_updated: "2026-07-12T18:55:00.000+08:00"
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-12 18:55 CST
-> 更新原因：Phase 3.11 Semantic Task Evidence Foundation 五切片全部落地，CODE COMPLETE
-> 并创建 CLOSEOUT；主线切换至 Phase 3.12。
+> 最后更新：2026-07-13 08:22 CST
+> 更新原因：Phase 3.12 Vendor-neutral LLM Provider 后端优先切片（Slice 0/1/2）落地并全绿；
+> 中立性证明成立；设置 UI 与真实 keychain 实现后置，phase 尚未收口。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.11 Semantic Task Evidence Foundation 已 CODE COMPLETE
-  （见其 CLOSEOUT）；下一执行 phase 为 Phase 3.12 Vendor-neutral LLM Provider，开工前
-  按 3.11 已落地的 rubric/judgment 契约修订 PLAN。Phase 3.9 仍不作为硬依赖。
+- **当前执行主线**：Phase 3.12 Vendor-neutral LLM Provider **IN PROGRESS**（后端优先，
+  分支 `codex/3.12-vendor-neutral-llm-provider`）。已落地并全绿：中立契约层（domain
+  `llm_provider` + application 两层 seam）；**两个异构协议 adapter（OpenAI Chat-compatible +
+  Anthropic Messages）过同一 fake-server 契约套件 = 中立性证明**（`crates/llm-provider/`，
+  10 契约测试，`drafts[0]==drafts[1]`）；draft→judgment use case（身份服务端铸造、过 3.11
+  validator、四层分离经 LLM 路径仍成立、5 种失败均不写 judgment 的诚实降级）；`SecretStore`
+  抽象 + in-memory 实现 + schema v36 profile 持久化（只存 auth_ref，守卫测试证明密钥不落 DB）。
+  ADR 0022 已立。PLAN 修订为 v3（含远端案例证伪）。判定默认**不获显示资格**（属 3.12.1）。
+  **剩余（未收口）**：真实 OS-keychain SecretStore 实现（security-framework，composition
+  root 注入）、provider-backed HTTP 路由 + `build_semantic_judge_provider` 工厂、最小设置 UI
+  （Slice 3）、增量协议 OpenAI Responses/Gemini（Slice 4，owner 按需）、CLOSEOUT。
+- Phase 3.11 Semantic Task Evidence Foundation 已 CODE COMPLETE（见其 CLOSEOUT）。
+  Phase 3.9 仍不作为硬依赖。
 - **治理线状态**：Phase 2.23 Architecture Debt Paydown 已于 2026-07-03 收口（详见其 CLOSEOUT）；3.x 开工前置全部就绪。
 - **算法线状态**：Phase 2.19 / 2.20 / 2.21 已于 2026-07-02 搁置；audible-structure v1
   contract 保持当前权威 shape，后续质量提升等学习闭环完成后再回到算法线。
@@ -327,10 +337,13 @@ last_updated: "2026-07-12T18:55:00.000+08:00"
 
 ## 下一步工作
 
-1. **Phase 3.12（当前第一优先）**：Vendor-neutral LLM Provider，两个异构协议
-   （OpenAI-compatible + Anthropic Messages）先证中立。开工前按 3.11 已落地的
-   `SemanticRubric`/`SemanticJudgment` 契约与 application trait 边界修订 PLAN；provider
-   判定默认不获任何显示资格（资格评估属 3.12.1）。
+1. **Phase 3.12（进行中）**：Vendor-neutral LLM Provider。后端中立性证明 + 安全存储 +
+   诚实降级已落地全绿（见"当前位置"）。**下一步收口顺序**：(a) 真实 OS-keychain
+   `SecretStore` 实现（security-framework）由 composition root 注入；(b) llm-provider 增
+   `build_semantic_judge_provider(profile, secret)` 工厂 + api-http provider profile CRUD
+   与 provider-backed judge/rubric 路由（错误映射已就位）；(c) 最小设置 UI（Slice 3）；
+   (d) 增量协议 OpenAI Responses/Gemini（Slice 4，owner 按需，只加 adapter 不改契约）；
+   (e) CLOSEOUT。全程 provider 判定不获任何显示资格（资格评估属 3.12.1）。
 2. Phase 3.9 保持延期且不收口；其 L1 解释/专项入口不作为后续 phase 的必需数据源。每个
    phase 开工前先按上游现状修订 PLAN。
 3. "收藏句 → 个人模板"的用户价值验证收敛到 Phase 3.16（3.4.3 结论待兑现）。

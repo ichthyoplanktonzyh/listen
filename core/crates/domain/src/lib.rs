@@ -65,7 +65,9 @@ mod listening_projection;
 pub use listening_projection::*;
 
 mod semantic_task;
+mod llm_provider;
 pub use semantic_task::*;
+pub use llm_provider::*;
 
 mod dictionary;
 pub use dictionary::*;
@@ -150,6 +152,7 @@ string_id!(SemanticRubricId);
 string_id!(SemanticTaskAttemptId);
 string_id!(SemanticJudgmentId);
 string_id!(JudgmentAdjudicationId);
+string_id!(LlmProviderProfileId);
 string_id!(PronunciationAnalysisId);
 string_id!(PhoneticAnalysisModelId);
 string_id!(PhoneticAnalysisJobId);

@@ -16,6 +16,7 @@ mod error;
 mod hunting;
 mod learner_profile;
 mod lexical;
+mod llm_provider;
 mod listening;
 mod media;
 mod phones;
@@ -26,6 +27,7 @@ mod pronunciation_providers;
 mod providers;
 mod recording;
 mod repositories;
+mod secret_store;
 mod semantic_task;
 mod sense_groups;
 mod subtitles;
@@ -44,6 +46,7 @@ pub use learner_profile::LearnerProfileView;
 pub use pronunciation_providers::*;
 pub use providers::*;
 pub use repositories::*;
+pub use secret_store::{InMemorySecretStore, SecretStore, SecretStoreError};
 pub use util::now_ms;
 pub(crate) use util::{
     clean_optional, clean_required, normalize_american_english, normalize_phrase,
@@ -90,6 +93,7 @@ pub struct AppServices {
     pub(crate) learner_profiles: Arc<dyn LearnerProfileRepository>,
     pub(crate) coach_dashboard: Arc<dyn CoachDashboardRepository>,
     pub(crate) semantic_tasks: Arc<dyn SemanticTaskRepository>,
+    pub(crate) llm_provider_profiles: Arc<dyn LlmProviderProfileRepository>,
     pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
     pub(crate) pronunciation_providers: Arc<Vec<Arc<dyn PronunciationProvider>>>,
 }
@@ -125,6 +129,7 @@ impl AppServices {
             learner_profiles: Arc::new(DisabledLearnerProfileRepository),
             coach_dashboard: Arc::new(DisabledCoachDashboardRepository),
             semantic_tasks: Arc::new(DisabledSemanticTaskRepository),
+            llm_provider_profiles: Arc::new(DisabledLlmProviderProfileRepository),
             lexical_normalizers: Arc::new(Vec::new()),
             pronunciation_providers: Arc::new(Vec::new()),
         }
@@ -180,6 +185,14 @@ impl AppServices {
         semantic_tasks: Arc<dyn SemanticTaskRepository>,
     ) -> Self {
         self.semantic_tasks = semantic_tasks;
+        self
+    }
+
+    pub fn with_llm_provider_profile_repository(
+        mut self,
+        llm_provider_profiles: Arc<dyn LlmProviderProfileRepository>,
+    ) -> Self {
+        self.llm_provider_profiles = llm_provider_profiles;
         self
     }
 
@@ -320,6 +333,39 @@ impl SemanticTaskRepository for DisabledSemanticTaskRepository {
 impl DisabledSemanticTaskRepository {
     fn disabled() -> ApplicationError {
         ApplicationError::Repository("semantic task repository is not configured".into())
+    }
+}
+
+/// Without configured persistence, provider profiles simply do not exist: reads
+/// return empty and writes error, so no config is silently lost.
+struct DisabledLlmProviderProfileRepository;
+
+impl LlmProviderProfileRepository for DisabledLlmProviderProfileRepository {
+    fn upsert_provider_profile(
+        &self,
+        _profile: &LlmProviderProfile,
+    ) -> Result<LlmProviderProfile, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "llm provider profile repository is not configured".into(),
+        ))
+    }
+
+    fn get_provider_profile(
+        &self,
+        _id: &LlmProviderProfileId,
+    ) -> Result<Option<LlmProviderProfile>, ApplicationError> {
+        Ok(None)
+    }
+
+    fn list_provider_profiles(&self) -> Result<Vec<LlmProviderProfile>, ApplicationError> {
+        Ok(Vec::new())
+    }
+
+    fn delete_provider_profile(
+        &self,
+        _id: &LlmProviderProfileId,
+    ) -> Result<(), ApplicationError> {
+        Ok(())
     }
 }
 

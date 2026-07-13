@@ -25,4 +25,11 @@ pub enum ApplicationError {
     Conflict(&'static str),
     #[error("external process failed: {0}")]
     ExternalProcess(String),
+    /// A vendor LLM provider failed. Carries the standardized, secret-free
+    /// taxonomy so HTTP/UI can degrade honestly without ever echoing a
+    /// credential (Phase 3.12).
+    #[error(transparent)]
+    Provider(#[from] domain::LlmProviderError),
+    #[error(transparent)]
+    SecretStore(#[from] crate::SecretStoreError),
 }

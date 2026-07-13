@@ -1258,6 +1258,25 @@ pub trait SemanticTaskRepository: Send + Sync {
     ) -> Result<Vec<JudgmentAdjudication>, ApplicationError>;
 }
 
+/// Phase 3.12 provider profiles. Unlike append-only semantic facts, a provider
+/// configuration is mutable: it may be edited or removed. Only routing metadata
+/// and an opaque `auth_ref` are stored; secrets live in the OS keychain.
+pub trait LlmProviderProfileRepository: Send + Sync {
+    fn upsert_provider_profile(
+        &self,
+        profile: &LlmProviderProfile,
+    ) -> Result<LlmProviderProfile, ApplicationError>;
+    fn get_provider_profile(
+        &self,
+        id: &LlmProviderProfileId,
+    ) -> Result<Option<LlmProviderProfile>, ApplicationError>;
+    fn list_provider_profiles(&self) -> Result<Vec<LlmProviderProfile>, ApplicationError>;
+    fn delete_provider_profile(
+        &self,
+        id: &LlmProviderProfileId,
+    ) -> Result<(), ApplicationError>;
+}
+
 pub trait DictionaryCacheRepository: Send + Sync {
     fn put(&self, entry: &DictionaryEntry) -> Result<(), ApplicationError>;
     fn get(

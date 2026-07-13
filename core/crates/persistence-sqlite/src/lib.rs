@@ -5,6 +5,7 @@ mod corpus;
 mod dictionary;
 mod learner_profile;
 mod learning_loop;
+mod llm_provider;
 mod lexical;
 mod media;
 mod migrations;
