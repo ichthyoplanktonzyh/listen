@@ -35,7 +35,7 @@
 | `domain` | ID 类型、枚举序列化、PhoneticAnalysis::validate()、SyntacticAnalysis span/mapping/tree/coverage validator |
 | `subtitle-core` | SRT/VTT 解析、token 化、时间轴查询（空隙/重叠/边界） |
 | `diagnosis-core` | 词义障碍、声音识别障碍、信息不足、其他因素 |
-| `speech-analysis` | 100 句发音基线测试、OOV fallback-v2 stress、information-structure prior、Reference B connected-speech rules、规则型语流检测、RhythmFrame audible-structure bridge、chunk 分区 |
+| `speech-analysis` | 100 句发音基线、OOV fallback-v2 stress、information-structure prior、Reference B text/syntax provenance、future/motion + habitual/state + have-to idiom syntax gate、未资格 artifact 精确 fallback、规则型语流检测、RhythmFrame bridge、chunk 分区 |
 | `application` | AppServices 用例逻辑、chunk 检测、SyntacticAnalysisProvider fake/finalization seam |
 | `syntactic-provider` | Stanza/spaCy 同构 neutral contract、缺模型 capability、畸形 stdout、timeout 闭合失败 |
 | `dictionary-provider` | Provider 查询、缓存逻辑 |

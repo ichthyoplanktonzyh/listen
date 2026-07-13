@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-13 16:27 CST: Phase 3.9.1 Slice 4 建立 Reference B 句法 consumer seam。
+  `ConnectedSpeechContext` 将 validator activatable 与外部 provider qualification 设为两个独立
+  gate；未资格/缺失 artifact 与原 `predict_default_connected` 输出逐项相同。本阶段只把锁定
+  验证通过的 future/motion `going to`、habitual/state（含 `get used to`）和 `have to do with`
+  idiom 用中立 UPOS/lemma/features 映射作保守门控；失败的 `want to` wh-extraction 仍固定走
+  现有 text heuristic。B evidence 区分 `prediction_provenance:syntax_model`（带 artifact ID）
+  与 `text_heuristic`，但 status 仍为 `PossibleByRule`，不冒充 C/audio evidence。新增 5 项
+  syntax consumer/fallback 回归；speech-analysis 175 单元 + 12 集成测试全通过。
+
 - 2026-07-13 16:22 CST: Phase 3.9.1 Slice 3 完成冻结评估与负资格判定。
   开发集仅用于 neutral query/mapping 调整；随后按预登记 digest 对验证集每个候选只运行一次。
   Stanza 1.13.0/en_ewt 与 spaCy 3.8.13/en_core_web_sm 3.8.0 均达到 100% lexical/exact

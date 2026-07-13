@@ -7,6 +7,9 @@ use domain::{
 
 mod context;
 use context::{has_punctuation_boundary, phrase_context_allows, weak_form_context_allows};
+mod syntactic_context;
+pub use syntactic_context::{ConnectedSpeechContext, SyntacticProviderQualification};
+use syntactic_context::{PhrasePredictionProvenance, syntactic_phrase_decision};
 
 const RULE_SOURCE: &str = "english_connected_speech_rules_v3";
 
@@ -598,6 +601,13 @@ pub fn is_default_rule_explanation(value: &ConnectedSpeechExplanation) -> bool {
 }
 
 pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSpeechExplanation> {
+    predict_default_connected_with_context(sentence, &ConnectedSpeechContext::without_syntax())
+}
+
+pub fn predict_default_connected_with_context(
+    sentence: &SubtitleSentence,
+    context: &ConnectedSpeechContext<'_>,
+) -> Vec<ConnectedSpeechExplanation> {
     let words = sentence
         .tokens
         .iter()
@@ -641,10 +651,25 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
         if has_punctuation_boundary(sentence, first.token_index, second.token_index) {
             continue;
         }
-        if let Some(rule) = PHRASE_RULES
+        if let Some((rule, provenance)) = PHRASE_RULES
             .iter()
             .find(|rule| rule.first == first.normalized && rule.second == second.normalized)
-            .filter(|rule| phrase_context_allows(rule.context, &words, pair_index, sentence))
+            .and_then(|rule| {
+                let syntax_decision = context.active_sentence(sentence).and_then(|syntax| {
+                    syntactic_phrase_decision(rule.context, &words, pair_index, sentence, syntax)
+                });
+                let allowed = syntax_decision
+                    .map(|decision| decision.allowed)
+                    .unwrap_or_else(|| {
+                        phrase_context_allows(rule.context, &words, pair_index, sentence)
+                    });
+                allowed.then_some((
+                    rule,
+                    syntax_decision
+                        .map(|decision| decision.provenance)
+                        .unwrap_or(PhrasePredictionProvenance::TextHeuristic),
+                ))
+            })
         {
             phrase_tokens.insert(first.token_index);
             phrase_tokens.insert(second.token_index);
@@ -669,6 +694,7 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
                     rule.reduced.join(" ")
                 ),
                 rule.id,
+                &provenance.evidence_suffix(context),
             ));
         }
     }
@@ -695,6 +721,7 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
                 default_symbols,
                 &format!("{} -> {}", word.text, form.reduced.join(" ")),
                 &format!("weak-{}", form.word),
+                "prediction_provenance:text_heuristic",
             ));
         }
 
@@ -723,6 +750,7 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
                 Vec::new(),
                 &format!("{} + {}", word.text, next.text),
                 "link-consonant-vowel",
+                "prediction_provenance:text_heuristic",
             ));
         }
         if let Some((replacement, rule_id, hint)) = last_phone
@@ -746,6 +774,7 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
                 predicted_symbols,
                 &format!("{} + {}", word.text, next.text),
                 rule_id,
+                "prediction_provenance:text_heuristic",
             ));
         }
         if let Some((replacement, rule_id, hint)) = last_phone
@@ -769,6 +798,7 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
                 predicted_symbols,
                 &format!("{} + {}", word.text, next.text),
                 rule_id,
+                "prediction_provenance:text_heuristic",
             ));
         }
         if let Some((glide, rule_id)) = last_phone
@@ -791,6 +821,7 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
                 predicted_symbols,
                 &format!("{} + {}", word.text, next.text),
                 rule_id,
+                "prediction_provenance:text_heuristic",
             ));
         }
         if last_phone
@@ -812,6 +843,7 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
                 Vec::new(),
                 &format!("{} + {}", word.text, next.text),
                 "link-same-consonant",
+                "prediction_provenance:text_heuristic",
             ));
         }
         if last_phone.is_some_and(|phone| matches!(phone, "T" | "D"))
@@ -833,6 +865,7 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
                 Vec::new(),
                 &format!("{} + {}", word.text, next.text),
                 "possible-t-d-deletion",
+                "prediction_provenance:text_heuristic",
             ));
         }
         if !word.is_fallback_pronunciation && has_stress_conditioned_flap(&word.stressed_symbols) {
@@ -847,6 +880,7 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
                 vec!["DX".into()],
                 &word.text,
                 "american-flap-t-d",
+                "prediction_provenance:text_heuristic",
             ));
         }
         if last_phone.is_some_and(|phone| matches!(phone, "T" | "D"))
@@ -874,6 +908,7 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
                 predicted_symbols,
                 &format!("{} + {}", word.text, next.text),
                 "american-flap-across-word",
+                "prediction_provenance:text_heuristic",
             ));
         }
     }
@@ -989,6 +1024,7 @@ fn explanation(
     default_symbols: Vec<String>,
     evidence_detail: &str,
     rule_id: &str,
+    provenance: &str,
 ) -> ConnectedSpeechExplanation {
     ConnectedSpeechExplanation {
         family,
@@ -1003,7 +1039,9 @@ fn explanation(
         expected_symbols,
         learning_symbols: default_symbols,
         observed_symbols: Vec::new(),
-        evidence: format!("{RULE_SOURCE}; default_connected_rule:{rule_id}; {evidence_detail}"),
+        evidence: format!(
+            "{RULE_SOURCE}; default_connected_rule:{rule_id}; {provenance}; {evidence_detail}"
+        ),
     }
 }
 
