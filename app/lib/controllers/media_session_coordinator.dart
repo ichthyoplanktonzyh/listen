@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -278,7 +279,21 @@ class MediaSessionCoordinator {
     player.setStatus(nextStatus);
     await reloadLearningEntries();
     await loadPhraseCandidates(subtitle.currentPrimaryCue);
+    unawaited(_analyzeSyntaxWhenAvailable(track.id));
     return loadSpeechEnhancements(track.id);
+  }
+
+  Future<void> _analyzeSyntaxWhenAvailable(String trackId) async {
+    final service = getApi();
+    if (service == null) return;
+    try {
+      final capability = await service.syntaxCapability();
+      if (capability['status'] == 'ready' && capability['enabled'] == true) {
+        await service.runTrackSyntaxAnalysis(trackId);
+      }
+    } catch (_) {
+      // Optional enhancement: never disturb subtitle import or playback.
+    }
   }
 
   Future<void> loadGeneratedTrack(
