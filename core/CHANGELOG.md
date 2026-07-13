@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-14 00:50 CST: main.dart 拆分 S3+S4（合并）—— 抽出 `PracticeActionsCoordinator`。
+  精听练习与 shadowing 深度交织（`_navigatePracticeSentence` 同时派发 cloze 与 shadowing、
+  `_replayPracticeWindow`/`_setShadowingStep` 共享），故合为单个 coordinator 避免跨 coordinator
+  循环依赖。19 个方法（四种练习启动、练习窗循环、提交、录音/回放/ABA、rate/step、external/
+  slice-window shadowing、复习保存、句子导航、teardown）逐字搬到
+  `lib/controllers/practice_actions_coordinator.dart`；注入 `getApi`/`isMounted`/`refreshDiagnosis`/
+  `seekCue`，`tools` 由持有的 settings 内部派生，其余全用 S2.5 归位后的 `playbackActions.*` 与
+  `settings.resolveLearningLanguage`。逻辑/字符串不变；~24 处调用点改走 coordinator。新增
+  `test/practice_actions_coordinator_test.dart`（4 例：无 draft replay no-op、submit 必刷 diagnosis
+  回调、无目标句不 seek、无 attempt 不改状态）。main.dart 2469 → 2206 行。`flutter analyze`
+  零问题、`flutter test` 308 全通过（304 + 4）。
+
 - 2026-07-14 00:25 CST: main.dart 拆分 S2.5 —— 把跨领域共享 glue helper 归位到自然属主，
   为后续 coordinator 抽取降低注入面。`_mediaTimeMs` 与 `_currentPracticeChunk(s)` 迁入
   `PlaybackActionsCoordinator`（已持 `mediaTime`/`currentChunkRef`/subtitle）；`_learningLanguage`
