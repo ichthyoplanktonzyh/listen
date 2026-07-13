@@ -22,6 +22,7 @@ api-http
         |       +--> speech-analysis     # ASR timing/chunk/phone analysis engines
         |
         +--> dictionary-provider         # application provider adapter
+        +--> syntactic-provider          # isolated Python JSONL syntax adapters
         +--> persistence-sqlite          # application repository adapter
 ```
 
@@ -95,6 +96,17 @@ application use cases and provider/repository boundaries.
 - `SyntacticAnalysisProvider` returns content/provenance drafts only. Application
   assigns artifact identity and validates the draft against the exact source
   sentence/token snapshot before a consumer may activate syntax-gated behavior.
+
+### `syntactic-provider`
+
+- Owns the provider-neutral process adapter for research Stanza and spaCy
+  candidates; neither Python runtime nor model is linked into the consumer app.
+- Uses a versioned one-request/one-response JSONL boundary with stdout reserved
+  for protocol data and stderr reserved for diagnostics.
+- Reports runtime/model/language capability honestly and maps closed failure
+  classes without changing the existing Reference B or SenseGroup fallback.
+- Produces application drafts only. It cannot populate Reference C, replace
+  `ChunkTimeline`, or mint Construction canonical identity.
 
 ### `api-http`
 

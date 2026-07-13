@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-13 16:10 CST: Phase 3.9.1 Slice 2 新增隔离式 Python 句法研究 Provider。
+  新建 `syntactic-provider` Rust crate 与版本化 JSONL sidecar，Stanza/spaCy 均只输出同一
+  provider-neutral draft；进程边界保持 stdout 纯协议、stderr 诊断，lazy runtime/model
+  探测和 runtime missing/model missing/corrupt/unsupported language/invalid output/timeout
+  闭合失败不会生成 artifact。token 映射覆盖 Unicode scalar offset、缩约 N:1、缩写 1:N、
+  normalized overlap 与显式 unaligned；Stanza/spaCy 原生标签在适配器内归一化，产品包不
+  链接 Python/model。新增 opt-in 隔离 venv、研究资产分层许可证 manifest、8 项 Python
+  sidecar contract 与 4 项 Rust process contract，并纳入全局 contract validator。
+
 - 2026-07-13 15:56 CST: Phase 3.9.1 Slice 1 建立 provider-neutral Rust 契约。
   domain 新增版本化 `SyntacticAnalysis`、完整 provider/runtime/model/checksum provenance、
   Unicode scalar char span 多对多映射、UD 字段、source/config/model 隔离 fingerprint，以及

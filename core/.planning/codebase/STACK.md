@@ -1,6 +1,6 @@
 # LLPlayerNext — 技术栈
 
-> 最后更新：2026-07-11
+> 最后更新：2026-07-13
 
 ## 1. 总览
 
@@ -15,11 +15,12 @@
 | 序列化 | Serde + serde_json | 1 |
 | 生产管线 | Python | 3.11 |
 | ASR/对齐 | WhisperX + torchaudio MMS_FA | 研究模式 |
+| 句法研究 | Stanza 1.13.0 / spaCy 3.8.13 | 隔离 JSONL sidecar，模型不随产品分发 |
 
 ## 2. Rust Workspace
 
 ```
-workspace: Cargo.toml (9 crates, resolver 2)
+workspace: Cargo.toml (11 crates, resolver 2)
 ├── domain              (数据类型，无外部依赖)
 ├── api-events          (serde, serde_json)
 ├── subtitle-core       (domain, sha2, hex, thiserror + proptest)
@@ -27,6 +28,7 @@ workspace: Cargo.toml (9 crates, resolver 2)
 ├── speech-analysis     (domain, hound, serde, serde_json, thiserror)
 ├── application         (domain, diagnosis-core, subtitle-core, speech-analysis, async-trait, serde)
 ├── dictionary-provider (application, domain, csv, reqwest, async-trait)
+├── syntactic-provider  (application, domain, tokio, serde, async-trait)
 ├── persistence-sqlite  (application, domain, rusqlite, serde_json, sha2)
 └── api-http (bin)     (application, api-events, speech-analysis, dictionary-provider, domain,
                          persistence-sqlite, axum, tokio, reqwest, tower, rand, async-stream)
@@ -88,6 +90,7 @@ workspace: Cargo.toml (9 crates, resolver 2)
 | 生产管线 venv | `~/Library/Caches/LLPlayerNext/research/timeline-production/` |
 | 强制对齐 venv | `~/Library/Caches/LLPlayerNext/research/forced-align/` |
 | ZIPA 研究 venv | `~/Library/Caches/LLPlayerNext/research/zipa/`（实验） |
+| 句法研究 venv | `~/Library/Caches/LLPlayerNext/research/syntactic-analysis/`（实验，模型可选） |
 
 ### 依赖
 
@@ -100,6 +103,9 @@ torch==2.9.1, torchaudio==2.9.1, soundfile==0.14.0
 
 # 评估
 datasets (可选，用于 TIMIT/Buckeye)
+
+# 句法 Provider 研究 (requirements.txt)
+stanza==1.13.0, spacy==3.8.13, psutil==7.2.2
 ```
 
 ### 脚本清单
@@ -115,6 +121,8 @@ datasets (可选，用于 TIMIT/Buckeye)
 | `scripts/phonetic-eval.py` | 音素分析评估引擎（实验） |
 | `scripts/phonetic-research-adapter.py` | 音素研究适配器（实验） |
 | `scripts/zipa-ctc-onnx-research.py` | ZIPA CTC ONNX 研究脚本（实验） |
+| `scripts/syntactic-analysis/syntax-sidecar.py` | Stanza/spaCy provider-neutral JSONL 研究 sidecar |
+| `scripts/syntactic-analysis/setup-venv.sh` | 隔离 runtime；模型下载须显式 opt-in |
 
 ## 5. 数据库
 
@@ -147,6 +155,7 @@ cd apps/desktop && flutter test         # Flutter 测试
 ```bash
 scripts/timeline-production/setup-venv.sh  # 安装生产环境
 scripts/forced-align/setup-venv.sh         # 安装对齐环境
+scripts/syntactic-analysis/setup-venv.sh   # 安装句法研究 runtime（默认不下载模型）
 python scripts/evaluate-word-timelines.py compare baseline.json candidate.json  # 评估
 ```
 

@@ -1,0 +1,47 @@
+{
+  "manifest_version": 1,
+  "status": "research_only",
+  "runtime": [
+    {
+      "id": "python-stanza",
+      "version": "1.13.0",
+      "source": "https://pypi.org/project/stanza/1.13.0/",
+      "license": "Apache-2.0",
+      "artifact_sha256": null,
+      "installed_bytes": null
+    },
+    {
+      "id": "python-spacy",
+      "version": "3.8.13",
+      "source": "https://pypi.org/project/spacy/3.8.13/",
+      "license": "MIT",
+      "artifact_sha256": null,
+      "installed_bytes": null
+    }
+  ],
+  "models": [
+    {
+      "provider_id": "stanza",
+      "model_id": "en_ewt",
+      "install_command": "stanza.download('en', package='ewt')",
+      "source": "https://huggingface.co/stanfordnlp/stanza-en",
+      "artifact_sha256": null,
+      "installed_bytes": null,
+      "model_license": "unknown_pending_exact_artifact_audit",
+      "training_data": ["UD English EWT"],
+      "training_data_license": "CC-BY-SA-4.0 annotations; underlying text restrictions require separate review"
+    },
+    {
+      "provider_id": "spacy",
+      "model_id": "en_core_web_sm",
+      "install_command": "python -m spacy download en_core_web_sm",
+      "source": "https://github.com/explosion/spacy-models/releases",
+      "artifact_sha256": null,
+      "installed_bytes": null,
+      "model_license": "unknown_pending_exact_artifact_audit",
+      "training_data": [],
+      "training_data_license": "unknown_pending_exact_model_meta_audit"
+    }
+  ],
+  "distribution_decision": "No runtime or model is bundled. Null checksum/size/license fields must be filled from installed exact artifacts before qualification."
+}

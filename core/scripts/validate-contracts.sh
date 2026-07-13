@@ -11,12 +11,15 @@ PYTHONPYCACHEPREFIX="$tmp/pycache" python3 -m py_compile \
   "$root/scripts/forced-align/mfa-align-cli.py" \
   "$root/scripts/lltimeline_common.py" \
   "$root/scripts/lltimeline-resource.py" \
+  "$root/scripts/syntactic-analysis/syntax-sidecar.py" \
+  "$root/scripts/syntactic-analysis/test_syntax_sidecar_contract.py" \
   "$root/scripts/validate-syntactic-fixtures.py" \
   "$root/scripts/timeline-production/production_pipeline.py" \
   "$root/scripts/timeline-production/whisperx-align-request.py"
 PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/test_lltimeline_common.py"
 PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/forced-align/test_align_cli_contract.py"
 PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/forced-align/test_mfa_align_cli_contract.py"
+PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/syntactic-analysis/test_syntax_sidecar_contract.py"
 PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/validate-syntactic-fixtures.py"
 word_report="$(
   python3 "$root/scripts/evaluate-word-timelines.py" compare \

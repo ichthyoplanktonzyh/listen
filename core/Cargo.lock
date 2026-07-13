@@ -2614,6 +2614,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "syntactic-provider"
+version = "0.7.0"
+dependencies = [
+ "application",
+ "async-trait",
+ "domain",
+ "serde",
+ "serde_json",
+ "subtitle-core",
+ "tokio",
+]
+
+[[package]]
 name = "tar"
 version = "0.4.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"

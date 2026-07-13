@@ -37,6 +37,7 @@
 | `diagnosis-core` | 词义障碍、声音识别障碍、信息不足、其他因素 |
 | `speech-analysis` | 100 句发音基线测试、OOV fallback-v2 stress、information-structure prior、Reference B connected-speech rules、规则型语流检测、RhythmFrame audible-structure bridge、chunk 分区 |
 | `application` | AppServices 用例逻辑、chunk 检测、SyntacticAnalysisProvider fake/finalization seam |
+| `syntactic-provider` | Stanza/spaCy 同构 neutral contract、缺模型 capability、畸形 stdout、timeout 闭合失败 |
 | `dictionary-provider` | Provider 查询、缓存逻辑 |
 | `persistence-sqlite` | CRUD 操作、幂等、唯一约束、事务 |
 | `api-http` | 路由 handler、错误映射、认证中间件 |
@@ -142,6 +143,7 @@ cd apps/desktop && flutter test
 | `scripts/test_prepare_helsinki_libritts_benchmark.py` | LibriTTS/Helsinki prep 的 directory/archive input、missing-audio handling 和 baseline LLTimeline shape 单元测试 |
 | `scripts/timeline-production/test_production_pipeline_acoustic_cues.py` | Production-side `rhythm_word_acoustic_cues` artifact generation from synthetic wav |
 | `scripts/validate-contracts.sh` | LLTimeline Schema smoke + 契约测试 |
+| `scripts/syntactic-analysis/test_syntax_sidecar_contract.py` | JSONL stdout 洁净、missing runtime/language、Unicode scalar、1:N/N:1/unaligned mapping |
 
 ### Python 评估缺少自动化单元测试
 
@@ -158,6 +160,7 @@ Phase 2.20 LibriTTS/Helsinki prep 也已有 `scripts/test_prepare_helsinki_libri
 | 事件 Schema | `api-events` JSON Schema 文件 + 自动化验证 |
 | LLTimeline JSON v1 | `scripts/validate-contracts.sh` + fixtures (`testdata/lltimeline/`) |
 | LLTimeline Flutter parse | `cd apps/desktop && flutter test test/contract/lltimeline_parse_test.dart` over committed rhythm fixtures |
+| 句法 Provider JSONL | `scripts/syntactic-analysis/test_syntax_sidecar_contract.py` + `cargo test -p syntactic-provider` |
 
 ## 6. 测试数据
 
