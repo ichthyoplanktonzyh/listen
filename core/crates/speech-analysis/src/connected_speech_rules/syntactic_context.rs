@@ -186,6 +186,8 @@ mod tests {
         predict_default_connected, predict_default_connected_with_context,
     };
 
+    type TestAnnotation<'a> = (&'a str, &'a str, Option<(&'a str, &'a str)>);
+
     fn sentence(text: &str) -> SubtitleSentence {
         SubtitleSentence {
             id: SubtitleSentenceId::parse("syntax-b").unwrap(),
@@ -200,7 +202,7 @@ mod tests {
 
     fn analysis(
         sentence: &SubtitleSentence,
-        annotations: &[(&str, &str, Option<(&str, &str)>)],
+        annotations: &[TestAnnotation<'_>],
     ) -> SyntacticAnalysis {
         let words = sentence
             .tokens

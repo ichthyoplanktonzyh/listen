@@ -214,8 +214,14 @@ candidate -> active -> archived
 `SyntacticAnalysis` is currently an ephemeral, rebuildable analysis artifact,
 not a timeline or user asset. Its identity isolates the source text/token
 snapshot, language, contract, provider, runtime, model checksum, and profile
-configuration. Slice 1 adds no SQLite row and grants no deletion/cascade or
+configuration. Phase 3.9.1 adds no SQLite row and grants no deletion/cascade or
 learning-evidence semantics.
+
+`SenseGroupAnalysis` retains its existing independent candidate/active/archive
+lifecycle. `rule-based-sense-group/v1` and `syntax-aware-sense-group/v1` are
+different provider runs rather than in-place upgrades. A syntax-aware run stores
+the source syntactic artifact ID/provider descriptor in `metrics_json`, while
+`chunk_timeline_dependency=false` makes the non-relationship explicit.
 
 SQLite enforces one active resource per track/resource kind with partial unique
 indexes. `created_by`, parent IDs, publication markers, and model/provider
@@ -235,6 +241,7 @@ boundary, but the Rust and Flutter models now wrap them in typed envelopes:
 | `WordTimeline.metrics_json` | `TimelineMetrics` | lifecycle/provenance metrics |
 | `ChunkTimeline.metrics_json` | `TimelineMetrics` | partitioner and parent timing metrics |
 | `PhoneTimeline.metrics_json` | `TimelineMetrics` | phonetic analysis provenance metrics |
+| `SenseGroupAnalysis.metrics_json` | `TimelineMetrics` | optional source syntactic artifact/provider provenance; never a ChunkTimeline parent |
 | `ChunkTimelineChunk.evidence_json` | `ChunkEvidence` | boundary/evidence payload |
 | `PhoneTimeline.sound_analysis.rhythm_frame` | `RhythmFrame` | audible-structure map: A/B/C references, prominence anchors, phrase-scoped nuclei, weak groups, compression spans, phrase boundaries, connected-speech refs, hotspots, and signal-source quality |
 | `LLTimelineDocument.rhythm_frames[].rhythm_frame` | `RhythmFrame` | first-class WordTimeline-derived rhythm resource keyed by sentence for WordTimeline-only imports/exports |

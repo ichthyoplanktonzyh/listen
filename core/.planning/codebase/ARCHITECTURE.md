@@ -375,14 +375,18 @@ subtitle track -> word timeline -> rhythm frames / chunk timeline / phone timeli
 SubtitleSentence + SubtitleToken snapshot
   -> SyntacticAnalysisProvider draft
   -> application identity + domain validator
-  -> validated rebuildable artifact
+  -> validated rebuildable artifact + separate provider qualification gate
        -> Reference B / syntax-aware SenseGroup / dependency matcher
-provider missing or artifact not activatable
+provider missing, unqualified, or artifact not activatable
   -> existing conservative B + punctuation_length_rule_v1
 ```
 
 The syntactic artifact is not persisted by Slice 1, is not a learning asset,
 does not replace ChunkTimeline, and cannot supply audio-backed Reference C.
+Syntax-aware SenseGroup is a distinct `syntax-aware-sense-group/v1` analysis
+run: dependency subtrees propose boundaries/head/NP-PP-clause labels, while
+punctuation, protected phrases, min/max words and target teaching granularity
+remain authoritative. Rule and syntax runs coexist under the existing lifecycle.
 
 ### LLTimeline Import/Export
 

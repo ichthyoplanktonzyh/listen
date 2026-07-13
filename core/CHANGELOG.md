@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-13 16:36 CST: Phase 3.9.1 Slice 5 新增独立 syntax-aware SenseGroup Provider。
+  新增 `syntax-aware-sense-group/v1` / `dependency_teaching_partition_v1`，与既有
+  `rule-based-sense-group/v1` 分开 fingerprint、持久化和 candidate/active/archive 生命周期；
+  metrics 引用 syntactic artifact/descriptor 并显式记录 `chunk_timeline_dependency=false`。
+  dependency clause/conj/subordinator/PP subtree 只提出 boundary/head/NP-PP-clause label，强标点、
+  phrase candidate 完整性、min 2/hard max 8 与典型 3–5 组教学粒度仍作最终裁决；错误 snapshot
+  或低 coverage 精确返回原 rule partition。新增 4 项 syntax partition fixture 和 rule/syntax
+  双 run 持久化回归；未资格 Provider 在 application gate 被拒绝，现有 HTTP 默认生成路径保持
+  rule Provider，ChunkTimeline 代码与生命周期均未改动。
+
 - 2026-07-13 16:27 CST: Phase 3.9.1 Slice 4 建立 Reference B 句法 consumer seam。
   `ConnectedSpeechContext` 将 validator activatable 与外部 provider qualification 设为两个独立
   gate；未资格/缺失 artifact 与原 `predict_default_connected` 输出逐项相同。本阶段只把锁定

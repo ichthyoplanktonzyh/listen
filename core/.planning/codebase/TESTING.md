@@ -35,7 +35,7 @@
 | `domain` | ID 类型、枚举序列化、PhoneticAnalysis::validate()、SyntacticAnalysis span/mapping/tree/coverage validator |
 | `subtitle-core` | SRT/VTT 解析、token 化、时间轴查询（空隙/重叠/边界） |
 | `diagnosis-core` | 词义障碍、声音识别障碍、信息不足、其他因素 |
-| `speech-analysis` | 100 句发音基线、OOV fallback-v2 stress、information-structure prior、Reference B text/syntax provenance、future/motion + habitual/state + have-to idiom syntax gate、未资格 artifact 精确 fallback、规则型语流检测、RhythmFrame bridge、chunk 分区 |
+| `speech-analysis` | 100 句发音基线、OOV fallback-v2 stress、information-structure prior、Reference B text/syntax provenance 与未资格 fallback、syntax-aware SenseGroup clause/PP/subordinator boundary、phrase/标点保护、min/max + 3–5 教学粒度、低 coverage 精确 fallback、RhythmFrame bridge、chunk 分区 |
 | `application` | AppServices 用例逻辑、chunk 检测、SyntacticAnalysisProvider fake/finalization seam |
 | `syntactic-provider` | Stanza/spaCy 同构 neutral contract、缺模型 capability、畸形 stdout、timeout 闭合失败 |
 | `dictionary-provider` | Provider 查询、缓存逻辑 |
@@ -52,6 +52,7 @@
 | `crates/persistence-sqlite/src/tests.rs::current_version_with_legacy_lexical_schema_is_destructively_repaired` | 旧 v7 lexical schema 已跑过且 `user_version=15` 的坏库回归：v16 断代重建 lexical/learning-resource 表，恢复 `lexical_observations` 与 LexicalUnit identity columns |
 | `crates/persistence-sqlite/src/tests/learning_loop.rs::session_summary_derives_stuck_point_statuses_from_events_attempts_and_review` | Phase 3.2 卡点 summary 聚合：事件、practice attempt、review item 派生状态与熟料标记 |
 | `crates/persistence-sqlite/src/tests/learning_loop.rs::listening_inbox_capture_process_review_and_micro_intensive_round_trip` | Phase 3.3 泛听 Inbox 编排：soft interrupt capture、ReviewItem 去向、micro-intensive PracticeItem 去向、理解度自报事件 |
+| `crates/persistence-sqlite/src/tests/timelines.rs::rule_and_syntax_sense_group_providers_keep_independent_runs` | rule/syntax SenseGroup provider/version、syntax artifact metrics 与独立 lifecycle 共存，且显式不依赖 ChunkTimeline |
 | `crates/persistence-sqlite/src/tests/learning_loop.rs::shadowing_completion_persists_recording_without_creating_capability_evidence` | Phase 3.8 录音资产 round trip、幂等非评价 completion、零 observation/review 与删除语义 |
 | `crates/api-http/src/tests/practice.rs::practice_routes_capture_and_process_listening_inbox_items` | Phase 3.3 HTTP 路由：Listening Inbox capture/list/process 端到端 JSON contract |
 | `crates/api-http/src/tests/practice.rs::recording_and_unscored_shadowing_routes_round_trip` | Phase 3.8 recording create/get/delete 与 `completed` shadowing HTTP contract |
