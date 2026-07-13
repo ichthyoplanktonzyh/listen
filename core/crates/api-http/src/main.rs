@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use api_http::{ApiState, KeychainSecretStore, router};
+use api_http::{ApiState, KeychainSecretStore, SyntaxCapabilityManager, router};
 use application::AppServices;
 use persistence_sqlite::SqliteRepository;
 use rand::Rng;
@@ -42,9 +42,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let token = env::var("LLPLAYERNEXT_API_TOKEN").unwrap_or_else(|_| random_token());
     let mut state = ApiState::new(services, repository, token.clone())
         .with_secret_store(Arc::new(KeychainSecretStore::new()));
-    if let Some(provider) = optional_syntactic_provider() {
-        state = state.with_syntactic_provider(provider);
-    }
+    let syntax_root = syntax_capability_root();
+    let install_dir = syntax_root.join("spacy-3.8.13-en_core_web_sm-3.8.0");
+    let syntax_provider = Arc::new(PythonSyntacticProvider::new(
+        PythonSyntacticKind::Spacy,
+        install_dir.join("venv/bin/python"),
+        install_dir.join("syntax-sidecar.py"),
+    ));
+    let syntax_manager = SyntaxCapabilityManager::new(syntax_root, Some(syntax_provider.clone()));
+    state = state.with_syntax_capability(syntax_manager, syntax_provider);
     let app = router(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let address = listener.local_addr()?;
@@ -72,16 +78,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
     );
     Ok(())
-}
-
-fn optional_syntactic_provider() -> Option<Arc<dyn application::SyntacticAnalysisProvider>> {
-    let python = env::var_os("LLPLAYERNEXT_SYNTAX_PYTHON")?;
-    let sidecar = env::var_os("LLPLAYERNEXT_SYNTAX_SIDECAR")?;
-    Some(Arc::new(PythonSyntacticProvider::new(
-        PythonSyntacticKind::Spacy,
-        PathBuf::from(python),
-        PathBuf::from(sidecar),
-    )))
 }
 
 fn random_token() -> String {
@@ -130,6 +126,28 @@ fn database_path() -> PathBuf {
         } else {
             legacy
         }
+    }
+}
+
+fn syntax_capability_root() -> PathBuf {
+    #[cfg(target_os = "macos")]
+    {
+        return PathBuf::from(env::var_os("HOME").expect("HOME is required"))
+            .join("Library/Application Support/listen/syntax");
+    }
+    #[cfg(target_os = "windows")]
+    {
+        return PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is required"))
+            .join("listen/syntax");
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        PathBuf::from(env::var_os("XDG_DATA_HOME").unwrap_or_else(|| {
+            PathBuf::from(env::var_os("HOME").expect("HOME is required"))
+                .join(".local/share")
+                .into_os_string()
+        }))
+        .join("listen/syntax")
     }
 }
 

@@ -8,8 +8,23 @@ use domain::{
     SyntacticAlignmentStatus, SyntacticProviderDescriptor, SyntacticProviderError,
     SyntacticSentenceAnalysis, SyntacticToken,
 };
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-struct RouteSyntacticProvider;
+struct RouteSyntacticProvider {
+    analyses: Arc<AtomicUsize>,
+}
+
+impl RouteSyntacticProvider {
+    fn new() -> (Arc<Self>, Arc<AtomicUsize>) {
+        let analyses = Arc::new(AtomicUsize::new(0));
+        (
+            Arc::new(Self {
+                analyses: analyses.clone(),
+            }),
+            analyses,
+        )
+    }
+}
 
 fn descriptor() -> SyntacticProviderDescriptor {
     SyntacticProviderDescriptor {
@@ -44,6 +59,7 @@ impl SyntacticAnalysisProvider for RouteSyntacticProvider {
         &self,
         request: &SyntacticAnalysisRequest,
     ) -> Result<SyntacticAnalysisDraft, SyntacticProviderError> {
+        self.analyses.fetch_add(1, Ordering::SeqCst);
         Ok(SyntacticAnalysisDraft {
             descriptor: descriptor(),
             sentences: request
@@ -145,7 +161,8 @@ async fn unconfigured_syntax_route_returns_exact_explicit_fallback_batch() {
 
 #[tokio::test]
 async fn configured_syntax_route_runs_one_batch_and_returns_shared_artifacts() {
-    let app = router(test_state().with_syntactic_provider(Arc::new(RouteSyntacticProvider)));
+    let (provider, _) = RouteSyntacticProvider::new();
+    let app = router(test_state().with_syntactic_provider(provider));
     let track = setup_phonetic_track(&app, "syntax-configured-route").await;
     let response = app
         .oneshot(
@@ -176,4 +193,60 @@ async fn configured_syntax_route_runs_one_batch_and_returns_shared_artifacts() {
                     && sentence.get("fallback_reason").is_none()
             })
     );
+}
+
+#[tokio::test]
+async fn track_analysis_reuses_fingerprint_cache_and_force_rebuilds() {
+    let (provider, analyses) = RouteSyntacticProvider::new();
+    let root = std::env::temp_dir().join(format!(
+        "llplayer-syntax-cache-test-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let manager = SyntaxCapabilityManager::new(&root, None);
+    tokio::fs::create_dir_all(manager.install_dir().join("venv/bin"))
+        .await
+        .unwrap();
+    tokio::fs::write(manager.install_dir().join("venv/bin/python"), b"fixture")
+        .await
+        .unwrap();
+    tokio::fs::write(manager.install_dir().join("syntax-sidecar.py"), b"fixture")
+        .await
+        .unwrap();
+    manager.assume_ready_for_tests().await;
+    let app = router(test_state().with_syntax_capability(manager, provider));
+    let track = setup_phonetic_track(&app, "syntax-cache-route").await;
+    let uri = format!(
+        "/v1/subtitles/{}/syntax-analysis",
+        track["id"].as_str().unwrap()
+    );
+    let run = |force: bool| {
+        app.clone().oneshot(
+            Request::post(&uri)
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::json!({"force": force}).to_string()))
+                .unwrap(),
+        )
+    };
+    let first = run(false).await.unwrap();
+    assert_eq!(first.status(), StatusCode::OK);
+    let first: serde_json::Value =
+        serde_json::from_slice(&to_bytes(first.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(first["status"], "ready");
+    assert_eq!(first["cache_hit"], false);
+    assert_eq!(analyses.load(Ordering::SeqCst), 1);
+
+    let second = run(false).await.unwrap();
+    let second: serde_json::Value =
+        serde_json::from_slice(&to_bytes(second.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(second["cache_hit"], true);
+    assert_eq!(analyses.load(Ordering::SeqCst), 1);
+
+    let rebuilt = run(true).await.unwrap();
+    assert_eq!(rebuilt.status(), StatusCode::OK);
+    assert_eq!(analyses.load(Ordering::SeqCst), 2);
+    let _ = tokio::fs::remove_dir_all(root).await;
 }

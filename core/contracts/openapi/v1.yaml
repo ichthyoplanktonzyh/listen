@@ -642,6 +642,65 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SyntacticConsumerBatch"
+  /v1/subtitles/{track_id}/syntax-analysis:
+    get:
+      operationId: trackSyntaxAnalysisStatus
+      responses:
+        "200":
+          description: Current cache state; stale means the track or qualified model fingerprint changed
+    post:
+      operationId: runTrackSyntaxAnalysis
+      description: Reuses or rebuilds the optional whole-track syntax batch cache; each sentence remains independently validated.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force: { type: boolean, default: false }
+                patterns:
+                  type: array
+                  items: { $ref: "#/components/schemas/SyntacticDependencyPattern" }
+      responses:
+        "200":
+          description: Track cache status and optional shared consumer batch
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, fingerprint, cache_hit, sentence_count, analyzed_sentence_count, fallback_sentence_count]
+                properties:
+                  status: { type: string, enum: [unavailable, analyzing, ready, partial, failed, stale] }
+                  fingerprint: { type: string }
+                  cache_hit: { type: boolean }
+                  sentence_count: { type: integer, minimum: 0 }
+                  analyzed_sentence_count: { type: integer, minimum: 0 }
+                  fallback_sentence_count: { type: integer, minimum: 0 }
+                  batch: { $ref: "#/components/schemas/SyntacticConsumerBatch" }
+  /v1/syntax/capability:
+    get:
+      operationId: syntaxCapability
+      responses:
+        "200":
+          description: Persisted optional syntax capability state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyntaxCapabilityView" }
+  /v1/syntax/capability/install:
+    post: { operationId: installSyntaxCapability, responses: { "200": { description: Installation started } } }
+  /v1/syntax/capability/cancel:
+    post: { operationId: cancelSyntaxCapability, responses: { "200": { description: Installation cancelled } } }
+  /v1/syntax/capability/validate:
+    post: { operationId: validateSyntaxCapability, responses: { "200": { description: Installation validated } } }
+  /v1/syntax/capability/enable:
+    post: { operationId: enableSyntaxCapability, responses: { "200": { description: Capability enabled } } }
+  /v1/syntax/capability/disable:
+    post: { operationId: disableSyntaxCapability, responses: { "200": { description: Capability disabled } } }
+  /v1/syntax/capability/uninstall:
+    post: { operationId: uninstallSyntaxCapability, responses: { "200": { description: Capability uninstalled } } }
+  /v1/syntax/capability/update:
+    post: { operationId: updateSyntaxCapability, responses: { "200": { description: Capability update started } } }
   /v1/sense-group-analyses/{analysis_id}:
     get:
       operationId: senseGroupAnalysis
@@ -2206,6 +2265,20 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
   schemas:
+    SyntaxCapabilityView:
+      type: object
+      required: [status, progress, enabled, runtime_version, model_version, model_checksum_sha256, expected_install_bytes, installed_bytes, updated_at_ms]
+      properties:
+        status: { type: string, enum: [not_installed, downloading, ready, partial, failed, stale, disabled] }
+        progress: { type: number, minimum: 0, maximum: 1 }
+        enabled: { type: boolean }
+        runtime_version: { type: string }
+        model_version: { type: string }
+        model_checksum_sha256: { type: string }
+        expected_install_bytes: { type: integer, minimum: 0 }
+        installed_bytes: { type: integer, minimum: 0 }
+        error: { type: [string, "null"] }
+        updated_at_ms: { type: integer, minimum: 0 }
     Health:
       type: object
       required: [status, api_version]

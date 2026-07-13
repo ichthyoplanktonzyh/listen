@@ -11,13 +11,13 @@ parser.add_argument("--model", required=True)
 parser.add_argument("--model-dir")
 args = parser.parse_args()
 
-request = json.loads(sys.stdin.readline())
-if args.model == "slow":
+def respond(request):
+  if args.model == "slow":
     time.sleep(1)
-if args.model == "malformed":
-    print("not-json")
-    raise SystemExit(0)
-if args.model in {"missing", "corrupt"}:
+  if args.model == "malformed":
+    print("not-json", flush=True)
+    return
+  if args.model in {"missing", "corrupt"}:
     kind = "model_missing" if args.model == "missing" else "model_corrupt"
     print(
         json.dumps(
@@ -29,10 +29,10 @@ if args.model in {"missing", "corrupt"}:
                 "error": {"kind": kind, "detail": f"fixture model {args.model}"},
             }
         )
-    )
-    raise SystemExit(0)
+    , flush=True)
+    return
 
-descriptor = {
+  descriptor = {
     "provider_id": args.provider,
     "provider_version": "fake-v1",
     "runtime_id": "fake-python",
@@ -40,8 +40,8 @@ descriptor = {
     "model_id": "fixture",
     "model_version": "1",
     "model_checksum_sha256": "c" * 64,
-}
-if args.model == "invalid" and request["operation"] == "analyze":
+  }
+  if args.model == "invalid" and request["operation"] == "analyze":
     print(
         json.dumps(
             {
@@ -52,9 +52,9 @@ if args.model == "invalid" and request["operation"] == "analyze":
                 "error": {"kind": "invalid_output", "detail": "fixture invalid tree"},
             }
         )
-    )
-    raise SystemExit(0)
-if request["operation"] == "probe":
+    , flush=True)
+    return
+  if request["operation"] == "probe":
     print(
         json.dumps(
             {
@@ -65,11 +65,11 @@ if request["operation"] == "probe":
                 "capability": {"status": "ready", "descriptor": descriptor},
             }
         )
-    )
-    raise SystemExit(0)
+    , flush=True)
+    return
 
-sentences = []
-for source in request["sentences"]:
+  sentences = []
+  for source in request["sentences"]:
     syntactic_tokens = []
     root_index = next(
         index
@@ -111,7 +111,7 @@ for source in request["sentences"]:
         }
     )
 
-print(
+  print(
     json.dumps(
         {
             "protocol_version": 1,
@@ -121,4 +121,9 @@ print(
             "analysis": {"descriptor": descriptor, "sentences": sentences},
         }
     )
-)
+  , flush=True)
+
+
+for line in sys.stdin:
+    if line.strip():
+        respond(json.loads(line))
