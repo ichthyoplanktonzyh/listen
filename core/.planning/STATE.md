@@ -3,14 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-13T10:57:00.000+08:00"
+last_updated: "2026-07-13T12:17:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-13 10:57 CST
-> 更新原因：Phase 3.12 Vendor-neutral LLM Provider 已 CODE COMPLETE；Phase 3.9 A/B/C
-> audible-structure 进入真实媒体 QA；资源刷新、C 证据门控与长句结构浏览缺陷均已修复。
+> 最后更新：2026-07-13 12:17 CST
+> 更新原因：Phase 3.9 第 4 项启动：建立有来源的完整英语语流规则目录，并开始分批扩展 B。
 
 ## 当前位置
 
@@ -181,6 +180,11 @@ last_updated: "2026-07-13T10:57:00.000+08:00"
 
 ### Phase 3.9: L1-aware Diagnosis v1 ⏳ 已恢复，A/B/C 算法与 UI 重构中
 
+- 2026-07-13 建立 General American 语流规则权威目录：规则按 `B-safe`、`B-context`、
+  `C-only`、`dialect` 分层，全部常见规则进入目录但只有文本证据充分者进入 B。第一批新增
+  `/t,d,s,z/ + /j/` coalescence、`/n/` 部位同化、V#V `[j]/[w]` 连接、跨词 flap；词内
+  flap 加入重音条件，`/t,d/` 删除收紧为词尾辅音簇环境。下一步补最小 POS/重音/边界/
+  构式上下文后接入其余 `B-context` 规则，并用真实字幕统计误报/漏报。
 - 2026-07-13 真实媒体 QA 修复：A/B/C 共用跟随式长句视口，紧凑态自动定位当前结构并提示
   横向溢出，展开态按结构节点换行显示完整句；B 的普通文本跨度也参与 token 跟随。
 - 2026-07-13 真实媒体 QA 修复：C 不再接受 text/WordTimeline 预测 frame 作为降级替代；仅当

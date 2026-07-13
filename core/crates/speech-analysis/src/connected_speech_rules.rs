@@ -5,7 +5,7 @@ use domain::{
     SubtitleSentence, SubtitleTokenKind,
 };
 
-const RULE_SOURCE: &str = "english_connected_speech_rules_v1";
+const RULE_SOURCE: &str = "english_connected_speech_rules_v2";
 
 struct WeakForm {
     word: &'static str,
@@ -339,17 +339,6 @@ const PHRASE_RULES: &[PhraseRule] = &[
         reduced: &["G", "AH", "N", "AH"],
         confidence: 0.78,
     },
-    PhraseRule {
-        id: "assimilation-did-you",
-        first: "did",
-        second: "you",
-        family: ConnectedSpeechFamily::Assimilation,
-        label: "default assimilation",
-        hint: "did you may assimilate at the /d/ + /y/ boundary.",
-        canonical: &["D", "IH", "D", "Y", "UW"],
-        reduced: &["D", "IH", "D", "ZH", "UW"],
-        confidence: 0.75,
-    },
 ];
 
 #[derive(Debug, Clone)]
@@ -358,6 +347,7 @@ struct RuleWord {
     text: String,
     normalized: String,
     symbols: Vec<String>,
+    stressed_symbols: Vec<String>,
     is_fallback_pronunciation: bool,
 }
 
@@ -379,6 +369,14 @@ impl RuleWord {
             symbols
         }
     }
+
+    fn penultimate_phone(&self) -> Option<&str> {
+        self.symbols
+            .len()
+            .checked_sub(2)
+            .and_then(|index| self.symbols.get(index))
+            .map(String::as_str)
+    }
 }
 
 pub fn rule_source() -> &'static str {
@@ -397,11 +395,29 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
         .map(|token| {
             let (symbols, is_fallback_pronunciation) =
                 crate::pronunciation_symbols(&token.text, token.index, None);
+            let pronunciation = crate::lookup(&token.text, token.index);
+            let stressed_symbols = pronunciation
+                .variants
+                .iter()
+                .find(|variant| !variant.is_fallback)
+                .or_else(|| pronunciation.variants.first())
+                .map(|variant| {
+                    variant
+                        .phonemes
+                        .iter()
+                        .map(|phone| match phone.stress {
+                            Some(stress) => format!("{}{}", phone.symbol, stress),
+                            None => phone.symbol.clone(),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
             RuleWord {
                 token_index: token.index,
                 text: token.text.clone(),
                 normalized: crate::normalize_word(&token.text),
                 symbols,
+                stressed_symbols,
                 is_fallback_pronunciation,
             }
         })
@@ -412,6 +428,9 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
     for pair in words.windows(2) {
         let first = &pair[0];
         let second = &pair[1];
+        if has_punctuation_boundary(sentence, first.token_index, second.token_index) {
+            continue;
+        }
         if let Some(rule) = PHRASE_RULES
             .iter()
             .find(|rule| rule.first == first.normalized && rule.second == second.normalized)
@@ -470,6 +489,9 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
         let Some(next) = words.get(index + 1) else {
             continue;
         };
+        if has_punctuation_boundary(sentence, word.token_index, next.token_index) {
+            continue;
+        }
         if phrase_tokens.contains(&word.token_index) || phrase_tokens.contains(&next.token_index) {
             continue;
         }
@@ -489,6 +511,74 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
                 Vec::new(),
                 &format!("{} + {}", word.text, next.text),
                 "link-consonant-vowel",
+            ));
+        }
+        if let Some((replacement, rule_id, hint)) = last_phone
+            .zip(next_first_phone)
+            .and_then(|(last, first)| coalescent_yod(last, first))
+        {
+            let mut expected_symbols = word.symbols.clone();
+            expected_symbols.extend(next.symbols.clone());
+            let mut predicted_symbols = word.symbols.clone();
+            predicted_symbols.pop();
+            predicted_symbols.push(replacement.into());
+            predicted_symbols.extend(next.symbols.iter().skip(1).cloned());
+            values.push(explanation(
+                ConnectedSpeechFamily::Assimilation,
+                "default yod coalescence",
+                hint,
+                word.token_index,
+                next.token_index,
+                0.72,
+                expected_symbols,
+                predicted_symbols,
+                &format!("{} + {}", word.text, next.text),
+                rule_id,
+            ));
+        }
+        if let Some((replacement, rule_id, hint)) = last_phone
+            .zip(next_first_phone)
+            .and_then(|(last, first)| nasal_place_assimilation(last, first))
+        {
+            let mut expected_symbols = word.symbols.clone();
+            expected_symbols.extend(next.symbols.clone());
+            let mut predicted_symbols = word.symbols.clone();
+            predicted_symbols.pop();
+            predicted_symbols.push(replacement.into());
+            predicted_symbols.extend(next.symbols.clone());
+            values.push(explanation(
+                ConnectedSpeechFamily::Assimilation,
+                "possible place assimilation",
+                hint,
+                word.token_index,
+                next.token_index,
+                0.56,
+                expected_symbols,
+                predicted_symbols,
+                &format!("{} + {}", word.text, next.text),
+                rule_id,
+            ));
+        }
+        if let Some((glide, rule_id)) = last_phone
+            .zip(next_first_phone)
+            .and_then(|(last, first)| vowel_linking_glide(last, first))
+        {
+            let mut expected_symbols = word.symbols.clone();
+            expected_symbols.extend(next.symbols.clone());
+            let mut predicted_symbols = word.symbols.clone();
+            predicted_symbols.push(glide.into());
+            predicted_symbols.extend(next.symbols.clone());
+            values.push(explanation(
+                ConnectedSpeechFamily::Linking,
+                "possible vowel linking glide",
+                "A short glide can bridge adjacent vowels in connected speech.",
+                word.token_index,
+                next.token_index,
+                0.54,
+                expected_symbols,
+                predicted_symbols,
+                &format!("{} + {}", word.text, next.text),
+                rule_id,
             ));
         }
         if last_phone
@@ -513,6 +603,9 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
             ));
         }
         if last_phone.is_some_and(|phone| matches!(phone, "T" | "D"))
+            && word
+                .penultimate_phone()
+                .is_some_and(crate::arpabet_is_consonant)
             && next_first_phone.is_some_and(crate::arpabet_is_consonant)
         {
             values.push(explanation(
@@ -530,7 +623,7 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
                 "possible-t-d-deletion",
             ));
         }
-        if crate::has_intervocalic_t_or_d(&word.symbols) {
+        if !word.is_fallback_pronunciation && has_stress_conditioned_flap(&word.stressed_symbols) {
             values.push(explanation(
                 ConnectedSpeechFamily::Flapping,
                 "default flap",
@@ -544,6 +637,33 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
                 "american-flap-t-d",
             ));
         }
+        if last_phone.is_some_and(|phone| matches!(phone, "T" | "D"))
+            && word
+                .penultimate_phone()
+                .is_some_and(crate::arpabet_is_vowel)
+            && next_first_phone.is_some_and(crate::arpabet_is_vowel)
+            && WEAK_FORMS.iter().any(|form| form.word == next.normalized)
+        {
+            let mut expected_symbols = word.symbols.clone();
+            expected_symbols.extend(next.symbols.clone());
+            let mut predicted_symbols = word.symbols.clone();
+            if let Some(last) = predicted_symbols.last_mut() {
+                *last = "DX".into();
+            }
+            predicted_symbols.extend(next.symbols.clone());
+            values.push(explanation(
+                ConnectedSpeechFamily::Flapping,
+                "possible cross-word flap",
+                "In American English, final /t/ or /d/ can flap before an unstressed vowel-initial function word.",
+                word.token_index,
+                next.token_index,
+                0.62,
+                expected_symbols,
+                predicted_symbols,
+                &format!("{} + {}", word.text, next.text),
+                "american-flap-across-word",
+            ));
+        }
     }
 
     values.sort_by_key(|value| {
@@ -554,6 +674,85 @@ pub fn predict_default_connected(sentence: &SubtitleSentence) -> Vec<ConnectedSp
         )
     });
     values
+}
+
+fn has_punctuation_boundary(sentence: &SubtitleSentence, start: u32, end: u32) -> bool {
+    sentence.tokens.iter().any(|token| {
+        token.index > start && token.index < end && token.kind == SubtitleTokenKind::Punctuation
+    })
+}
+
+fn coalescent_yod(last: &str, next: &str) -> Option<(&'static str, &'static str, &'static str)> {
+    match (last, next) {
+        ("T", "Y") => Some((
+            "CH",
+            "yod-coalescence-t-y",
+            "/t/ + /j/ may coalesce to /tʃ/.",
+        )),
+        ("D", "Y") => Some((
+            "JH",
+            "yod-coalescence-d-y",
+            "/d/ + /j/ may coalesce to /dʒ/.",
+        )),
+        ("S", "Y") => Some((
+            "SH",
+            "yod-coalescence-s-y",
+            "/s/ + /j/ may coalesce to /ʃ/.",
+        )),
+        ("Z", "Y") => Some((
+            "ZH",
+            "yod-coalescence-z-y",
+            "/z/ + /j/ may coalesce to /ʒ/.",
+        )),
+        _ => None,
+    }
+}
+
+fn nasal_place_assimilation(
+    last: &str,
+    next: &str,
+) -> Option<(&'static str, &'static str, &'static str)> {
+    match (last, next) {
+        ("N", "P" | "B" | "M") => Some((
+            "M",
+            "place-assimilation-n-bilabial",
+            "Alveolar /n/ may anticipate a following bilabial consonant and sound like /m/.",
+        )),
+        ("N", "K" | "G") => Some((
+            "NG",
+            "place-assimilation-n-velar",
+            "Alveolar /n/ may anticipate a following velar consonant and sound like /ng/.",
+        )),
+        _ => None,
+    }
+}
+
+fn vowel_linking_glide(last: &str, next: &str) -> Option<(&'static str, &'static str)> {
+    if !crate::arpabet_is_vowel(next) {
+        return None;
+    }
+    match last {
+        "IY" | "EY" | "AY" | "OY" => Some(("Y", "link-vowel-vowel-y")),
+        "UW" | "OW" | "AW" => Some(("W", "link-vowel-vowel-w")),
+        _ => None,
+    }
+}
+
+fn has_stress_conditioned_flap(symbols: &[String]) -> bool {
+    symbols.windows(3).any(|phones| {
+        vowel_has_stress(&phones[0])
+            && matches!(crate::strip_arpabet_stress(&phones[1]).as_str(), "T" | "D")
+            && vowel_is_unstressed(&phones[2])
+    })
+}
+
+fn vowel_has_stress(symbol: &str) -> bool {
+    crate::arpabet_is_vowel(symbol) && (symbol.ends_with('1') || symbol.ends_with('2'))
+}
+
+fn vowel_is_unstressed(symbol: &str) -> bool {
+    crate::arpabet_is_vowel(symbol)
+        && (symbol.ends_with('0') || (!symbol.ends_with('1') && !symbol.ends_with('2')))
 }
 
 fn phrase_expected_symbols(first: &RuleWord, second: &RuleWord, rule: &PhraseRule) -> Vec<String> {
@@ -627,6 +826,43 @@ mod tests {
                     end_char: text.len() as u32,
                 })
                 .collect(),
+        }
+    }
+
+    fn sentence_with_boundary_punctuation() -> SubtitleSentence {
+        SubtitleSentence {
+            id: SubtitleSentenceId::parse("punctuation").unwrap(),
+            index: 0,
+            start: TimeMs::new(0),
+            end: TimeMs::new(1000),
+            original_text: "see, it".into(),
+            display_text: "see, it".into(),
+            tokens: vec![
+                SubtitleToken {
+                    index: 0,
+                    kind: SubtitleTokenKind::Word,
+                    text: "see".into(),
+                    normalized: Some("see".into()),
+                    start_char: 0,
+                    end_char: 3,
+                },
+                SubtitleToken {
+                    index: 1,
+                    kind: SubtitleTokenKind::Punctuation,
+                    text: ",".into(),
+                    normalized: None,
+                    start_char: 3,
+                    end_char: 4,
+                },
+                SubtitleToken {
+                    index: 2,
+                    kind: SubtitleTokenKind::Word,
+                    text: "it".into(),
+                    normalized: Some("it".into()),
+                    start_char: 5,
+                    end_char: 7,
+                },
+            ],
         }
     }
 
@@ -729,6 +965,111 @@ mod tests {
             !vowel_to_vowel
                 .iter()
                 .any(|value| value.evidence.contains("link-consonant-vowel"))
+        );
+    }
+
+    #[test]
+    fn yod_coalescence_is_generic_across_supported_coronals() {
+        assert_eq!(coalescent_yod("T", "Y").map(|value| value.0), Some("CH"));
+        assert_eq!(coalescent_yod("D", "Y").map(|value| value.0), Some("JH"));
+        assert_eq!(coalescent_yod("S", "Y").map(|value| value.0), Some("SH"));
+        assert_eq!(coalescent_yod("Z", "Y").map(|value| value.0), Some("ZH"));
+
+        let values = predict_default_connected(&sentence("did you see"));
+        let assimilation = values
+            .iter()
+            .find(|value| value.evidence.contains("yod-coalescence-d-y"))
+            .expect("generic did-you coalescence");
+        assert_eq!(assimilation.learning_symbols, ["D", "IH", "JH", "UW"]);
+    }
+
+    #[test]
+    fn nasal_place_assimilation_distinguishes_bilabial_and_velar_targets() {
+        assert_eq!(
+            nasal_place_assimilation("N", "B").map(|value| value.0),
+            Some("M")
+        );
+        assert_eq!(
+            nasal_place_assimilation("N", "K").map(|value| value.0),
+            Some("NG")
+        );
+        assert_eq!(nasal_place_assimilation("N", "S"), None);
+
+        let values = predict_default_connected(&sentence("ten boys"));
+        let assimilation = values
+            .iter()
+            .find(|value| value.evidence.contains("place-assimilation-n-bilabial"))
+            .expect("n-to-m place assimilation");
+        assert!(
+            assimilation
+                .learning_symbols
+                .windows(2)
+                .any(|pair| pair == ["M", "B"])
+        );
+    }
+
+    #[test]
+    fn vowel_hiatus_uses_front_or_back_linking_glide() {
+        assert_eq!(
+            vowel_linking_glide("IY", "IH"),
+            Some(("Y", "link-vowel-vowel-y"))
+        );
+        assert_eq!(
+            vowel_linking_glide("UW", "AE"),
+            Some(("W", "link-vowel-vowel-w"))
+        );
+        assert_eq!(vowel_linking_glide("AH", "IH"), None);
+
+        let values = predict_default_connected(&sentence("see it"));
+        let linking = values
+            .iter()
+            .find(|value| value.evidence.contains("link-vowel-vowel-y"))
+            .expect("front-vowel linking glide");
+        assert!(
+            linking
+                .learning_symbols
+                .windows(2)
+                .any(|pair| pair == ["IY", "Y"])
+        );
+
+        let across_punctuation = predict_default_connected(&sentence_with_boundary_punctuation());
+        assert!(
+            !across_punctuation
+                .iter()
+                .any(|value| value.evidence.contains("link-vowel-vowel-y"))
+        );
+    }
+
+    #[test]
+    fn lexical_flap_requires_stressed_to_unstressed_vowel_context() {
+        assert!(has_stress_conditioned_flap(&[
+            "W".into(),
+            "AO1".into(),
+            "T".into(),
+            "ER0".into(),
+        ]));
+        assert!(!has_stress_conditioned_flap(&[
+            "AH0".into(),
+            "T".into(),
+            "AE1".into(),
+            "K".into(),
+        ]));
+    }
+
+    #[test]
+    fn t_d_deletion_requires_a_word_final_consonant_cluster() {
+        let cluster = predict_default_connected(&sentence("last call"));
+        assert!(
+            cluster
+                .iter()
+                .any(|value| value.evidence.contains("possible-t-d-deletion"))
+        );
+
+        let singleton = predict_default_connected(&sentence("good call"));
+        assert!(
+            !singleton
+                .iter()
+                .any(|value| value.evidence.contains("possible-t-d-deletion"))
         );
     }
 }
