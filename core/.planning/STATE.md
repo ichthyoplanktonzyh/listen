@@ -8,14 +8,18 @@ last_updated: "2026-07-12T18:55:00.000+08:00"
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-13 08:22 CST
-> 更新原因：Phase 3.12 Vendor-neutral LLM Provider 后端优先切片（Slice 0/1/2）落地并全绿；
-> 中立性证明成立；设置 UI 与真实 keychain 实现后置，phase 尚未收口。
+> 最后更新：2026-07-13 09:24 CST
+> 更新原因：Phase 3.12 Vendor-neutral LLM Provider 五切片（0/1/2/2b/3）全部落地并全绿，
+> 已创建 CLOSEOUT，CODE COMPLETE；主线切换至 Phase 3.13 / 3.12.1。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.12 Vendor-neutral LLM Provider **IN PROGRESS**（后端优先，
-  分支 `codex/3.12-vendor-neutral-llm-provider`）。已落地并全绿：中立契约层（domain
+- **当前执行主线**：Phase 3.12 Vendor-neutral LLM Provider **CODE COMPLETE**（见其
+  CLOSEOUT；分支 `codex/3.12-vendor-neutral-llm-provider`，三 commit）。下一执行 phase 为
+  Phase 3.13 Reading Studio v1（首个真实消费 3.11 契约 + 3.12 provider 的 Studio），或
+  Phase 3.12.1 LLM Judge Qualification（可与 3.13 并行）；开工前按现状修订各自 PLAN。3.12
+  剩余仅 owner 真实 provider 端到端产品 QA 与 owner 按需的增量协议（Slice 4）。已落地并全绿：
+  中立契约层（domain
   `llm_provider` + application 两层 seam）；**两个异构协议 adapter（OpenAI Chat-compatible +
   Anthropic Messages）过同一 fake-server 契约套件 = 中立性证明**（`crates/llm-provider/`，
   10 契约测试，`drafts[0]==drafts[1]`）；draft→judgment use case（身份服务端铸造、过 3.11
@@ -254,6 +258,7 @@ last_updated: "2026-07-12T18:55:00.000+08:00"
 | 3.8 Shadowing & Recording Comparison | chunk 跟读 + 本地录音 + A/B/A + 客观波形/时长/停顿比较；非评分 completion | `.planning/phases/3.8-shadowing-recording-comparison/3.8-CLOSEOUT.md` |
 | 3.10 Coach Dashboard | 诊断型 dashboard 聚合 durable 事实 + 规则建议 + channel-ready envelope + starter 降级 | `.planning/phases/3.10-coach-dashboard/3.10-CLOSEOUT.md` |
 | 3.11 Semantic Task Evidence Foundation | 四层事实分离（attempt/judgment/observation/capability）+ 版本化 rubric + 逐点判定含 abstain + adjudication；schema v35 append-only；ADR 0021；零 observation/projection writer | `.planning/phases/3.11-semantic-task-evidence-foundation/3.11-CLOSEOUT.md` |
+| 3.12 Vendor-neutral LLM Provider | 两异构协议 adapter（OpenAI Chat + Anthropic Messages）过同一契约套件证中立；draft-not-domain-type + 四层分离经 LLM 路径成立；OS keychain + auth_ref 密钥不落普通存储；诚实降级；Flutter 设置 UI；schema v36；ADR 0022；判定默认不获显示资格（属 3.12.1）。CODE COMPLETE，owner 真实 provider 端到端 QA 待做 | `.planning/phases/3.12-vendor-neutral-llm-provider/3.12-CLOSEOUT.md` |
 
 ## 最近重要决策
 

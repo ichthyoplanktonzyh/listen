@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-13 09:24 CST: Phase 3.12 Vendor-neutral LLM Provider 收口，CODE COMPLETE。
+  创建 `3.12-CLOSEOUT.md`（五切片 0/1/2/2b/3 交付清单、七项 Key Decisions、四条 exit signal
+  逐条核验通过、验证记录、QA 归属、Deferred 清单）；PLAN 置 CODE COMPLETE；STATE.md 主线
+  切换至 Phase 3.13 Reading Studio / 3.12.1 Judge Qualification 并登记已完成 phase 索引。
+  Exit signals 全部核验通过：两异构 adapter 同契约套件证中立、切 provider 领域 JSON 不变 +
+  provenance 保留、删/禁 key 诚实降级、密钥不落普通存储 + 错误不回显凭证。剩余为 owner 真实
+  provider 端到端产品 QA（人工门）与增量协议 Slice 4（owner 按需）；judge 质量资格属 3.12.1。
+
 - 2026-07-13 09:24 CST: Phase 3.12 Slice 3：Flutter 最小设置 UI（AI providers）。
   新增 `apps/desktop/lib/models/llm_provider.dart` 手写 DTO（`LlmProviderProfileView`
   /`LlmProviderCapability`/`LlmCapabilityClaim`/`LlmProbeResult`，ADR 0014）+
