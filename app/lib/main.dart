@@ -28,6 +28,7 @@ import 'controllers/media_session_coordinator.dart';
 import 'controllers/occurrence_media_resolver.dart';
 import 'controllers/playback_actions_coordinator.dart';
 import 'controllers/player_controller.dart';
+import 'controllers/practice_actions_coordinator.dart';
 import 'controllers/practice_controller.dart';
 import 'controllers/resource_actions_coordinator.dart';
 import 'controllers/speech_enhancement_workflow_controller.dart';
@@ -163,6 +164,17 @@ class _PlayerScreenState extends State<PlayerScreen>
     subtitle: subtitleController,
     playbackActions: playbackActions,
   );
+  late final practiceActions = PracticeActionsCoordinator(
+    practice: practiceController,
+    player: playerController,
+    subtitle: subtitleController,
+    learning: learningController,
+    slicePlayer: slicePlayerController,
+    playbackActions: playbackActions,
+    settings: settingsController,
+    adapter: adapter,
+    recordingAdapter: recordingAdapter,
+  );
 
   // ── Local UI state (not managed by controllers) ──
   String get status => playerController.status;
@@ -256,6 +268,12 @@ class _PlayerScreenState extends State<PlayerScreen>
       text: (key) => l.text(key),
     );
     inboxActions.bind(getApi: () => api, isMounted: () => mounted);
+    practiceActions.bind(
+      getApi: () => api,
+      isMounted: () => mounted,
+      refreshDiagnosis: _refreshDiagnosis,
+      seekCue: _seekCue,
+    );
     unawaited(_connectApi());
     unawaited(_loadSettings());
     subscriptions.addAll([
@@ -549,7 +567,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _collapseWorkbench() {
-    unawaited(_closePracticeWindow());
+    unawaited(practiceActions.closePracticeWindow());
     _workbenchAnimController.reverse().then((_) {
       if (mounted) setState(() => _workbenchExpanded = false);
     });
@@ -1262,298 +1280,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     await _refreshDiagnosis();
   }
 
-  Future<void> _startClozePractice() async {
-    final cue = subtitleController.currentPrimaryCue;
-    await practiceController.startCloze(
-      api: api,
-      cue: cue,
-      mediaId: playerController.mediaId,
-      trackId: subtitleController.primaryTrack?.id,
-      wordTimings: cue == null
-          ? const []
-          : subtitleController.timingsBySentence[cue.id] ?? const [],
-      wordEntries: learningController.wordEntries,
-      mediaTimeMs: playbackActions.mediaTimeMs,
-    );
-    if (practiceController.item != null) {
-      await _replayPracticeWindow();
-    }
-  }
-
-  Future<void> _startChunkDictationPractice() async {
-    await practiceController.startChunkDictation(
-      api: api,
-      cue: subtitleController.currentPrimaryCue,
-      chunk: playbackActions.currentPracticeChunk(),
-      mediaId: playerController.mediaId,
-      trackId: subtitleController.primaryTrack?.id,
-      mediaTimeMs: playbackActions.mediaTimeMs,
-    );
-    if (practiceController.item != null) {
-      await _replayPracticeWindow();
-    }
-  }
-
-  Future<void> _startSentenceDictationPractice() async {
-    await practiceController.startSentenceDictation(
-      api: api,
-      cue: subtitleController.currentPrimaryCue,
-      mediaId: playerController.mediaId,
-      trackId: subtitleController.primaryTrack?.id,
-      mediaTimeMs: playbackActions.mediaTimeMs,
-    );
-    if (practiceController.item != null) {
-      await _replayPracticeWindow();
-    }
-  }
-
-  Future<void> _startShadowingPractice() async {
-    await practiceController.startShadowing(
-      api: api,
-      cue: subtitleController.currentPrimaryCue,
-      chunk: playbackActions.currentPracticeChunk(),
-      chunks: playbackActions.currentPracticeChunks(),
-      mediaId: playerController.mediaId,
-      trackId: subtitleController.primaryTrack?.id,
-      mediaTimeMs: playbackActions.mediaTimeMs,
-    );
-    if (practiceController.item != null) {
-      await adapter.setRate(practiceController.state.shadowingRate);
-      await _replayPracticeWindow();
-    }
-  }
-
-  Future<void> _replayPracticeWindow() async {
-    final draft = practiceController.draft;
-    if (draft == null) return;
-    if (draft.referenceMediaPath != null) {
-      await adapter.pause();
-      await slicePlayerController.open(
-        path: draft.referenceMediaPath!,
-        occurrence: {
-          'start_ms_snapshot': draft.playbackStartMs,
-          'end_ms_snapshot': draft.playbackEndMs,
-          'sentence_text_snapshot': draft.expectedText,
-          'media_title_snapshot': draft.referenceMediaPath!
-              .split(Platform.pathSeparator)
-              .last,
-          'original_form': draft.focusLabel,
-        },
-      );
-      await slicePlayerController.setRate(
-        practiceController.state.shadowingRate,
-      );
-      slicePlayerController.setLooping(true);
-      return;
-    }
-    await slicePlayerController.pause();
-    await playbackActions.loopRange(
-      draft.playbackStartMs,
-      draft.playbackEndMs,
-      'Looping practice window',
-      labelKey: 'loopPractice',
-    );
-  }
-
-  Future<void> _submitPractice() async {
-    await practiceController.submit(api);
-    final attempt = practiceController.attempt;
-    if (attempt != null && mounted) {
-      playerController.setStatus(
-        'Practice ${attempt.result}; ${attempt.evaluation.summary}',
-      );
-    }
-    await _refreshDiagnosis();
-  }
-
-  Future<void> _beginShadowingRecording() async {
-    await practiceController.beginShadowingRecording(
-      acquireAudioFocus: () async {
-        await adapter.pause();
-        await recordingAdapter.pause();
-        await slicePlayerController.pause();
-      },
-    );
-  }
-
-  Future<void> _stopShadowingRecording() async {
-    final path =
-        practiceController.draft?.referenceMediaPath ??
-        playerController.mediaPath;
-    final draft = practiceController.draft;
-    if (path == null || draft == null) return;
-    await practiceController.stopShadowingRecording(
-      api: api,
-      language: settingsController.resolveLearningLanguage(
-        subtitleController.primaryTrack?.language,
-      ),
-      mediaId: draft.sourceMediaId ?? playerController.mediaId,
-      extractReferenceWav: () => tools.extractPcm16AudioSegment(
-        path,
-        startMs: draft.playbackStartMs,
-        endMs: draft.playbackEndMs,
-      ),
-    );
-  }
-
-  Future<void> _playShadowingReferenceOnce() async {
-    final draft = practiceController.draft;
-    if (draft == null) return;
-    await recordingAdapter.pause();
-    if (draft.referenceMediaPath != null) {
-      slicePlayerController.setLooping(false);
-      await slicePlayerController.replay();
-      final durationMs =
-          ((draft.playbackEndMs - draft.playbackStartMs) /
-                  practiceController.state.shadowingRate)
-              .ceil();
-      await Future<void>.delayed(Duration(milliseconds: durationMs + 80));
-      await slicePlayerController.pause();
-      slicePlayerController.setLooping(true);
-      return;
-    }
-    playerController.setSourceLoop(null, null);
-    await adapter.pause();
-    await adapter.setRate(practiceController.state.shadowingRate);
-    await adapter.seek(Duration(milliseconds: draft.playbackStartMs));
-    await adapter.play();
-    final durationMs =
-        ((draft.playbackEndMs - draft.playbackStartMs) /
-                practiceController.state.shadowingRate)
-            .ceil();
-    await Future<void>.delayed(Duration(milliseconds: durationMs + 80));
-    await adapter.pause();
-  }
-
-  Future<void> _playShadowingRecording() async {
-    final asset = practiceController.recordingAsset;
-    if (asset == null) return;
-    await adapter.pause();
-    await slicePlayerController.pause();
-    await recordingAdapter.open(asset.filePath);
-    await Future<void>.delayed(Duration(milliseconds: asset.durationMs + 80));
-    await recordingAdapter.pause();
-  }
-
-  Future<void> _playShadowingAba() async {
-    if (practiceController.recordingAsset == null) return;
-    await _playShadowingReferenceOnce();
-    await _playShadowingRecording();
-    await _playShadowingReferenceOnce();
-  }
-
-  Future<void> _setShadowingRate(double rate) async {
-    practiceController.setShadowingRate(rate);
-    if (practiceController.draft?.referenceMediaPath != null) {
-      await slicePlayerController.setRate(rate);
-    } else {
-      await adapter.setRate(rate);
-    }
-    if (playerController.sourceLoopLabel == 'loopPractice') {
-      await _replayPracticeWindow();
-    }
-  }
-
-  Future<void> _setShadowingStep(int index) async {
-    await practiceController.selectShadowingStep(
-      api: api,
-      index: index,
-      mediaId: playerController.mediaId,
-      trackId: subtitleController.primaryTrack?.id,
-    );
-    if (practiceController.item != null) await _replayPracticeWindow();
-  }
-
-  Future<void> _togglePracticePlayback() async {
-    if (practiceController.draft?.referenceMediaPath != null) {
-      await slicePlayerController.togglePlayback();
-      return;
-    }
-    await adapter.playOrPause();
-  }
-
-  Future<void> _startExternalShadowing(
-    String path,
-    Map<String, dynamic> occurrence,
-  ) async {
-    final startMs = occurrence['start_ms_snapshot'];
-    final endMs = occurrence['end_ms_snapshot'];
-    final prompt = occurrence['sentence_text_snapshot'];
-    if (startMs is! int || endMs is! int || prompt is! String) return;
-    await practiceController.startExternalShadowing(
-      api: api,
-      mediaPath: path,
-      mediaId: occurrence['media_id'] as String?,
-      trackId: occurrence['track_id'] as String?,
-      sentenceId: occurrence['sentence_id'] as String?,
-      promptText: prompt,
-      startMs: startMs,
-      endMs: endMs,
-    );
-    if (practiceController.item != null) await _replayPracticeWindow();
-  }
-
-  Future<void> _startSliceWindowShadowing(SlicePlayerState state) async {
-    final path = state.path;
-    final sentence = state.sentence;
-    if (path == null || sentence == null) return;
-    await _startExternalShadowing(path, {
-      'media_id': state.mediaId,
-      'track_id': state.trackId,
-      'sentence_id': state.sentenceId,
-      'sentence_text_snapshot': sentence,
-      'start_ms_snapshot': state.start.inMilliseconds,
-      'end_ms_snapshot': state.end.inMilliseconds,
-    });
-  }
-
-  Future<void> _savePracticeReview() async {
-    await practiceController.saveCurrentFailureToReview(api);
-    if (practiceController.attempt?.generatedReviewItemIds.isNotEmpty == true &&
-        mounted) {
-      playerController.setStatus('Practice failure saved to review');
-    }
-  }
-
-  Future<void> _navigatePracticeSentence(int delta) async {
-    // Review/dictionary shadowing owns one resolved source clip. It must never
-    // navigate the primary subtitle cursor, whether invoked by the UI or a
-    // global arrow shortcut.
-    if (practiceController.draft?.referenceMediaPath != null) return;
-    final current = subtitleController.currentPrimaryCue;
-    final target = delta < 0
-        ? subtitleController.primaryCursor.previous(current)
-        : subtitleController.primaryCursor.next(current);
-    if (target == null) return;
-    final draft = practiceController.draft;
-    await _seekCue(target);
-    if (draft == null) return;
-    if (draft.kind == 'shadowing') {
-      await _startShadowingPractice();
-    } else if (draft.kind == 'cloze') {
-      await _startClozePractice();
-    } else if (draft.targetKind == 'chunk') {
-      await _startChunkDictationPractice();
-    } else {
-      await _startSentenceDictationPractice();
-    }
-  }
-
-  Future<void> _closePracticeWindow() async {
-    if (playerController.sourceLoopLabel == 'loopPractice') {
-      playerController.setSourceLoop(null, null);
-    }
-    await recordingAdapter.pause();
-    if (practiceController.recordingActive) {
-      await practiceController.cancelShadowingRecording();
-    }
-    if (practiceController.draft?.referenceMediaPath != null) {
-      await slicePlayerController.close();
-    }
-    await adapter.setRate(playerController.rate);
-    practiceController.clear();
-  }
-
   Future<void> _openSlicePlayback(Map<String, dynamic> occurrence) async {
     final result = await playbackActions.resolveOccurrenceMedia(
       occurrence,
@@ -1622,7 +1348,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     final cueIndex = cues.indexWhere((cue) => cue.id == sentenceId);
     if (cueIndex < 0) return;
     await _seekCue(cues[cueIndex]);
-    await _startSentenceDictationPractice();
+    await practiceActions.startSentenceDictationPractice();
   }
 
   Future<void> _openDiagnosisView() async {
@@ -1753,7 +1479,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           huntingController: huntingController,
           initialEntryId: initialEntryId,
           onPauseBackgroundPlayback: adapter.pause,
-          onStartShadowing: _startExternalShadowing,
+          onStartShadowing: practiceActions.startExternalShadowing,
         ),
       ),
     );
@@ -1813,7 +1539,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         .map((anchor) => anchor.sentenceId)
         .whereType<String>()
         .firstOrNull;
-    await _startExternalShadowing(path, {
+    await practiceActions.startExternalShadowing(path, {
       'media_id': mediaId,
       'track_id': entry.item.source.trackId,
       'sentence_id': sentenceId,
@@ -2103,11 +1829,11 @@ class _PlayerScreenState extends State<PlayerScreen>
         child: PlayerGlobalShortcuts(
           bindings: {
             const SingleActivator(LogicalKeyboardKey.space):
-                _togglePracticePlayback,
+                practiceActions.togglePracticePlayback,
             const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
-                unawaited(_navigatePracticeSentence(-1)),
+                unawaited(practiceActions.navigatePracticeSentence(-1)),
             const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
-                unawaited(_navigatePracticeSentence(1)),
+                unawaited(practiceActions.navigatePracticeSentence(1)),
             const SingleActivator(LogicalKeyboardKey.keyL): () =>
                 subtitleController.setLoopCue(!subtitleController.loopCue),
             const SingleActivator(LogicalKeyboardKey.keyH): () =>
@@ -2306,25 +2032,34 @@ class _PlayerScreenState extends State<PlayerScreen>
                                         null
                                     ? slicePlayerController.state.playing
                                     : playerController.playing,
-                                onReplay: _replayPracticeWindow,
-                                onTogglePlayback: _togglePracticePlayback,
-                                onNavigate: _navigatePracticeSentence,
-                                onSubmit: _submitPractice,
-                                onSaveReview: _savePracticeReview,
-                                onStartRecording: _beginShadowingRecording,
-                                onStopRecording: _stopShadowingRecording,
+                                onReplay: practiceActions.replayPracticeWindow,
+                                onTogglePlayback:
+                                    practiceActions.togglePracticePlayback,
+                                onNavigate:
+                                    practiceActions.navigatePracticeSentence,
+                                onSubmit: practiceActions.submitPractice,
+                                onSaveReview:
+                                    practiceActions.savePracticeReview,
+                                onStartRecording:
+                                    practiceActions.beginShadowingRecording,
+                                onStopRecording:
+                                    practiceActions.stopShadowingRecording,
                                 onCancelRecording:
                                     practiceController.cancelShadowingRecording,
                                 onOpenMicrophoneSettings:
                                     practiceController.openMicrophoneSettings,
-                                onPlayReference: _playShadowingReferenceOnce,
-                                onPlayRecording: _playShadowingRecording,
-                                onPlayAba: _playShadowingAba,
+                                onPlayReference:
+                                    practiceActions.playShadowingReferenceOnce,
+                                onPlayRecording:
+                                    practiceActions.playShadowingRecording,
+                                onPlayAba: practiceActions.playShadowingAba,
                                 onDeleteRecording: () => practiceController
                                     .deleteCurrentRecording(api),
-                                onShadowingRateChanged: _setShadowingRate,
-                                onShadowingStepChanged: _setShadowingStep,
-                                onClose: _closePracticeWindow,
+                                onShadowingRateChanged:
+                                    practiceActions.setShadowingRate,
+                                onShadowingStepChanged:
+                                    practiceActions.setShadowingStep,
+                                onClose: practiceActions.closePracticeWindow,
                               ),
                             Positioned(
                               top: 18,
@@ -2349,7 +2084,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                                   ? SlicePlaybackWindow(
                                       controller: slicePlayerController,
                                       onClose: _closeSlicePlayback,
-                                      onShadowing: _startSliceWindowShadowing,
+                                      onShadowing: practiceActions
+                                          .startSliceWindowShadowing,
                                     )
                                   : const SizedBox.shrink(),
                             ),
@@ -2414,10 +2150,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     onManualReviewTimeline: _openManualReviewTimeline,
     onDeleteSubtitle: _deleteSubtitleResource,
     onExportSubtitle: _exportSubtitleResource,
-    onStartClozePractice: _startClozePractice,
-    onStartChunkDictationPractice: _startChunkDictationPractice,
-    onStartSentenceDictationPractice: _startSentenceDictationPractice,
-    onStartShadowingPractice: _startShadowingPractice,
+    onStartClozePractice: practiceActions.startClozePractice,
+    onStartChunkDictationPractice: practiceActions.startChunkDictationPractice,
+    onStartSentenceDictationPractice:
+        practiceActions.startSentenceDictationPractice,
+    onStartShadowingPractice: practiceActions.startShadowingPractice,
     onOpenDiagnosisView: _openDiagnosisView,
     onOpenSlicePlayback: _openSlicePlayback,
     onOpenListeningDictionary: _openListeningDictionaryEntry,
