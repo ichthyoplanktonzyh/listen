@@ -132,13 +132,13 @@ fn database_path() -> PathBuf {
 fn syntax_capability_root() -> PathBuf {
     #[cfg(target_os = "macos")]
     {
-        return PathBuf::from(env::var_os("HOME").expect("HOME is required"))
-            .join("Library/Application Support/listen/syntax");
+        PathBuf::from(env::var_os("HOME").expect("HOME is required"))
+            .join("Library/Application Support/listen/syntax")
     }
     #[cfg(target_os = "windows")]
     {
-        return PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is required"))
-            .join("listen/syntax");
+        PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is required"))
+            .join("listen/syntax")
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {

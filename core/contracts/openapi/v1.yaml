@@ -2267,14 +2267,16 @@ components:
   schemas:
     SyntaxCapabilityView:
       type: object
-      required: [status, progress, enabled, runtime_version, model_version, model_checksum_sha256, expected_install_bytes, installed_bytes, updated_at_ms]
+      required: [status, progress, enabled, provider_version, runtime_version, model_version, model_checksum_sha256, delivery_checksum_sha256, expected_install_bytes, installed_bytes, updated_at_ms]
       properties:
         status: { type: string, enum: [not_installed, downloading, ready, partial, failed, stale, disabled] }
         progress: { type: number, minimum: 0, maximum: 1 }
         enabled: { type: boolean }
+        provider_version: { type: string }
         runtime_version: { type: string }
         model_version: { type: string }
         model_checksum_sha256: { type: string }
+        delivery_checksum_sha256: { type: string }
         expected_install_bytes: { type: integer, minimum: 0 }
         installed_bytes: { type: integer, minimum: 0 }
         error: { type: [string, "null"] }

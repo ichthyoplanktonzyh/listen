@@ -152,6 +152,16 @@ class SidecarContractTest(unittest.TestCase):
         self.assertEqual(aligned[0]["end_char"], 4)
         self.assertEqual(coverage, 1.0)
 
+    def test_leading_subtitle_whitespace_is_not_a_parser_token(self) -> None:
+        text = " hello"
+        raw = [{"surface": "hello", "start_char": 1, "end_char": 6}]
+        aligned, unaligned, coverage = subject.align_tokens(
+            text, raw, subtitle_tokens(text)
+        )
+        self.assertEqual(aligned[0]["subtitle_token_indices"], [1])
+        self.assertEqual(unaligned, [])
+        self.assertEqual(coverage, 1.0)
+
     def test_unmapped_word_is_explicit(self) -> None:
         text = "hello 2026"
         raw = [{"surface": "hello", "start_char": 0, "end_char": 5}]

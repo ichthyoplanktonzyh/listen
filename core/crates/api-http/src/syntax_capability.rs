@@ -4,6 +4,7 @@ use std::sync::Arc;
 use application::{SyntacticAnalysisProvider, SyntacticCapabilityStatus};
 use domain::LanguageCode;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use syntactic_provider::PythonSyntacticProvider;
 use tokio::process::Command;
 use tokio::sync::Mutex;
@@ -13,6 +14,7 @@ const RUNTIME_VERSION: &str = "3.8.13";
 const MODEL_VERSION: &str = "3.8.0";
 const MODEL_CHECKSUM: &str = "adda6df4860f555a57e6e31635f233359ab471dafa177d58d96a8d4198450a7c";
 const EXPECTED_BYTES: u64 = 162_250_752;
+const PROVIDER_VERSION: &str = "jsonl-v2";
 const REQUIREMENTS: &str =
     include_str!("../../../scripts/syntactic-analysis/requirements-spacy-product.txt");
 const SIDECAR: &str = include_str!("../../../scripts/syntactic-analysis/syntax-sidecar.py");
@@ -30,14 +32,17 @@ pub enum SyntaxCapabilityStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SyntaxCapabilityView {
     pub status: SyntaxCapabilityStatus,
     pub progress: f32,
     pub enabled: bool,
     pub runtime_version: String,
+    pub provider_version: String,
     pub model_version: String,
     pub model_checksum_sha256: String,
     pub expected_install_bytes: u64,
+    pub delivery_checksum_sha256: String,
     pub installed_bytes: u64,
     pub error: Option<String>,
     pub updated_at_ms: u64,
@@ -50,9 +55,11 @@ impl Default for SyntaxCapabilityView {
             progress: 0.0,
             enabled: false,
             runtime_version: RUNTIME_VERSION.into(),
+            provider_version: PROVIDER_VERSION.into(),
             model_version: MODEL_VERSION.into(),
             model_checksum_sha256: MODEL_CHECKSUM.into(),
             expected_install_bytes: EXPECTED_BYTES,
+            delivery_checksum_sha256: delivery_checksum(),
             installed_bytes: 0,
             error: None,
             updated_at_ms: now_ms(),
@@ -148,6 +155,10 @@ impl SyntaxCapabilityManager {
     pub async fn cancel(&self) -> SyntaxCapabilityView {
         if let Some(task) = self.task.lock().await.take() {
             task.abort();
+            // Wait until the install future has actually dropped its
+            // kill-on-drop child before removing staging. Without this join,
+            // venv creation can race and recreate the directory after cancel.
+            let _ = task.await;
         }
         let staging = self.root.join(".installing");
         let _ = tokio::fs::remove_dir_all(staging).await;
@@ -176,6 +187,22 @@ impl SyntaxCapabilityManager {
             .await;
             return self.view().await;
         };
+        let sidecar_matches = tokio::fs::read(self.install_dir.join("syntax-sidecar.py"))
+            .await
+            .is_ok_and(|value| value == SIDECAR.as_bytes());
+        let requirements_match = tokio::fs::read(self.install_dir.join("requirements.txt"))
+            .await
+            .is_ok_and(|value| value == REQUIREMENTS.as_bytes());
+        if !sidecar_matches || !requirements_match {
+            self.set_state(
+                SyntaxCapabilityStatus::Stale,
+                0.0,
+                false,
+                Some("installed syntax delivery files do not match this app version".into()),
+            )
+            .await;
+            return self.view().await;
+        }
         provider.shutdown().await;
         match provider
             .probe(&LanguageCode::parse("en").expect("static language"))
@@ -184,6 +211,7 @@ impl SyntaxCapabilityManager {
             Ok(capability) if capability.status == SyntacticCapabilityStatus::Ready => {
                 let descriptor_ok = capability.descriptor.as_ref().is_some_and(|descriptor| {
                     descriptor.runtime_version == RUNTIME_VERSION
+                        && descriptor.provider_version == PROVIDER_VERSION
                         && descriptor.model_version == MODEL_VERSION
                         && descriptor.model_checksum_sha256 == MODEL_CHECKSUM
                 });
@@ -337,6 +365,7 @@ impl SyntaxCapabilityManager {
             .ok_or_else(|| "installed syntax probe omitted descriptor".to_string())?;
         if capability.status != SyntacticCapabilityStatus::Ready
             || descriptor.runtime_version != RUNTIME_VERSION
+            || descriptor.provider_version != PROVIDER_VERSION
             || descriptor.model_version != MODEL_VERSION
             || descriptor.model_checksum_sha256 != MODEL_CHECKSUM
         {
@@ -407,13 +436,28 @@ async fn run(program: &Path, args: &[&str], cwd: &Path) -> Result<(), String> {
 }
 
 async fn run_path(program: &Path, args: &[&str], cwd: &Path) -> Result<(), String> {
-    let output = Command::new(program)
-        .args(args)
-        .current_dir(cwd)
-        .kill_on_drop(true)
-        .output()
+    let mut command = Command::new(program);
+    command.args(args).current_dir(cwd).kill_on_drop(true);
+    // Creating a venv can launch ensurepip grandchildren. Killing only the
+    // direct child lets those grandchildren recreate staging after Cancel.
+    // Give every installer command its own process group and kill the whole
+    // group if this future is dropped.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.as_std_mut().process_group(0);
+    }
+    let child = command
+        .spawn()
+        .map_err(|error| format!("run {}: {error}", program.display()))?;
+    #[cfg(unix)]
+    let mut process_group = ProcessGroupGuard::new(child.id());
+    let output = child
+        .wait_with_output()
         .await
         .map_err(|error| format!("run {}: {error}", program.display()))?;
+    #[cfg(unix)]
+    process_group.disarm();
     if output.status.success() {
         Ok(())
     } else {
@@ -422,6 +466,37 @@ async fn run_path(program: &Path, args: &[&str], cwd: &Path) -> Result<(), Strin
             .take(800)
             .collect::<String>();
         Err(format!("{} failed: {detail}", program.display()))
+    }
+}
+
+#[cfg(unix)]
+struct ProcessGroupGuard {
+    pid: u32,
+    armed: bool,
+}
+
+#[cfg(unix)]
+impl ProcessGroupGuard {
+    fn new(pid: Option<u32>) -> Self {
+        Self {
+            pid: pid.unwrap_or_default(),
+            armed: pid.is_some(),
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+#[cfg(unix)]
+impl Drop for ProcessGroupGuard {
+    fn drop(&mut self) {
+        if self.armed {
+            let _ = std::process::Command::new("/bin/kill")
+                .args(["-KILL", &format!("-{}", self.pid)])
+                .status();
+        }
     }
 }
 
@@ -457,6 +532,18 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
+fn delivery_checksum() -> String {
+    let mut digest = Sha256::new();
+    digest.update(b"syntax-delivery-v1\0");
+    digest.update(PROVIDER_VERSION.as_bytes());
+    digest.update(RUNTIME_VERSION.as_bytes());
+    digest.update(MODEL_VERSION.as_bytes());
+    digest.update(MODEL_CHECKSUM.as_bytes());
+    digest.update(REQUIREMENTS.as_bytes());
+    digest.update(SIDECAR.as_bytes());
+    hex::encode(digest.finalize())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -490,6 +577,23 @@ mod tests {
         let removed = manager.uninstall().await;
         assert_eq!(removed.status, SyntaxCapabilityStatus::NotInstalled);
         assert!(!removed.enabled);
+        let _ = tokio::fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
+    async fn cancel_waits_for_task_drop_and_removes_staging() {
+        let root = root("cancel-staging");
+        let manager = SyntaxCapabilityManager::new(&root, None);
+        let staging = root.join(".installing");
+        tokio::fs::create_dir_all(&staging).await.unwrap();
+        tokio::fs::write(staging.join("partial"), b"partial")
+            .await
+            .unwrap();
+        *manager.task.lock().await = Some(tokio::spawn(async {
+            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+        }));
+        manager.cancel().await;
+        assert!(!staging.exists());
         let _ = tokio::fs::remove_dir_all(root).await;
     }
 }

@@ -218,6 +218,18 @@ The pronunciation provider uses CMUdict when available and a deterministic
 `fallback-v2` G2P for OOV words. Fallback stress is intentionally conservative:
 one primary fallback vowel, later fallback vowels unstressed.
 
+### Optional syntax capability (Phase 3.9.3)
+
+- `SyntaxCapabilityManager` at the HTTP composition root owns a filesystem-backed seven-state lifecycle,
+  staging install, delivery validation and cache deletion. It does not enter application/domain authority.
+- spaCy runs behind one lazy resident JSONL sidecar. Probe and analyze serialize through the same process;
+  the adapter releases it after idle, stops it on disable/uninstall and restarts once after a crash.
+- `/v1/subtitles/{track}/syntax-analysis` performs one whole-track batch with per-sentence validation and
+  a single-flight, rebuildable cache. Fingerprints bind subtitle/token/language/profile and complete delivery
+  identity; stale results are observable and never promoted to learning evidence.
+- Flutter settings own the explicit install lifecycle. Ready capability plus an active uncached track triggers
+  non-blocking background analysis; absent capability produces no prompt and leaves all fallback paths intact.
+
 ### Flutter Desktop
 
 - **UI state pattern (single track)**: `controller + Store<T>` is the only UI
@@ -386,15 +398,18 @@ provider missing, unqualified, or artifact not activatable
 ```
 
 Phase 3.9.2 exposes this composition through
-`POST /v1/subtitles/{track_id}/syntactic-consumers`. The composition root may
-inject one optional provider using `LLPLAYERNEXT_SYNTAX_PYTHON` and
-`LLPLAYERNEXT_SYNTAX_SIDECAR`; absent configuration never starts Python.
+`POST /v1/subtitles/{track_id}/syntactic-consumers`. Phase 3.9.3 replaces the
+developer environment-variable activation with an App-managed optional install
+under Application Support plus `/v1/syntax/capability/*` lifecycle routes;
+absent or disabled capability never starts Python.
 Qualification is per consumer query: spaCy artifacts, B going-to/used-to/have-to,
 SenseGroup, and matcher are activated, while B want-to stays on its exact text
 fallback because basic dependencies do not resolve its wh ambiguity reliably.
 
-The syntactic artifact is not persisted by Slice 1, is not a learning asset,
+The syntactic artifact is not a learning asset,
 does not replace ChunkTimeline, and cannot supply audio-backed Reference C.
+Phase 3.9.3 may persist it only in a deletable fingerprint cache; it never gains
+SQLite, learning-evidence, or canonical identity authority.
 Syntax-aware SenseGroup is a distinct `syntax-aware-sense-group/v1` analysis
 run: dependency subtrees propose boundaries/head/NP-PP-clause labels, while
 punctuation, protected phrases, min/max words and target teaching granularity

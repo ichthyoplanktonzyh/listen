@@ -170,6 +170,12 @@ Phase 2.20 LibriTTS/Helsinki prep 也已有 `scripts/test_prepare_helsinki_libri
 | LLTimeline JSON v1 | `scripts/validate-contracts.sh` + fixtures (`testdata/lltimeline/`) |
 | LLTimeline Flutter parse | `cd apps/desktop && flutter test test/contract/lltimeline_parse_test.dart` over committed rhythm fixtures |
 | 句法 Provider JSONL | `scripts/syntactic-analysis/test_syntax_sidecar_contract.py` + `cargo test -p syntactic-provider` |
+| Syntax capability lifecycle | `cargo test -p api-http syntax` + Flutter DTO/transport/settings widget tests；真实隔离 HOME 覆盖 install/cancel/update/damage/disable/uninstall |
+
+Phase 3.9.3 的真实媒体 qualification 固定记录在
+`.planning/phases/3.9.3-syntax-capability-delivery-lifecycle/`：244 cue release 路径覆盖首次整轨、
+常驻热分析、fingerprint cache、单句 partial、backend restart persistence 与资源损坏/移除。报告不复制
+字幕正文，只保存输入 hash、cue index 和聚合指标。
 
 ## 6. 测试数据
 

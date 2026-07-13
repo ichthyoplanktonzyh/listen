@@ -223,6 +223,12 @@ dependency matches carry/reference that same artifact ID. The batch is still
 ephemeral: no new SQLite authority, cascade, or canonical identity is created.
 Invalid/missing sentences contain an explicit fallback reason and no artifact.
 
+Phase 3.9.3 persists only capability lifecycle JSON and rebuildable track-cache JSON in Application Support,
+not SQLite. Capability status is `not_installed/downloading/ready/partial/failed/stale/disabled`. Track-cache
+identity covers subtitle text and token snapshot, language, analysis profile and the combined provider/runtime/
+model/requirements/sidecar delivery checksum. Subtitle or delivery changes therefore expose stale and require
+rebuild; uninstall may delete every syntax cache without deleting a user or learning asset.
+
 `SenseGroupAnalysis` retains its existing independent candidate/active/archive
 lifecycle. `rule-based-sense-group/v1` and `syntax-aware-sense-group/v1` are
 different provider runs rather than in-place upgrades. A syntax-aware run stores

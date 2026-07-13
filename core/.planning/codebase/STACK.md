@@ -125,9 +125,14 @@ fully pinned spaCy 3.8.13 dependency closure + en_core_web_sm 3.8.0 wheel hash
 | `scripts/phonetic-eval.py` | 音素分析评估引擎（实验） |
 | `scripts/phonetic-research-adapter.py` | 音素研究适配器（实验） |
 | `scripts/zipa-ctc-onnx-research.py` | ZIPA CTC ONNX 研究脚本（实验） |
-| `scripts/syntactic-analysis/syntax-sidecar.py` | Stanza/spaCy provider-neutral JSONL sidecar；产品 composition 只选择 spaCy |
+| `scripts/syntactic-analysis/syntax-sidecar.py` | Stanza/spaCy provider-neutral JSONL `jsonl-v2` sidecar；产品 composition 只选择 spaCy，并由 App lifecycle manager 长驻复用 |
 | `scripts/syntactic-analysis/setup-venv.sh` | 隔离 runtime；模型下载须显式 opt-in |
 | `scripts/syntactic-analysis/setup-spacy-product.sh` | 安装、复制 sidecar、probe 并校验可选 spaCy 产品 capability；不修改 base bundle |
+
+Phase 3.9.3 的普通用户产品路径不再依赖 setup 脚本或环境变量。App 将 pinned spaCy runtime/model
+按需安装到 `~/Library/Application Support/listen/syntax/`，同目录保存 capability state；track syntax
+cache 位于其可重建 cache 子树。基础 bundle 只携带小型 installer manifest/sidecar 文本，runtime/model
+仍为 +0 bytes。
 
 ## 5. 数据库
 

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-13 22:25 CST: Phase 3.9.3 完整收口并冻结。最终 `jsonl-v2` 修复带前导空格字幕的
+  spaCy SPACE token/head 重映射，delivery identity 现同时绑定 provider/requirements/sidecar/model；
+  真实 244 cue App 路径为 243 analyzed + 1 `invalid_sentence` 隔离，首次 rebuild 2.10s、同 fingerprint
+  hot hit 0.11s。实测完成 clean install、restart persistence、stale/update、模型损坏 partial/恢复、
+  disable/enable、cancel/retry 和 uninstall；取消安装改为终止完整 venv/ensurepip process group，确认
+  staging 零残留。Rust workspace/Clippy/contracts/Python、Flutter analyze/test、release backend 与 macOS
+  build 全绿；QUALIFICATION、REAL-MEDIA-QA、codebase、STATE、PLAN、CLOSEOUT 已同步。
+
 - 2026-07-13 21:54 CST: Phase 3.9.3 交付 App 内可选句法 capability 竖切片。后端新增持久化
   `not_installed/downloading/ready/partial/failed/stale/disabled` 状态、版本化 Application Support
   安装目录和 install/cancel/retry(update)/verify/enable/disable/uninstall HTTP 路径；fully pinned

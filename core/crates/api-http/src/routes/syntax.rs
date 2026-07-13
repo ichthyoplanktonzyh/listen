@@ -164,7 +164,7 @@ pub(crate) async fn run_track_syntax_analysis(
     let fingerprint = track_syntax_fingerprint(
         &language,
         &track.sentences,
-        &capability.model_checksum_sha256,
+        &capability.delivery_checksum_sha256,
     );
     if !state.syntax_capability.is_ready().await {
         return Ok(Json(TrackSyntaxAnalysisView {
@@ -287,7 +287,7 @@ pub(crate) async fn track_syntax_analysis_status(
     let fingerprint = track_syntax_fingerprint(
         &language,
         &track.sentences,
-        &capability.model_checksum_sha256,
+        &capability.delivery_checksum_sha256,
     );
     let unavailable = !state.syntax_capability.is_ready().await;
     let cache_path = state

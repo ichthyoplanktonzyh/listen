@@ -23,7 +23,7 @@ from typing import Any, Iterable
 
 
 PROTOCOL_VERSION = 1
-PROVIDER_VERSION = "jsonl-v1"
+PROVIDER_VERSION = "jsonl-v2"
 PROCESSORS = "tokenize,mwt,pos,lemma,depparse"
 SUPPORTED_LANGUAGES = {"en"}
 
@@ -319,26 +319,48 @@ class SpacyAdapter(ProviderAdapter):
 
     def analyze(self, language: str, sentence: dict[str, Any]) -> dict[str, Any]:
         self._load(language)
-        document = self._pipeline(sentence["text"])
+        source_text = sentence["text"]
+        leading_offset = len(source_text) - len(source_text.lstrip())
+        analysis_text = source_text.strip()
+        document = self._pipeline(analysis_text)
+        # spaCy preserves leading/trailing whitespace as `SPACE` tokens while
+        # the neutral syntax contract intentionally maps only lexical and
+        # punctuation SubtitleTokens. Drop those parser-only whitespace nodes
+        # and remap every dependency head to the compact parser index space.
+        content_tokens = [token for token in document if not token.is_space]
+        parser_index_by_spacy = {
+            token.i: parser_index for parser_index, token in enumerate(content_tokens)
+        }
+
+        def compact_head(index: int) -> int | None:
+            candidate = document[index]
+            visited: set[int] = set()
+            while candidate.is_space and candidate.i not in visited:
+                visited.add(candidate.i)
+                if candidate.head.i == candidate.i:
+                    return None
+                candidate = candidate.head
+            return parser_index_by_spacy.get(candidate.i)
+
         prep_objects: dict[int, int] = {}
-        for token in document:
+        for token in content_tokens:
             if token.dep_ == "pobj" and token.head.dep_ == "prep":
                 prep_objects[token.head.i] = token.i
         raw_tokens: list[dict[str, Any]] = []
-        for token in document:
+        for token in content_tokens:
             head: int | None
             dependency = SPACY_DEPENDENCY_MAP.get(token.dep_, "dep")
             if token.dep_ == "ROOT" or token.head.i == token.i:
                 head = None
                 dependency = "root"
             elif token.dep_ == "prep" and token.i in prep_objects:
-                head = prep_objects[token.i]
+                head = compact_head(prep_objects[token.i])
                 dependency = "case"
             elif token.dep_ == "pobj" and token.head.dep_ == "prep":
-                head = token.head.head.i
+                head = compact_head(token.head.head.i)
                 dependency = "obl"
             else:
-                head = token.head.i
+                head = compact_head(token.head.i)
             raw_tokens.append(
                 {
                     "surface": token.text,
@@ -348,8 +370,8 @@ class SpacyAdapter(ProviderAdapter):
                     "features": token.morph.to_dict(),
                     "head_parser_token_index": head,
                     "dependency_relation": dependency,
-                    "start_char": token.idx,
-                    "end_char": token.idx + len(token.text),
+                    "start_char": leading_offset + token.idx,
+                    "end_char": leading_offset + token.idx + len(token.text),
                     "confidence": None,
                 }
             )
