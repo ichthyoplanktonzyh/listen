@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- 2026-07-14 01:15 CST: main.dart 拆分 S5 —— 抽出 `VocabularyActionsCoordinator`（仅上下文无关
+  数据方法）。vocabulary 入口大量 BuildContext 耦合（`showDialog`/`Navigator.push`/
+  `MaterialPageRoute`），按代码库约定「coordinator 无 context、对话框留宿主」，这些导航/对话框
+  方法保留在 State；可抽子集为 10 个纯数据方法：`loadWordEntries`/`loadPhraseEntries`/
+  `loadPhraseCandidates`/`openWord`/`setSelectedWordStatus`/`setCapabilityOverride`/
+  `saveSelectedLearningContent`/`recordCurrentSource`/`markFirstWord`/`observeSelected`，连同
+  私有 `_sourceFor`（仅被这些方法使用，随之内化）逐字搬到
+  `lib/controllers/vocabulary_actions_coordinator.dart`，注入 `getApi`/`isMounted`/`text`/
+  `refreshDiagnosis`，其余用归位后的 `settings.resolveLearningLanguage`。逻辑/字符串不变。新增
+  `test/vocabulary_actions_coordinator_test.dart`（markFirstWord 必刷 diagnosis、无选择的
+  observeSelected 静默 no-op）。main.dart 2206 → 2051 行。`flutter analyze` 零问题、`flutter test`
+  310 全通过（308 + 2）。
+
 - 2026-07-14 00:50 CST: main.dart 拆分 S3+S4（合并）—— 抽出 `PracticeActionsCoordinator`。
   精听练习与 shadowing 深度交织（`_navigatePracticeSentence` 同时派发 cloze 与 shadowing、
   `_replayPracticeWindow`/`_setShadowingStep` 共享），故合为单个 coordinator 避免跨 coordinator
