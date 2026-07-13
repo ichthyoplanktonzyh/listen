@@ -9,7 +9,7 @@ import '../../controllers/subtitle_controller.dart';
 import '../../localization.dart';
 import '../../models/timeline.dart';
 import '../../models/capability_readiness.dart'
-    show rhythmFrameHasAudioSupport;
+    show canDisplayActualRhythmFrame;
 import '../../models/types.dart';
 import '../../player_adapter.dart';
 import '../../utils/subtitle_style.dart';
@@ -213,14 +213,14 @@ class _PlayerStageState extends State<PlayerStage> {
                                   baseColor: settingsController.primaryColor,
                                   currentTokenIndex:
                                       subtitleController.currentWordToken,
-                                  groupingMode:
-                                      settingsController.groupingMode,
+                                  groupingMode: settingsController.groupingMode,
                                   // Both grouping layers flow in independently
                                   // (ADR 0016); TokenLine draws one per mode.
-                                  chunkPartition: subtitleController
-                                      .chunkPartitionsBySentence[subtitleController
-                                      .currentPrimaryCue!
-                                      .id],
+                                  chunkPartition:
+                                      subtitleController
+                                          .chunkPartitionsBySentence[subtitleController
+                                          .currentPrimaryCue!
+                                          .id],
                                   currentChunkIndex:
                                       settingsController.chunkHighlightActive
                                       ? subtitleController.currentChunkIndex
@@ -234,9 +234,10 @@ class _PlayerStageState extends State<PlayerStage> {
                                   currentWordIntensity:
                                       settingsController.wordAnimationIntensity,
                                   senseGroups:
-                                      subtitleController.senseGroupsBySentence[subtitleController
-                                              .currentPrimaryCue!
-                                              .id] ??
+                                      subtitleController
+                                          .senseGroupsBySentence[subtitleController
+                                          .currentPrimaryCue!
+                                          .id] ??
                                       const [],
                                   onWord: _openWord,
                                   onPhrase: _openPhrase,
@@ -455,11 +456,14 @@ class _PlayerStageState extends State<PlayerStage> {
                                     );
                                   }
 
-                                  if (rhythmFrame == null) {
-                                    // C ("this audio") has no forced-alignment
-                                    // data yet: offer to load it in place rather
-                                    // than only reporting it missing. Suppressed
-                                    // when phonetic analysis is turned off.
+                                  if (!canDisplayActualRhythmFrame(
+                                    rhythmFrame,
+                                    hasPhoneEvidence: hasPhoneEvidence,
+                                  )) {
+                                    // C ("this audio") is phone-observed only.
+                                    // A text/word-timeline RhythmFrame belongs
+                                    // to A/B and must never be shown here as a
+                                    // predicted substitute for actual evidence.
                                     final canLoad =
                                         widget.onLoadSoundReference != null &&
                                         settingsController
@@ -493,11 +497,8 @@ class _PlayerStageState extends State<PlayerStage> {
                                       offerPhoneEvidence: true,
                                     );
                                   }
-                                  final predicted = !rhythmFrameHasAudioSupport(
-                                    rhythmFrame,
-                                  );
                                   final actualView = RhythmFrameRibbon(
-                                    frame: rhythmFrame,
+                                    frame: rhythmFrame!,
                                     pronunciation: pronunciation,
                                     position: playerController.position,
                                     title: l.text('rhythmReferenceActual'),
@@ -507,10 +508,8 @@ class _PlayerStageState extends State<PlayerStage> {
                                     hotspotLabel: l.text('listeningHotspots'),
                                     fontSize: primarySize * 0.44,
                                     height: primarySize * 1.15,
-                                    tooltip: predicted
-                                        ? l.text('listeningPredictedTooltip')
-                                        : l.text('rhythmRibbonHint'),
-                                    predicted: predicted,
+                                    tooltip: l.text('rhythmRibbonHint'),
+                                    predicted: false,
                                     predictedLabel: l.text(
                                       'listeningPredictedBadge',
                                     ),

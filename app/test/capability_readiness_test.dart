@@ -116,11 +116,45 @@ void main() {
     ]);
   });
 
-  test('rhythmFrameHasAudioSupport separates audio-backed from text-predicted', () {
-    expect(rhythmFrameHasAudioSupport(_audioRhythmFrame.rhythmFrame), isTrue);
+  test(
+    'rhythmFrameHasAudioSupport separates audio-backed from text-predicted',
+    () {
+      expect(rhythmFrameHasAudioSupport(_audioRhythmFrame.rhythmFrame), isTrue);
+      expect(
+        rhythmFrameHasAudioSupport(_predictedRhythmFrame.rhythmFrame),
+        isFalse,
+      );
+    },
+  );
+
+  test('C requires loaded phones and phone evidence inside the frame', () {
     expect(
-      rhythmFrameHasAudioSupport(_predictedRhythmFrame.rhythmFrame),
+      canDisplayActualRhythmFrame(
+        _predictedRhythmFrame.rhythmFrame,
+        hasPhoneEvidence: false,
+      ),
       isFalse,
+    );
+    expect(
+      canDisplayActualRhythmFrame(
+        _audioRhythmFrame.rhythmFrame,
+        hasPhoneEvidence: false,
+      ),
+      isFalse,
+    );
+    expect(
+      canDisplayActualRhythmFrame(
+        _predictedRhythmFrame.rhythmFrame,
+        hasPhoneEvidence: true,
+      ),
+      isFalse,
+    );
+    expect(
+      canDisplayActualRhythmFrame(
+        _audioRhythmFrame.rhythmFrame,
+        hasPhoneEvidence: true,
+      ),
+      isTrue,
     );
   });
 
@@ -153,34 +187,35 @@ void main() {
     expect(find.text('predicted'), findsOneWidget);
   });
 
-  testWidgets('rhythm ribbon hides the predicted badge for audio-backed frames', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: SizedBox(
-              width: 500,
-              child: RhythmFrameRibbon(
-                frame: _audioRhythmFrame.rhythmFrame,
-                position: Duration.zero,
-                title: 'Listening structure',
-                anchorLabel: 'Anchors',
-                weakGroupLabel: 'Weak',
-                compressionLabel: 'Compressed',
-                hotspotLabel: 'Hotspots',
-                predicted: false,
-                predictedLabel: 'predicted',
+  testWidgets(
+    'rhythm ribbon hides the predicted badge for audio-backed frames',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 500,
+                child: RhythmFrameRibbon(
+                  frame: _audioRhythmFrame.rhythmFrame,
+                  position: Duration.zero,
+                  title: 'Listening structure',
+                  anchorLabel: 'Anchors',
+                  weakGroupLabel: 'Weak',
+                  compressionLabel: 'Compressed',
+                  hotspotLabel: 'Hotspots',
+                  predicted: false,
+                  predictedLabel: 'predicted',
+                ),
               ),
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    expect(find.text('predicted'), findsNothing);
-  });
+      expect(find.text('predicted'), findsNothing);
+    },
+  );
 }
 
 const _track = SubtitleTrack(
@@ -340,7 +375,7 @@ const _audioRhythmFrame = LLTimelineRhythmFrame(
       prominenceSources: ['timing'],
       boundarySources: [],
       connectedSpeechSource: 'text_prior',
-      phoneEvidenceCoverage: 0.0,
+      phoneEvidenceCoverage: 0.75,
       rhythmConfidence: 0.8,
     ),
   ),
