@@ -28,6 +28,9 @@
 > audible-structure v1 contract 保持为当前权威 shape，3.x 按现状消费。同日新增
 > Phase 2.23 Architecture Debt Paydown 作为 3.x 前置工程治理：main.dart 收缩为
 > Flutter practice UI 的直接前置，sound_analysis 机械拆分落在算法线静默窗口内。
+> 2026-07-13 产品语义校正：Phase 3.9 并行恢复 A/B/C audible-structure 重构。A=词典标准
+> 发音与书写词界，B=文本规则预测的可听分组，C=真实音素 + timing/prosody 支持的实际分组；
+> linking/reduction 等类别退为解释标签，B 不得冒充 C。
 > 2026-07-04 产品路线更新：Phase 3.x 执行序列确立为 Phase 3.1 ~ 3.10，并确立精听/泛听
 > 一级心智、可组合不强制流程、功能按场景分不按设备分（生产端唯一 PC-only）等原则；
 > 见 §14.12 与 `.planning/phases/3.0-english-listening-learning-loop/3.0-PHASE-BREAKDOWN.md`。
@@ -129,6 +132,8 @@ LLTimeline JSON v1
 - Phase 2.21 consumer-closure correction 后，`AsrReported` 是低精度音频时序而非纯文本预测；
   Rust 本地服务在 Whisper WAV 生命周期内生成 RMS energy 与 F0/pitch cue。真实 QA 负责
   校准与回归，不阻塞轻量 DSP 进入消费端。
+- Phase 3.9 audible-structure rework 后，A/B/C 必须显示书写结构到可听音组的映射；例如
+  `pick up` 的 B 为 `/pɪk | ʌp/ → /pɪ.kʌp/`。真实 observed phones 缺席时 C 保持缺席。
 - Phase 2.22 后，当前所有用户功能必须被组织成用户可见的能力路径：媒体播放、下载、
   字幕获取、资源管理、Word sync、Chunk replay、Listening structure、Phone evidence、
   词汇、诊断、设置、任务中心和 practice/review readiness 都需要明确入口、可用状态、

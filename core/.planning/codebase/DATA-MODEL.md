@@ -275,6 +275,14 @@ means the actual or predicted connected form matches B; `clip_specific` means
 the C-side audio evidence goes beyond B. Pure B predictions use
 `signal_sources = ["text_prior"]` and `claim_status = "predicted"`.
 
+Phase 3.9's resumed A/B/C rework adds optional `citation_structure`,
+`predicted_structure`, and `actual_structure` to each connected-speech ref.
+Each structure contains perceptual groups, IPA, a compact learner cue, and the
+written token indices contributing sound to each group. This makes a linking
+boundary shift explicit (`pick up`: A `/pɪk | ʌp/`, B `/pɪ.kʌp/`, cue
+`pɪ-kʌp`). B is rule-predicted; C is emitted only from audio-backed observed
+phones. Timing/prosody may support C grouping but cannot invent a segmental C.
+
 Production LLTimeline artifacts may include `kind = "rhythm_word_acoustic_cues"`
 with a flat `payload.cues[]` list keyed by `sentence_id` and `token_index`.
 When the artifact `timeline_id` matches the active WordTimeline, application

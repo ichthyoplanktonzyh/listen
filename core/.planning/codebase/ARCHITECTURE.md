@@ -186,7 +186,7 @@ Owns analysis engines, not application contracts:
 | `chunk_partition` | word timeline to learning chunk partition |
 | `phonetic_alignment` | phoneme sequence alignment |
 | `phonetic_findings` | reductions, elision, linking findings |
-| `connected_speech_rules` | text-side Reference B default connected-form prediction |
+| `connected_speech_rules` | text-side Reference B prediction, including A written-word groups → B audible-group transformations |
 | `sound_analysis` | learning-phone, syllable, phrase, connected-speech and WordTimeline-first RhythmFrame generation with optional word acoustic prominence cues |
 | `learned_prosodic_provider` | rule-based prosodic analysis |
 | `rich_acoustic_evidence` | acoustic evidence aggregation |

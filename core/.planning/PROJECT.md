@@ -182,6 +182,11 @@ phone-level 证据。当前 phone recognizer 的 PER 可能偏高，因此 raw p
 默认教学真值；稳定教学标签来自 expected pronunciation，真实音频提供 timing、confidence
 和 evidence。
 
+A/B/C 的产品输出必须是可听结构而非类别清单：A 按书写词界展示词典标准发音，B 展示文本
+规则预测的可听分组，C 展示真实音素分析结合 timing/prosody 支持的实际分组。`linking`、
+`reduction` 等名称只解释结构为何变化；核心学习信息是类似 `pick up` 从
+`/pɪk | ʌp/` 到 `/pɪ.kʌp/`（`pɪ-kʌp`）的听觉重组。B 不得冒充 C。
+
 ### 4.2 目标用户
 
 首期只有一个明确用户：项目开发者本人。

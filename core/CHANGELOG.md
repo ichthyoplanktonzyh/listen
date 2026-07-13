@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 2026-07-13 10:12 CST: 将 Phase 3.9 A/B/C audible-structure 两批实现合入已完成
+  Phase 3.12 的 main；保留 3.12 收口事实，并将 3.9 状态切换为主工作区真实媒体 QA 与
+  增量修正。后续工作从 main 新建专用阶段分支，不在 main 直接开发。
+
 - 2026-07-13 09:24 CST: Phase 3.12 Vendor-neutral LLM Provider 收口，CODE COMPLETE。
   创建 `3.12-CLOSEOUT.md`（五切片 0/1/2/2b/3 交付清单、七项 Key Decisions、四条 exit signal
   逐条核验通过、验证记录、QA 归属、Deferred 清单）；PLAN 置 CODE COMPLETE；STATE.md 主线
@@ -73,6 +77,19 @@
   api-http 53 全通过；新文件 clippy 零告警；validate-contracts OK；git diff --check 通过。
   本 phase 判定默认**不获任何显示资格**（资格评估属 3.12.1）；剩余：真实 OS-keychain
   SecretStore 实现、provider-backed HTTP 路由与工厂、最小设置 UI、closeout。
+- 2026-07-13 08:40 CST: 扩展 Phase 3.9 B 预测可听结构到 weak form、contraction、
+  assimilation、deletion 与 flapping。Deletion 由空预测改为在完整跨词结构中移除词尾
+  `/t|d/`（如 `last call`：`/læst | kɔl/ → /læs.kɔl/`）；flapping 不再只
+  输出孤立 `DX`，而是在完整词内把元音间 `/t|d/` 替换为 `/ɾ/`。其余三类使用完整规则
+  音素生成可听结构；新增测试确保所有类别都有 A/B 且纯文本规则不生成 C。
+
+- 2026-07-13 08:28 CST: 恢复 Phase 3.9 的 A/B/C audible-structure 算法与 UI 重构并完成
+  linking 首条竖切片。`RhythmConnectedSpeechRef` 新增向后兼容的 A citation、B predicted、
+  C actual 可听结构（音组、IPA、学习者 cue、书写 token 来源映射）；`pick up` 的文本规则现
+  输出 `/pɪk | ʌp/ → /pɪ.kʌp/` 与 `pɪ-kʌp`，不再只显示 linking 类别。C 仅在存在
+  observed phone evidence 时生成，timing/prosody 只作边界与分组证据。Flutter B ribbon
+  直接呈现书写结构到可听结构的变化，C ribbon 展示 phone-segmental 支持的实际音组；OpenAPI、
+  Dart model、Rust/Flutter/contract 回归同步扩展。Phase 3.12 继续在独立 worktree 并行推进。
 
 - 2026-07-12 19:20 CST: 清除 speech-analysis 既有 deny 级 clippy error。
   `sense_group_partition.rs` 测试里的恒真断言 `assert!(any_span_covers || true, ...)`
