@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-13T13:59:00.000+08:00"
+last_updated: "2026-07-13T16:53:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-13 13:59 CST
-> 更新原因：插入 Phase 3.9.1，共享句法 Provider 成为 B、SenseGroup、Construction 的共同基础。
+> 最后更新：2026-07-13 16:53 CST
+> 更新原因：Phase 3.9.1 以负向 Provider 资格结论完成；共享中立契约与消费者 seam 保留，产品继续 fallback。
 
 ## 当前位置
 
@@ -35,8 +35,9 @@ last_updated: "2026-07-13T13:59:00.000+08:00"
   证伪）。判定默认**不获显示资格**（属 3.12.1）。**剩余**：增量协议 OpenAI Responses/Gemini
   （Slice 4，owner 按需，只加 adapter 不改契约）、CLOSEOUT。
 - Phase 3.11 Semantic Task Evidence Foundation 已 CODE COMPLETE（见其 CLOSEOUT）。
-  Phase 3.9 不作为后续 Studio phase 的硬依赖；A/B/C 下一批构式敏感规则暂停扩张，先进入
-  Phase 3.9.1 建立共享句法 Provider，避免 B、SenseGroup、Construction 各自堆启发式。
+  Phase 3.9 不作为后续 Studio phase 的硬依赖。Phase 3.9.1 已建立共享句法契约、B/SenseGroup
+  consumer 与 Construction matcher seam；Stanza/spaCy 均因锁定高风险假阳性未获资格，产品
+  不激活 parser，继续保留 B/SenseGroup fallback。
 - **治理线状态**：Phase 2.23 Architecture Debt Paydown 已于 2026-07-03 收口（详见其 CLOSEOUT）；3.x 开工前置全部就绪。
 - **算法线状态**：Phase 2.19 / 2.20 / 2.21 全局质量线仍搁置；Phase 3.9 仅恢复与 L1 学习
   价值直接相关的 A/B/C audible-structure contract、linking 结构生成和证据门控。
@@ -225,15 +226,6 @@ last_updated: "2026-07-13T13:59:00.000+08:00"
   `pick up: /pɪk | ʌp/ → /pɪ.kʌp/`，纯 B 不填充 C。
 - 计划：`.planning/phases/3.9-l1-aware-diagnosis-v1/3.9-PLAN.md`。
 
-### Phase 3.9.1: Shared Syntactic Analysis Provider ⏳ ACTIVE
-
-- 2026-07-13 插入：以 UD/CoNLL-U 定义共享、token-aligned 的可重建分析；先通过 Python
-  sidecar 评估 Stanza/spaCy，再让 B/SenseGroup 消费，Construction 只复用 matcher seam。
-- 先做 ADR、token 映射、真实字幕 fixture 与预登记；模型缺席保留当前 B/SenseGroup fallback。
-  句法不得填充 C、替代 ChunkTimeline 或铸造 Construction identity；模型许可单独审计。
-- 文档：`.planning/phases/3.9.1-shared-syntactic-analysis-provider/3.9.1-PLAN.md`、
-  `3.9.1-CONTEXT.md`。
-
 ### 下一执行序列：Phase 3.11–3.18
 
 - **Gate Q（已通过）**：Q1/Q2 通过；Q3/Q4 因后续 UX/功能调整明确延期且 QA 债留在
@@ -288,6 +280,7 @@ last_updated: "2026-07-13T13:59:00.000+08:00"
 | 3.6.2 Dictionary Inline Clip UX | 词典详情内嵌切片卡 + PageView 横向轨道取代 overlay | `.planning/phases/3.6.2-dictionary-inline-clip-ux/3.6.2-CLOSEOUT.md` |
 | 3.7 Hunting List | 用户确认猎词资产 + 泛听会话级预算提示 + 三态听力证据 + completion 小结 | `.planning/phases/3.7-hunting-list/3.7-CLOSEOUT.md` |
 | 3.8 Shadowing & Recording Comparison | chunk 跟读 + 本地录音 + A/B/A + 客观波形/时长/停顿比较；非评分 completion | `.planning/phases/3.8-shadowing-recording-comparison/3.8-CLOSEOUT.md` |
+| 3.9.1 Shared Syntactic Analysis Provider | 中立 token-aligned artifact + B/SenseGroup/matcher seam；Stanza/spaCy 负资格，产品保持 fallback | `.planning/phases/3.9.1-shared-syntactic-analysis-provider/3.9.1-CLOSEOUT.md` |
 | 3.10 Coach Dashboard | 诊断型 dashboard 聚合 durable 事实 + 规则建议 + channel-ready envelope + starter 降级 | `.planning/phases/3.10-coach-dashboard/3.10-CLOSEOUT.md` |
 | 3.11 Semantic Task Evidence Foundation | 四层事实分离（attempt/judgment/observation/capability）+ 版本化 rubric + 逐点判定含 abstain + adjudication；schema v35 append-only；ADR 0021；零 observation/projection writer | `.planning/phases/3.11-semantic-task-evidence-foundation/3.11-CLOSEOUT.md` |
 | 3.12 Vendor-neutral LLM Provider | 两异构协议 adapter（OpenAI Chat + Anthropic Messages）过同一契约套件证中立；draft-not-domain-type + 四层分离经 LLM 路径成立；OS keychain + auth_ref 密钥不落普通存储；诚实降级；Flutter 设置 UI；schema v36；ADR 0022；判定默认不获显示资格（属 3.12.1）。CODE COMPLETE，owner 真实 provider 端到端 QA 待做 | `.planning/phases/3.12-vendor-neutral-llm-provider/3.12-CLOSEOUT.md` |

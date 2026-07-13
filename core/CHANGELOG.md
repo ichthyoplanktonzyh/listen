@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-13 16:53 CST: Phase 3.9.1 Shared Syntactic Analysis Provider 收口。完整 contracts 与
+  Rust workspace 测试通过；PLAN/STATE/CLOSEOUT 记录负向资格结论：Stanza/spaCy 共享中立契约、
+  token mapping、sidecar failure taxonomy、B/SenseGroup consumer 与 Construction candidate
+  matcher 均已验证，但两个候选都因锁定 wh-extraction 高风险假阳性不得激活。模型、runtime、
+  treebank/training provenance 分层审计完成；无模型产品路径保持原 B 与 rule SenseGroup，句法
+  不进入 C、不替代 ChunkTimeline、不铸造 Construction identity。
+
 - 2026-07-13 16:48 CST: Phase 3.9.1 Slice 6 建立 Construction dependency matcher seam 与真实
   媒体 QA。matcher 只在 qualified + activatable artifact 上输出带 source artifact、subtitle
   token span 与 bindings 的可重建候选，类型和序列化守卫证明不会铸造 Construction canonical/
