@@ -1756,6 +1756,63 @@ class ListeningHotspot {
   };
 }
 
+class RhythmAudibleGroup {
+  const RhythmAudibleGroup({
+    required this.symbols,
+    required this.displayIpa,
+    required this.sourceTokenIndices,
+  });
+
+  factory RhythmAudibleGroup.fromJson(Map<String, dynamic> json) =>
+      RhythmAudibleGroup(
+        symbols: _stringList(json['symbols']),
+        displayIpa: json['display_ipa'] as String? ?? '',
+        sourceTokenIndices:
+            ((json['source_token_indices'] as List<dynamic>?) ?? const [])
+                .cast<int>(),
+      );
+
+  final List<String> symbols;
+  final String displayIpa;
+  final List<int> sourceTokenIndices;
+
+  Map<String, dynamic> toJson() => {
+    'symbols': symbols,
+    'display_ipa': displayIpa,
+    'source_token_indices': sourceTokenIndices,
+  };
+}
+
+class RhythmAudibleStructure {
+  const RhythmAudibleStructure({
+    required this.groups,
+    required this.displayIpa,
+    required this.learnerCue,
+  });
+
+  factory RhythmAudibleStructure.fromJson(Map<String, dynamic> json) =>
+      RhythmAudibleStructure(
+        groups: ((json['groups'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) =>
+                  RhythmAudibleGroup.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+        displayIpa: json['display_ipa'] as String? ?? '',
+        learnerCue: json['learner_cue'] as String? ?? '',
+      );
+
+  final List<RhythmAudibleGroup> groups;
+  final String displayIpa;
+  final String learnerCue;
+
+  Map<String, dynamic> toJson() => {
+    'groups': groups.map((value) => value.toJson()).toList(),
+    'display_ipa': displayIpa,
+    'learner_cue': learnerCue,
+  };
+}
+
 class RhythmConnectedSpeechRef {
   const RhythmConnectedSpeechRef({
     required this.id,
@@ -1771,6 +1828,9 @@ class RhythmConnectedSpeechRef {
     this.defaultSymbols = const [],
     this.expectedDisplayIpa = '',
     this.defaultDisplayIpa = '',
+    this.citationStructure,
+    this.predictedStructure,
+    this.actualStructure,
     this.connectedSpeechIndex,
     this.tokenStart,
     this.tokenEnd,
@@ -1794,6 +1854,21 @@ class RhythmConnectedSpeechRef {
         defaultSymbols: _stringList(json['default_symbols']),
         expectedDisplayIpa: json['expected_display_ipa'] as String? ?? '',
         defaultDisplayIpa: json['default_display_ipa'] as String? ?? '',
+        citationStructure: json['citation_structure'] is Map
+            ? RhythmAudibleStructure.fromJson(
+                Map<String, dynamic>.from(json['citation_structure'] as Map),
+              )
+            : null,
+        predictedStructure: json['predicted_structure'] is Map
+            ? RhythmAudibleStructure.fromJson(
+                Map<String, dynamic>.from(json['predicted_structure'] as Map),
+              )
+            : null,
+        actualStructure: json['actual_structure'] is Map
+            ? RhythmAudibleStructure.fromJson(
+                Map<String, dynamic>.from(json['actual_structure'] as Map),
+              )
+            : null,
         divergence: json['divergence'] as String? ?? 'clip_specific',
         signalSources: _stringList(json['signal_sources']),
         evidenceClass: json['evidence_class'] as String? ?? 'heuristic_proxy',
@@ -1814,6 +1889,9 @@ class RhythmConnectedSpeechRef {
   final List<String> defaultSymbols;
   final String expectedDisplayIpa;
   final String defaultDisplayIpa;
+  final RhythmAudibleStructure? citationStructure;
+  final RhythmAudibleStructure? predictedStructure;
+  final RhythmAudibleStructure? actualStructure;
   final String divergence;
   final List<String> signalSources;
   final String evidenceClass;
@@ -1834,6 +1912,11 @@ class RhythmConnectedSpeechRef {
     'default_symbols': defaultSymbols,
     'expected_display_ipa': expectedDisplayIpa,
     'default_display_ipa': defaultDisplayIpa,
+    if (citationStructure != null)
+      'citation_structure': citationStructure!.toJson(),
+    if (predictedStructure != null)
+      'predicted_structure': predictedStructure!.toJson(),
+    if (actualStructure != null) 'actual_structure': actualStructure!.toJson(),
     'divergence': divergence,
     'signal_sources': signalSources,
     'evidence_class': evidenceClass,

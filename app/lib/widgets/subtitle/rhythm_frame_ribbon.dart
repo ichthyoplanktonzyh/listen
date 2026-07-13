@@ -133,7 +133,7 @@ class RhythmFrameRibbon extends StatelessWidget {
   }
 
   List<_AudibleItem> _audibleItems() {
-    final values = <_AudibleItem>[];
+    final values = <_AudibleItem>[..._actualConnectedItems()];
     if (frame.informationAnchors.isNotEmpty) {
       for (final anchor in frame.informationAnchors) {
         if (!predicted &&
@@ -248,6 +248,48 @@ class RhythmFrameRibbon extends StatelessWidget {
       if (item != null) values.add(item);
     }
     values.sort(_audibleSort);
+    return values;
+  }
+
+  List<_AudibleItem> _actualConnectedItems() {
+    if (predicted) return const [];
+    final values = <_AudibleItem>[];
+    for (final reference in frame.connectedSpeechRefs) {
+      final structure = reference.actualStructure;
+      if (structure == null ||
+          structure.learnerCue.trim().isEmpty ||
+          !reference.signalSources.contains('phone_segmental')) {
+        continue;
+      }
+      ListeningHotspot? hotspot;
+      for (final value in frame.listeningHotspots) {
+        if (value.kind == 'connected_speech' &&
+            value.tokenStart == reference.tokenStart &&
+            value.tokenEnd == reference.tokenEnd &&
+            value.label == reference.label) {
+          hotspot = value;
+          break;
+        }
+      }
+      if (hotspot == null || hotspot.end <= hotspot.start) continue;
+      final family = (reference.family ?? reference.label).replaceAll('_', ' ');
+      values.add(
+        _AudibleItem(
+          kind: _AudibleKind.connected,
+          label: structure.learnerCue,
+          caption: reference.surfaceText,
+          start: hotspot.start,
+          end: hotspot.end,
+          confidence: reference.confidence,
+          tooltip: [
+            'Actual audible structure: ${reference.surfaceText}',
+            '/${structure.displayIpa}/',
+            family,
+            'audio supported · phone segmental',
+          ].join('\n'),
+        ),
+      );
+    }
     return values;
   }
 
@@ -535,6 +577,7 @@ class _AudibleNode extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final nucleus = item.kind == _AudibleKind.nucleus;
+    final connected = item.kind == _AudibleKind.connected;
     final weak = item.kind == _AudibleKind.weak;
     final color = nucleus
         ? ListenColors.soundNucleus
@@ -551,8 +594,16 @@ class _AudibleNode extends StatelessWidget {
     final labelSize = weak
         ? math.max(9.0, fontSize * 0.78)
         : math.max(12.0, fontSize * (nucleus ? 1.18 : 1.02));
-    final meaningLabel = item.caption.isEmpty ? item.label : item.caption;
-    final soundLabel = item.caption.isEmpty ? '' : '/${item.label}/';
+    final meaningLabel = connected
+        ? item.label
+        : item.caption.isEmpty
+        ? item.label
+        : item.caption;
+    final soundLabel = connected
+        ? item.caption
+        : item.caption.isEmpty
+        ? ''
+        : '/${item.label}/';
     final foreground = !weak;
     final foregroundNode = Container(
       padding: EdgeInsets.symmetric(
@@ -688,7 +739,7 @@ class _PhraseDivider extends StatelessWidget {
   );
 }
 
-enum _AudibleKind { nucleus, anchor, weak }
+enum _AudibleKind { nucleus, connected, anchor, weak }
 
 class _AudibleItem {
   const _AudibleItem({

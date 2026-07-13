@@ -214,8 +214,18 @@ class _ConnectedAnnotation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final expected = reference.expectedDisplayIpa.trim();
-    final connected = reference.defaultDisplayIpa.trim();
+    final expected =
+        reference.citationStructure?.displayIpa.trim().isNotEmpty == true
+        ? reference.citationStructure!.displayIpa.trim()
+        : reference.expectedDisplayIpa.trim();
+    final connected =
+        reference.predictedStructure?.displayIpa.trim().isNotEmpty == true
+        ? reference.predictedStructure!.displayIpa.trim()
+        : reference.defaultDisplayIpa.trim();
+    final audibleCue =
+        reference.predictedStructure?.learnerCue.trim().isNotEmpty == true
+        ? reference.predictedStructure!.learnerCue.trim()
+        : '';
     final pronunciation = connected.isEmpty
         ? reference.label
         : expected.isEmpty
@@ -224,6 +234,8 @@ class _ConnectedAnnotation extends StatelessWidget {
     final ruleLabel = _ruleLabel(reference);
     final tooltipLines = <String>[
       surface,
+      if (audibleCue.isNotEmpty && audibleCue != surface)
+        'Hear it as: $audibleCue',
       pronunciation,
       if (reference.hint.trim().isNotEmpty) reference.hint.trim(),
       if (reference.family?.trim().isNotEmpty == true)
@@ -243,7 +255,9 @@ class _ConnectedAnnotation extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                ruleLabel,
+                audibleCue.isNotEmpty && surface.isNotEmpty
+                    ? '$surface →'
+                    : ruleLabel,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -267,7 +281,7 @@ class _ConnectedAnnotation extends StatelessWidget {
                     3,
                   ),
                   child: Text(
-                    surface,
+                    audibleCue.isEmpty ? surface : audibleCue,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
