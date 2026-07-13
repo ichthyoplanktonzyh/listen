@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-13 21:33 CST: 新建 Phase 3.9.3 Syntax Capability Delivery & Lifecycle，基于冻结的
+  3.9.2 最终提交 `71be2c20` 建立独立分支与 phase 文档。计划把已资格 spaCy Provider 补成
+  App 内可安装/校验/取消/重试/更新/停用/卸载的可选能力，并交付持久状态机、长驻 sidecar、
+  整轨 fingerprint cache、stale/rebuild、自动后台分析和 Flutter 完整用户路径；未安装零打扰、
+  base bundle +0B、B/want-to/C/ChunkTimeline/Construction identity 边界保持不变。
+
 - 2026-07-13 19:30 CST: Phase 3.9.2 Syntax Provider Product Activation 收口。corrected v2
   holdout、逐 query qualification、spaCy opt-in lifecycle、单 batch/逐句共享编排、真实媒体与
   missing/corrupt/invalid/timeout 降级全部通过；contracts、句法相关 crates 与 Rust workspace
