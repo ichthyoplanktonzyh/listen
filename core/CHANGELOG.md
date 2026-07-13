@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- 2026-07-13 09:24 CST: Phase 3.12 Slice 3：Flutter 最小设置 UI（AI providers）。
+  新增 `apps/desktop/lib/models/llm_provider.dart` 手写 DTO（`LlmProviderProfileView`
+  /`LlmProviderCapability`/`LlmCapabilityClaim`/`LlmProbeResult`，ADR 0014）+
+  `test/contract/llm_provider_contract_test.dart` fixture 契约测试（4 项，pin 到
+  OpenAPI v1.yaml）；`LocalApi` 增 listLlmProviders/registerLlmProvider/deleteLlmProvider/
+  probeLlmProvider（secret 只写、DELETE 204→null）；自包含 `LlmProviderSettings` widget
+  （provider 列表 + 添加表单 + 连通/能力 probe 测试 + 删除；协议下拉 OpenAI/Anthropic、
+  用途勾选、密钥 obscured 提交后即清空、数据去向警告、"未获显示资格 仅供诊断"提示、
+  has_credential 徽标不显示 secret）；SettingsDialog 加第 7 个导航类目"AI providers"
+  与 section（新增可空 `api` 参数，缺 sidecar 时降级提示），settings_flow 传入既有 `api`；
+  localization en+zh 补 24 键。判定默认不获显示资格（属 3.12.1），UI 明示。
+  验证：flutter analyze 全项目零问题；flutter test 288 全通过（含新增 4 契约）。
+  Rust 侧本切片未改动。至此 3.12 功能面完成，剩余：增量协议（Slice 4，owner 按需）、CLOSEOUT。
+
 - 2026-07-13 08:57 CST: Phase 3.12 Slice 2b：provider 工厂 + 真实 OS-keychain + HTTP 路由。
   llm-provider 新增 `BuiltSemanticProvider`（按 profile.adapter_kind 建 OpenAI/Anthropic
   adapter，暴露 as_judge/as_rubric/probe；新协议= 新 match 臂，契约不变）+ 工厂契约测试

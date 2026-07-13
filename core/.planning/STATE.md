@@ -25,9 +25,12 @@ last_updated: "2026-07-12T18:55:00.000+08:00"
   `KeychainSecretStore`（security-framework，cfg-gated，composition root 注入）；四条
   `/v1/llm/providers*` HTTP 路由（CRUD + probe 实测 + provider-backed judge），响应用
   secret-free `ProviderProfileView`；OpenAPI 契约齐全；集成测试证明 secret 不回显/删除移除/
-  未知 provider 404。ADR 0022 已立。PLAN 修订为 v3（含远端案例证伪）。判定默认**不获显示
-  资格**（属 3.12.1）。**剩余（未收口）**：最小设置 UI（Slice 3，Flutter，你已同意后置）、
-  增量协议 OpenAI Responses/Gemini（Slice 4，owner 按需）、CLOSEOUT。
+  未知 provider 404。**Slice 3 已完成**：Flutter 最小设置 UI（AI providers 类目：provider
+  列表 + 添加表单 + 连通/能力 probe + 删除；密钥只写提交即清空、数据去向警告、"未获显示
+  资格"提示、has_credential 徽标不显 secret）；手写 DTO + fixture 契约测试（ADR 0014）；
+  flutter analyze 零问题、flutter test 288 全通过。ADR 0022 已立。PLAN 修订为 v3（含远端案例
+  证伪）。判定默认**不获显示资格**（属 3.12.1）。**剩余**：增量协议 OpenAI Responses/Gemini
+  （Slice 4，owner 按需，只加 adapter 不改契约）、CLOSEOUT。
 - Phase 3.11 Semantic Task Evidence Foundation 已 CODE COMPLETE（见其 CLOSEOUT）。
   Phase 3.9 仍不作为硬依赖。
 - **治理线状态**：Phase 2.23 Architecture Debt Paydown 已于 2026-07-03 收口（详见其 CLOSEOUT）；3.x 开工前置全部就绪。
@@ -340,12 +343,11 @@ last_updated: "2026-07-12T18:55:00.000+08:00"
 
 ## 下一步工作
 
-1. **Phase 3.12（进行中）**：Vendor-neutral LLM Provider。后端中立性证明 + 安全存储 +
-   诚实降级 + 真实 keychain + provider 工厂 + HTTP 路由已落地全绿（见"当前位置"）。
-   **剩余收口顺序**：(a) 最小设置 UI（Slice 3，Flutter：选 provider/用途/数据去向警告/
-   连通与能力测试/费用上限；沿用 ADR 0014 手写 DTO + fixture 契约测试）；(b) 增量协议
-   OpenAI Responses/Gemini（Slice 4，owner 按需，只加 adapter 不改契约）；(c) CLOSEOUT。
-   全程 provider 判定不获任何显示资格（资格评估属 3.12.1）。
+1. **Phase 3.12（功能面完成，待收口）**：Vendor-neutral LLM Provider。中立性证明 + 安全
+   存储 + 诚实降级 + 真实 keychain + provider 工厂 + HTTP 路由 + Flutter 设置 UI 均已落地
+   全绿（见"当前位置"）。**剩余**：(a) 增量协议 OpenAI Responses/Gemini（Slice 4，owner
+   按真实使用需求排期，只加 adapter 不改契约，可推迟）；(b) CLOSEOUT（核验 exit signals、
+   建 3.12-CLOSEOUT.md）。全程 provider 判定不获任何显示资格（资格评估属 3.12.1）。
 2. Phase 3.9 保持延期且不收口；其 L1 解释/专项入口不作为后续 phase 的必需数据源。每个
    phase 开工前先按上游现状修订 PLAN。
 3. "收藏句 → 个人模板"的用户价值验证收敛到 Phase 3.16（3.4.3 结论待兑现）。
