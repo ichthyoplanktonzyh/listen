@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-13 22:47 CST: 机械拆分 `persistence-sqlite/src/lexical.rs`（1801 → 948 行，低于
+  AGENT.md 1500 行阈值）。按子领域抽出三个子模块：`lexical/import_export.rs`（bulk
+  import/export + capability-state 持久化的两个 inherent impl 块 + `merge_imported_entry`）、
+  `lexical/capability.rs`（capability profile/state 读写 helper）、`lexical/rows.rs`（row 反序列化
+  + sense-folder/observation reader）。`LearningAssetRepository` trait impl 因 Rust 不允许 trait
+  impl 跨文件拆分，保留在 `lexical.rs`。纯搬移不改逻辑；`export_lexical_assets`/
+  `import_lexical_assets` 升为 `pub(crate)` 以保持 tests 可见。`cargo test -p persistence-sqlite`
+  110+5+6 全绿，workspace build 通过，clippy 告警数 19 与拆分前完全一致（零回归）。
+
 - 2026-07-13 19:30 CST: Phase 3.9.2 Syntax Provider Product Activation 收口。corrected v2
   holdout、逐 query qualification、spaCy opt-in lifecycle、单 batch/逐句共享编排、真实媒体与
   missing/corrupt/invalid/timeout 降级全部通过；contracts、句法相关 crates 与 Rust workspace
