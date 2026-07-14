@@ -114,9 +114,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   final subscriptions = <StreamSubscription<dynamic>>[];
   Timer? progressTimer;
   Timer? syntaxCapabilityTimer;
-  bool _syntaxCapabilityCheckBusy = false;
-  bool _syntaxCapabilityWasReady = false;
-  String? _syntaxAnalyzedTrackId;
   LocalApi? api;
 
   // ── Controllers ──
@@ -459,9 +456,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       });
       syntaxCapabilityTimer = Timer.periodic(
         const Duration(seconds: 2),
-        (_) => unawaited(_checkSyntaxCapability()),
+        (_) => unawaited(subtitleSources.checkSyntaxCapability()),
       );
-      unawaited(_checkSyntaxCapability());
+      unawaited(subtitleSources.checkSyntaxCapability());
       unawaited(mediaLibraryActions.prefetchHomeSummary());
       unawaited(_runSmokeIfConfigured());
     } catch (error) {
@@ -471,33 +468,6 @@ class _PlayerScreenState extends State<PlayerScreen>
           connectingApi = false;
         });
       }
-    }
-  }
-
-  Future<void> _checkSyntaxCapability() async {
-    final service = api;
-    if (service == null || _syntaxCapabilityCheckBusy) return;
-    _syntaxCapabilityCheckBusy = true;
-    try {
-      final capability = await service.syntaxCapability();
-      final ready =
-          capability['status'] == 'ready' && capability['enabled'] == true;
-      if (!ready) {
-        _syntaxCapabilityWasReady = false;
-        _syntaxAnalyzedTrackId = null;
-        return;
-      }
-      final trackId = subtitleController.primaryTrack?.id;
-      if (trackId == null) return;
-      if (!_syntaxCapabilityWasReady || _syntaxAnalyzedTrackId != trackId) {
-        _syntaxCapabilityWasReady = true;
-        _syntaxAnalyzedTrackId = trackId;
-        await service.runTrackSyntaxAnalysis(trackId);
-      }
-    } catch (_) {
-      // Optional capability monitoring never changes core playback state.
-    } finally {
-      _syntaxCapabilityCheckBusy = false;
     }
   }
 

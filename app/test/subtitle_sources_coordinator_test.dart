@@ -161,6 +161,50 @@ void main() {
     expect(calls, 1);
   });
 
+  test('checkSyntaxCapability analyzes a ready track exactly once', () async {
+    final analysisCalls = <String>[];
+    final api = _fakeApi((method, path, body) {
+      if (method == 'GET' && path == '/v1/syntax/capability') {
+        return (
+          statusCode: 200,
+          body: jsonEncode({'status': 'ready', 'enabled': true}),
+        );
+      }
+      if (method == 'POST' && path.endsWith('/syntax-analysis')) {
+        analysisCalls.add(path);
+        return (statusCode: 200, body: '{}');
+      }
+      throw StateError('unexpected $method $path');
+    });
+    final w = _wire(() => api);
+    w.subtitle.setPrimaryTrack(_track);
+
+    await w.coordinator.checkSyntaxCapability();
+    await w.coordinator.checkSyntaxCapability();
+
+    expect(analysisCalls, ['/v1/subtitles/track-1/syntax-analysis']);
+  });
+
+  test('checkSyntaxCapability stays idle while not ready', () async {
+    final analysisCalls = <String>[];
+    final api = _fakeApi((method, path, body) {
+      if (method == 'GET' && path == '/v1/syntax/capability') {
+        return (
+          statusCode: 200,
+          body: jsonEncode({'status': 'not_installed', 'enabled': false}),
+        );
+      }
+      analysisCalls.add(path);
+      return (statusCode: 200, body: '{}');
+    });
+    final w = _wire(() => api);
+    w.subtitle.setPrimaryTrack(_track);
+
+    await w.coordinator.checkSyntaxCapability();
+
+    expect(analysisCalls, isEmpty);
+  });
+
   test('analyzePhonetics guards a missing track with a snack bar', () async {
     final w = _wire(() => null);
 

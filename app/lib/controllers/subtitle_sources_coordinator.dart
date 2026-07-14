@@ -47,6 +47,40 @@ class SubtitleSourcesCoordinator {
     this.openSubtitlePath = openSubtitlePath;
   }
 
+  bool _syntaxCapabilityCheckBusy = false;
+  bool _syntaxCapabilityWasReady = false;
+  String? _syntaxAnalyzedTrackId;
+
+  /// Polled capability monitor: once the optional syntax capability reports
+  /// ready, runs whole-track analysis for the current primary track exactly
+  /// once per track.
+  Future<void> checkSyntaxCapability() async {
+    final service = getApi();
+    if (service == null || _syntaxCapabilityCheckBusy) return;
+    _syntaxCapabilityCheckBusy = true;
+    try {
+      final capability = await service.syntaxCapability();
+      final ready =
+          capability['status'] == 'ready' && capability['enabled'] == true;
+      if (!ready) {
+        _syntaxCapabilityWasReady = false;
+        _syntaxAnalyzedTrackId = null;
+        return;
+      }
+      final trackId = subtitle.primaryTrack?.id;
+      if (trackId == null) return;
+      if (!_syntaxCapabilityWasReady || _syntaxAnalyzedTrackId != trackId) {
+        _syntaxCapabilityWasReady = true;
+        _syntaxAnalyzedTrackId = trackId;
+        await service.runTrackSyntaxAnalysis(trackId);
+      }
+    } catch (_) {
+      // Optional capability monitoring never changes core playback state.
+    } finally {
+      _syntaxCapabilityCheckBusy = false;
+    }
+  }
+
   Future<void> ensureCurrentPronunciation(Cue? cue) async {
     final service = getApi();
     if (cue == null ||
