@@ -2,6 +2,173 @@
 
 ## Unreleased
 
+- 2026-07-14 12:10 CST: 机械拆分 `dictionary-provider/src/lib.rs`（1425 → 15 行 lib +
+  按上游资源分模块：cedict 523（中文词典+拼音发音，共享 CC-CEDICT 索引）/ ecdict 271 /
+  edict 253 / free_dictionary 155 / support 10（共享 `ResourceSignature`）/ tests 271）。
+  逐字搬移；跨模块可见性最小升级：`resolve`/`numbered_pinyin_to_marks`/
+  `parse_free_dictionary_phonetics`/`ResourceSignature` 升 `pub(crate)`（测试与共享所需）。
+  doc comment 逐行对拍与原文件完全一致。`cargo test` 8 全绿（与基线同数）、workspace
+  测试零失败、clippy 告警 28 与基线持平。
+
+- 2026-07-14 11:40 CST: 机械拆分 `models/types.dart`（1657 → 12 行 library + 5 个 part
+  文件：lexical 504 / pronunciation 452 / media_fit 283 / dictionary 237 / diagnosis 171
+  行），沿 `models/timeline.dart` 既有 part 模式，40 个类逐字搬移、消费端 import 零改动。
+  `flutter analyze` 零问题、`flutter test` 344 全通过。
+
+- 2026-07-14 11:20 CST: 机械拆分 `api_service.dart`（1629 → 263 行核心 + 9 个按资源域的
+  part 文件，各 73–345 行）。`LocalApi` 保留 connect/transport/`_request`/events/close
+  生命周期；143 个资源方法逐字搬入 `services/api/{media,subtitles,timelines,speech,
+  transcription,lexical,practice,listening_hunting,coach_llm}.dart` 的 `extension on
+  LocalApi`（part 共享库作用域，私有 `_request` 照常可用；唯一文本改动是 media.dart 里
+  static `_isAudio` 按 Dart 规则加 `LocalApi.` 限定）。29 个消费文件 import 与调用点
+  零改动。附带 spike 结论：放弃从 OpenAPI 生成 Dart DTO——types.dart 的模型类携带领域
+  便利方法（如 `triageQueue`），生成会破坏该设计；防漂移继续走既有 `test/contract/`
+  对拍测试（已 12 个）+ Rust 侧 OpenAPI parity test。`flutter analyze` 零问题、
+  `flutter test` 344 全通过。
+
+- 2026-07-14 10:40 CST: 删除 46 方法的 fat `SubtitleRepository` trait 及其 4 组 blanket
+  桥接 impl（repositories.rs 1375 → 848 行）。消费侧窄 trait（`SubtitleTrackRepository`/
+  `PronunciationRepository`/`TimelineResourceRepository`/`LLTimelineResourceRepository`）
+  早已存在且 AppServices 全部经窄 trait 依赖——fat trait 只是实现侧聚合，导致每加一个
+  持久化方法要同步写 4 处（fat trait + 窄 trait + 桥接 + sqlite impl）。现
+  `persistence-sqlite/subtitles.rs` 直接按资源 impl 4 个窄 trait（方法体逐字不变，仅
+  lltimeline 两方法挪至文件尾自成 impl 块），新增方法今后只写 2 处。测试导入改窄
+  trait。`cargo test --workspace` 608 全绿，clippy 告警 30 与基线持平（零回归）。
+
+- 2026-07-14 10:05 CST: main.dart 拆分 S9 —— 3.9.3 合并带来的 `_checkSyntaxCapability`
+  能力监控（方法 + busy/ready/analyzed 三个状态标志）逐字搬入
+  `SubtitleSourcesCoordinator.checkSyntaxCapability`（字幕轨分析域的自然归属）；2 秒轮询
+  Timer 生命周期留在宿主 `initState`/`dispose`。新增 2 例隔离测试（ready 轨道恰好分析
+  一次、not_installed 时保持静默）。`flutter analyze` 零问题、`flutter test` 344 全通过
+  （342 + 2）。
+
+- 2026-07-14 09:35 CST: main.dart 拆分 S8 —— 词汇/学习类对话框与导航流程迁往
+  `widgets/flows/learning_flows.dart`（沿用 flows 顶层函数模式）：
+  `openLearningAssetsFlow`/`openLearningResourcesFlow`/`showCurrentPhraseCandidatesFlow`/
+  `openPhraseFlow`/`correctCurrentLemmaFlow`/`showVocabularyFlow`/`openReviewQueueFlow`/
+  `openCoachDashboardFlow`/`importWordListFlow`。宿主保留同名薄 wrapper。顺带修复新
+  widget test 暴露的潜在缺陷：correct-lemma 对话框此前在退场动画期间就 dispose
+  `TextEditingController`（debug 断言隐患），改由 `_LemmaCorrectionDialog` 自持生命周期。
+  新增 `test/learning_flows_test.dart`（3 例：无选中 token no-op、修正词元发
+  POST /lexical-normalization/correct、null api 不导航）。main.dart 1737 → 1551 行。
+  `flutter analyze` 零问题、`flutter test` 337 全通过（334 + 3）。
+
+- 2026-07-14 09:05 CST: main.dart 拆分 S7b —— 字幕资源类对话框/导航流程迁往
+  `widgets/flows/subtitle_resource_flows.dart`（沿用 `media_import_flows.dart` 顶层
+  flow 函数既有模式，非 coordinator）：`deleteSubtitleResourceFlow`/
+  `exportSubtitleResourceFlow`/`generateSubtitlesFlow`/`openTranscriptionCenterFlow`/
+  `openPhoneticAnalysisCenterFlow`/`openSubtitleResourcesFlow`/`openColdStartMarkingFlow`。
+  宿主保留同名薄 wrapper 转调（R3：最小化 build 改动面）；`_generateSubtitles` 的
+  setState 任务登记改注入 `recordTaskStatus` 回调（刻意不复用 `_setTaskStatus`，
+  后者会额外覆盖 player status 文本，保持逐字语义）。新增
+  `test/subtitle_resource_flows_test.dart`（4 例 widget test：删除取消/确认发
+  DELETE、导出 null-api 不弹窗、导出双格式渲染与 dismissal）。main.dart
+  1842 → 1737 行。`flutter analyze` 零问题、`flutter test` 334 全通过（330 + 4）。
+
+- 2026-07-14 08:52 CST: main.dart 拆分 S7a —— 抽出 `SubtitleSourcesCoordinator`（仅上下文
+  无关子集）：`ensureCurrentPronunciation`/`analyzePhonetics`/`handleDrop`/`isMediaPath`/
+  `isSubtitlePath` 逐字搬到 `lib/controllers/subtitle_sources_coordinator.dart`，注入
+  `getApi`/`isMounted`/`showSnackBar`/`setTaskStatus`/`openMediaPath`/`openSubtitlePath`。
+  对话框驱动的来源流程（delete/export/generate/import word list/cold-start 等）按 S5 既定
+  裁决留在宿主，后续 S7b 评估迁往 `widgets/flows/` 既有模式。逻辑/字符串不变。新增
+  `test/subtitle_sources_coordinator_test.dart`（9 例：扩展名分类、drop 路由/前置守卫/
+  不支持类型、发音缓存与去重、phonetics 无轨守卫/成功派发/失败上报）。main.dart
+  1937 → 1842 行。`flutter analyze` 零问题、`flutter test` 330 全通过（321 + 9）。
+
+- 2026-07-14 08:47 CST: main.dart 拆分 S6 —— 抽出 `MediaLibraryCoordinator`。首页媒体库/
+  triage 动作 9 个方法（`recordRecentMedia`/`prefetchHomeSummary`/`loadMediaLibrary`/
+  `openLibraryEntry`/`startExtensiveFromLibrary`/`startIntensiveFromLibrary`/
+  `setLibraryTriageIntent`/`toggleFamiliarSupply`/`continueRecentMedia`）逐字搬到
+  `lib/controllers/media_library_coordinator.dart`；coordinator 自持 `savedVocabulary`/
+  `mediaLibrary` 两个首页汇总事实（原 State 字段），`setState` 改注入 `requestRebuild`；
+  media-session 操作按 PLAN R5 走注入回调（`openMediaPath`/`openMedia`）而非直接持有
+  coordinator。逻辑/字符串不变。新增 `test/media_library_coordinator_test.dart`（11 例：
+  加载成功/失败保留旧值/null API no-op、缺失文件守卫、triage 就地替换与失败上报、continue
+  回退拣选器/重开近期路径、recordRecentMedia 无媒体 no-op）。main.dart 2051 → 1937 行。
+  `flutter analyze` 零问题、`flutter test` 321 全通过（310 + 11）。
+
+- 2026-07-14 01:15 CST: main.dart 拆分 S5 —— 抽出 `VocabularyActionsCoordinator`（仅上下文无关
+  数据方法）。vocabulary 入口大量 BuildContext 耦合（`showDialog`/`Navigator.push`/
+  `MaterialPageRoute`），按代码库约定「coordinator 无 context、对话框留宿主」，这些导航/对话框
+  方法保留在 State；可抽子集为 10 个纯数据方法：`loadWordEntries`/`loadPhraseEntries`/
+  `loadPhraseCandidates`/`openWord`/`setSelectedWordStatus`/`setCapabilityOverride`/
+  `saveSelectedLearningContent`/`recordCurrentSource`/`markFirstWord`/`observeSelected`，连同
+  私有 `_sourceFor`（仅被这些方法使用，随之内化）逐字搬到
+  `lib/controllers/vocabulary_actions_coordinator.dart`，注入 `getApi`/`isMounted`/`text`/
+  `refreshDiagnosis`，其余用归位后的 `settings.resolveLearningLanguage`。逻辑/字符串不变。新增
+  `test/vocabulary_actions_coordinator_test.dart`（markFirstWord 必刷 diagnosis、无选择的
+  observeSelected 静默 no-op）。main.dart 2206 → 2051 行。`flutter analyze` 零问题、`flutter test`
+  310 全通过（308 + 2）。
+
+- 2026-07-14 00:50 CST: main.dart 拆分 S3+S4（合并）—— 抽出 `PracticeActionsCoordinator`。
+  精听练习与 shadowing 深度交织（`_navigatePracticeSentence` 同时派发 cloze 与 shadowing、
+  `_replayPracticeWindow`/`_setShadowingStep` 共享），故合为单个 coordinator 避免跨 coordinator
+  循环依赖。19 个方法（四种练习启动、练习窗循环、提交、录音/回放/ABA、rate/step、external/
+  slice-window shadowing、复习保存、句子导航、teardown）逐字搬到
+  `lib/controllers/practice_actions_coordinator.dart`；注入 `getApi`/`isMounted`/`refreshDiagnosis`/
+  `seekCue`，`tools` 由持有的 settings 内部派生，其余全用 S2.5 归位后的 `playbackActions.*` 与
+  `settings.resolveLearningLanguage`。逻辑/字符串不变；~24 处调用点改走 coordinator。新增
+  `test/practice_actions_coordinator_test.dart`（4 例：无 draft replay no-op、submit 必刷 diagnosis
+  回调、无目标句不 seek、无 attempt 不改状态）。main.dart 2469 → 2206 行。`flutter analyze`
+  零问题、`flutter test` 308 全通过（304 + 4）。
+
+- 2026-07-14 00:25 CST: main.dart 拆分 S2.5 —— 把跨领域共享 glue helper 归位到自然属主，
+  为后续 coordinator 抽取降低注入面。`_mediaTimeMs` 与 `_currentPracticeChunk(s)` 迁入
+  `PlaybackActionsCoordinator`（已持 `mediaTime`/`currentChunkRef`/subtitle）；`_learningLanguage`
+  改为 `SettingsController.resolveLearningLanguage(trackLanguage)`，main.dart 16 处调用点改为
+  `settingsController.resolveLearningLanguage(subtitleController.primaryTrack?.language)`。
+  `ListeningInboxCoordinator` 随之去掉 `mediaTimeMs` 注入，直接用 `playbackActions.mediaTimeMs`。
+  `_sourceFor`（仅 vocab 使用）留待 vocab slice。逻辑逐字不变；新增 3 例测试（coordinators_test
+  的 mediaTimeMs/practice-chunk 空态、settings_test 的 resolveLearningLanguage 优先级）。
+  `flutter analyze` 零问题、`flutter test` 304 全通过（301 + 3）。
+
+- 2026-07-14 00:05 CST: main.dart 拆分 S2 —— 抽出 `ListeningInboxCoordinator`。把
+  `_captureListeningInbox` / `_refreshListeningInbox` / `_replayListeningInboxItem` /
+  `_processListeningInboxItem` 四个方法逐字搬到 `lib/controllers/listening_inbox_coordinator.dart`
+  （注入 `getApi`/`isMounted`/`mediaTimeMs` + 复用既有 `playbackActions`），逻辑/字符串不变。
+  `_hardInterruptListening` 与 `_toggleExtensiveListening`（含 `showDialog` 与跨 slice
+  `_refreshDiagnosis` 依赖）暂留 State，待其依赖抽出后处理；两个 `loopRange` 方法后续归入
+  `PlaybackActionsCoordinator`。新增 `test/listening_inbox_coordinator_test.dart`（3 例：process
+  review-item 分支、null-range replay 守卫、null-api no-op）。main.dart 2527 → 2476 行。
+  `flutter analyze` 零问题、`flutter test` 301 全通过（298 + 3）。
+
+- 2026-07-13 23:40 CST: main.dart 拆分 S1 —— 抽出 `HuntingActionsCoordinator`。把
+  `_toggleHuntingMode` / `_reindexHuntingCorpus` / `_answerHuntingCheck` 三个方法逐字搬到
+  `lib/controllers/hunting_actions_coordinator.dart`，仅做 seam 改写（`api`→`getApi()`、
+  `mounted`→`isMounted()`、`l.text`→注入 `text()`、controller 接收者按现有 coordinator 短命名）；
+  逻辑/分支/字符串不变。`_PlayerScreenState` 新增 `huntingActions` 字段 + `initState` bind，
+  3 处调用点改走 coordinator。新增 `test/hunting_actions_coordinator_test.dart`（5 例：toggle
+  启/停、reindex 成功/失败、null-api no-op），复用既有 `LocalApi.withTransport` fake。main.dart
+  2578 → 2527 行。`flutter analyze` 零问题、`flutter test` 298 全通过（293 + 5）。
+
+- 2026-07-13 23:20 CST: 立 `main.dart` Coordinator 抽取治理 mini-phase 的可执行 PLAN
+  （`.planning/phases/main-dart-coordinator-extraction/PLAN.md`）。核实 `_PlayerScreenState`
+  从 2.23 的 1457 行回涨至 2578 行，且无任何测试 mount `PlayerScreen`、State 无 DI，故整屏
+  widget 测试不可行；测试网改建在代码库既有的 Coordinator 隔离单测层。PLAN 按现有
+  `media_session_coordinator` 模板，分 Slice 0（fakes + 前置）+ S1–S7（Hunting / Inbox /
+  Shadowing / Practice / Vocabulary / MediaLibrary / SubtitleSources），逐 Slice test-first、
+  逐字搬移、analyze+test+对拍验证；`initState`/`dispose`/`build`/视图组合与高频 `_onPosition`
+  保留在 State。属语义重构（非机械搬移），与本次 lexical/timeline 两个纯机械拆分区分。
+
+- 2026-07-13 23:05 CST: 机械拆分 `apps/desktop/lib/models/timeline.dart`（2837 → 10 行 library +
+  6 个 part 文件，最大 `rhythm.dart` 965 行，均低于 AGENT.md 1500 行阈值）。采用 Dart
+  `part`/`part of`：原文件零 import、完全自包含，故 43 处 `import 'models/timeline.dart'` 全部
+  保持不变。按子领域切分：`timeline/subtitle.dart`（token/cue/track/capabilities）、`word_chunk.dart`
+  （Word/Chunk timeline + evidence + SenseGroup）、`sound.dart`（PhoneTimeline + sound 原语）、
+  `rhythm.dart`（RhythmFrame 模型全族）、`document.dart`（LLTimeline document/metadata/artifact/
+  DetectedPhone）、`display.dart`（DisplayChunk/partition/cursor）。逐字搬移，脚本验证 2618 非空行
+  与原文完全一致（仅 dart format 空行规整）。`flutter analyze` 零问题、`flutter test` 293 全通过、
+  未违反 ADR 0014（手写解析不变，仅分文件）。
+
+- 2026-07-13 22:47 CST: 机械拆分 `persistence-sqlite/src/lexical.rs`（1801 → 948 行，低于
+  AGENT.md 1500 行阈值）。按子领域抽出三个子模块：`lexical/import_export.rs`（bulk
+  import/export + capability-state 持久化的两个 inherent impl 块 + `merge_imported_entry`）、
+  `lexical/capability.rs`（capability profile/state 读写 helper）、`lexical/rows.rs`（row 反序列化
+  + sense-folder/observation reader）。`LearningAssetRepository` trait impl 因 Rust 不允许 trait
+  impl 跨文件拆分，保留在 `lexical.rs`。纯搬移不改逻辑；`export_lexical_assets`/
+  `import_lexical_assets` 升为 `pub(crate)` 以保持 tests 可见。`cargo test -p persistence-sqlite`
+  110+5+6 全绿，workspace build 通过，clippy 告警数 19 与拆分前完全一致（零回归）。
+
 - 2026-07-13 22:25 CST: Phase 3.9.3 完整收口并冻结。最终 `jsonl-v2` 修复带前导空格字幕的
   spaCy SPACE token/head 重映射，delivery identity 现同时绑定 provider/requirements/sidecar/model；
   真实 244 cue App 路径为 243 analyzed + 1 `invalid_sentence` 隔离，首次 rebuild 2.10s、同 fingerprint

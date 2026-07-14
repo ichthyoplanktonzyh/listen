@@ -1,10 +1,10 @@
-use application::{ApplicationError, SubtitleRepository};
+use application::{ApplicationError, LLTimelineResourceRepository, PronunciationRepository, SubtitleTrackRepository, TimelineResourceRepository};
 use domain::*;
 use rusqlite::{OptionalExtension, params};
 
 use super::{SqliteRepository, domain_sql, from_json, json, repo};
 
-impl SubtitleRepository for SqliteRepository {
+impl SubtitleTrackRepository for SqliteRepository {
     fn save_track(&self, track: &SubtitleTrack) -> Result<(), ApplicationError> {
         let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
         let tx = conn.transaction().map_err(repo)?;
@@ -233,52 +233,6 @@ impl SubtitleRepository for SqliteRepository {
             .transpose()
             .map(Option::flatten)
     }
-
-    fn save_lltimeline_resource(
-        &self,
-        track_id: &SubtitleTrackId,
-        metadata: &LLTimelineMetadata,
-        artifacts: &[LLTimelineArtifact],
-    ) -> Result<(), ApplicationError> {
-        self.connection
-            .lock()
-            .expect("sqlite mutex poisoned")
-            .execute(
-                "INSERT INTO lltimeline_resources
-                 (track_id,metadata_json,artifacts_json,updated_at_ms)
-                 VALUES (?1,?2,?3,unixepoch('subsec') * 1000)
-                 ON CONFLICT(track_id) DO UPDATE SET
-                   metadata_json=excluded.metadata_json,
-                   artifacts_json=excluded.artifacts_json,
-                   updated_at_ms=excluded.updated_at_ms",
-                params![track_id.as_str(), json(metadata)?, json(artifacts)?],
-            )
-            .map(|_| ())
-            .map_err(repo)
-    }
-
-    fn get_lltimeline_resource(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Option<(LLTimelineMetadata, Vec<LLTimelineArtifact>)>, ApplicationError> {
-        self.connection
-            .lock()
-            .expect("sqlite mutex poisoned")
-            .query_row(
-                "SELECT metadata_json, artifacts_json FROM lltimeline_resources
-                 WHERE track_id=?1",
-                [track_id.as_str()],
-                |row| {
-                    Ok((
-                        from_json(&row.get::<_, String>(0)?)?,
-                        from_json(&row.get::<_, String>(1)?)?,
-                    ))
-                },
-            )
-            .optional()
-            .map_err(repo)
-    }
-
     fn get_sentence(
         &self,
         id: &SubtitleSentenceId,
@@ -347,6 +301,9 @@ impl SubtitleRepository for SqliteRepository {
             .transpose()
             .map_err(ApplicationError::from)
     }
+}
+
+impl PronunciationRepository for SqliteRepository {
 
     fn save_pronunciation(&self, analysis: &SentencePronunciation) -> Result<(), ApplicationError> {
         self.connection
@@ -445,6 +402,9 @@ impl SubtitleRepository for SqliteRepository {
             .optional()
             .map_err(repo)
     }
+}
+
+impl TimelineResourceRepository for SqliteRepository {
 
     fn save_word_timings(
         &self,
@@ -1326,5 +1286,52 @@ impl SubtitleRepository for SqliteRepository {
             .map_err(repo)?;
         tx.commit().map_err(repo)?;
         Ok(timeline)
+    }
+}
+
+impl LLTimelineResourceRepository for SqliteRepository {
+    fn save_lltimeline_resource(
+        &self,
+        track_id: &SubtitleTrackId,
+        metadata: &LLTimelineMetadata,
+        artifacts: &[LLTimelineArtifact],
+    ) -> Result<(), ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "INSERT INTO lltimeline_resources
+                 (track_id,metadata_json,artifacts_json,updated_at_ms)
+                 VALUES (?1,?2,?3,unixepoch('subsec') * 1000)
+                 ON CONFLICT(track_id) DO UPDATE SET
+                   metadata_json=excluded.metadata_json,
+                   artifacts_json=excluded.artifacts_json,
+                   updated_at_ms=excluded.updated_at_ms",
+                params![track_id.as_str(), json(metadata)?, json(artifacts)?],
+            )
+            .map(|_| ())
+            .map_err(repo)
+    }
+
+    fn get_lltimeline_resource(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<(LLTimelineMetadata, Vec<LLTimelineArtifact>)>, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .query_row(
+                "SELECT metadata_json, artifacts_json FROM lltimeline_resources
+                 WHERE track_id=?1",
+                [track_id.as_str()],
+                |row| {
+                    Ok((
+                        from_json(&row.get::<_, String>(0)?)?,
+                        from_json(&row.get::<_, String>(1)?)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(repo)
     }
 }

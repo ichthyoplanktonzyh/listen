@@ -23,6 +23,14 @@ last_updated: "2026-07-13T22:25:00.000+08:00"
   与 parser gold。Phase 3.9.2 已完成：spaCy artifact 与 B going-to/used-to/have-to、SenseGroup、
   matcher 获资格并接入单 batch/逐句共享产品编排；want-to 与无模型路径保留精确 fallback。
 - **治理线状态**：Phase 2.23 Architecture Debt Paydown 已于 2026-07-03 收口（详见其 CLOSEOUT）；3.x 开工前置全部就绪。
+- **2026-07-14 大文件解耦治理（chore/large-file-decomposition）**：main.dart Coordinator
+  抽取 S1–S9 全部完成（2578 → ~1558 行，8 个 coordinator + 3 个 flows 文件，全部配隔离
+  测试）；删除 46 方法 fat `SubtitleRepository`（消费侧窄 trait 原已存在，砍掉 4 组桥接
+  样板 527 行）；`api_service.dart` 按资源域拆 9 个 part 文件（1629 → 263 核心）；
+  `models/types.dart` 拆 5 个子域 part；`dictionary-provider` 按上游资源拆模块。Dart DTO
+  生成 spike 已证伪（模型类携带领域方法，防漂移走既有 contract test）。Phase 3.9.1–3.9.3
+  句法分支已合回 main 并 merge 进本分支。剩余尾项：subtitle-core 三子域拆分（1180 行未超
+  红线，低优先）、speech-analysis pub facade 收窄（设计动作，建议单独 phase）。
 - **算法线状态**：Phase 2.19 / 2.20 / 2.21 全局质量线仍搁置；Phase 3.9 仅恢复与 L1 学习
   价值直接相关的 A/B/C audible-structure contract、linking 结构生成和证据门控。
 - **当前版本**：0.7.0。

@@ -3,7 +3,8 @@ use application::{
     AppServices, ApplicationError, CoachDashboardRepository, DictionaryProvider,
     DictionaryProviderError, ImportSubtitle, LearningAssetRepository, LearningEventRepository,
     ListeningInboxRepository, MediaRepository, PhoneticAnalysisRepository, PracticeRepository,
-    RegisterMedia, ReviewRepository, SubtitleRepository, TranscriptionRepository,
+    LLTimelineResourceRepository, PronunciationRepository, RegisterMedia, ReviewRepository,
+    SubtitleTrackRepository, TimelineResourceRepository, TranscriptionRepository,
     UpsertLexicalEntry,
 };
 
