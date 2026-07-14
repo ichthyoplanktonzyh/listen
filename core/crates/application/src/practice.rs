@@ -1,4 +1,5 @@
 use std::collections::{BTreeSet, HashSet};
+use std::sync::Arc;
 
 use crate::*;
 
@@ -6,7 +7,45 @@ mod review;
 mod upgrade;
 use review::{REVIEW_ALGORITHM, next_review_schedule, review_card};
 
-impl AppServices {
+/// Owns practice sessions, review scheduling, hunting targets, and listening
+/// inbox processing. They share learning-event and queue transition invariants;
+/// lexical evidence is delegated to the lexical module.
+#[derive(Clone)]
+pub struct PracticeUseCases {
+    pub(crate) practice: Arc<dyn PracticeRepository>,
+    pub(crate) review_queue: Arc<dyn ReviewQueueRepository>,
+    pub(crate) hunting: Arc<dyn HuntingRepository>,
+    pub(crate) learning_events: Arc<dyn LearningEventRepository>,
+    pub(crate) learning_observations: Arc<dyn LearningObservationRepository>,
+    pub(crate) listening_inbox: Arc<dyn ListeningInboxRepository>,
+    pub(crate) difficulty: Arc<dyn DifficultyRepository>,
+    pub(crate) subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
+    pub(crate) corpus: Arc<dyn CorpusIndexRepository>,
+    pub(crate) media: Arc<dyn MediaRepository>,
+    lexical_learning: LexicalLearningUseCases,
+}
+
+impl PracticeUseCases {
+    pub(crate) fn from_services(services: &AppServices) -> Self {
+        Self {
+            practice: services.practice.clone(),
+            review_queue: services.review_queue.clone(),
+            hunting: services.hunting.clone(),
+            learning_events: services.learning_events.clone(),
+            learning_observations: services.learning_observations.clone(),
+            listening_inbox: services.listening_inbox.clone(),
+            difficulty: services.difficulty.clone(),
+            subtitle_tracks: services.subtitle_tracks.clone(),
+            corpus: services.corpus.clone(),
+            media: services.media.clone(),
+            lexical_learning: LexicalLearningUseCases::from_services(services),
+        }
+    }
+
+    pub(crate) fn lexical_learning(&self) -> &LexicalLearningUseCases {
+        &self.lexical_learning
+    }
+
     pub fn create_practice_session(
         &self,
         input: CreatePracticeSession,
@@ -508,6 +547,7 @@ impl AppServices {
             }
             if let Some(sentence_id) = sentence_id.as_ref()
                 && self
+                    .lexical_learning()
                     .lexical_entries
                     .lexical_details(&lexical_entry_id)?
                     .is_some()

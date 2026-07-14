@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-14 19:55 CST: Phase 2.24 `AppServices` 深化完成：practice session、review
+  scheduling、hunting 与 listening inbox 归入 `PracticeUseCases`，lexical evidence 通过显式
+  collaborator 写入。application 中散布的 18 个 `impl AppServices` 已全部删除；顶层仅剩
+  composition/builders 与 9 个聚合模块访问器，workspace production check 与全部 test targets
+  编译通过。
+
 - 2026-07-14 19:41 CST: Phase 2.24 第二个深用例族完成：media/subtitle、四类 timeline、
   transcription/phonetic derived resources、corpus、content-fit、diagnosis 与 coach material
   统一进入 `MediaAnalysisUseCases`，共享资源失效与 provenance 边界，并显式依赖 lexical

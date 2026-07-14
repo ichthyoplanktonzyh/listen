@@ -8,13 +8,13 @@ use domain::{
 };
 
 use crate::{
-    AppServices, ApplicationError, CreateHuntingTargetInput, CreateLexicalObservation,
+    ApplicationError, CreateHuntingTargetInput, CreateLexicalObservation, PracticeUseCases,
     HuntingCheckResult, LexicalSourceContext, SubmitHuntingCheckInput, normalize_phrase, now_ms,
 };
 
 const MAX_ACTIVE_HUNTING_TARGETS: usize = 5;
 
-impl AppServices {
+impl PracticeUseCases {
     pub fn list_hunting_candidates(
         &self,
         status: Option<HuntingCandidateStatus>,
@@ -30,6 +30,7 @@ impl AppServices {
         input: CreateHuntingTargetInput,
     ) -> Result<HuntingTarget, ApplicationError> {
         let details = self
+            .lexical_learning()
             .lexical_entries
             .lexical_details(&input.lexical_entry_id)?
             .ok_or(ApplicationError::NotFound("lexical entry"))?;
@@ -189,6 +190,7 @@ impl AppServices {
         let mut occurrences = Vec::new();
         for target in targets {
             let Some(details) = self
+                .lexical_learning()
                 .lexical_entries
                 .lexical_details(&target.lexical_entry_id)?
             else {
@@ -279,6 +281,7 @@ impl AppServices {
                 "hunting occurrence has no sentence",
             ))?;
         let entry = self
+            .lexical_learning()
             .lexical_entries
             .lexical_details(&target.lexical_entry_id)?
             .map(|details| details.entry)

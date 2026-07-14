@@ -341,16 +341,14 @@ fn comprehension_feedback_calibrates_sound_fit_and_survives_recompute() {
 
     // Two extensive sessions self-reported "unclear" on this media.
     for _ in 0..2 {
-        let session = services
-            .create_practice_session(application::CreatePracticeSession {
+        let session = services.practice_learning().create_practice_session(application::CreatePracticeSession {
                 mode: PracticeMode::Extensive,
                 media_id: Some(track.media_id.clone()),
                 track_id: Some(track.id.clone()),
                 source: Some("test".into()),
             })
             .unwrap();
-        services
-            .complete_listening_session(
+        services.practice_learning().complete_listening_session(
                 &session.id,
                 application::CompleteListeningSessionInput {
                     comprehension_report: Some(ListeningComprehensionReport::Unclear),
@@ -422,16 +420,14 @@ fn sessions_without_media_or_feedback_leave_no_calibration() {
     MediaRepository::upsert(repo.as_ref(), &transcription_media()).unwrap();
 
     // No media on the session: nothing to calibrate.
-    let session = services
-        .create_practice_session(application::CreatePracticeSession {
+    let session = services.practice_learning().create_practice_session(application::CreatePracticeSession {
             mode: PracticeMode::Extensive,
             media_id: None,
             track_id: None,
             source: Some("test".into()),
         })
         .unwrap();
-    services
-        .complete_listening_session(
+    services.practice_learning().complete_listening_session(
             &session.id,
             application::CompleteListeningSessionInput {
                 comprehension_report: Some(ListeningComprehensionReport::Unclear),
@@ -442,16 +438,14 @@ fn sessions_without_media_or_feedback_leave_no_calibration() {
 
     // Media session without report or scored attempts: also nothing.
     let media_id = MediaId::parse("media-1").unwrap();
-    let session = services
-        .create_practice_session(application::CreatePracticeSession {
+    let session = services.practice_learning().create_practice_session(application::CreatePracticeSession {
             mode: PracticeMode::Extensive,
             media_id: Some(media_id.clone()),
             track_id: None,
             source: Some("test".into()),
         })
         .unwrap();
-    services
-        .complete_listening_session(
+    services.practice_learning().complete_listening_session(
             &session.id,
             application::CompleteListeningSessionInput {
                 comprehension_report: None,
@@ -484,8 +478,7 @@ fn practice_accuracy_feedback_calibrates_sound_fit() {
     repo.save_track(&track).unwrap();
     seed_vocabulary(&services);
 
-    let session = services
-        .create_practice_session(application::CreatePracticeSession {
+    let session = services.practice_learning().create_practice_session(application::CreatePracticeSession {
             mode: PracticeMode::Intensive,
             media_id: Some(track.media_id.clone()),
             track_id: Some(track.id.clone()),
@@ -496,8 +489,7 @@ fn practice_accuracy_feedback_calibrates_sound_fit() {
     // Six dictation attempts, one correct: 1/6 <= 0.5 shifts one band
     // harder once enough attempts exist.
     for index in 0..6 {
-        let item = services
-            .create_practice_item(application::CreatePracticeItem {
+        let item = services.practice_learning().create_practice_item(application::CreatePracticeItem {
                 session_id: Some(session.id.clone()),
                 kind: PracticeKind::Dictation,
                 target: PracticeTarget {
@@ -513,8 +505,7 @@ fn practice_accuracy_feedback_calibrates_sound_fit() {
                 anchors: Vec::new(),
             })
             .unwrap();
-        services
-            .submit_practice_attempt(application::SubmitPracticeAttempt {
+        services.practice_learning().submit_practice_attempt(application::SubmitPracticeAttempt {
                 item_id: item.id,
                 text_answer: if index == 0 {
                     "alpha bravo".into()

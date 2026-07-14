@@ -55,8 +55,7 @@ pub(crate) async fn create_practice_session(
     Json(request): Json<application::CreatePracticeSession>,
 ) -> Result<Json<PracticeSession>, ApiError> {
     state
-        .services
-        .create_practice_session(request)
+        .services.practice_learning().create_practice_session(request)
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -66,8 +65,7 @@ pub(crate) async fn create_practice_item(
     Json(request): Json<application::CreatePracticeItem>,
 ) -> Result<Json<PracticeItem>, ApiError> {
     state
-        .services
-        .create_practice_item(request)
+        .services.practice_learning().create_practice_item(request)
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -79,8 +77,7 @@ pub(crate) async fn complete_listening_session(
 ) -> Result<Json<PracticeSession>, ApiError> {
     let id = PracticeSessionId::parse(id).map_err(ApplicationError::from)?;
     state
-        .services
-        .complete_listening_session(&id, request)
+        .services.practice_learning().complete_listening_session(&id, request)
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -90,8 +87,7 @@ pub(crate) async fn submit_practice_attempt(
     Json(request): Json<application::SubmitPracticeAttempt>,
 ) -> Result<Json<PracticeAttempt>, ApiError> {
     state
-        .services
-        .submit_practice_attempt(request)
+        .services.practice_learning().submit_practice_attempt(request)
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -102,8 +98,7 @@ pub(crate) async fn practice_attempt(
 ) -> Result<Json<PracticeAttempt>, ApiError> {
     let id = PracticeAttemptId::parse(id).map_err(ApplicationError::from)?;
     state
-        .services
-        .practice_attempt(&id)?
+        .services.practice_learning().practice_attempt(&id)?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("practice attempt"))
 }
@@ -182,8 +177,7 @@ pub(crate) async fn list_listening_inbox_items(
     Query(query): Query<ListeningInboxQuery>,
 ) -> Result<Json<Vec<ListeningInboxItem>>, ApiError> {
     state
-        .services
-        .list_listening_inbox_items(
+        .services.practice_learning().list_listening_inbox_items(
             Some(query.status.unwrap_or(ListeningInboxStatus::Active)),
             query.limit.unwrap_or(100),
             query.offset.unwrap_or(0),
@@ -197,8 +191,7 @@ pub(crate) async fn capture_listening_inbox_item(
     Json(request): Json<application::CaptureListeningInboxItemInput>,
 ) -> Result<Json<ListeningInboxItem>, ApiError> {
     state
-        .services
-        .capture_listening_inbox_item(request)
+        .services.practice_learning().capture_listening_inbox_item(request)
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -210,8 +203,7 @@ pub(crate) async fn process_listening_inbox_item(
 ) -> Result<Json<ListeningInboxItem>, ApiError> {
     let id = ListeningInboxItemId::parse(id).map_err(ApplicationError::from)?;
     state
-        .services
-        .process_listening_inbox_item(&id, request)
+        .services.practice_learning().process_listening_inbox_item(&id, request)
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -228,8 +220,7 @@ pub(crate) async fn list_hunting_candidates(
     Query(query): Query<HuntingCandidateQuery>,
 ) -> Result<Json<Vec<HuntingCandidate>>, ApiError> {
     state
-        .services
-        .list_hunting_candidates(
+        .services.practice_learning().list_hunting_candidates(
             Some(query.status.unwrap_or(HuntingCandidateStatus::Active)),
             query.limit.unwrap_or(100),
             query.offset.unwrap_or(0),
@@ -250,8 +241,7 @@ pub(crate) async fn list_hunting_targets(
     Query(query): Query<HuntingTargetQuery>,
 ) -> Result<Json<Vec<HuntingTarget>>, ApiError> {
     state
-        .services
-        .list_hunting_targets(
+        .services.practice_learning().list_hunting_targets(
             Some(query.status.unwrap_or(HuntingTargetStatus::Active)),
             query.limit.unwrap_or(100),
             query.offset.unwrap_or(0),
@@ -265,8 +255,7 @@ pub(crate) async fn create_hunting_target(
     Json(request): Json<application::CreateHuntingTargetInput>,
 ) -> Result<Json<HuntingTarget>, ApiError> {
     state
-        .services
-        .create_hunting_target(request)
+        .services.practice_learning().create_hunting_target(request)
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -277,8 +266,7 @@ pub(crate) async fn archive_hunting_target(
 ) -> Result<Json<HuntingTarget>, ApiError> {
     let id = HuntingTargetId::parse(id).map_err(ApplicationError::from)?;
     state
-        .services
-        .archive_hunting_target(&id)
+        .services.practice_learning().archive_hunting_target(&id)
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -300,8 +288,7 @@ pub(crate) async fn list_hunting_occurrences(
         .transpose()
         .map_err(ApplicationError::from)?;
     state
-        .services
-        .hunting_occurrences(&media_id, track_id.as_ref())
+        .services.practice_learning().hunting_occurrences(&media_id, track_id.as_ref())
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -311,8 +298,7 @@ pub(crate) async fn submit_hunting_check(
     Json(request): Json<application::SubmitHuntingCheckInput>,
 ) -> Result<Json<application::HuntingCheckResult>, ApiError> {
     state
-        .services
-        .submit_hunting_check(request)
+        .services.practice_learning().submit_hunting_check(request)
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -322,8 +308,7 @@ pub(crate) async fn create_review_item(
     Json(request): Json<application::CreateReviewItem>,
 ) -> Result<Json<ReviewItem>, ApiError> {
     state
-        .services
-        .create_review_item(request)
+        .services.practice_learning().create_review_item(request)
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -339,8 +324,7 @@ pub(crate) async fn list_due_review_items(
     Query(query): Query<ReviewQueueQuery>,
 ) -> Result<Json<Vec<application::ReviewQueueEntry>>, ApiError> {
     state
-        .services
-        .due_review_items(query.at_ms, query.limit.unwrap_or(20))
+        .services.practice_learning().due_review_items(query.at_ms, query.limit.unwrap_or(20))
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -350,8 +334,7 @@ pub(crate) async fn submit_review_attempt(
     Json(request): Json<application::SubmitReviewAttempt>,
 ) -> Result<Json<application::ReviewSubmission>, ApiError> {
     state
-        .services
-        .submit_review_attempt(request)
+        .services.practice_learning().submit_review_attempt(request)
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -447,8 +430,7 @@ pub(crate) async fn review_item(
 ) -> Result<Json<ReviewItem>, ApiError> {
     let id = ReviewItemId::parse(id).map_err(ApplicationError::from)?;
     state
-        .services
-        .review_item(&id)?
+        .services.practice_learning().review_item(&id)?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("review item"))
 }

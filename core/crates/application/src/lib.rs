@@ -49,6 +49,7 @@ pub use lexical::LexicalLearningUseCases;
 pub use llm_provider::LlmProviderUseCases;
 pub use media::MediaAnalysisUseCases;
 pub use pronunciation::PronunciationUseCases;
+pub use practice::PracticeUseCases;
 pub use pronunciation_providers::*;
 pub use providers::*;
 pub use recording::RecordingUseCases;
@@ -115,6 +116,10 @@ pub struct AppServices {
 }
 
 impl AppServices {
+    pub fn practice_learning(&self) -> PracticeUseCases {
+        PracticeUseCases::from_services(self)
+    }
+
     pub fn media_analysis(&self) -> MediaAnalysisUseCases {
         MediaAnalysisUseCases::from_services(self)
     }

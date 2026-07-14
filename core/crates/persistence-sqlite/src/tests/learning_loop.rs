@@ -256,8 +256,7 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
     )
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
     .with_recording_repository(repo.clone());
-    let session = services
-        .create_practice_session(application::CreatePracticeSession {
+    let session = services.practice_learning().create_practice_session(application::CreatePracticeSession {
             mode: PracticeMode::Intensive,
             media_id: None,
             track_id: None,
@@ -272,8 +271,7 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
         start_ms: Some(100),
         end_ms: Some(900),
     };
-    let item = services
-        .create_practice_item(application::CreatePracticeItem {
+    let item = services.practice_learning().create_practice_item(application::CreatePracticeItem {
             session_id: Some(session.id.clone()),
             kind: PracticeKind::Shadowing,
             target: target.clone(),
@@ -454,8 +452,7 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
         Some(LearningStatus::KnownNotRecognized),
         None,
     );
-    let review = services
-        .create_review_item(application::CreateReviewItem {
+    let review = services.practice_learning().create_review_item(application::CreateReviewItem {
             source: ReviewSource {
                 kind: ReviewSourceKind::PracticeFailure,
                 id: None,
@@ -479,8 +476,7 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
         })
         .unwrap();
 
-    let submission = services
-        .submit_review_attempt(application::SubmitReviewAttempt {
+    let submission = services.practice_learning().submit_review_attempt(application::SubmitReviewAttempt {
             item_id: review.id.clone(),
             rating: ReviewRating::Again,
         })
@@ -496,15 +492,13 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
         observations[0].result,
         ObservationResult::NotRecognizedInContext
     );
-    let candidates = services
-        .hunting_candidates(Some(HuntingCandidateStatus::Active), 10, 0)
+    let candidates = services.practice_learning().hunting_candidates(Some(HuntingCandidateStatus::Active), 10, 0)
         .unwrap();
     assert_eq!(candidates.len(), 1);
     assert_eq!(candidates[0].review_item_id, review.id);
     assert_eq!(candidates[0].failure_count, 1);
     assert_eq!(candidates[0].target_snapshot, "Hello");
-    let target = services
-        .create_hunting_target(application::CreateHuntingTargetInput {
+    let target = services.practice_learning().create_hunting_target(application::CreateHuntingTargetInput {
             lexical_entry_id: lexical.entry.id.clone(),
             source_kind: HuntingTargetSourceKind::ReviewCandidate,
             source_id: Some(candidates[0].id.as_str().into()),
@@ -513,23 +507,20 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
     assert_eq!(target.target_snapshot, "Hello");
     assert_eq!(target.status, HuntingTargetStatus::Active);
     assert_eq!(
-        services
-            .list_hunting_targets(Some(HuntingTargetStatus::Active), 10, 0)
+        services.practice_learning().list_hunting_targets(Some(HuntingTargetStatus::Active), 10, 0)
             .unwrap(),
         vec![target.clone()]
     );
     assert_eq!(
-        services
-            .list_hunting_candidates(Some(HuntingCandidateStatus::Consumed), 10, 0)
+        services.practice_learning().list_hunting_candidates(Some(HuntingCandidateStatus::Consumed), 10, 0)
             .unwrap()[0]
             .id,
         candidates[0].id
     );
-    let archived = services.archive_hunting_target(&target.id).unwrap();
+    let archived = services.practice_learning().archive_hunting_target(&target.id).unwrap();
     assert_eq!(archived.status, HuntingTargetStatus::Archived);
     assert!(
-        services
-            .list_hunting_targets(Some(HuntingTargetStatus::Active), 10, 0)
+        services.practice_learning().list_hunting_targets(Some(HuntingTargetStatus::Active), 10, 0)
             .unwrap()
             .is_empty()
     );
@@ -591,8 +582,7 @@ fn hunting_list_enforces_five_active_targets_and_allows_replacement_after_archiv
     let mut targets = Vec::new();
     for entry in entries.iter().take(5) {
         targets.push(
-            services
-                .create_hunting_target(application::CreateHuntingTargetInput {
+            services.practice_learning().create_hunting_target(application::CreateHuntingTargetInput {
                     lexical_entry_id: entry.id.clone(),
                     source_kind: HuntingTargetSourceKind::Manual,
                     source_id: None,
@@ -601,7 +591,7 @@ fn hunting_list_enforces_five_active_targets_and_allows_replacement_after_archiv
         );
     }
     assert!(matches!(
-        services.create_hunting_target(application::CreateHuntingTargetInput {
+        services.practice_learning().create_hunting_target(application::CreateHuntingTargetInput {
             lexical_entry_id: entries[5].id.clone(),
             source_kind: HuntingTargetSourceKind::Manual,
             source_id: None,
@@ -611,9 +601,8 @@ fn hunting_list_enforces_five_active_targets_and_allows_replacement_after_archiv
         ))
     ));
 
-    services.archive_hunting_target(&targets[0].id).unwrap();
-    let replacement = services
-        .create_hunting_target(application::CreateHuntingTargetInput {
+    services.practice_learning().archive_hunting_target(&targets[0].id).unwrap();
+    let replacement = services.practice_learning().create_hunting_target(application::CreateHuntingTargetInput {
             lexical_entry_id: entries[5].id.clone(),
             source_kind: HuntingTargetSourceKind::Manual,
             source_id: None,
@@ -621,8 +610,7 @@ fn hunting_list_enforces_five_active_targets_and_allows_replacement_after_archiv
         .unwrap();
     assert_eq!(replacement.target_snapshot, "Target 5");
     assert_eq!(
-        services
-            .list_hunting_targets(Some(HuntingTargetStatus::Active), 10, 0)
+        services.practice_learning().list_hunting_targets(Some(HuntingTargetStatus::Active), 10, 0)
             .unwrap()
             .len(),
         5
@@ -661,16 +649,14 @@ fn hunting_occurrences_use_media_corpus_and_three_way_checks_keep_not_noticed_ev
         })
         .unwrap();
     let lexical = upsert_word_asset(&services, "en", "hello", "hello", None, None);
-    let target = services
-        .create_hunting_target(application::CreateHuntingTargetInput {
+    let target = services.practice_learning().create_hunting_target(application::CreateHuntingTargetInput {
             lexical_entry_id: lexical.entry.id.clone(),
             source_kind: HuntingTargetSourceKind::Manual,
             source_id: None,
         })
         .unwrap();
 
-    let located = services
-        .hunting_occurrences(&media.id, Some(&track.id))
+    let located = services.practice_learning().hunting_occurrences(&media.id, Some(&track.id))
         .unwrap();
     assert!(located.indexed);
     assert_eq!(located.occurrences.len(), 1);
@@ -678,16 +664,14 @@ fn hunting_occurrences_use_media_corpus_and_three_way_checks_keep_not_noticed_ev
     assert_eq!(occurrence.target_id, target.id);
     assert_eq!(occurrence.occurrence.display_text, "Hello");
 
-    let session = services
-        .create_practice_session(application::CreatePracticeSession {
+    let session = services.practice_learning().create_practice_session(application::CreatePracticeSession {
             mode: PracticeMode::Extensive,
             media_id: Some(media.id.clone()),
             track_id: Some(track.id.clone()),
             source: Some("hunting_test".into()),
         })
         .unwrap();
-    let recognized = services
-        .submit_hunting_check(application::SubmitHuntingCheckInput {
+    let recognized = services.practice_learning().submit_hunting_check(application::SubmitHuntingCheckInput {
             session_id: session.id.clone(),
             target_id: target.id.clone(),
             occurrence_id: occurrence.occurrence.id.clone(),
@@ -704,8 +688,7 @@ fn hunting_occurrences_use_media_corpus_and_three_way_checks_keep_not_noticed_ev
         ObservationResult::RecognizedInContext
     );
 
-    let not_noticed = services
-        .submit_hunting_check(application::SubmitHuntingCheckInput {
+    let not_noticed = services.practice_learning().submit_hunting_check(application::SubmitHuntingCheckInput {
             session_id: session.id.clone(),
             target_id: target.id,
             occurrence_id: occurrence.occurrence.id.clone(),
@@ -761,8 +744,7 @@ fn practice_attempts_append_channelized_observations_for_success_and_failure() {
         start_ms: None,
         end_ms: None,
     };
-    let correct_item = services
-        .create_practice_item(application::CreatePracticeItem {
+    let correct_item = services.practice_learning().create_practice_item(application::CreatePracticeItem {
             session_id: None,
             kind: PracticeKind::Dictation,
             target: target.clone(),
@@ -771,8 +753,7 @@ fn practice_attempts_append_channelized_observations_for_success_and_failure() {
             anchors: anchors.clone(),
         })
         .unwrap();
-    let correct = services
-        .submit_practice_attempt(application::SubmitPracticeAttempt {
+    let correct = services.practice_learning().submit_practice_attempt(application::SubmitPracticeAttempt {
             item_id: correct_item.id,
             text_answer: "signals".into(),
             create_review_item_on_failure: false,
@@ -780,8 +761,7 @@ fn practice_attempts_append_channelized_observations_for_success_and_failure() {
         .unwrap();
     assert_eq!(correct.result, PracticeResult::Correct);
 
-    let failed_item = services
-        .create_practice_item(application::CreatePracticeItem {
+    let failed_item = services.practice_learning().create_practice_item(application::CreatePracticeItem {
             session_id: None,
             kind: PracticeKind::Dictation,
             target,
@@ -790,8 +770,7 @@ fn practice_attempts_append_channelized_observations_for_success_and_failure() {
             anchors,
         })
         .unwrap();
-    let failed = services
-        .submit_practice_attempt(application::SubmitPracticeAttempt {
+    let failed = services.practice_learning().submit_practice_attempt(application::SubmitPracticeAttempt {
             item_id: failed_item.id,
             text_answer: "single".into(),
             create_review_item_on_failure: false,
@@ -905,8 +884,7 @@ fn five_distinct_review_contexts_require_confirmation_before_status_upgrade() {
     let mut generated = Vec::new();
     for index in 0..5 {
         let sentence_id = SubtitleSentenceId::parse(format!("upgrade-context-{index}")).unwrap();
-        let review = services
-            .create_review_item(application::CreateReviewItem {
+        let review = services.practice_learning().create_review_item(application::CreateReviewItem {
                 source: ReviewSource {
                     kind: ReviewSourceKind::Sentence,
                     id: Some(sentence_id.as_str().into()),
@@ -929,8 +907,7 @@ fn five_distinct_review_contexts_require_confirmation_before_status_upgrade() {
                 prompt_snapshot: format!("context {index}"),
             })
             .unwrap();
-        generated = services
-            .submit_review_attempt(application::SubmitReviewAttempt {
+        generated = services.practice_learning().submit_review_attempt(application::SubmitReviewAttempt {
                 item_id: review.id,
                 rating: ReviewRating::Good,
             })
@@ -1016,8 +993,7 @@ fn listening_projection_flips_on_task_failure_and_blocks_self_report_upgrade() {
 
     // One failed audio review on a never-confirmed word flips the listening
     // view — the "看得懂听不出" discovery (ADR 0019 accepted behavior change).
-    let review = services
-        .create_review_item(application::CreateReviewItem {
+    let review = services.practice_learning().create_review_item(application::CreateReviewItem {
             source: ReviewSource {
                 kind: ReviewSourceKind::LexicalEntry,
                 id: Some(lexical.entry.id.as_str().into()),
@@ -1040,8 +1016,7 @@ fn listening_projection_flips_on_task_failure_and_blocks_self_report_upgrade() {
             prompt_snapshot: "gonna".into(),
         })
         .unwrap();
-    services
-        .submit_review_attempt(application::SubmitReviewAttempt {
+    services.practice_learning().submit_review_attempt(application::SubmitReviewAttempt {
             item_id: review.id,
             rating: ReviewRating::Again,
         })
@@ -1129,8 +1104,7 @@ fn rejecting_upgrade_suggestion_sets_cooldown_without_status_change() {
         })
         .unwrap();
     }
-    let final_review = services
-        .create_review_item(application::CreateReviewItem {
+    let final_review = services.practice_learning().create_review_item(application::CreateReviewItem {
             source: ReviewSource {
                 kind: ReviewSourceKind::Sentence,
                 id: Some("reject-4".into()),
@@ -1153,8 +1127,7 @@ fn rejecting_upgrade_suggestion_sets_cooldown_without_status_change() {
             prompt_snapshot: "reject context".into(),
         })
         .unwrap();
-    let suggestion = services
-        .submit_review_attempt(application::SubmitReviewAttempt {
+    let suggestion = services.practice_learning().submit_review_attempt(application::SubmitReviewAttempt {
             item_id: final_review.id,
             rating: ReviewRating::Good,
         })
@@ -1173,8 +1146,7 @@ fn rejecting_upgrade_suggestion_sets_cooldown_without_status_change() {
             .status,
         Some(LearningStatus::KnownNotRecognized)
     );
-    let next_review = services
-        .create_review_item(application::CreateReviewItem {
+    let next_review = services.practice_learning().create_review_item(application::CreateReviewItem {
             source: ReviewSource {
                 kind: ReviewSourceKind::Sentence,
                 id: Some("reject-next".into()),
@@ -1197,8 +1169,7 @@ fn rejecting_upgrade_suggestion_sets_cooldown_without_status_change() {
             prompt_snapshot: "new context during cooldown".into(),
         })
         .unwrap();
-    let during_cooldown = services
-        .submit_review_attempt(application::SubmitReviewAttempt {
+    let during_cooldown = services.practice_learning().submit_review_attempt(application::SubmitReviewAttempt {
             item_id: next_review.id,
             rating: ReviewRating::Good,
         })
@@ -1221,8 +1192,7 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
     )
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
 
-    let session = services
-        .create_practice_session(application::CreatePracticeSession {
+    let session = services.practice_learning().create_practice_session(application::CreatePracticeSession {
             mode: PracticeMode::Extensive,
             media_id: None,
             track_id: None,
@@ -1250,8 +1220,7 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
         end_ms: Some(2_400),
     }];
 
-    let first = services
-        .capture_listening_inbox_item(application::CaptureListeningInboxItemInput {
+    let first = services.practice_learning().capture_listening_inbox_item(application::CaptureListeningInboxItemInput {
             session_id: session.id.clone(),
             target: target.clone(),
             anchors: anchors.clone(),
@@ -1264,15 +1233,13 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
         .unwrap();
     assert_eq!(first.status, ListeningInboxStatus::Active);
     assert_eq!(
-        services
-            .list_listening_inbox_items(Some(ListeningInboxStatus::Active), 10, 0)
+        services.practice_learning().list_listening_inbox_items(Some(ListeningInboxStatus::Active), 10, 0)
             .unwrap()
             .len(),
         1
     );
 
-    let reviewed = services
-        .process_listening_inbox_item(
+    let reviewed = services.practice_learning().process_listening_inbox_item(
             &first.id,
             application::ProcessListeningInboxItemInput {
                 resolution: ListeningInboxResolution::ReviewItem,
@@ -1291,8 +1258,7 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
         .unwrap();
     assert_eq!(review.source.kind, ReviewSourceKind::ListeningInbox);
 
-    let second = services
-        .capture_listening_inbox_item(application::CaptureListeningInboxItemInput {
+    let second = services.practice_learning().capture_listening_inbox_item(application::CaptureListeningInboxItemInput {
             session_id: session.id.clone(),
             target: target.clone(),
             anchors: anchors.clone(),
@@ -1303,8 +1269,7 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
             expires_in_days: Some(7),
         })
         .unwrap();
-    let micro = services
-        .process_listening_inbox_item(
+    let micro = services.practice_learning().process_listening_inbox_item(
             &second.id,
             application::ProcessListeningInboxItemInput {
                 resolution: ListeningInboxResolution::MicroIntensive,
@@ -1318,7 +1283,7 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
     let practice_item_id = micro.practice_item_id.as_ref().unwrap();
     assert!(repo.get_practice_item(practice_item_id).unwrap().is_some());
 
-    let invalid_summary = services.complete_listening_session(
+    let invalid_summary = services.practice_learning().complete_listening_session(
         &session.id,
         application::CompleteListeningSessionInput {
             comprehension_report: None,
@@ -1335,8 +1300,7 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
         Err(application::ApplicationError::Validation(_))
     ));
 
-    services
-        .complete_listening_session(
+    services.practice_learning().complete_listening_session(
             &session.id,
             application::CompleteListeningSessionInput {
                 comprehension_report: Some(ListeningComprehensionReport::GotTheGist),
