@@ -143,8 +143,7 @@ class SpeechEnhancementWorkflowController {
     }
 
     try {
-      final value = await service.exportTrackLLTimeline(trackId);
-      final exportedDocument = LLTimelineDocument.fromJson(value);
+      final exportedDocument = await service.exportTrackLLTimeline(trackId);
       final preservedArtifacts = previous.document?.artifacts ?? const [];
       // The export endpoint derives fresh rhythm frames from the current word
       // timeline. An older imported document may still carry artifacts that
@@ -281,10 +280,7 @@ class SpeechEnhancementWorkflowController {
     List<String> errors,
   ) async {
     try {
-      final rawAnalyses = await service.trackSenseGroupAnalyses(trackId);
-      final analyses = rawAnalyses
-          .map(SenseGroupAnalysis.fromJson)
-          .toList(growable: false);
+      final analyses = await service.trackSenseGroupAnalyses(trackId);
       final active = analyses.where((a) => a.isActive).firstOrNull;
       if (active == null) return const {};
       final grouped = <String, List<SenseGroup>>{};

@@ -124,6 +124,20 @@ class LLTimelineDocument {
   final List<LLTimelineRhythmFrame> rhythmFrames;
   final List<LLTimelineArtifact> artifacts;
 
+  Map<String, dynamic> toJson() => {
+    'schema': schema,
+    'metadata': metadata.toJson(),
+    'active_word_timeline_id': activeWordTimelineId,
+    'active_phone_timeline_id': activePhoneTimelineId,
+    'active_chunk_timeline_id': activeChunkTimelineId,
+    'rhythm_frames': rhythmFrames
+        .map((value) => value.toJson())
+        .toList(growable: false),
+    'artifacts': artifacts
+        .map((value) => value.toJson())
+        .toList(growable: false),
+  };
+
   bool get importedResource =>
       metadata.trackSource == 'lltimeline-json-v1' ||
       artifacts.isNotEmpty ||
@@ -193,6 +207,21 @@ class LLTimelineRhythmFrame {
   final Duration updatedAt;
 
   bool get isActive => status == 'active';
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'track_id': trackId,
+    'media_id': mediaId,
+    'sentence_id': sentenceId,
+    'parent_word_timeline_id': parentWordTimelineId,
+    'provider_id': providerId,
+    'provider_version': providerVersion,
+    'status': status,
+    'metrics_json': metricsJson.toJson(),
+    'rhythm_frame': rhythmFrame.toJson(),
+    'created_at_ms': createdAt.inMilliseconds,
+    'updated_at_ms': updatedAt.inMilliseconds,
+  };
 }
 
 class LLTimelineMetadata {
@@ -235,6 +264,19 @@ class LLTimelineMetadata {
   final Map<String, dynamic> extra;
 
   String? get trackSource => extra['track_source'] as String?;
+
+  Map<String, dynamic> toJson() => {
+    'created_at_ms': createdAt.inMilliseconds,
+    'generator': {
+      'id': generatorId,
+      'version': generatorVersion,
+      'mode': generatorMode,
+    },
+    'media': {'title': mediaTitle, 'fingerprint': mediaFingerprint},
+    'language': language,
+    'human_reviewed': humanReviewed,
+    'extra': extra,
+  };
 }
 
 class LLTimelineArtifact {
@@ -257,6 +299,13 @@ class LLTimelineArtifact {
   final String? providerId;
   final String? providerVersion;
   final Map<String, dynamic> payload;
+
+  Map<String, dynamic> toJson() => {
+    'kind': kind,
+    'provider_id': providerId,
+    'provider_version': providerVersion,
+    'payload': payload,
+  };
 }
 
 Duration? _durationFromNullableMs(int? value) =>

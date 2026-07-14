@@ -291,9 +291,9 @@ class ResourceActionsCoordinator {
       );
       if (location == null) return;
       final document = await service.exportTrackLLTimeline(track.id);
-      await File(
-        location.path,
-      ).writeAsString(const JsonEncoder.withIndent('  ').convert(document));
+      await File(location.path).writeAsString(
+        const JsonEncoder.withIndent('  ').convert(document.toJson()),
+      );
       if (isMounted()) player.setStatus('Exported LLTimeline resource');
     } catch (error) {
       if (isMounted()) player.setStatus('LLTimeline export failed: $error');

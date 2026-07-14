@@ -421,6 +421,21 @@ void main() {
     expect(connectedRef.actualStructure, isNull);
     expect(document.rhythmFrameForSentence('missing'), isNull);
     expect(document.importedResource, true);
+    final roundTrip = LLTimelineDocument.fromJson(document.toJson());
+    expect(roundTrip.schema, document.schema);
+    expect(
+      roundTrip.metadata.mediaFingerprint,
+      document.metadata.mediaFingerprint,
+    );
+    expect(roundTrip.rhythmFrames.single.id, 'rhythm-1');
+    expect(
+      roundTrip
+          .rhythmFrameForSentence('sentence-1')
+          ?.connectedSpeechRefs
+          .single
+          .surfaceText,
+      'could have',
+    );
   });
 
   test('parses phone timeline sound analysis for grouped ribbon display', () {

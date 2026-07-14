@@ -58,7 +58,7 @@ extension SubtitlesApi on LocalApi {
             as Map<String, dynamic>,
       );
 
-  Future<List<Map<String, dynamic>>> coldStartWords(
+  Future<List<ColdStartWordCandidate>> coldStartWords(
     String trackId, {
     int limit = 20,
   }) async =>
@@ -67,7 +67,11 @@ extension SubtitlesApi on LocalApi {
                 '/v1/subtitles/${Uri.encodeComponent(trackId)}/cold-start-words?limit=$limit',
               ))
               as List<dynamic>)
-          .cast<Map<String, dynamic>>();
+          .map(
+            (value) =>
+                ColdStartWordCandidate.fromJson(value as Map<String, dynamic>),
+          )
+          .toList(growable: false);
 
   Future<Map<String, dynamic>> archiveSubtitle(String trackId) async =>
       (await _request(
@@ -90,12 +94,14 @@ extension SubtitlesApi on LocalApi {
           ))
           as Map<String, dynamic>;
 
-  Future<Map<String, dynamic>> exportTrackLLTimeline(String trackId) async =>
-      (await _request(
-            'GET',
-            '/v1/subtitles/${Uri.encodeComponent(trackId)}/lltimeline/export',
-          ))
-          as Map<String, dynamic>;
+  Future<LLTimelineDocument> exportTrackLLTimeline(String trackId) async =>
+      LLTimelineDocument.fromJson(
+        (await _request(
+              'GET',
+              '/v1/subtitles/${Uri.encodeComponent(trackId)}/lltimeline/export',
+            ))
+            as Map<String, dynamic>,
+      );
 
   Future<String> exportSubtitleSrt(String trackId) async {
     final request = await _client.getUrl(

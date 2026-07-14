@@ -109,7 +109,7 @@ extension TimelinesApi on LocalApi {
           ))
           as Map<String, dynamic>;
 
-  Future<List<Map<String, dynamic>>> trackSenseGroupAnalyses(
+  Future<List<SenseGroupAnalysis>> trackSenseGroupAnalyses(
     String trackId,
   ) async =>
       ((await _request(
@@ -117,9 +117,13 @@ extension TimelinesApi on LocalApi {
                 '/v1/subtitles/${Uri.encodeComponent(trackId)}/sense-group-analyses',
               ))
               as List<dynamic>)
-          .cast<Map<String, dynamic>>();
+          .map(
+            (value) =>
+                SenseGroupAnalysis.fromJson(value as Map<String, dynamic>),
+          )
+          .toList(growable: false);
 
-  Future<List<Map<String, dynamic>>> trackSenseGroupAnalysisSummaries(
+  Future<List<SenseGroupAnalysisSummary>> trackSenseGroupAnalysisSummaries(
     String trackId,
   ) async =>
       ((await _request(
@@ -127,45 +131,54 @@ extension TimelinesApi on LocalApi {
                 '/v1/subtitles/${Uri.encodeComponent(trackId)}/sense-group-analyses/summary',
               ))
               as List<dynamic>)
-          .cast<Map<String, dynamic>>();
+          .map(
+            (value) => SenseGroupAnalysisSummary.fromJson(
+              value as Map<String, dynamic>,
+            ),
+          )
+          .toList(growable: false);
 
-  Future<Map<String, dynamic>> generateSenseGroupAnalysis(
+  Future<SenseGroupAnalysis> generateSenseGroupAnalysis(
     String trackId, {
     String status = 'candidate',
-  }) async =>
-      (await _request(
-            'POST',
-            '/v1/subtitles/${Uri.encodeComponent(trackId)}/sense-group-analyses',
-            {'status': status},
-          ))
-          as Map<String, dynamic>;
+  }) async => SenseGroupAnalysis.fromJson(
+    (await _request(
+          'POST',
+          '/v1/subtitles/${Uri.encodeComponent(trackId)}/sense-group-analyses',
+          {'status': status},
+        ))
+        as Map<String, dynamic>,
+  );
 
-  Future<Map<String, dynamic>> activateSenseGroupAnalysis(
+  Future<SenseGroupAnalysis> activateSenseGroupAnalysis(
     String analysisId,
-  ) async =>
-      (await _request(
-            'POST',
-            '/v1/sense-group-analyses/${Uri.encodeComponent(analysisId)}/activate',
-          ))
-          as Map<String, dynamic>;
+  ) async => SenseGroupAnalysis.fromJson(
+    (await _request(
+          'POST',
+          '/v1/sense-group-analyses/${Uri.encodeComponent(analysisId)}/activate',
+        ))
+        as Map<String, dynamic>,
+  );
 
-  Future<Map<String, dynamic>> archiveSenseGroupAnalysis(
+  Future<SenseGroupAnalysis> archiveSenseGroupAnalysis(
     String analysisId,
-  ) async =>
-      (await _request(
-            'POST',
-            '/v1/sense-group-analyses/${Uri.encodeComponent(analysisId)}/archive',
-          ))
-          as Map<String, dynamic>;
+  ) async => SenseGroupAnalysis.fromJson(
+    (await _request(
+          'POST',
+          '/v1/sense-group-analyses/${Uri.encodeComponent(analysisId)}/archive',
+        ))
+        as Map<String, dynamic>,
+  );
 
-  Future<Map<String, dynamic>> deleteSenseGroupAnalysis(
+  Future<SenseGroupAnalysis> deleteSenseGroupAnalysis(
     String analysisId,
-  ) async =>
-      (await _request(
-            'DELETE',
-            '/v1/sense-group-analyses/${Uri.encodeComponent(analysisId)}',
-          ))
-          as Map<String, dynamic>;
+  ) async => SenseGroupAnalysis.fromJson(
+    (await _request(
+          'DELETE',
+          '/v1/sense-group-analyses/${Uri.encodeComponent(analysisId)}',
+        ))
+        as Map<String, dynamic>,
+  );
 
   Future<List<PhoneTimelineSummary>> trackPhoneTimelineSummaries(
     String trackId,
