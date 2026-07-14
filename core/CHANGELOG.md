@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-14 12:10 CST: 机械拆分 `dictionary-provider/src/lib.rs`（1425 → 15 行 lib +
+  按上游资源分模块：cedict 523（中文词典+拼音发音，共享 CC-CEDICT 索引）/ ecdict 271 /
+  edict 253 / free_dictionary 155 / support 10（共享 `ResourceSignature`）/ tests 271）。
+  逐字搬移；跨模块可见性最小升级：`resolve`/`numbered_pinyin_to_marks`/
+  `parse_free_dictionary_phonetics`/`ResourceSignature` 升 `pub(crate)`（测试与共享所需）。
+  doc comment 逐行对拍与原文件完全一致。`cargo test` 8 全绿（与基线同数）、workspace
+  测试零失败、clippy 告警 28 与基线持平。
+
 - 2026-07-14 11:40 CST: 机械拆分 `models/types.dart`（1657 → 12 行 library + 5 个 part
   文件：lexical 504 / pronunciation 452 / media_fit 283 / dictionary 237 / diagnosis 171
   行），沿 `models/timeline.dart` 既有 part 模式，40 个类逐字搬移、消费端 import 零改动。
