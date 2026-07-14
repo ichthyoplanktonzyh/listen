@@ -71,7 +71,12 @@ void main() {
     final calls = <String>[];
     final api = _fakeApi((method, path, body) {
       calls.add('$method $path $body');
-      return (statusCode: 200, body: '{}');
+      return (
+        statusCode: 200,
+        body:
+            '{"original":"ran","normalized":"run","provider":"user",'
+            '"version":"v1","user_corrected":true}',
+      );
     });
     final learning = LearningController()
       ..setSelectedToken(

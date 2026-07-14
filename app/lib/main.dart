@@ -730,16 +730,17 @@ class _PlayerScreenState extends State<PlayerScreen>
         settingsController: settingsController,
       );
 
-  Future<void> _openPhrase(PhraseCandidate candidate, Cue cue) => openPhraseFlow(
-    context: context,
-    api: api,
-    playerController: playerController,
-    subtitleController: subtitleController,
-    settingsController: settingsController,
-    learningController: learningController,
-    candidate: candidate,
-    cue: cue,
-  );
+  Future<void> _openPhrase(PhraseCandidate candidate, Cue cue) =>
+      openPhraseFlow(
+        context: context,
+        api: api,
+        playerController: playerController,
+        subtitleController: subtitleController,
+        settingsController: settingsController,
+        learningController: learningController,
+        candidate: candidate,
+        cue: cue,
+      );
 
   Future<void> _correctCurrentLemma() => correctCurrentLemmaFlow(
     context: context,
@@ -808,7 +809,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     final service = api;
     if (service == null || !mounted) return;
     final currentTrackId = subtitleController.primaryTrack?.id;
-    Map<String, dynamic> payload;
+    L1SpecialtyView payload;
     try {
       payload = await service.l1SpecialtyOccurrences(
         difficultyKind: hint.difficultyKind,
@@ -832,10 +833,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     if (action == null || !mounted) return;
     if (action.action == 'play') {
-      await _openSlicePlayback(action.occurrence);
+      await _openSlicePlayback(action.occurrence.toJson());
       return;
     }
-    final sentenceId = action.occurrence['sentence_id'] as String?;
+    final sentenceId = action.occurrence.sentenceId;
     final cues = subtitleController.primaryTrack?.cues ?? const <Cue>[];
     final cueIndex = cues.indexWhere((cue) => cue.id == sentenceId);
     if (cueIndex < 0) return;
@@ -970,7 +971,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     final endMs = entry.playbackEndMs;
     if (mediaId == null || startMs == null || endMs == null) return;
     final media = await api?.readMedia(mediaId);
-    final path = media?['path'] as String?;
+    final path = media?.path;
     if (path == null || !File(path).existsSync()) {
       playerController.setStatus(
         'Review source media is unavailable for shadowing',

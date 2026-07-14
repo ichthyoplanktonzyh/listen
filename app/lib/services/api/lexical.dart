@@ -105,17 +105,18 @@ extension LexicalApi on LocalApi {
             as Map<String, dynamic>,
       );
 
-  Future<Map<String, dynamic>> setCapabilityOverride(
+  Future<LexicalCapabilityProfile> setCapabilityOverride(
     String entryId,
     String capability, {
     String? conclusion,
-  }) async =>
-      (await _request(
-            'PUT',
-            '/v1/lexical-entries/${Uri.encodeComponent(entryId)}/capability/$capability',
-            {'conclusion': conclusion},
-          ))
-          as Map<String, dynamic>;
+  }) async => LexicalCapabilityProfile.fromJson(
+    (await _request(
+          'PUT',
+          '/v1/lexical-entries/${Uri.encodeComponent(entryId)}/capability/$capability',
+          {'conclusion': conclusion},
+        ))
+        as Map<String, dynamic>,
+  );
 
   Future<LexicalEntryDetails> updateLexicalLearningContent(
     String entryId, {
@@ -264,20 +265,23 @@ extension LexicalApi on LocalApi {
         as Map<String, dynamic>,
   );
 
-  Future<Map<String, dynamic>> learnerProfile() async =>
-      (await _request('GET', '/v1/learner/profile')) as Map<String, dynamic>;
+  Future<LearnerProfileView> learnerProfile() async =>
+      LearnerProfileView.fromJson(
+        (await _request('GET', '/v1/learner/profile')) as Map<String, dynamic>,
+      );
 
-  Future<Map<String, dynamic>> updateLearnerProfile({
+  Future<LearnerProfileView> updateLearnerProfile({
     String? l1Language,
     String? uiLanguage,
-  }) async =>
-      (await _request('PUT', '/v1/learner/profile', {
-            'l1_language': l1Language,
-            'ui_language': uiLanguage,
-          }))
-          as Map<String, dynamic>;
+  }) async => LearnerProfileView.fromJson(
+    (await _request('PUT', '/v1/learner/profile', {
+          'l1_language': l1Language,
+          'ui_language': uiLanguage,
+        }))
+        as Map<String, dynamic>,
+  );
 
-  Future<Map<String, dynamic>> l1SpecialtyOccurrences({
+  Future<L1SpecialtyView> l1SpecialtyOccurrences({
     required String difficultyKind,
     required String language,
     String? trackId,
@@ -292,8 +296,10 @@ extension LexicalApi on LocalApi {
     final encoded = query.entries
         .map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}')
         .join('&');
-    return (await _request('GET', '/v1/learner/l1-specialty?$encoded'))
-        as Map<String, dynamic>;
+    return L1SpecialtyView.fromJson(
+      (await _request('GET', '/v1/learner/l1-specialty?$encoded'))
+          as Map<String, dynamic>,
+    );
   }
 
   Future<Diagnosis> diagnose(String sentenceId) async => Diagnosis.fromJson(
@@ -339,17 +345,18 @@ extension LexicalApi on LocalApi {
         as Map<String, dynamic>,
   );
 
-  Future<Map<String, dynamic>> correctLemma(
+  Future<LexicalNormalization> correctLemma(
     String original,
     String corrected, {
     required String language,
-  }) async =>
-      (await _request('POST', '/v1/lexical-normalization/correct', {
-            'language': language,
-            'original': original,
-            'corrected': corrected,
-          }))
-          as Map<String, dynamic>;
+  }) async => LexicalNormalization.fromJson(
+    (await _request('POST', '/v1/lexical-normalization/correct', {
+          'language': language,
+          'original': original,
+          'corrected': corrected,
+        }))
+        as Map<String, dynamic>,
+  );
 
   Future<List<PhraseCandidate>> phraseCandidates(String sentenceId) async =>
       ((await _request(

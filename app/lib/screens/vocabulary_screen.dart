@@ -204,7 +204,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   Future<void> _playCorpus(CorpusOccurrence occurrence) async {
     final mediaId = occurrence.mediaId;
     if (mediaId == null) return;
-    Map<String, dynamic> media;
+    MediaItem media;
     try {
       media = await widget.api.readMedia(mediaId);
     } catch (_) {
@@ -216,8 +216,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     }
     await _playOccurrenceMap({
       'media_id': mediaId,
-      'media_fingerprint_snapshot': media['fingerprint'],
-      'media_title_snapshot': media['title'] ?? '',
+      'media_fingerprint_snapshot': media.fingerprint,
+      'media_title_snapshot': media.title,
       'sentence_text_snapshot': occurrence.sourceSnapshot,
       'original_form': occurrence.displayText,
       'start_ms_snapshot': occurrence.startMs,
@@ -257,8 +257,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
               ? occurrence.displayText
               : entry.displayForm,
           'sentence_text': occurrence.sourceSnapshot,
-          'media_title': media['title'] ?? '',
-          'media_fingerprint': media['fingerprint'],
+          'media_title': media.title,
+          'media_fingerprint': media.fingerprint,
           'start_ms': occurrence.startMs,
           'end_ms': occurrence.endMs,
         },

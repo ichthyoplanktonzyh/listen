@@ -2,8 +2,9 @@ import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 
-typedef ReadOccurrenceMedia =
-    Future<Map<String, dynamic>> Function(String mediaId);
+import '../models/types.dart';
+
+typedef ReadOccurrenceMedia = Future<MediaItem> Function(String mediaId);
 typedef FingerprintOccurrenceMedia = Future<String> Function(String path);
 typedef RegisterOccurrenceMedia = Future<void> Function(String path);
 typedef PickOccurrenceMedia =
@@ -106,8 +107,8 @@ class OccurrenceMediaResolver {
     if (linkedMediaId != null) {
       try {
         final linkedMedia = await readMedia(linkedMediaId);
-        final linkedPath = linkedMedia['path'];
-        if (linkedPath is String && await fileExists(linkedPath)) {
+        final linkedPath = linkedMedia.path;
+        if (await fileExists(linkedPath)) {
           return ResolvedOccurrenceMedia(
             path: linkedPath,
             usesCurrentMedia: false,

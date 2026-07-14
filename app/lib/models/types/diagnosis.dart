@@ -117,9 +117,7 @@ class Diagnosis {
         .map((value) => DiagnosisHint.fromJson(value as Map<String, dynamic>))
         .toList(growable: false),
     l1Hints: ((json['l1_hints'] as List<dynamic>?) ?? const [])
-        .map(
-          (value) => L1DiagnosisHint.fromJson(value as Map<String, dynamic>),
-        )
+        .map((value) => L1DiagnosisHint.fromJson(value as Map<String, dynamic>))
         .toList(growable: false),
     l1Context: json['l1_context'] == null
         ? null
@@ -174,3 +172,53 @@ class Diagnosis {
 // ──────────────────────────────────────────────
 // Phrase Candidate
 // ──────────────────────────────────────────────
+class LearnerProfileView {
+  const LearnerProfileView({
+    this.l1Language,
+    this.uiLanguage,
+    this.activeL2Language,
+    this.updatedAtMs,
+  });
+
+  factory LearnerProfileView.fromJson(Map<String, dynamic> json) =>
+      LearnerProfileView(
+        l1Language: json['l1_language'] as String?,
+        uiLanguage: json['ui_language'] as String?,
+        activeL2Language: json['active_l2_language'] as String?,
+        updatedAtMs: json['updated_at_ms'] as int?,
+      );
+
+  final String? l1Language;
+  final String? uiLanguage;
+  final String? activeL2Language;
+  final int? updatedAtMs;
+}
+
+class L1SpecialtyView {
+  const L1SpecialtyView({
+    required this.difficultyKind,
+    required this.families,
+    required this.indexed,
+    required this.occurrences,
+  });
+
+  factory L1SpecialtyView.fromJson(Map<String, dynamic> json) =>
+      L1SpecialtyView(
+        difficultyKind: json['difficulty_kind'] as String,
+        families: ((json['families'] as List<dynamic>?) ?? const [])
+            .cast<String>()
+            .toList(growable: false),
+        indexed: json['indexed'] as bool? ?? false,
+        occurrences: ((json['occurrences'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) =>
+                  CorpusOccurrence.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+      );
+
+  final String difficultyKind;
+  final List<String> families;
+  final bool indexed;
+  final List<CorpusOccurrence> occurrences;
+}

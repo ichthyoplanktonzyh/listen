@@ -22,14 +22,21 @@ void main() {
             seenMethod = method;
             seenPath = path;
             seenBody = body;
-            return (statusCode: 200, body: '{"id":"m1","title":"Clip"}');
+            return (
+              statusCode: 200,
+              body:
+                  '{"id":"m1","path":"/clip.mp4","fingerprint":"fp",'
+                  '"title":"Clip","kind":"video","duration":1000,'
+                  '"availability":"available","created_at_ms":1,'
+                  '"updated_at_ms":2}',
+            );
           },
         );
 
         final media = await api.readMedia('m1');
 
-        expect(media['id'], 'm1');
-        expect(media['title'], 'Clip');
+        expect(media.id, 'm1');
+        expect(media.title, 'Clip');
         expect(seenMethod, 'GET');
         expect(seenPath, '/v1/media/m1');
         expect(seenBody, isNull, reason: 'a GET carries no request body');

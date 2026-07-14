@@ -121,13 +121,13 @@ class MediaSessionCoordinator {
       await previousProgressSave;
       final media = await api?.registerMedia(path);
       if (media != null) {
-        final id = media['id'] as String;
+        final id = media.id;
         final saved = await api?.readProgress(id);
         player.setMedia(
           id: id,
           path: path,
-          title: media['title'] as String,
-          fingerprint: media['fingerprint'] as String,
+          title: media.title,
+          fingerprint: media.fingerprint,
         );
         if (saved != null && saved > Duration.zero) {
           await adapter.seek(saved);

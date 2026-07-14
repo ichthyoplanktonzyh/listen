@@ -28,14 +28,15 @@ extension SpeechAnalysisApi on LocalApi {
         as Map<String, dynamic>,
   );
 
-  Future<Map<String, dynamic>> trackSyntaxAnalysisStatus(
+  Future<TrackSyntaxAnalysisView> trackSyntaxAnalysisStatus(
     String trackId,
-  ) async =>
-      (await _request(
-            'GET',
-            '/v1/subtitles/${Uri.encodeComponent(trackId)}/syntax-analysis',
-          ))
-          as Map<String, dynamic>;
+  ) async => TrackSyntaxAnalysisView.fromJson(
+    (await _request(
+          'GET',
+          '/v1/subtitles/${Uri.encodeComponent(trackId)}/syntax-analysis',
+        ))
+        as Map<String, dynamic>,
+  );
 
   Future<WordPronunciation> lookupPronunciation(String word) async =>
       WordPronunciation.fromJson(
@@ -87,7 +88,7 @@ extension SpeechAnalysisApi on LocalApi {
           )
           .toList(growable: false);
 
-  Future<List<Map<String, dynamic>>> trackChunkPartitions(
+  Future<List<SentenceChunkPartition>> trackChunkPartitions(
     String trackId,
   ) async =>
       ((await _request(
@@ -95,7 +96,11 @@ extension SpeechAnalysisApi on LocalApi {
                 '/v1/subtitles/${Uri.encodeComponent(trackId)}/chunk-partitions',
               ))
               as List<dynamic>)
-          .cast<Map<String, dynamic>>();
+          .map(
+            (value) =>
+                SentenceChunkPartition.fromJson(value as Map<String, dynamic>),
+          )
+          .toList(growable: false);
 
   Future<List<Map<String, dynamic>>> phoneticAnalysisModels() async =>
       ((await _request('GET', '/v1/phonetic-analysis/models')) as List<dynamic>)

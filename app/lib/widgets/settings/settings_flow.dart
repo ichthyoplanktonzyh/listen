@@ -29,7 +29,7 @@ Future<void> showAppSettings({
     if (api != null) {
       try {
         final profile = await api.learnerProfile();
-        l1Language = (profile['l1_language'] as String?) ?? '';
+        l1Language = profile.l1Language ?? '';
       } catch (_) {
         // Sidecar unavailable — the dialog still opens with L1 unset.
       }

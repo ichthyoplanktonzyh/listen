@@ -1,6 +1,19 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/occurrence_media_resolver.dart';
+import 'package:llplayer_next/models/types.dart';
+
+MediaItem mediaAt(String path) => MediaItem(
+  id: 'media-1',
+  path: path,
+  fingerprint: 'expected-fingerprint',
+  title: 'Source',
+  kind: 'video',
+  durationMs: 1000,
+  availability: 'available',
+  createdAtMs: 1,
+  updatedAtMs: 1,
+);
 
 Map<String, dynamic> occurrence({String? mediaId}) {
   final linked = mediaId == null
@@ -15,7 +28,7 @@ void main() {
     () async {
       var pickerCalled = false;
       final resolver = OccurrenceMediaResolver(
-        readMedia: (_) async => {'path': '/linked/source.mp4'},
+        readMedia: (_) async => mediaAt('/linked/source.mp4'),
         fingerprintFile: (_) async => throw StateError('not needed'),
         registerMedia: (_) async => throw StateError('not needed'),
         pickFile: (_) async {
@@ -69,7 +82,7 @@ void main() {
     () async {
       var registeredPath = '';
       final resolver = OccurrenceMediaResolver(
-        readMedia: (_) async => {'path': '/missing/original.mp4'},
+        readMedia: (_) async => mediaAt('/missing/original.mp4'),
         fingerprintFile: (_) async => 'expected-fingerprint',
         registerMedia: (path) async => registeredPath = path,
         pickFile: (_) async => XFile('/relocated/source.mp4'),

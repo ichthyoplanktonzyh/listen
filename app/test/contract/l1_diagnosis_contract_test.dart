@@ -75,6 +75,19 @@ void main() {
   });
 
   group('LearnerProfileView', () {
+    test('profile language axes stay independently typed', () {
+      final profile = LearnerProfileView.fromJson(const {
+        'l1_language': 'ja',
+        'ui_language': 'zh',
+        'active_l2_language': null,
+        'updated_at_ms': 42,
+      });
+      expect(profile.l1Language, 'ja');
+      expect(profile.uiLanguage, 'zh');
+      expect(profile.activeL2Language, isNull);
+      expect(profile.updatedAtMs, 42);
+    });
+
     test('l1-specialty payload occurrences reuse the corpus DTO', () {
       const payload = {
         'difficulty_kind': 'weak_function_words',
@@ -96,9 +109,9 @@ void main() {
           },
         ],
       };
-      final occurrence = CorpusOccurrence.fromJson(
-        (payload['occurrences']! as List).first as Map<String, dynamic>,
-      );
+      final specialty = L1SpecialtyView.fromJson(payload);
+      final occurrence = specialty.occurrences.single;
+      expect(specialty.indexed, isTrue);
       expect(occurrence.kind, 'connected_speech');
       expect(occurrence.normalizedKey, 'rhythm.weak_group');
     });

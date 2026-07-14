@@ -266,12 +266,9 @@ class SpeechEnhancementWorkflowController {
       'chunk',
       errors,
     );
-    return Map<String, SentenceChunkPartition>.fromEntries(
-      partitions.map((raw) {
-        final partition = SentenceChunkPartition.fromJson(raw);
-        return MapEntry(partition.sentenceId, partition);
-      }),
-    );
+    return {
+      for (final partition in partitions) partition.sentenceId: partition,
+    };
   }
 
   Future<Map<String, List<SenseGroup>>> _loadSenseGroups(

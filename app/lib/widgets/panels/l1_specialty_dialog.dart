@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../models/types.dart';
 import '../../theme/listen_theme.dart';
 
 /// One selected action from the specialty clip list: `play` opens the slice
@@ -10,7 +11,7 @@ class L1SpecialtyAction {
   const L1SpecialtyAction(this.action, this.occurrence);
 
   final String action;
-  final Map<String, dynamic> occurrence;
+  final CorpusOccurrence occurrence;
 }
 
 /// Same-family clip list for one L1 difficulty category (Phase 3.9). Pure
@@ -19,12 +20,11 @@ class L1SpecialtyAction {
 Future<L1SpecialtyAction?> showL1SpecialtyDialog({
   required BuildContext context,
   required String difficultyKindName,
-  required Map<String, dynamic> payload,
+  required L1SpecialtyView payload,
   required String? currentTrackId,
 }) {
-  final occurrences = ((payload['occurrences'] as List<dynamic>?) ?? const [])
-      .cast<Map<String, dynamic>>();
-  final indexed = payload['indexed'] as bool? ?? false;
+  final occurrences = payload.occurrences;
+  final indexed = payload.indexed;
   return showDialog<L1SpecialtyAction>(
     context: context,
     builder: (context) {
@@ -59,16 +59,16 @@ Future<L1SpecialtyAction?> showL1SpecialtyDialog({
                       final occurrence = occurrences[index];
                       final sameTrack =
                           currentTrackId != null &&
-                          occurrence['track_id'] == currentTrackId;
+                          occurrence.trackId == currentTrackId;
                       return ListTile(
                         dense: true,
                         title: Text(
-                          occurrence['display_text'] as String? ?? '',
+                          occurrence.displayText,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         subtitle: Text(
-                          occurrence['source_snapshot'] as String? ?? '',
+                          occurrence.sourceSnapshot,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -82,9 +82,9 @@ Future<L1SpecialtyAction?> showL1SpecialtyDialog({
                             IconButton(
                               tooltip: l.text('l1ListenAgain'),
                               icon: const Icon(Icons.play_circle_outline),
-                              onPressed: () => Navigator.of(context).pop(
-                                L1SpecialtyAction('play', occurrence),
-                              ),
+                              onPressed: () => Navigator.of(
+                                context,
+                              ).pop(L1SpecialtyAction('play', occurrence)),
                             ),
                             IconButton(
                               tooltip: l.text('l1SpecialtyPractice'),

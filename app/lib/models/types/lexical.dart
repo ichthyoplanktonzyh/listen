@@ -464,6 +464,31 @@ class LexicalCapabilityProfile {
   };
 }
 
+class LexicalNormalization {
+  const LexicalNormalization({
+    required this.original,
+    required this.normalized,
+    required this.provider,
+    required this.version,
+    required this.userCorrected,
+  });
+
+  factory LexicalNormalization.fromJson(Map<String, dynamic> json) =>
+      LexicalNormalization(
+        original: json['original'] as String,
+        normalized: json['normalized'] as String,
+        provider: json['provider'] as String,
+        version: json['version'] as String,
+        userCorrected: json['user_corrected'] as bool,
+      );
+
+  final String original;
+  final String normalized;
+  final String provider;
+  final String version;
+  final bool userCorrected;
+}
+
 Map<String, dynamic> _asMap(Object? value) =>
     value is Map ? Map<String, dynamic>.from(value) : const {};
 
