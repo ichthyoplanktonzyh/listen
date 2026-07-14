@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-14 09:05 CST: main.dart 拆分 S7b —— 字幕资源类对话框/导航流程迁往
+  `widgets/flows/subtitle_resource_flows.dart`（沿用 `media_import_flows.dart` 顶层
+  flow 函数既有模式，非 coordinator）：`deleteSubtitleResourceFlow`/
+  `exportSubtitleResourceFlow`/`generateSubtitlesFlow`/`openTranscriptionCenterFlow`/
+  `openPhoneticAnalysisCenterFlow`/`openSubtitleResourcesFlow`/`openColdStartMarkingFlow`。
+  宿主保留同名薄 wrapper 转调（R3：最小化 build 改动面）；`_generateSubtitles` 的
+  setState 任务登记改注入 `recordTaskStatus` 回调（刻意不复用 `_setTaskStatus`，
+  后者会额外覆盖 player status 文本，保持逐字语义）。新增
+  `test/subtitle_resource_flows_test.dart`（4 例 widget test：删除取消/确认发
+  DELETE、导出 null-api 不弹窗、导出双格式渲染与 dismissal）。main.dart
+  1842 → 1737 行。`flutter analyze` 零问题、`flutter test` 334 全通过（330 + 4）。
+
 - 2026-07-14 08:52 CST: main.dart 拆分 S7a —— 抽出 `SubtitleSourcesCoordinator`（仅上下文
   无关子集）：`ensureCurrentPronunciation`/`analyzePhonetics`/`handleDrop`/`isMediaPath`/
   `isSubtitlePath` 逐字搬到 `lib/controllers/subtitle_sources_coordinator.dart`，注入
