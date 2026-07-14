@@ -6,7 +6,8 @@ part of '../api_service.dart';
 extension SpeechAnalysisApi on LocalApi {
   Future<SyntaxCapabilityView> syntaxCapability() async =>
       SyntaxCapabilityView.fromJson(
-        (await _request('GET', '/v1/syntax/capability')) as Map<String, dynamic>,
+        (await _request('GET', '/v1/syntax/capability'))
+            as Map<String, dynamic>,
       );
 
   Future<SyntaxCapabilityView> syntaxCapabilityAction(String action) async =>
@@ -18,12 +19,14 @@ extension SpeechAnalysisApi on LocalApi {
   Future<TrackSyntaxAnalysisView> runTrackSyntaxAnalysis(
     String trackId, {
     bool force = false,
-  }) async =>
-      TrackSyntaxAnalysisView.fromJson((await _request(
-            'POST',
-            '/v1/subtitles/${Uri.encodeComponent(trackId)}/syntax-analysis',
-            {'force': force},
-          )) as Map<String, dynamic>);
+  }) async => TrackSyntaxAnalysisView.fromJson(
+    (await _request(
+          'POST',
+          '/v1/subtitles/${Uri.encodeComponent(trackId)}/syntax-analysis',
+          {'force': force},
+        ))
+        as Map<String, dynamic>,
+  );
 
   Future<Map<String, dynamic>> trackSyntaxAnalysisStatus(
     String trackId,
@@ -43,33 +46,46 @@ extension SpeechAnalysisApi on LocalApi {
             as Map<String, dynamic>,
       );
 
-  Future<List<Map<String, dynamic>>> pronunciationProviders() async =>
+  Future<List<PronunciationProvider>> pronunciationProviders() async =>
       ((await _request('GET', '/v1/pronunciation/providers')) as List<dynamic>)
-          .cast<Map<String, dynamic>>();
+          .map(
+            (value) =>
+                PronunciationProvider.fromJson(value as Map<String, dynamic>),
+          )
+          .toList(growable: false);
 
-  Future<Map<String, dynamic>> analyzePronunciation(String sentenceId) async =>
-      (await _request('POST', '/v1/pronunciation/analyze-sentence', {
-            'sentence_id': sentenceId,
-          }))
-          as Map<String, dynamic>;
+  Future<PronunciationAnalysis> analyzePronunciation(String sentenceId) async =>
+      PronunciationAnalysis.fromJson(
+        (await _request('POST', '/v1/pronunciation/analyze-sentence', {
+              'sentence_id': sentenceId,
+            }))
+            as Map<String, dynamic>,
+      );
 
-  Future<List<Map<String, dynamic>>> trackPronunciation(String trackId) async =>
+  Future<List<PronunciationAnalysis>> trackPronunciation(
+    String trackId,
+  ) async =>
       ((await _request(
                 'GET',
                 '/v1/subtitles/${Uri.encodeComponent(trackId)}/pronunciation',
               ))
               as List<dynamic>)
-          .cast<Map<String, dynamic>>();
+          .map(
+            (value) =>
+                PronunciationAnalysis.fromJson(value as Map<String, dynamic>),
+          )
+          .toList(growable: false);
 
-  Future<List<Map<String, dynamic>>> trackPhoneticAnalyses(
-    String trackId,
-  ) async =>
+  Future<List<PhoneticAnalysis>> trackPhoneticAnalyses(String trackId) async =>
       ((await _request(
                 'GET',
                 '/v1/subtitles/${Uri.encodeComponent(trackId)}/phonetic-analyses',
               ))
               as List<dynamic>)
-          .cast<Map<String, dynamic>>();
+          .map(
+            (value) => PhoneticAnalysis.fromJson(value as Map<String, dynamic>),
+          )
+          .toList(growable: false);
 
   Future<List<Map<String, dynamic>>> trackChunkPartitions(
     String trackId,

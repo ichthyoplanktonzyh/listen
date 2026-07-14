@@ -1,6 +1,5 @@
 import '../models/task_status.dart';
 import '../models/timeline.dart';
-import '../models/types.dart';
 import '../services/api_service.dart';
 import 'player_controller.dart';
 import 'settings_controller.dart';
@@ -88,12 +87,9 @@ class SubtitleSourcesCoordinator {
       return;
     }
     try {
-      final value = await service.analyzePronunciation(cue.id);
+      final analysis = await service.analyzePronunciation(cue.id);
       if (isMounted() && subtitle.currentPrimaryCue?.id == cue.id) {
-        subtitle.setSentencePronunciation(
-          cue.id,
-          PronunciationAnalysis.fromJson(value),
-        );
+        subtitle.setSentencePronunciation(cue.id, analysis);
       }
     } catch (_) {
       // Pronunciation is optional and must never block playback.

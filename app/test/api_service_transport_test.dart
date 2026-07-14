@@ -9,29 +9,32 @@ import 'package:llplayer_next/services/api_service.dart';
 /// mapping can be unit tested. (Full method/controller coverage builds on this.)
 void main() {
   group('LocalApi transport seam', () {
-    test('routes a GET through the transport and decodes the JSON body', () async {
-      String? seenMethod;
-      String? seenPath;
-      String? seenBody;
-      final api = LocalApi.withTransport(
-        baseUrl: 'http://test',
-        token: 'tok',
-        transport: (method, path, body) async {
-          seenMethod = method;
-          seenPath = path;
-          seenBody = body;
-          return (statusCode: 200, body: '{"id":"m1","title":"Clip"}');
-        },
-      );
+    test(
+      'routes a GET through the transport and decodes the JSON body',
+      () async {
+        String? seenMethod;
+        String? seenPath;
+        String? seenBody;
+        final api = LocalApi.withTransport(
+          baseUrl: 'http://test',
+          token: 'tok',
+          transport: (method, path, body) async {
+            seenMethod = method;
+            seenPath = path;
+            seenBody = body;
+            return (statusCode: 200, body: '{"id":"m1","title":"Clip"}');
+          },
+        );
 
-      final media = await api.readMedia('m1');
+        final media = await api.readMedia('m1');
 
-      expect(media['id'], 'm1');
-      expect(media['title'], 'Clip');
-      expect(seenMethod, 'GET');
-      expect(seenPath, '/v1/media/m1');
-      expect(seenBody, isNull, reason: 'a GET carries no request body');
-    });
+        expect(media['id'], 'm1');
+        expect(media['title'], 'Clip');
+        expect(seenMethod, 'GET');
+        expect(seenPath, '/v1/media/m1');
+        expect(seenBody, isNull, reason: 'a GET carries no request body');
+      },
+    );
 
     test('maps a non-2xx response to an HttpException', () async {
       final api = LocalApi.withTransport(
@@ -108,6 +111,23 @@ void main() {
       expect(diagnosis.hints, isEmpty);
       expect(diagnosis.l1Hints, isEmpty);
       expect(seenPath, '/v1/sentences/sentence%2F1/diagnosis');
+    });
+
+    test('subtitle resource decodes before leaving the client', () async {
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'tok',
+        transport: (method, path, body) async => (
+          statusCode: 200,
+          body: '{"id":"track-1","media_id":"media-1","sentences":[]}',
+        ),
+      );
+
+      final track = await api.readSubtitle('track/1');
+
+      expect(track.id, 'track-1');
+      expect(track.mediaId, 'media-1');
+      expect(track.cues, isEmpty);
     });
   });
 }

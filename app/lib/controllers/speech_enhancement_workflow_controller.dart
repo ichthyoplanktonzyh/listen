@@ -101,15 +101,10 @@ class SpeechEnhancementWorkflowController {
       timingsBySentence: _groupWordTimings(timings),
       chunkPartitionsBySentence: partitions,
       senseGroupsBySentence: senseGroups,
-      pronunciationBySentence: Map<String, PronunciationAnalysis>.fromEntries(
-        analyses.map((value) {
-          final analysis = PronunciationAnalysis.fromJson(value);
-          return MapEntry(analysis.sentenceId, analysis);
-        }),
-      ),
-      pronunciationProviders: providers
-          .map(PronunciationProvider.fromJson)
-          .toList(growable: false),
+      pronunciationBySentence: {
+        for (final analysis in analyses) analysis.sentenceId: analysis,
+      },
+      pronunciationProviders: providers,
       phoneticAnalysisBySentence: soundPatterns,
       errors: errors,
     );
@@ -127,30 +122,21 @@ class SpeechEnhancementWorkflowController {
     LLTimelineDocument? document;
 
     try {
-      final values = await service.trackWordTimelineSummaries(trackId);
-      summaries = values
-          .map((raw) => WordTimelineSummary.fromJson(raw))
-          .toList(growable: false);
+      summaries = await service.trackWordTimelineSummaries(trackId);
     } catch (error) {
       errors.add('summary: $error');
       summaries = previous.wordSummaries;
     }
 
     try {
-      final values = await service.trackPhoneTimelineSummaries(trackId);
-      phoneSummaries = values
-          .map((raw) => PhoneTimelineSummary.fromJson(raw))
-          .toList(growable: false);
+      phoneSummaries = await service.trackPhoneTimelineSummaries(trackId);
     } catch (error) {
       errors.add('phone summary: $error');
       phoneSummaries = previous.phoneSummaries;
     }
 
     try {
-      final values = await service.trackChunkTimelineSummaries(trackId);
-      chunkSummaries = values
-          .map((raw) => ChunkTimelineSummary.fromJson(raw))
-          .toList(growable: false);
+      chunkSummaries = await service.trackChunkTimelineSummaries(trackId);
     } catch (error) {
       errors.add('chunk summary: $error');
       chunkSummaries = previous.chunkSummaries;
@@ -237,14 +223,15 @@ class SpeechEnhancementWorkflowController {
       'phone',
       errors,
     );
-    final latest = latestPhoneticAnalysesBySentence(phoneticAnalyses);
-    return latest.map(
-      (sentenceId, value) =>
-          MapEntry(sentenceId, PhoneticAnalysis.fromJson(value)),
-    );
+    final latest = <String, PhoneticAnalysis>{};
+    for (final analysis in phoneticAnalyses) {
+      final sentenceId = analysis.sentenceId;
+      if (sentenceId != null) latest.putIfAbsent(sentenceId, () => analysis);
+    }
+    return latest;
   }
 
-  Future<List<Map<String, dynamic>>> _loadPronunciationEnhancements(
+  Future<List<PronunciationAnalysis>> _loadPronunciationEnhancements(
     LocalApi service,
     String trackId,
     List<String> errors,
@@ -311,8 +298,8 @@ class SpeechEnhancementWorkflowController {
     }
   }
 
-  Future<List<Map<String, dynamic>>> _loadOptionalResourceCapability(
-    Future<List<Map<String, dynamic>>> Function() loader,
+  Future<List<T>> _loadOptionalResourceCapability<T>(
+    Future<List<T>> Function() loader,
     String label,
     List<String> errors,
   ) async {
@@ -324,12 +311,9 @@ class SpeechEnhancementWorkflowController {
     }
   }
 
-  Map<String, List<WordTiming>> _groupWordTimings(
-    List<Map<String, dynamic>> timings,
-  ) {
+  Map<String, List<WordTiming>> _groupWordTimings(List<WordTiming> timings) {
     final grouped = <String, List<WordTiming>>{};
-    for (final raw in timings) {
-      final value = WordTiming.fromJson(raw);
+    for (final value in timings) {
       grouped.putIfAbsent(value.sentenceId, () => []).add(value);
     }
     for (final values in grouped.values) {

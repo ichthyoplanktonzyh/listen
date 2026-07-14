@@ -18,9 +18,10 @@ extension SubtitlesApi on LocalApi {
           }))
           as Map<String, dynamic>;
 
-  Future<List<Map<String, dynamic>>> mediaSubtitles(String mediaId) async =>
+  Future<List<SubtitleTrack>> mediaSubtitles(String mediaId) async =>
       ((await _request('GET', '/v1/media/$mediaId/subtitles')) as List<dynamic>)
-          .cast<Map<String, dynamic>>();
+          .map((value) => SubtitleTrack.fromJson(value as Map<String, dynamic>))
+          .toList(growable: false);
 
   Future<Map<String, dynamic>> importLLTimeline(
     Map<String, dynamic> document,
@@ -40,17 +41,22 @@ extension SubtitlesApi on LocalApi {
           ))
           as Map<String, dynamic>;
 
-  Future<Map<String, dynamic>> readSubtitle(String trackId) async =>
-      (await _request('GET', '/v1/subtitles/${Uri.encodeComponent(trackId)}'))
-          as Map<String, dynamic>;
+  Future<SubtitleTrack> readSubtitle(String trackId) async =>
+      SubtitleTrack.fromJson(
+        (await _request('GET', '/v1/subtitles/${Uri.encodeComponent(trackId)}'))
+            as Map<String, dynamic>,
+      );
 
   /// Dual-dimension content fit for the track's media (ADR 0018). Served
   /// from the backend cache; safe to call on every resource refresh.
   Future<ContentDifficultyProfile> trackContentFit(String trackId) async =>
-      ContentDifficultyProfile.fromJson((await _request(
-            'GET',
-            '/v1/subtitles/${Uri.encodeComponent(trackId)}/content-fit',
-          )) as Map<String, dynamic>);
+      ContentDifficultyProfile.fromJson(
+        (await _request(
+              'GET',
+              '/v1/subtitles/${Uri.encodeComponent(trackId)}/content-fit',
+            ))
+            as Map<String, dynamic>,
+      );
 
   Future<List<Map<String, dynamic>>> coldStartWords(
     String trackId, {

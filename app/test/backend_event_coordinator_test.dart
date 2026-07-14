@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/backend_event_coordinator.dart';
 import 'package:llplayer_next/models/task_status.dart';
+import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/types.dart';
 
 /// Records every callback the coordinator fires so each SSE dispatch branch can
@@ -14,7 +15,7 @@ class _Recorder {
   int loadWordEntriesCalls = 0;
   final List<String> loadedTimelineResources = [];
   final List<String> readSubtitleCalls = [];
-  final List<Map<String, dynamic>> generatedTracks = [];
+  final List<SubtitleTrack> generatedTracks = [];
   final List<bool> generatedSecondary = [];
   final List<String> loadedSpeechEnhancements = [];
   final List<String> statuses = [];
@@ -22,7 +23,10 @@ class _Recorder {
   final List<String> updatedForms = [];
   final List<LexicalEntry> updatedEntries = [];
 
-  Map<String, dynamic> subtitleToReturn = const {'id': 'gen-track'};
+  SubtitleTrack subtitleToReturn = const SubtitleTrack(
+    id: 'gen-track',
+    cues: [],
+  );
   Object? subtitleReadError;
 
   BackendEventCoordinator build() => BackendEventCoordinator(
@@ -101,7 +105,7 @@ void main() {
       () async {
         final recorder = _Recorder()
           ..mediaId = 'media-1'
-          ..subtitleToReturn = {'id': 'gen-1'};
+          ..subtitleToReturn = const SubtitleTrack(id: 'gen-1', cues: []);
         recorder.build().handle({
           'event': 'transcription-job-changed',
           'payload': {
@@ -115,9 +119,7 @@ void main() {
         await pumpEventQueue();
 
         expect(recorder.readSubtitleCalls, ['gen-1']);
-        expect(recorder.generatedTracks, [
-          {'id': 'gen-1'},
-        ]);
+        expect(recorder.generatedTracks.single.id, 'gen-1');
         expect(recorder.generatedSecondary, [true]);
         expect(
           recorder.taskStatuses.single.kind,

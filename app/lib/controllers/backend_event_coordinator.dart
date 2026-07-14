@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../models/backend_event.dart';
 import '../models/task_status.dart';
+import '../models/timeline.dart';
 import '../models/types.dart';
 
 class BackendEventCoordinator {
@@ -23,8 +24,8 @@ class BackendEventCoordinator {
   final String? Function() currentPrimaryTrackId;
   final Future<void> Function() loadWordEntries;
   final Future<void> Function(String trackId) loadTimelineResource;
-  final Future<Map<String, dynamic>> Function(String trackId) readSubtitle;
-  final Future<void> Function(Map<String, dynamic> track, bool secondary)
+  final Future<SubtitleTrack> Function(String trackId) readSubtitle;
+  final Future<void> Function(SubtitleTrack track, bool secondary)
   loadGeneratedTrack;
   final Future<void> Function(String trackId) loadSpeechEnhancements;
   final void Function(String status) setStatus;

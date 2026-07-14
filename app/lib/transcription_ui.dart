@@ -4,11 +4,12 @@ import 'dart:io';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
+import 'models/timeline.dart';
 import 'services/api_service.dart';
 import 'localization.dart';
 
 typedef LoadGeneratedTrack =
-    Future<void> Function(Map<String, dynamic> track, bool secondary);
+    Future<void> Function(SubtitleTrack track, bool secondary);
 
 Future<bool> showGenerateSubtitles({
   required BuildContext context,

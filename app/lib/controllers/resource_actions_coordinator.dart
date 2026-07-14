@@ -125,10 +125,7 @@ class ResourceActionsCoordinator {
       return;
     }
     try {
-      final values = await service.mediaSubtitles(mediaId);
-      final tracks = values
-          .map((raw) => SubtitleTrack.fromJson(raw))
-          .toList(growable: false);
+      final tracks = await service.mediaSubtitles(mediaId);
       final capabilities = await _loadSubtitleResourceCapabilities(
         service,
         tracks,
@@ -174,11 +171,11 @@ class ResourceActionsCoordinator {
             wordTimingCount: wordTimings.length,
             chunkCount: chunkSummaries.fold<int>(
               0,
-              (total, raw) => total + (raw['chunk_count'] as int? ?? 0),
+              (total, summary) => total + summary.chunkCount,
             ),
             phoneCount: phoneSummaries.fold<int>(
               0,
-              (total, raw) => total + (raw['phone_count'] as int? ?? 0),
+              (total, summary) => total + summary.phoneCount,
             ),
             error: errors.isEmpty ? null : errors.join('; '),
           ),
@@ -188,8 +185,8 @@ class ResourceActionsCoordinator {
     return Map<String, SubtitleResourceCapabilities>.fromEntries(entries);
   }
 
-  Future<List<Map<String, dynamic>>> _loadOptionalResourceCapability(
-    Future<List<Map<String, dynamic>>> Function() loader,
+  Future<List<T>> _loadOptionalResourceCapability<T>(
+    Future<List<T>> Function() loader,
     String label,
     List<String> errors,
   ) async {

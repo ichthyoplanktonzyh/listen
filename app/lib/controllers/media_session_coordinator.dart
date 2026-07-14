@@ -297,12 +297,11 @@ class MediaSessionCoordinator {
   }
 
   Future<void> loadGeneratedTrack(
-    Map<String, dynamic> value,
+    SubtitleTrack imported,
     bool secondary,
   ) async {
     await adapter.disableNativeSubtitles();
     if (!isMounted()) return;
-    final imported = SubtitleTrack.fromJson(value);
     if (secondary) {
       subtitle.setSecondaryTrack(imported);
       subtitle.setCurrentSecondaryCue(
