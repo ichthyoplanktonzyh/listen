@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-14 09:35 CST: main.dart 拆分 S8 —— 词汇/学习类对话框与导航流程迁往
+  `widgets/flows/learning_flows.dart`（沿用 flows 顶层函数模式）：
+  `openLearningAssetsFlow`/`openLearningResourcesFlow`/`showCurrentPhraseCandidatesFlow`/
+  `openPhraseFlow`/`correctCurrentLemmaFlow`/`showVocabularyFlow`/`openReviewQueueFlow`/
+  `openCoachDashboardFlow`/`importWordListFlow`。宿主保留同名薄 wrapper。顺带修复新
+  widget test 暴露的潜在缺陷：correct-lemma 对话框此前在退场动画期间就 dispose
+  `TextEditingController`（debug 断言隐患），改由 `_LemmaCorrectionDialog` 自持生命周期。
+  新增 `test/learning_flows_test.dart`（3 例：无选中 token no-op、修正词元发
+  POST /lexical-normalization/correct、null api 不导航）。main.dart 1737 → 1551 行。
+  `flutter analyze` 零问题、`flutter test` 337 全通过（334 + 3）。
+
 - 2026-07-14 09:05 CST: main.dart 拆分 S7b —— 字幕资源类对话框/导航流程迁往
   `widgets/flows/subtitle_resource_flows.dart`（沿用 `media_import_flows.dart` 顶层
   flow 函数既有模式，非 coordinator）：`deleteSubtitleResourceFlow`/
