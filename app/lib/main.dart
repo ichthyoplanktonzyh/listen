@@ -34,6 +34,7 @@ import 'controllers/practice_controller.dart';
 import 'controllers/resource_actions_coordinator.dart';
 import 'controllers/speech_enhancement_workflow_controller.dart';
 import 'controllers/subtitle_controller.dart';
+import 'controllers/subtitle_sources_coordinator.dart';
 import 'controllers/vocabulary_actions_coordinator.dart';
 import 'controllers/settings_controller.dart';
 import 'controllers/slice_player_controller.dart';
@@ -191,6 +192,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     settings: settingsController,
     extensiveListening: extensiveListeningController,
   );
+  late final subtitleSources = SubtitleSourcesCoordinator(
+    player: playerController,
+    subtitle: subtitleController,
+    settings: settingsController,
+  );
 
   // ── Local UI state (not managed by controllers) ──
   String get status => playerController.status;
@@ -298,6 +304,14 @@ class _PlayerScreenState extends State<PlayerScreen>
       requestRebuild: () => setState(() {}),
       openMediaPath: mediaSession.openMediaPath,
       openMedia: mediaSession.openMedia,
+    );
+    subtitleSources.bind(
+      getApi: () => api,
+      isMounted: () => mounted,
+      showSnackBar: _showSnackBar,
+      setTaskStatus: _setTaskStatus,
+      openMediaPath: mediaSession.openMediaPath,
+      openSubtitlePath: mediaSession.openSubtitlePath,
     );
     unawaited(_connectApi());
     unawaited(_loadSettings());
@@ -550,7 +564,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _lastPrimaryCueId = primaryCue?.id;
       unawaited(_refreshDiagnosis());
       unawaited(vocabularyActions.loadPhraseCandidates(primaryCue));
-      unawaited(_ensureCurrentPronunciation(primaryCue));
+      unawaited(subtitleSources.ensureCurrentPronunciation(primaryCue));
     }
     playerController.setPosition(value);
     huntingSessionController.updatePosition(value);
@@ -674,82 +688,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     mediaSession: mediaSession,
   );
 
-  Future<void> _ensureCurrentPronunciation(Cue? cue) async {
-    final service = api;
-    if (cue == null ||
-        service == null ||
-        subtitleController.pronunciationBySentence.containsKey(cue.id)) {
-      return;
-    }
-    try {
-      final value = await service.analyzePronunciation(cue.id);
-      if (mounted && subtitleController.currentPrimaryCue?.id == cue.id) {
-        subtitleController.setSentencePronunciation(
-          cue.id,
-          PronunciationAnalysis.fromJson(value),
-        );
-      }
-    } catch (_) {
-      // Pronunciation is optional and must never block playback.
-    }
-  }
-
-  Future<void> _analyzePhonetics({required bool wholeTrack}) async {
-    final service = api;
-    final track = subtitleController.primaryTrack;
-    final cue = subtitleController.currentPrimaryCue;
-    if (service == null || track == null || (!wholeTrack && cue == null)) {
-      _showSnackBar('No media or subtitle loaded');
-      return;
-    }
-    try {
-      final models = await service.phoneticAnalysisModels();
-      final preferred = settingsController.settings.phoneticModelId;
-      final model = models.cast<Map<String, dynamic>?>().firstWhere(
-        (value) =>
-            value != null &&
-            (value['id'] == preferred ||
-                (preferred.isEmpty &&
-                    (value['state'] == 'installed' ||
-                        value['state'] == 'custom'))),
-        orElse: () => null,
-      );
-      if (model == null) {
-        throw StateError('No compatible phonetic analysis model is available');
-      }
-      final job = await service.createPhoneticAnalysisJob(
-        trackId: track.id,
-        sentenceId: wholeTrack ? null : cue!.id,
-        modelId: model['id'] as String,
-      );
-      if (mounted) {
-        _setTaskStatus(
-          UserTaskStatus(
-            kind: UserTaskKind.audioAnalysis,
-            state: UserTaskState.working,
-            rawStatus: job['status'] as String? ?? 'queued',
-            progress: 0,
-            targetId: track.id,
-          ),
-        );
-        _showSnackBar('Audio analysis ${job['status']}');
-      }
-    } catch (error) {
-      if (mounted) {
-        _setTaskStatus(
-          UserTaskStatus(
-            kind: UserTaskKind.audioAnalysis,
-            state: UserTaskState.error,
-            rawStatus: 'failed',
-            progress: 0,
-            targetId: track.id,
-          ),
-        );
-        _showSnackBar('Audio analysis failed: $error');
-      }
-    }
-  }
-
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
@@ -806,39 +744,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
-  Future<void> _handleDrop(List<String> paths) async {
-    final media = paths.where(_isMediaPath).toList(growable: false);
-    final subtitles = paths.where(_isSubtitlePath).toList(growable: false);
-    if (media.isNotEmpty) await mediaSession.openMediaPath(media.first);
-    for (final path in subtitles) {
-      if (playerController.mediaId == null || api == null) {
-        playerController.setStatus('Drop or open media before subtitles');
-        return;
-      }
-      await mediaSession.openSubtitlePath(
-        path,
-        secondary: subtitleController.primaryTrack != null,
-      );
-    }
-    if (media.isEmpty && subtitles.isEmpty) {
-      playerController.setStatus('Unsupported dropped file type');
-    }
-  }
-
-  bool _isMediaPath(String path) => const {
-    'mp4',
-    'mkv',
-    'mov',
-    'webm',
-    'm4a',
-    'mp3',
-    'wav',
-    'flac',
-  }.contains(path.split('.').last.toLowerCase());
-
-  bool _isSubtitlePath(String path) =>
-      const {'srt', 'vtt'}.contains(path.split('.').last.toLowerCase());
-
   Future<void> _openOnline() => openOnlineMediaFlow(
     context: context,
     adapter: adapter,
@@ -861,7 +766,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     mediaSession: mediaSession,
     tools: tools,
     api: api,
-    isMediaPath: _isMediaPath,
+    isMediaPath: subtitleSources.isMediaPath,
   );
 
   Future<void> _openSettings() => showAppSettings(
@@ -1613,7 +1518,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                 onDragDone: (details) {
                   setState(() => dragging = false);
                   unawaited(
-                    _handleDrop(
+                    subtitleSources.handleDrop(
                       details.files.map((file) => file.path).toList(),
                     ),
                   );
@@ -1853,7 +1758,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     onOpenMedia: mediaSession.openMedia,
     onLoadSoundReference: settingsController.phoneticAnalysisPreference == 'off'
         ? null
-        : _analyzePhonetics,
+        : subtitleSources.analyzePhonetics,
   );
 
   String _timingQuality(String sentenceId) {
