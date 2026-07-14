@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/types.dart';
 import '../../theme/listen_theme.dart';
+import 'following_structure_viewport.dart';
 
 class ExpectedPronunciationReference extends StatelessWidget {
   const ExpectedPronunciationReference({
@@ -14,6 +15,8 @@ class ExpectedPronunciationReference extends StatelessWidget {
     this.fontSize = 11,
     this.height = 24,
     this.tooltip,
+    this.expandTooltip = 'Show full sentence',
+    this.collapseTooltip = 'Collapse sentence',
   });
 
   final PronunciationAnalysis analysis;
@@ -22,6 +25,8 @@ class ExpectedPronunciationReference extends StatelessWidget {
   final double fontSize;
   final double height;
   final String? tooltip;
+  final String expandTooltip;
+  final String collapseTooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +43,7 @@ class ExpectedPronunciationReference extends StatelessWidget {
         border: Border.all(color: ListenColors.overlayBorder),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: MainAxisSize.max,
         children: [
           Icon(
             Icons.record_voice_over,
@@ -58,26 +63,25 @@ class ExpectedPronunciationReference extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
-          Flexible(
+          Expanded(
             child: items.isEmpty
                 ? _FallbackText(text: fallback, fontSize: fontSize)
-                : SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        for (final item in items)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 4),
-                            child: _PronunciationChip(
-                              item: item,
-                              active: item.tokenIndex == currentTokenIndex,
-                              fontSize: fontSize,
-                              height: height,
-                            ),
-                          ),
-                      ],
+                : FollowingStructureViewport(
+                    activeIndex: items.indexWhere(
+                      (item) => item.tokenIndex == currentTokenIndex,
                     ),
+                    spacing: 4,
+                    expandTooltip: expandTooltip,
+                    collapseTooltip: collapseTooltip,
+                    children: [
+                      for (final item in items)
+                        _PronunciationChip(
+                          item: item,
+                          active: item.tokenIndex == currentTokenIndex,
+                          fontSize: fontSize,
+                          height: height,
+                        ),
+                    ],
                   ),
           ),
         ],

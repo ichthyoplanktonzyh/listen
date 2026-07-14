@@ -39,6 +39,7 @@ Future<void> showAppSettings({
       context: context,
       builder: (_) => SettingsDialog(
         api: api,
+        currentTrackId: subtitleController.primaryTrack?.id,
         language: settingsController.language,
         subtitlePreset: subtitleController.preset,
         primaryFontSize: subtitleController.primaryFontSize,

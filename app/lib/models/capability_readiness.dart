@@ -382,6 +382,17 @@ bool rhythmFrameHasAudioSupport(RhythmFrame frame) =>
     ) ||
     frame.listeningHotspots.any((value) => value.isAudioSupported);
 
+/// C is the observed audible structure, not a fallback presentation of A/B.
+/// Both the loaded sentence resource and the frame itself must carry phone
+/// evidence before the player may render the actual view.
+bool canDisplayActualRhythmFrame(
+  RhythmFrame? frame, {
+  required bool hasPhoneEvidence,
+}) =>
+    frame != null &&
+    hasPhoneEvidence &&
+    frame.quality.phoneEvidenceCoverage > 0;
+
 bool _hasAudioSource(List<String> values) => values.any(
   (value) =>
       value == 'timing' ||

@@ -571,6 +571,7 @@ void main() {
       ),
     );
 
+    await tester.pumpAndSettle();
     await tester.tap(find.text('weak group'));
 
     expect(loopStart, const Duration(milliseconds: 20));

@@ -1,5 +1,9 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/speech_enhancement_workflow_controller.dart';
+import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
 /// Characterizes the graceful-degradation logic of `loadTimelineResource`:
@@ -51,5 +55,56 @@ void main() {
       expect(result.error, isNotNull);
       expect(result.error, contains('warning'));
     });
+
+    test(
+      'keeps fresh rhythm frames while preserving imported artifacts',
+      () async {
+        final controller = SpeechEnhancementWorkflowController();
+        final exported =
+            jsonDecode(
+                  File(
+                    '../../testdata/rhythm-frame-qa/fixture-no-phone-rhythm.lltimeline.json',
+                  ).readAsStringSync(),
+                )
+                as Map<String, dynamic>;
+        final exportedDocument = LLTimelineDocument.fromJson(exported);
+        expect(exportedDocument.rhythmFrames, isNotEmpty);
+        expect(exportedDocument.artifacts, isEmpty);
+
+        final previous = LLTimelineDocument(
+          schema: exportedDocument.schema,
+          metadata: exportedDocument.metadata,
+          activeWordTimelineId: exportedDocument.activeWordTimelineId,
+          activePhoneTimelineId: exportedDocument.activePhoneTimelineId,
+          activeChunkTimelineId: exportedDocument.activeChunkTimelineId,
+          rhythmFrames: const [],
+          artifacts: const [
+            LLTimelineArtifact(
+              kind: 'imported-note',
+              payload: {'source': 'older-import'},
+            ),
+          ],
+        );
+        final api = LocalApi.withTransport(
+          baseUrl: 'http://test',
+          token: 'tok',
+          transport: (method, path, body) async =>
+              path.endsWith('/lltimeline/export')
+              ? (statusCode: 200, body: jsonEncode(exported))
+              : (statusCode: 200, body: '[]'),
+        );
+
+        final result = await controller.loadTimelineResource(
+          service: api,
+          trackId: 't1',
+          previous: ExistingTimelineResourceState(document: previous),
+        );
+
+        expect(result.error, isNull);
+        expect(result.document!.rhythmFrames, isNotEmpty);
+        expect(result.document!.artifacts, hasLength(1));
+        expect(result.document!.artifacts.single.kind, 'imported-note');
+      },
+    );
   });
 }

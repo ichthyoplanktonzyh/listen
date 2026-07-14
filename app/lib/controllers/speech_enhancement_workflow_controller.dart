@@ -159,10 +159,23 @@ class SpeechEnhancementWorkflowController {
     try {
       final value = await service.exportTrackLLTimeline(trackId);
       final exportedDocument = LLTimelineDocument.fromJson(value);
+      final preservedArtifacts = previous.document?.artifacts ?? const [];
+      // The export endpoint derives fresh rhythm frames from the current word
+      // timeline. An older imported document may still carry artifacts that
+      // are not re-emitted by that endpoint, but it must never replace the
+      // freshly exported document wholesale: doing so discards the derived
+      // rhythm frames and makes A/B appear unavailable after transcription.
       document =
-          exportedDocument.artifacts.isEmpty &&
-              previous.document?.artifacts.isNotEmpty == true
-          ? previous.document
+          exportedDocument.artifacts.isEmpty && preservedArtifacts.isNotEmpty
+          ? LLTimelineDocument(
+              schema: exportedDocument.schema,
+              metadata: exportedDocument.metadata,
+              activeWordTimelineId: exportedDocument.activeWordTimelineId,
+              activePhoneTimelineId: exportedDocument.activePhoneTimelineId,
+              activeChunkTimelineId: exportedDocument.activeChunkTimelineId,
+              rhythmFrames: exportedDocument.rhythmFrames,
+              artifacts: preservedArtifacts,
+            )
           : exportedDocument;
     } catch (error) {
       errors.add('export: $error');

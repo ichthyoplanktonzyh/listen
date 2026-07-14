@@ -201,6 +201,35 @@ class LocalApi {
       (await _request('GET', '/v1/subtitles/${Uri.encodeComponent(trackId)}'))
           as Map<String, dynamic>;
 
+  // ── Phase 3.9.3 optional syntax capability ──
+
+  Future<Map<String, dynamic>> syntaxCapability() async =>
+      (await _request('GET', '/v1/syntax/capability')) as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> syntaxCapabilityAction(String action) async =>
+      (await _request('POST', '/v1/syntax/capability/$action', const {}))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> runTrackSyntaxAnalysis(
+    String trackId, {
+    bool force = false,
+  }) async =>
+      (await _request(
+            'POST',
+            '/v1/subtitles/${Uri.encodeComponent(trackId)}/syntax-analysis',
+            {'force': force},
+          ))
+          as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> trackSyntaxAnalysisStatus(
+    String trackId,
+  ) async =>
+      (await _request(
+            'GET',
+            '/v1/subtitles/${Uri.encodeComponent(trackId)}/syntax-analysis',
+          ))
+          as Map<String, dynamic>;
+
   /// Media library for triage (Phase 3.5): every registered media with
   /// cached fit facts, user triage intent, and familiar-material mark.
   Future<List<dynamic>> listMediaLibrary() async =>
@@ -228,16 +257,16 @@ class LocalApi {
     String retention = 'unknown',
   }) async =>
       (await _request('POST', '/v1/llm/providers', {
-        'display_name': displayName,
-        'adapter_kind': adapterKind,
-        'base_url': baseUrl,
-        'model_id': modelId,
-        'allowed_uses': allowedUses,
-        'retention': retention,
-        if (protocolVersion != null && protocolVersion.isNotEmpty)
-          'protocol_version': protocolVersion,
-        if (secret != null && secret.isNotEmpty) 'secret': secret,
-      }))
+            'display_name': displayName,
+            'adapter_kind': adapterKind,
+            'base_url': baseUrl,
+            'model_id': modelId,
+            'allowed_uses': allowedUses,
+            'retention': retention,
+            if (protocolVersion != null && protocolVersion.isNotEmpty)
+              'protocol_version': protocolVersion,
+            if (secret != null && secret.isNotEmpty) 'secret': secret,
+          }))
           as Map<String, dynamic>;
 
   /// Deletes a provider and removes its credential from the secure store.
