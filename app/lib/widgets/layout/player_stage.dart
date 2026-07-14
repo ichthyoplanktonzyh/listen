@@ -239,6 +239,18 @@ class _PlayerStageState extends State<PlayerStage> {
                                           .currentPrimaryCue!
                                           .id] ??
                                       const [],
+                                  wordTimings:
+                                      subtitleController
+                                          .timingsBySentence[subtitleController
+                                          .currentPrimaryCue!
+                                          .id] ??
+                                      const [],
+                                  mediaPosition:
+                                      settingsController.chunkHighlightActive
+                                      ? playerController.position
+                                      : null,
+                                  subtitleOffset:
+                                      subtitleController.primarySubtitleOffset,
                                   onWord: _openWord,
                                   onPhrase: _openPhrase,
                                   onChunk: _seekChunk,

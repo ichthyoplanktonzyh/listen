@@ -453,6 +453,32 @@ class SenseGroup {
   };
 }
 
+/// Projects a text-only sense group through sentence-local word timings.
+///
+/// The input does not need to be ordered. A partial projection is valid as
+/// long as at least one timing belongs to the group's inclusive token span.
+({int startMs, int endMs})? senseGroupPlaybackRange(
+  SenseGroup group,
+  List<WordTiming> timings,
+) {
+  int? startMs;
+  int? endMs;
+  for (final timing in timings) {
+    if (timing.sentenceId != group.sentenceId ||
+        timing.tokenIndex < group.startTokenIndex ||
+        timing.tokenIndex > group.endTokenIndex) {
+      continue;
+    }
+    final timingStartMs = timing.start.inMilliseconds;
+    final timingEndMs = timing.end.inMilliseconds;
+    if (startMs == null || timingStartMs < startMs) startMs = timingStartMs;
+    if (endMs == null || timingEndMs > endMs) endMs = timingEndMs;
+  }
+  return startMs == null || endMs == null
+      ? null
+      : (startMs: startMs, endMs: endMs);
+}
+
 class SenseGroupAnalysis {
   const SenseGroupAnalysis({
     required this.id,

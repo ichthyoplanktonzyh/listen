@@ -115,6 +115,49 @@ const _groupingSenseGroups = [
   ),
 ];
 
+const _groupingWordTimings = [
+  WordTiming(
+    sentenceId: 'sentence-1',
+    tokenIndex: 0,
+    start: Duration.zero,
+    end: Duration(milliseconds: 350),
+    source: 'test',
+    provider: 'test',
+  ),
+  WordTiming(
+    sentenceId: 'sentence-1',
+    tokenIndex: 2,
+    start: Duration(milliseconds: 400),
+    end: Duration(milliseconds: 900),
+    source: 'test',
+    provider: 'test',
+  ),
+  WordTiming(
+    sentenceId: 'sentence-1',
+    tokenIndex: 4,
+    start: Duration(milliseconds: 1000),
+    end: Duration(milliseconds: 1350),
+    source: 'test',
+    provider: 'test',
+  ),
+  WordTiming(
+    sentenceId: 'sentence-1',
+    tokenIndex: 6,
+    start: Duration(milliseconds: 1400),
+    end: Duration(milliseconds: 1700),
+    source: 'test',
+    provider: 'test',
+  ),
+  WordTiming(
+    sentenceId: 'sentence-1',
+    tokenIndex: 8,
+    start: Duration(milliseconds: 1800),
+    end: Duration(milliseconds: 2300),
+    source: 'test',
+    provider: 'test',
+  ),
+];
+
 void main() {
   test('OpenSubtitles media hash follows the 64-bit file algorithm', () async {
     final directory = await Directory.systemTemp.createTemp(
@@ -456,9 +499,7 @@ void main() {
     expect(find.byKey(const ValueKey('divergence-marker-2')), findsNothing);
   });
 
-  testWidgets('semantic grouping renders provisional (dashed) capsules', (
-    tester,
-  ) async {
+  testWidgets('semantic grouping renders solid capsules', (tester) async {
     await tester.pumpWidget(
       localized(
         TokenLine(
@@ -474,11 +515,129 @@ void main() {
     );
 
     expect(find.byKey(const ValueKey('sense-container-0')), findsOneWidget);
-    // The dashed provisional outline marks it as a heuristic, not evidence.
-    expect(find.byKey(const ValueKey('sense-provisional-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('sense-provisional-0')), findsNothing);
+    final container = tester.widget<AnimatedContainer>(
+      find.byKey(const ValueKey('sense-container-0')),
+    );
+    expect((container.decoration! as BoxDecoration).border, isNotNull);
     // Semantic mode does not draw the prosodic chunks or divergence markers.
     expect(find.byKey(const ValueKey('chunk-container-0')), findsNothing);
     expect(find.byKey(const ValueKey('divergence-marker-2')), findsNothing);
+  });
+
+  testWidgets('semantic grouping follows the projected playback range', (
+    tester,
+  ) async {
+    Widget line(Duration position) => localized(
+      TokenLine(
+        cue: _groupingCue,
+        profiles: const {},
+        showStyles: true,
+        groupingMode: 'semantic',
+        senseGroups: _groupingSenseGroups,
+        wordTimings: _groupingWordTimings,
+        mediaPosition: position,
+        chunkHighlightStyle: 'bounce',
+        onWord: (_, _) async {},
+      ),
+    );
+
+    await tester.pumpWidget(line(const Duration(milliseconds: 500)));
+    expect(
+      tester
+          .widget<AnimatedScale>(find.byKey(const ValueKey('sense-scale-1')))
+          .scale,
+      1.045,
+    );
+    expect(
+      tester
+          .widget<AnimatedScale>(find.byKey(const ValueKey('sense-scale-3')))
+          .scale,
+      1,
+    );
+
+    await tester.pumpWidget(line(const Duration(milliseconds: 1900)));
+    expect(
+      tester
+          .widget<AnimatedScale>(find.byKey(const ValueKey('sense-scale-1')))
+          .scale,
+      1,
+    );
+    expect(
+      tester
+          .widget<AnimatedScale>(find.byKey(const ValueKey('sense-scale-3')))
+          .scale,
+      1.045,
+    );
+  });
+
+  testWidgets('semantic capsule click seeks through the chunk callback', (
+    tester,
+  ) async {
+    DisplayChunk? selected;
+    await tester.pumpWidget(
+      localized(
+        TokenLine(
+          cue: _groupingCue,
+          profiles: const {},
+          showStyles: true,
+          groupingMode: 'semantic',
+          senseGroups: _groupingSenseGroups,
+          wordTimings: _groupingWordTimings,
+          onWord: (_, _) async {},
+          onChunk: (chunk) async => selected = chunk,
+        ),
+      ),
+    );
+
+    final rect = tester.getRect(
+      find.byKey(const ValueKey('sense-container-1')),
+    );
+    await tester.tapAt(Offset(rect.center.dx, rect.top + 1));
+    expect(selected?.start, const Duration(milliseconds: 400));
+    expect(selected?.end, const Duration(milliseconds: 900));
+  });
+
+  testWidgets('semantic group without a projection is not interactive', (
+    tester,
+  ) async {
+    var seekCount = 0;
+    await tester.pumpWidget(
+      localized(
+        TokenLine(
+          cue: _groupingCue,
+          profiles: const {},
+          showStyles: true,
+          groupingMode: 'semantic',
+          senseGroups: _groupingSenseGroups,
+          wordTimings: _groupingWordTimings.sublist(1),
+          mediaPosition: const Duration(milliseconds: 100),
+          onWord: (_, _) async {},
+          onChunk: (_) async => seekCount += 1,
+        ),
+      ),
+    );
+
+    final firstCapsule = find.byKey(const ValueKey('sense-container-0'));
+    final detector = tester.widget<GestureDetector>(
+      find.ancestor(of: firstCapsule, matching: find.byType(GestureDetector)),
+    );
+    expect(detector.onTap, isNull);
+    expect(
+      tester
+          .widget<AnimatedScale>(find.byKey(const ValueKey('sense-scale-0')))
+          .scale,
+      1,
+    );
+    final rect = tester.getRect(firstCapsule);
+    await tester.tapAt(Offset(rect.center.dx, rect.top + 1));
+    expect(seekCount, 0);
+
+    final secondRect = tester.getRect(
+      find.byKey(const ValueKey('sense-container-1')),
+    );
+    await tester.tapAt(Offset(secondRect.center.dx, secondRect.top + 1));
+    expect(seekCount, 1);
   });
 
   testWidgets('compare grouping overlays divergence markers where layers '

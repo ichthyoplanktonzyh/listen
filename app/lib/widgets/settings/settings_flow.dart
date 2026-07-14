@@ -61,6 +61,8 @@ Future<void> showAppSettings({
         openSubtitlesApiKey: settingsController.openSubtitlesApiKey,
         wordSyncVisible: settingsController.wordSyncVisible,
         groupingMode: settingsController.groupingMode,
+        senseGroupsAvailable:
+            subtitleController.senseGroupsBySentence.isNotEmpty,
         chunkDisplayStyle: settingsController.chunkDisplayStyle,
         highlightCurrentChunk: settingsController.highlightCurrentChunk,
         chunkHighlightStyle: settingsController.chunkHighlightStyle,
