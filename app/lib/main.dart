@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:fvp/fvp.dart' as fvp;
 import 'localization.dart';
-import 'm18_ui.dart';
 import 'player_adapter.dart';
 import 'settings.dart';
 import 'theme/listen_theme.dart';
@@ -44,16 +43,13 @@ import 'models/timeline.dart';
 import 'models/types.dart';
 import 'services/api_service.dart';
 import 'services/external_tools.dart';
-import 'utils/word_list_parser.dart';
 import 'widgets/panels/intensive_practice_window.dart';
 import 'widgets/panels/l1_specialty_dialog.dart';
 import 'widgets/panels/hunting_prompt_card.dart';
 import 'widgets/panels/slice_playback_window.dart';
-import 'widgets/coach/coach_dashboard_screen.dart';
-import 'screens/vocabulary_screen.dart';
-import 'screens/review_queue_screen.dart';
 import 'widgets/player/download_status_bar.dart';
 import 'widgets/app_bar/player_app_bar.dart';
+import 'widgets/flows/learning_flows.dart';
 import 'widgets/flows/manual_review_flow.dart';
 import 'widgets/flows/media_import_flows.dart';
 import 'widgets/flows/subtitle_resource_flows.dart';
@@ -708,116 +704,45 @@ class _PlayerScreenState extends State<PlayerScreen>
     api: api,
   );
 
-  Future<void> _openLearningAssets() async {
-    if (api == null) return;
-    final occurrence = await Navigator.of(context).push<Map<String, dynamic>>(
-      MaterialPageRoute(
-        builder: (_) => LearningAssetsScreen(
-          api: api!,
-          language: settingsController.resolveLearningLanguage(
-            subtitleController.primaryTrack?.language,
-          ),
-        ),
-      ),
-    );
-    if (occurrence != null) await _openSlicePlayback(occurrence);
-  }
+  Future<void> _openLearningAssets() => openLearningAssetsFlow(
+    context: context,
+    api: api,
+    settingsController: settingsController,
+    subtitleController: subtitleController,
+    openSlicePlayback: _openSlicePlayback,
+  );
 
-  Future<void> _openLearningResources() async {
-    if (api == null) return;
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => LearningResourceScreen(api: api!)),
-    );
-  }
+  Future<void> _openLearningResources() =>
+      openLearningResourcesFlow(context: context, api: api);
 
-  Future<void> _showCurrentPhraseCandidates() async {
-    final cue = subtitleController.currentPrimaryCue;
-    if (api == null ||
-        cue == null ||
-        playerController.mediaFingerprint == null) {
-      return;
-    }
-    await showPhraseCandidates(
-      context: context,
-      api: api!,
-      sentenceId: cue.id,
-      source: {
-        'language': settingsController.resolveLearningLanguage(
-          subtitleController.primaryTrack?.language,
-        ),
-        'media_id': playerController.mediaId,
-        'sentence_id': cue.id,
-        'sentence_text': cue.text,
-        'media_title': playerController.mediaTitle ?? '',
-        'media_fingerprint': playerController.mediaFingerprint,
-        'start_ms': cue.start.inMilliseconds,
-        'end_ms': cue.end.inMilliseconds,
-      },
-    );
-  }
-
-  Future<void> _openPhrase(PhraseCandidate candidate, Cue cue) async {
-    if (api == null || playerController.mediaFingerprint == null) return;
-    final canonical = candidate.canonicalForm;
-    final details = await showPhraseCandidate(
-      context: context,
-      api: api!,
-      candidate: candidate.toJson(),
-      initialStatus: learningController.phraseEntries[canonical]?.entry.status,
-      source: {
-        'language': settingsController.resolveLearningLanguage(
-          subtitleController.primaryTrack?.language,
-        ),
-        'media_id': playerController.mediaId,
-        'sentence_id': cue.id,
-        'sentence_text': cue.text,
-        'media_title': playerController.mediaTitle ?? '',
-        'media_fingerprint': playerController.mediaFingerprint,
-        'start_ms': cue.start.inMilliseconds,
-        'end_ms': cue.end.inMilliseconds,
-      },
-    );
-    if (details != null && mounted) {
-      learningController.updateSinglePhraseEntry(
-        canonical,
-        LexicalEntryDetails.fromJson(details),
+  Future<void> _showCurrentPhraseCandidates() =>
+      showCurrentPhraseCandidatesFlow(
+        context: context,
+        api: api,
+        playerController: playerController,
+        subtitleController: subtitleController,
+        settingsController: settingsController,
       );
-      playerController.setStatus('Saved phrase "${candidate.displayForm}"');
-    }
-  }
 
-  Future<void> _correctCurrentLemma() async {
-    final token = learningController.selectedToken;
-    if (api == null || token?.normalized == null) return;
-    final controller = TextEditingController(text: token!.normalized);
-    final corrected = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Correct lemma'),
-        content: TextField(controller: controller),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(l.text('cancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: Text(l.text('save')),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (corrected == null || corrected.isEmpty) return;
-    await api!.correctLemma(
-      token.normalized!,
-      corrected,
-      language: settingsController.resolveLearningLanguage(
-        subtitleController.primaryTrack?.language,
-      ),
-    );
-    if (mounted) playerController.setStatus(l.text('lemmaCorrectionSaved'));
-  }
+  Future<void> _openPhrase(PhraseCandidate candidate, Cue cue) => openPhraseFlow(
+    context: context,
+    api: api,
+    playerController: playerController,
+    subtitleController: subtitleController,
+    settingsController: settingsController,
+    learningController: learningController,
+    candidate: candidate,
+    cue: cue,
+  );
+
+  Future<void> _correctCurrentLemma() => correctCurrentLemmaFlow(
+    context: context,
+    api: api,
+    playerController: playerController,
+    subtitleController: subtitleController,
+    settingsController: settingsController,
+    learningController: learningController,
+  );
 
   Future<void> _searchOpenSubtitles({bool? secondary}) =>
       searchOpenSubtitlesFlow(
@@ -1006,65 +931,32 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _openListeningDictionaryEntry(String entryId) =>
       _showVocabulary(initialEntryId: entryId);
 
-  Future<void> _showVocabulary({String? initialEntryId}) async {
-    final service = api;
-    if (service == null) return;
-    // The dictionary hosts its own slice playback; it only needs a way to
-    // silence the primary player so a slice owns audio focus alone.
-    await Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => VocabularyScreen(
-          api: service,
-          language: settingsController.resolveLearningLanguage(
-            subtitleController.primaryTrack?.language,
-          ),
-          onExport: playbackActions.exportVocabulary,
-          onImport: playbackActions.importVocabulary,
-          huntingController: huntingController,
-          initialEntryId: initialEntryId,
-          onPauseBackgroundPlayback: adapter.pause,
-          onStartShadowing: practiceActions.startExternalShadowing,
-        ),
-      ),
-    );
-  }
+  Future<void> _showVocabulary({String? initialEntryId}) => showVocabularyFlow(
+    context: context,
+    api: api,
+    settingsController: settingsController,
+    subtitleController: subtitleController,
+    playbackActions: playbackActions,
+    practiceActions: practiceActions,
+    huntingController: huntingController,
+    pauseBackgroundPlayback: adapter.pause,
+    initialEntryId: initialEntryId,
+  );
 
-  Future<void> _openReviewQueue() async {
-    final service = api;
-    if (service == null) return;
-    await Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ReviewQueueScreen(
-          api: service,
-          currentMediaId: playerController.mediaId,
-          onPlayRange: (startMs, endMs) => playbackActions.loopRange(
-            startMs,
-            endMs,
-            'Looping review card',
-            labelKey: 'loopReview',
-          ),
-          onStartShadowing: _startReviewShadowing,
-        ),
-      ),
-    );
-  }
+  Future<void> _openReviewQueue() => openReviewQueueFlow(
+    context: context,
+    api: api,
+    playerController: playerController,
+    playbackActions: playbackActions,
+    startReviewShadowing: _startReviewShadowing,
+  );
 
-  Future<void> _openCoachDashboard() async {
-    final service = api;
-    if (service == null) return;
-    await Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CoachDashboardScreen(
-          api: service,
-          onOpenReview: () => unawaited(_openReviewQueue()),
-          onOpenHunting: _openVocabulary,
-        ),
-      ),
-    );
-  }
+  Future<void> _openCoachDashboard() => openCoachDashboardFlow(
+    context: context,
+    api: api,
+    openReviewQueue: _openReviewQueue,
+    openVocabulary: _openVocabulary,
+  );
 
   Future<void> _startReviewShadowing(ReviewQueueEntry entry) async {
     final mediaId = entry.item.source.mediaId;
@@ -1151,92 +1043,14 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
-  Future<void> _importWordList() async {
-    final service = api;
-    if (service == null) return;
-    const group = XTypeGroup(label: 'word list', extensions: ['txt', 'csv']);
-    final file = await openFile(acceptedTypeGroups: [group]);
-    if (file == null) return;
-    final content = await File(file.path).readAsString();
-    final entries = <Map<String, dynamic>>[];
-    var defaultStatus = 'known_recognized';
-    var overwrite = false;
-    try {
-      entries.addAll(
-        parseExternalWordList(
-          content,
-          csv: file.path.toLowerCase().endsWith('.csv'),
-        ),
-      );
-    } on FormatException catch (error) {
-      playerController.setStatus(error.message);
-      return;
-    }
-    if (!mounted) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, refresh) => AlertDialog(
-          title: Text(l.text('previewImport')),
-          content: SizedBox(
-            width: 520,
-            height: 420,
-            child: Column(
-              children: [
-                Text(
-                  '${entries.length} words · ${entries.take(8).map((e) => e['word']).join(', ')}',
-                ),
-                DropdownButtonFormField<String>(
-                  initialValue: defaultStatus,
-                  items:
-                      const [
-                            'unknown_meaning',
-                            'known_not_recognized',
-                            'known_recognized',
-                          ]
-                          .map(
-                            (value) => DropdownMenuItem(
-                              value: value,
-                              child: Text(l.status(value)),
-                            ),
-                          )
-                          .toList(),
-                  onChanged: (value) => refresh(() => defaultStatus = value!),
-                ),
-                CheckboxListTile(
-                  value: overwrite,
-                  title: Text(l.text('overwriteExisting')),
-                  onChanged: (value) =>
-                      refresh(() => overwrite = value ?? false),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: Text(l.text('close')),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(l.text('import')),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (confirmed != true) return;
-    final result = await service.importExternalVocabulary(
-      entries,
-      language: settingsController.resolveLearningLanguage(
-        subtitleController.primaryTrack?.language,
-      ),
-      defaultStatus: defaultStatus,
-      overwriteExisting: overwrite,
-    );
-    await vocabularyActions.loadWordEntries();
-    playerController.setStatus('Imported word list: $result');
-  }
+  Future<void> _importWordList() => importWordListFlow(
+    context: context,
+    api: api,
+    playerController: playerController,
+    subtitleController: subtitleController,
+    settingsController: settingsController,
+    reloadWordEntries: vocabularyActions.loadWordEntries,
+  );
 
   Future<void> _refreshDiagnosis() async {
     final cue = subtitleController.currentPrimaryCue;
