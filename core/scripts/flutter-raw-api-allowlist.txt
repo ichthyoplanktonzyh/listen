@@ -1,29 +1,8 @@
 # Phase 2.24 bounded migration ledger.
 # Format: API part filename:method. New raw resource-client returns fail the
 # architecture guard. Remove an entry when the endpoint gains a domain model.
-coach_llm.dart:learningResources
-coach_llm.dart:installLearningResource
-coach_llm.dart:removeLearningResource
 lexical.dart:listVocabulary
 lexical.dart:importExternalVocabulary
 lexical.dart:exportVocabulary
-speech.dart:phoneticAnalysisModels
-speech.dart:phoneticAnalysisProviders
-speech.dart:installPhoneticAnalysisModel
-speech.dart:phoneticAnalysisJobs
-speech.dart:createPhoneticAnalysisJob
-speech.dart:cancelPhoneticAnalysisJob
-speech.dart:retryPhoneticAnalysisJob
-speech.dart:clearTerminalPhoneticAnalysisJobs
-speech.dart:updatePhoneticFindingFeedback
 subtitles.dart:importLLTimeline
 subtitles.dart:searchOpenSubtitles
-transcription.dart:transcriptionProviders
-transcription.dart:transcriptionModels
-transcription.dart:registerCustomTranscriptionModel
-transcription.dart:cancelTranscriptionModelInstall
-transcription.dart:transcriptionJobs
-transcription.dart:createTranscriptionJob
-transcription.dart:cancelTranscriptionJob
-transcription.dart:retryTranscriptionJob
-transcription.dart:archiveTranscriptionJob

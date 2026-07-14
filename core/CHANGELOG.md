@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- 2026-07-14 18:42 CST: Phase 2.24 typed-resource 第六批：learning resources、transcription
+  providers/models/jobs 与 phonetic providers/models/jobs/feedback 全部改为显式领域模型，
+  三个 UI surface 和 subtitle source coordinator 不再读取匿名 wire maps；raw-return
+  allowlist 从 26 降至 5。Flutter analyze、相关 23 tests 与 architecture guard 全绿。
+
 - 2026-07-14 18:17 CST: Phase 2.24 typed-resource 第五批：LLM provider registration、corpus
   search、subtitle import/lifecycle 与 word/chunk/phone timeline lifecycle 全部在 LocalApi
   seam 解码为既有领域模型，调用侧旧 `fromJson` 被原地删除；raw-return allowlist 从 42 降至
