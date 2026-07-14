@@ -7,16 +7,17 @@ extension SubtitlesApi on LocalApi {
   /// Imports a subtitle file. When [language] is null the core detects the
   /// learning language from the subtitle script (so a Chinese subtitle is
   /// segmented as Chinese), instead of assuming English.
-  Future<Map<String, dynamic>> importSubtitle(
+  Future<SubtitleTrack> importSubtitle(
     String mediaId,
     String path, {
     String? language,
-  }) async =>
-      (await _request('POST', '/v1/media/$mediaId/subtitles', {
-            'path': path,
-            'language': ?language,
-          }))
-          as Map<String, dynamic>;
+  }) async => SubtitleTrack.fromJson(
+    (await _request('POST', '/v1/media/$mediaId/subtitles', {
+          'path': path,
+          'language': ?language,
+        }))
+        as Map<String, dynamic>,
+  );
 
   Future<List<SubtitleTrack>> mediaSubtitles(String mediaId) async =>
       ((await _request('GET', '/v1/media/$mediaId/subtitles')) as List<dynamic>)
@@ -29,17 +30,18 @@ extension SubtitlesApi on LocalApi {
       (await _request('POST', '/v1/lltimeline/import', document))
           as Map<String, dynamic>;
 
-  Future<Map<String, dynamic>> importLLTimelineForMedia(
+  Future<SubtitleTrack> importLLTimelineForMedia(
     String mediaId,
     Map<String, dynamic> document, {
     bool allowMismatch = false,
-  }) async =>
-      (await _request(
-            'POST',
-            '/v1/media/$mediaId/lltimeline/import?allow_mismatch=$allowMismatch',
-            document,
-          ))
-          as Map<String, dynamic>;
+  }) async => SubtitleTrack.fromJson(
+    (await _request(
+          'POST',
+          '/v1/media/$mediaId/lltimeline/import?allow_mismatch=$allowMismatch',
+          document,
+        ))
+        as Map<String, dynamic>,
+  );
 
   Future<SubtitleTrack> readSubtitle(String trackId) async =>
       SubtitleTrack.fromJson(
@@ -73,26 +75,32 @@ extension SubtitlesApi on LocalApi {
           )
           .toList(growable: false);
 
-  Future<Map<String, dynamic>> archiveSubtitle(String trackId) async =>
-      (await _request(
-            'POST',
-            '/v1/subtitles/${Uri.encodeComponent(trackId)}/archive',
-          ))
-          as Map<String, dynamic>;
+  Future<SubtitleTrack> archiveSubtitle(String trackId) async =>
+      SubtitleTrack.fromJson(
+        (await _request(
+              'POST',
+              '/v1/subtitles/${Uri.encodeComponent(trackId)}/archive',
+            ))
+            as Map<String, dynamic>,
+      );
 
-  Future<Map<String, dynamic>> restoreSubtitle(String trackId) async =>
-      (await _request(
-            'POST',
-            '/v1/subtitles/${Uri.encodeComponent(trackId)}/restore',
-          ))
-          as Map<String, dynamic>;
+  Future<SubtitleTrack> restoreSubtitle(String trackId) async =>
+      SubtitleTrack.fromJson(
+        (await _request(
+              'POST',
+              '/v1/subtitles/${Uri.encodeComponent(trackId)}/restore',
+            ))
+            as Map<String, dynamic>,
+      );
 
-  Future<Map<String, dynamic>> deleteSubtitle(String trackId) async =>
-      (await _request(
-            'DELETE',
-            '/v1/subtitles/${Uri.encodeComponent(trackId)}',
-          ))
-          as Map<String, dynamic>;
+  Future<SubtitleTrack> deleteSubtitle(String trackId) async =>
+      SubtitleTrack.fromJson(
+        (await _request(
+              'DELETE',
+              '/v1/subtitles/${Uri.encodeComponent(trackId)}',
+            ))
+            as Map<String, dynamic>,
+      );
 
   Future<LLTimelineDocument> exportTrackLLTimeline(String trackId) async =>
       LLTimelineDocument.fromJson(

@@ -10,7 +10,7 @@ extension CoachLlmApi on LocalApi {
 
   /// Registers or updates a provider. When [secret] is non-empty it is stored
   /// in the OS keychain and never echoed back.
-  Future<Map<String, dynamic>> registerLlmProvider({
+  Future<LlmProviderProfileView> registerLlmProvider({
     required String displayName,
     required String adapterKind,
     required String baseUrl,
@@ -19,19 +19,20 @@ extension CoachLlmApi on LocalApi {
     String? secret,
     String? protocolVersion,
     String retention = 'unknown',
-  }) async =>
-      (await _request('POST', '/v1/llm/providers', {
-            'display_name': displayName,
-            'adapter_kind': adapterKind,
-            'base_url': baseUrl,
-            'model_id': modelId,
-            'allowed_uses': allowedUses,
-            'retention': retention,
-            if (protocolVersion != null && protocolVersion.isNotEmpty)
-              'protocol_version': protocolVersion,
-            if (secret != null && secret.isNotEmpty) 'secret': secret,
-          }))
-          as Map<String, dynamic>;
+  }) async => LlmProviderProfileView.fromJson(
+    (await _request('POST', '/v1/llm/providers', {
+          'display_name': displayName,
+          'adapter_kind': adapterKind,
+          'base_url': baseUrl,
+          'model_id': modelId,
+          'allowed_uses': allowedUses,
+          'retention': retention,
+          if (protocolVersion != null && protocolVersion.isNotEmpty)
+            'protocol_version': protocolVersion,
+          if (secret != null && secret.isNotEmpty) 'secret': secret,
+        }))
+        as Map<String, dynamic>,
+  );
 
   /// Deletes a provider and removes its credential from the secure store.
   Future<void> deleteLlmProvider(String id) async {
@@ -41,15 +42,18 @@ extension CoachLlmApi on LocalApi {
   /// Connectivity + capability test: actually measures structured-output
   /// support against the endpoint. Diagnostic only, never learning feedback.
   Future<LlmProbeResult> probeLlmProvider(String id) async =>
-      LlmProbeResult.fromJson((await _request(
-            'POST',
-            '/v1/llm/providers/${Uri.encodeComponent(id)}/probe',
-          )) as Map<String, dynamic>);
+      LlmProbeResult.fromJson(
+        (await _request(
+              'POST',
+              '/v1/llm/providers/${Uri.encodeComponent(id)}/probe',
+            ))
+            as Map<String, dynamic>,
+      );
 
   /// Searches the rebuildable local corpus projection. A whitespace-free
   /// query matches exact normalized word keys; a multi-word query substring
   /// matches sentence and chunk text.
-  Future<List<Map<String, dynamic>>> searchCorpus({
+  Future<List<CorpusOccurrence>> searchCorpus({
     required String language,
     required String query,
     int limit = 50,
@@ -63,7 +67,11 @@ extension CoachLlmApi on LocalApi {
     ].join('&');
     final values =
         await _request('GET', '/v1/corpus/search?$params') as List<dynamic>;
-    return values.cast<Map<String, dynamic>>();
+    return values
+        .map(
+          (value) => CorpusOccurrence.fromJson(value as Map<String, dynamic>),
+        )
+        .toList(growable: false);
   }
 
   /// Rebuilds the corpus projection for every imported subtitle track and

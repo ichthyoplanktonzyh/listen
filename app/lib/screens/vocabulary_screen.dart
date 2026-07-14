@@ -232,7 +232,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
       language: entry.language,
       query: entry.kind == 'phrase' ? entry.displayForm : entry.normalizedForm,
     );
-    return values.map(CorpusOccurrence.fromJson).toList(growable: false);
+    return values;
   }
 
   Future<bool> _collectCorpus(
@@ -287,7 +287,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
         language: widget.language,
         query: search,
       );
-      results = values.map(CorpusOccurrence.fromJson).toList(growable: false);
+      results = values;
     } catch (_) {
       results = const [];
     }

@@ -36,23 +36,26 @@ extension TimelinesApi on LocalApi {
             as Map<String, dynamic>,
       );
 
-  Future<Map<String, dynamic>> createTrackWordTimeline(
+  Future<WordTimeline> createTrackWordTimeline(
     String trackId,
     Map<String, dynamic> payload,
-  ) async =>
-      (await _request(
-            'POST',
-            '/v1/subtitles/${Uri.encodeComponent(trackId)}/word-timelines',
-            payload,
-          ))
-          as Map<String, dynamic>;
+  ) async => WordTimeline.fromJson(
+    (await _request(
+          'POST',
+          '/v1/subtitles/${Uri.encodeComponent(trackId)}/word-timelines',
+          payload,
+        ))
+        as Map<String, dynamic>,
+  );
 
-  Future<Map<String, dynamic>> activateWordTimeline(String timelineId) async =>
-      (await _request(
-            'POST',
-            '/v1/word-timelines/${Uri.encodeComponent(timelineId)}/activate',
-          ))
-          as Map<String, dynamic>;
+  Future<WordTimeline> activateWordTimeline(String timelineId) async =>
+      WordTimeline.fromJson(
+        (await _request(
+              'POST',
+              '/v1/word-timelines/${Uri.encodeComponent(timelineId)}/activate',
+            ))
+            as Map<String, dynamic>,
+      );
 
   Future<List<ChunkTimelineSummary>> trackChunkTimelineSummaries(
     String trackId,
@@ -77,37 +80,44 @@ extension TimelinesApi on LocalApi {
             as Map<String, dynamic>,
       );
 
-  Future<Map<String, dynamic>> generateChunkTimeline(
+  Future<ChunkTimeline> generateChunkTimeline(
     String trackId, {
     String status = 'candidate',
-  }) async =>
-      (await _request(
-            'POST',
-            '/v1/subtitles/${Uri.encodeComponent(trackId)}/chunk-timelines',
-            {'status': status},
-          ))
-          as Map<String, dynamic>;
+  }) async => ChunkTimeline.fromJson(
+    (await _request(
+          'POST',
+          '/v1/subtitles/${Uri.encodeComponent(trackId)}/chunk-timelines',
+          {'status': status},
+        ))
+        as Map<String, dynamic>,
+  );
 
-  Future<Map<String, dynamic>> activateChunkTimeline(String timelineId) async =>
-      (await _request(
-            'POST',
-            '/v1/chunk-timelines/${Uri.encodeComponent(timelineId)}/activate',
-          ))
-          as Map<String, dynamic>;
+  Future<ChunkTimeline> activateChunkTimeline(String timelineId) async =>
+      ChunkTimeline.fromJson(
+        (await _request(
+              'POST',
+              '/v1/chunk-timelines/${Uri.encodeComponent(timelineId)}/activate',
+            ))
+            as Map<String, dynamic>,
+      );
 
-  Future<Map<String, dynamic>> archiveChunkTimeline(String timelineId) async =>
-      (await _request(
-            'POST',
-            '/v1/chunk-timelines/${Uri.encodeComponent(timelineId)}/archive',
-          ))
-          as Map<String, dynamic>;
+  Future<ChunkTimeline> archiveChunkTimeline(String timelineId) async =>
+      ChunkTimeline.fromJson(
+        (await _request(
+              'POST',
+              '/v1/chunk-timelines/${Uri.encodeComponent(timelineId)}/archive',
+            ))
+            as Map<String, dynamic>,
+      );
 
-  Future<Map<String, dynamic>> deleteChunkTimeline(String timelineId) async =>
-      (await _request(
-            'DELETE',
-            '/v1/chunk-timelines/${Uri.encodeComponent(timelineId)}',
-          ))
-          as Map<String, dynamic>;
+  Future<ChunkTimeline> deleteChunkTimeline(String timelineId) async =>
+      ChunkTimeline.fromJson(
+        (await _request(
+              'DELETE',
+              '/v1/chunk-timelines/${Uri.encodeComponent(timelineId)}',
+            ))
+            as Map<String, dynamic>,
+      );
 
   Future<List<SenseGroupAnalysis>> trackSenseGroupAnalyses(
     String trackId,
@@ -203,24 +213,30 @@ extension TimelinesApi on LocalApi {
             as Map<String, dynamic>,
       );
 
-  Future<Map<String, dynamic>> activatePhoneTimeline(String timelineId) async =>
-      (await _request(
-            'POST',
-            '/v1/phone-timelines/${Uri.encodeComponent(timelineId)}/activate',
-          ))
-          as Map<String, dynamic>;
+  Future<PhoneTimeline> activatePhoneTimeline(String timelineId) async =>
+      PhoneTimeline.fromJson(
+        (await _request(
+              'POST',
+              '/v1/phone-timelines/${Uri.encodeComponent(timelineId)}/activate',
+            ))
+            as Map<String, dynamic>,
+      );
 
-  Future<Map<String, dynamic>> archivePhoneTimeline(String timelineId) async =>
-      (await _request(
-            'POST',
-            '/v1/phone-timelines/${Uri.encodeComponent(timelineId)}/archive',
-          ))
-          as Map<String, dynamic>;
+  Future<PhoneTimeline> archivePhoneTimeline(String timelineId) async =>
+      PhoneTimeline.fromJson(
+        (await _request(
+              'POST',
+              '/v1/phone-timelines/${Uri.encodeComponent(timelineId)}/archive',
+            ))
+            as Map<String, dynamic>,
+      );
 
-  Future<Map<String, dynamic>> deletePhoneTimeline(String timelineId) async =>
-      (await _request(
-            'DELETE',
-            '/v1/phone-timelines/${Uri.encodeComponent(timelineId)}',
-          ))
-          as Map<String, dynamic>;
+  Future<PhoneTimeline> deletePhoneTimeline(String timelineId) async =>
+      PhoneTimeline.fromJson(
+        (await _request(
+              'DELETE',
+              '/v1/phone-timelines/${Uri.encodeComponent(timelineId)}',
+            ))
+            as Map<String, dynamic>,
+      );
 }

@@ -167,9 +167,8 @@ class MediaSessionCoordinator {
 
   Future<void> openSubtitlePath(String path, {required bool secondary}) async {
     try {
-      final value = await getApi()!.importSubtitle(player.mediaId!, path);
+      final imported = await getApi()!.importSubtitle(player.mediaId!, path);
       await adapter.disableNativeSubtitles();
-      final imported = SubtitleTrack.fromJson(value);
       if (secondary) {
         subtitle.setSecondaryTrack(imported);
         subtitle.setCurrentSecondaryCue(
@@ -226,12 +225,11 @@ class MediaSessionCoordinator {
           return;
         }
       }
-      final value = await service.importLLTimelineForMedia(
+      final imported = await service.importLLTimelineForMedia(
         mediaId,
         decoded,
         allowMismatch: allowMismatch,
       );
-      final imported = SubtitleTrack.fromJson(value);
       await usePrimarySubtitleTrack(
         imported,
         nextStatus:
