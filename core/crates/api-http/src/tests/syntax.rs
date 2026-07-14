@@ -238,15 +238,58 @@ async fn track_analysis_reuses_fingerprint_cache_and_force_rebuilds() {
     assert_eq!(first["status"], "ready");
     assert_eq!(first["cache_hit"], false);
     assert_eq!(analyses.load(Ordering::SeqCst), 1);
+    let batch_group_count = first["batch"]["sentences"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|sentence| sentence["sense_groups"].as_array().unwrap().len())
+        .sum::<usize>();
+    assert!(batch_group_count > 0);
+
+    let persisted = get_sense_group_analyses(&app, track["id"].as_str().unwrap()).await;
+    assert_eq!(persisted.len(), 1);
+    let active = persisted
+        .iter()
+        .find(|analysis| analysis["status"] == "active")
+        .unwrap();
+    assert_eq!(
+        active["groups"].as_array().unwrap().len(),
+        batch_group_count
+    );
+    let active_id = active["id"].as_str().unwrap().to_owned();
 
     let second = run(false).await.unwrap();
     let second: serde_json::Value =
         serde_json::from_slice(&to_bytes(second.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(second["cache_hit"], true);
     assert_eq!(analyses.load(Ordering::SeqCst), 1);
+    let persisted_after_cache_hit =
+        get_sense_group_analyses(&app, track["id"].as_str().unwrap()).await;
+    assert_eq!(persisted_after_cache_hit.len(), 1);
+    assert_eq!(persisted_after_cache_hit[0]["id"], active_id);
+    assert_eq!(persisted_after_cache_hit[0]["status"], "active");
 
     let rebuilt = run(true).await.unwrap();
     assert_eq!(rebuilt.status(), StatusCode::OK);
     assert_eq!(analyses.load(Ordering::SeqCst), 2);
+    let persisted_after_force = get_sense_group_analyses(&app, track["id"].as_str().unwrap()).await;
+    assert_eq!(persisted_after_force.len(), 1);
+    assert_eq!(persisted_after_force[0]["id"], active_id);
+    assert_eq!(persisted_after_force[0]["status"], "active");
     let _ = tokio::fs::remove_dir_all(root).await;
+}
+
+async fn get_sense_group_analyses(app: &Router, track_id: &str) -> Vec<serde_json::Value> {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/v1/subtitles/{track_id}/sense-group-analyses"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
 }

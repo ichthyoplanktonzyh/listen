@@ -2,6 +2,53 @@
 
 ## Unreleased
 
+- 2026-07-14 21:30 CST: Phase 3.9.4 收口。Slice 4 QA：Rust workspace 614 tests、
+  clippy strict、fmt、contracts、flutter analyze/test 362 全绿；隔离 DB + 真实 spaCy
+  capability + 两条真实字幕轨道的后端 HTTP 全链路实测通过（持久化/激活/幂等/
+  cache-hit 补偿/force/文本回退生成/syntax 接管 active），临时 track cache 已清理。
+  撰写 `3.9.4-REAL-MEDIA-QA.md`（含 owner GUI 清单）与 `3.9.4-CLOSEOUT.md`，
+  更新 STATE，phase 分支合回 main。
+
+- 2026-07-14 21:05 CST: Phase 3.9.4 Slice 3 完成：语义分组获得播放跟随与点击跳转，
+  按 ADR 0016 投影实现——新增纯函数 `senseGroupPlaybackRange`（token span →
+  WordTiming min/max，容忍乱序/缺失，无匹配返回 null），TokenLine 缓存投影（列表
+  identity 变化才重算，播放 tick 只做区间比较），点击合成 DisplayChunk 复用既有
+  onChunk → seekChunk 通路与 offset 换算；semantic 纯模式改为与 prosodic 同级的
+  实线胶囊并复用 chunk 高亮设置，删除 provisional 虚线画笔与 tooltip；compare 模式
+  保持 prosodic 底 + 虚线差异标记不变。新增投影 helper 六类单测与 TokenLine
+  semantic 高亮/点击/null 投影/compare 回归 widget 测试；flutter analyze 无告警，
+  flutter test 362 全绿。
+
+- 2026-07-14 20:47 CST: Phase 3.9.4 Slice 2 完成：Flutter speech-enhancement 加载在
+  sense group 为空且非请求错误时触发一次文本规则回退生成并激活（每 track 单次守卫，
+  失败降级为空并记录 errors）；设置页 semantic/compare 选项标注"可用/数据未就绪"短
+  状态，未就绪且选中语义相关模式时 grouping 下拉 helper 显示逐词回退说明（中英文案）。
+  新增 controller 三场景测试与 SettingsDialog 两态 widget 测试（该文件首个 widget
+  测试基建）；监督评审中修正了 codex 无法在 sandbox 验证的测试 fixture 非法下拉值
+  （ruleHintsLevel/soundPatternDisplayMode/phonemeRibbonStyle/phoneticAnalysisPreference）
+  并把长文案从选项文本移入 helperText 以消除真实 RenderFlex 溢出。flutter analyze
+  无告警，flutter test 353 全绿。
+
+- 2026-07-14 20:29 CST: Phase 3.9.4 Slice 1 完成：track syntax-analysis 的新鲜
+  batch 与 cache-hit batch 都通过 application 用例持久化并激活 SenseGroup，失败仅记录
+  tracing warning、不影响 syntax 响应，capability unavailable 早退保持无副作用。扩展
+  api-http ready fake-provider 集成测试，覆盖首次 syntax batch 的 groups 一致性、cache hit
+  幂等和 force 重算不重复。
+
+- 2026-07-14 20:20 CST: Phase 3.9.4 Slice 0 完成：application 新增
+  `MediaAnalysisUseCases::persist_sense_group_analysis_from_batch`，把语法分析 batch 中
+  已算好的 sense groups 映射持久化为 `SenseGroupAnalysis` 并激活；text/id 推导与既有
+  生成路径抽公共 helper；幂等（active 同 id 跳过）、syntax 接管 fallback active
+  （fingerprint 含 provider_id）、空 batch 返回 None。新增 6 个单测覆盖混合/纯回退/
+  幂等/接管/双入口一致性/空 batch；application 65 tests、clippy -D warnings、fmt 全绿。
+
+- 2026-07-14 20:03 CST: 建立 Phase 3.9.4 SenseGroup UX Unification（分支
+  `phase/3.9.4-sensegroup-ux-unification`）。核实语义分组四层断链（syntax 分析不落
+  SQLite、syntax-aware 生成入口为死参数、Flutter 无生成/激活调用方、加载只认 active），
+  写入 `3.9.4-CONTEXT.md` 决策 D1–D6（时间戳走 ADR 0016 投影、持久化直接映射
+  batch、幂等激活、cache-hit 补偿、Flutter 触发文本回退、编排收在 application）与
+  `3.9.4-PLAN.md` Slice 0–4；上游桌面方案文档归档至 phase design-notes。
+
 - 2026-07-14 20:50 CST: Phase 2.24 严格收口。AppServices 变为 composition-only，三个
   深模块与六个窄模块承接用例；Flutter raw return 约 97→1，production Rust wildcard 归零，
   Python production entry 1433→262 行。最终 Rust 608、Flutter 348、Python 11、contracts 5
