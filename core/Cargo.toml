@@ -6,6 +6,7 @@ members = [
   "crates/domain",
   "crates/dictionary-provider",
   "crates/llm-provider",
+  "crates/local-runtime",
   "crates/diagnosis-core",
   "crates/persistence-sqlite",
   "crates/speech-analysis",

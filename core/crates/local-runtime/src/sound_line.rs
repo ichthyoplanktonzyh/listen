@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -9,10 +8,12 @@ use application::{AppServices, ApplicationError, now_ms};
 use domain::{LanguageCode, SubtitleTrackId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::process::Command;
 use tokio::sync::{Semaphore, broadcast};
 
-use crate::transcription::{ffmpeg_wav_args, io_error, resolve_forced_align_sidecar, resolve_tool};
+use crate::process::{NeverCancelled, ProcessRunner, ProcessSpec, TokioProcessRunner};
+use crate::runtime_support::{
+    ffmpeg_wav_args, io_error, resolve_forced_align_sidecar, resolve_tool,
+};
 
 static JOB_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
@@ -61,10 +62,19 @@ pub struct SoundLineCoordinator {
     jobs: Arc<Mutex<HashMap<String, SoundLineJob>>>,
     queue: Arc<Semaphore>,
     temp_dir: PathBuf,
+    process_runner: Arc<dyn ProcessRunner>,
 }
 
 impl SoundLineCoordinator {
     pub fn new(services: AppServices, events: broadcast::Sender<EventEnvelope>) -> Arc<Self> {
+        Self::new_with_process_runner(services, events, Arc::new(TokioProcessRunner))
+    }
+
+    pub fn new_with_process_runner(
+        services: AppServices,
+        events: broadcast::Sender<EventEnvelope>,
+        process_runner: Arc<dyn ProcessRunner>,
+    ) -> Arc<Self> {
         let temp_dir = std::env::temp_dir().join("LLPlayerNext/sound-line");
         // Best-effort cleanup of stale work dirs from a previous run.
         let _ = std::fs::remove_dir_all(&temp_dir);
@@ -74,6 +84,7 @@ impl SoundLineCoordinator {
             jobs: Arc::new(Mutex::new(HashMap::new())),
             queue: Arc::new(Semaphore::new(1)),
             temp_dir,
+            process_runner,
         });
         // Auto-trigger: subscribe to transcription completions and enqueue a
         // sound-line job for the freshly generated track. Guarded so that
@@ -248,19 +259,9 @@ impl SoundLineCoordinator {
         // work dir. It has no record of the original audio track index, so it
         // uses the default track — an acceptable degradation for enrichment.
         let args = ffmpeg_wav_args(media_path, None, wav);
-        let status = Command::new(&ffmpeg)
-            .args(&args)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .kill_on_drop(true)
-            .status()
-            .await
-            .map_err(io_error)?;
-        if !status.success() {
-            return Err(ApplicationError::Repository(format!(
-                "ffmpeg exited with {status}"
-            )));
-        }
+        self.process_runner
+            .run(ProcessSpec::new(ffmpeg, args), Arc::new(NeverCancelled))
+            .await?;
         let language = language.as_ref().map(LanguageCode::as_str);
         // whisper JSON is intentionally empty: the sound line derives its word
         // baseline from the already-persisted active text timeline.
@@ -337,7 +338,7 @@ impl SoundLineCoordinator {
         };
         self.emit_changed(&job);
         let _ = self.events.send(
-            crate::event_payloads::SoundLineCompletedPayload {
+            crate::events::SoundLineCompletedPayload {
                 job_id: job.id.clone(),
                 track_id: job.track_id.clone(),
                 timeline_id: job.timeline_id.clone(),

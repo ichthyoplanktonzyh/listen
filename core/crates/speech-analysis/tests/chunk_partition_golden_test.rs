@@ -3,9 +3,7 @@ use domain::{
     WordTiming,
 };
 use serde::Deserialize;
-use speech_analysis::chunk_partition::{
-    ChunkPartitionConfig, PARTITIONER_VERSION, partition_sentence,
-};
+use speech_analysis::chunking::{ChunkPartitionConfig, PARTITIONER_VERSION, partition_sentence};
 
 #[derive(Debug, Deserialize)]
 struct GoldenCorpus {
@@ -109,7 +107,7 @@ fn v2_partitions_real_whisper_fixture_without_overlong_chunks() {
         sentence("real-asr-3", "is what"),
     ];
     let timings =
-        speech_analysis::asr_timing::extract_word_timings_from_json(fixture, &sentences).unwrap();
+        speech_analysis::timing::extract_word_timings_from_json(fixture, &sentences).unwrap();
     let config = ChunkPartitionConfig::for_asr_generated_subtitle();
 
     for sentence in sentences {

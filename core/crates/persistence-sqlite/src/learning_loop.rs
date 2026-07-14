@@ -1,6 +1,6 @@
 use application::{
     ApplicationError, LearningEventRepository, ListeningInboxRepository, PracticeRepository,
-    ReviewRepository,
+    HuntingRepository, RecognitionUpgradeRepository, ReviewQueueRepository,
 };
 use domain::*;
 use rusqlite::{OptionalExtension, params};
@@ -184,7 +184,7 @@ impl PracticeRepository for SqliteRepository {
     }
 }
 
-impl ReviewRepository for SqliteRepository {
+impl ReviewQueueRepository for SqliteRepository {
     fn create_review_item(&self, item: &ReviewItem) -> Result<ReviewItem, ApplicationError> {
         let conn = self.connection.lock().expect("sqlite mutex poisoned");
         conn.execute(
@@ -374,6 +374,9 @@ impl ReviewRepository for SqliteRepository {
             .map_err(repo)
     }
 
+}
+
+impl HuntingRepository for SqliteRepository {
     fn upsert_hunting_candidate(
         &self,
         candidate: &HuntingCandidate,
@@ -540,6 +543,9 @@ impl ReviewRepository for SqliteRepository {
         }
     }
 
+}
+
+impl RecognitionUpgradeRepository for SqliteRepository {
     fn upsert_recognition_evidence(
         &self,
         evidence: &RecognitionEvidence,

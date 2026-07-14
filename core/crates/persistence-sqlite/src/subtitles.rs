@@ -1,4 +1,8 @@
-use application::{ApplicationError, LLTimelineResourceRepository, PronunciationRepository, SubtitleTrackRepository, TimelineResourceRepository};
+use application::{
+    ApplicationError, ChunkTimelineRepository, LLTimelineResourceRepository,
+    PhoneTimelineRepository, PronunciationRepository, SenseGroupRepository,
+    SubtitleTrackRepository, WordTimelineRepository,
+};
 use domain::*;
 use rusqlite::{OptionalExtension, params};
 
@@ -404,7 +408,7 @@ impl PronunciationRepository for SqliteRepository {
     }
 }
 
-impl TimelineResourceRepository for SqliteRepository {
+impl WordTimelineRepository for SqliteRepository {
 
     fn save_word_timings(
         &self,
@@ -699,6 +703,9 @@ impl TimelineResourceRepository for SqliteRepository {
         Ok(timeline)
     }
 
+}
+
+impl ChunkTimelineRepository for SqliteRepository {
     fn save_chunk_timeline(
         &self,
         timeline: &ChunkTimeline,
@@ -889,6 +896,9 @@ impl TimelineResourceRepository for SqliteRepository {
         Ok(timeline)
     }
 
+}
+
+impl SenseGroupRepository for SqliteRepository {
     fn save_sense_group_analysis(
         &self,
         analysis: &SenseGroupAnalysis,
@@ -1084,6 +1094,9 @@ impl TimelineResourceRepository for SqliteRepository {
         Ok(analysis)
     }
 
+}
+
+impl PhoneTimelineRepository for SqliteRepository {
     fn save_phone_timeline(
         &self,
         timeline: &PhoneTimeline,

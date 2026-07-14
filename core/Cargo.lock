@@ -69,6 +69,7 @@ dependencies = [
  "futures-core",
  "hex",
  "llm-provider",
+ "local-runtime",
  "persistence-sqlite",
  "rand 0.9.4",
  "reqwest 0.12.28",
@@ -1509,6 +1510,22 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "local-runtime"
+version = "0.7.0"
+dependencies = [
+ "api-events",
+ "application",
+ "async-trait",
+ "domain",
+ "hex",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2",
  "tokio",
 ]
 

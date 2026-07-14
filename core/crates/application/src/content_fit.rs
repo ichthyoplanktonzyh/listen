@@ -44,10 +44,10 @@ impl AppServices {
         track: &SubtitleTrack,
         language: &LanguageCode,
     ) -> Result<String, ApplicationError> {
-        let word_timeline = self.timelines.active_word_timeline(track_id)?;
-        let chunk_timeline = self.timelines.active_chunk_timeline(track_id)?;
+        let word_timeline = self.word_timelines.active_word_timeline(track_id)?;
+        let chunk_timeline = self.chunk_timelines.active_chunk_timeline(track_id)?;
         let (vocab_count, vocab_watermark_ms) = self
-            .learning_assets
+            .lexical_entries
             .lexical_vocabulary_watermark(language)?;
         // The calibration watermark makes new usage feedback invalidate the
         // cached profile; the record itself is durable evidence and is never
@@ -135,7 +135,7 @@ impl AppServices {
         }
 
         let keys: Vec<String> = token_counts_by_key.keys().cloned().collect();
-        let entries = self.learning_assets.lexical_entries_by_keys(
+        let entries = self.lexical_entries.lexical_entries_by_keys(
             &language,
             LexicalEntryKind::Word,
             &keys,
@@ -291,7 +291,7 @@ impl AppServices {
         }
 
         let keys: Vec<String> = token_counts_by_key.keys().cloned().collect();
-        let entries = self.learning_assets.lexical_entries_by_keys(
+        let entries = self.lexical_entries.lexical_entries_by_keys(
             &language,
             LexicalEntryKind::Word,
             &keys,

@@ -7,12 +7,12 @@ use domain::{
     SyntacticValidationReport,
 };
 use serde::{Deserialize, Serialize};
-use speech_analysis::connected_speech_rules::{
+use speech_analysis::audible_structure::{
     ConnectedSpeechContext, SyntacticProviderQualification, predict_default_connected,
     predict_default_connected_with_context,
 };
-use speech_analysis::dependency_patterns::match_dependency_patterns;
-use speech_analysis::sense_group_partition::{
+use speech_analysis::audible_structure::match_dependency_patterns;
+use speech_analysis::audible_structure::{
     SenseGroupPartitionConfig, SenseGroupSpan, partition_sentence, partition_sentence_with_syntax,
 };
 
@@ -317,7 +317,7 @@ fn consume_valid_sentence(
     let dependency_matches = if qualification.dependency_matcher {
         let algorithm_patterns = patterns
             .iter()
-            .map(speech_analysis::dependency_patterns::DependencyPatternSpec::from)
+            .map(speech_analysis::audible_structure::DependencyPatternSpec::from)
             .collect::<Vec<_>>();
         match_dependency_patterns(
             &analysis,
@@ -437,7 +437,7 @@ impl SyntacticSenseGroupSpan {
 }
 
 impl From<&SyntacticDependencyPattern>
-    for speech_analysis::dependency_patterns::DependencyPatternSpec
+    for speech_analysis::audible_structure::DependencyPatternSpec
 {
     fn from(value: &SyntacticDependencyPattern) -> Self {
         Self {
@@ -446,7 +446,7 @@ impl From<&SyntacticDependencyPattern>
                 .nodes
                 .iter()
                 .map(
-                    |node| speech_analysis::dependency_patterns::DependencyNodeConstraint {
+                    |node| speech_analysis::audible_structure::DependencyNodeConstraint {
                         binding: node.binding.clone(),
                         lemma: node.lemma.clone(),
                         upos: node.upos.clone(),
@@ -458,7 +458,7 @@ impl From<&SyntacticDependencyPattern>
                 .edges
                 .iter()
                 .map(
-                    |edge| speech_analysis::dependency_patterns::DependencyEdgeConstraint {
+                    |edge| speech_analysis::audible_structure::DependencyEdgeConstraint {
                         head_binding: edge.head_binding.clone(),
                         dependent_binding: edge.dependent_binding.clone(),
                         dependency_relation: edge.dependency_relation.clone(),
@@ -469,10 +469,10 @@ impl From<&SyntacticDependencyPattern>
     }
 }
 
-impl From<speech_analysis::dependency_patterns::DependencyMatchCandidate>
+impl From<speech_analysis::audible_structure::DependencyMatchCandidate>
     for SyntacticDependencyMatch
 {
-    fn from(value: speech_analysis::dependency_patterns::DependencyMatchCandidate) -> Self {
+    fn from(value: speech_analysis::audible_structure::DependencyMatchCandidate) -> Self {
         Self {
             matcher_version: value.matcher_version,
             matcher_key: value.matcher_key,

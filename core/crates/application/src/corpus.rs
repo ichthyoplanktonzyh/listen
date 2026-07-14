@@ -77,7 +77,7 @@ impl AppServices {
                 });
             }
         }
-        if let Some(timeline) = self.timelines.active_chunk_timeline(&track.id)? {
+        if let Some(timeline) = self.chunk_timelines.active_chunk_timeline(&track.id)? {
             for chunk in &timeline.chunks {
                 occurrences.push(CorpusOccurrence {
                     id: CorpusOccurrenceId::from_fingerprint(

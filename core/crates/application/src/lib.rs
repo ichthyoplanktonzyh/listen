@@ -81,12 +81,21 @@ pub struct AppServices {
     pub(crate) progress: Arc<dyn PlaybackProgressRepository>,
     pub(crate) subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
     pub(crate) pronunciations: Arc<dyn PronunciationRepository>,
-    pub(crate) timelines: Arc<dyn TimelineResourceRepository>,
+    pub(crate) word_timelines: Arc<dyn WordTimelineRepository>,
+    pub(crate) chunk_timelines: Arc<dyn ChunkTimelineRepository>,
+    pub(crate) sense_groups: Arc<dyn SenseGroupRepository>,
+    pub(crate) phone_timelines: Arc<dyn PhoneTimelineRepository>,
     pub(crate) lltimeline_resources: Arc<dyn LLTimelineResourceRepository>,
     pub(crate) dictionary: Arc<dyn DictionaryCacheRepository>,
-    pub(crate) learning_assets: Arc<dyn LearningAssetRepository>,
+    pub(crate) lexical_capabilities: Arc<dyn LexicalCapabilityRepository>,
+    pub(crate) lexical_entries: Arc<dyn LexicalEntryRepository>,
+    pub(crate) learning_observations: Arc<dyn LearningObservationRepository>,
+    pub(crate) lexical_content: Arc<dyn LexicalContentRepository>,
+    pub(crate) vocabulary_assets: Arc<dyn VocabularyAssetRepository>,
     pub(crate) practice: Arc<dyn PracticeRepository>,
-    pub(crate) review: Arc<dyn ReviewRepository>,
+    pub(crate) review_queue: Arc<dyn ReviewQueueRepository>,
+    pub(crate) hunting: Arc<dyn HuntingRepository>,
+    pub(crate) recognition_upgrades: Arc<dyn RecognitionUpgradeRepository>,
     pub(crate) learning_events: Arc<dyn LearningEventRepository>,
     pub(crate) listening_inbox: Arc<dyn ListeningInboxRepository>,
     pub(crate) recordings: Arc<dyn RecordingRepository>,
@@ -102,27 +111,49 @@ pub struct AppServices {
 
 impl AppServices {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub fn new<R, L>(
         media: Arc<dyn MediaRepository>,
         progress: Arc<dyn PlaybackProgressRepository>,
         subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
         pronunciations: Arc<dyn PronunciationRepository>,
-        timelines: Arc<dyn TimelineResourceRepository>,
+        timelines: Arc<R>,
         lltimeline_resources: Arc<dyn LLTimelineResourceRepository>,
         dictionary: Arc<dyn DictionaryCacheRepository>,
-        learning_assets: Arc<dyn LearningAssetRepository>,
-    ) -> Self {
+        learning_assets: Arc<L>,
+    ) -> Self
+    where
+        R: WordTimelineRepository
+            + ChunkTimelineRepository
+            + SenseGroupRepository
+            + PhoneTimelineRepository
+            + 'static,
+        L: LexicalCapabilityRepository
+            + LexicalEntryRepository
+            + LearningObservationRepository
+            + LexicalContentRepository
+            + VocabularyAssetRepository
+            + 'static,
+    {
         Self {
             media,
             progress,
             subtitle_tracks,
             pronunciations,
-            timelines,
+            word_timelines: timelines.clone(),
+            chunk_timelines: timelines.clone(),
+            sense_groups: timelines.clone(),
+            phone_timelines: timelines,
             lltimeline_resources,
             dictionary,
-            learning_assets,
+            lexical_capabilities: learning_assets.clone(),
+            lexical_entries: learning_assets.clone(),
+            learning_observations: learning_assets.clone(),
+            lexical_content: learning_assets.clone(),
+            vocabulary_assets: learning_assets,
             practice: Arc::new(DisabledLearningLoopRepository),
-            review: Arc::new(DisabledLearningLoopRepository),
+            review_queue: Arc::new(DisabledLearningLoopRepository),
+            hunting: Arc::new(DisabledLearningLoopRepository),
+            recognition_upgrades: Arc::new(DisabledLearningLoopRepository),
             learning_events: Arc::new(DisabledLearningLoopRepository),
             listening_inbox: Arc::new(DisabledLearningLoopRepository),
             recordings: Arc::new(DisabledLearningLoopRepository),
@@ -145,15 +176,20 @@ impl AppServices {
         self
     }
 
-    pub fn with_learning_loop_repositories(
+    pub fn with_learning_loop_repositories<R>(
         mut self,
         practice: Arc<dyn PracticeRepository>,
-        review: Arc<dyn ReviewRepository>,
+        review: Arc<R>,
         learning_events: Arc<dyn LearningEventRepository>,
         listening_inbox: Arc<dyn ListeningInboxRepository>,
-    ) -> Self {
+    ) -> Self
+    where
+        R: ReviewQueueRepository + HuntingRepository + RecognitionUpgradeRepository + 'static,
+    {
         self.practice = practice;
-        self.review = review;
+        self.review_queue = review.clone();
+        self.hunting = review.clone();
+        self.recognition_upgrades = review;
         self.learning_events = learning_events;
         self.listening_inbox = listening_inbox;
         self
@@ -1159,11 +1195,11 @@ pub(crate) fn word_timing_cache_is_usable(values: &[WordTiming]) -> bool {
 
 pub(crate) fn chunk_partition_config_for_track_source(
     source: &str,
-) -> speech_analysis::chunk_partition::ChunkPartitionConfig {
+) -> speech_analysis::chunking::ChunkPartitionConfig {
     if source.starts_with("ASR-") {
-        speech_analysis::chunk_partition::ChunkPartitionConfig::for_asr_generated_subtitle()
+        speech_analysis::chunking::ChunkPartitionConfig::for_asr_generated_subtitle()
     } else {
-        speech_analysis::chunk_partition::ChunkPartitionConfig::default()
+        speech_analysis::chunking::ChunkPartitionConfig::default()
     }
 }
 

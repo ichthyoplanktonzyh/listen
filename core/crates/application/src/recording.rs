@@ -159,7 +159,7 @@ impl AppServices {
             .practice_attempt_id
             .clone()
             .ok_or(ApplicationError::Validation("completed shadowing attempt"))?;
-        let analysis = speech_analysis::shadowing_comparison::compare_pcm16_wav_paths(
+        let analysis = speech_analysis::phonetics::compare_pcm16_wav_paths(
             reference_wav_path,
             &recording.file_path,
         )

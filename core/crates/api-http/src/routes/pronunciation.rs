@@ -65,7 +65,7 @@ pub(crate) async fn analyze_pronunciation_sentence(
             crate::event_payloads::SpeechCacheInvalidatedPayload {
                 job_id: None,
                 track_id: None,
-                kind: crate::speech_jobs::SpeechBatchKind::PronunciationAnalysis,
+                kind: local_runtime::SpeechBatchKind::PronunciationAnalysis,
                 sentence_id: sentence_id.as_str().to_owned(),
             }
             .envelope(),

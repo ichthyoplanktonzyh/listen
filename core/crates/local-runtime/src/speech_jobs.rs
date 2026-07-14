@@ -239,7 +239,7 @@ impl SpeechBatchCoordinator {
         match job.kind {
             SpeechBatchKind::PronunciationAnalysis => {
                 let _ = self.events.send(
-                    crate::event_payloads::PronunciationAnalysisCompletedPayload {
+                    crate::events::PronunciationAnalysisCompletedPayload {
                         job_id: Some(job.id.clone()),
                         track_id: Some(job.track_id.clone()),
                         sentence_id: None,
@@ -250,7 +250,7 @@ impl SpeechBatchCoordinator {
             }
             SpeechBatchKind::WordTimings => {
                 let _ = self.events.send(
-                    crate::event_payloads::WordTimingsCompletedPayload {
+                    crate::events::WordTimingsCompletedPayload {
                         job_id: Some(job.id.clone()),
                         track_id: job.track_id.clone(),
                         line: None,
@@ -290,7 +290,7 @@ impl SpeechBatchCoordinator {
             SpeechBatchKind::WordTimings => EventName::WordTimingsProgress,
         };
         let _ = self.events.send(
-            crate::event_payloads::SpeechBatchProgressPayload {
+            crate::events::SpeechBatchProgressPayload {
                 job_id: Some(job.id.clone()),
                 track_id: job.track_id.clone(),
                 processed: job.processed,
@@ -302,7 +302,7 @@ impl SpeechBatchCoordinator {
 
     fn emit_cache_invalidated(&self, job: &SpeechBatchJob, sentence_id: &str) {
         let _ = self.events.send(
-            crate::event_payloads::SpeechCacheInvalidatedPayload {
+            crate::events::SpeechCacheInvalidatedPayload {
                 job_id: Some(job.id.clone()),
                 track_id: Some(job.track_id.clone()),
                 kind: job.kind,

@@ -175,7 +175,7 @@ impl AppServices {
                     created_at_ms: now,
                 };
                 let saved = self
-                    .learning_assets
+                    .learning_observations
                     .create_lexical_observation(&observation)?;
                 attempt.generated_observation_ids.push(saved.id);
             }
@@ -246,7 +246,7 @@ impl AppServices {
         let prompt_snapshot = clean_required(input.prompt_snapshot, "review prompt")?;
         if input.source.kind == ReviewSourceKind::LexicalEntry {
             let existing = self
-                .review
+                .review_queue
                 .list_review_items(Some(ReviewItemStatus::Active), 200, 0)?
                 .into_iter()
                 .find(|item| {
@@ -273,8 +273,8 @@ impl AppServices {
             created_at_ms: now,
             updated_at_ms: now,
         };
-        let saved = self.review.create_review_item(&item)?;
-        self.review.save_review_schedule(&ReviewSchedule {
+        let saved = self.review_queue.create_review_item(&item)?;
+        self.review_queue.save_review_schedule(&ReviewSchedule {
             item_id: saved.id.clone(),
             algorithm: REVIEW_ALGORITHM.into(),
             due_at_ms: now,
@@ -287,7 +287,7 @@ impl AppServices {
     }
 
     pub fn review_item(&self, id: &ReviewItemId) -> Result<Option<ReviewItem>, ApplicationError> {
-        self.review.get_review_item(id)
+        self.review_queue.get_review_item(id)
     }
 
     pub fn due_review_items(
@@ -295,7 +295,7 @@ impl AppServices {
         at_ms: Option<u64>,
         limit: u32,
     ) -> Result<Vec<ReviewQueueEntry>, ApplicationError> {
-        self.review
+        self.review_queue
             .list_due_review_items(at_ms.unwrap_or_else(now_ms), limit.min(100))
             .map(|entries| {
                 entries
@@ -317,7 +317,7 @@ impl AppServices {
         input: SubmitReviewAttempt,
     ) -> Result<ReviewSubmission, ApplicationError> {
         let item = self
-            .review
+            .review_queue
             .get_review_item(&input.item_id)?
             .ok_or(ApplicationError::NotFound("review item"))?;
         if item.status != ReviewItemStatus::Active {
@@ -325,7 +325,7 @@ impl AppServices {
         }
         let now = now_ms();
         let current = self
-            .review
+            .review_queue
             .get_review_schedule(&item.id)?
             .unwrap_or(ReviewSchedule {
                 item_id: item.id.clone(),
@@ -338,7 +338,7 @@ impl AppServices {
             });
         let schedule = next_review_schedule(&current, input.rating, now);
         let fingerprint = format!("{}:{now}:{:?}", item.id.as_str(), input.rating);
-        let attempt = self.review.create_review_attempt(&ReviewAttempt {
+        let attempt = self.review_queue.create_review_attempt(&ReviewAttempt {
             id: ReviewAttemptId::from_fingerprint("review-attempt", &fingerprint),
             item_id: item.id.clone(),
             reviewed_at_ms: now,
@@ -346,7 +346,7 @@ impl AppServices {
             practice_attempt_id: None,
             next_due_at_ms: Some(schedule.due_at_ms),
         })?;
-        let schedule = self.review.save_review_schedule(&schedule)?;
+        let schedule = self.review_queue.save_review_schedule(&schedule)?;
         {
             let spec = observation_spec_for_review(input.rating);
             let fallback_sentence = item
@@ -454,7 +454,7 @@ impl AppServices {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<HuntingCandidate>, ApplicationError> {
-        self.review
+        self.hunting
             .list_hunting_candidates(status, limit.min(500), offset)
     }
 
@@ -506,13 +506,13 @@ impl AppServices {
             }
             if let Some(sentence_id) = sentence_id.as_ref()
                 && self
-                    .learning_assets
+                    .lexical_entries
                     .lexical_details(&lexical_entry_id)?
                     .is_some()
                 && self.subtitle_tracks.get_sentence(sentence_id)?.is_some()
             {
                 let observation =
-                    self.learning_assets
+                    self.learning_observations
                         .create_lexical_observation(&LexicalObservation {
                             id: domain::lexical_observation_id(&lexical_entry_id, sentence_id),
                             lexical_entry_id: lexical_entry_id.clone(),
@@ -528,8 +528,8 @@ impl AppServices {
                 "hunting-candidate",
                 &format!("{}:{}", item.id.as_str(), lexical_entry_id.as_str()),
             );
-            let existing = self.review.get_hunting_candidate(&id)?;
-            let candidate = self.review.upsert_hunting_candidate(&HuntingCandidate {
+            let existing = self.hunting.get_hunting_candidate(&id)?;
+            let candidate = self.hunting.upsert_hunting_candidate(&HuntingCandidate {
                 id,
                 lexical_entry_id,
                 review_item_id: item.id.clone(),
@@ -823,7 +823,7 @@ impl PracticeRepository for DisabledLearningLoopRepository {
     }
 }
 
-impl ReviewRepository for DisabledLearningLoopRepository {
+impl ReviewQueueRepository for DisabledLearningLoopRepository {
     fn create_review_item(&self, _item: &ReviewItem) -> Result<ReviewItem, ApplicationError> {
         Err(Self::disabled())
     }
@@ -877,6 +877,9 @@ impl ReviewRepository for DisabledLearningLoopRepository {
         Err(Self::disabled())
     }
 
+}
+
+impl HuntingRepository for DisabledLearningLoopRepository {
     fn upsert_hunting_candidate(
         &self,
         _candidate: &HuntingCandidate,
@@ -923,6 +926,9 @@ impl ReviewRepository for DisabledLearningLoopRepository {
         Err(Self::disabled())
     }
 
+}
+
+impl RecognitionUpgradeRepository for DisabledLearningLoopRepository {
     fn upsert_recognition_evidence(
         &self,
         evidence: &RecognitionEvidence,

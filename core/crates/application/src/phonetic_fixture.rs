@@ -72,7 +72,7 @@ impl AppServices {
                 .flat_map(|analysis| analysis.phonemes)
                 .filter_map(|phone| {
                     phone.token_index.map(|token_index| {
-                        speech_analysis::phonetic_alignment::CanonicalPhone {
+                        speech_analysis::phonetics::CanonicalPhone {
                             symbol: phone.symbol,
                             token_index,
                             stress: phone.stress,
@@ -83,8 +83,8 @@ impl AppServices {
         } else {
             Vec::new()
         };
-        let alignments = speech_analysis::phonetic_alignment::align_phones(&canonical, &phones);
-        let findings = speech_analysis::phonetic_findings::findings_from_alignments(
+        let alignments = speech_analysis::phonetics::align_phones(&canonical, &phones);
+        let findings = speech_analysis::phonetics::findings_from_alignments(
             &id,
             job.audio_start_ms,
             job.audio_end_ms,
@@ -93,11 +93,11 @@ impl AppServices {
         );
         let word_timings =
             self.active_sentence_word_timings(&job.track_id, job.sentence_id.as_ref())?;
-        let sound_analysis = speech_analysis::sound_analysis::build_sound_analysis(
+        let sound_analysis = speech_analysis::audible_structure::build_sound_analysis(
             &canonical,
             &phones,
             &alignments,
-            speech_analysis::sound_analysis::SoundAnalysisConfig {
+            speech_analysis::audible_structure::SoundAnalysisConfig {
                 provider_id: "research-fixture",
                 provider_version: "v1",
                 model_revision: Some(job.model_revision.clone()),
@@ -139,7 +139,7 @@ impl AppServices {
         audio_path: &str,
         model_dir: &str,
     ) -> Result<PhoneticAnalysis, ApplicationError> {
-        let recognized = speech_analysis::phone_recognition::recognize_phones(
+        let recognized = speech_analysis::phonetics::recognize_phones(
             audio_path,
             model_dir,
             job.audio_start_ms,
@@ -171,7 +171,7 @@ impl AppServices {
             .flat_map(|analysis| analysis.phonemes)
             .filter_map(|phone| {
                 phone.token_index.map(|token_index| {
-                    speech_analysis::phonetic_alignment::CanonicalPhone {
+                    speech_analysis::phonetics::CanonicalPhone {
                         symbol: phone.symbol,
                         token_index,
                         stress: phone.stress,
@@ -179,8 +179,8 @@ impl AppServices {
                 })
             })
             .collect::<Vec<_>>();
-        let alignments = speech_analysis::phonetic_alignment::align_phones(&canonical, &phones);
-        let findings = speech_analysis::phonetic_findings::findings_from_alignments(
+        let alignments = speech_analysis::phonetics::align_phones(&canonical, &phones);
+        let findings = speech_analysis::phonetics::findings_from_alignments(
             &id,
             job.audio_start_ms,
             job.audio_end_ms,
@@ -189,13 +189,13 @@ impl AppServices {
         );
         let word_timings =
             self.active_sentence_word_timings(&job.track_id, job.sentence_id.as_ref())?;
-        let sound_analysis = speech_analysis::sound_analysis::build_sound_analysis(
+        let sound_analysis = speech_analysis::audible_structure::build_sound_analysis(
             &canonical,
             &phones,
             &alignments,
-            speech_analysis::sound_analysis::SoundAnalysisConfig {
-                provider_id: speech_analysis::phone_recognition::PROVIDER_ID,
-                provider_version: speech_analysis::phone_recognition::PROVIDER_VERSION,
+            speech_analysis::audible_structure::SoundAnalysisConfig {
+                provider_id: speech_analysis::phonetics::PROVIDER_ID,
+                provider_version: speech_analysis::phonetics::PROVIDER_VERSION,
                 model_revision: Some(job.model_revision.clone()),
                 phone_set: "arpabet",
                 sentence,
@@ -211,8 +211,8 @@ impl AppServices {
             sentence_id: job.sentence_id.clone(),
             audio_start_ms: job.audio_start_ms,
             audio_end_ms: job.audio_end_ms,
-            provider_id: speech_analysis::phone_recognition::PROVIDER_ID.into(),
-            provider_version: speech_analysis::phone_recognition::PROVIDER_VERSION.into(),
+            provider_id: speech_analysis::phonetics::PROVIDER_ID.into(),
+            provider_version: speech_analysis::phonetics::PROVIDER_VERSION.into(),
             model_id: job.model_id.clone(),
             model_revision: job.model_revision.clone(),
             model_checksum_sha256: job.model_checksum_sha256.clone(),
@@ -223,8 +223,8 @@ impl AppServices {
             sound_analysis: Some(sound_analysis),
             analyzer_version: format!(
                 "{}-{}",
-                speech_analysis::phone_recognition::PROVIDER_ID,
-                speech_analysis::phone_recognition::PROVIDER_VERSION
+                speech_analysis::phonetics::PROVIDER_ID,
+                speech_analysis::phonetics::PROVIDER_VERSION
             ),
             created_at_ms: now_ms(),
         };
@@ -240,7 +240,7 @@ impl AppServices {
         let Some(sentence_id) = sentence_id else {
             return Ok(Vec::new());
         };
-        let Some(timeline) = self.timelines.active_word_timeline(track_id)? else {
+        let Some(timeline) = self.word_timelines.active_word_timeline(track_id)? else {
             return Ok(Vec::new());
         };
         let mut words = timeline

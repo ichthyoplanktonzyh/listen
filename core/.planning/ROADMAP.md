@@ -28,6 +28,10 @@
 > audible-structure v1 contract 保持为当前权威 shape，3.x 按现状消费。同日新增
 > Phase 2.23 Architecture Debt Paydown 作为 3.x 前置工程治理：main.dart 收缩为
 > Flutter practice UI 的直接前置，sound_analysis 机械拆分落在算法线静默窗口内。
+> 2026-07-14 架构路线更新：新增 Phase 2.24 System Cohesion & Coupling Consolidation，
+> 作为 2.23 的语义级后继。它不改变产品路线，专门收窄 speech/application interface、
+> 把 runtime job/resource 编排移出 HTTP adapter、按变化原因拆 use-case/repository interface，
+> 并让 Flutter resource client 完成 typed wire mapping。P0/P1 slice 建议在 3.13 大规模扩展前完成。
 > 2026-07-13 产品语义校正：Phase 3.9 并行恢复 A/B/C audible-structure 重构。A=词典标准
 > 发音与书写词界，B=文本规则预测的可听分组，C=真实音素 + timing/prosody 支持的实际分组；
 > linking/reduction 等类别退为解释标签，B 不得冒充 C。
@@ -1412,6 +1416,15 @@ Phase 3.0 的第一个架构地基阶段为：
   Practice / Review / LearningEvent / Corpus / Difficulty / LearnerProfile / Recording 边界，并以
   cloze + chunk dictation 作为第一条 backend vertical slice。参考
   `.planning/phases/3.0.1-learning-loop-architecture-foundation/`。
+
+与产品主线并行的工程治理线新增：
+
+- **Phase 2.24 System Cohesion & Coupling Consolidation**：承接 2.23 后仍存在的 interface
+  深度问题；处理 `api-http` runtime ownership、speech/application 类型泄漏、宽 repository
+  interface、`AppServices` 用例聚合、Flutter raw JSON 和 Python pipeline locality。该 phase
+  不改用户行为、HTTP/SQLite/LLTimeline contract 或算法语义；P0/P1 slice 是 3.13 前的推荐
+  工程门槛。计划见
+  `.planning/phases/2.24-system-cohesion-coupling-consolidation/2.24-PLAN.md`。
 
 Phase 3.0 的执行序列（2026-07-04 确立，取代早期建议顺序）：
 

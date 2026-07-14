@@ -1,5 +1,5 @@
 use domain::{SubtitleSentence, SubtitleSentenceId, SubtitleToken, SubtitleTokenKind, TimeMs};
-use speech_analysis::chunk_detection::{
+use speech_analysis::chunking::{
     ChunkDetectionConfig, detect_chunk_boundaries, detect_chunk_boundaries_for_track,
 };
 use speech_analysis::estimate_word_timings;
@@ -372,7 +372,7 @@ fn track_detection_isolates_sentences() {
 // ---------------------------------------------------------------------------
 #[test]
 fn detects_chunks_from_real_asr_timings() {
-    use speech_analysis::asr_timing::extract_word_timings_from_json;
+    use speech_analysis::timing::extract_word_timings_from_json;
 
     let fixture_path = format!(
         "{}/../../testdata/asr/sample-output.json",

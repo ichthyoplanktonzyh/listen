@@ -263,6 +263,21 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - 移动端无需复制词汇状态和诊断规则。
 - 依赖：ARCH-003、MOB-001。
 
+### ARCH-011：深模块与真实接缝
+
+- 优先级：P0
+- 阶段：Phase 2.24
+- 需求：系统必须按变化原因形成高内聚模块，以小而稳定的接口隐藏运行时、算法、持久化和
+  wire-format 复杂度；只有存在真实替换轴时才建立接缝和适配器。
+- 验收标准：
+  - HTTP 适配层不拥有模型下载、子进程、任务队列或业务状态机实现。
+  - application 公共接口不暴露算法实现 crate 的类型路径。
+  - repository 接口按用例/聚合变化原因组织，不存在为实现方便而建立的 fat 聚合接口。
+  - Flutter controller/widget 不解析 HTTP JSON，typed resource client 负责 wire mapping。
+  - 每个新增 trait 至少有两个合理适配器，或有明确的 true-external 测试替代需求。
+  - 模块测试以公开接口的可观察结果为 surface，不依赖实现内部状态。
+- 依赖：ARCH-001、ARCH-003、ARCH-008、TEST-001、TEST-008。
+
 ## 6. 媒体与播放需求
 
 ### PLAY-001：打开本地视频

@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- 2026-07-14 16:28 CST: 执行 Phase 2.24 首批高耦合治理。speech-analysis 的 17 个公开
+  implementation modules 改为 private，通过 timing/chunking/phonetics/audible-structure
+  curated facade 暴露能力；删除 application 6 个无 caller legacy engine wrappers。
+  新增无 Axum 依赖的 local-runtime crate，原地迁出 transcription/phonetic/speech-batch/
+  sound-line coordinators 与 event payload，新增并实际接入 Tokio/fake ProcessRunner、
+  Reqwest/fake ArtifactDownloader，共享 tool discovery 不再跨 workflow 私借。删除
+  TimelineResourceRepository/LearningAssetRepository/ReviewRepository 三个 fat ports，
+  按 word/chunk/sense/phone、capability/entry/observation/content/bundle、
+  review/hunting/recognition-upgrade 拆为 12 个窄端口，Sqlite 直接实现且无聚合桥接。
+
+- 2026-07-14 15:58 CST: 建立 Phase 2.24 System Cohesion & Coupling Consolidation，新增
+  CONTEXT/BASELINE/PLAN，记录 `api-http` runtime ownership、speech/application 公共类型泄漏、
+  宽 repository/AppServices、Flutter raw JSON client、Rust/Python locality 五组治理目标；明确
+  deep-module/seam 裁决（单实现纯算法禁止机械加 trait）、P0→P2 六步执行顺序、完整测试门槛
+  与 3.13 前推荐工程关口。同步新增 ARCH-011，并更新 ROADMAP/STATE。
+
 - 2026-07-14 12:10 CST: 机械拆分 `dictionary-provider/src/lib.rs`（1425 → 15 行 lib +
   按上游资源分模块：cedict 523（中文词典+拼音发音，共享 CC-CEDICT 索引）/ ecdict 271 /
   edict 253 / free_dictionary 155 / support 10（共享 `ResourceSignature`）/ tests 271）。

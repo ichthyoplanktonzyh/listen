@@ -1,7 +1,9 @@
 //! Bulk import/export and capability-state persistence for lexical assets.
 //! Split out of `lexical.rs` (mechanical decomposition).
 
-use application::{ApplicationError, LearningAssetRepository};
+use application::{
+    ApplicationError, LexicalCapabilityRepository, LexicalEntryRepository,
+};
 use domain::*;
 use rusqlite::{OptionalExtension, params};
 use std::collections::HashMap;

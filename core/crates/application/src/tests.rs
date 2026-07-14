@@ -510,11 +510,11 @@ fn forced_alignment_overrides_coarse_asr_timing() {
 fn asr_track_source_uses_inferred_punctuation_config() {
     assert_eq!(
         chunk_partition_config_for_track_source("ASR-Whisper Large.srt").punctuation_reliability,
-        speech_analysis::chunk_partition::PunctuationReliability::Inferred
+        speech_analysis::chunking::PunctuationReliability::Inferred
     );
     assert_eq!(
         chunk_partition_config_for_track_source("official-subtitles.srt").punctuation_reliability,
-        speech_analysis::chunk_partition::PunctuationReliability::Trusted
+        speech_analysis::chunking::PunctuationReliability::Trusted
     );
 }
 

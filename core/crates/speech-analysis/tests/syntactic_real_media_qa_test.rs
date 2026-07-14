@@ -3,7 +3,7 @@ use domain::{
     SyntacticSentenceAnalysis, SyntacticToken, TimeMs,
 };
 use serde_json::Value;
-use speech_analysis::sense_group_partition::{
+use speech_analysis::audible_structure::{
     SenseGroupPartitionConfig, partition_sentence_with_syntax,
 };
 

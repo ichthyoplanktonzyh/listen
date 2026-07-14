@@ -31,7 +31,7 @@ impl AppServices {
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
-        let entries = self.learning_assets.lexical_entries_by_keys(
+        let entries = self.lexical_entries.lexical_entries_by_keys(
             &language,
             LexicalEntryKind::Word,
             &keys,
@@ -43,7 +43,7 @@ impl AppServices {
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
-        let phrase_entries = self.learning_assets.lexical_entries_by_keys(
+        let phrase_entries = self.lexical_entries.lexical_entries_by_keys(
             &language,
             LexicalEntryKind::Phrase,
             &phrase_keys,
@@ -51,14 +51,14 @@ impl AppServices {
         let mut profiles = std::collections::HashMap::new();
         for entry in entries.iter().chain(phrase_entries.iter()) {
             if let Some(profile) = self
-                .learning_assets
+                .lexical_capabilities
                 .lexical_capability_profile(&entry.id, None)?
             {
                 profiles.insert(entry.id.clone(), profile);
             }
         }
         let observations = self
-            .learning_assets
+            .learning_observations
             .list_lexical_observations_by_sentence(sentence_id)?;
         let mut diagnosis = diagnosis_core::diagnose_with_profiles(
             &sentence,

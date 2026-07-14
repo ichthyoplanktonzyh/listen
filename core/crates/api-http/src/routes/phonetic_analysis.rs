@@ -191,7 +191,7 @@ pub(crate) async fn update_phonetic_finding_feedback(
     Json(request): Json<PhoneticFindingFeedbackRequest>,
 ) -> Result<Json<domain::PhoneticFindingFeedback>, ApiError> {
     let feedback = domain::PhoneticFindingFeedback {
-        finding_id: phonetic_analysis::finding_id(finding_id)?,
+        finding_id: local_runtime::finding_id(finding_id)?,
         value: request.value,
         note: request.note,
         updated_at_ms: application::now_ms(),

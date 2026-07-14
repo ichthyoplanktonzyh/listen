@@ -28,7 +28,7 @@ impl AppServices {
         external_ref: Option<String>,
     ) -> Result<LexicalSenseFolder, ApplicationError> {
         if self
-            .learning_assets
+            .lexical_entries
             .lexical_details(lexical_entry_id)?
             .is_none()
         {
@@ -49,7 +49,7 @@ impl AppServices {
             created_at_ms: now,
             updated_at_ms: now,
         };
-        self.learning_assets.create_lexical_sense_folder(&folder)
+        self.lexical_content.create_lexical_sense_folder(&folder)
     }
 
     pub fn update_lexical_sense_folder(
@@ -71,7 +71,7 @@ impl AppServices {
             created_at_ms: 0,
             updated_at_ms: now_ms(),
         };
-        self.learning_assets.update_lexical_sense_folder(&folder)
+        self.lexical_content.update_lexical_sense_folder(&folder)
     }
 
     pub fn delete_lexical_sense_folder(
@@ -79,7 +79,7 @@ impl AppServices {
         lexical_entry_id: &LexicalEntryId,
         sense_id: &LexicalSenseId,
     ) -> Result<(), ApplicationError> {
-        self.learning_assets
+        self.lexical_content
             .delete_lexical_sense_folder(lexical_entry_id, sense_id)
     }
 
@@ -89,7 +89,7 @@ impl AppServices {
         sense_id: &LexicalSenseId,
         occurrence_id: &LexicalOccurrenceId,
     ) -> Result<(), ApplicationError> {
-        self.learning_assets
+        self.lexical_content
             .assign_occurrence_to_lexical_sense_folder(lexical_entry_id, sense_id, occurrence_id)
     }
 
@@ -99,7 +99,7 @@ impl AppServices {
         sense_id: &LexicalSenseId,
         occurrence_id: &LexicalOccurrenceId,
     ) -> Result<(), ApplicationError> {
-        self.learning_assets
+        self.lexical_content
             .unassign_occurrence_from_lexical_sense_folder(
                 lexical_entry_id,
                 sense_id,
@@ -111,7 +111,7 @@ impl AppServices {
         &self,
         lexical_entry_id: &LexicalEntryId,
     ) -> Result<Option<LexicalCapabilityProfile>, ApplicationError> {
-        self.learning_assets
+        self.lexical_capabilities
             .lexical_capability_profile(lexical_entry_id, None)
     }
 
@@ -127,7 +127,7 @@ impl AppServices {
             source: CapabilityOverrideSource::UserSelection,
             updated_at_ms: now,
         });
-        let profile = self.learning_assets.set_lexical_capability_override(
+        let profile = self.lexical_capabilities.set_lexical_capability_override(
             lexical_entry_id,
             None,
             capability,
@@ -161,7 +161,7 @@ impl AppServices {
             let dim = target.dimension(capability);
             if let Some(proj) = &dim.projection {
                 let current = self
-                    .learning_assets
+                    .lexical_capabilities
                     .lexical_capability_profile(lexical_entry_id, None)?;
                 let current_dim = current
                     .as_ref()
@@ -186,7 +186,7 @@ impl AppServices {
                 {
                     continue;
                 }
-                self.learning_assets.set_lexical_capability_projection(
+                self.lexical_capabilities.set_lexical_capability_projection(
                     lexical_entry_id,
                     None,
                     capability,
@@ -202,7 +202,7 @@ impl AppServices {
                 )?;
             } else {
                 let current = self
-                    .learning_assets
+                    .lexical_capabilities
                     .lexical_capability_profile(lexical_entry_id, None)?;
                 let current_dim = current
                     .as_ref()
@@ -212,7 +212,7 @@ impl AppServices {
                 if current_dim.user_override.is_some() || current_dim.projection.is_none() {
                     continue;
                 }
-                self.learning_assets.set_lexical_capability_projection(
+                self.lexical_capabilities.set_lexical_capability_projection(
                     lexical_entry_id,
                     None,
                     capability,
@@ -225,7 +225,7 @@ impl AppServices {
         // ladder may have kept a task-grade evidence conclusion, and callers
         // write the raw status onto the entry row before syncing.
         if let Some(profile) = self
-            .learning_assets
+            .lexical_capabilities
             .lexical_capability_profile(lexical_entry_id, None)?
         {
             self.sync_legacy_status_from_profile(lexical_entry_id, &profile)?;
@@ -239,13 +239,13 @@ impl AppServices {
         profile: &LexicalCapabilityProfile,
     ) -> Result<(), ApplicationError> {
         let legacy = profile.legacy_status_view();
-        let details = self.learning_assets.lexical_details(lexical_entry_id)?;
+        let details = self.lexical_entries.lexical_details(lexical_entry_id)?;
         if let Some(mut details) = details {
             if details.entry.status != legacy {
                 details.entry.status = legacy;
                 details.entry.updated_at_ms = now_ms();
                 details.entry.learning_updated_at_ms = details.entry.updated_at_ms;
-                self.learning_assets.upsert_lexical_entry(
+                self.lexical_entries.upsert_lexical_entry(
                     &details.entry,
                     None,
                     LearningChangeSource::CapabilityOverrideSync,
@@ -276,7 +276,7 @@ impl AppServices {
             }
         }
         let normalized = normalized.into_iter().collect::<Vec<_>>();
-        self.learning_assets
+        self.lexical_entries
             .lexical_entries_by_keys(&language, kind, &normalized)
     }
 
@@ -313,7 +313,7 @@ impl AppServices {
             source_ref,
             occurred_at_ms,
         };
-        self.learning_assets
+        self.learning_observations
             .append_learning_observation(&observation)?;
         if spec.capability == LexicalCapability::Listening {
             self.reproject_listening_from_evidence(lexical_entry_id, occurred_at_ms)?;
@@ -330,7 +330,7 @@ impl AppServices {
         lexical_entry_id: &LexicalEntryId,
         now: u64,
     ) -> Result<(), ApplicationError> {
-        let observations = self.learning_assets.list_learning_observations(
+        let observations = self.learning_observations.list_learning_observations(
             lexical_entry_id,
             Some(LexicalCapability::Listening),
             LISTENING_PROJECTION_EVIDENCE_LIMIT,
@@ -343,7 +343,7 @@ impl AppServices {
         // downgrade, import) newer than our newest decisive evidence wins
         // until newer evidence arrives.
         let current = self
-            .learning_assets
+            .lexical_capabilities
             .lexical_capability_profile(lexical_entry_id, None)?;
         if let Some(existing) = current.as_ref().and_then(|profile| {
             profile
@@ -357,7 +357,7 @@ impl AppServices {
         {
             return Ok(());
         }
-        let profile = self.learning_assets.set_lexical_capability_projection(
+        let profile = self.lexical_capabilities.set_lexical_capability_projection(
             lexical_entry_id,
             None,
             LexicalCapability::Listening,
@@ -374,7 +374,7 @@ impl AppServices {
     ) -> Result<LexicalObservation, ApplicationError> {
         require_text(&input.original_form, "original_form")?;
         let mut entry = self
-            .learning_assets
+            .lexical_entries
             .lexical_details(&input.lexical_entry_id)?
             .map(|details| details.entry)
             .ok_or(ApplicationError::NotFound("lexical entry"))?;
@@ -385,7 +385,7 @@ impl AppServices {
         }
         let created_at_ms = now_ms();
         let observation = self
-            .learning_assets
+            .learning_observations
             .create_lexical_observation(&LexicalObservation {
                 id: domain::lexical_observation_id(&input.lexical_entry_id, &input.sentence_id),
                 lexical_entry_id: input.lexical_entry_id,
@@ -396,7 +396,7 @@ impl AppServices {
             })?;
         if let Some(source) = input.source.as_ref() {
             entry.updated_at_ms = created_at_ms;
-            self.learning_assets.upsert_lexical_entry(
+            self.lexical_entries.upsert_lexical_entry(
                 &entry,
                 Some(source),
                 LearningChangeSource::UserSelection,
@@ -438,7 +438,7 @@ impl AppServices {
         lexical_entry_id: &LexicalEntryId,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<(), ApplicationError> {
-        self.learning_assets
+        self.learning_observations
             .clear_lexical_observation(lexical_entry_id, sentence_id)
     }
 
@@ -456,7 +456,7 @@ impl AppServices {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<LexicalEntryDetails>, ApplicationError> {
-        self.learning_assets.list_lexical_entries(
+        self.lexical_entries.list_lexical_entries(
             &LanguageCode::parse(language)?,
             kind,
             status,
@@ -468,7 +468,7 @@ impl AppServices {
     }
 
     pub fn export_vocabulary(&self) -> Result<VocabularyAssetBundle, ApplicationError> {
-        self.learning_assets.export_assets()
+        self.vocabulary_assets.export_assets()
     }
 
     pub fn import_vocabulary(
@@ -495,7 +495,7 @@ impl AppServices {
                 })
                 .collect();
         }
-        self.learning_assets.import_assets(&effective)
+        self.vocabulary_assets.import_assets(&effective)
     }
 
     pub fn update_lexical_learning_content(
@@ -504,7 +504,7 @@ impl AppServices {
         user_definition: Option<String>,
         personal_note: Option<String>,
     ) -> Result<LexicalEntryDetails, ApplicationError> {
-        self.learning_assets.update_lexical_learning_content(
+        self.lexical_content.update_lexical_learning_content(
             id,
             clean_optional(user_definition),
             clean_optional(personal_note),
@@ -526,7 +526,7 @@ impl AppServices {
                 continue;
             }
             let normalization = self.normalize_lexical_form(language.as_str(), &word)?;
-            let existing = self.learning_assets.lexical_entry_by_key(
+            let existing = self.lexical_entries.lexical_entry_by_key(
                 &language,
                 LexicalEntryKind::Word,
                 &normalization.normalized,
@@ -571,7 +571,7 @@ impl AppServices {
                     .as_ref()
                     .map_or(imported_at_ms, |entry| entry.learning_updated_at_ms),
             };
-            self.learning_assets.upsert_lexical_entry(
+            self.lexical_entries.upsert_lexical_entry(
                 &entry,
                 None,
                 LearningChangeSource::Import,

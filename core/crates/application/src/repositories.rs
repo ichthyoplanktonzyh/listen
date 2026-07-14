@@ -91,7 +91,9 @@ pub trait PronunciationRepository: Send + Sync {
     ) -> Result<Option<SentencePronunciation>, ApplicationError>;
 }
 
-pub trait TimelineResourceRepository: Send + Sync {
+/// Word timing and word-timeline persistence change together because active
+/// selection and raw timing compatibility share one invariant.
+pub trait WordTimelineRepository: Send + Sync {
     fn save_word_timings(
         &self,
         sentence_id: &SubtitleSentenceId,
@@ -119,6 +121,10 @@ pub trait TimelineResourceRepository: Send + Sync {
     -> Result<WordTimeline, ApplicationError>;
     fn archive_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError>;
     fn delete_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError>;
+}
+
+/// Chunk partitions have an independent lifecycle.
+pub trait ChunkTimelineRepository: Send + Sync {
     fn save_chunk_timeline(
         &self,
         timeline: &ChunkTimeline,
@@ -147,6 +153,10 @@ pub trait TimelineResourceRepository: Send + Sync {
         &self,
         id: &ChunkTimelineId,
     ) -> Result<ChunkTimeline, ApplicationError>;
+}
+
+/// Sense-group analyses are versioned and activated as one resource family.
+pub trait SenseGroupRepository: Send + Sync {
     fn save_sense_group_analysis(
         &self,
         analysis: &SenseGroupAnalysis,
@@ -175,6 +185,10 @@ pub trait TimelineResourceRepository: Send + Sync {
         &self,
         id: &SenseGroupAnalysisId,
     ) -> Result<SenseGroupAnalysis, ApplicationError>;
+}
+
+/// Phone timelines have their own activation and archival lifecycle.
+pub trait PhoneTimelineRepository: Send + Sync {
     fn save_phone_timeline(
         &self,
         timeline: &PhoneTimeline,
@@ -218,7 +232,8 @@ pub trait LLTimelineResourceRepository: Send + Sync {
     ) -> Result<Option<(LLTimelineMetadata, Vec<LLTimelineArtifact>)>, ApplicationError>;
 }
 
-pub trait LearningAssetRepository: Send + Sync {
+/// Capability projections and their audit history change under one invariant.
+pub trait LexicalCapabilityRepository: Send + Sync {
     fn lexical_capability_profile(
         &self,
         lexical_entry_id: &LexicalEntryId,
@@ -245,6 +260,11 @@ pub trait LearningAssetRepository: Send + Sync {
         lexical_entry_id: &LexicalEntryId,
         sense_id: Option<&LexicalSenseId>,
     ) -> Result<Vec<LexicalCapabilityHistory>, ApplicationError>;
+}
+
+/// Lexical identity, lookup, normalization overrides, and vocabulary
+/// watermarks are one catalog capability.
+pub trait LexicalEntryRepository: Send + Sync {
     fn upsert_lexical_entry(
         &self,
         entry: &LexicalEntry,
@@ -279,6 +299,29 @@ pub trait LearningAssetRepository: Send + Sync {
         &self,
         language: &LanguageCode,
     ) -> Result<(u64, u64), ApplicationError>;
+    fn set_lemma_override(
+        &self,
+        language: &LanguageCode,
+        original_normalized: &str,
+        corrected_normalized: &str,
+        updated_at_ms: u64,
+    ) -> Result<(), ApplicationError>;
+    fn lemma_override(
+        &self,
+        language: &LanguageCode,
+        original_normalized: &str,
+    ) -> Result<Option<String>, ApplicationError>;
+    fn lexical_entry_by_key(
+        &self,
+        language: &LanguageCode,
+        kind: LexicalEntryKind,
+        normalized_form: &str,
+    ) -> Result<Option<LexicalEntry>, ApplicationError>;
+}
+
+/// Occurrence and channelized learning observations are append/read/clear
+/// evidence operations.
+pub trait LearningObservationRepository: Send + Sync {
     fn create_lexical_observation(
         &self,
         observation: &LexicalObservation,
@@ -305,6 +348,11 @@ pub trait LearningAssetRepository: Send + Sync {
         lexical_entry_id: &LexicalEntryId,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<(), ApplicationError>;
+}
+
+/// User-authored lexical content and sense-folder assignment share editing
+/// consistency rules.
+pub trait LexicalContentRepository: Send + Sync {
     fn update_lexical_learning_content(
         &self,
         id: &LexicalEntryId,
@@ -337,29 +385,15 @@ pub trait LearningAssetRepository: Send + Sync {
         sense_id: &LexicalSenseId,
         occurrence_id: &LexicalOccurrenceId,
     ) -> Result<(), ApplicationError>;
+}
+
+/// Import/export owns whole-vocabulary snapshot compatibility.
+pub trait VocabularyAssetRepository: Send + Sync {
     fn export_assets(&self) -> Result<VocabularyAssetBundle, ApplicationError>;
     fn import_assets(&self, bundle: &VocabularyAssetBundle) -> Result<(), ApplicationError>;
     fn export_all_capability_profiles(
         &self,
     ) -> Result<Vec<LexicalCapabilityProfile>, ApplicationError>;
-    fn set_lemma_override(
-        &self,
-        language: &LanguageCode,
-        original_normalized: &str,
-        corrected_normalized: &str,
-        updated_at_ms: u64,
-    ) -> Result<(), ApplicationError>;
-    fn lemma_override(
-        &self,
-        language: &LanguageCode,
-        original_normalized: &str,
-    ) -> Result<Option<String>, ApplicationError>;
-    fn lexical_entry_by_key(
-        &self,
-        language: &LanguageCode,
-        kind: LexicalEntryKind,
-        normalized_form: &str,
-    ) -> Result<Option<LexicalEntry>, ApplicationError>;
 }
 
 pub trait PracticeRepository: Send + Sync {
@@ -398,7 +432,8 @@ pub trait PracticeRepository: Send + Sync {
     ) -> Result<Vec<PracticeAttempt>, ApplicationError>;
 }
 
-pub trait ReviewRepository: Send + Sync {
+/// Review cards, attempts, and schedules form one transaction-oriented queue.
+pub trait ReviewQueueRepository: Send + Sync {
     fn create_review_item(&self, item: &ReviewItem) -> Result<ReviewItem, ApplicationError>;
     fn get_review_item(&self, id: &ReviewItemId) -> Result<Option<ReviewItem>, ApplicationError>;
     fn list_review_items(
@@ -428,6 +463,10 @@ pub trait ReviewRepository: Send + Sync {
         due_at_or_before_ms: u64,
         limit: u32,
     ) -> Result<Vec<(ReviewItem, ReviewSchedule)>, ApplicationError>;
+}
+
+/// Hunting candidates and targets evolve together as one discovery workflow.
+pub trait HuntingRepository: Send + Sync {
     fn upsert_hunting_candidate(
         &self,
         candidate: &HuntingCandidate,
@@ -456,6 +495,10 @@ pub trait ReviewRepository: Send + Sync {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<HuntingTarget>, ApplicationError>;
+}
+
+/// Recognition evidence and upgrade suggestions share the promotion invariant.
+pub trait RecognitionUpgradeRepository: Send + Sync {
     fn upsert_recognition_evidence(
         &self,
         evidence: &RecognitionEvidence,

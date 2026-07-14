@@ -32,17 +32,19 @@ use domain::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
-mod event_payloads;
+mod event_payloads {
+    pub use local_runtime::events::*;
+}
 mod m18;
-mod phonetic_analysis;
 mod routes;
 mod secret_store_keychain;
-mod sound_line;
-mod speech_jobs;
 mod syntax_capability;
-mod transcription;
 use m18::M18Coordinator;
-use phonetic_analysis::{CreatePhoneticJobRequest, PhoneticAnalysisCoordinator};
+use local_runtime::{
+    CreateJobRequest, CreatePhoneticJobRequest, CreateSoundLineJob, CreateSpeechBatchJob,
+    PhoneticAnalysisCoordinator, SoundLineCoordinator, SpeechBatchCoordinator,
+    TranscriptionCoordinator,
+};
 use routes::corpus::*;
 use routes::dictionary::*;
 use routes::language::*;
@@ -60,12 +62,9 @@ use routes::timelines::*;
 use routes::transcription::*;
 use routes::vocabulary::*;
 pub use secret_store_keychain::KeychainSecretStore;
-use sound_line::{CreateSoundLineJob, SoundLineCoordinator};
-use speech_jobs::{CreateSpeechBatchJob, SpeechBatchCoordinator};
 pub use syntax_capability::{
     SyntaxCapabilityManager, SyntaxCapabilityStatus, SyntaxCapabilityView,
 };
-use transcription::{CreateJobRequest, TranscriptionCoordinator};
 
 static ERROR_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
@@ -113,6 +112,16 @@ impl ApiState {
             TranscriptionCoordinator::new(services.clone(), repository.clone(), events.clone())
                 .expect("transcription coordinator must initialize"),
         );
+        #[cfg(test)]
+        let phonetic_analysis = Arc::new(
+            PhoneticAnalysisCoordinator::new_with_test_provider(
+                services.clone(),
+                repository,
+                events.clone(),
+            )
+            .expect("phonetic analysis coordinator must initialize"),
+        );
+        #[cfg(not(test))]
         let phonetic_analysis = Arc::new(
             PhoneticAnalysisCoordinator::new(services.clone(), repository, events.clone())
                 .expect("phonetic analysis coordinator must initialize"),

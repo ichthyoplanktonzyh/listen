@@ -5,14 +5,14 @@ impl AppServices {
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<SenseGroupAnalysis>, ApplicationError> {
-        self.timelines.list_sense_group_analyses(track_id)
+        self.sense_groups.list_sense_group_analyses(track_id)
     }
 
     pub fn summarize_sense_group_analyses(
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<SenseGroupAnalysisSummary>, ApplicationError> {
-        let analyses = self.timelines.list_sense_group_analyses(track_id)?;
+        let analyses = self.sense_groups.list_sense_group_analyses(track_id)?;
         Ok(analyses.iter().map(sense_group_analysis_summary).collect())
     }
 
@@ -20,7 +20,7 @@ impl AppServices {
         &self,
         id: &SenseGroupAnalysisId,
     ) -> Result<Option<SenseGroupAnalysis>, ApplicationError> {
-        self.timelines.get_sense_group_analysis(id)
+        self.sense_groups.get_sense_group_analysis(id)
     }
 
     pub fn generate_sense_group_analysis(
@@ -29,23 +29,6 @@ impl AppServices {
         requested_status: Option<TimelineStatus>,
     ) -> Result<SenseGroupAnalysis, ApplicationError> {
         self.generate_sense_group_analysis_internal(track_id, requested_status, None)
-    }
-
-    pub fn generate_syntax_aware_sense_group_analysis(
-        &self,
-        track_id: &SubtitleTrackId,
-        requested_status: Option<TimelineStatus>,
-        syntax: &SyntacticAnalysis,
-        validation: &SyntacticValidationReport,
-        qualification: speech_analysis::connected_speech_rules::SyntacticProviderQualification,
-    ) -> Result<SenseGroupAnalysis, ApplicationError> {
-        if qualification
-            != speech_analysis::connected_speech_rules::SyntacticProviderQualification::Qualified
-            || !validation.is_activatable()
-        {
-            return Err(ApplicationError::Validation("qualified syntactic analysis"));
-        }
-        self.generate_sense_group_analysis_internal(track_id, requested_status, Some(syntax))
     }
 
     fn generate_sense_group_analysis_internal(
@@ -66,7 +49,7 @@ impl AppServices {
                 "syntactic analysis source snapshot",
             ));
         }
-        let config = speech_analysis::sense_group_partition::SenseGroupPartitionConfig::default();
+        let config = speech_analysis::audible_structure::SenseGroupPartitionConfig::default();
         let mut groups = Vec::new();
         for sentence in &track.sentences {
             let candidates = self.phrase_candidates(&sentence.id)?;
@@ -78,7 +61,7 @@ impl AppServices {
                         .find(|syntax| syntax.sentence_id == sentence.id)
                 })
                 .map(|syntax| {
-                    speech_analysis::sense_group_partition::partition_sentence_with_syntax(
+                    speech_analysis::audible_structure::partition_sentence_with_syntax(
                         sentence,
                         &candidates,
                         &config,
@@ -86,7 +69,7 @@ impl AppServices {
                     )
                 })
                 .unwrap_or_else(|| {
-                    speech_analysis::sense_group_partition::partition_sentence(
+                    speech_analysis::audible_structure::partition_sentence(
                         sentence,
                         &candidates,
                         &config,
@@ -103,15 +86,15 @@ impl AppServices {
         let now = now_ms();
         let (provider_id, provider_version, algorithm) = if syntax.is_some() {
             (
-                speech_analysis::sense_group_partition::SYNTAX_PROVIDER_ID.to_owned(),
-                speech_analysis::sense_group_partition::SYNTAX_PROVIDER_VERSION.to_owned(),
-                speech_analysis::sense_group_partition::SYNTAX_ALGORITHM.to_owned(),
+                speech_analysis::audible_structure::SYNTAX_PROVIDER_ID.to_owned(),
+                speech_analysis::audible_structure::SYNTAX_PROVIDER_VERSION.to_owned(),
+                speech_analysis::audible_structure::SYNTAX_ALGORITHM.to_owned(),
             )
         } else {
             (
-                speech_analysis::sense_group_partition::PROVIDER_ID.to_owned(),
-                speech_analysis::sense_group_partition::PROVIDER_VERSION.to_owned(),
-                speech_analysis::sense_group_partition::ALGORITHM.to_owned(),
+                speech_analysis::audible_structure::PROVIDER_ID.to_owned(),
+                speech_analysis::audible_structure::PROVIDER_VERSION.to_owned(),
+                speech_analysis::audible_structure::ALGORITHM.to_owned(),
             )
         };
         let fingerprint = format!(
@@ -128,7 +111,7 @@ impl AppServices {
             track_id: track.id.clone(),
             media_id: track.media_id.clone(),
             parent_word_timeline_id: self
-                .timelines
+                .word_timelines
                 .active_word_timeline(track_id)?
                 .map(|wt| wt.id),
             provider_id,
@@ -149,9 +132,9 @@ impl AppServices {
         if requested_status == TimelineStatus::Active {
             analysis.status = TimelineStatus::Candidate;
         }
-        let analysis = self.timelines.save_sense_group_analysis(&analysis)?;
+        let analysis = self.sense_groups.save_sense_group_analysis(&analysis)?;
         if requested_status == TimelineStatus::Active {
-            self.timelines.activate_sense_group_analysis(&analysis.id)
+            self.sense_groups.activate_sense_group_analysis(&analysis.id)
         } else {
             Ok(analysis)
         }
@@ -161,28 +144,28 @@ impl AppServices {
         &self,
         id: &SenseGroupAnalysisId,
     ) -> Result<SenseGroupAnalysis, ApplicationError> {
-        self.timelines.activate_sense_group_analysis(id)
+        self.sense_groups.activate_sense_group_analysis(id)
     }
 
     pub fn archive_sense_group_analysis(
         &self,
         id: &SenseGroupAnalysisId,
     ) -> Result<SenseGroupAnalysis, ApplicationError> {
-        self.timelines.archive_sense_group_analysis(id)
+        self.sense_groups.archive_sense_group_analysis(id)
     }
 
     pub fn delete_sense_group_analysis(
         &self,
         id: &SenseGroupAnalysisId,
     ) -> Result<SenseGroupAnalysis, ApplicationError> {
-        self.timelines.delete_sense_group_analysis(id)
+        self.sense_groups.delete_sense_group_analysis(id)
     }
 }
 
 fn sense_group_from_span(
     sentence: &SubtitleSentence,
     group_index: u32,
-    span: &speech_analysis::sense_group_partition::SenseGroupSpan,
+    span: &speech_analysis::audible_structure::SenseGroupSpan,
 ) -> SenseGroup {
     let matching_tokens: Vec<&SubtitleToken> = sentence
         .tokens

@@ -8,5 +8,5 @@ fuzz_target!(|data: &[u8]| {
     if data.len() > 1_000_000 {
         return;
     }
-    let _ = speech_analysis::asr_timing::extract_word_timings_from_json(data, &[]);
+    let _ = speech_analysis::timing::extract_word_timings_from_json(data, &[]);
 });

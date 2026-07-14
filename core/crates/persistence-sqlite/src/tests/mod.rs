@@ -1,10 +1,14 @@
 use super::*;
 use application::{
     AppServices, ApplicationError, CoachDashboardRepository, DictionaryProvider,
-    DictionaryProviderError, ImportSubtitle, LearningAssetRepository, LearningEventRepository,
+    DictionaryProviderError, ImportSubtitle, LearningEventRepository,
+    LearningObservationRepository, LexicalCapabilityRepository,
+    LexicalEntryRepository, VocabularyAssetRepository,
     ListeningInboxRepository, MediaRepository, PhoneticAnalysisRepository, PracticeRepository,
-    LLTimelineResourceRepository, PronunciationRepository, RegisterMedia, ReviewRepository,
-    SubtitleTrackRepository, TimelineResourceRepository, TranscriptionRepository,
+    LLTimelineResourceRepository, PronunciationRepository,
+    RecognitionUpgradeRepository, RegisterMedia, ReviewQueueRepository,
+    ChunkTimelineRepository, PhoneTimelineRepository, SenseGroupRepository,
+    SubtitleTrackRepository, TranscriptionRepository, WordTimelineRepository,
     UpsertLexicalEntry,
 };
 

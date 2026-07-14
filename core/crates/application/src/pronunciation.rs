@@ -131,7 +131,7 @@ impl AppServices {
         &self,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<Vec<WordTiming>, ApplicationError> {
-        let existing = self.timelines.get_word_timings(sentence_id)?;
+        let existing = self.word_timelines.get_word_timings(sentence_id)?;
         if word_timing_cache_is_usable(&existing) {
             return Ok(existing);
         }
@@ -148,7 +148,7 @@ impl AppServices {
             &sentence,
             Some(profile.rhythm_prosody.as_str()),
         );
-        self.timelines.save_word_timings(sentence_id, &values)?;
+        self.word_timelines.save_word_timings(sentence_id, &values)?;
         Ok(values)
     }
 
@@ -156,7 +156,7 @@ impl AppServices {
         &self,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<Option<bool>, ApplicationError> {
-        let values = self.timelines.get_word_timings(sentence_id)?;
+        let values = self.word_timelines.get_word_timings(sentence_id)?;
         Ok(values.first().map(|_| word_timing_cache_is_usable(&values)))
     }
 
@@ -179,7 +179,7 @@ impl AppServices {
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<WordTiming>, ApplicationError> {
-        if let Some(timeline) = self.timelines.active_word_timeline(track_id)?
+        if let Some(timeline) = self.word_timelines.active_word_timeline(track_id)?
             && !timeline.words.is_empty()
         {
             return Ok(timeline.words);

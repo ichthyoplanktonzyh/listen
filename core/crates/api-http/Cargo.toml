@@ -15,6 +15,7 @@ dictionary-provider = { path = "../dictionary-provider" }
 domain = { path = "../domain" }
 hex.workspace = true
 llm-provider = { path = "../llm-provider" }
+local-runtime = { path = "../local-runtime" }
 persistence-sqlite = { path = "../persistence-sqlite" }
 rand.workspace = true
 reqwest.workspace = true

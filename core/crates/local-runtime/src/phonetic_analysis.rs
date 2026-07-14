@@ -10,6 +10,10 @@ use domain::{
 };
 use tokio::sync::{Semaphore, broadcast};
 
+use crate::process::{
+    CancellationProbe, ProcessOutputObserver, ProcessRunner, ProcessSpec, TokioProcessRunner,
+};
+
 const FAKE_PROVIDER_ID: &str = "research-fixture";
 const FAKE_MODEL_ID: &str = "research-fixture:deterministic@v1";
 
@@ -32,6 +36,8 @@ pub struct PhoneticAnalysisCoordinator {
     repository: Arc<dyn PhoneticAnalysisRepository>,
     events: broadcast::Sender<EventEnvelope>,
     queue: Arc<Semaphore>,
+    process_runner: Arc<dyn ProcessRunner>,
+    fake_provider_enabled: bool,
 }
 
 impl PhoneticAnalysisCoordinator {
@@ -40,11 +46,61 @@ impl PhoneticAnalysisCoordinator {
         repository: Arc<dyn PhoneticAnalysisRepository>,
         events: broadcast::Sender<EventEnvelope>,
     ) -> Result<Self, ApplicationError> {
+        Self::new_with_options(
+            services,
+            repository,
+            events,
+            Arc::new(TokioProcessRunner),
+            fake_provider_enabled_from_env(),
+        )
+    }
+
+    /// Test composition entry point. The deterministic fixture is explicit so
+    /// moving this coordinator across crate boundaries cannot change behavior
+    /// through the downstream crate's `cfg(test)`.
+    pub fn new_with_test_provider(
+        services: AppServices,
+        repository: Arc<dyn PhoneticAnalysisRepository>,
+        events: broadcast::Sender<EventEnvelope>,
+    ) -> Result<Self, ApplicationError> {
+        Self::new_with_options(
+            services,
+            repository,
+            events,
+            Arc::new(TokioProcessRunner),
+            true,
+        )
+    }
+
+    pub fn new_with_process_runner(
+        services: AppServices,
+        repository: Arc<dyn PhoneticAnalysisRepository>,
+        events: broadcast::Sender<EventEnvelope>,
+        process_runner: Arc<dyn ProcessRunner>,
+    ) -> Result<Self, ApplicationError> {
+        Self::new_with_options(
+            services,
+            repository,
+            events,
+            process_runner,
+            fake_provider_enabled_from_env(),
+        )
+    }
+
+    fn new_with_options(
+        services: AppServices,
+        repository: Arc<dyn PhoneticAnalysisRepository>,
+        events: broadcast::Sender<EventEnvelope>,
+        process_runner: Arc<dyn ProcessRunner>,
+        fake_provider_enabled: bool,
+    ) -> Result<Self, ApplicationError> {
         let value = Self {
             services,
             repository,
             events,
             queue: Arc::new(Semaphore::new(1)),
+            process_runner,
+            fake_provider_enabled,
         };
         value.repository.interrupt_active_phonetic_jobs(now_ms())?;
         value.seed_research_model()?;
@@ -72,7 +128,7 @@ impl PhoneticAnalysisCoordinator {
                     .into(),
             ),
         }];
-        if fake_enabled() {
+        if self.fake_provider_enabled {
             providers.push(PhoneticAnalysisProviderInfo {
                 id: FAKE_PROVIDER_ID.into(),
                 display_name: "Deterministic research fixture".into(),
@@ -93,7 +149,7 @@ impl PhoneticAnalysisCoordinator {
 
     pub fn models(&self) -> Result<Vec<PhoneticAnalysisModelDescriptor>, ApplicationError> {
         let mut models = self.repository.list_phonetic_models()?;
-        if !fake_enabled() {
+        if !self.fake_provider_enabled {
             models.retain(|m| m.provider_id != FAKE_PROVIDER_ID);
         }
         Ok(models)
@@ -137,51 +193,24 @@ impl PhoneticAnalysisCoordinator {
                 ApplicationError::Repository(format!("cannot create model dir: {e}"))
             })?;
 
-            let mut child = tokio::process::Command::new("python3")
-                .arg(&script)
-                .arg("--model-dir")
-                .arg(&model_dir)
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .spawn()
-                .map_err(|e| ApplicationError::ExternalProcess(format!("spawn failed: {e}")))?;
-
-            let stdout = child.stdout.take().unwrap();
-            let mut reader = tokio::io::BufReader::new(stdout).lines();
-
-            use tokio::io::AsyncBufReadExt;
-            while let Some(line) = reader
-                .next_line()
+            self.process_runner
+                .run_streaming(
+                    ProcessSpec::new(
+                        "python3",
+                        vec![script, "--model-dir".into(), model_dir.clone()],
+                    ),
+                    Arc::new(PhoneticInstallCancellation {
+                        repository: self.repository.clone(),
+                        model_id: id.clone(),
+                    }),
+                    Arc::new(PhoneticInstallProgress {
+                        repository: self.repository.clone(),
+                        events: self.events.clone(),
+                        model_id: id.clone(),
+                        model_size_bytes: model.size_bytes,
+                    }),
+                )
                 .await
-                .map_err(|e| ApplicationError::Repository(e.to_string()))?
-            {
-                if let Ok(msg) = serde_json::from_str::<serde_json::Value>(&line) {
-                    let progress = msg.get("progress").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                    model.installed_bytes = (progress / 100.0 * model.size_bytes as f64) as u64;
-                    model.updated_at_ms = now_ms();
-                    self.repository.upsert_phonetic_model(&model)?;
-                    self.emit_model(&model);
-
-                    if msg.get("status").and_then(|v| v.as_str()) == Some("failed") {
-                        let message = msg
-                            .get("message")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("unknown error");
-                        return Err(ApplicationError::ExternalProcess(message.into()));
-                    }
-                }
-            }
-
-            let status = child
-                .wait()
-                .await
-                .map_err(|e| ApplicationError::ExternalProcess(e.to_string()))?;
-            if !status.success() {
-                return Err(ApplicationError::ExternalProcess(format!(
-                    "download script exited with {status}"
-                )));
-            }
-            Ok(())
         }
         .await;
 
@@ -300,7 +329,7 @@ impl PhoneticAnalysisCoordinator {
         request: CreatePhoneticJobRequest,
     ) -> Result<PhoneticAnalysisJob, ApplicationError> {
         let is_ctc = request.model_id == CTC_MODEL_ID;
-        if !is_ctc && !fake_enabled() {
+        if !is_ctc && !self.fake_provider_enabled {
             return Err(ApplicationError::Conflict(
                 "no phonetic analysis provider is available",
             ));
@@ -633,7 +662,7 @@ impl PhoneticAnalysisCoordinator {
             phone_timeline_ids.push(timeline.id);
         }
         let _ = self.events.send(
-            crate::event_payloads::PhoneticAnalysisCompletedPayload {
+            crate::events::PhoneticAnalysisCompletedPayload {
                 job_id: job.id.as_str().to_owned(),
                 track_id: job.track_id.as_str().to_owned(),
                 analysis_ids: analyses
@@ -785,8 +814,60 @@ impl PhoneticAnalysisCoordinator {
     }
 }
 
-fn fake_enabled() -> bool {
-    cfg!(test) || std::env::var("LLPLAYERNEXT_ENABLE_FAKE_PHONETIC_PROVIDER").as_deref() == Ok("1")
+struct PhoneticInstallCancellation {
+    repository: Arc<dyn PhoneticAnalysisRepository>,
+    model_id: PhoneticAnalysisModelId,
+}
+
+impl CancellationProbe for PhoneticInstallCancellation {
+    fn is_cancelled(&self) -> Result<bool, ApplicationError> {
+        Ok(self
+            .repository
+            .get_phonetic_model(&self.model_id)?
+            .is_some_and(|model| model.state != PhoneticModelState::Installing))
+    }
+}
+
+struct PhoneticInstallProgress {
+    repository: Arc<dyn PhoneticAnalysisRepository>,
+    events: broadcast::Sender<EventEnvelope>,
+    model_id: PhoneticAnalysisModelId,
+    model_size_bytes: u64,
+}
+
+impl ProcessOutputObserver for PhoneticInstallProgress {
+    fn stdout_line(&self, line: &str) -> Result<(), ApplicationError> {
+        let Ok(message) = serde_json::from_str::<serde_json::Value>(line) else {
+            return Ok(());
+        };
+        if message.get("status").and_then(|value| value.as_str()) == Some("failed") {
+            let detail = message
+                .get("message")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown error");
+            return Err(ApplicationError::ExternalProcess(detail.into()));
+        }
+        let progress = message
+            .get("progress")
+            .and_then(|value| value.as_f64())
+            .unwrap_or(0.0);
+        let mut model = self
+            .repository
+            .get_phonetic_model(&self.model_id)?
+            .ok_or(ApplicationError::NotFound("phonetic analysis model"))?;
+        model.installed_bytes = (progress / 100.0 * self.model_size_bytes as f64) as u64;
+        model.updated_at_ms = now_ms();
+        let model = self.repository.upsert_phonetic_model(&model)?;
+        let _ = self.events.send(EventEnvelope::v1(
+            EventName::PhoneticAnalysisModelChanged,
+            serde_json::to_value(model).expect("phonetic model serializes"),
+        ));
+        Ok(())
+    }
+}
+
+fn fake_provider_enabled_from_env() -> bool {
+    std::env::var("LLPLAYERNEXT_ENABLE_FAKE_PHONETIC_PROVIDER").as_deref() == Ok("1")
 }
 
 fn ctc_model_dir() -> Option<String> {

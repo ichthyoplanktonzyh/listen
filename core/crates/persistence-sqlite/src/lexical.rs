@@ -1,4 +1,8 @@
-use application::{ApplicationError, LearningAssetRepository, LexicalSourceContext};
+use application::{
+    ApplicationError, LearningObservationRepository, LexicalCapabilityRepository,
+    LexicalContentRepository, LexicalEntryRepository, LexicalSourceContext,
+    VocabularyAssetRepository,
+};
 use domain::*;
 use rusqlite::{OptionalExtension, params, params_from_iter};
 
@@ -18,7 +22,7 @@ mod rows;
 use capability::*;
 use rows::*;
 
-impl LearningAssetRepository for SqliteRepository {
+impl LexicalCapabilityRepository for SqliteRepository {
     fn lexical_capability_profile(
         &self,
         lexical_entry_id: &LexicalEntryId,
@@ -100,6 +104,9 @@ impl LearningAssetRepository for SqliteRepository {
             .map_err(repo)
     }
 
+}
+
+impl LexicalEntryRepository for SqliteRepository {
     fn upsert_lexical_entry(
         &self,
         entry: &LexicalEntry,
@@ -521,6 +528,9 @@ impl LearningAssetRepository for SqliteRepository {
         .map_err(repo)
     }
 
+}
+
+impl LearningObservationRepository for SqliteRepository {
     fn create_lexical_observation(
         &self,
         observation: &LexicalObservation,
@@ -655,6 +665,9 @@ impl LearningAssetRepository for SqliteRepository {
             .map_err(repo)
     }
 
+}
+
+impl LexicalContentRepository for SqliteRepository {
     fn update_lexical_learning_content(
         &self,
         id: &LexicalEntryId,
@@ -814,6 +827,9 @@ impl LearningAssetRepository for SqliteRepository {
         Ok(())
     }
 
+}
+
+impl VocabularyAssetRepository for SqliteRepository {
     fn export_assets(&self) -> Result<VocabularyAssetBundle, ApplicationError> {
         let (lexical_entries, lexical_history, lexical_occurrences, lexical_observations) =
             self.export_lexical_assets()?;

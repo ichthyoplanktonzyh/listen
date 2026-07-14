@@ -9,7 +9,7 @@ impl AppServices {
         let language = LanguageCode::parse(language)?;
         let original = normalize_lemma(value);
         require_text(&original, "value")?;
-        if let Some(corrected) = self.learning_assets.lemma_override(&language, &original)? {
+        if let Some(corrected) = self.lexical_entries.lemma_override(&language, &original)? {
             return Ok(LexicalNormalization {
                 original,
                 normalized: corrected,
@@ -53,12 +53,12 @@ impl AppServices {
         let corrected = normalize_lemma(corrected);
         require_text(&original, "original")?;
         require_text(&corrected, "corrected")?;
-        let original_entry = self.learning_assets.lexical_entry_by_key(
+        let original_entry = self.lexical_entries.lexical_entry_by_key(
             &language,
             LexicalEntryKind::Word,
             &original,
         )?;
-        let corrected_entry = self.learning_assets.lexical_entry_by_key(
+        let corrected_entry = self.lexical_entries.lexical_entry_by_key(
             &language,
             LexicalEntryKind::Word,
             &corrected,
@@ -70,7 +70,7 @@ impl AppServices {
                 "lemma correction target already has a separate word asset",
             ));
         }
-        self.learning_assets
+        self.lexical_entries
             .set_lemma_override(&language, &original, &corrected, now_ms())?;
         Ok(LexicalNormalization {
             original,
@@ -98,7 +98,7 @@ impl AppServices {
             lexical_unit_for_entry(&language, input.kind, &normalized_form, &input.display_form);
         let id = LexicalEntryId::from_fingerprint("lexical-entry", &unit.identity());
         let now = now_ms();
-        let details = self.learning_assets.upsert_lexical_entry(
+        let details = self.lexical_entries.upsert_lexical_entry(
             &LexicalEntry {
                 id,
                 unit,
@@ -129,7 +129,7 @@ impl AppServices {
             // The writer ladder may have kept a task-grade evidence
             // conclusion; return the effective view, not the raw write.
             return self
-                .learning_assets
+                .lexical_entries
                 .lexical_details(&details.entry.id)?
                 .ok_or(ApplicationError::NotFound("lexical entry"));
         }
@@ -140,7 +140,7 @@ impl AppServices {
         &self,
         id: &LexicalEntryId,
     ) -> Result<Option<LexicalEntryDetails>, ApplicationError> {
-        self.learning_assets.lexical_details(id)
+        self.lexical_entries.lexical_details(id)
     }
 
     pub fn list_lexical_entries(
@@ -152,7 +152,7 @@ impl AppServices {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<LexicalEntryDetails>, ApplicationError> {
-        self.learning_assets.list_lexical_entries(
+        self.lexical_entries.list_lexical_entries(
             &LanguageCode::parse(language)?,
             kind,
             status,
