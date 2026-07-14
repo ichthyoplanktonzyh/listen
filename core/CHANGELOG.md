@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-14 21:05 CST: Phase 3.9.4 Slice 3 完成：语义分组获得播放跟随与点击跳转，
+  按 ADR 0016 投影实现——新增纯函数 `senseGroupPlaybackRange`（token span →
+  WordTiming min/max，容忍乱序/缺失，无匹配返回 null），TokenLine 缓存投影（列表
+  identity 变化才重算，播放 tick 只做区间比较），点击合成 DisplayChunk 复用既有
+  onChunk → seekChunk 通路与 offset 换算；semantic 纯模式改为与 prosodic 同级的
+  实线胶囊并复用 chunk 高亮设置，删除 provisional 虚线画笔与 tooltip；compare 模式
+  保持 prosodic 底 + 虚线差异标记不变。新增投影 helper 六类单测与 TokenLine
+  semantic 高亮/点击/null 投影/compare 回归 widget 测试；flutter analyze 无告警，
+  flutter test 362 全绿。
+
 - 2026-07-14 20:47 CST: Phase 3.9.4 Slice 2 完成：Flutter speech-enhancement 加载在
   sense group 为空且非请求错误时触发一次文本规则回退生成并激活（每 track 单次守卫，
   失败降级为空并记录 errors）；设置页 semantic/compare 选项标注"可用/数据未就绪"短
