@@ -65,5 +65,28 @@ void main() {
       expect(seenPath, '/v1/media/m1/progress');
       expect(jsonDecode(seenBody!), {'position_ms': 5000});
     });
+
+    test('builds syntax lifecycle and force-rebuild requests', () async {
+      final seen = <String>[];
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'tok',
+        transport: (method, path, body) async {
+          seen.add('$method $path ${body ?? ''}');
+          return (statusCode: 200, body: '{}');
+        },
+      );
+
+      await api.syntaxCapability();
+      await api.syntaxCapabilityAction('validate');
+      await api.runTrackSyntaxAnalysis('track/a', force: true);
+
+      expect(seen[0], 'GET /v1/syntax/capability ');
+      expect(seen[1], 'POST /v1/syntax/capability/validate {}');
+      expect(seen[2], contains('POST /v1/subtitles/track%2Fa/syntax-analysis'));
+      expect(jsonDecode(seen[2].substring(seen[2].indexOf('{'))), {
+        'force': true,
+      });
+    });
   });
 }

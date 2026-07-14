@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../services/api_service.dart';
 import 'llm_provider_settings.dart';
+import 'syntax_capability_settings.dart';
 
 /// Settings dialog content widget. Takes all setting values via constructor
 /// and communicates changes back through callbacks.
@@ -12,6 +13,7 @@ class SettingsDialog extends StatefulWidget {
   const SettingsDialog({
     super.key,
     this.api,
+    this.currentTrackId,
     required this.language,
     required this.subtitlePreset,
     required this.primaryFontSize,
@@ -85,6 +87,7 @@ class SettingsDialog extends StatefulWidget {
   /// Phase 3.12: when a sidecar is connected, the AI-providers section can
   /// manage vendor-neutral LLM providers. Null keeps that section inert.
   final LocalApi? api;
+  final String? currentTrackId;
   final String language;
   final String subtitlePreset;
   final double primaryFontSize;
@@ -920,6 +923,19 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         refresh(() {});
                       },
                     ),
+                    const Divider(),
+                    Text(
+                      l.text('syntaxCapabilityTitle'),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    if (widget.api != null)
+                      SyntaxCapabilitySettings(
+                        api: widget.api!,
+                        currentTrackId: widget.currentTrackId,
+                      )
+                    else
+                      Text(l.text('syntaxCoreUnavailable')),
                     const Divider(),
                     Text(
                       key: _categoryKeys[4],
