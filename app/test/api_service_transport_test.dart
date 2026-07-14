@@ -136,5 +136,25 @@ void main() {
       expect(track.mediaId, 'media-1');
       expect(track.cues, isEmpty);
     });
+
+    test('vocabulary export preserves its open transfer document', () async {
+      const document = {
+        'version': 7,
+        'exported_at_ms': 42,
+        'lexical_entries': <Object>[],
+        'future_extension': {'preserved': true},
+      };
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'tok',
+        transport: (method, path, body) async =>
+            (statusCode: 200, body: jsonEncode(document)),
+      );
+
+      final exported = await api.exportVocabulary();
+
+      expect(exported, document);
+      expect(exported['future_extension'], {'preserved': true});
+    });
   });
 }

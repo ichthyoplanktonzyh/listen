@@ -296,3 +296,34 @@ class DeletedResourceCount {
 
   final int deleted;
 }
+
+class OpenSubtitleCandidate {
+  const OpenSubtitleCandidate({
+    required this.id,
+    required this.fileId,
+    required this.language,
+    required this.release,
+    required this.source,
+    required this.rating,
+    required this.downloadCount,
+  });
+
+  factory OpenSubtitleCandidate.fromJson(Map<String, dynamic> json) =>
+      OpenSubtitleCandidate(
+        id: json['id'] as String,
+        fileId: (json['file_id'] as num).toInt(),
+        language: json['language'] as String,
+        release: json['release'] as String,
+        source: json['source'] as String,
+        rating: (json['rating'] as num).toDouble(),
+        downloadCount: (json['download_count'] as num).toInt(),
+      );
+
+  final String id;
+  final int fileId;
+  final String language;
+  final String release;
+  final String source;
+  final double rating;
+  final int downloadCount;
+}

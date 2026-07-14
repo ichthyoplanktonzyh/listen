@@ -71,7 +71,7 @@ extension LexicalApi on LocalApi {
   /// is the legacy status axis; [capability] + [assessment] together filter by a
   /// four-channel capability dimension (both required to take effect); [kind]
   /// omitted returns both words and phrases.
-  Future<List<Map<String, dynamic>>> listVocabulary({
+  Future<List<LexicalEntryDetails>> listVocabulary({
     required String language,
     String? status,
     String? capability,
@@ -96,7 +96,12 @@ extension LexicalApi on LocalApi {
         .join('&');
     final values =
         await _request('GET', '/v1/vocabulary?$query') as List<dynamic>;
-    return values.cast<Map<String, dynamic>>();
+    return values
+        .map(
+          (value) =>
+              LexicalEntryDetails.fromJson(value as Map<String, dynamic>),
+        )
+        .toList(growable: false);
   }
 
   Future<LexicalEntryDetails> lexicalEntryDetails(String entryId) async =>
@@ -207,19 +212,20 @@ extension LexicalApi on LocalApi {
         as Map<String, dynamic>,
   );
 
-  Future<Map<String, dynamic>> importExternalVocabulary(
+  Future<ExternalVocabularyImportSummary> importExternalVocabulary(
     List<Map<String, dynamic>> entries, {
     required String language,
     String? defaultStatus,
     bool overwriteExisting = false,
-  }) async =>
-      (await _request('POST', '/v1/vocabulary/import-external', {
-            'language': language,
-            'entries': entries,
-            'default_status': defaultStatus,
-            'overwrite_existing': overwriteExisting,
-          }))
-          as Map<String, dynamic>;
+  }) async => ExternalVocabularyImportSummary.fromJson(
+    (await _request('POST', '/v1/vocabulary/import-external', {
+          'language': language,
+          'entries': entries,
+          'default_status': defaultStatus,
+          'overwrite_existing': overwriteExisting,
+        }))
+        as Map<String, dynamic>,
+  );
 
   Future<Map<String, dynamic>> exportVocabulary() async =>
       (await _request('GET', '/v1/vocabulary/export')) as Map<String, dynamic>;

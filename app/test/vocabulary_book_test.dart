@@ -13,6 +13,23 @@ import 'package:llplayer_next/utils/subtitle_position.dart';
 import 'package:llplayer_next/utils/subtitle_style.dart';
 import 'package:llplayer_next/utils/word_list_parser.dart';
 
+LexicalEntryDetails vocabularyDetails({
+  required String displayForm,
+  String kind = 'word',
+  List<LexicalOccurrence> occurrences = const [],
+  LexicalCapabilityProfile? capabilityProfile,
+}) => LexicalEntryDetails(
+  entry: LexicalEntry(
+    id: 'entry-$displayForm',
+    normalizedForm: displayForm.toLowerCase(),
+    displayForm: displayForm,
+    kind: kind,
+    language: 'en',
+  ),
+  occurrences: occurrences,
+  capabilityProfile: capabilityProfile,
+);
+
 Widget localized(Widget child, {Locale locale = const Locale('en')}) =>
     MaterialApp(
       locale: locale,
@@ -82,16 +99,20 @@ void main() {
   testWidgets('vocabulary book shows durable source and unavailable state', (
     tester,
   ) async {
-    Map<String, dynamic>? selected;
-    final word = <String, dynamic>{
-      'entry': {'display_form': 'Hello'},
-      'occurrences': [
-        {
-          'sentence_text_snapshot': 'Hello from a durable snapshot.',
-          'media_id': null,
-        },
+    LexicalEntryDetails? selected;
+    final word = vocabularyDetails(
+      displayForm: 'Hello',
+      occurrences: const [
+        LexicalOccurrence(
+          mediaTitleSnapshot: 'Example',
+          mediaFingerprintSnapshot: 'sha256:example',
+          sentenceTextSnapshot: 'Hello from a durable snapshot.',
+          startMsSnapshot: 0,
+          endMsSnapshot: 1000,
+          encounterCount: 1,
+        ),
       ],
-    };
+    );
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -113,17 +134,17 @@ void main() {
   testWidgets('vocabulary book shows a four-channel snapshot and phrase badge', (
     tester,
   ) async {
-    final word = <String, dynamic>{
-      'entry': {'display_form': 'take care of', 'kind': 'phrase'},
-      'occurrences': const [],
-      'capability_profile': {
+    final word = vocabularyDetails(
+      displayForm: 'take care of',
+      kind: 'phrase',
+      capabilityProfile: LexicalCapabilityProfile.fromJson({
         'lexical_entry_id': 'e1',
         'reading': <String, dynamic>{},
         'listening': <String, dynamic>{},
         'speaking': <String, dynamic>{},
         'writing': <String, dynamic>{},
-      },
-    };
+      }),
+    );
     await tester.pumpWidget(
       localized(VocabularyBookView(words: [word], onWord: (_) {})),
     );
@@ -557,10 +578,7 @@ void main() {
   testWidgets('status movement removes a word from the previous dynamic book', (
     tester,
   ) async {
-    final word = <String, dynamic>{
-      'entry': {'display_form': 'Move me'},
-      'occurrences': const [],
-    };
+    final word = vocabularyDetails(displayForm: 'Move me');
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(

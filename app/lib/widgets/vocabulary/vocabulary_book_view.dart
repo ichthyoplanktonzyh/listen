@@ -19,8 +19,8 @@ class VocabularyBookView extends StatelessWidget {
     required this.onWord,
   });
 
-  final List<Map<String, dynamic>> words;
-  final ValueChanged<Map<String, dynamic>> onWord;
+  final List<LexicalEntryDetails> words;
+  final ValueChanged<LexicalEntryDetails> onWord;
 
   @override
   Widget build(BuildContext context) {
@@ -33,30 +33,20 @@ class VocabularyBookView extends StatelessWidget {
       separatorBuilder: (_, _) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final value = words[index];
-        final entry = value['entry'] as Map<String, dynamic>;
-        final occurrences = (value['occurrences'] as List<dynamic>?) ?? const [];
-        final profile = value['capability_profile'] is Map
-            ? LexicalCapabilityProfile.fromJson(
-                Map<String, dynamic>.from(value['capability_profile'] as Map),
-              )
-            : null;
-        final isPhrase = entry['kind'] == 'phrase';
+        final entry = value.entry;
+        final occurrences = value.occurrences;
+        final profile = value.capabilityProfile;
+        final isPhrase = entry.kind == 'phrase';
         final snapshot = occurrences.isEmpty
             ? l.text('noSourceSnapshot')
-            : (occurrences.first as Map<String, dynamic>)['sentence_text_snapshot']
-                      as String? ??
-                  l.text('noSourceSnapshot');
+            : occurrences.first.sentenceTextSnapshot;
         final hasMedia =
-            occurrences.isNotEmpty &&
-            (occurrences.first as Map<String, dynamic>)['media_id'] != null;
+            occurrences.isNotEmpty && occurrences.first.mediaId != null;
         return ListTile(
           title: Row(
             children: [
               Flexible(
-                child: Text(
-                  entry['display_form'] as String,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                child: Text(entry.displayForm, overflow: TextOverflow.ellipsis),
               ),
               if (isPhrase) ...[
                 const SizedBox(width: 8),

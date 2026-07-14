@@ -484,7 +484,7 @@ Future<String?> showOpenSubtitlesSearch({
   required String? mediaPath,
 }) async {
   final controller = TextEditingController(text: initialTitle);
-  var values = <Map<String, dynamic>>[];
+  var values = <OpenSubtitleCandidate>[];
   var loading = false;
   var mode = 'title';
   String? error;
@@ -552,14 +552,14 @@ Future<String?> showOpenSubtitlesSearch({
                   children: [
                     for (final value in values)
                       ListTile(
-                        title: Text(value['release'] as String),
+                        title: Text(value.release),
                         subtitle: Text(
-                          '${value['language']} · rating ${value['rating']} · ${value['download_count']} downloads',
+                          '${value.language} · rating ${value.rating} · ${value.downloadCount} downloads',
                         ),
                         onTap: () async {
                           selected = await api.downloadOpenSubtitle(
                             apiKey: apiKey,
-                            fileId: value['file_id'] as int,
+                            fileId: value.fileId,
                           );
                           if (context.mounted) Navigator.pop(context);
                         },

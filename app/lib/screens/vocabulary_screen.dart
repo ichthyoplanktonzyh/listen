@@ -56,7 +56,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   String? assessment;
   String search = '';
   bool loading = true;
-  List<Map<String, dynamic>> words = const [];
+  List<LexicalEntryDetails> words = const [];
 
   /// Non-null while the in-page entry detail is open (master → detail).
   LexicalEntryDetails? details;
@@ -153,10 +153,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     }
   }
 
-  Future<void> _openDetails(Map<String, dynamic> value) async {
-    final entry = value['entry'];
-    if (entry is! Map || entry['id'] is! String) return;
-    await _openEntryById(entry['id'] as String);
+  Future<void> _openDetails(LexicalEntryDetails value) async {
+    await _openEntryById(value.entry.id);
   }
 
   void _closeDetails() => setState(() => details = null);

@@ -24,12 +24,6 @@ extension SubtitlesApi on LocalApi {
           .map((value) => SubtitleTrack.fromJson(value as Map<String, dynamic>))
           .toList(growable: false);
 
-  Future<Map<String, dynamic>> importLLTimeline(
-    Map<String, dynamic> document,
-  ) async =>
-      (await _request('POST', '/v1/lltimeline/import', document))
-          as Map<String, dynamic>;
-
   Future<SubtitleTrack> importLLTimelineForMedia(
     String mediaId,
     Map<String, dynamic> document, {
@@ -132,7 +126,7 @@ extension SubtitlesApi on LocalApi {
     });
   }
 
-  Future<List<Map<String, dynamic>>> searchOpenSubtitles({
+  Future<List<OpenSubtitleCandidate>> searchOpenSubtitles({
     required String apiKey,
     String? query,
     String? moviehash,
@@ -147,7 +141,11 @@ extension SubtitlesApi on LocalApi {
                   'moviehash': moviehash,
               }))
               as List<dynamic>)
-          .cast<Map<String, dynamic>>();
+          .map(
+            (value) =>
+                OpenSubtitleCandidate.fromJson(value as Map<String, dynamic>),
+          )
+          .toList(growable: false);
 
   Future<String> openSubtitlesMovieHash(String path) =>
       computeOpenSubtitlesMovieHash(path);
