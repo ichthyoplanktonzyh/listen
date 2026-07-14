@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-14 08:52 CST: main.dart 拆分 S7a —— 抽出 `SubtitleSourcesCoordinator`（仅上下文
+  无关子集）：`ensureCurrentPronunciation`/`analyzePhonetics`/`handleDrop`/`isMediaPath`/
+  `isSubtitlePath` 逐字搬到 `lib/controllers/subtitle_sources_coordinator.dart`，注入
+  `getApi`/`isMounted`/`showSnackBar`/`setTaskStatus`/`openMediaPath`/`openSubtitlePath`。
+  对话框驱动的来源流程（delete/export/generate/import word list/cold-start 等）按 S5 既定
+  裁决留在宿主，后续 S7b 评估迁往 `widgets/flows/` 既有模式。逻辑/字符串不变。新增
+  `test/subtitle_sources_coordinator_test.dart`（9 例：扩展名分类、drop 路由/前置守卫/
+  不支持类型、发音缓存与去重、phonetics 无轨守卫/成功派发/失败上报）。main.dart
+  1937 → 1842 行。`flutter analyze` 零问题、`flutter test` 330 全通过（321 + 9）。
+
 - 2026-07-14 08:47 CST: main.dart 拆分 S6 —— 抽出 `MediaLibraryCoordinator`。首页媒体库/
   triage 动作 9 个方法（`recordRecentMedia`/`prefetchHomeSummary`/`loadMediaLibrary`/
   `openLibraryEntry`/`startExtensiveFromLibrary`/`startIntensiveFromLibrary`/
