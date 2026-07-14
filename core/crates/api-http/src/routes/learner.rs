@@ -1,6 +1,6 @@
 use application::{L1SpecialtyOccurrences, LearnerProfileView};
 
-use crate::*;
+use crate::{ApiError, ApiState, Deserialize, Json, Query, State};
 
 pub(crate) async fn learner_profile(
     State(state): State<ApiState>,
@@ -34,7 +34,9 @@ pub(crate) async fn l1_specialty_occurrences(
     Query(query): Query<L1SpecialtyQuery>,
 ) -> Result<Json<L1SpecialtyOccurrences>, ApiError> {
     state
-        .services.media_analysis().l1_specialty_occurrences(
+        .services
+        .media_analysis()
+        .l1_specialty_occurrences(
             &query.difficulty_kind,
             &query.language,
             query.track_id.as_deref(),

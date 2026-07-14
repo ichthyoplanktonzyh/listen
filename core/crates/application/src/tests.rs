@@ -1,7 +1,7 @@
 use super::*;
 use domain::{
-    LexicalEntryKind, SubtitleSentence, SubtitleSentenceId, SubtitleToken, SubtitleTokenKind,
-    TimeMs, TimingSource,
+    ChunkEvidence, LexicalEntryKind, SubtitleSentence, SubtitleSentenceId, SubtitleToken,
+    SubtitleTokenKind, TimeMs, TimingSource,
 };
 
 // ── require_text ────────────────────────────────────────────────────────

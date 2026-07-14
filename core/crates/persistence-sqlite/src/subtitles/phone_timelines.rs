@@ -1,5 +1,8 @@
 use application::{ApplicationError, PhoneTimelineRepository};
-use domain::*;
+use domain::{
+    PhoneTimeline, PhoneTimelineId, PhoneticAnalysisId, SubtitleSentenceId, SubtitleTrackId,
+    TimelineStatus, WordTimelineId,
+};
 use rusqlite::{OptionalExtension, params};
 
 use crate::{SqliteRepository, from_json, json, repo};

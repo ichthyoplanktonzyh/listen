@@ -713,7 +713,7 @@ fn build_chunk(
         .iter()
         .map(|word| word.text.as_str())
         .collect();
-    let all_cjk = texts.iter().all(|t| t.chars().all(|ch| is_cjk_char(ch)));
+    let all_cjk = texts.iter().all(|t| t.chars().all(is_cjk_char));
     let separator = if all_cjk { "" } else { " " };
     DisplayChunk {
         index: index as u32,

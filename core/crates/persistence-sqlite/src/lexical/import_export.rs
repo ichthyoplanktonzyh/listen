@@ -1,16 +1,25 @@
 //! Bulk import/export and capability-state persistence for lexical assets.
 //! Split out of `lexical.rs` (mechanical decomposition).
 
-use application::{
-    ApplicationError, LexicalCapabilityRepository, LexicalEntryRepository,
+use application::{ApplicationError, LexicalCapabilityRepository, LexicalEntryRepository};
+use domain::{
+    CapabilityDimensionState, CapabilityStateChangeKind, LearningChangeSource, LearningObservation,
+    LexicalCapability, LexicalCapabilityProfile, LexicalEntry, LexicalEntryId, LexicalObservation,
+    LexicalOccurrence, LexicalOccurrenceId, LexicalSenseFolder, LexicalSenseFolderOccurrence,
+    LexicalSenseId, LexicalStatusHistory, lexical_observation_id,
 };
-use domain::*;
 use rusqlite::{OptionalExtension, params};
 use std::collections::HashMap;
 
 use super::LexicalAssets;
-use super::capability::*;
-use super::rows::*;
+use super::capability::{
+    merge_capability_dimension, read_capability_state, write_capability_history,
+    write_capability_state,
+};
+use super::rows::{
+    learning_observation_row, lexical_entry_row, lexical_history_row, lexical_observation_row,
+    lexical_occurrence_row,
+};
 use crate::{SqliteRepository, json, repo};
 
 impl SqliteRepository {

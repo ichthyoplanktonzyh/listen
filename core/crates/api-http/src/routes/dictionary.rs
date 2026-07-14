@@ -1,4 +1,6 @@
-use crate::*;
+use crate::{
+    ApiError, ApiState, ApplicationError, Deserialize, Json, Path, Query, State, SubtitleSentenceId,
+};
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct DictionaryQuery {
@@ -25,7 +27,9 @@ pub(crate) async fn diagnose_sentence(
 ) -> Result<Json<domain::SentenceDiagnosis>, ApiError> {
     let sentence_id = SubtitleSentenceId::parse(sentence_id).map_err(ApplicationError::from)?;
     state
-        .services.media_analysis().diagnose_sentence(&sentence_id)
+        .services
+        .media_analysis()
+        .diagnose_sentence(&sentence_id)
         .map(Json)
         .map_err(ApiError::from)
 }

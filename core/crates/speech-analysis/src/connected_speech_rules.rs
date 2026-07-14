@@ -1013,6 +1013,9 @@ fn same_symbols(left: &[String], right: &[String]) -> bool {
     left == right
 }
 
+// A single construction point mirrors every field of the evidence record;
+// grouping these as an opaque options bag would hide required provenance.
+#[allow(clippy::too_many_arguments)]
 fn explanation(
     family: ConnectedSpeechFamily,
     label: &str,

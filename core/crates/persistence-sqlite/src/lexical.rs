@@ -3,7 +3,15 @@ use application::{
     LexicalContentRepository, LexicalEntryRepository, LexicalSourceContext,
     VocabularyAssetRepository,
 };
-use domain::*;
+use domain::{
+    CapabilityAssessment, CapabilityDimensionState, CapabilityFilter, CapabilityOverride,
+    CapabilityProjection, CapabilityStateChangeKind, LanguageCode, LearningChangeSource,
+    LearningObservation, LearningStatus, LexicalCapability, LexicalCapabilityHistory,
+    LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails, LexicalEntryId, LexicalEntryKind,
+    LexicalObservation, LexicalOccurrence, LexicalOccurrenceId, LexicalSenseFolder, LexicalSenseId,
+    LexicalStatusHistory, LexicalStatusHistoryId, MediaId, SubtitleSentenceId,
+    VocabularyAssetBundle,
+};
 use rusqlite::{OptionalExtension, params, params_from_iter};
 
 use super::{SqliteRepository, from_json, json, repo};
@@ -19,8 +27,13 @@ mod capability;
 mod import_export;
 mod rows;
 
-use capability::*;
-use rows::*;
+use capability::{capability_history_row, read_capability_profile, sense_key};
+use rows::{
+    learning_observation_row, lexical_entry_row, lexical_history_row, lexical_observation_row,
+    lexical_occurrence_row, read_all_lexical_sense_folder_occurrences,
+    read_all_lexical_sense_folders, read_all_phonetic_feedback, read_lexical_sense_folder,
+    read_lexical_sense_folder_details,
+};
 
 impl LexicalCapabilityRepository for SqliteRepository {
     fn lexical_capability_profile(
@@ -103,7 +116,6 @@ impl LexicalCapabilityRepository for SqliteRepository {
             .collect::<Result<Vec<_>, _>>()
             .map_err(repo)
     }
-
 }
 
 impl LexicalEntryRepository for SqliteRepository {
@@ -527,7 +539,6 @@ impl LexicalEntryRepository for SqliteRepository {
         )
         .map_err(repo)
     }
-
 }
 
 impl LearningObservationRepository for SqliteRepository {
@@ -664,7 +675,6 @@ impl LearningObservationRepository for SqliteRepository {
             .map(|_| ())
             .map_err(repo)
     }
-
 }
 
 impl LexicalContentRepository for SqliteRepository {
@@ -826,7 +836,6 @@ impl LexicalContentRepository for SqliteRepository {
         .map_err(repo)?;
         Ok(())
     }
-
 }
 
 impl VocabularyAssetRepository for SqliteRepository {

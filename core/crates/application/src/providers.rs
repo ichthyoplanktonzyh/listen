@@ -1,5 +1,14 @@
 use async_trait::async_trait;
-use domain::*;
+use domain::{
+    AsrReliability, CapabilityClaim, DictionaryLookup, DictionaryProviderInfo, JudgmentAbstain,
+    LanguageCode, LlmAdapterKind, LlmProviderError, PhraseCandidate, PointJudgment,
+    PronunciationProviderInfo, ProviderCapability, RubricPointImportance,
+    SYNTACTIC_CONTRACT_VERSION, SemanticRubric, SemanticTaskKind, SentencePronunciation,
+    SubtitleSentence, SyntacticAnalysis, SyntacticAnalysisId, SyntacticProviderDescriptor,
+    SyntacticProviderError, SyntacticSentenceAnalysis, SyntacticValidationReport,
+    SyntacticValidationStatus, WordPronunciation, syntactic_analysis_fingerprint,
+    syntactic_source_fingerprint, validate_syntactic_analysis,
+};
 use thiserror::Error;
 
 #[async_trait]
@@ -281,6 +290,7 @@ pub trait SemanticJudgeProvider: Send + Sync {
 #[cfg(test)]
 mod syntactic_provider_tests {
     use super::*;
+    use domain::{SubtitleSentenceId, SyntacticAlignmentStatus, SyntacticToken, TimeMs};
     use std::collections::BTreeMap;
 
     struct FakeSyntacticProvider;

@@ -286,18 +286,22 @@ impl<A: LlmChatAdapter> SemanticJudgeProvider for LlmSemanticProvider<A> {
     }
 
     async fn judge(&self, request: &JudgeRequest) -> Result<JudgmentDraft, LlmProviderError> {
-        let response = self.adapter.complete_structured(&judge_request(request)).await?;
+        let response = self
+            .adapter
+            .complete_structured(&judge_request(request))
+            .await?;
         let raw_output: serde_json::Value =
             serde_json::from_str(&response.json_text).map_err(|error| {
                 LlmProviderError::SchemaInvalid {
                     detail: format!("output was not valid JSON: {error}"),
                 }
             })?;
-        let parsed: JudgmentOutput = serde_json::from_value(raw_output.clone()).map_err(|error| {
-            LlmProviderError::SchemaInvalid {
-                detail: format!("output did not match judgment schema: {error}"),
-            }
-        })?;
+        let parsed: JudgmentOutput =
+            serde_json::from_value(raw_output.clone()).map_err(|error| {
+                LlmProviderError::SchemaInvalid {
+                    detail: format!("output did not match judgment schema: {error}"),
+                }
+            })?;
         // Structural sanity the use case also enforces, surfaced early as a
         // schema error: abstain and per-point verdicts are mutually exclusive.
         if parsed.abstain.is_some() && !parsed.points.is_empty() {

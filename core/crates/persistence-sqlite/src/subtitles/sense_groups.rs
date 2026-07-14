@@ -1,5 +1,7 @@
 use application::{ApplicationError, SenseGroupRepository};
-use domain::*;
+use domain::{
+    SenseGroupAnalysis, SenseGroupAnalysisId, SubtitleTrackId, TimelineStatus, WordTimelineId,
+};
 use rusqlite::{OptionalExtension, params};
 
 use crate::{SqliteRepository, from_json, json, repo};

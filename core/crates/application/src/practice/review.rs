@@ -1,4 +1,7 @@
-use crate::*;
+use crate::{
+    PracticeAnchorKind, ReviewCard, ReviewCardKind, ReviewItem, ReviewRating, ReviewSchedule,
+    ReviewSourceKind,
+};
 
 pub(super) const REVIEW_ALGORITHM: &str = "listen_review_v1_heuristic_proxy";
 const MINUTE_MS: u64 = 60_000;
@@ -140,6 +143,7 @@ fn cloze_prompt(snapshot: &str, target: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use domain::{PracticeAnchor, ReviewItemId, ReviewItemStatus, ReviewSource};
 
     #[test]
     fn review_scheduler_uses_short_failure_and_growing_success_intervals() {

@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use domain::*;
+use domain::{PhraseCandidate, SubtitleSentence, SubtitleTokenKind, normalize_lemma};
 
 use crate::ApplicationError;
 

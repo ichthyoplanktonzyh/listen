@@ -67,10 +67,10 @@ pub use learning_observation::*;
 mod listening_projection;
 pub use listening_projection::*;
 
-mod semantic_task;
 mod llm_provider;
-pub use semantic_task::*;
+mod semantic_task;
 pub use llm_provider::*;
+pub use semantic_task::*;
 
 mod dictionary;
 pub use dictionary::*;

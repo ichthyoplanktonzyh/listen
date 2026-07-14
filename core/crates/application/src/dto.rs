@@ -1,6 +1,16 @@
 use std::path::PathBuf;
 
-use domain::*;
+use domain::{
+    ContentDifficultyProfile, CorpusOccurrence, CorpusOccurrenceId, HuntingCandidateId,
+    HuntingCheckAnswer, HuntingTargetId, HuntingTargetSourceKind, LanguageCode, LearningEventId,
+    LearningStatus, LexicalEntryId, LexicalEntryKind, LexicalObservationId,
+    ListeningComprehensionReport, ListeningInboxResolution, MediaId, MediaItem, MediaKind,
+    MediaTriageIntent, ObservationResult, PlayableSegment, PracticeAnchor, PracticeItemId,
+    PracticeKind, PracticeMode, PracticeSessionId, PracticeTarget, RecordingAssetId,
+    RecordingAudioMetadata, ReviewAttempt, ReviewItem, ReviewItemId, ReviewRating, ReviewSchedule,
+    ReviewSource, SubtitleSentenceId, SubtitleTrackId, TimelineCreator, TimelineMetrics,
+    TimelineStatus, TimingSource, UpgradeSuggestion, WordTimelineId, WordTiming,
+};
 use serde::{Deserialize, Serialize};
 
 /// Same-family clip aggregation for one L1 difficulty category (Phase 3.9).

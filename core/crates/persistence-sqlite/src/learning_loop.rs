@@ -1,8 +1,16 @@
 use application::{
-    ApplicationError, LearningEventRepository, ListeningInboxRepository, PracticeRepository,
-    HuntingRepository, RecognitionUpgradeRepository, ReviewQueueRepository,
+    ApplicationError, HuntingRepository, LearningEventRepository, ListeningInboxRepository,
+    PracticeRepository, RecognitionUpgradeRepository, ReviewQueueRepository,
 };
-use domain::*;
+use domain::{
+    HuntingCandidate, HuntingCandidateId, HuntingCandidateStatus, HuntingTarget, HuntingTargetId,
+    HuntingTargetStatus, LearningEvent, LearningEventKind, LearningEventSubjectKind,
+    LexicalEntryId, ListeningInboxItem, ListeningInboxItemId, ListeningInboxStatus,
+    PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeItemId, PracticeSession,
+    PracticeSessionId, RecognitionEvidence, ReviewAttempt, ReviewAttemptId, ReviewItem,
+    ReviewItemId, ReviewItemStatus, ReviewSchedule, UpgradeSuggestion, UpgradeSuggestionId,
+    UpgradeSuggestionStatus,
+};
 use rusqlite::{OptionalExtension, params};
 
 use super::{SqliteRepository, from_json, json, repo};
@@ -373,7 +381,6 @@ impl ReviewQueueRepository for SqliteRepository {
             .collect::<Result<Vec<_>, _>>()
             .map_err(repo)
     }
-
 }
 
 impl HuntingRepository for SqliteRepository {
@@ -542,7 +549,6 @@ impl HuntingRepository for SqliteRepository {
                 .map_err(repo)
         }
     }
-
 }
 
 impl RecognitionUpgradeRepository for SqliteRepository {

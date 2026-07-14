@@ -1,5 +1,5 @@
 use application::{ApplicationError, ChunkTimelineRepository};
-use domain::*;
+use domain::{ChunkTimeline, ChunkTimelineId, SubtitleTrackId, TimelineStatus, WordTimelineId};
 use rusqlite::{OptionalExtension, params};
 
 use crate::{SqliteRepository, from_json, json, repo};

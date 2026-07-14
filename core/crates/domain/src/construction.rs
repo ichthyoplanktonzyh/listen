@@ -440,10 +440,10 @@ pub fn validate_construction_spike_fixture(
         {
             errors.push("construction evidence references an incomplete target".into());
         }
-        if let Some(exemplar_id) = &evidence.source_exemplar_id {
-            if !exemplars.contains_key(exemplar_id.as_str()) {
-                errors.push("construction evidence references a missing exemplar".into());
-            }
+        if let Some(exemplar_id) = &evidence.source_exemplar_id
+            && !exemplars.contains_key(exemplar_id.as_str())
+        {
+            errors.push("construction evidence references a missing exemplar".into());
         }
         let valid_modality = matches!(
             (evidence.capability, evidence.modality),

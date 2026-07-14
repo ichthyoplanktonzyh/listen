@@ -5,7 +5,12 @@
 //! consumes `PracticeAttempt` results — the four-layer separation is enforced
 //! by construction, and the negative tests in persistence-sqlite pin it.
 
-use domain::*;
+use domain::{
+    JudgmentAdjudication, SemanticGeneratorKind, SemanticGeneratorProvenance, SemanticJudgment,
+    SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
+    SemanticTaskAttemptId, semantic_judgment_id, transcript_sha256, validate_judgment_adjudication,
+    validate_semantic_attempt, validate_semantic_judgment, validate_semantic_rubric,
+};
 use std::sync::Arc;
 
 use crate::{

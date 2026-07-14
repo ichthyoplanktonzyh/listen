@@ -35,6 +35,22 @@ def guard_application_public_interface() -> None:
                 fail(f"application public interface leaks speech-analysis in {path.relative_to(ROOT)}")
 
 
+def guard_production_rust_wildcards() -> None:
+    """Keep production dependencies explicit; test preludes may use `super::*`."""
+    wildcard = re.compile(r"(?m)^\s*use\s+(?!super::)[^;]+::\*\s*;")
+    offenders: list[Path] = []
+    for path in rust_sources(ROOT / "crates"):
+        relative = path.relative_to(ROOT)
+        if "tests" in relative.parts or path.name == "tests.rs":
+            continue
+        source = path.read_text(encoding="utf-8")
+        production_source = source.split("#[cfg(test)]", 1)[0]
+        if wildcard.search(production_source):
+            offenders.append(relative)
+    if offenders:
+        fail(f"production Rust wildcard imports remain: {offenders}")
+
+
 def guard_http_runtime_ownership() -> None:
     forbidden = {
         "tokio::process": "process execution",
@@ -117,6 +133,7 @@ def guard_pipeline_entrypoint() -> None:
 def main() -> int:
     guard_dependency_direction()
     guard_application_public_interface()
+    guard_production_rust_wildcards()
     guard_http_runtime_ownership()
     guard_flutter_transport_parsing()
     guard_flutter_raw_api_allowlist()

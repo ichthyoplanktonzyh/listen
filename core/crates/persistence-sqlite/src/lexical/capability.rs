@@ -2,7 +2,11 @@
 //! Split out of `lexical.rs` (mechanical decomposition).
 
 use application::ApplicationError;
-use domain::*;
+use domain::{
+    CapabilityDimensionState, CapabilityStateChangeKind, LexicalCapability,
+    LexicalCapabilityHistory, LexicalCapabilityHistoryId, LexicalCapabilityProfile, LexicalEntryId,
+    LexicalSenseId,
+};
 use rusqlite::{OptionalExtension, params};
 
 use crate::{from_json, json, repo};
@@ -138,7 +142,6 @@ pub(super) fn write_capability_state(
 }
 
 #[allow(clippy::too_many_arguments)]
-
 pub(super) fn write_capability_history(
     conn: &rusqlite::Connection,
     lexical_entry_id: &LexicalEntryId,

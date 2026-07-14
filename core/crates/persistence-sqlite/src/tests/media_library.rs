@@ -123,15 +123,22 @@ fn set_media_triage_intent_validates_media_and_returns_entry() {
     let services = library_services(&repo);
     let missing = MediaId::parse("missing-media").unwrap();
     assert!(matches!(
-        services.media_analysis().set_media_triage_intent(&missing, Some(MediaTriageIntent::Defer)),
+        services
+            .media_analysis()
+            .set_media_triage_intent(&missing, Some(MediaTriageIntent::Defer)),
         Err(ApplicationError::NotFound("media"))
     ));
 
     let item = MediaRepository::upsert(repo.as_ref(), &media("intent-media", 10)).unwrap();
-    let entry = services.media_analysis().set_media_triage_intent(&item.id, Some(MediaTriageIntent::Defer))
+    let entry = services
+        .media_analysis()
+        .set_media_triage_intent(&item.id, Some(MediaTriageIntent::Defer))
         .unwrap();
     assert_eq!(entry.media.id, item.id);
     assert_eq!(entry.triage_intent, Some(MediaTriageIntent::Defer));
-    let cleared = services.media_analysis().set_media_triage_intent(&item.id, None).unwrap();
+    let cleared = services
+        .media_analysis()
+        .set_media_triage_intent(&item.id, None)
+        .unwrap();
     assert_eq!(cleared.triage_intent, None);
 }

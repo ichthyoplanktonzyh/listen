@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-14 20:28 CST: Phase 2.24 Rust hygiene gate 收口：生产代码 86 处 wildcard imports
+  全部展开并清除未使用依赖，测试 prelude 仍可局部使用 `super::*`；architecture guard 新增生产
+  wildcard 回归检查。同步清理历史 fmt/clippy 基线，`cargo fmt --all -- --check` 与
+  `cargo clippy --workspace --all-targets -- -D warnings` 首次全绿，workspace 所有 test targets
+  编译通过。
+
 - 2026-07-14 19:55 CST: Phase 2.24 `AppServices` 深化完成：practice session、review
   scheduling、hunting 与 listening inbox 归入 `PracticeUseCases`，lexical evidence 通过显式
   collaborator 写入。application 中散布的 18 个 `impl AppServices` 已全部删除；顶层仅剩

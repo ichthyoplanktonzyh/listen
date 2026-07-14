@@ -138,7 +138,10 @@ impl LlmChatAdapter for OpenAiChatAdapter {
         if let Some(key) = &self.api_key {
             builder = builder.bearer_auth(key);
         }
-        let response = builder.send().await.map_err(|error| map_reqwest_error(&error))?;
+        let response = builder
+            .send()
+            .await
+            .map_err(|error| map_reqwest_error(&error))?;
 
         let status = response.status();
         if !status.is_success() {

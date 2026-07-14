@@ -1,4 +1,8 @@
-use crate::*;
+use crate::{
+    ApplicationError, DetectedPhone, MediaAnalysisUseCases, PhoneticAnalysis, PhoneticAnalysisId,
+    PhoneticAnalysisJob, SubtitleSentence, SubtitleSentenceId, SubtitleTokenKind, SubtitleTrackId,
+    WordTiming, now_ms,
+};
 
 impl MediaAnalysisUseCases {
     pub fn build_research_fixture_phonetic_analysis(
@@ -146,7 +150,7 @@ impl MediaAnalysisUseCases {
             job.audio_end_ms,
             &job.model_revision,
         )
-        .map_err(|e| ApplicationError::ExternalProcess(e.into()))?;
+        .map_err(ApplicationError::ExternalProcess)?;
         let phones = recognized.phones;
         if phones.is_empty() {
             return Err(ApplicationError::Validation("no phones detected in audio"));
@@ -170,13 +174,13 @@ impl MediaAnalysisUseCases {
             .into_iter()
             .flat_map(|analysis| analysis.phonemes)
             .filter_map(|phone| {
-                phone.token_index.map(|token_index| {
-                    speech_analysis::phonetics::CanonicalPhone {
+                phone
+                    .token_index
+                    .map(|token_index| speech_analysis::phonetics::CanonicalPhone {
                         symbol: phone.symbol,
                         token_index,
                         stress: phone.stress,
-                    }
-                })
+                    })
             })
             .collect::<Vec<_>>();
         let alignments = speech_analysis::phonetics::align_phones(&canonical, &phones);

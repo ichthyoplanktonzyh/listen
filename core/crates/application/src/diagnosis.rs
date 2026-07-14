@@ -1,4 +1,9 @@
-use crate::*;
+use crate::{
+    ApplicationError, DiagnosisKind, L1DiagnosisContext, L1DiagnosisHint, L1DiagnosisSpan,
+    L1DiagnosisSupport, LanguageCode, LearningEvent, LearningEventId, LearningEventKind,
+    LearningEventSubject, LearningEventSubjectKind, LexicalEntryKind, MediaAnalysisUseCases,
+    SentenceDiagnosis, SubtitleSentenceId, now_ms,
+};
 
 impl MediaAnalysisUseCases {
     pub fn diagnose_sentence(

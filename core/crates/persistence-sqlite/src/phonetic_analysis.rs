@@ -1,5 +1,9 @@
 use application::{ApplicationError, PhoneticAnalysisRepository};
-use domain::*;
+use domain::{
+    PhoneticAnalysis, PhoneticAnalysisId, PhoneticAnalysisJob, PhoneticAnalysisJobId,
+    PhoneticAnalysisJobStatus, PhoneticAnalysisModelDescriptor, PhoneticAnalysisModelId,
+    PhoneticFindingFeedback, PhoneticFindingId, SubtitleSentenceId, SubtitleTrackId,
+};
 use rusqlite::{OptionalExtension, params};
 
 use super::{SqliteRepository, from_json, json, repo};

@@ -4,7 +4,11 @@ use domain::{
     LexicalSenseId,
 };
 
-use crate::*;
+use crate::{
+    ApiError, ApiState, ApplicationError, Deserialize, EventEnvelope, EventName, Json,
+    LearningStatus, LexicalEntryId, MediaAvailability, MediaId, Path, Query, Serialize, State,
+    VocabularyAssetBundle,
+};
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct SetCapabilityOverrideRequest {
@@ -76,13 +80,16 @@ pub(crate) async fn create_sense_folder(
     Json(request): Json<UpsertSenseFolderRequest>,
 ) -> Result<Json<LexicalEntryDetails>, ApiError> {
     let entry_id = LexicalEntryId::parse(entry_id).map_err(ApplicationError::from)?;
-    state.services.lexical_learning().create_lexical_sense_folder(
-        &entry_id,
-        request.label,
-        request.definition,
-        request.gloss,
-        request.external_ref,
-    )?;
+    state
+        .services
+        .lexical_learning()
+        .create_lexical_sense_folder(
+            &entry_id,
+            request.label,
+            request.definition,
+            request.gloss,
+            request.external_ref,
+        )?;
     lexical_details_after_sense_folder_change(&state, &entry_id)
 }
 
@@ -93,14 +100,17 @@ pub(crate) async fn update_sense_folder(
 ) -> Result<Json<LexicalEntryDetails>, ApiError> {
     let entry_id = LexicalEntryId::parse(entry_id).map_err(ApplicationError::from)?;
     let sense_id = LexicalSenseId::parse(sense_id).map_err(ApplicationError::from)?;
-    state.services.lexical_learning().update_lexical_sense_folder(
-        &entry_id,
-        &sense_id,
-        request.label,
-        request.definition,
-        request.gloss,
-        request.external_ref,
-    )?;
+    state
+        .services
+        .lexical_learning()
+        .update_lexical_sense_folder(
+            &entry_id,
+            &sense_id,
+            request.label,
+            request.definition,
+            request.gloss,
+            request.external_ref,
+        )?;
     lexical_details_after_sense_folder_change(&state, &entry_id)
 }
 
@@ -125,11 +135,10 @@ pub(crate) async fn assign_sense_folder_occurrence(
     let sense_id = LexicalSenseId::parse(sense_id).map_err(ApplicationError::from)?;
     let occurrence_id =
         LexicalOccurrenceId::parse(occurrence_id).map_err(ApplicationError::from)?;
-    state.services.lexical_learning().assign_occurrence_to_lexical_sense_folder(
-        &entry_id,
-        &sense_id,
-        &occurrence_id,
-    )?;
+    state
+        .services
+        .lexical_learning()
+        .assign_occurrence_to_lexical_sense_folder(&entry_id, &sense_id, &occurrence_id)?;
     lexical_details_after_sense_folder_change(&state, &entry_id)
 }
 
@@ -188,7 +197,11 @@ pub(crate) async fn read_progress(
 ) -> Result<Json<ProgressResponse>, ApiError> {
     let id = MediaId::parse(media_id).map_err(ApplicationError::from)?;
     Ok(Json(ProgressResponse {
-        position_ms: state.services.media_analysis().read_progress(&id)?.map(domain::TimeMs::get),
+        position_ms: state
+            .services
+            .media_analysis()
+            .read_progress(&id)?
+            .map(domain::TimeMs::get),
     }))
 }
 
@@ -208,7 +221,10 @@ pub(crate) async fn update_progress(
     Json(request): Json<UpdateProgressRequest>,
 ) -> Result<Json<ProgressResponse>, ApiError> {
     let id = MediaId::parse(media_id).map_err(ApplicationError::from)?;
-    let position = state.services.media_analysis().update_progress(&id, request.position_ms)?;
+    let position = state
+        .services
+        .media_analysis()
+        .update_progress(&id, request.position_ms)?;
     Ok(Json(ProgressResponse {
         position_ms: Some(position.get()),
     }))
@@ -284,7 +300,10 @@ pub(crate) async fn import_vocabulary(
     State(state): State<ApiState>,
     Json(bundle): Json<VocabularyAssetBundle>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    state.services.lexical_learning().import_vocabulary(&bundle)?;
+    state
+        .services
+        .lexical_learning()
+        .import_vocabulary(&bundle)?;
     let _ = state.events.send(
         crate::event_payloads::VocabularyAssetsImportedPayload {
             lexical_entries: bundle.lexical_entries.len(),

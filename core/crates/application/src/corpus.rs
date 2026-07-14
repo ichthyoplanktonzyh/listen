@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 
-use crate::*;
+use crate::{
+    ApplicationError, CorpusOccurrence, CorpusOccurrenceId, CorpusOccurrenceKind,
+    L1SpecialtyOccurrences, LanguageCode, MediaAnalysisUseCases, SubtitleTokenKind, SubtitleTrack,
+    SubtitleTrackId, clean_required, normalize_phrase,
+};
 
 impl MediaAnalysisUseCases {
     /// Rebuild the local corpus projection for one subtitle track. The Slice 3

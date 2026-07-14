@@ -1,5 +1,8 @@
 use application::{ApplicationError, TranscriptionRepository};
-use domain::*;
+use domain::{
+    SubtitleTrackProvenance, TranscriptionJob, TranscriptionJobId, TranscriptionJobStatus,
+    TranscriptionModelDescriptor, TranscriptionModelId,
+};
 use rusqlite::{OptionalExtension, params};
 
 use super::{SqliteRepository, from_json, json, repo};

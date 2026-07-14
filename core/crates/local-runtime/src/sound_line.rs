@@ -112,7 +112,9 @@ impl SoundLineCoordinator {
         request: CreateSoundLineJob,
     ) -> Result<SoundLineJob, ApplicationError> {
         let track_id = SubtitleTrackId::parse(request.track_id)?;
-        self.services.media_analysis().read_subtitle_track(&track_id)?
+        self.services
+            .media_analysis()
+            .read_subtitle_track(&track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         self.enqueue(track_id)
     }
@@ -226,10 +228,14 @@ impl SoundLineCoordinator {
             .ok_or(ApplicationError::NotFound("sound line job"))?;
         let track_id = SubtitleTrackId::parse(job.track_id.clone())?;
         let track = self
-            .services.media_analysis().read_subtitle_track(&track_id)?
+            .services
+            .media_analysis()
+            .read_subtitle_track(&track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         let media = self
-            .services.media_analysis().read_media(&track.media_id)?
+            .services
+            .media_analysis()
+            .read_media(&track.media_id)?
             .ok_or(ApplicationError::NotFound("media"))?;
         let job_dir = self.temp_dir.join(&job.id);
         tokio::fs::create_dir_all(&job_dir)
@@ -263,7 +269,9 @@ impl SoundLineCoordinator {
         // whisper JSON is intentionally empty: the sound line derives its word
         // baseline from the already-persisted active text timeline.
         let result = self
-            .services.media_analysis().build_transcription_sound_line_resources(
+            .services
+            .media_analysis()
+            .build_transcription_sound_line_resources(
                 track_id,
                 b"",
                 wav,

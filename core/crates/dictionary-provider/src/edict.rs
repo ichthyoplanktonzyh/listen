@@ -6,13 +6,11 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use application::{
-    DictionaryProvider, DictionaryProviderError,
-};
+use application::{DictionaryProvider, DictionaryProviderError};
 use async_trait::async_trait;
 use domain::{
-    DictionaryDefinition, DictionaryLookup, DictionaryPhonetic,
-    DictionaryProviderInfo, LanguageCode,
+    DictionaryDefinition, DictionaryLookup, DictionaryPhonetic, DictionaryProviderInfo,
+    LanguageCode,
 };
 
 /// Japanese dictionary provider. It resolves from an installed JMdict/EDICT2 dump

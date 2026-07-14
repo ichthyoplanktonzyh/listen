@@ -264,11 +264,11 @@ pub async fn correct_lemma(
     State(state): State<ApiState>,
     Json(request): Json<CorrectLemmaRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let value =
-        state
-            .services
-            .lexical_learning()
-            .correct_lemma(&request.language, &request.original, &request.corrected)?;
+    let value = state.services.lexical_learning().correct_lemma(
+        &request.language,
+        &request.original,
+        &request.corrected,
+    )?;
     Ok(Json(serde_json::json!({
         "original": value.original,
         "normalized": value.normalized,

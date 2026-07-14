@@ -341,7 +341,9 @@ impl PhoneticAnalysisCoordinator {
         }
         let track_id = SubtitleTrackId::parse(request.track_id)?;
         let track = self
-            .services.media_analysis().read_subtitle_track(&track_id)?
+            .services
+            .media_analysis()
+            .read_subtitle_track(&track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         let model_id = PhoneticAnalysisModelId::parse(request.model_id)?;
         let model = self
@@ -588,7 +590,9 @@ impl PhoneticAnalysisCoordinator {
         let is_ctc = job.provider_id == CTC_PROVIDER_ID;
         let audio_path = if is_ctc {
             let media = self
-                .services.media_analysis().read_media(&job.media_id)?
+                .services
+                .media_analysis()
+                .read_media(&job.media_id)?
                 .ok_or(ApplicationError::NotFound("media item"))?;
             Some(media.path)
         } else {
@@ -602,7 +606,9 @@ impl PhoneticAnalysisCoordinator {
             None
         };
         let analyses = if job.scope == PhoneticAnalysisScope::Track {
-            self.services.media_analysis().read_subtitle_track(&job.track_id)?
+            self.services
+                .media_analysis()
+                .read_subtitle_track(&job.track_id)?
                 .ok_or(ApplicationError::NotFound("subtitle track"))?
                 .sentences
                 .into_iter()
@@ -620,11 +626,13 @@ impl PhoneticAnalysisCoordinator {
                             model_dir.as_deref().unwrap(),
                         )
                     } else {
-                        self.services.media_analysis().build_research_fixture_phonetic_analysis(
-                            &sentence_job,
-                            Some(&sentence),
-                            job_research_mode(&sentence_job).as_deref() == Some("partial"),
-                        )
+                        self.services
+                            .media_analysis()
+                            .build_research_fixture_phonetic_analysis(
+                                &sentence_job,
+                                Some(&sentence),
+                                job_research_mode(&sentence_job).as_deref() == Some("partial"),
+                            )
                     }
                 })
                 .collect::<Result<Vec<_>, _>>()?
@@ -643,18 +651,24 @@ impl PhoneticAnalysisCoordinator {
                     model_dir.as_deref().unwrap(),
                 )?]
             } else {
-                vec![self.services.media_analysis().build_research_fixture_phonetic_analysis(
-                    &job,
-                    sentence.as_ref(),
-                    job_research_mode(&job).as_deref() == Some("partial"),
-                )?]
+                vec![
+                    self.services
+                        .media_analysis()
+                        .build_research_fixture_phonetic_analysis(
+                            &job,
+                            sentence.as_ref(),
+                            job_research_mode(&job).as_deref() == Some("partial"),
+                        )?,
+                ]
             }
         };
         let mut phone_timeline_ids = Vec::new();
         for analysis in &analyses {
             self.repository.save_phonetic_analysis(analysis)?;
             let timeline = self
-                .services.media_analysis().create_phone_timeline_from_analysis(analysis, Some(TimelineStatus::Candidate))?;
+                .services
+                .media_analysis()
+                .create_phone_timeline_from_analysis(analysis, Some(TimelineStatus::Candidate))?;
             phone_timeline_ids.push(timeline.id);
         }
         let _ = self.events.send(
@@ -867,10 +881,10 @@ fn fake_provider_enabled_from_env() -> bool {
 }
 
 fn ctc_model_dir() -> Option<String> {
-    if let Ok(path) = std::env::var("LLPLAYERNEXT_PHONEME_MODEL_DIR") {
-        if std::path::Path::new(&path).is_dir() {
-            return Some(path);
-        }
+    if let Ok(path) = std::env::var("LLPLAYERNEXT_PHONEME_MODEL_DIR")
+        && std::path::Path::new(&path).is_dir()
+    {
+        return Some(path);
     }
     let home = std::env::var_os("HOME")?;
     let default = std::path::PathBuf::from(home)
@@ -895,17 +909,17 @@ fn default_ctc_model_dir() -> Option<String> {
 }
 
 fn download_script_path() -> Option<String> {
-    if let Ok(path) = std::env::var("LLPLAYERNEXT_DOWNLOAD_SCRIPT") {
-        if std::path::Path::new(&path).is_file() {
-            return Some(path);
-        }
+    if let Ok(path) = std::env::var("LLPLAYERNEXT_DOWNLOAD_SCRIPT")
+        && std::path::Path::new(&path).is_file()
+    {
+        return Some(path);
     }
     let name = "download-phoneme-model.py";
     let mut dirs: Vec<std::path::PathBuf> = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            dirs.push(parent.into());
-        }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(parent) = exe.parent()
+    {
+        dirs.push(parent.into());
     }
     if let Ok(cwd) = std::env::current_dir() {
         dirs.push(cwd);

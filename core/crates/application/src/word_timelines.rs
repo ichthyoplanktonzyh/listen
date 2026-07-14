@@ -1,6 +1,17 @@
 use std::collections::HashMap;
 
-use crate::*;
+use crate::{
+    ApplicationError, CreateWordTimeline, LLTIMELINE_SCHEMA_V1, LLTimelineArtifact,
+    LLTimelineDocument, LLTimelineGenerator, LLTimelineMedia, LLTimelineMetadata,
+    LLTimelineRhythmFrame, MediaAnalysisUseCases, MediaAvailability, MediaId, MediaItem, MediaKind,
+    RhythmFrameId, SentenceWordTimingDiagnostics, SubtitleSentenceId, SubtitleTrack,
+    SubtitleTrackId, SubtitleTrackStatus, TimeMs, TimelineCreator, TimelineMetrics, TimelineStatus,
+    WordTimeline, WordTimelineId, WordTimelineSummary, WordTimingBoundaryDiagnostic,
+    build_word_timeline, lltimeline_segments_from_track, lltimeline_segments_to_sentences,
+    lltimeline_track_extra, lltimeline_track_fingerprint, lltimeline_track_id,
+    mark_word_timeline_published, merge_lltimeline_track_extra, now_ms, remap_lltimeline_identity,
+    require_text, validate_word_timeline_words, word_timeline_summary,
+};
 
 const RHYTHM_FRAME_PROVIDER_ID: &str = "wordtimeline-rhythm-frame";
 const RHYTHM_FRAME_PROVIDER_VERSION: &str = "phase-2.21-w2";
@@ -564,7 +575,8 @@ impl MediaAnalysisUseCases {
             self.sense_groups.save_sense_group_analysis(&analysis)?;
         }
         if let Some(active_id) = document.active_sense_group_analysis_id {
-            self.sense_groups.activate_sense_group_analysis(&active_id)?;
+            self.sense_groups
+                .activate_sense_group_analysis(&active_id)?;
         }
 
         // One reindex after every timeline landed, so the corpus projection

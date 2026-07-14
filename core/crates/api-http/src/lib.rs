@@ -43,22 +43,87 @@ use local_runtime::{
     SpeechBatchCoordinator, SubtitleSearchCoordinator, TranscriptionCoordinator,
 };
 pub use local_runtime::{SyntaxCapabilityManager, SyntaxCapabilityStatus, SyntaxCapabilityView};
-use routes::corpus::*;
-use routes::dictionary::*;
-use routes::language::*;
-use routes::learner::*;
-use routes::llm::*;
-use routes::media::*;
-use routes::phonetic_analysis::*;
-use routes::practice::*;
-use routes::pronunciation::*;
-use routes::semantic::*;
-use routes::sound_line::*;
-use routes::speech::*;
-use routes::syntax::*;
-use routes::timelines::*;
-use routes::transcription::*;
-use routes::vocabulary::*;
+use routes::corpus::{reindex_corpus, search_corpus};
+use routes::dictionary::{diagnose_sentence, dictionary_lookup};
+use routes::language::{language_profile, list_languages};
+use routes::learner::{l1_specialty_occurrences, learner_profile, update_learner_profile};
+use routes::llm::{
+    delete_llm_provider, get_llm_provider, judge_via_llm_provider, list_llm_providers,
+    probe_llm_provider, register_llm_provider,
+};
+use routes::media::{
+    archive_subtitle, cold_start_words, delete_subtitle, export_subtitle, import_lltimeline,
+    import_lltimeline_for_media, import_subtitle, list_media_library, media_subtitles, read_media,
+    read_subtitle, register_media, restore_subtitle, set_media_triage_intent, track_content_fit,
+    update_track_language,
+};
+use routes::phonetic_analysis::{
+    cancel_phonetic_analysis_job, cancel_phonetic_analysis_model_install,
+    clear_terminal_phonetic_analysis_jobs, create_phonetic_analysis_job,
+    delete_phonetic_analysis_job, delete_phonetic_analysis_model, install_phonetic_analysis_model,
+    phonetic_analysis_findings, phonetic_analysis_job, phonetic_analysis_jobs,
+    phonetic_analysis_models, phonetic_analysis_providers, register_custom_phonetic_analysis_model,
+    retry_phonetic_analysis_job, track_phonetic_analyses, update_phonetic_finding_feedback,
+};
+use routes::practice::{
+    archive_hunting_target, capture_listening_inbox_item, coach_dashboard, coach_evidence,
+    compare_shadowing, complete_listening_session, complete_shadowing_attempt,
+    confirm_upgrade_suggestion, create_hunting_target, create_practice_item,
+    create_practice_session, create_recording_asset, create_review_item, delete_recording_asset,
+    graduate_coach_material, list_due_review_items, list_hunting_candidates,
+    list_hunting_occurrences, list_hunting_targets, list_listening_inbox_items,
+    list_upgrade_suggestions, practice_attempt, process_listening_inbox_item, recording_asset,
+    reject_upgrade_suggestion, review_item, submit_hunting_check, submit_practice_attempt,
+    submit_review_attempt, upgrade_suggestion_history,
+};
+use routes::pronunciation::{
+    analyze_pronunciation_sentence, generate_track_pronunciation, pronunciation_lookup,
+    pronunciation_providers, track_pronunciation,
+};
+use routes::semantic::{
+    create_judgment_adjudication, create_semantic_attempt, create_semantic_judgment,
+    create_semantic_rubric, semantic_attempt, semantic_attempt_judgments,
+    semantic_judgment_adjudications, semantic_rubric, semantic_rubric_attempts,
+};
+use routes::sound_line::{
+    cancel_sound_line_job, create_sound_line_job, retry_sound_line_job, sound_line_job,
+    sound_line_jobs,
+};
+use routes::speech::{
+    cancel_speech_job, create_speech_job, retry_speech_job, speech_job, speech_jobs,
+};
+use routes::syntax::{
+    cancel_syntax_capability, disable_syntax_capability, enable_syntax_capability,
+    install_syntax_capability, run_syntactic_consumers, run_track_syntax_analysis,
+    syntax_capability, track_syntax_analysis_status, uninstall_syntax_capability,
+    update_syntax_capability, validate_syntax_capability,
+};
+use routes::timelines::{
+    activate_chunk_timeline, activate_phone_timeline, activate_sense_group_analysis,
+    activate_word_timeline, archive_chunk_timeline, archive_phone_timeline,
+    archive_sense_group_analysis, archive_word_timeline, chunk_providers, chunk_timeline,
+    create_track_word_timeline, delete_chunk_timeline, delete_phone_timeline,
+    delete_sense_group_analysis, delete_word_timeline, export_chunk_timeline,
+    export_phone_timeline, export_track_lltimeline, export_word_timeline, generate_chunk_timeline,
+    generate_sense_group_analysis, generate_track_word_timings, phone_timeline,
+    publish_word_timeline, sense_group_analysis, track_chunk_diagnostics, track_chunk_partitions,
+    track_chunk_timeline_summaries, track_chunk_timelines, track_phone_timeline_summaries,
+    track_phone_timelines, track_sense_group_analyses, track_sense_group_analysis_summaries,
+    track_word_timeline_summaries, track_word_timelines, track_word_timing_diagnostics,
+    track_word_timings, word_timeline,
+};
+use routes::transcription::{
+    archive_transcription_job, cancel_transcription_job, cancel_transcription_model_install,
+    create_transcription_job, delete_transcription_model, install_transcription_model,
+    pronunciation_rules, register_custom_transcription_model, retry_transcription_job,
+    transcription_job, transcription_jobs, transcription_models, transcription_providers,
+};
+use routes::vocabulary::{
+    assign_sense_folder_occurrence, create_sense_folder, delete_sense_folder, export_vocabulary,
+    get_capability_profile, import_external_vocabulary, import_vocabulary, list_vocabulary,
+    read_progress, set_capability_override, unassign_sense_folder_occurrence,
+    update_media_availability, update_progress, update_sense_folder,
+};
 pub use secret_store_keychain::KeychainSecretStore;
 
 static ERROR_SEQUENCE: AtomicU64 = AtomicU64::new(1);

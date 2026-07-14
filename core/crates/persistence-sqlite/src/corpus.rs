@@ -1,5 +1,8 @@
 use application::{ApplicationError, CorpusIndexRepository};
-use domain::*;
+use domain::{
+    CorpusOccurrence, CorpusOccurrenceId, CorpusOccurrenceKind, LanguageCode, MediaId,
+    SubtitleSentenceId, SubtitleTrackId,
+};
 use rusqlite::params;
 
 use super::{SqliteRepository, domain_sql, from_json, json, repo};

@@ -1,5 +1,5 @@
 use application::{ApplicationError, DictionaryCacheRepository};
-use domain::*;
+use domain::{DictionaryEntry, DictionaryEntryId, LanguageCode};
 use rusqlite::{OptionalExtension, params};
 
 use super::{SqliteRepository, domain_sql, repo};

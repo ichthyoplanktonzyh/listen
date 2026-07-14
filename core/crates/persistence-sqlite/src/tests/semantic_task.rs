@@ -24,17 +24,25 @@ fn gold_fixture() -> SemanticTaskGoldFixture {
 }
 
 fn save_gold_fixture(services: &AppServices, fixture: &SemanticTaskGoldFixture) {
-    services.semantic()
+    services
+        .semantic()
         .save_semantic_rubric(fixture.rubric.clone())
         .unwrap();
     for attempt in &fixture.attempts {
-        services.semantic().record_semantic_attempt(attempt.clone()).unwrap();
+        services
+            .semantic()
+            .record_semantic_attempt(attempt.clone())
+            .unwrap();
     }
     for judgment in &fixture.judgments {
-        services.semantic().record_semantic_judgment(judgment.clone()).unwrap();
+        services
+            .semantic()
+            .record_semantic_judgment(judgment.clone())
+            .unwrap();
     }
     for adjudication in &fixture.adjudications {
-        services.semantic()
+        services
+            .semantic()
             .record_judgment_adjudication(adjudication.clone())
             .unwrap();
     }
@@ -58,25 +66,29 @@ fn semantic_gold_fixture_round_trips_through_use_cases() {
     save_gold_fixture(&services, &fixture);
 
     assert_eq!(
-        services.semantic()
+        services
+            .semantic()
             .semantic_rubric(&fixture.rubric.id, None)
             .unwrap()
             .unwrap(),
         fixture.rubric
     );
-    let attempts = services.semantic()
+    let attempts = services
+        .semantic()
         .semantic_attempts_for_rubric(&fixture.rubric.id)
         .unwrap();
     assert_eq!(attempts, fixture.attempts);
 
     for judgment in &fixture.judgments {
-        let listed = services.semantic()
+        let listed = services
+            .semantic()
             .semantic_judgments_for_attempt(&judgment.attempt_id)
             .unwrap();
         assert_eq!(listed, vec![judgment.clone()]);
     }
 
-    let adjudications = services.semantic()
+    let adjudications = services
+        .semantic()
         .judgment_adjudications(&fixture.adjudications[0].judgment_id)
         .unwrap();
     assert_eq!(adjudications, fixture.adjudications);
@@ -156,16 +168,19 @@ fn semantic_snapshots_survive_media_deletion() {
 
     // No foreign key ties the fact layer to media: the full chain still
     // loads and still explains itself via its own snapshots.
-    let rubric = services.semantic()
+    let rubric = services
+        .semantic()
         .semantic_rubric(&fixture.rubric.id, Some(1))
         .unwrap()
         .unwrap();
     assert!(!rubric.source.transcript_snapshot.is_empty());
-    let attempts = services.semantic()
+    let attempts = services
+        .semantic()
         .semantic_attempts_for_rubric(&fixture.rubric.id)
         .unwrap();
     assert_eq!(attempts.len(), 3);
-    let judgments = services.semantic()
+    let judgments = services
+        .semantic()
         .semantic_judgments_for_attempt(&fixture.attempts[0].id)
         .unwrap();
     assert_eq!(judgments.len(), 1);
@@ -176,14 +191,21 @@ fn adjudication_never_rewrites_the_original_judgment() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = semantic_services(&repo);
     let fixture = gold_fixture();
-    services.semantic()
+    services
+        .semantic()
         .save_semantic_rubric(fixture.rubric.clone())
         .unwrap();
     for attempt in &fixture.attempts {
-        services.semantic().record_semantic_attempt(attempt.clone()).unwrap();
+        services
+            .semantic()
+            .record_semantic_attempt(attempt.clone())
+            .unwrap();
     }
     for judgment in &fixture.judgments {
-        services.semantic().record_semantic_judgment(judgment.clone()).unwrap();
+        services
+            .semantic()
+            .record_semantic_judgment(judgment.clone())
+            .unwrap();
     }
 
     let adjudication = fixture.adjudications[0].clone();
@@ -198,7 +220,8 @@ fn adjudication_never_rewrites_the_original_judgment() {
         )
         .unwrap();
 
-    services.semantic()
+    services
+        .semantic()
         .record_judgment_adjudication(adjudication.clone())
         .unwrap();
 
@@ -214,7 +237,8 @@ fn adjudication_never_rewrites_the_original_judgment() {
         .unwrap();
     assert_eq!(raw_before, raw_after);
     assert_eq!(
-        services.semantic()
+        services
+            .semantic()
             .judgment_adjudications(&adjudication.judgment_id)
             .unwrap()
             .len(),
@@ -230,23 +254,31 @@ fn use_cases_reject_missing_targets_duplicates_and_tampered_hashes() {
 
     // Attempt before its rubric exists.
     assert!(matches!(
-        services.semantic().record_semantic_attempt(fixture.attempts[0].clone()),
+        services
+            .semantic()
+            .record_semantic_attempt(fixture.attempts[0].clone()),
         Err(ApplicationError::NotFound(_))
     ));
 
-    services.semantic()
+    services
+        .semantic()
         .save_semantic_rubric(fixture.rubric.clone())
         .unwrap();
     assert!(matches!(
-        services.semantic().save_semantic_rubric(fixture.rubric.clone()),
+        services
+            .semantic()
+            .save_semantic_rubric(fixture.rubric.clone()),
         Err(ApplicationError::Conflict(_))
     ));
 
-    services.semantic()
+    services
+        .semantic()
         .record_semantic_attempt(fixture.attempts[0].clone())
         .unwrap();
     assert!(matches!(
-        services.semantic().record_semantic_attempt(fixture.attempts[0].clone()),
+        services
+            .semantic()
+            .record_semantic_attempt(fixture.attempts[0].clone()),
         Err(ApplicationError::Conflict(_))
     ));
 
@@ -259,7 +291,9 @@ fn use_cases_reject_missing_targets_duplicates_and_tampered_hashes() {
 
     // Adjudication of a judgment that was never recorded.
     assert!(matches!(
-        services.semantic().record_judgment_adjudication(fixture.adjudications[0].clone()),
+        services
+            .semantic()
+            .record_judgment_adjudication(fixture.adjudications[0].clone()),
         Err(ApplicationError::NotFound(_))
     ));
 }
@@ -269,7 +303,8 @@ fn rubric_revision_appends_a_new_version_and_keeps_history() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = semantic_services(&repo);
     let fixture = gold_fixture();
-    services.semantic()
+    services
+        .semantic()
         .save_semantic_rubric(fixture.rubric.clone())
         .unwrap();
 
@@ -281,7 +316,10 @@ fn rubric_revision_appends_a_new_version_and_keeps_history() {
         note: "细化 P4 的时间表述".into(),
         revised_at_ms: 1781222700000,
     });
-    services.semantic().save_semantic_rubric(revised.clone()).unwrap();
+    services
+        .semantic()
+        .save_semantic_rubric(revised.clone())
+        .unwrap();
 
     // A revision with a different source snapshot is a different segment and
     // must be rejected instead of silently rebasing history.
@@ -299,14 +337,16 @@ fn rubric_revision_appends_a_new_version_and_keeps_history() {
     ));
 
     assert_eq!(
-        services.semantic()
+        services
+            .semantic()
             .semantic_rubric(&fixture.rubric.id, None)
             .unwrap()
             .unwrap(),
         revised
     );
     assert_eq!(
-        services.semantic()
+        services
+            .semantic()
             .semantic_rubric(&fixture.rubric.id, Some(1))
             .unwrap()
             .unwrap(),
@@ -344,9 +384,15 @@ impl SemanticJudgeProvider for FakeJudge {
 }
 
 fn save_rubric_and_attempts(services: &AppServices, fixture: &SemanticTaskGoldFixture) {
-    services.semantic().save_semantic_rubric(fixture.rubric.clone()).unwrap();
+    services
+        .semantic()
+        .save_semantic_rubric(fixture.rubric.clone())
+        .unwrap();
     for attempt in &fixture.attempts {
-        services.semantic().record_semantic_attempt(attempt.clone()).unwrap();
+        services
+            .semantic()
+            .record_semantic_attempt(attempt.clone())
+            .unwrap();
     }
 }
 
@@ -376,8 +422,14 @@ fn llm_draft_becomes_validated_judgment_with_server_minted_identity() {
         .expect("a scored fixture judgment");
     let draft = draft_from(scored);
 
-    let recorded = services.semantic()
-        .record_llm_judgment(&scored.attempt_id, scored.response_revision, draft, 1_800_000_000_000)
+    let recorded = services
+        .semantic()
+        .record_llm_judgment(
+            &scored.attempt_id,
+            scored.response_revision,
+            draft,
+            1_800_000_000_000,
+        )
         .unwrap();
 
     // Identity is minted server-side, not carried from any client/vendor value.
@@ -392,7 +444,10 @@ fn llm_draft_becomes_validated_judgment_with_server_minted_identity() {
     assert_ne!(recorded.id, scored.id);
     // Provenance and snapshot hashes are authoritative, evidence class honest.
     assert_eq!(recorded.provenance.kind, SemanticGeneratorKind::Llm);
-    assert_eq!(recorded.provenance.model_id.as_deref(), Some("fake-model-2026"));
+    assert_eq!(
+        recorded.provenance.model_id.as_deref(),
+        Some("fake-model-2026")
+    );
     assert_eq!(recorded.evidence_class, "heuristic_proxy");
     assert_eq!(
         recorded.rubric_source_sha256,
@@ -424,8 +479,14 @@ fn llm_judgment_path_writes_no_lexical_or_capability_evidence() {
         .iter()
         .find(|judgment| judgment.abstain.is_none())
         .unwrap();
-    services.semantic()
-        .record_llm_judgment(&scored.attempt_id, scored.response_revision, draft_from(scored), 1_800_000_000_001)
+    services
+        .semantic()
+        .record_llm_judgment(
+            &scored.attempt_id,
+            scored.response_revision,
+            draft_from(scored),
+            1_800_000_000_001,
+        )
         .unwrap();
 
     // The vendor path is still structurally incapable of leaking into the
@@ -450,11 +511,16 @@ async fn provider_failure_writes_no_judgment_honest_degradation() {
         LlmProviderError::Offline,
         LlmProviderError::Auth,
         LlmProviderError::Truncated,
-        LlmProviderError::Refusal { reason: "no".into() },
-        LlmProviderError::SchemaInvalid { detail: "bad".into() },
+        LlmProviderError::Refusal {
+            reason: "no".into(),
+        },
+        LlmProviderError::SchemaInvalid {
+            detail: "bad".into(),
+        },
     ] {
         let provider = FakeJudge { result: Err(error) };
-        let outcome = services.semantic()
+        let outcome = services
+            .semantic()
             .judge_semantic_attempt(&attempt.id, 1, &provider, 1_800_000_000_002)
             .await;
         assert!(matches!(outcome, Err(ApplicationError::Provider(_))));
@@ -475,10 +541,18 @@ async fn provider_success_orchestration_records_judgment() {
         .iter()
         .find(|judgment| judgment.abstain.is_none())
         .unwrap();
-    let provider = FakeJudge { result: Ok(draft_from(scored)) };
+    let provider = FakeJudge {
+        result: Ok(draft_from(scored)),
+    };
 
-    let recorded = services.semantic()
-        .judge_semantic_attempt(&scored.attempt_id, scored.response_revision, &provider, 1_800_000_000_003)
+    let recorded = services
+        .semantic()
+        .judge_semantic_attempt(
+            &scored.attempt_id,
+            scored.response_revision,
+            &provider,
+            1_800_000_000_003,
+        )
         .await
         .unwrap();
     assert_eq!(recorded.provenance.kind, SemanticGeneratorKind::Llm);

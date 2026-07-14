@@ -1,5 +1,17 @@
 use crate::lexical::lexical_unit_for_entry;
-use crate::*;
+use crate::{
+    ApplicationError, CapabilityConclusion, CapabilityFilter, CapabilityOverride,
+    CapabilityOverrideSource, CapabilityProjection, CapabilityProjectionSource,
+    CreateLexicalObservation, ExternalVocabularyImport, ExternalVocabularyImportSummary,
+    LISTENING_CONFIDENCE_TASK, LanguageCode, LearningChangeSource, LearningObservation,
+    LearningStatus, LexicalCapability, LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails,
+    LexicalEntryId, LexicalEntryKind, LexicalLearningUseCases, LexicalObservation,
+    LexicalOccurrenceId, LexicalSenseFolder, LexicalSenseId, MediaAvailability, MediaId, MediaItem,
+    ObservationOrigin, ObservationResult, ObservationSpec, RecognitionEvidenceSourceKind,
+    SubtitleSentenceId, VocabularyAssetBundle, clean_optional, clean_required,
+    learning_observation_id, listening_projection_v1, normalize_lemma, normalize_phrase, now_ms,
+    observation_spec_for_marking, require_text,
+};
 
 /// Marks capability projections inferred from a legacy linear status write,
 /// as opposed to the one-shot v22 backfill
@@ -186,20 +198,21 @@ impl LexicalLearningUseCases {
                 {
                     continue;
                 }
-                self.lexical_capabilities.set_lexical_capability_projection(
-                    lexical_entry_id,
-                    None,
-                    capability,
-                    Some(CapabilityProjection {
-                        conclusion: proj.conclusion,
-                        source,
-                        algorithm_version: LEGACY_STATUS_COMPAT_ALGORITHM_VERSION.into(),
-                        confidence: None,
-                        evidence_as_of_ms: None,
-                        updated_at_ms: changed_at_ms,
-                    }),
-                    changed_at_ms,
-                )?;
+                self.lexical_capabilities
+                    .set_lexical_capability_projection(
+                        lexical_entry_id,
+                        None,
+                        capability,
+                        Some(CapabilityProjection {
+                            conclusion: proj.conclusion,
+                            source,
+                            algorithm_version: LEGACY_STATUS_COMPAT_ALGORITHM_VERSION.into(),
+                            confidence: None,
+                            evidence_as_of_ms: None,
+                            updated_at_ms: changed_at_ms,
+                        }),
+                        changed_at_ms,
+                    )?;
             } else {
                 let current = self
                     .lexical_capabilities
@@ -212,13 +225,14 @@ impl LexicalLearningUseCases {
                 if current_dim.user_override.is_some() || current_dim.projection.is_none() {
                     continue;
                 }
-                self.lexical_capabilities.set_lexical_capability_projection(
-                    lexical_entry_id,
-                    None,
-                    capability,
-                    None,
-                    changed_at_ms,
-                )?;
+                self.lexical_capabilities
+                    .set_lexical_capability_projection(
+                        lexical_entry_id,
+                        None,
+                        capability,
+                        None,
+                        changed_at_ms,
+                    )?;
             }
         }
         // Re-derive the legacy status column from the profile: the writer
@@ -240,17 +254,17 @@ impl LexicalLearningUseCases {
     ) -> Result<(), ApplicationError> {
         let legacy = profile.legacy_status_view();
         let details = self.lexical_entries.lexical_details(lexical_entry_id)?;
-        if let Some(mut details) = details {
-            if details.entry.status != legacy {
-                details.entry.status = legacy;
-                details.entry.updated_at_ms = now_ms();
-                details.entry.learning_updated_at_ms = details.entry.updated_at_ms;
-                self.lexical_entries.upsert_lexical_entry(
-                    &details.entry,
-                    None,
-                    LearningChangeSource::CapabilityOverrideSync,
-                )?;
-            }
+        if let Some(mut details) = details
+            && details.entry.status != legacy
+        {
+            details.entry.status = legacy;
+            details.entry.updated_at_ms = now_ms();
+            details.entry.learning_updated_at_ms = details.entry.updated_at_ms;
+            self.lexical_entries.upsert_lexical_entry(
+                &details.entry,
+                None,
+                LearningChangeSource::CapabilityOverrideSync,
+            )?;
         }
         Ok(())
     }
@@ -357,13 +371,15 @@ impl LexicalLearningUseCases {
         {
             return Ok(());
         }
-        let profile = self.lexical_capabilities.set_lexical_capability_projection(
-            lexical_entry_id,
-            None,
-            LexicalCapability::Listening,
-            Some(projection),
-            now,
-        )?;
+        let profile = self
+            .lexical_capabilities
+            .set_lexical_capability_projection(
+                lexical_entry_id,
+                None,
+                LexicalCapability::Listening,
+                Some(projection),
+                now,
+            )?;
         self.sync_legacy_status_from_profile(lexical_entry_id, &profile)?;
         Ok(())
     }
@@ -378,22 +394,22 @@ impl LexicalLearningUseCases {
             .lexical_details(&input.lexical_entry_id)?
             .map(|details| details.entry)
             .ok_or(ApplicationError::NotFound("lexical entry"))?;
-        if let Some(source) = input.source.as_ref() {
-            if source.end_ms < source.start_ms {
-                return Err(ApplicationError::Validation("source context"));
-            }
+        if let Some(source) = input.source.as_ref()
+            && source.end_ms < source.start_ms
+        {
+            return Err(ApplicationError::Validation("source context"));
         }
         let created_at_ms = now_ms();
-        let observation = self
-            .learning_observations
-            .create_lexical_observation(&LexicalObservation {
-                id: domain::lexical_observation_id(&input.lexical_entry_id, &input.sentence_id),
-                lexical_entry_id: input.lexical_entry_id,
-                sentence_id: input.sentence_id,
-                original_form: input.original_form,
-                result: input.result,
-                created_at_ms,
-            })?;
+        let observation =
+            self.learning_observations
+                .create_lexical_observation(&LexicalObservation {
+                    id: domain::lexical_observation_id(&input.lexical_entry_id, &input.sentence_id),
+                    lexical_entry_id: input.lexical_entry_id,
+                    sentence_id: input.sentence_id,
+                    original_form: input.original_form,
+                    result: input.result,
+                    created_at_ms,
+                })?;
         if let Some(source) = input.source.as_ref() {
             entry.updated_at_ms = created_at_ms;
             self.lexical_entries.upsert_lexical_entry(
@@ -446,6 +462,8 @@ impl LexicalLearningUseCases {
     /// `status` and `capability_filter` are optional, additive filters (the
     /// legacy status axis stays available while the four-channel capability axis
     /// becomes the primary lens).
+    // Mirrors the repository's validated query axes at the HTTP use-case seam.
+    #[allow(clippy::too_many_arguments)]
     pub fn list_vocabulary(
         &self,
         language: &str,

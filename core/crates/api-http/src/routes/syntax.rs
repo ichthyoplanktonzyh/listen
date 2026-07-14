@@ -7,7 +7,10 @@ use application::{
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use crate::*;
+use crate::{
+    ApiError, ApiState, ApplicationError, Deserialize, Json, LanguageCode, Path, State,
+    SubtitleTrackId, SyntaxCapabilityView,
+};
 
 pub(crate) async fn syntax_capability(State(state): State<ApiState>) -> Json<SyntaxCapabilityView> {
     Json(state.syntax_capability.view().await)
@@ -109,7 +112,9 @@ pub(crate) async fn run_syntactic_consumers(
 ) -> Result<Json<application::SyntacticConsumerBatch>, ApiError> {
     let track_id = SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?;
     let track = state
-        .services.media_analysis().read_subtitle_track(&track_id)?
+        .services
+        .media_analysis()
+        .read_subtitle_track(&track_id)?
         .ok_or(ApplicationError::NotFound("subtitle track"))?;
     let language = track
         .language
@@ -119,7 +124,10 @@ pub(crate) async fn run_syntactic_consumers(
     for sentence in &track.sentences {
         phrases.insert(
             sentence.id.clone(),
-            state.services.lexical_learning().phrase_candidates(&sentence.id)?,
+            state
+                .services
+                .lexical_learning()
+                .phrase_candidates(&sentence.id)?,
         );
     }
     let patterns = request
@@ -152,7 +160,9 @@ pub(crate) async fn run_track_syntax_analysis(
     let request = request.map(|Json(value)| value).unwrap_or_default();
     let track_id = SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?;
     let track = state
-        .services.media_analysis().read_subtitle_track(&track_id)?
+        .services
+        .media_analysis()
+        .read_subtitle_track(&track_id)?
         .ok_or(ApplicationError::NotFound("subtitle track"))?;
     let language = track
         .language
@@ -197,7 +207,10 @@ pub(crate) async fn run_track_syntax_analysis(
     for sentence in &track.sentences {
         phrases.insert(
             sentence.id.clone(),
-            state.services.lexical_learning().phrase_candidates(&sentence.id)?,
+            state
+                .services
+                .lexical_learning()
+                .phrase_candidates(&sentence.id)?,
         );
     }
     let batch = state
@@ -276,7 +289,9 @@ pub(crate) async fn track_syntax_analysis_status(
 ) -> Result<Json<TrackSyntaxAnalysisView>, ApiError> {
     let track_id = SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?;
     let track = state
-        .services.media_analysis().read_subtitle_track(&track_id)?
+        .services
+        .media_analysis()
+        .read_subtitle_track(&track_id)?
         .ok_or(ApplicationError::NotFound("subtitle track"))?;
     let language = track
         .language

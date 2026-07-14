@@ -29,7 +29,11 @@ fn openai_content_envelope(content: &str) -> serde_json::Value {
     })
 }
 
-async fn post_json(app: &Router, uri: &str, body: serde_json::Value) -> (StatusCode, serde_json::Value) {
+async fn post_json(
+    app: &Router,
+    uri: &str,
+    body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
     let response = app
         .clone()
         .oneshot(
@@ -46,8 +50,9 @@ async fn post_json(app: &Router, uri: &str, body: serde_json::Value) -> (StatusC
     let json = if bytes.is_empty() {
         serde_json::Value::Null
     } else {
-        serde_json::from_slice(&bytes)
-            .unwrap_or_else(|_| serde_json::Value::String(String::from_utf8_lossy(&bytes).to_string()))
+        serde_json::from_slice(&bytes).unwrap_or_else(|_| {
+            serde_json::Value::String(String::from_utf8_lossy(&bytes).to_string())
+        })
     };
     (status, json)
 }
@@ -73,7 +78,12 @@ async fn register_lists_and_probes_provider_without_leaking_secret() {
     let app = test_app();
 
     // Register with a credential.
-    let (status, view) = post_json(&app, "/v1/llm/providers", register_body(&base, Some("sk-secret-777"))).await;
+    let (status, view) = post_json(
+        &app,
+        "/v1/llm/providers",
+        register_body(&base, Some("sk-secret-777")),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "register failed: {view}");
     assert_eq!(view["has_credential"], true);
     // The response is a view with no auth_ref and no secret anywhere.
@@ -99,7 +109,12 @@ async fn register_lists_and_probes_provider_without_leaking_secret() {
     assert!(!list_body.to_string().contains("sk-secret-777"));
 
     // Probe actually measures structured-output support against the endpoint.
-    let (status, probe) = post_json(&app, &format!("/v1/llm/providers/{id}/probe"), serde_json::Value::Null).await;
+    let (status, probe) = post_json(
+        &app,
+        &format!("/v1/llm/providers/{id}/probe"),
+        serde_json::Value::Null,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(probe["structured_output"]["state"], "probed");
     assert_eq!(probe["structured_output"]["supported"], true);
@@ -109,7 +124,12 @@ async fn register_lists_and_probes_provider_without_leaking_secret() {
 async fn delete_removes_provider() {
     let base = spawn_fake_openai(openai_content_envelope("{\"ok\": true}")).await;
     let app = test_app();
-    let (_, view) = post_json(&app, "/v1/llm/providers", register_body(&base, Some("sk-x"))).await;
+    let (_, view) = post_json(
+        &app,
+        "/v1/llm/providers",
+        register_body(&base, Some("sk-x")),
+    )
+    .await;
     let id = view["id"].as_str().unwrap().to_string();
 
     let deleted = app

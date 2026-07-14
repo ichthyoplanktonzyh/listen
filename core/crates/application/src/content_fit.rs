@@ -1,6 +1,12 @@
 use std::collections::HashMap;
 
-use crate::*;
+use crate::{
+    ApplicationError, CONTENT_FIT_ALGORITHM_VERSION, ColdStartWordCandidate,
+    ContentDifficultyProfile, FitEvidenceGrade, LanguageCode, LearningStatus, LexicalEntryKind,
+    MeaningFitInputs, MediaAnalysisUseCases, SoundFitInputs, SubtitleSentenceId, SubtitleTokenKind,
+    SubtitleTrack, SubtitleTrackId, WordTiming, apply_sound_fit_calibration,
+    content_fit_fingerprint, meaning_fit, now_ms, sound_fit, sound_fit_calibration_outcome,
+};
 
 impl MediaAnalysisUseCases {
     /// Cached read path: returns the stored profile when its fingerprint
@@ -357,6 +363,7 @@ fn speech_rate_wpm(words: &[WordTiming]) -> Option<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use domain::TimingSource;
 
     fn timing(sentence: &SubtitleSentenceId, index: u32, start_ms: u64, end_ms: u64) -> WordTiming {
         WordTiming {

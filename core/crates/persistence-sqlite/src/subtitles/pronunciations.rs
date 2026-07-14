@@ -1,5 +1,5 @@
 use application::{ApplicationError, PronunciationRepository};
-use domain::*;
+use domain::{SentencePronunciation, SubtitleSentenceId, WordPronunciation};
 use rusqlite::{OptionalExtension, params};
 
 use crate::{SqliteRepository, from_json, json, repo};

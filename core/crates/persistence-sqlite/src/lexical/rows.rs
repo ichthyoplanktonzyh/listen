@@ -2,7 +2,13 @@
 //! Split out of `lexical.rs` (mechanical decomposition).
 
 use application::ApplicationError;
-use domain::*;
+use domain::{
+    LanguageCode, LearningObservation, LearningObservationId, LexicalEntry, LexicalEntryId,
+    LexicalObservation, LexicalObservationId, LexicalOccurrence, LexicalOccurrenceId,
+    LexicalSenseFolder, LexicalSenseFolderDetails, LexicalSenseFolderOccurrence, LexicalSenseId,
+    LexicalStatusHistory, LexicalStatusHistoryId, LexicalUnit, MediaId, PhoneticFindingFeedback,
+    SubtitleSentenceId,
+};
 use rusqlite::OptionalExtension;
 
 use crate::{from_json, repo};

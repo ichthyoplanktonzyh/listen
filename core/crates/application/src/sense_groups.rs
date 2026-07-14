@@ -1,4 +1,8 @@
-use crate::*;
+use crate::{
+    ApplicationError, MediaAnalysisUseCases, SenseGroup, SenseGroupAnalysis, SenseGroupAnalysisId,
+    SenseGroupAnalysisSummary, SenseGroupId, SubtitleSentence, SubtitleToken, SubtitleTrackId,
+    SyntacticAnalysis, TimelineCreator, TimelineStatus, now_ms, validate_syntactic_analysis,
+};
 
 impl MediaAnalysisUseCases {
     pub fn list_sense_group_analyses(
@@ -134,7 +138,8 @@ impl MediaAnalysisUseCases {
         }
         let analysis = self.sense_groups.save_sense_group_analysis(&analysis)?;
         if requested_status == TimelineStatus::Active {
-            self.sense_groups.activate_sense_group_analysis(&analysis.id)
+            self.sense_groups
+                .activate_sense_group_analysis(&analysis.id)
         } else {
             Ok(analysis)
         }

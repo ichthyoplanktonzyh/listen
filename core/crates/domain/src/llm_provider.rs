@@ -113,7 +113,13 @@ impl CapabilityClaim {
     /// Whether a dispatcher may rely on this capability. Only measured support
     /// counts as usable for hard requirements; declared support is advisory.
     pub fn is_usable(self) -> bool {
-        matches!(self, CapabilityClaim::Probed { supported: true, .. })
+        matches!(
+            self,
+            CapabilityClaim::Probed {
+                supported: true,
+                ..
+            }
+        )
     }
 }
 
@@ -249,18 +255,22 @@ mod tests {
 
     #[test]
     fn only_probed_support_is_usable() {
-        assert!(CapabilityClaim::Probed {
-            supported: true,
-            probed_at_ms: 1
-        }
-        .is_usable());
+        assert!(
+            CapabilityClaim::Probed {
+                supported: true,
+                probed_at_ms: 1
+            }
+            .is_usable()
+        );
         assert!(!CapabilityClaim::Declared { supported: true }.is_usable());
         assert!(!CapabilityClaim::Unknown.is_usable());
-        assert!(!CapabilityClaim::Probed {
-            supported: false,
-            probed_at_ms: 1
-        }
-        .is_usable());
+        assert!(
+            !CapabilityClaim::Probed {
+                supported: false,
+                probed_at_ms: 1
+            }
+            .is_usable()
+        );
     }
 
     #[test]

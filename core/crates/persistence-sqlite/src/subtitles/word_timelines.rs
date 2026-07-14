@@ -1,5 +1,7 @@
 use application::{ApplicationError, WordTimelineRepository};
-use domain::*;
+use domain::{
+    SubtitleSentenceId, SubtitleTrackId, TimelineStatus, WordTimeline, WordTimelineId, WordTiming,
+};
 use rusqlite::{OptionalExtension, params};
 
 use crate::{SqliteRepository, from_json, json, repo};

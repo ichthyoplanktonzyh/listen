@@ -12,8 +12,8 @@ use application::{
 };
 use async_trait::async_trait;
 use domain::{
-    DictionaryDefinition, DictionaryLookup, DictionaryPhonetic,
-    DictionaryProviderInfo, LanguageCode, PhraseCandidate, SubtitleSentence, SubtitleTokenKind, normalize_lemma,
+    DictionaryDefinition, DictionaryLookup, DictionaryPhonetic, DictionaryProviderInfo,
+    LanguageCode, PhraseCandidate, SubtitleSentence, SubtitleTokenKind, normalize_lemma,
 };
 
 pub struct EcdictProvider {
@@ -21,7 +21,6 @@ pub struct EcdictProvider {
     version: String,
     index: Mutex<Option<(ResourceSignature, Arc<EcdictIndex>)>>,
 }
-
 
 #[derive(Debug, Default)]
 struct EcdictIndex {

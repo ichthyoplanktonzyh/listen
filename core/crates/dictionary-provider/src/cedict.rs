@@ -6,15 +6,12 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use application::{
-    DictionaryProvider, DictionaryProviderError, PronunciationProvider,
-};
+use application::{DictionaryProvider, DictionaryProviderError, PronunciationProvider};
 use async_trait::async_trait;
 use domain::{
     CharacterBreakdown, DictionaryDefinition, DictionaryLookup, DictionaryPhonetic,
-    DictionaryProviderInfo, LanguageCode, Phoneme, PronunciationProviderInfo,
-    PronunciationVariant, SentencePronunciation, SubtitleSentence, SubtitleTokenKind,
-    WordPronunciation,
+    DictionaryProviderInfo, LanguageCode, Phoneme, PronunciationProviderInfo, PronunciationVariant,
+    SentencePronunciation, SubtitleSentence, SubtitleTokenKind, WordPronunciation,
 };
 
 /// Mandarin dictionary provider. It resolves from CC-CEDICT when that resource
@@ -217,7 +214,6 @@ impl DictionaryProvider for ChineseDictionaryProvider {
 // Chinese Pronunciation Provider (Pinyin from CC-CEDICT)
 // ---------------------------------------------------------------------------
 
-
 pub struct ChinesePronunciationProvider {
     seed: HashMap<&'static str, (&'static str, &'static str)>,
     path: PathBuf,
@@ -265,19 +261,19 @@ impl ChinesePronunciationProvider {
     }
 
     fn lookup_pinyin(&self, word: &str) -> Option<String> {
-        if let Some(index) = self.load_index() {
-            if let Some(entry) = index.entries.get(word) {
-                return Some(entry.pinyin.clone());
-            }
+        if let Some(index) = self.load_index()
+            && let Some(entry) = index.entries.get(word)
+        {
+            return Some(entry.pinyin.clone());
         }
         self.seed.get(word).map(|(pinyin, _)| pinyin.to_string())
     }
 
     fn lookup_pinyin_single_char(&self, ch: &str) -> Option<String> {
-        if let Some(index) = self.load_index() {
-            if let Some(entry) = index.entries.get(ch) {
-                return Some(entry.pinyin.clone());
-            }
+        if let Some(index) = self.load_index()
+            && let Some(entry) = index.entries.get(ch)
+        {
+            return Some(entry.pinyin.clone());
         }
         self.seed.get(ch).map(|(pinyin, _)| pinyin.to_string())
     }

@@ -1,5 +1,5 @@
 use application::{ApplicationError, LLTimelineResourceRepository};
-use domain::*;
+use domain::{LLTimelineArtifact, LLTimelineMetadata, SubtitleTrackId};
 use rusqlite::{OptionalExtension, params};
 
 use crate::{SqliteRepository, from_json, json, repo};

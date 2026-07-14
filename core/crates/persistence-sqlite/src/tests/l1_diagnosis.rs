@@ -19,7 +19,9 @@ fn l1_services(repo: &Arc<SqliteRepository>) -> AppServices {
 }
 
 fn import_english_sentence(services: &AppServices) -> SubtitleTrack {
-    let media = services.media_analysis().register_media(RegisterMedia {
+    let media = services
+        .media_analysis()
+        .register_media(RegisterMedia {
             path: "/tmp/l1-diagnosis.mp4".into(),
             fingerprint: "l1-diagnosis-media".into(),
             title: "L1 diagnosis media".into(),
@@ -27,7 +29,9 @@ fn import_english_sentence(services: &AppServices) -> SubtitleTrack {
             duration_ms: Some(10_000),
         })
         .unwrap();
-    services.media_analysis().import_subtitle(ImportSubtitle {
+    services
+        .media_analysis()
+        .import_subtitle(ImportSubtitle {
             media_id: media.id,
             source_name: "l1.srt".into(),
             content: b"1\n00:00:00,000 --> 00:00:03,000\nI want to check the results now.\n"
@@ -78,7 +82,9 @@ fn active_word_timeline(services: &AppServices, track: &SubtitleTrack) {
             provider_version: "v1".into(),
         })
         .collect::<Vec<_>>();
-    services.media_analysis().create_word_timeline(
+    services
+        .media_analysis()
+        .create_word_timeline(
             &track.id,
             CreateWordTimeline {
                 algorithm_id: Some("test".into()),
@@ -102,7 +108,10 @@ fn l1_diagnosis_degrades_cleanly_without_l1_or_profile_or_frame() {
     let sentence_id = track.sentences[0].id.clone();
 
     // No L1 declared: baseline diagnosis is untouched.
-    let baseline = services.media_analysis().diagnose_sentence(&sentence_id).unwrap();
+    let baseline = services
+        .media_analysis()
+        .diagnose_sentence(&sentence_id)
+        .unwrap();
     assert!(baseline.l1_context.is_none());
     assert!(baseline.l1_hints.is_empty());
 
@@ -111,7 +120,10 @@ fn l1_diagnosis_degrades_cleanly_without_l1_or_profile_or_frame() {
         .learner_profile()
         .set_learner_l1(Some("ja"), Some("zh"))
         .unwrap();
-    let unsupported = services.media_analysis().diagnose_sentence(&sentence_id).unwrap();
+    let unsupported = services
+        .media_analysis()
+        .diagnose_sentence(&sentence_id)
+        .unwrap();
     let context = unsupported.l1_context.expect("context for declared L1");
     assert_eq!(context.support, L1DiagnosisSupport::UnsupportedPair);
     assert!(unsupported.l1_hints.is_empty());
@@ -124,7 +136,10 @@ fn l1_diagnosis_degrades_cleanly_without_l1_or_profile_or_frame() {
         .set_learner_l1(Some("zh"), Some("zh"))
         .unwrap();
     mark_all_words_known(&services, &track);
-    let no_frame = services.media_analysis().diagnose_sentence(&sentence_id).unwrap();
+    let no_frame = services
+        .media_analysis()
+        .diagnose_sentence(&sentence_id)
+        .unwrap();
     assert_eq!(
         no_frame.l1_context.unwrap().support,
         L1DiagnosisSupport::Supported
@@ -147,7 +162,10 @@ fn l1_hits_attach_replayable_spans_and_record_idempotent_events() {
     mark_all_words_known(&services, &track);
     active_word_timeline(&services, &track);
 
-    let diagnosis = services.media_analysis().diagnose_sentence(&sentence_id).unwrap();
+    let diagnosis = services
+        .media_analysis()
+        .diagnose_sentence(&sentence_id)
+        .unwrap();
     assert_eq!(
         diagnosis.l1_context.as_ref().unwrap().support,
         L1DiagnosisSupport::Supported
@@ -181,7 +199,10 @@ fn l1_hits_attach_replayable_spans_and_record_idempotent_events() {
             .all(|event| event.subject.id == sentence_id.as_str())
     );
 
-    services.media_analysis().diagnose_sentence(&sentence_id).unwrap();
+    services
+        .media_analysis()
+        .diagnose_sentence(&sentence_id)
+        .unwrap();
     let events_after = repo.list_learning_events(100, 0).unwrap();
     assert_eq!(
         events_after
@@ -207,10 +228,15 @@ fn family_projection_feeds_specialty_aggregation() {
     // family annotation rows alongside words/phrases/chunks.
     active_word_timeline(&services, &track);
 
-    let diagnosis = services.media_analysis().diagnose_sentence(&track.sentences[0].id).unwrap();
+    let diagnosis = services
+        .media_analysis()
+        .diagnose_sentence(&track.sentences[0].id)
+        .unwrap();
     let kind = &diagnosis.l1_hints[0].difficulty_kind;
 
-    let specialty = services.media_analysis().l1_specialty_occurrences(kind, "en", None, 30)
+    let specialty = services
+        .media_analysis()
+        .l1_specialty_occurrences(kind, "en", None, 30)
         .unwrap();
     assert!(specialty.indexed, "projection rows must serve the query");
     assert!(!specialty.occurrences.is_empty());
@@ -230,11 +256,15 @@ fn family_projection_feeds_specialty_aggregation() {
 
     // Unknown category and unsupported pair degrade to typed errors.
     assert!(
-        services.media_analysis().l1_specialty_occurrences("not_a_kind", "en", None, 30)
+        services
+            .media_analysis()
+            .l1_specialty_occurrences("not_a_kind", "en", None, 30)
             .is_err()
     );
     assert!(
-        services.media_analysis().l1_specialty_occurrences(kind, "ja", None, 30)
+        services
+            .media_analysis()
+            .l1_specialty_occurrences(kind, "ja", None, 30)
             .is_err()
     );
 }
@@ -264,15 +294,22 @@ fn specialty_degrades_to_current_track_without_corpus_projection() {
     mark_all_words_known(&services, &track);
     active_word_timeline(&services, &track);
 
-    let diagnosis = services.media_analysis().diagnose_sentence(&track.sentences[0].id).unwrap();
+    let diagnosis = services
+        .media_analysis()
+        .diagnose_sentence(&track.sentences[0].id)
+        .unwrap();
     let kind = &diagnosis.l1_hints[0].difficulty_kind;
 
-    let no_track = services.media_analysis().l1_specialty_occurrences(kind, "en", None, 30)
+    let no_track = services
+        .media_analysis()
+        .l1_specialty_occurrences(kind, "en", None, 30)
         .unwrap();
     assert!(!no_track.indexed);
     assert!(no_track.occurrences.is_empty());
 
-    let degraded = services.media_analysis().l1_specialty_occurrences(kind, "en", Some(track.id.as_str()), 30)
+    let degraded = services
+        .media_analysis()
+        .l1_specialty_occurrences(kind, "en", Some(track.id.as_str()), 30)
         .unwrap();
     assert!(!degraded.indexed);
     assert!(!degraded.occurrences.is_empty());

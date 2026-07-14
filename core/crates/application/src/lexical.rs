@@ -1,4 +1,13 @@
-use crate::*;
+use crate::{
+    AppServices, ApplicationError, CapabilityProjectionSource, LanguageCode, LearningChangeSource,
+    LearningEventRepository, LearningObservationRepository, LearningStatus,
+    LexicalCapabilityRepository, LexicalContentRepository, LexicalEntry, LexicalEntryDetails,
+    LexicalEntryId, LexicalEntryKind, LexicalEntryRepository, LexicalNormalization,
+    LexicalNormalizationProvider, LexicalUnit, MediaRepository, PhraseCandidate,
+    PracticeRepository, RecognitionUpgradeRepository, SubtitleSentenceId, SubtitleTrackRepository,
+    UpsertLexicalEntry, VocabularyAssetRepository, normalize_american_english, normalize_lemma,
+    normalize_phrase, now_ms, phrase_candidates, require_text,
+};
 use std::sync::Arc;
 
 /// Lexical learning owns normalization, durable lexical assets, capability

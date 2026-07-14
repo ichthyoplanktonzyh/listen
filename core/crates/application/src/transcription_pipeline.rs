@@ -1,7 +1,11 @@
 use std::path::Path;
 use std::process::Stdio;
 
-use crate::*;
+use crate::{
+    ApplicationError, ForcedAlignRequest, ForcedAlignSidecar, MediaAnalysisUseCases,
+    SubtitleSentence, SubtitleTrackId, TimelineMetrics, TimelineStatus, WordTimelinePipelineResult,
+    WordTiming, forced_align_segments, save_word_timeline_snapshot_with_metrics,
+};
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
@@ -119,8 +123,8 @@ impl MediaAnalysisUseCases {
 
         let mut forced_aligned_timeline_id = None;
         let mut final_timeline_id = None;
-        if forced_aligned_word_count > 0 {
-            if let Ok(timeline_id) = save_word_timeline_snapshot_with_metrics(
+        if forced_aligned_word_count > 0
+            && let Ok(timeline_id) = save_word_timeline_snapshot_with_metrics(
                 self,
                 &track.id,
                 &timings,
@@ -133,11 +137,11 @@ impl MediaAnalysisUseCases {
                     "line": "sound",
                     "source": "forced_alignment",
                 }))),
-            ) {
-                parent_timeline_id = Some(timeline_id.clone());
-                forced_aligned_timeline_id = Some(timeline_id.clone());
-                final_timeline_id = Some(timeline_id);
-            }
+            )
+        {
+            parent_timeline_id = Some(timeline_id.clone());
+            forced_aligned_timeline_id = Some(timeline_id.clone());
+            final_timeline_id = Some(timeline_id);
         }
 
         let wav_bytes = tokio::fs::read(audio_wav_path).await.ok();
@@ -194,9 +198,7 @@ impl MediaAnalysisUseCases {
         if let (Some(timeline_id), Some(wav_bytes)) =
             (final_timeline_id.as_ref(), wav_bytes.as_deref())
             && let Ok(acoustic_analysis) =
-                speech_analysis::timing::analyze_word_acoustics_from_pcm_wav(
-                    wav_bytes, &timings,
-                )
+                speech_analysis::timing::analyze_word_acoustics_from_pcm_wav(wav_bytes, &timings)
             && let Ok(cue_count) =
                 self.store_rhythm_word_acoustic_analysis(&track.id, timeline_id, &acoustic_analysis)
         {

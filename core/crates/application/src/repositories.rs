@@ -1,4 +1,28 @@
-use domain::*;
+use domain::{
+    CapabilityFilter, CapabilityOverride, CapabilityProjection, ChunkTimeline, ChunkTimelineId,
+    ContentDifficultyProfile, CorpusOccurrence, CorpusOccurrenceId, DictionaryEntry,
+    HuntingCandidate, HuntingCandidateId, HuntingCandidateStatus, HuntingTarget, HuntingTargetId,
+    HuntingTargetStatus, JudgmentAdjudication, LLTimelineArtifact, LLTimelineMetadata,
+    LanguageCode, LearnerProfile, LearnerProfileId, LearningChangeSource, LearningEvent,
+    LearningEventKind, LearningEventSubjectKind, LearningObservation, LearningStatus,
+    LexicalCapability, LexicalCapabilityHistory, LexicalCapabilityProfile, LexicalEntry,
+    LexicalEntryDetails, LexicalEntryId, LexicalEntryKind, LexicalObservation, LexicalOccurrenceId,
+    LexicalSenseFolder, LexicalSenseId, ListeningInboxItem, ListeningInboxItemId,
+    ListeningInboxStatus, LlmProviderProfile, LlmProviderProfileId, MediaAvailability, MediaId,
+    MediaItem, MediaTriageIntent, PhoneTimeline, PhoneTimelineId, PhoneticAnalysis,
+    PhoneticAnalysisId, PhoneticAnalysisJob, PhoneticAnalysisJobId,
+    PhoneticAnalysisModelDescriptor, PhoneticAnalysisModelId, PhoneticFindingFeedback,
+    PhoneticFindingId, PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeItemId,
+    PracticeSession, PracticeSessionId, RecognitionEvidence, RecordingAsset, RecordingAssetId,
+    ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewSchedule,
+    SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
+    SemanticTaskAttemptId, SenseGroupAnalysis, SenseGroupAnalysisId, SentencePronunciation,
+    SoundFitCalibration, SubtitleSentence, SubtitleSentenceId, SubtitleTrack, SubtitleTrackId,
+    SubtitleTrackProvenance, SubtitleTrackStatus, TimeMs, TranscriptionJob, TranscriptionJobId,
+    TranscriptionModelDescriptor, TranscriptionModelId, UpgradeSuggestion, UpgradeSuggestionId,
+    UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation, WordTimeline,
+    WordTimelineId, WordTiming,
+};
 
 use crate::{ApplicationError, LexicalSourceContext};
 
@@ -275,6 +299,9 @@ pub trait LexicalEntryRepository: Send + Sync {
         &self,
         id: &LexicalEntryId,
     ) -> Result<Option<LexicalEntryDetails>, ApplicationError>;
+    // Query axes remain explicit because capability filtering is optional only
+    // as a pair; an unvalidated bag would permit invalid combinations.
+    #[allow(clippy::too_many_arguments)]
     fn list_lexical_entries(
         &self,
         language: &LanguageCode,
@@ -787,10 +814,7 @@ pub trait LlmProviderProfileRepository: Send + Sync {
         id: &LlmProviderProfileId,
     ) -> Result<Option<LlmProviderProfile>, ApplicationError>;
     fn list_provider_profiles(&self) -> Result<Vec<LlmProviderProfile>, ApplicationError>;
-    fn delete_provider_profile(
-        &self,
-        id: &LlmProviderProfileId,
-    ) -> Result<(), ApplicationError>;
+    fn delete_provider_profile(&self, id: &LlmProviderProfileId) -> Result<(), ApplicationError>;
 }
 
 pub trait DictionaryCacheRepository: Send + Sync {

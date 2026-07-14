@@ -184,9 +184,15 @@ impl Judge {
     }
 }
 
-async fn run_judge(protocol: Protocol, canned: Canned, timeout: Duration) -> Result<application::JudgmentDraft, LlmProviderError> {
+async fn run_judge(
+    protocol: Protocol,
+    canned: Canned,
+    timeout: Duration,
+) -> Result<application::JudgmentDraft, LlmProviderError> {
     let base = spawn(canned).await;
-    Judge::build(protocol, &base, timeout).judge(&judge_request()).await
+    Judge::build(protocol, &base, timeout)
+        .judge(&judge_request())
+        .await
 }
 
 const T: Duration = Duration::from_secs(5);
@@ -264,7 +270,12 @@ async fn refusal_maps_to_refusal_across_protocols() {
                 "content": []
             }),
         };
-        let canned = Canned { status: StatusCode::OK, body, retry_after: None, delay_ms: 0 };
+        let canned = Canned {
+            status: StatusCode::OK,
+            body,
+            retry_after: None,
+            delay_ms: 0,
+        };
         let error = run_judge(protocol, canned, T).await.unwrap_err();
         assert!(matches!(error, LlmProviderError::Refusal { .. }));
     }
@@ -284,7 +295,12 @@ async fn truncation_maps_to_truncated_across_protocols() {
                 "content": []
             }),
         };
-        let canned = Canned { status: StatusCode::OK, body, retry_after: None, delay_ms: 0 };
+        let canned = Canned {
+            status: StatusCode::OK,
+            body,
+            retry_after: None,
+            delay_ms: 0,
+        };
         let error = run_judge(protocol, canned, T).await.unwrap_err();
         assert!(matches!(error, LlmProviderError::Truncated));
     }
@@ -300,7 +316,12 @@ async fn rate_limit_status_maps_with_retry_after() {
             delay_ms: 0,
         };
         let error = run_judge(protocol, canned, T).await.unwrap_err();
-        assert_eq!(error, LlmProviderError::RateLimit { retry_after_ms: Some(2000) });
+        assert_eq!(
+            error,
+            LlmProviderError::RateLimit {
+                retry_after_ms: Some(2000)
+            }
+        );
     }
 }
 
@@ -327,7 +348,9 @@ async fn slow_server_maps_to_timeout() {
         let output = serde_json::json!({ "abstain": null, "points": [] });
         let mut canned = success_envelope(protocol, "semantic_judgment", output);
         canned.delay_ms = 400;
-        let error = run_judge(protocol, canned, Duration::from_millis(80)).await.unwrap_err();
+        let error = run_judge(protocol, canned, Duration::from_millis(80))
+            .await
+            .unwrap_err();
         assert_eq!(error, LlmProviderError::Timeout);
     }
 }
@@ -336,17 +359,43 @@ async fn slow_server_maps_to_timeout() {
 async fn probe_measures_structured_output_support() {
     // A conforming endpoint probes as supported.
     for protocol in ALL_PROTOCOLS {
-        let canned = success_envelope(protocol, "capability_probe", serde_json::json!({ "ok": true }));
+        let canned = success_envelope(
+            protocol,
+            "capability_probe",
+            serde_json::json!({ "ok": true }),
+        );
         let base = spawn(canned).await;
-        let claim = Judge::build(protocol, &base, T).probe().await.expect("probe");
-        assert!(matches!(claim, CapabilityClaim::Probed { supported: true, .. }));
+        let claim = Judge::build(protocol, &base, T)
+            .probe()
+            .await
+            .expect("probe");
+        assert!(matches!(
+            claim,
+            CapabilityClaim::Probed {
+                supported: true,
+                ..
+            }
+        ));
     }
     // An endpoint that returns the wrong shape probes as unsupported, not error.
     for protocol in ALL_PROTOCOLS {
-        let canned = success_envelope(protocol, "capability_probe", serde_json::json!({ "ok": "nope" }));
+        let canned = success_envelope(
+            protocol,
+            "capability_probe",
+            serde_json::json!({ "ok": "nope" }),
+        );
         let base = spawn(canned).await;
-        let claim = Judge::build(protocol, &base, T).probe().await.expect("probe");
-        assert!(matches!(claim, CapabilityClaim::Probed { supported: false, .. }));
+        let claim = Judge::build(protocol, &base, T)
+            .probe()
+            .await
+            .expect("probe");
+        assert!(matches!(
+            claim,
+            CapabilityClaim::Probed {
+                supported: false,
+                ..
+            }
+        ));
     }
 }
 
@@ -387,9 +436,15 @@ fn profile_for(protocol: Protocol, base_url: &str) -> LlmProviderProfile {
 async fn factory_builds_matching_adapter_for_each_profile() {
     let output = serde_json::json!({ "abstain": null, "points": [] });
     for protocol in ALL_PROTOCOLS {
-        let base = spawn(success_envelope(protocol, "semantic_judgment", output.clone())).await;
-        let provider = BuiltSemanticProvider::build(&profile_for(protocol, &base), Some("k".into()))
-            .expect("built");
+        let base = spawn(success_envelope(
+            protocol,
+            "semantic_judgment",
+            output.clone(),
+        ))
+        .await;
+        let provider =
+            BuiltSemanticProvider::build(&profile_for(protocol, &base), Some("k".into()))
+                .expect("built");
         // The chosen adapter kind matches the profile.
         let expected = match protocol {
             Protocol::OpenAi => LlmAdapterKind::OpenAiChatCompletions,
@@ -397,7 +452,11 @@ async fn factory_builds_matching_adapter_for_each_profile() {
         };
         assert_eq!(provider.as_judge().descriptor().adapter_kind, expected);
         // The judge seam works through the factory-built provider.
-        let draft = provider.as_judge().judge(&judge_request()).await.expect("judgment");
+        let draft = provider
+            .as_judge()
+            .judge(&judge_request())
+            .await
+            .expect("judgment");
         assert!(draft.abstain.is_none());
     }
 }
@@ -416,7 +475,10 @@ async fn factory_probe_measures_capability() {
         let claim = provider.probe_structured_output().await.expect("probe");
         assert!(matches!(
             claim,
-            domain::CapabilityClaim::Probed { supported: true, .. }
+            domain::CapabilityClaim::Probed {
+                supported: true,
+                ..
+            }
         ));
     }
 }

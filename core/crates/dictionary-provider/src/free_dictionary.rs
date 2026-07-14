@@ -6,8 +6,8 @@ use std::time::Duration;
 use application::{DictionaryProvider, DictionaryProviderError};
 use async_trait::async_trait;
 use domain::{
-    DictionaryDefinition, DictionaryLookup, DictionaryPhonetic,
-    DictionaryProviderInfo, LanguageCode,
+    DictionaryDefinition, DictionaryLookup, DictionaryPhonetic, DictionaryProviderInfo,
+    LanguageCode,
 };
 
 pub struct FreeDictionaryProvider {
@@ -113,8 +113,9 @@ impl DictionaryProvider for FreeDictionaryProvider {
     }
 }
 
-
-pub(crate) fn parse_free_dictionary_phonetics(entry: &serde_json::Value) -> Vec<DictionaryPhonetic> {
+pub(crate) fn parse_free_dictionary_phonetics(
+    entry: &serde_json::Value,
+) -> Vec<DictionaryPhonetic> {
     entry["phonetics"]
         .as_array()
         .into_iter()
@@ -139,7 +140,6 @@ pub(crate) fn parse_free_dictionary_phonetics(entry: &serde_json::Value) -> Vec<
         })
         .collect()
 }
-
 
 fn url_encode(value: &str) -> String {
     value

@@ -1,15 +1,13 @@
 use super::*;
 use application::{
-    AppServices, ApplicationError, CoachDashboardRepository, DictionaryProvider,
-    DictionaryProviderError, ImportSubtitle, LearningEventRepository,
-    LearningObservationRepository, LexicalCapabilityRepository,
-    LexicalEntryRepository, VocabularyAssetRepository,
-    ListeningInboxRepository, MediaRepository, PhoneticAnalysisRepository, PracticeRepository,
-    LLTimelineResourceRepository, PronunciationRepository,
-    RecognitionUpgradeRepository, RegisterMedia, ReviewQueueRepository,
-    ChunkTimelineRepository, PhoneTimelineRepository, SenseGroupRepository,
-    SubtitleTrackRepository, TranscriptionRepository, WordTimelineRepository,
-    UpsertLexicalEntry,
+    AppServices, ApplicationError, ChunkTimelineRepository, CoachDashboardRepository,
+    DictionaryProvider, DictionaryProviderError, ImportSubtitle, LLTimelineResourceRepository,
+    LearningEventRepository, LearningObservationRepository, LexicalCapabilityRepository,
+    LexicalEntryRepository, ListeningInboxRepository, MediaRepository, PhoneTimelineRepository,
+    PhoneticAnalysisRepository, PracticeRepository, PronunciationRepository,
+    RecognitionUpgradeRepository, RegisterMedia, ReviewQueueRepository, SenseGroupRepository,
+    SubtitleTrackRepository, TranscriptionRepository, UpsertLexicalEntry,
+    VocabularyAssetRepository, WordTimelineRepository,
 };
 
 #[test]
@@ -64,7 +62,9 @@ fn coach_dashboard_derives_material_trajectory_and_requires_confirmed_graduation
     )
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
     .with_coach_dashboard_repository(repo.clone());
-    let graduated = services.media_analysis().graduate_coach_material(&MediaId::parse("media-coach").unwrap())
+    let graduated = services
+        .media_analysis()
+        .graduate_coach_material(&MediaId::parse("media-coach").unwrap())
         .unwrap();
     assert_eq!(graduated.triage_intent, Some(MediaTriageIntent::Graduated));
 }
@@ -176,7 +176,8 @@ fn upsert_word_asset(
     source: Option<application::LexicalSourceContext>,
 ) -> LexicalEntryDetails {
     services
-        .lexical_learning().create_lexical_entry(UpsertLexicalEntry {
+        .lexical_learning()
+        .create_lexical_entry(UpsertLexicalEntry {
             language: language.into(),
             kind: LexicalEntryKind::Word,
             canonical_form: value.into(),
@@ -191,7 +192,8 @@ fn upsert_word_asset(
 
 fn read_word_asset(services: &AppServices, language: &str, value: &str) -> Option<LexicalEntry> {
     services
-        .lexical_learning().read_lexical_entries_by_forms(language, LexicalEntryKind::Word, &[value.into()])
+        .lexical_learning()
+        .read_lexical_entries_by_forms(language, LexicalEntryKind::Word, &[value.into()])
         .unwrap()
         .into_iter()
         .next()

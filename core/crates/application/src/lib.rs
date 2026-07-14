@@ -2,7 +2,50 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::coach_dashboard::DisabledCoachDashboardRepository;
-use domain::*;
+use domain::{
+    CONTENT_FIT_ALGORITHM_VERSION, CapabilityAssessment, CapabilityConclusion, CapabilityFilter,
+    CapabilityOverride, CapabilityOverrideSource, CapabilityProjection, CapabilityProjectionSource,
+    CapabilitySupport, ChunkBoundarySource, ChunkId, ChunkTimeline, ChunkTimelineChunk,
+    ChunkTimelineId, ChunkTimelinePrecision, ChunkTimelineSummary, ContentDifficultyProfile,
+    CorpusOccurrence, CorpusOccurrenceId, CorpusOccurrenceKind, DetectedPhone, DiagnosisKind,
+    DictionaryEntry, DictionaryEntryId, DictionaryLookupBundle, DictionaryProviderResult,
+    ExternalVocabularyImport, ExternalVocabularyImportSummary, FitEvidenceGrade, HuntingCandidate,
+    HuntingCandidateId, HuntingCandidateStatus, HuntingTarget, HuntingTargetId,
+    HuntingTargetStatus, JudgmentAdjudication, L1DiagnosisContext, L1DiagnosisHint,
+    L1DiagnosisSpan, L1DiagnosisSupport, LISTENING_CONFIDENCE_TASK, LLTIMELINE_SCHEMA_V1,
+    LLTimelineArtifact, LLTimelineDocument, LLTimelineGenerator, LLTimelineId, LLTimelineMedia,
+    LLTimelineMetadata, LLTimelineRhythmFrame, LLTimelineSegment, LLTimelineToken, LanguageCode,
+    LearnerProfile, LearnerProfileId, LearningChangeSource, LearningEvent, LearningEventId,
+    LearningEventKind, LearningEventSubject, LearningEventSubjectKind, LearningObservation,
+    LearningStatus, LexicalCapability, LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails,
+    LexicalEntryId, LexicalEntryKind, LexicalObservation, LexicalObservationId,
+    LexicalOccurrenceId, LexicalSenseFolder, LexicalSenseId, LexicalUnit,
+    ListeningComprehensionReport, ListeningInboxItem, ListeningInboxItemId,
+    ListeningInboxResolution, ListeningInboxStatus, LlmProviderProfile, LlmProviderProfileId,
+    MeaningFitInputs, MediaAvailability, MediaId, MediaItem, MediaKind, MediaTriageIntent,
+    ObservationOrigin, ObservationResult, ObservationSpec, PhoneTimeline, PhoneTimelineId,
+    PhoneTimelinePrecision, PhoneTimelineSummary, PhoneticAnalysis, PhoneticAnalysisId,
+    PhoneticAnalysisJob, PhoneticFindingStatus, PhraseCandidate, PracticeAnchorKind,
+    PracticeAttempt, PracticeAttemptId, PracticeEvaluation, PracticeItem, PracticeItemId,
+    PracticeKind, PracticeMode, PracticeResult, PracticeSession, PracticeSessionId, PracticeTarget,
+    PracticeTargetKind, PracticeTokenEvaluation, PracticeTokenResult, PronunciationProviderInfo,
+    RecognitionEvidence, RecognitionEvidenceId, RecognitionEvidenceSourceKind, ReviewAttempt,
+    ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewRating, ReviewSchedule,
+    ReviewSource, ReviewSourceKind, RhythmFrameId, SemanticJudgment, SemanticJudgmentId,
+    SemanticRubric, SemanticRubricId, SemanticTaskAttempt, SemanticTaskAttemptId, SenseGroup,
+    SenseGroupAnalysis, SenseGroupAnalysisId, SenseGroupAnalysisSummary, SenseGroupId,
+    SentenceDiagnosis, SentencePronunciation, SoundFitCalibration, SoundFitInputs,
+    SubtitleSentence, SubtitleSentenceId, SubtitleToken, SubtitleTokenKind, SubtitleTrack,
+    SubtitleTrackId, SubtitleTrackStatus, SyntacticAnalysis, TimeMs, TimelineCreator,
+    TimelineMetrics, TimelineStatus, TimingSource, UpgradeSuggestion, UpgradeSuggestionId,
+    UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation, WordTimeline,
+    WordTimelineId, WordTimelineLifecycleStage, WordTimelineSummary, WordTiming,
+    apply_sound_fit_calibration, content_fit_fingerprint, learning_observation_id,
+    listening_projection_v1, meaning_fit, normalize_lemma, observation_spec_for_marking,
+    observation_spec_for_practice, observation_spec_for_review,
+    observation_spec_for_upgrade_confirmation, sound_fit, sound_fit_calibration_outcome,
+    validate_syntactic_analysis,
+};
 use serde::Serialize;
 
 mod chunks;
@@ -48,8 +91,8 @@ pub use learner_profile::{LearnerProfileUseCases, LearnerProfileView};
 pub use lexical::LexicalLearningUseCases;
 pub use llm_provider::LlmProviderUseCases;
 pub use media::MediaAnalysisUseCases;
-pub use pronunciation::PronunciationUseCases;
 pub use practice::PracticeUseCases;
+pub use pronunciation::PronunciationUseCases;
 pub use pronunciation_providers::*;
 pub use providers::*;
 pub use recording::RecordingUseCases;
@@ -636,6 +679,9 @@ pub(crate) fn validate_word_timeline_words(
     Ok(values.into_iter().map(|(_, timing)| timing).collect())
 }
 
+// Construction requires complete algorithm provenance and optional parent/
+// metrics together; an options bag would make incomplete snapshots possible.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn build_word_timeline(
     track: &SubtitleTrack,
     words: Vec<WordTiming>,

@@ -293,7 +293,9 @@ impl TranscriptionCoordinator {
     ) -> Result<TranscriptionJob, ApplicationError> {
         let media_id = MediaId::parse(request.media_id)?;
         let media = self
-            .services.media_analysis().read_media(&media_id)?
+            .services
+            .media_analysis()
+            .read_media(&media_id)?
             .ok_or(ApplicationError::NotFound("media"))?;
         let model_id = TranscriptionModelId::parse(request.model_id)?;
         let model = self
@@ -481,7 +483,9 @@ impl TranscriptionCoordinator {
         job.started_at_ms = Some(now_ms());
         self.transition(&mut job, TranscriptionJobStatus::Extracting, 5)?;
         let media = self
-            .services.media_analysis().read_media(&job.media_id)?
+            .services
+            .media_analysis()
+            .read_media(&job.media_id)?
             .ok_or(ApplicationError::NotFound("media"))?;
         let model = self
             .repository
@@ -541,22 +545,25 @@ impl TranscriptionCoordinator {
         let srt = tokio::fs::read(output.with_extension("srt"))
             .await
             .map_err(io_error)?;
-        let track = self.services.media_analysis().import_subtitle(ImportSubtitle {
-            media_id: job.media_id.clone(),
-            source_name: format!("ASR-{}.srt", file_id(&model.display_name)),
-            content: srt,
-            language: if job.purpose == TranscriptionPurpose::TranslateToEnglish {
-                Some("en".into())
-            } else {
-                job.requested_language.clone()
-            },
-            identity_salt: Some(format!(
-                "{}:{}:{}",
-                job.provider_id,
-                job.model_id.as_str(),
-                job.model_revision
-            )),
-        })?;
+        let track = self
+            .services
+            .media_analysis()
+            .import_subtitle(ImportSubtitle {
+                media_id: job.media_id.clone(),
+                source_name: format!("ASR-{}.srt", file_id(&model.display_name)),
+                content: srt,
+                language: if job.purpose == TranscriptionPurpose::TranslateToEnglish {
+                    Some("en".into())
+                } else {
+                    job.requested_language.clone()
+                },
+                identity_salt: Some(format!(
+                    "{}:{}:{}",
+                    job.provider_id,
+                    job.model_id.as_str(),
+                    job.model_revision
+                )),
+            })?;
         // Store the text-line word timeline from JSON-full output when DTW was
         // enabled. The sound line is a separate, independently triggered workflow
         // (SoundLineCoordinator, driven off the transcription-completed event) —
@@ -565,7 +572,9 @@ impl TranscriptionCoordinator {
             let json_path = output.with_extension("json");
             if let Ok(json_bytes) = tokio::fs::read(&json_path).await
                 && let Ok(Some(result)) = self
-                    .services.media_analysis().store_transcription_text_word_timeline(&track.id, &json_bytes)
+                    .services
+                    .media_analysis()
+                    .store_transcription_text_word_timeline(&track.id, &json_bytes)
                     .await
             {
                 let _ = self.events.send(

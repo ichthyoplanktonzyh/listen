@@ -1,5 +1,8 @@
 use application::{ApplicationError, SemanticTaskRepository};
-use domain::*;
+use domain::{
+    JudgmentAdjudication, MediaId, SemanticJudgment, SemanticJudgmentId, SemanticRubric,
+    SemanticRubricId, SemanticTaskAttempt, SemanticTaskAttemptId, transcript_sha256,
+};
 use rusqlite::{OptionalExtension, Row, params};
 
 use super::{SqliteRepository, from_json, json, repo};

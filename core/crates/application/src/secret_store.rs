@@ -88,7 +88,10 @@ mod tests {
         let reference = store.store("sk-secret").unwrap();
         // The reference is opaque and does not contain the secret.
         assert!(!reference.as_str().contains("sk-secret"));
-        assert_eq!(store.resolve(&reference).unwrap().as_deref(), Some("sk-secret"));
+        assert_eq!(
+            store.resolve(&reference).unwrap().as_deref(),
+            Some("sk-secret")
+        );
         store.delete(&reference).unwrap();
         assert_eq!(store.resolve(&reference).unwrap(), None);
     }

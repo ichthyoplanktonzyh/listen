@@ -8,8 +8,8 @@ use domain::{
 };
 
 use crate::{
-    ApplicationError, CreateHuntingTargetInput, CreateLexicalObservation, PracticeUseCases,
-    HuntingCheckResult, LexicalSourceContext, SubmitHuntingCheckInput, normalize_phrase, now_ms,
+    ApplicationError, CreateHuntingTargetInput, CreateLexicalObservation, HuntingCheckResult,
+    LexicalSourceContext, PracticeUseCases, SubmitHuntingCheckInput, normalize_phrase, now_ms,
 };
 
 const MAX_ACTIVE_HUNTING_TARGETS: usize = 5;
@@ -300,29 +300,30 @@ impl PracticeUseCases {
                     .get(&media_id)?
                     .ok_or(ApplicationError::NotFound("media"))?;
                 Some(
-                    self.lexical_learning().create_lexical_observation(CreateLexicalObservation {
-                        lexical_entry_id: target.lexical_entry_id.clone(),
-                        sentence_id: sentence_id.clone(),
-                        original_form: occurrence.display_text.clone(),
-                        result: if input.answer == HuntingCheckAnswer::Recognized {
-                            ObservationResult::RecognizedInContext
-                        } else {
-                            ObservationResult::NotRecognizedInContext
-                        },
-                        source: Some(LexicalSourceContext {
-                            media_id: Some(media_id.clone()),
-                            sentence_id: Some(sentence_id.clone()),
+                    self.lexical_learning()
+                        .create_lexical_observation(CreateLexicalObservation {
+                            lexical_entry_id: target.lexical_entry_id.clone(),
+                            sentence_id: sentence_id.clone(),
                             original_form: occurrence.display_text.clone(),
-                            sentence_text: occurrence.source_snapshot.clone(),
-                            media_title: media.title,
-                            media_fingerprint: media.fingerprint,
-                            start_ms: occurrence.start_ms,
-                            end_ms: occurrence.end_ms,
-                            token_start: None,
-                            token_end: None,
-                        }),
-                    })?
-                    .id,
+                            result: if input.answer == HuntingCheckAnswer::Recognized {
+                                ObservationResult::RecognizedInContext
+                            } else {
+                                ObservationResult::NotRecognizedInContext
+                            },
+                            source: Some(LexicalSourceContext {
+                                media_id: Some(media_id.clone()),
+                                sentence_id: Some(sentence_id.clone()),
+                                original_form: occurrence.display_text.clone(),
+                                sentence_text: occurrence.source_snapshot.clone(),
+                                media_title: media.title,
+                                media_fingerprint: media.fingerprint,
+                                start_ms: occurrence.start_ms,
+                                end_ms: occurrence.end_ms,
+                                token_start: None,
+                                token_end: None,
+                            }),
+                        })?
+                        .id,
                 )
             }
             HuntingCheckAnswer::NotNoticed => None,

@@ -7,11 +7,11 @@ use domain::{
     SyntacticValidationReport,
 };
 use serde::{Deserialize, Serialize};
+use speech_analysis::audible_structure::match_dependency_patterns;
 use speech_analysis::audible_structure::{
     ConnectedSpeechContext, SyntacticProviderQualification, predict_default_connected,
     predict_default_connected_with_context,
 };
-use speech_analysis::audible_structure::match_dependency_patterns;
 use speech_analysis::audible_structure::{
     SenseGroupPartitionConfig, SenseGroupSpan, partition_sentence, partition_sentence_with_syntax,
 };
@@ -568,14 +568,13 @@ mod tests {
         ) -> Result<SyntacticAnalysisDraft, SyntacticProviderError> {
             self.analyses.fetch_add(1, Ordering::SeqCst);
             let mut sentences = request.sentences.iter().map(syntax_for).collect::<Vec<_>>();
-            if self.invalidate_second_sentence {
-                if let Some(token) = sentences
+            if self.invalidate_second_sentence
+                && let Some(token) = sentences
                     .get_mut(1)
                     .and_then(|sentence| sentence.tokens.first_mut())
-                {
-                    token.head_parser_token_index = None;
-                    token.dependency_relation = "root".into();
-                }
+            {
+                token.head_parser_token_index = None;
+                token.dependency_relation = "root".into();
             }
             Ok(SyntacticAnalysisDraft {
                 descriptor: descriptor(),

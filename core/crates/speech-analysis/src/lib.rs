@@ -967,9 +967,9 @@ mod tests {
             .filter_map(|phone| phone.stress)
             .collect::<Vec<_>>();
 
-        assert_eq!(codex.variants[0].is_fallback, true);
+        assert!(codex.variants[0].is_fallback);
         assert_eq!(stresses.iter().filter(|stress| **stress == 1).count(), 1);
-        assert!(stresses.iter().any(|stress| *stress == 0));
+        assert!(stresses.contains(&0));
     }
 
     #[test]

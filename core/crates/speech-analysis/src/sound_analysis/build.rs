@@ -81,6 +81,9 @@ pub fn build_rhythm_frame_from_word_timeline(
     )
 }
 
+// All inputs are distinct synchronized analysis streams required to construct
+// one frame; keeping them explicit prevents accidental default evidence.
+#[allow(clippy::too_many_arguments)]
 fn build_rhythm_frame(
     sentence: Option<&SubtitleSentence>,
     canonical: &[CanonicalPhone],

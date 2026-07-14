@@ -128,20 +128,20 @@ fn partition_sentence_internal(
             continue;
         }
 
-        if let Some((_, strong)) = &punct_between {
-            if *strong {
-                boundaries.push((word_pos, vec![SenseGroupSource::Punctuation]));
-                word_count_in_group = 0;
-                continue;
-            }
+        if let Some((_, strong)) = &punct_between
+            && *strong
+        {
+            boundaries.push((word_pos, vec![SenseGroupSource::Punctuation]));
+            word_count_in_group = 0;
+            continue;
         }
 
-        if let Some((_, false)) = &punct_between {
-            if word_count_in_group >= config.min_words {
-                boundaries.push((word_pos, vec![SenseGroupSource::Punctuation]));
-                word_count_in_group = 0;
-                continue;
-            }
+        if let Some((_, false)) = &punct_between
+            && word_count_in_group >= config.min_words
+        {
+            boundaries.push((word_pos, vec![SenseGroupSource::Punctuation]));
+            word_count_in_group = 0;
+            continue;
         }
 
         let remaining_words = words.len() - word_pos - 1;
@@ -156,12 +156,10 @@ fn partition_sentence_internal(
             continue;
         }
 
-        if word_count_in_group >= config.soft_max_words {
-            if punct_between.is_some() {
-                boundaries.push((word_pos, vec![SenseGroupSource::Punctuation]));
-                word_count_in_group = 0;
-                continue;
-            }
+        if word_count_in_group >= config.soft_max_words && punct_between.is_some() {
+            boundaries.push((word_pos, vec![SenseGroupSource::Punctuation]));
+            word_count_in_group = 0;
+            continue;
         }
 
         if word_count_in_group >= config.hard_max_words {
@@ -180,10 +178,9 @@ fn partition_sentence_internal(
         if phrase_candidates
             .iter()
             .any(|pc| pc.token_start >= span_start && pc.token_end <= span_end)
+            && !span_sources.contains(&SenseGroupSource::Rule)
         {
-            if !span_sources.contains(&SenseGroupSource::Rule) {
-                span_sources.push(SenseGroupSource::Rule);
-            }
+            span_sources.push(SenseGroupSource::Rule);
         }
         let confidence = if span_sources.contains(&SenseGroupSource::DependencyParse) {
             0.72
