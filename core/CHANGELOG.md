@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-14 11:20 CST: 机械拆分 `api_service.dart`（1629 → 263 行核心 + 9 个按资源域的
+  part 文件，各 73–345 行）。`LocalApi` 保留 connect/transport/`_request`/events/close
+  生命周期；143 个资源方法逐字搬入 `services/api/{media,subtitles,timelines,speech,
+  transcription,lexical,practice,listening_hunting,coach_llm}.dart` 的 `extension on
+  LocalApi`（part 共享库作用域，私有 `_request` 照常可用；唯一文本改动是 media.dart 里
+  static `_isAudio` 按 Dart 规则加 `LocalApi.` 限定）。29 个消费文件 import 与调用点
+  零改动。附带 spike 结论：放弃从 OpenAPI 生成 Dart DTO——types.dart 的模型类携带领域
+  便利方法（如 `triageQueue`），生成会破坏该设计；防漂移继续走既有 `test/contract/`
+  对拍测试（已 12 个）+ Rust 侧 OpenAPI parity test。`flutter analyze` 零问题、
+  `flutter test` 344 全通过。
+
 - 2026-07-14 10:40 CST: 删除 46 方法的 fat `SubtitleRepository` trait 及其 4 组 blanket
   桥接 impl（repositories.rs 1375 → 848 行）。消费侧窄 trait（`SubtitleTrackRepository`/
   `PronunciationRepository`/`TimelineResourceRepository`/`LLTimelineResourceRepository`）
