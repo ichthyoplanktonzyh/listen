@@ -11,7 +11,6 @@ import 'localization.dart';
 import 'm18_ui.dart';
 import 'player_adapter.dart';
 import 'settings.dart';
-import 'transcription_ui.dart';
 import 'theme/listen_theme.dart';
 
 import 'controllers/app_controllers.dart';
@@ -43,12 +42,9 @@ import 'models/practice.dart';
 import 'models/task_status.dart';
 import 'models/timeline.dart';
 import 'models/types.dart';
-import 'phonetic_analysis_ui.dart';
 import 'services/api_service.dart';
 import 'services/external_tools.dart';
 import 'utils/word_list_parser.dart';
-import 'screens/subtitle_resources_screen.dart';
-import 'widgets/panels/cold_start_marking_sheet.dart';
 import 'widgets/panels/intensive_practice_window.dart';
 import 'widgets/panels/l1_specialty_dialog.dart';
 import 'widgets/panels/hunting_prompt_card.dart';
@@ -60,6 +56,7 @@ import 'widgets/player/download_status_bar.dart';
 import 'widgets/app_bar/player_app_bar.dart';
 import 'widgets/flows/manual_review_flow.dart';
 import 'widgets/flows/media_import_flows.dart';
+import 'widgets/flows/subtitle_resource_flows.dart';
 import 'widgets/layout/playback_bar.dart';
 import 'widgets/layout/media_workbench.dart';
 import 'widgets/layout/player_stage.dart';
@@ -622,61 +619,20 @@ class _PlayerScreenState extends State<PlayerScreen>
   String _capabilityStatusSegment(CapabilityReadiness readiness) =>
       '${l.text(readiness.titleKey)}: ${l.text(readiness.stateKey)}';
 
-  Future<void> _deleteSubtitleResource(SubtitleTrack track) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l.text('deleteResource')),
-        content: Text(l.text('deleteSubtitleResourceBody')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(l.text('cancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(l.text('deleteResource')),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    await resourceActions.deleteSubtitleResource(track);
-  }
+  Future<void> _deleteSubtitleResource(SubtitleTrack track) =>
+      deleteSubtitleResourceFlow(
+        context: context,
+        resourceActions: resourceActions,
+        track: track,
+      );
 
-  Future<void> _exportSubtitleResource(SubtitleTrack track) async {
-    if (api == null) return;
-    final format = await showDialog<String>(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: Text(l.text('exportSubtitleFormat')),
-        children: [
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(context, 'srt'),
-            child: ListTile(
-              leading: const Icon(Icons.subtitles_outlined),
-              title: Text(l.text('exportSrt')),
-              subtitle: const Text('.srt'),
-            ),
-          ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(context, 'lltimeline'),
-            child: ListTile(
-              leading: const Icon(Icons.timeline),
-              title: Text(l.text('exportLLTimelineJson')),
-              subtitle: const Text('.lltimeline.json'),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (format == null) return;
-    if (format == 'lltimeline') {
-      await resourceActions.exportLLTimelineResource(track);
-    } else {
-      await resourceActions.exportSubtitleSrt(track);
-    }
-  }
+  Future<void> _exportSubtitleResource(SubtitleTrack track) =>
+      exportSubtitleResourceFlow(
+        context: context,
+        api: api,
+        resourceActions: resourceActions,
+        track: track,
+      );
 
   Future<void> _openManualReviewTimeline() => openManualReviewFlow(
     context: context,
@@ -694,55 +650,28 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
-  Future<void> _generateSubtitles({required bool secondary}) async {
-    if (api == null || playerController.mediaId == null) {
-      playerController.setStatus('Open media and connect the local core first');
-      return;
-    }
-    final created = await showGenerateSubtitles(
-      context: context,
-      api: api!,
-      mediaId: playerController.mediaId!,
-      secondary: secondary,
-      preferredQuality: settingsController.transcriptionQuality,
-      preferredLanguage: settingsController.transcriptionLanguage,
-    );
-    if (created && mounted) {
-      playerController.setStatus(
-        secondary
-            ? l.text('secondarySubtitleGenerationStarted')
-            : l.text('primarySubtitleGenerationStarted'),
+  Future<void> _generateSubtitles({required bool secondary}) =>
+      generateSubtitlesFlow(
+        context: context,
+        api: api,
+        playerController: playerController,
+        settingsController: settingsController,
+        secondary: secondary,
+        recordTaskStatus: (value) {
+          setState(() {
+            taskStatuses[value.kind] = value;
+          });
+        },
       );
-      setState(() {
-        taskStatuses[UserTaskKind.subtitleGeneration] = UserTaskStatus(
-          kind: UserTaskKind.subtitleGeneration,
-          state: UserTaskState.working,
-          rawStatus: 'queued',
-          progress: 0,
-          targetId: playerController.mediaId,
-        );
-      });
-    }
-  }
 
-  Future<void> _openTranscriptionCenter() async {
-    if (api == null) return;
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => TranscriptionCenter(
-          api: api!,
-          loadTrack: mediaSession.loadGeneratedTrack,
-        ),
-      ),
-    );
-  }
+  Future<void> _openTranscriptionCenter() => openTranscriptionCenterFlow(
+    context: context,
+    api: api,
+    loadTrack: mediaSession.loadGeneratedTrack,
+  );
 
-  Future<void> _openPhoneticAnalysisCenter() async {
-    if (api == null) return;
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => PhoneticAnalysisCenter(api: api!)),
-    );
-  }
+  Future<void> _openPhoneticAnalysisCenter() =>
+      openPhoneticAnalysisCenterFlow(context: context, api: api);
 
   Future<void> _openOnline() => openOnlineMediaFlow(
     context: context,
@@ -1165,57 +1094,23 @@ class _PlayerScreenState extends State<PlayerScreen>
     });
   }
 
-  Future<void> _openSubtitleResources() async {
-    if (api == null) return;
-    await resourceActions.loadSubtitleResources(updateStatus: false);
-    if (!mounted) return;
-    await Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => SubtitleResourcesScreen(
-          playerController: playerController,
-          subtitleController: subtitleController,
-          onImportSubtitle: () => mediaSession.openSubtitle(secondary: false),
-          onImportLLTimeline: mediaSession.openLLTimelineResource,
-          onRefreshResources: resourceActions.refreshSubtitleResources,
-          onActivateSubtitle: resourceActions.activateSubtitleResource,
-          onArchiveSubtitle: resourceActions.archiveSubtitleResource,
-          onRestoreSubtitle: resourceActions.restoreSubtitleResource,
-          onDeleteSubtitle: _deleteSubtitleResource,
-          onExportSubtitle: _exportSubtitleResource,
-          onLanguageChanged: resourceActions.changeTrackLanguage,
-          availableLanguages: learningController.availableLanguages,
-          onExportLLTimeline: resourceActions.exportLLTimelineResource,
-          onActivateWordTimeline: resourceActions.activateWordTimeline,
-          onManualReviewTimeline: _openManualReviewTimeline,
-          onActivatePhoneTimeline: resourceActions.activatePhoneTimeline,
-          onArchivePhoneTimeline: resourceActions.archivePhoneTimeline,
-          onDeletePhoneTimeline: resourceActions.deletePhoneTimeline,
-          onGenerateChunkTimeline: resourceActions.generateChunkTimeline,
-          onActivateChunkTimeline: resourceActions.activateChunkTimeline,
-          onArchiveChunkTimeline: resourceActions.archiveChunkTimeline,
-          onDeleteChunkTimeline: resourceActions.deleteChunkTimeline,
-          onStartColdStart: _openColdStartMarking,
-        ),
-      ),
-    );
-  }
+  Future<void> _openSubtitleResources() => openSubtitleResourcesFlow(
+    context: context,
+    api: api,
+    playerController: playerController,
+    subtitleController: subtitleController,
+    learningController: learningController,
+    resourceActions: resourceActions,
+    mediaSession: mediaSession,
+    onManualReviewTimeline: _openManualReviewTimeline,
+  );
 
-  void _openColdStartMarking() {
-    final service = api;
-    final trackId = subtitleController.primaryTrack?.id;
-    final language = subtitleController.primaryTrack?.language;
-    if (service == null || trackId == null || language == null) return;
-    showDialog<void>(
-      context: context,
-      builder: (_) => ColdStartMarkingSheet(
-        api: service,
-        trackId: trackId,
-        language: language,
-        onDone: () => resourceActions.loadContentFit(trackId),
-      ),
-    );
-  }
+  void _openColdStartMarking() => openColdStartMarkingFlow(
+    context: context,
+    api: api,
+    subtitleController: subtitleController,
+    resourceActions: resourceActions,
+  );
 
   Future<void> _loopSoundRibbonFinding(
     PhonemeRibbonFinding finding,
