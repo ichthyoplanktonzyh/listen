@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-14 20:20 CST: Phase 3.9.4 Slice 0 完成：application 新增
+  `MediaAnalysisUseCases::persist_sense_group_analysis_from_batch`，把语法分析 batch 中
+  已算好的 sense groups 映射持久化为 `SenseGroupAnalysis` 并激活；text/id 推导与既有
+  生成路径抽公共 helper；幂等（active 同 id 跳过）、syntax 接管 fallback active
+  （fingerprint 含 provider_id）、空 batch 返回 None。新增 6 个单测覆盖混合/纯回退/
+  幂等/接管/双入口一致性/空 batch；application 65 tests、clippy -D warnings、fmt 全绿。
+
 - 2026-07-14 20:03 CST: 建立 Phase 3.9.4 SenseGroup UX Unification（分支
   `phase/3.9.4-sensegroup-ux-unification`）。核实语义分组四层断链（syntax 分析不落
   SQLite、syntax-aware 生成入口为死参数、Flutter 无生成/激活调用方、加载只认 active），
