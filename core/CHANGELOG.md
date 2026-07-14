@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-14 16:48 CST: 完成 Phase 2.24 runtime ownership 尾项：M18 learning-resource
+  lifecycle、OpenSubtitles provider 和 syntax capability manager/cache I/O 从 api-http
+  迁入 local-runtime，HTTP 层缩回协议映射；resource install 复用 ArtifactDownloader 并由
+  deterministic fake 覆盖校验失败、原子发布和清理。开始深化 AppServices，将 semantic task
+  与 LLM provider/secret、learner profile singleton lifecycle 原地替换为只持有所需
+  repository 的 use-case modules，不保留旧直出 wrapper。application/local-runtime/
+  api-http/persistence-sqlite 共 219 个定向 tests 全绿；learner profile 后续切片另通过 4 个
+  L1 聚合测试与 36 个 HTTP tests。
+
 - 2026-07-14 16:28 CST: 执行 Phase 2.24 首批高耦合治理。speech-analysis 的 17 个公开
   implementation modules 改为 private，通过 timing/chunking/phonetics/audible-structure
   curated facade 暴露能力；删除 application 6 个无 caller legacy engine wrappers。

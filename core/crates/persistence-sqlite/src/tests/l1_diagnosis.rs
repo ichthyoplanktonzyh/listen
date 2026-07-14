@@ -110,7 +110,10 @@ fn l1_diagnosis_degrades_cleanly_without_l1_or_profile_or_frame() {
     assert!(baseline.l1_hints.is_empty());
 
     // Unsupported (L1, L2) pair: context only, no generic content.
-    services.set_learner_l1(Some("ja"), Some("zh")).unwrap();
+    services
+        .learner_profile()
+        .set_learner_l1(Some("ja"), Some("zh"))
+        .unwrap();
     let unsupported = services.diagnose_sentence(&sentence_id).unwrap();
     let context = unsupported.l1_context.expect("context for declared L1");
     assert_eq!(context.support, L1DiagnosisSupport::UnsupportedPair);
@@ -119,7 +122,10 @@ fn l1_diagnosis_degrades_cleanly_without_l1_or_profile_or_frame() {
     assert_eq!(unsupported.hints, baseline.hints);
 
     // Supported pair but no rhythm frame (no word timeline yet): no hints.
-    services.set_learner_l1(Some("zh"), Some("zh")).unwrap();
+    services
+        .learner_profile()
+        .set_learner_l1(Some("zh"), Some("zh"))
+        .unwrap();
     mark_all_words_known(&services, &track);
     let no_frame = services.diagnose_sentence(&sentence_id).unwrap();
     assert_eq!(
@@ -135,7 +141,10 @@ fn l1_hits_attach_replayable_spans_and_record_idempotent_events() {
     let services = l1_services(&repo);
     let track = import_english_sentence(&services);
     let sentence_id = track.sentences[0].id.clone();
-    services.set_learner_l1(Some("zh"), Some("zh")).unwrap();
+    services
+        .learner_profile()
+        .set_learner_l1(Some("zh"), Some("zh"))
+        .unwrap();
     // All words known+recognized so the base diagnosis lands on the
     // sound-side OtherFactors hint that gates the L1 layer.
     mark_all_words_known(&services, &track);
@@ -192,7 +201,10 @@ fn family_projection_feeds_specialty_aggregation() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = l1_services(&repo);
     let track = import_english_sentence(&services);
-    services.set_learner_l1(Some("zh"), Some("zh")).unwrap();
+    services
+        .learner_profile()
+        .set_learner_l1(Some("zh"), Some("zh"))
+        .unwrap();
     mark_all_words_known(&services, &track);
     // Creating an active word timeline reindexes the track, which writes the
     // family annotation rows alongside words/phrases/chunks.
@@ -251,7 +263,10 @@ fn specialty_degrades_to_current_track_without_corpus_projection() {
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
     .with_learner_profile_repository(repo.clone());
     let track = import_english_sentence(&services);
-    services.set_learner_l1(Some("zh"), Some("zh")).unwrap();
+    services
+        .learner_profile()
+        .set_learner_l1(Some("zh"), Some("zh"))
+        .unwrap();
     mark_all_words_known(&services, &track);
     active_word_timeline(&services, &track);
 

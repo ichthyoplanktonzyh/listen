@@ -38,13 +38,12 @@ mod event_payloads {
 mod m18;
 mod routes;
 mod secret_store_keychain;
-mod syntax_capability;
-use m18::M18Coordinator;
 use local_runtime::{
     CreateJobRequest, CreatePhoneticJobRequest, CreateSoundLineJob, CreateSpeechBatchJob,
-    PhoneticAnalysisCoordinator, SoundLineCoordinator, SpeechBatchCoordinator,
-    TranscriptionCoordinator,
+    LearningResourceManager, PhoneticAnalysisCoordinator, SoundLineCoordinator,
+    SpeechBatchCoordinator, SubtitleSearchCoordinator, TranscriptionCoordinator,
 };
+pub use local_runtime::{SyntaxCapabilityManager, SyntaxCapabilityStatus, SyntaxCapabilityView};
 use routes::corpus::*;
 use routes::dictionary::*;
 use routes::language::*;
@@ -62,9 +61,6 @@ use routes::timelines::*;
 use routes::transcription::*;
 use routes::vocabulary::*;
 pub use secret_store_keychain::KeychainSecretStore;
-pub use syntax_capability::{
-    SyntaxCapabilityManager, SyntaxCapabilityStatus, SyntaxCapabilityView,
-};
 
 static ERROR_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
@@ -78,7 +74,8 @@ pub struct ApiState {
     pub phonetic_analysis: Arc<PhoneticAnalysisCoordinator>,
     pub speech_jobs: Arc<SpeechBatchCoordinator>,
     pub sound_line: Arc<SoundLineCoordinator>,
-    pub m18: Arc<M18Coordinator>,
+    pub learning_resources: Arc<LearningResourceManager>,
+    pub subtitle_search: Arc<SubtitleSearchCoordinator>,
     /// Optional Phase 3.9.2 syntax capability. The default has no runtime and
     /// returns the exact B/rule-SenseGroup fallback without touching Python.
     pub syntactic_consumers: Arc<SyntacticConsumerOrchestrator>,
@@ -147,7 +144,8 @@ impl ApiState {
             phonetic_analysis,
             speech_jobs,
             sound_line,
-            m18: Arc::new(M18Coordinator::new()),
+            learning_resources: Arc::new(LearningResourceManager::new()),
+            subtitle_search: Arc::new(SubtitleSearchCoordinator::new()),
             syntactic_consumers: Arc::new(SyntacticConsumerOrchestrator::new(
                 None,
                 SyntacticProductQualification::corrected_v2(),

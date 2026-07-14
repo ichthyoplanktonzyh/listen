@@ -6,9 +6,10 @@
 //! by construction, and the negative tests in persistence-sqlite pin it.
 
 use domain::*;
+use std::sync::Arc;
 
 use crate::{
-    AppServices, ApplicationError, JudgeRequest, JudgmentDraft, SemanticJudgeProvider,
+    ApplicationError, JudgeRequest, JudgmentDraft, SemanticJudgeProvider, SemanticTaskRepository,
 };
 
 fn invalid(errors: Vec<String>) -> ApplicationError {
@@ -20,7 +21,16 @@ fn invalid(errors: Vec<String>) -> ApplicationError {
 /// storing it here writes no observation and unlocks no learning surface.
 const LLM_JUDGMENT_EVIDENCE_CLASS: &str = "heuristic_proxy";
 
-impl AppServices {
+#[derive(Clone)]
+pub struct SemanticUseCases {
+    semantic_tasks: Arc<dyn SemanticTaskRepository>,
+}
+
+impl SemanticUseCases {
+    pub(crate) fn new(semantic_tasks: Arc<dyn SemanticTaskRepository>) -> Self {
+        Self { semantic_tasks }
+    }
+
     /// Saves a rubric version. Version 1 creates the rubric; higher versions
     /// are manual revisions and must extend an existing earlier version.
     /// Existing (id, version) rows are never overwritten.

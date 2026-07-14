@@ -94,7 +94,7 @@ impl AppServices {
     ) -> Result<(), ApplicationError> {
         const MAX_HINTS: usize = 3;
         const MAX_SPANS_PER_HINT: usize = 8;
-        let Some(l1) = self.learner_l1()? else {
+        let Some(l1) = self.learner_profile().learner_l1()? else {
             return Ok(());
         };
         let Some(rules) = diagnosis_core::l1l2_difficulty_rules(&l1, language) else {

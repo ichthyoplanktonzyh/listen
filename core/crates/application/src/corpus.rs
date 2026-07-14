@@ -204,7 +204,7 @@ impl AppServices {
     ) -> Result<L1SpecialtyOccurrences, ApplicationError> {
         let l2 = LanguageCode::parse(language)?;
         let difficulty_kind = clean_required(difficulty_kind.to_owned(), "difficulty_kind")?;
-        let Some(l1) = self.learner_l1()? else {
+        let Some(l1) = self.learner_profile().learner_l1()? else {
             return Err(ApplicationError::Validation("learner L1 setting"));
         };
         let Some(rules) = diagnosis_core::l1l2_difficulty_rules(&l1, &l2) else {

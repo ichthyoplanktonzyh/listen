@@ -87,8 +87,13 @@ pub(crate) struct RegisterProviderRequest {
 pub(crate) async fn list_llm_providers(
     State(state): State<ApiState>,
 ) -> Result<Json<Vec<ProviderProfileView>>, ApiError> {
-    let profiles = state.services.list_llm_provider_profiles()?;
-    Ok(Json(profiles.iter().map(ProviderProfileView::from).collect()))
+    let profiles = state
+        .services
+        .llm_providers()
+        .list_llm_provider_profiles()?;
+    Ok(Json(
+        profiles.iter().map(ProviderProfileView::from).collect(),
+    ))
 }
 
 pub(crate) async fn register_llm_provider(
@@ -113,12 +118,14 @@ pub(crate) async fn register_llm_provider(
         created_at_ms: application::now_ms(),
     };
     let saved = match request.secret {
-        Some(secret) if !secret.is_empty() => {
-            state
-                .services
-                .register_llm_provider(profile, &secret, state.secret_store.as_ref())?
-        }
-        _ => state.services.save_llm_provider_profile(profile)?,
+        Some(secret) if !secret.is_empty() => state
+            .services
+            .llm_providers()
+            .register_llm_provider(profile, &secret, state.secret_store.as_ref())?,
+        _ => state
+            .services
+            .llm_providers()
+            .save_llm_provider_profile(profile)?,
     };
     Ok(Json(ProviderProfileView::from(&saved)))
 }
@@ -130,6 +137,7 @@ pub(crate) async fn get_llm_provider(
     let id = LlmProviderProfileId::parse(id).map_err(ApplicationError::from)?;
     state
         .services
+        .llm_providers()
         .llm_provider_profile(&id)?
         .as_ref()
         .map(ProviderProfileView::from)
@@ -144,6 +152,7 @@ pub(crate) async fn delete_llm_provider(
     let id = LlmProviderProfileId::parse(id).map_err(ApplicationError::from)?;
     state
         .services
+        .llm_providers()
         .delete_llm_provider(&id, state.secret_store.as_ref())?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -161,7 +170,10 @@ pub(crate) async fn probe_llm_provider(
     Path(id): Path<String>,
 ) -> Result<Json<ProbeResult>, ApiError> {
     let provider = build_provider(&state, &id)?;
-    let claim = provider.probe_structured_output().await.map_err(ApplicationError::from)?;
+    let claim = provider
+        .probe_structured_output()
+        .await
+        .map_err(ApplicationError::from)?;
     Ok(Json(ProbeResult {
         structured_output: claim,
     }))
@@ -186,6 +198,7 @@ pub(crate) async fn judge_via_llm_provider(
     let provider = build_provider(&state, &id)?;
     let judgment = state
         .services
+        .semantic()
         .judge_semantic_attempt(
             &attempt_id,
             request.response_revision,
@@ -201,10 +214,12 @@ fn build_provider(state: &ApiState, id: &str) -> Result<BuiltSemanticProvider, A
     let id = LlmProviderProfileId::parse(id).map_err(ApplicationError::from)?;
     let profile = state
         .services
+        .llm_providers()
         .llm_provider_profile(&id)?
         .ok_or_else(|| ApiError::not_found("llm provider profile"))?;
     let secret = state
         .services
+        .llm_providers()
         .resolve_llm_provider_secret(&profile, state.secret_store.as_ref())?;
     BuiltSemanticProvider::build(&profile, secret)
         .map_err(ApplicationError::from)

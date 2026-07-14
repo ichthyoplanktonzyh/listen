@@ -7,6 +7,7 @@ pub(crate) async fn learner_profile(
 ) -> Result<Json<LearnerProfileView>, ApiError> {
     state
         .services
+        .learner_profile()
         .learner_profile_view()
         .map(Json)
         .map_err(ApiError::from)
@@ -50,6 +51,7 @@ pub(crate) async fn update_learner_profile(
 ) -> Result<Json<LearnerProfileView>, ApiError> {
     state
         .services
+        .learner_profile()
         .set_learner_l1(
             request.l1_language.as_deref(),
             request.ui_language.as_deref(),

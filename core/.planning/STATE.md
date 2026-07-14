@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-14T16:28:00.000+08:00"
+last_updated: "2026-07-14T16:48:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-14 16:28 CST
-> 更新原因：执行 Phase 2.24 首批 slice：speech facade、local-runtime 与 repository ports。
+> 最后更新：2026-07-14 16:48 CST
+> 更新原因：Phase 2.24 runtime ownership 完成并开始深化 AppServices use-case modules。
 
 ## 当前位置
 
@@ -22,10 +22,11 @@ last_updated: "2026-07-14T16:28:00.000+08:00"
   consumer 与 Construction matcher seam；后续复核发现唯一否决样本混淆歧义句产品 policy
   与 parser gold。Phase 3.9.2 已完成：spaCy artifact 与 B going-to/used-to/have-to、SenseGroup、
   matcher 获资格并接入单 batch/逐句共享产品编排；want-to 与无模型路径保留精确 fallback。
-- **治理线状态**：Phase 2.23 已收口；Phase 2.24 正在执行。Step 0–1 已完成；独立
-  local-runtime 已接管 transcription/phonetic/speech-batch/sound-line，process/download
-  真实 seam 已接入；三个 fat repository ports 已拆除。下一 slice 为 m18/syntax runtime
-  ownership、AppServices use-case modules 与 Flutter typed clients。
+- **治理线状态**：Phase 2.23 已收口；Phase 2.24 正在执行。Step 0–2 已完成；独立
+  local-runtime 已接管 transcription/phonetic/speech-batch/sound-line、M18 resource/
+  subtitle provider 与 syntax capability，process/download 真实 seam 已接入；三个 fat
+  repository ports 已拆除，semantic/LLM provider/learner profile 首批 use-case modules 已
+  落地。下一 slice 继续深化 AppServices，随后进入 Flutter typed clients。
 - **2026-07-14 大文件解耦治理（chore/large-file-decomposition）**：main.dart Coordinator
   抽取 S1–S9 全部完成（2578 → ~1558 行，8 个 coordinator + 3 个 flows 文件，全部配隔离
   测试）；删除 46 方法 fat `SubtitleRepository`（消费侧窄 trait 原已存在，砍掉 4 组桥接

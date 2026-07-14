@@ -7,16 +7,20 @@
 pub mod events;
 
 mod download;
+mod learning_resources;
 mod phonetic_analysis;
 mod process;
 mod runtime_support;
 mod sound_line;
 mod speech_jobs;
+mod subtitle_search;
+mod syntax_capability;
 mod transcription;
 
 pub use download::{
     ArtifactDownloader, DownloadProgress, FakeArtifactDownloader, ReqwestArtifactDownloader,
 };
+pub use learning_resources::{LearningResourceError, LearningResourceManager};
 pub use phonetic_analysis::{CreatePhoneticJobRequest, PhoneticAnalysisCoordinator, finding_id};
 pub use process::{
     CancellationProbe, FakeProcessRunner, IgnoreProcessOutput, NeverCancelled,
@@ -26,5 +30,12 @@ pub use sound_line::{CreateSoundLineJob, SoundLineCoordinator, SoundLineJob, Sou
 pub use speech_jobs::{
     CreateSpeechBatchJob, SpeechBatchCoordinator, SpeechBatchJob, SpeechBatchKind,
     SpeechBatchStatus,
+};
+pub use subtitle_search::{
+    SubtitleDownloadRequest, SubtitleOperation, SubtitleProviderError, SubtitleSearchCoordinator,
+    SubtitleSearchRequest,
+};
+pub use syntax_capability::{
+    SyntaxCapabilityManager, SyntaxCapabilityStatus, SyntaxCapabilityView,
 };
 pub use transcription::{CreateJobRequest, TranscriptionCoordinator};

@@ -16,8 +16,8 @@ mod error;
 mod hunting;
 mod learner_profile;
 mod lexical;
-mod llm_provider;
 mod listening;
+mod llm_provider;
 mod media;
 mod phones;
 mod phonetic_fixture;
@@ -43,11 +43,13 @@ pub use coach_dashboard::{
 };
 pub use dto::*;
 pub use error::ApplicationError;
-pub use learner_profile::LearnerProfileView;
+pub use learner_profile::{LearnerProfileUseCases, LearnerProfileView};
+pub use llm_provider::LlmProviderUseCases;
 pub use pronunciation_providers::*;
 pub use providers::*;
 pub use repositories::*;
 pub use secret_store::{InMemorySecretStore, SecretStore, SecretStoreError};
+pub use semantic_task::SemanticUseCases;
 pub use syntactic_consumers::*;
 pub use util::now_ms;
 pub(crate) use util::{
@@ -110,6 +112,18 @@ pub struct AppServices {
 }
 
 impl AppServices {
+    pub fn learner_profile(&self) -> LearnerProfileUseCases {
+        LearnerProfileUseCases::new(self.learner_profiles.clone())
+    }
+
+    pub fn llm_providers(&self) -> LlmProviderUseCases {
+        LlmProviderUseCases::new(self.llm_provider_profiles.clone())
+    }
+
+    pub fn semantic(&self) -> SemanticUseCases {
+        SemanticUseCases::new(self.semantic_tasks.clone())
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new<R, L>(
         media: Arc<dyn MediaRepository>,
@@ -399,10 +413,7 @@ impl LlmProviderProfileRepository for DisabledLlmProviderProfileRepository {
         Ok(Vec::new())
     }
 
-    fn delete_provider_profile(
-        &self,
-        _id: &LlmProviderProfileId,
-    ) -> Result<(), ApplicationError> {
+    fn delete_provider_profile(&self, _id: &LlmProviderProfileId) -> Result<(), ApplicationError> {
         Ok(())
     }
 }

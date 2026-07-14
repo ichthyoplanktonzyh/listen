@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 use crate::*;
@@ -25,14 +27,22 @@ pub struct LearnerProfileView {
     pub updated_at_ms: Option<u64>,
 }
 
-impl AppServices {
+pub struct LearnerProfileUseCases {
+    profiles: Arc<dyn LearnerProfileRepository>,
+}
+
+impl LearnerProfileUseCases {
+    pub(crate) fn new(profiles: Arc<dyn LearnerProfileRepository>) -> Self {
+        Self { profiles }
+    }
+
     fn local_learner_id() -> LearnerProfileId {
         LearnerProfileId::parse(LOCAL_LEARNER_ID).expect("static learner id is valid")
     }
 
     pub fn learner_profile_view(&self) -> Result<LearnerProfileView, ApplicationError> {
         let profile = self
-            .learner_profiles
+            .profiles
             .get_learner_profile(&Self::local_learner_id())?;
         Ok(match profile {
             Some(profile) => LearnerProfileView {
@@ -55,7 +65,7 @@ impl AppServices {
     /// unaffected for learners who never opened the setting.
     pub(crate) fn learner_l1(&self) -> Result<Option<LanguageCode>, ApplicationError> {
         Ok(self
-            .learner_profiles
+            .profiles
             .get_learner_profile(&Self::local_learner_id())?
             .and_then(|profile| profile.l1_language))
     }
@@ -79,7 +89,7 @@ impl AppServices {
             .map(LanguageCode::parse)
             .transpose()?;
         let id = Self::local_learner_id();
-        let existing = self.learner_profiles.get_learner_profile(&id)?;
+        let existing = self.profiles.get_learner_profile(&id)?;
         let now = now_ms();
         let profile = LearnerProfile {
             id,
@@ -96,7 +106,7 @@ impl AppServices {
                 .unwrap_or(now),
             updated_at_ms: now,
         };
-        let saved = self.learner_profiles.save_learner_profile(&profile)?;
+        let saved = self.profiles.save_learner_profile(&profile)?;
         Ok(LearnerProfileView {
             l1_language: saved.l1_language,
             ui_language: Some(saved.ui_language),

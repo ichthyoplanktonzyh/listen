@@ -177,13 +177,12 @@ pub(crate) async fn run_track_syntax_analysis(
             batch: None,
         }));
     }
-    let cache_path = state
-        .syntax_capability
-        .cache_dir()
-        .join(format!("{}.json", track_id.as_str()));
     let _single_flight = state.syntax_analysis_lock.lock().await;
     if !request.force
-        && let Some(cached) = read_track_cache(&cache_path).await
+        && let Some(cached) = state
+            .syntax_capability
+            .read_track_cache::<TrackSyntaxCacheEntry>(track_id.as_str())
+            .await
         && cached.fingerprint == fingerprint
     {
         return Ok(Json(TrackSyntaxAnalysisView {
@@ -257,7 +256,10 @@ pub(crate) async fn run_track_syntax_analysis(
         batch: batch.clone(),
     };
     if analyzed_sentence_count > 0 {
-        write_track_cache(&cache_path, &cached).await;
+        state
+            .syntax_capability
+            .write_track_cache(track_id.as_str(), &cached)
+            .await;
     }
     Ok(Json(TrackSyntaxAnalysisView {
         status,
@@ -290,11 +292,10 @@ pub(crate) async fn track_syntax_analysis_status(
         &capability.delivery_checksum_sha256,
     );
     let unavailable = !state.syntax_capability.is_ready().await;
-    let cache_path = state
+    let cached = state
         .syntax_capability
-        .cache_dir()
-        .join(format!("{}.json", track_id.as_str()));
-    let cached = read_track_cache(&cache_path).await;
+        .read_track_cache::<TrackSyntaxCacheEntry>(track_id.as_str())
+        .await;
     if !unavailable
         && let Some(cached) = cached
         && cached.fingerprint == fingerprint
@@ -337,24 +338,4 @@ fn track_syntax_fingerprint(
     digest.update(b"\0");
     digest.update(serde_json::to_vec(sentences).unwrap_or_default());
     hex::encode(digest.finalize())
-}
-
-async fn read_track_cache(path: &std::path::Path) -> Option<TrackSyntaxCacheEntry> {
-    serde_json::from_slice(&tokio::fs::read(path).await.ok()?).ok()
-}
-
-async fn write_track_cache(path: &std::path::Path, entry: &TrackSyntaxCacheEntry) {
-    let Some(parent) = path.parent() else {
-        return;
-    };
-    let Ok(json) = serde_json::to_vec(entry) else {
-        return;
-    };
-    if tokio::fs::create_dir_all(parent).await.is_err() {
-        return;
-    }
-    let temporary = path.with_extension("json.tmp");
-    if tokio::fs::write(&temporary, json).await.is_ok() {
-        let _ = tokio::fs::rename(temporary, path).await;
-    }
 }

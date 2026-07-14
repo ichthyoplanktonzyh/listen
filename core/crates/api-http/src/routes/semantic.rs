@@ -55,6 +55,7 @@ pub(crate) async fn create_semantic_rubric(
     };
     state
         .services
+        .semantic()
         .save_semantic_rubric(rubric)
         .map(Json)
         .map_err(ApiError::from)
@@ -73,6 +74,7 @@ pub(crate) async fn semantic_rubric(
     let id = SemanticRubricId::parse(id).map_err(ApplicationError::from)?;
     state
         .services
+        .semantic()
         .semantic_rubric(&id, query.version)
         .map_err(ApiError::from)?
         .map(Json)
@@ -86,6 +88,7 @@ pub(crate) async fn semantic_rubric_attempts(
     let id = SemanticRubricId::parse(id).map_err(ApplicationError::from)?;
     state
         .services
+        .semantic()
         .semantic_attempts_for_rubric(&id)
         .map(Json)
         .map_err(ApiError::from)
@@ -134,6 +137,7 @@ pub(crate) async fn create_semantic_attempt(
     };
     state
         .services
+        .semantic()
         .record_semantic_attempt(attempt)
         .map(Json)
         .map_err(ApiError::from)
@@ -146,6 +150,7 @@ pub(crate) async fn semantic_attempt(
     let id = SemanticTaskAttemptId::parse(id).map_err(ApplicationError::from)?;
     state
         .services
+        .semantic()
         .semantic_attempt(&id)
         .map_err(ApiError::from)?
         .map(Json)
@@ -159,6 +164,7 @@ pub(crate) async fn semantic_attempt_judgments(
     let id = SemanticTaskAttemptId::parse(id).map_err(ApplicationError::from)?;
     state
         .services
+        .semantic()
         .semantic_judgments_for_attempt(&id)
         .map(Json)
         .map_err(ApiError::from)
@@ -214,6 +220,7 @@ pub(crate) async fn create_semantic_judgment(
     };
     state
         .services
+        .semantic()
         .record_semantic_judgment(judgment)
         .map(Json)
         .map_err(ApiError::from)
@@ -226,6 +233,7 @@ pub(crate) async fn semantic_judgment_adjudications(
     let id = SemanticJudgmentId::parse(id).map_err(ApplicationError::from)?;
     state
         .services
+        .semantic()
         .judgment_adjudications(&id)
         .map(Json)
         .map_err(ApiError::from)
@@ -265,6 +273,7 @@ pub(crate) async fn create_judgment_adjudication(
     };
     state
         .services
+        .semantic()
         .record_judgment_adjudication(adjudication)
         .map(Json)
         .map_err(ApiError::from)

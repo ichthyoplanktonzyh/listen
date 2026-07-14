@@ -111,6 +111,32 @@ impl SyntaxCapabilityManager {
         self.root.join("track-cache")
     }
 
+    pub async fn read_track_cache<T>(&self, track_id: &str) -> Option<T>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let path = self.cache_dir().join(format!("{track_id}.json"));
+        serde_json::from_slice(&tokio::fs::read(path).await.ok()?).ok()
+    }
+
+    pub async fn write_track_cache<T>(&self, track_id: &str, entry: &T)
+    where
+        T: Serialize,
+    {
+        let directory = self.cache_dir();
+        let Ok(json) = serde_json::to_vec(entry) else {
+            return;
+        };
+        if tokio::fs::create_dir_all(&directory).await.is_err() {
+            return;
+        }
+        let path = directory.join(format!("{track_id}.json"));
+        let temporary = directory.join(format!("{track_id}.json.tmp"));
+        if tokio::fs::write(&temporary, json).await.is_ok() {
+            let _ = tokio::fs::rename(temporary, path).await;
+        }
+    }
+
     pub async fn view(&self) -> SyntaxCapabilityView {
         let mut state = self.state.lock().await.clone();
         if matches!(
@@ -307,8 +333,8 @@ impl SyntaxCapabilityManager {
         .await;
     }
 
-    #[cfg(test)]
-    pub(crate) async fn assume_ready_for_tests(&self) {
+    #[doc(hidden)]
+    pub async fn assume_ready_for_tests(&self) {
         self.set_state(SyntaxCapabilityStatus::Ready, 1.0, true, None)
             .await;
     }
