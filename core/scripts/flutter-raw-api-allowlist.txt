@@ -1,8 +1,6 @@
-# Phase 2.24 bounded migration ledger.
-# Format: API part filename:method. New raw resource-client returns fail the
-# architecture guard. Remove an entry when the endpoint gains a domain model.
-lexical.dart:listVocabulary
-lexical.dart:importExternalVocabulary
+# Phase 2.24 reviewed exceptions. New raw resource-client returns fail the
+# architecture guard.
+# Vocabulary export is intentionally an open, versioned transfer document.
+# The client writes it without interpreting or discarding additive fields;
+# api_service_transport_test.dart locks down that lossless boundary.
 lexical.dart:exportVocabulary
-subtitles.dart:importLLTimeline
-subtitles.dart:searchOpenSubtitles

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-14 18:53 CST: Phase 2.24 Flutter raw-return ledger 收敛完成：vocabulary
+  list/import 与 OpenSubtitles search 建模，未使用的全局 LLTimeline import 客户端入口删除；
+  vocabulary book 同步改为 typed details。仅保留 vocabulary export 这一项经审定的开放版本文档
+  例外，并以 transport contract 验证 additive fields 无损透传。Analyze、相关 51 tests 与
+  architecture guard 全绿。
+
 - 2026-07-14 18:42 CST: Phase 2.24 typed-resource 第六批：learning resources、transcription
   providers/models/jobs 与 phonetic providers/models/jobs/feedback 全部改为显式领域模型，
   三个 UI surface 和 subtitle source coordinator 不再读取匿名 wire maps；raw-return
