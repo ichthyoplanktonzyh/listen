@@ -1067,8 +1067,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     await learningWorkflowController.refreshDiagnosis(
       cue: cue,
-      diagnose: (cueId) async =>
-          Diagnosis.fromJson(await service.diagnose(cueId)),
+      diagnose: service.diagnose,
       currentCueId: () => subtitleController.currentPrimaryCue?.id,
       setDiagnosis: (value) {
         if (mounted) learningController.setDiagnosis(value);

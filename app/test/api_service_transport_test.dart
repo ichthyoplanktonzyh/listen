@@ -88,5 +88,26 @@ void main() {
         'force': true,
       });
     });
+
+    test('diagnosis resource decodes into a typed result', () async {
+      String? seenPath;
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'tok',
+        transport: (method, path, body) async {
+          seenPath = path;
+          return (
+            statusCode: 200,
+            body: '{"hints":[],"l1_hints":[],"l1_context":null}',
+          );
+        },
+      );
+
+      final diagnosis = await api.diagnose('sentence/1');
+
+      expect(diagnosis.hints, isEmpty);
+      expect(diagnosis.l1Hints, isEmpty);
+      expect(seenPath, '/v1/sentences/sentence%2F1/diagnosis');
+    });
   });
 }

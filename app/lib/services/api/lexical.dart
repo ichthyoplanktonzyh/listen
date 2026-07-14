@@ -285,12 +285,13 @@ extension LexicalApi on LocalApi {
         as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> diagnose(String sentenceId) async =>
-      (await _request(
-            'GET',
-            '/v1/sentences/${Uri.encodeComponent(sentenceId)}/diagnosis',
-          ))
-          as Map<String, dynamic>;
+  Future<Diagnosis> diagnose(String sentenceId) async => Diagnosis.fromJson(
+    (await _request(
+          'GET',
+          '/v1/sentences/${Uri.encodeComponent(sentenceId)}/diagnosis',
+        ))
+        as Map<String, dynamic>,
+  );
 
   Future<List<Map<String, dynamic>>> lexicalEntries({
     required String language,

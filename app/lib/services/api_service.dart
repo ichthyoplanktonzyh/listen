@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import '../models/listening.dart';
 import '../models/coach_dashboard.dart';
 import '../models/practice.dart';
+import '../models/types.dart';
 
 part 'api/media.dart';
 part 'api/subtitles.dart';
