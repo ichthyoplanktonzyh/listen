@@ -158,6 +158,68 @@ List<ReadingSentence> _deriveSentences(
   return sentences;
 }
 
+/// A paragraph flattened into one synthetic cue so the existing token-span
+/// renderer can lay it out as flowing text. Word taps map back to the real
+/// cue via [tokenOrigins] — the synthetic cue never leaks into learning
+/// writes.
+class ParagraphComposite {
+  const ParagraphComposite({required this.cue, required this.tokenOrigins});
+
+  /// Synthetic cue: id is the paragraph anchor cue id, tokens re-indexed
+  /// across all member cues.
+  final Cue cue;
+
+  /// Synthetic token index → (original cue, original token).
+  final Map<int, (Cue, SubtitleToken)> tokenOrigins;
+}
+
+/// Flattens a paragraph's cues into a single synthetic cue for flowing-text
+/// rendering. A single space token is inserted between cues so words from
+/// adjacent cues never fuse.
+ParagraphComposite composeParagraphCue(ReadingParagraph paragraph) {
+  final tokens = <SubtitleToken>[];
+  final origins = <int, (Cue, SubtitleToken)>{};
+  final text = StringBuffer();
+  for (final sentence in paragraph.sentences) {
+    for (final cue in sentence.cues) {
+      if (tokens.isNotEmpty) {
+        tokens.add(
+          SubtitleToken(
+            index: tokens.length,
+            kind: 'whitespace',
+            text: ' ',
+            normalized: null,
+          ),
+        );
+        text.write(' ');
+      }
+      for (final token in cue.tokens) {
+        final synthetic = SubtitleToken(
+          index: tokens.length,
+          kind: token.kind,
+          text: token.text,
+          normalized: token.normalized,
+        );
+        origins[synthetic.index] = (cue, token);
+        tokens.add(synthetic);
+      }
+      text.write(cue.text.trim());
+    }
+  }
+  final first = paragraph.sentences.first.cues.first;
+  return ParagraphComposite(
+    cue: Cue(
+      id: first.id,
+      index: first.index,
+      start: paragraph.start,
+      end: paragraph.end,
+      text: text.toString(),
+      tokens: List.unmodifiable(tokens),
+    ),
+    tokenOrigins: origins,
+  );
+}
+
 /// Pure derivation from production cues to reading paragraphs. Non-speech
 /// markers become their own single-sentence paragraphs so the reading view
 /// can render them as separators (or skip them) without losing timeline

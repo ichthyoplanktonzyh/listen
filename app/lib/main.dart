@@ -29,6 +29,7 @@ import 'controllers/playback_actions_coordinator.dart';
 import 'controllers/player_controller.dart';
 import 'controllers/practice_actions_coordinator.dart';
 import 'controllers/practice_controller.dart';
+import 'controllers/reading_controller.dart';
 import 'controllers/resource_actions_coordinator.dart';
 import 'controllers/speech_enhancement_workflow_controller.dart';
 import 'controllers/subtitle_controller.dart';
@@ -46,6 +47,7 @@ import 'services/external_tools.dart';
 import 'widgets/panels/intensive_practice_window.dart';
 import 'widgets/panels/l1_specialty_dialog.dart';
 import 'widgets/panels/hunting_prompt_card.dart';
+import 'widgets/panels/reading_view.dart';
 import 'widgets/panels/slice_playback_window.dart';
 import 'widgets/player/download_status_bar.dart';
 import 'widgets/app_bar/player_app_bar.dart';
@@ -122,6 +124,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   final learningController = LearningController();
   final practiceController = PracticeController();
   final slicePlayerController = SlicePlayerController();
+  final readingController = ReadingController();
+  // Restores the pre-reading play state when the reading posture closes.
+  bool _resumePlaybackAfterReading = false;
   final extensiveListeningController = ExtensiveListeningController();
   final huntingController = HuntingController();
   final huntingSessionController = HuntingSessionController();
@@ -801,6 +806,57 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _closeSlicePlayback() => slicePlayerController.close();
 
+  /// Enters the reading posture over the current primary track. Playback is
+  /// paused (reading has its own rhythm); the position is untouched so
+  /// closing returns to the exact playback context.
+  Future<void> _openReading() async {
+    final track = subtitleController.primaryTrack;
+    if (track == null) return;
+    _resumePlaybackAfterReading = playerController.playing;
+    await adapter.pause();
+    readingController.open(
+      track,
+      secondaryTrack: subtitleController.secondaryTrack,
+    );
+  }
+
+  Future<void> _closeReading() async {
+    readingController.close();
+    if (_resumePlaybackAfterReading) {
+      _resumePlaybackAfterReading = false;
+      await adapter.play();
+    }
+  }
+
+  /// Replays a reading range through the slice window (3.5.7) so the primary
+  /// playback position never moves while reading.
+  Future<void> _playReadingRange(
+    Duration start,
+    Duration end,
+    String anchorCueId,
+    String textSnapshot,
+  ) async {
+    final track = subtitleController.primaryTrack;
+    if (track == null) return;
+    final cursor = subtitleController.primaryCursor;
+    final anchor = Cue(
+      id: anchorCueId,
+      index: 0,
+      start: start,
+      end: end,
+      text: textSnapshot,
+      tokens: const [],
+    );
+    await _openSlicePlayback({
+      'media_id': track.mediaId ?? playerController.mediaId,
+      'track_id': track.id,
+      'sentence_id': anchorCueId,
+      'sentence_text_snapshot': textSnapshot,
+      'start_ms_snapshot': cursor.mediaStart(anchor).inMilliseconds,
+      'end_ms_snapshot': cursor.mediaEnd(anchor).inMilliseconds,
+    });
+  }
+
   /// Opens the same-family clip aggregation for one L1 difficulty hint
   /// (Phase 3.9): listen goes through the slice playback window; practice is
   /// available for clips of the currently loaded track and seeds the
@@ -1107,6 +1163,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     learningController.dispose();
     practiceController.dispose();
     slicePlayerController.dispose();
+    readingController.dispose();
     extensiveListeningController.dispose();
     huntingController.dispose();
     huntingSessionController.dispose();
@@ -1147,6 +1204,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         huntingController,
         huntingSessionController,
         slicePlayerController,
+        readingController,
         settingsController,
         downloadController,
       ]),
@@ -1337,7 +1395,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                                   mediaTitle: playerController.mediaPath!
                                       .split(Platform.pathSeparator)
                                       .last,
-                                  playerStage: _playerStage(),
+                                  playerStage: readingController.isOpen
+                                      ? _readingView()
+                                      : _playerStage(),
                                   learningPanel: _sidePanel(),
                                   mediaFraction:
                                       settingsController.workbenchMediaFraction,
@@ -1482,6 +1542,27 @@ class _PlayerScreenState extends State<PlayerScreen>
     return '${first.source.replaceAll('_', ' ')} · ${first.provider}';
   }
 
+  Widget _readingView() => ReadingView(
+    controller: readingController,
+    wordEntries: learningController.wordEntries,
+    capabilityProfiles: learningController.capabilityProfiles,
+    showStyles: settingsController.statusStylesVisible,
+    onWord: vocabularyActions.openWord,
+    onPlaySentence: (sentence) => _playReadingRange(
+      sentence.start,
+      sentence.end,
+      sentence.cues.first.id,
+      sentence.text,
+    ),
+    onPlayParagraph: (paragraph) => _playReadingRange(
+      paragraph.start,
+      paragraph.end,
+      paragraph.anchorCueId,
+      paragraph.sentences.first.text,
+    ),
+    onClose: () => unawaited(_closeReading()),
+  );
+
   Widget _sidePanel() => SidePanel(
     playerController: playerController,
     subtitleController: subtitleController,
@@ -1507,6 +1588,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     onStartSentenceDictationPractice:
         practiceActions.startSentenceDictationPractice,
     onStartShadowingPractice: practiceActions.startShadowingPractice,
+    onOpenReading: () => unawaited(_openReading()),
     onOpenDiagnosisView: _openDiagnosisView,
     onOpenSlicePlayback: _openSlicePlayback,
     onOpenListeningDictionary: _openListeningDictionaryEntry,
