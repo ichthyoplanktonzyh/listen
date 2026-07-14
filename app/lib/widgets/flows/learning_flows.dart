@@ -12,7 +12,7 @@ import '../../controllers/practice_actions_coordinator.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
 import '../../localization.dart';
-import '../../m18_ui.dart';
+import '../../learning_assets_ui.dart';
 import '../../models/practice.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
@@ -104,7 +104,7 @@ Future<void> openPhraseFlow({
   final details = await showPhraseCandidate(
     context: context,
     api: api,
-    candidate: candidate.toJson(),
+    candidate: candidate,
     initialStatus: learningController.phraseEntries[canonical]?.entry.status,
     source: {
       'language': settingsController.resolveLearningLanguage(
@@ -120,10 +120,7 @@ Future<void> openPhraseFlow({
     },
   );
   if (details != null && context.mounted) {
-    learningController.updateSinglePhraseEntry(
-      canonical,
-      LexicalEntryDetails.fromJson(details),
-    );
+    learningController.updateSinglePhraseEntry(canonical, details);
     playerController.setStatus('Saved phrase "${candidate.displayForm}"');
   }
 }

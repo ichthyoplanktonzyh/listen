@@ -22,12 +22,11 @@ extension TimelinesApi on LocalApi {
               as List<dynamic>)
           .cast<Map<String, dynamic>>();
 
-  Future<Map<String, dynamic>> wordTimeline(String timelineId) async =>
-      (await _request(
+  Future<WordTimeline> wordTimeline(String timelineId) async =>
+      WordTimeline.fromJson((await _request(
             'GET',
             '/v1/word-timelines/${Uri.encodeComponent(timelineId)}',
-          ))
-          as Map<String, dynamic>;
+          )) as Map<String, dynamic>);
 
   Future<Map<String, dynamic>> createTrackWordTimeline(
     String trackId,
@@ -57,12 +56,11 @@ extension TimelinesApi on LocalApi {
               as List<dynamic>)
           .cast<Map<String, dynamic>>();
 
-  Future<Map<String, dynamic>> chunkTimeline(String timelineId) async =>
-      (await _request(
+  Future<ChunkTimeline> chunkTimeline(String timelineId) async =>
+      ChunkTimeline.fromJson((await _request(
             'GET',
             '/v1/chunk-timelines/${Uri.encodeComponent(timelineId)}',
-          ))
-          as Map<String, dynamic>;
+          )) as Map<String, dynamic>);
 
   Future<Map<String, dynamic>> generateChunkTimeline(
     String trackId, {
@@ -164,12 +162,11 @@ extension TimelinesApi on LocalApi {
               as List<dynamic>)
           .cast<Map<String, dynamic>>();
 
-  Future<Map<String, dynamic>> phoneTimeline(String timelineId) async =>
-      (await _request(
+  Future<PhoneTimeline> phoneTimeline(String timelineId) async =>
+      PhoneTimeline.fromJson((await _request(
             'GET',
             '/v1/phone-timelines/${Uri.encodeComponent(timelineId)}',
-          ))
-          as Map<String, dynamic>;
+          )) as Map<String, dynamic>);
 
   Future<Map<String, dynamic>> activatePhoneTimeline(String timelineId) async =>
       (await _request(

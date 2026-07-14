@@ -288,7 +288,7 @@ class MediaSessionCoordinator {
     if (service == null) return;
     try {
       final capability = await service.syntaxCapability();
-      if (capability['status'] == 'ready' && capability['enabled'] == true) {
+      if (capability.isReady) {
         await service.runTrackSyntaxAnalysis(trackId);
       }
     } catch (_) {

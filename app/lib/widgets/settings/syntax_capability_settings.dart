@@ -42,9 +42,7 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
 
   Future<void> _refresh() async {
     try {
-      final next = SyntaxCapabilityView.fromJson(
-        await widget.api.syntaxCapability(),
-      );
+      final next = await widget.api.syntaxCapability();
       if (!mounted) return;
       final becameReady = _capability?.isReady != true && next.isReady;
       setState(() {
@@ -74,9 +72,7 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
       _error = null;
     });
     try {
-      final next = SyntaxCapabilityView.fromJson(
-        await widget.api.syntaxCapabilityAction(action),
-      );
+      final next = await widget.api.syntaxCapabilityAction(action);
       if (!mounted) return;
       setState(() {
         _capability = next;
@@ -100,8 +96,9 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
       _error = null;
     });
     try {
-      final result = TrackSyntaxAnalysisView.fromJson(
-        await widget.api.runTrackSyntaxAnalysis(trackId, force: force),
+      final result = await widget.api.runTrackSyntaxAnalysis(
+        trackId,
+        force: force,
       );
       if (!mounted) return;
       setState(() {

@@ -75,9 +75,7 @@ class ResourceActionsCoordinator {
     if (service == null) return;
     ContentDifficultyProfile? profile;
     try {
-      profile = ContentDifficultyProfile.fromJson(
-        await service.trackContentFit(trackId),
-      );
+      profile = await service.trackContentFit(trackId);
     } catch (_) {
       profile = null;
     }

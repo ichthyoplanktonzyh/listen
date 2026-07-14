@@ -46,12 +46,11 @@ extension SubtitlesApi on LocalApi {
 
   /// Dual-dimension content fit for the track's media (ADR 0018). Served
   /// from the backend cache; safe to call on every resource refresh.
-  Future<Map<String, dynamic>> trackContentFit(String trackId) async =>
-      (await _request(
+  Future<ContentDifficultyProfile> trackContentFit(String trackId) async =>
+      ContentDifficultyProfile.fromJson((await _request(
             'GET',
             '/v1/subtitles/${Uri.encodeComponent(trackId)}/content-fit',
-          ))
-          as Map<String, dynamic>;
+          )) as Map<String, dynamic>);
 
   Future<List<Map<String, dynamic>>> coldStartWords(
     String trackId, {

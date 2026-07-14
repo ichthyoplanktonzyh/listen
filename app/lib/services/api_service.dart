@@ -6,7 +6,10 @@ import 'package:crypto/crypto.dart';
 
 import '../models/listening.dart';
 import '../models/coach_dashboard.dart';
+import '../models/llm_provider.dart';
 import '../models/practice.dart';
+import '../models/syntax_capability.dart';
+import '../models/timeline.dart';
 import '../models/types.dart';
 
 part 'api/media.dart';

@@ -72,9 +72,7 @@ Future<void> openManualReviewFlow({
       }
       return;
     }
-    final timeline = WordTimeline.fromJson(
-      await service.wordTimeline(activeTimelineId),
-    );
+    final timeline = await service.wordTimeline(activeTimelineId);
     final initialCue = _initialCue(subtitleController, track, timeline);
     if (initialCue == null) {
       if (context.mounted) {

@@ -4,23 +4,26 @@ part of '../api_service.dart';
 // Split out of api_service.dart (mechanical decomposition).
 
 extension SpeechAnalysisApi on LocalApi {
-  Future<Map<String, dynamic>> syntaxCapability() async =>
-      (await _request('GET', '/v1/syntax/capability')) as Map<String, dynamic>;
+  Future<SyntaxCapabilityView> syntaxCapability() async =>
+      SyntaxCapabilityView.fromJson(
+        (await _request('GET', '/v1/syntax/capability')) as Map<String, dynamic>,
+      );
 
-  Future<Map<String, dynamic>> syntaxCapabilityAction(String action) async =>
-      (await _request('POST', '/v1/syntax/capability/$action', const {}))
-          as Map<String, dynamic>;
+  Future<SyntaxCapabilityView> syntaxCapabilityAction(String action) async =>
+      SyntaxCapabilityView.fromJson(
+        (await _request('POST', '/v1/syntax/capability/$action', const {}))
+            as Map<String, dynamic>,
+      );
 
-  Future<Map<String, dynamic>> runTrackSyntaxAnalysis(
+  Future<TrackSyntaxAnalysisView> runTrackSyntaxAnalysis(
     String trackId, {
     bool force = false,
   }) async =>
-      (await _request(
+      TrackSyntaxAnalysisView.fromJson((await _request(
             'POST',
             '/v1/subtitles/${Uri.encodeComponent(trackId)}/syntax-analysis',
             {'force': force},
-          ))
-          as Map<String, dynamic>;
+          )) as Map<String, dynamic>);
 
   Future<Map<String, dynamic>> trackSyntaxAnalysisStatus(
     String trackId,
@@ -31,12 +34,14 @@ extension SpeechAnalysisApi on LocalApi {
           ))
           as Map<String, dynamic>;
 
-  Future<Map<String, dynamic>> lookupPronunciation(String word) async =>
-      (await _request(
-            'GET',
-            '/v1/pronunciation/lookup?word=${Uri.encodeQueryComponent(word)}',
-          ))
-          as Map<String, dynamic>;
+  Future<WordPronunciation> lookupPronunciation(String word) async =>
+      WordPronunciation.fromJson(
+        (await _request(
+              'GET',
+              '/v1/pronunciation/lookup?word=${Uri.encodeQueryComponent(word)}',
+            ))
+            as Map<String, dynamic>,
+      );
 
   Future<List<Map<String, dynamic>>> pronunciationProviders() async =>
       ((await _request('GET', '/v1/pronunciation/providers')) as List<dynamic>)

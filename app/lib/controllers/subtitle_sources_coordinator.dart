@@ -60,8 +60,7 @@ class SubtitleSourcesCoordinator {
     _syntaxCapabilityCheckBusy = true;
     try {
       final capability = await service.syntaxCapability();
-      final ready =
-          capability['status'] == 'ready' && capability['enabled'] == true;
+      final ready = capability.isReady;
       if (!ready) {
         _syntaxCapabilityWasReady = false;
         _syntaxAnalyzedTrackId = null;

@@ -164,9 +164,7 @@ class MediaLibraryCoordinator {
     final service = getApi();
     if (service == null) return;
     try {
-      final updated = MediaLibraryEntry.fromJson(
-        await service.setMediaTriageIntent(entry.media.id, intent),
-      );
+      final updated = await service.setMediaTriageIntent(entry.media.id, intent);
       if (!isMounted()) return;
       final library = mediaLibrary;
       if (library != null) {

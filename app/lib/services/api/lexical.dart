@@ -4,7 +4,7 @@ part of '../api_service.dart';
 // Split out of api_service.dart (mechanical decomposition).
 
 extension LexicalApi on LocalApi {
-  Future<List<Map<String, dynamic>>> readLexicalEntriesBatch(
+  Future<List<LexicalEntry>> readLexicalEntriesBatch(
     List<String> forms, {
     required String language,
     String kind = 'word',
@@ -16,10 +16,12 @@ extension LexicalApi on LocalApi {
               'forms': forms,
             })
             as List<dynamic>;
-    return values.cast<Map<String, dynamic>>();
+    return values
+        .map((value) => LexicalEntry.fromJson(value as Map<String, dynamic>))
+        .toList(growable: false);
   }
 
-  Future<Map<String, dynamic>> upsertWordLexicalEntry(
+  Future<LexicalEntryDetails> upsertWordLexicalEntry(
     String canonicalForm,
     String displayForm,
     String? status, {
@@ -97,9 +99,11 @@ extension LexicalApi on LocalApi {
     return values.cast<Map<String, dynamic>>();
   }
 
-  Future<Map<String, dynamic>> lexicalEntryDetails(String entryId) async =>
-      (await _request('GET', '/v1/lexical-entries/$entryId'))
-          as Map<String, dynamic>;
+  Future<LexicalEntryDetails> lexicalEntryDetails(String entryId) async =>
+      LexicalEntryDetails.fromJson(
+        (await _request('GET', '/v1/lexical-entries/$entryId'))
+            as Map<String, dynamic>,
+      );
 
   Future<Map<String, dynamic>> setCapabilityOverride(
     String entryId,
@@ -113,88 +117,94 @@ extension LexicalApi on LocalApi {
           ))
           as Map<String, dynamic>;
 
-  Future<Map<String, dynamic>> updateLexicalLearningContent(
+  Future<LexicalEntryDetails> updateLexicalLearningContent(
     String entryId, {
     String? userDefinition,
     String? personalNote,
-  }) async =>
-      (await _request('PUT', '/v1/lexical-entries/$entryId/learning-content', {
-            'user_definition': userDefinition,
-            'personal_note': personalNote,
-          }))
-          as Map<String, dynamic>;
+  }) async => LexicalEntryDetails.fromJson(
+    (await _request('PUT', '/v1/lexical-entries/$entryId/learning-content', {
+          'user_definition': userDefinition,
+          'personal_note': personalNote,
+        }))
+        as Map<String, dynamic>,
+  );
 
-  Future<Map<String, dynamic>> createLexicalSenseFolder(
+  Future<LexicalEntryDetails> createLexicalSenseFolder(
     String entryId, {
     required String label,
     String? definition,
     String? gloss,
     String? externalRef,
-  }) async =>
-      (await _request(
-            'POST',
-            '/v1/lexical-entries/${Uri.encodeComponent(entryId)}/sense-folders',
-            {
-              'label': label,
-              'definition': definition,
-              'gloss': gloss,
-              'external_ref': externalRef,
-            },
-          ))
-          as Map<String, dynamic>;
+  }) async => LexicalEntryDetails.fromJson(
+    (await _request(
+          'POST',
+          '/v1/lexical-entries/${Uri.encodeComponent(entryId)}/sense-folders',
+          {
+            'label': label,
+            'definition': definition,
+            'gloss': gloss,
+            'external_ref': externalRef,
+          },
+        ))
+        as Map<String, dynamic>,
+  );
 
-  Future<Map<String, dynamic>> updateLexicalSenseFolder(
+  Future<LexicalEntryDetails> updateLexicalSenseFolder(
     String entryId,
     String senseId, {
     required String label,
     String? definition,
     String? gloss,
     String? externalRef,
-  }) async =>
-      (await _request(
-            'PUT',
-            '/v1/lexical-entries/${Uri.encodeComponent(entryId)}/sense-folders/${Uri.encodeComponent(senseId)}',
-            {
-              'label': label,
-              'definition': definition,
-              'gloss': gloss,
-              'external_ref': externalRef,
-            },
-          ))
-          as Map<String, dynamic>;
+  }) async => LexicalEntryDetails.fromJson(
+    (await _request(
+          'PUT',
+          '/v1/lexical-entries/${Uri.encodeComponent(entryId)}/sense-folders/${Uri.encodeComponent(senseId)}',
+          {
+            'label': label,
+            'definition': definition,
+            'gloss': gloss,
+            'external_ref': externalRef,
+          },
+        ))
+        as Map<String, dynamic>,
+  );
 
-  Future<Map<String, dynamic>> deleteLexicalSenseFolder(
+  Future<LexicalEntryDetails> deleteLexicalSenseFolder(
     String entryId,
     String senseId,
-  ) async =>
-      (await _request(
-            'DELETE',
-            '/v1/lexical-entries/${Uri.encodeComponent(entryId)}/sense-folders/${Uri.encodeComponent(senseId)}',
-          ))
-          as Map<String, dynamic>;
+  ) async => LexicalEntryDetails.fromJson(
+    (await _request(
+          'DELETE',
+          '/v1/lexical-entries/${Uri.encodeComponent(entryId)}/sense-folders/${Uri.encodeComponent(senseId)}',
+        ))
+        as Map<String, dynamic>,
+  );
 
-  Future<Map<String, dynamic>> assignLexicalSenseFolderOccurrence(
-    String entryId,
-    String senseId,
-    String occurrenceId,
-  ) async =>
-      (await _request(
-            'PUT',
-            '/v1/lexical-entries/${Uri.encodeComponent(entryId)}/sense-folders/${Uri.encodeComponent(senseId)}/occurrences/${Uri.encodeComponent(occurrenceId)}',
-            const {},
-          ))
-          as Map<String, dynamic>;
-
-  Future<Map<String, dynamic>> unassignLexicalSenseFolderOccurrence(
+  Future<LexicalEntryDetails> assignLexicalSenseFolderOccurrence(
     String entryId,
     String senseId,
     String occurrenceId,
-  ) async =>
-      (await _request(
-            'DELETE',
-            '/v1/lexical-entries/${Uri.encodeComponent(entryId)}/sense-folders/${Uri.encodeComponent(senseId)}/occurrences/${Uri.encodeComponent(occurrenceId)}',
-          ))
-          as Map<String, dynamic>;
+  ) async => LexicalEntryDetails.fromJson(
+    (await _request(
+          'PUT',
+          '/v1/lexical-entries/${Uri.encodeComponent(entryId)}/sense-folders/${Uri.encodeComponent(senseId)}/occurrences/${Uri.encodeComponent(occurrenceId)}',
+          const {},
+        ))
+        as Map<String, dynamic>,
+  );
+
+  Future<LexicalEntryDetails> unassignLexicalSenseFolderOccurrence(
+    String entryId,
+    String senseId,
+    String occurrenceId,
+  ) async => LexicalEntryDetails.fromJson(
+    (await _request(
+          'DELETE',
+          '/v1/lexical-entries/${Uri.encodeComponent(entryId)}/sense-folders/${Uri.encodeComponent(senseId)}/occurrences/${Uri.encodeComponent(occurrenceId)}',
+        ))
+        as Map<String, dynamic>,
+  );
 
   Future<Map<String, dynamic>> importExternalVocabulary(
     List<Map<String, dynamic>> entries, {
@@ -243,15 +253,16 @@ extension LexicalApi on LocalApi {
     await _request('POST', '/v1/vocabulary/import', bundle);
   }
 
-  Future<Map<String, dynamic>> lookupDictionary(
+  Future<DictionaryLookupBundle> lookupDictionary(
     String lemma, {
     required String language,
-  }) async =>
-      (await _request(
-            'GET',
-            '/v1/dictionary?language=${Uri.encodeQueryComponent(language)}&lemma=${Uri.encodeQueryComponent(lemma)}',
-          ))
-          as Map<String, dynamic>;
+  }) async => DictionaryLookupBundle.fromJson(
+    (await _request(
+          'GET',
+          '/v1/dictionary?language=${Uri.encodeQueryComponent(language)}&lemma=${Uri.encodeQueryComponent(lemma)}',
+        ))
+        as Map<String, dynamic>,
+  );
 
   Future<Map<String, dynamic>> learnerProfile() async =>
       (await _request('GET', '/v1/learner/profile')) as Map<String, dynamic>;
@@ -293,7 +304,7 @@ extension LexicalApi on LocalApi {
         as Map<String, dynamic>,
   );
 
-  Future<List<Map<String, dynamic>>> lexicalEntries({
+  Future<List<LexicalEntryDetails>> lexicalEntries({
     required String language,
     String? kind,
     String? status,
@@ -313,14 +324,20 @@ extension LexicalApi on LocalApi {
               '/v1/lexical-entries?${Uri(queryParameters: query).query}',
             )
             as List<dynamic>;
-    return values.cast<Map<String, dynamic>>();
+    return values
+        .map(
+          (value) =>
+              LexicalEntryDetails.fromJson(value as Map<String, dynamic>),
+        )
+        .toList(growable: false);
   }
 
-  Future<Map<String, dynamic>> upsertLexicalEntry(
+  Future<LexicalEntryDetails> upsertLexicalEntry(
     Map<String, dynamic> value,
-  ) async =>
-      (await _request('PUT', '/v1/lexical-entries', value))
-          as Map<String, dynamic>;
+  ) async => LexicalEntryDetails.fromJson(
+    (await _request('PUT', '/v1/lexical-entries', value))
+        as Map<String, dynamic>,
+  );
 
   Future<Map<String, dynamic>> correctLemma(
     String original,
@@ -334,13 +351,14 @@ extension LexicalApi on LocalApi {
           }))
           as Map<String, dynamic>;
 
-  Future<List<Map<String, dynamic>>> phraseCandidates(
-    String sentenceId,
-  ) async =>
+  Future<List<PhraseCandidate>> phraseCandidates(String sentenceId) async =>
       ((await _request(
                 'GET',
                 '/v1/sentences/${Uri.encodeComponent(sentenceId)}/phrase-candidates',
               ))
               as List<dynamic>)
-          .cast<Map<String, dynamic>>();
+          .map(
+            (value) => PhraseCandidate.fromJson(value as Map<String, dynamic>),
+          )
+          .toList(growable: false);
 }

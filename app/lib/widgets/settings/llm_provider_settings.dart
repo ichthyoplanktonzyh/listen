@@ -133,7 +133,7 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
     final l = AppLocalizations.of(context);
     setState(() => _probeLabels[id] = l.text('llmProbing'));
     try {
-      final result = LlmProbeResult.fromJson(await widget.api.probeLlmProvider(id));
+      final result = await widget.api.probeLlmProvider(id);
       if (!mounted) return;
       final claim = result.structuredOutput;
       setState(() {

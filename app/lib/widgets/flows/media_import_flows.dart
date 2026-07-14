@@ -10,7 +10,7 @@ import '../../controllers/player_controller.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
 import '../../localization.dart';
-import '../../m18_ui.dart';
+import '../../learning_assets_ui.dart';
 import '../../player_adapter.dart';
 import '../../services/api_service.dart';
 import '../../services/external_tools.dart';

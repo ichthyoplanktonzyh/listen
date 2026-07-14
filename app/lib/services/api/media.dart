@@ -29,16 +29,15 @@ extension MediaApi on LocalApi {
 
   /// Stores (or clears, with null) the explicit triage intent for one media
   /// and returns the refreshed library entry.
-  Future<Map<String, dynamic>> setMediaTriageIntent(
+  Future<MediaLibraryEntry> setMediaTriageIntent(
     String mediaId,
     String? intent,
   ) async =>
-      (await _request(
+      MediaLibraryEntry.fromJson((await _request(
             'PUT',
             '/v1/media/${Uri.encodeComponent(mediaId)}/triage-intent',
             {'intent': intent},
-          ))
-          as Map<String, dynamic>;
+          )) as Map<String, dynamic>);
 
   Future<void> setMediaAvailability(String mediaId, String availability) async {
     await _request('PUT', '/v1/media/$mediaId/availability', {
@@ -50,12 +49,14 @@ extension MediaApi on LocalApi {
       ((await _request('GET', '/v1/languages')) as List<dynamic>)
           .cast<String>();
 
-  Future<Map<String, dynamic>> lookupLanguageProfile(String code) async =>
-      (await _request(
-            'GET',
-            '/v1/languages/${Uri.encodeComponent(code)}/profile',
-          ))
-          as Map<String, dynamic>;
+  Future<LanguageProfile> lookupLanguageProfile(String code) async =>
+      LanguageProfile.fromJson(
+        (await _request(
+              'GET',
+              '/v1/languages/${Uri.encodeComponent(code)}/profile',
+            ))
+            as Map<String, dynamic>,
+      );
 
   Future<void> saveProgress(String mediaId, Duration position) async {
     await _request('PUT', '/v1/media/$mediaId/progress', {

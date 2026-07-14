@@ -40,12 +40,11 @@ extension CoachLlmApi on LocalApi {
 
   /// Connectivity + capability test: actually measures structured-output
   /// support against the endpoint. Diagnostic only, never learning feedback.
-  Future<Map<String, dynamic>> probeLlmProvider(String id) async =>
-      (await _request(
+  Future<LlmProbeResult> probeLlmProvider(String id) async =>
+      LlmProbeResult.fromJson((await _request(
             'POST',
             '/v1/llm/providers/${Uri.encodeComponent(id)}/probe',
-          ))
-          as Map<String, dynamic>;
+          )) as Map<String, dynamic>);
 
   /// Searches the rebuildable local corpus projection. A whitespace-free
   /// query matches exact normalized word keys; a multi-word query substring

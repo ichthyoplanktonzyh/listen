@@ -219,9 +219,7 @@ class SpeechEnhancementWorkflowController {
         .firstOrNull;
     if (active != null) {
       try {
-        final timeline = PhoneTimeline.fromJson(
-          await service.phoneTimeline(active.id),
-        );
+        final timeline = await service.phoneTimeline(active.id);
         final sentenceId = timeline.sentenceId;
         if (sentenceId != null) {
           return {
@@ -271,7 +269,7 @@ class SpeechEnhancementWorkflowController {
     if (active != null) {
       try {
         return chunkPartitionsFromTimeline(
-          ChunkTimeline.fromJson(await service.chunkTimeline(active.id)),
+          await service.chunkTimeline(active.id),
         );
       } catch (error) {
         errors.add('chunk timeline: $error');

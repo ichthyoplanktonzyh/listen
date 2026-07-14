@@ -116,9 +116,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   }
 
   Future<void> _openEntryById(String entryId) async {
-    final value = LexicalEntryDetails.fromJson(
-      await widget.api.lexicalEntryDetails(entryId),
-    );
+    final value = await widget.api.lexicalEntryDetails(entryId);
     // Suggestions and dictionary audio are decorations: each degrades to
     // absence instead of failing the detail page.
     List<UpgradeSuggestion> pending;
@@ -129,11 +127,9 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     }
     String? audio;
     try {
-      final bundle = DictionaryLookupBundle.fromJson(
-        await widget.api.lookupDictionary(
-          value.entry.normalizedForm,
-          language: widget.language,
-        ),
+      final bundle = await widget.api.lookupDictionary(
+        value.entry.normalizedForm,
+        language: widget.language,
       );
       audio = bundle.results
           .expand(
@@ -438,11 +434,11 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
 
   Future<void> _saveSenseFolderChange(
     LexicalEntry entry,
-    Future<Map<String, dynamic>> Function() action,
+    Future<LexicalEntryDetails> Function() action,
   ) async {
     final l = AppLocalizations.of(context);
     try {
-      final value = LexicalEntryDetails.fromJson(await action());
+      final value = await action();
       if (mounted) setState(() => details = value);
     } catch (error) {
       if (mounted) {

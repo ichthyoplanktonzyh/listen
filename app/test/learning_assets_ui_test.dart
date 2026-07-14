@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
-import 'package:llplayer_next/m18_ui.dart';
-import 'package:llplayer_next/models/timeline.dart';
+import 'package:llplayer_next/learning_assets_ui.dart';
 import 'package:llplayer_next/models/types.dart';
+import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/widgets/subtitle/token_line.dart';
 
@@ -117,7 +117,7 @@ const _groupingSenseGroups = [
 void main() {
   test('OpenSubtitles media hash follows the 64-bit file algorithm', () async {
     final directory = await Directory.systemTemp.createTemp(
-      'llplayer-m18-hash-',
+      'llplayer-learning-assets-hash-',
     );
     final file = File('${directory.path}/media.bin');
     await file.writeAsBytes(List<int>.filled(131072, 0));
@@ -132,16 +132,26 @@ void main() {
     await tester.pumpWidget(
       localized(
         LearningAssetTile(
-          details: const {
-            'entry': {
-              'display_form': 'piece of cake',
-              'kind': 'phrase',
-              'status': 'known_not_recognized',
-            },
-            'occurrences': [
-              {'sentence_text_snapshot': 'That was a piece of cake.'},
+          details: const LexicalEntryDetails(
+            entry: LexicalEntry(
+              id: 'lexical-1',
+              normalizedForm: 'piece of cake',
+              displayForm: 'piece of cake',
+              kind: 'phrase',
+              status: 'known_not_recognized',
+              language: 'en',
+            ),
+            occurrences: [
+              LexicalOccurrence(
+                mediaTitleSnapshot: 'Clip',
+                mediaFingerprintSnapshot: 'sha256:clip',
+                sentenceTextSnapshot: 'That was a piece of cake.',
+                startMsSnapshot: 0,
+                endMsSnapshot: 1000,
+                encounterCount: 1,
+              ),
             ],
-          },
+          ),
           onTap: () => selected = true,
         ),
       ),
