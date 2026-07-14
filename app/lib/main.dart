@@ -24,6 +24,7 @@ import 'controllers/hunting_session_controller.dart';
 import 'controllers/learning_controller.dart';
 import 'controllers/learning_workflow_controller.dart';
 import 'controllers/listening_inbox_coordinator.dart';
+import 'controllers/media_library_coordinator.dart';
 import 'controllers/media_session_coordinator.dart';
 import 'controllers/occurrence_media_resolver.dart';
 import 'controllers/playback_actions_coordinator.dart';
@@ -183,6 +184,13 @@ class _PlayerScreenState extends State<PlayerScreen>
     settings: settingsController,
     player: playerController,
   );
+  late final mediaLibraryActions = MediaLibraryCoordinator(
+    player: playerController,
+    subtitle: subtitleController,
+    learning: learningController,
+    settings: settingsController,
+    extensiveListening: extensiveListeningController,
+  );
 
   // ── Local UI state (not managed by controllers) ──
   String get status => playerController.status;
@@ -192,11 +200,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _workbenchExpanded = false;
   late final AnimationController _workbenchAnimController;
   late final Animation<Offset> _workbenchSlideAnimation;
-  // Global learning totals prefetched for the no-media home surface so the
-  // readiness strip is not misleadingly empty at cold start.
-  SavedVocabularyCount? _savedVocabulary;
-  List<MediaLibraryEntry>? _mediaLibrary;
-
   // ── Convenience ──
   AppLocalizations get l => AppLocalizations.of(context);
 
@@ -287,6 +290,14 @@ class _PlayerScreenState extends State<PlayerScreen>
       isMounted: () => mounted,
       text: (key) => l.text(key),
       refreshDiagnosis: _refreshDiagnosis,
+    );
+    mediaLibraryActions.bind(
+      getApi: () => api,
+      isMounted: () => mounted,
+      text: (key) => l.text(key),
+      requestRebuild: () => setState(() {}),
+      openMediaPath: mediaSession.openMediaPath,
+      openMedia: mediaSession.openMedia,
     );
     unawaited(_connectApi());
     unawaited(_loadSettings());
@@ -432,10 +443,10 @@ class _PlayerScreenState extends State<PlayerScreen>
               playerController.position,
             ),
           );
-          _recordRecentMedia();
+          mediaLibraryActions.recordRecentMedia();
         }
       });
-      unawaited(_prefetchHomeSummary());
+      unawaited(mediaLibraryActions.prefetchHomeSummary());
       unawaited(_runSmokeIfConfigured());
     } catch (error) {
       if (mounted) {
@@ -445,134 +456,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         });
       }
     }
-  }
-
-  /// Persist the currently playing media so the no-media home can offer a real
-  /// "continue" entry and honest readiness at the next launch.
-  void _recordRecentMedia() {
-    final path = playerController.mediaPath;
-    if (path == null || path.isEmpty) return;
-    settingsController.recordRecentMedia(
-      path: path,
-      title:
-          playerController.mediaTitle ??
-          path.split(Platform.pathSeparator).last,
-      positionMs: playerController.position.inMilliseconds,
-      durationMs: playerController.duration.inMilliseconds,
-      subtitleCount: subtitleController.subtitleResources.length,
-    );
-  }
-
-  /// Prefetch global learning totals (vocabulary, listening inbox) so the home
-  /// readiness strip reflects real state instead of cold-start zeros.
-  Future<void> _prefetchHomeSummary() async {
-    final service = api;
-    if (service == null) return;
-    unawaited(extensiveListeningController.refreshInbox(service));
-    unawaited(_loadMediaLibrary());
-    try {
-      final count = await service.savedVocabularyCount(
-        language: settingsController.resolveLearningLanguage(
-          subtitleController.primaryTrack?.language,
-        ),
-      );
-      if (mounted) setState(() => _savedVocabulary = count);
-    } catch (_) {
-      // Leave the strip on its neutral placeholder when the count is
-      // unavailable; the home must not fail because a summary query did.
-    }
-  }
-
-  /// Media library facts for the home triage list. Failures leave the
-  /// section on its previous state: the library is a suggestion surface,
-  /// never a gate on playback or learning.
-  Future<void> _loadMediaLibrary() async {
-    final service = api;
-    if (service == null) return;
-    try {
-      final entries = (await service.listMediaLibrary())
-          .whereType<Map>()
-          .map(
-            (value) =>
-                MediaLibraryEntry.fromJson(Map<String, dynamic>.from(value)),
-          )
-          .toList();
-      if (mounted) setState(() => _mediaLibrary = entries);
-    } catch (_) {
-      // Keep whatever the section had; the home must not fail on a summary.
-    }
-  }
-
-  /// Opens a library row like any other media — triage never changes what
-  /// opening a file does.
-  Future<void> _openLibraryEntry(MediaLibraryEntry entry) async {
-    if (!File(entry.media.path).existsSync()) {
-      playerController.setStatus(l.text('mediaFileMissing'));
-      return;
-    }
-    await mediaSession.openMediaPath(entry.media.path);
-  }
-
-  /// One-click extensive listening: open the media, then start the ambient
-  /// session with the loaded primary track.
-  Future<void> _startExtensiveFromLibrary(MediaLibraryEntry entry) async {
-    if (!File(entry.media.path).existsSync()) {
-      playerController.setStatus(l.text('mediaFileMissing'));
-      return;
-    }
-    await mediaSession.openMediaPath(entry.media.path);
-    if (!mounted || extensiveListeningController.active) return;
-    final started = await extensiveListeningController.startSession(
-      api: api,
-      mediaId: playerController.mediaId,
-      trackId: subtitleController.primaryTrack?.id ?? entry.primaryTrackId,
-    );
-    if (started && mounted) {
-      playerController.setStatus('Extensive listening started');
-    }
-  }
-
-  /// One-click intensive listening opens the material; a concrete current
-  /// sentence is still required before the user chooses a practice type.
-  Future<void> _startIntensiveFromLibrary(MediaLibraryEntry entry) async {
-    if (!File(entry.media.path).existsSync()) {
-      playerController.setStatus(l.text('mediaFileMissing'));
-      return;
-    }
-    await mediaSession.openMediaPath(entry.media.path);
-    if (mounted) learningController.selectSidePanel(0);
-  }
-
-  Future<void> _setLibraryTriageIntent(
-    MediaLibraryEntry entry,
-    String? intent,
-  ) async {
-    final service = api;
-    if (service == null) return;
-    try {
-      final updated = MediaLibraryEntry.fromJson(
-        await service.setMediaTriageIntent(entry.media.id, intent),
-      );
-      if (!mounted) return;
-      setState(() {
-        final library = _mediaLibrary;
-        if (library == null) return;
-        final index = library.indexWhere(
-          (item) => item.media.id == updated.media.id,
-        );
-        if (index >= 0) library[index] = updated;
-      });
-    } catch (error) {
-      playerController.setStatus('Could not save triage intent: $error');
-    }
-  }
-
-  Future<void> _toggleFamiliarSupply(bool enabled) async {
-    await settingsController.update(
-      settingsController.settings.copyWith(
-        familiarMaterialSuggestions: enabled,
-      ),
-    );
   }
 
   void _expandWorkbench() {
@@ -585,22 +468,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     _workbenchAnimController.reverse().then((_) {
       if (mounted) setState(() => _workbenchExpanded = false);
     });
-  }
-
-  /// Reopen the most recently played media from the home continue entry. The
-  /// backend restores the exact saved position during [openMediaPath].
-  Future<void> _continueRecentMedia() async {
-    final path = settingsController.lastMediaPath;
-    if (path.isEmpty) {
-      await mediaSession.openMedia();
-      return;
-    }
-    if (!File(path).existsSync()) {
-      playerController.setStatus('Recent media is no longer available');
-      await mediaSession.openMedia();
-      return;
-    }
-    await mediaSession.openMediaPath(path);
   }
 
   Future<void> _runSmokeIfConfigured() async {
@@ -1773,7 +1640,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                                     playerController.mediaPath != null) {
                                   _expandWorkbench();
                                 } else {
-                                  unawaited(_continueRecentMedia());
+                                  unawaited(
+                                    mediaLibraryActions.continueRecentMedia(),
+                                  );
                                 }
                               },
                               onOpenSubtitleResources: () =>
@@ -1783,20 +1652,33 @@ class _PlayerScreenState extends State<PlayerScreen>
                               onOpenCoach: () =>
                                   unawaited(_openCoachDashboard()),
                               onOpenSettings: () => unawaited(_openSettings()),
-                              mediaLibrary: _mediaLibrary,
+                              mediaLibrary: mediaLibraryActions.mediaLibrary,
                               familiarSupplyEnabled: settingsController
                                   .familiarMaterialSuggestions,
-                              onOpenLibraryEntry: (entry) =>
-                                  unawaited(_openLibraryEntry(entry)),
-                              onStartExtensiveEntry: (entry) =>
-                                  unawaited(_startExtensiveFromLibrary(entry)),
-                              onStartIntensiveEntry: (entry) =>
-                                  unawaited(_startIntensiveFromLibrary(entry)),
-                              onSetLibraryIntent: (entry, intent) => unawaited(
-                                _setLibraryTriageIntent(entry, intent),
+                              onOpenLibraryEntry: (entry) => unawaited(
+                                mediaLibraryActions.openLibraryEntry(entry),
                               ),
-                              onToggleFamiliarSupply: (enabled) =>
-                                  unawaited(_toggleFamiliarSupply(enabled)),
+                              onStartExtensiveEntry: (entry) => unawaited(
+                                mediaLibraryActions.startExtensiveFromLibrary(
+                                  entry,
+                                ),
+                              ),
+                              onStartIntensiveEntry: (entry) => unawaited(
+                                mediaLibraryActions.startIntensiveFromLibrary(
+                                  entry,
+                                ),
+                              ),
+                              onSetLibraryIntent: (entry, intent) => unawaited(
+                                mediaLibraryActions.setLibraryTriageIntent(
+                                  entry,
+                                  intent,
+                                ),
+                              ),
+                              onToggleFamiliarSupply: (enabled) => unawaited(
+                                mediaLibraryActions.toggleFamiliarSupply(
+                                  enabled,
+                                ),
+                              ),
                               recentMediaTitle:
                                   settingsController.lastMediaTitle.isEmpty
                                   ? null
@@ -1815,10 +1697,14 @@ class _PlayerScreenState extends State<PlayerScreen>
                               ),
                               recentSubtitleCount:
                                   settingsController.lastMediaSubtitleCount,
-                              vocabularyCount: _savedVocabulary?.total ?? 0,
+                              vocabularyCount:
+                                  mediaLibraryActions.savedVocabulary?.total ??
+                                  0,
                               vocabularyCapped:
-                                  _savedVocabulary?.capped ?? false,
-                              vocabularyKnown: _savedVocabulary != null,
+                                  mediaLibraryActions.savedVocabulary?.capped ??
+                                  false,
+                              vocabularyKnown:
+                                  mediaLibraryActions.savedVocabulary != null,
                               listeningInboxCount:
                                   extensiveListeningController.activeItemCount,
                               statusText: playerController.status,
