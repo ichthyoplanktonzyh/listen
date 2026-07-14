@@ -27,6 +27,7 @@ lindera = ["dep:lindera"]
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 proptest = "1"
+serde_json.workspace = true
 
 [[bench]]
 name = "parse_bench"

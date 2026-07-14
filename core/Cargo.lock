@@ -2593,6 +2593,7 @@ dependencies = [
  "jieba-rs",
  "lindera",
  "proptest",
+ "serde_json",
  "sha2",
  "thiserror",
 ]

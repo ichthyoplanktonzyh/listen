@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-14 22:25 CST: Phase 3.13 Slice 0 完成：段落 read model spike 通过。真实数据
+  证伪 PLAN v1 的"gap 阈值分段"假设（whisper 转写 244 cue 仅 2 个非零间隙），落地
+  两级派生纯函数 `deriveReadingParagraphs`（标点/说话人/间隙/runaway 断句 → 说话人/
+  间隙/词数软上限组段，非语音 cue 成分隔段，段落身份=首 cue id）；`♪` 计句终符、
+  含词歌词行算阅读内容。新闻 49 段中位 37 词、歌词 8 段中位 49 词，目检通过。新增
+  dev 工具 `dump_sentences`（Rust example，产线切句导出）与 `paragraph_spike.dart`；
+  12 项单测，flutter analyze 零问题 / test 374 全绿，clippy/fmt 通过。结论与已知
+  限制见 `3.13-SLICE0-SPIKE.md`。
+
 - 2026-07-14 21:55 CST: Phase 3.13 Reading Studio v1 开工：PLAN 按上游落地现状修订为
   v2 并建分支 `claude/3.13-reading-studio-v1`。关键裁决：读听差异直接骑在 3.11
   `SemanticTaskConditions`（source_text_visible/audio_play_count）+
