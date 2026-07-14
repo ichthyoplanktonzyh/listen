@@ -157,6 +157,33 @@ class PlaybackActionsCoordinator {
     return value.isNegative ? Duration.zero : value;
   }
 
+  int mediaTimeMs(Duration subtitleTime) =>
+      mediaTime(subtitleTime).inMilliseconds;
+
+  /// The chunk under the playback cursor for the current primary cue, used to
+  /// seed chunk-based practice.
+  DisplayChunk? currentPracticeChunk() {
+    final cue = subtitle.currentPrimaryCue;
+    if (cue == null) return null;
+    final current = currentChunkRef();
+    if (current?.cue.id == cue.id) return current!.chunk;
+    final partition = subtitle.chunkPartitionsBySentence[cue.id];
+    if (partition == null || partition.chunks.isEmpty) return null;
+    final currentIndex = subtitle.currentChunkIndex;
+    if (currentIndex != null) {
+      for (final chunk in partition.chunks) {
+        if (chunk.index == currentIndex) return chunk;
+      }
+    }
+    return partition.chunks.first;
+  }
+
+  List<DisplayChunk> currentPracticeChunks() {
+    final cue = subtitle.currentPrimaryCue;
+    if (cue == null) return const [];
+    return subtitle.chunkPartitionsBySentence[cue.id]?.chunks ?? const [];
+  }
+
   // ── Source-loop ranges ──
 
   /// [label] is the transient status text (may carry dynamic detail such as a

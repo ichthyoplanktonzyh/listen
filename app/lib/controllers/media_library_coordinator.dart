@@ -1,0 +1,205 @@
+import 'dart:async';
+import 'dart:io';
+
+import '../models/types.dart';
+import '../services/api_service.dart';
+import 'extensive_listening_controller.dart';
+import 'learning_controller.dart';
+import 'player_controller.dart';
+import 'settings_controller.dart';
+import 'subtitle_controller.dart';
+
+/// Owns the home media-library/triage actions plus the prefetched home
+/// summary facts (saved vocabulary count, library entries). Extracted
+/// verbatim from `_PlayerScreenState` (main.dart decomposition); media-session
+/// operations arrive as injected callbacks so this stays testable in
+/// isolation and never holds another coordinator.
+class MediaLibraryCoordinator {
+  MediaLibraryCoordinator({
+    required this.player,
+    required this.subtitle,
+    required this.learning,
+    required this.settings,
+    required this.extensiveListening,
+  });
+
+  final PlayerController player;
+  final SubtitleController subtitle;
+  final LearningController learning;
+  final SettingsController settings;
+  final ExtensiveListeningController extensiveListening;
+
+  late LocalApi? Function() getApi;
+  late bool Function() isMounted;
+  late String Function(String key) text;
+  late void Function() requestRebuild;
+  late Future<void> Function(String path) openMediaPath;
+  late Future<void> Function() openMedia;
+
+  /// Global learning totals prefetched for the no-media home surface so the
+  /// readiness strip is not misleadingly empty at cold start.
+  SavedVocabularyCount? savedVocabulary;
+  List<MediaLibraryEntry>? mediaLibrary;
+
+  void bind({
+    required LocalApi? Function() getApi,
+    required bool Function() isMounted,
+    required String Function(String key) text,
+    required void Function() requestRebuild,
+    required Future<void> Function(String path) openMediaPath,
+    required Future<void> Function() openMedia,
+  }) {
+    this.getApi = getApi;
+    this.isMounted = isMounted;
+    this.text = text;
+    this.requestRebuild = requestRebuild;
+    this.openMediaPath = openMediaPath;
+    this.openMedia = openMedia;
+  }
+
+  /// Persist the currently playing media so the no-media home can offer a real
+  /// "continue" entry and honest readiness at the next launch.
+  void recordRecentMedia() {
+    final path = player.mediaPath;
+    if (path == null || path.isEmpty) return;
+    settings.recordRecentMedia(
+      path: path,
+      title: player.mediaTitle ?? path.split(Platform.pathSeparator).last,
+      positionMs: player.position.inMilliseconds,
+      durationMs: player.duration.inMilliseconds,
+      subtitleCount: subtitle.subtitleResources.length,
+    );
+  }
+
+  /// Prefetch global learning totals (vocabulary, listening inbox) so the home
+  /// readiness strip reflects real state instead of cold-start zeros.
+  Future<void> prefetchHomeSummary() async {
+    final service = getApi();
+    if (service == null) return;
+    unawaited(extensiveListening.refreshInbox(service));
+    unawaited(loadMediaLibrary());
+    try {
+      final count = await service.savedVocabularyCount(
+        language: settings.resolveLearningLanguage(
+          subtitle.primaryTrack?.language,
+        ),
+      );
+      if (isMounted()) {
+        savedVocabulary = count;
+        requestRebuild();
+      }
+    } catch (_) {
+      // Leave the strip on its neutral placeholder when the count is
+      // unavailable; the home must not fail because a summary query did.
+    }
+  }
+
+  /// Media library facts for the home triage list. Failures leave the
+  /// section on its previous state: the library is a suggestion surface,
+  /// never a gate on playback or learning.
+  Future<void> loadMediaLibrary() async {
+    final service = getApi();
+    if (service == null) return;
+    try {
+      final entries = (await service.listMediaLibrary())
+          .whereType<Map>()
+          .map(
+            (value) =>
+                MediaLibraryEntry.fromJson(Map<String, dynamic>.from(value)),
+          )
+          .toList();
+      if (isMounted()) {
+        mediaLibrary = entries;
+        requestRebuild();
+      }
+    } catch (_) {
+      // Keep whatever the section had; the home must not fail on a summary.
+    }
+  }
+
+  /// Opens a library row like any other media — triage never changes what
+  /// opening a file does.
+  Future<void> openLibraryEntry(MediaLibraryEntry entry) async {
+    if (!File(entry.media.path).existsSync()) {
+      player.setStatus(text('mediaFileMissing'));
+      return;
+    }
+    await openMediaPath(entry.media.path);
+  }
+
+  /// One-click extensive listening: open the media, then start the ambient
+  /// session with the loaded primary track.
+  Future<void> startExtensiveFromLibrary(MediaLibraryEntry entry) async {
+    if (!File(entry.media.path).existsSync()) {
+      player.setStatus(text('mediaFileMissing'));
+      return;
+    }
+    await openMediaPath(entry.media.path);
+    if (!isMounted() || extensiveListening.active) return;
+    final started = await extensiveListening.startSession(
+      api: getApi(),
+      mediaId: player.mediaId,
+      trackId: subtitle.primaryTrack?.id ?? entry.primaryTrackId,
+    );
+    if (started && isMounted()) {
+      player.setStatus('Extensive listening started');
+    }
+  }
+
+  /// One-click intensive listening opens the material; a concrete current
+  /// sentence is still required before the user chooses a practice type.
+  Future<void> startIntensiveFromLibrary(MediaLibraryEntry entry) async {
+    if (!File(entry.media.path).existsSync()) {
+      player.setStatus(text('mediaFileMissing'));
+      return;
+    }
+    await openMediaPath(entry.media.path);
+    if (isMounted()) learning.selectSidePanel(0);
+  }
+
+  Future<void> setLibraryTriageIntent(
+    MediaLibraryEntry entry,
+    String? intent,
+  ) async {
+    final service = getApi();
+    if (service == null) return;
+    try {
+      final updated = MediaLibraryEntry.fromJson(
+        await service.setMediaTriageIntent(entry.media.id, intent),
+      );
+      if (!isMounted()) return;
+      final library = mediaLibrary;
+      if (library != null) {
+        final index = library.indexWhere(
+          (item) => item.media.id == updated.media.id,
+        );
+        if (index >= 0) library[index] = updated;
+      }
+      requestRebuild();
+    } catch (error) {
+      player.setStatus('Could not save triage intent: $error');
+    }
+  }
+
+  Future<void> toggleFamiliarSupply(bool enabled) async {
+    await settings.update(
+      settings.settings.copyWith(familiarMaterialSuggestions: enabled),
+    );
+  }
+
+  /// Reopen the most recently played media from the home continue entry. The
+  /// backend restores the exact saved position during [openMediaPath].
+  Future<void> continueRecentMedia() async {
+    final path = settings.lastMediaPath;
+    if (path.isEmpty) {
+      await openMedia();
+      return;
+    }
+    if (!File(path).existsSync()) {
+      player.setStatus('Recent media is no longer available');
+      await openMedia();
+      return;
+    }
+    await openMediaPath(path);
+  }
+}
