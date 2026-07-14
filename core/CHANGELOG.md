@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-14 20:47 CST: Phase 3.9.4 Slice 2 完成：Flutter speech-enhancement 加载在
+  sense group 为空且非请求错误时触发一次文本规则回退生成并激活（每 track 单次守卫，
+  失败降级为空并记录 errors）；设置页 semantic/compare 选项标注"可用/数据未就绪"短
+  状态，未就绪且选中语义相关模式时 grouping 下拉 helper 显示逐词回退说明（中英文案）。
+  新增 controller 三场景测试与 SettingsDialog 两态 widget 测试（该文件首个 widget
+  测试基建）；监督评审中修正了 codex 无法在 sandbox 验证的测试 fixture 非法下拉值
+  （ruleHintsLevel/soundPatternDisplayMode/phonemeRibbonStyle/phoneticAnalysisPreference）
+  并把长文案从选项文本移入 helperText 以消除真实 RenderFlex 溢出。flutter analyze
+  无告警，flutter test 353 全绿。
+
 - 2026-07-14 20:29 CST: Phase 3.9.4 Slice 1 完成：track syntax-analysis 的新鲜
   batch 与 cache-hit batch 都通过 application 用例持久化并激活 SenseGroup，失败仅记录
   tracing warning、不影响 syntax 响应，capability unavailable 早退保持无副作用。扩展
