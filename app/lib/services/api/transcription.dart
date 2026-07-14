@@ -4,13 +4,22 @@ part of '../api_service.dart';
 // Split out of api_service.dart (mechanical decomposition).
 
 extension TranscriptionApi on LocalApi {
-  Future<List<Map<String, dynamic>>> transcriptionProviders() async =>
+  Future<List<TranscriptionProviderView>> transcriptionProviders() async =>
       ((await _request('GET', '/v1/transcription/providers')) as List<dynamic>)
-          .cast<Map<String, dynamic>>();
+          .map(
+            (value) => TranscriptionProviderView.fromJson(
+              value as Map<String, dynamic>,
+            ),
+          )
+          .toList(growable: false);
 
-  Future<List<Map<String, dynamic>>> transcriptionModels() async =>
+  Future<List<TranscriptionModelView>> transcriptionModels() async =>
       ((await _request('GET', '/v1/transcription/models')) as List<dynamic>)
-          .cast<Map<String, dynamic>>();
+          .map(
+            (value) =>
+                TranscriptionModelView.fromJson(value as Map<String, dynamic>),
+          )
+          .toList(growable: false);
 
   Future<void> installTranscriptionModel(String modelId) async {
     await _request('POST', '/v1/transcription/models/install', {
@@ -18,22 +27,24 @@ extension TranscriptionApi on LocalApi {
     });
   }
 
-  Future<Map<String, dynamic>> registerCustomTranscriptionModel(
+  Future<TranscriptionModelView> registerCustomTranscriptionModel(
     String path,
-  ) async =>
-      (await _request('POST', '/v1/transcription/models/register-custom', {
-            'path': path,
-          }))
-          as Map<String, dynamic>;
+  ) async => TranscriptionModelView.fromJson(
+    (await _request('POST', '/v1/transcription/models/register-custom', {
+          'path': path,
+        }))
+        as Map<String, dynamic>,
+  );
 
-  Future<Map<String, dynamic>> cancelTranscriptionModelInstall(
+  Future<TranscriptionModelView> cancelTranscriptionModelInstall(
     String modelId,
-  ) async =>
-      (await _request(
-            'POST',
-            '/v1/transcription/models/${Uri.encodeComponent(modelId)}/cancel-install',
-          ))
-          as Map<String, dynamic>;
+  ) async => TranscriptionModelView.fromJson(
+    (await _request(
+          'POST',
+          '/v1/transcription/models/${Uri.encodeComponent(modelId)}/cancel-install',
+        ))
+        as Map<String, dynamic>,
+  );
 
   Future<void> deleteTranscriptionModel(String modelId) async {
     await _request(
@@ -42,11 +53,15 @@ extension TranscriptionApi on LocalApi {
     );
   }
 
-  Future<List<Map<String, dynamic>>> transcriptionJobs() async =>
+  Future<List<TranscriptionJobView>> transcriptionJobs() async =>
       ((await _request('GET', '/v1/transcription/jobs')) as List<dynamic>)
-          .cast<Map<String, dynamic>>();
+          .map(
+            (value) =>
+                TranscriptionJobView.fromJson(value as Map<String, dynamic>),
+          )
+          .toList(growable: false);
 
-  Future<Map<String, dynamic>> createTranscriptionJob({
+  Future<TranscriptionJobView> createTranscriptionJob({
     required String mediaId,
     required String modelId,
     required bool secondary,
@@ -54,36 +69,43 @@ extension TranscriptionApi on LocalApi {
     String? language,
     int? audioTrack,
     bool force = false,
-  }) async =>
-      (await _request('POST', '/v1/transcription/jobs', {
-            'media_id': mediaId,
-            'model_id': modelId,
-            'destination': secondary ? 'secondary' : 'primary',
-            'purpose': translate ? 'translate_to_english' : 'transcribe',
-            'language': language,
-            'audio_track': audioTrack,
-            'force': force,
-          }))
-          as Map<String, dynamic>;
+  }) async => TranscriptionJobView.fromJson(
+    (await _request('POST', '/v1/transcription/jobs', {
+          'media_id': mediaId,
+          'model_id': modelId,
+          'destination': secondary ? 'secondary' : 'primary',
+          'purpose': translate ? 'translate_to_english' : 'transcribe',
+          'language': language,
+          'audio_track': audioTrack,
+          'force': force,
+        }))
+        as Map<String, dynamic>,
+  );
 
-  Future<Map<String, dynamic>> cancelTranscriptionJob(String jobId) async =>
-      (await _request(
-            'POST',
-            '/v1/transcription/jobs/${Uri.encodeComponent(jobId)}/cancel',
-          ))
-          as Map<String, dynamic>;
+  Future<TranscriptionJobView> cancelTranscriptionJob(String jobId) async =>
+      TranscriptionJobView.fromJson(
+        (await _request(
+              'POST',
+              '/v1/transcription/jobs/${Uri.encodeComponent(jobId)}/cancel',
+            ))
+            as Map<String, dynamic>,
+      );
 
-  Future<Map<String, dynamic>> retryTranscriptionJob(String jobId) async =>
-      (await _request(
-            'POST',
-            '/v1/transcription/jobs/${Uri.encodeComponent(jobId)}/retry',
-          ))
-          as Map<String, dynamic>;
+  Future<TranscriptionJobView> retryTranscriptionJob(String jobId) async =>
+      TranscriptionJobView.fromJson(
+        (await _request(
+              'POST',
+              '/v1/transcription/jobs/${Uri.encodeComponent(jobId)}/retry',
+            ))
+            as Map<String, dynamic>,
+      );
 
-  Future<Map<String, dynamic>> archiveTranscriptionJob(String jobId) async =>
-      (await _request(
-            'POST',
-            '/v1/transcription/jobs/${Uri.encodeComponent(jobId)}/archive',
-          ))
-          as Map<String, dynamic>;
+  Future<TranscriptionJobView> archiveTranscriptionJob(String jobId) async =>
+      TranscriptionJobView.fromJson(
+        (await _request(
+              'POST',
+              '/v1/transcription/jobs/${Uri.encodeComponent(jobId)}/archive',
+            ))
+            as Map<String, dynamic>,
+      );
 }

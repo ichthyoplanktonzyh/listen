@@ -47,19 +47,20 @@ _wire(LocalApi? Function() getApi) {
   final taskStatuses = <UserTaskStatus>[];
   final openedMedia = <String>[];
   final openedSubtitles = <String>[];
-  final coordinator = SubtitleSourcesCoordinator(
-    player: player,
-    subtitle: subtitle,
-    settings: settings,
-  )..bind(
-    getApi: getApi,
-    isMounted: () => true,
-    showSnackBar: snackBars.add,
-    setTaskStatus: taskStatuses.add,
-    openMediaPath: (path) async => openedMedia.add(path),
-    openSubtitlePath: (path, {required secondary}) async =>
-        openedSubtitles.add('$path secondary=$secondary'),
-  );
+  final coordinator =
+      SubtitleSourcesCoordinator(
+        player: player,
+        subtitle: subtitle,
+        settings: settings,
+      )..bind(
+        getApi: getApi,
+        isMounted: () => true,
+        showSnackBar: snackBars.add,
+        setTaskStatus: taskStatuses.add,
+        openMediaPath: (path) async => openedMedia.add(path),
+        openSubtitlePath: (path, {required secondary}) async =>
+            openedSubtitles.add('$path secondary=$secondary'),
+      );
   return (
     coordinator: coordinator,
     player: player,
@@ -221,12 +222,38 @@ void main() {
           return (
             statusCode: 200,
             body: jsonEncode([
-              {'id': 'model-1', 'state': 'installed'},
+              {
+                'id': 'model-1',
+                'provider_id': 'fixture',
+                'display_name': 'Fixture model',
+                'revision': 'v1',
+                'size_bytes': 1,
+                'state': 'installed',
+                'installed_bytes': 1,
+                'license': 'test',
+                'training_data_provenance': 'synthetic',
+                'distribution_allowed': false,
+                'application_verified': false,
+              },
             ]),
           );
         }
         if (method == 'POST' && path == '/v1/phonetic-analysis/jobs') {
-          return (statusCode: 200, body: jsonEncode({'status': 'queued'}));
+          return (
+            statusCode: 200,
+            body: jsonEncode({
+              'id': 'job-1',
+              'track_id': 'track-1',
+              'scope': 'track',
+              'provider_id': 'fixture',
+              'runtime_id': 'fixture-runtime',
+              'runtime_version': 'v1',
+              'model_revision': 'v1',
+              'status': 'queued',
+              'phase_progress': 0,
+              'created_at_ms': 1,
+            }),
+          );
         }
         throw StateError('unexpected $method $path');
       }),

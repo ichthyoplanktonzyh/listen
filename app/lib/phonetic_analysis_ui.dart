@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'localization.dart';
+import 'models/runtime_resources.dart';
 import 'services/api_service.dart';
 import 'theme/listen_theme.dart';
 
@@ -18,26 +19,25 @@ class PhoneticAnalysisCenter extends StatefulWidget {
   });
 
   final LocalApi? api;
-  final Future<List<Map<String, dynamic>>> Function()? loadProviders;
-  final Future<List<Map<String, dynamic>>> Function()? loadModels;
-  final Future<List<Map<String, dynamic>>> Function()? loadJobs;
-  final Future<Map<String, dynamic>> Function(String id)? cancelJob;
-  final Future<Map<String, dynamic>> Function(String id)? retryJob;
+  final Future<List<PhoneticProviderView>> Function()? loadProviders;
+  final Future<List<PhoneticModelView>> Function()? loadModels;
+  final Future<List<PhoneticJobView>> Function()? loadJobs;
+  final Future<PhoneticJobView> Function(String id)? cancelJob;
+  final Future<PhoneticJobView> Function(String id)? retryJob;
 
   @override
   State<PhoneticAnalysisCenter> createState() => _PhoneticAnalysisCenterState();
 }
 
 class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
-  List<Map<String, dynamic>> providers = const [];
-  List<Map<String, dynamic>> models = const [];
-  List<Map<String, dynamic>> jobs = const [];
+  List<PhoneticProviderView> providers = const [];
+  List<PhoneticModelView> models = const [];
+  List<PhoneticJobView> jobs = const [];
   Timer? timer;
   String? error;
 
-  bool get _hasActiveJobs => jobs.any((j) => _isActive(j['status'] as String));
-  bool get _hasTerminalJobs =>
-      jobs.any((j) => _isTerminal(j['status'] as String));
+  bool get _hasActiveJobs => jobs.any((job) => _isActive(job.status));
+  bool get _hasTerminalJobs => jobs.any((job) => _isTerminal(job.status));
 
   @override
   void initState() {
@@ -62,17 +62,20 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
 
   Future<void> _refresh() async {
     try {
-      final values = await Future.wait([
-        widget.loadProviders?.call() ?? widget.api!.phoneticAnalysisProviders(),
-        widget.loadModels?.call() ?? widget.api!.phoneticAnalysisModels(),
-        widget.loadJobs?.call() ?? widget.api!.phoneticAnalysisJobs(),
-      ]);
+      final providerValues =
+          await (widget.loadProviders?.call() ??
+              widget.api!.phoneticAnalysisProviders());
+      final modelValues =
+          await (widget.loadModels?.call() ??
+              widget.api!.phoneticAnalysisModels());
+      final jobValues =
+          await (widget.loadJobs?.call() ?? widget.api!.phoneticAnalysisJobs());
       if (!mounted) return;
       final hadActive = _hasActiveJobs;
       setState(() {
-        providers = values[0];
-        models = values[1];
-        jobs = values[2];
+        providers = providerValues;
+        models = modelValues;
+        jobs = jobValues;
         error = null;
       });
       if (hadActive != _hasActiveJobs) _scheduleTimer();
@@ -118,8 +121,8 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
   }
 
   Widget _jobCountBadge() {
-    final active = jobs.where((j) => _isActive(j['status'] as String)).length;
-    final failed = jobs.where((j) => j['status'] == 'failed').length;
+    final active = jobs.where((job) => _isActive(job.status)).length;
+    final failed = jobs.where((job) => job.status == 'failed').length;
     final color = failed > 0
         ? ListenColors.error
         : active > 0
@@ -141,9 +144,9 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
 
   // --- Models tab ---
 
-  double? _installProgress(Map<String, dynamic> model) {
-    final size = (model['size_bytes'] as num?)?.toDouble() ?? 0.0;
-    final installed = (model['installed_bytes'] as num?)?.toDouble() ?? 0.0;
+  double? _installProgress(PhoneticModelView model) {
+    final size = model.sizeBytes.toDouble();
+    final installed = model.installedBytes.toDouble();
     if (size <= 0) return null;
     return (installed / size).clamp(0.0, 1.0);
   }
@@ -162,48 +165,46 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
       for (final provider in providers)
         ListTile(
           leading: Icon(
-            provider['available'] == true
-                ? Icons.science_outlined
-                : Icons.error_outline,
+            provider.available ? Icons.science_outlined : Icons.error_outline,
           ),
           title: Text(
-            '${provider['display_name']} · '
-            '${provider['experimental'] == true ? l.text('experimental') : l.text('ready')}',
+            '${provider.displayName} · '
+            '${provider.experimental ? l.text('experimental') : l.text('ready')}',
           ),
           subtitle: Text(
-            provider['diagnostic'] as String? ??
-                '${provider['runtime_id']} ${provider['runtime_version']}',
+            provider.diagnostic ??
+                '${provider.runtimeId} ${provider.runtimeVersion}',
           ),
         ),
       for (final model in models)
         ListTile(
           leading: const Icon(Icons.memory_outlined),
-          title: Text('${model['display_name']} · ${model['state']}'),
+          title: Text('${model.displayName} · ${model.state}'),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (model['state'] == 'installing')
+              if (model.state == 'installing')
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: LinearProgressIndicator(
                     value: _installProgress(model),
                   ),
                 ),
-              if (model['error'] != null)
+              if (model.error != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Text(
-                    '${model['error']}',
+                    model.error!,
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.error,
                     ),
                   ),
                 ),
               Text(
-                '${model['license']} · ${model['revision']}\n'
-                '${model['training_data_provenance']}\n'
-                '${model['application_verified'] == true ? l.text('applicationVerified') : l.text('notApplicationVerified')} · '
-                '${model['distribution_allowed'] == true ? l.text('distributionAllowed') : l.text('distributionNotAllowed')}',
+                '${model.license} · ${model.revision}\n'
+                '${model.trainingDataProvenance}\n'
+                '${model.applicationVerified ? l.text('applicationVerified') : l.text('notApplicationVerified')} · '
+                '${model.distributionAllowed ? l.text('distributionAllowed') : l.text('distributionNotAllowed')}',
               ),
             ],
           ),
@@ -213,13 +214,13 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
     ],
   );
 
-  Widget? _modelAction(Map<String, dynamic> model, AppLocalizations l) {
-    final state = model['state'] as String?;
-    final id = model['id'] as String?;
+  Widget? _modelAction(PhoneticModelView model, AppLocalizations l) {
+    final state = model.state;
+    final id = model.id;
     if (state == 'downloadable' || state == 'failed') {
       return IconButton(
         tooltip: l.text('download'),
-        onPressed: id == null ? null : () => _installModel(id),
+        onPressed: () => _installModel(id),
         icon: const Icon(Icons.download),
       );
     }
@@ -272,14 +273,14 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
     );
   }
 
-  Widget _jobTile(Map<String, dynamic> job, AppLocalizations l) {
-    final status = job['status'] as String;
+  Widget _jobTile(PhoneticJobView job, AppLocalizations l) {
+    final status = job.status;
     final active = _isActive(status);
     final terminal = _isTerminal(status);
-    final progress = (job['phase_progress'] as num).toDouble() / 100;
-    final errorMsg = job['error_message'] as String?;
-    final scope = job['scope'] as String;
-    final createdAt = job['created_at_ms'] as num?;
+    final progress = job.phaseProgress / 100;
+    final errorMsg = job.errorMessage;
+    final scope = job.scope;
+    final createdAt = job.createdAtMs;
 
     return ListTile(
       leading: _statusIcon(status),
@@ -305,7 +306,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
           if (active) const SizedBox(height: 4),
           if (status == 'completed')
             Text(
-              '${job['provider_id']} · ${job['model_revision']}',
+              '${job.providerId} · ${job.modelRevision}',
               style: const TextStyle(fontSize: 12),
             ),
           if (errorMsg != null && errorMsg.isNotEmpty)
@@ -321,17 +322,16 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-          if (createdAt != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                _formatTimestamp(createdAt.toInt()),
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Theme.of(context).colorScheme.onSurface.withAlpha(120),
-                ),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              _formatTimestamp(createdAt),
+              style: TextStyle(
+                fontSize: 11,
+                color: Theme.of(context).colorScheme.onSurface.withAlpha(120),
               ),
             ),
+          ),
         ],
       ),
       trailing: _jobActions(job, status, active, terminal, l),
@@ -395,13 +395,13 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
   }
 
   Widget? _jobActions(
-    Map<String, dynamic> job,
+    PhoneticJobView job,
     String status,
     bool active,
     bool terminal,
     AppLocalizations l,
   ) {
-    final id = job['id'] as String;
+    final id = job.id;
     if (active) {
       return IconButton(
         tooltip: l.text('cancel'),

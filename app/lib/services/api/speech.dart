@@ -102,52 +102,69 @@ extension SpeechAnalysisApi on LocalApi {
           )
           .toList(growable: false);
 
-  Future<List<Map<String, dynamic>>> phoneticAnalysisModels() async =>
+  Future<List<PhoneticModelView>> phoneticAnalysisModels() async =>
       ((await _request('GET', '/v1/phonetic-analysis/models')) as List<dynamic>)
-          .cast<Map<String, dynamic>>();
+          .map(
+            (value) =>
+                PhoneticModelView.fromJson(value as Map<String, dynamic>),
+          )
+          .toList(growable: false);
 
-  Future<List<Map<String, dynamic>>> phoneticAnalysisProviders() async =>
+  Future<List<PhoneticProviderView>> phoneticAnalysisProviders() async =>
       ((await _request('GET', '/v1/phonetic-analysis/providers'))
               as List<dynamic>)
-          .cast<Map<String, dynamic>>();
+          .map(
+            (value) =>
+                PhoneticProviderView.fromJson(value as Map<String, dynamic>),
+          )
+          .toList(growable: false);
 
-  Future<Map<String, dynamic>> installPhoneticAnalysisModel(
+  Future<PhoneticModelView> installPhoneticAnalysisModel(
     String modelId,
-  ) async =>
-      (await _request('POST', '/v1/phonetic-analysis/models/install', {
-            'model_id': modelId,
-          }))
-          as Map<String, dynamic>;
+  ) async => PhoneticModelView.fromJson(
+    (await _request('POST', '/v1/phonetic-analysis/models/install', {
+          'model_id': modelId,
+        }))
+        as Map<String, dynamic>,
+  );
 
-  Future<List<Map<String, dynamic>>> phoneticAnalysisJobs() async =>
+  Future<List<PhoneticJobView>> phoneticAnalysisJobs() async =>
       ((await _request('GET', '/v1/phonetic-analysis/jobs')) as List<dynamic>)
-          .cast<Map<String, dynamic>>();
+          .map(
+            (value) => PhoneticJobView.fromJson(value as Map<String, dynamic>),
+          )
+          .toList(growable: false);
 
-  Future<Map<String, dynamic>> createPhoneticAnalysisJob({
+  Future<PhoneticJobView> createPhoneticAnalysisJob({
     required String trackId,
     required String modelId,
     String? sentenceId,
-  }) async =>
-      (await _request('POST', '/v1/phonetic-analysis/jobs', {
-            'track_id': trackId,
-            'sentence_id': sentenceId,
-            'model_id': modelId,
-          }))
-          as Map<String, dynamic>;
+  }) async => PhoneticJobView.fromJson(
+    (await _request('POST', '/v1/phonetic-analysis/jobs', {
+          'track_id': trackId,
+          'sentence_id': sentenceId,
+          'model_id': modelId,
+        }))
+        as Map<String, dynamic>,
+  );
 
-  Future<Map<String, dynamic>> cancelPhoneticAnalysisJob(String jobId) async =>
-      (await _request(
-            'POST',
-            '/v1/phonetic-analysis/jobs/${Uri.encodeComponent(jobId)}/cancel',
-          ))
-          as Map<String, dynamic>;
+  Future<PhoneticJobView> cancelPhoneticAnalysisJob(String jobId) async =>
+      PhoneticJobView.fromJson(
+        (await _request(
+              'POST',
+              '/v1/phonetic-analysis/jobs/${Uri.encodeComponent(jobId)}/cancel',
+            ))
+            as Map<String, dynamic>,
+      );
 
-  Future<Map<String, dynamic>> retryPhoneticAnalysisJob(String jobId) async =>
-      (await _request(
-            'POST',
-            '/v1/phonetic-analysis/jobs/${Uri.encodeComponent(jobId)}/retry',
-          ))
-          as Map<String, dynamic>;
+  Future<PhoneticJobView> retryPhoneticAnalysisJob(String jobId) async =>
+      PhoneticJobView.fromJson(
+        (await _request(
+              'POST',
+              '/v1/phonetic-analysis/jobs/${Uri.encodeComponent(jobId)}/retry',
+            ))
+            as Map<String, dynamic>,
+      );
 
   Future<void> deletePhoneticAnalysisJob(String jobId) async {
     await _request(
@@ -156,19 +173,22 @@ extension SpeechAnalysisApi on LocalApi {
     );
   }
 
-  Future<Map<String, dynamic>> clearTerminalPhoneticAnalysisJobs() async =>
-      (await _request('POST', '/v1/phonetic-analysis/jobs/clear'))
-          as Map<String, dynamic>;
+  Future<DeletedResourceCount> clearTerminalPhoneticAnalysisJobs() async =>
+      DeletedResourceCount.fromJson(
+        (await _request('POST', '/v1/phonetic-analysis/jobs/clear'))
+            as Map<String, dynamic>,
+      );
 
-  Future<Map<String, dynamic>> updatePhoneticFindingFeedback({
+  Future<PhoneticFindingFeedbackView> updatePhoneticFindingFeedback({
     required String findingId,
     required String value,
     String? note,
-  }) async =>
-      (await _request(
-            'PUT',
-            '/v1/phonetic-analysis/findings/${Uri.encodeComponent(findingId)}/feedback',
-            {'value': value, 'note': note},
-          ))
-          as Map<String, dynamic>;
+  }) async => PhoneticFindingFeedbackView.fromJson(
+    (await _request(
+          'PUT',
+          '/v1/phonetic-analysis/findings/${Uri.encodeComponent(findingId)}/feedback',
+          {'value': value, 'note': note},
+        ))
+        as Map<String, dynamic>,
+  );
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'services/api_service.dart';
 import 'localization.dart';
+import 'models/runtime_resources.dart';
 import 'models/types.dart';
 
 class LearningAssetsScreen extends StatefulWidget {
@@ -204,7 +205,7 @@ class LearningResourceScreen extends StatefulWidget {
 }
 
 class _LearningResourceScreenState extends State<LearningResourceScreen> {
-  List<Map<String, dynamic>> resources = const [];
+  List<LearningResourceDescriptor> resources = const [];
   String? busy;
 
   @override
@@ -218,11 +219,11 @@ class _LearningResourceScreenState extends State<LearningResourceScreen> {
     if (mounted) setState(() => resources = values);
   }
 
-  Future<void> _toggle(Map<String, dynamic> value) async {
-    final id = value['id'] as String;
+  Future<void> _toggle(LearningResourceDescriptor value) async {
+    final id = value.id;
     setState(() => busy = id);
     try {
-      if (value['state'] == 'installed') {
+      if (value.state == 'installed') {
         await widget.api.removeLearningResource(id);
       } else {
         await widget.api.installLearningResource(id);
@@ -241,7 +242,7 @@ class _LearningResourceScreenState extends State<LearningResourceScreen> {
         for (final value in resources)
           LearningResourceTile(
             value: value,
-            busy: busy == value['id'],
+            busy: busy == value.id,
             onToggle: () => _toggle(value),
           ),
       ],
@@ -283,23 +284,23 @@ class LearningResourceTile extends StatelessWidget {
     required this.onToggle,
   });
 
-  final Map<String, dynamic> value;
+  final LearningResourceDescriptor value;
   final bool busy;
   final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context) => ListTile(
-    title: Text(value['display_name'] as String),
+    title: Text(value.displayName),
     subtitle: Text(
-      '${value['version']} · ${value['license']} · ${value['state']}\n'
-      '${value['checksum_sha256']}',
+      '${value.version} · ${value.license} · ${value.state}\n'
+      '${value.checksumSha256}',
     ),
     isThreeLine: true,
     trailing: busy
         ? const CircularProgressIndicator()
         : IconButton(
             icon: Icon(
-              value['state'] == 'installed'
+              value.state == 'installed'
                   ? Icons.delete_outline
                   : Icons.download,
             ),

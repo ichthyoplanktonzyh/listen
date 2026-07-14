@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/learning_assets_ui.dart';
+import 'package:llplayer_next/models/runtime_resources.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -170,13 +171,16 @@ void main() {
     await tester.pumpWidget(
       localized(
         LearningResourceTile(
-          value: const {
-            'display_name': 'ECDICT',
-            'version': 'bc015ed2',
-            'license': 'MIT',
-            'state': 'available',
-            'checksum_sha256': 'abc123',
-          },
+          value: const LearningResourceDescriptor(
+            id: 'ecdict',
+            displayName: 'ECDICT',
+            version: 'bc015ed2',
+            license: 'MIT',
+            checksumSha256: 'abc123',
+            sizeBytes: 1024,
+            state: 'available',
+            installedBytes: 0,
+          ),
           busy: false,
           onToggle: () => toggled = true,
         ),

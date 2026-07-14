@@ -1,5 +1,6 @@
 import '../models/task_status.dart';
 import '../models/timeline.dart';
+import '../models/runtime_resources.dart';
 import '../services/api_service.dart';
 import 'player_controller.dart';
 import 'settings_controller.dart';
@@ -107,13 +108,12 @@ class SubtitleSourcesCoordinator {
     try {
       final models = await service.phoneticAnalysisModels();
       final preferred = settings.settings.phoneticModelId;
-      final model = models.cast<Map<String, dynamic>?>().firstWhere(
+      final model = models.cast<PhoneticModelView?>().firstWhere(
         (value) =>
             value != null &&
-            (value['id'] == preferred ||
+            (value.id == preferred ||
                 (preferred.isEmpty &&
-                    (value['state'] == 'installed' ||
-                        value['state'] == 'custom'))),
+                    (value.state == 'installed' || value.state == 'custom'))),
         orElse: () => null,
       );
       if (model == null) {
@@ -122,19 +122,19 @@ class SubtitleSourcesCoordinator {
       final job = await service.createPhoneticAnalysisJob(
         trackId: track.id,
         sentenceId: wholeTrack ? null : cue!.id,
-        modelId: model['id'] as String,
+        modelId: model.id,
       );
       if (isMounted()) {
         setTaskStatus(
           UserTaskStatus(
             kind: UserTaskKind.audioAnalysis,
             state: UserTaskState.working,
-            rawStatus: job['status'] as String? ?? 'queued',
+            rawStatus: job.status,
             progress: 0,
             targetId: track.id,
           ),
         );
-        showSnackBar('Audio analysis ${job['status']}');
+        showSnackBar('Audio analysis ${job.status}');
       }
     } catch (error) {
       if (isMounted()) {

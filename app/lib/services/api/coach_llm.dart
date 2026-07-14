@@ -83,23 +83,32 @@ extension CoachLlmApi on LocalApi {
     return result['indexed_tracks'] as int;
   }
 
-  Future<List<Map<String, dynamic>>> learningResources() async =>
+  Future<List<LearningResourceDescriptor>> learningResources() async =>
       ((await _request('GET', '/v1/learning-resources')) as List<dynamic>)
-          .cast<Map<String, dynamic>>();
+          .map(
+            (value) => LearningResourceDescriptor.fromJson(
+              value as Map<String, dynamic>,
+            ),
+          )
+          .toList(growable: false);
 
-  Future<Map<String, dynamic>> installLearningResource(String id) async =>
-      (await _request(
-            'POST',
-            '/v1/learning-resources/${Uri.encodeComponent(id)}/install',
-          ))
-          as Map<String, dynamic>;
+  Future<LearningResourceDescriptor> installLearningResource(String id) async =>
+      LearningResourceDescriptor.fromJson(
+        (await _request(
+              'POST',
+              '/v1/learning-resources/${Uri.encodeComponent(id)}/install',
+            ))
+            as Map<String, dynamic>,
+      );
 
-  Future<Map<String, dynamic>> removeLearningResource(String id) async =>
-      (await _request(
-            'DELETE',
-            '/v1/learning-resources/${Uri.encodeComponent(id)}',
-          ))
-          as Map<String, dynamic>;
+  Future<LearningResourceDescriptor> removeLearningResource(String id) async =>
+      LearningResourceDescriptor.fromJson(
+        (await _request(
+              'DELETE',
+              '/v1/learning-resources/${Uri.encodeComponent(id)}',
+            ))
+            as Map<String, dynamic>,
+      );
 
   Future<CoachDashboard> coachDashboard({int days = 7}) async =>
       CoachDashboard.fromJson(
