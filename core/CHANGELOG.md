@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-14 10:40 CST: 删除 46 方法的 fat `SubtitleRepository` trait 及其 4 组 blanket
+  桥接 impl（repositories.rs 1375 → 848 行）。消费侧窄 trait（`SubtitleTrackRepository`/
+  `PronunciationRepository`/`TimelineResourceRepository`/`LLTimelineResourceRepository`）
+  早已存在且 AppServices 全部经窄 trait 依赖——fat trait 只是实现侧聚合，导致每加一个
+  持久化方法要同步写 4 处（fat trait + 窄 trait + 桥接 + sqlite impl）。现
+  `persistence-sqlite/subtitles.rs` 直接按资源 impl 4 个窄 trait（方法体逐字不变，仅
+  lltimeline 两方法挪至文件尾自成 impl 块），新增方法今后只写 2 处。测试导入改窄
+  trait。`cargo test --workspace` 608 全绿，clippy 告警 30 与基线持平（零回归）。
+
 - 2026-07-14 10:05 CST: main.dart 拆分 S9 —— 3.9.3 合并带来的 `_checkSyntaxCapability`
   能力监控（方法 + busy/ready/analyzed 三个状态标志）逐字搬入
   `SubtitleSourcesCoordinator.checkSyntaxCapability`（字幕轨分析域的自然归属）；2 秒轮询
