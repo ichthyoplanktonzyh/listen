@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- 2026-07-14 11:40 CST: 机械拆分 `models/types.dart`（1657 → 12 行 library + 5 个 part
+  文件：lexical 504 / pronunciation 452 / media_fit 283 / dictionary 237 / diagnosis 171
+  行），沿 `models/timeline.dart` 既有 part 模式，40 个类逐字搬移、消费端 import 零改动。
+  `flutter analyze` 零问题、`flutter test` 344 全通过。
+
 - 2026-07-14 11:20 CST: 机械拆分 `api_service.dart`（1629 → 263 行核心 + 9 个按资源域的
   part 文件，各 73–345 行）。`LocalApi` 保留 connect/transport/`_request`/events/close
   生命周期；143 个资源方法逐字搬入 `services/api/{media,subtitles,timelines,speech,
