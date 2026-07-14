@@ -129,6 +129,30 @@
   `import_lexical_assets` 升为 `pub(crate)` 以保持 tests 可见。`cargo test -p persistence-sqlite`
   110+5+6 全绿，workspace build 通过，clippy 告警数 19 与拆分前完全一致（零回归）。
 
+- 2026-07-13 22:25 CST: Phase 3.9.3 完整收口并冻结。最终 `jsonl-v2` 修复带前导空格字幕的
+  spaCy SPACE token/head 重映射，delivery identity 现同时绑定 provider/requirements/sidecar/model；
+  真实 244 cue App 路径为 243 analyzed + 1 `invalid_sentence` 隔离，首次 rebuild 2.10s、同 fingerprint
+  hot hit 0.11s。实测完成 clean install、restart persistence、stale/update、模型损坏 partial/恢复、
+  disable/enable、cancel/retry 和 uninstall；取消安装改为终止完整 venv/ensurepip process group，确认
+  staging 零残留。Rust workspace/Clippy/contracts/Python、Flutter analyze/test、release backend 与 macOS
+  build 全绿；QUALIFICATION、REAL-MEDIA-QA、codebase、STATE、PLAN、CLOSEOUT 已同步。
+
+- 2026-07-13 21:54 CST: Phase 3.9.3 交付 App 内可选句法 capability 竖切片。后端新增持久化
+  `not_installed/downloading/ready/partial/failed/stale/disabled` 状态、版本化 Application Support
+  安装目录和 install/cancel/retry(update)/verify/enable/disable/uninstall HTTP 路径；fully pinned
+  runtime/model 在 staging 校验后原子发布，基础 bundle 仍不含 Python/runtime/model。spaCy JSONL
+  adapter 改为 probe/analyze 共享长驻进程，支持主动 idle release、崩溃单次恢复和 lifecycle shutdown。
+  整轨分析新增 subtitle/token/language/model/config fingerprint、single-flight、逐句 partial 隔离、cache
+  hit/stale/force rebuild；Flutter 设置页提供完整动作、进度/错误/当前轨道状态，安装完成或打开未分析
+  轨道时静默后台启动，相同 fingerprint 复用。新增 Rust/HTTP/Dart DTO/transport/widget tests 与 OpenAPI；
+  未安装不启动 Python、不弹窗、不阻塞字幕或播放，B `want_to`/C/ChunkTimeline/Construction 边界未变。
+
+- 2026-07-13 21:33 CST: 新建 Phase 3.9.3 Syntax Capability Delivery & Lifecycle，基于冻结的
+  3.9.2 最终提交 `71be2c20` 建立独立分支与 phase 文档。计划把已资格 spaCy Provider 补成
+  App 内可安装/校验/取消/重试/更新/停用/卸载的可选能力，并交付持久状态机、长驻 sidecar、
+  整轨 fingerprint cache、stale/rebuild、自动后台分析和 Flutter 完整用户路径；未安装零打扰、
+  base bundle +0B、B/want-to/C/ChunkTimeline/Construction identity 边界保持不变。
+
 - 2026-07-13 19:30 CST: Phase 3.9.2 Syntax Provider Product Activation 收口。corrected v2
   holdout、逐 query qualification、spaCy opt-in lifecycle、单 batch/逐句共享编排、真实媒体与
   missing/corrupt/invalid/timeout 降级全部通过；contracts、句法相关 crates 与 Rust workspace

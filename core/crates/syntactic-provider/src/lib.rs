@@ -6,6 +6,7 @@
 
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
@@ -19,8 +20,10 @@ use domain::{
     SyntacticSentenceAnalysis,
 };
 use serde::{Deserialize, Serialize};
-use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::process::{Child, ChildStdin, ChildStdout, Command};
+use tokio::sync::Mutex;
+use tokio::time::Instant;
 
 const PROTOCOL_VERSION: u32 = 1;
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
@@ -55,6 +58,16 @@ pub struct PythonSyntacticProvider {
     model: String,
     model_dir: Option<PathBuf>,
     timeout: Duration,
+    idle_timeout: Duration,
+    process: Arc<Mutex<Option<ResidentProcess>>>,
+}
+
+#[derive(Debug)]
+struct ResidentProcess {
+    child: Child,
+    stdin: ChildStdin,
+    stdout: BufReader<ChildStdout>,
+    last_used: Instant,
 }
 
 impl PythonSyntacticProvider {
@@ -70,6 +83,8 @@ impl PythonSyntacticProvider {
             model: kind.default_model().into(),
             model_dir: None,
             timeout: Duration::from_secs(60),
+            idle_timeout: Duration::from_secs(120),
+            process: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -88,10 +103,41 @@ impl PythonSyntacticProvider {
         self
     }
 
-    async fn exchange(
-        &self,
-        request: &WireRequest<'_>,
-    ) -> Result<WireResponse, SyntacticProviderError> {
+    pub fn with_idle_timeout(mut self, timeout: Duration) -> Self {
+        self.idle_timeout = timeout;
+        self
+    }
+
+    /// Stops the optional resident runtime. Capability disable/uninstall calls
+    /// this before changing files; normal app shutdown is still covered by
+    /// `kill_on_drop`.
+    pub async fn shutdown(&self) {
+        let mut process = self.process.lock().await;
+        if let Some(mut resident) = process.take() {
+            let _ = resident.child.kill().await;
+        }
+    }
+
+    #[cfg(test)]
+    async fn resident_process_id(&self) -> Option<u32> {
+        self.process.lock().await.as_ref()?.child.id()
+    }
+
+    #[cfg(test)]
+    async fn terminate_resident_for_test(&self) {
+        let mut process = self.process.lock().await;
+        if let Some(resident) = process.as_mut() {
+            let _ = resident.child.kill().await;
+        }
+    }
+
+    async fn start_process(&self) -> Result<ResidentProcess, SyntacticProviderError> {
+        if self.python.components().count() > 1 && !self.python.is_file() {
+            return Err(SyntacticProviderError::RuntimeMissing);
+        }
+        if !self.script.is_file() {
+            return Err(SyntacticProviderError::ModelMissing);
+        }
         let mut command = Command::new(&self.python);
         command
             .arg(&self.script)
@@ -111,65 +157,131 @@ impl PythonSyntacticProvider {
             .map_err(|error| SyntacticProviderError::Process {
                 detail: format!("failed to start syntactic sidecar: {error}"),
             })?;
-        let mut stdin = child
+        let stdin = child
             .stdin
             .take()
             .ok_or_else(|| SyntacticProviderError::Process {
                 detail: "syntactic sidecar stdin was not piped".into(),
             })?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| SyntacticProviderError::Process {
+                detail: "syntactic sidecar stdout was not piped".into(),
+            })?;
+        if let Some(mut stderr) = child.stderr.take() {
+            tokio::spawn(async move {
+                let mut sink = tokio::io::sink();
+                let _ = tokio::io::copy(&mut stderr, &mut sink).await;
+            });
+        }
+        Ok(ResidentProcess {
+            child,
+            stdin,
+            stdout: BufReader::new(stdout),
+            last_used: Instant::now(),
+        })
+    }
+
+    async fn exchange(
+        &self,
+        request: &WireRequest<'_>,
+    ) -> Result<WireResponse, SyntacticProviderError> {
         let mut payload =
             serde_json::to_vec(request).map_err(|error| SyntacticProviderError::Protocol {
                 detail: format!("failed to encode syntactic request: {error}"),
             })?;
         payload.push(b'\n');
-        stdin
-            .write_all(&payload)
-            .await
-            .map_err(|error| SyntacticProviderError::Process {
-                detail: format!("failed to write syntactic request: {error}"),
-            })?;
-        drop(stdin);
-        let output = tokio::time::timeout(self.timeout, child.wait_with_output())
-            .await
-            .map_err(|_| SyntacticProviderError::Timeout)?
-            .map_err(|error| SyntacticProviderError::Process {
-                detail: format!("failed to wait for syntactic sidecar: {error}"),
-            })?;
-        let stderr = sanitized_stderr(&output.stderr);
-        if !output.status.success() {
-            return Err(SyntacticProviderError::Process {
-                detail: format!("syntactic sidecar exited {}: {stderr}", output.status),
-            });
-        }
-        let stdout =
-            std::str::from_utf8(&output.stdout).map_err(|_| SyntacticProviderError::Protocol {
-                detail: "syntactic sidecar stdout is not UTF-8".into(),
-            })?;
-        let lines: Vec<_> = stdout
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .collect();
-        if lines.len() != 1 {
-            return Err(SyntacticProviderError::Protocol {
-                detail: format!("syntactic sidecar returned {} protocol lines", lines.len()),
-            });
-        }
-        let response: WireResponse =
-            serde_json::from_str(lines[0]).map_err(|error| SyntacticProviderError::Protocol {
-                detail: format!("invalid syntactic sidecar JSON: {error}"),
-            })?;
-        if response.protocol_version != PROTOCOL_VERSION
-            || response.request_id != request.request_id
+        let mut process = self.process.lock().await;
+        if process
+            .as_ref()
+            .is_some_and(|resident| resident.last_used.elapsed() >= self.idle_timeout)
+            && let Some(mut resident) = process.take()
         {
-            return Err(SyntacticProviderError::Protocol {
-                detail: "syntactic response version/request_id mismatch".into(),
-            });
+            let _ = resident.child.kill().await;
         }
-        if !response.ok {
-            return Err(map_wire_error(response.error));
+        let mut last_error = None;
+        for attempt in 0..2 {
+            if process.is_none() {
+                *process = Some(self.start_process().await?);
+            }
+            let resident = process.as_mut().expect("resident process initialized");
+            let exchange = async {
+                resident.stdin.write_all(&payload).await?;
+                resident.stdin.flush().await?;
+                let mut line = String::new();
+                let read = resident.stdout.read_line(&mut line).await?;
+                if read == 0 {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::UnexpectedEof,
+                        "syntactic sidecar closed stdout",
+                    ));
+                }
+                Ok::<String, std::io::Error>(line)
+            };
+            match tokio::time::timeout(self.timeout, exchange).await {
+                Ok(Ok(line)) => {
+                    resident.last_used = Instant::now();
+                    let response = decode_response(request, &line)?;
+                    self.schedule_idle_shutdown();
+                    return Ok(response);
+                }
+                Ok(Err(error)) => {
+                    last_error = Some(format!("syntactic sidecar exchange failed: {error}"));
+                }
+                Err(_) => {
+                    if let Some(mut failed) = process.take() {
+                        let _ = failed.child.kill().await;
+                    }
+                    return Err(SyntacticProviderError::Timeout);
+                }
+            }
+            if let Some(mut failed) = process.take() {
+                let _ = failed.child.kill().await;
+            }
+            if attempt == 1 {
+                break;
+            }
         }
-        Ok(response)
+        Err(SyntacticProviderError::Process {
+            detail: last_error.unwrap_or_else(|| "syntactic sidecar failed".into()),
+        })
     }
+
+    fn schedule_idle_shutdown(&self) {
+        let process = Arc::clone(&self.process);
+        let idle_timeout = self.idle_timeout;
+        tokio::spawn(async move {
+            tokio::time::sleep(idle_timeout).await;
+            let mut process = process.lock().await;
+            if process
+                .as_ref()
+                .is_some_and(|resident| resident.last_used.elapsed() >= idle_timeout)
+                && let Some(mut resident) = process.take()
+            {
+                let _ = resident.child.kill().await;
+            }
+        });
+    }
+}
+
+fn decode_response(
+    request: &WireRequest<'_>,
+    line: &str,
+) -> Result<WireResponse, SyntacticProviderError> {
+    let response: WireResponse =
+        serde_json::from_str(line.trim()).map_err(|error| SyntacticProviderError::Protocol {
+            detail: format!("invalid syntactic sidecar JSON: {error}"),
+        })?;
+    if response.protocol_version != PROTOCOL_VERSION || response.request_id != request.request_id {
+        return Err(SyntacticProviderError::Protocol {
+            detail: "syntactic response version/request_id mismatch".into(),
+        });
+    }
+    if !response.ok {
+        return Err(map_wire_error(response.error));
+    }
+    Ok(response)
 }
 
 #[async_trait]
@@ -278,14 +390,6 @@ fn next_request_id(operation: &str) -> String {
         "syntax-{operation}-{}",
         REQUEST_SEQUENCE.fetch_add(1, Ordering::Relaxed)
     )
-}
-
-fn sanitized_stderr(value: &[u8]) -> String {
-    let text = String::from_utf8_lossy(value);
-    text.chars()
-        .take(500)
-        .collect::<String>()
-        .replace(['\n', '\r'], " ")
 }
 
 fn map_wire_error(error: Option<WireError>) -> SyntacticProviderError {
@@ -479,5 +583,32 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(error, SyntacticProviderError::Timeout);
+    }
+
+    #[tokio::test]
+    async fn probe_and_analysis_reuse_one_resident_process() {
+        let provider = provider(PythonSyntacticKind::Spacy);
+        let request = request();
+        provider.probe(&request.language).await.unwrap();
+        let first = provider.resident_process_id().await.unwrap();
+        provider.analyze(&request).await.unwrap();
+        assert_eq!(provider.resident_process_id().await, Some(first));
+    }
+
+    #[tokio::test]
+    async fn idle_release_and_crash_recovery_restart_once() {
+        let provider =
+            provider(PythonSyntacticKind::Spacy).with_idle_timeout(Duration::from_millis(5));
+        let request = request();
+        provider.probe(&request.language).await.unwrap();
+        let first = provider.resident_process_id().await.unwrap();
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert_eq!(provider.resident_process_id().await, None);
+        provider.analyze(&request).await.unwrap();
+        let second = provider.resident_process_id().await.unwrap();
+        assert_ne!(first, second);
+        provider.terminate_resident_for_test().await;
+        provider.analyze(&request).await.unwrap();
+        assert_ne!(provider.resident_process_id().await, Some(second));
     }
 }

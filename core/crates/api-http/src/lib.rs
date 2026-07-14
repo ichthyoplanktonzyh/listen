@@ -39,6 +39,7 @@ mod routes;
 mod secret_store_keychain;
 mod sound_line;
 mod speech_jobs;
+mod syntax_capability;
 mod transcription;
 use m18::M18Coordinator;
 use phonetic_analysis::{CreatePhoneticJobRequest, PhoneticAnalysisCoordinator};
@@ -61,6 +62,9 @@ use routes::vocabulary::*;
 pub use secret_store_keychain::KeychainSecretStore;
 use sound_line::{CreateSoundLineJob, SoundLineCoordinator};
 use speech_jobs::{CreateSpeechBatchJob, SpeechBatchCoordinator};
+pub use syntax_capability::{
+    SyntaxCapabilityManager, SyntaxCapabilityStatus, SyntaxCapabilityView,
+};
 use transcription::{CreateJobRequest, TranscriptionCoordinator};
 
 static ERROR_SEQUENCE: AtomicU64 = AtomicU64::new(1);
@@ -79,6 +83,13 @@ pub struct ApiState {
     /// Optional Phase 3.9.2 syntax capability. The default has no runtime and
     /// returns the exact B/rule-SenseGroup fallback without touching Python.
     pub syntactic_consumers: Arc<SyntacticConsumerOrchestrator>,
+    /// Phase 3.9.3 optional resource lifecycle. This is separate from learning
+    /// assets and remains `not_installed` in tests/default composition.
+    pub syntax_capability: Arc<SyntaxCapabilityManager>,
+    /// Single-flight guard for rebuildable whole-track syntax batches. Cache
+    /// lookup is repeated after acquiring it, so concurrent UI/background
+    /// triggers cannot duplicate a provider batch.
+    pub syntax_analysis_lock: Arc<tokio::sync::Mutex<()>>,
     /// Phase 3.12: resolves provider credentials at dispatch time. Defaults to
     /// an in-memory store; the composition root injects the OS keychain via
     /// [`ApiState::with_secret_store`]. The secret never lives on `services`.
@@ -132,6 +143,8 @@ impl ApiState {
                 None,
                 SyntacticProductQualification::corrected_v2(),
             )),
+            syntax_capability: SyntaxCapabilityManager::unmanaged(),
+            syntax_analysis_lock: Arc::new(tokio::sync::Mutex::new(())),
             secret_store: Arc::new(InMemorySecretStore::new()),
         }
     }
@@ -143,6 +156,19 @@ impl ApiState {
     }
 
     pub fn with_syntactic_provider(mut self, provider: Arc<dyn SyntacticAnalysisProvider>) -> Self {
+        self.syntactic_consumers = Arc::new(SyntacticConsumerOrchestrator::new(
+            Some(provider),
+            SyntacticProductQualification::corrected_v2(),
+        ));
+        self
+    }
+
+    pub fn with_syntax_capability(
+        mut self,
+        manager: Arc<SyntaxCapabilityManager>,
+        provider: Arc<dyn SyntacticAnalysisProvider>,
+    ) -> Self {
+        self.syntax_capability = manager;
         self.syntactic_consumers = Arc::new(SyntacticConsumerOrchestrator::new(
             Some(provider),
             SyntacticProductQualification::corrected_v2(),
@@ -282,6 +308,39 @@ pub fn router(state: ApiState) -> Router {
         .route(
             "/v1/subtitles/{track_id}/syntactic-consumers",
             post(run_syntactic_consumers),
+        )
+        .route(
+            "/v1/subtitles/{track_id}/syntax-analysis",
+            get(track_syntax_analysis_status).post(run_track_syntax_analysis),
+        )
+        .route("/v1/syntax/capability", get(syntax_capability))
+        .route(
+            "/v1/syntax/capability/install",
+            post(install_syntax_capability),
+        )
+        .route(
+            "/v1/syntax/capability/cancel",
+            post(cancel_syntax_capability),
+        )
+        .route(
+            "/v1/syntax/capability/validate",
+            post(validate_syntax_capability),
+        )
+        .route(
+            "/v1/syntax/capability/enable",
+            post(enable_syntax_capability),
+        )
+        .route(
+            "/v1/syntax/capability/disable",
+            post(disable_syntax_capability),
+        )
+        .route(
+            "/v1/syntax/capability/uninstall",
+            post(uninstall_syntax_capability),
+        )
+        .route(
+            "/v1/syntax/capability/update",
+            post(update_syntax_capability),
         )
         .route(
             "/v1/subtitles/{track_id}/sense-group-analyses/summary",
