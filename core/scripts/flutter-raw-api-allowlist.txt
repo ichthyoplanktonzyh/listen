@@ -30,11 +30,9 @@ speech.dart:updatePhoneticFindingFeedback
 subtitles.dart:importSubtitle
 subtitles.dart:importLLTimeline
 subtitles.dart:importLLTimelineForMedia
-subtitles.dart:coldStartWords
 subtitles.dart:archiveSubtitle
 subtitles.dart:restoreSubtitle
 subtitles.dart:deleteSubtitle
-subtitles.dart:exportTrackLLTimeline
 subtitles.dart:searchOpenSubtitles
 timelines.dart:createTrackWordTimeline
 timelines.dart:activateWordTimeline
@@ -42,12 +40,6 @@ timelines.dart:generateChunkTimeline
 timelines.dart:activateChunkTimeline
 timelines.dart:archiveChunkTimeline
 timelines.dart:deleteChunkTimeline
-timelines.dart:trackSenseGroupAnalyses
-timelines.dart:trackSenseGroupAnalysisSummaries
-timelines.dart:generateSenseGroupAnalysis
-timelines.dart:activateSenseGroupAnalysis
-timelines.dart:archiveSenseGroupAnalysis
-timelines.dart:deleteSenseGroupAnalysis
 timelines.dart:activatePhoneTimeline
 timelines.dart:archivePhoneTimeline
 timelines.dart:deletePhoneTimeline

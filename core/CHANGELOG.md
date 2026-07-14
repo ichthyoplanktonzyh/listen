@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-14 17:44 CST: 继续压缩 Flutter raw-return allowlist：cold-start candidates、
+  sense-group analysis/summary/lifecycle 与 LLTimeline export 改为 LocalApi typed decoding，
+  controller/widget 删除 wire parsing。补齐 `LLTimelineDocument` 及其 export children 的
+  `toJson`，同一个领域对象同时服务 UI 与无损 JSON 导出；相关 43 tests、timeline round-trip、
+  analyze 与 architecture guard 全绿，allowlist 再减少 8 项。
+
 - 2026-07-14 17:34 CST: Phase 2.24 Flutter typed-resource 第二批：字幕轨道、词时间、
   word/chunk/phone timeline summaries、pronunciation provider/analysis 与 phonetic analysis
   在 LocalApi 边界解码，controller/coordinator/event flow 删除对应 wire-shape knowledge。

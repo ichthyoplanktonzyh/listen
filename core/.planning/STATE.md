@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-14T17:34:00.000+08:00"
+last_updated: "2026-07-14T17:44:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-14 17:34 CST
-> 更新原因：Phase 2.24 继续收紧 Flutter typed-client 边界并建立 raw-return allowlist。
+> 最后更新：2026-07-14 17:44 CST
+> 更新原因：Phase 2.24 继续压缩 Flutter raw-return allowlist 与调用侧 wire knowledge。
 
 ## 当前位置
 
@@ -29,8 +29,9 @@ last_updated: "2026-07-14T17:34:00.000+08:00"
   落地，dictionary/recording modules 随后完成；Flutter diagnosis/lexical/syntax/timeline 等
   caller clusters 已 typed 化；subtitle/timing/summary/pronunciation/phonetic 第二批也已迁移。
   Rust/Python locality 与架构守卫已完成，剩余 LocalApi raw-return 已形成禁止净新增的
-  allowlist；pronunciation/timing cluster 也已迁入窄依赖 use-case module。下一 slice 继续审定
-  AppServices cluster 与 allowlist，之后做严格全量 closeout。
+  allowlist，并已继续移除 cold-start、sense-group、LLTimeline export 8 项；pronunciation/
+  timing cluster 也已迁入窄依赖 use-case module。下一 slice 继续审定 AppServices cluster 与
+  job/command DTO allowlist，之后做严格全量 closeout。
 - **2026-07-14 大文件解耦治理（chore/large-file-decomposition）**：main.dart Coordinator
   抽取 S1–S9 全部完成（2578 → ~1558 行，8 个 coordinator + 3 个 flows 文件，全部配隔离
   测试）；删除 46 方法 fat `SubtitleRepository`（消费侧窄 trait 原已存在，砍掉 4 组桥接
