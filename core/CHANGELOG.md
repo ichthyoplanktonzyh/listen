@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-14 20:03 CST: 建立 Phase 3.9.4 SenseGroup UX Unification（分支
+  `phase/3.9.4-sensegroup-ux-unification`）。核实语义分组四层断链（syntax 分析不落
+  SQLite、syntax-aware 生成入口为死参数、Flutter 无生成/激活调用方、加载只认 active），
+  写入 `3.9.4-CONTEXT.md` 决策 D1–D6（时间戳走 ADR 0016 投影、持久化直接映射
+  batch、幂等激活、cache-hit 补偿、Flutter 触发文本回退、编排收在 application）与
+  `3.9.4-PLAN.md` Slice 0–4；上游桌面方案文档归档至 phase design-notes。
+
 - 2026-07-14 20:50 CST: Phase 2.24 严格收口。AppServices 变为 composition-only，三个
   深模块与六个窄模块承接用例；Flutter raw return 约 97→1，production Rust wildcard 归零，
   Python production entry 1433→262 行。最终 Rust 608、Flutter 348、Python 11、contracts 5
