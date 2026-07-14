@@ -1,6 +1,6 @@
 # LLPlayerNext System Architecture
 
-Last updated: 2026-07-11. Reflects Phase 3.8 recording-asset backend foundation.
+Last updated: 2026-07-13. Reflects Phase 3.9.2 optional shared syntax product composition.
 
 ## Overview
 
@@ -22,6 +22,7 @@ api-http
         |       +--> speech-analysis     # ASR timing/chunk/phone analysis engines
         |
         +--> dictionary-provider         # application provider adapter
+        +--> syntactic-provider          # isolated Python JSONL syntax adapters
         +--> persistence-sqlite          # application repository adapter
 ```
 
@@ -49,6 +50,10 @@ application use cases and provider/repository boundaries.
 - `TimelineMetrics` and `ChunkEvidence` wrap timeline JSON extension objects
   while preserving object-shaped API/storage JSON.
 - `DomainError` is the shared validation error type.
+- Phase 3.9.1 adds a rebuildable `SyntacticAnalysis` artifact contract with
+  provider/runtime/model provenance, Unicode-scalar char spans, explicit
+  parser-token ↔ SubtitleToken many-to-many alignment, UD-compatible fields,
+  tree validation, coverage gating, and provider/model/config-isolated identity.
 
 ### `application`
 
@@ -88,6 +93,24 @@ application use cases and provider/repository boundaries.
   `ListeningInboxItem`, list active/archived Inbox items, process them into
   review items / micro-intensive practice items / favorite or dismissed
   archival outcomes, and append durable listening events.
+- `SyntacticAnalysisProvider` returns content/provenance drafts only. Application
+  assigns artifact identity and validates the draft against the exact source
+  sentence/token snapshot before a consumer may activate syntax-gated behavior.
+- `SyntacticConsumerOrchestrator` probes once and analyzes a subtitle track in
+  one batch, then finalises each sentence independently. B, SenseGroup, and the
+  dependency matcher share the same per-sentence artifact; a bad sentence
+  falls back without invalidating its siblings.
+
+### `syntactic-provider`
+
+- Owns the provider-neutral process adapter for research Stanza and spaCy
+  candidates; neither Python runtime nor model is linked into the consumer app.
+- Uses a versioned one-request/one-response JSONL boundary with stdout reserved
+  for protocol data and stderr reserved for diagnostics.
+- Reports runtime/model/language capability honestly and maps closed failure
+  classes without changing the existing Reference B or SenseGroup fallback.
+- Produces application drafts only. It cannot populate Reference C, replace
+  `ChunkTimeline`, or mint Construction canonical identity.
 
 ### `api-http`
 
@@ -186,7 +209,7 @@ Owns analysis engines, not application contracts:
 | `chunk_partition` | word timeline to learning chunk partition |
 | `phonetic_alignment` | phoneme sequence alignment |
 | `phonetic_findings` | reductions, elision, linking findings |
-| `connected_speech_rules` | text-side Reference B prediction, including A written-word groups → B audible-group transformations |
+| `connected_speech_rules` | Reference B prediction with explicit `text_heuristic` / `syntax_model` provenance; valid syntax is additionally gated by an external provider qualification decision, and missing/unqualified syntax is exact fallback |
 | `sound_analysis` | learning-phone, syllable, phrase, connected-speech and WordTimeline-first RhythmFrame generation with optional word acoustic prominence cues |
 | `learned_prosodic_provider` | rule-based prosodic analysis |
 | `rich_acoustic_evidence` | acoustic evidence aggregation |
@@ -194,6 +217,18 @@ Owns analysis engines, not application contracts:
 The pronunciation provider uses CMUdict when available and a deterministic
 `fallback-v2` G2P for OOV words. Fallback stress is intentionally conservative:
 one primary fallback vowel, later fallback vowels unstressed.
+
+### Optional syntax capability (Phase 3.9.3)
+
+- `SyntaxCapabilityManager` at the HTTP composition root owns a filesystem-backed seven-state lifecycle,
+  staging install, delivery validation and cache deletion. It does not enter application/domain authority.
+- spaCy runs behind one lazy resident JSONL sidecar. Probe and analyze serialize through the same process;
+  the adapter releases it after idle, stops it on disable/uninstall and restarts once after a crash.
+- `/v1/subtitles/{track}/syntax-analysis` performs one whole-track batch with per-sentence validation and
+  a single-flight, rebuildable cache. Fingerprints bind subtitle/token/language/profile and complete delivery
+  identity; stale results are observable and never promoted to learning evidence.
+- Flutter settings own the explicit install lifecycle. Ready capability plus an active uncached track triggers
+  non-blocking background analysis; absent capability produces no prompt and leaves all fallback paths intact.
 
 ### Flutter Desktop
 
@@ -349,6 +384,41 @@ complete shadowing -> PracticeAttempt(result=completed, score=null)
 subtitle track -> word timeline -> rhythm frames / chunk timeline / phone timeline
   -> SpeechEnhancementWorkflowController -> Flutter timeline/pronunciation model
 ```
+
+### Shared Syntactic Analysis (Phases 3.9.1–3.9.2)
+
+```text
+SubtitleSentence + SubtitleToken snapshot
+  -> SyntacticAnalysisProvider draft
+  -> application identity + domain validator
+  -> validated rebuildable artifact + separate provider qualification gate
+       -> Reference B / syntax-aware SenseGroup / dependency matcher
+provider missing, unqualified, or artifact not activatable
+  -> existing conservative B + punctuation_length_rule_v1
+```
+
+Phase 3.9.2 exposes this composition through
+`POST /v1/subtitles/{track_id}/syntactic-consumers`. Phase 3.9.3 replaces the
+developer environment-variable activation with an App-managed optional install
+under Application Support plus `/v1/syntax/capability/*` lifecycle routes;
+absent or disabled capability never starts Python.
+Qualification is per consumer query: spaCy artifacts, B going-to/used-to/have-to,
+SenseGroup, and matcher are activated, while B want-to stays on its exact text
+fallback because basic dependencies do not resolve its wh ambiguity reliably.
+
+The syntactic artifact is not a learning asset,
+does not replace ChunkTimeline, and cannot supply audio-backed Reference C.
+Phase 3.9.3 may persist it only in a deletable fingerprint cache; it never gains
+SQLite, learning-evidence, or canonical identity authority.
+Syntax-aware SenseGroup is a distinct `syntax-aware-sense-group/v1` analysis
+run: dependency subtrees propose boundaries/head/NP-PP-clause labels, while
+punctuation, protected phrases, min/max words and target teaching granularity
+remain authoritative. Rule and syntax runs coexist under the existing lifecycle.
+The dependency matcher is likewise provider-neutral and returns only rebuildable
+subtitle-span candidates with matcher/artifact provenance and token bindings. It
+has no Construction canonical ID, occurrence ID, capability projection, or
+persistence authority; a later curated Construction layer must review and link
+any candidate.
 
 ### LLTimeline Import/Export
 

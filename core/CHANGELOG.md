@@ -2,6 +2,178 @@
 
 ## Unreleased
 
+- 2026-07-13 22:25 CST: Phase 3.9.3 完整收口并冻结。最终 `jsonl-v2` 修复带前导空格字幕的
+  spaCy SPACE token/head 重映射，delivery identity 现同时绑定 provider/requirements/sidecar/model；
+  真实 244 cue App 路径为 243 analyzed + 1 `invalid_sentence` 隔离，首次 rebuild 2.10s、同 fingerprint
+  hot hit 0.11s。实测完成 clean install、restart persistence、stale/update、模型损坏 partial/恢复、
+  disable/enable、cancel/retry 和 uninstall；取消安装改为终止完整 venv/ensurepip process group，确认
+  staging 零残留。Rust workspace/Clippy/contracts/Python、Flutter analyze/test、release backend 与 macOS
+  build 全绿；QUALIFICATION、REAL-MEDIA-QA、codebase、STATE、PLAN、CLOSEOUT 已同步。
+
+- 2026-07-13 21:54 CST: Phase 3.9.3 交付 App 内可选句法 capability 竖切片。后端新增持久化
+  `not_installed/downloading/ready/partial/failed/stale/disabled` 状态、版本化 Application Support
+  安装目录和 install/cancel/retry(update)/verify/enable/disable/uninstall HTTP 路径；fully pinned
+  runtime/model 在 staging 校验后原子发布，基础 bundle 仍不含 Python/runtime/model。spaCy JSONL
+  adapter 改为 probe/analyze 共享长驻进程，支持主动 idle release、崩溃单次恢复和 lifecycle shutdown。
+  整轨分析新增 subtitle/token/language/model/config fingerprint、single-flight、逐句 partial 隔离、cache
+  hit/stale/force rebuild；Flutter 设置页提供完整动作、进度/错误/当前轨道状态，安装完成或打开未分析
+  轨道时静默后台启动，相同 fingerprint 复用。新增 Rust/HTTP/Dart DTO/transport/widget tests 与 OpenAPI；
+  未安装不启动 Python、不弹窗、不阻塞字幕或播放，B `want_to`/C/ChunkTimeline/Construction 边界未变。
+
+- 2026-07-13 21:33 CST: 新建 Phase 3.9.3 Syntax Capability Delivery & Lifecycle，基于冻结的
+  3.9.2 最终提交 `71be2c20` 建立独立分支与 phase 文档。计划把已资格 spaCy Provider 补成
+  App 内可安装/校验/取消/重试/更新/停用/卸载的可选能力，并交付持久状态机、长驻 sidecar、
+  整轨 fingerprint cache、stale/rebuild、自动后台分析和 Flutter 完整用户路径；未安装零打扰、
+  base bundle +0B、B/want-to/C/ChunkTimeline/Construction identity 边界保持不变。
+
+- 2026-07-13 19:30 CST: Phase 3.9.2 Syntax Provider Product Activation 收口。corrected v2
+  holdout、逐 query qualification、spaCy opt-in lifecycle、单 batch/逐句共享编排、真实媒体与
+  missing/corrupt/invalid/timeout 降级全部通过；contracts、句法相关 crates 与 Rust workspace
+  全绿。最终裁决为 spaCy artifact + B `going_to`/`used_to`/`have_to` + SenseGroup + matcher
+  qualified，B `want_to` fallback-only；base bundle +0B，C/ChunkTimeline/Construction identity
+  边界冻结。PLAN/STATE/CLOSEOUT 已更新，phase 转 COMPLETED。
+
+- 2026-07-13 19:22 CST: Phase 3.9.2 激活可选 spaCy 共享句法产品 capability。application
+  新增单次 probe/batch、逐句 finalise 的 consumer orchestrator；同一 artifact ID 供已资格
+  B（`going_to` / `used_to` / `have_to`）、syntax-aware SenseGroup 与 dependency candidate
+  matcher 共用，`want_to` 继续精确 text fallback。新增 HTTP/OpenAPI composition、未配置/timeout/
+  坏树逐句隔离测试；base 路径不启动 Python。fresh opt-in 安装以 fully pinned spaCy 3.8.13 +
+  `en_core_web_sm` 3.8.0 实测通过 probe 与 development v2，clean install 162,250,752 bytes，
+  base bundle +0B；runtime/model/training-data 许可与安装/刷新/停用/卸载分别审计。模型 identity
+  排除非内容 `__pycache__/*.pyc` 后在 research/fresh venv 稳定一致；真实媒体 244 cues 中唯一
+  双 root 句单独 fallback，不影响其余句，句法仍不进入 C、不替代 ChunkTimeline、不铸造
+  Construction identity。
+
+- 2026-07-13 18:57 CST: Phase 3.9.2 Slice 0 建立 corrected syntax qualification v2。冻结旧 v1
+  历史，新增 development/validation v2、独立 digest 与 scorer，把 attachment gold、产品歧义
+  policy 和 artifact validity 分层，并改为逐 consumer query 授权。spaCy 开发/锁定验证均达到
+  100% lexical/exact mapping、零 silent/tree issue；`going_to`、`used_to`、`have_to` 各自 100%
+  qualified。basic dependency 无法稳定区分 want-to wh subject/object，且锁定歧义例 raw allow，
+  因而 `want_to` 明确为 `fallback_only`，不能再整体否决 artifact，也不能整体放行 provider。
+
+- 2026-07-13 18:45 CST: 新建 Phase 3.9.2 Syntax Provider Qualification Correction and Product
+  Activation。纠正 3.9.1 将 `Which team do you want to win?` 的保守 block policy 当作唯一
+  parser attachment gold 的评估错误；冻结旧报告，另建 v2 subject/object 清晰最小对照和
+  ambiguous-abstain gate。首选 spaCy 作单一产品候选；若修正版资格通过，则在不让 Python/model
+  成为基础产品硬依赖的前提下，让 B、syntax-aware SenseGroup 与 Construction candidate matcher
+  共享同一 validated artifact，并保留 C/ChunkTimeline/Construction identity 边界和无模型 fallback。
+
+- 2026-07-13 16:53 CST: Phase 3.9.1 Shared Syntactic Analysis Provider 收口。完整 contracts 与
+  Rust workspace 测试通过；PLAN/STATE/CLOSEOUT 记录负向资格结论：Stanza/spaCy 共享中立契约、
+  token mapping、sidecar failure taxonomy、B/SenseGroup consumer 与 Construction candidate
+  matcher 均已验证，但两个候选都因锁定 wh-extraction 高风险假阳性不得激活。模型、runtime、
+  treebank/training provenance 分层审计完成；无模型产品路径保持原 B 与 rule SenseGroup，句法
+  不进入 C、不替代 ChunkTimeline、不铸造 Construction identity。
+
+- 2026-07-13 16:48 CST: Phase 3.9.1 Slice 6 建立 Construction dependency matcher seam 与真实
+  媒体 QA。matcher 只在 qualified + activatable artifact 上输出带 source artifact、subtitle
+  token span 与 bindings 的可重建候选，类型和序列化守卫证明不会铸造 Construction canonical/
+  occurrence identity 或 capability。以 owner 本地 244 cue / 1773 word 新闻字幕运行 Stanza/
+  spaCy：两者 lexical mapping 100%、exact span 98.76%、零静默错位且刷新确定；Stanza 零树错误，
+  spaCy 在一个口语残句产生双 root 并被 validator 闭合拒绝。生产 SenseGroup 对真实 Stanza
+  输出保持教学粒度和 `New York City` 多词短语完整性；missing/corrupt/invalid sidecar 均不生成
+  draft。报告不复制字幕正文，未资格候选仍不接入产品，B/SenseGroup 保留原 fallback，C 与
+  ChunkTimeline 未改动。
+
+- 2026-07-13 16:36 CST: Phase 3.9.1 Slice 5 新增独立 syntax-aware SenseGroup Provider。
+  新增 `syntax-aware-sense-group/v1` / `dependency_teaching_partition_v1`，与既有
+  `rule-based-sense-group/v1` 分开 fingerprint、持久化和 candidate/active/archive 生命周期；
+  metrics 引用 syntactic artifact/descriptor 并显式记录 `chunk_timeline_dependency=false`。
+  dependency clause/conj/subordinator/PP subtree 只提出 boundary/head/NP-PP-clause label，强标点、
+  phrase candidate 完整性、min 2/hard max 8 与典型 3–5 组教学粒度仍作最终裁决；错误 snapshot
+  或低 coverage 精确返回原 rule partition。新增 4 项 syntax partition fixture 和 rule/syntax
+  双 run 持久化回归；未资格 Provider 在 application gate 被拒绝，现有 HTTP 默认生成路径保持
+  rule Provider，ChunkTimeline 代码与生命周期均未改动。
+
+- 2026-07-13 16:27 CST: Phase 3.9.1 Slice 4 建立 Reference B 句法 consumer seam。
+  `ConnectedSpeechContext` 将 validator activatable 与外部 provider qualification 设为两个独立
+  gate；未资格/缺失 artifact 与原 `predict_default_connected` 输出逐项相同。本阶段只把锁定
+  验证通过的 future/motion `going to`、habitual/state（含 `get used to`）和 `have to do with`
+  idiom 用中立 UPOS/lemma/features 映射作保守门控；失败的 `want to` wh-extraction 仍固定走
+  现有 text heuristic。B evidence 区分 `prediction_provenance:syntax_model`（带 artifact ID）
+  与 `text_heuristic`，但 status 仍为 `PossibleByRule`，不冒充 C/audio evidence。新增 5 项
+  syntax consumer/fallback 回归；speech-analysis 175 单元 + 12 集成测试全通过。
+
+- 2026-07-13 16:22 CST: Phase 3.9.1 Slice 3 完成冻结评估与负资格判定。
+  开发集仅用于 neutral query/mapping 调整；随后按预登记 digest 对验证集每个候选只运行一次。
+  Stanza 1.13.0/en_ewt 与 spaCy 3.8.13/en_core_web_sm 3.8.0 均达到 100% lexical/exact
+  mapping、零静默错位/树错误，并在 future/motion `going to`、habitual/state `used to`、
+  obligation/idiom `have to` 对上满分；但两者都在 multi-token wh-extraction
+  `Which team ... want to win` 产生一项高风险 `wanna` 假阳性，依锁定零容忍 gate 判为
+  `not_qualified`，未添加 validation-specific 特例。资源 gate 均通过（Stanza/spaCy cold p95
+  2.63/1.21s、warm p95 106.4/4.1ms、RSS 0.86/0.32GB、产品包 +0B）；runtime/model/
+  treebank 分层许可证、精确 installed-tree checksum/size 和 raw case reports 已审计，Stanza
+  传递训练数据 provenance 不完整仍独立保持 research-only。
+
+- 2026-07-13 16:10 CST: Phase 3.9.1 Slice 2 新增隔离式 Python 句法研究 Provider。
+  新建 `syntactic-provider` Rust crate 与版本化 JSONL sidecar，Stanza/spaCy 均只输出同一
+  provider-neutral draft；进程边界保持 stdout 纯协议、stderr 诊断，lazy runtime/model
+  探测和 runtime missing/model missing/corrupt/unsupported language/invalid output/timeout
+  闭合失败不会生成 artifact。token 映射覆盖 Unicode scalar offset、缩约 N:1、缩写 1:N、
+  normalized overlap 与显式 unaligned；Stanza/spaCy 原生标签在适配器内归一化，产品包不
+  链接 Python/model。新增 opt-in 隔离 venv、研究资产分层许可证 manifest、8 项 Python
+  sidecar contract 与 4 项 Rust process contract，并纳入全局 contract validator。
+
+- 2026-07-13 15:56 CST: Phase 3.9.1 Slice 1 建立 provider-neutral Rust 契约。
+  domain 新增版本化 `SyntacticAnalysis`、完整 provider/runtime/model/checksum provenance、
+  Unicode scalar char span 多对多映射、UD 字段、source/config/model 隔离 fingerprint，以及
+  span/coverage/HEAD/单 root/无环/sentence ownership validator；application 新增 draft-only
+  `SyntacticAnalysisProvider`、capability 与 closed error taxonomy，并由 server-side finalizer
+  铸造 artifact identity、拒绝 invalid provider 输出。fake provider、缩约 N:1、低 coverage
+  abstain、坏 span/head/cycle 和模型升级重算测试通过；本 slice 不增加持久化或 parser runtime。
+
+- 2026-07-13 14:21 CST: Phase 3.9.1 Slice 0 建立共享句法 Provider 的可执行研究边界。
+  新增 ADR 0023，锁定 provider-neutral、可重建 artifact、Unicode scalar half-open char span
+  1:N/N:1 token 映射、closed validation/abstain 降级、隔离 provider/runtime/model/config 的缓存
+  身份，以及不得填充 C、替代 ChunkTimeline 或铸造 Construction identity 的边界。新增 24 条
+  开发/锁定验证歧义 fixture（含真实 CNN10 字幕短摘录与受控最小对照）、4 条 mapping contract
+  fixture 和无 parser 依赖的 validator；预登记 alignment/关键歧义/失败/延迟/内存/体积 gate，
+  并分别审计 Stanza/spaCy runtime、model weights 与 UD/treebank 许可，未知项保持 research-only。
+
+- 2026-07-13 13:59 CST: 新建 Phase 3.9.1 Shared Syntactic Analysis Provider。确定以
+  UD/CoNLL-U 语义建立共享、可重建的 token-aligned 句法 artifact，通过现有 Python sidecar
+  模式先评估 Stanza/spaCy，供 Reference B、SenseGroup 与 Construction 共用；明确模型缺席
+  时保留现有保守 B 与标点/长度 SenseGroup，句法结果不得填充 C、替代 ChunkTimeline 或铸造
+  Construction canonical identity。新增 CAP-011/012，锁定 char-span 1:N/N:1 token 映射、
+  开发/验证集分离、真实字幕歧义评估及代码/runtime/model/treebank 分层许可证审计。
+
+- 2026-07-13 13:25 CST: Phase 3.9 英语语流规则第二批。Reference B 规则源升级为 v3；Phrase
+  rule 新增上下文门控，不再把字面相邻词无条件缩约：`going to` 只接受动词补语候选并阻断
+  专名/限定词/常见地点歧义，`want to` 对 wh-extraction 歧义保守缺席，`used to` 区分
+  habitual 与 `be used to + NP/gerund`。新增 `gotta`、`hafta/hasta`、`had to`、habitual
+  `used to`、`supposed to/ought to`、安全层 `trying to`，以及
+  `lemme/gimme/kinda/sorta/outta/lotta/lotsa/dunno` 的完整 A→B 音素结构；weak form 补标点、话语
+  起始 `/h/`、`the + vowel` 阻断。新增正例、motion/NP/疑问抽取/形容词 used-to 等反例和
+  UI 结构断言；speech-analysis 170 项测试全通过。规则与来源同步登记到 3.9 catalog。
+  `connected_speech_rules.rs` 达到规模线后，将构式/弱读阻断提取到 `context.rs`（主文件回落
+  到 1403 行），为下一批音节规则保留清晰模块边界。
+
+- 2026-07-13 12:17 CST: Phase 3.9 第 4 项启动：新增 General American 英语语流完整规则目录，
+  按 `B-safe` / `B-context` / `C-only` / `dialect` 记录音素环境、阻断条件、口音范围、来源和
+  实现状态，明确“全部纳入目录”不等于把声学渐变现象伪造成 B。首批 B 扩展：硬编码
+  `did you` 改为通用 `/t,d,s,z/ + /j/` coalescence，并修正输出为 `/dɪdʒu/`；新增 `/n/`
+  在双唇/软腭音前的部位同化、V#V `[j]/[w]` 连接、跨词弱功能词前的美式 flap；词内 flap
+  加入“重读元音后、非重读元音前”条件，`/t,d/` 删除收紧为词尾辅音簇 + 辅音环境。新增
+  标点/强边界阻断，避免跨逗号等标点触发 linking/assimilation/deletion；新增规则环境与
+  反例测试，speech-analysis 全部 165 项回归通过。
+
+- 2026-07-13 10:57 CST: 修复长句 A/B/C 结构带后半句不可见。新增三视图共用的跟随式
+  sentence viewport：紧凑模式按当前 token/播放节点自动横向定位，左右渐隐提示仍有内容；
+  展开按钮切换为可换行、可纵向滚动的完整句结构。A 跟随单词，B 同时跟随规则跨度与普通
+  文本跨度，C 跟随当前音频节点；切换视图不再只能看到句首。新增长句第 11 节点定位和完整
+  展开回归测试，中英 tooltip 同步补齐。
+
+- 2026-07-13 10:47 CST: 修正 Rhythm C 证据门控。播放器不再把 text/WordTimeline 派生的
+  RhythmFrame 作为“预测 C”显示；C 现在同时要求当前句已加载音素，且 frame 自身
+  `phone_evidence_coverage > 0`。无音素证据时只提供当前句/全轨音频分析入口，A/B 仍可正常
+  使用。新增四象限回归测试锁定“有 frame 无 phones”“有 phones 无 frame phone evidence”
+  均不得显示 C。
+
+- 2026-07-13 10:30 CST: 修复导入过 LLTimeline 后刷新听感结构仍显示不可用。Flutter 资源
+  加载不再用带 artifacts 的旧文档整体覆盖后端新导出文档；现在保留新导出的 WordTimeline
+  派生 RhythmFrame，仅把旧 artifacts 合并回来。新增回归测试覆盖“旧文档无 rhythm frames、
+  新导出有 rhythm frames”的真实 QA 场景。
+
 - 2026-07-13 10:12 CST: 将 Phase 3.9 A/B/C audible-structure 两批实现合入已完成
   Phase 3.12 的 main；保留 3.12 收口事实，并将 3.9 状态切换为主工作区真实媒体 QA 与
   增量修正。后续工作从 main 新建专用阶段分支，不在 main 直接开发。

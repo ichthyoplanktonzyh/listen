@@ -1,8 +1,17 @@
-use domain::{PhraseCandidate, SenseGroupSource, SubtitleSentence, SubtitleTokenKind};
+use std::collections::HashSet;
+
+use domain::{
+    PhraseCandidate, SenseGroupSource, SubtitleSentence, SubtitleTokenKind,
+    SyntacticSentenceAnalysis,
+};
+use serde::{Deserialize, Serialize};
 
 pub const PROVIDER_ID: &str = "rule-based-sense-group";
 pub const PROVIDER_VERSION: &str = "v1";
 pub const ALGORITHM: &str = "punctuation_length_rule_v1";
+pub const SYNTAX_PROVIDER_ID: &str = "syntax-aware-sense-group";
+pub const SYNTAX_PROVIDER_VERSION: &str = "v1";
+pub const SYNTAX_ALGORITHM: &str = "dependency_teaching_partition_v1";
 
 pub struct SenseGroupPartitionConfig {
     pub min_words: usize,
@@ -22,18 +31,57 @@ impl Default for SenseGroupPartitionConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SenseGroupSpan {
     pub start_token_index: u32,
     pub end_token_index: u32,
     pub sources: Vec<SenseGroupSource>,
     pub confidence: f32,
+    pub label: Option<String>,
+    pub head_token_index: Option<u32>,
 }
 
 pub fn partition_sentence(
     sentence: &SubtitleSentence,
     phrase_candidates: &[PhraseCandidate],
     config: &SenseGroupPartitionConfig,
+) -> Vec<SenseGroupSpan> {
+    partition_sentence_internal(sentence, phrase_candidates, config, &HashSet::new())
+}
+
+pub fn partition_sentence_with_syntax(
+    sentence: &SubtitleSentence,
+    phrase_candidates: &[PhraseCandidate],
+    config: &SenseGroupPartitionConfig,
+    syntax: &SyntacticSentenceAnalysis,
+) -> Vec<SenseGroupSpan> {
+    if syntax.sentence_id != sentence.id
+        || syntax.source_text != sentence.display_text
+        || syntax.source_char_count != sentence.display_text.chars().count() as u32
+        || syntax.lexical_alignment_coverage < domain::DEFAULT_MIN_LEXICAL_ALIGNMENT_COVERAGE
+    {
+        return partition_sentence(sentence, phrase_candidates, config);
+    }
+    let boundaries = syntactic_boundary_candidates(sentence, syntax);
+    let mut spans = partition_sentence_internal(sentence, phrase_candidates, config, &boundaries);
+    for span in &mut spans {
+        if let Some((label, head_token_index)) = syntactic_span_shape(syntax, span) {
+            span.label = label;
+            span.head_token_index = head_token_index;
+            if !span.sources.contains(&SenseGroupSource::DependencyParse) {
+                span.sources.push(SenseGroupSource::DependencyParse);
+            }
+            span.confidence = span.confidence.max(0.72);
+        }
+    }
+    spans
+}
+
+fn partition_sentence_internal(
+    sentence: &SubtitleSentence,
+    phrase_candidates: &[PhraseCandidate],
+    config: &SenseGroupPartitionConfig,
+    syntax_boundaries: &HashSet<usize>,
 ) -> Vec<SenseGroupSpan> {
     let words: Vec<&domain::SubtitleToken> = sentence
         .tokens
@@ -51,6 +99,8 @@ pub fn partition_sentence(
             end_token_index: words.last().unwrap().index,
             sources: vec![SenseGroupSource::Rule],
             confidence: 0.5,
+            label: None,
+            head_token_index: None,
         }];
     }
 
@@ -94,6 +144,18 @@ pub fn partition_sentence(
             }
         }
 
+        let remaining_words = words.len() - word_pos - 1;
+        if syntax_boundaries.contains(&word_pos)
+            && !in_phrase
+            && word_count_in_group >= config.min_words
+            && remaining_words >= config.min_words
+            && boundaries.len() + 1 < config.target_groups_per_sentence
+        {
+            boundaries.push((word_pos, vec![SenseGroupSource::DependencyParse]));
+            word_count_in_group = 0;
+            continue;
+        }
+
         if word_count_in_group >= config.soft_max_words {
             if punct_between.is_some() {
                 boundaries.push((word_pos, vec![SenseGroupSource::Punctuation]));
@@ -123,11 +185,18 @@ pub fn partition_sentence(
                 span_sources.push(SenseGroupSource::Rule);
             }
         }
+        let confidence = if span_sources.contains(&SenseGroupSource::DependencyParse) {
+            0.72
+        } else {
+            0.5
+        };
         spans.push(SenseGroupSpan {
             start_token_index: span_start,
             end_token_index: span_end,
             sources: span_sources,
-            confidence: 0.5,
+            confidence,
+            label: None,
+            head_token_index: None,
         });
         start_word_pos = boundary_word_pos + 1;
     }
@@ -147,10 +216,109 @@ pub fn partition_sentence(
             end_token_index: span_end,
             sources,
             confidence: 0.5,
+            label: None,
+            head_token_index: None,
         });
     }
 
     spans
+}
+
+fn syntactic_boundary_candidates(
+    sentence: &SubtitleSentence,
+    syntax: &SyntacticSentenceAnalysis,
+) -> HashSet<usize> {
+    let word_indices = sentence
+        .tokens
+        .iter()
+        .filter(|token| token.kind == SubtitleTokenKind::Word)
+        .map(|token| token.index)
+        .collect::<Vec<_>>();
+    let mut boundaries = HashSet::new();
+    for token in &syntax.tokens {
+        let relation = token.dependency_relation.as_str();
+        let starts_unit = matches!(relation, "advcl" | "ccomp" | "parataxis" | "acl:relcl")
+            || relation == "conj"
+            || relation.starts_with("conj:");
+        let mark_starts_clause = relation == "mark"
+            && token
+                .head_parser_token_index
+                .and_then(|head| syntax.tokens.get(head as usize))
+                .is_some_and(|head| matches!(head.dependency_relation.as_str(), "advcl" | "ccomp"));
+        let case_starts_pp = relation == "case"
+            && token
+                .head_parser_token_index
+                .and_then(|head| syntax.tokens.get(head as usize))
+                .is_some_and(|head| {
+                    head.dependency_relation == "obl"
+                        || head.dependency_relation.starts_with("obl:")
+                        || head.dependency_relation == "nmod"
+                        || head.dependency_relation.starts_with("nmod:")
+                });
+        if !starts_unit && !mark_starts_clause && !case_starts_pp {
+            continue;
+        }
+        let Some(first_word_index) = token
+            .subtitle_token_indices
+            .iter()
+            .filter_map(|index| word_indices.iter().position(|word| word == index))
+            .min()
+        else {
+            continue;
+        };
+        if first_word_index > 0 {
+            boundaries.insert(first_word_index - 1);
+        }
+    }
+    boundaries
+}
+
+#[cfg(test)]
+mod syntax_tests;
+
+fn syntactic_span_shape(
+    syntax: &SyntacticSentenceAnalysis,
+    span: &SenseGroupSpan,
+) -> Option<(Option<String>, Option<u32>)> {
+    let inside = syntax
+        .tokens
+        .iter()
+        .filter(|token| {
+            token
+                .subtitle_token_indices
+                .iter()
+                .any(|index| *index >= span.start_token_index && *index <= span.end_token_index)
+        })
+        .collect::<Vec<_>>();
+    let head = inside.iter().copied().find(|token| {
+        token.head_parser_token_index.is_none()
+            || token.head_parser_token_index.is_some_and(|head| {
+                !inside
+                    .iter()
+                    .any(|candidate| candidate.parser_token_index == head)
+            })
+    })?;
+    let starts_with_case = inside
+        .first()
+        .is_some_and(|token| token.dependency_relation == "case" || token.upos == "ADP");
+    let label = if starts_with_case
+        || head.dependency_relation == "obl"
+        || head.dependency_relation.starts_with("obl:")
+    {
+        Some("PP".into())
+    } else if matches!(head.upos.as_str(), "VERB" | "AUX") {
+        Some("clause".into())
+    } else if matches!(head.upos.as_str(), "NOUN" | "PROPN" | "PRON") {
+        Some("NP".into())
+    } else {
+        None
+    };
+    let head_token_index = head
+        .subtitle_token_indices
+        .iter()
+        .copied()
+        .find(|index| *index >= span.start_token_index && *index <= span.end_token_index);
+    Some((label, head_token_index))
 }
 
 fn punctuation_between_tokens(

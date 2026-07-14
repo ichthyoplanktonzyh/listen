@@ -3,40 +3,25 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-13T10:12:00.000+08:00"
+last_updated: "2026-07-13T22:25:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-13 10:12 CST
-> 更新原因：Phase 3.12 Vendor-neutral LLM Provider 已 CODE COMPLETE；Phase 3.9 A/B/C
-> audible-structure 重构已合入 main，并转入主工作区的真实媒体 QA 与增量修正。
+> 最后更新：2026-07-13 22:25 CST
+> 更新原因：Phase 3.9.3 收口；可选 spaCy capability 完成 App delivery、生命周期与整轨 cache。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.12 Vendor-neutral LLM Provider **CODE COMPLETE**（见其
-  CLOSEOUT；分支 `codex/3.12-vendor-neutral-llm-provider`，三 commit）。下一执行 phase 为
-  Phase 3.13 Reading Studio v1（首个真实消费 3.11 契约 + 3.12 provider 的 Studio），或
-  Phase 3.12.1 LLM Judge Qualification（可与 3.13 并行）；开工前按现状修订各自 PLAN。3.12
-  剩余仅 owner 真实 provider 端到端产品 QA 与 owner 按需的增量协议（Slice 4）。已落地并全绿：
-  中立契约层（domain
-  `llm_provider` + application 两层 seam）；**两个异构协议 adapter（OpenAI Chat-compatible +
-  Anthropic Messages）过同一 fake-server 契约套件 = 中立性证明**（`crates/llm-provider/`，
-  10 契约测试，`drafts[0]==drafts[1]`）；draft→judgment use case（身份服务端铸造、过 3.11
-  validator、四层分离经 LLM 路径仍成立、5 种失败均不写 judgment 的诚实降级）；`SecretStore`
-  抽象 + in-memory 实现 + schema v36 profile 持久化（只存 auth_ref，守卫测试证明密钥不落 DB）。
-  **Slice 2b 已补全**：`BuiltSemanticProvider` 工厂（profile→adapter）；真实 macOS keychain
-  `KeychainSecretStore`（security-framework，cfg-gated，composition root 注入）；四条
-  `/v1/llm/providers*` HTTP 路由（CRUD + probe 实测 + provider-backed judge），响应用
-  secret-free `ProviderProfileView`；OpenAPI 契约齐全；集成测试证明 secret 不回显/删除移除/
-  未知 provider 404。**Slice 3 已完成**：Flutter 最小设置 UI（AI providers 类目：provider
-  列表 + 添加表单 + 连通/能力 probe + 删除；密钥只写提交即清空、数据去向警告、"未获显示
-  资格"提示、has_credential 徽标不显 secret）；手写 DTO + fixture 契约测试（ADR 0014）；
-  flutter analyze 零问题、flutter test 288 全通过。ADR 0022 已立。PLAN 修订为 v3（含远端案例
-  证伪）。判定默认**不获显示资格**（属 3.12.1）。**剩余**：增量协议 OpenAI Responses/Gemini
-  （Slice 4，owner 按需，只加 adapter 不改契约）、CLOSEOUT。
+- **当前执行主线**：Phase 3.9.3 已完成并冻结；spaCy syntax capability 已具 App 内 opt-in
+  install/update/cancel/validate/disable/uninstall、持久七态、resident sidecar、整轨 fingerprint
+  cache 与 Flutter 静默后台分析。下一执行 phase 仍为 3.13 Reading Studio v1 或可并行的
+  3.12.1 LLM Judge Qualification；3.12 已 CODE COMPLETE，owner 真实 provider QA 与增量协议按需。
 - Phase 3.11 Semantic Task Evidence Foundation 已 CODE COMPLETE（见其 CLOSEOUT）。
-  Phase 3.9 不作为后续 phase 的硬依赖，但 A/B/C 算法与 UI 已恢复推进并进入真实媒体 QA。
+  Phase 3.9 不作为后续 Studio phase 的硬依赖。Phase 3.9.1 已建立共享句法契约、B/SenseGroup
+  consumer 与 Construction matcher seam；后续复核发现唯一否决样本混淆歧义句产品 policy
+  与 parser gold。Phase 3.9.2 已完成：spaCy artifact 与 B going-to/used-to/have-to、SenseGroup、
+  matcher 获资格并接入单 batch/逐句共享产品编排；want-to 与无模型路径保留精确 fallback。
 - **治理线状态**：Phase 2.23 Architecture Debt Paydown 已于 2026-07-03 收口（详见其 CLOSEOUT）；3.x 开工前置全部就绪。
 - **算法线状态**：Phase 2.19 / 2.20 / 2.21 全局质量线仍搁置；Phase 3.9 仅恢复与 L1 学习
   价值直接相关的 A/B/C audible-structure contract、linking 结构生成和证据门控。
@@ -181,6 +166,22 @@ last_updated: "2026-07-13T10:12:00.000+08:00"
 
 ### Phase 3.9: L1-aware Diagnosis v1 ⏳ 已恢复，A/B/C 算法与 UI 重构中
 
+- 2026-07-13 规则第二批：B 规则源 v3 新增构式门控与 `gotta/hafta/hasta`、habitual
+  `used to`、`supposed to/ought to`、`lemme/gimme/kinda/sorta/outta/lotta/lotsa/dunno`；`gonna`
+  阻断 motion + NP/地点歧义，`wanna` 阻断 wh-extraction 歧义，`be used to` 不误判 habitual。
+  weak form 补标点、话语起始 `/h/`、`the + vowel` 阻断。下一批为 `/nt/`、syllabic-`n`、
+  schwa deletion 与 `and/of` 音段删除。
+- 2026-07-13 建立 General American 语流规则权威目录：规则按 `B-safe`、`B-context`、
+  `C-only`、`dialect` 分层，全部常见规则进入目录但只有文本证据充分者进入 B。第一批新增
+  `/t,d,s,z/ + /j/` coalescence、`/n/` 部位同化、V#V `[j]/[w]` 连接、跨词 flap；词内
+  flap 加入重音条件，`/t,d/` 删除收紧为词尾辅音簇环境。下一步补最小 POS/重音/边界/
+  构式上下文后接入其余 `B-context` 规则，并用真实字幕统计误报/漏报。
+- 2026-07-13 真实媒体 QA 修复：A/B/C 共用跟随式长句视口，紧凑态自动定位当前结构并提示
+  横向溢出，展开态按结构节点换行显示完整句；B 的普通文本跨度也参与 token 跟随。
+- 2026-07-13 真实媒体 QA 修复：C 不再接受 text/WordTimeline 预测 frame 作为降级替代；仅当
+  当前句音素已加载且 frame 的 phone evidence coverage 大于零时显示实际可听结构。
+- 2026-07-13 真实媒体 QA 修复：Flutter 刷新 LLTimeline 时以当前后端导出为权威，只从旧
+  导入文档补回缺失 artifacts，不再丢弃由现有 WordTimeline 新派生的 RhythmFrame。
 - 2026-07-13 A/B/C 重构第二批完成：B 已覆盖 weak form、contraction、assimilation、
   deletion、flapping。Deletion 现在基于完整短语删除预测弱化的词尾 `/t|d/`，flapping
   基于完整词将元音间 `/t|d/` 替换为 `/ɾ/`；所有纯文本规则仍严格不生成 C。
@@ -208,6 +209,24 @@ last_updated: "2026-07-13T10:12:00.000+08:00"
   音素 + timing/prosody 支持的实际可听分组；类别退为解释标签。首条竖切片聚焦
   `pick up: /pɪk | ʌp/ → /pɪ.kʌp/`，纯 B 不填充 C。
 - 计划：`.planning/phases/3.9-l1-aware-diagnosis-v1/3.9-PLAN.md`。
+
+### Phase 3.9.2: Syntax Provider Qualification Correction and Product Activation ✅ COMPLETE
+
+- 不修改已冻结的 3.9.1 fixture/report；新建 v2 holdout，将争议句改为
+  `ambiguous_policy_abstain`，加入清晰 want-to subject/object 最小对照。
+- spaCy artifact、B going-to/used-to/have-to、SenseGroup 与 matcher 已逐项获资格；want-to
+  `fallback_only`，歧义 raw allow 不进入产品。
+- 可选 pinned runtime/model +0B base bundle；single batch、逐句 finalise、共享 artifact ID 与
+  missing/corrupt/invalid/timeout fallback 已验证。未新增复杂安装 UI。
+- 文档：`.planning/phases/3.9.2-syntax-provider-product-activation/3.9.2-PLAN.md`、
+  `3.9.2-CONTEXT.md`、`3.9.2-CLOSEOUT.md`。
+
+### Phase 3.9.3: Syntax Capability Delivery & Lifecycle ✅ COMPLETE
+
+- App 管理 pinned spaCy runtime/model，七态持久 lifecycle 与完整设置 UI；base runtime/model +0B。
+- probe/analyze 共享 resident sidecar，支持 idle release、crash recovery、取消进程组清理。
+- 244 cue 整轨实测 243 analyzed / 1 isolated fallback；首次 2.10s、hot cache 0.11s。
+- 文档：`.planning/phases/3.9.3-syntax-capability-delivery-lifecycle/3.9.3-CLOSEOUT.md`。
 
 ### 下一执行序列：Phase 3.11–3.18
 
@@ -263,6 +282,9 @@ last_updated: "2026-07-13T10:12:00.000+08:00"
 | 3.6.2 Dictionary Inline Clip UX | 词典详情内嵌切片卡 + PageView 横向轨道取代 overlay | `.planning/phases/3.6.2-dictionary-inline-clip-ux/3.6.2-CLOSEOUT.md` |
 | 3.7 Hunting List | 用户确认猎词资产 + 泛听会话级预算提示 + 三态听力证据 + completion 小结 | `.planning/phases/3.7-hunting-list/3.7-CLOSEOUT.md` |
 | 3.8 Shadowing & Recording Comparison | chunk 跟读 + 本地录音 + A/B/A + 客观波形/时长/停顿比较；非评分 completion | `.planning/phases/3.8-shadowing-recording-comparison/3.8-CLOSEOUT.md` |
+| 3.9.1 Shared Syntactic Analysis Provider | 中立 token-aligned artifact + B/SenseGroup/matcher seam；Stanza/spaCy 负资格，产品保持 fallback | `.planning/phases/3.9.1-shared-syntactic-analysis-provider/3.9.1-CLOSEOUT.md` |
+| 3.9.2 Syntax Provider Product Activation | corrected gold/policy qualification + 可选 spaCy 单 batch/逐句共享 artifact；want-to 精确 fallback | `.planning/phases/3.9.2-syntax-provider-product-activation/3.9.2-CLOSEOUT.md` |
+| 3.9.3 Syntax Capability Delivery & Lifecycle | App opt-in lifecycle + resident sidecar + 整轨 fingerprint cache；未安装零打扰 | `.planning/phases/3.9.3-syntax-capability-delivery-lifecycle/3.9.3-CLOSEOUT.md` |
 | 3.10 Coach Dashboard | 诊断型 dashboard 聚合 durable 事实 + 规则建议 + channel-ready envelope + starter 降级 | `.planning/phases/3.10-coach-dashboard/3.10-CLOSEOUT.md` |
 | 3.11 Semantic Task Evidence Foundation | 四层事实分离（attempt/judgment/observation/capability）+ 版本化 rubric + 逐点判定含 abstain + adjudication；schema v35 append-only；ADR 0021；零 observation/projection writer | `.planning/phases/3.11-semantic-task-evidence-foundation/3.11-CLOSEOUT.md` |
 | 3.12 Vendor-neutral LLM Provider | 两异构协议 adapter（OpenAI Chat + Anthropic Messages）过同一契约套件证中立；draft-not-domain-type + 四层分离经 LLM 路径成立；OS keychain + auth_ref 密钥不落普通存储；诚实降级；Flutter 设置 UI；schema v36；ADR 0022；判定默认不获显示资格（属 3.12.1）。CODE COMPLETE，owner 真实 provider 端到端 QA 待做 | `.planning/phases/3.12-vendor-neutral-llm-provider/3.12-CLOSEOUT.md` |
@@ -355,9 +377,8 @@ last_updated: "2026-07-13T10:12:00.000+08:00"
 
 ## 下一步工作
 
-1. **Phase 3.9（当前测试与修正线）**：A/B/C audible-structure 已覆盖 linking、weak form、
-   contraction、assimilation、deletion、flapping；在主工作区运行真实媒体 QA，修正触发准确度、
-   多现象 UI 冲突与 C observed-phone 分组后再裁决收口。
+1. **Phase 3.9（已收口）**：3.9.3 已交付可选 syntax App lifecycle；后续若继续加固独立 CDN/
+   下载签名/notarization，须新建 packaging phase，不回写冻结产物。
 2. **Phase 3.13 / 3.12.1（下一主线）**：3.12 已 CODE COMPLETE；Reading Studio 与 LLM Judge
    Qualification 按各自 PLAN 开工。3.12 增量协议 Slice 4 仍按 owner 真实需求排期。
 3. "收藏句 → 个人模板"的用户价值验证收敛到 Phase 3.16（3.4.3 结论待兑现）。

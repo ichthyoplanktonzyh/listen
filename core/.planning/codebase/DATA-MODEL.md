@@ -1,6 +1,6 @@
 # Current Data Model
 
-Last updated: 2026-07-11, Phase 3.8 recording-asset backend foundation.
+Last updated: 2026-07-13, Phase 3.9.2 shared syntactic product composition.
 
 All persisted time values are non-negative integer milliseconds. Public IDs are
 opaque SHA-256 strings generated from a namespace and stable fingerprint; they
@@ -211,6 +211,36 @@ Word, chunk, and phone timelines share the same resource lifecycle:
 candidate -> active -> archived
 ```
 
+`SyntacticAnalysis` is currently an ephemeral, rebuildable analysis artifact,
+not a timeline or user asset. Its identity isolates the source text/token
+snapshot, language, contract, provider, runtime, model checksum, and profile
+configuration. Phase 3.9.1 adds no SQLite row and grants no deletion/cascade or
+learning-evidence semantics.
+
+The Phase 3.9.2 HTTP batch returns one independently validated artifact per
+source sentence. Reference B evidence, syntax-aware SenseGroup spans, and
+dependency matches carry/reference that same artifact ID. The batch is still
+ephemeral: no new SQLite authority, cascade, or canonical identity is created.
+Invalid/missing sentences contain an explicit fallback reason and no artifact.
+
+Phase 3.9.3 persists only capability lifecycle JSON and rebuildable track-cache JSON in Application Support,
+not SQLite. Capability status is `not_installed/downloading/ready/partial/failed/stale/disabled`. Track-cache
+identity covers subtitle text and token snapshot, language, analysis profile and the combined provider/runtime/
+model/requirements/sidecar delivery checksum. Subtitle or delivery changes therefore expose stale and require
+rebuild; uninstall may delete every syntax cache without deleting a user or learning asset.
+
+`SenseGroupAnalysis` retains its existing independent candidate/active/archive
+lifecycle. `rule-based-sense-group/v1` and `syntax-aware-sense-group/v1` are
+different provider runs rather than in-place upgrades. A syntax-aware run stores
+the source syntactic artifact ID/provider descriptor in `metrics_json`, while
+`chunk_timeline_dependency=false` makes the non-relationship explicit.
+
+`DependencyMatchCandidate` is an ephemeral query result over a validated,
+qualified syntactic artifact. Its matcher-local key, subtitle token span and
+bindings are diagnostics for a later curated layer; they are not a
+`ConstructionId`, canonical key, durable occurrence, capability fact, or user
+asset.
+
 SQLite enforces one active resource per track/resource kind with partial unique
 indexes. `created_by`, parent IDs, publication markers, and model/provider
 metadata are provenance/revision metadata, not lifecycle state.
@@ -229,6 +259,7 @@ boundary, but the Rust and Flutter models now wrap them in typed envelopes:
 | `WordTimeline.metrics_json` | `TimelineMetrics` | lifecycle/provenance metrics |
 | `ChunkTimeline.metrics_json` | `TimelineMetrics` | partitioner and parent timing metrics |
 | `PhoneTimeline.metrics_json` | `TimelineMetrics` | phonetic analysis provenance metrics |
+| `SenseGroupAnalysis.metrics_json` | `TimelineMetrics` | optional source syntactic artifact/provider provenance; never a ChunkTimeline parent |
 | `ChunkTimelineChunk.evidence_json` | `ChunkEvidence` | boundary/evidence payload |
 | `PhoneTimeline.sound_analysis.rhythm_frame` | `RhythmFrame` | audible-structure map: A/B/C references, prominence anchors, phrase-scoped nuclei, weak groups, compression spans, phrase boundaries, connected-speech refs, hotspots, and signal-source quality |
 | `LLTimelineDocument.rhythm_frames[].rhythm_frame` | `RhythmFrame` | first-class WordTimeline-derived rhythm resource keyed by sentence for WordTimeline-only imports/exports |

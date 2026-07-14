@@ -31,6 +31,7 @@ mod secret_store;
 mod semantic_task;
 mod sense_groups;
 mod subtitles;
+mod syntactic_consumers;
 mod transcription_pipeline;
 mod util;
 mod vocabulary;
@@ -47,6 +48,7 @@ pub use pronunciation_providers::*;
 pub use providers::*;
 pub use repositories::*;
 pub use secret_store::{InMemorySecretStore, SecretStore, SecretStoreError};
+pub use syntactic_consumers::*;
 pub use util::now_ms;
 pub(crate) use util::{
     clean_optional, clean_required, normalize_american_english, normalize_phrase,

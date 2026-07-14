@@ -10,6 +10,7 @@ pub(crate) mod pronunciation;
 pub(crate) mod semantic;
 pub(crate) mod sound_line;
 pub(crate) mod speech;
+pub(crate) mod syntax;
 pub(crate) mod timelines;
 pub(crate) mod transcription;
 pub(crate) mod vocabulary;

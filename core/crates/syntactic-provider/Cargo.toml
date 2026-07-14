@@ -1,0 +1,16 @@
+[package]
+name = "syntactic-provider"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+application = { path = "../application" }
+async-trait.workspace = true
+domain = { path = "../domain" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+subtitle-core = { path = "../subtitle-core" }

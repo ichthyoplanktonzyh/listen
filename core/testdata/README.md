@@ -23,6 +23,10 @@ testdata/
 │
 ├── pronunciation/             # Pronunciation analysis fixtures
 │   └── en-us-baseline.tsv     # 100-sentence fixed en-US baseline for rule validation
+├── syntactic-analysis/         # Phase 3.9.1 mapping + ambiguity preregistration
+│   ├── mapping-contract-v1.json
+│   ├── ambiguity-dev-v1.jsonl
+│   └── ambiguity-validation-v1.jsonl
 ├── phonetic-analysis/          # M2.0 Phase 0 research catalog and scorer smoke data
 │   ├── evaluation-catalog-v1.tsv
 │   ├── candidates-v1.json
@@ -81,6 +85,14 @@ testdata/
 | `phonetic-analysis/zipa-ctc-frames-smoke-v1.json` | `scripts/phonetic-research-adapter.py` | Synthetic CTC frame IDs and confidence values for experimental timeline projection smoke coverage. |
 | `phonetic-analysis/zipa-tokens-smoke-v1.txt` | `scripts/phonetic-research-adapter.py` | Synthetic token inventory paired with the ZIPA CTC frame projection smoke fixture. |
 | `phonetic-analysis/zipa-research-requirements-v1.txt` | `scripts/setup-zipa-research.sh` | Pinned isolated ZIPA research dependencies; not application runtime dependencies. |
+
+### Syntactic Analysis Fixtures
+
+| File | Used By | Description |
+|------|---------|-------------|
+| `syntactic-analysis/mapping-contract-v1.json` | `scripts/validate-syntactic-fixtures.py` | Provider-neutral Unicode-scalar char-span mapping examples, including 1:N, N:1, normalized overlap, and explicit unaligned tokens. |
+| `syntactic-analysis/ambiguity-dev-v1.jsonl` | Phase 3.9.1 provider adapter development | Real-caption excerpts plus controlled ambiguity pairs allowed for adapter/offset development. |
+| `syntactic-analysis/ambiguity-validation-v1.jsonl` | Phase 3.9.1 locked provider qualification | Holdout ambiguity cases locked by SHA-256 before any provider run; not overall parser-quality gold. |
 
 ### Word Timeline Evaluation Fixtures
 

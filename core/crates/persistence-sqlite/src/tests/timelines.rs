@@ -430,6 +430,45 @@ fn activating_sense_group_analysis_updates_active_resource() {
 }
 
 #[test]
+fn rule_and_syntax_sense_group_providers_keep_independent_runs() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let track = word_timeline_track();
+    repo.save_track(&track).unwrap();
+    let rule = sense_group_analysis("sg-rule-v1", &track, TimelineStatus::Candidate);
+    let mut syntax = sense_group_analysis("sg-syntax-v1", &track, TimelineStatus::Candidate);
+    syntax.provider_id = "syntax-aware-sense-group".into();
+    syntax.provider_version = "v1".into();
+    syntax.algorithm = "dependency_teaching_partition_v1".into();
+    syntax.metrics_json = serde_json::json!({
+        "syntactic_analysis_id": "syntax-artifact-1",
+        "chunk_timeline_dependency": false
+    })
+    .into();
+    repo.save_sense_group_analysis(&rule).unwrap();
+    repo.save_sense_group_analysis(&syntax).unwrap();
+
+    let runs = repo.list_sense_group_analyses(&track.id).unwrap();
+    assert_eq!(runs.len(), 2);
+    assert!(
+        runs.iter()
+            .any(|run| run.provider_id == "rule-based-sense-group")
+    );
+    assert!(runs.iter().any(|run| {
+        let metrics = run.metrics_json.as_object();
+        run.provider_id == "syntax-aware-sense-group"
+            && metrics
+                .get("syntactic_analysis_id")
+                .and_then(|value| value.as_str())
+                == Some("syntax-artifact-1")
+            && metrics
+                .get("chunk_timeline_dependency")
+                .and_then(|value| value.as_bool())
+                == Some(false)
+    }));
+}
+
+#[test]
 fn archiving_and_deleting_sense_group_analysis_updates_repository() {
     let repo = SqliteRepository::in_memory().unwrap();
     MediaRepository::upsert(&repo, &transcription_media()).unwrap();

@@ -144,4 +144,5 @@ mod phonetic_analysis;
 mod practice;
 mod semantic;
 mod speech_language;
+mod syntax;
 mod timelines;

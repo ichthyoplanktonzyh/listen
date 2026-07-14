@@ -76,6 +76,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "syntactic-provider",
  "tokio",
  "tower",
 ]
@@ -2611,6 +2612,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "syntactic-provider"
+version = "0.7.0"
+dependencies = [
+ "application",
+ "async-trait",
+ "domain",
+ "serde",
+ "serde_json",
+ "subtitle-core",
+ "tokio",
 ]
 
 [[package]]

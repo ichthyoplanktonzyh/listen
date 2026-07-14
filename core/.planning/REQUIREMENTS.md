@@ -2971,6 +2971,45 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - recognition/production evidence 记录 modality。
   - 证据不足时允许以“不建生产表”收口。
 
+### CAP-011：共享句法分析 Provider
+
+- 优先级：P0
+- 阶段：Phase 3.9.1
+- 需求：以 Provider-neutral、UD-compatible 的可重建 artifact，为 Reference B、SenseGroup
+  和 Construction 提供共享 lemma、POS、morphology 与 dependency 分析；具体 parser、runtime
+  和模型不得进入消费者契约。
+- 验收标准：
+  - 输出记录 provider/model/version、source fingerprint、char span 和 SubtitleToken 显式映射。
+  - parser 重新分词时支持 1:N/N:1，不按数组位置静默映射。
+  - 模型未安装、语言不支持、超时、损坏输出时安全降级，不阻断字幕与播放。
+  - Reference B 只把句法结果作为文本预测条件，不生成 C 音频证据。
+  - SenseGroup 新 provider 与 `punctuation_length_rule_v1` 并存，不覆盖 ChunkTimeline。
+  - Construction 只消费 occurrence 候选，不由 parser 铸造 canonical identity。
+
+### CAP-012：句法模型资格与可分发性
+
+- 优先级：P0
+- 阶段：Phase 3.9.1
+- 需求：任何获得产品资格的句法 provider 必须经过预登记真实字幕验证和代码/runtime/model/
+  treebank 分层许可证审计。
+- 验收标准：
+  - 开发集与验证集分离；关键构式歧义、token alignment、延迟、内存、体积和失败率均有报告。
+  - 模型记录下载来源、版本、checksum 与许可证；非商业模型不得进入可分发产品路径。
+  - 未达门槛时允许 abstain 或保持研究 Provider，不以小型 smoke 测试授予产品资格。
+
+### CAP-013：句法 Provider 纠偏资格与共享产品激活
+
+- 优先级：P0
+- 阶段：Phase 3.9.2
+- 需求：区分 parser attachment gold 与产品保守策略；以修正版 locked holdout 选择并激活一个
+  可选本地句法 Provider，使 B、SenseGroup 和 Construction candidate matcher 共享同一 artifact。
+- 验收标准：
+  - 歧义句标记为 abstain/block-by-policy，不作为唯一 attachment gold 判错 Provider。
+  - 首个产品候选通过清晰 subject/object 最小对照、真实字幕、许可、资源和 failure gate。
+  - 同一句只分析一次，三个消费者共享 artifact identity/provenance。
+  - runtime/model 不是字幕、播放或基础学习路径的硬依赖；缺席时精确 fallback。
+  - B 不填充 C，SenseGroup 不替代 ChunkTimeline，matcher 不铸造 Construction/capability identity。
+
 ## 19. MVP 发布追踪矩阵
 
 | 发布能力 | 必须满足的需求 |
@@ -2994,5 +3033,5 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | Phase 2.22 用户可见工作流语义 | UX-001 至 UX-008 |
 | Milestone 2 多语言学习基础 | LANG-001 至 LANG-010 |
 | Phase 3.0 英语听力学习闭环 | LOOP-000 至 LOOP-009 |
-| Phase 3.4.x Learning Domain Model v2 | CAP-001 至 CAP-010 |
+| Phase 3.4.x / 3.9.1–3.9.2 Learning Analysis Foundation | CAP-001 至 CAP-013 |
 | Phase 3.35 听力工作台 UI 重构 | UI-016 至 UI-017 |

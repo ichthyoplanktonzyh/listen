@@ -1,6 +1,6 @@
 # LLPlayerNext — 测试体系
 
-> 最后更新：2026-07-11
+> 最后更新：2026-07-13
 
 ## 1. 测试层次
 
@@ -32,11 +32,12 @@
 
 | Crate | 覆盖范围 |
 |---|---|
-| `domain` | ID 类型、枚举序列化、PhoneticAnalysis::validate() |
+| `domain` | ID 类型、枚举序列化、PhoneticAnalysis::validate()、SyntacticAnalysis span/mapping/tree/coverage validator |
 | `subtitle-core` | SRT/VTT 解析、token 化、时间轴查询（空隙/重叠/边界） |
 | `diagnosis-core` | 词义障碍、声音识别障碍、信息不足、其他因素 |
-| `speech-analysis` | 100 句发音基线测试、OOV fallback-v2 stress、information-structure prior、Reference B connected-speech rules、规则型语流检测、RhythmFrame audible-structure bridge、chunk 分区 |
-| `application` | AppServices 用例逻辑、chunk 检测 |
+| `speech-analysis` | 100 句发音基线、OOV fallback-v2 stress、information-structure prior、Reference B text/syntax provenance 与未资格 fallback、syntax-aware SenseGroup clause/PP/subordinator boundary、phrase/标点保护、min/max + 3–5 教学粒度、低 coverage 精确 fallback、provider-neutral dependency candidate matcher、RhythmFrame bridge、chunk 分区 |
+| `application` | AppServices 用例逻辑、chunk 检测、SyntacticAnalysisProvider fake/finalization seam、共享 consumer 单 batch/artifact ID、坏句隔离、timeout 精确 fallback |
+| `syntactic-provider` | Stanza/spaCy 同构 neutral contract、缺模型 capability、畸形 stdout、timeout 闭合失败 |
 | `dictionary-provider` | Provider 查询、缓存逻辑 |
 | `persistence-sqlite` | CRUD 操作、幂等、唯一约束、事务 |
 | `api-http` | 路由 handler、错误映射、认证中间件 |
@@ -51,6 +52,7 @@
 | `crates/persistence-sqlite/src/tests.rs::current_version_with_legacy_lexical_schema_is_destructively_repaired` | 旧 v7 lexical schema 已跑过且 `user_version=15` 的坏库回归：v16 断代重建 lexical/learning-resource 表，恢复 `lexical_observations` 与 LexicalUnit identity columns |
 | `crates/persistence-sqlite/src/tests/learning_loop.rs::session_summary_derives_stuck_point_statuses_from_events_attempts_and_review` | Phase 3.2 卡点 summary 聚合：事件、practice attempt、review item 派生状态与熟料标记 |
 | `crates/persistence-sqlite/src/tests/learning_loop.rs::listening_inbox_capture_process_review_and_micro_intensive_round_trip` | Phase 3.3 泛听 Inbox 编排：soft interrupt capture、ReviewItem 去向、micro-intensive PracticeItem 去向、理解度自报事件 |
+| `crates/persistence-sqlite/src/tests/timelines.rs::rule_and_syntax_sense_group_providers_keep_independent_runs` | rule/syntax SenseGroup provider/version、syntax artifact metrics 与独立 lifecycle 共存，且显式不依赖 ChunkTimeline |
 | `crates/persistence-sqlite/src/tests/learning_loop.rs::shadowing_completion_persists_recording_without_creating_capability_evidence` | Phase 3.8 录音资产 round trip、幂等非评价 completion、零 observation/review 与删除语义 |
 | `crates/api-http/src/tests/practice.rs::practice_routes_capture_and_process_listening_inbox_items` | Phase 3.3 HTTP 路由：Listening Inbox capture/list/process 端到端 JSON contract |
 | `crates/api-http/src/tests/practice.rs::recording_and_unscored_shadowing_routes_round_trip` | Phase 3.8 recording create/get/delete 与 `completed` shadowing HTTP contract |
@@ -59,6 +61,7 @@
 | `crates/speech-analysis/tests/asr_timing_integration_test.rs` | whisper.cpp JSON → 词级时间戳 |
 | `crates/speech-analysis/tests/chunk_detection_integration_test.rs` | 声学 chunk 检测 |
 | `crates/speech-analysis/tests/chunk_partition_golden_test.rs` | 金标准 chunk 分区 |
+| `crates/speech-analysis/tests/syntactic_real_media_qa_test.rs` | 真实 Stanza 开发报告 token 经生产 SenseGroup 分区：教学粒度与多词专名完整性 |
 
 ### 属性测试（proptest）
 
@@ -142,6 +145,14 @@ cd apps/desktop && flutter test
 | `scripts/test_prepare_helsinki_libritts_benchmark.py` | LibriTTS/Helsinki prep 的 directory/archive input、missing-audio handling 和 baseline LLTimeline shape 单元测试 |
 | `scripts/timeline-production/test_production_pipeline_acoustic_cues.py` | Production-side `rhythm_word_acoustic_cues` artifact generation from synthetic wav |
 | `scripts/validate-contracts.sh` | LLTimeline Schema smoke + 契约测试 |
+| `scripts/syntactic-analysis/test_syntax_sidecar_contract.py` | JSONL stdout 洁净、missing runtime/language、Unicode scalar、1:N/N:1/unaligned mapping |
+| `scripts/syntactic-analysis/evaluate_provider.py` | Phase 3.9.1 digest-locked Stanza/spaCy correctness、alignment、tree、cold/warm/RSS/size 资格评估 |
+| `scripts/syntactic-analysis/test_evaluate_provider.py` | Rust tokenizer parity 与 future/motion、habitual/state、have-to idiom、wh-extraction 保守 query 单元测试 |
+| `scripts/syntactic-analysis/real_media_qa.py` | 对 owner 本地 SRT 分批执行 mapping/tree/determinism/phrase QA；报告仅存输入 SHA、cue 编号和统计，不复制字幕正文 |
+| `scripts/syntactic-analysis/test_real_media_qa.py` | real-media SRT 多行 cue 解析与时间戳隔离单元测试 |
+| `scripts/syntactic-analysis/evaluate_provider_v2.py` | Phase 3.9.2 corrected artifact/query/policy 分层资格评估；validation digest locked |
+| `scripts/syntactic-analysis/test_evaluate_provider_v2.py` | v2 ambiguous-policy 与逐 query `qualified` / `fallback_only` scorer 回归 |
+| `scripts/syntactic-analysis/real_media_qa_v2.py` | corrected want-to query 下的真实媒体 mapping/tree/determinism 复核，不复制字幕正文 |
 
 ### Python 评估缺少自动化单元测试
 
@@ -158,6 +169,13 @@ Phase 2.20 LibriTTS/Helsinki prep 也已有 `scripts/test_prepare_helsinki_libri
 | 事件 Schema | `api-events` JSON Schema 文件 + 自动化验证 |
 | LLTimeline JSON v1 | `scripts/validate-contracts.sh` + fixtures (`testdata/lltimeline/`) |
 | LLTimeline Flutter parse | `cd apps/desktop && flutter test test/contract/lltimeline_parse_test.dart` over committed rhythm fixtures |
+| 句法 Provider JSONL | `scripts/syntactic-analysis/test_syntax_sidecar_contract.py` + `cargo test -p syntactic-provider` |
+| Syntax capability lifecycle | `cargo test -p api-http syntax` + Flutter DTO/transport/settings widget tests；真实隔离 HOME 覆盖 install/cancel/update/damage/disable/uninstall |
+
+Phase 3.9.3 的真实媒体 qualification 固定记录在
+`.planning/phases/3.9.3-syntax-capability-delivery-lifecycle/`：244 cue release 路径覆盖首次整轨、
+常驻热分析、fingerprint cache、单句 partial、backend restart persistence 与资源损坏/移除。报告不复制
+字幕正文，只保存输入 hash、cue index 和聚合指标。
 
 ## 6. 测试数据
 
