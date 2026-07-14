@@ -1,8 +1,6 @@
 # Phase 2.24 bounded migration ledger.
 # Format: API part filename:method. New raw resource-client returns fail the
 # architecture guard. Remove an entry when the endpoint gains a domain model.
-coach_llm.dart:registerLlmProvider
-coach_llm.dart:searchCorpus
 coach_llm.dart:learningResources
 coach_llm.dart:installLearningResource
 coach_llm.dart:removeLearningResource
@@ -18,22 +16,8 @@ speech.dart:cancelPhoneticAnalysisJob
 speech.dart:retryPhoneticAnalysisJob
 speech.dart:clearTerminalPhoneticAnalysisJobs
 speech.dart:updatePhoneticFindingFeedback
-subtitles.dart:importSubtitle
 subtitles.dart:importLLTimeline
-subtitles.dart:importLLTimelineForMedia
-subtitles.dart:archiveSubtitle
-subtitles.dart:restoreSubtitle
-subtitles.dart:deleteSubtitle
 subtitles.dart:searchOpenSubtitles
-timelines.dart:createTrackWordTimeline
-timelines.dart:activateWordTimeline
-timelines.dart:generateChunkTimeline
-timelines.dart:activateChunkTimeline
-timelines.dart:archiveChunkTimeline
-timelines.dart:deleteChunkTimeline
-timelines.dart:activatePhoneTimeline
-timelines.dart:archivePhoneTimeline
-timelines.dart:deletePhoneTimeline
 transcription.dart:transcriptionProviders
 transcription.dart:transcriptionModels
 transcription.dart:registerCustomTranscriptionModel

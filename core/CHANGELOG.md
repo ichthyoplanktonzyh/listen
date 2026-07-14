@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- 2026-07-14 18:17 CST: Phase 2.24 typed-resource 第五批：LLM provider registration、corpus
+  search、subtitle import/lifecycle 与 word/chunk/phone timeline lifecycle 全部在 LocalApi
+  seam 解码为既有领域模型，调用侧旧 `fromJson` 被原地删除；raw-return allowlist 从 42 降至
+  26。Flutter analyze 与相关 38 tests 全绿。
+
 - 2026-07-14 17:49 CST: Flutter typed-resource 第四批将 MediaItem、chunk partition、syntax
   status、learner profile/L1 specialty、capability override、lemma normalization 移至 LocalApi
   解码，UI/occurrence resolver/settings 删除对应 map field knowledge；补充 learner/L1 contract
