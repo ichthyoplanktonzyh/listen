@@ -45,6 +45,7 @@ pub use dictionary::DictionaryUseCases;
 pub use dto::*;
 pub use error::ApplicationError;
 pub use learner_profile::{LearnerProfileUseCases, LearnerProfileView};
+pub use lexical::LexicalLearningUseCases;
 pub use llm_provider::LlmProviderUseCases;
 pub use pronunciation::PronunciationUseCases;
 pub use pronunciation_providers::*;
@@ -113,6 +114,10 @@ pub struct AppServices {
 }
 
 impl AppServices {
+    pub fn lexical_learning(&self) -> LexicalLearningUseCases {
+        LexicalLearningUseCases::from_services(self)
+    }
+
     pub fn pronunciation(&self) -> PronunciationUseCases {
         PronunciationUseCases::new(
             self.pronunciations.clone(),

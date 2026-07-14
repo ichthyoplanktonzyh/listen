@@ -52,7 +52,7 @@ impl AppServices {
         let config = speech_analysis::audible_structure::SenseGroupPartitionConfig::default();
         let mut groups = Vec::new();
         for sentence in &track.sentences {
-            let candidates = self.phrase_candidates(&sentence.id)?;
+            let candidates = self.lexical_learning().phrase_candidates(&sentence.id)?;
             let spans = syntax
                 .and_then(|analysis| {
                     analysis

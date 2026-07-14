@@ -30,6 +30,7 @@ pub async fn list_lexical_entries(
 ) -> Result<Json<Vec<LexicalEntryDetails>>, ApiError> {
     state
         .services
+        .lexical_learning()
         .list_lexical_entries(
             query.language.as_deref().unwrap_or("en"),
             query.kind,
@@ -55,6 +56,7 @@ pub async fn read_lexical_entries(
 ) -> Result<Json<Vec<LexicalEntry>>, ApiError> {
     state
         .services
+        .lexical_learning()
         .read_lexical_entries_by_forms(&request.language, request.kind, &request.forms)
         .map(Json)
         .map_err(ApiError::from)
@@ -112,6 +114,7 @@ pub async fn upsert_lexical_entry(
 ) -> Result<Json<LexicalEntryDetails>, ApiError> {
     let details = state
         .services
+        .lexical_learning()
         .create_lexical_entry(UpsertLexicalEntry {
             language: request.language,
             kind: request.kind,
@@ -139,6 +142,7 @@ pub async fn lexical_details(
 ) -> Result<Json<LexicalEntryDetails>, ApiError> {
     state
         .services
+        .lexical_learning()
         .lexical_details(&LexicalEntryId::parse(id).map_err(ApplicationError::from)?)?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("lexical entry"))
@@ -157,6 +161,7 @@ pub async fn update_lexical_learning_content(
 ) -> Result<Json<LexicalEntryDetails>, ApiError> {
     let details = state
         .services
+        .lexical_learning()
         .update_lexical_learning_content(
             &LexicalEntryId::parse(id).map_err(ApplicationError::from)?,
             request.user_definition,
@@ -191,6 +196,7 @@ pub async fn create_lexical_observation(
     if request.clear.unwrap_or(false) {
         state
             .services
+            .lexical_learning()
             .clear_lexical_observation(&lexical_entry_id, &sentence_id)?;
         let _ = state.events.send(
             crate::event_payloads::LexicalObservationClearedPayload {
@@ -203,6 +209,7 @@ pub async fn create_lexical_observation(
     }
     let observation = state
         .services
+        .lexical_learning()
         .create_lexical_observation(CreateLexicalObservation {
             lexical_entry_id,
             sentence_id,
@@ -235,6 +242,7 @@ pub async fn normalize_lexical(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let value = state
         .services
+        .lexical_learning()
         .normalize_lexical_form(&request.language, &request.value)?;
     Ok(Json(serde_json::json!({
         "original": value.original,
@@ -259,6 +267,7 @@ pub async fn correct_lemma(
     let value =
         state
             .services
+            .lexical_learning()
             .correct_lemma(&request.language, &request.original, &request.corrected)?;
     Ok(Json(serde_json::json!({
         "original": value.original,
@@ -275,6 +284,7 @@ pub async fn phrase_candidates(
 ) -> Result<Json<Vec<PhraseCandidate>>, ApiError> {
     state
         .services
+        .lexical_learning()
         .phrase_candidates(&SubtitleSentenceId::parse(sentence_id).map_err(ApplicationError::from)?)
         .map(Json)
         .map_err(ApiError::from)

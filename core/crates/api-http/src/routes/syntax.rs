@@ -120,7 +120,7 @@ pub(crate) async fn run_syntactic_consumers(
     for sentence in &track.sentences {
         phrases.insert(
             sentence.id.clone(),
-            state.services.phrase_candidates(&sentence.id)?,
+            state.services.lexical_learning().phrase_candidates(&sentence.id)?,
         );
     }
     let patterns = request
@@ -199,7 +199,7 @@ pub(crate) async fn run_track_syntax_analysis(
     for sentence in &track.sentences {
         phrases.insert(
             sentence.id.clone(),
-            state.services.phrase_candidates(&sentence.id)?,
+            state.services.lexical_learning().phrase_candidates(&sentence.id)?,
         );
     }
     let batch = state

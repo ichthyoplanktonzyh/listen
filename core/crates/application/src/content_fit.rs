@@ -118,6 +118,7 @@ impl AppServices {
                     Some(cached) => cached.clone(),
                     None => {
                         let normalized = self
+                            .lexical_learning()
                             .normalize_lexical_form(language.as_str(), &token.text)?
                             .normalized;
                         let value = (!normalized.is_empty()).then_some(normalized);
@@ -269,6 +270,7 @@ impl AppServices {
                     Some(cached) => cached.clone(),
                     None => {
                         let normalized = self
+                            .lexical_learning()
                             .normalize_lexical_form(language.as_str(), &token.text)?
                             .normalized;
                         let value = (!normalized.is_empty()).then_some(normalized);

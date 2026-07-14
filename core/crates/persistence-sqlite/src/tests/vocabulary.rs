@@ -63,7 +63,7 @@ fn english_and_chinese_vocabulary_and_sources_stay_isolated() {
 
     // Vocabulary lists are isolated by language.
     let zh_vocab = services
-        .list_vocabulary(
+        .lexical_learning().list_vocabulary(
             "zh",
             None,
             Some(LearningStatus::UnknownMeaning),
@@ -76,7 +76,7 @@ fn english_and_chinese_vocabulary_and_sources_stay_isolated() {
     assert!(zh_vocab.iter().any(|d| d.entry.normalized_form == "咖啡"));
     assert!(zh_vocab.iter().all(|d| d.entry.normalized_form != "coffee"));
     let en_vocab = services
-        .list_vocabulary(
+        .lexical_learning().list_vocabulary(
             "en",
             None,
             Some(LearningStatus::KnownRecognized),
@@ -91,7 +91,7 @@ fn english_and_chinese_vocabulary_and_sources_stay_isolated() {
 
     // The Chinese source snapshot is captured under the Chinese profile.
     let details = services
-        .lexical_details(&chinese.entry.id)
+        .lexical_learning().lexical_details(&chinese.entry.id)
         .unwrap()
         .unwrap();
     assert_eq!(details.occurrences.len(), 1);
@@ -158,12 +158,12 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
         Some(LearningStatus::KnownRecognized),
         Some(source),
     );
-    let details = services.lexical_details(&entry.entry.id).unwrap().unwrap();
+    let details = services.lexical_learning().lexical_details(&entry.entry.id).unwrap().unwrap();
     assert_eq!(details.history.len(), 2);
     assert_eq!(details.occurrences[0].encounter_count, 2);
 
     let first_observation = services
-        .create_lexical_observation(application::CreateLexicalObservation {
+        .lexical_learning().create_lexical_observation(application::CreateLexicalObservation {
             lexical_entry_id: entry.entry.id.clone(),
             sentence_id: sentence.id.clone(),
             original_form: "Hello".into(),
@@ -172,7 +172,7 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
         })
         .unwrap();
     let second_observation = services
-        .create_lexical_observation(application::CreateLexicalObservation {
+        .lexical_learning().create_lexical_observation(application::CreateLexicalObservation {
             lexical_entry_id: entry.entry.id.clone(),
             sentence_id: sentence.id.clone(),
             original_form: "Hello".into(),
@@ -208,7 +208,7 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
         assert_eq!(observation.surface_form.as_deref(), Some("Hello"));
     }
     services
-        .clear_lexical_observation(&entry.entry.id, &sentence.id)
+        .lexical_learning().clear_lexical_observation(&entry.entry.id, &sentence.id)
         .unwrap();
     assert!(
         repo.list_lexical_observations_by_sentence(&sentence.id)
@@ -217,14 +217,14 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
     );
 
     services
-        .set_media_availability(
+        .lexical_learning().set_media_availability(
             &details.occurrences[0].media_id.clone().unwrap(),
             MediaAvailability::Archived,
         )
         .unwrap();
     assert_eq!(
         services
-            .lexical_details(&entry.entry.id)
+            .lexical_learning().lexical_details(&entry.entry.id)
             .unwrap()
             .unwrap()
             .occurrences[0]
@@ -240,11 +240,11 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
             duration_ms: Some(5000),
         })
         .unwrap();
-    let relinked = services.lexical_details(&entry.entry.id).unwrap().unwrap();
+    let relinked = services.lexical_learning().lexical_details(&entry.entry.id).unwrap().unwrap();
     assert!(relinked.occurrences[0].media_id.is_some());
     assert!(relinked.occurrences[0].sentence_id.is_some());
     services
-        .create_lexical_observation(application::CreateLexicalObservation {
+        .lexical_learning().create_lexical_observation(application::CreateLexicalObservation {
             lexical_entry_id: entry.entry.id.clone(),
             sentence_id: sentence.id.clone(),
             original_form: "Hello".into(),
@@ -253,7 +253,7 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
         })
         .unwrap();
 
-    let bundle = services.export_vocabulary().unwrap();
+    let bundle = services.lexical_learning().export_vocabulary().unwrap();
     assert_eq!(bundle.lexical_observations.len(), 1);
     assert_eq!(bundle.learning_observations.len(), 3);
     let restored = Arc::new(SqliteRepository::in_memory().unwrap());
@@ -267,9 +267,9 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
         restored.clone(),
         restored,
     );
-    restored_services.import_vocabulary(&bundle).unwrap();
+    restored_services.lexical_learning().import_vocabulary(&bundle).unwrap();
     let restored_details = restored_services
-        .lexical_details(&entry.entry.id)
+        .lexical_learning().lexical_details(&entry.entry.id)
         .unwrap()
         .unwrap();
     assert_eq!(
@@ -279,7 +279,7 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
     assert_eq!(restored_details.occurrences[0].media_id, None);
     assert_eq!(
         restored_services
-            .export_vocabulary()
+            .lexical_learning().export_vocabulary()
             .unwrap()
             .lexical_observations
             .len(),
@@ -287,16 +287,16 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
     );
     assert_eq!(
         restored_services
-            .export_vocabulary()
+            .lexical_learning().export_vocabulary()
             .unwrap()
             .learning_observations
             .len(),
         3
     );
-    restored_services.import_vocabulary(&bundle).unwrap();
+    restored_services.lexical_learning().import_vocabulary(&bundle).unwrap();
     assert_eq!(
         restored_services
-            .export_vocabulary()
+            .lexical_learning().export_vocabulary()
             .unwrap()
             .learning_observations
             .len(),
@@ -304,7 +304,7 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
     );
     assert_eq!(
         restored_services
-            .lexical_details(&entry.entry.id)
+            .lexical_learning().lexical_details(&entry.entry.id)
             .unwrap()
             .unwrap()
             .occurrences
@@ -423,7 +423,7 @@ fn failed_source_capture_rolls_back_profile_and_history() {
         repo.clone(),
         repo.clone(),
     );
-    let result = services.create_lexical_entry(UpsertLexicalEntry {
+    let result = services.lexical_learning().create_lexical_entry(UpsertLexicalEntry {
         language: "en".into(),
         kind: LexicalEntryKind::Word,
         canonical_form: "rollback".into(),
@@ -448,7 +448,7 @@ fn failed_source_capture_rolls_back_profile_and_history() {
     assert!(read_word_asset(&services, "en", "rollback").is_none());
     assert!(
         services
-            .export_vocabulary()
+            .lexical_learning().export_vocabulary()
             .unwrap()
             .lexical_history
             .is_empty()
@@ -469,7 +469,7 @@ fn external_import_preserves_existing_status_and_updates_learning_content() {
         repo,
     );
     let summary = services
-        .import_external_vocabulary(&ExternalVocabularyImport {
+        .lexical_learning().import_external_vocabulary(&ExternalVocabularyImport {
             language: "en".into(),
             entries: vec![
                 ExternalVocabularyEntry {
@@ -494,16 +494,16 @@ fn external_import_preserves_existing_status_and_updates_learning_content() {
     assert_eq!(summary.invalid, 0);
     let hello = read_word_asset(&services, "en", "hello").unwrap();
     let details = services
-        .update_lexical_learning_content(
+        .lexical_learning().update_lexical_learning_content(
             &hello.id,
             Some(" greeting ".into()),
             Some(" personal ".into()),
         )
         .unwrap();
     assert_eq!(details.entry.user_definition.as_deref(), Some("greeting"));
-    assert_eq!(services.export_vocabulary().unwrap().version, 7);
+    assert_eq!(services.lexical_learning().export_vocabulary().unwrap().version, 7);
     let second = services
-        .import_external_vocabulary(&ExternalVocabularyImport {
+        .lexical_learning().import_external_vocabulary(&ExternalVocabularyImport {
             language: "en".into(),
             entries: vec![ExternalVocabularyEntry {
                 word: "hello".into(),
@@ -516,7 +516,7 @@ fn external_import_preserves_existing_status_and_updates_learning_content() {
     assert_eq!(second.skipped, 1);
     assert_eq!(
         services
-            .read_lexical_entries_by_forms("en", LexicalEntryKind::Word, &["hello".into()])
+            .lexical_learning().read_lexical_entries_by_forms("en", LexicalEntryKind::Word, &["hello".into()])
             .unwrap()[0]
             .status,
         Some(LearningStatus::KnownRecognized)
@@ -537,7 +537,7 @@ fn external_import_marks_capability_projection_with_import_source() {
         repo,
     );
     services
-        .import_external_vocabulary(&ExternalVocabularyImport {
+        .lexical_learning().import_external_vocabulary(&ExternalVocabularyImport {
             language: "en".into(),
             entries: vec![ExternalVocabularyEntry {
                 word: "signal".into(),
@@ -549,7 +549,7 @@ fn external_import_marks_capability_projection_with_import_source() {
         .unwrap();
     let entry = read_word_asset(&services, "en", "signal").unwrap();
     let profile = services
-        .lexical_capability_profile(&entry.id)
+        .lexical_learning().lexical_capability_profile(&entry.id)
         .unwrap()
         .unwrap();
     for dimension in [&profile.reading, &profile.listening] {

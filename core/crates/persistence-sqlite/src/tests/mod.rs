@@ -177,7 +177,7 @@ fn upsert_word_asset(
     source: Option<application::LexicalSourceContext>,
 ) -> LexicalEntryDetails {
     services
-        .create_lexical_entry(UpsertLexicalEntry {
+        .lexical_learning().create_lexical_entry(UpsertLexicalEntry {
             language: language.into(),
             kind: LexicalEntryKind::Word,
             canonical_form: value.into(),
@@ -192,7 +192,7 @@ fn upsert_word_asset(
 
 fn read_word_asset(services: &AppServices, language: &str, value: &str) -> Option<LexicalEntry> {
     services
-        .read_lexical_entries_by_forms(language, LexicalEntryKind::Word, &[value.into()])
+        .lexical_learning().read_lexical_entries_by_forms(language, LexicalEntryKind::Word, &[value.into()])
         .unwrap()
         .into_iter()
         .next()

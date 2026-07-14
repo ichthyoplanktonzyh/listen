@@ -297,7 +297,7 @@ impl AppServices {
                     .get(&media_id)?
                     .ok_or(ApplicationError::NotFound("media"))?;
                 Some(
-                    self.create_lexical_observation(CreateLexicalObservation {
+                    self.lexical_learning().create_lexical_observation(CreateLexicalObservation {
                         lexical_entry_id: target.lexical_entry_id.clone(),
                         sentence_id: sentence_id.clone(),
                         original_form: occurrence.display_text.clone(),

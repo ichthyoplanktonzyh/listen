@@ -18,7 +18,7 @@ pub(crate) struct ObservationContext {
     pub media_id: Option<MediaId>,
 }
 
-impl AppServices {
+impl LexicalLearningUseCases {
     pub fn create_lexical_sense_folder(
         &self,
         lexical_entry_id: &LexicalEntryId,

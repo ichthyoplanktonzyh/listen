@@ -6,7 +6,7 @@ const UPGRADE_EVIDENCE_THRESHOLD: u32 = 5;
 const REJECTION_COOLDOWN_MS: u64 = 30 * 24 * 60 * 60 * 1000;
 const UPGRADE_EVIDENCE_CLASS: &str = "heuristic_proxy";
 
-impl AppServices {
+impl LexicalLearningUseCases {
     pub(crate) fn record_context_recognition_evidence(
         &self,
         lexical_entry_id: LexicalEntryId,

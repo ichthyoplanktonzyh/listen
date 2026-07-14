@@ -52,6 +52,7 @@ impl AppServices {
                     Some(hit) => hit.clone(),
                     None => {
                         let key = self
+                            .lexical_learning()
                             .normalize_lexical_form(language.as_str(), &surface_key)
                             .map(|normalization| normalization.normalized)
                             .unwrap_or_else(|_| surface_key.clone());
@@ -290,7 +291,8 @@ impl AppServices {
         let query = if query.contains(char::is_whitespace) {
             query
         } else {
-            self.normalize_lexical_form(language.as_str(), &query)
+            self.lexical_learning()
+                .normalize_lexical_form(language.as_str(), &query)
                 .map(|normalization| normalization.normalized)
                 .unwrap_or(query)
         };

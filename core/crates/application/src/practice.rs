@@ -136,7 +136,7 @@ impl AppServices {
                 let Some(lexical_entry_id) = &anchor.lexical_entry_id else {
                     continue;
                 };
-                self.append_channelized_observation(
+                self.lexical_learning().append_channelized_observation(
                     lexical_entry_id,
                     spec,
                     ObservationContext {
@@ -211,7 +211,8 @@ impl AppServices {
 
         let saved = self.practice.create_practice_attempt(&attempt)?;
         if saved.result == PracticeResult::Correct {
-            self.record_practice_recognition_evidence(&item, &saved, now)?;
+            self.lexical_learning()
+                .record_practice_recognition_evidence(&item, &saved, now)?;
         }
         // Usage-feedback calibration (Phase 3.5 Slice 7, revised after 3.5.6):
         // intensive sessions are never "completed" anymore, so scored attempts
@@ -365,7 +366,7 @@ impl AppServices {
                 if !observed.insert(lexical_entry_id.clone()) {
                     continue;
                 }
-                self.append_channelized_observation(
+                self.lexical_learning().append_channelized_observation(
                     lexical_entry_id,
                     spec,
                     ObservationContext {
@@ -384,7 +385,7 @@ impl AppServices {
             if let Some(lexical_entry_id) = item.source.lexical_entry_id.as_ref()
                 && observed.insert(lexical_entry_id.clone())
             {
-                self.append_channelized_observation(
+                self.lexical_learning().append_channelized_observation(
                     lexical_entry_id,
                     spec,
                     ObservationContext {
@@ -405,7 +406,8 @@ impl AppServices {
             } else {
                 let suggestions = if matches!(input.rating, ReviewRating::Good | ReviewRating::Easy)
                 {
-                    self.record_review_recognition_evidence(&item, &attempt, now)?
+                    self.lexical_learning()
+                        .record_review_recognition_evidence(&item, &attempt, now)?
                 } else {
                     Vec::new()
                 };

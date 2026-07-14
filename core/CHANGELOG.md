@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-14 19:18 CST: Phase 2.24 首个深用例族完成原地替换：lexical normalization、
+  entries/capability evidence、sense folders、vocabulary transfer 与 recognition upgrade 统一进入
+  `LexicalLearningUseCases`，只持有该一致性边界需要的 ports；api-http、跨域协作者和持久化测试
+  均通过 module interface，旧 `AppServices` lexical 直出方法删除。Application 59、api-http
+  48、persistence 121 tests 全绿，workspace tests 可完整编译。
+
 - 2026-07-14 18:53 CST: Phase 2.24 Flutter raw-return ledger 收敛完成：vocabulary
   list/import 与 OpenSubtitles search 建模，未使用的全局 LLTimeline import 客户端入口删除；
   vocabulary book 同步改为 typed details。仅保留 vocabulary export 这一项经审定的开放版本文档

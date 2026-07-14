@@ -40,7 +40,7 @@ fn upsert_word_asset(
 ) {
     let value = value.into();
     services
-        .create_lexical_entry(UpsertLexicalEntry {
+        .lexical_learning().create_lexical_entry(UpsertLexicalEntry {
             language: "en".into(),
             kind: LexicalEntryKind::Word,
             canonical_form: value,
@@ -55,7 +55,7 @@ fn upsert_word_asset(
 
 fn read_word_asset(services: &AppServices, value: &str) -> Option<LexicalEntry> {
     services
-        .read_lexical_entries_by_forms("en", LexicalEntryKind::Word, &[value.into()])
+        .lexical_learning().read_lexical_entries_by_forms("en", LexicalEntryKind::Word, &[value.into()])
         .expect("read lexical word")
         .into_iter()
         .next()
@@ -234,13 +234,13 @@ fn media_availability_lifecycle() {
 
     // Archive
     let archived = services
-        .set_media_availability(&media.id, MediaAvailability::Archived)
+        .lexical_learning().set_media_availability(&media.id, MediaAvailability::Archived)
         .expect("archive");
     assert_eq!(archived.availability, MediaAvailability::Archived);
 
     // Missing
     let deleted = services
-        .set_media_availability(&media.id, MediaAvailability::Missing)
+        .lexical_learning().set_media_availability(&media.id, MediaAvailability::Missing)
         .expect("delete");
     assert_eq!(deleted.availability, MediaAvailability::Missing);
 }

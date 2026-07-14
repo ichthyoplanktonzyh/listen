@@ -25,6 +25,7 @@ pub(crate) async fn set_capability_override(
         .transpose()?;
     let profile = state
         .services
+        .lexical_learning()
         .set_lexical_capability_override(&entry_id, capability, conclusion)?;
     let effective = profile.effective_assessment(capability);
     let _ = state.events.send(
@@ -39,7 +40,7 @@ pub(crate) async fn set_capability_override(
         }
         .envelope(),
     );
-    if let Ok(Some(details)) = state.services.lexical_details(&entry_id) {
+    if let Ok(Some(details)) = state.services.lexical_learning().lexical_details(&entry_id) {
         let _ = state.events.send(EventEnvelope::v1(
             EventName::LexicalEntryChanged,
             serde_json::to_value(&details).expect("lexical details serializes"),
@@ -55,6 +56,7 @@ pub(crate) async fn get_capability_profile(
     let entry_id = LexicalEntryId::parse(entry_id).map_err(ApplicationError::from)?;
     state
         .services
+        .lexical_learning()
         .lexical_capability_profile(&entry_id)?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("capability profile"))
@@ -74,7 +76,7 @@ pub(crate) async fn create_sense_folder(
     Json(request): Json<UpsertSenseFolderRequest>,
 ) -> Result<Json<LexicalEntryDetails>, ApiError> {
     let entry_id = LexicalEntryId::parse(entry_id).map_err(ApplicationError::from)?;
-    state.services.create_lexical_sense_folder(
+    state.services.lexical_learning().create_lexical_sense_folder(
         &entry_id,
         request.label,
         request.definition,
@@ -91,7 +93,7 @@ pub(crate) async fn update_sense_folder(
 ) -> Result<Json<LexicalEntryDetails>, ApiError> {
     let entry_id = LexicalEntryId::parse(entry_id).map_err(ApplicationError::from)?;
     let sense_id = LexicalSenseId::parse(sense_id).map_err(ApplicationError::from)?;
-    state.services.update_lexical_sense_folder(
+    state.services.lexical_learning().update_lexical_sense_folder(
         &entry_id,
         &sense_id,
         request.label,
@@ -110,6 +112,7 @@ pub(crate) async fn delete_sense_folder(
     let sense_id = LexicalSenseId::parse(sense_id).map_err(ApplicationError::from)?;
     state
         .services
+        .lexical_learning()
         .delete_lexical_sense_folder(&entry_id, &sense_id)?;
     lexical_details_after_sense_folder_change(&state, &entry_id)
 }
@@ -122,7 +125,7 @@ pub(crate) async fn assign_sense_folder_occurrence(
     let sense_id = LexicalSenseId::parse(sense_id).map_err(ApplicationError::from)?;
     let occurrence_id =
         LexicalOccurrenceId::parse(occurrence_id).map_err(ApplicationError::from)?;
-    state.services.assign_occurrence_to_lexical_sense_folder(
+    state.services.lexical_learning().assign_occurrence_to_lexical_sense_folder(
         &entry_id,
         &sense_id,
         &occurrence_id,
@@ -140,6 +143,7 @@ pub(crate) async fn unassign_sense_folder_occurrence(
         LexicalOccurrenceId::parse(occurrence_id).map_err(ApplicationError::from)?;
     state
         .services
+        .lexical_learning()
         .unassign_occurrence_from_lexical_sense_folder(&entry_id, &sense_id, &occurrence_id)?;
     lexical_details_after_sense_folder_change(&state, &entry_id)
 }
@@ -150,6 +154,7 @@ fn lexical_details_after_sense_folder_change(
 ) -> Result<Json<LexicalEntryDetails>, ApiError> {
     let details = state
         .services
+        .lexical_learning()
         .lexical_details(entry_id)?
         .ok_or_else(|| ApiError::not_found("lexical entry"))?;
     let _ = state.events.send(EventEnvelope::v1(
@@ -238,6 +243,7 @@ pub(crate) async fn list_vocabulary(
     };
     state
         .services
+        .lexical_learning()
         .list_vocabulary(
             query.language.as_deref().unwrap_or("en"),
             query.kind,
@@ -257,6 +263,7 @@ pub(crate) async fn import_external_vocabulary(
 ) -> Result<Json<domain::ExternalVocabularyImportSummary>, ApiError> {
     state
         .services
+        .lexical_learning()
         .import_external_vocabulary(&request)
         .map(Json)
         .map_err(ApiError::from)
@@ -267,6 +274,7 @@ pub(crate) async fn export_vocabulary(
 ) -> Result<Json<VocabularyAssetBundle>, ApiError> {
     state
         .services
+        .lexical_learning()
         .export_vocabulary()
         .map(Json)
         .map_err(ApiError::from)
@@ -276,7 +284,7 @@ pub(crate) async fn import_vocabulary(
     State(state): State<ApiState>,
     Json(bundle): Json<VocabularyAssetBundle>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    state.services.import_vocabulary(&bundle)?;
+    state.services.lexical_learning().import_vocabulary(&bundle)?;
     let _ = state.events.send(
         crate::event_payloads::VocabularyAssetsImportedPayload {
             lexical_entries: bundle.lexical_entries.len(),
@@ -298,6 +306,7 @@ pub(crate) async fn update_media_availability(
 ) -> Result<Json<domain::MediaItem>, ApiError> {
     let media = state
         .services
+        .lexical_learning()
         .set_media_availability(
             &MediaId::parse(media_id).map_err(ApplicationError::from)?,
             request.availability,

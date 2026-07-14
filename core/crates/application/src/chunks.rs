@@ -51,7 +51,7 @@ impl AppServices {
             let mut timings = grouped.remove(&sentence.id).unwrap_or_default();
             timings.sort_by_key(|timing| (timing.start_ms, timing.end_ms, timing.token_index));
             timing_sources.extend(timings.iter().map(|timing| timing.timing_source));
-            let candidates = self.phrase_candidates(&sentence.id)?;
+            let candidates = self.lexical_learning().phrase_candidates(&sentence.id)?;
             let partition = speech_analysis::chunking::partition_sentence(
                 sentence,
                 &timings,
@@ -162,7 +162,7 @@ impl AppServices {
             .get_sentence(sentence_id)?
             .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
         let timings = self.pronunciation().word_timings(sentence_id)?;
-        let candidates = self.phrase_candidates(sentence_id)?;
+        let candidates = self.lexical_learning().phrase_candidates(sentence_id)?;
         Ok(sentence_chunk_partition_from_analysis(
             speech_analysis::chunking::partition_sentence(
                 &sentence,
@@ -183,7 +183,7 @@ impl AppServices {
             .get_sentence(sentence_id)?
             .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
         let timings = self.pronunciation().word_timings(sentence_id)?;
-        let candidates = self.phrase_candidates(sentence_id)?;
+        let candidates = self.lexical_learning().phrase_candidates(sentence_id)?;
         Ok(sentence_chunk_diagnostics_from_analysis(
             speech_analysis::chunking::partition_sentence_with_diagnostics(
                 &sentence,
@@ -209,7 +209,7 @@ impl AppServices {
             .iter()
             .map(|sentence| {
                 let timings = self.pronunciation().word_timings(&sentence.id)?;
-                let candidates = self.phrase_candidates(&sentence.id)?;
+                let candidates = self.lexical_learning().phrase_candidates(&sentence.id)?;
                 Ok(sentence_chunk_partition_from_analysis(
                     speech_analysis::chunking::partition_sentence(
                         sentence,
@@ -238,7 +238,7 @@ impl AppServices {
             .iter()
             .map(|sentence| {
                 let timings = self.pronunciation().word_timings(&sentence.id)?;
-                let candidates = self.phrase_candidates(&sentence.id)?;
+                let candidates = self.lexical_learning().phrase_candidates(&sentence.id)?;
                 Ok(sentence_chunk_diagnostics_from_analysis(
                     speech_analysis::chunking::partition_sentence_with_diagnostics(
                         sentence,

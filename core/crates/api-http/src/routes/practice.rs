@@ -378,6 +378,7 @@ pub(crate) async fn list_upgrade_suggestions(
         .map_err(ApplicationError::from)?;
     state
         .services
+        .lexical_learning()
         .upgrade_suggestions(
             lexical_entry_id.as_ref(),
             Some(query.status.unwrap_or(UpgradeSuggestionStatus::Pending)),
@@ -406,6 +407,7 @@ pub(crate) async fn upgrade_suggestion_history(
         .map_err(ApplicationError::from)?;
     state
         .services
+        .lexical_learning()
         .upgrade_suggestions(
             lexical_entry_id.as_ref(),
             None,
@@ -422,6 +424,7 @@ pub(crate) async fn confirm_upgrade_suggestion(
 ) -> Result<Json<UpgradeSuggestion>, ApiError> {
     state
         .services
+        .lexical_learning()
         .confirm_upgrade_suggestion(
             &UpgradeSuggestionId::parse(id).map_err(ApplicationError::from)?,
         )
@@ -435,6 +438,7 @@ pub(crate) async fn reject_upgrade_suggestion(
 ) -> Result<Json<UpgradeSuggestion>, ApiError> {
     state
         .services
+        .lexical_learning()
         .reject_upgrade_suggestion(&UpgradeSuggestionId::parse(id).map_err(ApplicationError::from)?)
         .map(Json)
         .map_err(ApiError::from)

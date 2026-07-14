@@ -1,6 +1,41 @@
 use crate::*;
+use std::sync::Arc;
 
-impl AppServices {
+/// Lexical learning owns normalization, durable lexical assets, capability
+/// evidence, sense organization, and vocabulary transfer as one consistency
+/// boundary. It deliberately excludes practice scheduling and media analysis.
+#[derive(Clone)]
+pub struct LexicalLearningUseCases {
+    pub(crate) media: Arc<dyn MediaRepository>,
+    pub(crate) subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
+    pub(crate) lexical_capabilities: Arc<dyn LexicalCapabilityRepository>,
+    pub(crate) lexical_entries: Arc<dyn LexicalEntryRepository>,
+    pub(crate) learning_observations: Arc<dyn LearningObservationRepository>,
+    pub(crate) lexical_content: Arc<dyn LexicalContentRepository>,
+    pub(crate) vocabulary_assets: Arc<dyn VocabularyAssetRepository>,
+    pub(crate) practice: Arc<dyn PracticeRepository>,
+    pub(crate) recognition_upgrades: Arc<dyn RecognitionUpgradeRepository>,
+    pub(crate) learning_events: Arc<dyn LearningEventRepository>,
+    pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
+}
+
+impl LexicalLearningUseCases {
+    pub(crate) fn from_services(services: &AppServices) -> Self {
+        Self {
+            media: services.media.clone(),
+            subtitle_tracks: services.subtitle_tracks.clone(),
+            lexical_capabilities: services.lexical_capabilities.clone(),
+            lexical_entries: services.lexical_entries.clone(),
+            learning_observations: services.learning_observations.clone(),
+            lexical_content: services.lexical_content.clone(),
+            vocabulary_assets: services.vocabulary_assets.clone(),
+            practice: services.practice.clone(),
+            recognition_upgrades: services.recognition_upgrades.clone(),
+            learning_events: services.learning_events.clone(),
+            lexical_normalizers: services.lexical_normalizers.clone(),
+        }
+    }
+
     pub fn normalize_lexical_form(
         &self,
         language: &str,
@@ -188,6 +223,16 @@ impl AppServices {
                 && left.token_end == right.token_end
         });
         Ok(candidates)
+    }
+
+    pub(crate) fn sentence_language(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<LanguageCode, ApplicationError> {
+        match self.subtitle_tracks.sentence_track_language(sentence_id)? {
+            Some(language) => Ok(language),
+            None => Ok(LanguageCode::parse("en")?),
+        }
     }
 }
 

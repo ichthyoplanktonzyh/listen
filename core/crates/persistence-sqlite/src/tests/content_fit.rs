@@ -57,7 +57,7 @@ fn seed_vocabulary(services: &AppServices) {
     // 1 (tango) never assessed.
     for word in &WORDS[..17] {
         services
-            .create_lexical_entry(UpsertLexicalEntry {
+            .lexical_learning().create_lexical_entry(UpsertLexicalEntry {
                 language: "en".into(),
                 kind: LexicalEntryKind::Word,
                 canonical_form: (*word).to_owned(),
@@ -70,7 +70,7 @@ fn seed_vocabulary(services: &AppServices) {
             .unwrap();
     }
     services
-        .create_lexical_entry(UpsertLexicalEntry {
+        .lexical_learning().create_lexical_entry(UpsertLexicalEntry {
             language: "en".into(),
             kind: LexicalEntryKind::Word,
             canonical_form: "romeo".into(),
@@ -82,7 +82,7 @@ fn seed_vocabulary(services: &AppServices) {
         })
         .unwrap();
     services
-        .create_lexical_entry(UpsertLexicalEntry {
+        .lexical_learning().create_lexical_entry(UpsertLexicalEntry {
             language: "en".into(),
             kind: LexicalEntryKind::Word,
             canonical_form: "sierra".into(),
@@ -216,7 +216,7 @@ fn content_fit_fingerprint_is_stable_until_vocabulary_changes() {
     // Assessing the previously unassessed word moves the vocabulary
     // watermark, so the fingerprint must change and unassessed density drop.
     services
-        .create_lexical_entry(UpsertLexicalEntry {
+        .lexical_learning().create_lexical_entry(UpsertLexicalEntry {
             language: "en".into(),
             kind: LexicalEntryKind::Word,
             canonical_form: "tango".into(),
@@ -263,7 +263,7 @@ fn cached_content_fit_reuses_profile_until_inputs_change() {
     // A vocabulary change moves the watermark: the tampered cache is stale
     // and must be recomputed and re-persisted.
     services
-        .create_lexical_entry(UpsertLexicalEntry {
+        .lexical_learning().create_lexical_entry(UpsertLexicalEntry {
             language: "en".into(),
             kind: LexicalEntryKind::Word,
             canonical_form: "tango".into(),
@@ -393,7 +393,7 @@ fn comprehension_feedback_calibrates_sound_fit_and_survives_recompute() {
     // Vocabulary changes force a full recompute; the calibration survives it
     // because it lives outside the profile cache.
     services
-        .create_lexical_entry(UpsertLexicalEntry {
+        .lexical_learning().create_lexical_entry(UpsertLexicalEntry {
             language: "en".into(),
             kind: LexicalEntryKind::Word,
             canonical_form: "tango".into(),

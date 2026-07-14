@@ -537,7 +537,7 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
     );
     assert_eq!(
         services
-            .lexical_details(&lexical.entry.id)
+            .lexical_learning().lexical_details(&lexical.entry.id)
             .unwrap()
             .unwrap()
             .entry
@@ -950,7 +950,7 @@ fn five_distinct_review_contexts_require_confirmation_before_status_upgrade() {
     );
     assert_eq!(
         services
-            .lexical_details(&lexical.entry.id)
+            .lexical_learning().lexical_details(&lexical.entry.id)
             .unwrap()
             .unwrap()
             .entry
@@ -959,11 +959,11 @@ fn five_distinct_review_contexts_require_confirmation_before_status_upgrade() {
     );
 
     let confirmed = services
-        .confirm_upgrade_suggestion(&generated[0].id)
+        .lexical_learning().confirm_upgrade_suggestion(&generated[0].id)
         .unwrap();
     assert_eq!(confirmed.status, UpgradeSuggestionStatus::Accepted);
     let details = services
-        .lexical_details(&lexical.entry.id)
+        .lexical_learning().lexical_details(&lexical.entry.id)
         .unwrap()
         .unwrap();
     assert_eq!(details.entry.status, Some(LearningStatus::KnownRecognized));
@@ -972,7 +972,7 @@ fn five_distinct_review_contexts_require_confirmation_before_status_upgrade() {
         LearningChangeSource::CapabilityOverrideSync
     );
     let profile = services
-        .lexical_capability_profile(&lexical.entry.id)
+        .lexical_learning().lexical_capability_profile(&lexical.entry.id)
         .unwrap()
         .unwrap();
     assert_eq!(
@@ -1051,7 +1051,7 @@ fn listening_projection_flips_on_task_failure_and_blocks_self_report_upgrade() {
         })
         .unwrap();
     let details = services
-        .lexical_details(&lexical.entry.id)
+        .lexical_learning().lexical_details(&lexical.entry.id)
         .unwrap()
         .unwrap();
     assert_eq!(
@@ -1059,7 +1059,7 @@ fn listening_projection_flips_on_task_failure_and_blocks_self_report_upgrade() {
         Some(LearningStatus::KnownNotRecognized)
     );
     let profile = services
-        .lexical_capability_profile(&lexical.entry.id)
+        .lexical_learning().lexical_capability_profile(&lexical.entry.id)
         .unwrap()
         .unwrap();
     let projection = profile.listening.projection.as_ref().unwrap();
@@ -1080,7 +1080,7 @@ fn listening_projection_flips_on_task_failure_and_blocks_self_report_upgrade() {
         None,
     );
     let details = services
-        .lexical_details(&lexical.entry.id)
+        .lexical_learning().lexical_details(&lexical.entry.id)
         .unwrap()
         .unwrap();
     assert_eq!(
@@ -1089,7 +1089,7 @@ fn listening_projection_flips_on_task_failure_and_blocks_self_report_upgrade() {
     );
     // Reading is not evidence-owned: the self-report still lands there.
     let profile = services
-        .lexical_capability_profile(&lexical.entry.id)
+        .lexical_learning().lexical_capability_profile(&lexical.entry.id)
         .unwrap()
         .unwrap();
     assert_eq!(
@@ -1165,12 +1165,12 @@ fn rejecting_upgrade_suggestion_sets_cooldown_without_status_change() {
         .unwrap()
         .upgrade_suggestions
         .remove(0);
-    let rejected = services.reject_upgrade_suggestion(&suggestion.id).unwrap();
+    let rejected = services.lexical_learning().reject_upgrade_suggestion(&suggestion.id).unwrap();
     assert_eq!(rejected.status, UpgradeSuggestionStatus::Rejected);
     assert!(rejected.cooldown_until_ms > rejected.resolved_at_ms);
     assert_eq!(
         services
-            .lexical_details(&lexical.entry.id)
+            .lexical_learning().lexical_details(&lexical.entry.id)
             .unwrap()
             .unwrap()
             .entry

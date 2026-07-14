@@ -21,6 +21,7 @@ impl AppServices {
                 continue;
             }
             let normalized = self
+                .lexical_learning()
                 .normalize_lexical_form(language.as_str(), lemma)?
                 .normalized;
             lexical_keys.insert(lemma.clone(), normalized);
@@ -37,6 +38,7 @@ impl AppServices {
             &keys,
         )?;
         let phrase_keys = self
+            .lexical_learning()
             .phrase_candidates(sentence_id)?
             .into_iter()
             .map(|candidate| candidate.normalized_form)
