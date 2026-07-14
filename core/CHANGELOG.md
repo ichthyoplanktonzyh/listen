@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-14 21:55 CST: Phase 3.13 Reading Studio v1 开工：PLAN 按上游落地现状修订为
+  v2 并建分支 `claude/3.13-reading-studio-v1`。关键裁决：读听差异直接骑在 3.11
+  `SemanticTaskConditions`（source_text_visible/audio_play_count）+
+  `judgments_directly_comparable` 上，读端派生聚合、不新增权威表；段落 read model
+  为派生投影不落库；阅读位置定为 v37 upsert cursor 不进 append-only 事实族；无 LLM
+  默认路径 = manual rubric + 用户自评 manual judgment；semantic Dart DTO 由本 phase
+  作为首个真实 consumer 交付（ADR 0014）；reading observation 收窄为用户显式标记
+  （capability=Reading）；provider-backed rubric/judgment 为后置切片，跟随 owner
+  3.12.1 资格裁决。执行方式变更：本 phase 起由 Claude 全程实现（codex 无额度）。
+
 - 2026-07-14 21:30 CST: Phase 3.9.4 收口。Slice 4 QA：Rust workspace 614 tests、
   clippy strict、fmt、contracts、flutter analyze/test 362 全绿；隔离 DB + 真实 spaCy
   capability + 两条真实字幕轨道的后端 HTTP 全链路实测通过（持久化/激活/幂等/
