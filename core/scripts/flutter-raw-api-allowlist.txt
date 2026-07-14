@@ -7,17 +7,8 @@ coach_llm.dart:learningResources
 coach_llm.dart:installLearningResource
 coach_llm.dart:removeLearningResource
 lexical.dart:listVocabulary
-lexical.dart:setCapabilityOverride
 lexical.dart:importExternalVocabulary
 lexical.dart:exportVocabulary
-lexical.dart:learnerProfile
-lexical.dart:updateLearnerProfile
-lexical.dart:l1SpecialtyOccurrences
-lexical.dart:correctLemma
-media.dart:registerMedia
-media.dart:readMedia
-speech.dart:trackSyntaxAnalysisStatus
-speech.dart:trackChunkPartitions
 speech.dart:phoneticAnalysisModels
 speech.dart:phoneticAnalysisProviders
 speech.dart:installPhoneticAnalysisModel

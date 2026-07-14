@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-14 17:49 CST: Flutter typed-resource 第四批将 MediaItem、chunk partition、syntax
+  status、learner profile/L1 specialty、capability override、lemma normalization 移至 LocalApi
+  解码，UI/occurrence resolver/settings 删除对应 map field knowledge；补充 learner/L1 contract
+  tests。raw-return allowlist 从 51 项继续降至 42 项，analyze、定向 17 tests、全量 347
+  tests 与 guard 全绿。
+
 - 2026-07-14 17:44 CST: 继续压缩 Flutter raw-return allowlist：cold-start candidates、
   sense-group analysis/summary/lifecycle 与 LLTimeline export 改为 LocalApi typed decoding，
   controller/widget 删除 wire parsing。补齐 `LLTimelineDocument` 及其 export children 的
