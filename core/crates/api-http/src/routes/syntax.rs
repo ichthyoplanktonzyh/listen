@@ -105,6 +105,27 @@ struct TrackSyntaxCacheEntry {
     batch: SyntacticConsumerBatch,
 }
 
+fn persist_sense_groups_from_batch(
+    state: &ApiState,
+    track_id: &SubtitleTrackId,
+    batch: &SyntacticConsumerBatch,
+) {
+    if batch.sentences.is_empty() {
+        return;
+    }
+    if let Err(error) = state
+        .services
+        .media_analysis()
+        .persist_sense_group_analysis_from_batch(track_id, batch)
+    {
+        tracing::warn!(
+            track_id = track_id.as_str(),
+            error = ?error,
+            "failed to persist sense group analysis from syntax batch"
+        );
+    }
+}
+
 pub(crate) async fn run_syntactic_consumers(
     State(state): State<ApiState>,
     Path(track_id): Path<String>,
@@ -193,6 +214,7 @@ pub(crate) async fn run_track_syntax_analysis(
             .await
         && cached.fingerprint == fingerprint
     {
+        persist_sense_groups_from_batch(&state, &track_id, &cached.batch);
         return Ok(Json(TrackSyntaxAnalysisView {
             status: cached.status,
             fingerprint: cached.fingerprint,
@@ -272,6 +294,7 @@ pub(crate) async fn run_track_syntax_analysis(
             .write_track_cache(track_id.as_str(), &cached)
             .await;
     }
+    persist_sense_groups_from_batch(&state, &track_id, &batch);
     Ok(Json(TrackSyntaxAnalysisView {
         status,
         fingerprint,

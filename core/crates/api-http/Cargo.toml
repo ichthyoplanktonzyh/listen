@@ -25,6 +25,7 @@ sha2.workspace = true
 syntactic-provider = { path = "../syntactic-provider" }
 tokio.workspace = true
 tower.workspace = true
+tracing.workspace = true
 
 # Composition root owns the platform-specific secret store. security-framework
 # is already in the dependency tree; the macOS keychain path is cfg-gated.

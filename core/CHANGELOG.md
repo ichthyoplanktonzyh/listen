@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-14 20:29 CST: Phase 3.9.4 Slice 1 完成：track syntax-analysis 的新鲜
+  batch 与 cache-hit batch 都通过 application 用例持久化并激活 SenseGroup，失败仅记录
+  tracing warning、不影响 syntax 响应，capability unavailable 早退保持无副作用。扩展
+  api-http ready fake-provider 集成测试，覆盖首次 syntax batch 的 groups 一致性、cache hit
+  幂等和 force 重算不重复。
+
 - 2026-07-14 20:20 CST: Phase 3.9.4 Slice 0 完成：application 新增
   `MediaAnalysisUseCases::persist_sense_group_analysis_from_batch`，把语法分析 batch 中
   已算好的 sense groups 映射持久化为 `SenseGroupAnalysis` 并激活；text/id 推导与既有
