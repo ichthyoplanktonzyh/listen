@@ -109,8 +109,7 @@ pub(crate) async fn run_syntactic_consumers(
 ) -> Result<Json<application::SyntacticConsumerBatch>, ApiError> {
     let track_id = SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?;
     let track = state
-        .services
-        .read_subtitle_track(&track_id)?
+        .services.media_analysis().read_subtitle_track(&track_id)?
         .ok_or(ApplicationError::NotFound("subtitle track"))?;
     let language = track
         .language
@@ -153,8 +152,7 @@ pub(crate) async fn run_track_syntax_analysis(
     let request = request.map(|Json(value)| value).unwrap_or_default();
     let track_id = SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?;
     let track = state
-        .services
-        .read_subtitle_track(&track_id)?
+        .services.media_analysis().read_subtitle_track(&track_id)?
         .ok_or(ApplicationError::NotFound("subtitle track"))?;
     let language = track
         .language
@@ -278,8 +276,7 @@ pub(crate) async fn track_syntax_analysis_status(
 ) -> Result<Json<TrackSyntaxAnalysisView>, ApiError> {
     let track_id = SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?;
     let track = state
-        .services
-        .read_subtitle_track(&track_id)?
+        .services.media_analysis().read_subtitle_track(&track_id)?
         .ok_or(ApplicationError::NotFound("subtitle track"))?;
     let language = track
         .language

@@ -429,8 +429,7 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
         repo.clone(),
     )
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
-    let media = services
-        .register_media(RegisterMedia {
+    let media = services.media_analysis().register_media(RegisterMedia {
             path: "/tmp/review-evidence.mp4".into(),
             fingerprint: "review-evidence".into(),
             title: "Review evidence".into(),
@@ -438,8 +437,7 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
             duration_ms: Some(5_000),
         })
         .unwrap();
-    let track = services
-        .import_subtitle(ImportSubtitle {
+    let track = services.media_analysis().import_subtitle(ImportSubtitle {
             media_id: media.id.clone(),
             source_name: "timeline.srt".into(),
             content: include_bytes!("../../../../testdata/subtitles/timeline.srt").to_vec(),
@@ -646,8 +644,7 @@ fn hunting_occurrences_use_media_corpus_and_three_way_checks_keep_not_noticed_ev
     )
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
     .with_corpus_index_repository(repo.clone());
-    let media = services
-        .register_media(RegisterMedia {
+    let media = services.media_analysis().register_media(RegisterMedia {
             path: "/tmp/hunting.mp4".into(),
             fingerprint: "hunting-media".into(),
             title: "Hunting media".into(),
@@ -655,8 +652,7 @@ fn hunting_occurrences_use_media_corpus_and_three_way_checks_keep_not_noticed_ev
             duration_ms: Some(10_000),
         })
         .unwrap();
-    let track = services
-        .import_subtitle(ImportSubtitle {
+    let track = services.media_analysis().import_subtitle(ImportSubtitle {
             media_id: media.id.clone(),
             source_name: "timeline.srt".into(),
             content: include_bytes!("../../../../testdata/subtitles/timeline.srt").to_vec(),

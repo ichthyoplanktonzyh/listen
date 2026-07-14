@@ -47,6 +47,7 @@ pub use error::ApplicationError;
 pub use learner_profile::{LearnerProfileUseCases, LearnerProfileView};
 pub use lexical::LexicalLearningUseCases;
 pub use llm_provider::LlmProviderUseCases;
+pub use media::MediaAnalysisUseCases;
 pub use pronunciation::PronunciationUseCases;
 pub use pronunciation_providers::*;
 pub use providers::*;
@@ -114,6 +115,10 @@ pub struct AppServices {
 }
 
 impl AppServices {
+    pub fn media_analysis(&self) -> MediaAnalysisUseCases {
+        MediaAnalysisUseCases::from_services(self)
+    }
+
     pub fn lexical_learning(&self) -> LexicalLearningUseCases {
         LexicalLearningUseCases::from_services(self)
     }
@@ -707,7 +712,7 @@ pub(crate) fn build_word_timeline(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn save_word_timeline_snapshot_with_metrics(
-    services: &AppServices,
+    services: &MediaAnalysisUseCases,
     track_id: &SubtitleTrackId,
     timings: &[WordTiming],
     algorithm_id: &str,

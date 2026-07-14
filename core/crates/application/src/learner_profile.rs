@@ -27,6 +27,7 @@ pub struct LearnerProfileView {
     pub updated_at_ms: Option<u64>,
 }
 
+#[derive(Clone)]
 pub struct LearnerProfileUseCases {
     profiles: Arc<dyn LearnerProfileRepository>,
 }

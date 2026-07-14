@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::*;
 
-impl AppServices {
+impl MediaAnalysisUseCases {
     /// Cached read path: returns the stored profile when its fingerprint
     /// still matches the current inputs, otherwise recomputes and saves.
     /// The fingerprint check is cheap (no transcript normalization, no

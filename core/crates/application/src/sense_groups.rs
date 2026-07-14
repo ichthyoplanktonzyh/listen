@@ -1,6 +1,6 @@
 use crate::*;
 
-impl AppServices {
+impl MediaAnalysisUseCases {
     pub fn list_sense_group_analyses(
         &self,
         track_id: &SubtitleTrackId,

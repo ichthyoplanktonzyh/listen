@@ -132,7 +132,7 @@ fn select_rhythm_source_word_timeline_id(
         .or_else(|| active_word_timeline_id.cloned())
 }
 
-impl AppServices {
+impl MediaAnalysisUseCases {
     pub(crate) fn store_rhythm_word_acoustic_analysis(
         &self,
         track_id: &SubtitleTrackId,

@@ -11,8 +11,7 @@ pub(crate) async fn coach_dashboard(
     Query(query): Query<CoachDashboardQuery>,
 ) -> Result<Json<application::CoachDashboard>, ApiError> {
     state
-        .services
-        .coach_dashboard(query.days.unwrap_or(7))
+        .services.media_analysis().coach_dashboard(query.days.unwrap_or(7))
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -23,8 +22,7 @@ pub(crate) async fn graduate_coach_material(
 ) -> Result<Json<application::MediaLibraryEntry>, ApiError> {
     let media_id = MediaId::parse(media_id).map_err(ApplicationError::from)?;
     state
-        .services
-        .graduate_coach_material(&media_id)
+        .services.media_analysis().graduate_coach_material(&media_id)
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -42,8 +40,7 @@ pub(crate) async fn coach_evidence(
     Query(query): Query<CoachEvidenceQuery>,
 ) -> Result<Json<Vec<application::CoachEvidenceItem>>, ApiError> {
     state
-        .services
-        .coach_evidence(
+        .services.media_analysis().coach_evidence(
             &query.metric,
             query.days.unwrap_or(7),
             query.limit.unwrap_or(50),

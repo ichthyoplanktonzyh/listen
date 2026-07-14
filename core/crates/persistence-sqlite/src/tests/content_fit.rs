@@ -112,7 +112,7 @@ fn content_fit_profile_computes_dual_dimensions_from_transcript_and_vocabulary()
     repo.save_track(&track).unwrap();
     seed_vocabulary(&services);
 
-    let profile = services.compute_content_fit_for_track(&track.id).unwrap();
+    let profile = services.media_analysis().compute_content_fit_for_track(&track.id).unwrap();
 
     assert_eq!(profile.subject_kind, "media");
     assert_eq!(profile.subject_id, track.media_id.as_str());
@@ -177,7 +177,7 @@ fn fast_delivery_escalates_sound_fit_via_active_word_timeline() {
     })
     .unwrap();
 
-    let profile = services.compute_content_fit_for_track(&track.id).unwrap();
+    let profile = services.media_analysis().compute_content_fit_for_track(&track.id).unwrap();
 
     // challenging base (knr 0.05) + fast-speech escalation saturates the
     // remaining headroom regardless of what the derived rhythm frames add.
@@ -207,8 +207,8 @@ fn content_fit_fingerprint_is_stable_until_vocabulary_changes() {
     repo.save_track(&track).unwrap();
     seed_vocabulary(&services);
 
-    let first = services.compute_content_fit_for_track(&track.id).unwrap();
-    let second = services.compute_content_fit_for_track(&track.id).unwrap();
+    let first = services.media_analysis().compute_content_fit_for_track(&track.id).unwrap();
+    let second = services.media_analysis().compute_content_fit_for_track(&track.id).unwrap();
     assert_eq!(first.input_fingerprint, second.input_fingerprint);
     assert_eq!(first.meaning, second.meaning);
     assert_eq!(first.sound, second.sound);
@@ -227,7 +227,7 @@ fn content_fit_fingerprint_is_stable_until_vocabulary_changes() {
             source: None,
         })
         .unwrap();
-    let third = services.compute_content_fit_for_track(&track.id).unwrap();
+    let third = services.media_analysis().compute_content_fit_for_track(&track.id).unwrap();
     assert_ne!(first.input_fingerprint, third.input_fingerprint);
     assert!((third.assessed_token_ratio - 1.0).abs() < 1e-6);
     assert_eq!(third.meaning.fit, InputFit::Comprehensible);
@@ -242,7 +242,7 @@ fn cached_content_fit_reuses_profile_until_inputs_change() {
     repo.save_track(&track).unwrap();
     seed_vocabulary(&services);
 
-    let first = services.content_fit_for_track(&track.id).unwrap();
+    let first = services.media_analysis().content_fit_for_track(&track.id).unwrap();
     let stored = application::DifficultyRepository::get_difficulty_profile(
         repo.as_ref(),
         "media",
@@ -257,7 +257,7 @@ fn cached_content_fit_reuses_profile_until_inputs_change() {
     let mut tampered = stored.clone();
     tampered.assessed_token_ratio = 0.123;
     application::DifficultyRepository::save_difficulty_profile(repo.as_ref(), &tampered).unwrap();
-    let second = services.content_fit_for_track(&track.id).unwrap();
+    let second = services.media_analysis().content_fit_for_track(&track.id).unwrap();
     assert!((second.assessed_token_ratio - 0.123).abs() < 1e-6);
 
     // A vocabulary change moves the watermark: the tampered cache is stale
@@ -274,7 +274,7 @@ fn cached_content_fit_reuses_profile_until_inputs_change() {
             source: None,
         })
         .unwrap();
-    let third = services.content_fit_for_track(&track.id).unwrap();
+    let third = services.media_analysis().content_fit_for_track(&track.id).unwrap();
     assert!((third.assessed_token_ratio - 1.0).abs() < 1e-6);
     assert_ne!(third.input_fingerprint, first.input_fingerprint);
     let restored = application::DifficultyRepository::get_difficulty_profile(
@@ -296,7 +296,7 @@ fn content_fit_requires_language_and_word_tokens() {
     let track = fit_track(None);
     repo.save_track(&track).unwrap();
     assert!(matches!(
-        services.compute_content_fit_for_track(&track.id),
+        services.media_analysis().compute_content_fit_for_track(&track.id),
         Err(application::ApplicationError::Validation(
             "subtitle track language"
         ))
@@ -313,7 +313,7 @@ fn content_fit_requires_language_and_word_tokens() {
     }
     repo.save_track(&empty_track).unwrap();
     assert!(matches!(
-        services.compute_content_fit_for_track(&empty_track.id),
+        services.media_analysis().compute_content_fit_for_track(&empty_track.id),
         Err(application::ApplicationError::Validation(
             "track word tokens"
         ))
@@ -335,7 +335,7 @@ fn comprehension_feedback_calibrates_sound_fit_and_survives_recompute() {
     seed_vocabulary(&services);
 
     // Baseline: 0.05 knr => challenging, initial estimate.
-    let baseline = services.content_fit_for_track(&track.id).unwrap();
+    let baseline = services.media_analysis().content_fit_for_track(&track.id).unwrap();
     assert_eq!(baseline.sound.fit, InputFit::Challenging);
     assert_eq!(baseline.evidence_grade, FitEvidenceGrade::InitialEstimate);
 
@@ -373,7 +373,7 @@ fn comprehension_feedback_calibrates_sound_fit_and_survives_recompute() {
     // The calibration watermark invalidates the cached profile: the next
     // read re-bands one step harder and reports usage_calibrated, with the
     // calibration signal attached and material signals untouched.
-    let calibrated = services.content_fit_for_track(&track.id).unwrap();
+    let calibrated = services.media_analysis().content_fit_for_track(&track.id).unwrap();
     assert_ne!(calibrated.input_fingerprint, baseline.input_fingerprint);
     assert_eq!(calibrated.sound.fit, InputFit::TooHard);
     assert_eq!(calibrated.evidence_grade, FitEvidenceGrade::UsageCalibrated);
@@ -404,7 +404,7 @@ fn comprehension_feedback_calibrates_sound_fit_and_survives_recompute() {
             source: None,
         })
         .unwrap();
-    let recomputed = services.content_fit_for_track(&track.id).unwrap();
+    let recomputed = services.media_analysis().content_fit_for_track(&track.id).unwrap();
     assert_ne!(recomputed.input_fingerprint, calibrated.input_fingerprint);
     assert_eq!(recomputed.evidence_grade, FitEvidenceGrade::UsageCalibrated);
     assert_eq!(recomputed.sound.fit, InputFit::TooHard);
@@ -538,7 +538,7 @@ fn practice_accuracy_feedback_calibrates_sound_fit() {
     assert_eq!(calibration.practice_attempts, 6);
     assert_eq!(calibration.practice_correct, 1);
 
-    let profile = services.content_fit_for_track(&track.id).unwrap();
+    let profile = services.media_analysis().content_fit_for_track(&track.id).unwrap();
     assert_eq!(profile.evidence_grade, FitEvidenceGrade::UsageCalibrated);
     assert_eq!(profile.sound.fit, InputFit::TooHard);
     assert!(

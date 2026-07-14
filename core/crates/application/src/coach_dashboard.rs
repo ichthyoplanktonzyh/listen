@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::{AppServices, ApplicationError, CoachDashboardFacts, now_ms};
+use crate::{ApplicationError, CoachDashboardFacts, MediaAnalysisUseCases, now_ms};
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -70,7 +70,7 @@ pub struct CoachDashboard {
     pub materials: Vec<CoachMaterialInsight>,
 }
 
-impl AppServices {
+impl MediaAnalysisUseCases {
     pub fn coach_dashboard(&self, days: u32) -> Result<CoachDashboard, ApplicationError> {
         let generated_at_ms = now_ms();
         let period_end_ms = generated_at_ms;

@@ -12,7 +12,7 @@ const SOUND_LINE_DTW_ALGORITHM_ID: &str = "sound-line-whisper-dtw";
 const SOUND_LINE_DTW_ALGORITHM_VERSION: &str = "phase-2.22";
 const SOUND_LINE_DTW_CONFIG_HASH: &str = "sound-line-whisper-json-full-dtw-v1";
 
-impl AppServices {
+impl MediaAnalysisUseCases {
     pub async fn store_transcription_text_word_timeline(
         &self,
         track_id: &SubtitleTrackId,

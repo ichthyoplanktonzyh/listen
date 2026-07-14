@@ -64,8 +64,7 @@ fn coach_dashboard_derives_material_trajectory_and_requires_confirmed_graduation
     )
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
     .with_coach_dashboard_repository(repo.clone());
-    let graduated = services
-        .graduate_coach_material(&MediaId::parse("media-coach").unwrap())
+    let graduated = services.media_analysis().graduate_coach_material(&MediaId::parse("media-coach").unwrap())
         .unwrap();
     assert_eq!(graduated.triage_intent, Some(MediaTriageIntent::Graduated));
 }

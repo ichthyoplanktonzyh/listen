@@ -1,6 +1,6 @@
 use crate::*;
 
-impl AppServices {
+impl MediaAnalysisUseCases {
     pub fn diagnose_sentence(
         &self,
         sentence_id: &SubtitleSentenceId,
@@ -53,6 +53,7 @@ impl AppServices {
         let mut profiles = std::collections::HashMap::new();
         for entry in entries.iter().chain(phrase_entries.iter()) {
             if let Some(profile) = self
+                .lexical_learning()
                 .lexical_capabilities
                 .lexical_capability_profile(&entry.id, None)?
             {
@@ -60,6 +61,7 @@ impl AppServices {
             }
         }
         let observations = self
+            .lexical_learning()
             .learning_observations
             .list_lexical_observations_by_sentence(sentence_id)?;
         let mut diagnosis = diagnosis_core::diagnose_with_profiles(

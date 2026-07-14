@@ -533,12 +533,12 @@ fn services_are_idempotent_and_persist_state() {
         kind: MediaKind::Video,
         duration_ms: Some(10_000),
     };
-    let first = services.register_media(input.clone()).unwrap();
-    let second = services.register_media(input).unwrap();
+    let first = services.media_analysis().register_media(input.clone()).unwrap();
+    let second = services.media_analysis().register_media(input).unwrap();
     assert_eq!(first.id, second.id);
-    services.update_progress(&first.id, 1250).unwrap();
+    services.media_analysis().update_progress(&first.id, 1250).unwrap();
     assert_eq!(
-        services.read_progress(&first.id).unwrap(),
+        services.media_analysis().read_progress(&first.id).unwrap(),
         Some(TimeMs::new(1250))
     );
 
@@ -559,11 +559,11 @@ fn services_are_idempotent_and_persist_state() {
         language: Some("en".into()),
         identity_salt: None,
     };
-    let first_track = services.import_subtitle(subtitle.clone()).unwrap();
-    let second_track = services.import_subtitle(subtitle).unwrap();
+    let first_track = services.media_analysis().import_subtitle(subtitle.clone()).unwrap();
+    let second_track = services.media_analysis().import_subtitle(subtitle).unwrap();
     assert_eq!(first_track.id, second_track.id);
     assert_eq!(
-        services.read_subtitle_track(&first_track.id).unwrap(),
+        services.media_analysis().read_subtitle_track(&first_track.id).unwrap(),
         Some(first_track)
     );
 }
@@ -1075,8 +1075,7 @@ fn diagnosis_uses_capability_profile_not_legacy_status() {
         repo.clone(),
         repo.clone(),
     );
-    let media = services
-        .register_media(application::RegisterMedia {
+    let media = services.media_analysis().register_media(application::RegisterMedia {
             path: "/tmp/cap.mp4".into(),
             fingerprint: "cap-diag".into(),
             title: "Cap".into(),
@@ -1084,8 +1083,7 @@ fn diagnosis_uses_capability_profile_not_legacy_status() {
             duration_ms: Some(5000),
         })
         .unwrap();
-    let track = services
-        .import_subtitle(application::ImportSubtitle {
+    let track = services.media_analysis().import_subtitle(application::ImportSubtitle {
             media_id: media.id.clone(),
             source_name: "cap.srt".into(),
             content: "1\n00:00:00,000 --> 00:00:02,000\nalpha beta\n"
@@ -1131,7 +1129,7 @@ fn diagnosis_uses_capability_profile_not_legacy_status() {
         )
         .unwrap();
 
-    let diagnosis = services.diagnose_sentence(&sentence.id).unwrap();
+    let diagnosis = services.media_analysis().diagnose_sentence(&sentence.id).unwrap();
     // Alpha: reading=Acquired (from legacy), listening=Acquired (from override)
     // → no barrier
     assert!(
@@ -1163,8 +1161,7 @@ fn diagnosis_treats_unassessed_as_insufficient_not_barrier() {
         repo.clone(),
         repo.clone(),
     );
-    let media = services
-        .register_media(application::RegisterMedia {
+    let media = services.media_analysis().register_media(application::RegisterMedia {
             path: "/tmp/unass.mp4".into(),
             fingerprint: "unass-diag".into(),
             title: "Unass".into(),
@@ -1172,8 +1169,7 @@ fn diagnosis_treats_unassessed_as_insufficient_not_barrier() {
             duration_ms: Some(5000),
         })
         .unwrap();
-    let track = services
-        .import_subtitle(application::ImportSubtitle {
+    let track = services.media_analysis().import_subtitle(application::ImportSubtitle {
             media_id: media.id.clone(),
             source_name: "un.srt".into(),
             content: "1\n00:00:00,000 --> 00:00:02,000\nalpha\n"
@@ -1188,7 +1184,7 @@ fn diagnosis_treats_unassessed_as_insufficient_not_barrier() {
     // Create entry without status → all capabilities unassessed
     upsert_word_asset(&services, "en", "alpha", "alpha", None, None);
 
-    let diagnosis = services.diagnose_sentence(&sentence.id).unwrap();
+    let diagnosis = services.media_analysis().diagnose_sentence(&sentence.id).unwrap();
     assert!(
         !diagnosis
             .hints

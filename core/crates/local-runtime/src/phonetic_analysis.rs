@@ -341,8 +341,7 @@ impl PhoneticAnalysisCoordinator {
         }
         let track_id = SubtitleTrackId::parse(request.track_id)?;
         let track = self
-            .services
-            .read_subtitle_track(&track_id)?
+            .services.media_analysis().read_subtitle_track(&track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         let model_id = PhoneticAnalysisModelId::parse(request.model_id)?;
         let model = self
@@ -589,8 +588,7 @@ impl PhoneticAnalysisCoordinator {
         let is_ctc = job.provider_id == CTC_PROVIDER_ID;
         let audio_path = if is_ctc {
             let media = self
-                .services
-                .read_media(&job.media_id)?
+                .services.media_analysis().read_media(&job.media_id)?
                 .ok_or(ApplicationError::NotFound("media item"))?;
             Some(media.path)
         } else {
@@ -604,8 +602,7 @@ impl PhoneticAnalysisCoordinator {
             None
         };
         let analyses = if job.scope == PhoneticAnalysisScope::Track {
-            self.services
-                .read_subtitle_track(&job.track_id)?
+            self.services.media_analysis().read_subtitle_track(&job.track_id)?
                 .ok_or(ApplicationError::NotFound("subtitle track"))?
                 .sentences
                 .into_iter()
@@ -616,14 +613,14 @@ impl PhoneticAnalysisCoordinator {
                     sentence_job.audio_start_ms = sentence.start.get();
                     sentence_job.audio_end_ms = sentence.end.get();
                     if is_ctc {
-                        self.services.build_ctc_phonetic_analysis(
+                        self.services.media_analysis().build_ctc_phonetic_analysis(
                             &sentence_job,
                             Some(&sentence),
                             audio_path.as_deref().unwrap(),
                             model_dir.as_deref().unwrap(),
                         )
                     } else {
-                        self.services.build_research_fixture_phonetic_analysis(
+                        self.services.media_analysis().build_research_fixture_phonetic_analysis(
                             &sentence_job,
                             Some(&sentence),
                             job_research_mode(&sentence_job).as_deref() == Some("partial"),
@@ -635,18 +632,18 @@ impl PhoneticAnalysisCoordinator {
             let sentence = job
                 .sentence_id
                 .as_ref()
-                .map(|id| self.services.read_sentence(id))
+                .map(|id| self.services.media_analysis().read_sentence(id))
                 .transpose()?
                 .flatten();
             if is_ctc {
-                vec![self.services.build_ctc_phonetic_analysis(
+                vec![self.services.media_analysis().build_ctc_phonetic_analysis(
                     &job,
                     sentence.as_ref(),
                     audio_path.as_deref().unwrap(),
                     model_dir.as_deref().unwrap(),
                 )?]
             } else {
-                vec![self.services.build_research_fixture_phonetic_analysis(
+                vec![self.services.media_analysis().build_research_fixture_phonetic_analysis(
                     &job,
                     sentence.as_ref(),
                     job_research_mode(&job).as_deref() == Some("partial"),
@@ -657,8 +654,7 @@ impl PhoneticAnalysisCoordinator {
         for analysis in &analyses {
             self.repository.save_phonetic_analysis(analysis)?;
             let timeline = self
-                .services
-                .create_phone_timeline_from_analysis(analysis, Some(TimelineStatus::Candidate))?;
+                .services.media_analysis().create_phone_timeline_from_analysis(analysis, Some(TimelineStatus::Candidate))?;
             phone_timeline_ids.push(timeline.id);
         }
         let _ = self.events.send(

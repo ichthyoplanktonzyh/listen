@@ -188,7 +188,7 @@ pub(crate) async fn read_progress(
 ) -> Result<Json<ProgressResponse>, ApiError> {
     let id = MediaId::parse(media_id).map_err(ApplicationError::from)?;
     Ok(Json(ProgressResponse {
-        position_ms: state.services.read_progress(&id)?.map(domain::TimeMs::get),
+        position_ms: state.services.media_analysis().read_progress(&id)?.map(domain::TimeMs::get),
     }))
 }
 
@@ -208,7 +208,7 @@ pub(crate) async fn update_progress(
     Json(request): Json<UpdateProgressRequest>,
 ) -> Result<Json<ProgressResponse>, ApiError> {
     let id = MediaId::parse(media_id).map_err(ApplicationError::from)?;
-    let position = state.services.update_progress(&id, request.position_ms)?;
+    let position = state.services.media_analysis().update_progress(&id, request.position_ms)?;
     Ok(Json(ProgressResponse {
         position_ms: Some(position.get()),
     }))

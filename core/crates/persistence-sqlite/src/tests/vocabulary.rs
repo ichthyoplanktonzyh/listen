@@ -111,8 +111,7 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
         repo.clone(),
         repo.clone(),
     );
-    let media = services
-        .register_media(RegisterMedia {
+    let media = services.media_analysis().register_media(RegisterMedia {
             path: "/tmp/source.mp4".into(),
             fingerprint: "source-media".into(),
             title: "Source".into(),
@@ -120,8 +119,7 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
             duration_ms: Some(5000),
         })
         .unwrap();
-    let track = services
-        .import_subtitle(ImportSubtitle {
+    let track = services.media_analysis().import_subtitle(ImportSubtitle {
             media_id: media.id.clone(),
             source_name: "timeline.srt".into(),
             content: include_bytes!("../../../../testdata/subtitles/timeline.srt").to_vec(),
@@ -231,8 +229,7 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
             .media_id,
         None
     );
-    services
-        .register_media(RegisterMedia {
+    services.media_analysis().register_media(RegisterMedia {
             path: "/tmp/moved-source.mp4".into(),
             fingerprint: "source-media".into(),
             title: "Source moved".into(),

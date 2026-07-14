@@ -80,8 +80,7 @@ impl SpeechBatchCoordinator {
     ) -> Result<SpeechBatchJob, ApplicationError> {
         let track_id = SubtitleTrackId::parse(request.track_id)?;
         let total = self
-            .services
-            .read_subtitle_track(&track_id)?
+            .services.media_analysis().read_subtitle_track(&track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?
             .sentences
             .len();
@@ -163,8 +162,7 @@ impl SpeechBatchCoordinator {
             .ok_or(ApplicationError::NotFound("speech batch job"))?;
         let track_id = SubtitleTrackId::parse(job.track_id.clone())?;
         let track = self
-            .services
-            .read_subtitle_track(&track_id)?
+            .services.media_analysis().read_subtitle_track(&track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         let mut result_count = 0;
         for (index, sentence) in track.sentences.iter().enumerate() {

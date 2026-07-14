@@ -50,8 +50,7 @@ fn imported_subtitles_rebuild_local_corpus_words_and_phrases() {
         repo.clone(),
     )
     .with_corpus_index_repository(repo.clone());
-    let media = services
-        .register_media(RegisterMedia {
+    let media = services.media_analysis().register_media(RegisterMedia {
             path: "/tmp/corpus.mp4".into(),
             fingerprint: "corpus-media".into(),
             title: "Corpus media".into(),
@@ -59,8 +58,7 @@ fn imported_subtitles_rebuild_local_corpus_words_and_phrases() {
             duration_ms: Some(10_000),
         })
         .unwrap();
-    services
-        .import_subtitle(ImportSubtitle {
+    services.media_analysis().import_subtitle(ImportSubtitle {
             media_id: media.id,
             source_name: "corpus.srt".into(),
             content: b"1\n00:00:01,000 --> 00:00:03,000\nTake care of yourself.\n".to_vec(),
@@ -69,11 +67,11 @@ fn imported_subtitles_rebuild_local_corpus_words_and_phrases() {
         })
         .unwrap();
 
-    let word = services.search_corpus("en", "care", 10, 0).unwrap();
+    let word = services.media_analysis().search_corpus("en", "care", 10, 0).unwrap();
     assert_eq!(word.len(), 1);
     assert_eq!(word[0].kind, CorpusOccurrenceKind::Lexical);
     assert_eq!(word[0].display_text, "care");
-    let phrase = services.search_corpus("en", "take care", 10, 0).unwrap();
+    let phrase = services.media_analysis().search_corpus("en", "take care", 10, 0).unwrap();
     assert_eq!(phrase.len(), 1);
     assert_eq!(phrase[0].kind, CorpusOccurrenceKind::Phrase);
     assert_eq!(phrase[0].source_snapshot, "Take care of yourself.");
@@ -93,8 +91,7 @@ fn active_chunk_timeline_rows_follow_chunk_lifecycle() {
         repo.clone(),
     )
     .with_corpus_index_repository(repo.clone());
-    let media = services
-        .register_media(RegisterMedia {
+    let media = services.media_analysis().register_media(RegisterMedia {
             path: "/tmp/corpus-chunk.mp4".into(),
             fingerprint: "corpus-chunk-media".into(),
             title: "Corpus chunk media".into(),
@@ -102,8 +99,7 @@ fn active_chunk_timeline_rows_follow_chunk_lifecycle() {
             duration_ms: Some(10_000),
         })
         .unwrap();
-    let track = services
-        .import_subtitle(ImportSubtitle {
+    let track = services.media_analysis().import_subtitle(ImportSubtitle {
             media_id: media.id,
             source_name: "corpus-chunk.srt".into(),
             content: b"1\n00:00:01,000 --> 00:00:03,000\nTake care of yourself.\n".to_vec(),
@@ -141,9 +137,9 @@ fn active_chunk_timeline_rows_follow_chunk_lifecycle() {
         updated_at_ms: 1,
     };
     repo.save_chunk_timeline(&timeline).unwrap();
-    services.activate_chunk_timeline(&timeline.id).unwrap();
+    services.media_analysis().activate_chunk_timeline(&timeline.id).unwrap();
 
-    let hits = services.search_corpus("en", "take care", 10, 0).unwrap();
+    let hits = services.media_analysis().search_corpus("en", "take care", 10, 0).unwrap();
     let chunks: Vec<_> = hits
         .iter()
         .filter(|hit| hit.kind == CorpusOccurrenceKind::Chunk)
@@ -157,8 +153,8 @@ fn active_chunk_timeline_rows_follow_chunk_lifecycle() {
             .any(|hit| hit.kind == CorpusOccurrenceKind::Phrase)
     );
 
-    services.archive_chunk_timeline(&timeline.id).unwrap();
-    let hits = services.search_corpus("en", "take care", 10, 0).unwrap();
+    services.media_analysis().archive_chunk_timeline(&timeline.id).unwrap();
+    let hits = services.media_analysis().search_corpus("en", "take care", 10, 0).unwrap();
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].kind, CorpusOccurrenceKind::Phrase);
 }
@@ -179,8 +175,7 @@ fn giant_entry_search_samples_across_media() {
     .with_corpus_index_repository(repo.clone());
     // Media A holds three early hits; media B one late hit. A start-time
     // ordering would fill a 2-row page entirely from A's opening minutes.
-    let media_a = services
-        .register_media(RegisterMedia {
+    let media_a = services.media_analysis().register_media(RegisterMedia {
             path: "/tmp/corpus-sample-a.mp4".into(),
             fingerprint: "corpus-sample-a".into(),
             title: "Sample A".into(),
@@ -188,8 +183,7 @@ fn giant_entry_search_samples_across_media() {
             duration_ms: Some(60_000),
         })
         .unwrap();
-    services
-        .import_subtitle(ImportSubtitle {
+    services.media_analysis().import_subtitle(ImportSubtitle {
             media_id: media_a.id,
             source_name: "a.srt".into(),
             content: b"1\n00:00:01,000 --> 00:00:02,000\nTake care now.\n\n2\n00:00:03,000 --> 00:00:04,000\nI care a lot.\n\n3\n00:00:05,000 --> 00:00:06,000\nThey care too.\n"
@@ -198,8 +192,7 @@ fn giant_entry_search_samples_across_media() {
             identity_salt: None,
         })
         .unwrap();
-    let media_b = services
-        .register_media(RegisterMedia {
+    let media_b = services.media_analysis().register_media(RegisterMedia {
             path: "/tmp/corpus-sample-b.mp4".into(),
             fingerprint: "corpus-sample-b".into(),
             title: "Sample B".into(),
@@ -207,8 +200,7 @@ fn giant_entry_search_samples_across_media() {
             duration_ms: Some(60_000),
         })
         .unwrap();
-    services
-        .import_subtitle(ImportSubtitle {
+    services.media_analysis().import_subtitle(ImportSubtitle {
             media_id: media_b.id.clone(),
             source_name: "b.srt".into(),
             content: b"1\n00:00:50,000 --> 00:00:51,000\nWe care differently.\n".to_vec(),
@@ -217,7 +209,7 @@ fn giant_entry_search_samples_across_media() {
         })
         .unwrap();
 
-    let hits = services.search_corpus("en", "care", 2, 0).unwrap();
+    let hits = services.media_analysis().search_corpus("en", "care", 2, 0).unwrap();
     assert_eq!(hits.len(), 2);
     let media_ids: std::collections::HashSet<_> = hits
         .iter()
@@ -273,8 +265,7 @@ fn corpus_word_keys_and_free_text_queries_share_lemma_normalization() {
     )
     .with_corpus_index_repository(repo.clone())
     .with_lexical_normalizers(vec![Arc::new(StubLemmaProvider)]);
-    let media = services
-        .register_media(RegisterMedia {
+    let media = services.media_analysis().register_media(RegisterMedia {
             path: "/tmp/corpus-lemma.mp4".into(),
             fingerprint: "corpus-lemma-media".into(),
             title: "Corpus lemma media".into(),
@@ -282,8 +273,7 @@ fn corpus_word_keys_and_free_text_queries_share_lemma_normalization() {
             duration_ms: Some(10_000),
         })
         .unwrap();
-    services
-        .import_subtitle(ImportSubtitle {
+    services.media_analysis().import_subtitle(ImportSubtitle {
             media_id: media.id,
             source_name: "corpus-lemma.srt".into(),
             content: b"1\n00:00:01,000 --> 00:00:03,000\nHe is running fast.\n".to_vec(),
@@ -293,12 +283,12 @@ fn corpus_word_keys_and_free_text_queries_share_lemma_normalization() {
         .unwrap();
 
     // The index keys the inflected token by its provider lemma…
-    let by_lemma = services.search_corpus("en", "run", 10, 0).unwrap();
+    let by_lemma = services.media_analysis().search_corpus("en", "run", 10, 0).unwrap();
     assert_eq!(by_lemma.len(), 1);
     assert_eq!(by_lemma[0].display_text, "running");
     assert_eq!(by_lemma[0].normalized_key.as_deref(), Some("run"));
     // …and a free-text inflected query normalizes onto the same key.
-    let by_surface = services.search_corpus("en", "Running", 10, 0).unwrap();
+    let by_surface = services.media_analysis().search_corpus("en", "Running", 10, 0).unwrap();
     assert_eq!(by_surface.len(), 1);
     assert_eq!(by_surface[0].display_text, "running");
 }
@@ -317,8 +307,7 @@ fn deleting_a_track_keeps_corpus_search_coherent() {
         repo.clone(),
     )
     .with_corpus_index_repository(repo.clone());
-    let media = services
-        .register_media(RegisterMedia {
+    let media = services.media_analysis().register_media(RegisterMedia {
             path: "/tmp/corpus-delete.mp4".into(),
             fingerprint: "corpus-delete-media".into(),
             title: "Corpus delete media".into(),
@@ -326,8 +315,7 @@ fn deleting_a_track_keeps_corpus_search_coherent() {
             duration_ms: Some(10_000),
         })
         .unwrap();
-    let track = services
-        .import_subtitle(ImportSubtitle {
+    let track = services.media_analysis().import_subtitle(ImportSubtitle {
             media_id: media.id,
             source_name: "corpus-delete.srt".into(),
             content: b"1\n00:00:01,000 --> 00:00:03,000\nTake care of yourself.\n".to_vec(),
@@ -336,28 +324,25 @@ fn deleting_a_track_keeps_corpus_search_coherent() {
         })
         .unwrap();
     assert_eq!(
-        services
-            .search_corpus("en", "take care", 10, 0)
+        services.media_analysis().search_corpus("en", "take care", 10, 0)
             .unwrap()
             .len(),
         1
     );
     assert_eq!(
-        services.search_corpus("en", "care", 10, 0).unwrap().len(),
+        services.media_analysis().search_corpus("en", "care", 10, 0).unwrap().len(),
         1
     );
 
     repo.delete_track(&track.id).unwrap();
 
     assert!(
-        services
-            .search_corpus("en", "take care", 10, 0)
+        services.media_analysis().search_corpus("en", "take care", 10, 0)
             .unwrap()
             .is_empty()
     );
     assert!(
-        services
-            .search_corpus("en", "care", 10, 0)
+        services.media_analysis().search_corpus("en", "care", 10, 0)
             .unwrap()
             .is_empty()
     );
@@ -378,8 +363,7 @@ fn rebuild_corpus_index_backfills_preexisting_tracks() {
         repo.clone(),
         repo.clone(),
     );
-    let media = without_corpus
-        .register_media(RegisterMedia {
+    let media = without_corpus.media_analysis().register_media(RegisterMedia {
             path: "/tmp/corpus-rebuild.mp4".into(),
             fingerprint: "corpus-rebuild-media".into(),
             title: "Corpus rebuild media".into(),
@@ -387,8 +371,7 @@ fn rebuild_corpus_index_backfills_preexisting_tracks() {
             duration_ms: Some(10_000),
         })
         .unwrap();
-    without_corpus
-        .import_subtitle(ImportSubtitle {
+    without_corpus.media_analysis().import_subtitle(ImportSubtitle {
             media_id: media.id,
             source_name: "corpus-rebuild.srt".into(),
             content: b"1\n00:00:01,000 --> 00:00:03,000\nTake care of yourself.\n".to_vec(),
@@ -409,13 +392,12 @@ fn rebuild_corpus_index_backfills_preexisting_tracks() {
     )
     .with_corpus_index_repository(repo.clone());
     assert!(
-        services
-            .search_corpus("en", "care", 10, 0)
+        services.media_analysis().search_corpus("en", "care", 10, 0)
             .unwrap()
             .is_empty()
     );
-    assert_eq!(services.rebuild_corpus_index().unwrap(), 1);
-    let hits = services.search_corpus("en", "care", 10, 0).unwrap();
+    assert_eq!(services.media_analysis().rebuild_corpus_index().unwrap(), 1);
+    let hits = services.media_analysis().search_corpus("en", "care", 10, 0).unwrap();
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].display_text, "care");
 }
@@ -511,8 +493,7 @@ fn diagnosis_reads_lexical_entries_in_the_track_language() {
         repo.clone(),
         repo.clone(),
     );
-    let media = services
-        .register_media(RegisterMedia {
+    let media = services.media_analysis().register_media(RegisterMedia {
             path: "/tmp/zh.mp4".into(),
             fingerprint: "zh-media".into(),
             title: "ZH".into(),
@@ -520,8 +501,7 @@ fn diagnosis_reads_lexical_entries_in_the_track_language() {
             duration_ms: Some(5000),
         })
         .unwrap();
-    let track = services
-        .import_subtitle(ImportSubtitle {
+    let track = services.media_analysis().import_subtitle(ImportSubtitle {
             media_id: media.id.clone(),
             source_name: "zh.srt".into(),
             content: "1\n00:00:00,000 --> 00:00:02,000\n我想喝咖啡\n"
@@ -566,7 +546,7 @@ fn diagnosis_reads_lexical_entries_in_the_track_language() {
         None,
     );
 
-    let diagnosis = services.diagnose_sentence(&sentence.id).unwrap();
+    let diagnosis = services.media_analysis().diagnose_sentence(&sentence.id).unwrap();
     assert!(!diagnosis.unclassified_lemmas.contains(&"我".to_string()));
     let meaning = diagnosis
         .hints
@@ -589,8 +569,7 @@ fn recognition_barrier_carries_the_language_listening_reasons() {
         repo.clone(),
         repo.clone(),
     );
-    let media = services
-        .register_media(RegisterMedia {
+    let media = services.media_analysis().register_media(RegisterMedia {
             path: "/tmp/zh.mp4".into(),
             fingerprint: "zh-reasons".into(),
             title: "ZH".into(),
@@ -598,8 +577,7 @@ fn recognition_barrier_carries_the_language_listening_reasons() {
             duration_ms: Some(5000),
         })
         .unwrap();
-    let track = services
-        .import_subtitle(ImportSubtitle {
+    let track = services.media_analysis().import_subtitle(ImportSubtitle {
             media_id: media.id,
             source_name: "zh.srt".into(),
             content: "1\n00:00:00,000 --> 00:00:02,000\n我想喝咖啡\n"
@@ -620,7 +598,7 @@ fn recognition_barrier_carries_the_language_listening_reasons() {
         None,
     );
 
-    let diagnosis = services.diagnose_sentence(&sentence.id).unwrap();
+    let diagnosis = services.media_analysis().diagnose_sentence(&sentence.id).unwrap();
     let recognition = diagnosis
         .hints
         .iter()

@@ -1,6 +1,6 @@
 use crate::*;
 
-impl AppServices {
+impl MediaAnalysisUseCases {
     pub fn list_phone_timelines(
         &self,
         track_id: &SubtitleTrackId,

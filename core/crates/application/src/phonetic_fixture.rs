@@ -1,6 +1,6 @@
 use crate::*;
 
-impl AppServices {
+impl MediaAnalysisUseCases {
     pub fn build_research_fixture_phonetic_analysis(
         &self,
         job: &PhoneticAnalysisJob,

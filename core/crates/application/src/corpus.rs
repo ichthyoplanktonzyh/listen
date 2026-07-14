@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::*;
 
-impl AppServices {
+impl MediaAnalysisUseCases {
     /// Rebuild the local corpus projection for one subtitle track. The Slice 3
     /// shape indexes lemma-keyed word forms, sentence-level text for confirmed
     /// phrase lookup, and — when an active chunk timeline exists — precise

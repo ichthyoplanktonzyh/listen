@@ -1,6 +1,6 @@
 use crate::*;
 
-impl AppServices {
+impl MediaAnalysisUseCases {
     pub fn import_subtitle(
         &self,
         input: ImportSubtitle,

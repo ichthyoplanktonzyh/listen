@@ -388,8 +388,7 @@ async fn sound_line_resources_never_disturb_active_text_timeline() {
     // it must still persist a Candidate sound-line timeline without touching active.
     let track_id = SubtitleTrackId::parse(track_id_str.clone()).unwrap();
     let result = state
-        .services
-        .build_transcription_sound_line_resources(
+        .services.media_analysis().build_transcription_sound_line_resources(
             &track_id,
             b"",
             std::path::Path::new("/nonexistent/llplayernext-redline.wav"),

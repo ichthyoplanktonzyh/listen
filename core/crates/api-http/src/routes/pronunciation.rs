@@ -100,8 +100,7 @@ pub(crate) async fn track_pronunciation(
     let parsed_track_id =
         SubtitleTrackId::parse(track_id.clone()).map_err(ApplicationError::from)?;
     let total = state
-        .services
-        .read_subtitle_track(&parsed_track_id)?
+        .services.media_analysis().read_subtitle_track(&parsed_track_id)?
         .ok_or(ApplicationError::NotFound("subtitle track"))?
         .sentences
         .len();

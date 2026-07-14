@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-14 19:41 CST: Phase 2.24 第二个深用例族完成：media/subtitle、四类 timeline、
+  transcription/phonetic derived resources、corpus、content-fit、diagnosis 与 coach material
+  统一进入 `MediaAnalysisUseCases`，共享资源失效与 provenance 边界，并显式依赖 lexical
+  collaborator。api-http、local-runtime 与测试均删除旧 `AppServices` 直调；application 59、
+  local-runtime 14、api-http 48、persistence 121 tests 全绿。
+
 - 2026-07-14 19:18 CST: Phase 2.24 首个深用例族完成原地替换：lexical normalization、
   entries/capability evidence、sense folders、vocabulary transfer 与 recognition upgrade 统一进入
   `LexicalLearningUseCases`，只持有该一致性边界需要的 ports；api-http、跨域协作者和持久化测试

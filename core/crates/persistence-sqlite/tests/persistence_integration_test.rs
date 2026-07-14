@@ -8,8 +8,7 @@ use persistence_sqlite::SqliteRepository;
 
 /// Create test media and verify it round-trips through the database.
 fn register_test_media(services: &AppServices) -> domain::MediaItem {
-    services
-        .register_media(RegisterMedia {
+    services.media_analysis().register_media(RegisterMedia {
             path: "/tmp/test.mp4".into(),
             fingerprint: format!("fp-{}", application::now_ms()),
             title: "Test Video".into(),
@@ -77,8 +76,7 @@ fn file_database_persists_across_reopen() {
             "Persist",
             Some(LearningStatus::KnownRecognized),
         );
-        services
-            .update_progress(&media.id, 5555)
+        services.media_analysis().update_progress(&media.id, 5555)
             .expect("save progress");
     }
 
@@ -185,8 +183,7 @@ fn subtitle_import_and_export_preserves_sentence_structure() {
     };
 
     let services = make_services(repo);
-    let track = services
-        .import_subtitle(ImportSubtitle {
+    let track = services.media_analysis().import_subtitle(ImportSubtitle {
             media_id: media.id.clone(),
             source_name: "timeline.srt".into(),
             content: include_bytes!("../../../testdata/subtitles/timeline.srt").to_vec(),
@@ -202,8 +199,7 @@ fn subtitle_import_and_export_preserves_sentence_structure() {
     assert_eq!(track.sentences[3].display_text, "Final cue.");
 
     // Verify idempotent re-import
-    let track_again = services
-        .import_subtitle(ImportSubtitle {
+    let track_again = services.media_analysis().import_subtitle(ImportSubtitle {
             media_id: media.id,
             source_name: "timeline.srt".into(),
             content: include_bytes!("../../../testdata/subtitles/timeline.srt").to_vec(),
@@ -217,8 +213,7 @@ fn subtitle_import_and_export_preserves_sentence_structure() {
     );
 
     // Verify track retrieval
-    let retrieved = services
-        .read_subtitle_track(&track.id)
+    let retrieved = services.media_analysis().read_subtitle_track(&track.id)
         .expect("read track")
         .expect("track should exist");
     assert_eq!(retrieved.sentences.len(), 4);
@@ -256,8 +251,7 @@ fn empty_database_has_no_data() {
     let services = make_services(Arc::new(repo));
     assert!(read_word_asset(&services, "nonexistent").is_none());
     assert!(
-        services
-            .read_progress(&domain::MediaId::parse("nonexistent-media-id").unwrap())
+        services.media_analysis().read_progress(&domain::MediaId::parse("nonexistent-media-id").unwrap())
             .expect("read")
             .is_none()
     );
