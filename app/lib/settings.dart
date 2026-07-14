@@ -228,11 +228,12 @@ class AppSettings {
   final String openSubtitlesApiKey;
   final bool pronunciationVisible;
   final bool wordSyncVisible;
+
   /// Unified subtitle grouping presentation. One of:
-  /// `off`, `prosodic` (chunk capsules), `semantic` (provisional sense-group
-  /// capsules), `compare` (prosodic base + divergence markers). The prosodic
-  /// and semantic data layers stay separate per ADR 0016; this only unifies
-  /// how a single active grouping is drawn.
+  /// `off`, `prosodic` (chunk capsules), `semantic` (sense-group capsules),
+  /// `compare` (prosodic base + divergence markers). The prosodic and semantic
+  /// data layers stay separate per ADR 0016; this only unifies how a single
+  /// active grouping is drawn.
   final String groupingMode;
   final String chunkDisplayStyle;
   final bool highlightCurrentChunk;

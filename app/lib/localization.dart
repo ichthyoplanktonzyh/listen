@@ -819,7 +819,6 @@ class AppLocalizations {
       'senseGroupDataNotReady': 'Data not ready',
       'senseGroupDataNotReadyHint':
           'Semantic grouping data is not ready; subtitles fall back to word display',
-      'groupingSemanticProvisional': 'Provisional marker (heuristic)',
       'groupingDivergenceHint': 'Meaning and delivery disagree here',
       'chunkDisplayStyle': 'Group display style',
       'chunkDisplayCapsule': 'Capsules',
@@ -1642,7 +1641,6 @@ class AppLocalizations {
       'senseGroupDataAvailable': '可用',
       'senseGroupDataNotReady': '数据未就绪',
       'senseGroupDataNotReadyHint': '语义分组数据未就绪；字幕将回退为逐词显示',
-      'groupingSemanticProvisional': '临时标记（启发式）',
       'groupingDivergenceHint': '语义与语流在此不一致',
       'chunkDisplayStyle': '分组显示方式',
       'chunkDisplayCapsule': '胶囊分组',

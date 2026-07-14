@@ -10,6 +10,26 @@ Cue cue(String id, int start, int end) => Cue(
   tokens: const [],
 );
 
+const _senseGroup = SenseGroup(
+  id: 'group-1',
+  sentenceId: 'sentence-1',
+  groupIndex: 0,
+  startTokenIndex: 2,
+  endTokenIndex: 4,
+  text: 'a sense group',
+  confidence: 0.9,
+  sources: [],
+);
+
+WordTiming wordTiming(int tokenIndex, int startMs, int endMs) => WordTiming(
+  sentenceId: 'sentence-1',
+  tokenIndex: tokenIndex,
+  start: Duration(milliseconds: startMs),
+  end: Duration(milliseconds: endMs),
+  source: 'test',
+  provider: 'test',
+);
+
 void main() {
   final cues = [
     cue('0', 500, 2000),
@@ -227,6 +247,64 @@ void main() {
     expect(timing.tokenIndex, 2);
     expect(timing.toJson()['start_ms'], 100);
     expect(timing.toJson()['end_ms'], 300);
+  });
+
+  group('senseGroupPlaybackRange', () {
+    test('projects the inclusive token span to its minimum and maximum', () {
+      expect(
+        senseGroupPlaybackRange(_senseGroup, [
+          wordTiming(2, 100, 250),
+          wordTiming(3, 260, 420),
+          wordTiming(4, 430, 600),
+        ]),
+        (startMs: 100, endMs: 600),
+      );
+    });
+
+    test('returns null for empty timings', () {
+      expect(senseGroupPlaybackRange(_senseGroup, const []), isNull);
+    });
+
+    test('uses available timings when some group tokens are missing', () {
+      expect(senseGroupPlaybackRange(_senseGroup, [wordTiming(3, 260, 420)]), (
+        startMs: 260,
+        endMs: 420,
+      ));
+    });
+
+    test('does not assume timings are ordered', () {
+      expect(
+        senseGroupPlaybackRange(_senseGroup, [
+          wordTiming(4, 430, 600),
+          wordTiming(2, 100, 250),
+          wordTiming(3, 260, 420),
+        ]),
+        (startMs: 100, endMs: 600),
+      );
+    });
+
+    test('includes timings exactly on both token boundaries', () {
+      expect(
+        senseGroupPlaybackRange(_senseGroup, [
+          wordTiming(1, 10, 90),
+          wordTiming(2, 100, 250),
+          wordTiming(4, 430, 600),
+          wordTiming(5, 610, 700),
+        ]),
+        (startMs: 100, endMs: 600),
+      );
+    });
+
+    test('still projects when boundary tokens have no timing', () {
+      expect(
+        senseGroupPlaybackRange(_senseGroup, [
+          wordTiming(1, 10, 90),
+          wordTiming(3, 260, 420),
+          wordTiming(5, 610, 700),
+        ]),
+        (startMs: 260, endMs: 420),
+      );
+    });
   });
 
   test('parses complete word timeline resources', () {
