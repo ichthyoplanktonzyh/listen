@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-14 10:05 CST: main.dart 拆分 S9 —— 3.9.3 合并带来的 `_checkSyntaxCapability`
+  能力监控（方法 + busy/ready/analyzed 三个状态标志）逐字搬入
+  `SubtitleSourcesCoordinator.checkSyntaxCapability`（字幕轨分析域的自然归属）；2 秒轮询
+  Timer 生命周期留在宿主 `initState`/`dispose`。新增 2 例隔离测试（ready 轨道恰好分析
+  一次、not_installed 时保持静默）。`flutter analyze` 零问题、`flutter test` 344 全通过
+  （342 + 2）。
+
 - 2026-07-14 09:35 CST: main.dart 拆分 S8 —— 词汇/学习类对话框与导航流程迁往
   `widgets/flows/learning_flows.dart`（沿用 flows 顶层函数模式）：
   `openLearningAssetsFlow`/`openLearningResourcesFlow`/`showCurrentPhraseCandidatesFlow`/
