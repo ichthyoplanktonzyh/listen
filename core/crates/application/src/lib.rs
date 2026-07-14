@@ -41,12 +41,14 @@ pub use coach_dashboard::{
     CoachChannelStatus, CoachChannelSummary, CoachDashboard, CoachEvidenceItem,
     CoachMaterialInsight, CoachMetric, CoachSuggestion,
 };
+pub use dictionary::DictionaryUseCases;
 pub use dto::*;
 pub use error::ApplicationError;
 pub use learner_profile::{LearnerProfileUseCases, LearnerProfileView};
 pub use llm_provider::LlmProviderUseCases;
 pub use pronunciation_providers::*;
 pub use providers::*;
+pub use recording::RecordingUseCases;
 pub use repositories::*;
 pub use secret_store::{InMemorySecretStore, SecretStore, SecretStoreError};
 pub use semantic_task::SemanticUseCases;
@@ -57,8 +59,6 @@ pub(crate) use util::{
     phrase_candidates, require_text,
 };
 pub(crate) use vocabulary::ObservationContext;
-
-const DICTIONARY_CACHE_TTL_MS: u64 = 30 * 24 * 60 * 60 * 1000;
 
 #[derive(Debug, Serialize)]
 pub(crate) struct ForcedAlignRequest {
@@ -112,6 +112,18 @@ pub struct AppServices {
 }
 
 impl AppServices {
+    pub fn recordings(&self) -> RecordingUseCases {
+        RecordingUseCases::new(
+            self.recordings.clone(),
+            self.practice.clone(),
+            self.learning_events.clone(),
+        )
+    }
+
+    pub fn dictionary(&self) -> DictionaryUseCases {
+        DictionaryUseCases::new(self.dictionary.clone())
+    }
+
     pub fn learner_profile(&self) -> LearnerProfileUseCases {
         LearnerProfileUseCases::new(self.learner_profiles.clone())
     }

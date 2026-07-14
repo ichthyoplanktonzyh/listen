@@ -116,7 +116,8 @@ fully pinned spaCy 3.8.13 dependency closure + en_core_web_sm 3.8.0 wheel hash
 
 | 脚本 | 功能 |
 |---|---|
-| `scripts/timeline-production/production_pipeline.py` | 核心生产 CLI（doctor/prepare/run-whisperx/produce） |
+| `scripts/timeline-production/production_pipeline.py` | 薄生产 CLI（parser/doctor/dispatch） |
+| `scripts/timeline-production/production_pipeline_*.py` | I/O、声学 cue、质量报告、WhisperX 转换、音频准备、对齐与生产编排 modules |
 | `scripts/timeline-production/setup-venv.sh` | 生产环境安装 |
 | `scripts/forced-align/align-cli.py` | MMS_FA 强制对齐 sidecar |
 | `scripts/forced-align/setup-venv.sh` | 对齐环境安装 |

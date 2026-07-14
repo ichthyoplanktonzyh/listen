@@ -6,6 +6,7 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 PYTHONPYCACHEPREFIX="$tmp/pycache" python3 -m py_compile \
+  "$root/scripts/check-architecture-coupling.py" \
   "$root/scripts/benchmark-datasets.py" \
   "$root/scripts/evaluate-word-timelines.py" \
   "$root/scripts/forced-align/mfa-align-cli.py" \
@@ -23,7 +24,15 @@ PYTHONPYCACHEPREFIX="$tmp/pycache" python3 -m py_compile \
   "$root/scripts/validate-syntactic-fixtures.py" \
   "$root/scripts/validate-syntactic-fixtures-v2.py" \
   "$root/scripts/timeline-production/production_pipeline.py" \
+  "$root/scripts/timeline-production/production_pipeline_acoustics.py" \
+  "$root/scripts/timeline-production/production_pipeline_alignment.py" \
+  "$root/scripts/timeline-production/production_pipeline_audio.py" \
+  "$root/scripts/timeline-production/production_pipeline_common.py" \
+  "$root/scripts/timeline-production/production_pipeline_conversion.py" \
+  "$root/scripts/timeline-production/production_pipeline_orchestration.py" \
+  "$root/scripts/timeline-production/production_pipeline_report.py" \
   "$root/scripts/timeline-production/whisperx-align-request.py"
+PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/check-architecture-coupling.py"
 bash -n "$root/scripts/syntactic-analysis/setup-spacy-product.sh"
 python3 -m json.tool "$root/scripts/syntactic-analysis/product-assets-v2.json" >/dev/null
 PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/test_lltimeline_common.py"

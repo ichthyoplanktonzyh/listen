@@ -438,10 +438,12 @@ async fn dictionary_lookup_uses_persistent_cache() {
     });
     let providers = vec![provider.clone()];
     services
+        .dictionary()
         .lookup_dictionary(&providers, "en", "hello")
         .await
         .unwrap();
     services
+        .dictionary()
         .lookup_dictionary(&providers, "en", "hello")
         .await
         .unwrap();
@@ -471,6 +473,7 @@ async fn dictionary_lookup_routes_by_learning_language() {
     // A Chinese query only reaches the zh provider; the en provider is skipped
     // by supported_languages, so en and zh dictionaries never cross-talk.
     let bundle = services
+        .dictionary()
         .lookup_dictionary(&providers, "zh", "咖啡")
         .await
         .unwrap();
@@ -486,6 +489,7 @@ async fn dictionary_lookup_routes_by_learning_language() {
 
     // An English query only reaches the en provider.
     let bundle = services
+        .dictionary()
         .lookup_dictionary(&providers, "en", "hello")
         .await
         .unwrap();

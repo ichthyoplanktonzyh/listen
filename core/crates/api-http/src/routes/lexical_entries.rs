@@ -7,86 +7,12 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use domain::{
-    LearningResourceDescriptor, LearningResourceId, LearningStatus, LexicalEntry,
-    LexicalEntryDetails, LexicalEntryId, LexicalEntryKind, ObservationResult, PhraseCandidate,
-    SubtitleSearchResult, SubtitleSentenceId,
+    LearningStatus, LexicalEntry, LexicalEntryDetails, LexicalEntryId, LexicalEntryKind,
+    ObservationResult, PhraseCandidate, SubtitleSentenceId,
 };
 use serde::Deserialize;
 
-use local_runtime::{
-    SubtitleDownloadRequest, SubtitleOperation, SubtitleProviderError, SubtitleSearchRequest,
-};
-
 use crate::{ApiError, ApiState};
-
-fn subtitle_provider_api_error(error: SubtitleProviderError) -> ApiError {
-    match error {
-        SubtitleProviderError::ProviderNotFound => ApiError::not_found("subtitle search provider"),
-        SubtitleProviderError::CredentialsRequired => ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "subtitle_credentials_required",
-            "subtitle provider credentials are required",
-            false,
-        ),
-        SubtitleProviderError::QueryRequired => ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "subtitle_search_query_required",
-            "a title, filename, or media hash is required",
-            false,
-        ),
-        SubtitleProviderError::Authentication => ApiError::new(
-            StatusCode::UNAUTHORIZED,
-            "subtitle_authentication_failed",
-            "subtitle provider rejected the configured credentials",
-            false,
-        ),
-        SubtitleProviderError::RateLimited => ApiError::new(
-            StatusCode::TOO_MANY_REQUESTS,
-            "subtitle_rate_limited",
-            "subtitle provider rate limit reached",
-            true,
-        ),
-        SubtitleProviderError::Unavailable(operation) => ApiError::gateway(
-            "subtitle_service_unavailable",
-            format!("subtitle provider {} is unavailable", operation.wire_name()),
-        ),
-        SubtitleProviderError::Rejected(operation) => ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "subtitle_request_rejected",
-            format!(
-                "subtitle provider rejected the {} request",
-                operation.wire_name()
-            ),
-            false,
-        ),
-        SubtitleProviderError::Network { operation, detail } => ApiError::gateway(
-            match operation {
-                SubtitleOperation::Search => "subtitle_search_failed",
-                SubtitleOperation::Download => "subtitle_download_failed",
-            },
-            detail,
-        ),
-        SubtitleProviderError::MissingDownloadLink => {
-            ApiError::gateway("subtitle_download_failed", "missing download link")
-        }
-    }
-}
-
-fn learning_resource_api_error(error: local_runtime::LearningResourceError) -> ApiError {
-    match error {
-        local_runtime::LearningResourceError::NotFound => ApiError::not_found("learning resource"),
-        local_runtime::LearningResourceError::ChecksumMismatch => ApiError::new(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "checksum_mismatch",
-            "learning resource checksum mismatch",
-            false,
-        ),
-        local_runtime::LearningResourceError::Download(detail) => {
-            ApiError::gateway("resource_download_failed", detail)
-        }
-        local_runtime::LearningResourceError::Storage(error) => ApiError::from(error),
-    }
-}
 
 #[derive(Debug, Deserialize)]
 pub struct LexicalQuery {
@@ -352,62 +278,4 @@ pub async fn phrase_candidates(
         .phrase_candidates(&SubtitleSentenceId::parse(sentence_id).map_err(ApplicationError::from)?)
         .map(Json)
         .map_err(ApiError::from)
-}
-
-pub async fn resources(State(state): State<ApiState>) -> Json<Vec<LearningResourceDescriptor>> {
-    Json(state.learning_resources.list())
-}
-
-pub async fn install_resource(
-    State(state): State<ApiState>,
-    Path(id): Path<String>,
-) -> Result<Json<LearningResourceDescriptor>, ApiError> {
-    state
-        .learning_resources
-        .install(&LearningResourceId::parse(id).map_err(ApplicationError::from)?)
-        .await
-        .map(Json)
-        .map_err(learning_resource_api_error)
-}
-
-pub async fn remove_resource(
-    State(state): State<ApiState>,
-    Path(id): Path<String>,
-) -> Result<Json<LearningResourceDescriptor>, ApiError> {
-    state
-        .learning_resources
-        .remove(&LearningResourceId::parse(id).map_err(ApplicationError::from)?)
-        .await
-        .map(Json)
-        .map_err(learning_resource_api_error)
-}
-
-pub async fn search_subtitles(
-    State(state): State<ApiState>,
-    Json(request): Json<SubtitleSearchRequest>,
-) -> Result<Json<Vec<SubtitleSearchResult>>, ApiError> {
-    state
-        .subtitle_search
-        .search(&request)
-        .await
-        .map(Json)
-        .map_err(subtitle_provider_api_error)
-}
-
-pub async fn download_subtitle(
-    State(state): State<ApiState>,
-    Json(request): Json<SubtitleDownloadRequest>,
-) -> Result<Response, ApiError> {
-    state
-        .subtitle_search
-        .download(&request)
-        .await
-        .map_err(subtitle_provider_api_error)
-        .map(|bytes| {
-            (
-                [(axum::http::header::CONTENT_TYPE, "application/x-subrip")],
-                bytes,
-            )
-                .into_response()
-        })
 }

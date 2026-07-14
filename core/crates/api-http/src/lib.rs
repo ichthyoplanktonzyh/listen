@@ -35,7 +35,6 @@ use tokio::sync::broadcast;
 mod event_payloads {
     pub use local_runtime::events::*;
 }
-mod m18;
 mod routes;
 mod secret_store_keychain;
 use local_runtime::{
@@ -410,12 +409,19 @@ pub fn router(state: ApiState) -> Router {
             "/v1/media/{media_id}/progress",
             get(read_progress).put(update_progress),
         )
-        .route("/v1/lexical-entries/batch", post(m18::read_lexical_entries))
+        .route(
+            "/v1/lexical-entries/batch",
+            post(routes::lexical_entries::read_lexical_entries),
+        )
         .route(
             "/v1/lexical-entries",
-            get(m18::list_lexical_entries).put(m18::upsert_lexical_entry),
+            get(routes::lexical_entries::list_lexical_entries)
+                .put(routes::lexical_entries::upsert_lexical_entry),
         )
-        .route("/v1/lexical-entries/{id}", get(m18::lexical_details))
+        .route(
+            "/v1/lexical-entries/{id}",
+            get(routes::lexical_entries::lexical_details),
+        )
         .route(
             "/v1/lexical-entries/{id}/capability-profile",
             get(get_capability_profile),
@@ -426,7 +432,7 @@ pub fn router(state: ApiState) -> Router {
         )
         .route(
             "/v1/lexical-entries/{id}/learning-content",
-            put(m18::update_lexical_learning_content),
+            put(routes::lexical_entries::update_lexical_learning_content),
         )
         .route(
             "/v1/lexical-entries/{entry_id}/sense-folders",
@@ -442,16 +448,19 @@ pub fn router(state: ApiState) -> Router {
         )
         .route(
             "/v1/lexical-observations",
-            post(m18::create_lexical_observation),
+            post(routes::lexical_entries::create_lexical_observation),
         )
-        .route("/v1/lexical-normalization", post(m18::normalize_lexical))
+        .route(
+            "/v1/lexical-normalization",
+            post(routes::lexical_entries::normalize_lexical),
+        )
         .route(
             "/v1/lexical-normalization/correct",
-            post(m18::correct_lemma),
+            post(routes::lexical_entries::correct_lemma),
         )
         .route(
             "/v1/sentences/{sentence_id}/phrase-candidates",
-            get(m18::phrase_candidates),
+            get(routes::lexical_entries::phrase_candidates),
         )
         .route("/v1/practice/sessions", post(create_practice_session))
         .route("/v1/coach/dashboard", get(coach_dashboard))
@@ -515,17 +524,23 @@ pub fn router(state: ApiState) -> Router {
             "/v1/review/upgrade-suggestions/{id}/reject",
             post(reject_upgrade_suggestion),
         )
-        .route("/v1/learning-resources", get(m18::resources))
+        .route(
+            "/v1/learning-resources",
+            get(routes::learning_resources::list),
+        )
         .route(
             "/v1/learning-resources/{id}/install",
-            post(m18::install_resource),
+            post(routes::learning_resources::install),
         )
         .route(
             "/v1/learning-resources/{id}",
-            axum::routing::delete(m18::remove_resource),
+            axum::routing::delete(routes::learning_resources::remove),
         )
-        .route("/v1/subtitle-search", post(m18::search_subtitles))
-        .route("/v1/subtitle-search/download", post(m18::download_subtitle))
+        .route("/v1/subtitle-search", post(routes::subtitle_search::search))
+        .route(
+            "/v1/subtitle-search/download",
+            post(routes::subtitle_search::download),
+        )
         .route("/v1/vocabulary", get(list_vocabulary))
         .route("/v1/corpus/search", get(search_corpus))
         .route("/v1/corpus/reindex", post(reindex_corpus))

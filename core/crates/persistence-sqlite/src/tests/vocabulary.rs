@@ -580,6 +580,7 @@ async fn dictionary_aggregation_isolates_provider_failure() {
         }),
     ];
     let bundle = services
+        .dictionary()
         .lookup_dictionary(&providers, "en", "hello")
         .await
         .unwrap();

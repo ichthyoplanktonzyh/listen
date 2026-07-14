@@ -1,6 +1,6 @@
 # LLPlayerNext System Architecture
 
-Last updated: 2026-07-13. Reflects Phase 3.9.2 optional shared syntax product composition.
+Last updated: 2026-07-14. Reflects Phase 2.24 runtime/use-case/interface consolidation.
 
 ## Overview
 
@@ -12,6 +12,9 @@ Flutter desktop app
         v
 api-http
   Axum transport, auth, route composition, event stream, adapter composition
+        |
+        +--> local-runtime
+        |     local process/download/filesystem/network job and resource lifecycles
         |
         +--> application
         |     use-case orchestration, repository/provider traits, DTO mapping
@@ -29,7 +32,7 @@ api-http
 Dependency direction is intentionally boring:
 
 ```text
-domain <- core engines <- application <- api-http / persistence-sqlite / dictionary-provider
+domain <- core engines <- application <- local-runtime / api-http / persistence adapters
 ```
 
 `api-http` does not call algorithm crates directly. Algorithms enter through
@@ -57,16 +60,24 @@ application use cases and provider/repository boundaries.
 
 ### `application`
 
-- `AppServices` is the use-case facade.
+- `AppServices` is the composition object. Deep use-case modules such as
+  `SemanticUseCases`, `LlmProviderUseCases`, `LearnerProfileUseCases`,
+  `DictionaryUseCases`, and `RecordingUseCases` hold only the ports required by
+  their invariants; callers enter through those module interfaces rather than a
+  growing flat facade.
 - Repository boundaries are split by aggregate/resource:
   - `MediaRepository`
   - `SubtitleTrackRepository`
   - `PronunciationRepository`
-  - `TimelineResourceRepository`
+  - `WordTimelineRepository`, `ChunkTimelineRepository`,
+    `SenseGroupRepository`, `PhoneTimelineRepository`
   - `LLTimelineResourceRepository`
-  - `LearningAssetRepository`
+  - `LexicalCapabilityRepository`, `LexicalEntryRepository`,
+    `LearningObservationRepository`, `LexicalContentRepository`,
+    `VocabularyAssetRepository`
   - `PracticeRepository`
-  - `ReviewRepository`
+  - `ReviewQueueRepository`, `HuntingRepository`,
+    `RecognitionUpgradeRepository`
   - `LearningEventRepository`
   - `RecordingRepository`
   - transcription, phonetic analysis, dictionary cache, playback progress
@@ -119,6 +130,19 @@ application use cases and provider/repository boundaries.
   service construction.
 - OpenAPI parity is tested bidirectionally: implemented `/v1` routes and
   documented OpenAPI paths must match.
+- Route modules own only HTTP extraction, response/error mapping and event
+  adaptation. Lexical entries, downloadable learning resources, and subtitle
+  search use explicitly named route modules; milestone-coded `m18.rs` no longer
+  exists.
+
+### `local-runtime`
+
+- Owns transcription, phonetic-analysis, speech-batch and sound-line job
+  lifecycles plus syntax capability, downloadable learning resources and
+  subtitle provider coordination.
+- `ProcessRunner` and `ArtifactDownloader` are real seams with production and
+  deterministic fake adapters. Runtime modules do not depend on Axum, HTTP
+  status codes or `ApiState`.
 - Lexical routes are the only learning-asset API surface:
   - `/v1/lexical-entries`
   - `/v1/lexical-entries/batch`
@@ -220,7 +244,7 @@ one primary fallback vowel, later fallback vowels unstressed.
 
 ### Optional syntax capability (Phase 3.9.3)
 
-- `SyntaxCapabilityManager` at the HTTP composition root owns a filesystem-backed seven-state lifecycle,
+- `SyntaxCapabilityManager` in `local-runtime` owns a filesystem-backed seven-state lifecycle,
   staging install, delivery validation and cache deletion. It does not enter application/domain authority.
 - spaCy runs behind one lazy resident JSONL sidecar. Probe and analyze serialize through the same process;
   the adapter releases it after idle, stops it on disable/uninstall and restarts once after a crash.

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-14 17:23 CST: 继续 Phase 2.24 高内聚治理。删除语义不明的 `m18.rs`/
+  `m18_ui.dart`，分别替换为 lexical entries、learning resources、subtitle search HTTP
+  modules 与 `learning_assets_ui.dart`。新增 Dictionary/Recording use-case modules；Flutter
+  lexical、dictionary、pronunciation、language、syntax、timeline、content-fit、media-triage、
+  LLM-probe caller clusters 改为 resource-client typed decoding。SQLite 1350 行 subtitle
+  persistence 按 7 个 repository 职责拆分；Python production CLI 1433→262 行，核心实现按
+  I/O/acoustics/report/conversion/audio/alignment/orchestration 拆分。新增并接入 contract 流程的
+  architecture coupling guard。Rust 205、Flutter 345、Python 11 tests 与 analyze 全绿。
+
 - 2026-07-14 16:53 CST: 启动 Phase 2.24 Flutter typed-resource slice：diagnosis API client
   直接解码并返回 `Diagnosis`，主 controller 删除 `fromJson(await api...)` wire-shape 知识；
   新增 transport seam contract test。`flutter analyze` 与 API/learning-workflow 相关 16 tests

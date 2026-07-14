@@ -117,6 +117,7 @@ pub(crate) async fn create_recording_asset(
 ) -> Result<Json<RecordingAsset>, ApiError> {
     state
         .services
+        .recordings()
         .create_recording_asset(request)
         .map(Json)
         .map_err(ApiError::from)
@@ -129,6 +130,7 @@ pub(crate) async fn recording_asset(
     let id = RecordingAssetId::parse(id).map_err(ApplicationError::from)?;
     state
         .services
+        .recordings()
         .recording_asset(&id)?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("recording asset"))
@@ -141,6 +143,7 @@ pub(crate) async fn delete_recording_asset(
     let id = RecordingAssetId::parse(id).map_err(ApplicationError::from)?;
     state
         .services
+        .recordings()
         .delete_recording_asset(&id)?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("recording asset"))
@@ -152,6 +155,7 @@ pub(crate) async fn complete_shadowing_attempt(
 ) -> Result<Json<PracticeAttempt>, ApiError> {
     state
         .services
+        .recordings()
         .complete_shadowing_attempt(request)
         .map(Json)
         .map_err(ApiError::from)
@@ -163,6 +167,7 @@ pub(crate) async fn compare_shadowing(
 ) -> Result<Json<ShadowingComparison>, ApiError> {
     state
         .services
+        .recordings()
         .compare_shadowing(request)
         .map(Json)
         .map_err(ApiError::from)

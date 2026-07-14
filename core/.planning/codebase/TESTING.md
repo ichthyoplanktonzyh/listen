@@ -108,7 +108,7 @@
 | `diagnosis_card_test.dart` | 诊断面板 UI |
 | `vocabulary_book_test.dart` | 词汇本视图 |
 | `transcription_ui_test.dart` | 转写 UI |
-| `m18_ui_test.dart` | M1.8 学习质量功能 UI |
+| `learning_assets_ui_test.dart` | 学习资产、可下载资源与字幕搜索 UI |
 | `phonetic_analysis_ui_test.dart` | 音素分析 UI |
 | `contract/backend_event_contract_test.dart` | SSE producer golden envelopes 的 Flutter typed 解析契约 |
 | `contract/lltimeline_parse_test.dart` | committed LLTimeline rhythm fixtures 的 Flutter typed 解析契约，覆盖 segments、WordTimeline、document-level rhythm_frames 与 PhoneTimeline.sound_analysis fallback |
@@ -159,7 +159,8 @@ cd apps/desktop && flutter test
 多数 Python 脚本仍侧重评估/比较功能，单元测试覆盖有限；Phase 2.20 scorer 已有
 `scripts/test_evaluate_rhythm_frame.py` 和 `scripts/test_evaluate_helsinki_prosody.py`。
 Phase 2.20 LibriTTS/Helsinki prep 也已有 `scripts/test_prepare_helsinki_libritts_benchmark.py`。
-建议后续继续为 `production_pipeline.py` 核心函数（音频预处理、WhisperX JSON 转换）添加测试。
+Phase 2.24 已把 `production_pipeline.py` 收缩为 CLI/dispatch；核心函数位于按职责命名的
+`production_pipeline_*.py` modules，后续测试应直接面向这些 module interface。
 
 ## 5. 契约测试
 
@@ -304,7 +305,7 @@ scripts/validate-contracts.sh    # 单独契约验证
 | `api-http` 关键路由测试 | P1 | 🟡 部分 | Tier A `api_integration_test.rs` 已覆盖鉴权、media/subtitle 生命周期、LLTimeline 导入往返、word timeline create→activate、diagnosis、lexical entry 生命周期；pronunciation、phonetic/chunk timeline、transcription job 路由待补 |
 | `application` 层集成测试 | P1 | 🟡 部分 | `persistence-sqlite/tests/` 已驱动 `AppServices` 编排；无独立 `application/tests/` 目录 |
 | Flutter 状态/推送层测试 | P1 | 🟢 已建 | coordinator + store + builder + A1 transport seam；两个 workflow controller（generation guard + 降级）已覆盖；api_service 其余方法级测试待补 |
-| Python 管线单元测试 | P2 | 🔴 缺 | production_pipeline.py 核心函数 |
+| Python 管线单元测试 | P2 | 🟡 部分 | 声学 cue 与 GUI contract 已覆盖；conversion/audio/orchestration 需继续扩充 |
 | Flutter widget 交互测试 | P2 | 🔴 缺 | 播放器/字幕点击/拖放交互 |
 | 跨语言 E2E 测试 | P2 | 🔴 缺 | Tier B：Flutter → 真实 Rust sidecar 端到端 |
 | Rhythm-first 评测脚本 | P0 | 🟢 已建 | Phase 2.20 stress anchor / weak group / compression span / phrase boundary / explanation quality scorer |

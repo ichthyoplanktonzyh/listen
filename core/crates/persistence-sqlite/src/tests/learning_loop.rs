@@ -283,6 +283,7 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
         })
         .unwrap();
     let recording = services
+        .recordings()
         .create_recording_asset(application::CreateRecordingAsset {
             file_path: recording_path.to_string_lossy().into_owned(),
             duration_ms: 900,
@@ -309,6 +310,7 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
         })
         .unwrap();
     let attempt = services
+        .recordings()
         .complete_shadowing_attempt(application::CompleteShadowingAttempt {
             item_id: item.id,
             recording_id: recording.id.clone(),
@@ -333,10 +335,11 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
             .unwrap();
         assert_eq!(semantic_rows, 0, "{table} must stay empty");
     }
-    let linked = services.recording_asset(&recording.id).unwrap().unwrap();
+    let linked = services.recordings().recording_asset(&recording.id).unwrap().unwrap();
     assert_eq!(linked.practice_attempt_id, Some(attempt.id.clone()));
     assert_eq!(
         services
+            .recordings()
             .complete_shadowing_attempt(application::CompleteShadowingAttempt {
                 item_id: attempt.item_id.clone(),
                 recording_id: recording.id.clone(),
@@ -346,6 +349,7 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
         attempt.id
     );
     let comparison = services
+        .recordings()
         .compare_shadowing(application::CreateShadowingComparison {
             recording_id: recording.id.clone(),
             reference_wav_path: reference_path.to_string_lossy().into_owned(),
@@ -363,10 +367,10 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
         "not_scored"
     );
     assert_eq!(
-        services.delete_recording_asset(&recording.id).unwrap(),
+        services.recordings().delete_recording_asset(&recording.id).unwrap(),
         Some(linked)
     );
-    assert!(services.recording_asset(&recording.id).unwrap().is_none());
+    assert!(services.recordings().recording_asset(&recording.id).unwrap().is_none());
     let _ = std::fs::remove_file(recording_path);
     let _ = std::fs::remove_file(reference_path);
 }

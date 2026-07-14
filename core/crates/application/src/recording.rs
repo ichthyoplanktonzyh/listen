@@ -1,12 +1,32 @@
+use std::sync::Arc;
+
 use domain::*;
 
 use crate::{
-    AppServices, ApplicationError, CompleteShadowingAttempt, CreateRecordingAsset,
-    CreateShadowingComparison, DisabledLearningLoopRepository, RecordingRepository, clean_required,
-    now_ms,
+    ApplicationError, CompleteShadowingAttempt, CreateRecordingAsset, CreateShadowingComparison,
+    DisabledLearningLoopRepository, LearningEventRepository, PracticeRepository,
+    RecordingRepository, clean_required, now_ms,
 };
 
-impl AppServices {
+pub struct RecordingUseCases {
+    recordings: Arc<dyn RecordingRepository>,
+    practice: Arc<dyn PracticeRepository>,
+    learning_events: Arc<dyn LearningEventRepository>,
+}
+
+impl RecordingUseCases {
+    pub(crate) fn new(
+        recordings: Arc<dyn RecordingRepository>,
+        practice: Arc<dyn PracticeRepository>,
+        learning_events: Arc<dyn LearningEventRepository>,
+    ) -> Self {
+        Self {
+            recordings,
+            practice,
+            learning_events,
+        }
+    }
+
     pub fn create_recording_asset(
         &self,
         input: CreateRecordingAsset,

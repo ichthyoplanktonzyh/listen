@@ -12,6 +12,7 @@ pub(crate) async fn dictionary_lookup(
 ) -> Result<Json<domain::DictionaryLookupBundle>, ApiError> {
     state
         .services
+        .dictionary()
         .lookup_dictionary(state.dictionaries.as_ref(), &query.language, &query.lemma)
         .await
         .map(Json)
