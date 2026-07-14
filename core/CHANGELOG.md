@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-14 08:47 CST: main.dart 拆分 S6 —— 抽出 `MediaLibraryCoordinator`。首页媒体库/
+  triage 动作 9 个方法（`recordRecentMedia`/`prefetchHomeSummary`/`loadMediaLibrary`/
+  `openLibraryEntry`/`startExtensiveFromLibrary`/`startIntensiveFromLibrary`/
+  `setLibraryTriageIntent`/`toggleFamiliarSupply`/`continueRecentMedia`）逐字搬到
+  `lib/controllers/media_library_coordinator.dart`；coordinator 自持 `savedVocabulary`/
+  `mediaLibrary` 两个首页汇总事实（原 State 字段），`setState` 改注入 `requestRebuild`；
+  media-session 操作按 PLAN R5 走注入回调（`openMediaPath`/`openMedia`）而非直接持有
+  coordinator。逻辑/字符串不变。新增 `test/media_library_coordinator_test.dart`（11 例：
+  加载成功/失败保留旧值/null API no-op、缺失文件守卫、triage 就地替换与失败上报、continue
+  回退拣选器/重开近期路径、recordRecentMedia 无媒体 no-op）。main.dart 2051 → 1937 行。
+  `flutter analyze` 零问题、`flutter test` 321 全通过（310 + 11）。
+
 - 2026-07-14 01:15 CST: main.dart 拆分 S5 —— 抽出 `VocabularyActionsCoordinator`（仅上下文无关
   数据方法）。vocabulary 入口大量 BuildContext 耦合（`showDialog`/`Navigator.push`/
   `MaterialPageRoute`），按代码库约定「coordinator 无 context、对话框留宿主」，这些导航/对话框
