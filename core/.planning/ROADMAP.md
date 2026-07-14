@@ -1419,12 +1419,11 @@ Phase 3.0 的第一个架构地基阶段为：
 
 与产品主线并行的工程治理线新增：
 
-- **Phase 2.24 System Cohesion & Coupling Consolidation**：承接 2.23 后仍存在的 interface
+- **Phase 2.24 System Cohesion & Coupling Consolidation** ✅（2026-07-14 收口）：承接 2.23 后仍存在的 interface
   深度问题；处理 `api-http` runtime ownership、speech/application 类型泄漏、宽 repository
   interface、`AppServices` 用例聚合、Flutter raw JSON 和 Python pipeline locality。该 phase
-  不改用户行为、HTTP/SQLite/LLTimeline contract 或算法语义；P0/P1 slice 是 3.13 前的推荐
-  工程门槛。计划见
-  `.planning/phases/2.24-system-cohesion-coupling-consolidation/2.24-PLAN.md`。
+  未改用户行为、HTTP/SQLite/LLTimeline contract 或算法语义；P0–P2 与长期守卫均已完成。
+  详见 `.planning/phases/2.24-system-cohesion-coupling-consolidation/2.24-CLOSEOUT.md`。
 
 Phase 3.0 的执行序列（2026-07-04 确立，取代早期建议顺序）：
 

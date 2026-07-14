@@ -162,6 +162,12 @@ Phase 2.20 LibriTTS/Helsinki prep 也已有 `scripts/test_prepare_helsinki_libri
 Phase 2.24 已把 `production_pipeline.py` 收缩为 CLI/dispatch；核心函数位于按职责命名的
 `production_pipeline_*.py` modules，后续测试应直接面向这些 module interface。
 
+Phase 2.24 收口时 `./scripts/test.sh --full --strict --low-memory` 为严格绿：Rust workspace
+608 tests、Flutter 348 tests、analyze、fmt、`clippy -D warnings` 与 5 个 contract examples
+全部通过。另有 production pipeline acoustic/GUI contracts 1 + 10 tests。architecture guard
+同时锁定 dependency direction、runtime ownership、application public type、Flutter raw-return
+allowlist、production Rust wildcard=0、描述性 module 命名与 Python entrypoint locality。
+
 ## 5. 契约测试
 
 | 契约 | 验证方式 |

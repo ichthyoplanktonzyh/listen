@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- 2026-07-14 20:50 CST: Phase 2.24 严格收口。AppServices 变为 composition-only，三个
+  深模块与六个窄模块承接用例；Flutter raw return 约 97→1，production Rust wildcard 归零，
+  Python production entry 1433→262 行。最终 Rust 608、Flutter 348、Python 11、contracts 5
+  全绿，fmt/clippy strict 与 architecture guard 通过；详见 `2.24-CLOSEOUT.md`。
+
 - 2026-07-14 20:28 CST: Phase 2.24 Rust hygiene gate 收口：生产代码 86 处 wildcard imports
   全部展开并清除未使用依赖，测试 prelude 仍可局部使用 `super::*`；architecture guard 新增生产
   wildcard 回归检查。同步清理历史 fmt/clippy 基线，`cargo fmt --all -- --check` 与

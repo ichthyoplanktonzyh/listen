@@ -60,11 +60,13 @@ application use cases and provider/repository boundaries.
 
 ### `application`
 
-- `AppServices` is the composition object. Deep use-case modules such as
-  `SemanticUseCases`, `LlmProviderUseCases`, `LearnerProfileUseCases`,
-  `DictionaryUseCases`, and `RecordingUseCases` hold only the ports required by
-  their invariants; callers enter through those module interfaces rather than a
-  growing flat facade.
+- `AppServices` is composition-only: nine module accessors plus construction
+  builders, with no cross-domain use-case methods. `MediaAnalysisUseCases`,
+  `LexicalLearningUseCases`, and `PracticeUseCases` own the three broad caller
+  clusters; `SemanticUseCases`, `LlmProviderUseCases`, `LearnerProfileUseCases`,
+  `DictionaryUseCases`, `RecordingUseCases`, and `PronunciationUseCases` remain
+  narrow specialist modules. Each module holds only its required ports or an
+  explicit collaborating module.
 - Repository boundaries are split by aggregate/resource:
   - `MediaRepository`
   - `SubtitleTrackRepository`

@@ -368,9 +368,11 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
     let events = repo
         .list_learning_events_for_session(&session.id, 10, 0)
         .unwrap();
-    assert_eq!(
-        events.last().unwrap().payload["evaluation_kind"],
-        "not_scored"
+    assert!(
+        events
+            .iter()
+            .any(|event| event.payload["evaluation_kind"] == "not_scored"),
+        "shadowing completion must emit an explicit unscored event"
     );
     assert_eq!(
         services

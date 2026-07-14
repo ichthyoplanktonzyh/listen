@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-14T17:49:00.000+08:00"
+last_updated: "2026-07-14T20:50:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-14 17:49 CST
-> 更新原因：Phase 2.24 第四批 typed-client 迁移将 raw-return allowlist 降至 42 项。
+> 最后更新：2026-07-14 20:50 CST
+> 更新原因：Phase 2.24 严格收口；full/strict gate 全绿。
 
 ## 当前位置
 
@@ -22,16 +22,12 @@ last_updated: "2026-07-14T17:49:00.000+08:00"
   consumer 与 Construction matcher seam；后续复核发现唯一否决样本混淆歧义句产品 policy
   与 parser gold。Phase 3.9.2 已完成：spaCy artifact 与 B going-to/used-to/have-to、SenseGroup、
   matcher 获资格并接入单 batch/逐句共享产品编排；want-to 与无模型路径保留精确 fallback。
-- **治理线状态**：Phase 2.23 已收口；Phase 2.24 正在执行。Step 0–2 已完成；独立
-  local-runtime 已接管 transcription/phonetic/speech-batch/sound-line、M18 resource/
-  subtitle provider 与 syntax capability，process/download 真实 seam 已接入；三个 fat
-  repository ports 已拆除，semantic/LLM provider/learner profile 首批 use-case modules 已
-  落地，dictionary/recording modules 随后完成；Flutter diagnosis/lexical/syntax/timeline 等
-  caller clusters 已 typed 化；subtitle/timing/summary/pronunciation/phonetic 第二批也已迁移。
-  Rust/Python locality 与架构守卫已完成，剩余 LocalApi raw-return 已形成禁止净新增的
-  allowlist，并通过后三批已有模型迁移从 59 项降至 42 项；pronunciation/timing cluster 也已
-  迁入窄依赖 use-case module。下一 slice 继续审定 AppServices cluster 与 job/command DTO
-  allowlist，之后做严格全量 closeout。
+- **治理线状态**：Phase 2.23、2.24 均已收口。2.24 将 runtime implementation 迁入
+  local-runtime，删除三个 fat repository traits，把 AppServices 收缩为 composition-only，
+  建立 MediaAnalysis/LexicalLearning/Practice 三个深模块及六个窄模块；Flutter raw returns
+  从约 97 降至 1 个有 contract 的开放 transfer document；production Rust wildcard 清零，
+  Python production entry 1433→262 行。最终 Rust 608、Flutter 348、Python 11、contracts 5
+  全绿，fmt/clippy strict 与 architecture guard 通过。详见 `2.24-CLOSEOUT.md`。
 - **2026-07-14 大文件解耦治理（chore/large-file-decomposition）**：main.dart Coordinator
   抽取 S1–S9 全部完成（2578 → ~1558 行，8 个 coordinator + 3 个 flows 文件，全部配隔离
   测试）；删除 46 方法 fat `SubtitleRepository`（消费侧窄 trait 原已存在，砍掉 4 组桥接
