@@ -46,6 +46,7 @@ pub use dto::*;
 pub use error::ApplicationError;
 pub use learner_profile::{LearnerProfileUseCases, LearnerProfileView};
 pub use llm_provider::LlmProviderUseCases;
+pub use pronunciation::PronunciationUseCases;
 pub use pronunciation_providers::*;
 pub use providers::*;
 pub use recording::RecordingUseCases;
@@ -112,6 +113,15 @@ pub struct AppServices {
 }
 
 impl AppServices {
+    pub fn pronunciation(&self) -> PronunciationUseCases {
+        PronunciationUseCases::new(
+            self.pronunciations.clone(),
+            self.subtitle_tracks.clone(),
+            self.word_timelines.clone(),
+            self.pronunciation_providers.clone(),
+        )
+    }
+
     pub fn recordings(&self) -> RecordingUseCases {
         RecordingUseCases::new(
             self.recordings.clone(),

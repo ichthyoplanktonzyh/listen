@@ -161,7 +161,7 @@ impl AppServices {
             .subtitle_tracks
             .get_sentence(sentence_id)?
             .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
-        let timings = self.word_timings(sentence_id)?;
+        let timings = self.pronunciation().word_timings(sentence_id)?;
         let candidates = self.phrase_candidates(sentence_id)?;
         Ok(sentence_chunk_partition_from_analysis(
             speech_analysis::chunking::partition_sentence(
@@ -182,7 +182,7 @@ impl AppServices {
             .subtitle_tracks
             .get_sentence(sentence_id)?
             .ok_or(ApplicationError::NotFound("subtitle sentence"))?;
-        let timings = self.word_timings(sentence_id)?;
+        let timings = self.pronunciation().word_timings(sentence_id)?;
         let candidates = self.phrase_candidates(sentence_id)?;
         Ok(sentence_chunk_diagnostics_from_analysis(
             speech_analysis::chunking::partition_sentence_with_diagnostics(
@@ -208,7 +208,7 @@ impl AppServices {
             .sentences
             .iter()
             .map(|sentence| {
-                let timings = self.word_timings(&sentence.id)?;
+                let timings = self.pronunciation().word_timings(&sentence.id)?;
                 let candidates = self.phrase_candidates(&sentence.id)?;
                 Ok(sentence_chunk_partition_from_analysis(
                     speech_analysis::chunking::partition_sentence(
@@ -237,7 +237,7 @@ impl AppServices {
             .sentences
             .iter()
             .map(|sentence| {
-                let timings = self.word_timings(&sentence.id)?;
+                let timings = self.pronunciation().word_timings(&sentence.id)?;
                 let candidates = self.phrase_candidates(&sentence.id)?;
                 Ok(sentence_chunk_diagnostics_from_analysis(
                     speech_analysis::chunking::partition_sentence_with_diagnostics(

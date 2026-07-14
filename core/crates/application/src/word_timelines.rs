@@ -303,7 +303,7 @@ impl AppServices {
             .sentences
             .iter()
             .filter_map(|sentence| {
-                let timings = match self.word_timings(&sentence.id) {
+                let timings = match self.pronunciation().word_timings(&sentence.id) {
                     Ok(timings) => timings,
                     Err(error) => return Some(Err(error)),
                 };

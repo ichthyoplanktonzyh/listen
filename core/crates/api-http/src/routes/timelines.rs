@@ -6,6 +6,7 @@ pub(crate) async fn track_word_timings(
 ) -> Result<Json<Vec<domain::WordTiming>>, ApiError> {
     state
         .services
+        .pronunciation()
         .word_timings_for_track(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
         .map(Json)
         .map_err(ApiError::from)
@@ -400,7 +401,10 @@ pub(crate) async fn generate_track_word_timings(
         Some(Json(request)) if !request.timings.is_empty() => state
             .services
             .store_word_timings(&parsed_track_id, &request.timings)?,
-        _ => state.services.word_timings_for_track(&parsed_track_id)?,
+        _ => state
+            .services
+            .pronunciation()
+            .word_timings_for_track(&parsed_track_id)?,
     };
     let _ = state.events.send(
         crate::event_payloads::SpeechBatchProgressPayload {

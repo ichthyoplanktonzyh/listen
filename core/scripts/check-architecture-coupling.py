@@ -68,6 +68,31 @@ def guard_flutter_transport_parsing() -> None:
             fail(f"Flutter caller parses HTTP wire shape in {path.relative_to(ROOT)}")
 
 
+def guard_flutter_raw_api_allowlist() -> None:
+    """Make raw transport DTO debt explicit and monotonically removable."""
+    signature = re.compile(
+        r"Future<(?:Map<String, dynamic>|List<Map<String, dynamic>>)?>?\s*(\w+)\s*\("
+    )
+    actual: set[str] = set()
+    api_root = ROOT / "apps/desktop/lib/services/api"
+    for path in sorted(api_root.glob("*.dart")):
+        source = path.read_text(encoding="utf-8")
+        actual.update(f"{path.name}:{match.group(1)}" for match in signature.finditer(source))
+
+    allowlist_path = ROOT / "scripts/flutter-raw-api-allowlist.txt"
+    allowed = {
+        line.strip()
+        for line in allowlist_path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    additions = sorted(actual - allowed)
+    stale = sorted(allowed - actual)
+    if additions:
+        fail(f"unreviewed raw Flutter API returns: {additions}")
+    if stale:
+        fail(f"remove migrated Flutter API allowlist entries: {stale}")
+
+
 def guard_descriptive_module_names() -> None:
     ambiguous = [
         ROOT / "crates/api-http/src/m18.rs",
@@ -94,6 +119,7 @@ def main() -> int:
     guard_application_public_interface()
     guard_http_runtime_ownership()
     guard_flutter_transport_parsing()
+    guard_flutter_raw_api_allowlist()
     guard_descriptive_module_names()
     guard_pipeline_entrypoint()
     print("Architecture coupling guards passed.")

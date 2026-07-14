@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-14 17:34 CST: Phase 2.24 Flutter typed-resource 第二批：字幕轨道、词时间、
+  word/chunk/phone timeline summaries、pronunciation provider/analysis 与 phonetic analysis
+  在 LocalApi 边界解码，controller/coordinator/event flow 删除对应 wire-shape knowledge。
+  新增 raw-return allowlist 守卫，使剩余 transport DTO 债务可审计且禁止净新增；Flutter
+  analyze、定向 23 tests 与全量 346 tests 全绿。另将 pronunciation/timing 9 个方法从
+  `AppServices` 原地替换为仅持有 4 个相关 port/provider 集的 `PronunciationUseCases`；
+  application/local-runtime/api-http 共 109 tests 全绿。
+
 - 2026-07-14 17:23 CST: 继续 Phase 2.24 高内聚治理。删除语义不明的 `m18.rs`/
   `m18_ui.dart`，分别替换为 lexical entries、learning resources、subtitle search HTTP
   modules 与 `learning_assets_ui.dart`。新增 Dictionary/Recording use-case modules；Flutter

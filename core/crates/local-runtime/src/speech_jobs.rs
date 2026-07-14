@@ -173,17 +173,32 @@ impl SpeechBatchCoordinator {
             }
             result_count += match job.kind {
                 SpeechBatchKind::PronunciationAnalysis => {
-                    if self.services.pronunciation_cache_state(&sentence.id)? == Some(false) {
+                    if self
+                        .services
+                        .pronunciation()
+                        .pronunciation_cache_state(&sentence.id)?
+                        == Some(false)
+                    {
                         self.emit_cache_invalidated(&job, sentence.id.as_str());
                     }
-                    self.services.analyze_pronunciation(&sentence.id)?;
+                    self.services
+                        .pronunciation()
+                        .analyze_pronunciation(&sentence.id)?;
                     1
                 }
                 SpeechBatchKind::WordTimings => {
-                    if self.services.word_timing_cache_state(&sentence.id)? == Some(false) {
+                    if self
+                        .services
+                        .pronunciation()
+                        .word_timing_cache_state(&sentence.id)?
+                        == Some(false)
+                    {
                         self.emit_cache_invalidated(&job, sentence.id.as_str());
                     }
-                    self.services.word_timings(&sentence.id)?.len()
+                    self.services
+                        .pronunciation()
+                        .word_timings(&sentence.id)?
+                        .len()
                 }
             };
             self.progress(id, index + 1, result_count)?;

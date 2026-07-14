@@ -14,7 +14,12 @@ pub(crate) async fn pronunciation_rules(
     State(state): State<ApiState>,
     Query(query): Query<PronunciationRulesQuery>,
 ) -> Json<serde_json::Value> {
-    Json(state.services.pronunciation_rules(&query.language))
+    Json(
+        state
+            .services
+            .pronunciation()
+            .pronunciation_rules(&query.language),
+    )
 }
 
 pub(crate) async fn transcription_providers(
