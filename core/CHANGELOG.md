@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-14 23:05 CST: Phase 3.13 Slice 1 完成：阅读姿态 UI 骨架。新增
+  `ReadingController`（Store 模式：paragraphs 派生、anchorCueId 阅读游标、翻译投影按
+  段落时间范围中点匹配副字幕轨）与 `ReadingView`（替换 MediaWorkbench 播放区：段落流
+  排版、词点击经合成 token 映射回真实 cue 进词汇面板、锚定段落显示整段/逐句回听 chip
+  走 3.5.7 切片窗、翻译全局开关、非语音分隔段弱化显示、进入时暂停主播放/退出恢复原
+  播放状态）。`composeParagraphCue` 合成段落 cue 复用 TokenLine 流排（TokenLine 新增
+  textAlign 参数，默认 center 不变）；side panel 姿态区新增"读一下？"入口（有 track
+  即可用，不要求当前句）。ReadingView 自监听 controller。新增 9 项 controller/组合/
+  widget 测试；flutter analyze 零问题，flutter test 383 全绿。
+
 - 2026-07-14 22:25 CST: Phase 3.13 Slice 0 完成：段落 read model spike 通过。真实数据
   证伪 PLAN v1 的"gap 阈值分段"假设（whisper 转写 244 cue 仅 2 个非零间隙），落地
   两级派生纯函数 `deriveReadingParagraphs`（标点/说话人/间隙/runaway 断句 → 说话人/
