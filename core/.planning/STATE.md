@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-14T16:48:00.000+08:00"
+last_updated: "2026-07-14T16:53:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-14 16:48 CST
-> 更新原因：Phase 2.24 runtime ownership 完成并开始深化 AppServices use-case modules。
+> 最后更新：2026-07-14 16:53 CST
+> 更新原因：Phase 2.24 runtime ownership 完成，AppServices 深化与 Flutter typed clients 推进中。
 
 ## 当前位置
 
@@ -26,7 +26,8 @@ last_updated: "2026-07-14T16:48:00.000+08:00"
   local-runtime 已接管 transcription/phonetic/speech-batch/sound-line、M18 resource/
   subtitle provider 与 syntax capability，process/download 真实 seam 已接入；三个 fat
   repository ports 已拆除，semantic/LLM provider/learner profile 首批 use-case modules 已
-  落地。下一 slice 继续深化 AppServices，随后进入 Flutter typed clients。
+  落地；Flutter diagnosis client 已完成首个 typed slice。下一 slice 继续深化 AppServices
+  并按 controller caller cluster 收敛 Flutter raw JSON。
 - **2026-07-14 大文件解耦治理（chore/large-file-decomposition）**：main.dart Coordinator
   抽取 S1–S9 全部完成（2578 → ~1558 行，8 个 coordinator + 3 个 flows 文件，全部配隔离
   测试）；删除 46 方法 fat `SubtitleRepository`（消费侧窄 trait 原已存在，砍掉 4 组桥接

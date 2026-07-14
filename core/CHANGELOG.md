@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- 2026-07-14 16:53 CST: 启动 Phase 2.24 Flutter typed-resource slice：diagnosis API client
+  直接解码并返回 `Diagnosis`，主 controller 删除 `fromJson(await api...)` wire-shape 知识；
+  新增 transport seam contract test。`flutter analyze` 与 API/learning-workflow 相关 16 tests
+  全绿。
+
 - 2026-07-14 16:48 CST: 完成 Phase 2.24 runtime ownership 尾项：M18 learning-resource
   lifecycle、OpenSubtitles provider 和 syntax capability manager/cache I/O 从 api-http
   迁入 local-runtime，HTTP 层缩回协议映射；resource install 复用 ArtifactDownloader 并由
