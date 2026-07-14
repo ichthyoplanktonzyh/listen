@@ -35,6 +35,7 @@ class SettingsDialog extends StatefulWidget {
     required this.openSubtitlesApiKey,
     required this.wordSyncVisible,
     required this.groupingMode,
+    required this.senseGroupsAvailable,
     required this.chunkDisplayStyle,
     required this.highlightCurrentChunk,
     required this.chunkHighlightStyle,
@@ -109,6 +110,7 @@ class SettingsDialog extends StatefulWidget {
   final String openSubtitlesApiKey;
   final bool wordSyncVisible;
   final String groupingMode;
+  final bool senseGroupsAvailable;
   final String chunkDisplayStyle;
   final bool highlightCurrentChunk;
   final String chunkHighlightStyle;
@@ -416,7 +418,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       initialValue: groupingMode,
                       decoration: InputDecoration(
                         labelText: l.text('groupingMode'),
-                        helperText: l.text('groupingModeHint'),
+                        helperText: !widget.senseGroupsAvailable &&
+                                (groupingMode == 'semantic' ||
+                                    groupingMode == 'compare')
+                            ? l.text('senseGroupDataNotReadyHint')
+                            : l.text('groupingModeHint'),
                         helperMaxLines: 2,
                       ),
                       items: [
@@ -430,11 +436,17 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         ),
                         DropdownMenuItem(
                           value: 'semantic',
-                          child: Text(l.text('groupingModeSemantic')),
+                          child: Text(
+                            '${l.text('groupingModeSemantic')} · '
+                            '${l.text(widget.senseGroupsAvailable ? 'senseGroupDataAvailable' : 'senseGroupDataNotReady')}',
+                          ),
                         ),
                         DropdownMenuItem(
                           value: 'compare',
-                          child: Text(l.text('groupingModeCompare')),
+                          child: Text(
+                            '${l.text('groupingModeCompare')} · '
+                            '${l.text(widget.senseGroupsAvailable ? 'senseGroupDataAvailable' : 'senseGroupDataNotReady')}',
+                          ),
                         ),
                       ],
                       onChanged: (value) {

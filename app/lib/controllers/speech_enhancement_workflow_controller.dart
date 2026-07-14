@@ -57,6 +57,8 @@ class SpeechEnhancementLoadResult {
 }
 
 class SpeechEnhancementWorkflowController {
+  final Set<String> _senseGroupFallbackAttemptedTrackIds = {};
+
   Future<SpeechEnhancementLoadResult> loadSpeechEnhancements({
     required LocalApi service,
     required String trackId,
@@ -276,19 +278,42 @@ class SpeechEnhancementWorkflowController {
     String trackId,
     List<String> errors,
   ) async {
+    late List<SenseGroupAnalysis> analyses;
     try {
-      final analyses = await service.trackSenseGroupAnalyses(trackId);
-      final active = analyses.where((a) => a.isActive).firstOrNull;
-      if (active == null) return const {};
-      final grouped = <String, List<SenseGroup>>{};
-      for (final group in active.groups) {
-        grouped.putIfAbsent(group.sentenceId, () => []).add(group);
-      }
-      return grouped;
+      analyses = await service.trackSenseGroupAnalyses(trackId);
     } catch (error) {
       errors.add('sense groups: $error');
       return const {};
     }
+
+    final grouped = _activeSenseGroupsBySentence(analyses);
+    if (grouped.isNotEmpty ||
+        !_senseGroupFallbackAttemptedTrackIds.add(trackId)) {
+      return grouped;
+    }
+
+    try {
+      final generated = await service.generateSenseGroupAnalysis(trackId);
+      await service.activateSenseGroupAnalysis(generated.id);
+      return _activeSenseGroupsBySentence(
+        await service.trackSenseGroupAnalyses(trackId),
+      );
+    } catch (error) {
+      errors.add('sense group fallback: $error');
+      return const {};
+    }
+  }
+
+  Map<String, List<SenseGroup>> _activeSenseGroupsBySentence(
+    List<SenseGroupAnalysis> analyses,
+  ) {
+    final active = analyses.where((analysis) => analysis.isActive).firstOrNull;
+    if (active == null) return const {};
+    final grouped = <String, List<SenseGroup>>{};
+    for (final group in active.groups) {
+      grouped.putIfAbsent(group.sentenceId, () => []).add(group);
+    }
+    return grouped;
   }
 
   Future<List<T>> _loadOptionalResourceCapability<T>(
