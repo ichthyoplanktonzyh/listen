@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-14 21:30 CST: Phase 3.9.4 收口。Slice 4 QA：Rust workspace 614 tests、
+  clippy strict、fmt、contracts、flutter analyze/test 362 全绿；隔离 DB + 真实 spaCy
+  capability + 两条真实字幕轨道的后端 HTTP 全链路实测通过（持久化/激活/幂等/
+  cache-hit 补偿/force/文本回退生成/syntax 接管 active），临时 track cache 已清理。
+  撰写 `3.9.4-REAL-MEDIA-QA.md`（含 owner GUI 清单）与 `3.9.4-CLOSEOUT.md`，
+  更新 STATE，phase 分支合回 main。
+
 - 2026-07-14 21:05 CST: Phase 3.9.4 Slice 3 完成：语义分组获得播放跟随与点击跳转，
   按 ADR 0016 投影实现——新增纯函数 `senseGroupPlaybackRange`（token span →
   WordTiming min/max，容忍乱序/缺失，无匹配返回 null），TokenLine 缓存投影（列表

@@ -3,20 +3,22 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-14T20:03:00.000+08:00"
+last_updated: "2026-07-14T21:30:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-14 20:03 CST
-> 更新原因：建立 Phase 3.9.4 SenseGroup UX Unification 并开始执行。
+> 最后更新：2026-07-14 21:30 CST
+> 更新原因：Phase 3.9.4 SenseGroup UX Unification 收口。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.9.4 SenseGroup UX Unification 进行中（分支
-  `phase/3.9.4-sensegroup-ux-unification`）：修复语义分组"分析→SQLite 持久化→激活→
-  前端显示"四层断链，并按 ADR 0016 投影方案补播放跟随/点击跳转与视觉对等；
-  计划与决策见 `.planning/phases/3.9.4-sensegroup-ux-unification/`。
+- **当前执行主线**：Phase 3.9.4 SenseGroup UX Unification 已完成并合回 main：修复
+  语义分组"分析→SQLite 持久化→激活→前端显示"四层断链（batch 直接持久化 + 幂等
+  激活 + cache-hit 补偿 + Flutter 文本回退触发），并按 ADR 0016 投影方案获得播放
+  跟随/点击跳转与实线胶囊视觉对等；后端全链路已在真实媒体 + 真实 spaCy capability
+  上实测（见 `3.9.4-REAL-MEDIA-QA.md`），GUI 交互项留有 owner 清单。下一执行 phase
+  仍为 3.13 Reading Studio v1 或可并行的 3.12.1 LLM Judge Qualification。
 - Phase 3.9.3 已完成并冻结；spaCy syntax capability 已具 App 内 opt-in
   install/update/cancel/validate/disable/uninstall、持久七态、resident sidecar、整轨 fingerprint
   cache 与 Flutter 静默后台分析。下一执行 phase 仍为 3.13 Reading Studio v1 或可并行的
