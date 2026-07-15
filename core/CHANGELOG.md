@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- 2026-07-15 01:55 CST: Phase 3.13 Slice 4 完成：只听对照 + 读听差异解释卡。PLAN 记
+  v2.1 修正：v2"同 rubric 双条件配对"被 3.11 validator 证伪（ReadingComprehension 强制
+  文本可见、复述类强制隐藏），改为**同 source segment 双 rubric 事实并置**（阅读理解 vs
+  L1 复述），不改 3.11 契约。实现：`ReadingTaskController` 泛化 purpose（听侧 attempt
+  诚实记 source_text_visible=false + l1_trigger=user_requested + 实际播放次数，UI 强制
+  至少听一遍才可提交）；听测以 `ListeningCheckPanel` 整面替换阅读视图（文本因此天然
+  隐藏，且刻意非模态——切片窗保持可操作）；复述模板优先镜像阅读侧 rubric points；
+  `reading_diff.dart` 纯归约（adjudication 最新者生效 → 必答点 yes/partial/no/
+  unassessed，abstain/缺席=未评估不算失败）+ `ReadingDiffController` 读端聚合（跨
+  rubric 不做逐点比较）+ 四象限 possibilities 解释卡对话框；阅读视图锚定段落新增
+  "读听对照"chip。验证：flutter analyze 零问题 / test 406 全绿（新增 diff 归约 6 项、
+  explanation 1 项、diff controller 2 项、听侧条件 payload 1 项）。
+
 - 2026-07-15 01:10 CST: Phase 3.13 Slice 3 完成：段落任务全链路（manual rubric + 自评）。
   后端新增 additive 读端点 `GET /v1/semantic/rubrics/lookup`（按 source 身份六元组查最新
   rubric——客户端无法重推服务端 fingerprint id，409 后无从定位既有 rubric 是真实缺口；
