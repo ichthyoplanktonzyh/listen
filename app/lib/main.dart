@@ -1041,14 +1041,17 @@ class _PlayerScreenState extends State<PlayerScreen>
       text: textSnapshot,
       tokens: const [],
     );
-    await _openSlicePlayback({
-      'media_id': track.mediaId ?? playerController.mediaId,
-      'track_id': track.id,
-      'sentence_id': anchorCueId,
-      'sentence_text_snapshot': textSnapshot,
-      'start_ms_snapshot': cursor.mediaStart(anchor).inMilliseconds,
-      'end_ms_snapshot': cursor.mediaEnd(anchor).inMilliseconds,
-    });
+    await _openSlicePlayback(
+      currentMediaSliceOccurrence(
+        mediaId: track.mediaId ?? playerController.mediaId,
+        trackId: track.id,
+        sentenceId: anchorCueId,
+        textSnapshot: textSnapshot,
+        startMs: cursor.mediaStart(anchor).inMilliseconds,
+        endMs: cursor.mediaEnd(anchor).inMilliseconds,
+        mediaFingerprint: playerController.mediaFingerprint,
+      ),
+    );
   }
 
   /// Opens the same-family clip aggregation for one L1 difficulty hint
@@ -1750,14 +1753,17 @@ class _PlayerScreenState extends State<PlayerScreen>
         onPlaySegment: () {
           setState(() => _listeningPlayCount++);
           unawaited(
-            _openSlicePlayback({
-              'media_id': listeningSource.mediaId,
-              'track_id': listeningSource.trackId,
-              'sentence_id': listeningSource.anchorCueId,
-              'sentence_text_snapshot': '',
-              'start_ms_snapshot': listeningSource.startMs,
-              'end_ms_snapshot': listeningSource.endMs,
-            }),
+            _openSlicePlayback(
+              currentMediaSliceOccurrence(
+                mediaId: listeningSource.mediaId,
+                trackId: listeningSource.trackId,
+                sentenceId: listeningSource.anchorCueId,
+                textSnapshot: '',
+                startMs: listeningSource.startMs,
+                endMs: listeningSource.endMs,
+                mediaFingerprint: playerController.mediaFingerprint,
+              ),
+            ),
           );
         },
         onClose: _closeListeningCheck,

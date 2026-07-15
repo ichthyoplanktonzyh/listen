@@ -58,6 +58,30 @@ class UnresolvedOccurrenceMedia extends OccurrenceMediaResolution {
   };
 }
 
+/// Builds the occurrence snapshot for a time range of the currently loaded
+/// media (reading replay, listening check). The fingerprint is what lets
+/// [OccurrenceMediaResolver] short-circuit to the current player path; without
+/// it every resolution is rejected as an invalid snapshot before the
+/// linked-media route is even tried.
+Map<String, dynamic> currentMediaSliceOccurrence({
+  required String? mediaId,
+  required String? trackId,
+  required String sentenceId,
+  required String textSnapshot,
+  required int startMs,
+  required int endMs,
+  required String? mediaFingerprint,
+}) => {
+  'media_id': mediaId,
+  'track_id': trackId,
+  'sentence_id': sentenceId,
+  'sentence_text_snapshot': textSnapshot,
+  'start_ms_snapshot': startMs,
+  'end_ms_snapshot': endMs,
+  if (mediaFingerprint != null && mediaFingerprint.isNotEmpty)
+    'media_fingerprint_snapshot': mediaFingerprint,
+};
+
 /// Resolves a lexical occurrence's media snapshot to a playable local path.
 ///
 /// It is intentionally UI-framework-light except for [XTypeGroup], so both
