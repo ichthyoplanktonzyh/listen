@@ -59,9 +59,7 @@ class ReadingState {
     Map<String, int>? slicePlayCounts,
   }) => ReadingState(
     open: open ?? this.open,
-    trackId: identical(trackId, _unset)
-        ? this.trackId
-        : trackId as String?,
+    trackId: identical(trackId, _unset) ? this.trackId : trackId as String?,
     paragraphs: paragraphs ?? this.paragraphs,
     anchorCueId: identical(anchorCueId, _unset)
         ? this.anchorCueId
@@ -78,6 +76,7 @@ class ReadingController extends ChangeNotifier {
   }
 
   final Store<ReadingState> _store;
+  bool _translationPreference = false;
 
   Store<ReadingState> get store => _store;
   ReadingState get state => _store.state;
@@ -103,6 +102,7 @@ class ReadingController extends ChangeNotifier {
         trackId: track.id,
         paragraphs: paragraphs,
         anchorCueId: resumeValid ? resumeAnchorCueId : null,
+        translationVisible: _translationPreference,
         translationByAnchor: secondaryTrack == null
             ? const {}
             : _projectTranslations(paragraphs, secondaryTrack),
@@ -121,6 +121,7 @@ class ReadingController extends ChangeNotifier {
   }
 
   void setTranslationVisible(bool visible) {
+    _translationPreference = visible;
     _store.update((s) => s.copyWith(translationVisible: visible));
   }
 

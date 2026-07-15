@@ -281,12 +281,19 @@ class _HomeContent extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                l.text('library'),
+                l.text('contentHome'),
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 20),
+              Text(
+                l.text('currentContentJourney'),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 12),
               _ContinueLearningCard(
                 mediaTitle: recentMediaTitle,
                 mediaPath: recentMediaPath,
@@ -307,7 +314,7 @@ class _HomeContent extends StatelessWidget {
               ),
               const SizedBox(height: 32),
               Text(
-                l.text('startListening'),
+                l.text('addContentSource'),
                 style: Theme.of(
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
@@ -350,7 +357,7 @@ class _HomeContent extends StatelessWidget {
               ],
               const SizedBox(height: 36),
               Text(
-                l.text('learningTools'),
+                l.text('assetJourney'),
                 style: Theme.of(
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),

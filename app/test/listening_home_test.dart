@@ -51,9 +51,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('首页'), findsOneWidget);
-    expect(find.text('内容库'), findsOneWidget);
-    expect(find.text('开始聆听'), findsOneWidget);
-    expect(find.text('学习资料'), findsOneWidget);
+    expect(find.text('学习首页'), findsOneWidget);
+    expect(find.text('继续当前内容会话'), findsOneWidget);
+    expect(find.text('添加内容来源'), findsOneWidget);
+    expect(find.text('到期任务与学习资产'), findsOneWidget);
 
     await tester.tap(find.text('打开视频或音频'));
     expect(openMediaCalls, 1);
