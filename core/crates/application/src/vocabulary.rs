@@ -8,9 +8,10 @@ use crate::{
     LexicalEntryId, LexicalEntryKind, LexicalLearningUseCases, LexicalObservation,
     LexicalOccurrenceId, LexicalSenseFolder, LexicalSenseId, MediaAvailability, MediaId, MediaItem,
     ObservationOrigin, ObservationResult, ObservationSpec, RecognitionEvidenceSourceKind,
-    SubtitleSentenceId, VocabularyAssetBundle, clean_optional, clean_required,
-    learning_observation_id, listening_projection_v1, normalize_lemma, normalize_phrase, now_ms,
-    observation_spec_for_marking, observation_spec_for_reading_marking, require_text,
+    RecordSpeakingProduction, SubtitleSentenceId, VocabularyAssetBundle, clean_optional,
+    clean_required, learning_observation_id, listening_projection_v1, normalize_lemma,
+    normalize_phrase, now_ms, observation_spec_for_marking, observation_spec_for_reading_marking,
+    observation_spec_for_speaking_production, require_text,
 };
 
 /// Marks capability projections inferred from a legacy linear status write,
@@ -415,6 +416,28 @@ impl LexicalLearningUseCases {
             ObservationOrigin::UserMarking,
             sentence_id.map(|id| format!("reading-marking:{}", id.as_str())),
             occurred_at_ms,
+        )
+    }
+
+    pub fn record_speaking_production(
+        &self,
+        input: RecordSpeakingProduction,
+    ) -> Result<(), ApplicationError> {
+        require_text(&input.surface_form, "surface_form")?;
+        self.lexical_entries
+            .lexical_details(&input.lexical_entry_id)?
+            .ok_or(ApplicationError::NotFound("lexical entry"))?;
+        self.append_channelized_observation(
+            &input.lexical_entry_id,
+            observation_spec_for_speaking_production(input.assistance),
+            ObservationContext {
+                surface_form: Some(input.surface_form),
+                sentence_id: input.sentence_id,
+                media_id: input.media_id,
+            },
+            ObservationOrigin::PracticeTask,
+            Some(input.source_ref),
+            input.occurred_at_ms,
         )
     }
 

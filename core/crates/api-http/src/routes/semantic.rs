@@ -3,15 +3,17 @@
 //! there are intentionally no update or delete routes.
 
 use crate::{
-    ApiError, ApiState, ApplicationError, Deserialize, Json, LanguageCode, Path, Query, State,
+    ApiError, ApiState, ApplicationError, Deserialize, Json, LanguageCode, Path, Query,
+    RecordSpeakingProduction, State, StatusCode,
 };
 use domain::{
-    AttemptResponse, JudgmentAbstain, JudgmentAdjudication, PointJudgment, PointVerdict,
-    PracticeAnchor, PracticeTarget, RubricPoint, RubricRevisionNote, RubricSource,
-    SemanticAttemptStatus, SemanticGeneratorProvenance, SemanticJudgment, SemanticJudgmentId,
-    SemanticRubric, SemanticRubricId, SemanticTaskAttempt, SemanticTaskAttemptId,
-    SemanticTaskConditions, SemanticTaskKind, judgment_adjudication_id, semantic_judgment_id,
-    semantic_rubric_id, semantic_task_attempt_id,
+    AsrReliability, AssistanceLevel, AttemptResponse, JudgmentAbstain, JudgmentAdjudication,
+    LexicalEntryId, PointJudgment, PointVerdict, PracticeAnchor, PracticeTarget, RubricPoint,
+    RubricRevisionNote, RubricSource, SemanticAttemptStatus, SemanticGeneratorProvenance,
+    SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
+    SemanticTaskAttemptId, SemanticTaskConditions, SemanticTaskKind, SpeakingAssistanceLevel,
+    SubtitleSentenceId, judgment_adjudication_id, semantic_judgment_id, semantic_rubric_id,
+    semantic_task_attempt_id,
 };
 
 #[derive(Debug, Deserialize)]
@@ -188,6 +190,99 @@ pub(crate) async fn semantic_attempt(
         .map_err(ApiError::from)?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("semantic attempt"))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ConfirmSpeakingTargetRequest {
+    lexical_entry_id: String,
+    surface_form: String,
+    #[serde(default)]
+    sentence_id: Option<String>,
+}
+
+pub(crate) async fn confirm_speaking_target(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(request): Json<ConfirmSpeakingTargetRequest>,
+) -> Result<StatusCode, ApiError> {
+    let attempt_id = SemanticTaskAttemptId::parse(id).map_err(ApplicationError::from)?;
+    let attempt = state
+        .services
+        .semantic()
+        .semantic_attempt(&attempt_id)?
+        .ok_or_else(|| ApiError::not_found("semantic attempt"))?;
+    if !matches!(
+        attempt.kind,
+        SemanticTaskKind::L2Retelling | SemanticTaskKind::RoleReply
+    ) || attempt.status != SemanticAttemptStatus::Completed
+    {
+        return Err(ApplicationError::Validation("constructed speaking attempt").into());
+    }
+    let response = attempt
+        .responses
+        .first()
+        .ok_or(ApplicationError::Validation("speaking response"))?;
+    if response.asr_reliability == Some(AsrReliability::Unreliable) {
+        return Err(ApplicationError::Validation("reliable speaking transcript").into());
+    }
+    let surface = request.surface_form.trim();
+    if surface.is_empty() || !contains_literal_target(&response.transcript, surface) {
+        return Err(ApplicationError::Validation("literal target in speaking response").into());
+    }
+    let assistance = match attempt.kind {
+        SemanticTaskKind::L2Retelling => AssistanceLevel::None,
+        SemanticTaskKind::RoleReply => match attempt.conditions.speaking_assistance {
+            Some(SpeakingAssistanceLevel::FullSentence) => AssistanceLevel::FullText,
+            Some(SpeakingAssistanceLevel::Keywords) => AssistanceLevel::PartialText,
+            Some(SpeakingAssistanceLevel::NoText) => AssistanceLevel::None,
+            None => return Err(ApplicationError::Validation("role reply assistance").into()),
+        },
+        _ => unreachable!(),
+    };
+    let rubric = state
+        .services
+        .semantic()
+        .semantic_rubric(&attempt.rubric_id, Some(attempt.rubric_version))?
+        .ok_or_else(|| ApiError::not_found("semantic rubric"))?;
+    let lexical_entry_id =
+        LexicalEntryId::parse(request.lexical_entry_id).map_err(ApplicationError::from)?;
+    let sentence_id = request
+        .sentence_id
+        .map(SubtitleSentenceId::parse)
+        .transpose()
+        .map_err(ApplicationError::from)?;
+    let source_ref = format!(
+        "speaking:{}:{}",
+        attempt.id.as_str(),
+        lexical_entry_id.as_str()
+    );
+    state
+        .services
+        .lexical_learning()
+        .record_speaking_production(RecordSpeakingProduction {
+            lexical_entry_id,
+            sentence_id,
+            surface_form: surface.to_owned(),
+            media_id: rubric.source.media_id,
+            assistance,
+            source_ref,
+            occurred_at_ms: attempt.ended_at_ms.unwrap_or(attempt.started_at_ms),
+        })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+fn contains_literal_target(transcript: &str, surface: &str) -> bool {
+    let transcript = transcript.to_lowercase();
+    let surface = surface.to_lowercase();
+    if !surface.is_ascii() {
+        return transcript.contains(&surface);
+    }
+    transcript.match_indices(&surface).any(|(start, value)| {
+        let before = transcript[..start].chars().next_back();
+        let after = transcript[start + value.len()..].chars().next();
+        before.is_none_or(|character| !character.is_alphanumeric())
+            && after.is_none_or(|character| !character.is_alphanumeric())
+    })
 }
 
 pub(crate) async fn semantic_attempt_judgments(

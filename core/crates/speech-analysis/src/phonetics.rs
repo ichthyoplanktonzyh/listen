@@ -6,5 +6,6 @@ pub use crate::phone_recognition::{
 pub use crate::phonetic_alignment::{CanonicalPhone, align_phones};
 pub use crate::phonetic_findings::findings_from_alignments;
 pub use crate::shadowing_comparison::{
-    ShadowingAudioAnalysis, ShadowingComparisonError, compare_pcm16_wav_paths,
+    RecordingAudioAnalysis, ShadowingAudioAnalysis, ShadowingComparisonError,
+    analyze_pcm16_wav_path, compare_pcm16_wav_paths,
 };

@@ -1,8 +1,44 @@
 use super::*;
 
+fn speaking_facts_wav() -> Vec<u8> {
+    let sample_rate = 16_000_u32;
+    let sample_count = sample_rate as usize;
+    let data_len = (sample_count * 2) as u32;
+    let mut bytes = Vec::with_capacity(44 + data_len as usize);
+    bytes.extend_from_slice(b"RIFF");
+    bytes.extend_from_slice(&(36 + data_len).to_le_bytes());
+    bytes.extend_from_slice(b"WAVEfmt ");
+    bytes.extend_from_slice(&16_u32.to_le_bytes());
+    bytes.extend_from_slice(&1_u16.to_le_bytes());
+    bytes.extend_from_slice(&1_u16.to_le_bytes());
+    bytes.extend_from_slice(&sample_rate.to_le_bytes());
+    bytes.extend_from_slice(&(sample_rate * 2).to_le_bytes());
+    bytes.extend_from_slice(&2_u16.to_le_bytes());
+    bytes.extend_from_slice(&16_u16.to_le_bytes());
+    bytes.extend_from_slice(b"data");
+    bytes.extend_from_slice(&data_len.to_le_bytes());
+    for index in 0..sample_count {
+        let time_ms = index * 1000 / sample_rate as usize;
+        let sample = if (300..500).contains(&time_ms) {
+            0_i16
+        } else {
+            8_000_i16
+        };
+        bytes.extend_from_slice(&sample.to_le_bytes());
+    }
+    bytes
+}
+
 #[tokio::test]
 async fn recording_and_unscored_shadowing_routes_round_trip() {
     let app = test_app();
+    let recording_path = std::env::temp_dir().join(format!(
+        "llplayer-speaking-facts-{}-{}.wav",
+        std::process::id(),
+        application::now_ms()
+    ));
+    let wav = speaking_facts_wav();
+    std::fs::write(&recording_path, &wav).unwrap();
     async fn post(app: &Router, path: &str, body: serde_json::Value) -> serde_json::Value {
         let response = app
             .clone()
@@ -50,8 +86,8 @@ async fn recording_and_unscored_shadowing_routes_round_trip() {
         &app,
         "/v1/recordings",
         serde_json::json!({
-            "file_path": "/tmp/shadowing-route.wav",
-            "duration_ms": 780,
+            "file_path": recording_path.to_string_lossy(),
+            "duration_ms": 1000,
             "target": item["target"],
             "source_segment": {
                 "media_id": null,
@@ -68,7 +104,7 @@ async fn recording_and_unscored_shadowing_routes_round_trip() {
                 "sample_rate_hz": 16000,
                 "channels": 1,
                 "sample_format": "s16",
-                "byte_length": 24960,
+                "byte_length": wav.len(),
                 "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
             "recorder_version": "flutter-recorder-v1"
@@ -100,6 +136,25 @@ async fn recording_and_unscored_shadowing_routes_round_trip() {
         .await
         .unwrap();
     assert_eq!(get_response.status(), StatusCode::OK);
+    let facts_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/v1/recordings/{recording_id}/audio-facts"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(facts_response.status(), StatusCode::OK);
+    let facts: serde_json::Value = serde_json::from_slice(
+        &to_bytes(facts_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(facts["duration_ms"], 1000);
+    assert_eq!(facts["pauses"].as_array().unwrap().len(), 1);
     let delete_response = app
         .oneshot(
             Request::delete(format!("/v1/recordings/{recording_id}"))
@@ -110,6 +165,7 @@ async fn recording_and_unscored_shadowing_routes_round_trip() {
         .await
         .unwrap();
     assert_eq!(delete_response.status(), StatusCode::OK);
+    let _ = std::fs::remove_file(recording_path);
 }
 
 #[tokio::test]

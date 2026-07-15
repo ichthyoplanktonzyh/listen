@@ -1,12 +1,15 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use api_events::{EventEnvelope, EventName};
 use application::{AppServices, ApplicationError, ImportSubtitle, TranscriptionRepository, now_ms};
 use domain::{
-    MediaId, SubtitleTrackProvenance, TranscriptionDestination, TranscriptionJob,
-    TranscriptionJobId, TranscriptionJobStatus, TranscriptionModelDescriptor, TranscriptionModelId,
-    TranscriptionModelState, TranscriptionProviderInfo, TranscriptionPurpose, TranscriptionQuality,
+    MediaId, RecordingTranscriptProvenance, RecordingTranscriptionJob, RecordingTranscriptionJobId,
+    RecordingTranscriptionStatus, SubtitleTrackProvenance, TranscriptionDestination,
+    TranscriptionJob, TranscriptionJobId, TranscriptionJobStatus, TranscriptionModelDescriptor,
+    TranscriptionModelId, TranscriptionModelState, TranscriptionProviderInfo, TranscriptionPurpose,
+    TranscriptionQuality, TranscriptionSegment,
 };
 use sha2::{Digest, Sha256};
 use tokio::sync::{Semaphore, broadcast};
@@ -27,6 +30,7 @@ pub struct TranscriptionCoordinator {
     temp_dir: PathBuf,
     process_runner: Arc<dyn ProcessRunner>,
     downloader: Arc<dyn ArtifactDownloader>,
+    recording_jobs: Arc<Mutex<HashMap<RecordingTranscriptionJobId, RecordingTranscriptionJob>>>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -39,6 +43,13 @@ pub struct CreateJobRequest {
     pub audio_track: Option<u32>,
     #[serde(default)]
     pub force: bool,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct CreateRecordingTranscriptionRequest {
+    pub recording_id: String,
+    pub model_id: String,
+    pub language: Option<String>,
 }
 
 impl TranscriptionCoordinator {
@@ -88,6 +99,7 @@ impl TranscriptionCoordinator {
             temp_dir: std::env::temp_dir().join("LLPlayerNext/transcription"),
             process_runner,
             downloader,
+            recording_jobs: Arc::default(),
         };
         value.repository.interrupt_active_jobs(now_ms())?;
         // Best-effort cleanup of stale work directories left behind when a
@@ -132,6 +144,127 @@ impl TranscriptionCoordinator {
         id: &TranscriptionJobId,
     ) -> Result<Option<TranscriptionJob>, ApplicationError> {
         self.repository.get_job(id)
+    }
+
+    pub fn recording_transcription_job(
+        &self,
+        id: &RecordingTranscriptionJobId,
+    ) -> Option<RecordingTranscriptionJob> {
+        self.recording_jobs
+            .lock()
+            .expect("recording transcription jobs mutex poisoned")
+            .get(id)
+            .cloned()
+    }
+
+    pub fn create_recording_transcription(
+        self: Arc<Self>,
+        request: CreateRecordingTranscriptionRequest,
+    ) -> Result<RecordingTranscriptionJob, ApplicationError> {
+        let recording_id = domain::RecordingAssetId::parse(request.recording_id)?;
+        let recording = self
+            .services
+            .recordings()
+            .recording_asset(&recording_id)?
+            .ok_or(ApplicationError::NotFound("recording asset"))?;
+        validate_recording_input(&recording)?;
+        let model_id = TranscriptionModelId::parse(request.model_id)?;
+        let model = self
+            .repository
+            .get_model(&model_id)?
+            .ok_or(ApplicationError::NotFound("transcription model"))?;
+        if !matches!(
+            model.state,
+            TranscriptionModelState::Installed | TranscriptionModelState::Custom
+        ) {
+            return Err(ApplicationError::Validation(
+                "installed transcription model",
+            ));
+        }
+        let requested_language = request
+            .language
+            .map(|value| value.trim().to_ascii_lowercase())
+            .filter(|value| !value.is_empty())
+            .or_else(|| Some(recording.language.as_str().to_owned()));
+        if model.english_only
+            && requested_language
+                .as_deref()
+                .is_some_and(|value| value != "en" && value != "auto")
+        {
+            return Err(ApplicationError::Validation(
+                "English recording language for English-only model",
+            ));
+        }
+        let provider = self.providers().into_iter().next().expect("first provider");
+        if !provider.available {
+            return Err(ApplicationError::Validation("transcription runtime"));
+        }
+        let created_at_ms = now_ms();
+        let id = RecordingTranscriptionJobId::from_fingerprint(
+            "recording-transcription-job",
+            &format!(
+                "{}:{}:{}:{created_at_ms}",
+                recording.id.as_str(),
+                model.id.as_str(),
+                requested_language.as_deref().unwrap_or("auto")
+            ),
+        );
+        let job = RecordingTranscriptionJob {
+            id: id.clone(),
+            recording_asset_id: recording.id,
+            status: RecordingTranscriptionStatus::Queued,
+            raw_transcript: None,
+            segments: Vec::new(),
+            provenance: RecordingTranscriptProvenance {
+                provider_id: provider.id,
+                provider_version: provider.runtime_version.clone(),
+                runtime_id: provider.runtime_id,
+                runtime_version: provider.runtime_version,
+                model_id: model.id,
+                model_revision: model.revision,
+                model_checksum_sha256: model.checksum_sha256,
+                recording_content_sha256: recording.audio.content_sha256,
+                requested_language,
+                detected_language: None,
+            },
+            error_code: None,
+            error_message: None,
+            created_at_ms,
+            started_at_ms: None,
+            completed_at_ms: None,
+            latency_ms: None,
+        };
+        self.recording_jobs
+            .lock()
+            .expect("recording transcription jobs mutex poisoned")
+            .insert(id.clone(), job.clone());
+        tokio::spawn(async move { self.run_recording_transcription(id).await });
+        Ok(job)
+    }
+
+    pub fn cancel_recording_transcription(
+        &self,
+        id: &RecordingTranscriptionJobId,
+    ) -> Result<RecordingTranscriptionJob, ApplicationError> {
+        let mut jobs = self
+            .recording_jobs
+            .lock()
+            .expect("recording transcription jobs mutex poisoned");
+        let job = jobs
+            .get_mut(id)
+            .ok_or(ApplicationError::NotFound("recording transcription job"))?;
+        if !matches!(
+            job.status,
+            RecordingTranscriptionStatus::Completed
+                | RecordingTranscriptionStatus::Failed
+                | RecordingTranscriptionStatus::Cancelled
+        ) {
+            let completed_at_ms = now_ms();
+            job.status = RecordingTranscriptionStatus::Cancelled;
+            job.completed_at_ms = Some(completed_at_ms);
+            job.latency_ms = Some(completed_at_ms.saturating_sub(job.created_at_ms));
+        }
+        Ok(job.clone())
     }
 
     pub async fn install_model(
@@ -211,6 +344,10 @@ impl TranscriptionCoordinator {
             .map_err(|error| ApplicationError::Repository(error.to_string()))?;
         let checksum = hash_file(Path::new(&path))?;
         let id = TranscriptionModelId::from_fingerprint("custom-transcription-model", &checksum);
+        let english_only = Path::new(&path)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .is_some_and(english_only_model_name);
         self.repository.upsert_model(&TranscriptionModelDescriptor {
             id,
             provider_id: "whisper.cpp".into(),
@@ -226,8 +363,8 @@ impl TranscriptionCoordinator {
             local_path: Some(path),
             size_bytes: metadata.len(),
             quality: TranscriptionQuality::Balanced,
-            english_only: false,
-            supports_translation: true,
+            english_only,
+            supports_translation: !english_only,
             state: TranscriptionModelState::Custom,
             installed_bytes: metadata.len(),
             error: None,
@@ -472,6 +609,127 @@ impl TranscriptionCoordinator {
         }
     }
 
+    async fn run_recording_transcription(self: Arc<Self>, id: RecordingTranscriptionJobId) {
+        let _permit = match self.queue.acquire().await {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        let result = self.execute_recording_transcription(&id).await;
+        let _ = tokio::fs::remove_dir_all(self.temp_dir.join("recordings").join(id.as_str())).await;
+        if let Err(error) = result {
+            let mut jobs = self
+                .recording_jobs
+                .lock()
+                .expect("recording transcription jobs mutex poisoned");
+            if let Some(job) = jobs.get_mut(&id)
+                && job.status != RecordingTranscriptionStatus::Cancelled
+            {
+                let completed_at_ms = now_ms();
+                job.status = RecordingTranscriptionStatus::Failed;
+                job.error_code = Some("recording_transcription_failed".into());
+                job.error_message = Some(error.to_string());
+                job.completed_at_ms = Some(completed_at_ms);
+                job.latency_ms = Some(completed_at_ms.saturating_sub(job.created_at_ms));
+            }
+        }
+    }
+
+    async fn execute_recording_transcription(
+        &self,
+        id: &RecordingTranscriptionJobId,
+    ) -> Result<(), ApplicationError> {
+        let mut job = self
+            .recording_transcription_job(id)
+            .ok_or(ApplicationError::NotFound("recording transcription job"))?;
+        if job.status == RecordingTranscriptionStatus::Cancelled {
+            return Ok(());
+        }
+        let recording = self
+            .services
+            .recordings()
+            .recording_asset(&job.recording_asset_id)?
+            .ok_or(ApplicationError::NotFound("recording asset"))?;
+        validate_recording_input(&recording)?;
+        if hash_file(Path::new(&recording.file_path))? != recording.audio.content_sha256 {
+            return Err(ApplicationError::Validation("recording file integrity"));
+        }
+        let model = self
+            .repository
+            .get_model(&job.provenance.model_id)?
+            .ok_or(ApplicationError::NotFound("transcription model"))?;
+        let model_path = model
+            .local_path
+            .ok_or(ApplicationError::Validation("model path"))?;
+        let whisper = resolve_tool("LLPLAYERNEXT_WHISPER_CLI", "whisper-cli")
+            .ok_or(ApplicationError::Validation("whisper runtime"))?;
+        let work = self.temp_dir.join("recordings").join(id.as_str());
+        tokio::fs::create_dir_all(&work).await.map_err(io_error)?;
+        let output = work.join("result");
+        let started_at_ms = now_ms();
+        job.status = RecordingTranscriptionStatus::Transcribing;
+        job.started_at_ms = Some(started_at_ms);
+        self.update_recording_job(job);
+        let args = vec![
+            "-m".into(),
+            model_path,
+            "-f".into(),
+            recording.file_path,
+            // Standard JSON carries segment offsets/text without the token
+            // dump. whisper.cpp full JSON can contain split non-ASCII token
+            // bytes (not valid UTF-8 JSON) for Mandarin recordings.
+            "-oj".into(),
+            "-of".into(),
+            output.to_string_lossy().into_owned(),
+            "-l".into(),
+            self.recording_transcription_job(id)
+                .and_then(|value| value.provenance.requested_language)
+                .unwrap_or_else(|| "auto".into()),
+        ];
+        self.process_runner
+            .run(
+                ProcessSpec::new(whisper, args),
+                Arc::new(RecordingTranscriptionCancellation {
+                    jobs: self.recording_jobs.clone(),
+                    job_id: id.clone(),
+                }),
+            )
+            .await?;
+        let bytes = tokio::fs::read(output.with_extension("json"))
+            .await
+            .map_err(io_error)?;
+        let result = parse_recording_transcription_json(&bytes)?;
+        let completed_at_ms = now_ms();
+        let mut job = self
+            .recording_transcription_job(id)
+            .ok_or(ApplicationError::NotFound("recording transcription job"))?;
+        if job.status == RecordingTranscriptionStatus::Cancelled {
+            return Ok(());
+        }
+        job.status = RecordingTranscriptionStatus::Completed;
+        job.raw_transcript = Some(
+            result
+                .segments
+                .iter()
+                .map(|segment| segment.text.trim())
+                .filter(|text| !text.is_empty())
+                .collect::<Vec<_>>()
+                .join(" "),
+        );
+        job.segments = result.segments;
+        job.provenance.detected_language = result.detected_language;
+        job.completed_at_ms = Some(completed_at_ms);
+        job.latency_ms = Some(completed_at_ms.saturating_sub(started_at_ms));
+        self.update_recording_job(job);
+        Ok(())
+    }
+
+    fn update_recording_job(&self, job: RecordingTranscriptionJob) {
+        self.recording_jobs
+            .lock()
+            .expect("recording transcription jobs mutex poisoned")
+            .insert(job.id.clone(), job);
+    }
+
     async fn execute_job(&self, id: &TranscriptionJobId) -> Result<(), ApplicationError> {
         let mut job = self
             .repository
@@ -672,6 +930,11 @@ struct TranscriptionCancellation {
     job_id: TranscriptionJobId,
 }
 
+struct RecordingTranscriptionCancellation {
+    jobs: Arc<Mutex<HashMap<RecordingTranscriptionJobId, RecordingTranscriptionJob>>>,
+    job_id: RecordingTranscriptionJobId,
+}
+
 struct TranscriptionDownloadProgress {
     repository: Arc<dyn TranscriptionRepository>,
     events: broadcast::Sender<EventEnvelope>,
@@ -709,6 +972,73 @@ impl CancellationProbe for TranscriptionCancellation {
             .get_job(&self.job_id)?
             .is_some_and(|job| job.status == TranscriptionJobStatus::Cancelled))
     }
+}
+
+impl CancellationProbe for RecordingTranscriptionCancellation {
+    fn is_cancelled(&self) -> Result<bool, ApplicationError> {
+        Ok(self
+            .jobs
+            .lock()
+            .expect("recording transcription jobs mutex poisoned")
+            .get(&self.job_id)
+            .is_some_and(|job| job.status == RecordingTranscriptionStatus::Cancelled))
+    }
+}
+
+fn validate_recording_input(recording: &domain::RecordingAsset) -> Result<(), ApplicationError> {
+    if recording.duration_ms > 120_000
+        || recording.audio.container != "wav"
+        || recording.audio.codec != "pcm_s16le"
+        || recording.audio.sample_rate_hz != 16_000
+        || recording.audio.channels != 1
+        || recording.audio.sample_format != "s16"
+    {
+        return Err(ApplicationError::Validation(
+            "16 kHz mono PCM s16 WAV recording",
+        ));
+    }
+    let metadata = std::fs::metadata(&recording.file_path)
+        .map_err(|_| ApplicationError::Validation("available recording file"))?;
+    if metadata.len() != recording.audio.byte_length {
+        return Err(ApplicationError::Validation("recording file byte length"));
+    }
+    Ok(())
+}
+
+fn parse_recording_transcription_json(
+    bytes: &[u8],
+) -> Result<domain::TranscriptionResult, ApplicationError> {
+    let value: serde_json::Value = serde_json::from_slice(bytes)
+        .map_err(|error| ApplicationError::Repository(error.to_string()))?;
+    let detected_language = value
+        .pointer("/result/language")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned);
+    let segments = value
+        .get("transcription")
+        .and_then(serde_json::Value::as_array)
+        .ok_or(ApplicationError::Validation(
+            "whisper.cpp recording transcription JSON",
+        ))?
+        .iter()
+        .filter_map(|segment| {
+            let offsets = segment.get("offsets")?;
+            Some(TranscriptionSegment {
+                start_ms: offsets.get("from")?.as_u64()?,
+                end_ms: offsets.get("to")?.as_u64()?,
+                text: segment.get("text")?.as_str()?.trim().to_owned(),
+            })
+        })
+        .collect::<Vec<_>>();
+    if segments.is_empty() {
+        return Err(ApplicationError::Validation(
+            "non-empty recording transcript",
+        ));
+    }
+    Ok(domain::TranscriptionResult {
+        detected_language,
+        segments,
+    })
 }
 
 fn catalog() -> Vec<TranscriptionModelDescriptor> {
@@ -836,6 +1166,16 @@ fn dtw_preset_from_name(name: &str) -> Option<String> {
     Some(preset)
 }
 
+fn english_only_model_name(name: &str) -> bool {
+    if dtw_preset_from_name(name).is_some_and(|preset| preset.ends_with(".en")) {
+        return true;
+    }
+    let normalized = name.trim().to_ascii_lowercase().replace('_', "-");
+    ["tiny", "base", "small", "medium"]
+        .iter()
+        .any(|family| normalized.contains(&format!("-{family}-en-")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -903,6 +1243,13 @@ mod tests {
     }
 
     #[test]
+    fn recognizes_english_only_custom_model_names() {
+        assert!(english_only_model_name("ggml-base.en.bin"));
+        assert!(english_only_model_name("whisper-cpp-base-en-main.bin"));
+        assert!(!english_only_model_name("whisper-cpp-base-main.bin"));
+    }
+
+    #[test]
     fn non_whisper_cpp_models_do_not_enable_dtw() {
         let model = TranscriptionModelDescriptor {
             id: TranscriptionModelId::parse("custom").unwrap(),
@@ -924,5 +1271,34 @@ mod tests {
             updated_at_ms: 1,
         };
         assert!(dtw_preset_for_model(&model).is_none());
+    }
+
+    #[test]
+    fn parses_short_recording_json_with_language_and_offsets() {
+        let result = parse_recording_transcription_json(
+            r#"{
+                "result": {"language": "zh"},
+                "transcription": [
+                    {"offsets": {"from": 120, "to": 840}, "text": " 你好 "},
+                    {"offsets": {"from": 840, "to": 1600}, "text": "世界"}
+                ]
+            }"#
+            .as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(result.detected_language.as_deref(), Some("zh"));
+        assert_eq!(result.segments.len(), 2);
+        assert_eq!(result.segments[0].start_ms, 120);
+        assert_eq!(result.segments[0].text, "你好");
+        assert_eq!(result.segments[1].end_ms, 1600);
+    }
+
+    #[test]
+    fn rejects_short_recording_json_without_readable_segments() {
+        let error = parse_recording_transcription_json(
+            br#"{"result":{"language":"en"},"transcription":[]}"#,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("non-empty recording transcript"));
     }
 }

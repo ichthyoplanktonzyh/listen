@@ -1161,6 +1161,63 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/RecordingAsset" }
+    delete:
+      operationId: deleteRecordingAsset
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Deleted recording metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingAsset" }
+  /v1/recordings/{id}/audio-facts:
+    get:
+      operationId: recordingAudioFacts
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Objective duration, pause, and waveform facts; never a speaking score
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingAudioFacts" }
+  /v1/recording-transcriptions:
+    post:
+      operationId: createRecordingTranscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRecordingTranscription" }
+      responses:
+        "200":
+          description: Queued short-recording transcription; never a speaking score
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingTranscriptionJob" }
+  /v1/recording-transcriptions/{job_id}:
+    get:
+      operationId: recordingTranscriptionJob
+      parameters:
+        - { name: job_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Ephemeral short-recording transcription state and raw ASR result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingTranscriptionJob" }
+  /v1/recording-transcriptions/{job_id}/cancel:
+    post:
+      operationId: cancelRecordingTranscription
+      parameters:
+        - { name: job_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Cancelled short-recording transcription
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingTranscriptionJob" }
   /v1/shadowing/comparisons:
     post:
       operationId: compareShadowing
@@ -1175,16 +1232,6 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ShadowingComparison" }
-    delete:
-      operationId: deleteRecordingAsset
-      parameters:
-        - { name: id, in: path, required: true, schema: { type: string } }
-      responses:
-        "200":
-          description: Deleted recording metadata
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/RecordingAsset" }
   /v1/listening-inbox/items:
     get:
       operationId: listListeningInboxItems
@@ -1563,6 +1610,25 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SemanticTaskAttempt" }
+  /v1/semantic/attempts/{id}/speaking-targets:
+    post:
+      operationId: confirmSpeakingTarget
+      description: User confirms a literal lexical target produced in a completed constructed-speaking response.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lexical_entry_id, surface_form, sentence_id]
+              properties:
+                lexical_entry_id: { type: string }
+                surface_form: { type: string, minLength: 1 }
+                sentence_id: { type: [string, "null"] }
+      responses:
+        "204": { description: Idempotent speaking observation appended }
   /v1/semantic/attempts/{id}/judgments:
     get:
       operationId: semanticAttemptJudgments
@@ -3744,7 +3810,7 @@ components:
     PracticeTokenResult:
       enum: [correct, missing, extra, mismatch]
     ReviewSourceKind:
-      enum: [lexical_entry, practice_failure, listening_inbox, chunk, sentence, connected_speech]
+      enum: [lexical_entry, practice_failure, listening_inbox, chunk, sentence, connected_speech, speaking_attempt]
     ReviewItemStatus:
       enum: [active, suspended, archived]
     ReviewRating:
@@ -3862,19 +3928,27 @@ components:
       enum: [reliable, suspect, unreliable]
     L1RetellingTrigger:
       enum: [user_requested, l2_failed, diagnosis]
+    SpeakingAssistanceLevel:
+      enum: [full_sentence, keywords, no_text]
+    SpeakingRecallKind:
+      enum: [immediate, delayed]
     SemanticTaskConditions:
       type: object
-      required: [source_text_visible, audio_play_count, notes_allowed, l1_trigger]
+      required: [source_text_visible, audio_play_count, notes_allowed, l1_trigger, speaking_assistance, speaking_recall, prompt_snapshot]
       properties:
         source_text_visible: { type: boolean }
         audio_play_count: { type: [integer, "null"], minimum: 0 }
         notes_allowed: { type: boolean }
         l1_trigger: { $ref: "#/components/schemas/L1RetellingTrigger" }
+        speaking_assistance: { $ref: "#/components/schemas/SpeakingAssistanceLevel" }
+        speaking_recall: { $ref: "#/components/schemas/SpeakingRecallKind" }
+        prompt_snapshot: { type: [string, "null"] }
     AttemptResponse:
       type: object
-      required: [revision, transcript, source, recording_asset_id, asr_reliability, language, recorded_at_ms]
+      required: [revision, raw_transcript, transcript, source, recording_asset_id, asr_reliability, language, recorded_at_ms]
       properties:
         revision: { type: integer, minimum: 1 }
+        raw_transcript: { type: [string, "null"] }
         transcript: { type: string }
         source: { $ref: "#/components/schemas/ResponseTranscriptSource" }
         recording_asset_id: { type: [string, "null"] }
@@ -4122,6 +4196,52 @@ components:
         language: { type: string }
         audio: { $ref: "#/components/schemas/RecordingAudioMetadata" }
         recorder_version: { type: string }
+    CreateRecordingTranscription:
+      type: object
+      required: [recording_id, model_id]
+      properties:
+        recording_id: { type: string }
+        model_id: { type: string }
+        language: { type: [string, "null"] }
+    RecordingTranscriptSegment:
+      type: object
+      required: [start_ms, end_ms, text]
+      properties:
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        text: { type: string }
+    RecordingTranscriptProvenance:
+      type: object
+      required: [provider_id, provider_version, runtime_id, runtime_version, model_id, model_revision, model_checksum_sha256, recording_content_sha256, requested_language, detected_language]
+      properties:
+        provider_id: { type: string }
+        provider_version: { type: string }
+        runtime_id: { type: string }
+        runtime_version: { type: string }
+        model_id: { type: string }
+        model_revision: { type: string }
+        model_checksum_sha256: { type: string }
+        recording_content_sha256: { type: string, pattern: "^[0-9a-fA-F]{64}$" }
+        requested_language: { type: [string, "null"] }
+        detected_language: { type: [string, "null"] }
+    RecordingTranscriptionJob:
+      type: object
+      required: [id, recording_asset_id, status, raw_transcript, segments, provenance, error_code, error_message, created_at_ms, started_at_ms, completed_at_ms, latency_ms]
+      properties:
+        id: { type: string }
+        recording_asset_id: { type: string }
+        status: { type: string, enum: [queued, transcribing, completed, cancelled, failed] }
+        raw_transcript: { type: [string, "null"] }
+        segments:
+          type: array
+          items: { $ref: "#/components/schemas/RecordingTranscriptSegment" }
+        provenance: { $ref: "#/components/schemas/RecordingTranscriptProvenance" }
+        error_code: { type: [string, "null"] }
+        error_message: { type: [string, "null"] }
+        created_at_ms: { type: integer, minimum: 0 }
+        started_at_ms: { type: [integer, "null"], minimum: 0 }
+        completed_at_ms: { type: [integer, "null"], minimum: 0 }
+        latency_ms: { type: [integer, "null"], minimum: 0 }
     CompleteShadowingAttempt:
       type: object
       required: [item_id, recording_id]
@@ -4148,6 +4268,14 @@ components:
         bucket_ms: { type: integer, minimum: 1 }
         peaks: { type: array, items: { type: number, minimum: 0, maximum: 1 } }
         rms: { type: array, items: { type: number, minimum: 0, maximum: 1 } }
+    RecordingAudioFacts:
+      type: object
+      required: [recording_id, duration_ms, pauses, waveform]
+      properties:
+        recording_id: { type: string }
+        duration_ms: { type: integer, minimum: 0 }
+        pauses: { type: array, items: { $ref: "#/components/schemas/AudioPauseInterval" } }
+        waveform: { $ref: "#/components/schemas/AudioWaveformSummary" }
     ShadowingPauseAlignment:
       type: object
       required: [reference_pauses, recording_pauses, mean_absolute_offset_ms]
@@ -4217,7 +4345,7 @@ components:
         next_due_at_ms: { type: [integer, "null"], minimum: 0 }
     ReviewCardKind:
       type: string
-      enum: [word_recognition, chunk_cloze, phrase_presence, source_sentence_recall]
+      enum: [word_recognition, chunk_cloze, phrase_presence, source_sentence_recall, delayed_retelling]
     ReviewCard:
       type: object
       required: [kind, cue, answer, target]

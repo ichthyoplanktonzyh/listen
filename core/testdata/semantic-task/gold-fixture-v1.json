@@ -75,11 +75,15 @@
         "source_text_visible": false,
         "audio_play_count": 1,
         "notes_allowed": false,
-        "l1_trigger": "user_requested"
+        "l1_trigger": "user_requested",
+        "speaking_assistance": null,
+        "speaking_recall": null,
+        "prompt_snapshot": null
       },
       "responses": [
         {
           "revision": 1,
+          "raw_transcript": null,
           "transcript": "菲律宾南部发生了7.8级大地震，至少19人死亡、200多人受伤，路都裂了，有些房子也塌了。",
           "source": "typed",
           "recording_asset_id": null,
@@ -110,11 +114,15 @@
         "source_text_visible": false,
         "audio_play_count": 1,
         "notes_allowed": false,
-        "l1_trigger": "l2_failed"
+        "l1_trigger": "l2_failed",
+        "speaking_assistance": null,
+        "speaking_recall": null,
+        "prompt_snapshot": null
       },
       "responses": [
         {
           "revision": 1,
+          "raw_transcript": null,
           "transcript": "好像是哪里地震了，死了一些人。",
           "source": "typed",
           "recording_asset_id": null,
@@ -145,11 +153,15 @@
         "source_text_visible": false,
         "audio_play_count": 1,
         "notes_allowed": false,
-        "l1_trigger": "diagnosis"
+        "l1_trigger": "diagnosis",
+        "speaking_assistance": null,
+        "speaking_recall": null,
+        "prompt_snapshot": null
       },
       "responses": [
         {
           "revision": 1,
+          "raw_transcript": "",
           "transcript": "",
           "source": "asr",
           "recording_asset_id": null,
