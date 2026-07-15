@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- 2026-07-15 01:10 CST: Phase 3.13 Slice 3 完成：段落任务全链路（manual rubric + 自评）。
+  后端新增 additive 读端点 `GET /v1/semantic/rubrics/lookup`（按 source 身份六元组查最新
+  rubric——客户端无法重推服务端 fingerprint id，409 后无从定位既有 rubric 是真实缺口；
+  repository/use case/OpenAPI/route-drift 齐备）。Flutter：semantic DTO 首个真实 consumer
+  落地（`models/semantic_task.dart` 手写 + 直接 pin `gold-fixture-v1.json` 的 5 项契约测
+  试）、`SemanticApi` part（sha256 与 Rust `transcript_sha256` 对齐）、`ReadingTaskController`
+  状态机（lookup→模板编辑→rubric v1→作答→逐点自评→adjudication；409 并发回退 lookup；
+  覆盖/部分 span 取全响应且按 Unicode scalar 计数）、`ReadingTaskSheet` 底部工作流 +
+  段落"任务"chip + 切片回听计数进 attempt 的诚实 `audio_play_count`。自评 judgment 记
+  `evidence_class=self_assessment` + provenance 注明 span 语义，不冒充 gold；全程零
+  observation/projection 写入。重要契约事实（PLAN v2 裁决 1 修正预告）：3.11 validator
+  规定 ReadingComprehension 必须 source_text_visible=true，同 rubric"只读/只听"配对不成
+  立，Slice 4 读听差异改为同 source segment 双 rubric 事实并置，届时记 PLAN v2.1。验证：
+  Rust workspace 33 套件全绿（api-http 新增 lookup + 客户端 payload 端到端 2 项），clippy
+  零告警，validate-contracts 通过；flutter analyze 零问题 / test 396 全绿（新增 controller
+  5 项、sheet 1 项、契约 5 项）。
+
 - 2026-07-15 00:05 CST: Phase 3.13 Slice 2 完成：阅读位置持久化。schema v37
   `reading_positions`（track 键控 upsert，刻意非 append-only——位置是游标不是证据）；
   domain `ReadingPosition` + `ReadingPositionRepository` trait（Disabled 降级：读回 None

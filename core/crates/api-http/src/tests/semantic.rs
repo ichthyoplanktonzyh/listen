@@ -231,3 +231,31 @@ async fn semantic_routes_reject_matrix_violations_and_tampered_hashes() {
     let (status, _) = post_json(&app, "/v1/semantic/attempts", wrong_version).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn semantic_rubric_lookup_finds_by_source_identity() {
+    let app = test_app();
+    let fixture = gold_fixture();
+    let (status, created) = post_json(&app, "/v1/semantic/rubrics", rubric_request(&fixture)).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let source = &fixture.rubric.source;
+    let sha = domain::transcript_sha256(&source.transcript_snapshot);
+    let query = format!(
+        "/v1/semantic/rubrics/lookup?media_id={}&start_ms={}&end_ms={}\
+         &purpose=l1_retelling&response_language=zh&source_sha256={sha}",
+        source.media_id.as_ref().unwrap().as_str(),
+        source.start_ms,
+        source.end_ms,
+    );
+    let (status, found) = get_json(&app, &query).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(found["id"], created["id"]);
+    assert_eq!(found["version"], created["version"]);
+
+    // A different purpose or hash finds nothing instead of guessing.
+    let miss = query.replace("purpose=l1_retelling", "purpose=summary");
+    let (status, body) = get_json(&app, &miss).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, serde_json::Value::Null);
+}

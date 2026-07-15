@@ -83,7 +83,7 @@ use routes::pronunciation::{
 use routes::reading::{reading_position, save_reading_position};
 use routes::semantic::{
     create_judgment_adjudication, create_semantic_attempt, create_semantic_judgment,
-    create_semantic_rubric, semantic_attempt, semantic_attempt_judgments,
+    create_semantic_rubric, lookup_semantic_rubric, semantic_attempt, semantic_attempt_judgments,
     semantic_judgment_adjudications, semantic_rubric, semantic_rubric_attempts,
 };
 use routes::sound_line::{
@@ -632,6 +632,7 @@ pub fn router(state: ApiState) -> Router {
             get(reading_position).put(save_reading_position),
         )
         .route("/v1/semantic/rubrics", post(create_semantic_rubric))
+        .route("/v1/semantic/rubrics/lookup", get(lookup_semantic_rubric))
         .route("/v1/semantic/rubrics/{id}", get(semantic_rubric))
         .route(
             "/v1/semantic/rubrics/{id}/attempts",

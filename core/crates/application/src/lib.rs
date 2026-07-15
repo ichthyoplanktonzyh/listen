@@ -33,7 +33,7 @@ use domain::{
     ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewRating,
     ReviewSchedule, ReviewSource, ReviewSourceKind, RhythmFrameId, SemanticJudgment,
     SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
-    SemanticTaskAttemptId, SenseGroup, SenseGroupAnalysis, SenseGroupAnalysisId,
+    SemanticTaskAttemptId, SemanticTaskKind, SenseGroup, SenseGroupAnalysis, SenseGroupAnalysisId,
     SenseGroupAnalysisSummary, SenseGroupId, SentenceDiagnosis, SentencePronunciation,
     SoundFitCalibration, SoundFitInputs, SubtitleSentence, SubtitleSentenceId, SubtitleToken,
     SubtitleTokenKind, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, SyntacticAnalysis,
@@ -439,6 +439,18 @@ impl SemanticTaskRepository for DisabledSemanticTaskRepository {
     fn latest_semantic_rubric(
         &self,
         _id: &SemanticRubricId,
+    ) -> Result<Option<SemanticRubric>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn find_semantic_rubric_by_source(
+        &self,
+        _media_id: Option<&MediaId>,
+        _start_ms: u64,
+        _end_ms: u64,
+        _purpose: SemanticTaskKind,
+        _response_language: &LanguageCode,
+        _source_sha256: &str,
     ) -> Result<Option<SemanticRubric>, ApplicationError> {
         Err(Self::disabled())
     }

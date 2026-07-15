@@ -6,9 +6,10 @@
 //! by construction, and the negative tests in persistence-sqlite pin it.
 
 use domain::{
-    JudgmentAdjudication, SemanticGeneratorKind, SemanticGeneratorProvenance, SemanticJudgment,
-    SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
-    SemanticTaskAttemptId, semantic_judgment_id, transcript_sha256, validate_judgment_adjudication,
+    JudgmentAdjudication, LanguageCode, MediaId, SemanticGeneratorKind,
+    SemanticGeneratorProvenance, SemanticJudgment, SemanticJudgmentId, SemanticRubric,
+    SemanticRubricId, SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind,
+    semantic_judgment_id, transcript_sha256, validate_judgment_adjudication,
     validate_semantic_attempt, validate_semantic_judgment, validate_semantic_rubric,
 };
 use std::sync::Arc;
@@ -77,6 +78,34 @@ impl SemanticUseCases {
             Some(version) => self.semantic_tasks.get_semantic_rubric(id, version),
             None => self.semantic_tasks.latest_semantic_rubric(id),
         }
+    }
+
+    /// Read-side lookup by source identity, so a client that only knows the
+    /// segment (not the server-minted fingerprint id) can find an existing
+    /// rubric instead of colliding with a 409 on re-create (Phase 3.13).
+    pub fn find_rubric_for_source(
+        &self,
+        media_id: Option<&str>,
+        start_ms: u64,
+        end_ms: u64,
+        purpose: SemanticTaskKind,
+        response_language: &str,
+        source_sha256: &str,
+    ) -> Result<Option<SemanticRubric>, ApplicationError> {
+        let media_id = media_id
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(MediaId::parse)
+            .transpose()?;
+        let response_language = LanguageCode::parse(response_language)?;
+        self.semantic_tasks.find_semantic_rubric_by_source(
+            media_id.as_ref(),
+            start_ms,
+            end_ms,
+            purpose,
+            &response_language,
+            source_sha256,
+        )
     }
 
     /// Records a finished (completed or abandoned) semantic attempt against

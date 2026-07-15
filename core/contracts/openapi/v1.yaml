@@ -1415,6 +1415,57 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SemanticRubric" }
+  /v1/semantic/rubrics/lookup:
+    get:
+      operationId: lookupSemanticRubric
+      description: >
+        Read-side rubric lookup by source identity (Phase 3.13). Returns the
+        latest version matching the segment, purpose, response language, and
+        source snapshot hash, or null — clients cannot re-derive the
+        server-minted fingerprint id.
+      parameters:
+        - { name: media_id, in: query, schema: { type: string } }
+        - {
+            name: start_ms,
+            in: query,
+            required: true,
+            schema: { type: integer, minimum: 0 },
+          }
+        - {
+            name: end_ms,
+            in: query,
+            required: true,
+            schema: { type: integer, minimum: 0 },
+          }
+        - {
+            name: purpose,
+            in: query,
+            required: true,
+            schema: { $ref: "#/components/schemas/SemanticTaskKind" },
+          }
+        - {
+            name: response_language,
+            in: query,
+            required: true,
+            schema: { type: string },
+          }
+        - {
+            name: source_sha256,
+            in: query,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200":
+          description: The latest matching rubric, or null.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/SemanticRubric" }
+                  - { type: "null" }
+        default:
+          $ref: "#/components/responses/Error"
   /v1/semantic/rubrics/{id}:
     get:
       operationId: semanticRubric

@@ -16,12 +16,13 @@ use domain::{
     PracticeSession, PracticeSessionId, ReadingPosition, RecognitionEvidence, RecordingAsset,
     RecordingAssetId, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus,
     ReviewSchedule, SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId,
-    SemanticTaskAttempt, SemanticTaskAttemptId, SenseGroupAnalysis, SenseGroupAnalysisId,
-    SentencePronunciation, SoundFitCalibration, SubtitleSentence, SubtitleSentenceId,
-    SubtitleTrack, SubtitleTrackId, SubtitleTrackProvenance, SubtitleTrackStatus, TimeMs,
-    TranscriptionJob, TranscriptionJobId, TranscriptionModelDescriptor, TranscriptionModelId,
-    UpgradeSuggestion, UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle,
-    WordPronunciation, WordTimeline, WordTimelineId, WordTiming,
+    SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind, SenseGroupAnalysis,
+    SenseGroupAnalysisId, SentencePronunciation, SoundFitCalibration, SubtitleSentence,
+    SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackProvenance,
+    SubtitleTrackStatus, TimeMs, TranscriptionJob, TranscriptionJobId,
+    TranscriptionModelDescriptor, TranscriptionModelId, UpgradeSuggestion, UpgradeSuggestionId,
+    UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation, WordTimeline,
+    WordTimelineId, WordTiming,
 };
 
 use crate::{ApplicationError, LexicalSourceContext};
@@ -779,6 +780,19 @@ pub trait SemanticTaskRepository: Send + Sync {
     fn latest_semantic_rubric(
         &self,
         id: &SemanticRubricId,
+    ) -> Result<Option<SemanticRubric>, ApplicationError>;
+    /// Latest rubric version matching one source identity tuple. Read-side
+    /// lookup so clients can find an existing rubric without re-deriving the
+    /// server-minted fingerprint id (Phase 3.13).
+    #[allow(clippy::too_many_arguments)]
+    fn find_semantic_rubric_by_source(
+        &self,
+        media_id: Option<&MediaId>,
+        start_ms: u64,
+        end_ms: u64,
+        purpose: SemanticTaskKind,
+        response_language: &LanguageCode,
+        source_sha256: &str,
     ) -> Result<Option<SemanticRubric>, ApplicationError>;
     fn save_semantic_attempt(
         &self,
