@@ -1468,11 +1468,12 @@ Phase 3.7–3.10 仍按既有计划完成，不在本轮重排。听力主线与
 2. 3.12 Vendor-neutral LLM Provider；
 3. 3.12.1 LLM Judge Qualification（从 3.12 拆出的资格评估，可与 3.13 并行）；
 4. 3.13 Reading Studio v1；
-5. 3.14 Speaking Studio v1；
-6. 3.15 Writing Studio v1；
-7. 3.16 Personal Expression；
-8. 3.17 Four-channel Projection & Cross-modal Review；
-9. 3.18 Cross-modal Coach & Four-channel Closeout。
+5. 3.13.5 Studio Shell UX ✅（2026-07-15 收口：内容会话/资产驱动混合导航、阅读器、阶段自适应任务容器）；
+6. 3.14 Speaking Studio v1；
+7. 3.15 Writing Studio v1；
+8. 3.16 Personal Expression；
+9. 3.17 Four-channel Projection & Cross-modal Review；
+10. 3.18 Cross-modal Coach & Four-channel Closeout。
 
 上述**顺序**已按依赖固定；但各 PLAN 写于 3.7–3.10 开工前，是方向承诺而非执行规格，
 每个 phase 开工前必须按上游落地现状复核修订。每个 Studio 开工前仍允许基于上游真实 QA

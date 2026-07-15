@@ -3,25 +3,22 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-14T21:30:00.000+08:00"
+last_updated: "2026-07-15T20:45:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-15 03:20 CST
-> 更新原因：Phase 3.13 Reading Studio v1 CODE COMPLETE。
+> 最后更新：2026-07-15 20:45 CST
+> 更新原因：Phase 3.13.5 Studio Shell UX 完成并通过 owner GUI 验收。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.13 Reading Studio v1 已 CODE COMPLETE（2026-07-15 起由
-  Claude 全程实现，codex 无额度）：阅读姿态（派生段落布局 + 独立 v37 位置游标 +
-  切片窗回听不动主播放）、段落任务（manual rubric + 自评走 3.11 append-only 族，
-  首个 semantic Dart DTO consumer + additive rubric lookup 读端点）、读听差异
-  （v2.1 修正：同 segment 双 rubric 事实并置，四象限 possibilities）、词级阅读
-  证据仅显式标记（`ReadingContextMarking`，零 projection）。真实 CNN10 媒体后端
-  全链路 20/20 + 对话段通过；owner GUI 走查清单见
-  `.planning/phases/3.13-reading-studio-v1/3.13-REAL-MEDIA-QA.md` §3。owner 并行
-  推进 3.12.1 judge 资格验证；LLM 反馈接线（PLAN Slice 7）随其裁决。
+- **当前执行主线**：Phase 3.13.5 Studio Shell UX 已完成（2026-07-15）：首页 + 内容
+  工作台 + 资产层混合导航、沉浸式阅读器、阅读/听力分离词汇透镜、上下文查词面板与
+  阶段自适应阅读任务容器均落地；owner 真实媒体 GUI 验收通过。下一执行 phase 为
+  3.14 Speaking Studio v1，开工前按 3.13.5 的内容通道、任务生命周期与单一音频焦点
+  修订其 PLAN。owner 可并行推进 3.12.1 judge 资格验证；未获资格不得阻塞客观事实 +
+  自评的 speaking 降级路径。
 - Phase 3.9.4 已收口合回 main（语义分组四层断链修复 + ADR 0016 投影交互对等，
   见 `3.9.4-REAL-MEDIA-QA.md`，GUI 交互项留 owner 清单）。
 - Phase 3.9.3 已完成并冻结；spaCy syntax capability 已具 App 内 opt-in
@@ -317,18 +314,27 @@ last_updated: "2026-07-14T21:30:00.000+08:00"
 | 3.10 Coach Dashboard | 诊断型 dashboard 聚合 durable 事实 + 规则建议 + channel-ready envelope + starter 降级 | `.planning/phases/3.10-coach-dashboard/3.10-CLOSEOUT.md` |
 | 3.11 Semantic Task Evidence Foundation | 四层事实分离（attempt/judgment/observation/capability）+ 版本化 rubric + 逐点判定含 abstain + adjudication；schema v35 append-only；ADR 0021；零 observation/projection writer | `.planning/phases/3.11-semantic-task-evidence-foundation/3.11-CLOSEOUT.md` |
 | 3.12 Vendor-neutral LLM Provider | 两异构协议 adapter（OpenAI Chat + Anthropic Messages）过同一契约套件证中立；draft-not-domain-type + 四层分离经 LLM 路径成立；OS keychain + auth_ref 密钥不落普通存储；诚实降级；Flutter 设置 UI；schema v36；ADR 0022；判定默认不获显示资格（属 3.12.1）。CODE COMPLETE，owner 真实 provider 端到端 QA 待做 | `.planning/phases/3.12-vendor-neutral-llm-provider/3.12-CLOSEOUT.md` |
-| 3.13 Reading Studio v1 | 阅读姿态（派生段落 + v37 位置游标 + 切片回听）+ 段落任务（manual rubric + 自评，semantic DTO 首个 consumer + rubric lookup）+ 读听差异（同 segment 双 rubric 并置四象限）+ ReadingContextMarking 显式词级证据；真实媒体后端 20/20；CODE COMPLETE，owner GUI 走查待做 | `.planning/phases/3.13-reading-studio-v1/3.13-CLOSEOUT.md` |
+| 3.13 Reading Studio v1 | 阅读姿态（派生段落 + v37 位置游标 + 切片回听）+ 段落任务（manual rubric + 自评）+ 读听差异 + ReadingContextMarking；真实媒体后端 20/20，GUI 走查并入 3.13.5 后通过 | `.planning/phases/3.13-reading-studio-v1/3.13-CLOSEOUT.md` |
+| 3.13.5 Studio Shell UX | 混合导航 + 内容通道切换；沉浸式阅读器、分离词汇透镜与上下文查词；阶段自适应任务容器；owner GUI 验收通过 | `.planning/phases/3.13.5-studio-shell-ux/3.13.5-CLOSEOUT.md` |
 
 ## 最近重要决策
 
-1. **2026-07-15** — Owner UX 裁决：四个痛点全部成立（阅读不像阅读为核心、
+1. **2026-07-15 21:53 CST** — 后续 3.14–3.18 PLAN 按 3.13.5 实际底盘修订：3.14
+   已成为 READY v2 并建立 Reference Matrix；Speaking/Writing 作为内容通道，Personal
+   Expression/Review/Coach 作为资产旅程。共享任务底盘收窄为经第二住户验证后才抽取的
+   生命周期 interface，各住户保留录音、编辑、资产与算法 implementation。
+2. **2026-07-15 20:45 CST** — Phase 3.13.5 Studio Shell UX 收口：混合导航、内容
+   通道切换、沉浸式阅读器、分离词汇透镜、上下文查词面板与阶段自适应任务容器完成；
+   全量 Flutter analyze 与 416 项测试通过，owner 真实媒体 GUI 验收通过。共享底盘的
+   interface 是生命周期、来源快照、草稿/退出恢复和音频焦点，不是固定布局。
+3. **2026-07-15** — Owner UX 裁决：四个痛点全部成立（阅读不像阅读为核心、
    入口藏深、表面类型杂、任务流繁琐），确立**场景原生 UX** 原则（阅读像
    阅读器，听/说/写各符合其场景）；在 3.14 前插入 Phase 3.13.5 Studio Shell
    （导航模型裁决、表面语法收敛、共享任务容器、阅读器化改造），3.13 剩余
    GUI 走查并入其收口；同日将外部参考库（codex 调研经批判性修订）入库
    `.planning/discuss/`，3.14–3.16 PLAN 增补参考输入并要求各自
    REFERENCE-MATRIX。
-2. **2026-07-11** — 3.7–3.10 计划先按落地现状修订为 v2，再对齐四通道最终讨论修订为
+4. **2026-07-11** — 3.7–3.10 计划先按落地现状修订为 v2，再对齐四通道最终讨论修订为
    v3，并新建 3.11–3.18 全量落地计划。v2 共性修订：状态语言全部换四通道 capability
    口径、证据链路对齐
    ADR 0017/0019、播放对齐 3.5.7 双实例架构、文案走 localization。关键个性修订：
@@ -414,22 +420,15 @@ last_updated: "2026-07-14T21:30:00.000+08:00"
 
 ## 下一步工作
 
-1. **下一执行 phase：3.13.5 Studio Shell UX**（2026-07-15 owner 裁决插入，
-   沿 3.35 插入式 UI phase 先例）：导航模型裁决、表面语法收敛、共享任务
-   容器、阅读器化改造；Slice 0 低保真原型把门。3.13 剩余 owner GUI 走查项
-   并入其收口走查（3.13 首个走查缺陷——阅读回听 occurrence 缺 fingerprint——
-   已于 2026-07-15 修复）。计划：
-   `.planning/phases/3.13.5-studio-shell-ux/3.13.5-PLAN.md`。
-2. **其后执行 phase**：3.14 Speaking Studio v1（开工前按 3.8 recording 资产、
-   3.13 落地现状与 3.13.5 底盘修订 PLAN，并按
-   `.planning/discuss/studio-3.13-3.16-external-reference-library.zh.md` 建立
-   `3.14-REFERENCE-MATRIX.md`；Harper spike 可提前排，结论影响 3.15 provider
-   形态）；LLM 反馈接线（3.13 PLAN Slice 7）随 owner 3.12.1 资格裁决点亮或
+1. **下一执行 phase：3.14 Speaking Studio v1**：PLAN v2 与
+   `3.14-REFERENCE-MATRIX.md` 已按 3.13.5 实际底盘就绪；从 Slice 0 短录音 ASR、
+   RecordingAsset/音频焦点预检与参考交互复核开始。Harper spike 可提前排，结论影响
+   3.15 provider 形态；LLM 反馈接线（3.13 PLAN Slice 7）随 owner 3.12.1 资格裁决点亮或
    记录性跳过；3.12 增量协议 Slice 4 与 owner 真实 provider QA 仍按需排期。
-3. "收藏句 → 个人模板"的用户价值验证收敛到 Phase 3.16（3.4.3 结论待兑现）。
-4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
+2. "收藏句 → 个人模板"的用户价值验证收敛到 Phase 3.16（3.4.3 结论待兑现）。
+3. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
-5. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）；
+4. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）；
    legacy `LearningStatus` 物理删除推迟到所有 active consumer 迁移后的独立 cleanup phase；
    诊断 profile 批量读取接口、资产导入补写 capability history（见精化评审 §5）；
    四技能扩展稿 §10 研究引用在被 PLAN 引用前逐条核实（评审发现 Yanguas 引用可疑）。
