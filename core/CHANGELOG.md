@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-15 14:59 CST: 立项 Phase 3.13.5 Studio Shell UX（owner 裁决）。owner
+  确认四个 UX 痛点（阅读不像阅读为核心、入口藏深、表面类型六种无规则、任务
+  流繁琐），确立"场景原生 UX"原则（阅读像阅读器，听/说/写各符合其场景），
+  沿 3.35 插入式 UI phase 先例在 3.14 前插入独立 phase。PLAN 交付范围：Slice 0
+  低保真原型把门（导航模型两候选 + 阅读器化 + 共享任务容器 + 3.14/3.15 骨架
+  预演 + Reference Matrix）、导航与入口落地、阅读器化正文（文内工具栏替代
+  chip 排）、共享任务容器迁入 3.13 任务流、真实媒体走查（合并 3.13 剩余
+  owner 走查项）。guardrail：只改承载方式不改学习语义、低保真裁决前不写
+  Flutter、不重开 3.35 听力工作台改版。STATE 决策/下一步更新，3.14 PLAN 上游
+  输入增补 3.13.5 依赖。
+
 - 2026-07-15 14:42 CST: 修复 3.13 owner GUI 走查首个缺陷：阅读姿态"听整段"/
   逐句 chip 与听测面板播放全部无法回听。根因：`_playReadingRange` 与
   ListeningCheckPanel 手写的 occurrence map 缺 `media_fingerprint_snapshot`，

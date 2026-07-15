@@ -321,7 +321,14 @@ last_updated: "2026-07-14T21:30:00.000+08:00"
 
 ## 最近重要决策
 
-1. **2026-07-11** — 3.7–3.10 计划先按落地现状修订为 v2，再对齐四通道最终讨论修订为
+1. **2026-07-15** — Owner UX 裁决：四个痛点全部成立（阅读不像阅读为核心、
+   入口藏深、表面类型杂、任务流繁琐），确立**场景原生 UX** 原则（阅读像
+   阅读器，听/说/写各符合其场景）；在 3.14 前插入 Phase 3.13.5 Studio Shell
+   （导航模型裁决、表面语法收敛、共享任务容器、阅读器化改造），3.13 剩余
+   GUI 走查并入其收口；同日将外部参考库（codex 调研经批判性修订）入库
+   `.planning/discuss/`，3.14–3.16 PLAN 增补参考输入并要求各自
+   REFERENCE-MATRIX。
+2. **2026-07-11** — 3.7–3.10 计划先按落地现状修订为 v2，再对齐四通道最终讨论修订为
    v3，并新建 3.11–3.18 全量落地计划。v2 共性修订：状态语言全部换四通道 capability
    口径、证据链路对齐
    ADR 0017/0019、播放对齐 3.5.7 双实例架构、文案走 localization。关键个性修订：
@@ -341,7 +348,7 @@ last_updated: "2026-07-14T21:30:00.000+08:00"
    三级资格口径统一（未校验不进 surface / 仅可显示 / supporting evidence）；seam 预留
    裁决标准写入共享上下文 §3.6（additive 响应形状可预留，固化资产身份的泛化必须等
    真实 consumer）；3.11–3.18 PLAN 定性为方向承诺，开工前必须按上游现状修订。
-2. **2026-07-10** — 个人听力词典与切片播放器评审裁决（见
+3. **2026-07-10** — 个人听力词典与切片播放器评审裁决（见
    `.planning/discuss/personal-listening-dictionary-and-slice-player.zh.md` §9）：词典组织
    确立为"学习对象 →（可选义项）→ 切片"的**视图层级**；高频读端（字幕高亮/词汇本过滤）
    只读词条级画像，义项不进热路径；义项 = 用户文件夹为身份权威，词典 API 义项仅为建议/
@@ -349,55 +356,55 @@ last_updated: "2026-07-14T21:30:00.000+08:00"
    不迁移；图谱视图推迟（纯读端推导、不落库）。落地：新增 Phase 3.5.7 切片回听播放器
    （独立第二解码实例，Slice 0 spike 把门）；3.6 修订为 v2（第一刀零新后端资产词典页，
    corpus index/搜索降为第二刀）；sense spike 从"3.6 前"改排到义项切片（3.6.x）前。
-3. **2026-07-10** — Phase 3.5.5 收口 + 精听练习小窗切出：意群/chunk 定为**只收表达不合并数据**
+4. **2026-07-10** — Phase 3.5.5 收口 + 精听练习小窗切出：意群/chunk 定为**只收表达不合并数据**
    （伞概念"分组"，`groupingMode` 四态 off/prosodic/semantic/compare;compare = 语流胶囊为底 +
    语义∖语流边界处打差异标记 = 听力 hotspot），ADR 0016 双层分离不动;semantic 因算法仍是
    规则回退而刻意标 provisional;全新安装默认 `off`。精听浮动练习小窗（含 P0，且需反转 3.2 落地的
    卡点/悬案区/session summary 等"过度设计"机制）工作量与风险高于其余接线级修复，切出为 Phase 3.5.6
    独立做。内容匹配度/意群的**命名重设计**、词汇本"学习对象统一抽象"、旧状态 ChoiceChips 移除均留待独立处理。
-4. **2026-07-07** — 模型精化评审裁决（见 `.planning/discuss/learning-domain-model-v2-refinement-review.zh.md`
+5. **2026-07-07** — 模型精化评审裁决（见 `.planning/discuss/learning-domain-model-v2-refinement-review.zh.md`
    与共享上下文 §14）：确立复杂度分层原则与字段裁决标准；`CapabilityProjection` 预留
    confidence / evidence_as_of_ms seam；证据通道化 + surface_form + 投影写入者互斥为 3.5 前置
    slice；SenseGroup 用户修正定为 overlay 模式；sense 身份 spike 排在 3.6 前；明确砍掉混淆
    词对、时钟仲裁、override 衰老机制；修复导入路径 projection 来源标注。
-5. **2026-07-06** — Learning Domain Model v2：暂停 3.4/3.35 最终 QA，插入 3.4.1~3.4.3；
+6. **2026-07-06** — Learning Domain Model v2：暂停 3.4/3.35 最终 QA，插入 3.4.1~3.4.3；
    `LearningStatus` 不再作为长期权威模型，改为四通道 assessment + evidence/projection/override；
    SenseGroup 与现有音频/韵律 ChunkTimeline 并存。ADR 0015 取代 ADR 0012 的单状态决定。
-6. **2026-07-05** — Phase 3.35 收尾复审：走查发现部分 P0 项只有 UI 壳、数据通路是断的
+7. **2026-07-05** — Phase 3.35 收尾复审：走查发现部分 P0 项只有 UI 壳、数据通路是断的
    （首页继续学习、readiness），本轮补齐数据通路而非仅视觉；最近媒体经 settings 持久化，
    词汇总量客户端聚合现有 list 查询，不新增后端端点；文稿跟随以 drag/wheel 判定用户滚动、
    程序化滚动不触发暂停。
-7. **2026-07-05** — Phase 3.35 截图反馈第二轮：右侧文稿随播放当前句同步改为基于真实
+8. **2026-07-05** — Phase 3.35 截图反馈第二轮：右侧文稿随播放当前句同步改为基于真实
    列表行位置，移除固定行高估算，适配长字幕可变行高。
-8. **2026-07-05** — Phase 3.35 截图反馈第一轮：字幕资源页和右侧资源 tab 的上下资源区
+9. **2026-07-05** — Phase 3.35 截图反馈第一轮：字幕资源页和右侧资源 tab 的上下资源区
    改为可拖动分栏，timeline 详情独立滚动，修复矮窗口下区域挤压和底部 overflow。
-9. **2026-07-04** — Phase 3.35 首轮 UI 实施：来源中立首页、可拖动媒体/字幕工作台、
+10. **2026-07-04** — Phase 3.35 首轮 UI 实施：来源中立首页、可拖动媒体/字幕工作台、
    紧凑播放控制与统一 `ListenTheme` 已落地；主题采用冷杉绿 + 雾灰 + 暖金，旧学习面板
    已迁移，等待 owner 截图反馈继续收口。
-10. **2026-07-04** — 插入 Phase 3.35：在 3.3 与 3.4 之间先重构统一听力工作台 UI；
+11. **2026-07-04** — 插入 Phase 3.35：在 3.3 与 3.4 之间先重构统一听力工作台 UI；
    参考每日英语听力成熟的内容层级与播放学习组织，但保留 listen 的诊断/证据模型且不复制品牌。
    同时明确 local-first 不等于 local-only，未来 YouTube 等在线来源进入统一内容入口。
-11. **2026-07-04** — Phase 3.2 收口：精听卡点闭环落地，包含标记卡点 / 跳过、
+12. **2026-07-04** — Phase 3.2 收口：精听卡点闭环落地，包含标记卡点 / 跳过、
    diagnosis viewed evidence、session summary、悬案区 v0、精听完毕确认与
    `familiar_material_marked` 熟料事件；卡点状态保持读侧派生，不新增权威状态机表。
-12. **2026-07-04** — Phase 3.1 收口：Test posture 首个精听练习竖切片落地，包含
+13. **2026-07-04** — Phase 3.1 收口：Test posture 首个精听练习竖切片落地，包含
    cloze / chunk dictation / sentence dictation、失败项 review、phrase-aware diagnosis
    和 rhythm hotspot evidence loop；练习失败继续作为 evidence，不静默修改全局 `LearningStatus`。
-13. **2026-07-04** — Phase 3.x 产品形态确立：精听/泛听一级心智，复习/词典/dashboard
+14. **2026-07-04** — Phase 3.x 产品形态确立：精听/泛听一级心智，复习/词典/dashboard
    为资产消费层；功能按场景分不按设备分（生产端唯一 PC-only）；可组合不强制流程
    （每个功能可独立使用）；泛听默认零打扰。执行序列落为 Phase 3.1 ~ 3.10；双维难度
    （Meaning/Sound fit）直接实现，换取条件是分数可解释 + heuristic_proxy 标注。
-14. **2026-07-03** — ADR 0014：Dart 模型解析保持手写，fixture 契约测试为防漂移标准；
+15. **2026-07-03** — ADR 0014：Dart 模型解析保持手写，fixture 契约测试为防漂移标准；
    存量 `timeline.dart` 不做 codegen 迁移，3.x 新 DTO 手写 + 契约测试，体量大再试点。
-15. **2026-07-02** — speech-analysis 算法线（2.19/2.20/2.21）搁置，主线转入 Phase 3.x
+16. **2026-07-02** — speech-analysis 算法线（2.19/2.20/2.21）搁置，主线转入 Phase 3.x
    英语听力学习闭环；audible-structure v1 contract 保持当前权威 shape。
-16. **2026-07-02** — Phase 2.23 只做机械治理，不改产品行为；`main.dart` 收缩是 3.x
+17. **2026-07-02** — Phase 2.23 只做机械治理，不改产品行为；`main.dart` 收缩是 3.x
    Flutter practice UI 的前置。
-17. **2026-07-01** — consumer self-contained invariant：bundled whisper.cpp 产出的
+18. **2026-07-01** — consumer self-contained invariant：bundled whisper.cpp 产出的
    WordTimeline 必须解锁基础功能，sidecar 只升级质量。
-18. **2026-07-01** — 字幕层声音模式统一为 Rhythm A/B/C；phones 是 C 内 L4 evidence，不再是一级模式。
-19. **2026-06-30** — 算法/指标/阈值变更必须记录 evidence class，不能把小样本 smoke 或自动标签当真理。
-20. **2026-06-27** — 稳定教学标签优先：CTC 是 audio evidence，不是默认 teaching label truth。
+19. **2026-07-01** — 字幕层声音模式统一为 Rhythm A/B/C；phones 是 C 内 L4 evidence，不再是一级模式。
+20. **2026-06-30** — 算法/指标/阈值变更必须记录 evidence class，不能把小样本 smoke 或自动标签当真理。
+21. **2026-06-27** — 稳定教学标签优先：CTC 是 audio evidence，不是默认 teaching label truth。
 
 ## 当前阻塞项
 
@@ -407,14 +414,18 @@ last_updated: "2026-07-14T21:30:00.000+08:00"
 
 ## 下一步工作
 
-1. **Phase 3.13 收尾（owner 门）**：GUI 走查清单（`3.13-REAL-MEDIA-QA.md` §3）；
-   通过后 phase 完全收口。LLM 反馈接线（3.13 PLAN Slice 7）随 owner 3.12.1 资格
-   裁决点亮或记录性跳过。
-2. **下一执行 phase**：3.14 Speaking Studio v1（开工前按 3.8 recording 资产与 3.13
-   落地现状修订 PLAN，并按
+1. **下一执行 phase：3.13.5 Studio Shell UX**（2026-07-15 owner 裁决插入，
+   沿 3.35 插入式 UI phase 先例）：导航模型裁决、表面语法收敛、共享任务
+   容器、阅读器化改造；Slice 0 低保真原型把门。3.13 剩余 owner GUI 走查项
+   并入其收口走查（3.13 首个走查缺陷——阅读回听 occurrence 缺 fingerprint——
+   已于 2026-07-15 修复）。计划：
+   `.planning/phases/3.13.5-studio-shell-ux/3.13.5-PLAN.md`。
+2. **其后执行 phase**：3.14 Speaking Studio v1（开工前按 3.8 recording 资产、
+   3.13 落地现状与 3.13.5 底盘修订 PLAN，并按
    `.planning/discuss/studio-3.13-3.16-external-reference-library.zh.md` 建立
    `3.14-REFERENCE-MATRIX.md`；Harper spike 可提前排，结论影响 3.15 provider
-   形态）；3.12 增量协议 Slice 4 与 owner 真实 provider QA 仍按需排期。
+   形态）；LLM 反馈接线（3.13 PLAN Slice 7）随 owner 3.12.1 资格裁决点亮或
+   记录性跳过；3.12 增量协议 Slice 4 与 owner 真实 provider QA 仍按需排期。
 3. "收藏句 → 个人模板"的用户价值验证收敛到 Phase 3.16（3.4.3 结论待兑现）。
 4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
