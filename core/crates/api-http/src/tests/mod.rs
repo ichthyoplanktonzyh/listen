@@ -24,7 +24,8 @@ fn test_state() -> ApiState {
         .with_corpus_index_repository(repo.clone())
         .with_coach_dashboard_repository(repo.clone())
         .with_semantic_task_repository(repo.clone())
-        .with_llm_provider_profile_repository(repo.clone()),
+        .with_llm_provider_profile_repository(repo.clone())
+        .with_reading_position_repository(repo.clone()),
         repo,
         "secret",
     )
@@ -142,6 +143,7 @@ mod media_subtitles;
 mod openapi;
 mod phonetic_analysis;
 mod practice;
+mod reading;
 mod semantic;
 mod speech_language;
 mod syntax;

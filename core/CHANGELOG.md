@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-15 00:05 CST: Phase 3.13 Slice 2 完成：阅读位置持久化。schema v37
+  `reading_positions`（track 键控 upsert，刻意非 append-only——位置是游标不是证据）；
+  domain `ReadingPosition` + `ReadingPositionRepository` trait（Disabled 降级：读回 None
+  写报错）+ `ReadingUseCases`（空 anchor 拒绝）+ SQLite 实现；HTTP
+  `GET/PUT /v1/reading/positions/{track_id}` + OpenAPI 路径与 `ReadingPosition` schema
+  （route-drift 门通过）。Flutter：`ReadingPositionView` 手写 DTO + fixture 契约测试
+  （ADR 0014）、`ReadingApi` part、进入阅读姿态时恢复游标（拉取失败静默从头开始）、
+  段落锚定 800ms 防抖写入 + 关闭时冲刷、失败 best-effort 不打扰。验证：cargo
+  workspace 33 套件全绿（persistence 113 含新增 3 项、api-http 含新增 2 项路由测试）、
+  clippy 无新告警、validate-contracts 通过、flutter analyze 零问题 / test 385 全绿。
+
 - 2026-07-14 23:05 CST: Phase 3.13 Slice 1 完成：阅读姿态 UI 骨架。新增
   `ReadingController`（Store 模式：paragraphs 派生、anchorCueId 阅读游标、翻译投影按
   段落时间范围中点匹配副字幕轨）与 `ReadingView`（替换 MediaWorkbench 播放区：段落流

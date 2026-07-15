@@ -11,7 +11,7 @@ use super::PersistenceError;
 // 24 -> 26 per the "later lander renumbers" rule recorded in the 3.5 plan.
 // v33 belongs to Phase 3.8 recording_assets; v34 adds the Phase 3.9 learner
 // profile after it. v35 adds the Phase 3.11 semantic task fact layer.
-pub const MIGRATION_VERSION: u32 = 36;
+pub const MIGRATION_VERSION: u32 = 37;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -248,6 +248,12 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         let tx = connection.unchecked_transaction()?;
         tx.execute_batch(include_str!("../migrations/0036_llm_provider_profiles.sql"))?;
         tx.pragma_update(None, "user_version", 36)?;
+        tx.commit()?;
+    }
+    if current < 37 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0037_reading_positions.sql"))?;
+        tx.pragma_update(None, "user_version", 37)?;
         tx.commit()?;
     }
     Ok(())

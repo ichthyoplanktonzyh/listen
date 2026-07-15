@@ -13,15 +13,15 @@ use domain::{
     PhoneticAnalysisId, PhoneticAnalysisJob, PhoneticAnalysisJobId,
     PhoneticAnalysisModelDescriptor, PhoneticAnalysisModelId, PhoneticFindingFeedback,
     PhoneticFindingId, PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeItemId,
-    PracticeSession, PracticeSessionId, RecognitionEvidence, RecordingAsset, RecordingAssetId,
-    ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewSchedule,
-    SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
-    SemanticTaskAttemptId, SenseGroupAnalysis, SenseGroupAnalysisId, SentencePronunciation,
-    SoundFitCalibration, SubtitleSentence, SubtitleSentenceId, SubtitleTrack, SubtitleTrackId,
-    SubtitleTrackProvenance, SubtitleTrackStatus, TimeMs, TranscriptionJob, TranscriptionJobId,
-    TranscriptionModelDescriptor, TranscriptionModelId, UpgradeSuggestion, UpgradeSuggestionId,
-    UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation, WordTimeline,
-    WordTimelineId, WordTiming,
+    PracticeSession, PracticeSessionId, ReadingPosition, RecognitionEvidence, RecordingAsset,
+    RecordingAssetId, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus,
+    ReviewSchedule, SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId,
+    SemanticTaskAttempt, SemanticTaskAttemptId, SenseGroupAnalysis, SenseGroupAnalysisId,
+    SentencePronunciation, SoundFitCalibration, SubtitleSentence, SubtitleSentenceId,
+    SubtitleTrack, SubtitleTrackId, SubtitleTrackProvenance, SubtitleTrackStatus, TimeMs,
+    TranscriptionJob, TranscriptionJobId, TranscriptionModelDescriptor, TranscriptionModelId,
+    UpgradeSuggestion, UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle,
+    WordPronunciation, WordTimeline, WordTimelineId, WordTiming,
 };
 
 use crate::{ApplicationError, LexicalSourceContext};
@@ -732,6 +732,19 @@ pub trait LearnerProfileRepository: Send + Sync {
         &self,
         id: &LearnerProfileId,
     ) -> Result<Option<LearnerProfile>, ApplicationError>;
+}
+
+/// Reading cursor persistence (Phase 3.13). Upsert semantics: the position
+/// is a cursor, not evidence, so overwriting is the intended behavior.
+pub trait ReadingPositionRepository: Send + Sync {
+    fn save_reading_position(
+        &self,
+        position: &ReadingPosition,
+    ) -> Result<ReadingPosition, ApplicationError>;
+    fn get_reading_position(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<ReadingPosition>, ApplicationError>;
 }
 
 pub trait RecordingRepository: Send + Sync {

@@ -36,6 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_difficulty_repository(repository.clone())
     .with_corpus_index_repository(repository.clone())
     .with_learner_profile_repository(repository.clone())
+    .with_reading_position_repository(repository.clone())
     .with_semantic_task_repository(repository.clone())
     .with_llm_provider_profile_repository(repository.clone());
     let services = services.with_coach_dashboard_repository(repository.clone());
