@@ -154,6 +154,7 @@ class SemanticRubricView {
 class AttemptResponseView {
   const AttemptResponseView({
     required this.revision,
+    this.rawTranscript,
     required this.transcript,
     required this.source,
     required this.language,
@@ -161,6 +162,7 @@ class AttemptResponseView {
   });
 
   final int revision;
+  final String? rawTranscript;
   final String transcript;
 
   /// `typed` or `asr`.
@@ -171,6 +173,7 @@ class AttemptResponseView {
   factory AttemptResponseView.fromJson(Map<String, dynamic> json) =>
       AttemptResponseView(
         revision: (json['revision'] as num).toInt(),
+        rawTranscript: json['raw_transcript'] as String?,
         transcript: json['transcript'] as String,
         source: json['source'] as String,
         language: json['language'] as String,
@@ -183,17 +186,26 @@ class SemanticConditionsView {
     required this.sourceTextVisible,
     this.audioPlayCount,
     required this.notesAllowed,
+    this.speakingAssistance,
+    this.speakingRecall,
+    this.promptSnapshot,
   });
 
   final bool sourceTextVisible;
   final int? audioPlayCount;
   final bool notesAllowed;
+  final String? speakingAssistance;
+  final String? speakingRecall;
+  final String? promptSnapshot;
 
   factory SemanticConditionsView.fromJson(Map<String, dynamic> json) =>
       SemanticConditionsView(
         sourceTextVisible: json['source_text_visible'] as bool,
         audioPlayCount: (json['audio_play_count'] as num?)?.toInt(),
         notesAllowed: json['notes_allowed'] as bool? ?? false,
+        speakingAssistance: json['speaking_assistance'] as String?,
+        speakingRecall: json['speaking_recall'] as String?,
+        promptSnapshot: json['prompt_snapshot'] as String?,
       );
 }
 
@@ -232,9 +244,7 @@ class SemanticAttemptView {
           json['conditions'] as Map<String, dynamic>,
         ),
         responses: (json['responses'] as List<dynamic>)
-            .map(
-              (r) => AttemptResponseView.fromJson(r as Map<String, dynamic>),
-            )
+            .map((r) => AttemptResponseView.fromJson(r as Map<String, dynamic>))
             .toList(growable: false),
         status: json['status'] as String,
         startedAtMs: (json['started_at_ms'] as num).toInt(),
@@ -273,17 +283,15 @@ class PointJudgmentView {
   final String verdict;
   final List<ResponseSpanView> supportingSpans;
 
-  factory PointJudgmentView.fromJson(Map<String, dynamic> json) =>
-      PointJudgmentView(
-        pointId: json['point_id'] as String,
-        verdict: json['verdict'] as String,
-        supportingSpans:
-            (json['supporting_spans'] as List<dynamic>? ?? const [])
-                .map(
-                  (s) => ResponseSpanView.fromJson(s as Map<String, dynamic>),
-                )
-                .toList(growable: false),
-      );
+  factory PointJudgmentView.fromJson(
+    Map<String, dynamic> json,
+  ) => PointJudgmentView(
+    pointId: json['point_id'] as String,
+    verdict: json['verdict'] as String,
+    supportingSpans: (json['supporting_spans'] as List<dynamic>? ?? const [])
+        .map((s) => ResponseSpanView.fromJson(s as Map<String, dynamic>))
+        .toList(growable: false),
+  );
 
   Map<String, dynamic> toJson() => {
     'point_id': pointId,

@@ -156,5 +156,125 @@ void main() {
       expect(exported, document);
       expect(exported['future_extension'], {'preserved': true});
     });
+
+    test(
+      'short recording transcription keeps raw ASR and provenance typed',
+      () async {
+        String? seenBody;
+        final api = LocalApi.withTransport(
+          baseUrl: 'http://test',
+          token: 'tok',
+          transport: (method, path, body) async {
+            seenBody = body;
+            return (
+              statusCode: 200,
+              body: jsonEncode({
+                'id': 'rt-1',
+                'recording_asset_id': 'recording-1',
+                'status': 'completed',
+                'raw_transcript': 'hello there',
+                'segments': [
+                  {'start_ms': 0, 'end_ms': 800, 'text': 'hello there'},
+                ],
+                'provenance': {
+                  'provider_id': 'whisper.cpp',
+                  'provider_version': 'whisper-cli',
+                  'runtime_id': 'whisper.cpp-cli',
+                  'runtime_version': 'whisper-cli',
+                  'model_id': 'base.en',
+                  'model_revision': 'pinned',
+                  'model_checksum_sha256': 'model-sha',
+                  'recording_content_sha256': 'recording-sha',
+                  'requested_language': 'en',
+                  'detected_language': 'en',
+                },
+                'error_code': null,
+                'error_message': null,
+                'created_at_ms': 10,
+                'started_at_ms': 12,
+                'completed_at_ms': 42,
+                'latency_ms': 30,
+              }),
+            );
+          },
+        );
+
+        final job = await api.createRecordingTranscription(
+          recordingId: 'recording-1',
+          modelId: 'base.en',
+          language: 'en',
+        );
+
+        expect(jsonDecode(seenBody!), {
+          'recording_id': 'recording-1',
+          'model_id': 'base.en',
+          'language': 'en',
+        });
+        expect(job.rawTranscript, 'hello there');
+        expect(job.segments.single.endMs, 800);
+        expect(job.provenance.detectedLanguage, 'en');
+        expect(job.latencyMs, 30);
+      },
+    );
+
+    test(
+      'spoken attempt keeps raw and corrected transcripts separate',
+      () async {
+        Map<String, dynamic>? request;
+        final api = LocalApi.withTransport(
+          baseUrl: 'http://test',
+          token: 'tok',
+          transport: (method, path, body) async {
+            request = jsonDecode(body!) as Map<String, dynamic>;
+            return (
+              statusCode: 200,
+              body: jsonEncode({...request!, 'id': 'attempt-speaking-1'}),
+            );
+          },
+        );
+
+        final attempt = await api.createSpokenSemanticAttempt(
+          kind: 'role_reply',
+          target: {
+            'kind': 'segment',
+            'id': 'segment-1',
+            'sentence_id': null,
+            'chunk_id': null,
+            'start_ms': 0,
+            'end_ms': 8000,
+          },
+          rubricId: 'rubric-role-1',
+          rubricVersion: 1,
+          audioPlayCount: 1,
+          speakingAssistance: 'keywords',
+          speakingRecall: 'immediate',
+          promptSnapshot: 'Reply to the shop clerk',
+          recordingAssetId: 'recording-1',
+          rawTranscript: 'I need two ticket',
+          correctedTranscript: 'I need two tickets',
+          asrReliability: 'suspect',
+          responseLanguage: 'en',
+          startedAtMs: 10,
+          endedAtMs: 20,
+        );
+
+        final response =
+            (request!['responses'] as List<dynamic>).single
+                as Map<String, dynamic>;
+        expect(response['raw_transcript'], 'I need two ticket');
+        expect(response['transcript'], 'I need two tickets');
+        expect(response['recording_asset_id'], 'recording-1');
+        expect(
+          request!['conditions'],
+          containsPair('speaking_assistance', 'keywords'),
+        );
+        expect(
+          request!['conditions'],
+          containsPair('speaking_recall', 'immediate'),
+        );
+        expect(attempt.responses.single.rawTranscript, 'I need two ticket');
+        expect(attempt.responses.single.transcript, 'I need two tickets');
+      },
+    );
   });
 }

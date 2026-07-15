@@ -64,10 +64,12 @@ void main() {
     expect(good.conditions.sourceTextVisible, isFalse);
     expect(good.conditions.audioPlayCount, 1);
     expect(good.responses.single.revision, 1);
+    expect(good.responses.single.rawTranscript, isNull);
     expect(good.responses.single.source, 'typed');
     expect(good.responses.single.language, 'zh');
     expect(good.status, 'completed');
     expect(good.endedAtMs, isNotNull);
+    expect(attempts.last.responses.single.rawTranscript, '');
   });
 
   test('judgments parse verdicts, spans, and the abstain arm', () {

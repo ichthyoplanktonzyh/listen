@@ -34,6 +34,8 @@ import 'controllers/reading_diff_controller.dart';
 import 'controllers/reading_task_controller.dart';
 import 'controllers/resource_actions_coordinator.dart';
 import 'controllers/speech_enhancement_workflow_controller.dart';
+import 'controllers/speaking_actions_coordinator.dart';
+import 'controllers/speaking_task_controller.dart';
 import 'controllers/subtitle_controller.dart';
 import 'controllers/subtitle_sources_coordinator.dart';
 import 'controllers/vocabulary_actions_coordinator.dart';
@@ -56,10 +58,12 @@ import 'widgets/panels/reading_task_studio.dart';
 import 'widgets/panels/reading_view.dart';
 import 'widgets/panels/reading_word_inspector.dart';
 import 'widgets/panels/slice_playback_window.dart';
+import 'widgets/panels/speaking_task_studio.dart';
 import 'widgets/player/download_status_bar.dart';
 import 'widgets/app_bar/player_app_bar.dart';
 import 'widgets/flows/learning_flows.dart';
 import 'widgets/flows/reading_flows.dart';
+import 'widgets/flows/speaking_flows.dart';
 import 'widgets/flows/manual_review_flow.dart';
 import 'widgets/flows/media_import_flows.dart';
 import 'widgets/flows/subtitle_resource_flows.dart';
@@ -135,6 +139,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   final slicePlayerController = SlicePlayerController();
   final readingController = ReadingController();
   final readingTaskController = ReadingTaskController();
+  final speakingTaskController = SpeakingTaskController();
   final readingDiffController = ReadingDiffController();
   ReadingTaskSource? _readingTaskStudioSource;
   ReadingTaskSource? _readingDiffSource;
@@ -143,6 +148,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   // Non-null while the listening-retell surface replaces the reading view.
   ReadingTaskSource? _listeningCheckSource;
   int _listeningPlayCount = 0;
+  ReadingTaskSource? _speakingL1CheckSource;
+  int _speakingL1PlayCount = 0;
   Timer? _readingSaveTimer;
   String? _lastSavedReadingAnchor;
   final extensiveListeningController = ExtensiveListeningController();
@@ -192,6 +199,15 @@ class _PlayerScreenState extends State<PlayerScreen>
     slicePlayer: slicePlayerController,
     playbackActions: playbackActions,
     settings: settingsController,
+    adapter: adapter,
+    recordingAdapter: recordingAdapter,
+  );
+  late final speakingActions = SpeakingActionsCoordinator(
+    task: speakingTaskController,
+    player: playerController,
+    subtitle: subtitleController,
+    settings: settingsController,
+    slicePlayer: slicePlayerController,
     adapter: adapter,
     recordingAdapter: recordingAdapter,
   );
@@ -275,6 +291,10 @@ class _PlayerScreenState extends State<PlayerScreen>
       confirmLLTimelineMismatch: _confirmLLTimelineMismatch,
       onMediaSwitched: () {
         unawaited(slicePlayerController.close());
+        if (speakingActions.isOpen) {
+          if (_speakingL1CheckSource != null) _closeSpeakingL1Check();
+          unawaited(speakingActions.close(api, restorePosition: false));
+        }
         huntingSessionController.stop();
         setState(() {
           taskStatuses.clear();
@@ -965,12 +985,24 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _selectContentChannel(ContentChannel channel) async {
     switch (channel) {
       case ContentChannel.listening:
+        if (_speakingL1CheckSource != null) _closeSpeakingL1Check();
+        if (speakingActions.isOpen) await speakingActions.close(api);
         await _closeReading();
         return;
       case ContentChannel.reading:
+        if (_speakingL1CheckSource != null) _closeSpeakingL1Check();
+        if (speakingActions.isOpen) await speakingActions.close(api);
         await _openReading();
         return;
       case ContentChannel.speaking:
+        final service = api;
+        if (service == null || !Platform.isMacOS) return;
+        await speakingActions.openRetelling(
+          service,
+          fixedRubricPoints: listeningRetellTemplate(l),
+          closeReading: _closeReading,
+        );
+        return;
       case ContentChannel.writing:
         return;
     }
@@ -1241,6 +1273,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     playerController: playerController,
     playbackActions: playbackActions,
     startReviewShadowing: _startReviewShadowing,
+    startDelayedRetelling: _startDelayedRetelling,
   );
 
   Future<void> _openCoachDashboard() => openCoachDashboardFlow(
@@ -1276,6 +1309,135 @@ class _PlayerScreenState extends State<PlayerScreen>
       'start_ms_snapshot': startMs,
       'end_ms_snapshot': endMs,
     });
+  }
+
+  Future<void> _startDelayedRetelling(ReviewQueueEntry entry) async {
+    final service = api;
+    final mediaId = entry.item.source.mediaId;
+    if (service == null || mediaId == null) return;
+    final media = await service.readMedia(mediaId);
+    final path = media.path;
+    if (!File(path).existsSync()) {
+      playerController.setStatus(
+        'Delayed retelling source media is unavailable.',
+      );
+      return;
+    }
+    if (playerController.mediaPath == null) {
+      await mediaSession.openMediaPath(path);
+      await adapter.pause();
+    }
+    if (!mounted) return;
+    setState(() => _workbenchExpanded = true);
+    _workbenchAnimController.forward();
+    await speakingActions.openDelayedRetelling(
+      service,
+      entry: entry,
+      mediaPath: path,
+      fixedRubricPoints: listeningRetellTemplate(l),
+      closeReading: _closeReading,
+    );
+  }
+
+  Future<void> _closeSpeakingSurface() async {
+    if (_speakingL1CheckSource != null) _closeSpeakingL1Check();
+    final returnToReview = speakingActions.source?.recall == 'delayed';
+    await speakingActions.close(api);
+    if (returnToReview && mounted) {
+      unawaited(_openReviewQueue());
+    }
+  }
+
+  Future<void> _openSpeakingL1Check() async {
+    final service = api;
+    final speakingSource = speakingActions.source;
+    final rubric = speakingTaskController.state.rubric;
+    if (service == null || speakingSource == null || rubric == null) return;
+    final profile = await service.learnerProfile();
+    final l1 = profile.l1Language;
+    if (l1 == null || l1.trim().isEmpty) {
+      playerController.setStatus(
+        'Set your L1 language before using the meaning check.',
+      );
+      return;
+    }
+    final source = ReadingTaskSource(
+      anchorCueId: speakingSource.anchorCueId,
+      mediaId: speakingSource.mediaId,
+      trackId: speakingSource.trackId,
+      startMs: speakingSource.startMs,
+      endMs: speakingSource.endMs,
+      sourceLanguage: speakingSource.language,
+      responseLanguage: l1,
+      transcriptSnapshot: speakingSource.transcriptSnapshot,
+    );
+    _speakingL1PlayCount = 0;
+    setState(() => _speakingL1CheckSource = source);
+    await readingTaskController.openTask(
+      service,
+      source: source,
+      templatePoints: rubric.points,
+      purpose: ReadingTaskController.listeningPurpose,
+    );
+  }
+
+  void _closeSpeakingL1Check() {
+    readingTaskController.closeTask();
+    setState(() => _speakingL1CheckSource = null);
+  }
+
+  List<SpeakingTargetCandidate> _speakingTargetCandidates() {
+    final transcript = speakingTaskController.state.correctedTranscript
+        .toLowerCase();
+    if (transcript.isEmpty ||
+        speakingTaskController.state.asrReliability == 'unreliable') {
+      return const [];
+    }
+    final entries = <LexicalEntry>{
+      ...learningController.wordEntries.values,
+      ...learningController.phraseEntries.values.map(
+        (details) => details.entry,
+      ),
+    };
+    return entries
+        .where(
+          (entry) =>
+              entry.displayForm.trim().isNotEmpty &&
+              _containsSpeakingTarget(
+                transcript,
+                entry.displayForm.trim().toLowerCase(),
+              ),
+        )
+        .take(12)
+        .map(
+          (entry) => SpeakingTargetCandidate(
+            lexicalEntryId: entry.id,
+            surfaceForm: entry.displayForm.trim(),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  bool _containsSpeakingTarget(String transcript, String surface) {
+    if (surface.runes.any((rune) => rune > 0x7f)) {
+      return transcript.contains(surface);
+    }
+    var start = transcript.indexOf(surface);
+    while (start >= 0) {
+      final before = start == 0 ? null : transcript.codeUnitAt(start - 1);
+      final afterIndex = start + surface.length;
+      final after = afterIndex == transcript.length
+          ? null
+          : transcript.codeUnitAt(afterIndex);
+      bool isAlphaNumeric(int? code) =>
+          code != null &&
+          ((code >= 48 && code <= 57) ||
+              (code >= 65 && code <= 90) ||
+              (code >= 97 && code <= 122));
+      if (!isAlphaNumeric(before) && !isAlphaNumeric(after)) return true;
+      start = transcript.indexOf(surface, start + 1);
+    }
+    return false;
   }
 
   Future<void> _openSubtitleResources() => openSubtitleResourcesFlow(
@@ -1396,6 +1558,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     readingController.removeListener(_scheduleReadingPositionSave);
     readingController.dispose();
     readingTaskController.dispose();
+    speakingTaskController.dispose();
+    speakingActions.dispose();
     readingDiffController.dispose();
     extensiveListeningController.dispose();
     huntingController.dispose();
@@ -1438,6 +1602,8 @@ class _PlayerScreenState extends State<PlayerScreen>
         huntingSessionController,
         slicePlayerController,
         readingController,
+        speakingTaskController,
+        speakingActions,
         settingsController,
         downloadController,
       ]),
@@ -1630,7 +1796,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                                       .last,
                                   playerStage: _playerStage(),
                                   learningPanel: _sidePanel(),
-                                  selectedChannel: readingController.isOpen
+                                  selectedChannel: speakingActions.isOpen
+                                      ? ContentChannel.speaking
+                                      : readingController.isOpen
                                       ? ContentChannel.reading
                                       : ContentChannel.listening,
                                   channelAvailability: {
@@ -1643,9 +1811,15 @@ class _PlayerScreenState extends State<PlayerScreen>
                                           )
                                         : const ContentChannelAvailability.available(),
                                     ContentChannel.speaking:
-                                        ContentChannelAvailability.unavailable(
-                                          l.text('channelPlanned'),
-                                        ),
+                                        subtitleController.primaryTrack == null
+                                        ? ContentChannelAvailability.unavailable(
+                                            l.text('channelNeedsTranscript'),
+                                          )
+                                        : !Platform.isMacOS
+                                        ? ContentChannelAvailability.unavailable(
+                                            l.text('channelUnavailable'),
+                                          )
+                                        : const ContentChannelAvailability.available(),
                                     ContentChannel.writing:
                                         ContentChannelAvailability.unavailable(
                                           l.text('channelPlanned'),
@@ -1653,7 +1827,63 @@ class _PlayerScreenState extends State<PlayerScreen>
                                   },
                                   onChannelSelected: (channel) =>
                                       unawaited(_selectContentChannel(channel)),
-                                  immersiveStage: readingController.isOpen
+                                  immersiveStage: speakingActions.isOpen
+                                      ? _speakingL1CheckSource != null
+                                            ? ListeningCheckPanel(
+                                                controller:
+                                                    readingTaskController,
+                                                api: api!,
+                                                audioPlayCount: () =>
+                                                    _speakingL1PlayCount,
+                                                onPlaySegment: () {
+                                                  setState(
+                                                    () =>
+                                                        _speakingL1PlayCount++,
+                                                  );
+                                                  unawaited(
+                                                    speakingActions
+                                                        .playSource(),
+                                                  );
+                                                },
+                                                onClose: _closeSpeakingL1Check,
+                                              )
+                                            : SpeakingTaskStudio(
+                                                controller:
+                                                    speakingTaskController,
+                                                api: api!,
+                                                onPlaySource:
+                                                    speakingActions.playSource,
+                                                onPlayRecording: speakingActions
+                                                    .playRecording,
+                                                onAcquireRecordingFocus:
+                                                    speakingActions
+                                                        .acquireRecordingFocus,
+                                                onShowRetelling: () =>
+                                                    speakingActions.showRetelling(
+                                                      api!,
+                                                      fixedRubricPoints:
+                                                          listeningRetellTemplate(
+                                                            l,
+                                                          ),
+                                                    ),
+                                                onShowRoleReply: (assistance) =>
+                                                    speakingActions
+                                                        .showRoleReply(
+                                                          api!,
+                                                          assistance:
+                                                              assistance,
+                                                          fixedRubricPoints:
+                                                              roleReplyTemplate(
+                                                                l,
+                                                              ),
+                                                        ),
+                                                onOpenL1Check:
+                                                    _openSpeakingL1Check,
+                                                targetCandidates:
+                                                    _speakingTargetCandidates(),
+                                                onClose: _closeSpeakingSurface,
+                                              )
+                                      : readingController.isOpen
                                       ? _readingView()
                                       : null,
                                   mediaFraction:

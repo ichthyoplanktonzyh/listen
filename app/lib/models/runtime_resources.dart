@@ -146,6 +146,120 @@ class TranscriptionJobView {
   final int? archivedAtMs;
 }
 
+class RecordingTranscriptSegment {
+  const RecordingTranscriptSegment({
+    required this.startMs,
+    required this.endMs,
+    required this.text,
+  });
+
+  factory RecordingTranscriptSegment.fromJson(Map<String, dynamic> json) =>
+      RecordingTranscriptSegment(
+        startMs: (json['start_ms'] as num).toInt(),
+        endMs: (json['end_ms'] as num).toInt(),
+        text: json['text'] as String,
+      );
+
+  final int startMs;
+  final int endMs;
+  final String text;
+}
+
+class RecordingTranscriptProvenanceView {
+  const RecordingTranscriptProvenanceView({
+    required this.providerId,
+    required this.providerVersion,
+    required this.runtimeId,
+    required this.runtimeVersion,
+    required this.modelId,
+    required this.modelRevision,
+    required this.modelChecksumSha256,
+    required this.recordingContentSha256,
+    this.requestedLanguage,
+    this.detectedLanguage,
+  });
+
+  factory RecordingTranscriptProvenanceView.fromJson(
+    Map<String, dynamic> json,
+  ) => RecordingTranscriptProvenanceView(
+    providerId: json['provider_id'] as String,
+    providerVersion: json['provider_version'] as String,
+    runtimeId: json['runtime_id'] as String,
+    runtimeVersion: json['runtime_version'] as String,
+    modelId: json['model_id'] as String,
+    modelRevision: json['model_revision'] as String,
+    modelChecksumSha256: json['model_checksum_sha256'] as String,
+    recordingContentSha256: json['recording_content_sha256'] as String,
+    requestedLanguage: json['requested_language'] as String?,
+    detectedLanguage: json['detected_language'] as String?,
+  );
+
+  final String providerId;
+  final String providerVersion;
+  final String runtimeId;
+  final String runtimeVersion;
+  final String modelId;
+  final String modelRevision;
+  final String modelChecksumSha256;
+  final String recordingContentSha256;
+  final String? requestedLanguage;
+  final String? detectedLanguage;
+}
+
+class RecordingTranscriptionJobView {
+  const RecordingTranscriptionJobView({
+    required this.id,
+    required this.recordingAssetId,
+    required this.status,
+    required this.segments,
+    required this.provenance,
+    required this.createdAtMs,
+    this.rawTranscript,
+    this.errorCode,
+    this.errorMessage,
+    this.startedAtMs,
+    this.completedAtMs,
+    this.latencyMs,
+  });
+
+  factory RecordingTranscriptionJobView.fromJson(Map<String, dynamic> json) =>
+      RecordingTranscriptionJobView(
+        id: json['id'] as String,
+        recordingAssetId: json['recording_asset_id'] as String,
+        status: json['status'] as String,
+        rawTranscript: json['raw_transcript'] as String?,
+        segments: (json['segments'] as List<dynamic>)
+            .map(
+              (value) => RecordingTranscriptSegment.fromJson(
+                value as Map<String, dynamic>,
+              ),
+            )
+            .toList(growable: false),
+        provenance: RecordingTranscriptProvenanceView.fromJson(
+          json['provenance'] as Map<String, dynamic>,
+        ),
+        errorCode: json['error_code'] as String?,
+        errorMessage: json['error_message'] as String?,
+        createdAtMs: (json['created_at_ms'] as num).toInt(),
+        startedAtMs: (json['started_at_ms'] as num?)?.toInt(),
+        completedAtMs: (json['completed_at_ms'] as num?)?.toInt(),
+        latencyMs: (json['latency_ms'] as num?)?.toInt(),
+      );
+
+  final String id;
+  final String recordingAssetId;
+  final String status;
+  final String? rawTranscript;
+  final List<RecordingTranscriptSegment> segments;
+  final RecordingTranscriptProvenanceView provenance;
+  final String? errorCode;
+  final String? errorMessage;
+  final int createdAtMs;
+  final int? startedAtMs;
+  final int? completedAtMs;
+  final int? latencyMs;
+}
+
 class PhoneticProviderView {
   const PhoneticProviderView({
     required this.id,

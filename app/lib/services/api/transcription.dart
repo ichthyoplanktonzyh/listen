@@ -108,4 +108,37 @@ extension TranscriptionApi on LocalApi {
             ))
             as Map<String, dynamic>,
       );
+
+  Future<RecordingTranscriptionJobView> createRecordingTranscription({
+    required String recordingId,
+    required String modelId,
+    String? language,
+  }) async => RecordingTranscriptionJobView.fromJson(
+    (await _request('POST', '/v1/recording-transcriptions', {
+          'recording_id': recordingId,
+          'model_id': modelId,
+          'language': language,
+        }))
+        as Map<String, dynamic>,
+  );
+
+  Future<RecordingTranscriptionJobView> recordingTranscriptionJob(
+    String jobId,
+  ) async => RecordingTranscriptionJobView.fromJson(
+    (await _request(
+          'GET',
+          '/v1/recording-transcriptions/${Uri.encodeComponent(jobId)}',
+        ))
+        as Map<String, dynamic>,
+  );
+
+  Future<RecordingTranscriptionJobView> cancelRecordingTranscription(
+    String jobId,
+  ) async => RecordingTranscriptionJobView.fromJson(
+    (await _request(
+          'POST',
+          '/v1/recording-transcriptions/${Uri.encodeComponent(jobId)}/cancel',
+        ))
+        as Map<String, dynamic>,
+  );
 }

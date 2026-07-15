@@ -14,12 +14,14 @@ class ReviewQueueScreen extends StatefulWidget {
     required this.api,
     required this.onPlayRange,
     required this.onStartShadowing,
+    required this.onStartDelayedRetelling,
     this.currentMediaId,
   });
 
   final LocalApi api;
   final Future<void> Function(int startMs, int endMs) onPlayRange;
   final Future<void> Function(ReviewQueueEntry entry) onStartShadowing;
+  final Future<void> Function(ReviewQueueEntry entry) onStartDelayedRetelling;
   final String? currentMediaId;
 
   @override
@@ -86,7 +88,11 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
           onShadowing: () async {
             final entry = state.current!;
             Navigator.of(context).pop();
-            await widget.onStartShadowing(entry);
+            if (entry.card.kind == 'delayed_retelling') {
+              await widget.onStartDelayedRetelling(entry);
+            } else {
+              await widget.onStartShadowing(entry);
+            }
           },
           onReveal: controller.reveal,
           onRate: (rating) => controller.rate(widget.api, rating),
@@ -212,8 +218,14 @@ class _ReviewCardState extends State<_ReviewCard> {
                     onPressed: widget.shadowAvailable && !widget.busy
                         ? () => unawaited(widget.onShadowing())
                         : null,
-                    icon: const Icon(Icons.mic_none),
-                    label: const Text('跟一下这个片段'),
+                    icon: Icon(
+                      card.kind == 'delayed_retelling'
+                          ? Icons.record_voice_over_outlined
+                          : Icons.mic_none,
+                    ),
+                    label: Text(
+                      card.kind == 'delayed_retelling' ? '开始延迟复述' : '跟一下这个片段',
+                    ),
                   ),
                   const SizedBox(height: 26),
                   AnimatedSwitcher(
@@ -300,6 +312,7 @@ class _ReviewCardState extends State<_ReviewCard> {
         onPressed: widget.busy ? null : widget.onReveal,
         child: const Text('显示听到的词'),
       ),
+      'delayed_retelling' => const SizedBox.shrink(),
       _ => OutlinedButton(
         key: const ValueKey('source-sentence-prompt'),
         onPressed: widget.busy ? null : widget.onReveal,
@@ -375,6 +388,7 @@ class _ReviewCardState extends State<_ReviewCard> {
     'chunk_cloze' => '语块填空',
     'phrase_presence' => '短语判断',
     'source_sentence_recall' => '原句回听',
+    'delayed_retelling' => '延迟复述',
     _ => '声音卡',
   };
 
@@ -383,6 +397,7 @@ class _ReviewCardState extends State<_ReviewCard> {
     'chunk_cloze' => '听完整语块，把空白处补出来。',
     'phrase_presence' => '听原句，判断目标短语是否真的出现。',
     'source_sentence_recall' => '回听原句，先复述意思或原文，再翻面对照。',
+    'delayed_retelling' => '回听来源后进入口语场景；原文保持隐藏。',
     _ => '先听声音，再翻面对照。',
   };
 
@@ -391,6 +406,7 @@ class _ReviewCardState extends State<_ReviewCard> {
     'chunk_cloze' => Icons.space_bar_outlined,
     'phrase_presence' => Icons.rule_outlined,
     'source_sentence_recall' => Icons.record_voice_over_outlined,
+    'delayed_retelling' => Icons.event_repeat_outlined,
     _ => Icons.graphic_eq,
   };
 }
