@@ -21,6 +21,7 @@ class WordLearningPanel extends StatefulWidget {
     this.onCapabilityOverride,
     this.onRecordSource,
     this.onOpenListeningDictionary,
+    this.onReadingMark,
     this.hasSelectedCue = false,
   });
 
@@ -37,6 +38,10 @@ class WordLearningPanel extends StatefulWidget {
   onCapabilityOverride;
   final VoidCallback? onRecordSource;
   final VoidCallback? onOpenListeningDictionary;
+
+  /// Explicit reading mark (Phase 3.13); non-null only while the reading
+  /// posture is open. `true` = understood while reading.
+  final void Function(bool understood)? onReadingMark;
   final bool hasSelectedCue;
 
   @override
@@ -230,6 +235,20 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
               onPressed: widget.onNotHeard,
               label: Text(l.text('notHeard')),
             ),
+            if (widget.onReadingMark != null) ...[
+              TextButton.icon(
+                key: const ValueKey('reading-mark-understood'),
+                icon: const Icon(Icons.chrome_reader_mode_outlined, size: 18),
+                onPressed: () => widget.onReadingMark!(true),
+                label: Text(l.text('readUnderstood')),
+              ),
+              TextButton.icon(
+                key: const ValueKey('reading-mark-not-understood'),
+                icon: const Icon(Icons.help_outline, size: 18),
+                onPressed: () => widget.onReadingMark!(false),
+                label: Text(l.text('readNotUnderstood')),
+              ),
+            ],
           ],
         ),
         const Divider(),

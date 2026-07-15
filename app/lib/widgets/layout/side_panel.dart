@@ -50,6 +50,7 @@ class SidePanel extends StatefulWidget {
     required this.onStartChunkDictationPractice,
     required this.onStartSentenceDictationPractice,
     required this.onStartShadowingPractice,
+    this.onOpenReading,
     required this.onOpenDiagnosisView,
     required this.onOpenSlicePlayback,
     this.onOpenListeningDictionary,
@@ -60,6 +61,7 @@ class SidePanel extends StatefulWidget {
     required this.timingQuality,
     this.onStartColdStart,
     this.onRecordCurrentSource,
+    this.onReadingMark,
   });
 
   final PlayerController playerController;
@@ -86,6 +88,10 @@ class SidePanel extends StatefulWidget {
   final Future<void> Function() onStartChunkDictationPractice;
   final Future<void> Function() onStartSentenceDictationPractice;
   final Future<void> Function() onStartShadowingPractice;
+
+  /// Enters the reading posture (Phase 3.13); available whenever a transcript
+  /// is loaded — reading does not need a current sentence.
+  final VoidCallback? onOpenReading;
   final Future<void> Function() onOpenDiagnosisView;
   final Future<void> Function(Map<String, dynamic> occurrence)
   onOpenSlicePlayback;
@@ -99,6 +105,10 @@ class SidePanel extends StatefulWidget {
   final String Function(String sentenceId) timingQuality;
   final VoidCallback? onStartColdStart;
   final VoidCallback? onRecordCurrentSource;
+
+  /// Explicit reading mark for the selected word; non-null only while the
+  /// reading posture is open (Phase 3.13 Slice 5).
+  final void Function(bool understood)? onReadingMark;
 
   @override
   State<SidePanel> createState() => _SidePanelState();
@@ -222,6 +232,7 @@ class _SidePanelState extends State<SidePanel> {
                       onNotHeard: () => _observeSelected(false),
                       onCapabilityOverride: _setCapabilityOverride,
                       onRecordSource: widget.onRecordCurrentSource,
+                      onReadingMark: widget.onReadingMark,
                       onOpenListeningDictionary:
                           widget.onOpenListeningDictionary == null
                           ? null
@@ -503,6 +514,14 @@ class _SidePanelState extends State<SidePanel> {
               label: Text(l.text('shadowPosture')),
             ),
           ),
+          if (widget.onOpenReading != null)
+            OutlinedButton.icon(
+              onPressed: subtitleController.primaryTrack == null
+                  ? null
+                  : widget.onOpenReading,
+              icon: const Icon(Icons.chrome_reader_mode_outlined),
+              label: Text(l.text('readPosture')),
+            ),
         ],
       ),
     );

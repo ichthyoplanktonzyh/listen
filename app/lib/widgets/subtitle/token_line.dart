@@ -34,6 +34,7 @@ class TokenLine extends StatefulWidget {
     this.wordTimings = const [],
     this.mediaPosition,
     this.subtitleOffset = Duration.zero,
+    this.textAlign = TextAlign.center,
   });
 
   final Cue cue;
@@ -54,6 +55,10 @@ class TokenLine extends StatefulWidget {
   final List<WordTiming> wordTimings;
   final Duration? mediaPosition;
   final Duration subtitleOffset;
+
+  /// Center for subtitle/transcript surfaces; start for the reading view's
+  /// flowing paragraphs.
+  final TextAlign textAlign;
 
   /// Unified grouping presentation: `off`, `prosodic`, `semantic`, `compare`.
   /// The prosodic ([chunkPartition]) and semantic ([senseGroups]) data both
@@ -125,7 +130,7 @@ class _TokenLineState extends State<TokenLine> {
   @override
   Widget build(BuildContext context) => Text.rich(
     TextSpan(children: _spans(context)),
-    textAlign: TextAlign.center,
+    textAlign: widget.textAlign,
   );
 
   List<InlineSpan> _spans(BuildContext context) => switch (groupingMode) {
