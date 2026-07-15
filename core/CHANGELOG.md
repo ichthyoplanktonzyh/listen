@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-15 14:42 CST: 修复 3.13 owner GUI 走查首个缺陷：阅读姿态"听整段"/
+  逐句 chip 与听测面板播放全部无法回听。根因：`_playReadingRange` 与
+  ListeningCheckPanel 手写的 occurrence map 缺 `media_fingerprint_snapshot`，
+  共享 `OccurrenceMediaResolver` 在 linked-media 路径之前即以 invalidSnapshot
+  拒绝（后端 QA 为纯 HTTP、widget 测试回调为假，接线层缺口未被覆盖）。修复：
+  occurrence 构造收敛为 `currentMediaSliceOccurrence` helper（归属 resolver
+  文件，形状契约单一来源），两个调用点携带当前播放器 fingerprint；fingerprint
+  缺席仍诚实降级为显式错误。新增
+  `test/reading_slice_occurrence_test.dart` 回归（helper→resolver 真实链路 +
+  降级用例）。验证：flutter analyze 零问题、flutter test 409 全绿。
+
 - 2026-07-15 13:45 CST: Studio 3.13–3.16 外部参考库入库。将 owner 委托 codex 的
   外部项目调研经批判性修订后收入
   `.planning/discuss/studio-3.13-3.16-external-reference-library.zh.md`：A 级
