@@ -306,6 +306,38 @@ class AppLocalizations {
       'readingBackToPlayer': 'Back to player',
       'readingPlayParagraph': 'Play paragraph',
       'readingPlaySentence': 'Replay this sentence',
+      'readingTaskStart': 'Paragraph task',
+      'readingTaskTitle': 'Paragraph task',
+      'readingTaskEditHint':
+          'Edit the checkpoints for this paragraph. Star = required. '
+          'They become the fixed rubric for every later attempt.',
+      'readingTaskSavePoints': 'Save rubric',
+      'readingTaskPointRequired': 'Required point (tap to make optional)',
+      'readingTaskPointOptional': 'Optional point (tap to make required)',
+      'readingTaskPastAttempts': 'Attempted {n} time(s) before on this rubric.',
+      'readingTaskAnswerHint':
+          'Answer in your own words with the text visible.',
+      'readingTaskSubmitAnswer': 'Submit answer',
+      'readingTaskAssessHint':
+          'Assess your answer point by point. This is your own call — '
+          'you can correct it later.',
+      'readingTaskSubmitAssessment': 'Save self-assessment',
+      'readingTaskDone':
+          'Self-assessment saved. Corrections are recorded separately and '
+          'never rewrite the original.',
+      'readingTaskCorrect': 'Correct this verdict',
+      'readingTaskClose': 'Close',
+      'verdictCovered': 'Covered',
+      'verdictPartial': 'Partial',
+      'verdictMissing': 'Missing',
+      'verdictUncertain': 'Not sure',
+      'readingTaskPresetMainIdea':
+          'Main idea: summarize this paragraph in your own words',
+      'readingTaskPresetDetail':
+          'Detail: name one concrete fact this paragraph mentions',
+      'readingTaskPresetTitle': 'Title: give this paragraph a fitting title',
+      'readingTaskPresetInference':
+          'Inference: what does this paragraph imply but not say?',
       'shadowingPlannedTooltip': 'Shadowing and recording arrive in Phase 3.8.',
       'shadowingReadyTooltip':
           'Follow the current rhythm chunk and compare your recording.',
@@ -1182,6 +1214,28 @@ class AppLocalizations {
       'readingBackToPlayer': '返回播放',
       'readingPlayParagraph': '听整段',
       'readingPlaySentence': '回听这句',
+      'readingTaskStart': '段落任务',
+      'readingTaskTitle': '段落任务',
+      'readingTaskEditHint': '编辑本段的考点。星标 = 必答点。保存后成为本段固定评分尺，之后的每次作答都用它。',
+      'readingTaskSavePoints': '保存评分尺',
+      'readingTaskPointRequired': '必答点（点击改为选答）',
+      'readingTaskPointOptional': '选答点（点击改为必答）',
+      'readingTaskPastAttempts': '这把评分尺此前已作答 {n} 次。',
+      'readingTaskAnswerHint': '看着原文，用自己的话回答。',
+      'readingTaskSubmitAnswer': '提交回答',
+      'readingTaskAssessHint': '逐点评估自己的回答。这是你的自评，之后可以更正。',
+      'readingTaskSubmitAssessment': '保存自评',
+      'readingTaskDone': '自评已保存。更正会单独记录，不会改写原判定。',
+      'readingTaskCorrect': '更正这个判定',
+      'readingTaskClose': '关闭',
+      'verdictCovered': '覆盖',
+      'verdictPartial': '部分',
+      'verdictMissing': '未覆盖',
+      'verdictUncertain': '不确定',
+      'readingTaskPresetMainIdea': '主旨：用自己的话概括本段大意',
+      'readingTaskPresetDetail': '信息定位：说出本段提到的一个具体事实',
+      'readingTaskPresetTitle': '标题：给本段起一个贴切的小标题',
+      'readingTaskPresetInference': '简单推断：本段暗示了什么但没有明说？',
       'shadowingPlannedTooltip': '跟读与录音会在 Phase 3.8 点亮。',
       'shadowingReadyTooltip': '跟读当前韵律语块，并与自己的录音做客观对比。',
       'shadowingPractice': '跟读模仿',

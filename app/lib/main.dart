@@ -30,6 +30,7 @@ import 'controllers/player_controller.dart';
 import 'controllers/practice_actions_coordinator.dart';
 import 'controllers/practice_controller.dart';
 import 'controllers/reading_controller.dart';
+import 'controllers/reading_task_controller.dart';
 import 'controllers/resource_actions_coordinator.dart';
 import 'controllers/speech_enhancement_workflow_controller.dart';
 import 'controllers/subtitle_controller.dart';
@@ -40,6 +41,7 @@ import 'controllers/slice_player_controller.dart';
 import 'models/capability_readiness.dart';
 import 'models/practice.dart';
 import 'models/task_status.dart';
+import 'models/reading.dart';
 import 'models/timeline.dart';
 import 'models/types.dart';
 import 'services/api_service.dart';
@@ -52,6 +54,7 @@ import 'widgets/panels/slice_playback_window.dart';
 import 'widgets/player/download_status_bar.dart';
 import 'widgets/app_bar/player_app_bar.dart';
 import 'widgets/flows/learning_flows.dart';
+import 'widgets/flows/reading_flows.dart';
 import 'widgets/flows/manual_review_flow.dart';
 import 'widgets/flows/media_import_flows.dart';
 import 'widgets/flows/subtitle_resource_flows.dart';
@@ -125,6 +128,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   final practiceController = PracticeController();
   final slicePlayerController = SlicePlayerController();
   final readingController = ReadingController();
+  final readingTaskController = ReadingTaskController();
   // Restores the pre-reading play state when the reading posture closes.
   bool _resumePlaybackAfterReading = false;
   Timer? _readingSaveTimer;
@@ -876,6 +880,54 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  /// Opens the paragraph-task flow (Slice 3): manual rubric + typed answer +
+  /// per-point self-assessment through the 3.11 semantic fact family. The
+  /// response language defaults to the learner's L1 (comprehension is best
+  /// demonstrated in the language they think in), falling back to the track
+  /// language when L1 was never set.
+  Future<void> _openReadingTask(ReadingParagraph paragraph) async {
+    final track = subtitleController.primaryTrack;
+    final service = api;
+    if (track == null || service == null || !mounted) return;
+    final cursor = subtitleController.primaryCursor;
+    final sourceLanguage = settingsController.resolveLearningLanguage(
+      track.language,
+    );
+    var responseLanguage = sourceLanguage;
+    try {
+      final profile = await service.learnerProfile();
+      final l1 = profile.l1Language;
+      if (l1 != null && l1.isNotEmpty) responseLanguage = l1;
+    } catch (_) {}
+    if (!mounted) return;
+    final anchor = Cue(
+      id: paragraph.anchorCueId,
+      index: 0,
+      start: paragraph.start,
+      end: paragraph.end,
+      text: '',
+      tokens: const [],
+    );
+    await openReadingTaskFlow(
+      context: context,
+      api: service,
+      taskController: readingTaskController,
+      readingController: readingController,
+      source: ReadingTaskSource(
+        anchorCueId: paragraph.anchorCueId,
+        mediaId: track.mediaId ?? playerController.mediaId,
+        trackId: track.id,
+        startMs: cursor.mediaStart(anchor).inMilliseconds,
+        endMs: cursor.mediaEnd(anchor).inMilliseconds,
+        sourceLanguage: sourceLanguage,
+        responseLanguage: responseLanguage,
+        transcriptSnapshot: paragraph.sentences
+            .map((sentence) => sentence.text)
+            .join(' '),
+      ),
+    );
+  }
+
   /// Replays a reading range through the slice window (3.5.7) so the primary
   /// playback position never moves while reading.
   Future<void> _playReadingRange(
@@ -1214,6 +1266,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _readingSaveTimer?.cancel();
     readingController.removeListener(_scheduleReadingPositionSave);
     readingController.dispose();
+    readingTaskController.dispose();
     extensiveListeningController.dispose();
     huntingController.dispose();
     huntingSessionController.dispose();
@@ -1610,6 +1663,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       paragraph.anchorCueId,
       paragraph.sentences.first.text,
     ),
+    onStartTask: _openReadingTask,
     onClose: () => unawaited(_closeReading()),
   );
 

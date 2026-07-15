@@ -9,6 +9,7 @@ import '../models/coach_dashboard.dart';
 import '../models/llm_provider.dart';
 import '../models/practice.dart';
 import '../models/reading.dart';
+import '../models/semantic_task.dart';
 import '../models/runtime_resources.dart';
 import '../models/syntax_capability.dart';
 import '../models/timeline.dart';
@@ -24,6 +25,7 @@ part 'api/practice.dart';
 part 'api/listening_hunting.dart';
 part 'api/coach_llm.dart';
 part 'api/reading.dart';
+part 'api/semantic.dart';
 
 Future<String> computeOpenSubtitlesMovieHash(String path) async {
   final file = File(path);

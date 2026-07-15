@@ -24,6 +24,7 @@ class ReadingView extends StatefulWidget {
     required this.onWord,
     required this.onPlaySentence,
     required this.onPlayParagraph,
+    this.onStartTask,
     required this.onClose,
   });
 
@@ -34,6 +35,9 @@ class ReadingView extends StatefulWidget {
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
   final Future<void> Function(ReadingSentence sentence) onPlaySentence;
   final Future<void> Function(ReadingParagraph paragraph) onPlayParagraph;
+
+  /// Opens the paragraph-task flow (Slice 3); null hides the task chip.
+  final Future<void> Function(ReadingParagraph paragraph)? onStartTask;
   final VoidCallback onClose;
 
   @override
@@ -275,8 +279,22 @@ class _ReadingViewState extends State<ReadingView> {
           ActionChip(
             avatar: Icon(Icons.play_arrow, size: 16, color: colors.primary),
             label: Text(l.text('readingPlayParagraph')),
-            onPressed: () => unawaited(widget.onPlayParagraph(paragraph)),
+            onPressed: () {
+              widget.controller.noteSlicePlay(paragraph.anchorCueId);
+              unawaited(widget.onPlayParagraph(paragraph));
+            },
           ),
+          if (widget.onStartTask != null)
+            ActionChip(
+              key: ValueKey('reading-task-${paragraph.anchorCueId}'),
+              avatar: Icon(
+                Icons.checklist_outlined,
+                size: 16,
+                color: colors.primary,
+              ),
+              label: Text(l.text('readingTaskStart')),
+              onPressed: () => unawaited(widget.onStartTask!(paragraph)),
+            ),
           for (final sentence in paragraph.sentences)
             ActionChip(
               avatar: Icon(
@@ -286,7 +304,10 @@ class _ReadingViewState extends State<ReadingView> {
               ),
               label: Text(label(sentence)),
               tooltip: l.text('readingPlaySentence'),
-              onPressed: () => unawaited(widget.onPlaySentence(sentence)),
+              onPressed: () {
+                widget.controller.noteSlicePlay(paragraph.anchorCueId);
+                unawaited(widget.onPlaySentence(sentence));
+              },
             ),
         ],
       ),

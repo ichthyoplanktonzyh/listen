@@ -17,6 +17,7 @@ class ReadingState {
     this.anchorCueId,
     this.translationVisible = false,
     this.translationByAnchor = const {},
+    this.slicePlayCounts = const {},
   });
 
   final bool open;
@@ -35,6 +36,11 @@ class ReadingState {
   /// paragraph's time range. Empty when no secondary track is loaded.
   final Map<String, String> translationByAnchor;
 
+  /// Paragraph anchor cue id → slice replays started while reading it.
+  /// Feeds the honest `audio_play_count` condition on paragraph-task
+  /// attempts; in-memory only, resets per reading session.
+  final Map<String, int> slicePlayCounts;
+
   int get anchorParagraphIndex {
     if (anchorCueId == null) return 0;
     final index = paragraphs.indexWhere(
@@ -50,6 +56,7 @@ class ReadingState {
     Object? anchorCueId = _unset,
     bool? translationVisible,
     Map<String, String>? translationByAnchor,
+    Map<String, int>? slicePlayCounts,
   }) => ReadingState(
     open: open ?? this.open,
     trackId: identical(trackId, _unset)
@@ -61,6 +68,7 @@ class ReadingState {
         : anchorCueId as String?,
     translationVisible: translationVisible ?? this.translationVisible,
     translationByAnchor: translationByAnchor ?? this.translationByAnchor,
+    slicePlayCounts: slicePlayCounts ?? this.slicePlayCounts,
   );
 }
 
@@ -115,6 +123,21 @@ class ReadingController extends ChangeNotifier {
   void setTranslationVisible(bool visible) {
     _store.update((s) => s.copyWith(translationVisible: visible));
   }
+
+  /// Counts one slice replay for the paragraph anchored at [anchorCueId].
+  void noteSlicePlay(String anchorCueId) {
+    _store.update(
+      (s) => s.copyWith(
+        slicePlayCounts: {
+          ...s.slicePlayCounts,
+          anchorCueId: (s.slicePlayCounts[anchorCueId] ?? 0) + 1,
+        },
+      ),
+    );
+  }
+
+  int slicePlayCount(String anchorCueId) =>
+      state.slicePlayCounts[anchorCueId] ?? 0;
 
   /// Secondary cues whose midpoint falls inside the paragraph's time range,
   /// joined in order. Midpoint matching avoids double-assigning a secondary

@@ -1,0 +1,385 @@
+import 'package:flutter/foundation.dart';
+
+import '../models/semantic_task.dart';
+import '../services/api_service.dart';
+import '../state/store.dart';
+
+const _unset = Object();
+
+/// Everything the task flow needs to know about the paragraph being tasked.
+/// Times are media-time milliseconds (subtitle offset already applied) so
+/// the rubric source matches slice playback and survives track re-imports.
+class ReadingTaskSource {
+  const ReadingTaskSource({
+    required this.anchorCueId,
+    this.mediaId,
+    this.trackId,
+    required this.startMs,
+    required this.endMs,
+    required this.sourceLanguage,
+    required this.responseLanguage,
+    required this.transcriptSnapshot,
+  });
+
+  final String anchorCueId;
+  final String? mediaId;
+  final String? trackId;
+  final int startMs;
+  final int endMs;
+  final String sourceLanguage;
+  final String responseLanguage;
+  final String transcriptSnapshot;
+}
+
+class ReadingTaskState {
+  const ReadingTaskState({
+    this.phase = 'idle',
+    this.source,
+    this.rubric,
+    this.draftPoints = const [],
+    this.attempt,
+    this.judgment,
+    this.draftVerdicts = const {},
+    this.adjudications = const [],
+    this.pastAttemptCount = 0,
+    this.busy = false,
+    this.error,
+  });
+
+  /// idle | editing | answering | assessing | done
+  final String phase;
+  final ReadingTaskSource? source;
+  final SemanticRubricView? rubric;
+
+  /// Editable template points before the rubric exists (editing phase).
+  final List<RubricPointView> draftPoints;
+  final SemanticAttemptView? attempt;
+  final SemanticJudgmentView? judgment;
+
+  /// point_id → verdict picked so far during self-assessment.
+  final Map<String, String> draftVerdicts;
+  final List<JudgmentAdjudicationView> adjudications;
+  final int pastAttemptCount;
+  final bool busy;
+  final String? error;
+
+  bool get allPointsJudged =>
+      rubric != null &&
+      rubric!.points.every(
+        (point) => draftVerdicts.containsKey(point.pointId),
+      );
+
+  ReadingTaskState copyWith({
+    String? phase,
+    Object? source = _unset,
+    Object? rubric = _unset,
+    List<RubricPointView>? draftPoints,
+    Object? attempt = _unset,
+    Object? judgment = _unset,
+    Map<String, String>? draftVerdicts,
+    List<JudgmentAdjudicationView>? adjudications,
+    int? pastAttemptCount,
+    bool? busy,
+    Object? error = _unset,
+  }) => ReadingTaskState(
+    phase: phase ?? this.phase,
+    source: identical(source, _unset)
+        ? this.source
+        : source as ReadingTaskSource?,
+    rubric: identical(rubric, _unset)
+        ? this.rubric
+        : rubric as SemanticRubricView?,
+    draftPoints: draftPoints ?? this.draftPoints,
+    attempt: identical(attempt, _unset)
+        ? this.attempt
+        : attempt as SemanticAttemptView?,
+    judgment: identical(judgment, _unset)
+        ? this.judgment
+        : judgment as SemanticJudgmentView?,
+    draftVerdicts: draftVerdicts ?? this.draftVerdicts,
+    adjudications: adjudications ?? this.adjudications,
+    pastAttemptCount: pastAttemptCount ?? this.pastAttemptCount,
+    busy: busy ?? this.busy,
+    error: identical(error, _unset) ? this.error : error as String?,
+  );
+}
+
+/// Paragraph-task flow for the Reading Studio (Phase 3.13): manual rubric +
+/// typed answer + per-point self-assessment, all through the 3.11 semantic
+/// fact family. No path here writes observations or projections — the
+/// attempt/judgment/adjudication rows are the only durable output.
+class ReadingTaskController extends ChangeNotifier {
+  ReadingTaskController() : _store = Store(const ReadingTaskState()) {
+    _store.addListener(notifyListeners);
+  }
+
+  static const purpose = 'reading_comprehension';
+  static const evidenceClass = 'self_assessment';
+
+  final Store<ReadingTaskState> _store;
+  int _answerStartedAtMs = 0;
+
+  Store<ReadingTaskState> get store => _store;
+  ReadingTaskState get state => _store.state;
+
+  /// Opens the task flow for one paragraph: reuses the existing rubric when
+  /// the segment already has one, otherwise enters template editing.
+  /// [templatePoints] is the localized preset the user can edit.
+  Future<void> openTask(
+    LocalApi api, {
+    required ReadingTaskSource source,
+    required List<RubricPointView> templatePoints,
+  }) async {
+    _store.replace(
+      ReadingTaskState(phase: 'idle', source: source, busy: true),
+    );
+    try {
+      final rubric = await api.lookupSemanticRubric(
+        mediaId: source.mediaId,
+        startMs: source.startMs,
+        endMs: source.endMs,
+        purpose: purpose,
+        responseLanguage: source.responseLanguage,
+        transcriptSnapshot: source.transcriptSnapshot,
+      );
+      if (rubric == null) {
+        _store.update(
+          (s) => s.copyWith(
+            phase: 'editing',
+            draftPoints: templatePoints,
+            busy: false,
+          ),
+        );
+      } else {
+        final attempts = await api.semanticRubricAttempts(rubric.id);
+        _enterAnswering(rubric, attempts.length);
+      }
+    } catch (error) {
+      _store.update(
+        (s) => s.copyWith(phase: 'idle', busy: false, error: '$error'),
+      );
+    }
+  }
+
+  void updateDraftPoint(int index, RubricPointView point) {
+    final points = [...state.draftPoints];
+    if (index < 0 || index >= points.length) return;
+    points[index] = point;
+    _store.update((s) => s.copyWith(draftPoints: points));
+  }
+
+  void removeDraftPoint(int index) {
+    final points = [...state.draftPoints];
+    if (index < 0 || index >= points.length || points.length <= 1) return;
+    points.removeAt(index);
+    _store.update((s) => s.copyWith(draftPoints: points));
+  }
+
+  /// Saves the edited template as rubric version 1. On a concurrent 409 the
+  /// existing rubric is fetched instead — never two identities for one
+  /// segment.
+  Future<void> saveRubric(LocalApi api) async {
+    final source = state.source;
+    if (source == null || state.draftPoints.isEmpty) return;
+    _store.update((s) => s.copyWith(busy: true, error: null));
+    try {
+      final rubric = await api.createSemanticRubric(
+        purpose: purpose,
+        source: RubricSourceView(
+          mediaId: source.mediaId,
+          trackId: source.trackId,
+          startMs: source.startMs,
+          endMs: source.endMs,
+          language: source.sourceLanguage,
+          transcriptSnapshot: source.transcriptSnapshot,
+        ),
+        responseLanguage: source.responseLanguage,
+        points: state.draftPoints,
+        provenance: const SemanticProvenanceView(
+          kind: 'manual',
+          detail: 'reading studio paragraph task (user-edited template)',
+        ),
+      );
+      _enterAnswering(rubric, 0);
+    } catch (_) {
+      // Most likely a version conflict from a concurrent save; the lookup
+      // either recovers the existing rubric or surfaces the original error.
+      final recovered = await _tryLookup(api, source);
+      if (recovered != null) {
+        _enterAnswering(recovered, 0);
+      } else {
+        _store.update(
+          (s) => s.copyWith(busy: false, error: 'rubric save failed'),
+        );
+      }
+    }
+  }
+
+  /// Records the typed answer as a completed reading attempt. Conditions are
+  /// honest: text was visible, and [audioPlayCount] is however many slice
+  /// replays happened while reading this paragraph.
+  Future<void> submitAnswer(
+    LocalApi api,
+    String answer, {
+    int audioPlayCount = 0,
+  }) async {
+    final source = state.source;
+    final rubric = state.rubric;
+    final trimmed = answer.trim();
+    if (source == null || rubric == null || trimmed.isEmpty) return;
+    _store.update((s) => s.copyWith(busy: true, error: null));
+    try {
+      final attempt = await api.createSemanticAttempt(
+        kind: purpose,
+        target: {
+          'kind': 'segment',
+          'id': null,
+          'sentence_id': null,
+          'chunk_id': null,
+          'start_ms': source.startMs,
+          'end_ms': source.endMs,
+        },
+        rubricId: rubric.id,
+        rubricVersion: rubric.version,
+        sourceTextVisible: true,
+        audioPlayCount: audioPlayCount,
+        responseTranscript: trimmed,
+        responseLanguage: source.responseLanguage,
+        startedAtMs: _answerStartedAtMs,
+        endedAtMs: DateTime.now().millisecondsSinceEpoch,
+      );
+      _store.update(
+        (s) => s.copyWith(
+          phase: 'assessing',
+          attempt: attempt,
+          draftVerdicts: const {},
+          busy: false,
+        ),
+      );
+    } catch (error) {
+      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+    }
+  }
+
+  void setVerdict(String pointId, String verdict) {
+    _store.update(
+      (s) => s.copyWith(
+        draftVerdicts: {...s.draftVerdicts, pointId: verdict},
+      ),
+    );
+  }
+
+  /// Saves the per-point self-assessment as a manual judgment. Covered and
+  /// partial verdicts cite the whole response as their span — this is a
+  /// self-report, not citation evidence, and the provenance says so.
+  Future<void> submitSelfAssessment(LocalApi api) async {
+    final rubric = state.rubric;
+    final attempt = state.attempt;
+    if (rubric == null || attempt == null || !state.allPointsJudged) return;
+    final response = attempt.responses.single;
+    // Rust validates spans against chars().count(): Unicode scalar values,
+    // which is Dart's rune count, not UTF-16 length.
+    final charCount = response.transcript.runes.length;
+    final points = [
+      for (final point in rubric.points)
+        PointJudgmentView(
+          pointId: point.pointId,
+          verdict: state.draftVerdicts[point.pointId]!,
+          supportingSpans: switch (state.draftVerdicts[point.pointId]!) {
+            'covered' || 'partial' => [
+              ResponseSpanView(startChar: 0, endChar: charCount),
+            ],
+            _ => const [],
+          },
+        ),
+    ];
+    _store.update((s) => s.copyWith(busy: true, error: null));
+    try {
+      final judgment = await api.createSemanticJudgment(
+        attemptId: attempt.id,
+        responseRevision: response.revision,
+        rubricId: rubric.id,
+        rubricVersion: rubric.version,
+        rubricTranscriptSnapshot: rubric.source.transcriptSnapshot,
+        responseTranscript: response.transcript,
+        points: points,
+        provenance: const SemanticProvenanceView(
+          kind: 'manual',
+          detail: 'reading self-assessment; spans default to whole response',
+        ),
+        evidenceClass: evidenceClass,
+      );
+      _store.update(
+        (s) => s.copyWith(phase: 'done', judgment: judgment, busy: false),
+      );
+    } catch (error) {
+      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+    }
+  }
+
+  /// Appends a correction for one point of the saved judgment. The original
+  /// judgment is never rewritten (3.11 adjudication semantics).
+  Future<void> adjudicate(
+    LocalApi api, {
+    required String pointId,
+    required String userVerdict,
+    String? note,
+  }) async {
+    final judgment = state.judgment;
+    final prior = judgment?.verdictFor(pointId);
+    if (judgment == null || prior == null || prior == userVerdict) return;
+    _store.update((s) => s.copyWith(busy: true, error: null));
+    try {
+      final adjudication = await api.createJudgmentAdjudication(
+        judgmentId: judgment.id,
+        pointId: pointId,
+        priorVerdict: prior,
+        userVerdict: userVerdict,
+        note: note,
+      );
+      _store.update(
+        (s) => s.copyWith(
+          adjudications: [...s.adjudications, adjudication],
+          busy: false,
+        ),
+      );
+    } catch (error) {
+      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+    }
+  }
+
+  void closeTask() {
+    _store.replace(const ReadingTaskState());
+  }
+
+  void _enterAnswering(SemanticRubricView rubric, int pastAttemptCount) {
+    _answerStartedAtMs = DateTime.now().millisecondsSinceEpoch;
+    _store.update(
+      (s) => s.copyWith(
+        phase: 'answering',
+        rubric: rubric,
+        pastAttemptCount: pastAttemptCount,
+        busy: false,
+        error: null,
+      ),
+    );
+  }
+
+  Future<SemanticRubricView?> _tryLookup(
+    LocalApi api,
+    ReadingTaskSource source,
+  ) async {
+    try {
+      return await api.lookupSemanticRubric(
+        mediaId: source.mediaId,
+        startMs: source.startMs,
+        endMs: source.endMs,
+        purpose: purpose,
+        responseLanguage: source.responseLanguage,
+        transcriptSnapshot: source.transcriptSnapshot,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+}
