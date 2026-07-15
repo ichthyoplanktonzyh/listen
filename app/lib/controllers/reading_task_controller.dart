@@ -34,6 +34,7 @@ class ReadingTaskSource {
 class ReadingTaskState {
   const ReadingTaskState({
     this.phase = 'idle',
+    this.purpose = ReadingTaskController.readingPurpose,
     this.source,
     this.rubric,
     this.draftPoints = const [],
@@ -48,7 +49,12 @@ class ReadingTaskState {
 
   /// idle | editing | answering | assessing | done
   final String phase;
+
+  /// `reading_comprehension` (text visible) or `l1_retelling` (listen-only).
+  final String purpose;
   final ReadingTaskSource? source;
+
+  bool get isListening => purpose == ReadingTaskController.listeningPurpose;
   final SemanticRubricView? rubric;
 
   /// Editable template points before the rubric exists (editing phase).
@@ -71,6 +77,7 @@ class ReadingTaskState {
 
   ReadingTaskState copyWith({
     String? phase,
+    String? purpose,
     Object? source = _unset,
     Object? rubric = _unset,
     List<RubricPointView>? draftPoints,
@@ -83,6 +90,7 @@ class ReadingTaskState {
     Object? error = _unset,
   }) => ReadingTaskState(
     phase: phase ?? this.phase,
+    purpose: purpose ?? this.purpose,
     source: identical(source, _unset)
         ? this.source
         : source as ReadingTaskSource?,
@@ -113,7 +121,8 @@ class ReadingTaskController extends ChangeNotifier {
     _store.addListener(notifyListeners);
   }
 
-  static const purpose = 'reading_comprehension';
+  static const readingPurpose = 'reading_comprehension';
+  static const listeningPurpose = 'l1_retelling';
   static const evidenceClass = 'self_assessment';
 
   final Store<ReadingTaskState> _store;
@@ -124,14 +133,21 @@ class ReadingTaskController extends ChangeNotifier {
 
   /// Opens the task flow for one paragraph: reuses the existing rubric when
   /// the segment already has one, otherwise enters template editing.
-  /// [templatePoints] is the localized preset the user can edit.
+  /// [templatePoints] is the localized preset the user can edit. [purpose]
+  /// picks the channel: reading (text visible) or listening retell.
   Future<void> openTask(
     LocalApi api, {
     required ReadingTaskSource source,
     required List<RubricPointView> templatePoints,
+    String purpose = readingPurpose,
   }) async {
     _store.replace(
-      ReadingTaskState(phase: 'idle', source: source, busy: true),
+      ReadingTaskState(
+        phase: 'idle',
+        purpose: purpose,
+        source: source,
+        busy: true,
+      ),
     );
     try {
       final rubric = await api.lookupSemanticRubric(
@@ -184,7 +200,7 @@ class ReadingTaskController extends ChangeNotifier {
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
       final rubric = await api.createSemanticRubric(
-        purpose: purpose,
+        purpose: state.purpose,
         source: RubricSourceView(
           mediaId: source.mediaId,
           trackId: source.trackId,
@@ -215,9 +231,9 @@ class ReadingTaskController extends ChangeNotifier {
     }
   }
 
-  /// Records the typed answer as a completed reading attempt. Conditions are
-  /// honest: text was visible, and [audioPlayCount] is however many slice
-  /// replays happened while reading this paragraph.
+  /// Records the typed answer as a completed attempt. Conditions are honest
+  /// per channel: reading has the text visible, the listening retell has it
+  /// hidden; [audioPlayCount] is the actual replay count either way.
   Future<void> submitAnswer(
     LocalApi api,
     String answer, {
@@ -230,7 +246,7 @@ class ReadingTaskController extends ChangeNotifier {
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
       final attempt = await api.createSemanticAttempt(
-        kind: purpose,
+        kind: state.purpose,
         target: {
           'kind': 'segment',
           'id': null,
@@ -241,8 +257,9 @@ class ReadingTaskController extends ChangeNotifier {
         },
         rubricId: rubric.id,
         rubricVersion: rubric.version,
-        sourceTextVisible: true,
+        sourceTextVisible: !state.isListening,
         audioPlayCount: audioPlayCount,
+        l1Trigger: state.isListening ? 'user_requested' : null,
         responseTranscript: trimmed,
         responseLanguage: source.responseLanguage,
         startedAtMs: _answerStartedAtMs,
@@ -374,7 +391,7 @@ class ReadingTaskController extends ChangeNotifier {
         mediaId: source.mediaId,
         startMs: source.startMs,
         endMs: source.endMs,
-        purpose: purpose,
+        purpose: state.purpose,
         responseLanguage: source.responseLanguage,
         transcriptSnapshot: source.transcriptSnapshot,
       );

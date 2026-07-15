@@ -101,6 +101,7 @@ extension SemanticApi on LocalApi {
     required bool sourceTextVisible,
     int? audioPlayCount,
     bool notesAllowed = false,
+    String? l1Trigger,
     required String responseTranscript,
     required String responseLanguage,
     required int startedAtMs,
@@ -116,7 +117,7 @@ extension SemanticApi on LocalApi {
             'source_text_visible': sourceTextVisible,
             'audio_play_count': audioPlayCount,
             'notes_allowed': notesAllowed,
-            'l1_trigger': null,
+            'l1_trigger': l1Trigger,
           },
           'responses': [
             {

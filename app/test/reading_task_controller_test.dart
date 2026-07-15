@@ -281,6 +281,32 @@ void main() {
     expect(backend.requests.length, before);
   });
 
+  test('listening retell records hidden-text conditions and trigger', () async {
+    final backend = _FakeBackend()
+      ..on('GET', '/v1/semantic/rubrics/lookup', _rubricJson())
+      ..on('GET', '/v1/semantic/rubrics/rubric-x/attempts', <dynamic>[])
+      ..on('POST', '/v1/semantic/attempts', _attemptJson('复述内容'));
+    final controller = ReadingTaskController();
+    await controller.openTask(
+      backend.api,
+      source: _source,
+      templatePoints: _template,
+      purpose: ReadingTaskController.listeningPurpose,
+    );
+    expect(controller.state.isListening, isTrue);
+    // Lookup went to the listening purpose, not reading.
+    expect(backend.requests.first.$2, contains('purpose=l1_retelling'));
+
+    await controller.submitAnswer(backend.api, '复述内容', audioPlayCount: 3);
+    final body = backend.requests
+        .firstWhere((r) => r.$2 == '/v1/semantic/attempts')
+        .$3!;
+    expect(body['kind'], 'l1_retelling');
+    expect(body['conditions']['source_text_visible'], isFalse);
+    expect(body['conditions']['audio_play_count'], 3);
+    expect(body['conditions']['l1_trigger'], 'user_requested');
+  });
+
   test('backend failure surfaces an error without fake progress', () async {
     final backend = _FakeBackend()
       ..on('GET', '/v1/semantic/rubrics/lookup', null)

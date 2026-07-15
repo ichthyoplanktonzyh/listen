@@ -19,14 +19,20 @@ class ReadingTaskSheet extends StatefulWidget {
     required this.controller,
     required this.api,
     required this.audioPlayCount,
+    this.onPlaySegment,
   });
 
   final ReadingTaskController controller;
   final LocalApi api;
 
-  /// Honest replay count for the paragraph while it was read (feeds the
-  /// attempt's `audio_play_count` condition).
+  /// Honest replay count for the paragraph (feeds the attempt's
+  /// `audio_play_count` condition). For the listening retell this counts
+  /// plays started from [onPlaySegment].
   final int Function() audioPlayCount;
+
+  /// Plays the paragraph audio (listening retell only). The reading flow
+  /// leaves this null — replays there happen from the reading view chips.
+  final VoidCallback? onPlaySegment;
 
   @override
   State<ReadingTaskSheet> createState() => _ReadingTaskSheetState();
@@ -118,7 +124,11 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text(
-        l.text('readingTaskEditHint'),
+        l.text(
+          _state.isListening
+              ? 'readingTaskListenEditHint'
+              : 'readingTaskEditHint',
+        ),
         style: TextStyle(color: colors.onSurfaceVariant, fontSize: 13),
       ),
       const SizedBox(height: 8),
@@ -200,10 +210,13 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
     );
   }
 
-  // ── answering: prompts visible, learner types a free response ──
+  // ── answering: reading shows the prompts; the listening retell hides
+  // them (they paraphrase the content) and offers segment playback ──
 
   Widget _answering(AppLocalizations l, ColorScheme colors) {
     final rubric = _state.rubric!;
+    final listening = _state.isListening;
+    final plays = widget.audioPlayCount();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -217,29 +230,61 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
               style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
             ),
           ),
-        for (final point in rubric.points)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  point.importance == 'required'
-                      ? Icons.star
-                      : Icons.star_border,
-                  size: 14,
-                  color: colors.onSurfaceVariant,
+        if (listening) ...[
+          Text(
+            l.text('readingTaskListenAnswerHint'),
+            style: TextStyle(color: colors.onSurfaceVariant, fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              ActionChip(
+                key: const ValueKey('reading-task-play-segment'),
+                avatar: Icon(
+                  Icons.play_arrow,
+                  size: 16,
+                  color: colors.primary,
                 ),
-                const SizedBox(width: 6),
-                Expanded(
+                label: Text(l.text('readingTaskListenPlay')),
+                onPressed: widget.onPlaySegment,
+              ),
+              if (plays > 0)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
                   child: Text(
-                    point.statement,
-                    style: const TextStyle(fontSize: 13),
+                    '×$plays',
+                    style: TextStyle(
+                      color: colors.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
-              ],
-            ),
+            ],
           ),
+        ] else
+          for (final point in rubric.points)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    point.importance == 'required'
+                        ? Icons.star
+                        : Icons.star_border,
+                    size: 14,
+                    color: colors.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      point.statement,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
         const SizedBox(height: 10),
         TextField(
           key: const ValueKey('reading-task-answer'),
@@ -247,13 +292,19 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
           maxLines: 5,
           minLines: 3,
           decoration: InputDecoration(
-            hintText: l.text('readingTaskAnswerHint'),
+            hintText: l.text(
+              listening
+                  ? 'readingTaskListenTypeHint'
+                  : 'readingTaskAnswerHint',
+            ),
             border: const OutlineInputBorder(),
           ),
         ),
         const SizedBox(height: 10),
         FilledButton.icon(
-          onPressed: _state.busy
+          // A listening retell without a single play would fake its
+          // conditions; require one honest listen first.
+          onPressed: _state.busy || (listening && plays < 1)
               ? null
               : () => unawaited(
                   widget.controller.submitAnswer(

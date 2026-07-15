@@ -25,6 +25,7 @@ class ReadingView extends StatefulWidget {
     required this.onPlaySentence,
     required this.onPlayParagraph,
     this.onStartTask,
+    this.onOpenDiff,
     required this.onClose,
   });
 
@@ -38,6 +39,9 @@ class ReadingView extends StatefulWidget {
 
   /// Opens the paragraph-task flow (Slice 3); null hides the task chip.
   final Future<void> Function(ReadingParagraph paragraph)? onStartTask;
+
+  /// Opens the read-listen pairing card (Slice 4); null hides the chip.
+  final Future<void> Function(ReadingParagraph paragraph)? onOpenDiff;
   final VoidCallback onClose;
 
   @override
@@ -294,6 +298,17 @@ class _ReadingViewState extends State<ReadingView> {
               ),
               label: Text(l.text('readingTaskStart')),
               onPressed: () => unawaited(widget.onStartTask!(paragraph)),
+            ),
+          if (widget.onOpenDiff != null)
+            ActionChip(
+              key: ValueKey('reading-diff-${paragraph.anchorCueId}'),
+              avatar: Icon(
+                Icons.compare_arrows,
+                size: 16,
+                color: colors.primary,
+              ),
+              label: Text(l.text('readingDiffChip')),
+              onPressed: () => unawaited(widget.onOpenDiff!(paragraph)),
             ),
           for (final sentence in paragraph.sentences)
             ActionChip(

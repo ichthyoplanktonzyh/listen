@@ -338,6 +338,43 @@ class AppLocalizations {
       'readingTaskPresetTitle': 'Title: give this paragraph a fitting title',
       'readingTaskPresetInference':
           'Inference: what does this paragraph imply but not say?',
+      'readingDiffChip': 'Read vs listen',
+      'readingDiffTitle': 'Read vs listen',
+      'readingDiffRead': 'Reading comprehension',
+      'readingDiffListen': 'Listening retell',
+      'readingDiffOpenReading': 'Reading task',
+      'readingDiffOpenListening': 'Listen & retell',
+      'outcomeYes': 'Understood',
+      'outcomePartial': 'Partial',
+      'outcomeNo': 'Not yet',
+      'outcomeUnassessed': 'Not assessed',
+      'diffUnknown':
+          'One side has no facts yet. Finish both tasks to see the pairing.',
+      'diffBothYes':
+          'Both reading and listening worked — this passage is comfortable; '
+          'more input like this is fine.',
+      'diffReadYesListenNo':
+          'Read yes, listen no — possibly a sound-recognition gap rather '
+          'than a meaning gap. Replaying and shadowing this segment may help.',
+      'diffReadNoListenYes':
+          'Listen yes, read no — possibly unfamiliar written forms. Reading '
+          'this text with word lookups may help.',
+      'diffBothNo':
+          'Neither side landed — the content itself may be above the current '
+          'level; building background understanding first may help.',
+      'diffMixed':
+          'Coverage is partial on at least one side — one more attempt per '
+          'side would make the pairing more reliable.',
+      'readingTaskListenTitle': 'Listen & retell',
+      'readingTaskListenBack': 'Back to reading',
+      'readingTaskListenPlay': 'Play segment',
+      'readingTaskListenAnswerHint':
+          'Listen to this segment (replay as needed), then retell what you '
+          'heard in your own words — without the text.',
+      'readingTaskListenTypeHint': 'Retell what you heard, from memory.',
+      'readingTaskListenEditHint':
+          'Edit the retell checkpoints (this previews the content). Saved '
+          'points become the fixed listening rubric for this segment.',
       'shadowingPlannedTooltip': 'Shadowing and recording arrive in Phase 3.8.',
       'shadowingReadyTooltip':
           'Follow the current rhythm chunk and compare your recording.',
@@ -1236,6 +1273,28 @@ class AppLocalizations {
       'readingTaskPresetDetail': '信息定位：说出本段提到的一个具体事实',
       'readingTaskPresetTitle': '标题：给本段起一个贴切的小标题',
       'readingTaskPresetInference': '简单推断：本段暗示了什么但没有明说？',
+      'readingDiffChip': '读听对照',
+      'readingDiffTitle': '读听对照',
+      'readingDiffRead': '阅读理解',
+      'readingDiffListen': '只听复述',
+      'readingDiffOpenReading': '去做阅读任务',
+      'readingDiffOpenListening': '去只听复述',
+      'outcomeYes': '理解',
+      'outcomePartial': '部分',
+      'outcomeNo': '未理解',
+      'outcomeUnassessed': '未评估',
+      'diffUnknown': '还缺一侧的事实。两侧任务都完成后才能看到对照。',
+      'diffBothYes': '读和听都理解了——这段对你是舒适区，可以放心加大同类输入。',
+      'diffReadYesListenNo': '看文字懂、听不出来——可能是声音识别的缺口而不是词义问题，回听和跟读这段可能有帮助。',
+      'diffReadNoListenYes': '听懂了但读得吃力——可能是书写形式不熟，带着查词读一遍文本可能有帮助。',
+      'diffBothNo': '读和听都没过——内容本身可能超出当前水平，先补背景理解更划算。',
+      'diffMixed': '至少一侧覆盖不完整——两侧各再做一次任务，对照会更可靠。',
+      'readingTaskListenTitle': '只听复述',
+      'readingTaskListenBack': '返回阅读',
+      'readingTaskListenPlay': '播放本段',
+      'readingTaskListenAnswerHint': '先听本段（可重听），然后不看原文，用自己的话复述听到的内容。',
+      'readingTaskListenTypeHint': '凭记忆复述你听到的内容。',
+      'readingTaskListenEditHint': '编辑复述考点（会提前看到内容要点）。保存后成为本段听侧固定评分尺。',
       'shadowingPlannedTooltip': '跟读与录音会在 Phase 3.8 点亮。',
       'shadowingReadyTooltip': '跟读当前韵律语块，并与自己的录音做客观对比。',
       'shadowingPractice': '跟读模仿',
