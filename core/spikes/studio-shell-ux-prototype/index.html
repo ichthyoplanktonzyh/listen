@@ -1,8 +1,9 @@
-<!-- PROTOTYPE — throwaway. Phase 3.13.5 Slice 0 低保真原型。
-     七个画面经底部切换条循环（←/→ 键可用）：
-     A/B 导航候选 · C 阅读器 · D/E/F 共享任务容器三住户 · G 表面语法规则。
-     用 ListenTheme 真实色值模拟观感；刻意单一浅色主题（模拟 app 工作面）。 -->
-<title>Studio Shell UX 原型 · 3.13.5 Slice 0</title>
+<!-- PROTOTYPE v2 — throwaway. Phase 3.13.5 Slice 0 返工版（2026-07-15 晚裁决）。
+     v1→v2：导航改混合模型（首页/内容工作台/资产层，四 Studio rail 不建）；
+     阅读器默认干净+翻译默认隐藏+词汇概览中性化+透镜分视图；任务容器改
+     阶段自适应布局；表面规则改行为约束。七屏底部切换条循环（←/→ 键）。 -->
+<meta charset="utf-8">
+<title>Studio Shell UX 原型 v2 · 3.13.5 Slice 0</title>
 <style>
   :root {
     --fog: #f3f5f4; --surface: #ffffff; --sidebar: #e8eeeb; --player: #101715;
@@ -17,107 +18,146 @@
   body { font-family: var(--ui); color: var(--ink); padding: 0 0 96px; }
   .screen { display: none; max-width: 1180px; margin: 0 auto; padding: 20px 24px 8px; }
   .screen.on { display: block; }
-
-  /* ── 画面头：这一屏在回答什么问题 ── */
   .qhead { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; margin-bottom: 6px; }
-  .qhead h1 { font-size: 19px; font-weight: 800; letter-spacing: .01em; }
+  .qhead h1 { font-size: 19px; font-weight: 800; }
   .qhead .q { color: var(--muted); font-size: 13px; }
   .judge { font-size: 12.5px; color: var(--info); background: var(--info-surface);
     border-radius: 8px; padding: 7px 12px; margin: 8px 0 14px; line-height: 1.7; }
   .judge b { color: var(--ink); }
+  .v2note { font-size: 12px; color: var(--fir); background: var(--selected); border-radius: 8px;
+    padding: 6px 12px; margin: 0 0 14px; line-height: 1.7; }
 
-  /* ── app 框架模拟 ── */
   .frame { background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
     overflow: hidden; box-shadow: 0 10px 28px rgba(16,23,21,.08); }
   .topbar { display: flex; align-items: center; gap: 10px; padding: 10px 16px;
-    border-bottom: 1px solid var(--border); background: var(--surface); font-size: 13px; }
+    border-bottom: 1px solid var(--border); font-size: 13px; }
   .topbar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--outline); }
   .topbar .title { font-weight: 700; }
   .topbar .crumb { color: var(--muted); }
-  .cols { display: flex; min-height: 520px; }
-  .rail { width: 74px; background: var(--sidebar); border-right: 1px solid var(--border);
-    display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 0; }
-  .rail .item { width: 58px; padding: 8px 0 6px; border-radius: 10px; text-align: center;
-    font-size: 11px; color: var(--muted); cursor: default; line-height: 1.3; }
-  .rail .item .ic { font-size: 17px; display: block; margin-bottom: 2px; }
+  .cols { display: flex; min-height: 540px; }
+
+  /* 分组 rail（混合模型） */
+  .rail { width: 168px; background: var(--sidebar); border-right: 1px solid var(--border);
+    padding: 14px 10px; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+  .rail .group { font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em;
+    color: var(--outline); margin: 12px 8px 5px; }
+  .rail .item { display: flex; align-items: center; gap: 9px; padding: 7px 10px;
+    border-radius: 9px; color: var(--ink); cursor: default; }
+  .rail .item .ic { width: 18px; text-align: center; }
   .rail .item.cur { background: var(--selected); color: var(--fir); font-weight: 700; }
+  .rail .item .badge { margin-left: auto; font-size: 10.5px; background: var(--gold); color: #fff;
+    border-radius: 999px; padding: 1px 7px; }
+  .rail .sub { font-size: 11px; color: var(--muted); margin-left: 37px; line-height: 1.5; }
   .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  .stage { flex: 1; display: flex; min-height: 0; }
-  .media { flex: 1.35; background: var(--player); color: #f2f5f4; display: flex;
-    align-items: center; justify-content: center; flex-direction: column; gap: 10px; }
-  .media .ph { opacity: .55; font-size: 13px; }
-  .media .cap { font-size: 16px; }
-  .media .cap .hl { color: #ffd166; }
-  .panel { flex: 1; border-left: 1px solid var(--border); background: var(--surface);
-    padding: 14px 16px; font-size: 13px; overflow: hidden; }
-  .panel h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
-    color: var(--muted); margin-bottom: 10px; }
-  .playbar { border-top: 1px solid var(--border); padding: 10px 16px; display: flex;
-    align-items: center; gap: 12px; font-size: 13px; color: var(--muted); }
-  .playbar .btn { width: 30px; height: 30px; border-radius: 50%; background: var(--fir);
-    color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+
+  /* 首页 */
+  .home { padding: 20px 24px; overflow: auto; }
+  .home h2 { font-size: 13px; font-weight: 800; margin: 18px 0 10px; }
+  .home h2:first-child { margin-top: 0; }
+  .hero { border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px;
+    display: flex; gap: 16px; align-items: center; background: var(--surface); }
+  .hero .thumb { width: 120px; height: 68px; border-radius: 8px; background: var(--player);
+    color: #f2f5f4; display: flex; align-items: center; justify-content: center; font-size: 11px; flex: none; }
+  .hero .t { font-weight: 700; font-size: 14px; }
+  .hero .chs { display: flex; gap: 6px; margin-top: 9px; flex-wrap: wrap; }
+  .chy { font-size: 11.5px; border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; color: var(--muted); }
+  .chy b { color: var(--fir); font-weight: 700; }
+  .hero .go { margin-left: auto; }
+  .duecards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .due { border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; font-size: 12.5px; background: var(--surface); }
+  .due b { display: block; margin-bottom: 4px; }
+  .due .n { color: var(--gold); font-weight: 800; }
+  .due .act { color: var(--fir); margin-top: 6px; display: block; }
+  .lib { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .lib .m { border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; font-size: 12px; background: var(--surface); }
+  .lib .m b { display: block; font-size: 12.5px; margin-bottom: 4px; }
+  .lib .m span { color: var(--muted); }
+
+  /* 全局迷你播放条 */
+  .minibar { border-top: 1px solid var(--border); padding: 9px 16px; display: flex;
+    align-items: center; gap: 12px; font-size: 12.5px; color: var(--muted); background: var(--surface); }
+  .minibar .btn { width: 28px; height: 28px; border-radius: 50%; background: var(--fir);
+    color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; flex: none; }
+  .minibar .now { color: var(--ink); font-weight: 600; }
   .track { flex: 1; height: 4px; border-radius: 2px; background: var(--border); position: relative; }
   .track i { position: absolute; left: 0; top: 0; bottom: 0; width: 34%; background: var(--fir); border-radius: 2px; }
 
-  /* 姿态条（候选 A） */
-  .postures { display: flex; gap: 6px; padding: 9px 16px; border-bottom: 1px solid var(--border);
-    background: var(--surface); align-items: center; }
-  .postures .lab { font-size: 11px; color: var(--muted); margin-right: 4px; }
-  .pos { font-size: 12.5px; padding: 5px 13px; border-radius: 999px; border: 1px solid var(--border);
-    color: var(--muted); cursor: default; }
-  .pos.cur { background: var(--fir); border-color: var(--fir); color: #fff; font-weight: 600; }
-  .pos.new { border-style: dashed; border-color: var(--gold); color: var(--gold); }
-  .vr { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+  /* 工作台通道切换器 */
+  .channels { display: flex; gap: 4px; padding: 9px 16px; border-bottom: 1px solid var(--border); align-items: center; }
+  .ch { font-size: 13px; padding: 6px 16px; border-radius: 9px; color: var(--muted); cursor: default; }
+  .ch.cur { background: var(--fir); color: #fff; font-weight: 700; }
+  .ch .k { font-size: 10px; opacity: .65; margin-left: 5px; }
+  .subpos { margin-left: 14px; display: flex; gap: 5px; align-items: center; padding-left: 14px; border-left: 1px solid var(--border); }
+  .subpos .lab { font-size: 10.5px; color: var(--outline); }
+  .sp { font-size: 11.5px; padding: 3px 11px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+  .sp.cur { background: var(--selected); border-color: var(--fir); color: var(--fir); font-weight: 700; }
+  .stage { flex: 1; display: flex; min-height: 0; }
+  .media { flex: 1.35; background: var(--player); color: #f2f5f4; display: flex;
+    align-items: center; justify-content: center; flex-direction: column; gap: 10px; }
+  .media .ph { opacity: .55; font-size: 12px; }
+  .media .cap { font-size: 15px; padding: 0 30px; text-align: center; line-height: 1.7; }
+  .media .cap .hl { color: #ffd166; }
+  .panel { flex: 1; border-left: 1px solid var(--border); padding: 14px 16px; font-size: 13px; }
+  .panel h3 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 10px; }
+  .sem { border: 1px dashed var(--outline); border-radius: 9px; padding: 9px 11px; font-size: 12px;
+    color: var(--muted); line-height: 1.7; margin-top: 10px; }
+  .sem b { color: var(--ink); }
 
-  /* 取舍框 */
   .tradeoffs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
   .tcard { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; font-size: 12.5px; }
-  .tcard h4 { font-size: 12px; margin-bottom: 6px; }
-  .tcard.plus h4 { color: var(--fir); } .tcard.minus h4 { color: var(--error); }
-  .tcard li { margin: 4px 0 4px 16px; line-height: 1.55; color: var(--ink); }
+  .tcard h4 { font-size: 12px; margin-bottom: 6px; color: var(--fir); }
+  .tcard li { margin: 4px 0 4px 16px; line-height: 1.55; }
 
-  /* ── C 阅读器 ── */
+  /* 阅读器 v2 */
   .readerbar { display: flex; align-items: center; gap: 10px; padding: 9px 16px;
-    border-bottom: 1px solid var(--border); font-size: 12.5px; }
+    border-bottom: 1px solid var(--border); font-size: 12.5px; position: relative; }
   .readerbar .name { font-weight: 700; }
-  .ov { color: var(--muted); }
-  .ov b { color: var(--ink); font-weight: 700; }
   .spacer { flex: 1; }
   .toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
   .toggle button { border: 0; background: transparent; font: inherit; font-size: 12px;
     padding: 5px 12px; color: var(--muted); cursor: pointer; }
   .toggle button.cur { background: var(--fir); color: #fff; }
   .toggle button:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+  .ghostbtn { font: inherit; font-size: 12px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--surface); color: var(--muted); padding: 5px 12px; cursor: pointer; }
+  .vocab-pop { display: none; position: absolute; right: 16px; top: 44px; z-index: 20; width: 320px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: 0 12px 30px rgba(16,23,21,.18); padding: 14px 16px; font-size: 12.5px; }
+  .vocab-pop.show { display: block; }
+  .vocab-pop h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 10px 0 6px; }
+  .vocab-pop h4:first-child { margin-top: 0; }
+  .vrow { display: flex; justify-content: space-between; padding: 3px 0; }
+  .vrow b { font-weight: 700; }
+  .vnote { color: var(--muted); font-size: 11.5px; line-height: 1.6; margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
   .readpane { max-width: 660px; margin: 0 auto; padding: 34px 28px 40px;
     font-family: var(--reader); font-size: 17.5px; line-height: 1.9; }
   .readpane .ts { font-family: var(--ui); font-size: 11px; color: var(--outline); margin-bottom: 6px; }
   .para { margin-bottom: 26px; }
-  .sent { position: relative; border-radius: 4px; }
-  .sent:hover { background: var(--selected); }
+  .sent { position: relative; border-radius: 4px; cursor: default; }
+  .sent:hover, .sent:focus-visible, .sent.pinned { background: var(--selected); outline: none; }
   .sent .tools { display: none; position: absolute; left: 0; top: -38px; z-index: 5;
     font-family: var(--ui); font-size: 12px; background: var(--player); color: #f2f5f4;
     border-radius: 8px; padding: 5px 6px; white-space: nowrap; box-shadow: 0 6px 16px rgba(16,23,21,.25); }
-  .sent:hover .tools { display: flex; gap: 2px; }
+  .sent:hover .tools, .sent:focus-visible .tools, .sent.pinned .tools { display: flex; gap: 2px; }
   .tools span { padding: 3px 9px; border-radius: 6px; cursor: pointer; }
   .tools span:hover { background: rgba(255,255,255,.14); }
-  .trans { font-family: var(--ui); font-size: 13.5px; color: var(--muted); margin-top: 8px; line-height: 1.8; }
-  body.no-trans .trans { display: none; }
-  /* 词汇透镜：默认干净；.lens 时按状态着色。来源诚实：实线=阅读标记，虚线=听力证据/投影 */
+  .trans { font-family: var(--ui); font-size: 13.5px; color: var(--muted); margin-top: 8px; line-height: 1.8; display: none; }
+  body.show-trans .trans { display: block; }
+  /* 透镜分视图：off / read（阅读标记）/ listen（听力画像推测） */
   .w-new, .w-learn, .w-readok, .w-readno { border-bottom: 2px solid transparent; }
-  body.lens .w-new   { border-bottom: 2px dotted var(--error); }
-  body.lens .w-learn { border-bottom: 2px dotted var(--gold); }
-  body.lens .w-readok{ border-bottom: 2px solid var(--info); }
-  body.lens .w-readno{ border-bottom: 2px solid var(--error); background: #f7e4e4; }
+  body.lens-listen .w-new   { border-bottom: 2px dotted var(--error); }
+  body.lens-listen .w-learn { border-bottom: 2px dotted var(--gold); }
+  body.lens-read .w-readok  { border-bottom: 2px solid var(--info); }
+  body.lens-read .w-readno  { border-bottom: 2px solid var(--error); background: #f7e4e4; }
   .legend { display: none; font-family: var(--ui); font-size: 12px; color: var(--muted);
     gap: 16px; padding: 8px 16px; border-bottom: 1px solid var(--border); }
-  body.lens .legend { display: flex; flex-wrap: wrap; }
+  body.lens-read .legend.for-read, body.lens-listen .legend.for-listen { display: flex; }
   .legend i { font-style: normal; padding-bottom: 1px; }
   .l1 { border-bottom: 2px dotted var(--error); } .l2 { border-bottom: 2px dotted var(--gold); }
   .l3 { border-bottom: 2px solid var(--info); } .l4 { border-bottom: 2px solid var(--error); background: #f7e4e4; }
 
-  /* ── 任务容器（D/E/F 共用骨架） ── */
-  .stepper { display: flex; align-items: center; gap: 0; padding: 12px 18px;
-    border-bottom: 1px solid var(--border); font-size: 12.5px; }
+  /* 任务容器：阶段自适应 */
+  .stepper { display: flex; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
   .step { display: flex; align-items: center; gap: 7px; color: var(--muted); }
   .step .n { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--outline);
     display: flex; align-items: center; justify-content: center; font-size: 11px; }
@@ -127,49 +167,63 @@
   .step-arrow { color: var(--outline); margin: 0 12px; }
   .zones { display: flex; min-height: 430px; }
   .zone { padding: 16px 18px; min-width: 0; }
-  .zone h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 12px; }
-  .z-src { flex: 1.05; border-right: 1px solid var(--border); background: var(--fog); }
-  .z-work { flex: 1.5; border-right: 1px solid var(--border); }
-  .z-fb { flex: 1.05; }
-  .srctext { font-family: var(--reader); font-size: 14.5px; line-height: 1.85; color: var(--ink); }
+  .zone h3 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 12px; }
+  .z-src { flex: 1; border-right: 1px solid var(--border); background: var(--fog); }
+  .z-work { flex: 2.2; }
+  .z-fb { flex: 1.1; border-left: 1px solid var(--border); }
+  .srcbar { display: none; padding: 9px 18px; border-bottom: 1px solid var(--border);
+    background: var(--fog); font-size: 12.5px; color: var(--muted); align-items: center; gap: 10px; }
+  .srcbar b { color: var(--ink); }
+  .srctext { font-family: var(--reader); font-size: 14.5px; line-height: 1.85; }
   .srcmeta { font-size: 11.5px; color: var(--muted); margin: 10px 0; }
   .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fir);
     border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; cursor: default; background: var(--surface); }
   .hiddenify { filter: blur(5px); user-select: none; }
   .hidenote { font-size: 11.5px; color: var(--gold); margin-top: 8px; }
-  textarea.answer { width: 100%; min-height: 200px; border: 1px solid var(--border); border-radius: 10px;
-    padding: 12px; font: 14px/1.8 var(--ui); color: var(--ink); resize: vertical; background: var(--surface); }
+  textarea.answer { width: 100%; min-height: 230px; border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px; font: 14px/1.8 var(--ui); resize: vertical; }
   textarea.answer:focus-visible { outline: 2px solid var(--fir); }
+  .roanswer { border: 1px solid var(--border); border-radius: 10px; padding: 12px; font-size: 14px;
+    line-height: 1.8; background: var(--fog); }
   .fbpoint { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; font-size: 13px; }
   .fbpoint .pt { font-weight: 600; margin-bottom: 7px; line-height: 1.5; }
-  .verdicts { display: flex; gap: 6px; }
+  .verdicts { display: flex; gap: 6px; flex-wrap: wrap; }
   .verdicts button { font: inherit; font-size: 12px; border: 1px solid var(--border); background: var(--surface);
     border-radius: 999px; padding: 3px 12px; color: var(--muted); cursor: pointer; }
   .verdicts button.sel-yes { background: var(--selected); border-color: var(--fir); color: var(--fir); font-weight: 700; }
-  .verdicts button.sel-part { background: #f6ecd9; border-color: var(--gold); color: #9a6b15; font-weight: 700; }
-  .verdicts button.sel-no { background: #f7e4e4; border-color: var(--error); color: var(--error); font-weight: 700; }
   .fbnote { font-size: 11.5px; color: var(--muted); line-height: 1.7; margin-top: 10px; }
   .primary { font: inherit; font-size: 13px; background: var(--fir); color: #fff; border: 0;
     border-radius: 9px; padding: 8px 18px; cursor: pointer; }
   .primary:hover { background: var(--fir-press); }
   .ghost { font: inherit; font-size: 13px; background: transparent; color: var(--fir);
     border: 1px solid var(--border); border-radius: 9px; padding: 8px 14px; cursor: pointer; }
+  /* 阶段可见性 */
+  .tstage-answer .z-fb, .tstage-answer .srcbar { display: none; }
+  .tstage-assess .z-src { display: none; }
+  .tstage-assess .srcbar { display: flex; }
+  .tstage-done .z-src { display: none; }
+  .tstage-done .srcbar { display: flex; }
 
-  /* E 录音 */
-  .recwrap { text-align: center; padding: 26px 0 8px; }
-  .recbtn { width: 74px; height: 74px; border-radius: 50%; border: 0; cursor: pointer;
-    background: var(--fir); color: #fff; font-size: 26px; }
+  /* 口语（阶段自适应，录音中心） */
+  .recwrap { text-align: center; padding: 30px 0 8px; }
+  .recbtn { width: 84px; height: 84px; border-radius: 50%; border: 0; cursor: pointer;
+    background: var(--fir); color: #fff; font-size: 30px; }
   .recbtn.recording { background: var(--error); animation: pulse 1.2s infinite; }
   @media (prefers-reduced-motion: reduce) { .recbtn.recording { animation: none; } }
   @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(201,84,84,.4)} 70%{box-shadow:0 0 0 16px rgba(201,84,84,0)} 100%{box-shadow:0 0 0 0 rgba(201,84,84,0)} }
   .recstate { font-size: 13px; color: var(--muted); margin-top: 12px; min-height: 20px; }
-  .transcript { text-align: left; margin-top: 18px; border: 1px dashed var(--outline); border-radius: 10px;
-    padding: 12px; font-size: 13.5px; line-height: 1.8; display: none; }
-  .transcript.show { display: block; }
+  .transcript { text-align: left; margin: 18px auto 0; max-width: 520px; border: 1px dashed var(--outline);
+    border-radius: 10px; padding: 12px; font-size: 13.5px; line-height: 1.8; display: none; }
+  .speak-frame.done .transcript { display: block; }
   .transcript .tag { font-size: 11px; color: var(--muted); display: block; margin-bottom: 6px; }
+  .speak-frame .z-fb { display: none; }
+  .speak-frame.done .z-fb { display: block; }
   .assist { display: flex; gap: 6px; margin-top: 12px; }
 
-  /* F 写作 */
+  /* 写作（编辑器 ≥60%） */
+  .write-frame .z-work { flex: 3.2; }
+  .write-frame .z-fb { flex: 1.4; display: none; }
+  .write-frame.fb-on .z-fb { display: block; }
   .draftmeta { display: flex; gap: 14px; font-size: 11.5px; color: var(--muted); margin-top: 8px; }
   .fblayer { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
   .fblayer summary { cursor: pointer; padding: 9px 12px; font-size: 12.5px; font-weight: 700; background: var(--fog); list-style: none; }
@@ -180,199 +234,222 @@
   .disp { display: inline-flex; gap: 4px; margin-left: 8px; }
   .disp button { font-size: 11px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 1px 8px; cursor: pointer; color: var(--muted); }
 
-  /* G 规则表 */
+  /* 规则表 */
   .rules { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 8px 18px 18px; }
   table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 12px; }
   th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.65; }
   th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
   td b.k { color: var(--fir); }
-  .mig { color: var(--muted); }
-  .mig b { color: var(--ink); }
+  .mig { color: var(--muted); } .mig b { color: var(--ink); }
 
-  /* 底部切换条（评审工具，不属于被评审的设计） */
   .switcher { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
     display: flex; align-items: center; gap: 4px; background: var(--player); color: #f2f5f4;
     border-radius: 999px; padding: 7px 10px; box-shadow: 0 10px 30px rgba(16,23,21,.4); z-index: 50; font-size: 13px; }
   .switcher button { background: transparent; border: 0; color: #f2f5f4; font-size: 15px; cursor: pointer;
     width: 30px; height: 30px; border-radius: 50%; }
   .switcher button:hover { background: rgba(255,255,255,.14); }
-  .switcher .who { min-width: 300px; text-align: center; }
+  .switcher .who { min-width: 320px; text-align: center; }
   .switcher .who b { color: #ffd166; }
 </style>
 
-<!-- ═══════════ A：导航候选 A — 姿态扩展 ═══════════ -->
-<section class="screen" id="s-A">
-  <div class="qhead"><h1>候选 A · 姿态扩展</h1><span class="q">四通道都是当前媒体工作台内的"姿态"，与 理解/测试/跟读 同一条姿态栏。</span></div>
-  <div class="judge"><b>裁决点：</b>读/说/写永远从"当前正在播的媒体"进入是否符合你的使用直觉？好处是零新导航概念、来源上下文天然存在；代价是四通道被绑死在单一媒体会话上，"跨媒体的说/写任务"（如 3.16 个人模板练习）没有自然入口。</div>
+<!-- ═══ 1 首页（混合模型） ═══ -->
+<section class="screen" id="s-1">
+  <div class="qhead"><h1>首页 · 两条旅程的分发口</h1><span class="q">继续学习（内容会话）+ 到期资产（资产驱动）+ 资源库；左栏分组，全局迷你播放条。</span></div>
+  <div class="v2note">v2 变更：导航按裁决改混合模型——四通道 Studio rail 不建；左栏 = 首页 / 当前内容 / 资产分组；参考每日英语听力加全局迷你播放条（会话跨页面常驻）。</div>
+  <div class="judge"><b>裁决点：</b>① 左栏分组（内容 vs 资产）是否清楚？② "继续学习"卡带四通道进度，是否是你想要的会话恢复入口？③ 迷你播放条常驻是否符合期待（去词典/复习时会话不死）？</div>
   <div class="frame">
-    <div class="topbar"><span class="dot"></span><span class="title">CNN10 — Fusion Breakthrough.mp4</span><span class="crumb">· 12:36 · 英语</span></div>
-    <div class="postures">
-      <span class="lab">姿态</span>
-      <span class="pos">理解</span><span class="pos">测试</span><span class="pos">跟读</span>
-      <span class="vr"></span>
-      <span class="pos cur">阅读</span><span class="pos new">说 (3.14)</span><span class="pos new">写 (3.15)</span>
-    </div>
-    <div class="stage">
-      <div class="media" style="background:var(--surface);color:var(--ink);align-items:stretch;">
-        <div style="padding:22px 30px;font-family:var(--reader);font-size:16px;line-height:1.9;">
-          <div style="font-family:var(--ui);font-size:11px;color:var(--outline);margin-bottom:8px">阅读姿态替换播放区（现状 3.13 的做法，仅示意）</div>
-          Scientists in California say they have taken a major step toward producing clean energy from nuclear fusion. For decades, researchers have tried to recreate the process that powers the sun…
-        </div>
-      </div>
-      <div class="panel"><h3>学习面板</h3>
-        <div style="color:var(--muted);line-height:1.8">仍是听力中心的词汇/诊断/练习面板；阅读姿态下内容相关性待收敛（Slice 1 处理）。</div>
-      </div>
-    </div>
-    <div class="playbar"><span class="btn">▶</span><div class="track"><i></i></div><span>04:18 / 12:36</span></div>
-  </div>
-  <div class="tradeoffs">
-    <div class="tcard plus"><h4>支持它的理由</h4><ul>
-      <li>零新概念：3.35 姿态心智直接延伸，入口就在眼前一行。</li>
-      <li>来源上下文免费：读/说/写天然作用于当前媒体，不需要"选来源"步骤。</li>
-      <li>实现改动最小：现有 posture 切换机制直接扩展。</li></ul></div>
-    <div class="tcard minus"><h4>反对它的理由</h4><ul>
-      <li>说/写并不总是媒体伴生：3.16 个人模板、3.15 延迟复写都跨媒体，塞在单媒体姿态栏里语义拧巴。</li>
-      <li>姿态栏挤到 6+ 项，听力三姿态与四通道混在一层，层级混乱。</li>
-      <li>"没开媒体就不能进任何 Studio"——词典/复习已证明资产消费层需要独立入口。</li></ul></div>
-  </div>
-</section>
-
-<!-- ═══════════ B：导航候选 B — Studio 切换 ═══════════ -->
-<section class="screen" id="s-B">
-  <div class="qhead"><h1>候选 B · Studio 切换</h1><span class="q">左侧一级导航：听/读/说/写四个 Studio 平级；媒体是被 Studio 借用的"来源"，不是宿主。</span></div>
-  <div class="judge"><b>裁决点：</b>四通道升为一级导航是否值得多一层"选来源"？好处是每个 Studio 有独立会话与跨媒体能力（3.14–3.16 都需要）；代价是从"正在听"到"读这一篇"多一次跳转（可用"从当前媒体继续"捷径抹平——见听 Studio 徽标行）。</div>
-  <div class="frame">
-    <div class="topbar"><span class="dot"></span><span class="title">LLPlayerNext</span><span class="crumb">· 阅读 Studio</span></div>
     <div class="cols">
       <div class="rail">
-        <div class="item"><span class="ic">🏠</span>首页</div>
-        <div class="item"><span class="ic">🎧</span>听</div>
-        <div class="item cur"><span class="ic">📖</span>读</div>
-        <div class="item"><span class="ic">🎤</span>说</div>
-        <div class="item"><span class="ic">✏️</span>写</div>
-        <div class="item" style="margin-top:auto"><span class="ic">📚</span>词典</div>
-        <div class="item"><span class="ic">🔁</span>复习</div>
+        <div class="item cur"><span class="ic">🏠</span>首页</div>
+        <div class="group">当前内容</div>
+        <div class="item"><span class="ic">🎬</span>CNN10 — Fusion…</div>
+        <div class="sub">听 34% · 读 §12 · 说 1 次 · 写 —</div>
+        <div class="group">资源</div>
+        <div class="item"><span class="ic">📁</span>媒体库</div>
+        <div class="item"><span class="ic">⬇️</span>下载 / 添加来源</div>
+        <div class="group">资产</div>
+        <div class="item"><span class="ic">📚</span>词典</div>
+        <div class="item"><span class="ic">🔁</span>复习<span class="badge">18</span></div>
+        <div class="item"><span class="ic">🧩</span>我的表达（3.16）</div>
+        <div class="item"><span class="ic">📊</span>Coach</div>
       </div>
       <div class="main">
-        <div style="padding:18px 22px;">
-          <div style="font-size:14px;font-weight:800;margin-bottom:4px;">阅读 Studio</div>
-          <div style="font-size:12.5px;color:var(--muted);margin-bottom:16px;">从真实内容进入——不是先选一道抽象练习（参考 Aprelendo/Lector 原则）</div>
-          <div class="chip" style="border-color:var(--fir);background:var(--selected);margin-bottom:16px;">▶ 从当前正在听的 CNN10 继续阅读 · 第 12 段</div>
-          <div style="font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px;">最近来源</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
-            <div style="border:1px solid var(--border);border-radius:10px;padding:12px;font-size:12.5px;">
-              <b>CNN10 — Fusion…</b><div style="color:var(--muted);margin-top:5px;">读到 34% · 生词 12 · 任务 2/3</div></div>
-            <div style="border:1px solid var(--border);border-radius:10px;padding:12px;font-size:12.5px;">
-              <b>Friends S01E03 对话</b><div style="color:var(--muted);margin-top:5px;">未开始 · 生词 7</div></div>
-            <div style="border:1px solid var(--border);border-radius:10px;padding:12px;font-size:12.5px;color:var(--muted);">
-              ＋ 从媒体库选择来源</div>
+        <div class="home">
+          <h2>继续学习</h2>
+          <div class="hero">
+            <div class="thumb">CNN10</div>
+            <div>
+              <div class="t">CNN10 — Fusion Breakthrough</div>
+              <div class="chs">
+                <span class="chy">🎧 听 <b>34%</b> · 测试 2/5</span>
+                <span class="chy">📖 读 <b>第 12 段</b> · 任务 2/3</span>
+                <span class="chy">🎤 说 <b>1 次复述</b></span>
+                <span class="chy">✏️ 写 <b>未开始</b></span>
+              </div>
+            </div>
+            <button class="primary go">继续 · 读到第 12 段</button>
+          </div>
+          <h2>到期资产（资产驱动旅程的入口）</h2>
+          <div class="duecards">
+            <div class="due"><b>复习队列</b><span class="n">18</span> 张到期 · 声音卡为主<span class="act">开始复习 →</span></div>
+            <div class="due"><b>狩猎目标</b><span class="n">2</span> 个目标在本媒体有新出现点<span class="act">查看出现点 →</span></div>
+            <div class="due"><b>我的表达</b>"I ended up …" 到延迟复用窗口<span class="act">再用一次（说/写）→</span></div>
+          </div>
+          <h2>媒体库</h2>
+          <div class="lib">
+            <div class="m"><b>Friends S01E03</b><span>对话 · 生词 7 · 未读</span></div>
+            <div class="m"><b>TED — AI Safety</b><span>演讲 · 听 100% · 可进写作</span></div>
+            <div class="m"><b>播客 EP.42</b><span>无字幕 · 转写就绪</span></div>
+            <div class="m" style="color:var(--muted)">＋ 本地文件 / URL</div>
           </div>
         </div>
+        <div class="minibar"><span class="btn">▶</span><span class="now">CNN10 — Fusion Breakthrough</span><div class="track"><i></i></div><span>04:18 / 12:36</span></div>
       </div>
     </div>
   </div>
+</section>
+
+<!-- ═══ 2 内容工作台（通道切换器） ═══ -->
+<section class="screen" id="s-2">
+  <div class="qhead"><h1>内容工作台 · 通道切换器</h1><span class="q">同一内容上 听/读/说/写 一跳切换（⌘1–4）；听保留 理解/测试/跟读 子姿态——通道与姿态两层分明。</span></div>
+  <div class="v2note">v2 变更：取代 v1 的候选 A/B。通道是工作台级（对当前内容的四种学习方式），听力三姿态收为听通道内部子态；跨媒体说写任务不在这里，从资产层进入。</div>
+  <div class="judge"><b>裁决点：</b>① "听完这段→读一遍→复述"的切换是否够顺（一跳、上下文不丢）？② 通道/子姿态两层是否清楚不混？③ 退出/返回语义（右侧注记框）是否符合直觉？</div>
+  <div class="frame">
+    <div class="topbar"><span class="dot"></span><span class="title">CNN10 — Fusion Breakthrough.mp4</span><span class="crumb">· 12:36 · 英语</span></div>
+    <div class="channels">
+      <span class="ch cur">🎧 听<span class="k">⌘1</span></span>
+      <span class="ch">📖 读<span class="k">⌘2</span></span>
+      <span class="ch">🎤 说<span class="k">⌘3</span></span>
+      <span class="ch">✏️ 写<span class="k">⌘4</span></span>
+      <span class="subpos"><span class="lab">听 · 姿态</span><span class="sp cur">理解</span><span class="sp">测试</span><span class="sp">跟读</span></span>
+    </div>
+    <div class="stage">
+      <div class="media">
+        <div class="ph">▶ 视频画面</div>
+        <div class="cap">Last week, a lab in Livermore <span class="hl">announced</span> that its experiment produced more energy than the lasers put in.</div>
+      </div>
+      <div class="panel">
+        <h3>会话与返回语义（注记）</h3>
+        <div class="sem"><b>切通道</b>：保持同一内容会话——读通道恢复阅读游标、说/写通道默认锚定当前播放段落；主播放位置不动。</div>
+        <div class="sem"><b>离开工作台</b>（去首页/词典/复习）：会话驻留迷你播放条，点击即回，恢复离开时的通道与现场。</div>
+        <div class="sem"><b>任务中途退出</b>：草稿自动保存，返回时从 stepper 当前阶段继续；来源快照保证媒体变更后任务仍可解释。</div>
+        <div class="sem"><b>Coach/dashboard</b>：资产层入口（左栏），不占工作台；其"去练"建议跳回对应通道并携带目标。</div>
+      </div>
+    </div>
+    <div class="minibar"><span class="btn">⏸</span><span class="now">正在播放</span><div class="track"><i></i></div><span>04:18 / 12:36</span></div>
+  </div>
   <div class="tradeoffs">
-    <div class="tcard plus"><h4>支持它的理由</h4><ul>
-      <li>四通道有独立会话：说/写可跨媒体、可从个人模板进入（3.16 需要）。</li>
-      <li>入口不再藏在侧栏按钮里——"读"就在一级导航。</li>
-      <li>每个 Studio 可拥有场景原生布局（阅读像阅读器、写作像编辑器），不必迁就播放区形状。</li>
-      <li>与"精听/泛听一级心智 + 资产消费层"的既有产品结构同构。</li></ul></div>
-    <div class="tcard minus"><h4>反对它的理由</h4><ul>
-      <li>比 A 多一层导航；"边听边想读"的即时切换需要靠捷径保住。</li>
-      <li>听 Studio 内部已有三姿态，两套导航并存需要清晰的层级表述。</li>
-      <li>实现量更大：一级导航壳 + 各 Studio 来源选择页。</li></ul></div>
+    <div class="tcard"><h4>这个模型如何回应两条旅程</h4><ul>
+      <li>旅程一（内容会话）：3.13–3.15 的核心场景（读听差异/复述/重构都用刚学的片段）全程一跳，学每日英语听力的"角落菜单"零成本切换。</li>
+      <li>旅程二（资产驱动）：复习/狩猎/个人模板/Coach 从首页资产组进入，打开任务容器独立会话，跨媒体不依附当前内容。</li>
+      <li>Field razor：出现"不从资产也不从内容进入"的说写会话真实需求时，再议独立 Studio 首页。</li></ul></div>
+    <div class="tcard"><h4>与 v1 两候选的差异</h4><ul>
+      <li>比 A 多：通道与听力姿态分层；资产层独立入口；跨媒体任务有归宿。</li>
+      <li>比 B 少：不建四通道平级 rail 与各 Studio 首页——"说/写"不是地方，是对某个来源（内容或资产）的动作。</li>
+      <li>保留 B 的壳：首页资源分发 + 分组左栏 + 资产层。</li></ul></div>
   </div>
 </section>
 
-<!-- ═══════════ C：阅读器 ═══════════ -->
-<section class="screen" id="s-C">
-  <div class="qhead"><h1>阅读器</h1><span class="q">干净正文 / 词汇透镜一键切换 · 句子悬停工具栏替代 chip 排 · 材料级词汇概览。</span></div>
-  <div class="judge"><b>裁决点：</b>① 默认透镜是"干净"还是"着色"？② 着色浓淡与来源区分（实线=你的阅读标记 / 虚线=听力证据·投影）是否达意？③ 悬停句子出现工具栏（替代 chip 排）操作是否顺手？把鼠标移到任意句子上试试。</div>
+<!-- ═══ 3 阅读器 v2 ═══ -->
+<section class="screen" id="s-3">
+  <div class="qhead"><h1>阅读器 v2</h1><span class="q">默认干净正文 · 翻译默认隐藏 · 词汇概览中性化（不合成认识率）· 透镜分视图 · 句子工具栏可 hover/点击选中/键盘聚焦。</span></div>
+  <div class="v2note">v2 变更：翻译默认隐藏（记忆用户选择）；"认识 92%" 移除——概览分列阅读标记与听力画像推测；透镜改三态分视图不混叠；句子可点击固定选中（再点取消），Tab 可聚焦。</div>
+  <div class="judge"><b>裁决点：</b>① 默认态（干净+无翻译）是否就是你要的"像阅读器"？② 点开"词汇概览"看分列统计是否达意？③ 透镜三态（正文/阅读标记/听力推测）分视图是否比混叠清楚？④ 点击句子固定工具栏的手感。</div>
   <div class="frame">
     <div class="readerbar">
       <span class="name">CNN10 — Fusion Breakthrough</span>
-      <span class="ov">486 词 · 生词 <b>12</b> · 在学 <b>31</b> · 认识 <b>92%</b></span>
+      <span style="color:var(--muted)">486 词 · 第 12/49 段</span>
       <span class="spacer"></span>
+      <button class="ghostbtn" id="vocabBtn">词汇概览</button>
       <div class="toggle" id="lensToggle">
-        <button class="cur" data-lens="off">干净</button><button data-lens="on">词汇透镜</button>
+        <button class="cur" data-lens="off">正文</button><button data-lens="read">阅读标记</button><button data-lens="listen">听力推测</button>
       </div>
-      <div class="toggle" id="transToggle">
-        <button class="cur" data-trans="on">翻译</button><button data-trans="off">隐藏</button>
+      <button class="ghostbtn" id="transBtn">显示翻译</button>
+      <div class="vocab-pop" id="vocabPop">
+        <h4>阅读标记（你的显式判断）</h4>
+        <div class="vrow"><span>读懂了</span><b style="color:var(--info)">5 词</b></div>
+        <div class="vrow"><span>读不懂</span><b style="color:var(--error)">2 词</b></div>
+        <h4>听力画像推测（证据/投影，非阅读能力）</h4>
+        <div class="vrow"><span>可能生词</span><b style="color:var(--error)">12 词</b></div>
+        <div class="vrow"><span>在学</span><b style="color:var(--gold)">31 词</b></div>
+        <div class="vnote">两组数字来源不同、刻意不合成总分：阅读证据只来自你的标记；听力画像不代表你读不读得懂。</div>
       </div>
     </div>
-    <div class="legend">
-      <span><i class="l1">虚线红</i> 生词（听力证据/投影）</span>
-      <span><i class="l2">虚线金</i> 在学（听力证据/投影）</span>
-      <span><i class="l3">实线蓝</i> 你标过"读懂了"</span>
-      <span><i class="l4">实线红</i> 你标过"读不懂"</span>
-    </div>
+    <div class="legend for-read"><span><i class="l3">实线蓝</i> 你标过"读懂了"</span><span><i class="l4">实线红</i> 你标过"读不懂"</span></div>
+    <div class="legend for-listen"><span><i class="l1">虚线红</i> 可能生词（听力证据/投影）</span><span><i class="l2">虚线金</i> 在学（听力证据/投影）</span></div>
     <div class="readpane">
       <div class="para">
         <div class="ts">00:41</div>
-        <span class="sent">Scientists in California say they have taken a major step toward producing clean energy from nuclear <span class="w-new">fusion</span>.<span class="tools"><span>▶ 回听</span><span>✎ 任务</span><span>🎧 听测</span></span></span>
-        <span class="sent">For decades, researchers have tried to <span class="w-learn">recreate</span> the process that powers the sun.<span class="tools"><span>▶ 回听</span><span>✎ 任务</span><span>🎧 听测</span></span></span>
-        <span class="sent">Last week, a lab in Livermore <span class="w-readok">announced</span> that its experiment produced more energy than the lasers put in.<span class="tools"><span>▶ 回听</span><span>✎ 任务</span><span>🎧 听测</span></span></span>
+        <span class="sent" tabindex="0">Scientists in California say they have taken a major step toward producing clean energy from nuclear <span class="w-new">fusion</span>.<span class="tools"><span>▶ 回听</span><span>✎ 任务</span><span>🎧 听测</span></span></span>
+        <span class="sent" tabindex="0">For decades, researchers have tried to <span class="w-learn">recreate</span> the process that powers the sun.<span class="tools"><span>▶ 回听</span><span>✎ 任务</span><span>🎧 听测</span></span></span>
+        <span class="sent" tabindex="0">Last week, a lab in Livermore <span class="w-readok">announced</span> that its experiment produced more energy than the lasers put in.<span class="tools"><span>▶ 回听</span><span>✎ 任务</span><span>🎧 听测</span></span></span>
         <div class="trans">加州的科学家表示，他们朝着利用核聚变生产清洁能源迈出了重要一步。几十年来，研究人员一直试图重现为太阳提供能量的过程。上周，利弗莫尔的一间实验室宣布，其实验产生的能量超过了激光输入的能量。</div>
       </div>
       <div class="para">
         <div class="ts">01:12</div>
-        <span class="sent">The result is called <span class="w-new">ignition</span>, and it has been a goal since the 1950s.<span class="tools"><span>▶ 回听</span><span>✎ 任务</span><span>🎧 听测</span></span></span>
-        <span class="sent">But experts <span class="w-learn">caution</span> that a commercial power plant is still <span class="w-readno">decades</span> away, because the lasers themselves consume far more electricity than the reaction returns.<span class="tools"><span>▶ 回听</span><span>✎ 任务</span><span>🎧 听测</span></span></span>
+        <span class="sent" tabindex="0">The result is called <span class="w-new">ignition</span>, and it has been a goal since the 1950s.<span class="tools"><span>▶ 回听</span><span>✎ 任务</span><span>🎧 听测</span></span></span>
+        <span class="sent" tabindex="0">But experts <span class="w-learn">caution</span> that a commercial power plant is still <span class="w-readno">decades</span> away, because the lasers themselves consume far more electricity than the reaction returns.<span class="tools"><span>▶ 回听</span><span>✎ 任务</span><span>🎧 听测</span></span></span>
         <div class="trans">这一结果被称为"点火"，自 20 世纪 50 年代以来一直是研究目标。但专家提醒，商用聚变电站仍需数十年——因为激光器本身消耗的电力远超反应回馈的能量。</div>
       </div>
-      <div style="font-family:var(--ui);font-size:11.5px;color:var(--outline);">（低保真示意：词点击仍走既有 WordLearningPanel，此处不再重复）</div>
+      <div style="font-family:var(--ui);font-size:11.5px;color:var(--outline);">（词点击仍走 WordLearningPanel；句子工具栏点击句身固定/再点取消，避免与词点击争手势——词命中词、空白命中句）</div>
     </div>
   </div>
 </section>
 
-<!-- ═══════════ D：任务容器 · 阅读任务住户 ═══════════ -->
-<section class="screen" id="s-D">
-  <div class="qhead"><h1>共享任务容器 · 住户一：阅读段落任务</h1><span class="q">来源 / 产出 / 反馈三区 + 顶部阶段常显。语义 = 3.13 现有 manual rubric + 自评，只换承载。</span></div>
-  <div class="judge"><b>裁决点：</b>① 三区并排是否比 bottom sheet 的四阶段串行更清楚？② 顶部 stepper（点击可看各阶段）是否让"我在哪一步"始终可见？③ 中途关闭 = 保留草稿回到阅读器，语义是否符合直觉？</div>
-  <div class="frame">
-    <div class="stepper" id="stepD">
-      <span class="step done" data-s="0"><span class="n">✓</span>确认要点</span><span class="step-arrow">→</span>
-      <span class="step cur" data-s="1"><span class="n">2</span>作答</span><span class="step-arrow">→</span>
-      <span class="step" data-s="2"><span class="n">3</span>逐点自评</span><span class="step-arrow">→</span>
-      <span class="step" data-s="3"><span class="n">4</span>完成</span>
+<!-- ═══ 4 任务容器 · 阅读任务（阶段自适应，可走全流程） ═══ -->
+<section class="screen" id="s-4">
+  <div class="qhead"><h1>任务容器 v2 · 阅读任务（阶段自适应）</h1><span class="q">共享的是生命周期/快照/草稿/退出恢复——不是恒定三栏。点"提交回答"走一遍全流程。</span></div>
+  <div class="v2note">v2 变更：作答阶段反馈区完全隐藏（要点不提前泄露）；提交后来源折叠成顶条、产出转只读、反馈区才出现；完成态含"可重做"；stepper 只显状态、未到的阶段不可点。</div>
+  <div class="judge"><b>裁决点：</b>① 作答时大产出区+无反馈，是否解决了"提前泄露要点"？② 提交后的布局变形是否自然？③ 完成态的"重做（保留本次）"语义是否正确？</div>
+  <div class="frame tstage-answer" id="taskFrame">
+    <div class="stepper" id="taskStepper">
+      <span class="step cur"><span class="n">1</span>作答</span><span class="step-arrow">→</span>
+      <span class="step"><span class="n">2</span>逐点自评</span><span class="step-arrow">→</span>
+      <span class="step"><span class="n">3</span>完成 · 可重做</span>
     </div>
+    <div class="srcbar"><b>来源</b> CNN10 第 12 段 · 00:41–01:12 <span class="chip" style="margin-left:6px">▶ 听这一段</span><span style="margin-left:auto">展开原文 ▾</span></div>
     <div class="zones">
       <div class="zone z-src"><h3>来源 · 第 12 段</h3>
         <div class="srctext">Scientists in California say they have taken a major step toward producing clean energy from nuclear fusion. For decades, researchers have tried to recreate the process that powers the sun…</div>
-        <div class="srcmeta">CNN10 · 00:41–01:12 · 快照已保存（删除媒体后任务历史仍可解释）</div>
+        <div class="srcmeta">CNN10 · 00:41–01:12 · 快照已保存</div>
         <span class="chip">▶ 听这一段</span>
       </div>
-      <div class="zone z-work"><h3>你的回答</h3>
-        <textarea class="answer" placeholder="用你自己的话说说这段的主旨…">加州实验室在核聚变上取得突破，实验产出的能量首次超过激光输入。</textarea>
-        <div style="margin-top:12px;display:flex;gap:8px;"><button class="primary">提交回答</button><button class="ghost">保存草稿并返回阅读</button></div>
+      <div class="zone z-work">
+        <h3 id="workTitle">你的回答（要点提交后才显示，防泄露）</h3>
+        <textarea class="answer" id="taskAnswer">加州实验室在核聚变上取得突破，实验产出的能量首次超过激光输入。</textarea>
+        <div class="roanswer" id="taskAnswerRO" style="display:none"></div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button class="primary" id="taskGo">提交回答</button>
+          <button class="ghost">保存草稿并返回阅读</button>
+        </div>
       </div>
-      <div class="zone z-fb"><h3>要点自评（提交后）</h3>
-        <div class="fbpoint"><div class="pt">主旨：实验产出能量超过输入</div><div class="verdicts"><button class="sel-yes">说到了</button><button>部分</button><button>没说到</button></div></div>
-        <div class="fbpoint"><div class="pt">细节：这是 1950 年代以来的目标</div><div class="verdicts"><button>说到了</button><button class="sel-part">部分</button><button>没说到</button></div></div>
-        <div class="fbpoint"><div class="pt">推断：商用化仍需数十年及原因</div><div class="verdicts"><button>说到了</button><button>部分</button><button class="sel-no">没说到</button></div></div>
-        <div class="fbnote">自评保存为 manual judgment（provenance=self_assessment，永不冒充 gold）；改判走 adjudication。LLM 判定入口预留，随 3.12.1 资格点亮。</div>
+      <div class="zone z-fb"><h3>要点自评</h3>
+        <div class="fbpoint"><div class="pt">主旨：实验产出能量超过输入</div><div class="verdicts"><button>说到了</button><button>部分</button><button>没说到</button></div></div>
+        <div class="fbpoint"><div class="pt">细节：这是 1950 年代以来的目标</div><div class="verdicts"><button>说到了</button><button>部分</button><button>没说到</button></div></div>
+        <div class="fbpoint"><div class="pt">推断：商用化仍需数十年及原因</div><div class="verdicts"><button>说到了</button><button>部分</button><button>没说到</button></div></div>
+        <div class="fbnote">自评 = manual judgment（self_assessment，永不冒充 gold）；改判走 adjudication；LLM 判定随 3.12.1 资格点亮。</div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ═══════════ E：任务容器 · 3.14 录音循环骨架 ═══════════ -->
-<section class="screen" id="s-E">
-  <div class="qhead"><h1>共享任务容器 · 住户二：3.14 复述录音（骨架预演）</h1><span class="q">同一容器：来源区变"已隐藏原文的音频"，产出区变录音循环，反馈区仍是逐点自评。</span></div>
-  <div class="judge"><b>裁决点：</b>① 录音循环（待命→录音→转写→核对）住进产出区是否成立？点击麦克风走一遍。② assistance 三档（完整原句/关键词/无文本）放来源区底部是否合适？③ 转写"原始/修正分开保留"的呈现是否清楚？</div>
-  <div class="frame">
+<!-- ═══ 5 任务容器 · 口语（录音中心） ═══ -->
+<section class="screen" id="s-5">
+  <div class="qhead"><h1>任务容器 v2 · 3.14 复述（录音中心）</h1><span class="q">录音阶段以录音为绝对中心；转写完成才展开核对与自评。点麦克风走一遍。</span></div>
+  <div class="v2note">v2 变更：右栏自评在录音阶段不再占位（录完转写后才出现）；录音按钮加大居中；同容器语义（生命周期/快照/恢复）不变。</div>
+  <div class="judge"><b>裁决点：</b>① 录音阶段的专注布局是否成立？② 转写完成后"核对 → 自评"的展开顺序是否自然？③ assistance 档位放来源区底部是否合适？</div>
+  <div class="frame speak-frame" id="speakFrame">
     <div class="stepper">
       <span class="step done"><span class="n">✓</span>听来源</span><span class="step-arrow">→</span>
-      <span class="step cur"><span class="n">2</span>复述</span><span class="step-arrow">→</span>
-      <span class="step"><span class="n">3</span>核对转写</span><span class="step-arrow">→</span>
-      <span class="step"><span class="n">4</span>自评</span><span class="step-arrow">→</span>
-      <span class="step"><span class="n">5</span>延迟复述</span>
+      <span class="step cur" id="spStep2"><span class="n">2</span>复述</span><span class="step-arrow">→</span>
+      <span class="step" id="spStep3"><span class="n">3</span>核对与自评</span><span class="step-arrow">→</span>
+      <span class="step"><span class="n">4</span>完成 · 可延迟复述</span>
     </div>
     <div class="zones">
       <div class="zone z-src"><h3>来源 · 10–60 秒片段</h3>
         <div class="srctext hiddenify">Scientists in California say they have taken a major step toward producing clean energy…</div>
         <div class="hidenote">原文已隐藏——复述测构造，不测朗读</div>
-        <div class="srcmeta">已听 2 遍 · assistance 将随 attempt 如实记录</div>
+        <div class="srcmeta">已听 2 遍 · assistance 如实入 attempt conditions</div>
         <div class="assist"><span class="chip">显示关键词</span><span class="chip">显示完整原句</span></div>
         <span class="chip" style="margin-top:10px">▶ 再听一遍</span>
       </div>
@@ -381,7 +458,7 @@
           <button class="recbtn" id="recBtn" aria-label="录音">🎙</button>
           <div class="recstate" id="recState">点击开始录音</div>
           <div class="transcript" id="recTranscript">
-            <span class="tag">whisper 转写（原始版保留，可修正——修正版另存）</span>
+            <span class="tag">whisper 转写（原始版保留；修正另存，两版分离）</span>
             California lab made big progress on fusion energy, the experiment gave out more energy than the lasers <b style="color:var(--error)">[uncertain]</b> put in.
             <div style="margin-top:8px;"><button class="ghost" style="font-size:12px;padding:4px 10px;">修正转写</button>
             <button class="ghost" style="font-size:12px;padding:4px 10px;">重说一次（保留本次）</button></div>
@@ -391,77 +468,83 @@
       <div class="zone z-fb"><h3>信息点自评</h3>
         <div class="fbpoint"><div class="pt">说清了"产出超过输入"这个核心事实</div><div class="verdicts"><button>说到了</button><button>部分</button><button>没说到</button></div></div>
         <div class="fbpoint"><div class="pt">用到目标表达 "end up (doing)"</div><div class="verdicts"><button>用到了</button><button>没用到</button></div></div>
-        <div class="fbnote">无 LLM 时只显示客观事实：时长 22s · 停顿 3 次 · 目标表达字面命中 0 次。ASR 不确定 ≠ 你说错了。说不出时可切换 L1 复述（记为听力理解事实，不是 speaking 证据）。</div>
+        <div class="fbnote">客观事实：时长 22s · 停顿 3 次 · 目标表达命中 0。ASR 不确定 ≠ 你说错。可切 L1 复述（记为听力理解事实，非 speaking 证据）。</div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ═══════════ F：任务容器 · 3.15 写作编辑器骨架 ═══════════ -->
-<section class="screen" id="s-F">
-  <div class="qhead"><h1>共享任务容器 · 住户三：3.15 Dictogloss 重构写作（骨架预演）</h1><span class="q">同一容器：产出区变成真正的编辑空间，反馈区分层折叠、每层有数量上限。</span></div>
-  <div class="judge"><b>裁决点：</b>① 写作产出区的空间是否够"像编辑器"？② 反馈分四层折叠（内容→组织→用词→语法）、默认展开内容层，是否符合"内容优先于表面错误"？③ 每条 finding 的采纳/拒绝放在条目内是否顺手？</div>
-  <div class="frame">
+<!-- ═══ 6 任务容器 · 写作（编辑器优先） ═══ -->
+<section class="screen" id="s-6">
+  <div class="qhead"><h1>任务容器 v2 · 3.15 Dictogloss（编辑器优先）</h1><span class="q">编辑器 ≥60%；来源折叠为侧条；反馈栏在你点"请求反馈"后才出现。</span></div>
+  <div class="v2note">v2 变更：写作阶段编辑器占大头（v1 只有中间一栏被判"不像写作环境"）；反馈是被请求的阶段，不是常驻栏。</div>
+  <div class="judge"><b>裁决点：</b>① 这个宽度像"真正在写"了吗？② 反馈请求制（写完主动要）vs 常驻栏，你倾向哪个？③ 分层折叠 + 每层限量在窄栏里是否仍可用？</div>
+  <div class="frame write-frame" id="writeFrame">
     <div class="stepper">
       <span class="step done"><span class="n">✓</span>听片段</span><span class="step-arrow">→</span>
-      <span class="step done"><span class="n">✓</span>初稿</span><span class="step-arrow">→</span>
-      <span class="step cur"><span class="n">3</span>分层反馈</span><span class="step-arrow">→</span>
-      <span class="step"><span class="n">4</span>修订</span><span class="step-arrow">→</span>
-      <span class="step"><span class="n">5</span>保存版本</span>
+      <span class="step cur"><span class="n">2</span>初稿</span><span class="step-arrow">→</span>
+      <span class="step" id="wrStep3"><span class="n">3</span>分层反馈</span><span class="step-arrow">→</span>
+      <span class="step"><span class="n">4</span>修订 · 保存版本</span>
     </div>
     <div class="zones">
-      <div class="zone z-src"><h3>来源 · 已听 3 遍</h3>
-        <div class="srctext hiddenify">The result is called ignition, and it has been a goal since the 1950s…</div>
-        <div class="hidenote">Dictogloss：凭关键词笔记重构，不是听写</div>
-        <div class="srcmeta">你的关键词笔记：ignition · 1950s · goal · lasers consume more</div>
-        <span class="chip">▶ 再听（次数计入 assistance）</span>
+      <div class="zone z-src" style="flex:.8"><h3>来源 · 已听 3 遍</h3>
+        <div class="srctext hiddenify" style="font-size:13px">The result is called ignition, and it has been a goal since the 1950s…</div>
+        <div class="hidenote">Dictogloss：凭关键词重构，不是听写</div>
+        <div class="srcmeta">你的关键词：ignition · 1950s · goal · lasers consume more</div>
+        <span class="chip">▶ 再听（计入 assistance）</span>
       </div>
       <div class="zone z-work"><h3>你的重构（第 1 稿 · 你的文本永远是权威）</h3>
-        <textarea class="answer" style="min-height:260px">The result is called ignition. Scientists want to reach it since 1950s. But experts say real power plant still need many decades, because lasers use more electricity than the reaction give back.</textarea>
+        <textarea class="answer" style="min-height:300px">The result is called ignition. Scientists want to reach it since 1950s. But experts say real power plant still need many decades, because lasers use more electricity than the reaction give back.</textarea>
         <div class="draftmeta"><span>84 词</span><span>草稿已自动保存 14:32</span><span>版本 1/1</span></div>
-        <div style="margin-top:12px;display:flex;gap:8px;"><button class="primary">进入修订</button><button class="ghost">保存版本</button></div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button class="primary" id="askFb">请求分层反馈</button>
+          <button class="ghost">保存版本</button>
+        </div>
       </div>
       <div class="zone z-fb"><h3>分层反馈（每层至多 3 条）</h3>
         <details class="fblayer" open><summary>内容与信息 <span class="cnt">1 条</span></summary>
-          <div class="fbody">遗漏：原文解释了"为什么还要数十年"里激光效率只是原因之一。<span class="disp"><button>采纳</button><button>拒绝</button></span></div></details>
+          <div class="fbody">遗漏：激光效率只是"仍需数十年"的原因之一。<span class="disp"><button>采纳</button><button>拒绝</button></span></div></details>
         <details class="fblayer"><summary>组织与衔接 <span class="cnt">1 条</span></summary>
           <div class="fbody">"But experts say…" 前可加过渡，指明从成果转向局限。<span class="disp"><button>采纳</button><button>拒绝</button></span></div></details>
         <details class="fblayer"><summary>语境用词 <span class="cnt">1 条</span></summary>
-          <div class="fbody">"real power plant" → "commercial power plant" 更贴原语境。<span class="disp"><button>采纳</button><button>拒绝</button></span></div></details>
+          <div class="fbody">"real power plant" → "commercial power plant"。<span class="disp"><button>采纳</button><button>拒绝</button></span></div></details>
         <details class="fblayer"><summary>语法与拼写 <span class="cnt">2 条 · Harper 本地</span></summary>
-          <div class="fbody">"want to reach it since 1950s" → "have wanted … since the 1950s"（时态）<span class="disp"><button>采纳</button><button>拒绝</button></span><br>"the reaction give back" → "gives back"（主谓一致）<span class="disp"><button>采纳</button><button>拒绝</button></span></div></details>
-        <div class="fbnote">反馈是可纠正的 finding，不是教师真理；拒绝建议不产生负面证据。无 LLM 时内容层退为原文对照 + 自评，语法层可由本地 Harper 承担。</div>
+          <div class="fbody">"want to reach it since 1950s" → "have wanted … since the 1950s"；"the reaction give back" → "gives back"。<span class="disp"><button>采纳</button><button>拒绝</button></span></div></details>
+        <div class="fbnote">反馈是可纠正 finding；拒绝不产生负面证据；无 LLM 时内容层退为原文对照+自评，语法层可由本地 Harper 承担。</div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ═══════════ G：表面语法规则 ═══════════ -->
-<section class="screen" id="s-G">
-  <div class="qhead"><h1>表面语法规则（草案）</h1><span class="q">四类表面 + 使用规则 + 现状六种表面的迁移映射。裁决通过后成文并全库执行。</span></div>
-  <div class="judge"><b>裁决点：</b>规则是否覆盖了所有现状？迁移映射里有没有你不同意的归宿？（特别看：听测从"整面替换"改为"任务容器住户"、读听差异从 dialog 改为"反馈区卡片"）</div>
+<!-- ═══ 7 表面行为约束 ═══ -->
+<section class="screen" id="s-7">
+  <div class="qhead"><h1>表面行为约束（v2）</h1><span class="q">从"白名单"改为行为规则：任何新表面按行为归类，不再逐个报批。</span></div>
+  <div class="judge"><b>裁决点：</b>行为约束是否覆盖判断需要？迁移映射（特别是听测→容器住户、读听差异→反馈卡片）有无异议？</div>
   <div class="rules">
     <table>
-      <tr><th style="width:13%">表面</th><th style="width:33%">规则</th><th>只允许承载</th></tr>
-      <tr><td><b class="k">整面 Studio</b></td><td>用户"进入一个场景"，占据主区，自带退出返回；同屏最多一个。</td><td>阅读器、任务容器（读任务/复述/写作）、听力工作台</td></tr>
-      <tr><td><b class="k">右侧栏 Panel</b></td><td>依附当前场景的上下文信息，不抢焦点，可折叠；内容必须与当前场景相关。</td><td>词汇学习面板、诊断摘要、材料词汇概览详情</td></tr>
-      <tr><td><b class="k">浮窗 Float</b></td><td>跨场景借用的独立能力，可拖动、非模态；全局同时至多一个。</td><td>切片回听窗（唯一豁免：精听练习窗，3.5.6 已验收，不迁移）</td></tr>
-      <tr><td><b class="k">文内 Inline</b></td><td>作用于正文对象本身的轻量操作，悬停/选中出现，移开即走，不新增层。</td><td>句子工具栏、词点击、SenseGroup 胶囊、翻译渐隐</td></tr>
+      <tr><th style="width:12%">表面</th><th style="width:44%">行为约束（何时允许出现 / 焦点 / 退出）</th><th>冲突规则</th></tr>
+      <tr><td><b class="k">整面 Studio</b></td><td>仅当用户显式"进入一个场景"时出现；独占主区与焦点；必须自带返回并恢复来处现场。</td><td>同屏最多一个；切换 = 会话交接，不叠加。</td></tr>
+      <tr><td><b class="k">右侧栏 Panel</b></td><td>仅承载当前场景的上下文；不得抢焦点、不得含多阶段流程；可折叠，折叠不丢状态。</td><td>内容与场景无关时必须消失，不许残留。</td></tr>
+      <tr><td><b class="k">浮窗 Float</b></td><td>仅承载跨场景借用的独立能力；非模态可拖动；关闭不影响宿主场景任何状态。</td><td>全局同时至多一个（既有豁免：精听练习窗）。</td></tr>
+      <tr><td><b class="k">文内 Inline</b></td><td>仅作用于正文对象本身；hover/选中/键盘聚焦出现，焦点移开即走；不得新增持久层。</td><td>与词级手势分工：词命中词、空白命中句。</td></tr>
     </table>
     <table>
-      <tr><th>现状表面（六种）</th><th>新归宿</th></tr>
-      <tr><td class="mig">阅读姿态 = 替换播放区</td><td class="mig">→ <b>整面 Studio</b>（阅读器，候选 A/B 裁决决定入口）</td></tr>
-      <tr><td class="mig">段落任务 = modal bottom sheet</td><td class="mig">→ <b>整面 Studio</b>（任务容器住户一，阶段常显）</td></tr>
-      <tr><td class="mig">听测 = 整面替换阅读视图</td><td class="mig">→ <b>任务容器住户</b>（来源区=纯音频，同容器不跳变）</td></tr>
-      <tr><td class="mig">读听差异 = dialog</td><td class="mig">→ <b>反馈区卡片</b>（任务完成态内并置，四象限保持）</td></tr>
-      <tr><td class="mig">切片回听 = 浮窗</td><td class="mig">→ 保持 <b>浮窗</b>（规则内合法：跨场景借用）</td></tr>
-      <tr><td class="mig">狩猎提示 = 顶部悬浮卡</td><td class="mig">→ 保持（泛听场景内合法，非本 phase 范围）</td></tr>
+      <tr><th>禁则（行为级）</th></tr>
+      <tr><td class="mig">多阶段流程不得进 bottom sheet / dialog / Panel——凡有 stepper 生命周期的，一律整面 Studio（任务容器）。</td></tr>
+      <tr><td class="mig">dialog 仅剩一种合法用途：必须打断的破坏性确认。</td></tr>
+      <tr><td class="mig">任何表面不得在用户未请求时抢走键盘焦点。</td></tr>
     </table>
-    <div class="fbnote" style="margin-top:14px">禁则：桌面端不再用 modal bottom sheet 承载多阶段流程；dialog 只留给"必须打断的破坏性确认"。</div>
+    <table>
+      <tr><th>现状迁移</th><th>归宿</th></tr>
+      <tr><td class="mig">阅读姿态（替换播放区）</td><td class="mig">→ <b>工作台读通道</b>（阅读器整面）</td></tr>
+      <tr><td class="mig">段落任务 bottom sheet</td><td class="mig">→ <b>任务容器</b>（阶段自适应）</td></tr>
+      <tr><td class="mig">听测整面替换</td><td class="mig">→ <b>任务容器住户</b>（来源区=纯音频）</td></tr>
+      <tr><td class="mig">读听差异 dialog</td><td class="mig">→ <b>反馈区卡片</b>（完成态并置四象限）</td></tr>
+      <tr><td class="mig">切片回听浮窗 / 狩猎悬浮卡</td><td class="mig">→ 保持（行为约束内合法）</td></tr>
+    </table>
   </div>
 </section>
 
-<!-- 切换条 -->
 <div class="switcher">
   <button id="prev" aria-label="上一屏">←</button>
   <div class="who" id="who"></div>
@@ -470,9 +553,9 @@
 
 <script>
   const screens = [
-    ['A', '候选 A · 姿态扩展'], ['B', '候选 B · Studio 切换'], ['C', '阅读器 · 透镜与文内工具栏'],
-    ['D', '任务容器 · 阅读任务'], ['E', '任务容器 · 3.14 录音'], ['F', '任务容器 · 3.15 写作'],
-    ['G', '表面语法规则'],
+    ['1', '首页 · 旅程分发'], ['2', '内容工作台 · 通道切换'], ['3', '阅读器 v2'],
+    ['4', '任务容器 · 阅读（阶段自适应）'], ['5', '任务容器 · 口语（录音中心）'],
+    ['6', '任务容器 · 写作（编辑器优先）'], ['7', '表面行为约束'],
   ];
   let cur = Math.max(0, screens.findIndex(([k]) => location.hash === '#/' + k));
   function show(i) {
@@ -492,48 +575,84 @@
   });
   show(cur);
 
-  // C：透镜与翻译切换
+  // 3 阅读器：透镜三态 / 翻译记忆 / 词汇概览 / 句子固定选中
   document.getElementById('lensToggle').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     document.querySelectorAll('#lensToggle button').forEach(x => x.classList.toggle('cur', x === b));
-    document.body.classList.toggle('lens', b.dataset.lens === 'on');
+    document.body.classList.remove('lens-read', 'lens-listen');
+    if (b.dataset.lens !== 'off') document.body.classList.add('lens-' + b.dataset.lens);
   });
-  document.getElementById('transToggle').addEventListener('click', e => {
-    const b = e.target.closest('button'); if (!b) return;
-    document.querySelectorAll('#transToggle button').forEach(x => x.classList.toggle('cur', x === b));
-    document.body.classList.toggle('no-trans', b.dataset.trans === 'off');
+  const transBtn = document.getElementById('transBtn');
+  transBtn.addEventListener('click', () => {
+    const on = document.body.classList.toggle('show-trans');
+    transBtn.textContent = on ? '隐藏翻译' : '显示翻译';
+    transBtn.title = '选择会被记忆（原型注记）';
+  });
+  const vocabPop = document.getElementById('vocabPop');
+  document.getElementById('vocabBtn').addEventListener('click', e => {
+    e.stopPropagation(); vocabPop.classList.toggle('show');
+  });
+  document.addEventListener('click', e => {
+    if (!vocabPop.contains(e.target)) vocabPop.classList.remove('show');
+    const s = e.target.closest('.sent');
+    document.querySelectorAll('.sent.pinned').forEach(x => { if (x !== s) x.classList.remove('pinned'); });
+    if (s && !e.target.closest('.tools')) s.classList.toggle('pinned');
   });
 
-  // E：录音循环状态机 mock
+  // 4 阅读任务：阶段自适应流程
+  const taskFrame = document.getElementById('taskFrame');
+  const taskSteps = document.querySelectorAll('#taskStepper .step');
+  const taskGo = document.getElementById('taskGo');
+  let tstage = 0; // 0 作答 1 自评 2 完成
+  function setTaskStage(n) {
+    tstage = n;
+    taskFrame.className = 'frame ' + ['tstage-answer', 'tstage-assess', 'tstage-done'][n];
+    taskSteps.forEach((st, i) => {
+      st.classList.toggle('done', i < n);
+      st.classList.toggle('cur', i === n);
+      st.querySelector('.n').textContent = i < n ? '✓' : i + 1;
+    });
+    const ta = document.getElementById('taskAnswer'), ro = document.getElementById('taskAnswerRO');
+    if (n >= 1) { ro.textContent = ta.value; ta.style.display = 'none'; ro.style.display = 'block'; }
+    else { ta.style.display = 'block'; ro.style.display = 'none'; }
+    document.getElementById('workTitle').textContent =
+      n === 0 ? '你的回答（要点提交后才显示，防泄露）' : n === 1 ? '你的回答（已提交，只读）' : '你的回答（已完成）';
+    taskGo.textContent = n === 0 ? '提交回答' : n === 1 ? '完成自评' : '重做（保留本次事实）';
+  }
+  taskGo.addEventListener('click', () => setTaskStage(tstage === 2 ? 0 : tstage + 1));
+  setTaskStage(0);
+
+  // 5 口语：录音状态机 + 阶段展开
+  const speakFrame = document.getElementById('speakFrame');
   const recBtn = document.getElementById('recBtn'), recState = document.getElementById('recState');
   let rec = 'idle';
   recBtn.addEventListener('click', () => {
     if (rec === 'idle') {
       rec = 'recording'; recBtn.classList.add('recording'); recBtn.textContent = '■';
       recState.textContent = '录音中 · 00:0' + Math.ceil(Math.random() * 9) + ' — 再按停止';
+      speakFrame.classList.remove('done');
     } else if (rec === 'recording') {
       rec = 'processing'; recBtn.classList.remove('recording'); recBtn.textContent = '…';
       recState.textContent = '本地 whisper 转写中…';
       setTimeout(() => {
         rec = 'done'; recBtn.textContent = '🎙';
-        recState.textContent = '转写完成 — 核对下方文本（可修正 / 可重说一次）';
-        document.getElementById('recTranscript').classList.add('show');
+        recState.textContent = '转写完成 — 先核对，再到右侧自评';
+        speakFrame.classList.add('done');
+        document.getElementById('spStep2').classList.replace('cur', 'done');
+        document.getElementById('spStep2').querySelector('.n').textContent = '✓';
+        document.getElementById('spStep3').classList.add('cur');
       }, 900);
     } else if (rec === 'done') {
       rec = 'idle'; recState.textContent = '点击开始录音（上一次已保留）';
-      document.getElementById('recTranscript').classList.remove('show');
     }
   });
 
-  // D：stepper 点击预览（低保真：只切当前态样式）
-  document.getElementById('stepD').addEventListener('click', e => {
-    const s = e.target.closest('.step'); if (!s) return;
-    const idx = +s.dataset.s;
-    document.querySelectorAll('#stepD .step').forEach(st => {
-      const i = +st.dataset.s;
-      st.classList.toggle('done', i < idx);
-      st.classList.toggle('cur', i === idx);
-      st.querySelector('.n').textContent = i < idx ? '✓' : i + 1;
-    });
+  // 6 写作：请求反馈才展开右栏
+  document.getElementById('askFb').addEventListener('click', () => {
+    const f = document.getElementById('writeFrame');
+    const on = f.classList.toggle('fb-on');
+    document.getElementById('askFb').textContent = on ? '收起反馈' : '请求分层反馈';
+    const s3 = document.getElementById('wrStep3');
+    if (on) s3.classList.add('cur'); else s3.classList.remove('cur');
   });
 </script>
