@@ -5,6 +5,33 @@
 
 import 'timeline.dart';
 
+/// Reading cursor DTO for `/v1/reading/positions/{track_id}` (handwritten
+/// per ADR 0014; pinned by test/contract/reading_position_contract_test.dart).
+class ReadingPositionView {
+  const ReadingPositionView({
+    required this.trackId,
+    this.mediaId,
+    required this.anchorCueId,
+    required this.paragraphIndex,
+    required this.updatedAtMs,
+  });
+
+  final String trackId;
+  final String? mediaId;
+  final String anchorCueId;
+  final int paragraphIndex;
+  final int updatedAtMs;
+
+  factory ReadingPositionView.fromJson(Map<String, dynamic> json) =>
+      ReadingPositionView(
+        trackId: json['track_id'] as String,
+        mediaId: json['media_id'] as String?,
+        anchorCueId: json['anchor_cue_id'] as String,
+        paragraphIndex: (json['paragraph_index'] as num).toInt(),
+        updatedAtMs: (json['updated_at_ms'] as num).toInt(),
+      );
+}
+
 /// Tunable inputs for paragraph derivation. Defaults were calibrated on two
 /// real content classes (Slice 0 spike): whisper-generated news transcripts
 /// are ~99% gapless so punctuation and size carry the structure, while

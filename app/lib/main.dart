@@ -127,6 +127,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   final readingController = ReadingController();
   // Restores the pre-reading play state when the reading posture closes.
   bool _resumePlaybackAfterReading = false;
+  Timer? _readingSaveTimer;
+  String? _lastSavedReadingAnchor;
   final extensiveListeningController = ExtensiveListeningController();
   final huntingController = HuntingController();
   final huntingSessionController = HuntingSessionController();
@@ -220,6 +222,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   @override
   void initState() {
     super.initState();
+    readingController.addListener(_scheduleReadingPositionSave);
     _workbenchAnimController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -814,17 +817,62 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (track == null) return;
     _resumePlaybackAfterReading = playerController.playing;
     await adapter.pause();
+    // Restore the saved reading cursor; a fetch failure just starts from the
+    // top (the cursor is a convenience, never a gate).
+    String? resumeAnchor;
+    try {
+      final saved = await api?.readingPosition(track.id);
+      resumeAnchor = saved?.anchorCueId;
+    } catch (_) {}
+    _lastSavedReadingAnchor = resumeAnchor;
     readingController.open(
       track,
       secondaryTrack: subtitleController.secondaryTrack,
+      resumeAnchorCueId: resumeAnchor,
     );
   }
 
   Future<void> _closeReading() async {
+    _readingSaveTimer?.cancel();
+    unawaited(_saveReadingPosition());
     readingController.close();
     if (_resumePlaybackAfterReading) {
       _resumePlaybackAfterReading = false;
       await adapter.play();
+    }
+  }
+
+  /// Debounced cursor write: paragraph taps arrive in bursts while the user
+  /// settles; only the resting anchor is worth a backend round trip.
+  void _scheduleReadingPositionSave() {
+    final state = readingController.state;
+    if (!state.open ||
+        state.anchorCueId == null ||
+        state.anchorCueId == _lastSavedReadingAnchor) {
+      return;
+    }
+    _readingSaveTimer?.cancel();
+    _readingSaveTimer = Timer(const Duration(milliseconds: 800), () {
+      unawaited(_saveReadingPosition());
+    });
+  }
+
+  Future<void> _saveReadingPosition() async {
+    final state = readingController.state;
+    final trackId = state.trackId;
+    final anchor = state.anchorCueId;
+    if (trackId == null || anchor == null) return;
+    if (anchor == _lastSavedReadingAnchor) return;
+    try {
+      await api?.saveReadingPosition(
+        trackId: trackId,
+        mediaId: subtitleController.primaryTrack?.mediaId,
+        anchorCueId: anchor,
+        paragraphIndex: state.anchorParagraphIndex,
+      );
+      _lastSavedReadingAnchor = anchor;
+    } catch (_) {
+      // Cursor writes are best-effort; the next tap retries.
     }
   }
 
@@ -1163,6 +1211,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     learningController.dispose();
     practiceController.dispose();
     slicePlayerController.dispose();
+    _readingSaveTimer?.cancel();
+    readingController.removeListener(_scheduleReadingPositionSave);
     readingController.dispose();
     extensiveListeningController.dispose();
     huntingController.dispose();
