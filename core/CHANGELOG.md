@@ -2,6 +2,87 @@
 
 ## Unreleased
 
+- 2026-07-15 21:53 CST: Phase 3.13.5 正式收口并以实际底盘修订 3.14–3.18 PLAN。
+  3.14 Speaking Studio 升为 READY v2 并新增 Reference Matrix；后续统一采用内容通道与
+  资产旅程的混合导航，任务共享层收窄为第二住户验证后抽取的生命周期 interface，明确
+  禁止复制 Reading controller、固定三栏、常驻反馈与多阶段弹层。
+
+- 2026-07-15 20:30 CST: Phase 3.13.5 真实媒体走查修复阅读查词的可见出口：整面
+  阅读器不再把已更新的词汇状态藏在旧 SidePanel 中；显式点击单词后，宽窗口展开
+  360–460px 当前单词右侧栏，窄窗口使用可关闭覆盖层。收起不清空选择、不改变阅读
+  游标；词汇状态、能力覆盖、阅读标记、来源回听与听力词典继续复用既有语义。阅读器
+  同时补齐词汇概览及“干净正文 / 阅读标记 / 听力推测”分离视图，不合成含混认识率。
+
+- 2026-07-15 19:51 CST: Phase 3.13.5 进入 Flutter 实施前清偿裁决一致性：PLAN 的
+  Scope/Key Work 改写为混合导航与阶段自适应容器，明确保留首次 manual rubric 创建、
+  append-only 重做、来源 capability gating 与单一音频焦点；PROJECT/REQUIREMENTS/
+  ROADMAP/STATE 同步内容会话 + 资产驱动两条旅程，新增 UI-018 验收口径。
+
+- 2026-07-15 19:34 CST: Phase 3.13.5 Slice 0 走查裁决落地 + 原型 v2。owner+codex
+  评审结论"方向通过、布局退回"写入 PLAN（五项裁决表）；宏观旅程讨论（参照
+  每日英语听力"资源首页→学习页→模式菜单"）后导航定为**混合模型**：首页 +
+  内容工作台（听/读/说/写通道切换器一跳、听保留三子姿态、⌘1–4）+ 资产层
+  （词典/复习/我的表达/Coach 承接跨媒体任务），四通道平级 Studio rail 不建
+  （field razor）。原型 v2 重做七屏：首页（分组 rail + 四通道进度继续卡 +
+  到期资产 + 全局迷你播放条）、工作台通道切换（含退出/返回语义注记）、
+  阅读器 v2（默认干净、翻译默认隐藏、词汇概览分列阅读标记/听力推测不合成
+  认识率、透镜三态分视图、句子 hover/点击选中/键盘聚焦）、任务容器阶段
+  自适应（作答期反馈隐藏防泄露、口语录音中心化、写作编辑器≥60%、stepper
+  不可跳未来、含可重做）、表面行为约束（白名单→行为规则）。补 meta charset。
+  Reference Matrix v2：逐项"明确不借鉴"列、新增每日英语听力参考行、裁决
+  状态节。维护债清偿：外部参考库 §2 着色表述对齐词汇透镜裁决（PROJECT/
+  REQUIREMENTS 核对无矛盾无需改）。浏览器实测：本地 HTTP 干净加载下七屏
+  渲染与全部交互（透镜/概览/任务三阶段/录音状态机/反馈请求制）通过；
+  Artifact 已更新同 URL。
+
+- 2026-07-15 18:41 CST: Phase 3.13.5 Slice 0 交付：低保真 HTML 原型
+  `spikes/studio-shell-ux-prototype/index.html`（七屏，底部切换条 + 方向键：
+  A 姿态扩展 / B Studio 切换两导航候选各带取舍与裁决点；C 阅读器——干净/
+  词汇透镜一键切换、着色来源诚实区分（实线=阅读标记、虚线=听力证据/投影）、
+  句子悬停工具栏替代 chip 排、材料级词汇概览；D/E/F 共享任务容器三区布局
+  （来源/产出/反馈 + 阶段常显 stepper）分别入住 3.13 阅读任务、3.14 录音
+  循环骨架（可交互状态机 mock）、3.15 写作分层反馈骨架；G 表面语法规则
+  草案含现状六表面迁移映射）。已发布为 Artifact 供 owner 走查。同步交付
+  `3.13.5-REFERENCE-MATRIX.md`（借鉴/不借鉴/契约映射/证据等级 + 表面规则
+  草案 + 五项待裁决清单）。PLAN guardrail 按 owner 意见修正：全文词汇状态
+  着色从禁项改为"词汇透镜"（防 Lute 记账语义与通道误导，默认态随 Slice 0
+  裁决）。浏览器实测七屏渲染与交互（透镜/录音状态机/stepper）通过。
+
+- 2026-07-15 14:59 CST: 立项 Phase 3.13.5 Studio Shell UX（owner 裁决）。owner
+  确认四个 UX 痛点（阅读不像阅读为核心、入口藏深、表面类型六种无规则、任务
+  流繁琐），确立"场景原生 UX"原则（阅读像阅读器，听/说/写各符合其场景），
+  沿 3.35 插入式 UI phase 先例在 3.14 前插入独立 phase。PLAN 交付范围：Slice 0
+  低保真原型把门（导航模型两候选 + 阅读器化 + 共享任务容器 + 3.14/3.15 骨架
+  预演 + Reference Matrix）、导航与入口落地、阅读器化正文（文内工具栏替代
+  chip 排）、共享任务容器迁入 3.13 任务流、真实媒体走查（合并 3.13 剩余
+  owner 走查项）。guardrail：只改承载方式不改学习语义、低保真裁决前不写
+  Flutter、不重开 3.35 听力工作台改版。STATE 决策/下一步更新，3.14 PLAN 上游
+  输入增补 3.13.5 依赖。
+
+- 2026-07-15 14:42 CST: 修复 3.13 owner GUI 走查首个缺陷：阅读姿态"听整段"/
+  逐句 chip 与听测面板播放全部无法回听。根因：`_playReadingRange` 与
+  ListeningCheckPanel 手写的 occurrence map 缺 `media_fingerprint_snapshot`，
+  共享 `OccurrenceMediaResolver` 在 linked-media 路径之前即以 invalidSnapshot
+  拒绝（后端 QA 为纯 HTTP、widget 测试回调为假，接线层缺口未被覆盖）。修复：
+  occurrence 构造收敛为 `currentMediaSliceOccurrence` helper（归属 resolver
+  文件，形状契约单一来源），两个调用点携带当前播放器 fingerprint；fingerprint
+  缺席仍诚实降级为显式错误。新增
+  `test/reading_slice_occurrence_test.dart` 回归（helper→resolver 真实链路 +
+  降级用例）。验证：flutter analyze 零问题、flutter test 409 全绿。
+
+- 2026-07-15 13:45 CST: Studio 3.13–3.16 外部参考库入库。将 owner 委托 codex 的
+  外部项目调研经批判性修订后收入
+  `.planning/discuss/studio-3.13-3.16-external-reference-library.zh.md`：A 级
+  优先级按 3.13 CODE COMPLETE 现状重排（3.13 参考降级为 GUI 走查对照 +
+  Slice 7 预备，A 级集中到下一 phase 3.14：Sentence Paths / H5P Speak the
+  Words / iSpraak，Harper spike 可提前排）；Reference Matrix 模板新增
+  "对应既有契约/不变量"与"证据等级"必填列（3.13 v2→v2.1 validator 证伪
+  教训 + evidence-class 纪律）；H5P Essay 从"无 LLM 默认路径"重定位为
+  "目标表达字面命中"客观展示参考（无 LLM 路径维持 rubric 对照 + 自评）；
+  剔除正文无依据的 ReadingTree/InsightGUIDE；闭源 Sentence Paths 标注
+  heuristic_proxy。3.14/3.15/3.16 PLAN 各增"外部参考输入"节并要求开工
+  修订时建立各自 REFERENCE-MATRIX。STATE 下一步工作同步指针。
+
 - 2026-07-15 03:30 CST: Phase 3.13 Slice 6 完成 + phase CODE COMPLETE。真实媒体后端
   全链路 QA：隔离 DB + 真实 sidecar + CNN10 真实 mp4/244 句 whisper 转写，新闻段
   20/20 通过（位置往返、rubric 409→lookup 恢复、阅读 attempt/自评/adjudication、
