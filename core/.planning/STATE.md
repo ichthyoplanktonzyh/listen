@@ -8,17 +8,22 @@ last_updated: "2026-07-14T21:30:00.000+08:00"
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-14 21:30 CST
-> 更新原因：Phase 3.9.4 SenseGroup UX Unification 收口。
+> 最后更新：2026-07-15 03:20 CST
+> 更新原因：Phase 3.13 Reading Studio v1 CODE COMPLETE。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.9.4 SenseGroup UX Unification 已完成并合回 main：修复
-  语义分组"分析→SQLite 持久化→激活→前端显示"四层断链（batch 直接持久化 + 幂等
-  激活 + cache-hit 补偿 + Flutter 文本回退触发），并按 ADR 0016 投影方案获得播放
-  跟随/点击跳转与实线胶囊视觉对等；后端全链路已在真实媒体 + 真实 spaCy capability
-  上实测（见 `3.9.4-REAL-MEDIA-QA.md`），GUI 交互项留有 owner 清单。下一执行 phase
-  仍为 3.13 Reading Studio v1 或可并行的 3.12.1 LLM Judge Qualification。
+- **当前执行主线**：Phase 3.13 Reading Studio v1 已 CODE COMPLETE（2026-07-15 起由
+  Claude 全程实现，codex 无额度）：阅读姿态（派生段落布局 + 独立 v37 位置游标 +
+  切片窗回听不动主播放）、段落任务（manual rubric + 自评走 3.11 append-only 族，
+  首个 semantic Dart DTO consumer + additive rubric lookup 读端点）、读听差异
+  （v2.1 修正：同 segment 双 rubric 事实并置，四象限 possibilities）、词级阅读
+  证据仅显式标记（`ReadingContextMarking`，零 projection）。真实 CNN10 媒体后端
+  全链路 20/20 + 对话段通过；owner GUI 走查清单见
+  `.planning/phases/3.13-reading-studio-v1/3.13-REAL-MEDIA-QA.md` §3。owner 并行
+  推进 3.12.1 judge 资格验证；LLM 反馈接线（PLAN Slice 7）随其裁决。
+- Phase 3.9.4 已收口合回 main（语义分组四层断链修复 + ADR 0016 投影交互对等，
+  见 `3.9.4-REAL-MEDIA-QA.md`，GUI 交互项留 owner 清单）。
 - Phase 3.9.3 已完成并冻结；spaCy syntax capability 已具 App 内 opt-in
   install/update/cancel/validate/disable/uninstall、持久七态、resident sidecar、整轨 fingerprint
   cache 与 Flutter 静默后台分析。下一执行 phase 仍为 3.13 Reading Studio v1 或可并行的
@@ -312,6 +317,7 @@ last_updated: "2026-07-14T21:30:00.000+08:00"
 | 3.10 Coach Dashboard | 诊断型 dashboard 聚合 durable 事实 + 规则建议 + channel-ready envelope + starter 降级 | `.planning/phases/3.10-coach-dashboard/3.10-CLOSEOUT.md` |
 | 3.11 Semantic Task Evidence Foundation | 四层事实分离（attempt/judgment/observation/capability）+ 版本化 rubric + 逐点判定含 abstain + adjudication；schema v35 append-only；ADR 0021；零 observation/projection writer | `.planning/phases/3.11-semantic-task-evidence-foundation/3.11-CLOSEOUT.md` |
 | 3.12 Vendor-neutral LLM Provider | 两异构协议 adapter（OpenAI Chat + Anthropic Messages）过同一契约套件证中立；draft-not-domain-type + 四层分离经 LLM 路径成立；OS keychain + auth_ref 密钥不落普通存储；诚实降级；Flutter 设置 UI；schema v36；ADR 0022；判定默认不获显示资格（属 3.12.1）。CODE COMPLETE，owner 真实 provider 端到端 QA 待做 | `.planning/phases/3.12-vendor-neutral-llm-provider/3.12-CLOSEOUT.md` |
+| 3.13 Reading Studio v1 | 阅读姿态（派生段落 + v37 位置游标 + 切片回听）+ 段落任务（manual rubric + 自评，semantic DTO 首个 consumer + rubric lookup）+ 读听差异（同 segment 双 rubric 并置四象限）+ ReadingContextMarking 显式词级证据；真实媒体后端 20/20；CODE COMPLETE，owner GUI 走查待做 | `.planning/phases/3.13-reading-studio-v1/3.13-CLOSEOUT.md` |
 
 ## 最近重要决策
 
@@ -401,10 +407,11 @@ last_updated: "2026-07-14T21:30:00.000+08:00"
 
 ## 下一步工作
 
-1. **Phase 3.9（已收口）**：3.9.3 已交付可选 syntax App lifecycle；后续若继续加固独立 CDN/
-   下载签名/notarization，须新建 packaging phase，不回写冻结产物。
-2. **Phase 3.13 / 3.12.1（下一主线）**：3.12 已 CODE COMPLETE；Reading Studio 与 LLM Judge
-   Qualification 按各自 PLAN 开工。3.12 增量协议 Slice 4 仍按 owner 真实需求排期。
+1. **Phase 3.13 收尾（owner 门）**：GUI 走查清单（`3.13-REAL-MEDIA-QA.md` §3）；
+   通过后 phase 完全收口。LLM 反馈接线（3.13 PLAN Slice 7）随 owner 3.12.1 资格
+   裁决点亮或记录性跳过。
+2. **下一执行 phase**：3.14 Speaking Studio v1（开工前按 3.8 recording 资产与 3.13
+   落地现状修订 PLAN）；3.12 增量协议 Slice 4 与 owner 真实 provider QA 仍按需排期。
 3. "收藏句 → 个人模板"的用户价值验证收敛到 Phase 3.16（3.4.3 结论待兑现）。
 4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。

@@ -20,6 +20,11 @@ pub enum ObservationTaskType {
     Shadowing,
     ReviewRecall,
     UpgradeConfirmation,
+    /// Explicit "understood / didn't understand while reading" mark from the
+    /// reading posture (Phase 3.13). Reading-channel counterpart of
+    /// [`ObservationTaskType::ContextMarking`]; never written by paragraph
+    /// task results — only by a direct user act on one word.
+    ReadingContextMarking,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,6 +120,30 @@ pub fn observation_spec_for_marking(result: ObservationResult) -> ObservationSpe
         outcome: match result {
             ObservationResult::RecognizedInContext => ObservationOutcome::Success,
             ObservationResult::NotRecognizedInContext => ObservationOutcome::Failure,
+        },
+    }
+}
+
+/// Reading-posture word marking (Phase 3.13). Assistance records whether a
+/// translation was visible at marking time: only `None`-assistance reading
+/// observations can later support a reading `acquired` conclusion on their
+/// own, mirroring the listening invariant.
+pub fn observation_spec_for_reading_marking(
+    understood: bool,
+    translation_visible: bool,
+) -> ObservationSpec {
+    ObservationSpec {
+        task_type: ObservationTaskType::ReadingContextMarking,
+        capability: LexicalCapability::Reading,
+        assistance: if translation_visible {
+            AssistanceLevel::FullText
+        } else {
+            AssistanceLevel::None
+        },
+        outcome: if understood {
+            ObservationOutcome::Success
+        } else {
+            ObservationOutcome::Failure
         },
     }
 }

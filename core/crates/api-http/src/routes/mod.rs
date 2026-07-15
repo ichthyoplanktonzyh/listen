@@ -9,6 +9,7 @@ pub(crate) mod media;
 pub(crate) mod phonetic_analysis;
 pub(crate) mod practice;
 pub(crate) mod pronunciation;
+pub(crate) mod reading;
 pub(crate) mod semantic;
 pub(crate) mod sound_line;
 pub(crate) mod speech;

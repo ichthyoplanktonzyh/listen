@@ -68,6 +68,37 @@ pub(crate) struct SemanticRubricQuery {
     version: Option<u32>,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct SemanticRubricLookupQuery {
+    media_id: Option<String>,
+    start_ms: u64,
+    end_ms: u64,
+    purpose: SemanticTaskKind,
+    response_language: String,
+    source_sha256: String,
+}
+
+/// Read-side rubric lookup by source identity (Phase 3.13): the client knows
+/// the segment and snapshot hash but not the server-minted fingerprint id.
+pub(crate) async fn lookup_semantic_rubric(
+    State(state): State<ApiState>,
+    Query(query): Query<SemanticRubricLookupQuery>,
+) -> Result<Json<Option<SemanticRubric>>, ApiError> {
+    state
+        .services
+        .semantic()
+        .find_rubric_for_source(
+            query.media_id.as_deref(),
+            query.start_ms,
+            query.end_ms,
+            query.purpose,
+            &query.response_language,
+            &query.source_sha256,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 pub(crate) async fn semantic_rubric(
     State(state): State<ApiState>,
     Path(id): Path<String>,

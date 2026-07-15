@@ -10,7 +10,7 @@ use crate::{
     ObservationOrigin, ObservationResult, ObservationSpec, RecognitionEvidenceSourceKind,
     SubtitleSentenceId, VocabularyAssetBundle, clean_optional, clean_required,
     learning_observation_id, listening_projection_v1, normalize_lemma, normalize_phrase, now_ms,
-    observation_spec_for_marking, require_text,
+    observation_spec_for_marking, observation_spec_for_reading_marking, require_text,
 };
 
 /// Marks capability projections inferred from a legacy linear status write,
@@ -382,6 +382,40 @@ impl LexicalLearningUseCases {
             )?;
         self.sync_legacy_status_from_profile(lexical_entry_id, &profile)?;
         Ok(())
+    }
+
+    /// Reading-posture word marking (Phase 3.13 Slice 5): one explicit user
+    /// act on one word writes exactly one reading-channel observation.
+    /// Deliberately narrower than the listening marking path — no legacy
+    /// `LexicalObservation` row, no recognition evidence, and no projection
+    /// (reading has no qualified automatic projection until 3.17; the
+    /// channelized writer only reprojects the listening channel).
+    pub fn record_reading_marking(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        sentence_id: Option<&SubtitleSentenceId>,
+        surface_form: &str,
+        media_id: Option<MediaId>,
+        translation_visible: bool,
+        understood: bool,
+    ) -> Result<(), ApplicationError> {
+        require_text(surface_form, "surface_form")?;
+        self.lexical_entries
+            .lexical_details(lexical_entry_id)?
+            .ok_or(ApplicationError::NotFound("lexical entry"))?;
+        let occurred_at_ms = now_ms();
+        self.append_channelized_observation(
+            lexical_entry_id,
+            observation_spec_for_reading_marking(understood, translation_visible),
+            ObservationContext {
+                surface_form: Some(surface_form.to_owned()),
+                sentence_id: sentence_id.cloned(),
+                media_id,
+            },
+            ObservationOrigin::UserMarking,
+            sentence_id.map(|id| format!("reading-marking:{}", id.as_str())),
+            occurred_at_ms,
+        )
     }
 
     pub fn create_lexical_observation(

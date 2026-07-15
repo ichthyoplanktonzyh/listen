@@ -1,7 +1,8 @@
 use application::{ApplicationError, SemanticTaskRepository};
 use domain::{
-    JudgmentAdjudication, MediaId, SemanticJudgment, SemanticJudgmentId, SemanticRubric,
-    SemanticRubricId, SemanticTaskAttempt, SemanticTaskAttemptId, transcript_sha256,
+    JudgmentAdjudication, LanguageCode, MediaId, SemanticJudgment, SemanticJudgmentId,
+    SemanticRubric, SemanticRubricId, SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind,
+    transcript_sha256,
 };
 use rusqlite::{OptionalExtension, Row, params};
 
@@ -78,6 +79,39 @@ impl SemanticTaskRepository for SqliteRepository {
                 "SELECT rubric_json FROM semantic_rubrics
                  WHERE id=?1 ORDER BY version DESC LIMIT 1",
                 [id.as_str()],
+                rubric_from_row,
+            )
+            .optional()
+            .map_err(repo)
+    }
+
+    fn find_semantic_rubric_by_source(
+        &self,
+        media_id: Option<&MediaId>,
+        start_ms: u64,
+        end_ms: u64,
+        purpose: SemanticTaskKind,
+        response_language: &LanguageCode,
+        source_sha256: &str,
+    ) -> Result<Option<SemanticRubric>, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .query_row(
+                // `purpose` is stored JSON-encoded (with quotes) by
+                // save_semantic_rubric; encode the probe the same way.
+                "SELECT rubric_json FROM semantic_rubrics
+                 WHERE media_id IS ?1 AND start_ms=?2 AND end_ms=?3
+                   AND purpose=?4 AND response_language=?5 AND source_sha256=?6
+                 ORDER BY version DESC LIMIT 1",
+                params![
+                    media_id.map(MediaId::as_str),
+                    start_ms,
+                    end_ms,
+                    json(&purpose)?,
+                    response_language.as_str(),
+                    source_sha256,
+                ],
                 rubric_from_row,
             )
             .optional()

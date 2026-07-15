@@ -2,6 +2,100 @@
 
 ## Unreleased
 
+- 2026-07-15 03:30 CST: Phase 3.13 Slice 6 完成 + phase CODE COMPLETE。真实媒体后端
+  全链路 QA：隔离 DB + 真实 sidecar + CNN10 真实 mp4/244 句 whisper 转写，新闻段
+  20/20 通过（位置往返、rubric 409→lookup 恢复、阅读 attempt/自评/adjudication、
+  听侧独立 rubric + 隐藏文本 attempt、读听两侧可发现、真实词条阅读标记 204 且零
+  projection），对话段（31 个 speaker-turn cue）rubric/attempt/judgment 通过；形成
+  可追溯读听差异结论（read=yes / listen=partial → diffMixed）。撰写
+  `3.13-REAL-MEDIA-QA.md`（含 owner GUI 走查清单）与 `3.13-CLOSEOUT.md`，PLAN 置
+  CODE COMPLETE，STATE 更新（下一 phase 3.14；Slice 7 LLM 接线随 owner 3.12.1
+  裁决）。
+
+- 2026-07-15 02:30 CST: Phase 3.13 Slice 5 完成：reading observation writer（显式标记）。
+  domain 显式扩展封闭枚举 `ObservationTaskType::ReadingContextMarking` +
+  `observation_spec_for_reading_marking`（capability=Reading；assistance 按标记时翻译
+  可见性记 FullText/None——只有无辅助的阅读观察未来才可能独立支撑 acquired，镜像
+  listening 不变量）；application `record_reading_marking` 刻意窄于 listening 标记路径
+  （不写 legacy LexicalObservation、不写 recognition evidence、零 projection——channelized
+  writer 只对 Listening 通道重投影，结构性成立）；HTTP `POST /v1/reading/markings` +
+  OpenAPI。Flutter：`WordLearningPanel` 在阅读姿态下显示"读懂了/读不懂"按钮（词点击
+  经合成 token 映射回真实 cue，sentence 上下文正确）。负向测试：阅读标记不漏入
+  listening 通道/legacy 表/projection/history，未知词条 404 且零写入；无翻译标记为
+  None-assistance。验证：domain/application/persistence/api-http 12 套件全绿（persistence
+  reading 6 项、api-http reading 4 项），validate-contracts 通过，flutter analyze 零问题 /
+  test 406 全绿。
+
+- 2026-07-15 01:55 CST: Phase 3.13 Slice 4 完成：只听对照 + 读听差异解释卡。PLAN 记
+  v2.1 修正：v2"同 rubric 双条件配对"被 3.11 validator 证伪（ReadingComprehension 强制
+  文本可见、复述类强制隐藏），改为**同 source segment 双 rubric 事实并置**（阅读理解 vs
+  L1 复述），不改 3.11 契约。实现：`ReadingTaskController` 泛化 purpose（听侧 attempt
+  诚实记 source_text_visible=false + l1_trigger=user_requested + 实际播放次数，UI 强制
+  至少听一遍才可提交）；听测以 `ListeningCheckPanel` 整面替换阅读视图（文本因此天然
+  隐藏，且刻意非模态——切片窗保持可操作）；复述模板优先镜像阅读侧 rubric points；
+  `reading_diff.dart` 纯归约（adjudication 最新者生效 → 必答点 yes/partial/no/
+  unassessed，abstain/缺席=未评估不算失败）+ `ReadingDiffController` 读端聚合（跨
+  rubric 不做逐点比较）+ 四象限 possibilities 解释卡对话框；阅读视图锚定段落新增
+  "读听对照"chip。验证：flutter analyze 零问题 / test 406 全绿（新增 diff 归约 6 项、
+  explanation 1 项、diff controller 2 项、听侧条件 payload 1 项）。
+
+- 2026-07-15 01:10 CST: Phase 3.13 Slice 3 完成：段落任务全链路（manual rubric + 自评）。
+  后端新增 additive 读端点 `GET /v1/semantic/rubrics/lookup`（按 source 身份六元组查最新
+  rubric——客户端无法重推服务端 fingerprint id，409 后无从定位既有 rubric 是真实缺口；
+  repository/use case/OpenAPI/route-drift 齐备）。Flutter：semantic DTO 首个真实 consumer
+  落地（`models/semantic_task.dart` 手写 + 直接 pin `gold-fixture-v1.json` 的 5 项契约测
+  试）、`SemanticApi` part（sha256 与 Rust `transcript_sha256` 对齐）、`ReadingTaskController`
+  状态机（lookup→模板编辑→rubric v1→作答→逐点自评→adjudication；409 并发回退 lookup；
+  覆盖/部分 span 取全响应且按 Unicode scalar 计数）、`ReadingTaskSheet` 底部工作流 +
+  段落"任务"chip + 切片回听计数进 attempt 的诚实 `audio_play_count`。自评 judgment 记
+  `evidence_class=self_assessment` + provenance 注明 span 语义，不冒充 gold；全程零
+  observation/projection 写入。重要契约事实（PLAN v2 裁决 1 修正预告）：3.11 validator
+  规定 ReadingComprehension 必须 source_text_visible=true，同 rubric"只读/只听"配对不成
+  立，Slice 4 读听差异改为同 source segment 双 rubric 事实并置，届时记 PLAN v2.1。验证：
+  Rust workspace 33 套件全绿（api-http 新增 lookup + 客户端 payload 端到端 2 项），clippy
+  零告警，validate-contracts 通过；flutter analyze 零问题 / test 396 全绿（新增 controller
+  5 项、sheet 1 项、契约 5 项）。
+
+- 2026-07-15 00:05 CST: Phase 3.13 Slice 2 完成：阅读位置持久化。schema v37
+  `reading_positions`（track 键控 upsert，刻意非 append-only——位置是游标不是证据）；
+  domain `ReadingPosition` + `ReadingPositionRepository` trait（Disabled 降级：读回 None
+  写报错）+ `ReadingUseCases`（空 anchor 拒绝）+ SQLite 实现；HTTP
+  `GET/PUT /v1/reading/positions/{track_id}` + OpenAPI 路径与 `ReadingPosition` schema
+  （route-drift 门通过）。Flutter：`ReadingPositionView` 手写 DTO + fixture 契约测试
+  （ADR 0014）、`ReadingApi` part、进入阅读姿态时恢复游标（拉取失败静默从头开始）、
+  段落锚定 800ms 防抖写入 + 关闭时冲刷、失败 best-effort 不打扰。验证：cargo
+  workspace 33 套件全绿（persistence 113 含新增 3 项、api-http 含新增 2 项路由测试）、
+  clippy 无新告警、validate-contracts 通过、flutter analyze 零问题 / test 385 全绿。
+
+- 2026-07-14 23:05 CST: Phase 3.13 Slice 1 完成：阅读姿态 UI 骨架。新增
+  `ReadingController`（Store 模式：paragraphs 派生、anchorCueId 阅读游标、翻译投影按
+  段落时间范围中点匹配副字幕轨）与 `ReadingView`（替换 MediaWorkbench 播放区：段落流
+  排版、词点击经合成 token 映射回真实 cue 进词汇面板、锚定段落显示整段/逐句回听 chip
+  走 3.5.7 切片窗、翻译全局开关、非语音分隔段弱化显示、进入时暂停主播放/退出恢复原
+  播放状态）。`composeParagraphCue` 合成段落 cue 复用 TokenLine 流排（TokenLine 新增
+  textAlign 参数，默认 center 不变）；side panel 姿态区新增"读一下？"入口（有 track
+  即可用，不要求当前句）。ReadingView 自监听 controller。新增 9 项 controller/组合/
+  widget 测试；flutter analyze 零问题，flutter test 383 全绿。
+
+- 2026-07-14 22:25 CST: Phase 3.13 Slice 0 完成：段落 read model spike 通过。真实数据
+  证伪 PLAN v1 的"gap 阈值分段"假设（whisper 转写 244 cue 仅 2 个非零间隙），落地
+  两级派生纯函数 `deriveReadingParagraphs`（标点/说话人/间隙/runaway 断句 → 说话人/
+  间隙/词数软上限组段，非语音 cue 成分隔段，段落身份=首 cue id）；`♪` 计句终符、
+  含词歌词行算阅读内容。新闻 49 段中位 37 词、歌词 8 段中位 49 词，目检通过。新增
+  dev 工具 `dump_sentences`（Rust example，产线切句导出）与 `paragraph_spike.dart`；
+  12 项单测，flutter analyze 零问题 / test 374 全绿，clippy/fmt 通过。结论与已知
+  限制见 `3.13-SLICE0-SPIKE.md`。
+
+- 2026-07-14 21:55 CST: Phase 3.13 Reading Studio v1 开工：PLAN 按上游落地现状修订为
+  v2 并建分支 `claude/3.13-reading-studio-v1`。关键裁决：读听差异直接骑在 3.11
+  `SemanticTaskConditions`（source_text_visible/audio_play_count）+
+  `judgments_directly_comparable` 上，读端派生聚合、不新增权威表；段落 read model
+  为派生投影不落库；阅读位置定为 v37 upsert cursor 不进 append-only 事实族；无 LLM
+  默认路径 = manual rubric + 用户自评 manual judgment；semantic Dart DTO 由本 phase
+  作为首个真实 consumer 交付（ADR 0014）；reading observation 收窄为用户显式标记
+  （capability=Reading）；provider-backed rubric/judgment 为后置切片，跟随 owner
+  3.12.1 资格裁决。执行方式变更：本 phase 起由 Claude 全程实现（codex 无额度）。
+
 - 2026-07-14 21:30 CST: Phase 3.9.4 收口。Slice 4 QA：Rust workspace 614 tests、
   clippy strict、fmt、contracts、flutter analyze/test 362 全绿；隔离 DB + 真实 spaCy
   capability + 两条真实字幕轨道的后端 HTTP 全链路实测通过（持久化/激活/幂等/

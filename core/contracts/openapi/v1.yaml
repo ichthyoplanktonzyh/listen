@@ -1331,6 +1331,61 @@ paths:
                     id: { type: string }
                     occurred_at_ms: { type: integer, minimum: 0 }
                     result: { type: string }
+  /v1/reading/positions/{track_id}:
+    get:
+      operationId: readingPosition
+      description: >
+        Phase 3.13 reading cursor: one overwritable row per subtitle track.
+        Deliberately not append-only — the position is a cursor, not
+        evidence; reading history lives in the semantic-task family.
+      parameters:
+        - name: track_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The saved reading position, or null when never saved.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/ReadingPosition" }
+                  - { type: "null" }
+        default:
+          $ref: "#/components/responses/Error"
+    put:
+      operationId: saveReadingPosition
+      parameters:
+        - name: track_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [anchor_cue_id, paragraph_index]
+              properties:
+                media_id:
+                  type: [string, "null"]
+                anchor_cue_id:
+                  type: string
+                  description: First cue id of the paragraph the reader is at.
+                paragraph_index:
+                  type: integer
+                  minimum: 0
+                  description: Display hint; anchor_cue_id is the durable key.
+      responses:
+        "200":
+          description: The upserted reading position.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReadingPosition" }
+        default:
+          $ref: "#/components/responses/Error"
   /v1/semantic/rubrics:
     post:
       operationId: createSemanticRubric
@@ -1360,6 +1415,84 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SemanticRubric" }
+  /v1/reading/markings:
+    post:
+      operationId: recordReadingMarking
+      description: >
+        Explicit reading-posture word marking (Phase 3.13): one user act on
+        one word writes one reading-channel observation. Assistance records
+        whether a translation was visible. Paragraph task results never
+        write word-level observations.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lexical_entry_id, surface_form, translation_visible, understood]
+              properties:
+                lexical_entry_id: { type: string }
+                sentence_id: { type: [string, "null"] }
+                surface_form: { type: string }
+                media_id: { type: [string, "null"] }
+                translation_visible: { type: boolean }
+                understood: { type: boolean }
+      responses:
+        "204":
+          description: Observation appended (idempotent on identical replay).
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/semantic/rubrics/lookup:
+    get:
+      operationId: lookupSemanticRubric
+      description: >
+        Read-side rubric lookup by source identity (Phase 3.13). Returns the
+        latest version matching the segment, purpose, response language, and
+        source snapshot hash, or null — clients cannot re-derive the
+        server-minted fingerprint id.
+      parameters:
+        - { name: media_id, in: query, schema: { type: string } }
+        - {
+            name: start_ms,
+            in: query,
+            required: true,
+            schema: { type: integer, minimum: 0 },
+          }
+        - {
+            name: end_ms,
+            in: query,
+            required: true,
+            schema: { type: integer, minimum: 0 },
+          }
+        - {
+            name: purpose,
+            in: query,
+            required: true,
+            schema: { $ref: "#/components/schemas/SemanticTaskKind" },
+          }
+        - {
+            name: response_language,
+            in: query,
+            required: true,
+            schema: { type: string },
+          }
+        - {
+            name: source_sha256,
+            in: query,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200":
+          description: The latest matching rubric, or null.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/SemanticRubric" }
+                  - { type: "null" }
+        default:
+          $ref: "#/components/responses/Error"
   /v1/semantic/rubrics/{id}:
     get:
       operationId: semanticRubric
@@ -4392,6 +4525,18 @@ components:
         skipped: { type: integer, minimum: 0 }
         overwritten: { type: integer, minimum: 0 }
         invalid: { type: integer, minimum: 0 }
+    ReadingPosition:
+      type: object
+      required:
+        [track_id, media_id, anchor_cue_id, paragraph_index, updated_at_ms]
+      properties:
+        track_id: { type: string }
+        media_id: { type: [string, "null"] }
+        anchor_cue_id:
+          type: string
+          description: Paragraph anchor — the paragraph's first cue id.
+        paragraph_index: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
     LearnerProfileView:
       type: object
       required: [l1_language, ui_language, active_l2_language, updated_at_ms]

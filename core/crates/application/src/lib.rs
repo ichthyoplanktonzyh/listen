@@ -29,22 +29,22 @@ use domain::{
     PracticeAttempt, PracticeAttemptId, PracticeEvaluation, PracticeItem, PracticeItemId,
     PracticeKind, PracticeMode, PracticeResult, PracticeSession, PracticeSessionId, PracticeTarget,
     PracticeTargetKind, PracticeTokenEvaluation, PracticeTokenResult, PronunciationProviderInfo,
-    RecognitionEvidence, RecognitionEvidenceId, RecognitionEvidenceSourceKind, ReviewAttempt,
-    ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewRating, ReviewSchedule,
-    ReviewSource, ReviewSourceKind, RhythmFrameId, SemanticJudgment, SemanticJudgmentId,
-    SemanticRubric, SemanticRubricId, SemanticTaskAttempt, SemanticTaskAttemptId, SenseGroup,
-    SenseGroupAnalysis, SenseGroupAnalysisId, SenseGroupAnalysisSummary, SenseGroupId,
-    SentenceDiagnosis, SentencePronunciation, SoundFitCalibration, SoundFitInputs,
-    SubtitleSentence, SubtitleSentenceId, SubtitleToken, SubtitleTokenKind, SubtitleTrack,
-    SubtitleTrackId, SubtitleTrackStatus, SyntacticAnalysis, TimeMs, TimelineCreator,
-    TimelineMetrics, TimelineStatus, TimingSource, UpgradeSuggestion, UpgradeSuggestionId,
-    UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation, WordTimeline,
-    WordTimelineId, WordTimelineLifecycleStage, WordTimelineSummary, WordTiming,
+    ReadingPosition, RecognitionEvidence, RecognitionEvidenceId, RecognitionEvidenceSourceKind,
+    ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewRating,
+    ReviewSchedule, ReviewSource, ReviewSourceKind, RhythmFrameId, SemanticJudgment,
+    SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
+    SemanticTaskAttemptId, SemanticTaskKind, SenseGroup, SenseGroupAnalysis, SenseGroupAnalysisId,
+    SenseGroupAnalysisSummary, SenseGroupId, SentenceDiagnosis, SentencePronunciation,
+    SoundFitCalibration, SoundFitInputs, SubtitleSentence, SubtitleSentenceId, SubtitleToken,
+    SubtitleTokenKind, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, SyntacticAnalysis,
+    TimeMs, TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource, UpgradeSuggestion,
+    UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation,
+    WordTimeline, WordTimelineId, WordTimelineLifecycleStage, WordTimelineSummary, WordTiming,
     apply_sound_fit_calibration, content_fit_fingerprint, learning_observation_id,
     listening_projection_v1, meaning_fit, normalize_lemma, observation_spec_for_marking,
-    observation_spec_for_practice, observation_spec_for_review,
-    observation_spec_for_upgrade_confirmation, sound_fit, sound_fit_calibration_outcome,
-    validate_syntactic_analysis,
+    observation_spec_for_practice, observation_spec_for_reading_marking,
+    observation_spec_for_review, observation_spec_for_upgrade_confirmation, sound_fit,
+    sound_fit_calibration_outcome, validate_syntactic_analysis,
 };
 use serde::Serialize;
 
@@ -68,6 +68,7 @@ mod practice;
 mod pronunciation;
 mod pronunciation_providers;
 mod providers;
+mod reading;
 mod recording;
 mod repositories;
 mod secret_store;
@@ -95,6 +96,7 @@ pub use practice::PracticeUseCases;
 pub use pronunciation::PronunciationUseCases;
 pub use pronunciation_providers::*;
 pub use providers::*;
+pub use reading::ReadingUseCases;
 pub use recording::RecordingUseCases;
 pub use repositories::*;
 pub use secret_store::{InMemorySecretStore, SecretStore, SecretStoreError};
@@ -151,6 +153,7 @@ pub struct AppServices {
     pub(crate) corpus: Arc<dyn CorpusIndexRepository>,
     pub(crate) difficulty: Arc<dyn DifficultyRepository>,
     pub(crate) learner_profiles: Arc<dyn LearnerProfileRepository>,
+    pub(crate) reading_positions: Arc<dyn ReadingPositionRepository>,
     pub(crate) coach_dashboard: Arc<dyn CoachDashboardRepository>,
     pub(crate) semantic_tasks: Arc<dyn SemanticTaskRepository>,
     pub(crate) llm_provider_profiles: Arc<dyn LlmProviderProfileRepository>,
@@ -194,6 +197,10 @@ impl AppServices {
 
     pub fn learner_profile(&self) -> LearnerProfileUseCases {
         LearnerProfileUseCases::new(self.learner_profiles.clone())
+    }
+
+    pub fn reading(&self) -> ReadingUseCases {
+        ReadingUseCases::new(self.reading_positions.clone())
     }
 
     pub fn llm_providers(&self) -> LlmProviderUseCases {
@@ -254,6 +261,7 @@ impl AppServices {
             corpus: Arc::new(DisabledCorpusIndexRepository),
             difficulty: Arc::new(DisabledDifficultyRepository),
             learner_profiles: Arc::new(DisabledLearnerProfileRepository),
+            reading_positions: Arc::new(DisabledReadingPositionRepository),
             coach_dashboard: Arc::new(DisabledCoachDashboardRepository),
             semantic_tasks: Arc::new(DisabledSemanticTaskRepository),
             llm_provider_profiles: Arc::new(DisabledLlmProviderProfileRepository),
@@ -309,6 +317,14 @@ impl AppServices {
         learner_profiles: Arc<dyn LearnerProfileRepository>,
     ) -> Self {
         self.learner_profiles = learner_profiles;
+        self
+    }
+
+    pub fn with_reading_position_repository(
+        mut self,
+        reading_positions: Arc<dyn ReadingPositionRepository>,
+    ) -> Self {
+        self.reading_positions = reading_positions;
         self
     }
 
@@ -378,6 +394,28 @@ impl LearnerProfileRepository for DisabledLearnerProfileRepository {
     }
 }
 
+/// Reading positions degrade like learner profiles: reads answer `None`
+/// (fresh start), writes error so a missing store is never silently lossy.
+struct DisabledReadingPositionRepository;
+
+impl ReadingPositionRepository for DisabledReadingPositionRepository {
+    fn save_reading_position(
+        &self,
+        _position: &ReadingPosition,
+    ) -> Result<ReadingPosition, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "reading position repository is not configured".into(),
+        ))
+    }
+
+    fn get_reading_position(
+        &self,
+        _track_id: &SubtitleTrackId,
+    ) -> Result<Option<ReadingPosition>, ApplicationError> {
+        Ok(None)
+    }
+}
+
 /// Semantic tasks require configured persistence: silently accepting facts
 /// would lose evidence, so every method errors instead of degrading.
 struct DisabledSemanticTaskRepository;
@@ -401,6 +439,18 @@ impl SemanticTaskRepository for DisabledSemanticTaskRepository {
     fn latest_semantic_rubric(
         &self,
         _id: &SemanticRubricId,
+    ) -> Result<Option<SemanticRubric>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn find_semantic_rubric_by_source(
+        &self,
+        _media_id: Option<&MediaId>,
+        _start_ms: u64,
+        _end_ms: u64,
+        _purpose: SemanticTaskKind,
+        _response_language: &LanguageCode,
+        _source_sha256: &str,
     ) -> Result<Option<SemanticRubric>, ApplicationError> {
         Err(Self::disabled())
     }

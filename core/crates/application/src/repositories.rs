@@ -13,12 +13,13 @@ use domain::{
     PhoneticAnalysisId, PhoneticAnalysisJob, PhoneticAnalysisJobId,
     PhoneticAnalysisModelDescriptor, PhoneticAnalysisModelId, PhoneticFindingFeedback,
     PhoneticFindingId, PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeItemId,
-    PracticeSession, PracticeSessionId, RecognitionEvidence, RecordingAsset, RecordingAssetId,
-    ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewSchedule,
-    SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
-    SemanticTaskAttemptId, SenseGroupAnalysis, SenseGroupAnalysisId, SentencePronunciation,
-    SoundFitCalibration, SubtitleSentence, SubtitleSentenceId, SubtitleTrack, SubtitleTrackId,
-    SubtitleTrackProvenance, SubtitleTrackStatus, TimeMs, TranscriptionJob, TranscriptionJobId,
+    PracticeSession, PracticeSessionId, ReadingPosition, RecognitionEvidence, RecordingAsset,
+    RecordingAssetId, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus,
+    ReviewSchedule, SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId,
+    SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind, SenseGroupAnalysis,
+    SenseGroupAnalysisId, SentencePronunciation, SoundFitCalibration, SubtitleSentence,
+    SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackProvenance,
+    SubtitleTrackStatus, TimeMs, TranscriptionJob, TranscriptionJobId,
     TranscriptionModelDescriptor, TranscriptionModelId, UpgradeSuggestion, UpgradeSuggestionId,
     UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation, WordTimeline,
     WordTimelineId, WordTiming,
@@ -734,6 +735,19 @@ pub trait LearnerProfileRepository: Send + Sync {
     ) -> Result<Option<LearnerProfile>, ApplicationError>;
 }
 
+/// Reading cursor persistence (Phase 3.13). Upsert semantics: the position
+/// is a cursor, not evidence, so overwriting is the intended behavior.
+pub trait ReadingPositionRepository: Send + Sync {
+    fn save_reading_position(
+        &self,
+        position: &ReadingPosition,
+    ) -> Result<ReadingPosition, ApplicationError>;
+    fn get_reading_position(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<ReadingPosition>, ApplicationError>;
+}
+
 pub trait RecordingRepository: Send + Sync {
     fn save_recording_asset(
         &self,
@@ -766,6 +780,19 @@ pub trait SemanticTaskRepository: Send + Sync {
     fn latest_semantic_rubric(
         &self,
         id: &SemanticRubricId,
+    ) -> Result<Option<SemanticRubric>, ApplicationError>;
+    /// Latest rubric version matching one source identity tuple. Read-side
+    /// lookup so clients can find an existing rubric without re-deriving the
+    /// server-minted fingerprint id (Phase 3.13).
+    #[allow(clippy::too_many_arguments)]
+    fn find_semantic_rubric_by_source(
+        &self,
+        media_id: Option<&MediaId>,
+        start_ms: u64,
+        end_ms: u64,
+        purpose: SemanticTaskKind,
+        response_language: &LanguageCode,
+        source_sha256: &str,
     ) -> Result<Option<SemanticRubric>, ApplicationError>;
     fn save_semantic_attempt(
         &self,
