@@ -43,8 +43,9 @@ use domain::{
     apply_sound_fit_calibration, content_fit_fingerprint, learning_observation_id,
     listening_projection_v1, meaning_fit, normalize_lemma, observation_spec_for_marking,
     observation_spec_for_practice, observation_spec_for_reading_marking,
-    observation_spec_for_review, observation_spec_for_upgrade_confirmation, sound_fit,
-    sound_fit_calibration_outcome, validate_syntactic_analysis,
+    observation_spec_for_review, observation_spec_for_speaking_production,
+    observation_spec_for_upgrade_confirmation, sound_fit, sound_fit_calibration_outcome,
+    validate_syntactic_analysis,
 };
 use serde::Serialize;
 

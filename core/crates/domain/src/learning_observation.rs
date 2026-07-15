@@ -25,6 +25,9 @@ pub enum ObservationTaskType {
     /// [`ObservationTaskType::ContextMarking`]; never written by paragraph
     /// task results — only by a direct user act on one word.
     ReadingContextMarking,
+    /// User-confirmed literal production of an explicitly selected lexical
+    /// target inside a completed L2 retelling or role reply.
+    SpeakingProduction,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -145,6 +148,15 @@ pub fn observation_spec_for_reading_marking(
         } else {
             ObservationOutcome::Failure
         },
+    }
+}
+
+pub fn observation_spec_for_speaking_production(assistance: AssistanceLevel) -> ObservationSpec {
+    ObservationSpec {
+        task_type: ObservationTaskType::SpeakingProduction,
+        capability: LexicalCapability::Speaking,
+        assistance,
+        outcome: ObservationOutcome::Success,
     }
 }
 

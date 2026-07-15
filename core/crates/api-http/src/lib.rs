@@ -5,8 +5,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use api_events::{EventEnvelope, EventName};
 use application::{
     AppServices, ApplicationError, DictionaryProvider, EnglishPronunciationProvider,
-    ImportSubtitle, InMemorySecretStore, RegisterMedia, SecretStore, SyntacticAnalysisProvider,
-    SyntacticConsumerOrchestrator, SyntacticProductQualification,
+    ImportSubtitle, InMemorySecretStore, RecordSpeakingProduction, RegisterMedia, SecretStore,
+    SyntacticAnalysisProvider, SyntacticConsumerOrchestrator, SyntacticProductQualification,
 };
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
@@ -73,8 +73,8 @@ use routes::practice::{
     graduate_coach_material, list_due_review_items, list_hunting_candidates,
     list_hunting_occurrences, list_hunting_targets, list_listening_inbox_items,
     list_upgrade_suggestions, practice_attempt, process_listening_inbox_item, recording_asset,
-    reject_upgrade_suggestion, review_item, submit_hunting_check, submit_practice_attempt,
-    submit_review_attempt, upgrade_suggestion_history,
+    recording_audio_facts, reject_upgrade_suggestion, review_item, submit_hunting_check,
+    submit_practice_attempt, submit_review_attempt, upgrade_suggestion_history,
 };
 use routes::pronunciation::{
     analyze_pronunciation_sentence, generate_track_pronunciation, pronunciation_lookup,
@@ -82,9 +82,10 @@ use routes::pronunciation::{
 };
 use routes::reading::{reading_position, record_reading_marking, save_reading_position};
 use routes::semantic::{
-    create_judgment_adjudication, create_semantic_attempt, create_semantic_judgment,
-    create_semantic_rubric, lookup_semantic_rubric, semantic_attempt, semantic_attempt_judgments,
-    semantic_judgment_adjudications, semantic_rubric, semantic_rubric_attempts,
+    confirm_speaking_target, create_judgment_adjudication, create_semantic_attempt,
+    create_semantic_judgment, create_semantic_rubric, lookup_semantic_rubric, semantic_attempt,
+    semantic_attempt_judgments, semantic_judgment_adjudications, semantic_rubric,
+    semantic_rubric_attempts,
 };
 use routes::sound_line::{
     cancel_sound_line_job, create_sound_line_job, retry_sound_line_job, sound_line_job,
@@ -114,9 +115,10 @@ use routes::timelines::{
     track_word_timings, word_timeline,
 };
 use routes::transcription::{
-    archive_transcription_job, cancel_transcription_job, cancel_transcription_model_install,
-    create_transcription_job, delete_transcription_model, install_transcription_model,
-    pronunciation_rules, register_custom_transcription_model, retry_transcription_job,
+    archive_transcription_job, cancel_recording_transcription, cancel_transcription_job,
+    cancel_transcription_model_install, create_recording_transcription, create_transcription_job,
+    delete_transcription_model, install_transcription_model, pronunciation_rules,
+    recording_transcription_job, register_custom_transcription_model, retry_transcription_job,
     transcription_job, transcription_jobs, transcription_models, transcription_providers,
 };
 use routes::vocabulary::{
@@ -553,6 +555,22 @@ pub fn router(state: ApiState) -> Router {
             get(recording_asset).delete(delete_recording_asset),
         )
         .route(
+            "/v1/recordings/{id}/audio-facts",
+            get(recording_audio_facts),
+        )
+        .route(
+            "/v1/recording-transcriptions",
+            post(create_recording_transcription),
+        )
+        .route(
+            "/v1/recording-transcriptions/{job_id}",
+            get(recording_transcription_job),
+        )
+        .route(
+            "/v1/recording-transcriptions/{job_id}/cancel",
+            post(cancel_recording_transcription),
+        )
+        .route(
             "/v1/listening-inbox/items",
             get(list_listening_inbox_items).post(capture_listening_inbox_item),
         )
@@ -641,6 +659,10 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/v1/semantic/attempts", post(create_semantic_attempt))
         .route("/v1/semantic/attempts/{id}", get(semantic_attempt))
+        .route(
+            "/v1/semantic/attempts/{id}/speaking-targets",
+            post(confirm_speaking_target),
+        )
         .route(
             "/v1/semantic/attempts/{id}/judgments",
             get(semantic_attempt_judgments),

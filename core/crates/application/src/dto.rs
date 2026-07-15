@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
 use domain::{
-    ContentDifficultyProfile, CorpusOccurrence, CorpusOccurrenceId, HuntingCandidateId,
-    HuntingCheckAnswer, HuntingTargetId, HuntingTargetSourceKind, LanguageCode, LearningEventId,
-    LearningStatus, LexicalEntryId, LexicalEntryKind, LexicalObservationId,
+    AssistanceLevel, ContentDifficultyProfile, CorpusOccurrence, CorpusOccurrenceId,
+    HuntingCandidateId, HuntingCheckAnswer, HuntingTargetId, HuntingTargetSourceKind, LanguageCode,
+    LearningEventId, LearningStatus, LexicalEntryId, LexicalEntryKind, LexicalObservationId,
     ListeningComprehensionReport, ListeningInboxResolution, MediaId, MediaItem, MediaKind,
     MediaTriageIntent, ObservationResult, PlayableSegment, PracticeAnchor, PracticeItemId,
     PracticeKind, PracticeMode, PracticeSessionId, PracticeTarget, RecordingAssetId,
@@ -171,6 +171,19 @@ pub struct CreateLexicalObservation {
     pub source: Option<LexicalSourceContext>,
 }
 
+/// One learner-confirmed expression literally present in a completed speaking
+/// response. The API layer qualifies the attempt before this reaches the
+/// channelized observation writer.
+pub struct RecordSpeakingProduction {
+    pub lexical_entry_id: LexicalEntryId,
+    pub sentence_id: Option<SubtitleSentenceId>,
+    pub surface_form: String,
+    pub media_id: Option<MediaId>,
+    pub assistance: AssistanceLevel,
+    pub source_ref: String,
+    pub occurred_at_ms: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreatePracticeSession {
     pub mode: PracticeMode,
@@ -233,6 +246,7 @@ pub enum ReviewCardKind {
     ChunkCloze,
     PhrasePresence,
     SourceSentenceRecall,
+    DelayedRetelling,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

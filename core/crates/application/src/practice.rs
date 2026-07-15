@@ -304,14 +304,19 @@ impl PracticeUseCases {
         input: CreateReviewItem,
     ) -> Result<ReviewItem, ApplicationError> {
         let prompt_snapshot = clean_required(input.prompt_snapshot, "review prompt")?;
-        if input.source.kind == ReviewSourceKind::LexicalEntry {
+        if input.source.kind == ReviewSourceKind::LexicalEntry
+            || input.source.kind == ReviewSourceKind::SpeakingAttempt
+        {
             let existing = self
                 .review_queue
                 .list_review_items(Some(ReviewItemStatus::Active), 200, 0)?
                 .into_iter()
                 .find(|item| {
-                    item.source.lexical_entry_id == input.source.lexical_entry_id
-                        && item.prompt_snapshot == prompt_snapshot
+                    (input.source.kind == ReviewSourceKind::LexicalEntry
+                        && item.source.lexical_entry_id == input.source.lexical_entry_id
+                        && item.prompt_snapshot == prompt_snapshot)
+                        || (input.source.kind == ReviewSourceKind::SpeakingAttempt
+                            && item.source.id == input.source.id)
                 });
             if let Some(existing) = existing {
                 return Ok(existing);

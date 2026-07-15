@@ -151,6 +151,19 @@ pub(crate) async fn recording_asset(
         .ok_or_else(|| ApiError::not_found("recording asset"))
 }
 
+pub(crate) async fn recording_audio_facts(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> Result<Json<domain::RecordingAudioFacts>, ApiError> {
+    let id = RecordingAssetId::parse(id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .recordings()
+        .recording_audio_facts(&id)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 pub(crate) async fn delete_recording_asset(
     State(state): State<ApiState>,
     Path(id): Path<String>,

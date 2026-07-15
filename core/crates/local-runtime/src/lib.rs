@@ -38,4 +38,6 @@ pub use subtitle_search::{
 pub use syntax_capability::{
     SyntaxCapabilityManager, SyntaxCapabilityStatus, SyntaxCapabilityView,
 };
-pub use transcription::{CreateJobRequest, TranscriptionCoordinator};
+pub use transcription::{
+    CreateJobRequest, CreateRecordingTranscriptionRequest, TranscriptionCoordinator,
+};

@@ -130,6 +130,44 @@ pub(crate) async fn transcription_job(
         .ok_or_else(|| ApiError::not_found("transcription job"))
 }
 
+pub(crate) async fn create_recording_transcription(
+    State(state): State<ApiState>,
+    Json(request): Json<local_runtime::CreateRecordingTranscriptionRequest>,
+) -> Result<Json<domain::RecordingTranscriptionJob>, ApiError> {
+    state
+        .transcription
+        .clone()
+        .create_recording_transcription(request)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn recording_transcription_job(
+    State(state): State<ApiState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<domain::RecordingTranscriptionJob>, ApiError> {
+    state
+        .transcription
+        .recording_transcription_job(
+            &domain::RecordingTranscriptionJobId::parse(job_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("recording transcription job"))
+}
+
+pub(crate) async fn cancel_recording_transcription(
+    State(state): State<ApiState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<domain::RecordingTranscriptionJob>, ApiError> {
+    state
+        .transcription
+        .cancel_recording_transcription(
+            &domain::RecordingTranscriptionJobId::parse(job_id).map_err(ApplicationError::from)?,
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 pub(crate) async fn cancel_transcription_job(
     State(state): State<ApiState>,
     Path(job_id): Path<String>,

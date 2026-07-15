@@ -139,6 +139,21 @@ pub enum L1RetellingTrigger {
     Diagnosis,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpeakingAssistanceLevel {
+    FullSentence,
+    Keywords,
+    NoText,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpeakingRecallKind {
+    Immediate,
+    Delayed,
+}
+
 /// What the learner could access besides the assessed channel's input. The
 /// per-kind legality rules live in [`validate_semantic_attempt`], sourced from
 /// the evidence matrix §1/§2.
@@ -148,6 +163,12 @@ pub struct SemanticTaskConditions {
     pub audio_play_count: Option<u32>,
     pub notes_allowed: bool,
     pub l1_trigger: Option<L1RetellingTrigger>,
+    #[serde(default)]
+    pub speaking_assistance: Option<SpeakingAssistanceLevel>,
+    #[serde(default)]
+    pub speaking_recall: Option<SpeakingRecallKind>,
+    #[serde(default)]
+    pub prompt_snapshot: Option<String>,
 }
 
 /// One versioned learner response inside an attempt. Multiple revisions exist
@@ -156,6 +177,11 @@ pub struct SemanticTaskConditions {
 pub struct AttemptResponse {
     /// 1-based, contiguous.
     pub revision: u32,
+    /// Immutable ASR output. User correction is stored in `transcript`; the
+    /// raw value remains separately traceable and is never overwritten.
+    /// Typed responses carry `None`.
+    #[serde(default)]
+    pub raw_transcript: Option<String>,
     pub transcript: String,
     pub source: ResponseTranscriptSource,
     pub recording_asset_id: Option<RecordingAssetId>,
@@ -309,7 +335,18 @@ pub fn semantic_task_attempt_id(
     let response_fingerprint = transcript_sha256(
         &responses
             .iter()
-            .map(|response| response.transcript.as_str())
+            .map(|response| {
+                format!(
+                    "{}\u{1e}{}\u{1e}{}",
+                    response.raw_transcript.as_deref().unwrap_or(""),
+                    response.transcript,
+                    response
+                        .recording_asset_id
+                        .as_ref()
+                        .map(RecordingAssetId::as_str)
+                        .unwrap_or("")
+                )
+            })
             .collect::<Vec<_>>()
             .join("\u{1f}"),
     );
@@ -451,6 +488,36 @@ pub fn validate_semantic_attempt(
         }
         _ => {}
     }
+    match attempt.kind {
+        SemanticTaskKind::RoleReply => {
+            if attempt.conditions.speaking_assistance.is_none() {
+                errors.push("role_reply must snapshot its assistance level".into());
+            }
+            if attempt
+                .conditions
+                .prompt_snapshot
+                .as_deref()
+                .is_none_or(|value| value.trim().is_empty())
+            {
+                errors.push("role_reply must preserve its prompt snapshot".into());
+            }
+        }
+        _ if attempt.conditions.speaking_assistance.is_some() => {
+            errors.push("speaking assistance is only defined for role_reply".into());
+        }
+        _ => {}
+    }
+    match attempt.kind {
+        SemanticTaskKind::L2Retelling | SemanticTaskKind::RoleReply => {
+            if attempt.conditions.speaking_recall.is_none() {
+                errors.push("constructed speaking must record immediate or delayed recall".into());
+            }
+        }
+        _ if attempt.conditions.speaking_recall.is_some() => {
+            errors.push("speaking recall is only defined for constructed speaking".into());
+        }
+        _ => {}
+    }
     if attempt.responses.len() > 1 && attempt.kind != SemanticTaskKind::Dictogloss {
         errors.push("multiple response revisions are only defined for dictogloss".into());
     }
@@ -465,15 +532,32 @@ pub fn validate_semantic_attempt(
             errors.push("response language must match the rubric response language".into());
         }
         match response.source {
-            ResponseTranscriptSource::Asr if response.asr_reliability.is_none() => {
-                errors.push("asr responses must record reliability".into());
+            ResponseTranscriptSource::Asr => {
+                if response.asr_reliability.is_none() {
+                    errors.push("asr responses must record reliability".into());
+                }
+                if response.raw_transcript.is_none() {
+                    errors.push("asr responses must preserve the raw transcript".into());
+                }
             }
             ResponseTranscriptSource::Typed
-                if response.asr_reliability.is_some() || response.recording_asset_id.is_some() =>
+                if response.raw_transcript.is_some()
+                    || response.asr_reliability.is_some()
+                    || response.recording_asset_id.is_some() =>
             {
-                errors.push("typed responses carry no asr reliability or recording".into());
+                errors.push(
+                    "typed responses carry no raw transcript, asr reliability, or recording".into(),
+                );
             }
             _ => {}
+        }
+        if matches!(
+            attempt.kind,
+            SemanticTaskKind::L2Retelling | SemanticTaskKind::RoleReply
+        ) && (response.source != ResponseTranscriptSource::Asr
+            || response.recording_asset_id.is_none())
+        {
+            errors.push("constructed speaking responses require an ASR-linked recording".into());
         }
     }
     if let Some(ended) = attempt.ended_at_ms
@@ -902,6 +986,43 @@ mod tests {
         asr_without_reliability.responses[0].source = ResponseTranscriptSource::Asr;
         asr_without_reliability.responses[0].asr_reliability = None;
         assert!(validate_semantic_attempt(&asr_without_reliability, &fixture.rubric).is_err());
+
+        let mut corrected_asr = fixture.attempts[2].clone();
+        corrected_asr.responses[0].raw_transcript = Some("koi wire".into());
+        corrected_asr.responses[0].transcript = "Coy Wire".into();
+        corrected_asr.responses[0].asr_reliability = Some(AsrReliability::Suspect);
+        assert!(validate_semantic_attempt(&corrected_asr, &fixture.rubric).is_ok());
+
+        let mut missing_raw = corrected_asr;
+        missing_raw.responses[0].raw_transcript = None;
+        assert!(validate_semantic_attempt(&missing_raw, &fixture.rubric).is_err());
+
+        let mut role_rubric = fixture.rubric.clone();
+        role_rubric.purpose = SemanticTaskKind::RoleReply;
+        let mut role_reply = attempt;
+        role_reply.kind = SemanticTaskKind::RoleReply;
+        role_reply.conditions.l1_trigger = None;
+        role_reply.conditions.speaking_assistance = Some(SpeakingAssistanceLevel::Keywords);
+        role_reply.conditions.speaking_recall = Some(SpeakingRecallKind::Immediate);
+        role_reply.conditions.prompt_snapshot = Some("Reply to the shop clerk".into());
+        role_reply.responses[0].source = ResponseTranscriptSource::Asr;
+        role_reply.responses[0].raw_transcript = Some("I need two ticket".into());
+        role_reply.responses[0].transcript = "I need two tickets".into();
+        role_reply.responses[0].recording_asset_id =
+            Some(RecordingAssetId::parse("recording-role").unwrap());
+        role_reply.responses[0].asr_reliability = Some(AsrReliability::Suspect);
+        role_reply.responses[0].language = role_rubric.response_language.clone();
+        assert!(validate_semantic_attempt(&role_reply, &role_rubric).is_ok());
+
+        role_reply.conditions.speaking_recall = None;
+        assert!(validate_semantic_attempt(&role_reply, &role_rubric).is_err());
+        role_reply.conditions.speaking_recall = Some(SpeakingRecallKind::Immediate);
+        role_reply.conditions.speaking_assistance = None;
+        assert!(validate_semantic_attempt(&role_reply, &role_rubric).is_err());
+
+        let mut l1_with_speaking_recall = fixture.attempts[0].clone();
+        l1_with_speaking_recall.conditions.speaking_recall = Some(SpeakingRecallKind::Delayed);
+        assert!(validate_semantic_attempt(&l1_with_speaking_recall, &fixture.rubric).is_err());
     }
 
     #[test]

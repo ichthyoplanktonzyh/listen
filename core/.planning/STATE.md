@@ -3,22 +3,25 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-15T20:45:00.000+08:00"
+last_updated: "2026-07-15T23:40:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-15 20:45 CST
-> 更新原因：Phase 3.13.5 Studio Shell UX 完成并通过 owner GUI 验收。
+> 最后更新：2026-07-15 23:40 CST
+> 更新原因：Phase 3.14 Slice 0–5 code complete，owner 统一体验清单已建立。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.13.5 Studio Shell UX 已完成（2026-07-15）：首页 + 内容
-  工作台 + 资产层混合导航、沉浸式阅读器、阅读/听力分离词汇透镜、上下文查词面板与
-  阶段自适应阅读任务容器均落地；owner 真实媒体 GUI 验收通过。下一执行 phase 为
-  3.14 Speaking Studio v1，开工前按 3.13.5 的内容通道、任务生命周期与单一音频焦点
-  修订其 PLAN。owner 可并行推进 3.12.1 judge 资格验证；未获资格不得阻塞客观事实 +
-  自评的 speaking 降级路径。
+- **当前执行主线**：Phase 3.14 Speaking Studio v1 **CODE COMPLETE**。Slice 0–5 已落地：
+  独立 RecordingAsset 短录音 whisper.cpp job（格式/hash、语言、取消、latency/provenance）、
+  L2 Retelling + 三档 Role Reply、raw/corrected transcript、固定 rubric、请求后自评、append-only
+  adjudication、立即重说一次、延迟复述资产入口、L1 listening fallback、单录音时长/停顿/waveform
+  客观事实，以及显式 literal-hit anchored speaking observation（零 projection）。内容/资产入口
+  复用同一 Speaking 状态机；退出只恢复位置不自动播放。Reading/Speaking lifecycle seam 实证
+  副作用不同，未为形状预设抽 pass-through interface。3.12.1 未获资格，因此无 LLM/judge 仍以
+  客观事实 + 用户自评完整交付。下一步是 owner 按 `3.14-MANUAL-QA.md` 在可热重启版本统一体验
+  英文新闻、对话接话、延迟复述、音频焦点与真人普通话；在此之前状态不宣称 owner accepted。
 - Phase 3.9.4 已收口合回 main（语义分组四层断链修复 + ADR 0016 投影交互对等，
   见 `3.9.4-REAL-MEDIA-QA.md`，GUI 交互项留 owner 清单）。
 - Phase 3.9.3 已完成并冻结；spaCy syntax capability 已具 App 内 opt-in
@@ -420,9 +423,9 @@ last_updated: "2026-07-15T20:45:00.000+08:00"
 
 ## 下一步工作
 
-1. **下一执行 phase：3.14 Speaking Studio v1**：PLAN v2 与
-   `3.14-REFERENCE-MATRIX.md` 已按 3.13.5 实际底盘就绪；从 Slice 0 短录音 ASR、
-   RecordingAsset/音频焦点预检与参考交互复核开始。Harper spike 可提前排，结论影响
+1. **当前执行 phase：3.14 Speaking Studio v1 Slice 1**：Slice 0 结论见
+   `3.14-SLICE-0-ASR-SPIKE.md`；实现 Retelling/RoleReply task/source snapshot、固定 rubric、
+   durable raw/corrected transcript 与 append-only attempt。Harper spike 可提前排，结论影响
    3.15 provider 形态；LLM 反馈接线（3.13 PLAN Slice 7）随 owner 3.12.1 资格裁决点亮或
    记录性跳过；3.12 增量协议 Slice 4 与 owner 真实 provider QA 仍按需排期。
 2. "收藏句 → 个人模板"的用户价值验证收敛到 Phase 3.16（3.4.3 结论待兑现）。

@@ -47,6 +47,27 @@ async fn get_json(app: &Router, path: &str) -> (StatusCode, serde_json::Value) {
     (status, value)
 }
 
+async fn request_status(
+    app: &Router,
+    method: axum::http::Method,
+    path: &str,
+    body: serde_json::Value,
+) -> StatusCode {
+    app.clone()
+        .oneshot(
+            Request::builder()
+                .method(method)
+                .uri(path)
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+        .status()
+}
+
 fn rubric_request(fixture: &SemanticTaskGoldFixture) -> serde_json::Value {
     serde_json::json!({
         "purpose": fixture.rubric.purpose,
@@ -258,4 +279,143 @@ async fn semantic_rubric_lookup_finds_by_source_identity() {
     let (status, body) = get_json(&app, &miss).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, serde_json::Value::Null);
+}
+
+#[tokio::test]
+async fn speaking_target_confirmation_requires_qualified_literal_evidence() {
+    let app = test_app();
+    let fixture = gold_fixture();
+
+    let mut rubric_body = rubric_request(&fixture);
+    rubric_body["purpose"] = serde_json::json!("l2_retelling");
+    rubric_body["response_language"] = serde_json::json!("en");
+    let (status, rubric) = post_json(&app, "/v1/semantic/rubrics", rubric_body).await;
+    assert_eq!(status, StatusCode::OK);
+    let rubric_id = rubric["id"].as_str().unwrap();
+
+    let lexical_response = app
+        .clone()
+        .oneshot(
+            Request::put("/v1/lexical-entries")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "language": "en",
+                        "kind": "phrase",
+                        "canonical_form": "until Tuesday",
+                        "display_form": "until Tuesday"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(lexical_response.status(), StatusCode::OK);
+    let lexical: serde_json::Value = serde_json::from_slice(
+        &to_bytes(lexical_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let lexical_entry_id = lexical["entry"]["id"].as_str().unwrap();
+
+    let attempt_body = serde_json::json!({
+        "kind": "l2_retelling",
+        "target": {
+            "kind": "segment", "id": null, "sentence_id": null,
+            "chunk_id": null, "start_ms": 26200, "end_ms": 53760
+        },
+        "anchors": [],
+        "rubric_id": rubric_id,
+        "rubric_version": 1,
+        "conditions": {
+            "source_text_visible": false,
+            "audio_play_count": 1,
+            "notes_allowed": false,
+            "l1_trigger": null,
+            "speaking_assistance": null,
+            "speaking_recall": "immediate",
+            "prompt_snapshot": null
+        },
+        "responses": [{
+            "revision": 1,
+            "raw_transcript": "The storm delayed the fairy to Tuesday.",
+            "transcript": "The storm delayed the ferry until Tuesday.",
+            "source": "asr",
+            "recording_asset_id": "recording-speaking-target",
+            "asr_reliability": "suspect",
+            "language": "en",
+            "recorded_at_ms": 1781222460000_u64
+        }],
+        "status": "completed",
+        "started_at_ms": 1781222400000_u64,
+        "ended_at_ms": 1781222460000_u64
+    });
+    let (status, attempt) = post_json(&app, "/v1/semantic/attempts", attempt_body.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{attempt}");
+    let attempt_id = attempt["id"].as_str().unwrap();
+
+    let confirmation = serde_json::json!({
+        "lexical_entry_id": lexical_entry_id,
+        "surface_form": "until Tuesday",
+        "sentence_id": null
+    });
+    let status = request_status(
+        &app,
+        axum::http::Method::POST,
+        &format!("/v1/semantic/attempts/{attempt_id}/speaking-targets"),
+        confirmation.clone(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let mut absent = confirmation.clone();
+    absent["surface_form"] = serde_json::json!("Tuesday morning");
+    let status = request_status(
+        &app,
+        axum::http::Method::POST,
+        &format!("/v1/semantic/attempts/{attempt_id}/speaking-targets"),
+        absent,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    let mut unreliable_body = attempt_body;
+    unreliable_body["responses"][0]["asr_reliability"] = serde_json::json!("unreliable");
+    unreliable_body["started_at_ms"] = serde_json::json!(1781222500000_u64);
+    unreliable_body["ended_at_ms"] = serde_json::json!(1781222560000_u64);
+    let (status, unreliable) = post_json(&app, "/v1/semantic/attempts", unreliable_body).await;
+    assert_eq!(status, StatusCode::OK, "{unreliable}");
+    let unreliable_id = unreliable["id"].as_str().unwrap();
+    let status = request_status(
+        &app,
+        axum::http::Method::POST,
+        &format!("/v1/semantic/attempts/{unreliable_id}/speaking-targets"),
+        confirmation.clone(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    let (status, l1_rubric) =
+        post_json(&app, "/v1/semantic/rubrics", rubric_request(&fixture)).await;
+    assert_eq!(status, StatusCode::OK);
+    let l1_rubric_id = l1_rubric["id"].as_str().unwrap();
+    let (status, l1_attempt) = post_json(
+        &app,
+        "/v1/semantic/attempts",
+        attempt_request(&fixture, 0, l1_rubric_id),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let l1_attempt_id = l1_attempt["id"].as_str().unwrap();
+    let status = request_status(
+        &app,
+        axum::http::Method::POST,
+        &format!("/v1/semantic/attempts/{l1_attempt_id}/speaking-targets"),
+        confirmation,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }

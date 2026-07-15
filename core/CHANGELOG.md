@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+- 2026-07-15 23:40 CST: Phase 3.14 Speaking Studio v1 Slice 0–5 code complete。
+  内容 Speaking 通道现支持 10–60 秒 L2 retelling 与 full sentence/keywords/no text 三档
+  Role Reply；延迟复述从 review asset 进入同一状态机，不建独立首页。链路串通麦克风权限、
+  单一音频焦点、RecordingAsset、独立短录音 whisper.cpp job、raw/corrected transcript、
+  ASR reliability、请求后逐点自评、append-only adjudication、一次立即重说与显式复习难度。
+  新增单录音客观时长/≥120ms 停顿/waveform facts；无 qualified judge 时完整降级为这些事实 +
+  用户自评，不显示综合口语分。只有 completed L2/Role + 非 unreliable ASR + corrected literal hit +
+  用户显式确认，才写 assistance-aware `SpeakingProduction` observation，且零 projection；L1 核对
+  独立复用 typed listening fact。Reading/Speaking lifecycle audit 证实资源副作用不同，未抽取
+  pass-through interface。严格回归 Rust 581、contracts、Flutter analyze 与完整 Flutter tests
+  423 项 Flutter tests 通过；owner 按 `3.14-MANUAL-QA.md` 在可热重启版本统一体验真实麦克风/
+  真人普通话/GUI。
+
+- 2026-07-15 22:49 CST: Phase 3.14 Slice 1 code complete，并启动内容通道 L2 retelling
+  surface。新增独立 Speaking 状态机，串通固定信息点 rubric、麦克风权限、单一音频焦点、
+  RecordingAsset、短录音 ASR、raw/corrected transcript 核对、append-only spoken attempt、
+  用户请求后的逐点自评 judgment 与最多一次立即重说；ASR uncertainty/失败不会写成口语失败。
+  Speaking 作为当前内容通道打开整面阶段自适应场景，录音时不显示 transcript/feedback，核对后
+  才能请求自评；无独立首页、Reading 复制、固定三栏或弹层。来源/用户录音切源前均暂停其他
+  声源，退出恢复原主媒体位置但不自动播放。Role Reply 事实守卫已具 assistance/prompt snapshot，
+  UI 与延迟资产入口留后续 Slice；Reading/Speaking lifecycle interface 进入第二住户实证审计，
+  尚未抽取 mega abstraction。
+
+- 2026-07-15 22:19 CST: Phase 3.14 Slice 0 短录音 ASR 与底盘预检 code complete。
+  新增独立 `RecordingAsset -> RecordingTranscriptionJob` API/runtime/client contract，校验
+  16k mono PCM16、文件长度和 SHA-256，支持语言、取消、raw segment transcript、latency
+  与完整 provider/runtime/model/recording provenance；不导入字幕、不评分、不写学习证据。
+  真实新闻英文 14s（348ms）与取消 60s（122ms）通过；普通话 TTS coverage（560ms）发现
+  whisper.cpp `-ojf` 中文 token 非法 UTF-8，独立路径改用可靠的 `-oj` segment JSON。
+  Reference Matrix 复核后继续排除 H5P 固定答案、iSpraak 逐词/总分与 Sentence Paths 未核验
+  评分语义；真人普通话麦克风 QA 留 owner 最小步骤。Slice 1 同步落地 durable raw/corrected
+  transcript 分离、L2/RoleReply 必须关联录音、RoleReply assistance/prompt snapshot 与 typed
+  Flutter request；继续复用 v35 append-only semantic attempt，零 judgment/observation/projection，
+  不提前抽取 Reading/Speaking 生命周期 interface。
+
 - 2026-07-15 21:53 CST: Phase 3.13.5 正式收口并以实际底盘修订 3.14–3.18 PLAN。
   3.14 Speaking Studio 升为 READY v2 并新增 Reference Matrix；后续统一采用内容通道与
   资产旅程的混合导航，任务共享层收窄为第二住户验证后抽取的生命周期 interface，明确
