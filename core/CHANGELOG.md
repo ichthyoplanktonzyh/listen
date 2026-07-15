@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- 2026-07-15 13:45 CST: Studio 3.13–3.16 外部参考库入库。将 owner 委托 codex 的
+  外部项目调研经批判性修订后收入
+  `.planning/discuss/studio-3.13-3.16-external-reference-library.zh.md`：A 级
+  优先级按 3.13 CODE COMPLETE 现状重排（3.13 参考降级为 GUI 走查对照 +
+  Slice 7 预备，A 级集中到下一 phase 3.14：Sentence Paths / H5P Speak the
+  Words / iSpraak，Harper spike 可提前排）；Reference Matrix 模板新增
+  "对应既有契约/不变量"与"证据等级"必填列（3.13 v2→v2.1 validator 证伪
+  教训 + evidence-class 纪律）；H5P Essay 从"无 LLM 默认路径"重定位为
+  "目标表达字面命中"客观展示参考（无 LLM 路径维持 rubric 对照 + 自评）；
+  剔除正文无依据的 ReadingTree/InsightGUIDE；闭源 Sentence Paths 标注
+  heuristic_proxy。3.14/3.15/3.16 PLAN 各增"外部参考输入"节并要求开工
+  修订时建立各自 REFERENCE-MATRIX。STATE 下一步工作同步指针。
+
 - 2026-07-15 03:30 CST: Phase 3.13 Slice 6 完成 + phase CODE COMPLETE。真实媒体后端
   全链路 QA：隔离 DB + 真实 sidecar + CNN10 真实 mp4/244 句 whisper 转写，新闻段
   20/20 通过（位置往返、rubric 409→lookup 恢复、阅读 attempt/自评/adjudication、

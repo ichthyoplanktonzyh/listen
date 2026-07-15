@@ -411,7 +411,10 @@ last_updated: "2026-07-14T21:30:00.000+08:00"
    通过后 phase 完全收口。LLM 反馈接线（3.13 PLAN Slice 7）随 owner 3.12.1 资格
    裁决点亮或记录性跳过。
 2. **下一执行 phase**：3.14 Speaking Studio v1（开工前按 3.8 recording 资产与 3.13
-   落地现状修订 PLAN）；3.12 增量协议 Slice 4 与 owner 真实 provider QA 仍按需排期。
+   落地现状修订 PLAN，并按
+   `.planning/discuss/studio-3.13-3.16-external-reference-library.zh.md` 建立
+   `3.14-REFERENCE-MATRIX.md`；Harper spike 可提前排，结论影响 3.15 provider
+   形态）；3.12 增量协议 Slice 4 与 owner 真实 provider QA 仍按需排期。
 3. "收藏句 → 个人模板"的用户价值验证收敛到 Phase 3.16（3.4.3 结论待兑现）。
 4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
