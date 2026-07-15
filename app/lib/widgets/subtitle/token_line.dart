@@ -13,6 +13,7 @@ class TokenLine extends StatefulWidget {
     required this.cue,
     required this.profiles,
     this.capabilityProfiles = const {},
+    this.capabilityDisplayChannel,
     required this.showStyles,
     required this.onWord,
     this.onChunk,
@@ -40,6 +41,7 @@ class TokenLine extends StatefulWidget {
   final Cue cue;
   final Map<String, LexicalEntry> profiles;
   final Map<String, LexicalCapabilityProfile> capabilityProfiles;
+  final String? capabilityDisplayChannel;
   final bool showStyles;
   final double fontSize;
   final String? fontFamily;
@@ -81,6 +83,7 @@ class _TokenLineState extends State<TokenLine> {
   Map<String, LexicalEntry> get profiles => widget.profiles;
   Map<String, LexicalCapabilityProfile> get capabilityProfiles =>
       widget.capabilityProfiles;
+  String? get capabilityDisplayChannel => widget.capabilityDisplayChannel;
   bool get showStyles => widget.showStyles;
   double get fontSize => widget.fontSize;
   String? get fontFamily => widget.fontFamily;
@@ -447,9 +450,24 @@ class _TokenLineState extends State<TokenLine> {
   String? _effectiveDisplayStatus(String? normalized) {
     if (normalized == null) return null;
     final cap = capabilityProfiles[normalized];
-    if (cap != null) return _statusFromProfile(cap);
+    if (cap != null) {
+      return switch (capabilityDisplayChannel) {
+        'reading' => _statusForDimension(cap.reading, reading: true),
+        'listening' => _statusForDimension(cap.listening, reading: false),
+        _ => _statusFromProfile(cap),
+      };
+    }
     return profiles[normalized]?.status;
   }
+
+  static String? _statusForDimension(
+    CapabilityDimensionState dimension, {
+    required bool reading,
+  }) => switch (dimension.effectiveAssessment) {
+    'not_acquired' => reading ? 'unknown_meaning' : 'known_not_recognized',
+    'acquired' => 'known_recognized',
+    _ => null,
+  };
 
   static String? _statusFromProfile(LexicalCapabilityProfile? cap) {
     if (cap == null) return null;

@@ -10,6 +10,8 @@ import '../../models/types.dart';
 import '../../utils/format_duration.dart';
 import '../subtitle/token_line.dart';
 
+enum ReadingLens { clean, reading, listening }
+
 /// The reading posture surface (Phase 3.13). Replaces the player stage while
 /// open: independent reading rhythm, paragraph layout, word taps into the
 /// standard learning panel, and per-sentence replay through the slice window
@@ -51,6 +53,9 @@ class ReadingView extends StatefulWidget {
 class _ReadingViewState extends State<ReadingView> {
   final ScrollController _scroll = ScrollController();
   final Map<String, GlobalKey> _paragraphKeys = {};
+  String? _hoveredAnchor;
+  ReadingLens _lens = ReadingLens.clean;
+  bool _overviewVisible = false;
 
   ReadingState get _state => widget.controller.state;
 
@@ -81,8 +86,7 @@ class _ReadingViewState extends State<ReadingView> {
     final index = _state.anchorParagraphIndex;
     final count = _state.paragraphs.length;
     if (count > 1 && _scroll.hasClients) {
-      final target =
-          _scroll.position.maxScrollExtent * (index / (count - 1));
+      final target = _scroll.position.maxScrollExtent * (index / (count - 1));
       _scroll.jumpTo(target.clamp(0, _scroll.position.maxScrollExtent));
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -106,6 +110,7 @@ class _ReadingViewState extends State<ReadingView> {
       child: Column(
         children: [
           _header(l, colors),
+          if (_overviewVisible) _vocabularyOverview(context),
           Expanded(
             child: _state.paragraphs.isEmpty
                 ? Center(
@@ -123,8 +128,13 @@ class _ReadingViewState extends State<ReadingView> {
                       vertical: 20,
                     ),
                     itemCount: _state.paragraphs.length,
-                    itemBuilder: (context, index) =>
-                        _paragraph(context, _state.paragraphs[index]),
+                    itemBuilder: (context, index) => Align(
+                      alignment: Alignment.topCenter,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 900),
+                        child: _paragraph(context, _state.paragraphs[index]),
+                      ),
+                    ),
                   ),
           ),
         ],
@@ -136,46 +146,96 @@ class _ReadingViewState extends State<ReadingView> {
     decoration: BoxDecoration(
       border: Border(bottom: BorderSide(color: colors.outlineVariant)),
     ),
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(20, 10, 10, 10),
-      child: Row(
-        children: [
-          Icon(Icons.chrome_reader_mode_outlined, color: colors.primary),
-          const SizedBox(width: 10),
-          Text(
-            l.text('readingViewTitle'),
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const Spacer(),
-          Tooltip(
-            message: l.text(
-              _state.translationVisible
-                  ? 'readingHideTranslation'
-                  : 'readingShowTranslation',
-            ),
-            child: IconButton(
-              icon: Icon(
-                Icons.translate,
-                color: _state.translationVisible
-                    ? colors.primary
-                    : colors.onSurfaceVariant,
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 900;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 10, 10, 10),
+          child: Row(
+            children: [
+              Icon(Icons.chrome_reader_mode_outlined, color: colors.primary),
+              const SizedBox(width: 10),
+              Text(
+                l.text('readingViewTitle'),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
-              onPressed: () => widget.controller.setTranslationVisible(
-                !_state.translationVisible,
+              const Spacer(),
+              if (compact)
+                IconButton(
+                  key: const ValueKey('reading-vocabulary-overview'),
+                  tooltip: l.text('readingVocabularyOverview'),
+                  onPressed: () =>
+                      setState(() => _overviewVisible = !_overviewVisible),
+                  icon: const Icon(Icons.analytics_outlined, size: 18),
+                )
+              else
+                TextButton.icon(
+                  key: const ValueKey('reading-vocabulary-overview'),
+                  onPressed: () =>
+                      setState(() => _overviewVisible = !_overviewVisible),
+                  icon: const Icon(Icons.analytics_outlined, size: 18),
+                  label: Text(l.text('readingVocabularyOverview')),
+                ),
+              PopupMenuButton<ReadingLens>(
+                key: const ValueKey('reading-lens-menu'),
+                tooltip: l.text('readingLens'),
+                initialValue: _lens,
+                onSelected: (value) => setState(() => _lens = value),
+                itemBuilder: (context) => [
+                  for (final lens in ReadingLens.values)
+                    PopupMenuItem(
+                      value: lens,
+                      child: Text(_lensLabel(l, lens)),
+                    ),
+                ],
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.filter_alt_outlined, size: 18),
+                      if (!compact) ...[
+                        const SizedBox(width: 6),
+                        Text(_lensLabel(l, _lens)),
+                      ],
+                    ],
+                  ),
+                ),
               ),
-            ),
+              Tooltip(
+                message: l.text(
+                  _state.translationVisible
+                      ? 'readingHideTranslation'
+                      : 'readingShowTranslation',
+                ),
+                child: IconButton(
+                  icon: Icon(
+                    Icons.translate,
+                    color: _state.translationVisible
+                        ? colors.primary
+                        : colors.onSurfaceVariant,
+                  ),
+                  onPressed: () => widget.controller.setTranslationVisible(
+                    !_state.translationVisible,
+                  ),
+                ),
+              ),
+              Tooltip(
+                message: l.text('readingBackToPlayer'),
+                child: IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: widget.onClose,
+                ),
+              ),
+            ],
           ),
-          Tooltip(
-            message: l.text('readingBackToPlayer'),
-            child: IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: widget.onClose,
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     ),
   );
 
@@ -196,136 +256,237 @@ class _ReadingViewState extends State<ReadingView> {
       );
     }
     final anchored = paragraph.anchorCueId == _state.anchorCueId;
+    final active = anchored || paragraph.anchorCueId == _hoveredAnchor;
     final translation = _state.translationByAnchor[paragraph.anchorCueId];
     final composite = composeParagraphCue(paragraph);
     return KeyedSubtree(
       key: _paragraphKeys.putIfAbsent(paragraph.anchorCueId, GlobalKey.new),
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: () => widget.controller.markPosition(paragraph.anchorCueId),
-        child: Container(
-          key: ValueKey('reading-paragraph-${paragraph.anchorCueId}'),
-          margin: const EdgeInsets.only(bottom: 6),
-          padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
-          decoration: BoxDecoration(
-            border: Border(
-              left: BorderSide(
-                width: 3,
-                color: anchored ? colors.primary : Colors.transparent,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hoveredAnchor = paragraph.anchorCueId),
+        onExit: (_) {
+          if (_hoveredAnchor == paragraph.anchorCueId) {
+            setState(() => _hoveredAnchor = null);
+          }
+        },
+        child: FocusableActionDetector(
+          mouseCursor: SystemMouseCursors.basic,
+          onShowFocusHighlight: (focused) {
+            if (focused) widget.controller.markPosition(paragraph.anchorCueId);
+          },
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () => widget.controller.markPosition(paragraph.anchorCueId),
+            child: Container(
+              key: ValueKey('reading-paragraph-${paragraph.anchorCueId}'),
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+              decoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(
+                    width: 3,
+                    color: anchored ? colors.primary : Colors.transparent,
+                  ),
+                ),
               ),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    formatDuration(paragraph.start),
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: colors.onSurfaceVariant.withValues(alpha: 0.75),
+                  Row(
+                    children: [
+                      Text(
+                        formatDuration(paragraph.start),
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: colors.onSurfaceVariant.withValues(
+                            alpha: 0.75,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  DefaultTextStyle.merge(
+                    style: const TextStyle(fontSize: 16, height: 1.65),
+                    child: TokenLine(
+                      cue: composite.cue,
+                      profiles: widget.wordEntries,
+                      capabilityProfiles: widget.capabilityProfiles,
+                      capabilityDisplayChannel: switch (_lens) {
+                        ReadingLens.reading => 'reading',
+                        ReadingLens.listening => 'listening',
+                        ReadingLens.clean => null,
+                      },
+                      showStyles: _lens != ReadingLens.clean,
+                      baseColor: colors.onSurface,
+                      fontSize: 16,
+                      textAlign: TextAlign.start,
+                      onWord: (token, _) {
+                        final origin = composite.tokenOrigins[token.index];
+                        if (origin == null) return Future.value();
+                        return widget.onWord(origin.$2, origin.$1);
+                      },
                     ),
                   ),
+                  if (translation != null && _state.translationVisible) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      translation,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                  if (active) _inlineToolbar(context, paragraph),
                 ],
               ),
-              const SizedBox(height: 4),
-              DefaultTextStyle.merge(
-                style: const TextStyle(fontSize: 16, height: 1.65),
-                child: TokenLine(
-                  cue: composite.cue,
-                  profiles: widget.wordEntries,
-                  capabilityProfiles: widget.capabilityProfiles,
-                  showStyles: widget.showStyles,
-                  baseColor: colors.onSurface,
-                  fontSize: 16,
-                  textAlign: TextAlign.start,
-                  onWord: (token, _) {
-                    final origin = composite.tokenOrigins[token.index];
-                    if (origin == null) return Future.value();
-                    return widget.onWord(origin.$2, origin.$1);
-                  },
-                ),
-              ),
-              if (translation != null && _state.translationVisible) ...[
-                const SizedBox(height: 6),
-                Text(
-                  translation,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colors.onSurfaceVariant,
-                  ),
-                ),
-              ],
-              if (anchored) _sentenceChips(context, paragraph),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  /// Replay affordances for the anchored paragraph: whole paragraph plus one
-  /// chip per sentence, all through the slice window (primary playback
-  /// position stays untouched).
-  Widget _sentenceChips(BuildContext context, ReadingParagraph paragraph) {
+  String _lensLabel(AppLocalizations l, ReadingLens lens) =>
+      l.text(switch (lens) {
+        ReadingLens.clean => 'readingLensClean',
+        ReadingLens.reading => 'readingLensReading',
+        ReadingLens.listening => 'readingLensListening',
+      });
+
+  Widget _vocabularyOverview(BuildContext context) {
     final l = AppLocalizations.of(context);
     final colors = Theme.of(context).colorScheme;
-    String label(ReadingSentence sentence) {
-      final text = sentence.text;
-      return text.length <= 26 ? text : '${text.substring(0, 26)}…';
+    final words = <String>{};
+    for (final paragraph in _state.paragraphs) {
+      for (final sentence in paragraph.sentences) {
+        for (final cue in sentence.cues) {
+          for (final token in cue.tokens) {
+            if (token.kind == 'word' && token.normalized != null) {
+              words.add(token.normalized!);
+            }
+          }
+        }
+      }
     }
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: [
-          ActionChip(
-            avatar: Icon(Icons.play_arrow, size: 16, color: colors.primary),
-            label: Text(l.text('readingPlayParagraph')),
-            onPressed: () {
-              widget.controller.noteSlicePlay(paragraph.anchorCueId);
-              unawaited(widget.onPlayParagraph(paragraph));
-            },
-          ),
-          if (widget.onStartTask != null)
-            ActionChip(
-              key: ValueKey('reading-task-${paragraph.anchorCueId}'),
-              avatar: Icon(
-                Icons.checklist_outlined,
-                size: 16,
-                color: colors.primary,
-              ),
-              label: Text(l.text('readingTaskStart')),
-              onPressed: () => unawaited(widget.onStartTask!(paragraph)),
+    var readingAssessed = 0;
+    var listeningAssessed = 0;
+    for (final word in words) {
+      final profile = widget.capabilityProfiles[word];
+      if (profile == null) continue;
+      if (profile.reading.effectiveAssessment != 'unassessed') {
+        readingAssessed++;
+      }
+      if (profile.listening.effectiveAssessment != 'unassessed') {
+        listeningAssessed++;
+      }
+    }
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLow,
+        border: Border(bottom: BorderSide(color: colors.outlineVariant)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+        child: Wrap(
+          spacing: 28,
+          runSpacing: 8,
+          children: [
+            _OverviewMetric(
+              label: l.text('readingVocabularyUnique'),
+              value: words.length,
             ),
-          if (widget.onOpenDiff != null)
-            ActionChip(
-              key: ValueKey('reading-diff-${paragraph.anchorCueId}'),
-              avatar: Icon(
-                Icons.compare_arrows,
-                size: 16,
-                color: colors.primary,
-              ),
-              label: Text(l.text('readingDiffChip')),
-              onPressed: () => unawaited(widget.onOpenDiff!(paragraph)),
+            _OverviewMetric(
+              label: l.text('readingVocabularyReadingAssessed'),
+              value: readingAssessed,
             ),
-          for (final sentence in paragraph.sentences)
-            ActionChip(
-              avatar: Icon(
-                Icons.volume_up_outlined,
-                size: 15,
-                color: colors.onSurfaceVariant,
-              ),
-              label: Text(label(sentence)),
-              tooltip: l.text('readingPlaySentence'),
-              onPressed: () {
-                widget.controller.noteSlicePlay(paragraph.anchorCueId);
-                unawaited(widget.onPlaySentence(sentence));
-              },
+            _OverviewMetric(
+              label: l.text('readingVocabularyListeningAssessed'),
+              value: listeningAssessed,
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
+
+  /// A contextual toolbar appears only for hover, selection, or keyboard
+  /// focus. Sentence replays are compact numbered actions instead of a
+  /// permanent chip row competing with the prose.
+  Widget _inlineToolbar(BuildContext context, ReadingParagraph paragraph) {
+    final l = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surfaceContainerHighest.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          child: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 2,
+            children: [
+              TextButton.icon(
+                key: ValueKey('reading-play-${paragraph.anchorCueId}'),
+                icon: const Icon(Icons.play_arrow, size: 17),
+                label: Text(l.text('readingPlayParagraph')),
+                onPressed: () {
+                  widget.controller.noteSlicePlay(paragraph.anchorCueId);
+                  unawaited(widget.onPlayParagraph(paragraph));
+                },
+              ),
+              if (widget.onStartTask != null)
+                IconButton(
+                  key: ValueKey('reading-task-${paragraph.anchorCueId}'),
+                  tooltip: l.text('readingTaskStart'),
+                  icon: const Icon(Icons.checklist_outlined, size: 18),
+                  onPressed: () => unawaited(widget.onStartTask!(paragraph)),
+                ),
+              if (widget.onOpenDiff != null)
+                IconButton(
+                  key: ValueKey('reading-diff-${paragraph.anchorCueId}'),
+                  tooltip: l.text('readingDiffChip'),
+                  icon: const Icon(Icons.compare_arrows, size: 18),
+                  onPressed: () => unawaited(widget.onOpenDiff!(paragraph)),
+                ),
+              for (var i = 0; i < paragraph.sentences.length; i++)
+                Tooltip(
+                  message:
+                      '${l.text('readingPlaySentence')}: ${paragraph.sentences[i].text}',
+                  child: TextButton.icon(
+                    key: ValueKey(
+                      'reading-sentence-${paragraph.anchorCueId}-$i',
+                    ),
+                    icon: const Icon(Icons.volume_up_outlined, size: 15),
+                    label: Text('${i + 1}'),
+                    onPressed: () {
+                      widget.controller.noteSlicePlay(paragraph.anchorCueId);
+                      unawaited(widget.onPlaySentence(paragraph.sentences[i]));
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OverviewMetric extends StatelessWidget {
+  const _OverviewMetric({required this.label, required this.value});
+
+  final String label;
+  final int value;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text('$value', style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(width: 7),
+      Text(label, style: Theme.of(context).textTheme.bodySmall),
+    ],
+  );
 }

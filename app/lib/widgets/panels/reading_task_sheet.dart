@@ -9,7 +9,7 @@ import '../../services/api_service.dart';
 
 const _verdicts = ['covered', 'partial', 'missing', 'uncertain'];
 
-/// Paragraph-task bottom sheet (Phase 3.13): edit the rubric template once,
+/// Reusable paragraph-task content: edit the rubric template once,
 /// answer with the text visible, self-assess per point, and correct saved
 /// verdicts through adjudication. Everything routes through the 3.11
 /// append-only semantic family; nothing here touches word-level learning.
@@ -20,6 +20,8 @@ class ReadingTaskSheet extends StatefulWidget {
     required this.api,
     required this.audioPlayCount,
     this.onPlaySegment,
+    this.onClose,
+    this.expanded = false,
   });
 
   final ReadingTaskController controller;
@@ -33,6 +35,8 @@ class ReadingTaskSheet extends StatefulWidget {
   /// Plays the paragraph audio (listening retell only). The reading flow
   /// leaves this null — replays there happen from the reading view chips.
   final VoidCallback? onPlaySegment;
+  final VoidCallback? onClose;
+  final bool expanded;
 
   @override
   State<ReadingTaskSheet> createState() => _ReadingTaskSheetState();
@@ -42,6 +46,12 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
   final TextEditingController _answer = TextEditingController();
 
   ReadingTaskState get _state => widget.controller.state;
+
+  @override
+  void initState() {
+    super.initState();
+    _answer.text = _state.draftAnswer;
+  }
 
   @override
   void dispose() {
@@ -64,9 +74,13 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
             bottom: 14 + MediaQuery.of(context).viewInsets.bottom,
           ),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 560),
+            constraints: BoxConstraints(
+              maxHeight: widget.expanded ? double.infinity : 560,
+            ),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize: widget.expanded
+                  ? MainAxisSize.max
+                  : MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
@@ -75,8 +89,9 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
                     const SizedBox(width: 8),
                     Text(
                       l.text('readingTaskTitle'),
-                      style: Theme.of(context).textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w800),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     const Spacer(),
                     if (_state.busy)
@@ -160,9 +175,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
             ),
             child: IconButton(
               icon: Icon(
-                point.importance == 'required'
-                    ? Icons.star
-                    : Icons.star_border,
+                point.importance == 'required' ? Icons.star : Icons.star_border,
                 size: 18,
                 color: point.importance == 'required'
                     ? colors.primary
@@ -240,11 +253,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
             children: [
               ActionChip(
                 key: const ValueKey('reading-task-play-segment'),
-                avatar: Icon(
-                  Icons.play_arrow,
-                  size: 16,
-                  color: colors.primary,
-                ),
+                avatar: Icon(Icons.play_arrow, size: 16, color: colors.primary),
                 label: Text(l.text('readingTaskListenPlay')),
                 onPressed: widget.onPlaySegment,
               ),
@@ -289,13 +298,12 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
         TextField(
           key: const ValueKey('reading-task-answer'),
           controller: _answer,
+          onChanged: widget.controller.updateAnswerDraft,
           maxLines: 5,
           minLines: 3,
           decoration: InputDecoration(
             hintText: l.text(
-              listening
-                  ? 'readingTaskListenTypeHint'
-                  : 'readingTaskAnswerHint',
+              listening ? 'readingTaskListenTypeHint' : 'readingTaskAnswerHint',
             ),
             border: const OutlineInputBorder(),
           ),
@@ -456,7 +464,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
         Align(
           alignment: Alignment.centerRight,
           child: TextButton(
-            onPressed: () => Navigator.of(context).maybePop(),
+            onPressed: widget.onClose ?? () => Navigator.of(context).maybePop(),
             child: Text(l.text('readingTaskClose')),
           ),
         ),

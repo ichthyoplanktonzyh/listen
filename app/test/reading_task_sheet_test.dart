@@ -7,6 +7,7 @@ import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/semantic_task.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/widgets/panels/reading_task_sheet.dart';
+import 'package:llplayer_next/widgets/panels/reading_task_studio.dart';
 
 const _source = ReadingTaskSource(
   anchorCueId: 'cue-1',
@@ -130,6 +131,69 @@ Widget _host(ReadingTaskController controller, LocalApi api) => MaterialApp(
 );
 
 void main() {
+  test(
+    'draft answer and rubric edits restore after leaving the scene',
+    () async {
+      final api = _fakeApi();
+      final controller = ReadingTaskController();
+      await controller.openTask(
+        api,
+        source: _source,
+        templatePoints: _template,
+      );
+      controller.updateDraftPoint(
+        0,
+        const RubricPointView(
+          pointId: 'main-idea',
+          importance: 'required',
+          statement: 'Edited checkpoint',
+        ),
+      );
+      controller.updateAnswerDraft('Unsubmitted answer');
+      controller.closeTask();
+
+      await controller.openTask(
+        api,
+        source: _source,
+        templatePoints: _template,
+      );
+      expect(
+        controller.state.draftPoints.single.statement,
+        'Edited checkpoint',
+      );
+      expect(controller.state.draftAnswer, 'Unsubmitted answer');
+    },
+  );
+
+  testWidgets('studio preserves rubric creation as the first stage', (
+    tester,
+  ) async {
+    final api = _fakeApi();
+    final controller = ReadingTaskController();
+    await controller.openTask(api, source: _source, templatePoints: _template);
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: const [AppLocalizations.delegate],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: ReadingTaskStudio(
+            controller: controller,
+            api: api,
+            source: _source,
+            audioPlayCount: () => 0,
+            onClose: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Set checkpoints'), findsOneWidget);
+    expect(find.text(_source.transcriptSnapshot), findsOneWidget);
+    expect(find.text('Main idea point'), findsOneWidget);
+    expect(controller.state.phase, 'editing');
+  });
+
   testWidgets('walks editing → answering → assessing → done', (tester) async {
     final api = _fakeApi();
     final controller = ReadingTaskController();
@@ -154,14 +218,14 @@ void main() {
     // Assessing: submit disabled until every point is judged.
     final submit = find.text('Save self-assessment');
     expect(
-      tester.widget<FilledButton>(
-        find.ancestor(of: submit, matching: find.byType(FilledButton)),
-      ).onPressed,
+      tester
+          .widget<FilledButton>(
+            find.ancestor(of: submit, matching: find.byType(FilledButton)),
+          )
+          .onPressed,
       isNull,
     );
-    await tester.tap(
-      find.byKey(const ValueKey('verdict-main-idea-covered')),
-    );
+    await tester.tap(find.byKey(const ValueKey('verdict-main-idea-covered')));
     await tester.pump();
     await tester.tap(submit);
     await tester.pumpAndSettle();

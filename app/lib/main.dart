@@ -51,8 +51,10 @@ import 'widgets/panels/intensive_practice_window.dart';
 import 'widgets/panels/l1_specialty_dialog.dart';
 import 'widgets/panels/hunting_prompt_card.dart';
 import 'widgets/panels/listening_check_panel.dart';
-import 'widgets/panels/reading_diff_dialog.dart';
+import 'widgets/panels/reading_diff_panel.dart';
+import 'widgets/panels/reading_task_studio.dart';
 import 'widgets/panels/reading_view.dart';
+import 'widgets/panels/reading_word_inspector.dart';
 import 'widgets/panels/slice_playback_window.dart';
 import 'widgets/player/download_status_bar.dart';
 import 'widgets/app_bar/player_app_bar.dart';
@@ -63,6 +65,7 @@ import 'widgets/flows/media_import_flows.dart';
 import 'widgets/flows/subtitle_resource_flows.dart';
 import 'widgets/layout/playback_bar.dart';
 import 'widgets/layout/media_workbench.dart';
+import 'widgets/layout/content_channel_switcher.dart';
 import 'widgets/layout/player_stage.dart';
 import 'widgets/layout/side_panel.dart';
 import 'widgets/home/listening_home.dart';
@@ -133,11 +136,13 @@ class _PlayerScreenState extends State<PlayerScreen>
   final readingController = ReadingController();
   final readingTaskController = ReadingTaskController();
   final readingDiffController = ReadingDiffController();
+  ReadingTaskSource? _readingTaskStudioSource;
+  ReadingTaskSource? _readingDiffSource;
+  ReadingParagraph? _readingDiffParagraph;
+  bool _readingWordInspectorOpen = false;
   // Non-null while the listening-retell surface replaces the reading view.
   ReadingTaskSource? _listeningCheckSource;
   int _listeningPlayCount = 0;
-  // Restores the pre-reading play state when the reading posture closes.
-  bool _resumePlaybackAfterReading = false;
   Timer? _readingSaveTimer;
   String? _lastSavedReadingAnchor;
   final extensiveListeningController = ExtensiveListeningController();
@@ -826,7 +831,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _openReading() async {
     final track = subtitleController.primaryTrack;
     if (track == null) return;
-    _resumePlaybackAfterReading = playerController.playing;
     await adapter.pause();
     // Restore the saved reading cursor; a fetch failure just starts from the
     // top (the cursor is a convenience, never a gate).
@@ -845,13 +849,19 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _closeReading() async {
     if (_listeningCheckSource != null) _closeListeningCheck();
+    if (_readingTaskStudioSource != null) _closeReadingTaskStudio();
+    if (_readingDiffSource != null) _closeReadingDiff();
     _readingSaveTimer?.cancel();
     unawaited(_saveReadingPosition());
     readingController.close();
-    if (_resumePlaybackAfterReading) {
-      _resumePlaybackAfterReading = false;
-      await adapter.play();
+    if (mounted) setState(() => _readingWordInspectorOpen = false);
+  }
+
+  Future<void> _openReadingWord(SubtitleToken token, Cue cue) async {
+    if (!_readingWordInspectorOpen) {
+      setState(() => _readingWordInspectorOpen = true);
     }
+    await vocabularyActions.openWord(token, cue);
   }
 
   /// Debounced cursor write: paragraph taps arrive in bursts while the user
@@ -934,14 +944,36 @@ class _PlayerScreenState extends State<PlayerScreen>
   /// per-point self-assessment through the 3.11 semantic fact family.
   Future<void> _openReadingTask(ReadingParagraph paragraph) async {
     final source = await _readingTaskSource(paragraph);
-    if (source == null || !mounted) return;
-    await openReadingTaskFlow(
-      context: context,
-      api: api,
-      taskController: readingTaskController,
-      readingController: readingController,
-      source: source,
+    final service = api;
+    if (source == null || service == null || !mounted) return;
+    await adapter.pause();
+    setState(() => _readingTaskStudioSource = source);
+    unawaited(
+      readingTaskController.openTask(
+        service,
+        source: source,
+        templatePoints: readingTaskTemplate(l),
+      ),
     );
+  }
+
+  void _closeReadingTaskStudio() {
+    readingTaskController.closeTask();
+    setState(() => _readingTaskStudioSource = null);
+  }
+
+  Future<void> _selectContentChannel(ContentChannel channel) async {
+    switch (channel) {
+      case ContentChannel.listening:
+        await _closeReading();
+        return;
+      case ContentChannel.reading:
+        await _openReading();
+        return;
+      case ContentChannel.speaking:
+      case ContentChannel.writing:
+        return;
+    }
   }
 
   /// Opens the read-listen pairing card (Slice 4): both sides' facts over
@@ -950,28 +982,28 @@ class _PlayerScreenState extends State<PlayerScreen>
     final source = await _readingTaskSource(paragraph);
     final service = api;
     if (source == null || service == null || !mounted) return;
+    setState(() {
+      _readingDiffSource = source;
+      _readingDiffParagraph = paragraph;
+    });
     unawaited(readingDiffController.loadDiff(service, source));
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => ReadingDiffDialog(
-        controller: readingDiffController,
-        onOpenReadingTask: () {
-          Navigator.of(dialogContext).pop();
-          unawaited(_openReadingTask(paragraph));
-        },
-        onOpenListeningCheck: () {
-          Navigator.of(dialogContext).pop();
-          _openListeningCheck(paragraph, source);
-        },
-      ),
-    );
+  }
+
+  void _closeReadingDiff() {
+    setState(() {
+      _readingDiffSource = null;
+      _readingDiffParagraph = null;
+    });
   }
 
   /// Swaps the reading view for the listening-retell surface. The reading
   /// rubric's points seed the retell template when they exist, so both
   /// sides interrogate the same content; otherwise the generic template
   /// applies. Text hidden by construction: the panel replaces the view.
-  void _openListeningCheck(ReadingParagraph paragraph, ReadingTaskSource source) {
+  void _openListeningCheck(
+    ReadingParagraph paragraph,
+    ReadingTaskSource source,
+  ) {
     final service = api;
     if (service == null) return;
     final l = AppLocalizations.of(context);
@@ -1596,10 +1628,34 @@ class _PlayerScreenState extends State<PlayerScreen>
                                   mediaTitle: playerController.mediaPath!
                                       .split(Platform.pathSeparator)
                                       .last,
-                                  playerStage: readingController.isOpen
-                                      ? _readingView()
-                                      : _playerStage(),
+                                  playerStage: _playerStage(),
                                   learningPanel: _sidePanel(),
+                                  selectedChannel: readingController.isOpen
+                                      ? ContentChannel.reading
+                                      : ContentChannel.listening,
+                                  channelAvailability: {
+                                    ContentChannel.listening:
+                                        const ContentChannelAvailability.available(),
+                                    ContentChannel.reading:
+                                        subtitleController.primaryTrack == null
+                                        ? ContentChannelAvailability.unavailable(
+                                            l.text('channelNeedsTranscript'),
+                                          )
+                                        : const ContentChannelAvailability.available(),
+                                    ContentChannel.speaking:
+                                        ContentChannelAvailability.unavailable(
+                                          l.text('channelPlanned'),
+                                        ),
+                                    ContentChannel.writing:
+                                        ContentChannelAvailability.unavailable(
+                                          l.text('channelPlanned'),
+                                        ),
+                                  },
+                                  onChannelSelected: (channel) =>
+                                      unawaited(_selectContentChannel(channel)),
+                                  immersiveStage: readingController.isOpen
+                                      ? _readingView()
+                                      : null,
                                   mediaFraction:
                                       settingsController.workbenchMediaFraction,
                                   onMediaFractionChanged:
@@ -1744,6 +1800,33 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Widget _readingView() {
+    final taskSource = _readingTaskStudioSource;
+    if (taskSource != null && api != null) {
+      return ReadingTaskStudio(
+        controller: readingTaskController,
+        api: api!,
+        source: taskSource,
+        audioPlayCount: () =>
+            readingController.slicePlayCount(taskSource.anchorCueId),
+        onClose: _closeReadingTaskStudio,
+      );
+    }
+    final diffSource = _readingDiffSource;
+    final diffParagraph = _readingDiffParagraph;
+    if (diffSource != null && diffParagraph != null) {
+      return ReadingDiffPanel(
+        controller: readingDiffController,
+        onOpenReadingTask: () {
+          _closeReadingDiff();
+          unawaited(_openReadingTask(diffParagraph));
+        },
+        onOpenListeningCheck: () {
+          _closeReadingDiff();
+          _openListeningCheck(diffParagraph, diffSource);
+        },
+        onClose: _closeReadingDiff,
+      );
+    }
     final listeningSource = _listeningCheckSource;
     if (listeningSource != null && api != null) {
       return ListeningCheckPanel(
@@ -1769,12 +1852,12 @@ class _PlayerScreenState extends State<PlayerScreen>
         onClose: _closeListeningCheck,
       );
     }
-    return ReadingView(
+    final reader = ReadingView(
       controller: readingController,
       wordEntries: learningController.wordEntries,
       capabilityProfiles: learningController.capabilityProfiles,
       showStyles: settingsController.statusStylesVisible,
-      onWord: vocabularyActions.openWord,
+      onWord: _openReadingWord,
       onPlaySentence: (sentence) => _playReadingRange(
         sentence.start,
         sentence.end,
@@ -1790,6 +1873,32 @@ class _PlayerScreenState extends State<PlayerScreen>
       onStartTask: _openReadingTask,
       onOpenDiff: _openReadingDiff,
       onClose: () => unawaited(_closeReading()),
+    );
+    return ReadingContextLayout(
+      reader: reader,
+      inspectorOpen: _readingWordInspectorOpen,
+      inspector: ReadingWordInspector(
+        learningController: learningController,
+        onClose: () => setState(() => _readingWordInspectorOpen = false),
+        onStatus: (selected) =>
+            unawaited(vocabularyActions.setSelectedWordStatus(selected)),
+        onSave: vocabularyActions.saveSelectedLearningContent,
+        onSource: (occurrence) => unawaited(_openSlicePlayback(occurrence)),
+        onHeard: () => unawaited(vocabularyActions.observeSelected(true)),
+        onNotHeard: () => unawaited(vocabularyActions.observeSelected(false)),
+        onCapabilityOverride: vocabularyActions.setCapabilityOverride,
+        onRecordSource: () =>
+            unawaited(vocabularyActions.recordCurrentSource()),
+        onReadingMark: (understood) =>
+            unawaited(_recordReadingMark(understood)),
+        onOpenListeningDictionary: () {
+          final entry = learningController.selectedLexicalDetails?.entry;
+          if (entry != null) {
+            unawaited(_openListeningDictionaryEntry(entry.id));
+          }
+        },
+        hasSelectedCue: subtitleController.currentPrimaryCue != null,
+      ),
     );
   }
 

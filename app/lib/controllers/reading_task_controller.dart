@@ -38,6 +38,7 @@ class ReadingTaskState {
     this.source,
     this.rubric,
     this.draftPoints = const [],
+    this.draftAnswer = '',
     this.attempt,
     this.judgment,
     this.draftVerdicts = const {},
@@ -59,6 +60,7 @@ class ReadingTaskState {
 
   /// Editable template points before the rubric exists (editing phase).
   final List<RubricPointView> draftPoints;
+  final String draftAnswer;
   final SemanticAttemptView? attempt;
   final SemanticJudgmentView? judgment;
 
@@ -71,9 +73,7 @@ class ReadingTaskState {
 
   bool get allPointsJudged =>
       rubric != null &&
-      rubric!.points.every(
-        (point) => draftVerdicts.containsKey(point.pointId),
-      );
+      rubric!.points.every((point) => draftVerdicts.containsKey(point.pointId));
 
   ReadingTaskState copyWith({
     String? phase,
@@ -81,6 +81,7 @@ class ReadingTaskState {
     Object? source = _unset,
     Object? rubric = _unset,
     List<RubricPointView>? draftPoints,
+    String? draftAnswer,
     Object? attempt = _unset,
     Object? judgment = _unset,
     Map<String, String>? draftVerdicts,
@@ -98,6 +99,7 @@ class ReadingTaskState {
         ? this.rubric
         : rubric as SemanticRubricView?,
     draftPoints: draftPoints ?? this.draftPoints,
+    draftAnswer: draftAnswer ?? this.draftAnswer,
     attempt: identical(attempt, _unset)
         ? this.attempt
         : attempt as SemanticAttemptView?,
@@ -127,6 +129,8 @@ class ReadingTaskController extends ChangeNotifier {
 
   final Store<ReadingTaskState> _store;
   int _answerStartedAtMs = 0;
+  final Map<String, List<RubricPointView>> _pointDrafts = {};
+  final Map<String, String> _answerDrafts = {};
 
   Store<ReadingTaskState> get store => _store;
   ReadingTaskState get state => _store.state;
@@ -141,11 +145,13 @@ class ReadingTaskController extends ChangeNotifier {
     required List<RubricPointView> templatePoints,
     String purpose = readingPurpose,
   }) async {
+    final draftKey = _draftKey(source, purpose);
     _store.replace(
       ReadingTaskState(
         phase: 'idle',
         purpose: purpose,
         source: source,
+        draftAnswer: _answerDrafts[draftKey] ?? '',
         busy: true,
       ),
     );
@@ -159,12 +165,9 @@ class ReadingTaskController extends ChangeNotifier {
         transcriptSnapshot: source.transcriptSnapshot,
       );
       if (rubric == null) {
+        final points = _pointDrafts[draftKey] ?? templatePoints;
         _store.update(
-          (s) => s.copyWith(
-            phase: 'editing',
-            draftPoints: templatePoints,
-            busy: false,
-          ),
+          (s) => s.copyWith(phase: 'editing', draftPoints: points, busy: false),
         );
       } else {
         final attempts = await api.semanticRubricAttempts(rubric.id);
@@ -181,6 +184,7 @@ class ReadingTaskController extends ChangeNotifier {
     final points = [...state.draftPoints];
     if (index < 0 || index >= points.length) return;
     points[index] = point;
+    _cachePointDraft(points);
     _store.update((s) => s.copyWith(draftPoints: points));
   }
 
@@ -188,7 +192,15 @@ class ReadingTaskController extends ChangeNotifier {
     final points = [...state.draftPoints];
     if (index < 0 || index >= points.length || points.length <= 1) return;
     points.removeAt(index);
+    _cachePointDraft(points);
     _store.update((s) => s.copyWith(draftPoints: points));
+  }
+
+  void updateAnswerDraft(String value) {
+    final source = state.source;
+    if (source == null) return;
+    _answerDrafts[_draftKey(source, state.purpose)] = value;
+    _store.update((s) => s.copyWith(draftAnswer: value));
   }
 
   /// Saves the edited template as rubric version 1. On a concurrent 409 the
@@ -241,12 +253,13 @@ class ReadingTaskController extends ChangeNotifier {
   }) async {
     final source = state.source;
     final rubric = state.rubric;
+    final purpose = state.purpose;
     final trimmed = answer.trim();
     if (source == null || rubric == null || trimmed.isEmpty) return;
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
       final attempt = await api.createSemanticAttempt(
-        kind: state.purpose,
+        kind: purpose,
         target: {
           'kind': 'segment',
           'id': null,
@@ -273,6 +286,7 @@ class ReadingTaskController extends ChangeNotifier {
           busy: false,
         ),
       );
+      _answerDrafts.remove(_draftKey(source, purpose));
     } catch (error) {
       _store.update((s) => s.copyWith(busy: false, error: '$error'));
     }
@@ -280,9 +294,7 @@ class ReadingTaskController extends ChangeNotifier {
 
   void setVerdict(String pointId, String verdict) {
     _store.update(
-      (s) => s.copyWith(
-        draftVerdicts: {...s.draftVerdicts, pointId: verdict},
-      ),
+      (s) => s.copyWith(draftVerdicts: {...s.draftVerdicts, pointId: verdict}),
     );
   }
 
@@ -303,9 +315,8 @@ class ReadingTaskController extends ChangeNotifier {
           pointId: point.pointId,
           verdict: state.draftVerdicts[point.pointId]!,
           supportingSpans: switch (state.draftVerdicts[point.pointId]!) {
-            'covered' || 'partial' => [
-              ResponseSpanView(startChar: 0, endChar: charCount),
-            ],
+            'covered' ||
+            'partial' => [ResponseSpanView(startChar: 0, endChar: charCount)],
             _ => const [],
           },
         ),
@@ -368,6 +379,15 @@ class ReadingTaskController extends ChangeNotifier {
   void closeTask() {
     _store.replace(const ReadingTaskState());
   }
+
+  void _cachePointDraft(List<RubricPointView> points) {
+    final source = state.source;
+    if (source == null) return;
+    _pointDrafts[_draftKey(source, state.purpose)] = List.unmodifiable(points);
+  }
+
+  String _draftKey(ReadingTaskSource source, String purpose) =>
+      '$purpose|${source.mediaId}|${source.trackId}|${source.startMs}|${source.endMs}';
 
   void _enterAnswering(SemanticRubricView rubric, int pastAttemptCount) {
     _answerStartedAtMs = DateTime.now().millisecondsSinceEpoch;

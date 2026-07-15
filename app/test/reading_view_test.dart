@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/reading_controller.dart';
+import 'package:llplayer_next/controllers/learning_controller.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/reading.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/widgets/panels/reading_view.dart';
+import 'package:llplayer_next/widgets/panels/reading_word_inspector.dart';
 
 Cue _cue(int index, String text, {required int startMs, required int endMs}) {
   final words = text
@@ -61,14 +63,8 @@ void main() {
       );
       expect(controller.state.open, isTrue);
       expect(controller.state.paragraphs, hasLength(2));
-      expect(
-        controller.state.translationByAnchor['cue-0'],
-        '第一段翻译',
-      );
-      expect(
-        controller.state.translationByAnchor['cue-1'],
-        '第二段翻译',
-      );
+      expect(controller.state.translationByAnchor['cue-0'], '第一段翻译');
+      expect(controller.state.translationByAnchor['cue-1'], '第二段翻译');
     });
 
     test('resume anchor survives only when it still exists', () {
@@ -93,6 +89,16 @@ void main() {
       expect(controller.state.anchorCueId, 'cue-0');
       controller.close();
       expect(controller.state.open, isFalse);
+    });
+
+    test('translation preference survives a channel round trip', () {
+      final controller = ReadingController();
+      final track = _track([_cue(0, 'Hello there.', startMs: 0, endMs: 1000)]);
+      controller.open(track);
+      controller.setTranslationVisible(true);
+      controller.close();
+      controller.open(track);
+      expect(controller.state.translationVisible, isTrue);
     });
   });
 
@@ -126,7 +132,8 @@ void main() {
   });
 
   group('ReadingView', () {
-    Widget host(ReadingController controller, {
+    Widget host(
+      ReadingController controller, {
       Future<void> Function(SubtitleToken, Cue)? onWord,
       Future<void> Function(ReadingSentence)? onPlaySentence,
       VoidCallback? onClose,
@@ -189,7 +196,7 @@ void main() {
     });
 
     testWidgets(
-      'tapping a paragraph anchors it and reveals replay chips',
+      'tapping a paragraph anchors it and reveals the inline toolbar',
       (tester) async {
         final controller = ReadingController();
         controller.open(
@@ -200,29 +207,30 @@ void main() {
         );
         ReadingSentence? played;
         await tester.pumpWidget(
-          host(controller, onPlaySentence: (sentence) async {
-            played = sentence;
-          }),
+          host(
+            controller,
+            onPlaySentence: (sentence) async {
+              played = sentence;
+            },
+          ),
         );
         expect(find.text('Play paragraph'), findsNothing);
         // Tap paragraph whitespace (top-left corner), not a word's InkWell —
         // word taps intentionally win over paragraph selection.
         await tester.tapAt(
-          tester
-                  .getTopLeft(
-                    find.byKey(const ValueKey('reading-paragraph-cue-1')),
-                  ) +
+          tester.getTopLeft(
+                find.byKey(const ValueKey('reading-paragraph-cue-1')),
+              ) +
               const Offset(4, 4),
         );
         await tester.pump();
         expect(controller.state.anchorCueId, 'cue-1');
         expect(find.text('Play paragraph'), findsOneWidget);
-        await tester.tap(find.text('Second paragraph text.').last);
-        await tester.pump();
-        // The sentence chip label is the truncated sentence text.
-        final chip = find.widgetWithText(ActionChip, 'Second paragraph text.');
-        expect(chip, findsOneWidget);
-        await tester.tap(chip);
+        final sentenceAction = find.byKey(
+          const ValueKey('reading-sentence-cue-1-0'),
+        );
+        expect(sentenceAction, findsOneWidget);
+        await tester.tap(sentenceAction);
         expect(played?.cues.first.id, 'cue-1');
       },
     );
@@ -233,16 +241,42 @@ void main() {
       final controller = ReadingController();
       controller.open(
         _track([_cue(0, 'Hello world.', startMs: 0, endMs: 2000)]),
-        secondaryTrack: _track(
-          [_cue(10, '你好世界', startMs: 100, endMs: 1900)],
-          id: 'track-2',
-        ),
+        secondaryTrack: _track([
+          _cue(10, '你好世界', startMs: 100, endMs: 1900),
+        ], id: 'track-2'),
       );
       await tester.pumpWidget(host(controller));
       expect(find.text('你好世界'), findsNothing);
       await tester.tap(find.byIcon(Icons.translate));
       await tester.pump();
       expect(find.text('你好世界'), findsOneWidget);
+    });
+
+    testWidgets('vocabulary overview and channel lenses stay separated', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final controller = ReadingController();
+      controller.open(
+        _track([_cue(0, 'Hello world.', startMs: 0, endMs: 2000)]),
+      );
+      await tester.pumpWidget(host(controller));
+
+      await tester.tap(
+        find.byKey(const ValueKey('reading-vocabulary-overview')),
+      );
+      await tester.pump();
+      expect(find.text('unique words'), findsOneWidget);
+      expect(find.text('reading marks'), findsOneWidget);
+      expect(find.text('listening estimates'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('reading-lens-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reading marks').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Reading marks'), findsOneWidget);
+      expect(find.text('Listening estimates'), findsNothing);
     });
 
     testWidgets('close button invokes onClose', (tester) async {
@@ -253,6 +287,61 @@ void main() {
       var closed = false;
       await tester.pumpWidget(host(controller, onClose: () => closed = true));
       await tester.tap(find.byIcon(Icons.close));
+      expect(closed, isTrue);
+    });
+  });
+
+  group('Reading word inspector', () {
+    testWidgets('opens beside the reader and can be dismissed', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final learning = LearningController();
+      learning.setSelectedToken(
+        const SubtitleToken(
+          index: 0,
+          kind: 'word',
+          text: 'schools',
+          normalized: 'school',
+        ),
+      );
+      var closed = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: const [AppLocalizations.delegate],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: ReadingContextLayout(
+              inspectorOpen: true,
+              reader: const ColoredBox(
+                key: ValueKey('reader-content'),
+                color: Colors.white,
+              ),
+              inspector: ReadingWordInspector(
+                learningController: learning,
+                onClose: () => closed = true,
+                onStatus: (_) {},
+                onSave: (_, _) async {},
+                onSource: (_) {},
+                onHeard: () {},
+                onNotHeard: () {},
+                onCapabilityOverride: (_, _) async {},
+                onReadingMark: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byKey(const ValueKey('reader-content')), findsOneWidget);
+      expect(find.text('schools'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('reading-word-inspector-rail')),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('reading-word-inspector-close')),
+      );
       expect(closed, isTrue);
     });
   });
