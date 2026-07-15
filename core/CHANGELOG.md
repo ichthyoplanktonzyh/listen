@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-15 03:30 CST: Phase 3.13 Slice 6 完成 + phase CODE COMPLETE。真实媒体后端
+  全链路 QA：隔离 DB + 真实 sidecar + CNN10 真实 mp4/244 句 whisper 转写，新闻段
+  20/20 通过（位置往返、rubric 409→lookup 恢复、阅读 attempt/自评/adjudication、
+  听侧独立 rubric + 隐藏文本 attempt、读听两侧可发现、真实词条阅读标记 204 且零
+  projection），对话段（31 个 speaker-turn cue）rubric/attempt/judgment 通过；形成
+  可追溯读听差异结论（read=yes / listen=partial → diffMixed）。撰写
+  `3.13-REAL-MEDIA-QA.md`（含 owner GUI 走查清单）与 `3.13-CLOSEOUT.md`，PLAN 置
+  CODE COMPLETE，STATE 更新（下一 phase 3.14；Slice 7 LLM 接线随 owner 3.12.1
+  裁决）。
+
 - 2026-07-15 02:30 CST: Phase 3.13 Slice 5 完成：reading observation writer（显式标记）。
   domain 显式扩展封闭枚举 `ObservationTaskType::ReadingContextMarking` +
   `observation_spec_for_reading_marking`（capability=Reading；assistance 按标记时翻译
