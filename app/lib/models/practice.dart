@@ -437,6 +437,38 @@ class AudioWaveformSummary {
   final List<double> rms;
 }
 
+class RecordingAudioFacts {
+  const RecordingAudioFacts({
+    required this.recordingId,
+    required this.durationMs,
+    required this.pauses,
+    required this.waveform,
+  });
+
+  factory RecordingAudioFacts.fromJson(Map<String, dynamic> json) =>
+      RecordingAudioFacts(
+        recordingId: json['recording_id'] as String,
+        durationMs: json['duration_ms'] as int,
+        pauses: (json['pauses'] as List<dynamic>)
+            .map(
+              (value) =>
+                  AudioPauseInterval.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+        waveform: AudioWaveformSummary.fromJson(
+          json['waveform'] as Map<String, dynamic>,
+        ),
+      );
+
+  final String recordingId;
+  final int durationMs;
+  final List<AudioPauseInterval> pauses;
+  final AudioWaveformSummary waveform;
+
+  int get totalPauseMs =>
+      pauses.fold(0, (total, pause) => total + pause.endMs - pause.startMs);
+}
+
 class ShadowingComparison {
   const ShadowingComparison({
     required this.attemptId,

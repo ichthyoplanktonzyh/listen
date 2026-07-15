@@ -118,14 +118,72 @@ extension SemanticApi on LocalApi {
             'audio_play_count': audioPlayCount,
             'notes_allowed': notesAllowed,
             'l1_trigger': l1Trigger,
+            'speaking_assistance': null,
+            'speaking_recall': null,
+            'prompt_snapshot': null,
           },
           'responses': [
             {
               'revision': 1,
+              'raw_transcript': null,
               'transcript': responseTranscript,
               'source': 'typed',
               'recording_asset_id': null,
               'asr_reliability': null,
+              'language': responseLanguage,
+              'recorded_at_ms': endedAtMs,
+            },
+          ],
+          'status': 'completed',
+          'started_at_ms': startedAtMs,
+          'ended_at_ms': endedAtMs,
+        }))
+        as Map<String, dynamic>,
+  );
+
+  /// Records one constructed spoken response. Raw ASR and the learner-edited
+  /// transcript remain separate; this method records no judgment or score.
+  Future<SemanticAttemptView> createSpokenSemanticAttempt({
+    required String kind,
+    required Map<String, dynamic> target,
+    required String rubricId,
+    required int rubricVersion,
+    required int audioPlayCount,
+    String? l1Trigger,
+    String? speakingAssistance,
+    required String speakingRecall,
+    String? promptSnapshot,
+    required String recordingAssetId,
+    required String rawTranscript,
+    required String correctedTranscript,
+    required String asrReliability,
+    required String responseLanguage,
+    required int startedAtMs,
+    required int endedAtMs,
+  }) async => SemanticAttemptView.fromJson(
+    (await _request('POST', '/v1/semantic/attempts', {
+          'kind': kind,
+          'target': target,
+          'anchors': const <dynamic>[],
+          'rubric_id': rubricId,
+          'rubric_version': rubricVersion,
+          'conditions': {
+            'source_text_visible': false,
+            'audio_play_count': audioPlayCount,
+            'notes_allowed': false,
+            'l1_trigger': l1Trigger,
+            'speaking_assistance': speakingAssistance,
+            'speaking_recall': speakingRecall,
+            'prompt_snapshot': promptSnapshot,
+          },
+          'responses': [
+            {
+              'revision': 1,
+              'raw_transcript': rawTranscript,
+              'transcript': correctedTranscript,
+              'source': 'asr',
+              'recording_asset_id': recordingAssetId,
+              'asr_reliability': asrReliability,
               'language': responseLanguage,
               'recorded_at_ms': endedAtMs,
             },
@@ -145,9 +203,7 @@ extension SemanticApi on LocalApi {
                 '/v1/semantic/attempts/${Uri.encodeComponent(attemptId)}/judgments',
               ))
               as List<dynamic>)
-          .map(
-            (j) => SemanticJudgmentView.fromJson(j as Map<String, dynamic>),
-          )
+          .map((j) => SemanticJudgmentView.fromJson(j as Map<String, dynamic>))
           .toList(growable: false);
 
   /// Records a judgment over one attempt response. The server re-validates
@@ -178,6 +234,23 @@ extension SemanticApi on LocalApi {
         as Map<String, dynamic>,
   );
 
+  Future<void> confirmSpeakingTarget({
+    required String attemptId,
+    required String lexicalEntryId,
+    required String surfaceForm,
+    String? sentenceId,
+  }) async {
+    await _request(
+      'POST',
+      '/v1/semantic/attempts/${Uri.encodeComponent(attemptId)}/speaking-targets',
+      {
+        'lexical_entry_id': lexicalEntryId,
+        'surface_form': surfaceForm,
+        'sentence_id': sentenceId,
+      },
+    );
+  }
+
   Future<List<JudgmentAdjudicationView>> judgmentAdjudications(
     String judgmentId,
   ) async =>
@@ -187,8 +260,7 @@ extension SemanticApi on LocalApi {
               ))
               as List<dynamic>)
           .map(
-            (a) =>
-                JudgmentAdjudicationView.fromJson(a as Map<String, dynamic>),
+            (a) => JudgmentAdjudicationView.fromJson(a as Map<String, dynamic>),
           )
           .toList(growable: false);
 

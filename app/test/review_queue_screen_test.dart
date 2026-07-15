@@ -100,6 +100,7 @@ void main() {
             api: api,
             onPlayRange: (startMs, endMs) async {},
             onStartShadowing: (_) async {},
+            onStartDelayedRetelling: (_) async {},
           ),
         ),
       );
@@ -121,6 +122,90 @@ void main() {
       expect(find.text('听出了'), findsOneWidget);
     });
   }
+
+  testWidgets(
+    'delayed retelling enters speaking instead of revealing an answer',
+    (tester) async {
+      var launched = false;
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'tok',
+        transport: (method, path, body) async {
+          if (path ==
+              '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
+            return (statusCode: 200, body: '[]');
+          }
+          return (
+            statusCode: 200,
+            body: jsonEncode([
+              {
+                'item': {
+                  'id': 'review-speaking-1',
+                  'source': {
+                    'kind': 'speaking_attempt',
+                    'id': 'attempt-1',
+                    'practice_attempt_id': null,
+                    'lexical_entry_id': null,
+                    'media_id': 'media-1',
+                    'track_id': 'track-1',
+                  },
+                  'anchors': [
+                    {
+                      'kind': 'sentence',
+                      'id': 'cue-1',
+                      'label': 'en',
+                      'lexical_entry_id': null,
+                      'sentence_id': 'cue-1',
+                      'token_start': null,
+                      'token_end': null,
+                      'start_ms': 1000,
+                      'end_ms': 12000,
+                    },
+                  ],
+                  'prompt_snapshot': 'The ferry leaves on Tuesday.',
+                  'status': 'active',
+                  'created_at_ms': 1,
+                  'updated_at_ms': 1,
+                },
+                'schedule': {
+                  'item_id': 'review-speaking-1',
+                  'algorithm': 'listen_review_v1_heuristic_proxy',
+                  'due_at_ms': 1,
+                  'stability': null,
+                  'difficulty': null,
+                  'interval_days': null,
+                  'lapse_count': 0,
+                },
+                'card': {
+                  'kind': 'delayed_retelling',
+                  'cue': null,
+                  'answer': 'The ferry leaves on Tuesday.',
+                  'target': null,
+                },
+              },
+            ]),
+          );
+        },
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReviewQueueScreen(
+            api: api,
+            onPlayRange: (startMs, endMs) async {},
+            onStartShadowing: (_) async {},
+            onStartDelayedRetelling: (_) async => launched = true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('开始延迟复述'), findsOneWidget);
+      expect(find.text('显示原句'), findsNothing);
+      await tester.tap(find.text('开始延迟复述'));
+      await tester.pumpAndSettle();
+      expect(launched, isTrue);
+    },
+  );
 
   testWidgets('finished queue shows a non-blocking upgrade suggestion', (
     tester,
@@ -154,6 +239,7 @@ void main() {
           api: api,
           onPlayRange: (startMs, endMs) async {},
           onStartShadowing: (_) async {},
+          onStartDelayedRetelling: (_) async {},
         ),
       ),
     );

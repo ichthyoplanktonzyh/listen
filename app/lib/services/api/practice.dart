@@ -53,6 +53,15 @@ extension PracticeReviewApi on LocalApi {
         as Map<String, dynamic>,
   );
 
+  Future<RecordingAudioFacts> recordingAudioFacts(String recordingId) async =>
+      RecordingAudioFacts.fromJson(
+        (await _request(
+              'GET',
+              '/v1/recordings/${Uri.encodeComponent(recordingId)}/audio-facts',
+            ))
+            as Map<String, dynamic>,
+      );
+
   Future<RecordingAsset> deleteRecordingAsset(String id) async =>
       RecordingAsset.fromJson(
         (await _request('DELETE', '/v1/recordings/${Uri.encodeComponent(id)}'))

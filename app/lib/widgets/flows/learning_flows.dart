@@ -237,6 +237,7 @@ Future<void> openReviewQueueFlow({
   required PlayerController playerController,
   required PlaybackActionsCoordinator playbackActions,
   required Future<void> Function(ReviewQueueEntry entry) startReviewShadowing,
+  required Future<void> Function(ReviewQueueEntry entry) startDelayedRetelling,
 }) async {
   final service = api;
   if (service == null) return;
@@ -253,6 +254,7 @@ Future<void> openReviewQueueFlow({
           labelKey: 'loopReview',
         ),
         onStartShadowing: startReviewShadowing,
+        onStartDelayedRetelling: startDelayedRetelling,
       ),
     ),
   );
