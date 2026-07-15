@@ -61,6 +61,7 @@ class SidePanel extends StatefulWidget {
     required this.timingQuality,
     this.onStartColdStart,
     this.onRecordCurrentSource,
+    this.onReadingMark,
   });
 
   final PlayerController playerController;
@@ -104,6 +105,10 @@ class SidePanel extends StatefulWidget {
   final String Function(String sentenceId) timingQuality;
   final VoidCallback? onStartColdStart;
   final VoidCallback? onRecordCurrentSource;
+
+  /// Explicit reading mark for the selected word; non-null only while the
+  /// reading posture is open (Phase 3.13 Slice 5).
+  final void Function(bool understood)? onReadingMark;
 
   @override
   State<SidePanel> createState() => _SidePanelState();
@@ -227,6 +232,7 @@ class _SidePanelState extends State<SidePanel> {
                       onNotHeard: () => _observeSelected(false),
                       onCapabilityOverride: _setCapabilityOverride,
                       onRecordSource: widget.onRecordCurrentSource,
+                      onReadingMark: widget.onReadingMark,
                       onOpenListeningDictionary:
                           widget.onOpenListeningDictionary == null
                           ? null

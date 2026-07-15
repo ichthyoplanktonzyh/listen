@@ -13,6 +13,28 @@ extension ReadingApi on LocalApi {
     return ReadingPositionView.fromJson(json as Map<String, dynamic>);
   }
 
+  /// Records one explicit reading mark ("understood / didn't understand
+  /// while reading") as a reading-channel observation. Assistance honesty:
+  /// [translationVisible] reflects whether the paragraph translation was
+  /// shown at marking time.
+  Future<void> recordReadingMarking({
+    required String lexicalEntryId,
+    String? sentenceId,
+    required String surfaceForm,
+    String? mediaId,
+    required bool translationVisible,
+    required bool understood,
+  }) async {
+    await _request('POST', '/v1/reading/markings', {
+      'lexical_entry_id': lexicalEntryId,
+      'sentence_id': ?sentenceId,
+      'surface_form': surfaceForm,
+      'media_id': ?mediaId,
+      'translation_visible': translationVisible,
+      'understood': understood,
+    });
+  }
+
   /// Upserts the reading cursor for [trackId]. The position is a cursor, not
   /// evidence — overwriting is intended.
   Future<ReadingPositionView> saveReadingPosition({

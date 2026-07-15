@@ -375,6 +375,9 @@ class AppLocalizations {
       'readingTaskListenEditHint':
           'Edit the retell checkpoints (this previews the content). Saved '
           'points become the fixed listening rubric for this segment.',
+      'readUnderstood': 'Read & understood',
+      'readNotUnderstood': "Read, didn't get it",
+      'readingMarkSaved': 'Reading mark saved',
       'shadowingPlannedTooltip': 'Shadowing and recording arrive in Phase 3.8.',
       'shadowingReadyTooltip':
           'Follow the current rhythm chunk and compare your recording.',
@@ -1295,6 +1298,9 @@ class AppLocalizations {
       'readingTaskListenAnswerHint': '先听本段（可重听），然后不看原文，用自己的话复述听到的内容。',
       'readingTaskListenTypeHint': '凭记忆复述你听到的内容。',
       'readingTaskListenEditHint': '编辑复述考点（会提前看到内容要点）。保存后成为本段听侧固定评分尺。',
+      'readUnderstood': '读懂了',
+      'readNotUnderstood': '读不懂',
+      'readingMarkSaved': '阅读标记已记录',
       'shadowingPlannedTooltip': '跟读与录音会在 Phase 3.8 点亮。',
       'shadowingReadyTooltip': '跟读当前韵律语块，并与自己的录音做客观对比。',
       'shadowingPractice': '跟读模仿',

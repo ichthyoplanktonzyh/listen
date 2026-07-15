@@ -998,6 +998,30 @@ class _PlayerScreenState extends State<PlayerScreen>
     setState(() => _listeningCheckSource = null);
   }
 
+  /// Explicit reading mark on the selected word (Slice 5). Assistance is the
+  /// honest translation visibility at marking time; one act, one
+  /// reading-channel observation, nothing else.
+  Future<void> _recordReadingMark(bool understood) async {
+    final service = api;
+    final entry = learningController.selectedLexicalDetails?.entry;
+    final token = learningController.selectedToken;
+    final cue = learningController.selectedCue;
+    if (service == null || entry == null || token == null) return;
+    try {
+      await service.recordReadingMarking(
+        lexicalEntryId: entry.id,
+        sentenceId: cue?.id,
+        surfaceForm: token.text,
+        mediaId: subtitleController.primaryTrack?.mediaId,
+        translationVisible: readingController.state.translationVisible,
+        understood: understood,
+      );
+      playerController.setStatus(l.text('readingMarkSaved'));
+    } catch (error) {
+      playerController.setStatus('$error');
+    }
+  }
+
   /// Replays a reading range through the slice window (3.5.7) so the primary
   /// playback position never moves while reading.
   Future<void> _playReadingRange(
@@ -1799,6 +1823,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     timingQuality: _timingQuality,
     onStartColdStart: _openColdStartMarking,
     onRecordCurrentSource: vocabularyActions.recordCurrentSource,
+    onReadingMark: readingController.isOpen
+        ? (understood) => unawaited(_recordReadingMark(understood))
+        : null,
   );
 
   Widget _controls() => PlaybackBar(
