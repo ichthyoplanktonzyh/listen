@@ -219,3 +219,21 @@ async fn reading_studio_task_flow_round_trips() {
     assert_eq!(status, StatusCode::OK, "{judgment}");
     assert_eq!(judgment["evidence_class"], "self_assessment");
 }
+
+#[tokio::test]
+async fn reading_marking_rejects_unknown_entry_over_http() {
+    let app = test_app();
+    let (status, body) = post_json(
+        &app,
+        "/v1/reading/markings",
+        serde_json::json!({
+            "lexical_entry_id": "no-such-entry",
+            "sentence_id": "cue-1",
+            "surface_form": "word",
+            "translation_visible": false,
+            "understood": true,
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+}

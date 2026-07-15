@@ -80,7 +80,7 @@ use routes::pronunciation::{
     analyze_pronunciation_sentence, generate_track_pronunciation, pronunciation_lookup,
     pronunciation_providers, track_pronunciation,
 };
-use routes::reading::{reading_position, save_reading_position};
+use routes::reading::{reading_position, record_reading_marking, save_reading_position};
 use routes::semantic::{
     create_judgment_adjudication, create_semantic_attempt, create_semantic_judgment,
     create_semantic_rubric, lookup_semantic_rubric, semantic_attempt, semantic_attempt_judgments,
@@ -631,6 +631,7 @@ pub fn router(state: ApiState) -> Router {
             "/v1/reading/positions/{track_id}",
             get(reading_position).put(save_reading_position),
         )
+        .route("/v1/reading/markings", post(record_reading_marking))
         .route("/v1/semantic/rubrics", post(create_semantic_rubric))
         .route("/v1/semantic/rubrics/lookup", get(lookup_semantic_rubric))
         .route("/v1/semantic/rubrics/{id}", get(semantic_rubric))

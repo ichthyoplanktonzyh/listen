@@ -1415,6 +1415,33 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SemanticRubric" }
+  /v1/reading/markings:
+    post:
+      operationId: recordReadingMarking
+      description: >
+        Explicit reading-posture word marking (Phase 3.13): one user act on
+        one word writes one reading-channel observation. Assistance records
+        whether a translation was visible. Paragraph task results never
+        write word-level observations.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lexical_entry_id, surface_form, translation_visible, understood]
+              properties:
+                lexical_entry_id: { type: string }
+                sentence_id: { type: [string, "null"] }
+                surface_form: { type: string }
+                media_id: { type: [string, "null"] }
+                translation_visible: { type: boolean }
+                understood: { type: boolean }
+      responses:
+        "204":
+          description: Observation appended (idempotent on identical replay).
+        default:
+          $ref: "#/components/responses/Error"
   /v1/semantic/rubrics/lookup:
     get:
       operationId: lookupSemanticRubric

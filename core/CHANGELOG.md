@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- 2026-07-15 02:30 CST: Phase 3.13 Slice 5 完成：reading observation writer（显式标记）。
+  domain 显式扩展封闭枚举 `ObservationTaskType::ReadingContextMarking` +
+  `observation_spec_for_reading_marking`（capability=Reading；assistance 按标记时翻译
+  可见性记 FullText/None——只有无辅助的阅读观察未来才可能独立支撑 acquired，镜像
+  listening 不变量）；application `record_reading_marking` 刻意窄于 listening 标记路径
+  （不写 legacy LexicalObservation、不写 recognition evidence、零 projection——channelized
+  writer 只对 Listening 通道重投影，结构性成立）；HTTP `POST /v1/reading/markings` +
+  OpenAPI。Flutter：`WordLearningPanel` 在阅读姿态下显示"读懂了/读不懂"按钮（词点击
+  经合成 token 映射回真实 cue，sentence 上下文正确）。负向测试：阅读标记不漏入
+  listening 通道/legacy 表/projection/history，未知词条 404 且零写入；无翻译标记为
+  None-assistance。验证：domain/application/persistence/api-http 12 套件全绿（persistence
+  reading 6 项、api-http reading 4 项），validate-contracts 通过，flutter analyze 零问题 /
+  test 406 全绿。
+
 - 2026-07-15 01:55 CST: Phase 3.13 Slice 4 完成：只听对照 + 读听差异解释卡。PLAN 记
   v2.1 修正：v2"同 rubric 双条件配对"被 3.11 validator 证伪（ReadingComprehension 强制
   文本可见、复述类强制隐藏），改为**同 source segment 双 rubric 事实并置**（阅读理解 vs

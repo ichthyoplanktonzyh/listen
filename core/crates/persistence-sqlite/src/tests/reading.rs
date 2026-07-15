@@ -77,3 +77,119 @@ fn reading_use_case_rejects_empty_anchor() {
         Err(application::ApplicationError::Invalid(_))
     ));
 }
+
+fn observation_count(repo: &SqliteRepository, table: &str) -> i64 {
+    repo.connection
+        .lock()
+        .unwrap()
+        .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+            row.get(0)
+        })
+        .unwrap()
+}
+
+#[test]
+fn reading_marking_writes_one_reading_observation_and_nothing_else() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
+    let entry = upsert_word_asset(&services, "en", "quake", "quake", None, None);
+    let sentence_id = SubtitleSentenceId::parse("cue-1").unwrap();
+
+    services
+        .lexical_learning()
+        .record_reading_marking(
+            &entry.entry.id,
+            Some(&sentence_id),
+            "quakes",
+            None,
+            true,
+            false,
+        )
+        .unwrap();
+
+    let reading = repo
+        .list_learning_observations(&entry.entry.id, Some(LexicalCapability::Reading), 10, 0)
+        .unwrap();
+    assert_eq!(reading.len(), 1);
+    let observation = &reading[0];
+    assert_eq!(observation.capability, LexicalCapability::Reading);
+    assert_eq!(
+        observation.task_type,
+        domain::ObservationTaskType::ReadingContextMarking
+    );
+    assert_eq!(observation.outcome, domain::ObservationOutcome::Failure);
+    // Translation was visible, so this can never alone support acquired.
+    assert_eq!(observation.assistance, domain::AssistanceLevel::FullText);
+    assert_eq!(observation.surface_form.as_deref(), Some("quakes"));
+    assert_eq!(observation.origin, domain::ObservationOrigin::UserMarking);
+
+    // Negative wall: the reading mark never leaks into the listening
+    // channel, the legacy observation table, projections, or history.
+    let listening = repo
+        .list_learning_observations(&entry.entry.id, Some(LexicalCapability::Listening), 10, 0)
+        .unwrap();
+    assert!(listening.is_empty());
+    assert_eq!(observation_count(&repo, "lexical_observations"), 0);
+    assert_eq!(observation_count(&repo, "lexical_capability_states"), 0);
+    assert_eq!(observation_count(&repo, "lexical_capability_history"), 0);
+}
+
+#[test]
+fn reading_marking_without_translation_is_unassisted_success() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
+    let entry = upsert_word_asset(&services, "en", "strike", "strike", None, None);
+    services
+        .lexical_learning()
+        .record_reading_marking(&entry.entry.id, None, "struck", None, false, true)
+        .unwrap();
+    let reading = repo
+        .list_learning_observations(&entry.entry.id, Some(LexicalCapability::Reading), 10, 0)
+        .unwrap();
+    assert_eq!(reading.len(), 1);
+    assert_eq!(reading[0].assistance, domain::AssistanceLevel::None);
+    assert_eq!(reading[0].outcome, domain::ObservationOutcome::Success);
+    assert_eq!(reading[0].sentence_id, None);
+}
+
+#[test]
+fn reading_marking_rejects_unknown_entry() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    );
+    let missing = LexicalEntryId::parse("no-such-entry").unwrap();
+    let result = services
+        .lexical_learning()
+        .record_reading_marking(&missing, None, "word", None, false, true);
+    assert!(matches!(
+        result,
+        Err(application::ApplicationError::NotFound(_))
+    ));
+    assert_eq!(observation_count(&repo, "learning_observations"), 0);
+}
