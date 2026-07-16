@@ -105,7 +105,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | 轻量消费端资源读取 | 无强制 Milestone 1 发布项 | CONSUME-001 至 CONSUME-004 |
 | Rhythm-first 真实听感分析 | 无强制 Milestone 1 发布项 | RHY-001 至 RHY-008 |
 | 用户可见工作流语义 | 无强制 Milestone 1 发布项 | UX-001 至 UX-008 |
-| 真实内容驱动的四通道扩展 | 无强制当前发布项 | LOOP-010 至 LOOP-012、LOOP-015 至 LOOP-018 |
+| 真实内容驱动的四通道扩展 | 无强制当前发布项 | LOOP-010 至 LOOP-012、LOOP-015 至 LOOP-020 |
 | 厂商中立语义能力 | 无强制当前发布项 | LOOP-013、LOOP-014 |
 
 ## 4. 平台需求
@@ -2916,6 +2916,21 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - 模型建议和复盘派生不自动写 capability observation/projection，仍经过用户确认门。
 - 依赖：LOOP-011、LOOP-013、Phase 3.15.5、Phase 3.15.6。
 
+### LOOP-020：跨通道产出 gap-(c) 复盘
+
+- 优先级：P1
+- 阶段：Phase 3.15.6
+- 需求：从 immutable semantic attempts 派生的 personal production corpus 与 reading/listening
+  接收证据做只读 join，只返回按通用词频、证据强度、近期性排序的 top-K 产出练习候选。
+- 验收标准：
+  - 空 corpus 返回 `empty` 且零靶子；小 N 返回 `starter` 并明确不是能力结论。
+  - 通用频率参照缺失时标 unavailable；不输出无排序的全集。
+  - 每个候选解释频率、接收证据与近期性来源，stable tie-break 可复现。
+  - 查询零 attempt/evidence/observation/capability/projection writer；TTS/播放不进入证据。
+  - spoken、近义/embedding、durable personal template、capability confirmation 分别留给
+    3.15.7、3.15.8、3.16、3.17。
+- 依赖：Phase 3.15.5、LOOP-015、ADR 0015/0017/0019。
+
 ## 18.6 Phase 3.4.x Learning Domain Model v2 需求
 
 > 共享上下文：
@@ -3157,7 +3172,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | Phase 2.20 Rhythm-first 真实听感分析 | RHY-001 至 RHY-008 |
 | Phase 2.22 用户可见工作流语义 | UX-001 至 UX-009 |
 | Milestone 2 多语言学习基础 | LANG-001 至 LANG-010 |
-| Phase 3.0 英语听力学习闭环与四通道扩展 | LOOP-000 至 LOOP-019 |
+| Phase 3.0 英语听力学习闭环与四通道扩展 | LOOP-000 至 LOOP-020 |
 | Phase 3.4.x / 3.9.1–3.9.2 Learning Analysis Foundation | CAP-001 至 CAP-013 |
 | Phase 3.35 听力工作台 UI 重构 | UI-016 至 UI-017 |
 | Phase 3.15.9 本地优先 TTS | TTS-001 至 TTS-008 |

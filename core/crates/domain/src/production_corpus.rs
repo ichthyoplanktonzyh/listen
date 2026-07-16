@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    LanguageCode, MediaId, ProductionCorpusDocumentId, ProductionCorpusEntryId, SemanticRubricId,
-    SemanticTaskAttemptId, SemanticTaskKind,
+    LanguageCode, LexicalEntryId, MediaId, ProductionCorpusDocumentId, ProductionCorpusEntryId,
+    SemanticRubricId, SemanticTaskAttemptId, SemanticTaskKind,
 };
 
 /// Which learner-output channel produced a corpus document.
@@ -78,4 +78,67 @@ pub struct ProductionCorpusHit {
     pub document: ProductionCorpusDocument,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entry: Option<ProductionCorpusEntry>,
+}
+
+/// Read-only receptive-side facts eligible for gap-(c) ranking. This carries
+/// evidence counts, never a production capability conclusion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProductionGapCandidateFacts {
+    pub lexical_entry_id: LexicalEntryId,
+    pub normalized_key: String,
+    pub display_form: String,
+    pub reading_acquired: bool,
+    pub listening_acquired: bool,
+    pub reading_successes: u32,
+    pub listening_successes: u32,
+    pub recognition_contexts: u32,
+    pub latest_receptive_at_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProductionCorpusSummary {
+    pub document_count: u32,
+    pub token_count: u32,
+    pub lemma_count: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProductionGapReadiness {
+    Empty,
+    Starter,
+    Ready,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProductionGapTarget {
+    pub lexical_entry_id: LexicalEntryId,
+    pub normalized_key: String,
+    pub display_form: String,
+    /// BNC rank from the installed ECDICT resource. Missing means the
+    /// reference is unavailable, not that the word is rare.
+    pub frequency_rank: Option<u32>,
+    pub frequency_band: Option<u8>,
+    pub evidence_strength: u32,
+    pub recency_band: u8,
+    pub reading_acquired: bool,
+    pub listening_acquired: bool,
+    pub reading_successes: u32,
+    pub listening_successes: u32,
+    pub recognition_contexts: u32,
+    pub latest_receptive_at_ms: u64,
+    pub explanation: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProductionGapReview {
+    pub language: LanguageCode,
+    pub channel: ProductionChannel,
+    pub readiness: ProductionGapReadiness,
+    pub document_count: u32,
+    pub token_count: u32,
+    pub lemma_count: u32,
+    pub candidate_count: u32,
+    pub targets: Vec<ProductionGapTarget>,
+    pub ranking_version: String,
 }

@@ -489,6 +489,17 @@ async fn writing_attempt_is_queryable_from_personal_production_corpus() {
     assert_eq!(status, StatusCode::OK, "{phrase_hits}");
     assert_eq!(phrase_hits.as_array().unwrap().len(), 1);
     assert!(phrase_hits[0].get("entry").is_none());
+
+    let (status, review) = get_json(
+        &app,
+        "/v1/production-gap/review?language=en&channel=written&limit=10",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{review}");
+    assert_eq!(review["readiness"], "starter");
+    assert_eq!(review["document_count"], 1);
+    assert_eq!(review["ranking_version"], "production-gap-ranking-v1");
+    assert_eq!(review["targets"], serde_json::json!([]));
 }
 
 #[tokio::test]

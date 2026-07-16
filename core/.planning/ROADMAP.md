@@ -1478,7 +1478,8 @@ Phase 3.7–3.10 仍按既有计划完成，不在本轮重排。听力主线与
 7. 3.15 Writing Studio v1 ✅；
 8. 3.15.5 Personal Production Corpus ✅；
 9. 3.15.9 TTS ✅（本地优先 system speech、provider-neutral seam、共享音频焦点与可重建缓存）；
-10. 3.15.6 Cross-channel Production Gap Review；
+10. 3.15.6 Cross-channel Production Gap Review（透明 top-K 参照系、empty/starter/ready、
+    零 projection writer）✅；
 11. 3.15.7 Realtime Speech Conversation / 3.15.8 Semantic Embedding；
 12. 3.16 Personal Expression；
 13. 3.17 Four-channel Projection & Cross-modal Review；

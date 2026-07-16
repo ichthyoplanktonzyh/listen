@@ -675,6 +675,26 @@ impl ProductionCorpusRepository for DisabledProductionCorpusRepository {
     ) -> Result<Vec<ProductionCorpusHit>, ApplicationError> {
         Ok(Vec::new())
     }
+
+    fn production_corpus_summary(
+        &self,
+        _language: &LanguageCode,
+        _channel: domain::ProductionChannel,
+    ) -> Result<domain::ProductionCorpusSummary, ApplicationError> {
+        Ok(domain::ProductionCorpusSummary {
+            document_count: 0,
+            token_count: 0,
+            lemma_count: 0,
+        })
+    }
+
+    fn list_production_gap_candidates(
+        &self,
+        _language: &LanguageCode,
+        _channel: domain::ProductionChannel,
+    ) -> Result<Vec<domain::ProductionGapCandidateFacts>, ApplicationError> {
+        Ok(Vec::new())
+    }
 }
 
 struct DisabledCorpusIndexRepository;

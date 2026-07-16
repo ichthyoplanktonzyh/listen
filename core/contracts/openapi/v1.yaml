@@ -2350,6 +2350,20 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ProductionCorpusReindexResult" }
+  /v1/production-gap/review:
+    get:
+      operationId: productionGapReview
+      description: Returns a read-only, reference-ranked gap-(c) review over receptive facts and the rebuildable production corpus.
+      parameters:
+        - { name: language, in: query, schema: { type: string, default: en } }
+        - { name: channel, in: query, schema: { $ref: "#/components/schemas/ProductionChannel", default: written } }
+        - { name: limit, in: query, schema: { type: integer, default: 10, minimum: 1, maximum: 20 } }
+      responses:
+        "200":
+          description: Descriptive top-K practice candidates; readiness communicates empty or small-N degradation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductionGapReview" }
   /v1/vocabulary/export:
     get:
       operationId: exportVocabulary
@@ -3895,6 +3909,39 @@ components:
       required: [indexed_rubrics]
       properties:
         indexed_rubrics: { type: integer, minimum: 0 }
+    ProductionGapReadiness:
+      enum: [empty, starter, ready]
+    ProductionGapTarget:
+      type: object
+      required: [lexical_entry_id, normalized_key, display_form, frequency_rank, frequency_band, evidence_strength, recency_band, reading_acquired, listening_acquired, reading_successes, listening_successes, recognition_contexts, latest_receptive_at_ms, explanation]
+      properties:
+        lexical_entry_id: { type: string }
+        normalized_key: { type: string }
+        display_form: { type: string }
+        frequency_rank: { type: [integer, "null"], minimum: 1 }
+        frequency_band: { type: [integer, "null"], minimum: 1, maximum: 4 }
+        evidence_strength: { type: integer, minimum: 0 }
+        recency_band: { type: integer, minimum: 0, maximum: 3 }
+        reading_acquired: { type: boolean }
+        listening_acquired: { type: boolean }
+        reading_successes: { type: integer, minimum: 0 }
+        listening_successes: { type: integer, minimum: 0 }
+        recognition_contexts: { type: integer, minimum: 0 }
+        latest_receptive_at_ms: { type: integer, minimum: 0 }
+        explanation: { type: array, items: { type: string } }
+    ProductionGapReview:
+      type: object
+      required: [language, channel, readiness, document_count, token_count, lemma_count, candidate_count, targets, ranking_version]
+      properties:
+        language: { type: string }
+        channel: { $ref: "#/components/schemas/ProductionChannel" }
+        readiness: { $ref: "#/components/schemas/ProductionGapReadiness" }
+        document_count: { type: integer, minimum: 0 }
+        token_count: { type: integer, minimum: 0 }
+        lemma_count: { type: integer, minimum: 0 }
+        candidate_count: { type: integer, minimum: 0 }
+        targets: { type: array, items: { $ref: "#/components/schemas/ProductionGapTarget" } }
+        ranking_version: { type: string }
     LexicalStatusHistory:
       type: object
       required: [id, lexical_entry_id, previous_status, new_status, changed_at_ms, change_source]

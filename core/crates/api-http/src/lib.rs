@@ -77,7 +77,9 @@ use routes::practice::{
     recording_audio_facts, reject_upgrade_suggestion, review_item, submit_hunting_check,
     submit_practice_attempt, submit_review_attempt, upgrade_suggestion_history,
 };
-use routes::production_corpus::{reindex_production_corpus, search_production_corpus};
+use routes::production_corpus::{
+    production_gap_review, reindex_production_corpus, search_production_corpus,
+};
 use routes::pronunciation::{
     analyze_pronunciation_sentence, generate_track_pronunciation, pronunciation_lookup,
     pronunciation_providers, track_pronunciation,
@@ -663,6 +665,7 @@ pub fn router(state: ApiState) -> Router {
             "/v1/production-corpus/reindex",
             post(reindex_production_corpus),
         )
+        .route("/v1/production-gap/review", get(production_gap_review))
         .route("/v1/vocabulary/export", get(export_vocabulary))
         .route("/v1/vocabulary/import", post(import_vocabulary))
         .route(

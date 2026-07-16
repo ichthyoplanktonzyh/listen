@@ -25,7 +25,11 @@ fn ecdict_normalizes_inflections_and_finds_phrase_entries() {
         use std::io::Write;
         let mut writer = std::io::BufWriter::new(fixture.as_file());
         writeln!(writer, "word,phonetic,definition,translation,pos,collins,oxford,tag,bnc,frq,exchange,detail,audio").unwrap();
-        writeln!(writer, "go,go,move,,,,,,,,\"p:went/gone i:going 3:goes\",,").unwrap();
+        writeln!(
+            writer,
+            "go,go,move,,,,,,42,55,\"p:went/gone i:going 3:goes\",,"
+        )
+        .unwrap();
         writeln!(writer, "piece of cake,,easy task,,,,,,,,,,").unwrap();
         writer.flush().unwrap();
         fixture.as_file().sync_all().unwrap();
@@ -38,6 +42,7 @@ fn ecdict_normalizes_inflections_and_finds_phrase_entries() {
     );
     assert_eq!(provider.provider_id(), "ecdict");
     assert_eq!(provider.version(), "fixture-v1");
+    assert_eq!(provider.frequency_rank(&language, "went"), Some(42));
 
     let words = ["It", "is", "a", "piece", "of", "cake"];
     let sentence = SubtitleSentence {

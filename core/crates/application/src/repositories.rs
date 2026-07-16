@@ -14,9 +14,10 @@ use domain::{
     PhoneticAnalysisModelDescriptor, PhoneticAnalysisModelId, PhoneticFindingFeedback,
     PhoneticFindingId, PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeItemId,
     PracticeSession, PracticeSessionId, ProductionCorpusDocument, ProductionCorpusEntry,
-    ProductionCorpusHit, ReadingPosition, RecognitionEvidence, RecordingAsset, RecordingAssetId,
-    ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewSchedule,
-    SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
+    ProductionCorpusHit, ProductionCorpusSummary, ProductionGapCandidateFacts, ReadingPosition,
+    RecognitionEvidence, RecordingAsset, RecordingAssetId, ReviewAttempt, ReviewAttemptId,
+    ReviewItem, ReviewItemId, ReviewItemStatus, ReviewSchedule, SemanticJudgment,
+    SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
     SemanticTaskAttemptId, SemanticTaskKind, SenseGroupAnalysis, SenseGroupAnalysisId,
     SentencePronunciation, SoundFitCalibration, SubtitleSentence, SubtitleSentenceId,
     SubtitleTrack, SubtitleTrackId, SubtitleTrackProvenance, SubtitleTrackStatus, TimeMs,
@@ -740,6 +741,16 @@ pub trait ProductionCorpusRepository: Send + Sync {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<ProductionCorpusHit>, ApplicationError>;
+    fn production_corpus_summary(
+        &self,
+        language: &LanguageCode,
+        channel: domain::ProductionChannel,
+    ) -> Result<ProductionCorpusSummary, ApplicationError>;
+    fn list_production_gap_candidates(
+        &self,
+        language: &LanguageCode,
+        channel: domain::ProductionChannel,
+    ) -> Result<Vec<ProductionGapCandidateFacts>, ApplicationError>;
 }
 
 pub trait DifficultyRepository: Send + Sync {

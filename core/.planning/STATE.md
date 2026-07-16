@@ -3,23 +3,30 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-16T18:10:00.000+08:00"
+last_updated: "2026-07-16T17:39:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-16 18:10 CST
-> 更新原因：Phase 3.15.9 TTS Speech Synthesis 代码与自动化验证收口。
+> 最后更新：2026-07-16 17:39 CST
+> 更新原因：Phase 3.15.6 Cross-channel Production Gap Review 代码与自动化验证收口。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.15.9 TTS Speech Synthesis **✅ CODE COMPLETE**。application
+- **当前执行主线**：Phase 3.15.6 Cross-channel Production Gap Review **✅ CODE COMPLETE —
+  OWNER GUI QA PENDING**。3.15.5 rebuildable corpus 与 reading/listening receptive facts 的只读
+  join、ECDICT BNC rank → evidence strength → recency → lemma 的透明 top-K、`empty/starter/ready`
+  诚实降级、HTTP/OpenAPI/Flutter 词典资产入口已贯通。owner 真实只读副本仅 1 document /
+  1 token / 1 lemma，因此不做伪校准；真实 API smoke 为 starter + `enjoy` rank 685。全链路
+  零 attempt/evidence/observation/capability/projection writer。Rust workspace、Clippy strict、
+  Flutter 443、analyze、contracts 全绿。下一建议执行 **3.15.7 realtime conversation**，随后
+  3.15.8 embeddings；3.17 confirmation gate 保留。
+- Phase 3.15.9 TTS Speech Synthesis **✅ CODE COMPLETE**。application
   provider-neutral port + local-runtime cache/single-flight/atomic lifecycle + macOS system speech
   adapter、HTTP/OpenAPI、Flutter 共享 auxiliary audio focus 已贯通；词典真人/标准音频优先，
   缺失才 synthetic fallback，personal corpus/Writing 只朗读 learner-owned text。TTS 零
   attempt/evidence/projection/corpus writer，保持 3.15.5 projection-vs-authoritative-asset 边界。
   自动化与真实 `/usr/bin/say` smoke 通过；owner GUI 听感 QA 留清单，不冒充已验收。
-  **下一建议执行 3.15.6 gap-(c) 复盘**，随后 3.15.7 realtime → 3.15.8 嵌入。
 - Phase 3.12.2 Studio LLM Feedback（P1）**✅ COMPLETE**（2026-07-16 owner 真实 provider
   QA 通过）：LLM rubric 生成 + judgment 显示接入三个 Studio；三 Studio 共用
   `LlmJudgmentAssist`；显示诚实边界（heuristic_proxy、append-only adjudication、零

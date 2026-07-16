@@ -55,6 +55,7 @@
 | `crates/persistence-sqlite/src/tests/timelines.rs::rule_and_syntax_sense_group_providers_keep_independent_runs` | rule/syntax SenseGroup provider/version、syntax artifact metrics 与独立 lifecycle 共存，且显式不依赖 ChunkTimeline |
 | `crates/persistence-sqlite/src/tests/learning_loop.rs::shadowing_completion_persists_recording_without_creating_capability_evidence` | Phase 3.8 录音资产 round trip、幂等非评价 completion、零 observation/review 与删除语义 |
 | `crates/persistence-sqlite/src/tests/production_corpus.rs` | Phase 3.15.5 写作增量 lemma/phrase 索引、零 observation/capability writer、单份回答文本、幂等全量重建与失败事务保留旧投影 |
+| `crates/persistence-sqlite/src/tests/production_corpus.rs::gap_review_is_ranked_read_only_and_small_n_stays_starter` | Phase 3.15.6 receptive join、production exclusion、starter 降级与零 evidence/capability history writer |
 | `crates/api-http/src/tests/practice.rs::practice_routes_capture_and_process_listening_inbox_items` | Phase 3.3 HTTP 路由：Listening Inbox capture/list/process 端到端 JSON contract |
 | `crates/api-http/src/tests/practice.rs::recording_and_unscored_shadowing_routes_round_trip` | Phase 3.8 recording create/get/delete 与 `completed` shadowing HTTP contract |
 | `crates/api-http/src/tests/semantic.rs::writing_attempt_is_queryable_from_personal_production_corpus` | Writing typed attempt 落库后增量摄入，exact lemma 与 FTS phrase HTTP 查询端到端 |

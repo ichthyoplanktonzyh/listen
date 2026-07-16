@@ -1,8 +1,8 @@
 use application::{ApplicationError, ProductionCorpusRepository};
 use domain::{
-    LanguageCode, MediaId, ProductionCorpusDocument, ProductionCorpusDocumentId,
-    ProductionCorpusEntry, ProductionCorpusEntryId, ProductionCorpusHit, SemanticRubricId,
-    SemanticTaskAttemptId,
+    LanguageCode, MediaId, ProductionChannel, ProductionCorpusDocument, ProductionCorpusDocumentId,
+    ProductionCorpusEntry, ProductionCorpusEntryId, ProductionCorpusHit, ProductionCorpusSummary,
+    ProductionGapCandidateFacts, SemanticRubricId, SemanticTaskAttemptId,
 };
 use rusqlite::{Connection, Row, Transaction, params};
 
@@ -199,6 +199,99 @@ impl ProductionCorpusRepository for SqliteRepository {
                 params![language.as_str(), phrase, limit, offset],
                 document_hit_from_row,
             )
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
+    fn production_corpus_summary(
+        &self,
+        language: &LanguageCode,
+        channel: ProductionChannel,
+    ) -> Result<ProductionCorpusSummary, ApplicationError> {
+        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        connection
+            .query_row(
+                "SELECT COUNT(DISTINCT d.id),COUNT(e.id),COUNT(DISTINCT e.normalized_key)
+                 FROM production_corpus_documents d
+                 LEFT JOIN production_corpus_entries e ON e.document_id=d.id
+                 WHERE d.language=?1 AND d.channel=?2",
+                params![language.as_str(), json(&channel)?],
+                |row| {
+                    Ok(ProductionCorpusSummary {
+                        document_count: row.get(0)?,
+                        token_count: row.get(1)?,
+                        lemma_count: row.get(2)?,
+                    })
+                },
+            )
+            .map_err(repo)
+    }
+
+    fn list_production_gap_candidates(
+        &self,
+        language: &LanguageCode,
+        channel: ProductionChannel,
+    ) -> Result<Vec<ProductionGapCandidateFacts>, ApplicationError> {
+        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = connection.prepare(
+            "WITH capability AS (
+               SELECT lexical_entry_id,
+                 MAX(CASE WHEN capability='\"reading\"' AND
+                   COALESCE(json_extract(override_json,'$.conclusion'),json_extract(projection_json,'$.conclusion'))='acquired' THEN 1 ELSE 0 END) reading_acquired,
+                 MAX(CASE WHEN capability='\"listening\"' AND
+                   COALESCE(json_extract(override_json,'$.conclusion'),json_extract(projection_json,'$.conclusion'))='acquired' THEN 1 ELSE 0 END) listening_acquired,
+                 MAX(updated_at_ms) latest_at
+               FROM lexical_capability_states
+               WHERE capability IN ('\"reading\"','\"listening\"')
+               GROUP BY lexical_entry_id
+             ), observations AS (
+               SELECT lexical_entry_id,
+                 SUM(CASE WHEN capability='\"reading\"' AND outcome='\"success\"' THEN 1 ELSE 0 END) reading_successes,
+                 SUM(CASE WHEN capability='\"listening\"' AND outcome='\"success\"' THEN 1 ELSE 0 END) listening_successes,
+                 MAX(occurred_at_ms) latest_at
+               FROM learning_observations
+               WHERE capability IN ('\"reading\"','\"listening\"')
+               GROUP BY lexical_entry_id
+             ), recognition AS (
+               SELECT lexical_entry_id,COUNT(*) contexts,MAX(occurred_at_ms) latest_at
+               FROM recognition_evidence GROUP BY lexical_entry_id
+             )
+             SELECT le.id,le.normalized_key,le.display_form,
+               COALESCE(c.reading_acquired,0),COALESCE(c.listening_acquired,0),
+               COALESCE(o.reading_successes,0),COALESCE(o.listening_successes,0),
+               COALESCE(r.contexts,0),
+               MAX(COALESCE(c.latest_at,0),COALESCE(o.latest_at,0),COALESCE(r.latest_at,0))
+             FROM lexical_entries le
+             LEFT JOIN capability c ON c.lexical_entry_id=le.id
+             LEFT JOIN observations o ON o.lexical_entry_id=le.id
+             LEFT JOIN recognition r ON r.lexical_entry_id=le.id
+             WHERE le.language=?1
+               AND (COALESCE(c.reading_acquired,0)=1 OR COALESCE(c.listening_acquired,0)=1
+                 OR COALESCE(o.reading_successes,0)>0 OR COALESCE(o.listening_successes,0)>0
+                 OR COALESCE(r.contexts,0)>0)
+               AND NOT EXISTS (
+                 SELECT 1 FROM production_corpus_entries pe
+                 JOIN production_corpus_documents pd ON pd.id=pe.document_id
+                 WHERE pd.language=le.language AND pd.channel=?2
+                   AND pe.normalized_key=le.normalized_key)
+             ORDER BY le.normalized_key"
+        ).map_err(repo)?;
+        statement
+            .query_map(params![language.as_str(), json(&channel)?], |row| {
+                Ok(ProductionGapCandidateFacts {
+                    lexical_entry_id: domain::LexicalEntryId::parse(row.get::<_, String>(0)?)
+                        .map_err(domain_sql)?,
+                    normalized_key: row.get(1)?,
+                    display_form: row.get(2)?,
+                    reading_acquired: row.get::<_, u32>(3)? != 0,
+                    listening_acquired: row.get::<_, u32>(4)? != 0,
+                    reading_successes: row.get(5)?,
+                    listening_successes: row.get(6)?,
+                    recognition_contexts: row.get(7)?,
+                    latest_receptive_at_ms: row.get(8)?,
+                })
+            })
             .map_err(repo)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(repo)

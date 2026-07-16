@@ -9,13 +9,14 @@ use std::sync::Arc;
 
 use domain::{
     ProductionAssistance, ProductionChannel, ProductionCorpusDocument, ProductionCorpusDocumentId,
-    ProductionCorpusEntry, ProductionCorpusEntryId, ProductionCorpusHit, SemanticAttemptStatus,
-    SemanticRubricId, SemanticTaskAttempt, SemanticTaskKind, SubtitleTokenKind, transcript_sha256,
+    ProductionCorpusEntry, ProductionCorpusEntryId, ProductionCorpusHit, ProductionGapReadiness,
+    ProductionGapReview, ProductionGapTarget, SemanticAttemptStatus, SemanticRubricId,
+    SemanticTaskAttempt, SemanticTaskKind, SubtitleTokenKind, transcript_sha256,
 };
 
 use crate::{
     AppServices, ApplicationError, LexicalLearningUseCases, ProductionCorpusRepository,
-    SemanticTaskRepository, SemanticUseCases, clean_required,
+    SemanticTaskRepository, SemanticUseCases, clean_required, now_ms,
 };
 
 const WRITING_KINDS: [SemanticTaskKind; 4] = [
@@ -127,6 +128,139 @@ impl ProductionCorpusUseCases {
             .unwrap_or_else(|_| query.to_lowercase());
         self.production_corpus
             .list_production_entries_by_key(&language, &key, limit, offset)
+    }
+
+    /// Produces a descriptive gap-(c) review. Absence from a small corpus is
+    /// never converted into capability evidence; readiness only controls how
+    /// strongly the read model may describe its distribution.
+    pub fn production_gap_review(
+        &self,
+        language: &str,
+        channel: ProductionChannel,
+        limit: u32,
+    ) -> Result<ProductionGapReview, ApplicationError> {
+        let language = domain::LanguageCode::parse(language)?;
+        let summary = self
+            .production_corpus
+            .production_corpus_summary(&language, channel)?;
+        let readiness = if summary.document_count == 0 {
+            ProductionGapReadiness::Empty
+        } else if summary.document_count < 10
+            || summary.token_count < 100
+            || summary.lemma_count < 20
+        {
+            ProductionGapReadiness::Starter
+        } else {
+            ProductionGapReadiness::Ready
+        };
+        let mut facts = if readiness == ProductionGapReadiness::Empty {
+            Vec::new()
+        } else {
+            self.production_corpus
+                .list_production_gap_candidates(&language, channel)?
+        };
+        let candidate_count = facts.len() as u32;
+        let now = now_ms();
+        let mut targets = facts
+            .drain(..)
+            .map(|fact| {
+                let frequency_rank = self
+                    .lexical_learning
+                    .frequency_rank(&language, &fact.normalized_key);
+                let frequency_band = frequency_rank.map(|rank| match rank {
+                    1..=1_000 => 1,
+                    1_001..=3_000 => 2,
+                    3_001..=10_000 => 3,
+                    _ => 4,
+                });
+                let evidence_strength = u32::from(fact.reading_acquired) * 3
+                    + u32::from(fact.listening_acquired) * 3
+                    + fact.reading_successes.min(3)
+                    + fact.listening_successes.min(3)
+                    + fact.recognition_contexts.min(5);
+                let age = now.saturating_sub(fact.latest_receptive_at_ms);
+                let day = 86_400_000;
+                let recency_band = if age <= 30 * day {
+                    3
+                } else if age <= 90 * day {
+                    2
+                } else if age <= 365 * day {
+                    1
+                } else {
+                    0
+                };
+                let mut explanation = Vec::new();
+                if let Some(rank) = frequency_rank {
+                    explanation.push(format!("BNC frequency rank {rank}"));
+                } else {
+                    explanation.push("general frequency rank unavailable".into());
+                }
+                if fact.reading_acquired {
+                    explanation.push("reading profile acquired".into());
+                }
+                if fact.listening_acquired {
+                    explanation.push("listening profile acquired".into());
+                }
+                if fact.reading_successes > 0 {
+                    explanation.push(format!("{} reading success marks", fact.reading_successes));
+                }
+                if fact.listening_successes > 0 {
+                    explanation.push(format!(
+                        "{} listening success marks",
+                        fact.listening_successes
+                    ));
+                }
+                if fact.recognition_contexts > 0 {
+                    explanation.push(format!(
+                        "{} recognition contexts",
+                        fact.recognition_contexts
+                    ));
+                }
+                explanation.push(match recency_band {
+                    3 => "receptive evidence within 30 days".into(),
+                    2 => "receptive evidence within 90 days".into(),
+                    1 => "receptive evidence within one year".into(),
+                    _ => "receptive evidence older than one year".into(),
+                });
+                ProductionGapTarget {
+                    lexical_entry_id: fact.lexical_entry_id,
+                    normalized_key: fact.normalized_key,
+                    display_form: fact.display_form,
+                    frequency_rank,
+                    frequency_band,
+                    evidence_strength,
+                    recency_band,
+                    reading_acquired: fact.reading_acquired,
+                    listening_acquired: fact.listening_acquired,
+                    reading_successes: fact.reading_successes,
+                    listening_successes: fact.listening_successes,
+                    recognition_contexts: fact.recognition_contexts,
+                    latest_receptive_at_ms: fact.latest_receptive_at_ms,
+                    explanation,
+                }
+            })
+            .collect::<Vec<_>>();
+        targets.sort_by(|a, b| {
+            a.frequency_band
+                .unwrap_or(u8::MAX)
+                .cmp(&b.frequency_band.unwrap_or(u8::MAX))
+                .then_with(|| b.evidence_strength.cmp(&a.evidence_strength))
+                .then_with(|| b.recency_band.cmp(&a.recency_band))
+                .then_with(|| b.latest_receptive_at_ms.cmp(&a.latest_receptive_at_ms))
+                .then_with(|| a.normalized_key.cmp(&b.normalized_key))
+        });
+        targets.truncate(limit.clamp(1, 20) as usize);
+        Ok(ProductionGapReview {
+            language,
+            channel,
+            readiness,
+            document_count: summary.document_count,
+            token_count: summary.token_count,
+            lemma_count: summary.lemma_count,
+            candidate_count,
+            targets,
+            ranking_version: "production-gap-ranking-v1".into(),
+        })
     }
 
     /// Derives one document per final response of each completed attempt. The

@@ -222,6 +222,11 @@ application use cases and provider/repository boundaries.
   plus lemma-keyed token spans, refreshes one rubric best-effort after attempt
   creation, and atomically replaces the full projection on reindex. Assistance
   values are factual provenance, not autonomous/non-autonomous judgments.
+- Phase 3.15.6 adds no table or writer. `ProductionCorpusUseCases` joins the v39
+  projection with receptive capability/observation/recognition facts, asks the
+  installed lexical provider for an optional BNC rank, and returns a top-K
+  `ProductionGapReview`. Ranking and empty/starter/ready degradation stay in
+  application; SQLite returns raw aggregate facts and Flutter only presents them.
 - Learning-loop persistence stores JSON snapshots plus query columns for kind,
   status, subject, result, and timestamps. Corpus and recording persistence are
   implemented; learner-profile persistence remains future work.

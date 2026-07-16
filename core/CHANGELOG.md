@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-16 17:32 CST: Phase 3.15.6 Cross-channel Production Gap Review 实现。以 3.15.5
+  rebuildable corpus 与 reading/listening capability、成功 observation、recognition contexts
+  做只读 gap-(c) join；排序固定为 ECDICT BNC rank band → 接收证据强度 → 近期性 → lemma，
+  只返回 top-K 并逐项解释。新增 `empty/starter/ready` 诚实降级：owner 真实只读副本探针仅
+  1 document / 1 token / 1 lemma，因此不做小样本伪校准，starter 靶子明确不是能力结论。
+  词典资产页新增最小复盘入口并回到既有词汇/复习动作；全链路零 attempt/evidence/observation/
+  capability/projection writer。spoken、embedding 近义、durable template 与确认门分别留给
+  3.15.7、3.15.8、3.16、3.17。
+
 - 2026-07-16 18:10 CST: Phase 3.15.9 TTS code complete。新增 application provider-neutral
   synthesis port 与 local-runtime manager（校验、voice 选择、稳定 cache key、single-flight、原子
   发布、统计/清理），macOS production 使用零下载离线 `/usr/bin/say` system voice；HTTP/OpenAPI/

@@ -38,6 +38,11 @@ pub trait LexicalNormalizationProvider: Send + Sync {
         language: &LanguageCode,
         sentence: &SubtitleSentence,
     ) -> Result<Vec<PhraseCandidate>, LexicalNormalizationProviderError>;
+    /// Optional general-frequency reference. Providers must return `None`
+    /// when their resource has no honest rank for the lemma.
+    fn frequency_rank(&self, _language: &LanguageCode, _lemma: &str) -> Option<u32> {
+        None
+    }
 }
 
 #[derive(Debug, Error)]

@@ -108,6 +108,58 @@ fn writing_attempt_incrementally_indexes_lemma_and_phrase_without_evidence_write
 }
 
 #[test]
+fn gap_review_is_ranked_read_only_and_small_n_stays_starter() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = services(&repo);
+    let (rubric, attempt) = writing_fixture();
+    services.semantic().save_semantic_rubric(rubric).unwrap();
+    services
+        .production_corpus()
+        .record_semantic_attempt_and_index(attempt)
+        .unwrap();
+    let connection = repo.connection.lock().unwrap();
+    connection.execute(
+        "INSERT INTO lexical_entries
+         (id,language,kind,granularity,normalization,normalized_key,canonical_form,normalized_form,display_form,status,normalization_provider,normalization_version,updated_at_ms,learning_updated_at_ms)
+         VALUES ('enjoy-id','en','\"word\"','\"word\"','\"lemma\"','enjoy','enjoy','enjoy','enjoy','\"known_recognized\"','test','v1',10,10)", []).unwrap();
+    connection.execute(
+        "INSERT INTO lexical_capability_states
+         (lexical_entry_id,sense_id,capability,projection_json,updated_at_ms)
+         VALUES ('enjoy-id','','\"reading\"',?1,10)",
+        [serde_json::json!({"conclusion":"acquired","source":"legacy_learning_status_migration","algorithm_version":"test","updated_at_ms":10}).to_string()],
+    ).unwrap();
+    drop(connection);
+
+    let review = services
+        .production_corpus()
+        .production_gap_review("en", domain::ProductionChannel::Written, 10)
+        .unwrap();
+    assert_eq!(review.readiness, domain::ProductionGapReadiness::Starter);
+    assert_eq!(
+        (
+            review.document_count,
+            review.token_count,
+            review.lemma_count
+        ),
+        (1, 4, 4)
+    );
+    assert_eq!(review.targets.len(), 1);
+    assert_eq!(review.targets[0].normalized_key, "enjoy");
+    assert!(review.targets[0].reading_acquired);
+
+    let connection = repo.connection.lock().unwrap();
+    let writes: i64 = connection
+        .query_row(
+            "SELECT (SELECT COUNT(*) FROM learning_observations) +
+                (SELECT COUNT(*) FROM lexical_capability_history)",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(writes, 0);
+}
+
+#[test]
 fn rebuild_is_idempotent_and_keeps_one_response_copy_per_document() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = services(&repo);

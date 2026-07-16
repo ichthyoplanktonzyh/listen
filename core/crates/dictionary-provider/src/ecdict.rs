@@ -33,6 +33,7 @@ struct EcdictIndex {
 struct EcdictEntry {
     phonetic: String,
     definition: String,
+    bnc_rank: Option<u32>,
 }
 
 impl EcdictProvider {
@@ -211,6 +212,16 @@ impl LexicalNormalizationProvider for EcdictProvider {
         }
         Ok(values)
     }
+
+    fn frequency_rank(&self, language: &LanguageCode, lemma: &str) -> Option<u32> {
+        if !language.as_str().starts_with("en") {
+            return None;
+        }
+        let index = self.load_index().ok()??;
+        let query = normalize_lemma(lemma);
+        let normalized = index.lemmas.get(&query).unwrap_or(&query);
+        index.dictionary.get(normalized)?.bnc_rank
+    }
 }
 
 fn read_ecdict_index(path: &Path) -> Result<EcdictIndex, String> {
@@ -228,6 +239,7 @@ fn read_ecdict_index(path: &Path) -> Result<EcdictIndex, String> {
     let word_column = column("word", 0);
     let phonetic_column = column("phonetic", 1);
     let definition_column = column("definition", 2);
+    let bnc_column = column("bnc", 8);
     let exchange_column = column("exchange", 10);
     let mut index = EcdictIndex::default();
     for record in reader.records() {
@@ -263,6 +275,10 @@ fn read_ecdict_index(path: &Path) -> Result<EcdictIndex, String> {
             EcdictEntry {
                 phonetic: record.get(phonetic_column).unwrap_or_default().into(),
                 definition: record.get(definition_column).unwrap_or_default().into(),
+                bnc_rank: record
+                    .get(bnc_column)
+                    .and_then(|value| value.parse::<u32>().ok())
+                    .filter(|rank| *rank > 0),
             },
         );
     }

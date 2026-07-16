@@ -211,6 +211,12 @@ semantic_task_attempts (authoritative immutable facts)
         └── production_corpus_entries (rebuildable lemma occurrences)
 ```
 
+`ProductionGapReview` is an ephemeral read model over the last two branches. It
+has no identity, table, lifecycle, writer, cascade, or export semantics. Absence
+from `production_corpus_entries` is only a corpus fact; even a `ready` review does
+not become speaking/writing observation or capability projection without the
+separate Phase 3.17 confirmation path.
+
 Losing or deleting media/subtitle rows preserves lexical occurrence snapshots and
 status history. Media availability changes should archive replaceable content;
 permanent lexical deletion is an explicit learning-asset operation.

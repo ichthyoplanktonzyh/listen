@@ -29,6 +29,15 @@ pub struct LexicalLearningUseCases {
 }
 
 impl LexicalLearningUseCases {
+    pub(crate) fn frequency_rank(
+        &self,
+        language: &domain::LanguageCode,
+        lemma: &str,
+    ) -> Option<u32> {
+        self.lexical_normalizers
+            .iter()
+            .find_map(|provider| provider.frequency_rank(language, lemma))
+    }
     pub(crate) fn from_services(services: &AppServices) -> Self {
         Self {
             media: services.media.clone(),
