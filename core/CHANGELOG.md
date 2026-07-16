@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- 2026-07-16 13:15 CST: Phase 3.12.2 Slice 3 — LLM judgment 显示接线复制到 Speaking +
+  Writing（纯 Flutter，后端 judge 用例本就按 attempt_id + response_revision 取存量作答，
+  purpose 无关，零后端改动）。三个 Studio 现共用新抽取的 `LlmJudgmentAssist`
+  widget（`widgets/panels/llm_judgment_assist.dart`，Reading 内嵌实现迁移至此——第三住户
+  出现后才抽取的显示件，共享本地化键 `llmAssist*` 取代 `readingTaskAi*`）；provider 选择
+  逻辑收敛到 `coach_llm.dart` 的 `pickLlmProviderId` + `preferredLlmProviderId`（列表失败
+  吞掉、入口隐藏，manual 路径永不依赖 provider）。Speaking：`SpeakingTaskController` 在
+  attempt 落库后解析 judge provider，新增 `requestLlmJudgment`/`adjudicateLlm`，assessing/
+  done 阶段显示可纠正 AI 反馈，retryOnce 重置 LLM 判定；LLM 判定与用户自评并存、互不改写。
+  Writing：内容/组织判定走同一 SemanticJudgeProvider（区别于 Harper 表面 finding），
+  `WritingTaskController` 判定**最新 attempt 的最新 revision**（revising 侧栏判初稿 rev1，
+  提交修改稿后旧判定清空、done 页可对 rev2 重新请求，判定永不跨 revision 冒充）。全程守
+  显示诚实边界：evidence_class `heuristic_proxy`、append-only adjudication 引用 LLM
+  judgment id、零 observation/projection。新增 Speaking/Writing 控制器各两条测试（判定+
+  纠正诚实性、无 judgment-capable provider 时入口隐藏且零 judge 调用）。验证：flutter
+  analyze 干净、完整 flutter test 434 通过；无契约改动。
+
 - 2026-07-16 11:53 CST: Phase 3.12.2 Slice 2 — Reading LLM rubric 生成接线。后端新增
   `POST /v1/llm/providers/{id}/rubric`（routes/llm.rs `generate_rubric_via_llm_provider`）：调用
   `SemanticRubricProvider` 生成理解题草稿并**只返回内容草稿、不落库**——身份/版本/来源快照仍
