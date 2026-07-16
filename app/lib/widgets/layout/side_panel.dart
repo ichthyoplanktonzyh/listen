@@ -54,6 +54,7 @@ class SidePanel extends StatefulWidget {
     required this.onOpenDiagnosisView,
     required this.onOpenSlicePlayback,
     this.onOpenListeningDictionary,
+    this.onPlayPronunciationAudio,
     this.onOpenL1Specialty,
     required this.onRefreshListeningInbox,
     required this.onReplayListeningInboxItem,
@@ -96,6 +97,7 @@ class SidePanel extends StatefulWidget {
   final Future<void> Function(Map<String, dynamic> occurrence)
   onOpenSlicePlayback;
   final Future<void> Function(String lexicalEntryId)? onOpenListeningDictionary;
+  final ValueChanged<String>? onPlayPronunciationAudio;
   final Future<void> Function(L1DiagnosisHint hint)? onOpenL1Specialty;
   final Future<void> Function() onRefreshListeningInbox;
   final Future<void> Function(ListeningInboxItem item)
@@ -244,6 +246,7 @@ class _SidePanelState extends State<SidePanel> {
                                     .id,
                               ),
                             ),
+                      onPlayPronunciationAudio: widget.onPlayPronunciationAudio,
                       hasSelectedCue:
                           subtitleController.currentPrimaryCue != null,
                     ),

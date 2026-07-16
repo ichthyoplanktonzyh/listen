@@ -5,6 +5,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../../controllers/hunting_controller.dart';
+import '../../controllers/auxiliary_audio_controller.dart';
 import '../../controllers/learning_controller.dart';
 import '../../controllers/playback_actions_coordinator.dart';
 import '../../controllers/player_controller.dart';
@@ -205,6 +206,7 @@ Future<void> showVocabularyFlow({
   required PlaybackActionsCoordinator playbackActions,
   required PracticeActionsCoordinator practiceActions,
   required HuntingController huntingController,
+  required AuxiliaryAudioController auxiliaryAudio,
   required Future<void> Function() pauseBackgroundPlayback,
   String? initialEntryId,
 }) async {
@@ -223,6 +225,7 @@ Future<void> showVocabularyFlow({
         onExport: playbackActions.exportVocabulary,
         onImport: playbackActions.importVocabulary,
         huntingController: huntingController,
+        auxiliaryAudio: auxiliaryAudio,
         initialEntryId: initialEntryId,
         onPauseBackgroundPlayback: pauseBackgroundPlayback,
         onStartShadowing: practiceActions.startExternalShadowing,

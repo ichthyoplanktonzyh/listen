@@ -576,6 +576,71 @@ void main() {
     expect(find.textContaining('Open hello from a subtitle'), findsOneWidget);
   });
 
+  testWidgets('dictionary prefers provider audio over synthetic fallback', (
+    tester,
+  ) async {
+    String? providerAudio;
+    String? syntheticText;
+    await tester.pumpWidget(
+      localized(
+        ListeningDictionaryEntryView(
+          details: const LexicalEntryDetails(
+            entry: LexicalEntry(
+              id: 'hello',
+              normalizedForm: 'hello',
+              displayForm: 'hello',
+              kind: 'word',
+              language: 'en',
+            ),
+          ),
+          onPlay: _ignoreOccurrence,
+          onMark: _ignoreMark,
+          pronunciationAudioUrl: 'https://example.test/hello.mp3',
+          onPlayPronunciationAudio: (url) => providerAudio = url,
+          onSpeakSynthetic: (text, _) => syntheticText = text,
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Play pronunciation'));
+    expect(providerAudio, 'https://example.test/hello.mp3');
+    expect(syntheticText, isNull);
+    expect(find.byTooltip('Play synthetic pronunciation'), findsNothing);
+  });
+
+  testWidgets(
+    'dictionary labels synthetic speech when provider audio is absent',
+    (tester) async {
+      String? syntheticText;
+      String? purpose;
+      await tester.pumpWidget(
+        localized(
+          ListeningDictionaryEntryView(
+            details: const LexicalEntryDetails(
+              entry: LexicalEntry(
+                id: 'hello',
+                normalizedForm: 'hello',
+                displayForm: 'hello',
+                kind: 'word',
+                language: 'en',
+              ),
+            ),
+            onPlay: _ignoreOccurrence,
+            onMark: _ignoreMark,
+            onSpeakSynthetic: (text, value) {
+              syntheticText = text;
+              purpose = value;
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.byTooltip('Play synthetic pronunciation'));
+      expect(syntheticText, 'hello');
+      expect(purpose, 'dictionary_pronunciation_fallback');
+    },
+  );
+
   testWidgets('dictionary shows submitted output and opens its attempt', (
     tester,
   ) async {

@@ -12,6 +12,7 @@ import '../models/production_corpus.dart';
 import '../models/reading.dart';
 import '../models/semantic_task.dart';
 import '../models/runtime_resources.dart';
+import '../models/speech_synthesis.dart';
 import '../models/syntax_capability.dart';
 import '../models/timeline.dart';
 import '../models/types.dart';

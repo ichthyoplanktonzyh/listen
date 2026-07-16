@@ -99,6 +99,38 @@ void main() {
       });
     });
 
+    test('builds and decodes speech synthesis requests', () async {
+      String? requestBody;
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'tok',
+        transport: (method, path, body) async {
+          expect('$method $path', 'POST /v1/speech-synthesis');
+          requestBody = body;
+          return (
+            statusCode: 200,
+            body:
+                '{"audio_path":"/tmp/a.aiff","mime_type":"audio/aiff",'
+                '"provider_id":"macos-system-speech",'
+                '"provider_version":"say-v1","voice_id":"Samantha",'
+                '"language":"en","rate_words_per_minute":180,'
+                '"purpose":"dictionary_pronunciation_fallback",'
+                '"content_hash":"hash","cache_hit":true,"synthetic":true}',
+          );
+        },
+      );
+
+      final asset = await api.synthesizeSpeech(
+        text: 'hello',
+        language: 'en',
+        purpose: 'dictionary_pronunciation_fallback',
+      );
+
+      expect(asset.providerId, 'macos-system-speech');
+      expect(asset.cacheHit, isTrue);
+      expect(jsonDecode(requestBody!), containsPair('language', 'en'));
+    });
+
     test('diagnosis resource decodes into a typed result', () async {
       String? seenPath;
       final api = LocalApi.withTransport(

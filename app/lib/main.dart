@@ -13,6 +13,7 @@ import 'settings.dart';
 import 'theme/listen_theme.dart';
 
 import 'controllers/app_controllers.dart';
+import 'controllers/auxiliary_audio_controller.dart';
 import 'controllers/backend_event_coordinator.dart';
 import 'controllers/download_controller.dart';
 import 'controllers/extensive_listening_controller.dart';
@@ -140,6 +141,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   final learningController = LearningController();
   final practiceController = PracticeController();
   final slicePlayerController = SlicePlayerController();
+  final auxiliaryAudioController = AuxiliaryAudioController();
   final readingController = ReadingController();
   final readingTaskController = ReadingTaskController();
   final speakingTaskController = SpeakingTaskController();
@@ -208,6 +210,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     settings: settingsController,
     adapter: adapter,
     recordingAdapter: recordingAdapter,
+    stopAuxiliaryAudio: auxiliaryAudioController.stop,
   );
   late final speakingActions = SpeakingActionsCoordinator(
     task: speakingTaskController,
@@ -217,6 +220,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     slicePlayer: slicePlayerController,
     adapter: adapter,
     recordingAdapter: recordingAdapter,
+    stopAuxiliaryAudio: auxiliaryAudioController.stop,
   );
   late final vocabularyActions = VocabularyActionsCoordinator(
     workflow: learningWorkflowController,
@@ -1079,9 +1083,34 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _closeWritingTaskStudio() async {
+    await auxiliaryAudioController.stop();
     await _closeSlicePlayback();
     writingTaskController.closeTask();
     if (mounted) setState(() => _writingTaskStudioSource = null);
+  }
+
+  Future<void> _speakWritingText(String text) async {
+    final service = api;
+    final source = _writingTaskStudioSource;
+    if (service == null || source == null || text.trim().isEmpty) return;
+    final asset = await auxiliaryAudioController.speak(
+      service,
+      text: text,
+      language: source.responseLanguage,
+      purpose: 'writing_readback',
+      acquireAudioFocus: () async {
+        await adapter.pause();
+        await recordingAdapter.pause();
+        await slicePlayerController.pause();
+      },
+    );
+    if (asset == null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context).text('ttsUnavailable')),
+        ),
+      );
+    }
   }
 
   void _playWritingSource() {
@@ -1350,6 +1379,19 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _openListeningDictionaryEntry(String entryId) =>
       _showVocabulary(initialEntryId: entryId);
 
+  Future<void> _acquireAuxiliaryAudioFocus() async {
+    await adapter.pause();
+    await recordingAdapter.pause();
+    await slicePlayerController.pause();
+  }
+
+  void _playPronunciationAudio(String url) => unawaited(
+    auxiliaryAudioController.playRemote(
+      url,
+      acquireAudioFocus: _acquireAuxiliaryAudioFocus,
+    ),
+  );
+
   Future<void> _showVocabulary({String? initialEntryId}) => showVocabularyFlow(
     context: context,
     api: api,
@@ -1358,7 +1400,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     playbackActions: playbackActions,
     practiceActions: practiceActions,
     huntingController: huntingController,
-    pauseBackgroundPlayback: adapter.pause,
+    auxiliaryAudio: auxiliaryAudioController,
+    pauseBackgroundPlayback: _acquireAuxiliaryAudioFocus,
     initialEntryId: initialEntryId,
   );
 
@@ -1649,6 +1692,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     learningController.dispose();
     practiceController.dispose();
     slicePlayerController.dispose();
+    auxiliaryAudioController.dispose();
     _readingSaveTimer?.cancel();
     readingController.removeListener(_scheduleReadingPositionSave);
     readingController.dispose();
@@ -1938,6 +1982,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                                           onKindChanged: (kind) =>
                                               unawaited(_openWritingTask(kind)),
                                           onPlaySource: _playWritingSource,
+                                          onSpeakText: (text) => unawaited(
+                                            _speakWritingText(text),
+                                          ),
                                           onClose: () => unawaited(
                                             _closeWritingTaskStudio(),
                                           ),
@@ -2242,6 +2289,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             unawaited(_openListeningDictionaryEntry(entry.id));
           }
         },
+        onPlayPronunciationAudio: _playPronunciationAudio,
         hasSelectedCue: subtitleController.currentPrimaryCue != null,
       ),
     );
@@ -2276,6 +2324,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     onOpenDiagnosisView: _openDiagnosisView,
     onOpenSlicePlayback: _openSlicePlayback,
     onOpenListeningDictionary: _openListeningDictionaryEntry,
+    onPlayPronunciationAudio: _playPronunciationAudio,
     onOpenL1Specialty: _openL1Specialty,
     onRefreshListeningInbox: inboxActions.refreshListeningInbox,
     onReplayListeningInboxItem: inboxActions.replayListeningInboxItem,

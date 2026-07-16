@@ -21,6 +21,7 @@ class WordLearningPanel extends StatefulWidget {
     this.onCapabilityOverride,
     this.onRecordSource,
     this.onOpenListeningDictionary,
+    this.onPlayPronunciationAudio,
     this.onReadingMark,
     this.hasSelectedCue = false,
   });
@@ -38,6 +39,7 @@ class WordLearningPanel extends StatefulWidget {
   onCapabilityOverride;
   final VoidCallback? onRecordSource;
   final VoidCallback? onOpenListeningDictionary;
+  final ValueChanged<String>? onPlayPronunciationAudio;
 
   /// Explicit reading mark (Phase 3.13); non-null only while the reading
   /// posture is open. `true` = understood while reading.
@@ -338,7 +340,15 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
                         title: Text(value.text),
                         trailing:
                             value.audioUrl != null && value.audioUrl!.isNotEmpty
-                            ? PronunciationButton(audioUrl: value.audioUrl!)
+                            ? PronunciationButton(
+                                tooltip: l.text('pronunciation'),
+                                onPressed:
+                                    widget.onPlayPronunciationAudio == null
+                                    ? null
+                                    : () => widget.onPlayPronunciationAudio!(
+                                        value.audioUrl!,
+                                      ),
+                              )
                             : null,
                       ),
                   if (lookup != null)

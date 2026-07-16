@@ -16,6 +16,7 @@ class WritingTaskStudio extends StatefulWidget {
     required this.audioPlayCount,
     required this.onKindChanged,
     required this.onPlaySource,
+    this.onSpeakText,
     required this.onClose,
   });
 
@@ -24,6 +25,7 @@ class WritingTaskStudio extends StatefulWidget {
   final int Function() audioPlayCount;
   final ValueChanged<String> onKindChanged;
   final VoidCallback onPlaySource;
+  final ValueChanged<String>? onSpeakText;
   final VoidCallback onClose;
 
   @override
@@ -154,38 +156,50 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
               ),
             ),
             const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton.icon(
-                onPressed:
-                    state.busy ||
-                        _editor.text.trim().isEmpty ||
-                        (!revising &&
-                            state.kind ==
-                                WritingTaskController.dictoglossKind &&
-                            widget.audioPlayCount() == 0)
-                    ? null
-                    : () => revising
-                          ? widget.controller.submitRevision(
-                              widget.api,
-                              audioPlayCount: widget.audioPlayCount(),
-                            )
-                          : widget.controller.submitDraft(
-                              widget.api,
-                              audioPlayCount: widget.audioPlayCount(),
-                            ),
-                icon: state.busy
-                    ? const SizedBox.square(
-                        dimension: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.arrow_forward),
-                label: Text(
-                  l.text(
-                    revising ? 'writingSubmitRevision' : 'writingSubmitDraft',
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  key: const Key('writing-read-aloud'),
+                  onPressed:
+                      _editor.text.trim().isEmpty || widget.onSpeakText == null
+                      ? null
+                      : () => widget.onSpeakText!(_editor.text.trim()),
+                  icon: const Icon(Icons.record_voice_over_outlined),
+                  label: Text(l.text('readAloudSynthetic')),
+                ),
+                FilledButton.icon(
+                  onPressed:
+                      state.busy ||
+                          _editor.text.trim().isEmpty ||
+                          (!revising &&
+                              state.kind ==
+                                  WritingTaskController.dictoglossKind &&
+                              widget.audioPlayCount() == 0)
+                      ? null
+                      : () => revising
+                            ? widget.controller.submitRevision(
+                                widget.api,
+                                audioPlayCount: widget.audioPlayCount(),
+                              )
+                            : widget.controller.submitDraft(
+                                widget.api,
+                                audioPlayCount: widget.audioPlayCount(),
+                              ),
+                  icon: state.busy
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.arrow_forward),
+                  label: Text(
+                    l.text(
+                      revising ? 'writingSubmitRevision' : 'writingSubmitDraft',
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
           ],
         ),
@@ -220,6 +234,15 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
             runSpacing: 8,
             alignment: WrapAlignment.center,
             children: [
+              OutlinedButton.icon(
+                key: const Key('writing-read-saved-draft'),
+                onPressed:
+                    state.draft.trim().isEmpty || widget.onSpeakText == null
+                    ? null
+                    : () => widget.onSpeakText!(state.draft),
+                icon: const Icon(Icons.record_voice_over_outlined),
+                label: Text(l.text('readAloudSynthetic')),
+              ),
               FilledButton.icon(
                 key: const Key('writing-request-feedback'),
                 onPressed: state.busy
@@ -248,9 +271,21 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
         style: Theme.of(context).textTheme.headlineSmall,
       ),
       const SizedBox(height: 16),
-      _VersionCard(label: l.text('writingOriginal'), text: state.draft),
+      _VersionCard(
+        label: l.text('writingOriginal'),
+        text: state.draft,
+        onSpeak: widget.onSpeakText == null
+            ? null
+            : () => widget.onSpeakText!(state.draft),
+      ),
       const SizedBox(height: 12),
-      _VersionCard(label: l.text('writingRevised'), text: state.revisionDraft),
+      _VersionCard(
+        label: l.text('writingRevised'),
+        text: state.revisionDraft,
+        onSpeak: widget.onSpeakText == null
+            ? null
+            : () => widget.onSpeakText!(state.revisionDraft),
+      ),
       const SizedBox(height: 12),
       _RevisionDiff(original: state.draft, revised: state.revisionDraft),
       const SizedBox(height: 12),
@@ -549,10 +584,11 @@ class _FeedbackList extends StatelessWidget {
 }
 
 class _VersionCard extends StatelessWidget {
-  const _VersionCard({required this.label, required this.text});
+  const _VersionCard({required this.label, required this.text, this.onSpeak});
 
   final String label;
   final String text;
+  final VoidCallback? onSpeak;
 
   @override
   Widget build(BuildContext context) => Card(
@@ -561,7 +597,23 @@ class _VersionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: Theme.of(context).textTheme.titleSmall),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              IconButton(
+                tooltip: AppLocalizations.of(
+                  context,
+                ).text('readAloudSynthetic'),
+                onPressed: text.trim().isEmpty ? null : onSpeak,
+                icon: const Icon(Icons.record_voice_over_outlined),
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
           SelectableText(text),
         ],

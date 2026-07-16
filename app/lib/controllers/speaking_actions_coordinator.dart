@@ -25,6 +25,7 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
     required this.slicePlayer,
     required this.adapter,
     required this.recordingAdapter,
+    this.stopAuxiliaryAudio,
   });
 
   final SpeakingTaskController task;
@@ -34,6 +35,7 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
   final SlicePlayerController slicePlayer;
   final DesktopPlayerAdapter adapter;
   final DesktopPlayerAdapter recordingAdapter;
+  final Future<void> Function()? stopAuxiliaryAudio;
 
   SpeakingTaskSource? _source;
   SpeakingTaskSource? _retellingSource;
@@ -113,6 +115,7 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
   Future<void> playSource() async {
     final current = _source;
     if (current == null) return;
+    await stopAuxiliaryAudio?.call();
     final generation = ++_audioGeneration;
     await recordingAdapter.pause();
     await slicePlayer.pause();
@@ -256,6 +259,7 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
   Future<void> playRecording() async {
     final asset = task.state.recording;
     if (asset == null) return;
+    await stopAuxiliaryAudio?.call();
     final generation = ++_audioGeneration;
     await adapter.pause();
     await slicePlayer.pause();
@@ -268,6 +272,7 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
 
   Future<void> acquireRecordingFocus() async {
     _audioGeneration++;
+    await stopAuxiliaryAudio?.call();
     await adapter.pause();
     await recordingAdapter.pause();
     await slicePlayer.pause();

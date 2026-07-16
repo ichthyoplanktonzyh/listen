@@ -4,6 +4,37 @@ part of '../api_service.dart';
 // Split out of api_service.dart (mechanical decomposition).
 
 extension SpeechAnalysisApi on LocalApi {
+  Future<SpeechSynthesisCapabilityView> speechSynthesisCapability() async =>
+      SpeechSynthesisCapabilityView.fromJson(
+        (await _request('GET', '/v1/speech-synthesis/capability'))
+            as Map<String, dynamic>,
+      );
+
+  Future<SpeechSynthesisAssetView> synthesizeSpeech({
+    required String text,
+    required String language,
+    required String purpose,
+    String? providerId,
+    String? voiceId,
+    int rateWordsPerMinute = 180,
+  }) async => SpeechSynthesisAssetView.fromJson(
+    (await _request('POST', '/v1/speech-synthesis', {
+          'text': text,
+          'language': language,
+          'purpose': purpose,
+          'provider_id': providerId,
+          'voice_id': voiceId,
+          'rate_words_per_minute': rateWordsPerMinute,
+        }))
+        as Map<String, dynamic>,
+  );
+
+  Future<SpeechSynthesisCapabilityView> clearSpeechSynthesisCache() async =>
+      SpeechSynthesisCapabilityView.fromJson(
+        (await _request('DELETE', '/v1/speech-synthesis/cache'))
+            as Map<String, dynamic>,
+      );
+
   Future<SyntaxCapabilityView> syntaxCapability() async =>
       SyntaxCapabilityView.fromJson(
         (await _request('GET', '/v1/syntax/capability'))

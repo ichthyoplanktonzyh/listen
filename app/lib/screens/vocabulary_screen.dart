@@ -5,6 +5,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../controllers/occurrence_media_resolver.dart';
+import '../controllers/auxiliary_audio_controller.dart';
 import '../controllers/hunting_controller.dart';
 import '../controllers/slice_player_controller.dart';
 import '../localization.dart';
@@ -25,6 +26,7 @@ class VocabularyScreen extends StatefulWidget {
     required this.onExport,
     required this.onImport,
     required this.huntingController,
+    required this.auxiliaryAudio,
     this.initialEntryId,
     this.onPauseBackgroundPlayback,
     this.onStartShadowing,
@@ -35,6 +37,7 @@ class VocabularyScreen extends StatefulWidget {
   final Future<void> Function() onExport;
   final Future<void> Function() onImport;
   final HuntingController huntingController;
+  final AuxiliaryAudioController auxiliaryAudio;
   final String? initialEntryId;
 
   /// Pauses whatever is playing behind this route (the primary player) so a
@@ -78,6 +81,34 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   final SlicePlayerController slicePlayer = SlicePlayerController();
   HuntingController get hunting => widget.huntingController;
 
+  Future<void> _acquireAuxiliaryAudioFocus() async {
+    await slicePlayer.pause();
+    await widget.onPauseBackgroundPlayback?.call();
+  }
+
+  Future<void> _playPronunciationAudio(String url) async {
+    await widget.auxiliaryAudio.playRemote(
+      url,
+      acquireAudioFocus: _acquireAuxiliaryAudioFocus,
+    );
+    if (mounted && widget.auxiliaryAudio.error != null) {
+      _snack(AppLocalizations.of(context).text('pronunciationUnavailable'));
+    }
+  }
+
+  Future<void> _speakSynthetic(String text, String purpose) async {
+    final asset = await widget.auxiliaryAudio.speak(
+      widget.api,
+      text: text,
+      language: details?.entry.language ?? widget.language,
+      purpose: purpose,
+      acquireAudioFocus: _acquireAuxiliaryAudioFocus,
+    );
+    if (mounted && asset == null) {
+      _snack(AppLocalizations.of(context).text('ttsUnavailable'));
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -91,6 +122,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
 
   @override
   void dispose() {
+    unawaited(widget.auxiliaryAudio.stop());
     slicePlayer.dispose();
     super.dispose();
   }
@@ -179,7 +211,10 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     await _openEntryById(value.entry.id);
   }
 
-  void _closeDetails() => setState(() => details = null);
+  void _closeDetails() {
+    unawaited(widget.auxiliaryAudio.stop());
+    setState(() => details = null);
+  }
 
   Future<void> _openProductionAttempt(ProductionCorpusHitView hit) async {
     final attempt = await widget.api.semanticAttempt(hit.document.attemptId);
@@ -742,7 +777,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     final l = AppLocalizations.of(context);
     final openDetails = details;
     return ListenableBuilder(
-      listenable: hunting,
+      listenable: Listenable.merge([hunting, widget.auxiliaryAudio]),
       builder: (context, _) => Scaffold(
         appBar: AppBar(
           leading: openDetails == null
@@ -864,6 +899,11 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
         ),
         onOpenExternal: _openExternal,
         pronunciationAudioUrl: pronunciationAudioUrl,
+        onPlayPronunciationAudio: (url) =>
+            unawaited(_playPronunciationAudio(url)),
+        onSpeakSynthetic: (text, purpose) =>
+            unawaited(_speakSynthetic(text, purpose)),
+        speechBusy: widget.auxiliaryAudio.busy,
       ),
     ),
   );

@@ -31,6 +31,7 @@ class PracticeActionsCoordinator {
     required this.settings,
     required this.adapter,
     required this.recordingAdapter,
+    this.stopAuxiliaryAudio,
   });
 
   final PracticeController practice;
@@ -42,6 +43,7 @@ class PracticeActionsCoordinator {
   final SettingsController settings;
   final DesktopPlayerAdapter adapter;
   final DesktopPlayerAdapter recordingAdapter;
+  final Future<void> Function()? stopAuxiliaryAudio;
 
   late LocalApi? Function() getApi;
   late bool Function() isMounted;
@@ -130,6 +132,7 @@ class PracticeActionsCoordinator {
   Future<void> replayPracticeWindow() async {
     final draft = practice.draft;
     if (draft == null) return;
+    await stopAuxiliaryAudio?.call();
     if (draft.referenceMediaPath != null) {
       await adapter.pause();
       await slicePlayer.open(
@@ -171,6 +174,7 @@ class PracticeActionsCoordinator {
   Future<void> beginShadowingRecording() async {
     await practice.beginShadowingRecording(
       acquireAudioFocus: () async {
+        await stopAuxiliaryAudio?.call();
         await adapter.pause();
         await recordingAdapter.pause();
         await slicePlayer.pause();
@@ -199,6 +203,7 @@ class PracticeActionsCoordinator {
   Future<void> playShadowingReferenceOnce() async {
     final draft = practice.draft;
     if (draft == null) return;
+    await stopAuxiliaryAudio?.call();
     await recordingAdapter.pause();
     if (draft.referenceMediaPath != null) {
       slicePlayer.setLooping(false);
@@ -228,6 +233,7 @@ class PracticeActionsCoordinator {
   Future<void> playShadowingRecording() async {
     final asset = practice.recordingAsset;
     if (asset == null) return;
+    await stopAuxiliaryAudio?.call();
     await adapter.pause();
     await slicePlayer.pause();
     await recordingAdapter.open(asset.filePath);

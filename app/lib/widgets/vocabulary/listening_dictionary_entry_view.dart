@@ -61,6 +61,9 @@ class ListeningDictionaryEntryView extends StatefulWidget {
     this.externalLookupUrl,
     this.onOpenExternal,
     this.pronunciationAudioUrl,
+    this.onPlayPronunciationAudio,
+    this.onSpeakSynthetic,
+    this.speechBusy = false,
     this.libraryResultLimit = 50,
   });
 
@@ -131,6 +134,12 @@ class ListeningDictionaryEntryView extends StatefulWidget {
 
   /// Dictionary-provider pronunciation audio, when a lookup produced one.
   final String? pronunciationAudioUrl;
+  final ValueChanged<String>? onPlayPronunciationAudio;
+
+  /// Synthetic speech is a supplemental rendering of the supplied text. It
+  /// never replaces a real media slice or becomes learning evidence.
+  final void Function(String text, String purpose)? onSpeakSynthetic;
+  final bool speechBusy;
 
   /// The request limit used by [onSearchLibrary]; hitting it means the
   /// results were sampled, which the coverage-honest UI must say.
@@ -428,7 +437,23 @@ class _ListeningDictionaryEntryViewState
                   '${_assistanceLabel(l, hit.document.assistance)} · '
                   '${l.text('revision')} ${hit.document.responseRevision}',
                 ),
-                trailing: const Icon(Icons.open_in_new),
+                trailing: Wrap(
+                  spacing: 4,
+                  children: [
+                    if (widget.onSpeakSynthetic != null)
+                      PronunciationButton(
+                        key: ValueKey('production-speech-${hit.document.id}'),
+                        tooltip: l.text('readAloudSynthetic'),
+                        busy: widget.speechBusy,
+                        synthetic: true,
+                        onPressed: () => widget.onSpeakSynthetic!(
+                          hit.document.responseText,
+                          'production_corpus_readback',
+                        ),
+                      ),
+                    const Icon(Icons.open_in_new),
+                  ],
+                ),
                 onTap: widget.onOpenProductionAttempt == null
                     ? null
                     : () => widget.onOpenProductionAttempt!(hit),
@@ -865,7 +890,10 @@ class _ListeningDictionaryEntryViewState
     final audio = widget.pronunciationAudioUrl;
     final openExternal = widget.onOpenExternal;
     final hasLink = url != null && openExternal != null;
-    if (!hasLink && audio == null) return null;
+    final canPlayAudio =
+        audio != null && widget.onPlayPronunciationAudio != null;
+    final canSynthesize = audio == null && widget.onSpeakSynthetic != null;
+    if (!hasLink && !canPlayAudio && !canSynthesize) return null;
     return Wrap(
       crossAxisAlignment: WrapCrossAlignment.center,
       spacing: 8,
@@ -875,7 +903,22 @@ class _ListeningDictionaryEntryViewState
           l.text('dictionaryExternalHint'),
           style: const TextStyle(color: ListenColors.muted, fontSize: 12),
         ),
-        if (audio != null) PronunciationButton(audioUrl: audio),
+        if (canPlayAudio)
+          PronunciationButton(
+            tooltip: l.text('pronunciation'),
+            busy: widget.speechBusy,
+            onPressed: () => widget.onPlayPronunciationAudio!(audio),
+          )
+        else if (canSynthesize)
+          PronunciationButton(
+            tooltip: l.text('dictionarySyntheticFallback'),
+            busy: widget.speechBusy,
+            synthetic: true,
+            onPressed: () => widget.onSpeakSynthetic!(
+              entry.displayForm,
+              'dictionary_pronunciation_fallback',
+            ),
+          ),
         if (hasLink)
           OutlinedButton.icon(
             onPressed: () => openExternal(url),
