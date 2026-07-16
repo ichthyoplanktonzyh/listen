@@ -93,3 +93,67 @@ class ProductionCorpusHitView {
   final ProductionCorpusDocumentView document;
   final ProductionCorpusEntryView? entry;
 }
+
+class ProductionGapTargetView {
+  const ProductionGapTargetView({
+    required this.lexicalEntryId,
+    required this.normalizedKey,
+    required this.displayForm,
+    required this.frequencyRank,
+    required this.frequencyBand,
+    required this.evidenceStrength,
+    required this.recencyBand,
+    required this.explanation,
+  });
+  factory ProductionGapTargetView.fromJson(Map<String, dynamic> json) =>
+      ProductionGapTargetView(
+        lexicalEntryId: json['lexical_entry_id'] as String,
+        normalizedKey: json['normalized_key'] as String,
+        displayForm: json['display_form'] as String,
+        frequencyRank: json['frequency_rank'] as int?,
+        frequencyBand: json['frequency_band'] as int?,
+        evidenceStrength: json['evidence_strength'] as int,
+        recencyBand: json['recency_band'] as int,
+        explanation: (json['explanation'] as List<dynamic>).cast<String>(),
+      );
+  final String lexicalEntryId;
+  final String normalizedKey;
+  final String displayForm;
+  final int? frequencyRank;
+  final int? frequencyBand;
+  final int evidenceStrength;
+  final int recencyBand;
+  final List<String> explanation;
+}
+
+class ProductionGapReviewView {
+  const ProductionGapReviewView({
+    required this.readiness,
+    required this.documentCount,
+    required this.tokenCount,
+    required this.lemmaCount,
+    required this.candidateCount,
+    required this.targets,
+  });
+  factory ProductionGapReviewView.fromJson(
+    Map<String, dynamic> json,
+  ) => ProductionGapReviewView(
+    readiness: json['readiness'] as String,
+    documentCount: json['document_count'] as int,
+    tokenCount: json['token_count'] as int,
+    lemmaCount: json['lemma_count'] as int,
+    candidateCount: json['candidate_count'] as int,
+    targets: (json['targets'] as List<dynamic>)
+        .map(
+          (value) =>
+              ProductionGapTargetView.fromJson(value as Map<String, dynamic>),
+        )
+        .toList(growable: false),
+  );
+  final String readiness;
+  final int documentCount;
+  final int tokenCount;
+  final int lemmaCount;
+  final int candidateCount;
+  final List<ProductionGapTargetView> targets;
+}

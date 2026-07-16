@@ -256,6 +256,95 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     );
   }
 
+  Future<void> _openProductionGapReview() async {
+    final l = AppLocalizations.of(context);
+    ProductionGapReviewView review;
+    try {
+      review = await widget.api.productionGapReview(language: widget.language);
+    } catch (error) {
+      if (mounted) {
+        _snack(
+          l.text('productionGapUnavailable').replaceAll('{error}', '$error'),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l.text('productionGapTitle')),
+        content: SizedBox(
+          width: 620,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              Text(
+                l
+                    .text('productionGapFacts')
+                    .replaceAll('{documents}', '${review.documentCount}')
+                    .replaceAll('{tokens}', '${review.tokenCount}')
+                    .replaceAll('{lemmas}', '${review.lemmaCount}'),
+              ),
+              if (review.readiness == 'empty') ...[
+                const SizedBox(height: 12),
+                Text(l.text('productionGapEmpty')),
+              ] else ...[
+                if (review.readiness == 'starter') ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    l.text('productionGapStarter'),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.tertiary,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                for (final target in review.targets)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(target.displayForm),
+                    subtitle: Text(
+                      l
+                          .text('productionGapTargetReason')
+                          .replaceAll(
+                            '{frequency}',
+                            target.frequencyRank == null
+                                ? l.text('productionGapFrequencyUnavailable')
+                                : 'BNC #${target.frequencyRank}',
+                          )
+                          .replaceAll(
+                            '{evidence}',
+                            '${target.evidenceStrength}',
+                          )
+                          .replaceAll('{recency}', '${target.recencyBand}'),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: TextButton(
+                      onPressed: () {
+                        Navigator.pop(dialogContext);
+                        unawaited(_openEntryById(target.lexicalEntryId));
+                      },
+                      child: Text(l.text('productionGapOpenTarget')),
+                    ),
+                  ),
+                if (review.targets.isEmpty)
+                  Text(l.text('productionGapNoCandidates')),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(l.text('close')),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Slice playback (in-page, second decoder) ──
 
   OccurrenceMediaResolver get _resolver => OccurrenceMediaResolver(
@@ -820,6 +909,11 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                 label: Text(l.text('dictionaryAddToReview')),
               )
             else ...[
+              IconButton(
+                tooltip: l.text('productionGapTitle'),
+                onPressed: () => unawaited(_openProductionGapReview()),
+                icon: const Icon(Icons.compare_arrows_outlined),
+              ),
               IconButton(
                 tooltip: l.text('dictionaryReindex'),
                 onPressed: () => unawaited(_reindexCorpus()),

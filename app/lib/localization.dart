@@ -166,6 +166,20 @@ class AppLocalizations {
       'huntingSourceInbox': 'Confirmed from Listening Inbox',
       'huntingFailureCount': 'Missed in review {count} time(s)',
       'huntingOpen': 'Open Hunting List',
+      'productionGapTitle': 'Words to bring into your output',
+      'productionGapFacts':
+          '{documents} output samples · {tokens} words · {lemmas} lemmas',
+      'productionGapStarter':
+          'Your output corpus is still small. These are practice candidates, not conclusions about what you cannot use.',
+      'productionGapEmpty':
+          'Complete a writing task before comparing receptive evidence with your output.',
+      'productionGapNoCandidates':
+          'No reference-ranked candidates are available yet.',
+      'productionGapOpenTarget': 'View & practice',
+      'productionGapTargetReason':
+          '{frequency} · receptive evidence {evidence} · recency band {recency}',
+      'productionGapFrequencyUnavailable': 'frequency unavailable',
+      'productionGapUnavailable': 'Could not load output review: {error}',
       'huntingAddCurrent': 'Add to Hunting List',
       'huntingStartMode': 'Start Hunting Mode',
       'huntingStopMode': 'Stop Hunting Mode',
@@ -1298,6 +1312,17 @@ class AppLocalizations {
       'huntingSourceInbox': '从 Listening Inbox 确认加入',
       'huntingFailureCount': '复习中失败 {count} 次',
       'huntingOpen': '打开猎词单',
+      'productionGapTitle': '把这些词带进产出',
+      'productionGapFacts':
+          '已有 {documents} 份产出 · {tokens} 个词 · {lemmas} 个 lemma',
+      'productionGapStarter': '当前产出语料仍少。以下只是练习候选，不代表你不会使用这些词。',
+      'productionGapEmpty': '先完成一次写作任务，再比较接收侧证据与个人产出。',
+      'productionGapNoCandidates': '目前还没有可按参照系排序的候选。',
+      'productionGapOpenTarget': '查看与练习',
+      'productionGapTargetReason':
+          '{frequency} · 接收证据强度 {evidence} · 近期档 {recency}',
+      'productionGapFrequencyUnavailable': '通用词频暂无',
+      'productionGapUnavailable': '无法加载产出复盘：{error}',
       'huntingAddCurrent': '加入猎词单',
       'huntingStartMode': '开始狩猎模式',
       'huntingStopMode': '结束狩猎模式',

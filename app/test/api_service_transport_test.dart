@@ -242,6 +242,57 @@ void main() {
       expect(hits.single.entry!.normalizedKey, 'proposal');
     });
 
+    test('production gap review decodes starter and ranked target', () async {
+      String? seenPath;
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'tok',
+        transport: (method, path, body) async {
+          seenPath = path;
+          return (
+            statusCode: 200,
+            body: jsonEncode({
+              'language': 'en',
+              'channel': 'written',
+              'readiness': 'starter',
+              'document_count': 1,
+              'token_count': 4,
+              'lemma_count': 4,
+              'candidate_count': 1,
+              'ranking_version': 'production-gap-ranking-v1',
+              'targets': [
+                {
+                  'lexical_entry_id': 'entry-enjoy',
+                  'normalized_key': 'enjoy',
+                  'display_form': 'enjoy',
+                  'frequency_rank': 685,
+                  'frequency_band': 1,
+                  'evidence_strength': 3,
+                  'recency_band': 2,
+                  'reading_acquired': true,
+                  'listening_acquired': false,
+                  'reading_successes': 0,
+                  'listening_successes': 0,
+                  'recognition_contexts': 0,
+                  'latest_receptive_at_ms': 42,
+                  'explanation': ['BNC frequency rank 685'],
+                },
+              ],
+            }),
+          );
+        },
+      );
+
+      final review = await api.productionGapReview(language: 'en');
+
+      expect(
+        seenPath,
+        '/v1/production-gap/review?language=en&channel=written&limit=10',
+      );
+      expect(review.readiness, 'starter');
+      expect(review.targets.single.frequencyRank, 685);
+    });
+
     test(
       'short recording transcription keeps raw ASR and provenance typed',
       () async {

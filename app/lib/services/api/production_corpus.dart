@@ -1,6 +1,24 @@
 part of '../api_service.dart';
 
 extension ProductionCorpusApi on LocalApi {
+  Future<ProductionGapReviewView> productionGapReview({
+    required String language,
+    String channel = 'written',
+    int limit = 10,
+  }) async {
+    final params = Uri(
+      queryParameters: {
+        'language': language,
+        'channel': channel,
+        'limit': '$limit',
+      },
+    ).query;
+    return ProductionGapReviewView.fromJson(
+      await _request('GET', '/v1/production-gap/review?$params')
+          as Map<String, dynamic>,
+    );
+  }
+
   Future<List<ProductionCorpusHitView>> searchProductionCorpus({
     required String language,
     required String query,
