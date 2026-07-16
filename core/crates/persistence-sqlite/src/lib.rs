@@ -10,6 +10,7 @@ mod llm_provider;
 mod media;
 mod migrations;
 mod phonetic_analysis;
+mod production_corpus;
 mod progress;
 mod reading;
 mod recording;

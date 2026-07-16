@@ -71,6 +71,9 @@ Lexical learning state is split by purpose:
 | `lexical_capability_history` | Before/after capability state audit trail, including override clear |
 | `lexical_occurrences` | Durable source sentence/media snapshot |
 | `lexical_observations` | Sentence-specific heard/not-heard result |
+| `production_corpus_documents` | Rebuildable final learner-response documents with attempt/rubric/source and factual assistance provenance |
+| `production_corpus_entries` | Lemma-keyed token occurrences with surface form and Unicode-scalar span into one document |
+| `production_corpus_documents_fts` | Trigger-maintained phrase-search companion over document text |
 
 Updating a global status never rewrites historical observations. An observation
 is the current per-(entry, sentence) verdict, not an append-only log: its id is
@@ -202,6 +205,10 @@ learning_events
 recording_assets
   ├── practice_attempt_id nullable, ON DELETE SET NULL
   └── media_id nullable, ON DELETE SET NULL
+
+semantic_task_attempts (authoritative immutable facts)
+  └── production_corpus_documents (rebuildable projection; cascade on attempt deletion)
+        └── production_corpus_entries (rebuildable lemma occurrences)
 ```
 
 Losing or deleting media/subtitle rows preserves lexical occurrence snapshots and
@@ -393,6 +400,12 @@ expansion is ephemeral overlay state, not a fourth persisted Rhythm mode.
   A suggestion is never a learner response; only a later typed `AttemptResponse`
   in a new immutable attempt can be cited as the result of acceptance. The same
   migration adds mutable `writing_drafts`, isolated from every evidence writer.
+- Schema v39 adds `production_corpus_documents`, `production_corpus_entries`,
+  and `production_corpus_documents_fts`. Full response text is stored once per
+  document; token rows cite half-open Unicode-scalar spans. Incremental rubric
+  replacement and full replacement are transactional. The projection writes no
+  lexical observation, capability state/history, or template identity and can
+  be deleted/rebuilt from immutable semantic attempts.
 - Review scheduling v1 is recorded as `listen_review_v1_heuristic_proxy`: `again` returns in
   10 minutes, `hard` in one day, and successful intervals grow from 3 to 7 days before doubling.
   The durable attempts remain the evidence history; the schedule row is a replaceable read model.

@@ -50,6 +50,18 @@ Local QA media:
 
 ## Architecture Rules
 
+- Product form stays open. Optimize for better user experience and useful
+  capability; do not turn a current phase scope, an existing UI container, or
+  an architecture pattern into a permanent product prohibition. Hard limits
+  come from real engineering conditions such as platform/audio behavior,
+  latency, compute, storage, network/provider protocols, cost, privacy,
+  security, data integrity, and compatibility.
+- A shared deep module may unify facts, lifecycle, and difficult implementation
+  without forcing every consumer to share one UI. In particular, content-
+  anchored realtime conversation, a GPT-like open-chat surface, role play, and
+  future conversation forms may present differently while reusing session/turn/
+  audio/transcript facts, production-corpus ingestion, and review. A feature
+  being out of scope for one phase means "not delivered now", not "forbidden".
 - Keep dependency direction one-way: `domain` is the leaf foundation;
   `application` is the use-case orchestration layer; `api-http` adapts HTTP.
 - `api-http` handlers must not directly call `speech-analysis`; route cross-crate

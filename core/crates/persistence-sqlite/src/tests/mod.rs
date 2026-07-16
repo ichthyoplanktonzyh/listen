@@ -538,6 +538,7 @@ mod llm_provider;
 mod media_library;
 mod migrations;
 mod phonetic_analysis;
+mod production_corpus;
 mod reading;
 mod semantic_task;
 mod subtitles_dictionary;

@@ -13,17 +13,18 @@ use domain::{
     PhoneticAnalysisId, PhoneticAnalysisJob, PhoneticAnalysisJobId,
     PhoneticAnalysisModelDescriptor, PhoneticAnalysisModelId, PhoneticFindingFeedback,
     PhoneticFindingId, PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeItemId,
-    PracticeSession, PracticeSessionId, ReadingPosition, RecognitionEvidence, RecordingAsset,
-    RecordingAssetId, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus,
-    ReviewSchedule, SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId,
-    SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind, SenseGroupAnalysis,
-    SenseGroupAnalysisId, SentencePronunciation, SoundFitCalibration, SubtitleSentence,
-    SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackProvenance,
-    SubtitleTrackStatus, TimeMs, TranscriptionJob, TranscriptionJobId,
-    TranscriptionModelDescriptor, TranscriptionModelId, UpgradeSuggestion, UpgradeSuggestionId,
-    UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation, WordTimeline,
-    WordTimelineId, WordTiming, WritingDraft, WritingFeedbackFinding, WritingFeedbackFindingId,
-    WritingFindingDisposition, WritingFindingDispositionId,
+    PracticeSession, PracticeSessionId, ProductionCorpusDocument, ProductionCorpusEntry,
+    ProductionCorpusHit, ReadingPosition, RecognitionEvidence, RecordingAsset, RecordingAssetId,
+    ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewSchedule,
+    SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
+    SemanticTaskAttemptId, SemanticTaskKind, SenseGroupAnalysis, SenseGroupAnalysisId,
+    SentencePronunciation, SoundFitCalibration, SubtitleSentence, SubtitleSentenceId,
+    SubtitleTrack, SubtitleTrackId, SubtitleTrackProvenance, SubtitleTrackStatus, TimeMs,
+    TranscriptionJob, TranscriptionJobId, TranscriptionModelDescriptor, TranscriptionModelId,
+    UpgradeSuggestion, UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle,
+    WordPronunciation, WordTimeline, WordTimelineId, WordTiming, WritingDraft,
+    WritingFeedbackFinding, WritingFeedbackFindingId, WritingFindingDisposition,
+    WritingFindingDispositionId,
 };
 
 use crate::{ApplicationError, LexicalSourceContext};
@@ -702,6 +703,45 @@ pub trait CorpusIndexRepository: Send + Sync {
     ) -> Result<Vec<CorpusOccurrence>, ApplicationError>;
 }
 
+/// Phase 3.15.5 personal production corpus — a rebuildable projection over
+/// immutable semantic attempts. Rows mint no identity and are always safe to
+/// delete and regenerate; the repository therefore only offers whole-rubric
+/// replacement, never row patching.
+pub trait ProductionCorpusRepository: Send + Sync {
+    /// Atomically replaces every projection row derived from one rubric's
+    /// attempts (a rubric groups all attempts over one source/task).
+    fn replace_production_entries_for_rubric(
+        &self,
+        rubric_id: &SemanticRubricId,
+        documents: &[ProductionCorpusDocument],
+        entries: &[ProductionCorpusEntry],
+    ) -> Result<(), ApplicationError>;
+    /// Atomically replaces the complete projection after all source attempts
+    /// have been derived successfully. A failed rebuild leaves the previous
+    /// readable projection intact.
+    fn replace_all_production_entries(
+        &self,
+        documents: &[ProductionCorpusDocument],
+        entries: &[ProductionCorpusEntry],
+    ) -> Result<(), ApplicationError>;
+    /// Exact lemma lookup, newest first.
+    fn list_production_entries_by_key(
+        &self,
+        language: &LanguageCode,
+        normalized_key: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<ProductionCorpusHit>, ApplicationError>;
+    /// FTS phrase lookup over one-copy-per-revision response documents.
+    fn search_production_documents(
+        &self,
+        language: &LanguageCode,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<ProductionCorpusHit>, ApplicationError>;
+}
+
 pub trait DifficultyRepository: Send + Sync {
     fn save_difficulty_profile(
         &self,
@@ -806,6 +846,12 @@ pub trait SemanticTaskRepository: Send + Sync {
     fn list_semantic_attempts_for_rubric(
         &self,
         rubric_id: &SemanticRubricId,
+    ) -> Result<Vec<SemanticTaskAttempt>, ApplicationError>;
+    /// Every attempt of the given kinds, oldest first — the full-rebuild feed
+    /// for kind-scoped projections (Phase 3.15.5 production corpus).
+    fn list_semantic_attempts_by_kinds(
+        &self,
+        kinds: &[SemanticTaskKind],
     ) -> Result<Vec<SemanticTaskAttempt>, ApplicationError>;
     fn save_semantic_judgment(
         &self,

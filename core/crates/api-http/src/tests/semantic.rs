@@ -421,6 +421,77 @@ async fn writing_findings_require_user_revision_and_append_disposition() {
 }
 
 #[tokio::test]
+async fn writing_attempt_is_queryable_from_personal_production_corpus() {
+    let app = test_app();
+    let fixture = gold_fixture();
+    let mut rubric_body = rubric_request(&fixture);
+    rubric_body["purpose"] = serde_json::json!("opinion_response");
+    rubric_body["response_language"] = serde_json::json!("en");
+    let (status, rubric) = post_json(&app, "/v1/semantic/rubrics", rubric_body).await;
+    assert_eq!(status, StatusCode::OK, "{rubric}");
+    let rubric_id = rubric["id"].as_str().unwrap();
+
+    let (status, attempt) = post_json(
+        &app,
+        "/v1/semantic/attempts",
+        serde_json::json!({
+            "kind": "opinion_response",
+            "target": fixture.attempts[0].target,
+            "anchors": [],
+            "rubric_id": rubric_id,
+            "rubric_version": 1,
+            "conditions": {
+                "source_text_visible": true,
+                "audio_play_count": null,
+                "notes_allowed": true,
+                "l1_trigger": null,
+                "speaking_assistance": null,
+                "speaking_recall": null,
+                "prompt_snapshot": "Respond to the proposal."
+            },
+            "responses": [{
+                "revision": 1,
+                "raw_transcript": null,
+                "transcript": "This proposal works well.",
+                "source": "typed",
+                "recording_asset_id": null,
+                "asr_reliability": null,
+                "language": "en",
+                "recorded_at_ms": 20
+            }],
+            "status": "completed",
+            "started_at_ms": 10,
+            "ended_at_ms": 20
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{attempt}");
+
+    let (status, hits) = get_json(
+        &app,
+        "/v1/production-corpus/search?language=en&query=proposal",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{hits}");
+    assert_eq!(hits.as_array().unwrap().len(), 1);
+    assert_eq!(
+        hits[0]["document"]["response_text"],
+        "This proposal works well."
+    );
+    assert_eq!(hits[0]["document"]["assistance"], "content_anchored");
+    assert_eq!(hits[0]["entry"]["display_text"], "proposal");
+
+    let (status, phrase_hits) = get_json(
+        &app,
+        "/v1/production-corpus/search?language=en&query=proposal%20works",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{phrase_hits}");
+    assert_eq!(phrase_hits.as_array().unwrap().len(), 1);
+    assert!(phrase_hits[0].get("entry").is_none());
+}
+
+#[tokio::test]
 async fn semantic_routes_reject_matrix_violations_and_tampered_hashes() {
     let app = test_app();
     let fixture = gold_fixture();

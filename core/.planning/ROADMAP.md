@@ -63,6 +63,10 @@
 > 真实 QA；其后逐个验证 Reading / Speaking / Writing Studio。语义能力允许使用 LLM，
 > 但经厂商中立 provider 与主流 API protocol adapter 接入，自动判断先过独立校验再获得
 > 影响长期 capability 的资格。
+> 2026-07-16 产品开放性原则：产品形态以用户体验与实际功能为目标；阶段范围、既有 UI
+> 容器和架构模式不构成永久产品禁令，只有真实工程条件形成硬约束。共享深模块复用事实与
+> 生命周期而不强制复用界面。Realtime conversation 首个 surface 可锚定当前内容，后续
+> GPT-like 开放聊天、角色扮演等均为合法方向，并进入共同的产出语料与复盘处理。
 > 完成报告见 `docs/release/milestone-1.md`。
 
 ## 1. 路线图目标
@@ -1449,7 +1453,8 @@ Phase 3.0 的执行序列（2026-07-04 确立，取代早期建议顺序）：
 配套一级产品原则（详见 breakdown 与 discuss 文档）：精听/泛听为一级心智模型，
 复习/词典/dashboard 是资产消费层与回访动线；功能按场景分不按设备分，生产端
 （重模型）是唯一 PC-only 能力；闭环是推荐路径不是强制流程，每个功能必须可独立
-使用；泛听默认零打扰。
+使用；泛听默认零打扰。阶段范围用于安排交付顺序，不冻结长期产品形态；共享能力不强制
+不同场景复用同一种界面。
 
 - Phase 分解与依赖：`.planning/phases/3.0-english-listening-learning-loop/3.0-PHASE-BREAKDOWN.md`
 - Learning Domain Model v2 共享上下文：
@@ -1466,23 +1471,34 @@ Phase 3.7–3.10 仍按既有计划完成，不在本轮重排。听力主线与
 
 1. 3.11 Semantic Task & Evidence Foundation；
 2. 3.12 Vendor-neutral LLM Provider；
-3. 3.12.1 LLM Judge Qualification（从 3.12 拆出的资格评估，可与 3.13 并行）；
+3. 3.12.2 Studio LLM Feedback（取代已取消的 3.12.1）✅；
 4. 3.13 Reading Studio v1；
-5. 3.13.5 Studio Shell UX ✅（2026-07-15 收口：内容会话/资产驱动混合导航、阅读器、阶段自适应任务容器）；
+5. 3.13.5 Studio Shell UX ✅；
 6. 3.14 Speaking Studio v1；
-7. 3.15 Writing Studio v1；
-8. 3.16 Personal Expression；
-9. 3.17 Four-channel Projection & Cross-modal Review；
-10. 3.18 Cross-modal Coach & Four-channel Closeout。
+7. 3.15 Writing Studio v1 ✅；
+8. 3.15.5 Personal Production Corpus ✅；
+9. 3.15.9 TTS（正交插入建议）；
+10. 3.15.6 Cross-channel Production Gap Review；
+11. 3.15.7 Realtime Speech Conversation / 3.15.8 Semantic Embedding；
+12. 3.16 Personal Expression；
+13. 3.17 Four-channel Projection & Cross-modal Review；
+14. 3.18 Cross-modal Coach & Four-channel Closeout。
 
-上述**顺序**已按依赖固定；但各 PLAN 写于 3.7–3.10 开工前，是方向承诺而非执行规格，
+上述顺序表达当前依赖与建议交付次序；phase scope 不构成长期产品非目标。各 PLAN 是方向承诺
+而非永久执行规格，
 每个 phase 开工前必须按上游落地现状复核修订。每个 Studio 开工前仍允许基于上游真实 QA
 缩减范围，但不得跨 phase 把三个 Studio 合并实施。任何依赖语义理解的评价先建立版本化
-rubric / judgment contract，judge 经 3.12.1 留出集校验才进入学习 surface；LLM provider
+rubric / judgment contract，并以可纠正、可 adjudicate、`heuristic_proxy`、零自动
+observation/projection 的显示诚实边界进入 surface；LLM provider
 必须厂商中立，首批以两个异构协议（OpenAI Chat Completions-compatible + Anthropic
 Messages）证明中立性，OpenAI Responses / Gemini native 及本地或未来协议 adapter 为
 增量接入。完整产品与证据边界见
 `.planning/discuss/four-channel-product-and-vendor-neutral-llm-final.zh.md`。
+
+Realtime conversation 的内容锚定 surface 是首个交付形态，不是永久边界。后续开放聊天可采用
+类似 GPT 的连续对话界面，也可发展角色扮演、模板练习或其他场景原生 surface；共同复用会话
+事实、产出语料和复盘能力，不要求共享页面布局。复盘处理应成为 finalized session 的共同下游，
+但其呈现和进入方式保持开放。
 
 ### 14.13 Phase 2.20：Rhythm-first Listening Analysis
 

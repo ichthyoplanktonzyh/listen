@@ -187,6 +187,33 @@ impl SemanticTaskRepository for SqliteRepository {
         Ok(attempts)
     }
 
+    fn list_semantic_attempts_by_kinds(
+        &self,
+        kinds: &[SemanticTaskKind],
+    ) -> Result<Vec<SemanticTaskAttempt>, ApplicationError> {
+        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let placeholders = (1..=kinds.len())
+            .map(|index| format!("?{index}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        let mut statement = connection
+            .prepare(&format!(
+                "SELECT attempt_json FROM semantic_task_attempts
+                 WHERE kind IN ({placeholders}) ORDER BY started_at_ms ASC, id ASC",
+            ))
+            .map_err(repo)?;
+        let kind_keys = kinds.iter().map(json).collect::<Result<Vec<_>, _>>()?;
+        let attempts = statement
+            .query_map(
+                rusqlite::params_from_iter(kind_keys.iter()),
+                attempt_from_row,
+            )
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)?;
+        Ok(attempts)
+    }
+
     fn save_semantic_judgment(
         &self,
         judgment: &SemanticJudgment,

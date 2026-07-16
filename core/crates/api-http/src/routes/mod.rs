@@ -8,6 +8,7 @@ pub(crate) mod llm;
 pub(crate) mod media;
 pub(crate) mod phonetic_analysis;
 pub(crate) mod practice;
+pub(crate) mod production_corpus;
 pub(crate) mod pronunciation;
 pub(crate) mod reading;
 pub(crate) mod semantic;

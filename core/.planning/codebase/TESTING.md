@@ -54,8 +54,10 @@
 | `crates/persistence-sqlite/src/tests/learning_loop.rs::listening_inbox_capture_process_review_and_micro_intensive_round_trip` | Phase 3.3 泛听 Inbox 编排：soft interrupt capture、ReviewItem 去向、micro-intensive PracticeItem 去向、理解度自报事件 |
 | `crates/persistence-sqlite/src/tests/timelines.rs::rule_and_syntax_sense_group_providers_keep_independent_runs` | rule/syntax SenseGroup provider/version、syntax artifact metrics 与独立 lifecycle 共存，且显式不依赖 ChunkTimeline |
 | `crates/persistence-sqlite/src/tests/learning_loop.rs::shadowing_completion_persists_recording_without_creating_capability_evidence` | Phase 3.8 录音资产 round trip、幂等非评价 completion、零 observation/review 与删除语义 |
+| `crates/persistence-sqlite/src/tests/production_corpus.rs` | Phase 3.15.5 写作增量 lemma/phrase 索引、零 observation/capability writer、单份回答文本、幂等全量重建与失败事务保留旧投影 |
 | `crates/api-http/src/tests/practice.rs::practice_routes_capture_and_process_listening_inbox_items` | Phase 3.3 HTTP 路由：Listening Inbox capture/list/process 端到端 JSON contract |
 | `crates/api-http/src/tests/practice.rs::recording_and_unscored_shadowing_routes_round_trip` | Phase 3.8 recording create/get/delete 与 `completed` shadowing HTTP contract |
+| `crates/api-http/src/tests/semantic.rs::writing_attempt_is_queryable_from_personal_production_corpus` | Writing typed attempt 落库后增量摄入，exact lemma 与 FTS phrase HTTP 查询端到端 |
 | `crates/api-http/tests/api_integration_test.rs` | 全栈 HTTP 集成：真实 `router(ApiState::new(...))` + in-memory SQLite，`tower::oneshot` 进程内驱动 `api-http → application → persistence`（鉴权拒绝、media 注册/读取/404、字幕导入往返、archive/restore/delete 生命周期、LLTimeline v1 文档导入往返、word timeline create→activate、句子 diagnosis、lexical entry upsert→list→detail→学习内容更新） |
 | `crates/api-http/src/transcription.rs::tests::*dtw*` | whisper.cpp DTW preset 解析回归：内置模型名、自定义/量化 `ggml-*` 路径、非 whisper.cpp provider 降级 |
 | `crates/speech-analysis/tests/asr_timing_integration_test.rs` | whisper.cpp JSON → 词级时间戳 |
@@ -93,7 +95,7 @@
 | `store_test.dart` | `Store<T>` 状态容器：selector 身份 memoize、字段级精准通知、equal-state no-op、replace 刷新全部 + 聚合通知 |
 | `builder_test.dart` | `StoreBuilder` / `StoreBuilder2` widget：只在选中 slice 变化时重建、无关字段不重建、equal-state no-op |
 | `api_service_test.dart` | LocalApi HTTP 客户端 sidecar 路径解析 |
-| `api_service_transport_test.dart` | A1 transport seam（`LocalApi.withTransport`）：GET 解码、非 2xx → `HttpException`、body 编码经 seam 转发 |
+| `api_service_transport_test.dart` | A1 transport seam（`LocalApi.withTransport`）：GET 解码、非 2xx → `HttpException`、body 编码、personal production query/typed hit 解码 |
 | `practice_controller_test.dart` | Phase 3.1 practice item/attempt/review flow；Phase 3.8 chunk 逐步展开、录音权限、非评分 completion、录音资产与客观比较 seam |
 | `extensive_listening_controller_test.dart` | Phase 3.3 extensive listening start/capture/process/finish 与理解度自报请求；Phase 3.7 可选 hunting summary wire shape |
 | `hunting_controller_test.dart` | Phase 3.7 猎词单 controller：目标/候选加载、候选确认、active 目标归档与 HTTP seam |
@@ -106,7 +108,7 @@
 | `controllers_test.dart` | 控制器状态管理 |
 | `external_tools_test.dart` | ffmpeg/ffprobe/yt-dlp 适配器 |
 | `diagnosis_card_test.dart` | 诊断面板 UI |
-| `vocabulary_book_test.dart` | 词汇本视图 |
+| `vocabulary_book_test.dart` | 词汇本视图；personal production 次数/回答/attempt 入口与空态/不可用态区分 |
 | `transcription_ui_test.dart` | 转写 UI |
 | `learning_assets_ui_test.dart` | 学习资产、可下载资源与字幕搜索 UI |
 | `phonetic_analysis_ui_test.dart` | 音素分析 UI |

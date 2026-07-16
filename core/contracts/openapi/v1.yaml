@@ -2290,6 +2290,30 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CorpusReindexResult" }
+  /v1/production-corpus/search:
+    get:
+      operationId: searchProductionCorpus
+      description: Searches the rebuildable corpus of learner-authored writing by normalized lemma or FTS phrase.
+      parameters:
+        - { name: language, in: query, schema: { type: string, default: en } }
+        - { name: query, in: query, required: true, schema: { type: string, minLength: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 100 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: Learner-output occurrences with their one-copy response document and assistance provenance
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ProductionCorpusHit" } }
+  /v1/production-corpus/reindex:
+    post:
+      operationId: reindexProductionCorpus
+      responses:
+        "200":
+          description: Atomically rebuilds the production corpus from immutable writing attempts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductionCorpusReindexResult" }
   /v1/vocabulary/export:
     get:
       operationId: exportVocabulary
@@ -3735,6 +3759,48 @@ components:
       required: [indexed_tracks]
       properties:
         indexed_tracks: { type: integer, minimum: 0 }
+    ProductionChannel:
+      enum: [written, spoken]
+    ProductionAssistance:
+      enum: [content_anchored, source_reconstruction, learner_revision, explicit_target, model_suggested, direct_imitation, unknown]
+    ProductionCorpusDocument:
+      type: object
+      required: [id, language, channel, assistance, attempt_id, rubric_id, response_revision, task_kind, media_id, start_ms, end_ms, response_text, produced_at_ms]
+      properties:
+        id: { type: string }
+        language: { type: string }
+        channel: { $ref: "#/components/schemas/ProductionChannel" }
+        assistance: { $ref: "#/components/schemas/ProductionAssistance" }
+        attempt_id: { type: string }
+        rubric_id: { type: string }
+        response_revision: { type: integer, minimum: 1 }
+        task_kind: { $ref: "#/components/schemas/SemanticTaskKind" }
+        media_id: { type: [string, "null"] }
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        response_text: { type: string }
+        produced_at_ms: { type: integer, minimum: 0 }
+    ProductionCorpusEntry:
+      type: object
+      required: [id, document_id, normalized_key, display_text, start_char, end_char]
+      properties:
+        id: { type: string }
+        document_id: { type: string }
+        normalized_key: { type: string }
+        display_text: { type: string }
+        start_char: { type: integer, minimum: 0 }
+        end_char: { type: integer, minimum: 0 }
+    ProductionCorpusHit:
+      type: object
+      required: [document]
+      properties:
+        document: { $ref: "#/components/schemas/ProductionCorpusDocument" }
+        entry: { $ref: "#/components/schemas/ProductionCorpusEntry" }
+    ProductionCorpusReindexResult:
+      type: object
+      required: [indexed_rubrics]
+      properties:
+        indexed_rubrics: { type: integer, minimum: 0 }
     LexicalStatusHistory:
       type: object
       required: [id, lexical_entry_id, previous_status, new_status, changed_at_ms, change_source]

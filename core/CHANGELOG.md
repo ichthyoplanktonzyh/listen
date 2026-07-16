@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- 2026-07-16 16:07 CST: Phase 3.15.5 Personal Production Corpus 完成。新增 SQLite v39
+  document + lemma occurrence + FTS5 可重建投影；Writing typed attempt 成功落库后 best-effort
+  增量刷新，全量 reindex 先派生后单事务替换，失败保留旧投影。完整回答每 document 只存一份，
+  token 保存 surface/lemma/Unicode-scalar span；新增 exact lemma/phrase FTS HTTP API、OpenAPI 与
+  Flutter 词典「我的产出」（次数、回答、revision/assistance、原 attempt revision 链，加载/空/
+  不可用三态）。原 `scaffolding: bool` 修正为 factual assistance provenance，零 spoken writer、
+  零 observation/capability writer。3.16 边界裁定为可重建语料投影 vs 显式 durable 模板资产。
+  v39 migration 遵守 additive/idempotent 约定并通过 v29/v30 旧库升级回归。验证：production
+  persistence 3 项、api-http 端到端、Clippy strict、Flutter 全量 437 项、contracts 全绿；
+  `flutter analyze --fatal-infos --fatal-warnings` 干净。Rust workspace 复跑只命中一个既有 hunting
+  check 毫秒级 event-id 碰撞 flaky，单测立即复跑通过，未扩张本 phase 修改该领域。
+
+- 2026-07-16 14:58 CST: 补充项目级产品开放性与 conversation 多 surface 原则。`AGENT.md`
+  明确 phase scope、既有 UI 容器和架构模式不是永久产品禁令，只有平台/物理资源、延迟、
+  协议/网络、成本、隐私安全、数据正确性与兼容性等真实工程条件构成硬约束；共享深模块复用
+  事实和生命周期但不强制界面同形。同步 `PROJECT.md`、`REQUIREMENTS.md`、`ROADMAP.md`、
+  `STATE.md` 及 `3.15.7-PLAN.md`：首个当前内容锚定对话不排斥未来 GPT-like 开放聊天、角色扮演等场景原生
+  surface；它们共享 session/turn/audio/transcript、个人产出语料与 finalized-session 复盘处理，
+  复盘呈现可为独立页、聊天内卡片、后台生成或稍后回访。ROADMAP 同步 P1–P6 实际顺序并移除
+  已取消 3.12.1 的旧资格门表述。
+
 - 2026-07-16 13:50 CST: Phase 3.12.2 与 3.15 收口 + P2–P6 立 phase。owner QA 通过：
   3.12.2 真实 provider 下三 Studio「AI 出题 + AI 判定 + 纠正」端到端通过（新增
   `3.12.2-CLOSEOUT.md`，PLAN 置 COMPLETE）；3.15 按 `3.15-MANUAL-QA.md` 真实内容/重启/

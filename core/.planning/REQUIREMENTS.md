@@ -2529,6 +2529,19 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - 每个 P0 用户路径有明确失败时下一步行动。
 - 依赖：UX-001 至 UX-007、TEST-014。
 
+### UX-009：产品形态开放与场景原生 Surface
+
+- 优先级：P0
+- 阶段：全程
+- 需求：产品设计以更好的用户体验和实际功能为目标。共享领域能力不得强迫不同场景复用
+  同一种页面、导航或任务容器；phase 的 out-of-scope 只控制当前交付，不构成长期产品禁令。
+- 验收标准：
+  - 产品限制能追溯到真实工程条件或明确的当前阶段取舍，不以“现有框架不支持”为永久理由。
+  - 共享模块统一事实、生命周期和证据语义；surface 可按场景采用不同交互形态。
+  - 当前取舍与长期非目标在 PLAN/PROJECT/ROADMAP 中明确区分。
+  - 新 surface 不因追求视觉或流程统一而复制、扭曲或丢失共同事实。
+- 依赖：ARCH-011、UX-007。
+
 ## 18.4 Milestone 2 多语言学习基础需求
 
 > 方向与抽象决策见 `docs/decisions/0012-multilingual-learning-abstraction.md` 与
@@ -2886,6 +2899,23 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - 不展示综合语言分、排名、streak 或伪造零值。
   - 同一真实内容的听→读→说→写端到端路径完成 manual_product_qa。
 
+### LOOP-019：上下文开放的对话与统一复盘
+
+- 优先级：P1
+- 阶段：Phase 3.15.7 及后续 conversation surface
+- 需求：Realtime conversation 应作为可被多种场景消费的深模块。当前内容段落对话是首个
+  surface，但不得把媒体锚点写成 session、turn、transcript、产出语料或复盘的永久前提；
+  后续可交付 GPT-like 开放聊天、角色扮演、个人表达等不同形态。
+- 验收标准：
+  - 不同 surface 可拥有独立导航、布局与交互，不被强制塞入同一 Studio/任务容器。
+  - session/turn/audio/transcript、provider provenance、本地权威 user transcript 与产出语料
+    摄入保持共同事实语义。
+  - finalized session 可进入统一复盘处理；复盘页、聊天内卡片、后台生成和稍后回访均为合法
+    呈现策略，不强制阻塞跳转。
+  - 即时 session 复盘与长期 corpus-level gap 复盘区分时间尺度，但共享可追溯事实。
+  - 模型建议和复盘派生不自动写 capability observation/projection，仍经过用户确认门。
+- 依赖：LOOP-011、LOOP-013、Phase 3.15.5、Phase 3.15.6。
+
 ## 18.6 Phase 3.4.x Learning Domain Model v2 需求
 
 > 共享上下文：
@@ -3060,8 +3090,8 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | Milestone 2 生产引擎 | LLT-001 至 LLT-006、PROD-001 至 PROD-007、EVAL-001 至 EVAL-004 |
 | Milestone 2 轻量消费端 | LLT-007、CONSUME-001 至 CONSUME-004 |
 | Phase 2.20 Rhythm-first 真实听感分析 | RHY-001 至 RHY-008 |
-| Phase 2.22 用户可见工作流语义 | UX-001 至 UX-008 |
+| Phase 2.22 用户可见工作流语义 | UX-001 至 UX-009 |
 | Milestone 2 多语言学习基础 | LANG-001 至 LANG-010 |
-| Phase 3.0 英语听力学习闭环 | LOOP-000 至 LOOP-009 |
+| Phase 3.0 英语听力学习闭环与四通道扩展 | LOOP-000 至 LOOP-019 |
 | Phase 3.4.x / 3.9.1–3.9.2 Learning Analysis Foundation | CAP-001 至 CAP-013 |
 | Phase 3.35 听力工作台 UI 重构 | UI-016 至 UI-017 |
