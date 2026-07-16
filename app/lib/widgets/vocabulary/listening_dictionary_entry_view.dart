@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../localization.dart';
 import '../../models/practice.dart';
+import '../../models/production_corpus.dart';
 import '../../models/types.dart';
 import '../../theme/listen_theme.dart';
 import '../../utils/format_duration.dart';
@@ -35,6 +36,10 @@ class ListeningDictionaryEntryView extends StatefulWidget {
   const ListeningDictionaryEntryView({
     super.key,
     required this.details,
+    this.showProductionCorpus = false,
+    this.productionHits,
+    this.productionLoadFailed = false,
+    this.onOpenProductionAttempt,
     this.slicePlayer,
     required this.onPlay,
     required this.onMark,
@@ -60,6 +65,15 @@ class ListeningDictionaryEntryView extends StatefulWidget {
   });
 
   final LexicalEntryDetails details;
+
+  /// The vocabulary screen enables this section; reusable detail surfaces
+  /// remain layout-compatible until they opt into the projection.
+  final bool showProductionCorpus;
+
+  /// `null` while loading; an empty list is an honest no-output state.
+  final List<ProductionCorpusHitView>? productionHits;
+  final bool productionLoadFailed;
+  final ValueChanged<ProductionCorpusHitView>? onOpenProductionAttempt;
   final SlicePlayerController? slicePlayer;
   final ValueChanged<LexicalOccurrence> onPlay;
   final Future<bool> Function(LexicalOccurrence occurrence, bool heard) onMark;
@@ -322,6 +336,11 @@ class _ListeningDictionaryEntryViewState
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final occurrences = _sortedOccurrences();
+    final productionDocuments = <String, ProductionCorpusHitView>{};
+    for (final hit
+        in widget.productionHits ?? const <ProductionCorpusHitView>[]) {
+      productionDocuments.putIfAbsent(hit.document.id, () => hit);
+    }
     final unassignedOccurrences = occurrences
         .where((occurrence) => !_assignedOccurrenceIds.contains(occurrence.id))
         .toList(growable: false);
@@ -359,6 +378,62 @@ class _ListeningDictionaryEntryViewState
         if (widget.onCreateSenseFolder != null) ...[
           const SizedBox(height: 20),
           _senseFolderSection(l),
+        ],
+        if (widget.showProductionCorpus) ...[
+          const SizedBox(height: 20),
+          Text(
+            l.text('myOutput'),
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 4),
+          if (widget.productionHits == null && !widget.productionLoadFailed)
+            const LinearProgressIndicator()
+          else if (widget.productionLoadFailed)
+            Text(
+              l.text('myOutputUnavailable'),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: ListenColors.muted),
+            )
+          else if (widget.productionHits!.isEmpty)
+            Text(
+              l.text('myOutputEmpty'),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: ListenColors.muted),
+            )
+          else ...[
+            Text(
+              l
+                  .text(
+                    widget.productionHits!.length == 1
+                        ? 'myOutputCountOne'
+                        : 'myOutputCount',
+                  )
+                  .replaceAll('{count}', '${widget.productionHits!.length}'),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: ListenColors.muted),
+            ),
+            for (final hit in productionDocuments.values)
+              ListTile(
+                key: ValueKey('production-output-${hit.document.id}'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  hit.document.responseText,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  '${_assistanceLabel(l, hit.document.assistance)} · '
+                  '${l.text('revision')} ${hit.document.responseRevision}',
+                ),
+                trailing: const Icon(Icons.open_in_new),
+                onTap: widget.onOpenProductionAttempt == null
+                    ? null
+                    : () => widget.onOpenProductionAttempt!(hit),
+              ),
+          ],
         ],
         const SizedBox(height: 20),
         Row(
@@ -580,6 +655,16 @@ class _ListeningDictionaryEntryViewState
       ],
     );
   }
+
+  String _assistanceLabel(AppLocalizations l, String value) => switch (value) {
+    'content_anchored' => l.text('productionAssistanceContent'),
+    'source_reconstruction' => l.text('productionAssistanceReconstruction'),
+    'learner_revision' => l.text('productionAssistanceRevision'),
+    'explicit_target' => l.text('productionAssistanceTarget'),
+    'model_suggested' => l.text('productionAssistanceModel'),
+    'direct_imitation' => l.text('productionAssistanceImitation'),
+    _ => l.text('productionAssistanceUnknown'),
+  };
 
   Widget _senseFolderSection(AppLocalizations l) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
