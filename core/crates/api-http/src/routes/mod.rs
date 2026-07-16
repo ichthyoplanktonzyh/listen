@@ -11,6 +11,7 @@ pub(crate) mod practice;
 pub(crate) mod production_corpus;
 pub(crate) mod pronunciation;
 pub(crate) mod reading;
+pub(crate) mod realtime_conversation;
 pub(crate) mod semantic;
 pub(crate) mod sound_line;
 pub(crate) mod speech;

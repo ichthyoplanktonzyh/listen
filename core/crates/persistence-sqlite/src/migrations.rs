@@ -12,8 +12,9 @@ use super::PersistenceError;
 // v33 belongs to Phase 3.8 recording_assets; v34 adds the Phase 3.9 learner
 // profile after it. v35 adds the Phase 3.11 semantic task fact layer. v38 adds
 // Phase 3.15 append-only writing feedback and user disposition facts. v39 adds
-// the Phase 3.15.5 rebuildable production-corpus projection.
-pub const MIGRATION_VERSION: u32 = 39;
+// the Phase 3.15.5 rebuildable production-corpus projection. v40 adds Phase
+// 3.15.7 realtime provider config and local session/turn facts.
+pub const MIGRATION_VERSION: u32 = 41;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -270,7 +271,52 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         tx.pragma_update(None, "user_version", 39)?;
         tx.commit()?;
     }
+    if current < 40 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!(
+            "../migrations/0040_realtime_conversations.sql"
+        ))?;
+        tx.pragma_update(None, "user_version", 40)?;
+        tx.commit()?;
+    }
+    if current < 41 {
+        let tx = connection.unchecked_transaction()?;
+        // Several migration regression fixtures deliberately lower only
+        // `user_version` after constructing the latest schema. Do not rebuild
+        // an already-generalized corpus table as though it still had v39's
+        // `task_kind` column.
+        if !table_has_column(&tx, "production_corpus_documents", "activity_kind")? {
+            // Historical minimal-schema fixtures (and equivalently damaged
+            // databases) can contain the v30/v31 sense-folder triggers without
+            // their referenced v7 `lexical_occurrences` table. SQLite reparses
+            // every trigger during ALTER TABLE, so remove those unusable guards
+            // before rebuilding this unrelated projection.
+            if !table_has_column(&tx, "lexical_occurrences", "id")? {
+                tx.execute_batch(
+                    "DROP TRIGGER IF EXISTS validate_lexical_sense_folder_occurrence_parent;
+                     DROP TRIGGER IF EXISTS validate_lexical_sense_folder_occurrence_parent_update;",
+                )?;
+            }
+            tx.execute_batch(include_str!(
+                "../migrations/0041_production_corpus_sources.sql"
+            ))?;
+        }
+        tx.pragma_update(None, "user_version", 41)?;
+        tx.commit()?;
+    }
     Ok(())
+}
+
+fn table_has_column(
+    connection: &Connection,
+    table: &str,
+    column: &str,
+) -> Result<bool, PersistenceError> {
+    let mut statement = connection.prepare(&format!("PRAGMA table_info({table})"))?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(columns.iter().any(|name| name == column))
 }
 
 /// ADR 0017 decision 5: one channelized observation per legacy uncleared

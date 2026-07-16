@@ -1889,6 +1889,69 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/WritingFindingDisposition" }
+  /v1/realtime/providers:
+    get:
+      operationId: listRealtimeProviders
+      responses:
+        "200":
+          description: Secret-free realtime provider profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RealtimeProviderProfileView" }
+    post:
+      operationId: registerRealtimeProvider
+      description: The credential is write-only and stored in the OS keychain.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRealtimeProvider" }
+      responses:
+        "200":
+          description: Secret-free saved profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RealtimeProviderProfileView" }
+  /v1/realtime/providers/{id}:
+    delete:
+      operationId: deleteRealtimeProvider
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: Profile and keychain credential deleted }
+  /v1/realtime/conversations/ws:
+    get:
+      operationId: connectRealtimeConversation
+      description: Authenticated local WebSocket upgrade; binary frames carry neutral PCM16/24 kHz.
+      parameters:
+        - { name: profile_id, in: query, required: true, schema: { type: string } }
+        - { name: language, in: query, required: false, schema: { type: string, default: en } }
+        - { name: instructions, in: query, required: false, schema: { type: string } }
+      responses:
+        "101": { description: WebSocket switching protocols }
+  /v1/realtime/sessions:
+    post:
+      operationId: saveRealtimeSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Saved local session fact }
+  /v1/realtime/turns:
+    post:
+      operationId: saveRealtimeTurn
+      description: Finalized learner turns require a completed local Whisper transcript.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Saved immutable turn fact and best-effort spoken projection }
   /v1/llm/providers:
     get:
       operationId: listLlmProviders
@@ -4504,6 +4567,29 @@ components:
         multilingual: { $ref: "#/components/schemas/CapabilityClaim" }
         audio_input: { $ref: "#/components/schemas/CapabilityClaim" }
         max_context_tokens: { type: [integer, "null"] }
+    RealtimeProviderProfileView:
+      type: object
+      required: [id, display_name, adapter_kind, base_url, model_id, voice, has_credential, timeout_ms]
+      properties:
+        id: { type: string }
+        display_name: { type: string }
+        adapter_kind: { enum: [open_ai_realtime, qwen_omni_realtime] }
+        base_url: { type: string }
+        model_id: { type: string }
+        voice: { type: string }
+        has_credential: { type: boolean }
+        timeout_ms: { type: integer, minimum: 1000 }
+    RegisterRealtimeProvider:
+      type: object
+      required: [display_name, adapter_kind, base_url, model_id, voice, secret]
+      properties:
+        display_name: { type: string }
+        adapter_kind: { enum: [open_ai_realtime, qwen_omni_realtime] }
+        base_url: { type: string }
+        model_id: { type: string }
+        voice: { type: string }
+        secret: { type: string, writeOnly: true }
+        timeout_ms: { type: integer, minimum: 1000, default: 30000 }
     LlmProviderProfileView:
       type: object
       description: >

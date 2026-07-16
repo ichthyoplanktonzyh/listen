@@ -85,6 +85,11 @@ use routes::pronunciation::{
     pronunciation_providers, track_pronunciation,
 };
 use routes::reading::{reading_position, record_reading_marking, save_reading_position};
+use routes::realtime_conversation::{
+    connect as connect_realtime_conversation, delete_profile as delete_realtime_profile,
+    list_profiles as list_realtime_profiles, register_profile as register_realtime_profile,
+    save_session as save_realtime_session, save_turn as save_realtime_turn,
+};
 use routes::semantic::{
     confirm_speaking_target, create_judgment_adjudication, create_semantic_attempt,
     create_semantic_judgment, create_semantic_rubric, create_writing_disposition,
@@ -741,6 +746,20 @@ pub fn router(state: ApiState) -> Router {
             get(get_llm_provider).delete(delete_llm_provider),
         )
         .route("/v1/llm/providers/{id}/probe", post(probe_llm_provider))
+        .route(
+            "/v1/realtime/providers",
+            get(list_realtime_profiles).post(register_realtime_profile),
+        )
+        .route(
+            "/v1/realtime/providers/{id}",
+            delete(delete_realtime_profile),
+        )
+        .route(
+            "/v1/realtime/conversations/ws",
+            get(connect_realtime_conversation),
+        )
+        .route("/v1/realtime/sessions", post(save_realtime_session))
+        .route("/v1/realtime/turns", post(save_realtime_turn))
         .route("/v1/llm/providers/{id}/judge", post(judge_via_llm_provider))
         .route(
             "/v1/llm/providers/{id}/rubric",

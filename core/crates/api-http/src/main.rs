@@ -40,7 +40,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_reading_position_repository(repository.clone())
     .with_semantic_task_repository(repository.clone())
     .with_production_corpus_repository(repository.clone())
-    .with_llm_provider_profile_repository(repository.clone());
+    .with_llm_provider_profile_repository(repository.clone())
+    .with_realtime_conversation_repository(repository.clone());
     let services = services.with_coach_dashboard_repository(repository.clone());
     let token = env::var("LLPLAYERNEXT_API_TOKEN").unwrap_or_else(|_| random_token());
     let mut state = ApiState::new(services, repository, token.clone())

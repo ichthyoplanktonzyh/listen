@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     LanguageCode, LexicalEntryId, MediaId, ProductionCorpusDocumentId, ProductionCorpusEntryId,
-    SemanticRubricId, SemanticTaskAttemptId, SemanticTaskKind,
+    SemanticRubricId, SemanticTaskAttemptId,
 };
 
 /// Which learner-output channel produced a corpus document.
@@ -48,10 +48,18 @@ pub struct ProductionCorpusDocument {
     pub language: LanguageCode,
     pub channel: ProductionChannel,
     pub assistance: ProductionAssistance,
-    pub attempt_id: SemanticTaskAttemptId,
-    pub rubric_id: SemanticRubricId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attempt_id: Option<SemanticTaskAttemptId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rubric_id: Option<SemanticRubricId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub realtime_turn_id: Option<crate::RealtimeConversationTurnId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub realtime_session_id: Option<crate::RealtimeConversationSessionId>,
     pub response_revision: u32,
-    pub task_kind: SemanticTaskKind,
+    /// Factual activity name (`summary`, `opinion_response`,
+    /// `realtime_conversation`, ...), not a capability category.
+    pub activity_kind: String,
     pub media_id: Option<MediaId>,
     pub start_ms: u64,
     pub end_ms: u64,

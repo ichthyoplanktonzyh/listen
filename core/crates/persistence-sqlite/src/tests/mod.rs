@@ -540,6 +540,7 @@ mod migrations;
 mod phonetic_analysis;
 mod production_corpus;
 mod reading;
+mod realtime_conversation;
 mod semantic_task;
 mod subtitles_dictionary;
 mod timelines;

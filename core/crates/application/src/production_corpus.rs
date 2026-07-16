@@ -39,6 +39,7 @@ fn assistance_for(kind: SemanticTaskKind, revision: u32) -> ProductionAssistance
 #[derive(Clone)]
 pub struct ProductionCorpusUseCases {
     semantic_tasks: Arc<dyn SemanticTaskRepository>,
+    realtime_conversations: Arc<dyn crate::RealtimeConversationRepository>,
     production_corpus: Arc<dyn ProductionCorpusRepository>,
     lexical_learning: LexicalLearningUseCases,
 }
@@ -47,9 +48,83 @@ impl ProductionCorpusUseCases {
     pub(crate) fn from_services(services: &AppServices) -> Self {
         Self {
             semantic_tasks: services.semantic_tasks.clone(),
+            realtime_conversations: services.realtime_conversations.clone(),
             production_corpus: services.production_corpus.clone(),
             lexical_learning: LexicalLearningUseCases::from_services(services),
         }
+    }
+
+    /// Records the immutable/local-authoritative realtime turn first, then
+    /// best-effort refreshes only its spoken projection. Provider transcript
+    /// alone and interrupted/failed turns yield no document.
+    pub fn record_realtime_turn_and_index(
+        &self,
+        turn: domain::RealtimeConversationTurn,
+    ) -> Result<domain::RealtimeConversationTurn, ApplicationError> {
+        let saved = self.realtime_conversations.save_realtime_turn(&turn)?;
+        let mut documents = Vec::new();
+        let mut entries = Vec::new();
+        if saved.is_authoritative_learner_output() {
+            let session = self
+                .realtime_conversations
+                .get_realtime_session(&saved.session_id)?
+                .ok_or(ApplicationError::NotFound("realtime conversation session"))?;
+            let transcript = saved
+                .local_transcript
+                .as_ref()
+                .expect("authority predicate requires local transcript");
+            let anchor = session
+                .context
+                .as_ref()
+                .and_then(|context| context.content_anchor.as_ref());
+            let document_id = ProductionCorpusDocumentId::from_fingerprint(
+                "production-corpus-document",
+                &format!("realtime:{}", saved.id.as_str()),
+            );
+            documents.push(ProductionCorpusDocument {
+                id: document_id.clone(),
+                language: session.language.clone(),
+                channel: ProductionChannel::Spoken,
+                assistance: saved.assistance,
+                attempt_id: None,
+                rubric_id: None,
+                realtime_turn_id: Some(saved.id.clone()),
+                realtime_session_id: Some(saved.session_id.clone()),
+                response_revision: 1,
+                activity_kind: "realtime_conversation".into(),
+                media_id: anchor.map(|value| value.media_id.clone()),
+                start_ms: anchor.map_or(0, |value| value.start_ms),
+                end_ms: anchor.map_or(0, |value| value.end_ms),
+                response_text: transcript.text.clone(),
+                produced_at_ms: transcript.completed_at_ms,
+            });
+            for token in subtitle_core::tokenize(Some(&session.language), &transcript.text)
+                .into_iter()
+                .filter(|token| token.kind == SubtitleTokenKind::Word && token.normalized.is_some())
+            {
+                let surface = token.normalized.expect("filtered to Some");
+                let normalized_key = self
+                    .lexical_learning
+                    .normalize_lexical_form(session.language.as_str(), &surface)
+                    .map(|normalization| normalization.normalized)
+                    .unwrap_or(surface);
+                entries.push(ProductionCorpusEntry {
+                    id: ProductionCorpusEntryId::from_fingerprint(
+                        "production-corpus-entry",
+                        &format!("{}:token:{}", document_id.as_str(), token.index),
+                    ),
+                    document_id: document_id.clone(),
+                    normalized_key,
+                    display_text: token.text,
+                    start_char: token.start_char,
+                    end_char: token.end_char,
+                });
+            }
+        }
+        let _ = self
+            .production_corpus
+            .replace_production_entries_for_realtime_turn(&saved.id, &documents, &entries);
+        Ok(saved)
     }
 
     /// Records the authoritative attempt first, then best-effort refreshes its
@@ -305,10 +380,15 @@ impl ProductionCorpusUseCases {
                 language: response.language.clone(),
                 channel: ProductionChannel::Written,
                 assistance: assistance_for(attempt.kind, response.revision),
-                attempt_id: attempt.id.clone(),
-                rubric_id: attempt.rubric_id.clone(),
+                attempt_id: Some(attempt.id.clone()),
+                rubric_id: Some(attempt.rubric_id.clone()),
+                realtime_turn_id: None,
+                realtime_session_id: None,
                 response_revision: response.revision,
-                task_kind: attempt.kind,
+                activity_kind: serde_json::to_value(attempt.kind)
+                    .ok()
+                    .and_then(|value| value.as_str().map(ToOwned::to_owned))
+                    .unwrap_or_else(|| "semantic_task".into()),
                 media_id: rubric.source.media_id.clone(),
                 start_ms: rubric.source.start_ms,
                 end_ms: rubric.source.end_ms,

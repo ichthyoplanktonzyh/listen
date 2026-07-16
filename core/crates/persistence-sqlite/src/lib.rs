@@ -13,6 +13,7 @@ mod phonetic_analysis;
 mod production_corpus;
 mod progress;
 mod reading;
+mod realtime_conversation;
 mod recording;
 mod semantic_task;
 mod subtitles;

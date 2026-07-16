@@ -26,6 +26,7 @@ fn test_state() -> ApiState {
         .with_semantic_task_repository(repo.clone())
         .with_production_corpus_repository(repo.clone())
         .with_llm_provider_profile_repository(repo.clone())
+        .with_realtime_conversation_repository(repo.clone())
         .with_reading_position_repository(repo.clone()),
         repo,
         "secret",
@@ -34,6 +35,50 @@ fn test_state() -> ApiState {
 
 fn test_app() -> Router {
     router(test_state())
+}
+
+#[tokio::test]
+async fn realtime_provider_registration_is_write_only_and_listable() {
+    let app = test_app();
+    let secret = "realtime-api-secret-not-returned";
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/realtime/providers")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "display_name":"QA OpenAI",
+                        "adapter_kind":"open_ai_realtime",
+                        "base_url":"wss://api.openai.com/v1/realtime",
+                        "model_id":"gpt-realtime",
+                        "voice":"marin",
+                        "secret":secret
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let text = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!text.contains(secret));
+    assert!(!text.contains("auth_ref"));
+    assert!(text.contains("has_credential"));
+
+    let response = app
+        .oneshot(
+            Request::get("/v1/realtime/providers")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]

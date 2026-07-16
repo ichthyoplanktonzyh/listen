@@ -2,13 +2,14 @@ use application::{ApplicationError, ProductionCorpusRepository};
 use domain::{
     LanguageCode, MediaId, ProductionChannel, ProductionCorpusDocument, ProductionCorpusDocumentId,
     ProductionCorpusEntry, ProductionCorpusEntryId, ProductionCorpusHit, ProductionCorpusSummary,
-    ProductionGapCandidateFacts, SemanticRubricId, SemanticTaskAttemptId,
+    ProductionGapCandidateFacts, RealtimeConversationSessionId, RealtimeConversationTurnId,
+    SemanticRubricId, SemanticTaskAttemptId,
 };
 use rusqlite::{Connection, Row, Transaction, params};
 
 use super::{SqliteRepository, domain_sql, from_json, json, repo};
 
-const DOCUMENT_COLUMNS: &str = "d.id,d.language,d.channel,d.assistance,d.attempt_id,d.rubric_id,d.response_revision,d.task_kind,d.media_id,d.start_ms,d.end_ms,d.response_text,d.produced_at_ms";
+const DOCUMENT_COLUMNS: &str = "d.id,d.language,d.channel,d.assistance,d.attempt_id,d.rubric_id,d.realtime_turn_id,d.realtime_session_id,d.response_revision,d.activity_kind,d.media_id,d.start_ms,d.end_ms,d.response_text,d.produced_at_ms";
 
 fn document_from_row(row: &Row<'_>, offset: usize) -> rusqlite::Result<ProductionCorpusDocument> {
     Ok(ProductionCorpusDocument {
@@ -16,21 +17,37 @@ fn document_from_row(row: &Row<'_>, offset: usize) -> rusqlite::Result<Productio
         language: LanguageCode::parse(row.get::<_, String>(offset + 1)?).map_err(domain_sql)?,
         channel: from_json(&row.get::<_, String>(offset + 2)?)?,
         assistance: from_json(&row.get::<_, String>(offset + 3)?)?,
-        attempt_id: SemanticTaskAttemptId::parse(row.get::<_, String>(offset + 4)?)
+        attempt_id: row
+            .get::<_, Option<String>>(offset + 4)?
+            .map(SemanticTaskAttemptId::parse)
+            .transpose()
             .map_err(domain_sql)?,
-        rubric_id: SemanticRubricId::parse(row.get::<_, String>(offset + 5)?)
+        rubric_id: row
+            .get::<_, Option<String>>(offset + 5)?
+            .map(SemanticRubricId::parse)
+            .transpose()
             .map_err(domain_sql)?,
-        response_revision: row.get(offset + 6)?,
-        task_kind: from_json(&row.get::<_, String>(offset + 7)?)?,
+        realtime_turn_id: row
+            .get::<_, Option<String>>(offset + 6)?
+            .map(RealtimeConversationTurnId::parse)
+            .transpose()
+            .map_err(domain_sql)?,
+        realtime_session_id: row
+            .get::<_, Option<String>>(offset + 7)?
+            .map(RealtimeConversationSessionId::parse)
+            .transpose()
+            .map_err(domain_sql)?,
+        response_revision: row.get(offset + 8)?,
+        activity_kind: row.get(offset + 9)?,
         media_id: row
-            .get::<_, Option<String>>(offset + 8)?
+            .get::<_, Option<String>>(offset + 10)?
             .map(MediaId::parse)
             .transpose()
             .map_err(domain_sql)?,
-        start_ms: row.get(offset + 9)?,
-        end_ms: row.get(offset + 10)?,
-        response_text: row.get(offset + 11)?,
-        produced_at_ms: row.get(offset + 12)?,
+        start_ms: row.get(offset + 11)?,
+        end_ms: row.get(offset + 12)?,
+        response_text: row.get(offset + 13)?,
+        produced_at_ms: row.get(offset + 14)?,
     })
 }
 
@@ -64,18 +81,20 @@ fn insert_projection(
     for document in documents {
         tx.execute(
             "INSERT INTO production_corpus_documents
-             (id,language,channel,assistance,attempt_id,rubric_id,response_revision,task_kind,
+             (id,language,channel,assistance,attempt_id,rubric_id,realtime_turn_id,realtime_session_id,response_revision,activity_kind,
               media_id,start_ms,end_ms,response_text,produced_at_ms)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
             params![
                 document.id.as_str(),
                 document.language.as_str(),
                 json(&document.channel)?,
                 json(&document.assistance)?,
-                document.attempt_id.as_str(),
-                document.rubric_id.as_str(),
+                document.attempt_id.as_ref().map(SemanticTaskAttemptId::as_str),
+                document.rubric_id.as_ref().map(SemanticRubricId::as_str),
+                document.realtime_turn_id.as_ref().map(RealtimeConversationTurnId::as_str),
+                document.realtime_session_id.as_ref().map(RealtimeConversationSessionId::as_str),
                 document.response_revision,
-                json(&document.task_kind)?,
+                document.activity_kind,
                 document.media_id.as_ref().map(MediaId::as_str),
                 document.start_ms,
                 document.end_ms,
@@ -120,8 +139,11 @@ fn replace_projection(
             .map_err(repo)?;
         }
         None => {
-            tx.execute("DELETE FROM production_corpus_documents", [])
-                .map_err(repo)?;
+            tx.execute(
+                "DELETE FROM production_corpus_documents WHERE attempt_id IS NOT NULL",
+                [],
+            )
+            .map_err(repo)?;
         }
     }
     insert_projection(&tx, documents, entries)?;
@@ -146,6 +168,23 @@ impl ProductionCorpusRepository for SqliteRepository {
     ) -> Result<(), ApplicationError> {
         let mut connection = self.connection.lock().expect("sqlite mutex poisoned");
         replace_projection(&mut connection, None, documents, entries)
+    }
+
+    fn replace_production_entries_for_realtime_turn(
+        &self,
+        turn_id: &RealtimeConversationTurnId,
+        documents: &[ProductionCorpusDocument],
+        entries: &[ProductionCorpusEntry],
+    ) -> Result<(), ApplicationError> {
+        let mut connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let tx = connection.transaction().map_err(repo)?;
+        tx.execute(
+            "DELETE FROM production_corpus_documents WHERE realtime_turn_id=?1",
+            [turn_id.as_str()],
+        )
+        .map_err(repo)?;
+        insert_projection(&tx, documents, entries)?;
+        tx.commit().map_err(repo)
     }
 
     fn list_production_entries_by_key(

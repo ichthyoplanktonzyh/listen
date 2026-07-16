@@ -3,24 +3,24 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-16T17:39:00.000+08:00"
+last_updated: "2026-07-16T20:20:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-16 17:39 CST
-> 更新原因：Phase 3.15.6 Cross-channel Production Gap Review 代码与自动化验证收口。
+> 最后更新：2026-07-16 20:20 CST
+> 更新原因：Phase 3.15.7 Realtime Speech Conversation 代码与自动化验证收口，进入真实 provider/device QA。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.15.6 Cross-channel Production Gap Review **✅ CODE COMPLETE —
-  OWNER GUI QA PENDING**。3.15.5 rebuildable corpus 与 reading/listening receptive facts 的只读
-  join、ECDICT BNC rank → evidence strength → recency → lemma 的透明 top-K、`empty/starter/ready`
-  诚实降级、HTTP/OpenAPI/Flutter 词典资产入口已贯通。owner 真实只读副本仅 1 document /
-  1 token / 1 lemma，因此不做伪校准；真实 API smoke 为 starter + `enjoy` rank 685。全链路
-  零 attempt/evidence/observation/capability/projection writer。Rust workspace、Clippy strict、
-  Flutter 443、analyze、contracts 全绿。下一建议执行 **3.15.7 realtime conversation**，随后
-  3.15.8 embeddings；3.17 confirmation gate 保留。
+- **当前执行主线**：Phase 3.15.7 Realtime Speech Conversation **✅ CODE COMPLETE — OWNER
+  REAL-PROVIDER QA PENDING**。OpenAI/Qwen 两异构 adapter、provider-neutral session/turn/audio/
+  transcript lifecycle、Keychain + localhost WebSocket、macOS 24 kHz realtime PCM + 16 kHz local
+  WAV、内容锚定首个 surface 与 local Whisper → spoken corpus 已贯通。provider caption 永不成为
+  learner-output authority；失败/中断零半截 corpus，零 observation/evidence/capability/proposal/
+  review writer。最终 Rust workspace 667、Flutter 444、Clippy/analyze/contracts 与 macOS Debug
+  build 全绿。下一建议执行真实 provider/device QA，随后 **3.15.8 embeddings**；3.17 confirmation
+  gate 保留。
 - Phase 3.15.9 TTS Speech Synthesis **✅ CODE COMPLETE**。application
   provider-neutral port + local-runtime cache/single-flight/atomic lifecycle + macOS system speech
   adapter、HTTP/OpenAPI、Flutter 共享 auxiliary audio focus 已贯通；词典真人/标准音频优先，
@@ -79,7 +79,7 @@ last_updated: "2026-07-16T17:39:00.000+08:00"
   本地优先不等于仅限本地；在线内容与厂商中立 LLM provider 可作为可选能力进入系统，
   学习资产与高频播放路径仍默认本地。
 - **语义能力边界**：厂商中立在**能力类别**层成立（同类别 ≥2 异构 adapter 过同一契约
-  套件），不同类别各有 seam——文本 LLM（6，✅3.12）、realtime 语音（8，3.15.7 待建）、
+  套件），不同类别各有 seam——文本 LLM（6，✅3.12）、realtime 语音（8，✅3.15.7 code complete）、
   嵌入（7）、TTS（9）本地优先。3.12.1 留出集资格门已取消（2026-07-16 裁决）：LLM 判定
   以显示诚实边界进 surface——可纠正辅助反馈、可 adjudicate、`heuristic_proxy`、不自动写
   observation/projection；projection 仍归 3.17 确认门。
@@ -474,11 +474,12 @@ last_updated: "2026-07-16T17:39:00.000+08:00"
 
 ## 下一步工作
 
-1. **Phase 3.15.9 owner GUI QA**：按 `3.15.9-MANUAL-QA.md` 听感检查系统 voice、词典真实
-   音频优先、synthetic 标识与跨播放器焦点；不阻塞 3.15.6 开工，但未执行前不宣称 owner accepted。
-2. **Phase 3.15.6 数据探针**：基于已落地 production corpus 先测真实小 N 分布，再实现
-   gap-(c) 参照系排序与诚实降级。"收藏句 → 个人模板"仍归 3.16，并遵守本 phase 已裁定的
-   projection-vs-asset 边界。
+1. **Phase 3.15.7 owner real-provider/device QA**：按 `3.15.7-MANUAL-QA.md`，在 App 内向 Keychain
+   录入至少一家 provider key，完成真实 socket、麦克风、扬声器、barge-in、local Whisper 与
+   spoken corpus 闭环；未执行前不宣称 Phase COMPLETE。
+2. **Phase 3.15.8 Semantic Embedding**：开工前按 3.15.5 corpus、3.15.6 read-only gap 与本 phase
+   spoken source 的实际 schema 审计 PLAN；不得把 embedding 推断自动写成 capability 事实。
+3. **Phase 3.15.9 owner GUI QA**：仍按其独立清单检查 system voice 听感；不与 3.15.7 QA 混做。
 3. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
 4. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）；

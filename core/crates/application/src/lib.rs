@@ -30,18 +30,20 @@ use domain::{
     PracticeKind, PracticeMode, PracticeResult, PracticeSession, PracticeSessionId, PracticeTarget,
     PracticeTargetKind, PracticeTokenEvaluation, PracticeTokenResult, ProductionCorpusDocument,
     ProductionCorpusEntry, ProductionCorpusHit, PronunciationProviderInfo, ReadingPosition,
-    RecognitionEvidence, RecognitionEvidenceId, RecognitionEvidenceSourceKind, ReviewAttempt,
-    ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewRating, ReviewSchedule,
-    ReviewSource, ReviewSourceKind, RhythmFrameId, SemanticJudgment, SemanticJudgmentId,
-    SemanticRubric, SemanticRubricId, SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind,
-    SenseGroup, SenseGroupAnalysis, SenseGroupAnalysisId, SenseGroupAnalysisSummary, SenseGroupId,
-    SentenceDiagnosis, SentencePronunciation, SoundFitCalibration, SoundFitInputs,
-    SubtitleSentence, SubtitleSentenceId, SubtitleToken, SubtitleTokenKind, SubtitleTrack,
-    SubtitleTrackId, SubtitleTrackStatus, SyntacticAnalysis, TimeMs, TimelineCreator,
-    TimelineMetrics, TimelineStatus, TimingSource, UpgradeSuggestion, UpgradeSuggestionId,
-    UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation, WordTimeline,
-    WordTimelineId, WordTimelineLifecycleStage, WordTimelineSummary, WordTiming, WritingDraft,
-    WritingFeedbackFinding, WritingFeedbackFindingId, WritingFindingDisposition,
+    RealtimeConversationSession as DomainRealtimeConversationSession,
+    RealtimeConversationSessionId, RealtimeConversationTurn, RealtimeConversationTurnId,
+    RealtimeProviderProfile, RealtimeProviderProfileId, RecognitionEvidence, RecognitionEvidenceId,
+    RecognitionEvidenceSourceKind, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId,
+    ReviewItemStatus, ReviewRating, ReviewSchedule, ReviewSource, ReviewSourceKind, RhythmFrameId,
+    SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
+    SemanticTaskAttemptId, SemanticTaskKind, SenseGroup, SenseGroupAnalysis, SenseGroupAnalysisId,
+    SenseGroupAnalysisSummary, SenseGroupId, SentenceDiagnosis, SentencePronunciation,
+    SoundFitCalibration, SoundFitInputs, SubtitleSentence, SubtitleSentenceId, SubtitleToken,
+    SubtitleTokenKind, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, SyntacticAnalysis,
+    TimeMs, TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource, UpgradeSuggestion,
+    UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation,
+    WordTimeline, WordTimelineId, WordTimelineLifecycleStage, WordTimelineSummary, WordTiming,
+    WritingDraft, WritingFeedbackFinding, WritingFeedbackFindingId, WritingFindingDisposition,
     WritingFindingDispositionId, apply_sound_fit_calibration, content_fit_fingerprint,
     learning_observation_id, listening_projection_v1, meaning_fit, normalize_lemma,
     observation_spec_for_marking, observation_spec_for_practice,
@@ -73,6 +75,7 @@ mod pronunciation;
 mod pronunciation_providers;
 mod providers;
 mod reading;
+mod realtime_conversation;
 mod recording;
 mod repositories;
 mod secret_store;
@@ -103,6 +106,7 @@ pub use pronunciation::PronunciationUseCases;
 pub use pronunciation_providers::*;
 pub use providers::*;
 pub use reading::ReadingUseCases;
+pub use realtime_conversation::*;
 pub use recording::RecordingUseCases;
 pub use repositories::*;
 pub use secret_store::{InMemorySecretStore, SecretStore, SecretStoreError};
@@ -165,6 +169,7 @@ pub struct AppServices {
     pub(crate) semantic_tasks: Arc<dyn SemanticTaskRepository>,
     pub(crate) production_corpus: Arc<dyn ProductionCorpusRepository>,
     pub(crate) llm_provider_profiles: Arc<dyn LlmProviderProfileRepository>,
+    pub(crate) realtime_conversations: Arc<dyn RealtimeConversationRepository>,
     pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
     pub(crate) pronunciation_providers: Arc<Vec<Arc<dyn PronunciationProvider>>>,
 }
@@ -213,6 +218,10 @@ impl AppServices {
 
     pub fn llm_providers(&self) -> LlmProviderUseCases {
         LlmProviderUseCases::new(self.llm_provider_profiles.clone())
+    }
+
+    pub fn realtime_conversations(&self) -> RealtimeConversationUseCases {
+        RealtimeConversationUseCases::new(self.realtime_conversations.clone())
     }
 
     pub fn semantic(&self) -> SemanticUseCases {
@@ -278,6 +287,7 @@ impl AppServices {
             semantic_tasks: Arc::new(DisabledSemanticTaskRepository),
             production_corpus: Arc::new(DisabledProductionCorpusRepository),
             llm_provider_profiles: Arc::new(DisabledLlmProviderProfileRepository),
+            realtime_conversations: Arc::new(DisabledRealtimeConversationRepository),
             lexical_normalizers: Arc::new(Vec::new()),
             pronunciation_providers: Arc::new(Vec::new()),
         }
@@ -362,6 +372,14 @@ impl AppServices {
         llm_provider_profiles: Arc<dyn LlmProviderProfileRepository>,
     ) -> Self {
         self.llm_provider_profiles = llm_provider_profiles;
+        self
+    }
+
+    pub fn with_realtime_conversation_repository(
+        mut self,
+        repository: Arc<dyn RealtimeConversationRepository>,
+    ) -> Self {
+        self.realtime_conversations = repository;
         self
     }
 
@@ -636,6 +654,68 @@ impl LlmProviderProfileRepository for DisabledLlmProviderProfileRepository {
     }
 }
 
+struct DisabledRealtimeConversationRepository;
+
+impl RealtimeConversationRepository for DisabledRealtimeConversationRepository {
+    fn upsert_realtime_profile(
+        &self,
+        _profile: &RealtimeProviderProfile,
+    ) -> Result<RealtimeProviderProfile, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "realtime conversation repository is not configured".into(),
+        ))
+    }
+    fn get_realtime_profile(
+        &self,
+        _id: &RealtimeProviderProfileId,
+    ) -> Result<Option<RealtimeProviderProfile>, ApplicationError> {
+        Ok(None)
+    }
+    fn list_realtime_profiles(&self) -> Result<Vec<RealtimeProviderProfile>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn delete_realtime_profile(
+        &self,
+        _id: &RealtimeProviderProfileId,
+    ) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+    fn save_realtime_session(
+        &self,
+        _session: &DomainRealtimeConversationSession,
+    ) -> Result<DomainRealtimeConversationSession, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "realtime conversation repository is not configured".into(),
+        ))
+    }
+    fn get_realtime_session(
+        &self,
+        _id: &RealtimeConversationSessionId,
+    ) -> Result<Option<DomainRealtimeConversationSession>, ApplicationError> {
+        Ok(None)
+    }
+    fn save_realtime_turn(
+        &self,
+        _turn: &RealtimeConversationTurn,
+    ) -> Result<RealtimeConversationTurn, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "realtime conversation repository is not configured".into(),
+        ))
+    }
+    fn get_realtime_turn(
+        &self,
+        _id: &RealtimeConversationTurnId,
+    ) -> Result<Option<RealtimeConversationTurn>, ApplicationError> {
+        Ok(None)
+    }
+    fn list_realtime_turns(
+        &self,
+        _session_id: &RealtimeConversationSessionId,
+    ) -> Result<Vec<RealtimeConversationTurn>, ApplicationError> {
+        Ok(Vec::new())
+    }
+}
+
 struct DisabledProductionCorpusRepository;
 
 impl ProductionCorpusRepository for DisabledProductionCorpusRepository {
@@ -650,6 +730,15 @@ impl ProductionCorpusRepository for DisabledProductionCorpusRepository {
 
     fn replace_all_production_entries(
         &self,
+        _documents: &[ProductionCorpusDocument],
+        _entries: &[ProductionCorpusEntry],
+    ) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+
+    fn replace_production_entries_for_realtime_turn(
+        &self,
+        _turn_id: &RealtimeConversationTurnId,
         _documents: &[ProductionCorpusDocument],
         _entries: &[ProductionCorpusEntry],
     ) -> Result<(), ApplicationError> {

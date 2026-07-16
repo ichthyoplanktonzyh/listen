@@ -2903,6 +2903,8 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 
 - 优先级：P1
 - 阶段：Phase 3.15.7 及后续 conversation surface
+- 当前状态：3.15.7 共同事实、两 adapter、首个内容锚定 surface 与 local-authoritative spoken
+  projection 已 CODE COMPLETE；真实 provider/device QA pending。开放 surface 与统一复盘继续后续阶段。
 - 需求：Realtime conversation 应作为可被多种场景消费的深模块。当前内容段落对话是首个
   surface，但不得把媒体锚点写成 session、turn、transcript、产出语料或复盘的永久前提；
   后续可交付 GPT-like 开放聊天、角色扮演、个人表达等不同形态。

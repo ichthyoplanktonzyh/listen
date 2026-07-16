@@ -15,6 +15,8 @@ use domain::{
     PhoneticFindingId, PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeItemId,
     PracticeSession, PracticeSessionId, ProductionCorpusDocument, ProductionCorpusEntry,
     ProductionCorpusHit, ProductionCorpusSummary, ProductionGapCandidateFacts, ReadingPosition,
+    RealtimeConversationSession, RealtimeConversationSessionId, RealtimeConversationTurn,
+    RealtimeConversationTurnId, RealtimeProviderProfile, RealtimeProviderProfileId,
     RecognitionEvidence, RecordingAsset, RecordingAssetId, ReviewAttempt, ReviewAttemptId,
     ReviewItem, ReviewItemId, ReviewItemStatus, ReviewSchedule, SemanticJudgment,
     SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
@@ -725,6 +727,12 @@ pub trait ProductionCorpusRepository: Send + Sync {
         documents: &[ProductionCorpusDocument],
         entries: &[ProductionCorpusEntry],
     ) -> Result<(), ApplicationError>;
+    fn replace_production_entries_for_realtime_turn(
+        &self,
+        turn_id: &RealtimeConversationTurnId,
+        documents: &[ProductionCorpusDocument],
+        entries: &[ProductionCorpusEntry],
+    ) -> Result<(), ApplicationError>;
     /// Exact lemma lookup, newest first.
     fn list_production_entries_by_key(
         &self,
@@ -930,6 +938,45 @@ pub trait LlmProviderProfileRepository: Send + Sync {
     ) -> Result<Option<LlmProviderProfile>, ApplicationError>;
     fn list_provider_profiles(&self) -> Result<Vec<LlmProviderProfile>, ApplicationError>;
     fn delete_provider_profile(&self, id: &LlmProviderProfileId) -> Result<(), ApplicationError>;
+}
+
+/// Realtime provider config plus local session/turn facts. Provider events may
+/// update live transcript fields, but finalized local learner transcripts are
+/// immutable and repository implementations must reject divergent rewrites.
+pub trait RealtimeConversationRepository: Send + Sync {
+    fn upsert_realtime_profile(
+        &self,
+        profile: &RealtimeProviderProfile,
+    ) -> Result<RealtimeProviderProfile, ApplicationError>;
+    fn get_realtime_profile(
+        &self,
+        id: &RealtimeProviderProfileId,
+    ) -> Result<Option<RealtimeProviderProfile>, ApplicationError>;
+    fn list_realtime_profiles(&self) -> Result<Vec<RealtimeProviderProfile>, ApplicationError>;
+    fn delete_realtime_profile(
+        &self,
+        id: &RealtimeProviderProfileId,
+    ) -> Result<(), ApplicationError>;
+    fn save_realtime_session(
+        &self,
+        session: &RealtimeConversationSession,
+    ) -> Result<RealtimeConversationSession, ApplicationError>;
+    fn get_realtime_session(
+        &self,
+        id: &RealtimeConversationSessionId,
+    ) -> Result<Option<RealtimeConversationSession>, ApplicationError>;
+    fn save_realtime_turn(
+        &self,
+        turn: &RealtimeConversationTurn,
+    ) -> Result<RealtimeConversationTurn, ApplicationError>;
+    fn get_realtime_turn(
+        &self,
+        id: &RealtimeConversationTurnId,
+    ) -> Result<Option<RealtimeConversationTurn>, ApplicationError>;
+    fn list_realtime_turns(
+        &self,
+        session_id: &RealtimeConversationSessionId,
+    ) -> Result<Vec<RealtimeConversationTurn>, ApplicationError>;
 }
 
 pub trait DictionaryCacheRepository: Send + Sync {

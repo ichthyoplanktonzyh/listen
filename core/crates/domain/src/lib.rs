@@ -75,6 +75,9 @@ pub use semantic_task::*;
 mod production_corpus;
 pub use production_corpus::*;
 
+mod realtime_conversation;
+pub use realtime_conversation::*;
+
 mod writing_feedback;
 pub use writing_feedback::*;
 
@@ -169,6 +172,9 @@ string_id!(JudgmentAdjudicationId);
 string_id!(WritingFeedbackFindingId);
 string_id!(WritingFindingDispositionId);
 string_id!(LlmProviderProfileId);
+string_id!(RealtimeProviderProfileId);
+string_id!(RealtimeConversationSessionId);
+string_id!(RealtimeConversationTurnId);
 string_id!(ProductionCorpusDocumentId);
 string_id!(ProductionCorpusEntryId);
 string_id!(PronunciationAnalysisId);

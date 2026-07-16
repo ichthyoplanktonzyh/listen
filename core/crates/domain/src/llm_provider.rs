@@ -77,9 +77,9 @@ pub enum DataRetentionPreference {
 /// time by a `SecretStore` and never enters this type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct LlmAuthRef(String);
+pub struct SecretRef(String);
 
-impl LlmAuthRef {
+impl SecretRef {
     pub fn new(value: impl Into<String>) -> Self {
         Self(value.into())
     }
@@ -87,6 +87,9 @@ impl LlmAuthRef {
         &self.0
     }
 }
+
+/// Backward-compatible category name for the shared opaque keychain handle.
+pub type LlmAuthRef = SecretRef;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct CostBudget {

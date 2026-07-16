@@ -10,11 +10,13 @@ api-events = { path = "../api-events" }
 async-stream.workspace = true
 async-trait.workspace = true
 futures-core.workspace = true
+futures-util.workspace = true
 axum.workspace = true
 dictionary-provider = { path = "../dictionary-provider" }
 domain = { path = "../domain" }
 hex.workspace = true
 llm-provider = { path = "../llm-provider" }
+realtime-provider = { path = "../realtime-provider" }
 local-runtime = { path = "../local-runtime" }
 persistence-sqlite = { path = "../persistence-sqlite" }
 rand.workspace = true
