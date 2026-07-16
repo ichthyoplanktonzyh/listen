@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-16 11:10 CST: Phase 3.12.2 Slice 1 — Reading LLM judgment 显示接线（纯 Flutter，
+  复用 3.12 已就绪的 `POST /v1/llm/providers/{id}/judge`）。`coach_llm.dart` 新增 typed
+  `llmProviders()` 与 `judgeViaLlmProvider()`；`ReadingTaskController` 提交作答后惰性解析首个
+  允许 `semantic_judgment` 的 provider（优先有凭证者，失败静默不阻塞 manual 路径），新增
+  `requestLlmJudgment` 与 append-only `adjudicateLlm`（镜像 manual adjudicate，永不改写原
+  judgment 行）。`ReadingTaskSheet` 在 assessing/done 阶段新增「请求 AI 反馈」入口与逐点 LLM
+  判定展示：标注「AI 辅助反馈 · 可纠正」「仅供参考，不计入能力档案」，可 adjudicate；无
+  judgment-capable provider 时整块隐藏。LLM 判定与用户自评并存不互相改写，evidence_class 保持
+  `heuristic_proxy`，零 observation/projection。新增本地化键与两条控制器测试（请求→纠正→
+  heuristic 边界 / 无 provider 隐藏）；flutter analyze 全绿，reading task controller+sheet 11 测试通过。
+
 - 2026-07-16 10:58 CST: 产品方向讨论沉淀 + Phase 划分裁决。新增 discuss
   `conversation-output-corpus-and-model-categories.zh.md`：把 realtime 语音对话定为**独立中立
   模型类别**（中立在能力类别层成立，非一个 seam 通吃），对话厂商与证据文稿解耦（用户音频统一
