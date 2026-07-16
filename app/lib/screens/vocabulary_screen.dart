@@ -217,7 +217,10 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   }
 
   Future<void> _openProductionAttempt(ProductionCorpusHitView hit) async {
-    final attempt = await widget.api.semanticAttempt(hit.document.attemptId);
+    final attemptId = hit.document.attemptId;
+    final attempt = attemptId == null
+        ? null
+        : await widget.api.semanticAttempt(attemptId);
     if (!mounted) return;
     final l = AppLocalizations.of(context);
     await showDialog<void>(
@@ -230,11 +233,14 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
             shrinkWrap: true,
             children: [
               Text(
-                '${attempt.kind} · ${l.text('revision')} ${hit.document.responseRevision}',
+                '${hit.document.activityKind} · ${l.text('revision')} ${hit.document.responseRevision}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 12),
-              for (final response in attempt.responses) ...[
+              if (attempt == null) ...[
+                SelectableText(hit.document.responseText),
+              ],
+              for (final response in attempt?.responses ?? const []) ...[
                 Text(
                   '${l.text('revision')} ${response.revision}',
                   style: const TextStyle(fontWeight: FontWeight.bold),

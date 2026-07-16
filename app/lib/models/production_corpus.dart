@@ -4,10 +4,12 @@ class ProductionCorpusDocumentView {
     required this.language,
     required this.channel,
     required this.assistance,
-    required this.attemptId,
-    required this.rubricId,
+    this.attemptId,
+    this.rubricId,
+    this.realtimeTurnId,
+    this.realtimeSessionId,
     required this.responseRevision,
-    required this.taskKind,
+    required this.activityKind,
     required this.mediaId,
     required this.startMs,
     required this.endMs,
@@ -21,10 +23,13 @@ class ProductionCorpusDocumentView {
         language: json['language'] as String,
         channel: json['channel'] as String,
         assistance: json['assistance'] as String,
-        attemptId: json['attempt_id'] as String,
-        rubricId: json['rubric_id'] as String,
+        attemptId: json['attempt_id'] as String?,
+        rubricId: json['rubric_id'] as String?,
+        realtimeTurnId: json['realtime_turn_id'] as String?,
+        realtimeSessionId: json['realtime_session_id'] as String?,
         responseRevision: json['response_revision'] as int,
-        taskKind: json['task_kind'] as String,
+        activityKind:
+            (json['activity_kind'] ?? json['task_kind'] ?? 'unknown') as String,
         mediaId: json['media_id'] as String?,
         startMs: json['start_ms'] as int,
         endMs: json['end_ms'] as int,
@@ -36,10 +41,12 @@ class ProductionCorpusDocumentView {
   final String language;
   final String channel;
   final String assistance;
-  final String attemptId;
-  final String rubricId;
+  final String? attemptId;
+  final String? rubricId;
+  final String? realtimeTurnId;
+  final String? realtimeSessionId;
   final int responseRevision;
-  final String taskKind;
+  final String activityKind;
   final String? mediaId;
   final int startMs;
   final int endMs;

@@ -652,7 +652,7 @@ void main() {
       attemptId: 'attempt-1',
       rubricId: 'rubric-1',
       responseRevision: 2,
-      taskKind: 'opinion',
+      activityKind: 'opinion',
       mediaId: null,
       startMs: 0,
       endMs: 1000,

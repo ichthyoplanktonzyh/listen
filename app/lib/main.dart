@@ -33,6 +33,7 @@ import 'controllers/practice_controller.dart';
 import 'controllers/reading_controller.dart';
 import 'controllers/reading_diff_controller.dart';
 import 'controllers/reading_task_controller.dart';
+import 'controllers/realtime_conversation_controller.dart';
 import 'controllers/resource_actions_coordinator.dart';
 import 'controllers/speech_enhancement_workflow_controller.dart';
 import 'controllers/speaking_actions_coordinator.dart';
@@ -59,6 +60,7 @@ import 'widgets/panels/reading_diff_panel.dart';
 import 'widgets/panels/reading_task_studio.dart';
 import 'widgets/panels/reading_view.dart';
 import 'widgets/panels/reading_word_inspector.dart';
+import 'widgets/panels/realtime_conversation_panel.dart';
 import 'widgets/panels/slice_playback_window.dart';
 import 'widgets/panels/speaking_task_studio.dart';
 import 'widgets/panels/writing_task_studio.dart';
@@ -145,6 +147,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   final readingController = ReadingController();
   final readingTaskController = ReadingTaskController();
   final speakingTaskController = SpeakingTaskController();
+  final realtimeConversationController = RealtimeConversationController();
   final writingTaskController = WritingTaskController();
   final readingDiffController = ReadingDiffController();
   ReadingTaskSource? _readingTaskStudioSource;
@@ -159,6 +162,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   String _writingKind = WritingTaskController.summaryKind;
   int _writingPlayCount = 0;
   int _speakingL1PlayCount = 0;
+  bool _realtimeConversationOpen = false;
   Timer? _readingSaveTimer;
   String? _lastSavedReadingAnchor;
   final extensiveListeningController = ExtensiveListeningController();
@@ -994,6 +998,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _selectContentChannel(ContentChannel channel) async {
+    if (channel != ContentChannel.speaking && _realtimeConversationOpen) {
+      await realtimeConversationController.cancel();
+      if (mounted) setState(() => _realtimeConversationOpen = false);
+    }
     switch (channel) {
       case ContentChannel.listening:
         if (_writingTaskStudioSource != null) await _closeWritingTaskStudio();
@@ -1021,6 +1029,18 @@ class _PlayerScreenState extends State<PlayerScreen>
         await _openWritingTask(_writingKind);
         return;
     }
+  }
+
+  void _openRealtimeConversation() {
+    final source = speakingTaskController.state.source;
+    final modelId = speakingTaskController.state.asrModelId;
+    if (source == null || modelId == null) return;
+    setState(() => _realtimeConversationOpen = true);
+  }
+
+  Future<void> _closeRealtimeConversation() async {
+    await realtimeConversationController.cancel();
+    if (mounted) setState(() => _realtimeConversationOpen = false);
   }
 
   Future<void> _openWritingTask(String kind) async {
@@ -1698,6 +1718,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     readingController.dispose();
     readingTaskController.dispose();
     speakingTaskController.dispose();
+    realtimeConversationController.dispose();
     writingTaskController.dispose();
     speakingActions.dispose();
     readingDiffController.dispose();
@@ -1990,7 +2011,25 @@ class _PlayerScreenState extends State<PlayerScreen>
                                           ),
                                         )
                                       : speakingActions.isOpen
-                                      ? _speakingL1CheckSource != null
+                                      ? _realtimeConversationOpen
+                                            ? RealtimeConversationPanel(
+                                                controller:
+                                                    realtimeConversationController,
+                                                api: api!,
+                                                source: speakingTaskController
+                                                    .state
+                                                    .source!,
+                                                modelId: speakingTaskController
+                                                    .state
+                                                    .asrModelId!,
+                                                acquireAudioFocus:
+                                                    speakingActions
+                                                        .acquireRecordingFocus,
+                                                onClose: () => unawaited(
+                                                  _closeRealtimeConversation(),
+                                                ),
+                                              )
+                                            : _speakingL1CheckSource != null
                                             ? ListeningCheckPanel(
                                                 controller:
                                                     readingTaskController,
@@ -2041,6 +2080,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                         ),
                                                 onOpenL1Check:
                                                     _openSpeakingL1Check,
+                                                onOpenRealtimeConversation:
+                                                    _openRealtimeConversation,
                                                 targetCandidates:
                                                     _speakingTargetCandidates(),
                                                 onClose: _closeSpeakingSurface,

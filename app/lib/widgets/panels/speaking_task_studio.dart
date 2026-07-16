@@ -30,6 +30,7 @@ class SpeakingTaskStudio extends StatelessWidget {
     required this.onShowRetelling,
     required this.onShowRoleReply,
     required this.onOpenL1Check,
+    required this.onOpenRealtimeConversation,
     this.targetCandidates = const [],
     required this.onClose,
   });
@@ -42,6 +43,7 @@ class SpeakingTaskStudio extends StatelessWidget {
   final Future<void> Function() onShowRetelling;
   final Future<void> Function(String assistance) onShowRoleReply;
   final Future<void> Function() onOpenL1Check;
+  final VoidCallback onOpenRealtimeConversation;
   final List<SpeakingTargetCandidate> targetCandidates;
   final Future<void> Function() onClose;
 
@@ -265,6 +267,14 @@ class SpeakingTaskStudio extends StatelessWidget {
                     ),
               icon: const Icon(Icons.mic),
               label: Text(l.text('speakingStartRecording')),
+            ),
+            OutlinedButton.icon(
+              key: const ValueKey('speaking-open-realtime'),
+              onPressed: state.busy || state.asrModelId == null
+                  ? null
+                  : onOpenRealtimeConversation,
+              icon: const Icon(Icons.forum_outlined),
+              label: const Text('Realtime conversation'),
             ),
           ],
         ),
@@ -538,11 +548,7 @@ class SpeakingTaskStudio extends StatelessWidget {
     keyPrefix: 'speaking-task',
     onRequest: () => unawaited(controller.requestLlmJudgment(api)),
     onCorrect: (pointId, userVerdict) => unawaited(
-      controller.adjudicateLlm(
-        api,
-        pointId: pointId,
-        userVerdict: userVerdict,
-      ),
+      controller.adjudicateLlm(api, pointId: pointId, userVerdict: userVerdict),
     ),
   );
 

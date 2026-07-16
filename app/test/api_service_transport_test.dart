@@ -412,5 +412,53 @@ void main() {
         expect(attempt.responses.single.transcript, 'I need two tickets');
       },
     );
+
+    test(
+      'realtime provider secret is write-only and socket URI stays local',
+      () async {
+        Map<String, dynamic>? request;
+        final api = LocalApi.withTransport(
+          baseUrl: 'http://127.0.0.1:4321',
+          token: 'local-token',
+          transport: (method, path, body) async {
+            expect(method, 'POST');
+            expect(path, '/v1/realtime/providers');
+            request = jsonDecode(body!) as Map<String, dynamic>;
+            return (
+              statusCode: 200,
+              body: jsonEncode({
+                'id': 'profile-1',
+                'display_name': 'QA',
+                'adapter_kind': 'open_ai_realtime',
+                'base_url': 'wss://api.openai.com/v1/realtime',
+                'model_id': 'gpt-realtime',
+                'voice': 'marin',
+                'has_credential': true,
+                'timeout_ms': 30000,
+              }),
+            );
+          },
+        );
+        final profile = await api.registerRealtimeProfile(
+          displayName: 'QA',
+          adapterKind: 'open_ai_realtime',
+          baseUrl: 'wss://api.openai.com/v1/realtime',
+          modelId: 'gpt-realtime',
+          voice: 'marin',
+          secret: 'write-only-secret',
+        );
+        expect(request!['secret'], 'write-only-secret');
+        expect(profile.hasCredential, isTrue);
+        final socket = api.realtimeSocketUri(
+          profileId: profile.id,
+          language: 'en',
+          instructions: 'Discuss this source',
+        );
+        expect(socket.scheme, 'ws');
+        expect(socket.host, '127.0.0.1');
+        expect(socket.queryParameters['profile_id'], 'profile-1');
+        expect(socket.toString(), isNot(contains('write-only-secret')));
+      },
+    );
   });
 }
