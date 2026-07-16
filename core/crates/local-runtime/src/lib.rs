@@ -13,6 +13,7 @@ mod process;
 mod runtime_support;
 mod sound_line;
 mod speech_jobs;
+mod speech_synthesis;
 mod subtitle_search;
 mod syntax_capability;
 mod transcription;
@@ -30,6 +31,10 @@ pub use sound_line::{CreateSoundLineJob, SoundLineCoordinator, SoundLineJob, Sou
 pub use speech_jobs::{
     CreateSpeechBatchJob, SpeechBatchCoordinator, SpeechBatchJob, SpeechBatchKind,
     SpeechBatchStatus,
+};
+pub use speech_synthesis::{
+    MacOsSystemSpeechProvider, SpeechSynthesisAsset, SpeechSynthesisCapabilityView,
+    SpeechSynthesisManager, SpeechSynthesisRequest,
 };
 pub use subtitle_search::{
     SubtitleDownloadRequest, SubtitleOperation, SubtitleProviderError, SubtitleSearchCoordinator,

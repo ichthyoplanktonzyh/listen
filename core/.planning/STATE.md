@@ -3,24 +3,23 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-16T16:07:00.000+08:00"
+last_updated: "2026-07-16T18:10:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-16 16:07 CST
-> 更新原因：Phase 3.15.5 Personal Production Corpus 完成并裁定 3.16 资产边界。
+> 最后更新：2026-07-16 18:10 CST
+> 更新原因：Phase 3.15.9 TTS Speech Synthesis 代码与自动化验证收口。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.15.5 Personal Production Corpus（裁决代号 P2）**✅ COMPLETE**。
-  schema v39 建立从 immutable Writing attempts 派生的 document + lemma occurrence 可重建
-  投影；增量刷新、原子全量重建、exact lemma/phrase FTS、HTTP/OpenAPI 与词典「我的产出」
-  已贯通。assistance 只记 factual provenance，不用 scaffolding 布尔值冒充自治判断；spoken
-  仅 enum、无 writer。3.16 边界已裁：语料是可删投影，个人模板是显式 durable asset，可引
-  provenance 但不共享身份/删除生命周期。见 `3.15.5-CLOSEOUT.md`。
-  **下一建议执行 3.15.9 TTS**（此前已裁为 3.15.5 后可正交插入），然后 3.15.6 gap-(c)
-  复盘 → 3.15.7 realtime → 3.15.8 嵌入。
+- **当前执行主线**：Phase 3.15.9 TTS Speech Synthesis **✅ CODE COMPLETE**。application
+  provider-neutral port + local-runtime cache/single-flight/atomic lifecycle + macOS system speech
+  adapter、HTTP/OpenAPI、Flutter 共享 auxiliary audio focus 已贯通；词典真人/标准音频优先，
+  缺失才 synthetic fallback，personal corpus/Writing 只朗读 learner-owned text。TTS 零
+  attempt/evidence/projection/corpus writer，保持 3.15.5 projection-vs-authoritative-asset 边界。
+  自动化与真实 `/usr/bin/say` smoke 通过；owner GUI 听感 QA 留清单，不冒充已验收。
+  **下一建议执行 3.15.6 gap-(c) 复盘**，随后 3.15.7 realtime → 3.15.8 嵌入。
 - Phase 3.12.2 Studio LLM Feedback（P1）**✅ COMPLETE**（2026-07-16 owner 真实 provider
   QA 通过）：LLM rubric 生成 + judgment 显示接入三个 Studio；三 Studio 共用
   `LlmJudgmentAssist`；显示诚实边界（heuristic_proxy、append-only adjudication、零
@@ -279,14 +278,14 @@ last_updated: "2026-07-16T16:07:00.000+08:00"
 - 244 cue 整轨实测 243 analyzed / 1 isolated fallback；首次 2.10s、hot cache 0.11s。
 - 文档：`.planning/phases/3.9.3-syntax-capability-delivery-lifecycle/3.9.3-CLOSEOUT.md`。
 
-### 下一执行序列：3.15.9 → 3.15.6 → 3.15.7 → 3.15.8，随后重修 3.16–3.18
+### 下一执行序列：3.15.6 → 3.15.7 → 3.15.8，随后重修 3.16–3.18
 
 - **Gate Q（已通过）**：Q1/Q2 通过；Q3/Q4 因后续 UX/功能调整明确延期且 QA 债留在
   原 phase。裁决见 `3.7-GATE-Q-CHECKLIST.md`。
 - **3.11–3.15 全部收口**（3.14 owner QA 延期未重开）；3.12.1 取消，由 3.12.2（P1，已
   完成）取代。
-- **P2–P6 已立 PLAN（2026-07-16，编号 3.15.5–3.15.9）**：产出语料库 P2 已完成；下一按
-  正交插入建议执行 TTS（P6），再做 gap-(c) 复盘（参照系排序核心）→ realtime 语音对话
+- **P2–P6 已立 PLAN（2026-07-16，编号 3.15.5–3.15.9）**：产出语料库 P2 与 TTS P6 已完成；
+  下一做 gap-(c) 复盘（参照系排序核心）→ realtime 语音对话
   （新中立类别 8）→ 嵌入增强复盘；diarization/GOP 条件后置。产品裁决：
   `.planning/discuss/conversation-output-corpus-and-model-categories.zh.md` §11。
 - **3.16–3.18（方向承诺）**：3.18 Cross-modal Coach 收窄为聚合叙述，3.17 保留
@@ -344,9 +343,14 @@ last_updated: "2026-07-16T16:07:00.000+08:00"
 | 3.13 Reading Studio v1 | 阅读姿态（派生段落 + v37 位置游标 + 切片回听）+ 段落任务（manual rubric + 自评）+ 读听差异 + ReadingContextMarking；真实媒体后端 20/20，GUI 走查并入 3.13.5 后通过 | `.planning/phases/3.13-reading-studio-v1/3.13-CLOSEOUT.md` |
 | 3.13.5 Studio Shell UX | 混合导航 + 内容通道切换；沉浸式阅读器、分离词汇透镜与上下文查词；阶段自适应任务容器；owner GUI 验收通过 | `.planning/phases/3.13.5-studio-shell-ux/3.13.5-CLOSEOUT.md` |
 | 3.15.5 Personal Production Corpus | Writing attempts 派生的 document + lemma/FTS 可重建投影；词典「我的产出」；assistance 事实来源；3.16 资产边界裁决 | `.planning/phases/3.15.5-personal-production-corpus/3.15.5-CLOSEOUT.md` |
+| 3.15.9 TTS Speech Synthesis | macOS 本地 system speech、provider-neutral seam、确定性缓存与共享辅助音频焦点；零学习事实 writer | `.planning/phases/3.15.9-tts-speech-synthesis/3.15.9-CLOSEOUT.md` |
 
 ## 最近重要决策
 
+1. **2026-07-16 18:10 CST** — Phase 3.15.9 code complete。以 macOS 已安装 system voice
+   作为零下载离线 adapter，不复制 syntax 七态下载生命周期；application seam 保持 local/remote
+   可扩展，v1 不静默联网。词典真实 provider audio、真实 media slice 优先；TTS 只作明确 synthetic
+   fallback/learner-owned text readback。缓存与 3.15.5 corpus 分离，零 learning repository/writer。
 1. **2026-07-16 16:07 CST** — Phase 3.15.5 完成。产出语料采用 document + token occurrence
    两层可重建投影，避免每词复制全文；增量失败不回滚权威 attempt，全量替换保持事务原子性。
    原 `scaffolding: bool` 改为 factual assistance provenance，不在事实层裁定“自主/非自主”。
@@ -463,8 +467,8 @@ last_updated: "2026-07-16T16:07:00.000+08:00"
 
 ## 下一步工作
 
-1. **Phase 3.15.9 开工前修订**：按当前 provider/runtime 与高频播放场景复核 TTS PLAN；它是
-   3.15.5 后可正交插入的下一建议，不阻塞之后的 3.15.6 复盘。
+1. **Phase 3.15.9 owner GUI QA**：按 `3.15.9-MANUAL-QA.md` 听感检查系统 voice、词典真实
+   音频优先、synthetic 标识与跨播放器焦点；不阻塞 3.15.6 开工，但未执行前不宣称 owner accepted。
 2. **Phase 3.15.6 数据探针**：基于已落地 production corpus 先测真实小 N 分布，再实现
    gap-(c) 参照系排序与诚实降级。"收藏句 → 个人模板"仍归 3.16，并遵守本 phase 已裁定的
    projection-vs-asset 边界。

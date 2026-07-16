@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use api_http::{ApiState, KeychainSecretStore, SyntaxCapabilityManager, router};
 use application::AppServices;
+use local_runtime::SpeechSynthesisManager;
 use persistence_sqlite::SqliteRepository;
 use rand::Rng;
 use syntactic_provider::{PythonSyntacticKind, PythonSyntacticProvider};
@@ -53,6 +54,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ));
     let syntax_manager = SyntaxCapabilityManager::new(syntax_root, Some(syntax_provider.clone()));
     state = state.with_syntax_capability(syntax_manager, syntax_provider);
+    state = state.with_speech_synthesis(SpeechSynthesisManager::system_default(
+        speech_synthesis_cache_root(),
+    ));
     let app = router(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let address = listener.local_addr()?;
@@ -150,6 +154,28 @@ fn syntax_capability_root() -> PathBuf {
                 .into_os_string()
         }))
         .join("listen/syntax")
+    }
+}
+
+fn speech_synthesis_cache_root() -> PathBuf {
+    #[cfg(target_os = "macos")]
+    {
+        PathBuf::from(env::var_os("HOME").expect("HOME is required"))
+            .join("Library/Caches/listen/speech-synthesis")
+    }
+    #[cfg(target_os = "windows")]
+    {
+        PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is required"))
+            .join("listen/cache/speech-synthesis")
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        PathBuf::from(env::var_os("XDG_CACHE_HOME").unwrap_or_else(|| {
+            PathBuf::from(env::var_os("HOME").expect("HOME is required"))
+                .join(".cache")
+                .into_os_string()
+        }))
+        .join("listen/speech-synthesis")
     }
 }
 

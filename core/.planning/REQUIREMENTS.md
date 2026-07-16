@@ -3070,7 +3070,72 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - runtime/model 不是字幕、播放或基础学习路径的硬依赖；缺席时精确 fallback。
   - B 不填充 C，SenseGroup 不替代 ChunkTimeline，matcher 不铸造 Construction/capability identity。
 
-## 19. MVP 发布追踪矩阵
+## 19. Phase 3.15.9 TTS Speech Synthesis
+
+### TTS-001：Provider-neutral 合成契约
+
+- 优先级：P0
+- 阶段：Phase 3.15.9
+- 需求：application 只定义 provider、voice、request、output 与错误语义，不把平台命令、
+  在线厂商协议或 UI 场景写入共享契约。
+- 验收标准：local-runtime adapter 可替换；HTTP 与 Flutter 只消费 typed contract。
+
+### TTS-002：本地优先且无下载前置
+
+- 优先级：P0
+- 阶段：Phase 3.15.9
+- 需求：macOS 首发使用已安装 system speech voice，离线可用，不复制 3.9.3 模型下载生命周期。
+- 验收标准：真实 `/usr/bin/say` smoke 产生非空音频；无可用 voice 时 capability 明确 unavailable。
+
+### TTS-003：在线能力保持可选
+
+- 优先级：P1
+- 阶段：Phase 3.15.9
+- 需求：共享 seam 能表达 local/remote provider，但 v1 不在没有明确凭据、隐私和成本 surface
+  的条件下静默发送文本到网络。
+- 验收标准：v1 production composition 只有本地 adapter；未来 remote adapter 无需改场景 API。
+
+### TTS-004：确定性缓存与资源清理
+
+- 优先级：P0
+- 阶段：Phase 3.15.9
+- 需求：合成音频是 provider/version/voice/language/rate/text keyed 的可重建缓存资产，使用
+  single-flight 与原子发布，并提供清缓存生命周期。
+- 验收标准：并发相同请求只合成一次；失败不留资产；clear 后统计为零。
+
+### TTS-005：单一音频焦点与播放器释放
+
+- 优先级：P0
+- 阶段：Phase 3.15.9
+- 需求：dictionary provider audio 与 TTS 共用辅助音频控制器；播放前暂停 primary、recording、
+  slice，录音/真实媒体播放反向停止辅助音频；替换、停止和销毁释放 decoder。
+- 验收标准：controller 测试证明 focus-before-play 与 previous-player disposal。
+
+### TTS-006：高频 surface 与真实音频优先
+
+- 优先级：P0
+- 阶段：Phase 3.15.9
+- 需求：词典词条优先 provider 真人/标准发音，仅缺失时显示 synthetic fallback；真实例句 slice
+  保持首选；个人产出与 Writing 可朗读用户自己的文本，UI 明示 synthetic。
+- 验收标准：TTS 不替换 slice playback，不朗读 provider suggestion 冒充用户产出。
+
+### TTS-007：零学习事实写入
+
+- 优先级：P0
+- 阶段：Phase 3.15.9
+- 需求：合成与播放不得写 attempt、observation、evidence、projection、review item 或 production
+  corpus；3.15.5 corpus 继续是 authoritative attempts 的可重建 projection。
+- 验收标准：manager 不持有 learning repository；asset 只含渲染 provenance 与 cache identity。
+
+### TTS-008：输入、错误与契约完整性
+
+- 优先级：P0
+- 阶段：Phase 3.15.9
+- 需求：限制空文本、Unicode scalar 数、语言和 rate；provider/cache 错误映射稳定 HTTP 状态；
+  OpenAPI 与实现路径一致。
+- 验收标准：invalid request、capability、synthesize、cache clear route tests 与 contract guards 通过。
+
+## 20. MVP 发布追踪矩阵
 
 | 发布能力 | 必须满足的需求 |
 |---|---|
@@ -3095,3 +3160,4 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | Phase 3.0 英语听力学习闭环与四通道扩展 | LOOP-000 至 LOOP-019 |
 | Phase 3.4.x / 3.9.1–3.9.2 Learning Analysis Foundation | CAP-001 至 CAP-013 |
 | Phase 3.35 听力工作台 UI 重构 | UI-016 至 UI-017 |
+| Phase 3.15.9 本地优先 TTS | TTS-001 至 TTS-008 |

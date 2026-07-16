@@ -149,3 +149,4 @@ mod semantic;
 mod speech_language;
 mod syntax;
 mod timelines;
+mod tts;

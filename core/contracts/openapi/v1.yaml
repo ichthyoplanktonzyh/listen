@@ -331,6 +331,42 @@ paths:
         - { name: word, in: query, required: true, schema: { type: string } }
       responses:
         "200": { description: Canonical word pronunciation and variants }
+  /v1/speech-synthesis/capability:
+    get:
+      operationId: speechSynthesisCapability
+      description: Local-first provider and installed voice availability plus rebuildable cache usage.
+      responses:
+        "200":
+          description: Current speech synthesis capability
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpeechSynthesisCapability" }
+  /v1/speech-synthesis:
+    post:
+      operationId: synthesizeSpeech
+      description: Synthesize learner-facing auxiliary audio without writing learning facts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpeechSynthesisRequest" }
+      responses:
+        "200":
+          description: A local, rebuildable synthetic speech asset
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpeechSynthesisAsset" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/speech-synthesis/cache:
+    delete:
+      operationId: clearSpeechSynthesisCache
+      description: Delete rebuildable synthesized audio without touching learning assets.
+      responses:
+        "200":
+          description: Capability after cache clear
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpeechSynthesisCapability" }
   /v1/pronunciation/analyze-sentence:
     post:
       operationId: analyzeSentencePronunciation
@@ -2674,6 +2710,64 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
   schemas:
+    SpeechSynthesisLocality:
+      type: string
+      enum: [local, remote]
+    SpeechSynthesisProvider:
+      type: object
+      required: [id, display_name, version, locality]
+      properties:
+        id: { type: string }
+        display_name: { type: string }
+        version: { type: string }
+        locality: { $ref: "#/components/schemas/SpeechSynthesisLocality" }
+    SpeechSynthesisVoice:
+      type: object
+      required: [id, provider_id, display_name, language]
+      properties:
+        id: { type: string }
+        provider_id: { type: string }
+        display_name: { type: string }
+        language: { type: string }
+    SpeechSynthesisCapability:
+      type: object
+      required: [status, providers, voices, cache_bytes, cache_entries, error]
+      properties:
+        status: { type: string, enum: [ready, unavailable] }
+        providers:
+          type: array
+          items: { $ref: "#/components/schemas/SpeechSynthesisProvider" }
+        voices:
+          type: array
+          items: { $ref: "#/components/schemas/SpeechSynthesisVoice" }
+        cache_bytes: { type: integer, minimum: 0 }
+        cache_entries: { type: integer, minimum: 0 }
+        error: { type: [string, "null"] }
+    SpeechSynthesisRequest:
+      type: object
+      required: [text, language]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 5000 }
+        language: { type: string }
+        provider_id: { type: [string, "null"] }
+        voice_id: { type: [string, "null"] }
+        rate_words_per_minute: { type: integer, minimum: 80, maximum: 450, default: 180 }
+        purpose: { type: [string, "null"] }
+    SpeechSynthesisAsset:
+      type: object
+      required: [audio_path, mime_type, provider_id, provider_version, voice_id, language, rate_words_per_minute, purpose, content_hash, cache_hit, synthetic]
+      properties:
+        audio_path: { type: string }
+        mime_type: { type: string }
+        provider_id: { type: string }
+        provider_version: { type: string }
+        voice_id: { type: string }
+        language: { type: string }
+        rate_words_per_minute: { type: integer }
+        purpose: { type: [string, "null"] }
+        content_hash: { type: string }
+        cache_hit: { type: boolean }
+        synthetic: { type: boolean, const: true }
     SyntaxCapabilityView:
       type: object
       required: [status, progress, enabled, provider_version, runtime_version, model_version, model_checksum_sha256, delivery_checksum_sha256, expected_install_bytes, installed_bytes, updated_at_ms]

@@ -18,4 +18,5 @@ pub(crate) mod subtitle_search;
 pub(crate) mod syntax;
 pub(crate) mod timelines;
 pub(crate) mod transcription;
+pub(crate) mod tts;
 pub(crate) mod vocabulary;

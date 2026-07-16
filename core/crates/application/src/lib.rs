@@ -78,6 +78,7 @@ mod repositories;
 mod secret_store;
 mod semantic_task;
 mod sense_groups;
+mod speech_synthesis;
 mod subtitles;
 mod syntactic_consumers;
 mod transcription_pipeline;
@@ -106,6 +107,7 @@ pub use recording::RecordingUseCases;
 pub use repositories::*;
 pub use secret_store::{InMemorySecretStore, SecretStore, SecretStoreError};
 pub use semantic_task::SemanticUseCases;
+pub use speech_synthesis::*;
 pub use syntactic_consumers::*;
 pub use util::now_ms;
 pub(crate) use util::{

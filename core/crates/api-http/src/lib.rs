@@ -40,7 +40,8 @@ mod secret_store_keychain;
 use local_runtime::{
     CreateJobRequest, CreatePhoneticJobRequest, CreateSoundLineJob, CreateSpeechBatchJob,
     LearningResourceManager, PhoneticAnalysisCoordinator, SoundLineCoordinator,
-    SpeechBatchCoordinator, SubtitleSearchCoordinator, TranscriptionCoordinator,
+    SpeechBatchCoordinator, SpeechSynthesisManager, SubtitleSearchCoordinator,
+    TranscriptionCoordinator,
 };
 pub use local_runtime::{SyntaxCapabilityManager, SyntaxCapabilityStatus, SyntaxCapabilityView};
 use routes::corpus::{reindex_corpus, search_corpus};
@@ -124,6 +125,7 @@ use routes::transcription::{
     recording_transcription_job, register_custom_transcription_model, retry_transcription_job,
     transcription_job, transcription_jobs, transcription_models, transcription_providers,
 };
+use routes::tts::{clear_speech_synthesis_cache, speech_synthesis_capability, synthesize_speech};
 use routes::vocabulary::{
     assign_sense_folder_occurrence, create_sense_folder, delete_sense_folder, export_vocabulary,
     get_capability_profile, import_external_vocabulary, import_vocabulary, list_vocabulary,
@@ -143,6 +145,10 @@ pub struct ApiState {
     pub transcription: Arc<TranscriptionCoordinator>,
     pub phonetic_analysis: Arc<PhoneticAnalysisCoordinator>,
     pub speech_jobs: Arc<SpeechBatchCoordinator>,
+    /// Provider-neutral local-first TTS. It owns synthesis/cache lifecycle and
+    /// deliberately has no learning repository, so playback cannot become
+    /// evidence or personal-production data.
+    pub speech_synthesis: Arc<SpeechSynthesisManager>,
     pub sound_line: Arc<SoundLineCoordinator>,
     pub learning_resources: Arc<LearningResourceManager>,
     pub subtitle_search: Arc<SubtitleSearchCoordinator>,
@@ -213,6 +219,10 @@ impl ApiState {
             transcription,
             phonetic_analysis,
             speech_jobs,
+            speech_synthesis: SpeechSynthesisManager::new(
+                std::env::temp_dir().join(format!("llplayer-tts-unmanaged-{}", std::process::id())),
+                Vec::new(),
+            ),
             sound_line,
             learning_resources: Arc::new(LearningResourceManager::new()),
             subtitle_search: Arc::new(SubtitleSearchCoordinator::new()),
@@ -250,6 +260,11 @@ impl ApiState {
             Some(provider),
             SyntacticProductQualification::corrected_v2(),
         ));
+        self
+    }
+
+    pub fn with_speech_synthesis(mut self, manager: Arc<SpeechSynthesisManager>) -> Self {
+        self.speech_synthesis = manager;
         self
     }
 }
@@ -292,6 +307,15 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/v1/pronunciation/providers", get(pronunciation_providers))
         .route("/v1/pronunciation/lookup", get(pronunciation_lookup))
+        .route(
+            "/v1/speech-synthesis/capability",
+            get(speech_synthesis_capability),
+        )
+        .route("/v1/speech-synthesis", post(synthesize_speech))
+        .route(
+            "/v1/speech-synthesis/cache",
+            delete(clear_speech_synthesis_cache),
+        )
         .route(
             "/v1/pronunciation/analyze-sentence",
             post(analyze_pronunciation_sentence),

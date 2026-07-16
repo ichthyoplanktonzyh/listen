@@ -294,6 +294,17 @@ scripts/validate-contracts.sh    # 单独契约验证
 
 ## 9. 测试缺口
 
+### Phase 3.15.9 TTS 覆盖
+
+- `local-runtime::speech_synthesis`：cache identity/hit/clear、same-key single-flight、失败零
+  半文件、macOS voice parser、真实 `/usr/bin/say` 离线非空 AIFF smoke。
+- `api-http::tests::tts`：capability → synthesize → cache hit → clear lifecycle 与 invalid request；
+  OpenAPI path/schema parity 继续由既有 guard 覆盖。
+- Flutter：`AuxiliaryAudioController` 验证 focus-before-play、旧 decoder dispose、typed asset
+  provenance；transport test 验证 synthesis request/response wire shape；全量 widget 回归覆盖 surface。
+- 真实声音质量、快速跨播放器切换和不支持语言降级仍属于
+  `3.15.9-MANUAL-QA.md` owner GUI QA，不由非交互自动化冒充。
+
 ### 测试体系建设路线（2026-06-30 起）
 
 按"由便宜稳到贵脆"分三层推进，刻意不以 UI 驱动 E2E 起手：

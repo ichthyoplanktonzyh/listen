@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- 2026-07-16 18:10 CST: Phase 3.15.9 TTS code complete。新增 application provider-neutral
+  synthesis port 与 local-runtime manager（校验、voice 选择、稳定 cache key、single-flight、原子
+  发布、统计/清理），macOS production 使用零下载离线 `/usr/bin/say` system voice；HTTP/OpenAPI/
+  typed Dart client 贯通。Flutter 以共享 auxiliary audio controller 统一 dictionary remote audio
+  与 TTS，播放前获取焦点并在替换/录音/真实 reference/销毁时释放。词典标准音频与真人 slice
+  继续优先，缺失才 synthetic fallback；personal corpus/Writing 只朗读 learner-owned text。
+  TTS 零 learning repository/writer，保持 3.15.5 projection-vs-authoritative-asset 边界。验证：真实
+  system speech smoke、Rust manager/route/OpenAPI、contracts、Flutter 全量 442 项、analyze 全绿；
+  owner GUI 听感 QA 保留清单，未冒充已验收。
+
+- 2026-07-16 16:15 CST: Phase 3.15.9 TTS 开工审计并将 PLAN 修订为 READY v2。按
+  `main@1614ed74` 实际底盘否决“直接照搬 Piper/七态下载生命周期”的预设：macOS 系统语音
+  已提供零下载、离线、多语言 voice 与文件输出，v1 先以其作为本地 adapter，Piper 保留为经
+  质量/许可/体积审计后的跨平台候选。新计划把浅的“文本→音频”深化为 provider/voice 描述、
+  规范化请求、稳定 cache identity、single-flight/原子发布、取消与资源清理的 synthesis module；
+  明确 dictionary 标准音频优先/TTS 明示 fallback、真人 slice 优先、Writing 只读 learner text，
+  以及零 attempt/corpus/observation/judgment/projection writer。Flutter 将统一 remote pronunciation
+  与 TTS 的 auxiliary playback/单音频焦点，但各场景保留独立 surface。
+
 - 2026-07-16 16:07 CST: Phase 3.15.5 Personal Production Corpus 完成。新增 SQLite v39
   document + lemma occurrence + FTS5 可重建投影；Writing typed attempt 成功落库后 best-effort
   增量刷新，全量 reindex 先派生后单事务替换，失败保留旧投影。完整回答每 document 只存一份，

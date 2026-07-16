@@ -473,6 +473,27 @@ any candidate.
   -> persisted LLTimeline metadata/artifacts + generated timeline resources
 ```
 
+### Local-first Speech Synthesis (Phase 3.15.9)
+
+```text
+dictionary / personal corpus / Writing surface
+  -> Flutter AuxiliaryAudioController (single auxiliary decoder + focus)
+  -> /v1/speech-synthesis
+  -> local-runtime SpeechSynthesisManager
+       -> application SpeechSynthesisProvider port
+       -> macOS system speech adapter (/usr/bin/say)
+       -> provider/version/voice/language/rate/text keyed rebuildable cache
+```
+
+The manager owns validation, voice selection, single-flight synthesis, atomic
+file publication, cache statistics, and clearing. It has no learning repository:
+synthetic audio cannot become an attempt, observation, evidence, projection,
+review item, production-corpus row, or authoritative learning asset. Dictionary
+provider audio and TTS share playback/resource lifecycle, while each product
+scene keeps its own surface. Real dictionary audio and real media slices remain
+preferred; online providers require a future explicit privacy/credential/cost
+surface before entering production composition.
+
 ## Current Guardrails
 
 - `cargo test -p api-http openapi` verifies route/OpenAPI parity.
