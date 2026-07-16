@@ -3,10 +3,36 @@ part of '../api_service.dart';
 // Corpus search, LLM providers, learning resources, coach dashboard.
 // Split out of api_service.dart (mechanical decomposition).
 
+/// Picks the configured provider allowed for [use], preferring one with a
+/// stored credential. Returns null when nothing qualifies — callers keep
+/// their manual paths independent of any provider.
+String? pickLlmProviderId(List<LlmProviderProfileView> providers, String use) {
+  for (final provider in providers) {
+    if (provider.hasCredential && provider.allowedUses.contains(use)) {
+      return provider.id;
+    }
+  }
+  for (final provider in providers) {
+    if (provider.allowedUses.contains(use)) return provider.id;
+  }
+  return null;
+}
+
 extension CoachLlmApi on LocalApi {
   /// Lists configured provider profiles (secret-free views).
   Future<List<dynamic>> listLlmProviders() async =>
       (await _request('GET', '/v1/llm/providers')) as List<dynamic>;
+
+  /// Resolves the provider to use for [use] (e.g. `semantic_judgment`), or
+  /// null when none is configured or the listing fails — a provider-listing
+  /// failure must never break a task flow, the AI entries simply stay hidden.
+  Future<String?> preferredLlmProviderId(String use) async {
+    try {
+      return pickLlmProviderId(await llmProviders(), use);
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// Typed provider list (secret-free), convenience over [listLlmProviders].
   Future<List<LlmProviderProfileView>> llmProviders() async =>

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/speaking_task_controller.dart';
 import '../../localization.dart';
 import '../../services/api_service.dart';
+import 'llm_judgment_assist.dart';
 
 class SpeakingTargetCandidate {
   const SpeakingTargetCandidate({
@@ -520,9 +521,30 @@ class SpeakingTaskStudio extends StatelessWidget {
             child: Text(l.text('speakingSaveAssessment')),
           ),
         ),
+        _llmFeedback(state),
       ],
     );
   }
+
+  /// LLM assist (Phase 3.12.2): shared correctable block, hidden when no
+  /// judgment-capable provider is configured. Shown next to — never instead
+  /// of — the learner self-assessment.
+  Widget _llmFeedback(SpeakingTaskState state) => LlmJudgmentAssist(
+    visible: state.judgeProviderId != null,
+    points: state.rubric?.points ?? const [],
+    judgment: state.llmJudgment,
+    adjudications: state.llmAdjudications,
+    busy: state.busy,
+    keyPrefix: 'speaking-task',
+    onRequest: () => unawaited(controller.requestLlmJudgment(api)),
+    onCorrect: (pointId, userVerdict) => unawaited(
+      controller.adjudicateLlm(
+        api,
+        pointId: pointId,
+        userVerdict: userVerdict,
+      ),
+    ),
+  );
 
   Widget _done(BuildContext context, SpeakingTaskState state) {
     final l = AppLocalizations.of(context);
@@ -567,6 +589,7 @@ class SpeakingTaskStudio extends StatelessWidget {
               ),
             ),
           ),
+        _llmFeedback(state),
         if (state.source?.recall == 'delayed' &&
             !state.delayedReviewCompleted) ...[
           const SizedBox(height: 16),

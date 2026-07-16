@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 
-import '../models/llm_provider.dart';
 import '../models/semantic_task.dart';
 import '../services/api_service.dart';
 import '../state/store.dart';
@@ -221,24 +220,12 @@ class ReadingTaskController extends ChangeNotifier {
   /// assessment path never depends on any provider, and the AI entries simply
   /// stay hidden when nothing is configured.
   Future<void> _resolveProviders(LocalApi api) async {
-    String? pick(List<LlmProviderProfileView> providers, String use) {
-      for (final provider in providers) {
-        if (provider.hasCredential && provider.allowedUses.contains(use)) {
-          return provider.id;
-        }
-      }
-      for (final provider in providers) {
-        if (provider.allowedUses.contains(use)) return provider.id;
-      }
-      return null;
-    }
-
     try {
       final providers = await api.llmProviders();
       _store.update(
         (s) => s.copyWith(
-          judgeProviderId: pick(providers, 'semantic_judgment'),
-          rubricProviderId: pick(providers, 'rubric_generation'),
+          judgeProviderId: pickLlmProviderId(providers, 'semantic_judgment'),
+          rubricProviderId: pickLlmProviderId(providers, 'rubric_generation'),
         ),
       );
     } catch (_) {

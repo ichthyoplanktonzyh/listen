@@ -6,6 +6,7 @@ import '../../controllers/reading_task_controller.dart';
 import '../../localization.dart';
 import '../../models/semantic_task.dart';
 import '../../services/api_service.dart';
+import 'llm_judgment_assist.dart';
 
 const _verdicts = ['covered', 'partial', 'missing', 'uncertain'];
 
@@ -374,7 +375,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
           icon: const Icon(Icons.fact_check_outlined),
           label: Text(l.text('readingTaskSubmitAssessment')),
         ),
-        _llmFeedback(l, colors),
+        _llmFeedback(),
       ],
     );
   }
@@ -473,7 +474,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
               ],
             ),
           ),
-        _llmFeedback(l, colors),
+        _llmFeedback(),
         const SizedBox(height: 8),
         Align(
           alignment: Alignment.centerRight,
@@ -486,125 +487,25 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
     );
   }
 
-  // ── LLM assist (Phase 3.12.2): correctable heuristic feedback shown next to
-  // the manual self-assessment. Hidden entirely when no judgment-capable
-  // provider is configured; never writes learning evidence. ──
-
-  Widget _llmFeedback(AppLocalizations l, ColorScheme colors) {
-    if (_state.judgeProviderId == null) return const SizedBox.shrink();
-    final judgment = _state.llmJudgment;
-    return Padding(
-      padding: const EdgeInsets.only(top: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Divider(height: 1),
-          const SizedBox(height: 10),
-          if (judgment == null)
-            OutlinedButton.icon(
-              key: const ValueKey('reading-task-request-ai'),
-              onPressed: _state.busy
-                  ? null
-                  : () => unawaited(
-                      widget.controller.requestLlmJudgment(widget.api),
-                    ),
-              icon: const Icon(Icons.auto_awesome_outlined, size: 18),
-              label: Text(l.text('readingTaskAiFeedback')),
-            )
-          else ...[
-            Row(
-              children: [
-                Icon(Icons.auto_awesome, size: 16, color: colors.tertiary),
-                const SizedBox(width: 6),
-                Text(
-                  l.text('readingTaskAiTitle'),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: colors.tertiary,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Text(
-              l.text('readingTaskAiNote'),
-              style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
-            ),
-            const SizedBox(height: 6),
-            if (judgment.isAbstain)
-              Text(
-                l.text('readingTaskAiAbstain'),
-                style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
-              )
-            else
-              for (final point in _state.rubric!.points)
-                _llmVerdictRow(l, colors, point),
-          ],
-        ],
+  /// LLM assist (Phase 3.12.2): shared correctable block, hidden when no
+  /// judgment-capable provider is configured.
+  Widget _llmFeedback() => LlmJudgmentAssist(
+    visible: _state.judgeProviderId != null,
+    points: _state.rubric?.points ?? const [],
+    judgment: _state.llmJudgment,
+    adjudications: _state.llmAdjudications,
+    busy: _state.busy,
+    keyPrefix: 'reading-task',
+    onRequest: () =>
+        unawaited(widget.controller.requestLlmJudgment(widget.api)),
+    onCorrect: (pointId, userVerdict) => unawaited(
+      widget.controller.adjudicateLlm(
+        widget.api,
+        pointId: pointId,
+        userVerdict: userVerdict,
       ),
-    );
-  }
-
-  String _effectiveLlm(String pointId) {
-    for (final adjudication in _state.llmAdjudications.reversed) {
-      if (adjudication.pointId == pointId) return adjudication.userVerdict;
-    }
-    return _state.llmJudgment?.verdictFor(pointId) ?? 'uncertain';
-  }
-
-  Widget _llmVerdictRow(
-    AppLocalizations l,
-    ColorScheme colors,
-    RubricPointView point,
-  ) {
-    final verdict = _effectiveLlm(point.pointId);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Text(point.statement, style: const TextStyle(fontSize: 13)),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            _verdictLabel(l, verdict),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: switch (verdict) {
-                'covered' => Colors.green.shade700,
-                'partial' => Colors.orange.shade800,
-                'missing' => colors.error,
-                _ => colors.onSurfaceVariant,
-              },
-            ),
-          ),
-          PopupMenuButton<String>(
-            key: ValueKey('adjudicate-ai-${point.pointId}'),
-            tooltip: l.text('readingTaskCorrect'),
-            icon: const Icon(Icons.edit_outlined, size: 15),
-            onSelected: (userVerdict) => unawaited(
-              widget.controller.adjudicateLlm(
-                widget.api,
-                pointId: point.pointId,
-                userVerdict: userVerdict,
-              ),
-            ),
-            itemBuilder: (context) => [
-              for (final option in _verdicts)
-                if (option != verdict)
-                  PopupMenuItem(
-                    value: option,
-                    child: Text(_verdictLabel(l, option)),
-                  ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+    ),
+  );
 
   String _verdictLabel(AppLocalizations l, String verdict) =>
       l.text(switch (verdict) {
