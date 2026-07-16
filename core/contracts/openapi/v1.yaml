@@ -1964,6 +1964,53 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SemanticJudgment" }
+  /v1/llm/providers/{id}/rubric:
+    post:
+      operationId: generateRubricViaLlmProvider
+      description: >
+        Generates a scoring-rubric draft (information points only) for one source
+        segment through the provider. Returns a content-only draft; identity,
+        versioning, and persistence stay in the manual save path, so the vendor
+        layer never mints or stores a rubric. On any provider error nothing is
+        returned and a standardized, secret-free error is surfaced.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, source_language, response_language, transcript_snapshot]
+              properties:
+                purpose: { $ref: "#/components/schemas/SemanticTaskKind" }
+                source_language: { type: string }
+                response_language: { type: string }
+                transcript_snapshot: { type: string }
+      responses:
+        "200":
+          description: Rubric draft (points only, not persisted)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [points]
+                properties:
+                  points:
+                    type: array
+                    items:
+                      type: object
+                      required: [importance, statement]
+                      properties:
+                        importance: { $ref: "#/components/schemas/RubricPointImportance" }
+                        statement: { type: string }
+                        accepted_paraphrase_notes: { type: [string, "null"] }
+                  model_id: { type: [string, "null"] }
+                  prompt_version: { type: [string, "null"] }
+                  schema_version: { type: [string, "null"] }
   /v1/hunting/candidates:
     get:
       operationId: listHuntingCandidates

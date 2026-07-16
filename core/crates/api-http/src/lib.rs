@@ -48,8 +48,8 @@ use routes::dictionary::{diagnose_sentence, dictionary_lookup};
 use routes::language::{language_profile, list_languages};
 use routes::learner::{l1_specialty_occurrences, learner_profile, update_learner_profile};
 use routes::llm::{
-    delete_llm_provider, get_llm_provider, judge_via_llm_provider, list_llm_providers,
-    probe_llm_provider, register_llm_provider,
+    delete_llm_provider, generate_rubric_via_llm_provider, get_llm_provider,
+    judge_via_llm_provider, list_llm_providers, probe_llm_provider, register_llm_provider,
 };
 use routes::media::{
     archive_subtitle, cold_start_words, delete_subtitle, export_subtitle, import_lltimeline,
@@ -706,6 +706,10 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/v1/llm/providers/{id}/probe", post(probe_llm_provider))
         .route("/v1/llm/providers/{id}/judge", post(judge_via_llm_provider))
+        .route(
+            "/v1/llm/providers/{id}/rubric",
+            post(generate_rubric_via_llm_provider),
+        )
         .route("/v1/languages", get(list_languages))
         .route("/v1/languages/{code}/profile", get(language_profile))
         .route("/v1/transcription/providers", get(transcription_providers))

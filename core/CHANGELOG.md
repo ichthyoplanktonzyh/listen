@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- 2026-07-16 11:53 CST: Phase 3.12.2 Slice 2 — Reading LLM rubric 生成接线。后端新增
+  `POST /v1/llm/providers/{id}/rubric`（routes/llm.rs `generate_rubric_via_llm_provider`）：调用
+  `SemanticRubricProvider` 生成理解题草稿并**只返回内容草稿、不落库**——身份/版本/来源快照仍
+  只在用户保存已审阅 rubric 的正常 create 路径铸造，vendor 层永不成为 rubric 身份写者（守
+  ADR 0021）；provider 失败一律不返回、走标准化 secret-free 错误。OpenAPI v1.yaml 补路径，
+  route-drift 门通过。Flutter：新增 `RubricDraftView`（客户端分配 p1..pN point_id）、
+  `generateRubricViaLlmProvider` API；`ReadingTaskController` openTask 一次解析 judge/rubric 两个
+  provider，editing 阶段新增 `generateRubric`——AI 生成的题目载入**可编辑模板**（不自动应用），
+  用户复核/增删后保存；保存时若来自 AI 草稿则记录诚实 `llm` provenance（携带 model_id/prompt/
+  schema），否则 `manual`。`ReadingTaskSheet` editing 阶段新增「AI 生成理解题」入口（无 rubric
+  provider 时隐藏）。新增本地化键、后端 rubric 路由测试与控制器生成测试。验证：cargo test
+  api-http 44 / llm-provider 12、validate-contracts、fmt/clippy strict 全绿；flutter analyze 干净、
+  完整 flutter test 430 通过。
+
 - 2026-07-16 11:29 CST: fix(llm-provider) — OpenAI 兼容适配器改用广泛兼容的 `json_object`
   结构化输出模式，schema 内嵌进 prompt，取代此前硬编码的 `json_schema` response_format。
   DeepSeek 等众多"OpenAI 兼容"端点只支持 `{"type":"json_object"}`，对 `json_schema` 直接回

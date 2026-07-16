@@ -157,6 +157,55 @@ async fn delete_removes_provider() {
 }
 
 #[tokio::test]
+async fn generate_rubric_returns_a_draft_without_persisting() {
+    let rubric_json = serde_json::json!({
+        "points": [
+            {
+                "importance": "required",
+                "statement": "A quake happened.",
+                "accepted_paraphrase_notes": null
+            },
+            {
+                "importance": "optional",
+                "statement": "It was near the coast.",
+                "accepted_paraphrase_notes": "coast/shore"
+            }
+        ]
+    })
+    .to_string();
+    let base = spawn_fake_openai(openai_content_envelope(&rubric_json)).await;
+    let app = test_app();
+    let (_, view) = post_json(
+        &app,
+        "/v1/llm/providers",
+        register_body(&base, Some("sk-x")),
+    )
+    .await;
+    let id = view["id"].as_str().unwrap().to_string();
+
+    let (status, draft) = post_json(
+        &app,
+        &format!("/v1/llm/providers/{id}/rubric"),
+        serde_json::json!({
+            "purpose": "reading_comprehension",
+            "source_language": "en",
+            "response_language": "zh",
+            "transcript_snapshot": "The quake struck at dawn near the coast."
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "generate failed: {draft}");
+    let points = draft["points"].as_array().unwrap();
+    assert_eq!(points.len(), 2);
+    assert_eq!(points[0]["importance"], "required");
+    assert_eq!(points[0]["statement"], "A quake happened.");
+    assert_eq!(points[1]["accepted_paraphrase_notes"], "coast/shore");
+    // Draft only: no rubric identity/version/source is minted by the provider.
+    assert!(draft.get("id").is_none());
+    assert!(draft.get("version").is_none());
+}
+
+#[tokio::test]
 async fn judge_via_unknown_provider_is_not_found() {
     let app = test_app();
     let (status, _) = post_json(
