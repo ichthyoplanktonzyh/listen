@@ -9,6 +9,7 @@ import '../controllers/hunting_controller.dart';
 import '../controllers/slice_player_controller.dart';
 import '../localization.dart';
 import '../models/practice.dart';
+import '../models/production_corpus.dart';
 import '../models/types.dart';
 import '../services/api_service.dart';
 import '../widgets/vocabulary/vocabulary_book_view.dart';
@@ -65,6 +66,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   /// pronunciation audio for the open entry (both best-effort).
   List<UpgradeSuggestion> suggestions = const [];
   String? pronunciationAudioUrl;
+  List<ProductionCorpusHitView>? productionHits;
+  bool productionLoadFailed = false;
 
   /// Corpus fallback when the vocabulary list has no match for [search].
   List<CorpusOccurrence>? homeResults;
@@ -116,6 +119,12 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   }
 
   Future<void> _openEntryById(String entryId) async {
+    if (mounted) {
+      setState(() {
+        productionHits = null;
+        productionLoadFailed = false;
+      });
+    }
     final value = await widget.api.lexicalEntryDetails(entryId);
     // Suggestions and dictionary audio are decorations: each degrades to
     // absence instead of failing the detail page.
@@ -144,11 +153,24 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     } catch (_) {
       audio = null;
     }
+    List<ProductionCorpusHitView> output;
+    var outputLoadFailed = false;
+    try {
+      output = await widget.api.searchProductionCorpus(
+        language: value.entry.language,
+        query: value.entry.normalizedForm,
+      );
+    } catch (_) {
+      output = const [];
+      outputLoadFailed = true;
+    }
     if (mounted) {
       setState(() {
         details = value;
         suggestions = pending;
         pronunciationAudioUrl = audio;
+        productionHits = output;
+        productionLoadFailed = outputLoadFailed;
       });
     }
   }
@@ -158,6 +180,46 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   }
 
   void _closeDetails() => setState(() => details = null);
+
+  Future<void> _openProductionAttempt(ProductionCorpusHitView hit) async {
+    final attempt = await widget.api.semanticAttempt(hit.document.attemptId);
+    if (!mounted) return;
+    final l = AppLocalizations.of(context);
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l.text('myOutputAttempt')),
+        content: SizedBox(
+          width: 620,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              Text(
+                '${attempt.kind} · ${l.text('revision')} ${hit.document.responseRevision}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+              for (final response in attempt.responses) ...[
+                Text(
+                  '${l.text('revision')} ${response.revision}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                SelectableText(response.transcript),
+                const SizedBox(height: 12),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l.text('close')),
+          ),
+        ],
+      ),
+    );
+  }
 
   // ── Slice playback (in-page, second decoder) ──
 
@@ -748,6 +810,10 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
         // never leaks from another word.
         key: ValueKey(value.entry.id),
         details: value,
+        showProductionCorpus: true,
+        productionHits: productionHits,
+        productionLoadFailed: productionLoadFailed,
+        onOpenProductionAttempt: _openProductionAttempt,
         slicePlayer: slicePlayer,
         onPlay: (occurrence) =>
             unawaited(_playOccurrenceMap(occurrence.toJson())),

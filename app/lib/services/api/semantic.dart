@@ -90,6 +90,15 @@ extension SemanticApi on LocalApi {
           .map((a) => SemanticAttemptView.fromJson(a as Map<String, dynamic>))
           .toList(growable: false);
 
+  Future<SemanticAttemptView> semanticAttempt(String attemptId) async =>
+      SemanticAttemptView.fromJson(
+        (await _request(
+              'GET',
+              '/v1/semantic/attempts/${Uri.encodeComponent(attemptId)}',
+            ))
+            as Map<String, dynamic>,
+      );
+
   /// Records a completed reading-comprehension attempt. Conditions are the
   /// honest record of what the learner could access; the caller supplies
   /// them, this layer never invents them.

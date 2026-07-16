@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/practice.dart';
+import 'package:llplayer_next/models/production_corpus.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/widgets/panels/word_learning_panel.dart';
 import 'package:llplayer_next/widgets/vocabulary/vocabulary_book_view.dart';
@@ -573,6 +574,85 @@ void main() {
     );
     expect(find.text('No source clips yet'), findsOneWidget);
     expect(find.textContaining('Open hello from a subtitle'), findsOneWidget);
+  });
+
+  testWidgets('dictionary shows submitted output and opens its attempt', (
+    tester,
+  ) async {
+    const document = ProductionCorpusDocumentView(
+      id: 'document-1',
+      language: 'en',
+      channel: 'written',
+      assistance: 'learner_revision',
+      attemptId: 'attempt-1',
+      rubricId: 'rubric-1',
+      responseRevision: 2,
+      taskKind: 'opinion',
+      mediaId: null,
+      startMs: 0,
+      endMs: 1000,
+      responseText: 'This proposal is worth discussing.',
+      producedAtMs: 42,
+    );
+    const hit = ProductionCorpusHitView(
+      document: document,
+      entry: ProductionCorpusEntryView(
+        id: 'entry-1',
+        documentId: 'document-1',
+        normalizedKey: 'proposal',
+        displayText: 'proposal',
+        startChar: 5,
+        endChar: 13,
+      ),
+    );
+    ProductionCorpusHitView? opened;
+
+    await tester.pumpWidget(
+      localized(
+        ListeningDictionaryEntryView(
+          details: vocabularyDetails(displayForm: 'proposal'),
+          showProductionCorpus: true,
+          productionHits: const [hit],
+          onOpenProductionAttempt: (value) => opened = value,
+          onPlay: _ignoreOccurrence,
+          onMark: _ignoreMark,
+        ),
+      ),
+    );
+
+    expect(find.text('My output'), findsOneWidget);
+    expect(
+      find.text('You used this word once in submitted writing.'),
+      findsOneWidget,
+    );
+    expect(find.text('This proposal is worth discussing.'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('production-output-document-1')),
+    );
+    expect(opened, same(hit));
+  });
+
+  testWidgets('dictionary distinguishes unavailable output from no output', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      localized(
+        ListeningDictionaryEntryView(
+          details: vocabularyDetails(displayForm: 'proposal'),
+          showProductionCorpus: true,
+          productionHits: const [],
+          productionLoadFailed: true,
+          onPlay: _ignoreOccurrence,
+          onMark: _ignoreMark,
+        ),
+      ),
+    );
+
+    expect(
+      find.text('Your writing output is temporarily unavailable.'),
+      findsOneWidget,
+    );
+    expect(find.text('No writing output for this word yet.'), findsNothing);
   });
 
   testWidgets('status movement removes a word from the previous dynamic book', (

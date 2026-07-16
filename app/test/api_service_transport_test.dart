@@ -157,6 +157,59 @@ void main() {
       expect(exported['future_extension'], {'preserved': true});
     });
 
+    test('production corpus search builds the query and decodes hits', () async {
+      String? seenPath;
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'tok',
+        transport: (method, path, body) async {
+          seenPath = path;
+          return (
+            statusCode: 200,
+            body: jsonEncode([
+              {
+                'document': {
+                  'id': 'document-1',
+                  'language': 'en',
+                  'channel': 'written',
+                  'assistance': 'content_anchored',
+                  'attempt_id': 'attempt-1',
+                  'rubric_id': 'rubric-1',
+                  'response_revision': 1,
+                  'task_kind': 'opinion',
+                  'media_id': null,
+                  'start_ms': 0,
+                  'end_ms': 1000,
+                  'response_text': 'A useful proposal.',
+                  'produced_at_ms': 42,
+                },
+                'entry': {
+                  'id': 'entry-1',
+                  'document_id': 'document-1',
+                  'normalized_key': 'proposal',
+                  'display_text': 'proposal',
+                  'start_char': 9,
+                  'end_char': 17,
+                },
+              },
+            ]),
+          );
+        },
+      );
+
+      final hits = await api.searchProductionCorpus(
+        language: 'en',
+        query: 'useful proposal',
+      );
+
+      expect(
+        seenPath,
+        '/v1/production-corpus/search?language=en&query=useful+proposal&limit=50&offset=0',
+      );
+      expect(hits.single.document.responseText, 'A useful proposal.');
+      expect(hits.single.entry!.normalizedKey, 'proposal');
+    });
+
     test(
       'short recording transcription keeps raw ASR and provenance typed',
       () async {
