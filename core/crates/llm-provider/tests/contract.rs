@@ -482,3 +482,48 @@ async fn factory_probe_measures_capability() {
         ));
     }
 }
+
+async fn capture_request(
+    State(captured): State<std::sync::Arc<std::sync::Mutex<Option<serde_json::Value>>>>,
+    Json(body): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
+    *captured.lock().unwrap() = Some(body);
+    Json(serde_json::json!({
+        "model": "m",
+        "choices": [ {
+            "finish_reason": "stop",
+            "message": { "content": "{\"ok\":true}", "refusal": null }
+        } ]
+    }))
+}
+
+/// DeepSeek and many other "OpenAI-compatible" endpoints reject the newer
+/// `json_schema` response_format with HTTP 400. The adapter must therefore use
+/// the broadly-compatible `json_object` mode and carry the schema in the prompt.
+#[tokio::test]
+async fn openai_adapter_uses_json_object_mode_with_schema_in_prompt() {
+    use std::sync::{Arc, Mutex};
+    let captured: Arc<Mutex<Option<serde_json::Value>>> = Arc::new(Mutex::new(None));
+    let router = Router::new()
+        .route("/chat/completions", post(capture_request))
+        .with_state(captured.clone());
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    });
+    let base = format!("http://{addr}");
+
+    let adapter =
+        OpenAiChatAdapter::new(base, "m", Some("k".into()), Duration::from_secs(5)).unwrap();
+    adapter.probe_structured_output().await.expect("probe");
+
+    let body = captured.lock().unwrap().clone().expect("request captured");
+    // Never the `json_schema` type that DeepSeek rejects with HTTP 400.
+    assert_eq!(body["response_format"]["type"], "json_object");
+    // json_object mode needs the token "json" and the schema shape in the
+    // prompt (the probe schema has an "ok" property).
+    let system = body["messages"][0]["content"].as_str().unwrap();
+    assert!(system.to_lowercase().contains("json"));
+    assert!(system.contains("ok"));
+}

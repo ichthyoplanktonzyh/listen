@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-16 11:29 CST: fix(llm-provider) — OpenAI 兼容适配器改用广泛兼容的 `json_object`
+  结构化输出模式，schema 内嵌进 prompt，取代此前硬编码的 `json_schema` response_format。
+  DeepSeek 等众多"OpenAI 兼容"端点只支持 `{"type":"json_object"}`，对 `json_schema` 直接回
+  HTTP 400，导致 probe 与 judge/rubric 全部失败（owner 用 deepseek-v4-flash 实测 `/judge`
+  报 `unexpected status 400`）。语义层本就对解析结果做 schema 后校验（不符即 SchemaInvalid、
+  不写 judgment），故不依赖 wire 层强约束；`json_object` 模式需 prompt 含 "json" 词元并携带
+  schema 形状，均已在 system 提示中保证。Anthropic 走 tool_use 不受影响，中立契约套件
+  `drafts[0]==drafts[1]` 仍成立。新增回归测试钉住请求体使用 `json_object` 且 schema 入
+  prompt；llm-provider 13 测试通过，fmt/clippy 干净。
+
 - 2026-07-16 11:10 CST: Phase 3.12.2 Slice 1 — Reading LLM judgment 显示接线（纯 Flutter，
   复用 3.12 已就绪的 `POST /v1/llm/providers/{id}/judge`）。`coach_llm.dart` 新增 typed
   `llmProviders()` 与 `judgeViaLlmProvider()`；`ReadingTaskController` 提交作答后惰性解析首个
