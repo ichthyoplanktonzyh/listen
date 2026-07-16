@@ -81,6 +81,39 @@ Map<String, dynamic> _attemptJson(String transcript) => {
   'ended_at_ms': 10,
 };
 
+Map<String, dynamic> _providerJson() => {
+  'id': 'prov-1',
+  'display_name': 'Test',
+  'adapter_kind': 'openai_chat_completions',
+  'base_url': 'http://x',
+  'model_id': 'm',
+  'has_credential': true,
+  'timeout_ms': 30000,
+  'max_retries': 0,
+  'retention': 'unknown',
+  'allowed_uses': ['semantic_judgment'],
+  'capability': <String, dynamic>{},
+  'created_at_ms': 1,
+};
+
+Map<String, dynamic> _llmJudgmentJson() => {
+  'id': 'llm-judgment-1',
+  'attempt_id': 'attempt-x',
+  'response_revision': 1,
+  'rubric_id': 'rubric-x',
+  'rubric_version': 1,
+  'rubric_source_sha256': 'h1',
+  'response_transcript_sha256': 'h2',
+  'points': [
+    {'point_id': 'main-idea', 'verdict': 'covered'},
+    {'point_id': 'detail', 'verdict': 'partial'},
+  ],
+  'abstain': null,
+  'provenance': {'kind': 'llm', 'model_id': 'm'},
+  'evidence_class': 'heuristic_proxy',
+  'created_at_ms': 25,
+};
+
 /// Records every request and replays canned responses per (method, path
 /// prefix). Bodies are captured for payload assertions.
 class _FakeBackend {
@@ -305,6 +338,89 @@ void main() {
     expect(body['conditions']['source_text_visible'], isFalse);
     expect(body['conditions']['audio_play_count'], 3);
     expect(body['conditions']['l1_trigger'], 'user_requested');
+  });
+
+  test('LLM assist: request judgment, correct it, stays honest heuristic',
+      () async {
+    final backend = _FakeBackend()
+      ..on('GET', '/v1/semantic/rubrics/lookup', _rubricJson())
+      ..on('GET', '/v1/semantic/rubrics/rubric-x/attempts', <dynamic>[])
+      ..on('POST', '/v1/semantic/attempts', _attemptJson('地震发生在棉兰老岛。'))
+      ..on('GET', '/v1/llm/providers', [_providerJson()])
+      ..on('POST', '/v1/llm/providers/prov-1/judge', _llmJudgmentJson())
+      ..on('POST', '/v1/semantic/adjudications', {
+        'id': 'adj-ai',
+        'judgment_id': 'llm-judgment-1',
+        'point_id': 'detail',
+        'prior_verdict': 'partial',
+        'user_verdict': 'covered',
+        'note': null,
+        'occurred_at_ms': 40,
+      });
+    final controller = ReadingTaskController();
+    await controller.openTask(
+      backend.api,
+      source: _source,
+      templatePoints: _template,
+    );
+    await controller.submitAnswer(
+      backend.api,
+      '地震发生在棉兰老岛。',
+      audioPlayCount: 2,
+    );
+    // A judgment-capable provider was discovered, but nothing is judged yet.
+    expect(controller.state.judgeProviderId, 'prov-1');
+    expect(controller.state.llmJudgment, isNull);
+
+    await controller.requestLlmJudgment(backend.api);
+    final judgment = controller.state.llmJudgment!;
+    expect(judgment.id, 'llm-judgment-1');
+    // Never gold: an unqualified provider verdict stays a heuristic proxy.
+    expect(judgment.evidenceClass, 'heuristic_proxy');
+    expect(judgment.provenance.kind, 'llm');
+    expect(judgment.verdictFor('main-idea'), 'covered');
+
+    // The judge request cites the stored attempt + revision, not client id.
+    final judgeBody = backend.requests
+        .firstWhere((r) => r.$2 == '/v1/llm/providers/prov-1/judge')
+        .$3!;
+    expect(judgeBody['attempt_id'], 'attempt-x');
+    expect(judgeBody['response_revision'], 1);
+
+    // Correcting the LLM verdict appends an adjudication citing the LLM row.
+    await controller.adjudicateLlm(
+      backend.api,
+      pointId: 'detail',
+      userVerdict: 'covered',
+    );
+    expect(controller.state.llmAdjudications, hasLength(1));
+    final adjBody = backend.requests
+        .firstWhere((r) => r.$2 == '/v1/semantic/adjudications')
+        .$3!;
+    expect(adjBody['judgment_id'], 'llm-judgment-1');
+    expect(adjBody['prior_verdict'], 'partial');
+    expect(adjBody['user_verdict'], 'covered');
+  });
+
+  test('LLM assist stays hidden without a judgment-capable provider', () async {
+    final backend = _FakeBackend()
+      ..on('GET', '/v1/semantic/rubrics/lookup', _rubricJson())
+      ..on('GET', '/v1/semantic/rubrics/rubric-x/attempts', <dynamic>[])
+      ..on('POST', '/v1/semantic/attempts', _attemptJson('回答'))
+      ..on('GET', '/v1/llm/providers', [
+        {
+          ..._providerJson(),
+          'allowed_uses': ['rubric_generation'],
+        },
+      ]);
+    final controller = ReadingTaskController();
+    await controller.openTask(
+      backend.api,
+      source: _source,
+      templatePoints: _template,
+    );
+    await controller.submitAnswer(backend.api, '回答');
+    expect(controller.state.judgeProviderId, isNull);
   });
 
   test('backend failure surfaces an error without fake progress', () async {

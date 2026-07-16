@@ -8,6 +8,30 @@ extension CoachLlmApi on LocalApi {
   Future<List<dynamic>> listLlmProviders() async =>
       (await _request('GET', '/v1/llm/providers')) as List<dynamic>;
 
+  /// Typed provider list (secret-free), convenience over [listLlmProviders].
+  Future<List<LlmProviderProfileView>> llmProviders() async =>
+      (await listLlmProviders())
+          .map((e) => LlmProviderProfileView.fromJson(e as Map<String, dynamic>))
+          .toList(growable: false);
+
+  /// Judges one stored attempt response through a configured provider and
+  /// records the result server-side as an unqualified `heuristic_proxy`
+  /// judgment (Phase 3.12.2 display-honesty boundary: correctable assist, no
+  /// observation/projection). On any provider error nothing is recorded and
+  /// this throws — a cut-off or refused answer never becomes a stored verdict.
+  Future<SemanticJudgmentView> judgeViaLlmProvider(
+    String providerId, {
+    required String attemptId,
+    required int responseRevision,
+  }) async => SemanticJudgmentView.fromJson(
+    (await _request(
+          'POST',
+          '/v1/llm/providers/${Uri.encodeComponent(providerId)}/judge',
+          {'attempt_id': attemptId, 'response_revision': responseRevision},
+        ))
+        as Map<String, dynamic>,
+  );
+
   /// Registers or updates a provider. When [secret] is non-empty it is stored
   /// in the OS keychain and never echoed back.
   Future<LlmProviderProfileView> registerLlmProvider({

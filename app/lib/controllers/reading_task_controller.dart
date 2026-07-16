@@ -43,6 +43,9 @@ class ReadingTaskState {
     this.judgment,
     this.draftVerdicts = const {},
     this.adjudications = const [],
+    this.judgeProviderId,
+    this.llmJudgment,
+    this.llmAdjudications = const [],
     this.pastAttemptCount = 0,
     this.busy = false,
     this.error,
@@ -67,6 +70,13 @@ class ReadingTaskState {
   /// point_id → verdict picked so far during self-assessment.
   final Map<String, String> draftVerdicts;
   final List<JudgmentAdjudicationView> adjudications;
+
+  /// Phase 3.12.2: an optional LLM judgment shown as correctable assist. It
+  /// never replaces the manual self-assessment; both are stored, honest
+  /// `heuristic_proxy` rows that write no observation/projection.
+  final String? judgeProviderId;
+  final SemanticJudgmentView? llmJudgment;
+  final List<JudgmentAdjudicationView> llmAdjudications;
   final int pastAttemptCount;
   final bool busy;
   final String? error;
@@ -86,6 +96,9 @@ class ReadingTaskState {
     Object? judgment = _unset,
     Map<String, String>? draftVerdicts,
     List<JudgmentAdjudicationView>? adjudications,
+    Object? judgeProviderId = _unset,
+    Object? llmJudgment = _unset,
+    List<JudgmentAdjudicationView>? llmAdjudications,
     int? pastAttemptCount,
     bool? busy,
     Object? error = _unset,
@@ -108,6 +121,13 @@ class ReadingTaskState {
         : judgment as SemanticJudgmentView?,
     draftVerdicts: draftVerdicts ?? this.draftVerdicts,
     adjudications: adjudications ?? this.adjudications,
+    judgeProviderId: identical(judgeProviderId, _unset)
+        ? this.judgeProviderId
+        : judgeProviderId as String?,
+    llmJudgment: identical(llmJudgment, _unset)
+        ? this.llmJudgment
+        : llmJudgment as SemanticJudgmentView?,
+    llmAdjudications: llmAdjudications ?? this.llmAdjudications,
     pastAttemptCount: pastAttemptCount ?? this.pastAttemptCount,
     busy: busy ?? this.busy,
     error: identical(error, _unset) ? this.error : error as String?,
@@ -178,6 +198,30 @@ class ReadingTaskController extends ChangeNotifier {
         (s) => s.copyWith(phase: 'idle', busy: false, error: '$error'),
       );
     }
+  }
+
+  /// Picks a configured provider allowed for semantic judgment, preferring one
+  /// with a stored credential. Returns null (feature stays hidden) when no
+  /// judgment-capable provider is configured or the lookup fails — the manual
+  /// self-assessment path never depends on a provider.
+  Future<String?> _resolveJudgeProvider(LocalApi api) async {
+    try {
+      final providers = await api.llmProviders();
+      for (final provider in providers) {
+        if (provider.hasCredential &&
+            provider.allowedUses.contains('semantic_judgment')) {
+          return provider.id;
+        }
+      }
+      for (final provider in providers) {
+        if (provider.allowedUses.contains('semantic_judgment')) {
+          return provider.id;
+        }
+      }
+    } catch (_) {
+      // A provider-listing failure must not break the task flow.
+    }
+    return null;
   }
 
   void updateDraftPoint(int index, RubricPointView point) {
@@ -283,10 +327,18 @@ class ReadingTaskController extends ChangeNotifier {
           phase: 'assessing',
           attempt: attempt,
           draftVerdicts: const {},
+          llmJudgment: null,
+          llmAdjudications: const [],
           busy: false,
         ),
       );
       _answerDrafts.remove(_draftKey(source, purpose));
+      // Resolve the (optional) judge provider now that the answer exists — the
+      // assist entry only appears from the assessing phase onward.
+      final judgeProviderId = await _resolveJudgeProvider(api);
+      if (judgeProviderId != null && state.judgeProviderId != judgeProviderId) {
+        _store.update((s) => s.copyWith(judgeProviderId: judgeProviderId));
+      }
     } catch (error) {
       _store.update((s) => s.copyWith(busy: false, error: '$error'));
     }
@@ -368,6 +420,67 @@ class ReadingTaskController extends ChangeNotifier {
       _store.update(
         (s) => s.copyWith(
           adjudications: [...s.adjudications, adjudication],
+          busy: false,
+        ),
+      );
+    } catch (error) {
+      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+    }
+  }
+
+  /// Phase 3.12.2: judges the current answer through the configured provider
+  /// and shows the result as correctable assist. The judgment is recorded
+  /// server-side as a `heuristic_proxy` (no observation/projection). On any
+  /// provider failure nothing is stored and the error surfaces — the manual
+  /// path is unaffected.
+  Future<void> requestLlmJudgment(LocalApi api) async {
+    final attempt = state.attempt;
+    final providerId = state.judgeProviderId;
+    if (attempt == null || providerId == null) return;
+    final response = attempt.responses.single;
+    _store.update((s) => s.copyWith(busy: true, error: null));
+    try {
+      final judgment = await api.judgeViaLlmProvider(
+        providerId,
+        attemptId: attempt.id,
+        responseRevision: response.revision,
+      );
+      _store.update(
+        (s) => s.copyWith(
+          llmJudgment: judgment,
+          llmAdjudications: const [],
+          busy: false,
+        ),
+      );
+    } catch (error) {
+      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+    }
+  }
+
+  /// Corrects one point of the LLM judgment. Mirrors [adjudicate]: the stored
+  /// judgment row is never rewritten; the correction is an append-only
+  /// adjudication citing the LLM judgment id.
+  Future<void> adjudicateLlm(
+    LocalApi api, {
+    required String pointId,
+    required String userVerdict,
+    String? note,
+  }) async {
+    final judgment = state.llmJudgment;
+    final prior = judgment?.verdictFor(pointId);
+    if (judgment == null || prior == null || prior == userVerdict) return;
+    _store.update((s) => s.copyWith(busy: true, error: null));
+    try {
+      final adjudication = await api.createJudgmentAdjudication(
+        judgmentId: judgment.id,
+        pointId: pointId,
+        priorVerdict: prior,
+        userVerdict: userVerdict,
+        note: note,
+      );
+      _store.update(
+        (s) => s.copyWith(
+          llmAdjudications: [...s.llmAdjudications, adjudication],
           busy: false,
         ),
       );
