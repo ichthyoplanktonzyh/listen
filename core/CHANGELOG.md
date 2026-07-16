@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- 2026-07-16 13:50 CST: Phase 3.12.2 与 3.15 收口 + P2–P6 立 phase。owner QA 通过：
+  3.12.2 真实 provider 下三 Studio「AI 出题 + AI 判定 + 纠正」端到端通过（新增
+  `3.12.2-CLOSEOUT.md`，PLAN 置 COMPLETE）；3.15 按 `3.15-MANUAL-QA.md` 真实内容/重启/
+  窄窗口/音频焦点验收通过（CLOSEOUT 状态翻正，Deferred 中 3.12.1 资格门表述更正为已由
+  3.12.2 取代）。按 discuss §11 裁决新建五个 phase（压在 3.16–3.18 前，取插入编号）：
+  `3.15.5-personal-production-corpus`（P2，产出语料可重建投影、写作先行、scaffolding 仅
+  预留字段、开工裁 3.16 边界）、`3.15.6-production-gap-review`（P3，gap-(c) 复盘；本轮
+  评审把参照系排序提升为 v1 核心，小 N 走 3.10 式诚实降级，UI 克制到管线验证级）、
+  `3.15.7-realtime-speech-conversation`（P4，realtime 中立 seam，OpenAI+Qwen，中立必须
+  owner 可实测）、`3.15.8-semantic-embedding`（P5）、`3.15.9-tts-speech-synthesis`
+  （P6，正交、建议 3.15.5 后即插）。STATE.md 更新当前位置/执行序列/语义能力边界（judge
+  三级资格口径由显示诚实边界取代）并压缩已收口 phase 冗述；下一执行 3.15.5。
+
 - 2026-07-16 13:15 CST: Phase 3.12.2 Slice 3 — LLM judgment 显示接线复制到 Speaking +
   Writing（纯 Flutter，后端 judge 用例本就按 attempt_id + response_revision 取存量作答，
   purpose 无关，零后端改动）。三个 Studio 现共用新抽取的 `LlmJudgmentAssist`

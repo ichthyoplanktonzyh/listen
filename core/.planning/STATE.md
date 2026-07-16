@@ -3,38 +3,45 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-16T08:39:00.000+08:00"
+last_updated: "2026-07-16T13:40:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-16 08:39 CST
-> 更新原因：Phase 3.15 code complete，进入 owner 手工 QA。
+> 最后更新：2026-07-16 13:40 CST
+> 更新原因：3.15 与 3.12.2 owner QA 通过并收口；P2–P6 立 phase（3.15.5–3.15.9），
+> 下一执行 3.15.5 产出语料库。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.15 Writing Studio v1 **CODE COMPLETE — OWNER QA PENDING**。
-  Writing 已作为当前内容通道落地一句话/50–100 词摘要、观点回应和 dictogloss；自有 editor 状态机、
-  v38 durable scratch、immutable attempts/revisions、固定 rubric manual self-assessment、请求后 Harper
-  表面 finding、accept/reject disposition、历史复写参照和 diff 已贯通。接受建议只能引用保留原文
-  hash 的新 immutable attempt，provider 永不静默改写。无 qualified judge 路径完整可用；v1 零
-  writing observation/projection writer。只剩 owner 按 `3.15-MANUAL-QA.md` 验证真实内容、重启恢复、
-  窄窗口与音频焦点；3.14 延期 QA 未重开。
-- Phase 3.14 Speaking Studio v1 **CODE COMPLETE**。Slice 0–5 已落地：
-  独立 RecordingAsset 短录音 whisper.cpp job（格式/hash、语言、取消、latency/provenance）、
-  L2 Retelling + 三档 Role Reply、raw/corrected transcript、固定 rubric、请求后自评、append-only
-  adjudication、立即重说一次、延迟复述资产入口、L1 listening fallback、单录音时长/停顿/waveform
-  客观事实，以及显式 literal-hit anchored speaking observation（零 projection）。内容/资产入口
-  复用同一 Speaking 状态机；退出只恢复位置不自动播放。Reading/Speaking lifecycle seam 实证
-  副作用不同，未为形状预设抽 pass-through interface。3.12.1 未获资格，因此无 LLM/judge 仍以
-  客观事实 + 用户自评完整交付。下一步是 owner 按 `3.14-MANUAL-QA.md` 在可热重启版本统一体验
-  英文新闻、对话接话、延迟复述、音频焦点与真人普通话；在此之前状态不宣称 owner accepted。
+- **当前执行主线**：Phase 3.15.5 Personal Production Corpus（裁决代号 P2）**待开工**。
+  个人产出语料库 = 从 immutable attempts 派生的可重建投影（零新权威存储），写作先行、
+  lemma 归一 + channel 标签 + 来源锚点、scaffolding 仅预留字段；读端「我的产出」最小
+  查询；开工时一并裁定与 3.16 个人模板的资产边界。后续链：3.15.6 gap-(c) 复盘（参照系
+  排序为 v1 核心 + 诚实降级显示）→ 3.15.7 realtime 语音对话（OpenAI Realtime + Qwen
+  Omni，中立必须 owner 可实测）→ 3.15.8 嵌入 / 3.15.9 TTS 增补（TTS 建议 3.15.5 落地后
+  即插）。计划见各 `3.15.x-*/PLAN`，产品裁决见
+  `.planning/discuss/conversation-output-corpus-and-model-categories.zh.md` §11。
+- Phase 3.12.2 Studio LLM Feedback（P1）**✅ COMPLETE**（2026-07-16 owner 真实 provider
+  QA 通过）：LLM rubric 生成 + judgment 显示接入三个 Studio；三 Studio 共用
+  `LlmJudgmentAssist`；显示诚实边界（heuristic_proxy、append-only adjudication、零
+  observation/projection）；取代已取消的 3.12.1 资格门。见 `3.12.2-CLOSEOUT.md`。
+- Phase 3.15 Writing Studio v1 **✅ COMPLETE**（2026-07-16 owner 按 `3.15-MANUAL-QA.md`
+  验收通过）：Writing 内容通道、immutable attempts/revisions、manual self-assessment、
+  Harper 表面 finding 与 disposition 全贯通；v1 零 writing observation/projection
+  writer。详见 `3.15-CLOSEOUT.md`。
+- Phase 3.14 Speaking Studio v1 **CODE COMPLETE — OWNER QA 延期**。Slice 0–5 已落地
+  （短录音 whisper.cpp job、L2 Retelling + 三档 Role Reply、固定 rubric 自评 +
+  adjudication、客观音频事实、literal-hit anchored speaking observation 零 projection）；
+  详见其 phase 文档。owner 按 `3.14-MANUAL-QA.md` 的真实体验 QA 未重开，此前不宣称
+  owner accepted。LLM judge 反馈已由 3.12.2 后置补上（显示诚实边界）。
 - Phase 3.9.4 已收口合回 main（语义分组四层断链修复 + ADR 0016 投影交互对等，
   见 `3.9.4-REAL-MEDIA-QA.md`，GUI 交互项留 owner 清单）。
 - Phase 3.9.3 已完成并冻结；spaCy syntax capability 已具 App 内 opt-in
   install/update/cancel/validate/disable/uninstall、持久七态、resident sidecar、整轨 fingerprint
-  cache 与 Flutter 静默后台分析。下一执行 phase 仍为 3.13 Reading Studio v1 或可并行的
-  3.12.1 LLM Judge Qualification；3.12 已 CODE COMPLETE，owner 真实 provider QA 与增量协议按需。
+  cache 与 Flutter 静默后台分析。3.12 CODE COMPLETE；其 judge/rubric 路由已由 3.12.2 在
+  真实 provider 下实测（owner QA 通过），增量协议 adapter 按需。3.12.1 已取消（由 3.12.2
+  显示诚实边界取代）。
 - Phase 3.11 Semantic Task Evidence Foundation 已 CODE COMPLETE（见其 CLOSEOUT）。
   Phase 3.9 不作为后续 Studio phase 的硬依赖。Phase 3.9.1 已建立共享句法契约、B/SenseGroup
   consumer 与 Construction matcher seam；后续复核发现唯一否决样本混淆歧义句产品 policy
@@ -66,10 +73,11 @@ last_updated: "2026-07-16T08:39:00.000+08:00"
   当前楔子而非永久边界；后续 reading / speaking / writing 逐个 phase 验证独立任务和证据。
   本地优先不等于仅限本地；在线内容与厂商中立 LLM provider 可作为可选能力进入系统，
   学习资产与高频播放路径仍默认本地。
-- **语义能力边界**：LLM 不绑定单一厂商或 wire format；application trait 下先以两个
-  异构协议（OpenAI-compatible + Anthropic Messages）证明中立，其余协议增量适配。
-  LLM judge 资格分三级：未经 3.12.1 留出集校验不进学习 surface，通过后仅显示可纠正
-  feedback，更大评估 + confirmation gate 后才可作 supporting evidence。
+- **语义能力边界**：厂商中立在**能力类别**层成立（同类别 ≥2 异构 adapter 过同一契约
+  套件），不同类别各有 seam——文本 LLM（6，✅3.12）、realtime 语音（8，3.15.7 待建）、
+  嵌入（7）、TTS（9）本地优先。3.12.1 留出集资格门已取消（2026-07-16 裁决）：LLM 判定
+  以显示诚实边界进 surface——可纠正辅助反馈、可 adjudicate、`heuristic_proxy`、不自动写
+  observation/projection；projection 仍归 3.17 确认门。
 - **代码分支状态**：以 `git status` / `git log` 为准，不在 STATE 记录静态分支名。
 
 ## 项目双路线
@@ -264,19 +272,21 @@ last_updated: "2026-07-16T08:39:00.000+08:00"
 - 244 cue 整轨实测 243 analyzed / 1 isolated fallback；首次 2.10s、hot cache 0.11s。
 - 文档：`.planning/phases/3.9.3-syntax-capability-delivery-lifecycle/3.9.3-CLOSEOUT.md`。
 
-### 下一执行序列：Phase 3.11–3.18
+### 下一执行序列：3.15.5 → 3.15.6 → 3.15.7（P2→P3→P4），随后重修 3.16–3.18
 
 - **Gate Q（已通过）**：Q1/Q2 通过；Q3/Q4 因后续 UX/功能调整明确延期且 QA 债留在
   原 phase。裁决见 `3.7-GATE-Q-CHECKLIST.md`。
-- **3.7 / 3.8 / 3.10 已完成收口，3.9 并行恢复**：3.7 保持 listening-only；3.8 是
-  shadowing 模仿层且非评分 completion 不伪造 speaking success；3.9 重构 A/B/C 后再做
-  真实媒体 QA；3.10 只展示已有事实，但提供 channel-ready envelope。
-- **3.11–3.18（已立 PLAN，方向承诺）**：Semantic evidence foundation → vendor-neutral
-  LLM provider（两个异构协议先证中立）→ 3.12.1 judge 资格评估（可与 Reading 并行）→
-  Reading Studio → Speaking Studio → Writing Studio → Personal Expression → four-channel
-  projection/review → Cross-modal Coach closeout。各 PLAN 开工前须按上游现状修订。
-  共享约束（含 seam 裁决标准 §3.6、judge 三级资格 §3.5）：
-  `.planning/phases/3.0-english-listening-learning-loop/3.11-3.18-FOUR-CHANNEL-SHARED-CONTEXT.md`。
+- **3.11–3.15 全部收口**（3.14 owner QA 延期未重开）；3.12.1 取消，由 3.12.2（P1，已
+  完成）取代。
+- **P2–P6 已立 PLAN（2026-07-16，编号 3.15.5–3.15.9）**：产出语料库（写作先行、可重建
+  投影）→ gap-(c) 复盘（参照系排序核心）→ realtime 语音对话（新中立类别 8）；嵌入（P5）
+  增强复盘、TTS（P6）正交建议 3.15.5 后即插；diarization/GOP 条件后置。产品裁决：
+  `.planning/discuss/conversation-output-corpus-and-model-categories.zh.md` §11。
+- **3.16–3.18（方向承诺）**：3.18 Cross-modal Coach 收窄为聚合叙述，3.17 保留
+  usage→projection 确认门；3.16 个人模板与产出语料的边界在 3.15.5 开工时裁定。各 PLAN
+  开工前须按上游现状修订。共享约束（seam 裁决标准 §3.6）：
+  `.planning/phases/3.0-english-listening-learning-loop/3.11-3.18-FOUR-CHANNEL-SHARED-CONTEXT.md`
+  （其 §3.5 judge 三级资格已被 3.12.2 显示诚实边界取代）。
 
 ## 已完成 Phase 索引
 
@@ -329,7 +339,13 @@ last_updated: "2026-07-16T08:39:00.000+08:00"
 
 ## 最近重要决策
 
-1. **2026-07-15 21:53 CST** — 后续 3.14–3.18 PLAN 按 3.13.5 实际底盘修订：3.14
+1. **2026-07-16 13:40 CST** — P2–P6 立 phase（3.15.5–3.15.9，压在 3.16–3.18 前执行）：
+   产出语料库定为可重建投影（零新权威存储、写作先行、scaffolding 仅预留字段）；gap-(c)
+   复盘把**参照系排序提升为 v1 核心**（接收性>产出性是常态，gap 全集任何 N 下都千词
+   量级，必须 top-K），小 N 走 3.10 式诚实降级而非资格关卡，v1 呈现克制到管线验证级；
+   realtime 中立性要求 owner 可实测（测不了就换异构可达厂商）；TTS 定为高频正交功能、
+   建议 3.15.5 后即插。同日 3.15 与 3.12.2 owner QA 通过并收口；3.12.1 正式取消。
+2. **2026-07-15 21:53 CST** — 后续 3.14–3.18 PLAN 按 3.13.5 实际底盘修订：3.14
    已成为 READY v2 并建立 Reference Matrix；Speaking/Writing 作为内容通道，Personal
    Expression/Review/Coach 作为资产旅程。共享任务底盘收窄为经第二住户验证后才抽取的
    生命周期 interface，各住户保留录音、编辑、资产与算法 implementation。
@@ -430,9 +446,11 @@ last_updated: "2026-07-16T08:39:00.000+08:00"
 
 ## 下一步工作
 
-1. **Phase 3.15 owner 手工 QA**：按 `3.15-MANUAL-QA.md` 统一体验真实摘要/观点回应/dictogloss、
-   进程重启草稿恢复、窄窗口与单一音频焦点；在此之前不宣称 owner accepted。实现和自动化已完成。
-2. "收藏句 → 个人模板"的用户价值验证收敛到 Phase 3.16（3.4.3 结论待兑现）。
+1. **Phase 3.15.5 开工**：产出语料投影 schema + 写作 attempts 重建/增量摄入 + lemma
+   查询读端；开工时裁定与 3.16 个人模板的资产边界。owner 日常写作使用持续积累语料，
+   为 3.15.6 Slice 0 数据探针备料。
+2. "收藏句 → 个人模板"的用户价值验证收敛到 Phase 3.16（3.4.3 结论待兑现），且须与
+   3.15.5 产出语料裁清边界。
 3. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
 4. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）；
