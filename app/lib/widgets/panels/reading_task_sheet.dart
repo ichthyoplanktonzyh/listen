@@ -6,6 +6,7 @@ import '../../controllers/reading_task_controller.dart';
 import '../../localization.dart';
 import '../../models/semantic_task.dart';
 import '../../services/api_service.dart';
+import 'llm_judgment_assist.dart';
 
 const _verdicts = ['covered', 'partial', 'missing', 'uncertain'];
 
@@ -146,6 +147,18 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
         ),
         style: TextStyle(color: colors.onSurfaceVariant, fontSize: 13),
       ),
+      if (_state.rubricProviderId != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: OutlinedButton.icon(
+            key: const ValueKey('reading-task-generate-rubric'),
+            onPressed: _state.busy
+                ? null
+                : () => unawaited(widget.controller.generateRubric(widget.api)),
+            icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+            label: Text(l.text('readingTaskAiGenerate')),
+          ),
+        ),
       const SizedBox(height: 8),
       for (var i = 0; i < _state.draftPoints.length; i++)
         _draftPointRow(l, colors, i),
@@ -362,6 +375,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
           icon: const Icon(Icons.fact_check_outlined),
           label: Text(l.text('readingTaskSubmitAssessment')),
         ),
+        _llmFeedback(),
       ],
     );
   }
@@ -460,6 +474,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
               ],
             ),
           ),
+        _llmFeedback(),
         const SizedBox(height: 8),
         Align(
           alignment: Alignment.centerRight,
@@ -471,6 +486,26 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
       ],
     );
   }
+
+  /// LLM assist (Phase 3.12.2): shared correctable block, hidden when no
+  /// judgment-capable provider is configured.
+  Widget _llmFeedback() => LlmJudgmentAssist(
+    visible: _state.judgeProviderId != null,
+    points: _state.rubric?.points ?? const [],
+    judgment: _state.llmJudgment,
+    adjudications: _state.llmAdjudications,
+    busy: _state.busy,
+    keyPrefix: 'reading-task',
+    onRequest: () =>
+        unawaited(widget.controller.requestLlmJudgment(widget.api)),
+    onCorrect: (pointId, userVerdict) => unawaited(
+      widget.controller.adjudicateLlm(
+        widget.api,
+        pointId: pointId,
+        userVerdict: userVerdict,
+      ),
+    ),
+  );
 
   String _verdictLabel(AppLocalizations l, String verdict) =>
       l.text(switch (verdict) {

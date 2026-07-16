@@ -45,6 +45,9 @@ class WritingTaskState {
     this.decisions = const {},
     this.selfVerdicts = const {},
     this.selfAssessment,
+    this.judgeProviderId,
+    this.llmJudgment,
+    this.llmAdjudications = const [],
     this.pastAttempts = const [],
     this.pastAttemptCount = 0,
     this.busy = false,
@@ -68,6 +71,14 @@ class WritingTaskState {
   final Map<String, String> decisions;
   final Map<String, String> selfVerdicts;
   final SemanticJudgmentView? selfAssessment;
+
+  /// Phase 3.12.2: an optional LLM content/organization judgment shown as
+  /// correctable assist (distinct from Harper surface findings). It never
+  /// replaces the manual meaning check; both are stored, honest
+  /// `heuristic_proxy` rows that write no observation/projection.
+  final String? judgeProviderId;
+  final SemanticJudgmentView? llmJudgment;
+  final List<JudgmentAdjudicationView> llmAdjudications;
   final List<SemanticAttemptView> pastAttempts;
   final int pastAttemptCount;
   final bool busy;
@@ -87,6 +98,9 @@ class WritingTaskState {
     Map<String, String>? decisions,
     Map<String, String>? selfVerdicts,
     Object? selfAssessment = _unset,
+    Object? judgeProviderId = _unset,
+    Object? llmJudgment = _unset,
+    List<JudgmentAdjudicationView>? llmAdjudications,
     List<SemanticAttemptView>? pastAttempts,
     int? pastAttemptCount,
     bool? busy,
@@ -115,6 +129,13 @@ class WritingTaskState {
     selfAssessment: identical(selfAssessment, _unset)
         ? this.selfAssessment
         : selfAssessment as SemanticJudgmentView?,
+    judgeProviderId: identical(judgeProviderId, _unset)
+        ? this.judgeProviderId
+        : judgeProviderId as String?,
+    llmJudgment: identical(llmJudgment, _unset)
+        ? this.llmJudgment
+        : llmJudgment as SemanticJudgmentView?,
+    llmAdjudications: llmAdjudications ?? this.llmAdjudications,
     pastAttempts: pastAttempts ?? this.pastAttempts,
     pastAttemptCount: pastAttemptCount ?? this.pastAttemptCount,
     busy: busy ?? this.busy,
@@ -272,6 +293,74 @@ class WritingTaskController extends ChangeNotifier {
           busy: false,
         ),
       );
+      // Resolve the (optional) judge provider now that an attempt exists —
+      // the assist entry only appears once there is something to judge, and
+      // the manual meaning-check path never depends on any provider.
+      final judgeProviderId = await api.preferredLlmProviderId(
+        'semantic_judgment',
+      );
+      if (judgeProviderId != null && state.judgeProviderId != judgeProviderId) {
+        _store.update((s) => s.copyWith(judgeProviderId: judgeProviderId));
+      }
+    } catch (error) {
+      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+    }
+  }
+
+  /// Phase 3.12.2: judges the latest stored attempt (content/organization
+  /// against the rubric — the same SemanticJudgeProvider seam as Reading and
+  /// Speaking, distinct from Harper surface findings) and shows the result as
+  /// correctable assist. Recorded server-side as a `heuristic_proxy`; on any
+  /// provider failure nothing is stored and the error surfaces.
+  Future<void> requestLlmJudgment(LocalApi api) async {
+    final attempt = state.revisedAttempt ?? state.initialAttempt;
+    final providerId = state.judgeProviderId;
+    if (attempt == null || providerId == null) return;
+    final response = attempt.responses.last;
+    _store.update((s) => s.copyWith(busy: true, error: null));
+    try {
+      final judgment = await api.judgeViaLlmProvider(
+        providerId,
+        attemptId: attempt.id,
+        responseRevision: response.revision,
+      );
+      _store.update(
+        (s) => s.copyWith(
+          llmJudgment: judgment,
+          llmAdjudications: const [],
+          busy: false,
+        ),
+      );
+    } catch (error) {
+      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+    }
+  }
+
+  /// Corrects one point of the LLM judgment. The stored judgment row is never
+  /// rewritten; the correction is an append-only adjudication citing the LLM
+  /// judgment id.
+  Future<void> adjudicateLlm(
+    LocalApi api, {
+    required String pointId,
+    required String userVerdict,
+  }) async {
+    final judgment = state.llmJudgment;
+    final prior = judgment?.verdictFor(pointId);
+    if (judgment == null || prior == null || prior == userVerdict) return;
+    _store.update((s) => s.copyWith(busy: true, error: null));
+    try {
+      final adjudication = await api.createJudgmentAdjudication(
+        judgmentId: judgment.id,
+        pointId: pointId,
+        priorVerdict: prior,
+        userVerdict: userVerdict,
+      );
+      _store.update(
+        (s) => s.copyWith(
+          llmAdjudications: [...s.llmAdjudications, adjudication],
+          busy: false,
+        ),
+      );
     } catch (error) {
       _store.update((s) => s.copyWith(busy: false, error: '$error'));
     }
@@ -392,11 +481,15 @@ class WritingTaskController extends ChangeNotifier {
           evidenceClass: 'self_assessment',
         );
       }
+      // Any earlier LLM judgment cited the initial attempt's revision; the
+      // revised attempt gets a fresh, honest request instead of a carry-over.
       _store.update(
         (s) => s.copyWith(
           phase: 'done',
           revisedAttempt: attempt,
           selfAssessment: selfAssessment,
+          llmJudgment: null,
+          llmAdjudications: const [],
           busy: false,
         ),
       );

@@ -167,8 +167,44 @@ Map<String, dynamic> _reviewItemJson() => {
   'updated_at_ms': 21,
 };
 
+Map<String, dynamic> _providerJson({
+  List<String> allowedUses = const ['semantic_judgment'],
+}) => {
+  'id': 'prov-1',
+  'display_name': 'Test',
+  'adapter_kind': 'openai_chat_completions',
+  'base_url': 'http://x',
+  'model_id': 'm',
+  'has_credential': true,
+  'timeout_ms': 30000,
+  'max_retries': 0,
+  'retention': 'unknown',
+  'allowed_uses': allowedUses,
+  'capability': <String, dynamic>{},
+  'created_at_ms': 1,
+};
+
+Map<String, dynamic> _llmJudgmentJson() => {
+  'id': 'llm-judgment-1',
+  'attempt_id': 'attempt-1',
+  'response_revision': 1,
+  'rubric_id': 'rubric-1',
+  'rubric_version': 1,
+  'rubric_source_sha256': 'h1',
+  'response_transcript_sha256': 'h2',
+  'points': [
+    {'point_id': 'main-idea', 'verdict': 'covered'},
+    {'point_id': 'detail', 'verdict': 'missing'},
+  ],
+  'abstain': null,
+  'provenance': {'kind': 'llm', 'model_id': 'm'},
+  'evidence_class': 'heuristic_proxy',
+  'created_at_ms': 25,
+};
+
 class _FakeBackend {
   final requests = <(String, String, Map<String, dynamic>?)>[];
+  List<Map<String, dynamic>> providers = [];
 
   LocalApi get api => LocalApi.withTransport(
     baseUrl: 'http://test',
@@ -207,10 +243,12 @@ class _FakeBackend {
         ),
         ('POST', '/v1/review/items') => _reviewItemJson(),
         ('POST', '/v1/semantic/attempts/attempt-1/speaking-targets') => null,
+        ('GET', '/v1/llm/providers') => providers,
+        ('POST', '/v1/llm/providers/prov-1/judge') => _llmJudgmentJson(),
         ('POST', '/v1/semantic/adjudications') => {
           'id': 'adjudication-1',
-          'judgment_id': 'judgment-1',
-          'point_id': decoded!['point_id'],
+          'judgment_id': decoded!['judgment_id'],
+          'point_id': decoded['point_id'],
           'prior_verdict': decoded['prior_verdict'],
           'user_verdict': decoded['user_verdict'],
           'note': decoded['note'],
@@ -427,6 +465,86 @@ void main() {
       );
     },
   );
+
+  test('LLM assist: judge spoken attempt, correct it, stays honest heuristic',
+      () async {
+    final backend = _FakeBackend()..providers = [_providerJson()];
+    final controller = SpeakingTaskController(
+      recorder: _FakeRecorder(MicrophonePermissionStatus.granted),
+      delay: (_) async {},
+    );
+    await controller.openTask(
+      backend.api,
+      source: _source,
+      fixedRubricPoints: _points,
+    );
+    await controller.beginRecording(acquireAudioFocus: () async {});
+    await controller.stopRecording(backend.api);
+    await controller.acceptTranscript(backend.api);
+    // A judgment-capable provider was discovered, but nothing is judged yet.
+    expect(controller.state.phase, 'ready_feedback');
+    expect(controller.state.judgeProviderId, 'prov-1');
+    expect(controller.state.llmJudgment, isNull);
+
+    await controller.requestLlmJudgment(backend.api);
+    final judgment = controller.state.llmJudgment!;
+    expect(judgment.id, 'llm-judgment-1');
+    // Never gold: an unqualified provider verdict stays a heuristic proxy,
+    // and it does not touch the manual self-assessment slot.
+    expect(judgment.evidenceClass, 'heuristic_proxy');
+    expect(judgment.provenance.kind, 'llm');
+    expect(controller.state.judgment, isNull);
+
+    // The judge request cites the stored attempt + revision.
+    final judgeBody = backend.requests
+        .firstWhere((r) => r.$2 == '/v1/llm/providers/prov-1/judge')
+        .$3!;
+    expect(judgeBody['attempt_id'], 'attempt-1');
+    expect(judgeBody['response_revision'], 1);
+
+    // Correcting the LLM verdict appends an adjudication citing the LLM row.
+    await controller.adjudicateLlm(
+      backend.api,
+      pointId: 'detail',
+      userVerdict: 'partial',
+    );
+    expect(controller.state.llmAdjudications, hasLength(1));
+    final adjBody = backend.requests
+        .firstWhere((r) => r.$2 == '/v1/semantic/adjudications')
+        .$3!;
+    expect(adjBody['judgment_id'], 'llm-judgment-1');
+    expect(adjBody['prior_verdict'], 'missing');
+    expect(adjBody['user_verdict'], 'partial');
+  });
+
+  test('LLM assist stays hidden without a judgment-capable provider',
+      () async {
+    final backend = _FakeBackend()
+      ..providers = [
+        _providerJson(allowedUses: ['rubric_generation']),
+      ];
+    final controller = SpeakingTaskController(
+      recorder: _FakeRecorder(MicrophonePermissionStatus.granted),
+      delay: (_) async {},
+    );
+    await controller.openTask(
+      backend.api,
+      source: _source,
+      fixedRubricPoints: _points,
+    );
+    await controller.beginRecording(acquireAudioFocus: () async {});
+    await controller.stopRecording(backend.api);
+    await controller.acceptTranscript(backend.api);
+    expect(controller.state.phase, 'ready_feedback');
+    expect(controller.state.judgeProviderId, isNull);
+    // Requesting without a provider is a no-op; no judge call is recorded.
+    await controller.requestLlmJudgment(backend.api);
+    expect(controller.state.llmJudgment, isNull);
+    expect(
+      backend.requests.where((r) => r.$2.endsWith('/judge')),
+      isEmpty,
+    );
+  });
 
   test('future-stage intents cannot skip recording and review', () async {
     final backend = _FakeBackend();

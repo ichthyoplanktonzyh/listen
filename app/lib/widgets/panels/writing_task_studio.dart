@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../controllers/writing_task_controller.dart';
 import '../../localization.dart';
 import '../../models/semantic_task.dart';
 import '../../services/api_service.dart';
+import 'llm_judgment_assist.dart';
 
 class WritingTaskStudio extends StatefulWidget {
   const WritingTaskStudio({
@@ -189,7 +192,10 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
       ),
       if (revising) ...[
         const SizedBox(width: 16),
-        Expanded(flex: 2, child: _FeedbackList(controller: widget.controller)),
+        Expanded(
+          flex: 2,
+          child: _FeedbackList(controller: widget.controller, api: widget.api),
+        ),
       ],
     ],
   );
@@ -249,8 +255,40 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
       _RevisionDiff(original: state.draft, revised: state.revisionDraft),
       const SizedBox(height: 12),
       Text(l.text('writingEvidenceNotice')),
+      _WritingLlmAssist(controller: widget.controller, api: widget.api),
     ],
   );
+}
+
+/// LLM assist (Phase 3.12.2): shared correctable content/organization block,
+/// hidden when no judgment-capable provider is configured. Distinct from the
+/// Harper surface findings and from the learner meaning check.
+class _WritingLlmAssist extends StatelessWidget {
+  const _WritingLlmAssist({required this.controller, required this.api});
+
+  final WritingTaskController controller;
+  final LocalApi api;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = controller.state;
+    return LlmJudgmentAssist(
+      visible: state.judgeProviderId != null,
+      points: state.rubric?.points ?? const [],
+      judgment: state.llmJudgment,
+      adjudications: state.llmAdjudications,
+      busy: state.busy,
+      keyPrefix: 'writing-task',
+      onRequest: () => unawaited(controller.requestLlmJudgment(api)),
+      onCorrect: (pointId, userVerdict) => unawaited(
+        controller.adjudicateLlm(
+          api,
+          pointId: pointId,
+          userVerdict: userVerdict,
+        ),
+      ),
+    );
+  }
 }
 
 class _Header extends StatelessWidget {
@@ -389,9 +427,10 @@ class _SourceCard extends StatelessWidget {
 }
 
 class _FeedbackList extends StatelessWidget {
-  const _FeedbackList({required this.controller});
+  const _FeedbackList({required this.controller, required this.api});
 
   final WritingTaskController controller;
+  final LocalApi api;
 
   @override
   Widget build(BuildContext context) {
@@ -503,6 +542,7 @@ class _FeedbackList extends StatelessWidget {
                 ),
               ),
             ),
+        _WritingLlmAssist(controller: controller, api: api),
       ],
     );
   }

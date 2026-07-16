@@ -43,6 +43,10 @@ class ReadingTaskState {
     this.judgment,
     this.draftVerdicts = const {},
     this.adjudications = const [],
+    this.judgeProviderId,
+    this.rubricProviderId,
+    this.llmJudgment,
+    this.llmAdjudications = const [],
     this.pastAttemptCount = 0,
     this.busy = false,
     this.error,
@@ -67,6 +71,16 @@ class ReadingTaskState {
   /// point_id → verdict picked so far during self-assessment.
   final Map<String, String> draftVerdicts;
   final List<JudgmentAdjudicationView> adjudications;
+
+  /// Phase 3.12.2: an optional LLM judgment shown as correctable assist. It
+  /// never replaces the manual self-assessment; both are stored, honest
+  /// `heuristic_proxy` rows that write no observation/projection.
+  final String? judgeProviderId;
+
+  /// Provider allowed for rubric generation (`rubric_generation`), if any.
+  final String? rubricProviderId;
+  final SemanticJudgmentView? llmJudgment;
+  final List<JudgmentAdjudicationView> llmAdjudications;
   final int pastAttemptCount;
   final bool busy;
   final String? error;
@@ -86,6 +100,10 @@ class ReadingTaskState {
     Object? judgment = _unset,
     Map<String, String>? draftVerdicts,
     List<JudgmentAdjudicationView>? adjudications,
+    Object? judgeProviderId = _unset,
+    Object? rubricProviderId = _unset,
+    Object? llmJudgment = _unset,
+    List<JudgmentAdjudicationView>? llmAdjudications,
     int? pastAttemptCount,
     bool? busy,
     Object? error = _unset,
@@ -108,6 +126,16 @@ class ReadingTaskState {
         : judgment as SemanticJudgmentView?,
     draftVerdicts: draftVerdicts ?? this.draftVerdicts,
     adjudications: adjudications ?? this.adjudications,
+    judgeProviderId: identical(judgeProviderId, _unset)
+        ? this.judgeProviderId
+        : judgeProviderId as String?,
+    rubricProviderId: identical(rubricProviderId, _unset)
+        ? this.rubricProviderId
+        : rubricProviderId as String?,
+    llmJudgment: identical(llmJudgment, _unset)
+        ? this.llmJudgment
+        : llmJudgment as SemanticJudgmentView?,
+    llmAdjudications: llmAdjudications ?? this.llmAdjudications,
     pastAttemptCount: pastAttemptCount ?? this.pastAttemptCount,
     busy: busy ?? this.busy,
     error: identical(error, _unset) ? this.error : error as String?,
@@ -129,6 +157,10 @@ class ReadingTaskController extends ChangeNotifier {
 
   final Store<ReadingTaskState> _store;
   int _answerStartedAtMs = 0;
+
+  /// Set when the current draft points came from an AI rubric draft, so a save
+  /// records honest `llm` provenance instead of `manual`.
+  SemanticProvenanceView? _aiRubricProvenance;
   final Map<String, List<RubricPointView>> _pointDrafts = {};
   final Map<String, String> _answerDrafts = {};
 
@@ -146,6 +178,7 @@ class ReadingTaskController extends ChangeNotifier {
     String purpose = readingPurpose,
   }) async {
     final draftKey = _draftKey(source, purpose);
+    _aiRubricProvenance = null;
     _store.replace(
       ReadingTaskState(
         phase: 'idle',
@@ -173,10 +206,69 @@ class ReadingTaskController extends ChangeNotifier {
         final attempts = await api.semanticRubricAttempts(rubric.id);
         _enterAnswering(rubric, attempts.length);
       }
+      await _resolveProviders(api);
     } catch (error) {
       _store.update(
         (s) => s.copyWith(phase: 'idle', busy: false, error: '$error'),
       );
+    }
+  }
+
+  /// Resolves the (optional) providers allowed for rubric generation and
+  /// semantic judgment, preferring ones with a stored credential. A
+  /// provider-listing failure is swallowed: the manual template + self-
+  /// assessment path never depends on any provider, and the AI entries simply
+  /// stay hidden when nothing is configured.
+  Future<void> _resolveProviders(LocalApi api) async {
+    try {
+      final providers = await api.llmProviders();
+      _store.update(
+        (s) => s.copyWith(
+          judgeProviderId: pickLlmProviderId(providers, 'semantic_judgment'),
+          rubricProviderId: pickLlmProviderId(providers, 'rubric_generation'),
+        ),
+      );
+    } catch (_) {
+      // A provider-listing failure must not break the task flow.
+    }
+  }
+
+  /// Phase 3.12.2: asks the configured provider to draft rubric points for the
+  /// current source and loads them into the editable template. The suggestion
+  /// is never auto-applied — it becomes a rubric only when the user saves it,
+  /// and the save then records honest `llm` provenance.
+  Future<void> generateRubric(LocalApi api) async {
+    final source = state.source;
+    final providerId = state.rubricProviderId;
+    if (source == null || providerId == null) return;
+    _store.update((s) => s.copyWith(busy: true, error: null));
+    try {
+      final draft = await api.generateRubricViaLlmProvider(
+        providerId,
+        purpose: state.purpose,
+        sourceLanguage: source.sourceLanguage,
+        responseLanguage: source.responseLanguage,
+        transcriptSnapshot: source.transcriptSnapshot,
+      );
+      if (draft.points.isEmpty) {
+        _store.update(
+          (s) => s.copyWith(busy: false, error: 'no rubric points returned'),
+        );
+        return;
+      }
+      _aiRubricProvenance = SemanticProvenanceView(
+        kind: 'llm',
+        detail: 'reading studio paragraph task (AI-generated, user-reviewed)',
+        modelId: draft.modelId,
+        promptVersion: draft.promptVersion,
+        schemaVersion: draft.schemaVersion,
+      );
+      _cachePointDraft(draft.points);
+      _store.update(
+        (s) => s.copyWith(phase: 'editing', draftPoints: draft.points, busy: false),
+      );
+    } catch (error) {
+      _store.update((s) => s.copyWith(busy: false, error: '$error'));
     }
   }
 
@@ -223,10 +315,12 @@ class ReadingTaskController extends ChangeNotifier {
         ),
         responseLanguage: source.responseLanguage,
         points: state.draftPoints,
-        provenance: const SemanticProvenanceView(
-          kind: 'manual',
-          detail: 'reading studio paragraph task (user-edited template)',
-        ),
+        provenance:
+            _aiRubricProvenance ??
+            const SemanticProvenanceView(
+              kind: 'manual',
+              detail: 'reading studio paragraph task (user-edited template)',
+            ),
       );
       _enterAnswering(rubric, 0);
     } catch (_) {
@@ -283,6 +377,8 @@ class ReadingTaskController extends ChangeNotifier {
           phase: 'assessing',
           attempt: attempt,
           draftVerdicts: const {},
+          llmJudgment: null,
+          llmAdjudications: const [],
           busy: false,
         ),
       );
@@ -368,6 +464,67 @@ class ReadingTaskController extends ChangeNotifier {
       _store.update(
         (s) => s.copyWith(
           adjudications: [...s.adjudications, adjudication],
+          busy: false,
+        ),
+      );
+    } catch (error) {
+      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+    }
+  }
+
+  /// Phase 3.12.2: judges the current answer through the configured provider
+  /// and shows the result as correctable assist. The judgment is recorded
+  /// server-side as a `heuristic_proxy` (no observation/projection). On any
+  /// provider failure nothing is stored and the error surfaces — the manual
+  /// path is unaffected.
+  Future<void> requestLlmJudgment(LocalApi api) async {
+    final attempt = state.attempt;
+    final providerId = state.judgeProviderId;
+    if (attempt == null || providerId == null) return;
+    final response = attempt.responses.single;
+    _store.update((s) => s.copyWith(busy: true, error: null));
+    try {
+      final judgment = await api.judgeViaLlmProvider(
+        providerId,
+        attemptId: attempt.id,
+        responseRevision: response.revision,
+      );
+      _store.update(
+        (s) => s.copyWith(
+          llmJudgment: judgment,
+          llmAdjudications: const [],
+          busy: false,
+        ),
+      );
+    } catch (error) {
+      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+    }
+  }
+
+  /// Corrects one point of the LLM judgment. Mirrors [adjudicate]: the stored
+  /// judgment row is never rewritten; the correction is an append-only
+  /// adjudication citing the LLM judgment id.
+  Future<void> adjudicateLlm(
+    LocalApi api, {
+    required String pointId,
+    required String userVerdict,
+    String? note,
+  }) async {
+    final judgment = state.llmJudgment;
+    final prior = judgment?.verdictFor(pointId);
+    if (judgment == null || prior == null || prior == userVerdict) return;
+    _store.update((s) => s.copyWith(busy: true, error: null));
+    try {
+      final adjudication = await api.createJudgmentAdjudication(
+        judgmentId: judgment.id,
+        pointId: pointId,
+        priorVerdict: prior,
+        userVerdict: userVerdict,
+        note: note,
+      );
+      _store.update(
+        (s) => s.copyWith(
+          llmAdjudications: [...s.llmAdjudications, adjudication],
           busy: false,
         ),
       );

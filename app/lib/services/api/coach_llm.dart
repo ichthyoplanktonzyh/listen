@@ -3,10 +3,84 @@ part of '../api_service.dart';
 // Corpus search, LLM providers, learning resources, coach dashboard.
 // Split out of api_service.dart (mechanical decomposition).
 
+/// Picks the configured provider allowed for [use], preferring one with a
+/// stored credential. Returns null when nothing qualifies — callers keep
+/// their manual paths independent of any provider.
+String? pickLlmProviderId(List<LlmProviderProfileView> providers, String use) {
+  for (final provider in providers) {
+    if (provider.hasCredential && provider.allowedUses.contains(use)) {
+      return provider.id;
+    }
+  }
+  for (final provider in providers) {
+    if (provider.allowedUses.contains(use)) return provider.id;
+  }
+  return null;
+}
+
 extension CoachLlmApi on LocalApi {
   /// Lists configured provider profiles (secret-free views).
   Future<List<dynamic>> listLlmProviders() async =>
       (await _request('GET', '/v1/llm/providers')) as List<dynamic>;
+
+  /// Resolves the provider to use for [use] (e.g. `semantic_judgment`), or
+  /// null when none is configured or the listing fails — a provider-listing
+  /// failure must never break a task flow, the AI entries simply stay hidden.
+  Future<String?> preferredLlmProviderId(String use) async {
+    try {
+      return pickLlmProviderId(await llmProviders(), use);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Typed provider list (secret-free), convenience over [listLlmProviders].
+  Future<List<LlmProviderProfileView>> llmProviders() async =>
+      (await listLlmProviders())
+          .map((e) => LlmProviderProfileView.fromJson(e as Map<String, dynamic>))
+          .toList(growable: false);
+
+  /// Generates a rubric draft (information points only) for one source segment
+  /// through the provider (Phase 3.12.2). The draft is not persisted; the
+  /// client shows it for review/edit and saves an approved rubric through the
+  /// normal create path. Throws on any provider error.
+  Future<RubricDraftView> generateRubricViaLlmProvider(
+    String providerId, {
+    required String purpose,
+    required String sourceLanguage,
+    required String responseLanguage,
+    required String transcriptSnapshot,
+  }) async => RubricDraftView.fromJson(
+    (await _request(
+          'POST',
+          '/v1/llm/providers/${Uri.encodeComponent(providerId)}/rubric',
+          {
+            'purpose': purpose,
+            'source_language': sourceLanguage,
+            'response_language': responseLanguage,
+            'transcript_snapshot': transcriptSnapshot,
+          },
+        ))
+        as Map<String, dynamic>,
+  );
+
+  /// Judges one stored attempt response through a configured provider and
+  /// records the result server-side as an unqualified `heuristic_proxy`
+  /// judgment (Phase 3.12.2 display-honesty boundary: correctable assist, no
+  /// observation/projection). On any provider error nothing is recorded and
+  /// this throws — a cut-off or refused answer never becomes a stored verdict.
+  Future<SemanticJudgmentView> judgeViaLlmProvider(
+    String providerId, {
+    required String attemptId,
+    required int responseRevision,
+  }) async => SemanticJudgmentView.fromJson(
+    (await _request(
+          'POST',
+          '/v1/llm/providers/${Uri.encodeComponent(providerId)}/judge',
+          {'attempt_id': attemptId, 'response_revision': responseRevision},
+        ))
+        as Map<String, dynamic>,
+  );
 
   /// Registers or updates a provider. When [secret] is non-empty it is stored
   /// in the OS keychain and never echoed back.
