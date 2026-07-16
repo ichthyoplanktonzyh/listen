@@ -57,6 +57,11 @@ application use cases and provider/repository boundaries.
   provider/runtime/model provenance, Unicode-scalar char spans, explicit
   parser-token ↔ SubtitleToken many-to-many alignment, UD-compatible fields,
   tree validation, coverage gating, and provider/model/config-isolated identity.
+- Phase 3.15 adds Writing-specific feedback facts around the semantic task core:
+  provider findings bind one exact learner revision hash, while accept/reject
+  dispositions append separately and acceptance must cite a new immutable
+  attempt that preserves the reviewed text and adds a later typed revision.
+  Provider suggestions never become authoritative learner text by mutation.
 
 ### `application`
 
@@ -207,6 +212,10 @@ application use cases and provider/repository boundaries.
 - Schema v33 adds `recording_assets`. Audio stays in a local file while SQLite
   persists transcription-ready format/integrity metadata and durable prompt/source
   snapshots. Media and practice-attempt references use `ON DELETE SET NULL`.
+- Schema v38 adds append-only `writing_feedback_findings` and
+  `writing_finding_dispositions`; both retain JSON facts plus query columns and
+  have database triggers forbidding update/delete. `writing_drafts` is the
+  explicitly mutable crash-recovery projection and is never an evidence input.
 - Learning-loop persistence stores JSON snapshots plus query columns for kind,
   status, subject, result, and timestamps. Corpus and recording persistence are
   implemented; learner-profile persistence remains future work.

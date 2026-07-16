@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-16 08:39 CST: Phase 3.15 Writing Studio v1 code complete，进入 owner 手工 QA。
+  PLAN 按 3.14 closeout 保鲜并建立 Reference Matrix；确认
+  Writing 自有 editor/revision 状态机，不复制 Reading/Speaking controller 或虚构通用 lifecycle
+  interface。新增 `one_sentence_summary` / `opinion_response`、Summary/Dictogloss/Opinion 多稿 typed-only validator 与
+  Dictogloss playback/prompt 条件；新增项目自有分层 Writing finding/provenance 和 accept/reject
+  disposition；接受必须引用一个保留原文 hash 并含后续 typed revision 的新 immutable attempt，
+  provider suggestion 不能静默成为用户稿。schema v38 新增可变但非证据的 durable scratch 与
+  append-only finding/disposition；Writing 当前内容通道、自有 editor 状态机、600ms autosave/重启
+  恢复、来源折叠、请求后 feedback、固定 rubric 意义自评、Harper 0.40 离线表面 finding、历史复写
+  参照和 Unicode-safe diff 已落地。finding/manual judgment/observation/projection 继续分离，v1 零
+  writing observation/projection writer；真实内容、窄窗口与音频焦点留 `3.15-MANUAL-QA.md`。
+
 - 2026-07-15 23:40 CST: Phase 3.14 Speaking Studio v1 Slice 0–5 code complete。
   内容 Speaking 通道现支持 10–60 秒 L2 retelling 与 full sentence/keywords/no text 三档
   Role Reply；延迟复述从 review asset 进入同一状态机，不建独立首页。链路串通麦克风权限、

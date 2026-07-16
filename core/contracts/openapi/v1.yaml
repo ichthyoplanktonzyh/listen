@@ -1610,6 +1610,109 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SemanticTaskAttempt" }
+  /v1/semantic/writing-drafts/{id}:
+    get:
+      operationId: writingDraft
+      description: Reads mutable crash-recovery text for a rubric; this projection is not learning evidence.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Draft or null
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/WritingDraft" }
+                  - { type: "null" }
+    put:
+      operationId: saveWritingDraft
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt_snapshot, transcript]
+              properties:
+                prompt_snapshot: { type: string, minLength: 1 }
+                transcript: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Saved scratch projection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WritingDraft" }
+    delete:
+      operationId: deleteWritingDraft
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: Draft removed }
+  /v1/semantic/attempts/{id}/writing-findings:
+    get:
+      operationId: writingFindings
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Append-only feedback findings for one writing attempt
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WritingFeedbackFinding" }
+    post:
+      operationId: createWritingFinding
+      description: Records a provider finding against one exact learner revision without changing learner text.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [response_revision, layer, severity, message, provenance]
+              properties:
+                response_revision: { type: integer, minimum: 1 }
+                layer: { $ref: "#/components/schemas/WritingFeedbackLayer" }
+                severity: { $ref: "#/components/schemas/WritingFindingSeverity" }
+                source_span: { $ref: "#/components/schemas/WritingSourceSpan" }
+                message: { type: string, minLength: 1 }
+                suggested_replacement: { type: [string, "null"] }
+                provenance: { $ref: "#/components/schemas/WritingFeedbackProvenance" }
+      responses:
+        "200":
+          description: Persisted writing feedback finding
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WritingFeedbackFinding" }
+  /v1/semantic/attempts/{id}/writing-findings/local:
+    post:
+      operationId: generateLocalWritingFindings
+      description: Runs the bundled offline rule checker only after an explicit learner request and appends revision-bound heuristic findings.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [response_revision]
+              properties:
+                response_revision: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Persisted local findings, possibly empty
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WritingFeedbackFinding" }
   /v1/semantic/attempts/{id}/speaking-targets:
     post:
       operationId: confirmSpeakingTarget
@@ -1714,6 +1817,42 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/JudgmentAdjudication" }
+  /v1/semantic/writing-findings/{id}/dispositions:
+    get:
+      operationId: writingFindingDispositions
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Append-only learner decisions for one writing finding
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WritingFindingDisposition" }
+    post:
+      operationId: createWritingFindingDisposition
+      description: Records accept/reject; acceptance cites a new immutable attempt with a later learner revision and never applies provider text.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { $ref: "#/components/schemas/WritingFindingDecision" }
+                resulting_attempt_id: { type: [string, "null"] }
+                resulting_response_revision: { type: [integer, "null"], minimum: 1 }
+                note: { type: [string, "null"] }
+      responses:
+        "200":
+          description: Persisted writing finding disposition
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WritingFindingDisposition" }
   /v1/llm/providers:
     get:
       operationId: listLlmProviders
@@ -3868,7 +4007,7 @@ components:
         start_ms: { type: [integer, "null"], minimum: 0 }
         end_ms: { type: [integer, "null"], minimum: 0 }
     SemanticTaskKind:
-      enum: [reading_comprehension, l1_retelling, l2_retelling, role_reply, dictogloss, summary, pattern_production]
+      enum: [reading_comprehension, l1_retelling, l2_retelling, role_reply, dictogloss, one_sentence_summary, summary, opinion_response, pattern_production]
     RubricPointImportance:
       enum: [required, optional]
     RubricPoint:
@@ -4019,6 +4158,63 @@ components:
         point_id: { type: string }
         prior_verdict: { $ref: "#/components/schemas/PointVerdict" }
         user_verdict: { $ref: "#/components/schemas/PointVerdict" }
+        note: { type: [string, "null"] }
+        occurred_at_ms: { type: integer, minimum: 0 }
+    WritingFeedbackLayer:
+      enum: [task_completion, information_coverage, organization, cohesion, word_choice, grammar, spelling, punctuation]
+    WritingFindingSeverity:
+      enum: [notice, suggestion, important]
+    WritingFeedbackGenerator:
+      enum: [local_rule, llm, manual]
+    WritingFeedbackProvenance:
+      type: object
+      required: [generator, provider_id, provider_version, ruleset_version, evidence_class]
+      properties:
+        generator: { $ref: "#/components/schemas/WritingFeedbackGenerator" }
+        provider_id: { type: string }
+        provider_version: { type: string }
+        ruleset_version: { type: [string, "null"] }
+        evidence_class: { type: string }
+    WritingSourceSpan:
+      type: object
+      required: [start_char, end_char]
+      properties:
+        start_char: { type: integer, minimum: 0 }
+        end_char: { type: integer, minimum: 1 }
+    WritingFeedbackFinding:
+      type: object
+      required: [id, attempt_id, response_revision, response_transcript_sha256, layer, severity, source_span, message, suggested_replacement, provenance, created_at_ms]
+      properties:
+        id: { type: string }
+        attempt_id: { type: string }
+        response_revision: { type: integer, minimum: 1 }
+        response_transcript_sha256: { type: string }
+        layer: { $ref: "#/components/schemas/WritingFeedbackLayer" }
+        severity: { $ref: "#/components/schemas/WritingFindingSeverity" }
+        source_span: { $ref: "#/components/schemas/WritingSourceSpan" }
+        message: { type: string }
+        suggested_replacement: { type: [string, "null"] }
+        provenance: { $ref: "#/components/schemas/WritingFeedbackProvenance" }
+        created_at_ms: { type: integer, minimum: 0 }
+    WritingDraft:
+      type: object
+      required: [rubric_id, prompt_snapshot, transcript, updated_at_ms]
+      properties:
+        rubric_id: { type: string }
+        prompt_snapshot: { type: string }
+        transcript: { type: string }
+        updated_at_ms: { type: integer, minimum: 0 }
+    WritingFindingDecision:
+      enum: [accepted, rejected]
+    WritingFindingDisposition:
+      type: object
+      required: [id, finding_id, decision, resulting_attempt_id, resulting_response_revision, note, occurred_at_ms]
+      properties:
+        id: { type: string }
+        finding_id: { type: string }
+        decision: { $ref: "#/components/schemas/WritingFindingDecision" }
+        resulting_attempt_id: { type: [string, "null"] }
+        resulting_response_revision: { type: [integer, "null"], minimum: 1 }
         note: { type: [string, "null"] }
         occurred_at_ms: { type: integer, minimum: 0 }
     LlmAdapterKind:

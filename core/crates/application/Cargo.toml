@@ -9,6 +9,7 @@ domain = { path = "../domain" }
 diagnosis-core = { path = "../diagnosis-core" }
 subtitle-core = { path = "../subtitle-core" }
 speech-analysis = { path = "../speech-analysis" }
+writing-feedback = { path = "../writing-feedback" }
 async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true

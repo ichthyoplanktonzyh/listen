@@ -49,7 +49,9 @@ fn purpose_label(kind: SemanticTaskKind) -> &'static str {
         SemanticTaskKind::L2Retelling => "L2 (target-language) retelling",
         SemanticTaskKind::RoleReply => "role reply",
         SemanticTaskKind::Dictogloss => "dictogloss reconstruction",
+        SemanticTaskKind::OneSentenceSummary => "one-sentence summary",
         SemanticTaskKind::Summary => "summary",
+        SemanticTaskKind::OpinionResponse => "opinion response",
         SemanticTaskKind::PatternProduction => "sentence-pattern production",
     }
 }

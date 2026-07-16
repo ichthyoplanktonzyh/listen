@@ -72,6 +72,9 @@ mod semantic_task;
 pub use llm_provider::*;
 pub use semantic_task::*;
 
+mod writing_feedback;
+pub use writing_feedback::*;
+
 mod reading;
 pub use reading::*;
 
@@ -160,6 +163,8 @@ string_id!(SemanticRubricId);
 string_id!(SemanticTaskAttemptId);
 string_id!(SemanticJudgmentId);
 string_id!(JudgmentAdjudicationId);
+string_id!(WritingFeedbackFindingId);
+string_id!(WritingFindingDispositionId);
 string_id!(LlmProviderProfileId);
 string_id!(PronunciationAnalysisId);
 string_id!(PhoneticAnalysisModelId);

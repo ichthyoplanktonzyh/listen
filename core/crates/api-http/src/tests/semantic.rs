@@ -215,6 +215,212 @@ async fn semantic_gold_fixture_round_trips_over_http() {
 }
 
 #[tokio::test]
+async fn writing_findings_require_user_revision_and_append_disposition() {
+    let app = test_app();
+    let fixture = gold_fixture();
+    let mut rubric_body = rubric_request(&fixture);
+    rubric_body["purpose"] = serde_json::json!("opinion_response");
+    rubric_body["response_language"] = serde_json::json!("en");
+    let (status, rubric) = post_json(&app, "/v1/semantic/rubrics", rubric_body).await;
+    assert_eq!(status, StatusCode::OK, "{rubric}");
+    let rubric_id = rubric["id"].as_str().unwrap();
+
+    let draft_path = format!("/v1/semantic/writing-drafts/{rubric_id}");
+    assert_eq!(
+        request_status(
+            &app,
+            axum::http::Method::PUT,
+            &draft_path,
+            serde_json::json!({
+                "prompt_snapshot": "Respond to the proposal.",
+                "transcript": "unfinished"
+            }),
+        )
+        .await,
+        StatusCode::OK
+    );
+    let (status, draft) = get_json(&app, &draft_path).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(draft["transcript"], "unfinished");
+    assert_eq!(
+        request_status(
+            &app,
+            axum::http::Method::DELETE,
+            &draft_path,
+            serde_json::Value::Null,
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+
+    let (status, attempt) = post_json(
+        &app,
+        "/v1/semantic/attempts",
+        serde_json::json!({
+            "kind": "opinion_response",
+            "target": fixture.attempts[0].target,
+            "anchors": fixture.attempts[0].anchors,
+            "rubric_id": rubric_id,
+            "rubric_version": 1,
+            "conditions": {
+                "source_text_visible": true,
+                "audio_play_count": null,
+                "notes_allowed": true,
+                "l1_trigger": null,
+                "speaking_assistance": null,
+                "speaking_recall": null,
+                "prompt_snapshot": "Respond to the proposal."
+            },
+            "responses": [
+                {
+                    "revision": 1,
+                    "raw_transcript": null,
+                    "transcript": "This is an useful proposal.",
+                    "source": "typed",
+                    "recording_asset_id": null,
+                    "asr_reliability": null,
+                    "language": "en",
+                    "recorded_at_ms": 20
+                }
+            ],
+            "status": "completed",
+            "started_at_ms": 10,
+            "ended_at_ms": 40
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{attempt}");
+    let attempt_id = attempt["id"].as_str().unwrap();
+
+    let (status, local_findings) = post_json(
+        &app,
+        &format!("/v1/semantic/attempts/{attempt_id}/writing-findings/local"),
+        serde_json::json!({"response_revision": 1}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{local_findings}");
+    assert!(!local_findings.as_array().unwrap().is_empty());
+
+    let (status, finding) = post_json(
+        &app,
+        &format!("/v1/semantic/attempts/{attempt_id}/writing-findings"),
+        serde_json::json!({
+            "response_revision": 1,
+            "layer": "grammar",
+            "severity": "suggestion",
+            "source_span": {"start_char": 8, "end_char": 10},
+            "message": "Use ‘a’ before a consonant sound.",
+            "suggested_replacement": "a",
+            "provenance": {
+                "generator": "local_rule",
+                "provider_id": "harper",
+                "provider_version": "0.40.0",
+                "ruleset_version": "curated-american",
+                "evidence_class": "heuristic_proxy"
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{finding}");
+    assert_eq!(
+        finding["response_transcript_sha256"],
+        domain::transcript_sha256("This is an useful proposal.")
+    );
+    let finding_id = finding["id"].as_str().unwrap();
+
+    let (status, revised_attempt) = post_json(
+        &app,
+        "/v1/semantic/attempts",
+        serde_json::json!({
+            "kind": "opinion_response",
+            "target": fixture.attempts[0].target,
+            "anchors": fixture.attempts[0].anchors,
+            "rubric_id": rubric_id,
+            "rubric_version": 1,
+            "conditions": {
+                "source_text_visible": true,
+                "audio_play_count": null,
+                "notes_allowed": true,
+                "l1_trigger": null,
+                "speaking_assistance": null,
+                "speaking_recall": null,
+                "prompt_snapshot": "Respond to the proposal."
+            },
+            "responses": [
+                {
+                    "revision": 1,
+                    "raw_transcript": null,
+                    "transcript": "This is an useful proposal.",
+                    "source": "typed",
+                    "recording_asset_id": null,
+                    "asr_reliability": null,
+                    "language": "en",
+                    "recorded_at_ms": 50
+                },
+                {
+                    "revision": 2,
+                    "raw_transcript": null,
+                    "transcript": "This is a useful proposal.",
+                    "source": "typed",
+                    "recording_asset_id": null,
+                    "asr_reliability": null,
+                    "language": "en",
+                    "recorded_at_ms": 60
+                }
+            ],
+            "status": "completed",
+            "started_at_ms": 50,
+            "ended_at_ms": 70
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{revised_attempt}");
+    let revised_attempt_id = revised_attempt["id"].as_str().unwrap();
+
+    let (status, disposition) = post_json(
+        &app,
+        &format!("/v1/semantic/writing-findings/{finding_id}/dispositions"),
+        serde_json::json!({
+            "decision": "accepted",
+            "resulting_attempt_id": revised_attempt_id,
+            "resulting_response_revision": 2,
+            "note": null
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{disposition}");
+    assert_eq!(disposition["resulting_response_revision"], 2);
+
+    let (status, findings) = get_json(
+        &app,
+        &format!("/v1/semantic/attempts/{attempt_id}/writing-findings"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!findings.as_array().unwrap().is_empty());
+
+    let (status, dispositions) = get_json(
+        &app,
+        &format!("/v1/semantic/writing-findings/{finding_id}/dispositions"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(dispositions.as_array().unwrap().len(), 1);
+
+    let (status, invalid) = post_json(
+        &app,
+        &format!("/v1/semantic/writing-findings/{finding_id}/dispositions"),
+        serde_json::json!({
+            "decision": "accepted",
+            "resulting_attempt_id": null,
+            "resulting_response_revision": null
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{invalid}");
+}
+
+#[tokio::test]
 async fn semantic_routes_reject_matrix_violations_and_tampered_hashes() {
     let app = test_app();
     let fixture = gold_fixture();

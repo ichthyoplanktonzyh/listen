@@ -12,8 +12,11 @@ use domain::{
     RubricRevisionNote, RubricSource, SemanticAttemptStatus, SemanticGeneratorProvenance,
     SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
     SemanticTaskAttemptId, SemanticTaskConditions, SemanticTaskKind, SpeakingAssistanceLevel,
-    SubtitleSentenceId, judgment_adjudication_id, semantic_judgment_id, semantic_rubric_id,
-    semantic_task_attempt_id,
+    SubtitleSentenceId, WritingDraft, WritingFeedbackFinding, WritingFeedbackFindingId,
+    WritingFeedbackLayer, WritingFeedbackProvenance, WritingFindingDecision,
+    WritingFindingDisposition, WritingFindingSeverity, WritingSourceSpan, judgment_adjudication_id,
+    semantic_judgment_id, semantic_rubric_id, semantic_task_attempt_id,
+    writing_feedback_finding_id, writing_finding_disposition_id,
 };
 
 #[derive(Debug, Deserialize)]
@@ -190,6 +193,212 @@ pub(crate) async fn semantic_attempt(
         .map_err(ApiError::from)?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("semantic attempt"))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CreateWritingFindingRequest {
+    pub response_revision: u32,
+    pub layer: WritingFeedbackLayer,
+    pub severity: WritingFindingSeverity,
+    #[serde(default)]
+    pub source_span: Option<WritingSourceSpan>,
+    pub message: String,
+    #[serde(default)]
+    pub suggested_replacement: Option<String>,
+    pub provenance: WritingFeedbackProvenance,
+}
+
+pub(crate) async fn create_writing_finding(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(request): Json<CreateWritingFindingRequest>,
+) -> Result<Json<WritingFeedbackFinding>, ApiError> {
+    let attempt_id = SemanticTaskAttemptId::parse(id).map_err(ApplicationError::from)?;
+    let attempt = state
+        .services
+        .semantic()
+        .semantic_attempt(&attempt_id)?
+        .ok_or_else(|| ApiError::not_found("semantic attempt"))?;
+    let response = attempt
+        .responses
+        .iter()
+        .find(|response| response.revision == request.response_revision)
+        .ok_or(ApplicationError::NotFound("writing response revision"))?;
+    let created_at_ms = application::now_ms();
+    let finding = WritingFeedbackFinding {
+        id: writing_feedback_finding_id(
+            &attempt_id,
+            request.response_revision,
+            &response.transcript,
+            request.layer,
+            request.source_span,
+            &request.message,
+            &request.provenance,
+        ),
+        attempt_id,
+        response_revision: request.response_revision,
+        response_transcript_sha256: domain::transcript_sha256(&response.transcript),
+        layer: request.layer,
+        severity: request.severity,
+        source_span: request.source_span,
+        message: request.message,
+        suggested_replacement: request.suggested_replacement,
+        provenance: request.provenance,
+        created_at_ms,
+    };
+    state
+        .services
+        .semantic()
+        .record_writing_feedback_finding(finding)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn writing_findings(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<WritingFeedbackFinding>>, ApiError> {
+    let attempt_id = SemanticTaskAttemptId::parse(id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .semantic()
+        .writing_feedback_findings(&attempt_id)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct GenerateLocalWritingFindingsRequest {
+    pub response_revision: u32,
+}
+
+pub(crate) async fn generate_local_writing_findings(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(request): Json<GenerateLocalWritingFindingsRequest>,
+) -> Result<Json<Vec<WritingFeedbackFinding>>, ApiError> {
+    let attempt_id = SemanticTaskAttemptId::parse(id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .semantic()
+        .generate_local_writing_findings(
+            &attempt_id,
+            request.response_revision,
+            application::now_ms(),
+        )
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CreateWritingDispositionRequest {
+    pub decision: WritingFindingDecision,
+    #[serde(default)]
+    pub resulting_attempt_id: Option<String>,
+    #[serde(default)]
+    pub resulting_response_revision: Option<u32>,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+pub(crate) async fn create_writing_disposition(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(request): Json<CreateWritingDispositionRequest>,
+) -> Result<Json<WritingFindingDisposition>, ApiError> {
+    let finding_id = WritingFeedbackFindingId::parse(id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .semantic()
+        .writing_feedback_finding(&finding_id)?
+        .ok_or_else(|| ApiError::not_found("writing feedback finding"))?;
+    let resulting_attempt_id = request
+        .resulting_attempt_id
+        .map(SemanticTaskAttemptId::parse)
+        .transpose()
+        .map_err(ApplicationError::from)?;
+    let occurred_at_ms = application::now_ms();
+    let disposition = WritingFindingDisposition {
+        id: writing_finding_disposition_id(
+            &finding_id,
+            request.decision,
+            resulting_attempt_id.as_ref(),
+            request.resulting_response_revision,
+            occurred_at_ms,
+        ),
+        finding_id,
+        decision: request.decision,
+        resulting_attempt_id,
+        resulting_response_revision: request.resulting_response_revision,
+        note: request.note,
+        occurred_at_ms,
+    };
+    state
+        .services
+        .semantic()
+        .record_writing_finding_disposition(disposition)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn writing_dispositions(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<WritingFindingDisposition>>, ApiError> {
+    let finding_id = WritingFeedbackFindingId::parse(id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .semantic()
+        .writing_finding_dispositions(&finding_id)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct SaveWritingDraftRequest {
+    prompt_snapshot: String,
+    transcript: String,
+}
+
+pub(crate) async fn writing_draft(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> Result<Json<Option<WritingDraft>>, ApiError> {
+    let rubric_id = SemanticRubricId::parse(id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .semantic()
+        .writing_draft(&rubric_id)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn save_writing_draft(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(request): Json<SaveWritingDraftRequest>,
+) -> Result<Json<WritingDraft>, ApiError> {
+    let rubric_id = SemanticRubricId::parse(id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .semantic()
+        .save_writing_draft(WritingDraft {
+            rubric_id,
+            prompt_snapshot: request.prompt_snapshot,
+            transcript: request.transcript,
+            updated_at_ms: application::now_ms(),
+        })
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn delete_writing_draft(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let rubric_id = SemanticRubricId::parse(id).map_err(ApplicationError::from)?;
+    state.services.semantic().delete_writing_draft(&rubric_id)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(Debug, Deserialize)]

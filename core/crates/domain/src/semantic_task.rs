@@ -26,7 +26,9 @@ pub enum SemanticTaskKind {
     L2Retelling,
     RoleReply,
     Dictogloss,
+    OneSentenceSummary,
     Summary,
+    OpinionResponse,
     PatternProduction,
 }
 
@@ -171,8 +173,10 @@ pub struct SemanticTaskConditions {
     pub prompt_snapshot: Option<String>,
 }
 
-/// One versioned learner response inside an attempt. Multiple revisions exist
-/// only for dictogloss (draft 1 / draft 2 against the same rubric).
+/// One versioned learner response inside an attempt. Writing tasks may carry
+/// multiple learner-authored revisions against the same rubric. Provider
+/// suggestions are deliberately a separate finding fact and can never enter
+/// this collection as if the learner wrote them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AttemptResponse {
     /// 1-based, contiguous.
@@ -518,8 +522,14 @@ pub fn validate_semantic_attempt(
         }
         _ => {}
     }
-    if attempt.responses.len() > 1 && attempt.kind != SemanticTaskKind::Dictogloss {
-        errors.push("multiple response revisions are only defined for dictogloss".into());
+    let writing_kinds = [
+        SemanticTaskKind::Dictogloss,
+        SemanticTaskKind::OneSentenceSummary,
+        SemanticTaskKind::Summary,
+        SemanticTaskKind::OpinionResponse,
+    ];
+    if attempt.responses.len() > 1 && !writing_kinds.contains(&attempt.kind) {
+        errors.push("multiple response revisions are only defined for writing tasks".into());
     }
     if attempt.status == SemanticAttemptStatus::Completed && attempt.responses.is_empty() {
         errors.push("a completed attempt must carry at least one response".into());
@@ -530,6 +540,12 @@ pub fn validate_semantic_attempt(
         }
         if response.language != rubric.response_language {
             errors.push("response language must match the rubric response language".into());
+        }
+        if writing_kinds.contains(&attempt.kind)
+            && attempt.status == SemanticAttemptStatus::Completed
+            && response.transcript.trim().is_empty()
+        {
+            errors.push("a completed writing revision must not be empty".into());
         }
         match response.source {
             ResponseTranscriptSource::Asr => {
@@ -559,6 +575,32 @@ pub fn validate_semantic_attempt(
         {
             errors.push("constructed speaking responses require an ASR-linked recording".into());
         }
+        if writing_kinds.contains(&attempt.kind)
+            && response.source != ResponseTranscriptSource::Typed
+        {
+            errors.push("writing revisions must be learner-typed text".into());
+        }
+    }
+    if attempt.kind == SemanticTaskKind::Dictogloss
+        && attempt
+            .conditions
+            .audio_play_count
+            .is_none_or(|count| count == 0)
+    {
+        errors.push("dictogloss must record at least one source playback".into());
+    }
+    if matches!(
+        attempt.kind,
+        SemanticTaskKind::OneSentenceSummary
+            | SemanticTaskKind::Summary
+            | SemanticTaskKind::OpinionResponse
+    ) && attempt
+        .conditions
+        .prompt_snapshot
+        .as_deref()
+        .is_none_or(|prompt| prompt.trim().is_empty())
+    {
+        errors.push("summary and opinion response must preserve the writing prompt".into());
     }
     if let Some(ended) = attempt.ended_at_ms
         && ended < attempt.started_at_ms
@@ -1026,6 +1068,78 @@ mod tests {
     }
 
     #[test]
+    fn writing_revisions_are_typed_traceable_and_share_one_rubric() {
+        let fixture = fixture();
+        let mut rubric = fixture.rubric.clone();
+        rubric.purpose = SemanticTaskKind::OpinionResponse;
+        rubric.response_language = LanguageCode::parse("en").unwrap();
+
+        let first = AttemptResponse {
+            revision: 1,
+            raw_transcript: None,
+            transcript: "The speaker's proposal is useful, but it needs a smaller trial.".into(),
+            source: ResponseTranscriptSource::Typed,
+            recording_asset_id: None,
+            asr_reliability: None,
+            language: rubric.response_language.clone(),
+            recorded_at_ms: 20,
+        };
+        let mut second = first.clone();
+        second.revision = 2;
+        second.transcript =
+            "The proposal could help, but a smaller trial would reveal its hidden costs.".into();
+        second.recorded_at_ms = 30;
+        let mut attempt = SemanticTaskAttempt {
+            id: SemanticTaskAttemptId::parse("writing-opinion").unwrap(),
+            kind: SemanticTaskKind::OpinionResponse,
+            target: fixture.attempts[0].target.clone(),
+            anchors: fixture.attempts[0].anchors.clone(),
+            rubric_id: rubric.id.clone(),
+            rubric_version: rubric.version,
+            conditions: SemanticTaskConditions {
+                source_text_visible: true,
+                audio_play_count: None,
+                notes_allowed: true,
+                l1_trigger: None,
+                speaking_assistance: None,
+                speaking_recall: None,
+                prompt_snapshot: Some("Respond to the speaker's proposal.".into()),
+            },
+            responses: vec![first, second],
+            status: SemanticAttemptStatus::Completed,
+            started_at_ms: 10,
+            ended_at_ms: Some(40),
+        };
+        validate_semantic_attempt(&attempt, &rubric).unwrap();
+
+        attempt.responses[1].source = ResponseTranscriptSource::Asr;
+        attempt.responses[1].raw_transcript = Some("model supplied rewrite".into());
+        attempt.responses[1].asr_reliability = Some(AsrReliability::Reliable);
+        assert!(validate_semantic_attempt(&attempt, &rubric).is_err());
+    }
+
+    #[test]
+    fn dictogloss_requires_hidden_source_and_playback_snapshot() {
+        let fixture = fixture();
+        let mut rubric = fixture.rubric.clone();
+        rubric.purpose = SemanticTaskKind::Dictogloss;
+        rubric.response_language = LanguageCode::parse("en").unwrap();
+        let mut attempt = fixture.attempts[0].clone();
+        attempt.kind = SemanticTaskKind::Dictogloss;
+        attempt.rubric_id = rubric.id.clone();
+        attempt.conditions.l1_trigger = None;
+        attempt.conditions.audio_play_count = Some(1);
+        attempt.responses[0].language = rubric.response_language.clone();
+        validate_semantic_attempt(&attempt, &rubric).unwrap();
+
+        attempt.conditions.audio_play_count = Some(0);
+        assert!(validate_semantic_attempt(&attempt, &rubric).is_err());
+        attempt.conditions.audio_play_count = Some(1);
+        attempt.conditions.source_text_visible = true;
+        assert!(validate_semantic_attempt(&attempt, &rubric).is_err());
+    }
+
+    #[test]
     fn adjudication_target_must_exist_and_match() {
         let fixture = fixture();
         let adjudication = fixture.adjudications[0].clone();
@@ -1062,6 +1176,10 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&SemanticTaskKind::PatternProduction).unwrap(),
             "\"pattern_production\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SemanticTaskKind::OpinionResponse).unwrap(),
+            "\"opinion_response\""
         );
         assert_eq!(
             serde_json::to_string(&PointVerdict::Uncertain).unwrap(),

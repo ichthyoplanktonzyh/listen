@@ -25,6 +25,8 @@ do not contain database row numbers or player-library identifiers.
 | Learning event | `sha256("learning-event:" + kind/subject/timestamp)` |
 | Listening Inbox item | `sha256("listening-inbox-item:" + session/target/timestamp)` |
 | Recording asset | `sha256("recording-asset:" + audio SHA-256/target/source start/timestamp)` |
+| Writing feedback finding | Attempt + learner revision/hash + project category/span/message + provider/version |
+| Writing finding disposition | Finding + accept/reject + resulting immutable attempt/revision + timestamp |
 
 Media path is mutable metadata, not identity. Registering the same media
 fingerprint updates path/title metadata while retaining the media ID.
@@ -99,6 +101,9 @@ assets:
 | `learning_events` | Append-mostly analytics facts for practice/review/listening/status/stuck-point events |
 | `listening_inbox_items` | Queryable projection for extensive-listening soft interrupts, snapshots, expiry, and整理 outcomes |
 | `recording_assets` | Local recording path plus transcription-ready audio metadata and durable target/source snapshots |
+| `writing_feedback_findings` | Append-only provider/manual suggestions bound to one exact typed learner revision |
+| `writing_finding_dispositions` | Append-only learner accept/reject facts; acceptance cites a later typed revision |
+| `writing_drafts` | Mutable non-evidence scratch projection keyed by rubric; deleted after immutable submission |
 
 `PracticeAttempt` owns what the user tried and how it was evaluated. It may create
 `LexicalObservation` evidence, but it must not silently change global
@@ -384,6 +389,10 @@ expansion is ephemeral overlay state, not a fourth persisted Rhythm mode.
 - Schema v33 adds `recording_assets`; mutable file paths are metadata, while byte
   length and SHA-256 support later integrity checks and the language/format/sample
   fields are the explicit Phase 3.14 recording-transcription seam.
+- Schema v38 adds Writing finding/disposition facts with UPDATE/DELETE triggers.
+  A suggestion is never a learner response; only a later typed `AttemptResponse`
+  in a new immutable attempt can be cited as the result of acceptance. The same
+  migration adds mutable `writing_drafts`, isolated from every evidence writer.
 - Review scheduling v1 is recorded as `listen_review_v1_heuristic_proxy`: `again` returns in
   10 minutes, `hard` in one day, and successful intervals grow from 3 to 7 days before doubling.
   The durable attempts remain the evidence history; the schedule row is a replaceable read model.

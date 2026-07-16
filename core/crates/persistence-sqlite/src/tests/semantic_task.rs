@@ -1,6 +1,12 @@
 use std::sync::Arc;
 
 use super::*;
+use domain::{
+    AttemptResponse, ResponseTranscriptSource, SemanticAttemptStatus, SemanticTaskConditions,
+    WritingFeedbackGenerator, WritingFeedbackLayer, WritingFeedbackProvenance,
+    WritingFindingDecision, WritingFindingSeverity, WritingSourceSpan, transcript_sha256,
+    writing_feedback_finding_id, writing_finding_disposition_id,
+};
 
 fn semantic_services(repo: &Arc<SqliteRepository>) -> AppServices {
     AppServices::new(
@@ -56,6 +62,186 @@ fn count(repo: &SqliteRepository, table: &str) -> i64 {
             row.get(0)
         })
         .unwrap()
+}
+
+#[test]
+fn writing_findings_and_dispositions_are_append_only_and_user_revision_bound() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = semantic_services(&repo);
+    let fixture = gold_fixture();
+    let mut rubric = fixture.rubric.clone();
+    rubric.purpose = SemanticTaskKind::OpinionResponse;
+    rubric.response_language = LanguageCode::parse("en").unwrap();
+    services
+        .semantic()
+        .save_semantic_rubric(rubric.clone())
+        .unwrap();
+    let draft = WritingDraft {
+        rubric_id: rubric.id.clone(),
+        prompt_snapshot: "Respond to the proposal.".into(),
+        transcript: "unfinished".into(),
+        updated_at_ms: 5,
+    };
+    services
+        .semantic()
+        .save_writing_draft(draft.clone())
+        .unwrap();
+    assert_eq!(
+        services.semantic().writing_draft(&rubric.id).unwrap(),
+        Some(draft)
+    );
+    services
+        .semantic()
+        .delete_writing_draft(&rubric.id)
+        .unwrap();
+    assert_eq!(services.semantic().writing_draft(&rubric.id).unwrap(), None);
+
+    let first_text = "This is an useful proposal.";
+    let second_text = "This is a useful proposal.";
+    let attempt = SemanticTaskAttempt {
+        id: SemanticTaskAttemptId::parse("writing-attempt-persistence").unwrap(),
+        kind: SemanticTaskKind::OpinionResponse,
+        target: fixture.attempts[0].target.clone(),
+        anchors: fixture.attempts[0].anchors.clone(),
+        rubric_id: rubric.id.clone(),
+        rubric_version: rubric.version,
+        conditions: SemanticTaskConditions {
+            source_text_visible: true,
+            audio_play_count: None,
+            notes_allowed: true,
+            l1_trigger: None,
+            speaking_assistance: None,
+            speaking_recall: None,
+            prompt_snapshot: Some("Respond to the proposal.".into()),
+        },
+        responses: vec![AttemptResponse {
+            revision: 1,
+            raw_transcript: None,
+            transcript: first_text.into(),
+            source: ResponseTranscriptSource::Typed,
+            recording_asset_id: None,
+            asr_reliability: None,
+            language: rubric.response_language.clone(),
+            recorded_at_ms: 20,
+        }],
+        status: SemanticAttemptStatus::Completed,
+        started_at_ms: 10,
+        ended_at_ms: Some(25),
+    };
+    services
+        .semantic()
+        .record_semantic_attempt(attempt.clone())
+        .unwrap();
+    let mut revised_attempt = attempt.clone();
+    revised_attempt.id = SemanticTaskAttemptId::parse("writing-attempt-revised").unwrap();
+    revised_attempt.responses.push(AttemptResponse {
+        revision: 2,
+        raw_transcript: None,
+        transcript: second_text.into(),
+        source: ResponseTranscriptSource::Typed,
+        recording_asset_id: None,
+        asr_reliability: None,
+        language: rubric.response_language.clone(),
+        recorded_at_ms: 30,
+    });
+    revised_attempt.started_at_ms = 26;
+    revised_attempt.ended_at_ms = Some(40);
+    services
+        .semantic()
+        .record_semantic_attempt(revised_attempt.clone())
+        .unwrap();
+
+    let provenance = WritingFeedbackProvenance {
+        generator: WritingFeedbackGenerator::LocalRule,
+        provider_id: "harper".into(),
+        provider_version: "0.40.0".into(),
+        ruleset_version: Some("curated-american".into()),
+        evidence_class: "heuristic_proxy".into(),
+    };
+    let span = Some(WritingSourceSpan {
+        start_char: 8,
+        end_char: 10,
+    });
+    let finding = WritingFeedbackFinding {
+        id: writing_feedback_finding_id(
+            &attempt.id,
+            1,
+            first_text,
+            WritingFeedbackLayer::Grammar,
+            span,
+            "Use ‘a’ before a consonant sound.",
+            &provenance,
+        ),
+        attempt_id: attempt.id.clone(),
+        response_revision: 1,
+        response_transcript_sha256: transcript_sha256(first_text),
+        layer: WritingFeedbackLayer::Grammar,
+        severity: WritingFindingSeverity::Suggestion,
+        source_span: span,
+        message: "Use ‘a’ before a consonant sound.".into(),
+        suggested_replacement: Some("a".into()),
+        provenance,
+        created_at_ms: 50,
+    };
+    services
+        .semantic()
+        .record_writing_feedback_finding(finding.clone())
+        .unwrap();
+
+    let disposition = WritingFindingDisposition {
+        id: writing_finding_disposition_id(
+            &finding.id,
+            WritingFindingDecision::Accepted,
+            Some(&revised_attempt.id),
+            Some(2),
+            60,
+        ),
+        finding_id: finding.id.clone(),
+        decision: WritingFindingDecision::Accepted,
+        resulting_attempt_id: Some(revised_attempt.id.clone()),
+        resulting_response_revision: Some(2),
+        note: None,
+        occurred_at_ms: 60,
+    };
+    services
+        .semantic()
+        .record_writing_finding_disposition(disposition.clone())
+        .unwrap();
+
+    assert_eq!(
+        services
+            .semantic()
+            .writing_feedback_findings(&attempt.id)
+            .unwrap(),
+        vec![finding.clone()]
+    );
+    assert_eq!(
+        services
+            .semantic()
+            .writing_finding_dispositions(&finding.id)
+            .unwrap(),
+        vec![disposition]
+    );
+    assert_eq!(count(&repo, "writing_feedback_findings"), 1);
+    assert_eq!(count(&repo, "writing_finding_dispositions"), 1);
+
+    let connection = repo.connection.lock().unwrap();
+    assert!(
+        connection
+            .execute(
+                "UPDATE writing_feedback_findings SET provider_id='mutated' WHERE id=?1",
+                [finding.id.as_str()],
+            )
+            .is_err()
+    );
+    assert!(
+        connection
+            .execute(
+                "DELETE FROM writing_feedback_findings WHERE id=?1",
+                [finding.id.as_str()],
+            )
+            .is_err()
+    );
 }
 
 #[test]

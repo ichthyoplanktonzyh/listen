@@ -83,9 +83,11 @@ use routes::pronunciation::{
 use routes::reading::{reading_position, record_reading_marking, save_reading_position};
 use routes::semantic::{
     confirm_speaking_target, create_judgment_adjudication, create_semantic_attempt,
-    create_semantic_judgment, create_semantic_rubric, lookup_semantic_rubric, semantic_attempt,
-    semantic_attempt_judgments, semantic_judgment_adjudications, semantic_rubric,
-    semantic_rubric_attempts,
+    create_semantic_judgment, create_semantic_rubric, create_writing_disposition,
+    create_writing_finding, delete_writing_draft, generate_local_writing_findings,
+    lookup_semantic_rubric, save_writing_draft, semantic_attempt, semantic_attempt_judgments,
+    semantic_judgment_adjudications, semantic_rubric, semantic_rubric_attempts,
+    writing_dispositions, writing_draft, writing_findings,
 };
 use routes::sound_line::{
     cancel_sound_line_job, create_sound_line_job, retry_sound_line_job, sound_line_job,
@@ -658,7 +660,21 @@ pub fn router(state: ApiState) -> Router {
             get(semantic_rubric_attempts),
         )
         .route("/v1/semantic/attempts", post(create_semantic_attempt))
+        .route(
+            "/v1/semantic/writing-drafts/{id}",
+            get(writing_draft)
+                .put(save_writing_draft)
+                .delete(delete_writing_draft),
+        )
         .route("/v1/semantic/attempts/{id}", get(semantic_attempt))
+        .route(
+            "/v1/semantic/attempts/{id}/writing-findings",
+            get(writing_findings).post(create_writing_finding),
+        )
+        .route(
+            "/v1/semantic/attempts/{id}/writing-findings/local",
+            post(generate_local_writing_findings),
+        )
         .route(
             "/v1/semantic/attempts/{id}/speaking-targets",
             post(confirm_speaking_target),
@@ -675,6 +691,10 @@ pub fn router(state: ApiState) -> Router {
         .route(
             "/v1/semantic/adjudications",
             post(create_judgment_adjudication),
+        )
+        .route(
+            "/v1/semantic/writing-findings/{id}/dispositions",
+            get(writing_dispositions).post(create_writing_disposition),
         )
         .route(
             "/v1/llm/providers",

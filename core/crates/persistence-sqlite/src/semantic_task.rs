@@ -2,7 +2,8 @@ use application::{ApplicationError, SemanticTaskRepository};
 use domain::{
     JudgmentAdjudication, LanguageCode, MediaId, SemanticJudgment, SemanticJudgmentId,
     SemanticRubric, SemanticRubricId, SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind,
-    transcript_sha256,
+    WritingDraft, WritingFeedbackFinding, WritingFeedbackFindingId, WritingFindingDisposition,
+    WritingFindingDispositionId, transcript_sha256,
 };
 use rusqlite::{OptionalExtension, Row, params};
 
@@ -17,6 +18,14 @@ fn attempt_from_row(row: &Row<'_>) -> rusqlite::Result<SemanticTaskAttempt> {
 }
 
 fn judgment_from_row(row: &Row<'_>) -> rusqlite::Result<SemanticJudgment> {
+    from_json(&row.get::<_, String>(0)?)
+}
+
+fn writing_finding_from_row(row: &Row<'_>) -> rusqlite::Result<WritingFeedbackFinding> {
+    from_json(&row.get::<_, String>(0)?)
+}
+
+fn writing_disposition_from_row(row: &Row<'_>) -> rusqlite::Result<WritingFindingDisposition> {
     from_json(&row.get::<_, String>(0)?)
 }
 
@@ -282,5 +291,165 @@ impl SemanticTaskRepository for SqliteRepository {
             .collect::<Result<Vec<_>, _>>()
             .map_err(repo)?;
         Ok(adjudications)
+    }
+
+    fn save_writing_feedback_finding(
+        &self,
+        finding: &WritingFeedbackFinding,
+    ) -> Result<WritingFeedbackFinding, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "INSERT INTO writing_feedback_findings
+                 (id,attempt_id,response_revision,layer,provider_id,created_at_ms,finding_json)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7)",
+                params![
+                    finding.id.as_str(),
+                    finding.attempt_id.as_str(),
+                    finding.response_revision,
+                    json(&finding.layer)?,
+                    finding.provenance.provider_id,
+                    finding.created_at_ms,
+                    json(finding)?,
+                ],
+            )
+            .map_err(repo)?;
+        Ok(finding.clone())
+    }
+
+    fn get_writing_feedback_finding(
+        &self,
+        id: &WritingFeedbackFindingId,
+    ) -> Result<Option<WritingFeedbackFinding>, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .query_row(
+                "SELECT finding_json FROM writing_feedback_findings WHERE id=?1",
+                [id.as_str()],
+                writing_finding_from_row,
+            )
+            .optional()
+            .map_err(repo)
+    }
+
+    fn list_writing_feedback_findings(
+        &self,
+        attempt_id: &SemanticTaskAttemptId,
+    ) -> Result<Vec<WritingFeedbackFinding>, ApplicationError> {
+        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = connection
+            .prepare(
+                "SELECT finding_json FROM writing_feedback_findings
+                 WHERE attempt_id=?1 ORDER BY response_revision, created_at_ms, id",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map([attempt_id.as_str()], writing_finding_from_row)
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
+    fn save_writing_finding_disposition(
+        &self,
+        disposition: &WritingFindingDisposition,
+    ) -> Result<WritingFindingDisposition, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "INSERT INTO writing_finding_dispositions
+                 (id,finding_id,decision,occurred_at_ms,disposition_json)
+                 VALUES (?1,?2,?3,?4,?5)",
+                params![
+                    disposition.id.as_str(),
+                    disposition.finding_id.as_str(),
+                    json(&disposition.decision)?,
+                    disposition.occurred_at_ms,
+                    json(disposition)?,
+                ],
+            )
+            .map_err(repo)?;
+        Ok(disposition.clone())
+    }
+
+    fn get_writing_finding_disposition(
+        &self,
+        id: &WritingFindingDispositionId,
+    ) -> Result<Option<WritingFindingDisposition>, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .query_row(
+                "SELECT disposition_json FROM writing_finding_dispositions WHERE id=?1",
+                [id.as_str()],
+                writing_disposition_from_row,
+            )
+            .optional()
+            .map_err(repo)
+    }
+
+    fn list_writing_finding_dispositions(
+        &self,
+        finding_id: &WritingFeedbackFindingId,
+    ) -> Result<Vec<WritingFindingDisposition>, ApplicationError> {
+        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = connection
+            .prepare(
+                "SELECT disposition_json FROM writing_finding_dispositions
+                 WHERE finding_id=?1 ORDER BY occurred_at_ms, id",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map([finding_id.as_str()], writing_disposition_from_row)
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
+    fn upsert_writing_draft(&self, draft: &WritingDraft) -> Result<WritingDraft, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "INSERT INTO writing_drafts (rubric_id,updated_at_ms,draft_json)
+                 VALUES (?1,?2,?3)
+                 ON CONFLICT(rubric_id) DO UPDATE SET
+                   updated_at_ms=excluded.updated_at_ms,
+                   draft_json=excluded.draft_json",
+                params![draft.rubric_id.as_str(), draft.updated_at_ms, json(draft)?],
+            )
+            .map_err(repo)?;
+        Ok(draft.clone())
+    }
+
+    fn get_writing_draft(
+        &self,
+        rubric_id: &SemanticRubricId,
+    ) -> Result<Option<WritingDraft>, ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .query_row(
+                "SELECT draft_json FROM writing_drafts WHERE rubric_id=?1",
+                [rubric_id.as_str()],
+                |row| from_json(&row.get::<_, String>(0)?),
+            )
+            .optional()
+            .map_err(repo)
+    }
+
+    fn delete_writing_draft(&self, rubric_id: &SemanticRubricId) -> Result<(), ApplicationError> {
+        self.connection
+            .lock()
+            .expect("sqlite mutex poisoned")
+            .execute(
+                "DELETE FROM writing_drafts WHERE rubric_id=?1",
+                [rubric_id.as_str()],
+            )
+            .map_err(repo)?;
+        Ok(())
     }
 }

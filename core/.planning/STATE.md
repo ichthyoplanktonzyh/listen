@@ -3,17 +3,24 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-15T23:40:00.000+08:00"
+last_updated: "2026-07-16T08:39:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-15 23:40 CST
-> 更新原因：Phase 3.14 Slice 0–5 code complete，owner 统一体验清单已建立。
+> 最后更新：2026-07-16 08:39 CST
+> 更新原因：Phase 3.15 code complete，进入 owner 手工 QA。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.14 Speaking Studio v1 **CODE COMPLETE**。Slice 0–5 已落地：
+- **当前执行主线**：Phase 3.15 Writing Studio v1 **CODE COMPLETE — OWNER QA PENDING**。
+  Writing 已作为当前内容通道落地一句话/50–100 词摘要、观点回应和 dictogloss；自有 editor 状态机、
+  v38 durable scratch、immutable attempts/revisions、固定 rubric manual self-assessment、请求后 Harper
+  表面 finding、accept/reject disposition、历史复写参照和 diff 已贯通。接受建议只能引用保留原文
+  hash 的新 immutable attempt，provider 永不静默改写。无 qualified judge 路径完整可用；v1 零
+  writing observation/projection writer。只剩 owner 按 `3.15-MANUAL-QA.md` 验证真实内容、重启恢复、
+  窄窗口与音频焦点；3.14 延期 QA 未重开。
+- Phase 3.14 Speaking Studio v1 **CODE COMPLETE**。Slice 0–5 已落地：
   独立 RecordingAsset 短录音 whisper.cpp job（格式/hash、语言、取消、latency/provenance）、
   L2 Retelling + 三档 Role Reply、raw/corrected transcript、固定 rubric、请求后自评、append-only
   adjudication、立即重说一次、延迟复述资产入口、L1 listening fallback、单录音时长/停顿/waveform
@@ -423,11 +430,8 @@ last_updated: "2026-07-15T23:40:00.000+08:00"
 
 ## 下一步工作
 
-1. **当前执行 phase：3.14 Speaking Studio v1 Slice 1**：Slice 0 结论见
-   `3.14-SLICE-0-ASR-SPIKE.md`；实现 Retelling/RoleReply task/source snapshot、固定 rubric、
-   durable raw/corrected transcript 与 append-only attempt。Harper spike 可提前排，结论影响
-   3.15 provider 形态；LLM 反馈接线（3.13 PLAN Slice 7）随 owner 3.12.1 资格裁决点亮或
-   记录性跳过；3.12 增量协议 Slice 4 与 owner 真实 provider QA 仍按需排期。
+1. **Phase 3.15 owner 手工 QA**：按 `3.15-MANUAL-QA.md` 统一体验真实摘要/观点回应/dictogloss、
+   进程重启草稿恢复、窄窗口与单一音频焦点；在此之前不宣称 owner accepted。实现和自动化已完成。
 2. "收藏句 → 个人模板"的用户价值验证收敛到 Phase 3.16（3.4.3 结论待兑现）。
 3. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。

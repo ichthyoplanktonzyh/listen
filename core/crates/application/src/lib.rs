@@ -40,12 +40,13 @@ use domain::{
     TimeMs, TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource, UpgradeSuggestion,
     UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation,
     WordTimeline, WordTimelineId, WordTimelineLifecycleStage, WordTimelineSummary, WordTiming,
-    apply_sound_fit_calibration, content_fit_fingerprint, learning_observation_id,
-    listening_projection_v1, meaning_fit, normalize_lemma, observation_spec_for_marking,
-    observation_spec_for_practice, observation_spec_for_reading_marking,
-    observation_spec_for_review, observation_spec_for_speaking_production,
-    observation_spec_for_upgrade_confirmation, sound_fit, sound_fit_calibration_outcome,
-    validate_syntactic_analysis,
+    WritingDraft, WritingFeedbackFinding, WritingFeedbackFindingId, WritingFindingDisposition,
+    WritingFindingDispositionId, apply_sound_fit_calibration, content_fit_fingerprint,
+    learning_observation_id, listening_projection_v1, meaning_fit, normalize_lemma,
+    observation_spec_for_marking, observation_spec_for_practice,
+    observation_spec_for_reading_marking, observation_spec_for_review,
+    observation_spec_for_speaking_production, observation_spec_for_upgrade_confirmation, sound_fit,
+    sound_fit_calibration_outcome, validate_syntactic_analysis,
 };
 use serde::Serialize;
 
@@ -509,6 +510,66 @@ impl SemanticTaskRepository for DisabledSemanticTaskRepository {
         &self,
         _judgment_id: &SemanticJudgmentId,
     ) -> Result<Vec<JudgmentAdjudication>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn save_writing_feedback_finding(
+        &self,
+        _finding: &WritingFeedbackFinding,
+    ) -> Result<WritingFeedbackFinding, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn get_writing_feedback_finding(
+        &self,
+        _id: &WritingFeedbackFindingId,
+    ) -> Result<Option<WritingFeedbackFinding>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn list_writing_feedback_findings(
+        &self,
+        _attempt_id: &SemanticTaskAttemptId,
+    ) -> Result<Vec<WritingFeedbackFinding>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn save_writing_finding_disposition(
+        &self,
+        _disposition: &WritingFindingDisposition,
+    ) -> Result<WritingFindingDisposition, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn get_writing_finding_disposition(
+        &self,
+        _id: &WritingFindingDispositionId,
+    ) -> Result<Option<WritingFindingDisposition>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn list_writing_finding_dispositions(
+        &self,
+        _finding_id: &WritingFeedbackFindingId,
+    ) -> Result<Vec<WritingFindingDisposition>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn upsert_writing_draft(
+        &self,
+        _draft: &WritingDraft,
+    ) -> Result<WritingDraft, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn get_writing_draft(
+        &self,
+        _rubric_id: &SemanticRubricId,
+    ) -> Result<Option<WritingDraft>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn delete_writing_draft(&self, _rubric_id: &SemanticRubricId) -> Result<(), ApplicationError> {
         Err(Self::disabled())
     }
 }

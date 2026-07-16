@@ -22,7 +22,8 @@ use domain::{
     SubtitleTrackStatus, TimeMs, TranscriptionJob, TranscriptionJobId,
     TranscriptionModelDescriptor, TranscriptionModelId, UpgradeSuggestion, UpgradeSuggestionId,
     UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation, WordTimeline,
-    WordTimelineId, WordTiming,
+    WordTimelineId, WordTiming, WritingDraft, WritingFeedbackFinding, WritingFeedbackFindingId,
+    WritingFindingDisposition, WritingFindingDispositionId,
 };
 
 use crate::{ApplicationError, LexicalSourceContext};
@@ -763,10 +764,10 @@ pub trait RecordingRepository: Send + Sync {
     ) -> Result<Option<RecordingAsset>, ApplicationError>;
 }
 
-/// Phase 3.11 semantic task fact layer (ADR 0021). Append-only end to end:
+/// Phase 3.11 semantic task fact layer (ADR 0021). Submitted facts are append-only end to end:
 /// there are intentionally no update or delete methods, and implementations
-/// must not add them — corrections are new rows (rubric versions, re-judging,
-/// adjudications), never rewrites.
+/// must not add them — corrections are new rows. The explicitly named draft
+/// methods are the sole mutable crash-recovery projection and are not evidence.
 pub trait SemanticTaskRepository: Send + Sync {
     fn save_semantic_rubric(
         &self,
@@ -826,6 +827,36 @@ pub trait SemanticTaskRepository: Send + Sync {
         &self,
         judgment_id: &SemanticJudgmentId,
     ) -> Result<Vec<JudgmentAdjudication>, ApplicationError>;
+    fn save_writing_feedback_finding(
+        &self,
+        finding: &WritingFeedbackFinding,
+    ) -> Result<WritingFeedbackFinding, ApplicationError>;
+    fn get_writing_feedback_finding(
+        &self,
+        id: &WritingFeedbackFindingId,
+    ) -> Result<Option<WritingFeedbackFinding>, ApplicationError>;
+    fn list_writing_feedback_findings(
+        &self,
+        attempt_id: &SemanticTaskAttemptId,
+    ) -> Result<Vec<WritingFeedbackFinding>, ApplicationError>;
+    fn save_writing_finding_disposition(
+        &self,
+        disposition: &WritingFindingDisposition,
+    ) -> Result<WritingFindingDisposition, ApplicationError>;
+    fn get_writing_finding_disposition(
+        &self,
+        id: &WritingFindingDispositionId,
+    ) -> Result<Option<WritingFindingDisposition>, ApplicationError>;
+    fn list_writing_finding_dispositions(
+        &self,
+        finding_id: &WritingFeedbackFindingId,
+    ) -> Result<Vec<WritingFindingDisposition>, ApplicationError>;
+    fn upsert_writing_draft(&self, draft: &WritingDraft) -> Result<WritingDraft, ApplicationError>;
+    fn get_writing_draft(
+        &self,
+        rubric_id: &SemanticRubricId,
+    ) -> Result<Option<WritingDraft>, ApplicationError>;
+    fn delete_writing_draft(&self, rubric_id: &SemanticRubricId) -> Result<(), ApplicationError>;
 }
 
 /// Phase 3.12 provider profiles. Unlike append-only semantic facts, a provider
