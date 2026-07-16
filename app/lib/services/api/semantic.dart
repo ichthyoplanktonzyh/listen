@@ -261,12 +261,20 @@ extension SemanticApi on LocalApi {
           .toList(growable: false);
 
   Future<WritingDraftView?> writingDraft(String rubricId) async {
-    final json = await _request(
-      'GET',
-      '/v1/semantic/writing-drafts/${Uri.encodeComponent(rubricId)}',
-    );
-    if (json == null) return null;
-    return WritingDraftView.fromJson(json as Map<String, dynamic>);
+    // Draft recovery is best-effort: the writes in the controller
+    // (`_persistDraft`, `deleteWritingDraft`) already swallow failures, so a
+    // failed read must not block opening the task either. Any transport/HTTP
+    // error degrades to "no recoverable draft".
+    try {
+      final json = await _request(
+        'GET',
+        '/v1/semantic/writing-drafts/${Uri.encodeComponent(rubricId)}',
+      );
+      if (json == null) return null;
+      return WritingDraftView.fromJson(json as Map<String, dynamic>);
+    } on HttpException {
+      return null;
+    }
   }
 
   Future<WritingDraftView> saveWritingDraft({
