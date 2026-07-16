@@ -175,8 +175,8 @@ pub(crate) async fn create_semantic_attempt(
     };
     state
         .services
-        .semantic()
-        .record_semantic_attempt(attempt)
+        .production_corpus()
+        .record_semantic_attempt_and_index(attempt)
         .map(Json)
         .map_err(ApiError::from)
 }

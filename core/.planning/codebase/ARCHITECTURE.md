@@ -1,6 +1,6 @@
 # LLPlayerNext System Architecture
 
-Last updated: 2026-07-14. Reflects Phase 2.24 runtime/use-case/interface consolidation.
+Last updated: 2026-07-16. Reflects Phase 3.15.5 personal production corpus.
 
 ## Overview
 
@@ -87,6 +87,7 @@ application use cases and provider/repository boundaries.
     `RecognitionUpgradeRepository`
   - `LearningEventRepository`
   - `RecordingRepository`
+  - `ProductionCorpusRepository`
   - transcription, phonetic analysis, dictionary cache, playback progress
 - Application-owned DTOs sit in `application::dto`; algorithm crate structs are
   mapped at the boundary instead of re-exported.
@@ -216,6 +217,11 @@ application use cases and provider/repository boundaries.
   `writing_finding_dispositions`; both retain JSON facts plus query columns and
   have database triggers forbidding update/delete. `writing_drafts` is the
   explicitly mutable crash-recovery projection and is never an evidence input.
+- Schema v39 adds the rebuildable personal production corpus. Writing attempts
+  remain authoritative; `ProductionCorpusUseCases` derives one response document
+  plus lemma-keyed token spans, refreshes one rubric best-effort after attempt
+  creation, and atomically replaces the full projection on reindex. Assistance
+  values are factual provenance, not autonomous/non-autonomous judgments.
 - Learning-loop persistence stores JSON snapshots plus query columns for kind,
   status, subject, result, and timestamps. Corpus and recording persistence are
   implemented; learner-profile persistence remains future work.
@@ -266,6 +272,11 @@ one primary fallback vowel, later fallback vowels unstressed.
   non-blocking background analysis; absent capability produces no prompt and leaves all fallback paths intact.
 
 ### Flutter Desktop
+
+- Vocabulary details opt into the personal production read model. The client
+  queries the open lexical form, shows occurrence count and deduplicated response
+  documents, and opens the authoritative semantic attempt/revision chain.
+  Loading, honest zero-result, and projection-unavailable states stay distinct.
 
 - **UI state pattern (single track)**: `controller + Store<T>` is the only UI
   state model. Controllers (`PlayerController`, `SubtitleController`,

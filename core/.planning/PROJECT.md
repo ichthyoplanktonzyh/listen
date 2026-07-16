@@ -203,6 +203,13 @@ A/B/C 的产品输出必须是可听结构而非类别清单：A 按书写词界
 
 ### 4.3 产品原则
 
+- **体验与功能优先，产品形态保持开放**：架构模式、既有容器和当前 phase 范围用于管理
+  复杂度与交付顺序，不得被上升为永久产品禁令。产品可随真实使用发展出不同入口、界面和
+  交互形态；只有平台/物理条件、延迟与资源、协议与网络、成本、隐私安全、数据正确性和
+  兼容性等真实工程条件构成硬约束。
+- **复用能力，不强制复用界面**：共享深模块统一事实、生命周期和高复杂度实现，不要求所有
+  consumer 长成同一种 UI。场景原生 surface 可以拥有不同导航和交互，只要共同事实与证据
+  语义保持一致。一个功能在某 phase 中 out of scope 仅表示本阶段不交付，不表示长期非目标。
 - **播放可靠性优先**：播放器基础能力是全部学习功能的前提。
 - **诊断优先**：所有学习功能应服务于解释为什么没有听懂。
 - **用户判断优先**：词汇状态由用户主动维护，系统只提供辅助线索。
@@ -904,6 +911,11 @@ Phase 2.18 新学习资产架构之上，把英语作为第一门语言做成完
 最终讨论稿：
 `.planning/discuss/four-channel-product-and-vendor-neutral-llm-final.zh.md`。
 
-落地顺序已固定为 Phase 3.11 Semantic Task & Evidence Foundation → 3.12 Vendor-neutral
-LLM Provider → 3.13 Reading Studio → 3.14 Speaking Studio → 3.15 Writing Studio →
-3.16 Personal Expression → 3.17 Four-channel Projection/Review → 3.18 Cross-modal Coach。
+Realtime conversation 是可被多个场景消费的能力，不绑定单一产品外形。当前内容段落锚定的
+语音对话可作为首个 surface；后续允许 GPT-like 开放连续聊天、角色扮演、个人表达模板和
+文字/语音混合会话等独立场景。它们可以拥有不同界面和导航，但复用 session/turn/audio/
+transcript 事实、个人产出语料摄入与复盘处理。开放聊天在首个 realtime phase 中未交付时，
+只属于执行延期，不是产品非目标。复盘处理与复盘呈现分离：finalized session 应可进入统一
+复盘管线，而具体 surface 可选择跳转复盘页、聊天内卡片、后台生成或稍后回访，不强制一种流程。
+
+当前落地顺序见 ROADMAP/STATE；阶段范围控制交付规模，不冻结后续产品形态。

@@ -139,8 +139,8 @@ cache 位于其可重建 cache 子树。基础 bundle 只携带小型 installer 
 
 - **引擎**：SQLite（rusqlite bundled）
 - **位置**：`~/Library/Application Support/LLPlayerNext/llplayer.db`
-- **迁移**：38 个版本（0001 ~ 0038），自动迁移 + 预迁移备份
-- **关键表**：media_items, subtitle_tracks, subtitle_sentences, lexical_entries, lexical_occurrences, lexical_status_history, lexical_observations, practice_sessions, practice_items, practice_attempts, review_items, review_attempts, hunting_candidates, hunting_targets, recording_assets, learning_events, listening_inbox_items, word_timeline_runs, chunk_timeline_runs, phone_timeline_runs, lltimeline_resources, dictionary_cache, transcription_jobs, phonetic_analysis_jobs
+- **迁移**：39 个版本（0001 ~ 0039），自动迁移 + 预迁移备份
+- **关键表**：media_items, subtitle_tracks, subtitle_sentences, lexical_entries, lexical_occurrences, lexical_status_history, lexical_observations, practice_sessions, practice_items, practice_attempts, review_items, review_attempts, hunting_candidates, hunting_targets, recording_assets, learning_events, listening_inbox_items, word_timeline_runs, chunk_timeline_runs, phone_timeline_runs, lltimeline_resources, dictionary_cache, transcription_jobs, phonetic_analysis_jobs, semantic_task_attempts, production_corpus_documents, production_corpus_entries
 - **Writing 本地反馈**：`harper-core = 0.40.0`（Apache-2.0，离线 grammar/spelling finding；不评分）
 
 ## 6. 构建与测试

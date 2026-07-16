@@ -3,25 +3,24 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-16T13:40:00.000+08:00"
+last_updated: "2026-07-16T16:07:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-16 13:40 CST
-> 更新原因：3.15 与 3.12.2 owner QA 通过并收口；P2–P6 立 phase（3.15.5–3.15.9），
-> 下一执行 3.15.5 产出语料库。
+> 最后更新：2026-07-16 16:07 CST
+> 更新原因：Phase 3.15.5 Personal Production Corpus 完成并裁定 3.16 资产边界。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.15.5 Personal Production Corpus（裁决代号 P2）**待开工**。
-  个人产出语料库 = 从 immutable attempts 派生的可重建投影（零新权威存储），写作先行、
-  lemma 归一 + channel 标签 + 来源锚点、scaffolding 仅预留字段；读端「我的产出」最小
-  查询；开工时一并裁定与 3.16 个人模板的资产边界。后续链：3.15.6 gap-(c) 复盘（参照系
-  排序为 v1 核心 + 诚实降级显示）→ 3.15.7 realtime 语音对话（OpenAI Realtime + Qwen
-  Omni，中立必须 owner 可实测）→ 3.15.8 嵌入 / 3.15.9 TTS 增补（TTS 建议 3.15.5 落地后
-  即插）。计划见各 `3.15.x-*/PLAN`，产品裁决见
-  `.planning/discuss/conversation-output-corpus-and-model-categories.zh.md` §11。
+- **当前执行主线**：Phase 3.15.5 Personal Production Corpus（裁决代号 P2）**✅ COMPLETE**。
+  schema v39 建立从 immutable Writing attempts 派生的 document + lemma occurrence 可重建
+  投影；增量刷新、原子全量重建、exact lemma/phrase FTS、HTTP/OpenAPI 与词典「我的产出」
+  已贯通。assistance 只记 factual provenance，不用 scaffolding 布尔值冒充自治判断；spoken
+  仅 enum、无 writer。3.16 边界已裁：语料是可删投影，个人模板是显式 durable asset，可引
+  provenance 但不共享身份/删除生命周期。见 `3.15.5-CLOSEOUT.md`。
+  **下一建议执行 3.15.9 TTS**（此前已裁为 3.15.5 后可正交插入），然后 3.15.6 gap-(c)
+  复盘 → 3.15.7 realtime → 3.15.8 嵌入。
 - Phase 3.12.2 Studio LLM Feedback（P1）**✅ COMPLETE**（2026-07-16 owner 真实 provider
   QA 通过）：LLM rubric 生成 + judgment 显示接入三个 Studio；三 Studio 共用
   `LlmJudgmentAssist`；显示诚实边界（heuristic_proxy、append-only adjudication、零
@@ -78,6 +77,14 @@ last_updated: "2026-07-16T13:40:00.000+08:00"
   嵌入（7）、TTS（9）本地优先。3.12.1 留出集资格门已取消（2026-07-16 裁决）：LLM 判定
   以显示诚实边界进 surface——可纠正辅助反馈、可 adjudicate、`heuristic_proxy`、不自动写
   observation/projection；projection 仍归 3.17 确认门。
+- **产品开放性与硬约束**：阶段范围、既有 UI 容器和架构模式只管理复杂度与交付顺序，不是
+  永久产品禁令；产品形态以更好的用户体验和实际功能为目标。只有平台/物理条件、延迟与
+  资源、协议与网络、成本、隐私安全、数据正确性和兼容性等真实工程条件构成硬约束。共享
+  深模块复用事实与生命周期，不强迫不同场景共享界面。
+- **Conversation surface 与复盘**：3.15.7 首个交付可为当前内容段落锚定对话，但 GPT-like
+  开放连续聊天、角色扮演、个人表达等均是合法后续 surface，不得把媒体锚点写成 conversation
+  事实或复盘的永久前提。不同 surface 共享 session/turn/audio/transcript、个人产出语料和
+  finalized-session 复盘处理；复盘可用独立页、聊天内卡片、后台生成或稍后回访呈现。
 - **代码分支状态**：以 `git status` / `git log` 为准，不在 STATE 记录静态分支名。
 
 ## 项目双路线
@@ -272,15 +279,15 @@ last_updated: "2026-07-16T13:40:00.000+08:00"
 - 244 cue 整轨实测 243 analyzed / 1 isolated fallback；首次 2.10s、hot cache 0.11s。
 - 文档：`.planning/phases/3.9.3-syntax-capability-delivery-lifecycle/3.9.3-CLOSEOUT.md`。
 
-### 下一执行序列：3.15.5 → 3.15.6 → 3.15.7（P2→P3→P4），随后重修 3.16–3.18
+### 下一执行序列：3.15.9 → 3.15.6 → 3.15.7 → 3.15.8，随后重修 3.16–3.18
 
 - **Gate Q（已通过）**：Q1/Q2 通过；Q3/Q4 因后续 UX/功能调整明确延期且 QA 债留在
   原 phase。裁决见 `3.7-GATE-Q-CHECKLIST.md`。
 - **3.11–3.15 全部收口**（3.14 owner QA 延期未重开）；3.12.1 取消，由 3.12.2（P1，已
   完成）取代。
-- **P2–P6 已立 PLAN（2026-07-16，编号 3.15.5–3.15.9）**：产出语料库（写作先行、可重建
-  投影）→ gap-(c) 复盘（参照系排序核心）→ realtime 语音对话（新中立类别 8）；嵌入（P5）
-  增强复盘、TTS（P6）正交建议 3.15.5 后即插；diarization/GOP 条件后置。产品裁决：
+- **P2–P6 已立 PLAN（2026-07-16，编号 3.15.5–3.15.9）**：产出语料库 P2 已完成；下一按
+  正交插入建议执行 TTS（P6），再做 gap-(c) 复盘（参照系排序核心）→ realtime 语音对话
+  （新中立类别 8）→ 嵌入增强复盘；diarization/GOP 条件后置。产品裁决：
   `.planning/discuss/conversation-output-corpus-and-model-categories.zh.md` §11。
 - **3.16–3.18（方向承诺）**：3.18 Cross-modal Coach 收窄为聚合叙述，3.17 保留
   usage→projection 确认门；3.16 个人模板与产出语料的边界在 3.15.5 开工时裁定。各 PLAN
@@ -336,9 +343,19 @@ last_updated: "2026-07-16T13:40:00.000+08:00"
 | 3.12 Vendor-neutral LLM Provider | 两异构协议 adapter（OpenAI Chat + Anthropic Messages）过同一契约套件证中立；draft-not-domain-type + 四层分离经 LLM 路径成立；OS keychain + auth_ref 密钥不落普通存储；诚实降级；Flutter 设置 UI；schema v36；ADR 0022；判定默认不获显示资格（属 3.12.1）。CODE COMPLETE，owner 真实 provider 端到端 QA 待做 | `.planning/phases/3.12-vendor-neutral-llm-provider/3.12-CLOSEOUT.md` |
 | 3.13 Reading Studio v1 | 阅读姿态（派生段落 + v37 位置游标 + 切片回听）+ 段落任务（manual rubric + 自评）+ 读听差异 + ReadingContextMarking；真实媒体后端 20/20，GUI 走查并入 3.13.5 后通过 | `.planning/phases/3.13-reading-studio-v1/3.13-CLOSEOUT.md` |
 | 3.13.5 Studio Shell UX | 混合导航 + 内容通道切换；沉浸式阅读器、分离词汇透镜与上下文查词；阶段自适应任务容器；owner GUI 验收通过 | `.planning/phases/3.13.5-studio-shell-ux/3.13.5-CLOSEOUT.md` |
+| 3.15.5 Personal Production Corpus | Writing attempts 派生的 document + lemma/FTS 可重建投影；词典「我的产出」；assistance 事实来源；3.16 资产边界裁决 | `.planning/phases/3.15.5-personal-production-corpus/3.15.5-CLOSEOUT.md` |
 
 ## 最近重要决策
 
+1. **2026-07-16 16:07 CST** — Phase 3.15.5 完成。产出语料采用 document + token occurrence
+   两层可重建投影，避免每词复制全文；增量失败不回滚权威 attempt，全量替换保持事务原子性。
+   原 `scaffolding: bool` 改为 factual assistance provenance，不在事实层裁定“自主/非自主”。
+   3.16 个人模板保持显式 durable asset，可引用语料 provenance，不共享投影身份或删除生命周期。
+1. **2026-07-16 14:58 CST** — 确立产品开放性原则：体验与实际功能优先；phase out-of-scope
+   只表示当前不交付，不能上升为长期禁令；只有真实工程条件是硬约束。Realtime conversation
+   的首个内容锚定 surface 不排斥后续 GPT-like 开放聊天等不同形态；共享深模块统一会话事实、
+   产出语料和复盘处理，但不强制 UI/导航一致。即时 session 复盘与长期 corpus-level gap
+   复盘区分时间尺度并共享可追溯事实。
 1. **2026-07-16 13:40 CST** — P2–P6 立 phase（3.15.5–3.15.9，压在 3.16–3.18 前执行）：
    产出语料库定为可重建投影（零新权威存储、写作先行、scaffolding 仅预留字段）；gap-(c)
    复盘把**参照系排序提升为 v1 核心**（接收性>产出性是常态，gap 全集任何 N 下都千词
@@ -446,11 +463,11 @@ last_updated: "2026-07-16T13:40:00.000+08:00"
 
 ## 下一步工作
 
-1. **Phase 3.15.5 开工**：产出语料投影 schema + 写作 attempts 重建/增量摄入 + lemma
-   查询读端；开工时裁定与 3.16 个人模板的资产边界。owner 日常写作使用持续积累语料，
-   为 3.15.6 Slice 0 数据探针备料。
-2. "收藏句 → 个人模板"的用户价值验证收敛到 Phase 3.16（3.4.3 结论待兑现），且须与
-   3.15.5 产出语料裁清边界。
+1. **Phase 3.15.9 开工前修订**：按当前 provider/runtime 与高频播放场景复核 TTS PLAN；它是
+   3.15.5 后可正交插入的下一建议，不阻塞之后的 3.15.6 复盘。
+2. **Phase 3.15.6 数据探针**：基于已落地 production corpus 先测真实小 N 分布，再实现
+   gap-(c) 参照系排序与诚实降级。"收藏句 → 个人模板"仍归 3.16，并遵守本 phase 已裁定的
+   projection-vs-asset 边界。
 3. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
 4. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）；

@@ -28,19 +28,20 @@ use domain::{
     PhoneticAnalysisJob, PhoneticFindingStatus, PhraseCandidate, PracticeAnchorKind,
     PracticeAttempt, PracticeAttemptId, PracticeEvaluation, PracticeItem, PracticeItemId,
     PracticeKind, PracticeMode, PracticeResult, PracticeSession, PracticeSessionId, PracticeTarget,
-    PracticeTargetKind, PracticeTokenEvaluation, PracticeTokenResult, PronunciationProviderInfo,
-    ReadingPosition, RecognitionEvidence, RecognitionEvidenceId, RecognitionEvidenceSourceKind,
-    ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewRating,
-    ReviewSchedule, ReviewSource, ReviewSourceKind, RhythmFrameId, SemanticJudgment,
-    SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
-    SemanticTaskAttemptId, SemanticTaskKind, SenseGroup, SenseGroupAnalysis, SenseGroupAnalysisId,
-    SenseGroupAnalysisSummary, SenseGroupId, SentenceDiagnosis, SentencePronunciation,
-    SoundFitCalibration, SoundFitInputs, SubtitleSentence, SubtitleSentenceId, SubtitleToken,
-    SubtitleTokenKind, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, SyntacticAnalysis,
-    TimeMs, TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource, UpgradeSuggestion,
-    UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation,
-    WordTimeline, WordTimelineId, WordTimelineLifecycleStage, WordTimelineSummary, WordTiming,
-    WritingDraft, WritingFeedbackFinding, WritingFeedbackFindingId, WritingFindingDisposition,
+    PracticeTargetKind, PracticeTokenEvaluation, PracticeTokenResult, ProductionCorpusDocument,
+    ProductionCorpusEntry, ProductionCorpusHit, PronunciationProviderInfo, ReadingPosition,
+    RecognitionEvidence, RecognitionEvidenceId, RecognitionEvidenceSourceKind, ReviewAttempt,
+    ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewRating, ReviewSchedule,
+    ReviewSource, ReviewSourceKind, RhythmFrameId, SemanticJudgment, SemanticJudgmentId,
+    SemanticRubric, SemanticRubricId, SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind,
+    SenseGroup, SenseGroupAnalysis, SenseGroupAnalysisId, SenseGroupAnalysisSummary, SenseGroupId,
+    SentenceDiagnosis, SentencePronunciation, SoundFitCalibration, SoundFitInputs,
+    SubtitleSentence, SubtitleSentenceId, SubtitleToken, SubtitleTokenKind, SubtitleTrack,
+    SubtitleTrackId, SubtitleTrackStatus, SyntacticAnalysis, TimeMs, TimelineCreator,
+    TimelineMetrics, TimelineStatus, TimingSource, UpgradeSuggestion, UpgradeSuggestionId,
+    UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation, WordTimeline,
+    WordTimelineId, WordTimelineLifecycleStage, WordTimelineSummary, WordTiming, WritingDraft,
+    WritingFeedbackFinding, WritingFeedbackFindingId, WritingFindingDisposition,
     WritingFindingDispositionId, apply_sound_fit_calibration, content_fit_fingerprint,
     learning_observation_id, listening_projection_v1, meaning_fit, normalize_lemma,
     observation_spec_for_marking, observation_spec_for_practice,
@@ -67,6 +68,7 @@ mod media;
 mod phones;
 mod phonetic_fixture;
 mod practice;
+mod production_corpus;
 mod pronunciation;
 mod pronunciation_providers;
 mod providers;
@@ -95,6 +97,7 @@ pub use lexical::LexicalLearningUseCases;
 pub use llm_provider::LlmProviderUseCases;
 pub use media::MediaAnalysisUseCases;
 pub use practice::PracticeUseCases;
+pub use production_corpus::ProductionCorpusUseCases;
 pub use pronunciation::PronunciationUseCases;
 pub use pronunciation_providers::*;
 pub use providers::*;
@@ -158,6 +161,7 @@ pub struct AppServices {
     pub(crate) reading_positions: Arc<dyn ReadingPositionRepository>,
     pub(crate) coach_dashboard: Arc<dyn CoachDashboardRepository>,
     pub(crate) semantic_tasks: Arc<dyn SemanticTaskRepository>,
+    pub(crate) production_corpus: Arc<dyn ProductionCorpusRepository>,
     pub(crate) llm_provider_profiles: Arc<dyn LlmProviderProfileRepository>,
     pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
     pub(crate) pronunciation_providers: Arc<Vec<Arc<dyn PronunciationProvider>>>,
@@ -213,6 +217,10 @@ impl AppServices {
         SemanticUseCases::new(self.semantic_tasks.clone())
     }
 
+    pub fn production_corpus(&self) -> ProductionCorpusUseCases {
+        ProductionCorpusUseCases::from_services(self)
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new<R, L>(
         media: Arc<dyn MediaRepository>,
@@ -266,6 +274,7 @@ impl AppServices {
             reading_positions: Arc::new(DisabledReadingPositionRepository),
             coach_dashboard: Arc::new(DisabledCoachDashboardRepository),
             semantic_tasks: Arc::new(DisabledSemanticTaskRepository),
+            production_corpus: Arc::new(DisabledProductionCorpusRepository),
             llm_provider_profiles: Arc::new(DisabledLlmProviderProfileRepository),
             lexical_normalizers: Arc::new(Vec::new()),
             pronunciation_providers: Arc::new(Vec::new()),
@@ -335,6 +344,14 @@ impl AppServices {
         semantic_tasks: Arc<dyn SemanticTaskRepository>,
     ) -> Self {
         self.semantic_tasks = semantic_tasks;
+        self
+    }
+
+    pub fn with_production_corpus_repository(
+        mut self,
+        production_corpus: Arc<dyn ProductionCorpusRepository>,
+    ) -> Self {
+        self.production_corpus = production_corpus;
         self
     }
 
@@ -478,6 +495,13 @@ impl SemanticTaskRepository for DisabledSemanticTaskRepository {
         Err(Self::disabled())
     }
 
+    fn list_semantic_attempts_by_kinds(
+        &self,
+        _kinds: &[SemanticTaskKind],
+    ) -> Result<Vec<SemanticTaskAttempt>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
     fn save_semantic_judgment(
         &self,
         _judgment: &SemanticJudgment,
@@ -607,6 +631,47 @@ impl LlmProviderProfileRepository for DisabledLlmProviderProfileRepository {
 
     fn delete_provider_profile(&self, _id: &LlmProviderProfileId) -> Result<(), ApplicationError> {
         Ok(())
+    }
+}
+
+struct DisabledProductionCorpusRepository;
+
+impl ProductionCorpusRepository for DisabledProductionCorpusRepository {
+    fn replace_production_entries_for_rubric(
+        &self,
+        _rubric_id: &SemanticRubricId,
+        _documents: &[ProductionCorpusDocument],
+        _entries: &[ProductionCorpusEntry],
+    ) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+
+    fn replace_all_production_entries(
+        &self,
+        _documents: &[ProductionCorpusDocument],
+        _entries: &[ProductionCorpusEntry],
+    ) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+
+    fn list_production_entries_by_key(
+        &self,
+        _language: &LanguageCode,
+        _normalized_key: &str,
+        _limit: u32,
+        _offset: u32,
+    ) -> Result<Vec<ProductionCorpusHit>, ApplicationError> {
+        Ok(Vec::new())
+    }
+
+    fn search_production_documents(
+        &self,
+        _language: &LanguageCode,
+        _query: &str,
+        _limit: u32,
+        _offset: u32,
+    ) -> Result<Vec<ProductionCorpusHit>, ApplicationError> {
+        Ok(Vec::new())
     }
 }
 
