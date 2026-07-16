@@ -1,10 +1,16 @@
 //! OpenAI Chat Completions adapter (and any OpenAI-compatible endpoint).
 //!
 //! Wire shape: flat `messages: [{role, content}]`, `Authorization: Bearer`,
-//! native `response_format: {type: json_schema}`. Configurable base URL/model
-//! cover local services (Ollama, LM Studio, vLLM) — but endpoint compatibility
-//! is not capability equivalence, so [`probe_structured_output`] measures the
-//! real behavior instead of trusting the protocol.
+//! `response_format: {type: json_object}` with the target JSON Schema carried in
+//! the prompt. `json_object` is the broadly-compatible structured-output mode
+//! (OpenAI, DeepSeek, Qwen, Together, local servers); the newer `json_schema`
+//! response_format is rejected with HTTP 400 by many OpenAI-compatible endpoints
+//! (e.g. DeepSeek), and the semantic layer validates the parsed output against
+//! the schema regardless, so strict wire enforcement is not required here.
+//! Configurable base URL/model cover local services (Ollama, LM Studio, vLLM) —
+//! but endpoint compatibility is not capability equivalence, so
+//! [`probe_structured_output`] measures the real behavior instead of trusting
+//! the protocol.
 
 use application::{
     LlmChatAdapter, LlmProviderDescriptor, StructuredChatRequest, StructuredChatResponse,
@@ -114,20 +120,24 @@ impl LlmChatAdapter for OpenAiChatAdapter {
         &self,
         request: &StructuredChatRequest,
     ) -> Result<StructuredChatResponse, LlmProviderError> {
+        // Broadly-compatible structured output: `json_object` mode plus the
+        // target schema in the prompt (see the module doc). `json_object`
+        // requires the token "json" to appear in the messages, which the
+        // instruction below guarantees.
+        let system = format!(
+            "{}\n\nRespond with a single JSON object and nothing else. It must \
+             be valid json conforming to this schema (\"{}\"):\n{}",
+            request.system,
+            request.schema_name,
+            serde_json::to_string(&request.json_schema).unwrap_or_default(),
+        );
         let mut body = serde_json::json!({
             "model": self.model_id,
             "messages": [
-                { "role": "system", "content": request.system },
+                { "role": "system", "content": system },
                 { "role": "user", "content": request.user },
             ],
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": request.schema_name,
-                    "schema": request.json_schema,
-                    "strict": true,
-                },
-            },
+            "response_format": { "type": "json_object" },
             "max_tokens": request.max_output_tokens,
         });
         if let Some(temperature) = request.temperature {

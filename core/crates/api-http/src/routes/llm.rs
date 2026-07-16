@@ -12,10 +12,11 @@
 use crate::{
     ApiError, ApiState, ApplicationError, Deserialize, Json, Path, Serialize, State, StatusCode,
 };
+use application::RubricGenerationRequest;
 use domain::{
-    CapabilityClaim, CostBudget, DataRetentionPreference, LlmAdapterKind, LlmProviderProfile,
-    LlmProviderProfileId, LlmUse, ProviderCapability, SemanticJudgment, SemanticTaskAttemptId,
-    llm_provider_profile_id,
+    CapabilityClaim, CostBudget, DataRetentionPreference, LanguageCode, LlmAdapterKind,
+    LlmProviderProfile, LlmProviderProfileId, LlmUse, ProviderCapability, RubricPointImportance,
+    SemanticJudgment, SemanticTaskAttemptId, SemanticTaskKind, llm_provider_profile_id,
 };
 use llm_provider::BuiltSemanticProvider;
 
@@ -209,6 +210,70 @@ pub(crate) async fn judge_via_llm_provider(
         )
         .await?;
     Ok(Json(judgment))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ProviderRubricRequest {
+    pub purpose: SemanticTaskKind,
+    pub source_language: LanguageCode,
+    pub response_language: LanguageCode,
+    pub transcript_snapshot: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct RubricPointDraftView {
+    pub importance: RubricPointImportance,
+    pub statement: String,
+    pub accepted_paraphrase_notes: Option<String>,
+}
+
+/// Content-only rubric proposal. Deliberately omits identity/version/source
+/// snapshot: those are minted only when the user saves an approved rubric
+/// through the manual create path, so the vendor layer never becomes a rubric
+/// identity writer (ADR 0021 four-layer separation).
+#[derive(Debug, Serialize)]
+pub(crate) struct RubricDraftView {
+    pub points: Vec<RubricPointDraftView>,
+    pub model_id: Option<String>,
+    pub prompt_version: Option<String>,
+    pub schema_version: Option<String>,
+}
+
+/// Generates a rubric draft (information points only) for one source segment.
+/// The draft is not persisted; the client shows it for review/edit and saves an
+/// approved rubric through the normal create path. On any provider error nothing
+/// is returned and a standardized, secret-free error is surfaced.
+pub(crate) async fn generate_rubric_via_llm_provider(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(request): Json<ProviderRubricRequest>,
+) -> Result<Json<RubricDraftView>, ApiError> {
+    let provider = build_provider(&state, &id)?;
+    let generation = RubricGenerationRequest {
+        purpose: request.purpose,
+        source_language: request.source_language,
+        response_language: request.response_language,
+        transcript_snapshot: request.transcript_snapshot,
+    };
+    let draft = provider
+        .as_rubric()
+        .generate_rubric(&generation)
+        .await
+        .map_err(ApplicationError::from)?;
+    Ok(Json(RubricDraftView {
+        points: draft
+            .points
+            .into_iter()
+            .map(|point| RubricPointDraftView {
+                importance: point.importance,
+                statement: point.statement,
+                accepted_paraphrase_notes: point.accepted_paraphrase_notes,
+            })
+            .collect(),
+        model_id: draft.model_id,
+        prompt_version: draft.prompt_version,
+        schema_version: draft.schema_version,
+    }))
 }
 
 /// Loads a profile, resolves its secret, and builds the concrete provider.

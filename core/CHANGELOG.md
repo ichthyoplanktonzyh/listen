@@ -2,6 +2,82 @@
 
 ## Unreleased
 
+- 2026-07-16 13:50 CST: Phase 3.12.2 与 3.15 收口 + P2–P6 立 phase。owner QA 通过：
+  3.12.2 真实 provider 下三 Studio「AI 出题 + AI 判定 + 纠正」端到端通过（新增
+  `3.12.2-CLOSEOUT.md`，PLAN 置 COMPLETE）；3.15 按 `3.15-MANUAL-QA.md` 真实内容/重启/
+  窄窗口/音频焦点验收通过（CLOSEOUT 状态翻正，Deferred 中 3.12.1 资格门表述更正为已由
+  3.12.2 取代）。按 discuss §11 裁决新建五个 phase（压在 3.16–3.18 前，取插入编号）：
+  `3.15.5-personal-production-corpus`（P2，产出语料可重建投影、写作先行、scaffolding 仅
+  预留字段、开工裁 3.16 边界）、`3.15.6-production-gap-review`（P3，gap-(c) 复盘；本轮
+  评审把参照系排序提升为 v1 核心，小 N 走 3.10 式诚实降级，UI 克制到管线验证级）、
+  `3.15.7-realtime-speech-conversation`（P4，realtime 中立 seam，OpenAI+Qwen，中立必须
+  owner 可实测）、`3.15.8-semantic-embedding`（P5）、`3.15.9-tts-speech-synthesis`
+  （P6，正交、建议 3.15.5 后即插）。STATE.md 更新当前位置/执行序列/语义能力边界（judge
+  三级资格口径由显示诚实边界取代）并压缩已收口 phase 冗述；下一执行 3.15.5。
+
+- 2026-07-16 13:15 CST: Phase 3.12.2 Slice 3 — LLM judgment 显示接线复制到 Speaking +
+  Writing（纯 Flutter，后端 judge 用例本就按 attempt_id + response_revision 取存量作答，
+  purpose 无关，零后端改动）。三个 Studio 现共用新抽取的 `LlmJudgmentAssist`
+  widget（`widgets/panels/llm_judgment_assist.dart`，Reading 内嵌实现迁移至此——第三住户
+  出现后才抽取的显示件，共享本地化键 `llmAssist*` 取代 `readingTaskAi*`）；provider 选择
+  逻辑收敛到 `coach_llm.dart` 的 `pickLlmProviderId` + `preferredLlmProviderId`（列表失败
+  吞掉、入口隐藏，manual 路径永不依赖 provider）。Speaking：`SpeakingTaskController` 在
+  attempt 落库后解析 judge provider，新增 `requestLlmJudgment`/`adjudicateLlm`，assessing/
+  done 阶段显示可纠正 AI 反馈，retryOnce 重置 LLM 判定；LLM 判定与用户自评并存、互不改写。
+  Writing：内容/组织判定走同一 SemanticJudgeProvider（区别于 Harper 表面 finding），
+  `WritingTaskController` 判定**最新 attempt 的最新 revision**（revising 侧栏判初稿 rev1，
+  提交修改稿后旧判定清空、done 页可对 rev2 重新请求，判定永不跨 revision 冒充）。全程守
+  显示诚实边界：evidence_class `heuristic_proxy`、append-only adjudication 引用 LLM
+  judgment id、零 observation/projection。新增 Speaking/Writing 控制器各两条测试（判定+
+  纠正诚实性、无 judgment-capable provider 时入口隐藏且零 judge 调用）。验证：flutter
+  analyze 干净、完整 flutter test 434 通过；无契约改动。
+
+- 2026-07-16 11:53 CST: Phase 3.12.2 Slice 2 — Reading LLM rubric 生成接线。后端新增
+  `POST /v1/llm/providers/{id}/rubric`（routes/llm.rs `generate_rubric_via_llm_provider`）：调用
+  `SemanticRubricProvider` 生成理解题草稿并**只返回内容草稿、不落库**——身份/版本/来源快照仍
+  只在用户保存已审阅 rubric 的正常 create 路径铸造，vendor 层永不成为 rubric 身份写者（守
+  ADR 0021）；provider 失败一律不返回、走标准化 secret-free 错误。OpenAPI v1.yaml 补路径，
+  route-drift 门通过。Flutter：新增 `RubricDraftView`（客户端分配 p1..pN point_id）、
+  `generateRubricViaLlmProvider` API；`ReadingTaskController` openTask 一次解析 judge/rubric 两个
+  provider，editing 阶段新增 `generateRubric`——AI 生成的题目载入**可编辑模板**（不自动应用），
+  用户复核/增删后保存；保存时若来自 AI 草稿则记录诚实 `llm` provenance（携带 model_id/prompt/
+  schema），否则 `manual`。`ReadingTaskSheet` editing 阶段新增「AI 生成理解题」入口（无 rubric
+  provider 时隐藏）。新增本地化键、后端 rubric 路由测试与控制器生成测试。验证：cargo test
+  api-http 44 / llm-provider 12、validate-contracts、fmt/clippy strict 全绿；flutter analyze 干净、
+  完整 flutter test 430 通过。
+
+- 2026-07-16 11:29 CST: fix(llm-provider) — OpenAI 兼容适配器改用广泛兼容的 `json_object`
+  结构化输出模式，schema 内嵌进 prompt，取代此前硬编码的 `json_schema` response_format。
+  DeepSeek 等众多"OpenAI 兼容"端点只支持 `{"type":"json_object"}`，对 `json_schema` 直接回
+  HTTP 400，导致 probe 与 judge/rubric 全部失败（owner 用 deepseek-v4-flash 实测 `/judge`
+  报 `unexpected status 400`）。语义层本就对解析结果做 schema 后校验（不符即 SchemaInvalid、
+  不写 judgment），故不依赖 wire 层强约束；`json_object` 模式需 prompt 含 "json" 词元并携带
+  schema 形状，均已在 system 提示中保证。Anthropic 走 tool_use 不受影响，中立契约套件
+  `drafts[0]==drafts[1]` 仍成立。新增回归测试钉住请求体使用 `json_object` 且 schema 入
+  prompt；llm-provider 13 测试通过，fmt/clippy 干净。
+
+- 2026-07-16 11:10 CST: Phase 3.12.2 Slice 1 — Reading LLM judgment 显示接线（纯 Flutter，
+  复用 3.12 已就绪的 `POST /v1/llm/providers/{id}/judge`）。`coach_llm.dart` 新增 typed
+  `llmProviders()` 与 `judgeViaLlmProvider()`；`ReadingTaskController` 提交作答后惰性解析首个
+  允许 `semantic_judgment` 的 provider（优先有凭证者，失败静默不阻塞 manual 路径），新增
+  `requestLlmJudgment` 与 append-only `adjudicateLlm`（镜像 manual adjudicate，永不改写原
+  judgment 行）。`ReadingTaskSheet` 在 assessing/done 阶段新增「请求 AI 反馈」入口与逐点 LLM
+  判定展示：标注「AI 辅助反馈 · 可纠正」「仅供参考，不计入能力档案」，可 adjudicate；无
+  judgment-capable provider 时整块隐藏。LLM 判定与用户自评并存不互相改写，evidence_class 保持
+  `heuristic_proxy`，零 observation/projection。新增本地化键与两条控制器测试（请求→纠正→
+  heuristic 边界 / 无 provider 隐藏）；flutter analyze 全绿，reading task controller+sheet 11 测试通过。
+
+- 2026-07-16 10:58 CST: 产品方向讨论沉淀 + Phase 划分裁决。新增 discuss
+  `conversation-output-corpus-and-model-categories.zh.md`：把 realtime 语音对话定为**独立中立
+  模型类别**（中立在能力类别层成立，非一个 seam 通吃），对话厂商与证据文稿解耦（用户音频统一
+  走本地 whisper.cpp）；说/写统一为**个人输出产出语料库**（写作 attempts 现成先行）；复盘 =
+  跨通道 gap-(c)「能认不能产出」描述性画像，不自动写 projection；从整个产品推导 10 类模型地图
+  与本地/云落位。裁决：取消 Phase 3.12.1（留出集资格门对个人工具过度），改显示诚实边界；新增
+  Phase 序列 P1（studio LLM 反馈接线，folder 3.12.2）→ P2 产出语料 → P3 gap 复盘 → P4 realtime
+  （首批 OpenAI Realtime + 千问）→ P5 嵌入 / P6 TTS；3.18 收窄为聚合、3.17 保留投影确认门。
+  新增 `.planning/phases/3.12.2-studio-llm-feedback/3.12.2-PLAN.md`（Slice 1 Reading judgment
+  显示 / Slice 2 Reading rubric 生成 / Slice 3 复制到 Speaking+Writing）。仅规划文档，无代码变更。
+
 - 2026-07-16 08:39 CST: Phase 3.15 Writing Studio v1 code complete，进入 owner 手工 QA。
   PLAN 按 3.14 closeout 保鲜并建立 Reference Matrix；确认
   Writing 自有 editor/revision 状态机，不复制 Reading/Speaking controller 或虚构通用 lifecycle
