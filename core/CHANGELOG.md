@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-16 10:58 CST: 产品方向讨论沉淀 + Phase 划分裁决。新增 discuss
+  `conversation-output-corpus-and-model-categories.zh.md`：把 realtime 语音对话定为**独立中立
+  模型类别**（中立在能力类别层成立，非一个 seam 通吃），对话厂商与证据文稿解耦（用户音频统一
+  走本地 whisper.cpp）；说/写统一为**个人输出产出语料库**（写作 attempts 现成先行）；复盘 =
+  跨通道 gap-(c)「能认不能产出」描述性画像，不自动写 projection；从整个产品推导 10 类模型地图
+  与本地/云落位。裁决：取消 Phase 3.12.1（留出集资格门对个人工具过度），改显示诚实边界；新增
+  Phase 序列 P1（studio LLM 反馈接线，folder 3.12.2）→ P2 产出语料 → P3 gap 复盘 → P4 realtime
+  （首批 OpenAI Realtime + 千问）→ P5 嵌入 / P6 TTS；3.18 收窄为聚合、3.17 保留投影确认门。
+  新增 `.planning/phases/3.12.2-studio-llm-feedback/3.12.2-PLAN.md`（Slice 1 Reading judgment
+  显示 / Slice 2 Reading rubric 生成 / Slice 3 复制到 Speaking+Writing）。仅规划文档，无代码变更。
+
 - 2026-07-16 08:39 CST: Phase 3.15 Writing Studio v1 code complete，进入 owner 手工 QA。
   PLAN 按 3.14 closeout 保鲜并建立 Reference Matrix；确认
   Writing 自有 editor/revision 状态机，不复制 Reading/Speaking controller 或虚构通用 lifecycle
