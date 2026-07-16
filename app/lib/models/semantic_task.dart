@@ -151,6 +151,47 @@ class SemanticRubricView {
       );
 }
 
+/// Phase 3.12.2 rubric-generation draft: content-only points the provider
+/// proposes. Point ids are assigned client-side for the editing UI (`p1`..);
+/// identity/version/source are minted only when the user saves an approved
+/// rubric through the normal create path.
+class RubricDraftView {
+  const RubricDraftView({
+    required this.points,
+    this.modelId,
+    this.promptVersion,
+    this.schemaVersion,
+  });
+
+  final List<RubricPointView> points;
+  final String? modelId;
+  final String? promptVersion;
+  final String? schemaVersion;
+
+  factory RubricDraftView.fromJson(Map<String, dynamic> json) {
+    final raw = json['points'] as List<dynamic>? ?? const [];
+    return RubricDraftView(
+      points: [
+        for (var i = 0; i < raw.length; i++)
+          RubricPointView(
+            pointId: 'p${i + 1}',
+            importance:
+                (raw[i] as Map<String, dynamic>)['importance'] as String? ??
+                'required',
+            statement:
+                (raw[i] as Map<String, dynamic>)['statement'] as String? ?? '',
+            acceptedParaphraseNotes:
+                (raw[i] as Map<String, dynamic>)['accepted_paraphrase_notes']
+                    as String?,
+          ),
+      ],
+      modelId: json['model_id'] as String?,
+      promptVersion: json['prompt_version'] as String?,
+      schemaVersion: json['schema_version'] as String?,
+    );
+  }
+}
+
 class AttemptResponseView {
   const AttemptResponseView({
     required this.revision,

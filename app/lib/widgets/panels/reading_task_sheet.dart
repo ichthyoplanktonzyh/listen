@@ -146,6 +146,18 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
         ),
         style: TextStyle(color: colors.onSurfaceVariant, fontSize: 13),
       ),
+      if (_state.rubricProviderId != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: OutlinedButton.icon(
+            key: const ValueKey('reading-task-generate-rubric'),
+            onPressed: _state.busy
+                ? null
+                : () => unawaited(widget.controller.generateRubric(widget.api)),
+            icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+            label: Text(l.text('readingTaskAiGenerate')),
+          ),
+        ),
       const SizedBox(height: 8),
       for (var i = 0; i < _state.draftPoints.length; i++)
         _draftPointRow(l, colors, i),

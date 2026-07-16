@@ -14,6 +14,30 @@ extension CoachLlmApi on LocalApi {
           .map((e) => LlmProviderProfileView.fromJson(e as Map<String, dynamic>))
           .toList(growable: false);
 
+  /// Generates a rubric draft (information points only) for one source segment
+  /// through the provider (Phase 3.12.2). The draft is not persisted; the
+  /// client shows it for review/edit and saves an approved rubric through the
+  /// normal create path. Throws on any provider error.
+  Future<RubricDraftView> generateRubricViaLlmProvider(
+    String providerId, {
+    required String purpose,
+    required String sourceLanguage,
+    required String responseLanguage,
+    required String transcriptSnapshot,
+  }) async => RubricDraftView.fromJson(
+    (await _request(
+          'POST',
+          '/v1/llm/providers/${Uri.encodeComponent(providerId)}/rubric',
+          {
+            'purpose': purpose,
+            'source_language': sourceLanguage,
+            'response_language': responseLanguage,
+            'transcript_snapshot': transcriptSnapshot,
+          },
+        ))
+        as Map<String, dynamic>,
+  );
+
   /// Judges one stored attempt response through a configured provider and
   /// records the result server-side as an unqualified `heuristic_proxy`
   /// judgment (Phase 3.12.2 display-honesty boundary: correctable assist, no

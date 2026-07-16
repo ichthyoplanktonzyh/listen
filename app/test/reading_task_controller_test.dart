@@ -157,7 +157,9 @@ void main() {
     expect(controller.state.phase, 'editing');
     expect(controller.state.draftPoints, hasLength(2));
     // Lookup carried the source identity, not a client-derived id.
-    final (_, path, _) = backend.requests.single;
+    final (_, path, _) = backend.requests.firstWhere(
+      (r) => r.$2.startsWith('/v1/semantic/rubrics/lookup'),
+    );
     expect(path, contains('purpose=reading_comprehension'));
     expect(path, contains('start_ms=1000'));
     expect(path, isNot(contains('rubric-x')));
@@ -400,6 +402,62 @@ void main() {
     expect(adjBody['judgment_id'], 'llm-judgment-1');
     expect(adjBody['prior_verdict'], 'partial');
     expect(adjBody['user_verdict'], 'covered');
+  });
+
+  test('AI rubric generation loads an editable draft saved as llm provenance',
+      () async {
+    final backend = _FakeBackend()
+      ..on('GET', '/v1/semantic/rubrics/lookup', null)
+      ..on('GET', '/v1/llm/providers', [
+        {
+          ..._providerJson(),
+          'allowed_uses': ['rubric_generation'],
+        },
+      ])
+      ..on('POST', '/v1/llm/providers/prov-1/rubric', {
+        'points': [
+          {
+            'importance': 'required',
+            'statement': 'AI 主旨',
+            'accepted_paraphrase_notes': null,
+          },
+          {
+            'importance': 'optional',
+            'statement': 'AI 细节',
+            'accepted_paraphrase_notes': null,
+          },
+        ],
+        'model_id': 'deepseek-x',
+        'prompt_version': 'rubric-gen/v1',
+        'schema_version': 'semantic/v1',
+      })
+      ..on('POST', '/v1/semantic/rubrics', _rubricJson());
+    final controller = ReadingTaskController();
+    await controller.openTask(
+      backend.api,
+      source: _source,
+      templatePoints: _template,
+    );
+    expect(controller.state.phase, 'editing');
+    expect(controller.state.rubricProviderId, 'prov-1');
+
+    await controller.generateRubric(backend.api);
+    // The draft is loaded into the editable template (client-assigned ids),
+    // not auto-saved.
+    expect(controller.state.phase, 'editing');
+    expect(
+      controller.state.draftPoints.map((p) => p.statement).toList(),
+      ['AI 主旨', 'AI 细节'],
+    );
+    expect(controller.state.draftPoints.first.pointId, 'p1');
+
+    // Saving the reviewed draft records honest llm provenance with the model.
+    await controller.saveRubric(backend.api);
+    final body = backend.requests
+        .firstWhere((r) => r.$2 == '/v1/semantic/rubrics')
+        .$3!;
+    expect(body['provenance']['kind'], 'llm');
+    expect(body['provenance']['model_id'], 'deepseek-x');
   });
 
   test('LLM assist stays hidden without a judgment-capable provider', () async {

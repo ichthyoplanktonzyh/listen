@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../models/llm_provider.dart';
 import '../models/semantic_task.dart';
 import '../services/api_service.dart';
 import '../state/store.dart';
@@ -44,6 +45,7 @@ class ReadingTaskState {
     this.draftVerdicts = const {},
     this.adjudications = const [],
     this.judgeProviderId,
+    this.rubricProviderId,
     this.llmJudgment,
     this.llmAdjudications = const [],
     this.pastAttemptCount = 0,
@@ -75,6 +77,9 @@ class ReadingTaskState {
   /// never replaces the manual self-assessment; both are stored, honest
   /// `heuristic_proxy` rows that write no observation/projection.
   final String? judgeProviderId;
+
+  /// Provider allowed for rubric generation (`rubric_generation`), if any.
+  final String? rubricProviderId;
   final SemanticJudgmentView? llmJudgment;
   final List<JudgmentAdjudicationView> llmAdjudications;
   final int pastAttemptCount;
@@ -97,6 +102,7 @@ class ReadingTaskState {
     Map<String, String>? draftVerdicts,
     List<JudgmentAdjudicationView>? adjudications,
     Object? judgeProviderId = _unset,
+    Object? rubricProviderId = _unset,
     Object? llmJudgment = _unset,
     List<JudgmentAdjudicationView>? llmAdjudications,
     int? pastAttemptCount,
@@ -124,6 +130,9 @@ class ReadingTaskState {
     judgeProviderId: identical(judgeProviderId, _unset)
         ? this.judgeProviderId
         : judgeProviderId as String?,
+    rubricProviderId: identical(rubricProviderId, _unset)
+        ? this.rubricProviderId
+        : rubricProviderId as String?,
     llmJudgment: identical(llmJudgment, _unset)
         ? this.llmJudgment
         : llmJudgment as SemanticJudgmentView?,
@@ -149,6 +158,10 @@ class ReadingTaskController extends ChangeNotifier {
 
   final Store<ReadingTaskState> _store;
   int _answerStartedAtMs = 0;
+
+  /// Set when the current draft points came from an AI rubric draft, so a save
+  /// records honest `llm` provenance instead of `manual`.
+  SemanticProvenanceView? _aiRubricProvenance;
   final Map<String, List<RubricPointView>> _pointDrafts = {};
   final Map<String, String> _answerDrafts = {};
 
@@ -166,6 +179,7 @@ class ReadingTaskController extends ChangeNotifier {
     String purpose = readingPurpose,
   }) async {
     final draftKey = _draftKey(source, purpose);
+    _aiRubricProvenance = null;
     _store.replace(
       ReadingTaskState(
         phase: 'idle',
@@ -193,6 +207,7 @@ class ReadingTaskController extends ChangeNotifier {
         final attempts = await api.semanticRubricAttempts(rubric.id);
         _enterAnswering(rubric, attempts.length);
       }
+      await _resolveProviders(api);
     } catch (error) {
       _store.update(
         (s) => s.copyWith(phase: 'idle', busy: false, error: '$error'),
@@ -200,28 +215,74 @@ class ReadingTaskController extends ChangeNotifier {
     }
   }
 
-  /// Picks a configured provider allowed for semantic judgment, preferring one
-  /// with a stored credential. Returns null (feature stays hidden) when no
-  /// judgment-capable provider is configured or the lookup fails — the manual
-  /// self-assessment path never depends on a provider.
-  Future<String?> _resolveJudgeProvider(LocalApi api) async {
+  /// Resolves the (optional) providers allowed for rubric generation and
+  /// semantic judgment, preferring ones with a stored credential. A
+  /// provider-listing failure is swallowed: the manual template + self-
+  /// assessment path never depends on any provider, and the AI entries simply
+  /// stay hidden when nothing is configured.
+  Future<void> _resolveProviders(LocalApi api) async {
+    String? pick(List<LlmProviderProfileView> providers, String use) {
+      for (final provider in providers) {
+        if (provider.hasCredential && provider.allowedUses.contains(use)) {
+          return provider.id;
+        }
+      }
+      for (final provider in providers) {
+        if (provider.allowedUses.contains(use)) return provider.id;
+      }
+      return null;
+    }
+
     try {
       final providers = await api.llmProviders();
-      for (final provider in providers) {
-        if (provider.hasCredential &&
-            provider.allowedUses.contains('semantic_judgment')) {
-          return provider.id;
-        }
-      }
-      for (final provider in providers) {
-        if (provider.allowedUses.contains('semantic_judgment')) {
-          return provider.id;
-        }
-      }
+      _store.update(
+        (s) => s.copyWith(
+          judgeProviderId: pick(providers, 'semantic_judgment'),
+          rubricProviderId: pick(providers, 'rubric_generation'),
+        ),
+      );
     } catch (_) {
       // A provider-listing failure must not break the task flow.
     }
-    return null;
+  }
+
+  /// Phase 3.12.2: asks the configured provider to draft rubric points for the
+  /// current source and loads them into the editable template. The suggestion
+  /// is never auto-applied — it becomes a rubric only when the user saves it,
+  /// and the save then records honest `llm` provenance.
+  Future<void> generateRubric(LocalApi api) async {
+    final source = state.source;
+    final providerId = state.rubricProviderId;
+    if (source == null || providerId == null) return;
+    _store.update((s) => s.copyWith(busy: true, error: null));
+    try {
+      final draft = await api.generateRubricViaLlmProvider(
+        providerId,
+        purpose: state.purpose,
+        sourceLanguage: source.sourceLanguage,
+        responseLanguage: source.responseLanguage,
+        transcriptSnapshot: source.transcriptSnapshot,
+      );
+      if (draft.points.isEmpty) {
+        _store.update(
+          (s) => s.copyWith(busy: false, error: 'no rubric points returned'),
+        );
+        return;
+      }
+      _aiRubricProvenance = SemanticProvenanceView(
+        kind: 'llm',
+        detail: 'reading studio paragraph task (AI-generated, user-reviewed)',
+        modelId: draft.modelId,
+        promptVersion: draft.promptVersion,
+        schemaVersion: draft.schemaVersion,
+      );
+      _cachePointDraft(draft.points);
+      _store.update(
+        (s) => s.copyWith(phase: 'editing', draftPoints: draft.points, busy: false),
+      );
+    } catch (error) {
+      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+    }
   }
 
   void updateDraftPoint(int index, RubricPointView point) {
@@ -267,10 +328,12 @@ class ReadingTaskController extends ChangeNotifier {
         ),
         responseLanguage: source.responseLanguage,
         points: state.draftPoints,
-        provenance: const SemanticProvenanceView(
-          kind: 'manual',
-          detail: 'reading studio paragraph task (user-edited template)',
-        ),
+        provenance:
+            _aiRubricProvenance ??
+            const SemanticProvenanceView(
+              kind: 'manual',
+              detail: 'reading studio paragraph task (user-edited template)',
+            ),
       );
       _enterAnswering(rubric, 0);
     } catch (_) {
@@ -333,12 +396,6 @@ class ReadingTaskController extends ChangeNotifier {
         ),
       );
       _answerDrafts.remove(_draftKey(source, purpose));
-      // Resolve the (optional) judge provider now that the answer exists — the
-      // assist entry only appears from the assessing phase onward.
-      final judgeProviderId = await _resolveJudgeProvider(api);
-      if (judgeProviderId != null && state.judgeProviderId != judgeProviderId) {
-        _store.update((s) => s.copyWith(judgeProviderId: judgeProviderId));
-      }
     } catch (error) {
       _store.update((s) => s.copyWith(busy: false, error: '$error'));
     }
