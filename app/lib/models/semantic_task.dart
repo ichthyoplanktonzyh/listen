@@ -403,3 +403,94 @@ class JudgmentAdjudicationView {
         occurredAtMs: (json['occurred_at_ms'] as num).toInt(),
       );
 }
+
+class WritingFeedbackFindingView {
+  const WritingFeedbackFindingView({
+    required this.id,
+    required this.attemptId,
+    required this.responseRevision,
+    required this.layer,
+    required this.severity,
+    this.sourceSpan,
+    required this.message,
+    this.suggestedReplacement,
+    required this.providerId,
+  });
+
+  final String id;
+  final String attemptId;
+  final int responseRevision;
+  final String layer;
+  final String severity;
+  final ResponseSpanView? sourceSpan;
+  final String message;
+  final String? suggestedReplacement;
+  final String providerId;
+
+  factory WritingFeedbackFindingView.fromJson(Map<String, dynamic> json) =>
+      WritingFeedbackFindingView(
+        id: json['id'] as String,
+        attemptId: json['attempt_id'] as String,
+        responseRevision: (json['response_revision'] as num).toInt(),
+        layer: json['layer'] as String,
+        severity: json['severity'] as String,
+        sourceSpan: json['source_span'] == null
+            ? null
+            : ResponseSpanView.fromJson(
+                json['source_span'] as Map<String, dynamic>,
+              ),
+        message: json['message'] as String,
+        suggestedReplacement: json['suggested_replacement'] as String?,
+        providerId:
+            (json['provenance'] as Map<String, dynamic>)['provider_id']
+                as String,
+      );
+}
+
+class WritingDraftView {
+  const WritingDraftView({
+    required this.rubricId,
+    required this.promptSnapshot,
+    required this.transcript,
+    required this.updatedAtMs,
+  });
+
+  final String rubricId;
+  final String promptSnapshot;
+  final String transcript;
+  final int updatedAtMs;
+
+  factory WritingDraftView.fromJson(Map<String, dynamic> json) =>
+      WritingDraftView(
+        rubricId: json['rubric_id'] as String,
+        promptSnapshot: json['prompt_snapshot'] as String,
+        transcript: json['transcript'] as String,
+        updatedAtMs: (json['updated_at_ms'] as num).toInt(),
+      );
+}
+
+class WritingFindingDispositionView {
+  const WritingFindingDispositionView({
+    required this.id,
+    required this.findingId,
+    required this.decision,
+    this.resultingAttemptId,
+    this.resultingResponseRevision,
+  });
+
+  final String id;
+  final String findingId;
+  final String decision;
+  final String? resultingAttemptId;
+  final int? resultingResponseRevision;
+
+  factory WritingFindingDispositionView.fromJson(Map<String, dynamic> json) =>
+      WritingFindingDispositionView(
+        id: json['id'] as String,
+        findingId: json['finding_id'] as String,
+        decision: json['decision'] as String,
+        resultingAttemptId: json['resulting_attempt_id'] as String?,
+        resultingResponseRevision: (json['resulting_response_revision'] as num?)
+            ?.toInt(),
+      );
+}

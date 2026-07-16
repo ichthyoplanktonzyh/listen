@@ -195,6 +195,119 @@ extension SemanticApi on LocalApi {
         as Map<String, dynamic>,
   );
 
+  Future<SemanticAttemptView> createWritingAttempt({
+    required String kind,
+    required Map<String, dynamic> target,
+    required String rubricId,
+    required int rubricVersion,
+    required bool sourceTextVisible,
+    required int? audioPlayCount,
+    required String promptSnapshot,
+    required List<String> revisions,
+    required String responseLanguage,
+    required int startedAtMs,
+    required int endedAtMs,
+  }) async => SemanticAttemptView.fromJson(
+    (await _request('POST', '/v1/semantic/attempts', {
+          'kind': kind,
+          'target': target,
+          'anchors': const <dynamic>[],
+          'rubric_id': rubricId,
+          'rubric_version': rubricVersion,
+          'conditions': {
+            'source_text_visible': sourceTextVisible,
+            'audio_play_count': audioPlayCount,
+            'notes_allowed': true,
+            'l1_trigger': null,
+            'speaking_assistance': null,
+            'speaking_recall': null,
+            'prompt_snapshot': promptSnapshot,
+          },
+          'responses': [
+            for (var index = 0; index < revisions.length; index++)
+              {
+                'revision': index + 1,
+                'raw_transcript': null,
+                'transcript': revisions[index],
+                'source': 'typed',
+                'recording_asset_id': null,
+                'asr_reliability': null,
+                'language': responseLanguage,
+                'recorded_at_ms': endedAtMs + index,
+              },
+          ],
+          'status': 'completed',
+          'started_at_ms': startedAtMs,
+          'ended_at_ms': endedAtMs,
+        }))
+        as Map<String, dynamic>,
+  );
+
+  Future<List<WritingFeedbackFindingView>> generateLocalWritingFindings(
+    String attemptId,
+    int revision,
+  ) async =>
+      ((await _request(
+                'POST',
+                '/v1/semantic/attempts/${Uri.encodeComponent(attemptId)}/writing-findings/local',
+                {'response_revision': revision},
+              ))
+              as List<dynamic>)
+          .map(
+            (item) => WritingFeedbackFindingView.fromJson(
+              item as Map<String, dynamic>,
+            ),
+          )
+          .toList(growable: false);
+
+  Future<WritingDraftView?> writingDraft(String rubricId) async {
+    final json = await _request(
+      'GET',
+      '/v1/semantic/writing-drafts/${Uri.encodeComponent(rubricId)}',
+    );
+    if (json == null) return null;
+    return WritingDraftView.fromJson(json as Map<String, dynamic>);
+  }
+
+  Future<WritingDraftView> saveWritingDraft({
+    required String rubricId,
+    required String promptSnapshot,
+    required String transcript,
+  }) async => WritingDraftView.fromJson(
+    (await _request(
+          'PUT',
+          '/v1/semantic/writing-drafts/${Uri.encodeComponent(rubricId)}',
+          {'prompt_snapshot': promptSnapshot, 'transcript': transcript},
+        ))
+        as Map<String, dynamic>,
+  );
+
+  Future<void> deleteWritingDraft(String rubricId) async {
+    await _request(
+      'DELETE',
+      '/v1/semantic/writing-drafts/${Uri.encodeComponent(rubricId)}',
+    );
+  }
+
+  Future<WritingFindingDispositionView> createWritingDisposition({
+    required String findingId,
+    required String decision,
+    String? resultingAttemptId,
+    int? resultingRevision,
+  }) async => WritingFindingDispositionView.fromJson(
+    (await _request(
+          'POST',
+          '/v1/semantic/writing-findings/${Uri.encodeComponent(findingId)}/dispositions',
+          {
+            'decision': decision,
+            'resulting_attempt_id': resultingAttemptId,
+            'resulting_response_revision': resultingRevision,
+            'note': null,
+          },
+        ))
+        as Map<String, dynamic>,
+  );
+
   Future<List<SemanticJudgmentView>> semanticAttemptJudgments(
     String attemptId,
   ) async =>

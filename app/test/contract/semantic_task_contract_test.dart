@@ -107,4 +107,33 @@ void main() {
     expect(adjudication.userVerdict, 'covered');
     expect(adjudication.note, isNotEmpty);
   });
+
+  test(
+    'writing feedback and dispositions keep provenance and revision link',
+    () {
+      final finding = WritingFeedbackFindingView.fromJson({
+        'id': 'finding-1',
+        'attempt_id': 'attempt-1',
+        'response_revision': 1,
+        'layer': 'grammar',
+        'severity': 'suggestion',
+        'source_span': {'start_char': 2, 'end_char': 4},
+        'message': 'Check this phrase.',
+        'suggested_replacement': 'a',
+        'provenance': {'provider_id': 'harper'},
+      });
+      expect(finding.providerId, 'harper');
+      expect(finding.sourceSpan!.endChar, 4);
+
+      final disposition = WritingFindingDispositionView.fromJson({
+        'id': 'disposition-1',
+        'finding_id': 'finding-1',
+        'decision': 'accepted',
+        'resulting_attempt_id': 'attempt-2',
+        'resulting_response_revision': 2,
+      });
+      expect(disposition.resultingAttemptId, 'attempt-2');
+      expect(disposition.resultingResponseRevision, 2);
+    },
+  );
 }
