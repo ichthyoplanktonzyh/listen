@@ -2,6 +2,15 @@
 
 All notable changes to the listen desktop app.
 
+## 2026-07-16 — Phase 3.15.8 Semantic Search (Code Complete)
+
+- Added an opt-in local semantic model lifecycle and “Search by meaning” dialog with rebuild, status,
+  model fingerprint, top-K source provenance, disable/enable, and removal controls.
+- Production-gap review can show model-versioned “near something you used” clues below existing ranked
+  targets. These clues do not change ranking and are explicitly not synonym or capability claims.
+- Uninstalled, disabled, stale, and failed semantic capability leaves exact corpus search and the original
+  production-gap review available.
+
 ---
 
 ## Refactoring Initiative — Phases 1–6

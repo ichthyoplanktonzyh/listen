@@ -164,3 +164,64 @@ class ProductionGapReviewView {
   final int candidateCount;
   final List<ProductionGapTargetView> targets;
 }
+
+class NearSemanticProductionMatchView {
+  const NearSemanticProductionMatchView({
+    required this.normalizedKey,
+    required this.similarity,
+    required this.modelFingerprint,
+    required this.explanation,
+  });
+
+  factory NearSemanticProductionMatchView.fromJson(Map<String, dynamic> json) =>
+      NearSemanticProductionMatchView(
+        normalizedKey: json['normalized_key'] as String,
+        similarity: (json['similarity'] as num).toDouble(),
+        modelFingerprint: json['model_fingerprint'] as String,
+        explanation: json['explanation'] as String,
+      );
+
+  final String normalizedKey;
+  final double similarity;
+  final String modelFingerprint;
+  final String explanation;
+}
+
+class ProductionGapSemanticReviewView {
+  const ProductionGapSemanticReviewView({
+    required this.review,
+    required this.semanticStatus,
+    required this.matchesByTarget,
+    required this.threshold,
+  });
+
+  factory ProductionGapSemanticReviewView.fromJson(Map<String, dynamic> json) {
+    final matches = <String, List<NearSemanticProductionMatchView>>{};
+    for (final value in json['enrichments'] as List<dynamic>) {
+      final enrichment = value as Map<String, dynamic>;
+      matches[enrichment['lexical_entry_id']
+          as String] = (enrichment['matches'] as List<dynamic>)
+          .map(
+            (match) => NearSemanticProductionMatchView.fromJson(
+              match as Map<String, dynamic>,
+            ),
+          )
+          .toList(growable: false);
+    }
+    return ProductionGapSemanticReviewView(
+      review: ProductionGapReviewView.fromJson(
+        json['review'] as Map<String, dynamic>,
+      ),
+      semanticStatus:
+          (json['semantic_capability'] as Map<String, dynamic>)['status']
+              as String,
+      matchesByTarget: matches,
+      threshold: (json['threshold'] as num).toDouble(),
+    );
+  }
+
+  final ProductionGapReviewView review;
+  final String semanticStatus;
+  final Map<String, List<NearSemanticProductionMatchView>> matchesByTarget;
+  final double threshold;
+}

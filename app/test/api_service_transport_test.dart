@@ -293,6 +293,129 @@ void main() {
       expect(review.targets.single.frequencyRank, 685);
     });
 
+    test('semantic gap enrichment remains additive to the v1 review', () async {
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'tok',
+        transport: (method, path, body) async => (
+          statusCode: 200,
+          body: jsonEncode({
+            'review': {
+              'language': 'en',
+              'channel': 'written',
+              'readiness': 'starter',
+              'document_count': 1,
+              'token_count': 4,
+              'lemma_count': 4,
+              'candidate_count': 1,
+              'ranking_version': 'production-gap-ranking-v1',
+              'targets': [
+                {
+                  'lexical_entry_id': 'entry-big',
+                  'normalized_key': 'big',
+                  'display_form': 'big',
+                  'frequency_rank': 100,
+                  'frequency_band': 1,
+                  'evidence_strength': 3,
+                  'recency_band': 2,
+                  'reading_acquired': true,
+                  'listening_acquired': false,
+                  'reading_successes': 0,
+                  'listening_successes': 0,
+                  'recognition_contexts': 0,
+                  'latest_receptive_at_ms': 42,
+                  'explanation': ['BNC frequency rank 100'],
+                },
+              ],
+            },
+            'semantic_capability': {
+              'status': 'ready',
+              'indexed_source_count': 3,
+            },
+            'threshold': 0.7,
+            'enrichments': [
+              {
+                'lexical_entry_id': 'entry-big',
+                'target_normalized_key': 'big',
+                'matches': [
+                  {
+                    'normalized_key': 'enormous',
+                    'similarity': 0.81,
+                    'model_fingerprint': 'space-a',
+                    'explanation': 'model clue only',
+                  },
+                ],
+              },
+            ],
+          }),
+        ),
+      );
+
+      final result = await api.semanticProductionGapReview(language: 'en');
+
+      expect(result.review.targets.single.normalizedKey, 'big');
+      expect(
+        result.matchesByTarget['entry-big']!.single.normalizedKey,
+        'enormous',
+      );
+      expect(result.threshold, 0.7);
+    });
+
+    test('semantic search keeps capability and provenance typed', () async {
+      String? seenPath;
+      final api = LocalApi.withTransport(
+        baseUrl: 'http://test',
+        token: 'tok',
+        transport: (method, path, body) async {
+          seenPath = path;
+          return (
+            statusCode: 200,
+            body: jsonEncode({
+              'capability': {
+                'status': 'ready',
+                'indexed_source_count': 2,
+                'descriptor': {
+                  'model_id': 'all-MiniLM-L6-v2',
+                  'model_version': 'revision-a',
+                  'dimension': 384,
+                  'model_fingerprint': 'abcdef0123456789',
+                  'local': true,
+                },
+              },
+              'query': 'a very big room',
+              'hits': [
+                {
+                  'source': {
+                    'kind': 'media_corpus',
+                    'source_id': 'sentence-1',
+                    'language': 'en',
+                    'text': 'An enormous hall.',
+                    'start_ms': 10,
+                    'end_ms': 20,
+                  },
+                  'similarity': 0.82,
+                  'model_fingerprint': 'abcdef0123456789',
+                },
+              ],
+            }),
+          );
+        },
+      );
+
+      final result = await api.semanticSearch(
+        query: 'a very big room',
+        language: 'en',
+      );
+
+      expect(
+        seenPath,
+        '/v1/semantic-search?query=a+very+big+room&language=en&source=all&channel=all&limit=20',
+      );
+      expect(result.capability.canSearch, isTrue);
+      expect(result.hits.single.source.text, 'An enormous hall.');
+      expect(result.hits.single.similarity, closeTo(0.82, 0.001));
+    });
+
     test(
       'short recording transcription keeps raw ASR and provenance typed',
       () async {

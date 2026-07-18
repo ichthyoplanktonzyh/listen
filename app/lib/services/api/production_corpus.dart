@@ -19,6 +19,24 @@ extension ProductionCorpusApi on LocalApi {
     );
   }
 
+  Future<ProductionGapSemanticReviewView> semanticProductionGapReview({
+    required String language,
+    String channel = 'written',
+    int limit = 10,
+  }) async {
+    final params = Uri(
+      queryParameters: {
+        'language': language,
+        'channel': channel,
+        'limit': '$limit',
+      },
+    ).query;
+    return ProductionGapSemanticReviewView.fromJson(
+      await _request('GET', '/v1/production-gap/semantic-enrichment?$params')
+          as Map<String, dynamic>,
+    );
+  }
+
   Future<List<ProductionCorpusHitView>> searchProductionCorpus({
     required String language,
     required String query,
