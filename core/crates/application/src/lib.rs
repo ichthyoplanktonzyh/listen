@@ -93,8 +93,9 @@ mod vocabulary;
 mod word_timelines;
 
 pub use coach_dashboard::{
-    CoachChannelStatus, CoachChannelSummary, CoachDashboard, CoachEvidenceItem,
-    CoachMaterialInsight, CoachMetric, CoachSuggestion,
+    CoachAssessmentSummary, CoachChannelStatus, CoachChannelSummary, CoachDashboard,
+    CoachEvidenceItem, CoachFeatureAvailability, CoachMaterialInsight, CoachMetric,
+    CoachSuggestion, CoachSuggestionDestination,
 };
 pub use dictionary::DictionaryUseCases;
 pub use dto::*;

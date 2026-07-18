@@ -2896,6 +2896,9 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 
 - 优先级：P1
 - 阶段：Phase 3.18
+- 当前状态：✅ CODE COMPLETE — OWNER MANUAL QA PENDING（2026-07-18）。四通道分层 read model、
+  effective assessment、typed provenance/snapshot、provider-independent availability、typed
+  destination/return context 与资产层 Flutter surface 已落地；Coach 零 capability writer。
 - 需求：Coach 应从 durable facts 聚合四通道与 cross-modal gap，并提供可追溯、可忽略的
   下一步建议；Dashboard 不成为 evidence/projection 写入者。
 - 验收标准：

@@ -1317,6 +1317,7 @@ paths:
       operationId: coachDashboard
       parameters:
         - { name: days, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 365, default: 7 } }
+        - { name: language, in: query, required: false, schema: { type: string, default: en } }
       responses:
         "200":
           description: Read-only diagnostic dashboard with channel-ready availability and traceable suggestions
@@ -1324,7 +1325,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [period_start_ms, period_end_ms, generated_at_ms, channels, suggestions, starter_checklist, materials]
+                required: [period_start_ms, period_end_ms, generated_at_ms, channels, suggestions, starter_checklist, materials, features]
                 properties:
                   period_start_ms: { type: integer, minimum: 0 }
                   period_end_ms: { type: integer, minimum: 0 }
@@ -1333,7 +1334,7 @@ paths:
                     type: array
                     items:
                       type: object
-                      required: [channel, status, metrics]
+                      required: [channel, status, metrics, effective_assessments]
                       properties:
                         channel: { enum: [listening, reading, speaking, writing] }
                         status: { enum: [available, unassessed] }
@@ -1342,21 +1343,35 @@ paths:
                           type: array
                           items:
                             type: object
-                            required: [key, value, source]
+                            required: [key, value, source, authority_layer]
                             properties:
                               key: { type: string }
                               value: { type: integer, minimum: 0 }
                               source: { type: string }
+                              authority_layer: { type: string }
+                        effective_assessments:
+                          type: object
+                          required: [acquired, not_acquired, unassessed]
+                          properties:
+                            acquired: { type: integer, minimum: 0 }
+                            not_acquired: { type: integer, minimum: 0 }
+                            unassessed: { type: integer, minimum: 0 }
                   suggestions:
                     type: array
                     items:
                       type: object
-                      required: [kind, title_key, reason_key, action, evidence_source, evidence_count]
+                      required: [id, kind, title_key, reason_key, destination, evidence_source, evidence_count]
                       properties:
+                        id: { type: string }
                         kind: { type: string }
                         title_key: { type: string }
                         reason_key: { type: string }
-                        action: { type: string }
+                        destination:
+                          type: object
+                          required: [kind]
+                          properties:
+                            kind: { enum: [review_queue, hunting_list, cross_modal_review, personal_expression, content_home] }
+                            language: { type: string }
                         evidence_source: { type: string }
                         evidence_count: { type: integer, minimum: 0 }
                   starter_checklist:
@@ -1381,6 +1396,15 @@ paths:
                         triage_intent: { type: [string, "null"] }
                         graduation_candidate: { type: boolean }
                         recommended_intent: { type: [string, "null"], enum: [pin_extensive, pin_intensive, null] }
+                  features:
+                    type: array
+                    items:
+                      type: object
+                      required: [feature, status, reason]
+                      properties:
+                        feature: { type: string }
+                        status: { enum: [configured, not_configured] }
+                        reason: { type: string }
   /v1/coach/materials/{media_id}/graduate:
     post:
       operationId: graduateCoachMaterial
@@ -1409,11 +1433,15 @@ paths:
                 type: array
                 items:
                   type: object
-                  required: [id, occurred_at_ms, result]
+                  required: [id, occurred_at_ms, result, source_kind, snapshot, source_available]
                   properties:
                     id: { type: string }
                     occurred_at_ms: { type: integer, minimum: 0 }
                     result: { type: string }
+                    source_kind: { type: string }
+                    snapshot: { type: string }
+                    source_available: { type: boolean }
+                    unavailable_reason: { type: string }
   /v1/reading/positions/{track_id}:
     get:
       operationId: readingPosition

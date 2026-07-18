@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-18 23:17 CST: Phase 3.18 Cross-modal Coach code complete。按 `main@88223b0b`
+  重审并收紧旧 PLAN：Coach 只聚合、解释和编排既有事实/资产，不创建综合等级、跨通道蕴含或
+  第二 capability authority。SQLite bounded live read model 分层返回四通道 attempt、supporting
+  judgment、adjudication、observation、proposal、confirmed projection、history 与 personal-
+  expression attempt；effective assessment 保持 3.17 override 优先，unassessed 不算失败。新增
+  typed provenance/immutable snapshot/source-unavailable 降级、provider-independent availability、
+  typed Review/Hunting/Cross-modal Review/Personal Expression destination 与 Flutter return context；
+  无 schema/cache/rebuild 或 learning writer。Rust 受影响 crate 250 unit tests + 23 integration/
+  migration tests、strict Clippy、Flutter analyze/453 tests、contracts 全绿。owner 真实数据/来源失联/
+  GUI QA 留 `3.18-MANUAL-QA.md`，未执行或冒充相邻阶段 owner QA。
+
 - 2026-07-18 21:02 CST: Phase 3.17 Four-channel Projection & Cross-modal Review code complete。
   按 `main@5bf8fbd3` 重审 authority 与真实 evidence 底盘，新增 SQLite v44 append-only proposal/
   decision、Reading v1/Listening v2/Speaking v1 独立算法、Writing `insufficient_evidence`、显式

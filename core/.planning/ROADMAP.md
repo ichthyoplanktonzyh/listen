@@ -1485,7 +1485,9 @@ Phase 3.7–3.10 仍按既有计划完成，不在本轮重排。听力主线与
 12. 3.16 Personal Expression ✅ CODE COMPLETE（owner manual QA pending）；
 13. 3.17 Four-channel Projection & Cross-modal Review ✅ CODE COMPLETE（owner manual QA pending；
     writing lexical projection 因无合格 target confirmation 保持 unassessed）；
-14. 3.18 Cross-modal Coach & Four-channel Closeout。
+14. 3.18 Cross-modal Coach & Four-channel Closeout ✅ CODE COMPLETE（owner manual QA pending；
+    四通道只读聚合、分层 provenance、typed destination/return 与来源 snapshot 降级已落地，
+    零 capability/projection writer）。
 
 上述顺序表达当前依赖与建议交付次序；phase scope 不构成长期产品非目标。各 PLAN 是方向承诺
 而非永久执行规格，

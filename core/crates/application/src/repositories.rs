@@ -615,7 +615,31 @@ pub struct CoachDashboardFacts {
     pub active_hunting_candidates: u64,
     pub l1_difficulty_hits: u64,
     pub listening_capability_changes: u64,
+    pub channels: Vec<CoachChannelFacts>,
+    pub cross_modal_gap_count: u64,
+    pub personal_expression_asset_count: u64,
+    pub llm_provider_profile_count: u64,
     pub materials: Vec<CoachMaterialFact>,
+}
+
+/// Read-only, already-layered facts for one capability channel. Counts remain
+/// separate so the Coach cannot collapse attempts, supporting judgments,
+/// proposals, confirmed projections, overrides, and effective assessment into
+/// a second capability truth.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CoachChannelFacts {
+    pub channel: String,
+    pub completed_attempts: u64,
+    pub supporting_judgments: u64,
+    pub adjudications: u64,
+    pub observations: u64,
+    pub projection_proposals: u64,
+    pub confirmed_projections: u64,
+    pub capability_changes: u64,
+    pub personal_expression_attempts: u64,
+    pub acquired_entries: u64,
+    pub not_acquired_entries: u64,
+    pub unassessed_entries: u64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -636,6 +660,7 @@ pub struct CoachMaterialFact {
 pub trait CoachDashboardRepository: Send + Sync {
     fn coach_dashboard_facts(
         &self,
+        language: &LanguageCode,
         period_start_ms: u64,
         period_end_ms: u64,
         as_of_ms: u64,
@@ -655,6 +680,10 @@ pub struct CoachEvidenceFact {
     pub id: String,
     pub occurred_at_ms: u64,
     pub result: String,
+    pub source_kind: String,
+    pub snapshot: String,
+    pub source_available: bool,
+    pub unavailable_reason: Option<String>,
 }
 
 pub trait ListeningInboxRepository: Send + Sync {

@@ -11,16 +11,19 @@ use domain::{RecordingAsset, RecordingAssetId, ShadowingComparison};
 #[derive(Debug, Deserialize)]
 pub(crate) struct CoachDashboardQuery {
     days: Option<u32>,
+    language: Option<String>,
 }
 
 pub(crate) async fn coach_dashboard(
     State(state): State<ApiState>,
     Query(query): Query<CoachDashboardQuery>,
 ) -> Result<Json<application::CoachDashboard>, ApiError> {
+    let language = domain::LanguageCode::parse(query.language.as_deref().unwrap_or("en"))
+        .map_err(ApplicationError::from)?;
     state
         .services
         .media_analysis()
-        .coach_dashboard(query.days.unwrap_or(7))
+        .coach_dashboard(&language, query.days.unwrap_or(7))
         .map(Json)
         .map_err(ApiError::from)
 }

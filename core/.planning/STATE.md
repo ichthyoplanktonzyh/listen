@@ -3,17 +3,25 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-18T20:49:00.000+08:00"
+last_updated: "2026-07-18T23:17:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-18 20:49 CST
-> 更新原因：Phase 3.17 Four-channel Projection & Cross-modal Review 代码收口，进入 owner manual QA。
+> 最后更新：2026-07-18 23:17 CST
+> 更新原因：Phase 3.18 Cross-modal Coach 代码收口，进入 owner manual QA。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.17 Four-channel Projection & Cross-modal Review **✅ CODE COMPLETE —
+- **当前执行主线**：Phase 3.18 Cross-modal Coach **✅ CODE COMPLETE — OWNER MANUAL QA
+  PENDING**。3.10 listening-only dashboard 已扩为四通道只读聚合：attempt/judgment/
+  adjudication/observation/proposal/confirmed projection/history/personal-expression attempt 分层，
+  effective assessment 继续读取 3.17 authority，unassessed 不算失败。typed provenance + immutable
+  snapshot、provider-independent availability、Review/Hunting/Cross-modal Review/Personal Expression
+  typed destination 与 Coach return context 已贯通；无新 schema/cache/rebuild 或任何 capability
+  writer。下一步仅由 owner 执行 `3.18-MANUAL-QA.md`；实现者未执行或冒充 3.18、3.17、3.16、
+  3.15.7/3.15.8/3.15.9/3.14 owner QA。
+- Phase 3.17 Four-channel Projection & Cross-modal Review **✅ CODE COMPLETE —
   OWNER MANUAL QA PENDING**。schema v44 append-only proposal/decision、四通道独立 qualification、
   proposal-only 自动 writer、原子 confirmation→projection/history、override 优先、显式 rebuild、
   cross-modal assessed-gap 与来源 snapshot、OpenAPI/typed Flutter 资产层入口已贯通。Reading/
