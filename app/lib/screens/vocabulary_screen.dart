@@ -11,6 +11,7 @@ import '../controllers/slice_player_controller.dart';
 import '../localization.dart';
 import '../models/practice.dart';
 import '../models/production_corpus.dart';
+import '../models/projection_review.dart';
 import '../models/semantic_embedding.dart';
 import '../models/types.dart';
 import '../services/api_service.dart';
@@ -389,6 +390,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
 
   /// Non-null while the in-page entry detail is open (master → detail).
   LexicalEntryDetails? details;
+  bool returnToCrossModalReview = false;
 
   /// Pending listening upgrade suggestions and the dictionary-provider
   /// pronunciation audio for the open entry (both best-effort).
@@ -539,6 +541,10 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   void _closeDetails() {
     unawaited(widget.auxiliaryAudio.stop());
     setState(() => details = null);
+    if (returnToCrossModalReview) {
+      returnToCrossModalReview = false;
+      unawaited(_openCrossModalReview());
+    }
   }
 
   Future<void> _openProductionAttempt(ProductionCorpusHitView hit) async {
@@ -695,6 +701,152 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
               ],
             ],
           ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(l.text('close')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openCrossModalReview() async {
+    final l = AppLocalizations.of(context);
+    List<CrossModalReviewCandidateView> candidates;
+    try {
+      candidates = await widget.api.crossModalReviewGaps(
+        language: widget.language,
+      );
+    } catch (error) {
+      if (mounted) _snack('${l.text('crossModalReviewUnavailable')}: $error');
+      return;
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l.text('crossModalReviewTitle')),
+        content: SizedBox(
+          width: 680,
+          child: candidates.isEmpty
+              ? Text(l.text('crossModalReviewEmpty'))
+              : ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final candidate in candidates)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(candidate.displayForm),
+                        subtitle: Text(
+                          '${candidate.reviewKind}\n'
+                          '${candidate.reading} · ${candidate.listening} · '
+                          '${candidate.speaking} · ${candidate.writing}\n'
+                          '${candidate.reason}\n${candidate.source.snapshot}',
+                        ),
+                        isThreeLine: false,
+                        trailing: TextButton(
+                          onPressed: () {
+                            returnToCrossModalReview = true;
+                            Navigator.pop(dialogContext);
+                            unawaited(_openEntryById(candidate.lexicalEntryId));
+                          },
+                          child: Text(l.text('productionGapOpenTarget')),
+                        ),
+                      ),
+                  ],
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(l.text('close')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openProjectionReview(String lexicalEntryId) async {
+    final l = AppLocalizations.of(context);
+    List<ProjectionProposalView> proposals;
+    try {
+      proposals = await widget.api.auditProjectionEntry(lexicalEntryId);
+    } catch (error) {
+      if (mounted) _snack('${l.text('projectionReviewUnavailable')}: $error');
+      return;
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l.text('projectionReviewTitle')),
+        content: SizedBox(
+          width: 680,
+          child: proposals.isEmpty
+              ? Text(l.text('projectionReviewEmpty'))
+              : ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final proposal in proposals)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          '${proposal.capability} → ${proposal.proposedConclusion}',
+                        ),
+                        subtitle: Text(
+                          '${proposal.rationale}\n${proposal.algorithmVersion} · ${proposal.status}',
+                        ),
+                        isThreeLine: true,
+                        trailing: proposal.status != 'pending'
+                            ? null
+                            : Wrap(
+                                children: [
+                                  IconButton(
+                                    tooltip: l.text('reject'),
+                                    onPressed: () async {
+                                      await widget.api.decideProjectionProposal(
+                                        proposalId: proposal.id,
+                                        decision: 'reject',
+                                      );
+                                      if (dialogContext.mounted) {
+                                        Navigator.pop(dialogContext);
+                                      }
+                                      if (mounted) {
+                                        unawaited(
+                                          _openProjectionReview(lexicalEntryId),
+                                        );
+                                      }
+                                    },
+                                    icon: const Icon(Icons.close),
+                                  ),
+                                  IconButton(
+                                    tooltip: l.text('confirm'),
+                                    onPressed: () async {
+                                      await widget.api.decideProjectionProposal(
+                                        proposalId: proposal.id,
+                                        decision: 'confirm',
+                                      );
+                                      if (dialogContext.mounted) {
+                                        Navigator.pop(dialogContext);
+                                      }
+                                      if (mounted) {
+                                        unawaited(
+                                          _openEntryById(lexicalEntryId),
+                                        );
+                                        unawaited(
+                                          _openProjectionReview(lexicalEntryId),
+                                        );
+                                      }
+                                    },
+                                    icon: const Icon(Icons.check),
+                                  ),
+                                ],
+                              ),
+                      ),
+                  ],
+                ),
         ),
         actions: [
           TextButton(
@@ -1269,6 +1421,15 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                 icon: const Icon(Icons.queue_music_outlined, size: 18),
                 label: Text(l.text('dictionaryAddToReview')),
               )
+            else
+              const SizedBox.shrink(),
+            if (openDetails != null)
+              IconButton(
+                tooltip: l.text('projectionReviewTitle'),
+                onPressed: () =>
+                    unawaited(_openProjectionReview(openDetails.entry.id)),
+                icon: const Icon(Icons.fact_check_outlined),
+              )
             else ...[
               IconButton(
                 tooltip: l.text('semanticSearchTitle'),
@@ -1285,6 +1446,11 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                 tooltip: l.text('productionGapTitle'),
                 onPressed: () => unawaited(_openProductionGapReview()),
                 icon: const Icon(Icons.compare_arrows_outlined),
+              ),
+              IconButton(
+                tooltip: l.text('crossModalReviewTitle'),
+                onPressed: () => unawaited(_openCrossModalReview()),
+                icon: const Icon(Icons.hub_outlined),
               ),
               IconButton(
                 tooltip: l.text('dictionaryReindex'),

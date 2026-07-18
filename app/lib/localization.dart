@@ -167,6 +167,14 @@ class AppLocalizations {
       'huntingFailureCount': 'Missed in review {count} time(s)',
       'huntingOpen': 'Open Hunting List',
       'productionGapTitle': 'Words to bring into your output',
+      'crossModalReviewTitle': 'Cross-channel review',
+      'crossModalReviewEmpty':
+          'No assessed cross-channel gap needs review. Unassessed channels stay unassessed.',
+      'crossModalReviewUnavailable': 'Cross-channel review is unavailable',
+      'projectionReviewTitle': 'Capability proposals',
+      'projectionReviewEmpty':
+          'There is not enough qualified evidence for a proposal. The channel remains unassessed.',
+      'projectionReviewUnavailable': 'Capability proposals are unavailable',
       'productionGapFacts':
           '{documents} output samples · {tokens} words · {lemmas} lemmas',
       'productionGapStarter':
@@ -1329,6 +1337,12 @@ class AppLocalizations {
       'huntingFailureCount': '复习中失败 {count} 次',
       'huntingOpen': '打开猎词单',
       'productionGapTitle': '把这些词带进产出',
+      'crossModalReviewTitle': '跨通道复习',
+      'crossModalReviewEmpty': '当前没有已评估的跨通道差距；证据不足的通道仍保持未评估。',
+      'crossModalReviewUnavailable': '跨通道复习暂不可用',
+      'projectionReviewTitle': '能力建议',
+      'projectionReviewEmpty': '当前合格证据不足，无法形成建议；该通道保持未评估。',
+      'projectionReviewUnavailable': '能力建议暂不可用',
       'productionGapFacts':
           '已有 {documents} 份产出 · {tokens} 个词 · {lemmas} 个 lemma',
       'productionGapStarter': '当前产出语料仍少。以下只是练习候选，不代表你不会使用这些词。',
