@@ -15,9 +15,11 @@ import '../../controllers/subtitle_controller.dart';
 import '../../localization.dart';
 import '../../learning_assets_ui.dart';
 import '../../models/practice.dart';
+import '../../models/personal_expression.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
 import '../../screens/review_queue_screen.dart';
+import '../../screens/personal_expression_screen.dart';
 import '../../screens/vocabulary_screen.dart';
 import '../../services/api_service.dart';
 import '../../utils/word_list_parser.dart';
@@ -35,6 +37,10 @@ Future<void> openLearningAssetsFlow({
   required SubtitleController subtitleController,
   required Future<void> Function(Map<String, dynamic> occurrence)
   openSlicePlayback,
+  Future<void> Function(PersonalExpressionSourceView source)?
+  onPlayExpressionSource,
+  Future<void> Function(SentencePatternAssetView pattern)?
+  onStartExpressionSpeaking,
 }) async {
   if (api == null) return;
   final occurrence = await Navigator.of(context).push<Map<String, dynamic>>(
@@ -44,10 +50,34 @@ Future<void> openLearningAssetsFlow({
         language: settingsController.resolveLearningLanguage(
           subtitleController.primaryTrack?.language,
         ),
+        onPlayExpressionSource: onPlayExpressionSource,
+        onStartExpressionSpeaking: onStartExpressionSpeaking,
       ),
     ),
   );
   if (occurrence != null) await openSlicePlayback(occurrence);
+}
+
+Future<void> openPersonalExpressionFlow({
+  required BuildContext context,
+  required LocalApi? api,
+  required String language,
+  PersonalExpressionSourceView? initialSource,
+  Future<void> Function(PersonalExpressionSourceView source)? onPlaySource,
+  Future<void> Function(SentencePatternAssetView pattern)? onStartSpeaking,
+}) async {
+  if (api == null) return;
+  await Navigator.of(context).push<void>(
+    MaterialPageRoute(
+      builder: (_) => PersonalExpressionScreen(
+        api: api,
+        language: language,
+        initialSource: initialSource,
+        onPlaySource: onPlaySource,
+        onStartSpeaking: onStartSpeaking,
+      ),
+    ),
+  );
 }
 
 Future<void> openLearningResourcesFlow({

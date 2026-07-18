@@ -136,6 +136,7 @@ void main() {
       ReadingController controller, {
       Future<void> Function(SubtitleToken, Cue)? onWord,
       Future<void> Function(ReadingSentence)? onPlaySentence,
+      Future<void> Function(ReadingSentence)? onSaveSentencePattern,
       VoidCallback? onClose,
     }) => MaterialApp(
       locale: const Locale('en'),
@@ -150,9 +151,38 @@ void main() {
           onWord: onWord ?? (_, _) async {},
           onPlaySentence: onPlaySentence ?? (_) async {},
           onPlayParagraph: (_) async {},
+          onSaveSentencePattern: onSaveSentencePattern,
           onClose: onClose ?? () {},
         ),
       ),
+    );
+
+    testWidgets(
+      'sentence toolbar exposes explicit personal-expression capture',
+      (tester) async {
+        final controller = ReadingController();
+        controller.open(
+          _track([_cue(0, 'I ended up fixing it.', startMs: 0, endMs: 1000)]),
+        );
+        ReadingSentence? saved;
+        await tester.pumpWidget(
+          host(
+            controller,
+            onSaveSentencePattern: (sentence) async => saved = sentence,
+          ),
+        );
+        await tester.tapAt(
+          tester.getTopLeft(
+                find.byKey(const ValueKey('reading-paragraph-cue-0')),
+              ) +
+              const Offset(4, 4),
+        );
+        await tester.pump();
+        await tester.tap(
+          find.byKey(const ValueKey('reading-save-pattern-cue-0-0')),
+        );
+        expect(saved?.text, 'I ended up fixing it.');
+      },
     );
 
     testWidgets('renders paragraphs and separator markers', (tester) async {

@@ -6,16 +6,24 @@ import 'services/api_service.dart';
 import 'localization.dart';
 import 'models/runtime_resources.dart';
 import 'models/types.dart';
+import 'models/personal_expression.dart';
+import 'screens/personal_expression_screen.dart';
 
 class LearningAssetsScreen extends StatefulWidget {
   const LearningAssetsScreen({
     super.key,
     required this.api,
     required this.language,
+    this.onPlayExpressionSource,
+    this.onStartExpressionSpeaking,
   });
 
   final LocalApi api;
   final String language;
+  final Future<void> Function(PersonalExpressionSourceView source)?
+  onPlayExpressionSource;
+  final Future<void> Function(SentencePatternAssetView pattern)?
+  onStartExpressionSpeaking;
 
   @override
   State<LearningAssetsScreen> createState() => _LearningAssetsScreenState();
@@ -146,6 +154,29 @@ class _LearningAssetsScreenState extends State<LearningAssetsScreen> {
       appBar: AppBar(title: Text(l.text('learningAssets'))),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: Card(
+              child: ListTile(
+                leading: const Icon(Icons.auto_stories_outlined),
+                title: const Text('我的表达'),
+                subtitle: const Text('收藏真实句子，编辑成自己的模板，并分别练习书面与口头表达'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  await Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => PersonalExpressionScreen(
+                        api: widget.api,
+                        language: widget.language,
+                        onPlaySource: widget.onPlayExpressionSource,
+                        onStartSpeaking: widget.onStartExpressionSpeaking,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.all(12),
             child: Row(

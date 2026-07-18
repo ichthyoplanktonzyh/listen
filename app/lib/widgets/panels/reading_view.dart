@@ -27,6 +27,7 @@ class ReadingView extends StatefulWidget {
     required this.onPlaySentence,
     required this.onPlayParagraph,
     this.onStartTask,
+    this.onSaveSentencePattern,
     this.onOpenDiff,
     required this.onClose,
   });
@@ -41,6 +42,7 @@ class ReadingView extends StatefulWidget {
 
   /// Opens the paragraph-task flow (Slice 3); null hides the task chip.
   final Future<void> Function(ReadingParagraph paragraph)? onStartTask;
+  final Future<void> Function(ReadingSentence sentence)? onSaveSentencePattern;
 
   /// Opens the read-listen pairing card (Slice 4); null hides the chip.
   final Future<void> Function(ReadingParagraph paragraph)? onOpenDiff;
@@ -451,20 +453,40 @@ class _ReadingViewState extends State<ReadingView> {
                   onPressed: () => unawaited(widget.onOpenDiff!(paragraph)),
                 ),
               for (var i = 0; i < paragraph.sentences.length; i++)
-                Tooltip(
-                  message:
-                      '${l.text('readingPlaySentence')}: ${paragraph.sentences[i].text}',
-                  child: TextButton.icon(
-                    key: ValueKey(
-                      'reading-sentence-${paragraph.anchorCueId}-$i',
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Tooltip(
+                      message:
+                          '${l.text('readingPlaySentence')}: ${paragraph.sentences[i].text}',
+                      child: TextButton.icon(
+                        key: ValueKey(
+                          'reading-sentence-${paragraph.anchorCueId}-$i',
+                        ),
+                        icon: const Icon(Icons.volume_up_outlined, size: 15),
+                        label: Text('${i + 1}'),
+                        onPressed: () {
+                          widget.controller.noteSlicePlay(
+                            paragraph.anchorCueId,
+                          );
+                          unawaited(
+                            widget.onPlaySentence(paragraph.sentences[i]),
+                          );
+                        },
+                      ),
                     ),
-                    icon: const Icon(Icons.volume_up_outlined, size: 15),
-                    label: Text('${i + 1}'),
-                    onPressed: () {
-                      widget.controller.noteSlicePlay(paragraph.anchorCueId);
-                      unawaited(widget.onPlaySentence(paragraph.sentences[i]));
-                    },
-                  ),
+                    if (widget.onSaveSentencePattern != null)
+                      IconButton(
+                        key: ValueKey(
+                          'reading-save-pattern-${paragraph.anchorCueId}-$i',
+                        ),
+                        tooltip: '保存到我的表达',
+                        icon: const Icon(Icons.bookmark_add_outlined, size: 17),
+                        onPressed: () => unawaited(
+                          widget.onSaveSentencePattern!(paragraph.sentences[i]),
+                        ),
+                      ),
+                  ],
                 ),
             ],
           ),

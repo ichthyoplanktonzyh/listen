@@ -193,6 +193,47 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
     );
   }
 
+  Future<void> openPersonalPattern(
+    LocalApi api, {
+    required String patternId,
+    required String language,
+    required String sourceText,
+    required String promptText,
+    String? mediaId,
+    String? trackId,
+    int? startMs,
+    int? endMs,
+    required List<RubricPointView> fixedRubricPoints,
+    required Future<void> Function() closeReading,
+  }) async {
+    final effectiveStart = startMs ?? 0;
+    final source = SpeakingTaskSource(
+      anchorCueId: patternId,
+      mediaId: mediaId,
+      trackId: trackId,
+      startMs: effectiveStart,
+      endMs: endMs != null && endMs > effectiveStart
+          ? endMs
+          : effectiveStart + 1,
+      language: language,
+      transcriptSnapshot: sourceText,
+      promptSnapshot: promptText,
+    );
+    await closeReading();
+    await acquireRecordingFocus();
+    _returnPosition = player.position;
+    _source = source;
+    _retellingSource = null;
+    notifyListeners();
+    await task.openTask(
+      api,
+      source: source,
+      fixedRubricPoints: fixedRubricPoints,
+      kind: SpeakingTaskController.patternProductionKind,
+      assistance: 'no_text',
+    );
+  }
+
   Future<void> showRoleReply(
     LocalApi api, {
     required String assistance,

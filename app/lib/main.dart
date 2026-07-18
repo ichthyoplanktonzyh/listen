@@ -46,6 +46,7 @@ import 'controllers/settings_controller.dart';
 import 'controllers/slice_player_controller.dart';
 import 'models/capability_readiness.dart';
 import 'models/practice.dart';
+import 'models/personal_expression.dart';
 import 'models/task_status.dart';
 import 'models/reading.dart';
 import 'models/timeline.dart';
@@ -158,6 +159,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   ReadingTaskSource? _listeningCheckSource;
   int _listeningPlayCount = 0;
   ReadingTaskSource? _speakingL1CheckSource;
+  SentencePatternAssetView? _activePersonalPattern;
   WritingTaskSource? _writingTaskStudioSource;
   String _writingKind = WritingTaskController.summaryKind;
   int _writingPlayCount = 0;
@@ -775,6 +777,64 @@ class _PlayerScreenState extends State<PlayerScreen>
     settingsController: settingsController,
     subtitleController: subtitleController,
     openSlicePlayback: _openSlicePlayback,
+    onPlayExpressionSource: _playPersonalExpressionSource,
+    onStartExpressionSpeaking: _startPersonalExpressionSpeaking,
+  );
+
+  Future<void> _playPersonalExpressionSource(
+    PersonalExpressionSourceView value,
+  ) async {
+    final mediaId = value.mediaId;
+    final startMs = value.startMs;
+    final endMs = value.endMs;
+    if (mediaId == null || startMs == null || endMs == null) return;
+    await _openSlicePlayback(
+      currentMediaSliceOccurrence(
+        mediaId: mediaId,
+        trackId: value.trackId,
+        sentenceId: value.sentenceId ?? value.candidateRef ?? mediaId,
+        textSnapshot: value.text,
+        startMs: startMs,
+        endMs: endMs,
+        mediaFingerprint: value.mediaFingerprint,
+      ),
+    );
+  }
+
+  Future<void> _startPersonalExpressionSpeaking(
+    SentencePatternAssetView pattern,
+  ) async {
+    final service = api;
+    if (service == null || !Platform.isMacOS) return;
+    _activePersonalPattern = pattern;
+    setState(() => _workbenchExpanded = true);
+    _workbenchAnimController.forward();
+    await speakingActions.openPersonalPattern(
+      service,
+      patternId: pattern.id,
+      language: pattern.language,
+      sourceText: pattern.source.text,
+      promptText: pattern.currentVersion.patternText,
+      mediaId: pattern.source.mediaId,
+      trackId: pattern.source.trackId,
+      startMs: pattern.source.startMs,
+      endMs: pattern.source.endMs,
+      fixedRubricPoints: personalExpressionTemplate(l),
+      closeReading: _closeReading,
+    );
+  }
+
+  Future<void> _openPersonalExpression({
+    PersonalExpressionSourceView? source,
+  }) => openPersonalExpressionFlow(
+    context: context,
+    api: api,
+    language: settingsController.resolveLearningLanguage(
+      subtitleController.primaryTrack?.language,
+    ),
+    initialSource: source,
+    onPlaySource: _playPersonalExpressionSource,
+    onStartSpeaking: _startPersonalExpressionSpeaking,
   );
 
   Future<void> _openLearningResources() =>
@@ -1500,9 +1560,46 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _closeSpeakingSurface() async {
     if (_speakingL1CheckSource != null) _closeSpeakingL1Check();
     final returnToReview = speakingActions.source?.recall == 'delayed';
+    final personalPattern = _activePersonalPattern;
+    final personalState = speakingTaskController.state;
+    if (personalPattern != null &&
+        personalState.phase == 'done' &&
+        personalState.recording != null &&
+        personalState.correctedTranscript.trim().isNotEmpty) {
+      final verdicts =
+          personalState.rubric?.points
+              .map((point) => personalState.effectiveVerdict(point.pointId))
+              .whereType<String>()
+              .toList(growable: false) ??
+          const <String>[];
+      final assessment = verdicts.any((value) => value == 'missing')
+          ? 'needs_work'
+          : verdicts.isNotEmpty && verdicts.every((value) => value == 'covered')
+          ? 'expressed'
+          : 'partly_expressed';
+      try {
+        await api?.recordPersonalExpressionAttempt(
+          patternId: personalPattern.id,
+          patternVersionId: personalPattern.currentVersion.id,
+          channel: 'speaking',
+          assistance: 'no_text',
+          responseText: personalState.correctedTranscript.trim(),
+          rawTranscript: personalState.rawTranscript,
+          recordingAssetId: personalState.recording!.id,
+          selfAssessment: assessment,
+        );
+      } catch (error) {
+        playerController.setStatus(
+          'Could not save personal expression history: $error',
+        );
+      }
+    }
+    _activePersonalPattern = null;
     await speakingActions.close(api);
     if (returnToReview && mounted) {
       unawaited(_openReviewQueue());
+    } else if (personalPattern != null && mounted) {
+      unawaited(_openPersonalExpression());
     }
   }
 
@@ -2304,6 +2401,19 @@ class _PlayerScreenState extends State<PlayerScreen>
         paragraph.sentences.first.text,
       ),
       onStartTask: _openReadingTask,
+      onSaveSentencePattern: (sentence) => _openPersonalExpression(
+        source: PersonalExpressionSourceView(
+          kind: 'reading',
+          text: sentence.text,
+          title: playerController.mediaTitle,
+          mediaId: playerController.mediaId,
+          mediaFingerprint: playerController.mediaFingerprint,
+          trackId: subtitleController.primaryTrack?.id,
+          sentenceId: sentence.cues.first.id,
+          startMs: sentence.start.inMilliseconds,
+          endMs: sentence.end.inMilliseconds,
+        ),
+      ),
       onOpenDiff: _openReadingDiff,
       onClose: () => unawaited(_closeReading()),
     );

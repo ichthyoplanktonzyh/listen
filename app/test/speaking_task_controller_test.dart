@@ -466,59 +466,89 @@ void main() {
     },
   );
 
-  test('LLM assist: judge spoken attempt, correct it, stays honest heuristic',
-      () async {
-    final backend = _FakeBackend()..providers = [_providerJson()];
-    final controller = SpeakingTaskController(
-      recorder: _FakeRecorder(MicrophonePermissionStatus.granted),
-      delay: (_) async {},
-    );
-    await controller.openTask(
-      backend.api,
-      source: _source,
-      fixedRubricPoints: _points,
-    );
-    await controller.beginRecording(acquireAudioFocus: () async {});
-    await controller.stopRecording(backend.api);
-    await controller.acceptTranscript(backend.api);
-    // A judgment-capable provider was discovered, but nothing is judged yet.
-    expect(controller.state.phase, 'ready_feedback');
-    expect(controller.state.judgeProviderId, 'prov-1');
-    expect(controller.state.llmJudgment, isNull);
+  test(
+    'personal pattern uses the speaking resident with explicit assistance',
+    () async {
+      final backend = _FakeBackend();
+      final controller = SpeakingTaskController(
+        recorder: _FakeRecorder(MicrophonePermissionStatus.granted),
+      );
+      await controller.openTask(
+        backend.api,
+        source: const SpeakingTaskSource(
+          anchorCueId: 'pattern-1',
+          startMs: 0,
+          endMs: 1,
+          language: 'en',
+          transcriptSnapshot: 'I ended up fixing it.',
+          promptSnapshot: 'I ended up {result}.',
+        ),
+        fixedRubricPoints: _points,
+        kind: SpeakingTaskController.patternProductionKind,
+        assistance: 'no_text',
+      );
+      final request = backend.requests.firstWhere(
+        (value) => value.$2 == '/v1/semantic/rubrics',
+      );
+      expect(request.$3!['purpose'], 'pattern_production');
+      expect(controller.state.assistance, 'no_text');
+    },
+  );
 
-    await controller.requestLlmJudgment(backend.api);
-    final judgment = controller.state.llmJudgment!;
-    expect(judgment.id, 'llm-judgment-1');
-    // Never gold: an unqualified provider verdict stays a heuristic proxy,
-    // and it does not touch the manual self-assessment slot.
-    expect(judgment.evidenceClass, 'heuristic_proxy');
-    expect(judgment.provenance.kind, 'llm');
-    expect(controller.state.judgment, isNull);
+  test(
+    'LLM assist: judge spoken attempt, correct it, stays honest heuristic',
+    () async {
+      final backend = _FakeBackend()..providers = [_providerJson()];
+      final controller = SpeakingTaskController(
+        recorder: _FakeRecorder(MicrophonePermissionStatus.granted),
+        delay: (_) async {},
+      );
+      await controller.openTask(
+        backend.api,
+        source: _source,
+        fixedRubricPoints: _points,
+      );
+      await controller.beginRecording(acquireAudioFocus: () async {});
+      await controller.stopRecording(backend.api);
+      await controller.acceptTranscript(backend.api);
+      // A judgment-capable provider was discovered, but nothing is judged yet.
+      expect(controller.state.phase, 'ready_feedback');
+      expect(controller.state.judgeProviderId, 'prov-1');
+      expect(controller.state.llmJudgment, isNull);
 
-    // The judge request cites the stored attempt + revision.
-    final judgeBody = backend.requests
-        .firstWhere((r) => r.$2 == '/v1/llm/providers/prov-1/judge')
-        .$3!;
-    expect(judgeBody['attempt_id'], 'attempt-1');
-    expect(judgeBody['response_revision'], 1);
+      await controller.requestLlmJudgment(backend.api);
+      final judgment = controller.state.llmJudgment!;
+      expect(judgment.id, 'llm-judgment-1');
+      // Never gold: an unqualified provider verdict stays a heuristic proxy,
+      // and it does not touch the manual self-assessment slot.
+      expect(judgment.evidenceClass, 'heuristic_proxy');
+      expect(judgment.provenance.kind, 'llm');
+      expect(controller.state.judgment, isNull);
 
-    // Correcting the LLM verdict appends an adjudication citing the LLM row.
-    await controller.adjudicateLlm(
-      backend.api,
-      pointId: 'detail',
-      userVerdict: 'partial',
-    );
-    expect(controller.state.llmAdjudications, hasLength(1));
-    final adjBody = backend.requests
-        .firstWhere((r) => r.$2 == '/v1/semantic/adjudications')
-        .$3!;
-    expect(adjBody['judgment_id'], 'llm-judgment-1');
-    expect(adjBody['prior_verdict'], 'missing');
-    expect(adjBody['user_verdict'], 'partial');
-  });
+      // The judge request cites the stored attempt + revision.
+      final judgeBody = backend.requests
+          .firstWhere((r) => r.$2 == '/v1/llm/providers/prov-1/judge')
+          .$3!;
+      expect(judgeBody['attempt_id'], 'attempt-1');
+      expect(judgeBody['response_revision'], 1);
 
-  test('LLM assist stays hidden without a judgment-capable provider',
-      () async {
+      // Correcting the LLM verdict appends an adjudication citing the LLM row.
+      await controller.adjudicateLlm(
+        backend.api,
+        pointId: 'detail',
+        userVerdict: 'partial',
+      );
+      expect(controller.state.llmAdjudications, hasLength(1));
+      final adjBody = backend.requests
+          .firstWhere((r) => r.$2 == '/v1/semantic/adjudications')
+          .$3!;
+      expect(adjBody['judgment_id'], 'llm-judgment-1');
+      expect(adjBody['prior_verdict'], 'missing');
+      expect(adjBody['user_verdict'], 'partial');
+    },
+  );
+
+  test('LLM assist stays hidden without a judgment-capable provider', () async {
     final backend = _FakeBackend()
       ..providers = [
         _providerJson(allowedUses: ['rubric_generation']),
@@ -540,10 +570,7 @@ void main() {
     // Requesting without a provider is a no-op; no judge call is recorded.
     await controller.requestLlmJudgment(backend.api);
     expect(controller.state.llmJudgment, isNull);
-    expect(
-      backend.requests.where((r) => r.$2.endsWith('/judge')),
-      isEmpty,
-    );
+    expect(backend.requests.where((r) => r.$2.endsWith('/judge')), isEmpty);
   });
 
   test('future-stage intents cannot skip recording and review', () async {

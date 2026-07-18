@@ -229,6 +229,7 @@ class SpeakingTaskController extends ChangeNotifier {
 
   static const retellingKind = 'l2_retelling';
   static const roleReplyKind = 'role_reply';
+  static const patternProductionKind = 'pattern_production';
   static const evidenceClass = 'self_assessment';
 
   final ShadowingRecorder _recorder;
@@ -248,10 +249,12 @@ class SpeakingTaskController extends ChangeNotifier {
     String kind = retellingKind,
     String? assistance,
   }) async {
-    if (kind != retellingKind && kind != roleReplyKind) {
+    if (kind != retellingKind &&
+        kind != roleReplyKind &&
+        kind != patternProductionKind) {
       throw ArgumentError.value(kind, 'kind', 'unsupported speaking task');
     }
-    if (kind == roleReplyKind &&
+    if ((kind == roleReplyKind || kind == patternProductionKind) &&
         (assistance == null ||
             source.promptSnapshot?.trim().isEmpty != false)) {
       throw ArgumentError(
@@ -270,7 +273,9 @@ class SpeakingTaskController extends ChangeNotifier {
         phase: 'idle',
         kind: kind,
         source: source,
-        assistance: kind == roleReplyKind ? assistance : null,
+        assistance: kind == roleReplyKind || kind == patternProductionKind
+            ? assistance
+            : null,
         busy: true,
       ),
     );
@@ -381,9 +386,11 @@ class SpeakingTaskController extends ChangeNotifier {
             mediaId: source.mediaId,
             startMs: source.startMs,
             endMs: source.endMs,
-            label: state.kind == roleReplyKind
-                ? 'role reply prompt'
-                : 'retelling source',
+            label: switch (state.kind) {
+              roleReplyKind => 'role reply prompt',
+              patternProductionKind => 'personal expression pattern',
+              _ => 'retelling source',
+            },
             subtitleSnapshot:
                 source.audioTranscriptSnapshot ?? source.transcriptSnapshot,
             availability: source.mediaId == null
@@ -517,7 +524,8 @@ class SpeakingTaskController extends ChangeNotifier {
         audioPlayCount: state.audioPlayCount,
         speakingAssistance: state.assistance,
         speakingRecall: source.recall,
-        promptSnapshot: state.kind == roleReplyKind
+        promptSnapshot:
+            state.kind == roleReplyKind || state.kind == patternProductionKind
             ? source.promptSnapshot
             : null,
         recordingAssetId: recording.id,
