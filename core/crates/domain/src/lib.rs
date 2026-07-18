@@ -70,6 +70,9 @@ pub use learning_observation::*;
 mod listening_projection;
 pub use listening_projection::*;
 
+mod projection_review;
+pub use projection_review::*;
+
 mod llm_provider;
 mod semantic_task;
 pub use llm_provider::*;
@@ -147,6 +150,8 @@ string_id!(LexicalSenseId);
 string_id!(LexicalCapabilityHistoryId);
 string_id!(LexicalObservationId);
 string_id!(LearningObservationId);
+string_id!(ProjectionProposalId);
+string_id!(ProjectionDecisionId);
 string_id!(LexicalOccurrenceId);
 string_id!(LexicalStatusHistoryId);
 string_id!(LearningResourceId);

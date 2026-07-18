@@ -1015,6 +1015,22 @@ fn five_distinct_review_contexts_require_confirmation_before_status_upgrade() {
         .confirm_upgrade_suggestion(&generated[0].id)
         .unwrap();
     assert_eq!(confirmed.status, UpgradeSuggestionStatus::Accepted);
+    let audit = services
+        .projection_review()
+        .audit_and_refresh(&lexical.entry.id)
+        .unwrap();
+    let proposal = audit
+        .proposals
+        .iter()
+        .find(|value| {
+            value.capability == LexicalCapability::Listening
+                && value.status == ProjectionProposalStatus::Pending
+        })
+        .unwrap();
+    services
+        .projection_review()
+        .decide(&proposal.id, ProjectionDecisionKind::Confirm, None)
+        .unwrap();
     let details = services
         .lexical_learning()
         .lexical_details(&lexical.entry.id)
@@ -1034,12 +1050,12 @@ fn five_distinct_review_contexts_require_confirmation_before_status_upgrade() {
         profile.effective_assessment(LexicalCapability::Listening),
         CapabilityAssessment::Acquired
     );
-    // ADR 0019: the conclusion is derived from the observation stream by
-    // listening-projection-v1, not written directly by the confirm handler.
+    // ADR 0024: the legacy suggestion is evidence; only the separately
+    // confirmed Phase 3.17 proposal writes the projection.
     let projection = profile.listening.projection.as_ref().unwrap();
     assert_eq!(
         projection.algorithm_version,
-        LISTENING_PROJECTION_ALGORITHM_VERSION
+        LISTENING_PROPOSAL_ALGORITHM_VERSION
     );
     assert_eq!(
         projection.source,
@@ -1073,8 +1089,8 @@ fn listening_projection_flips_on_task_failure_and_blocks_self_report_upgrade() {
         None,
     );
 
-    // One failed audio review on a never-confirmed word flips the listening
-    // view — the "看得懂听不出" discovery (ADR 0019 accepted behavior change).
+    // Two failed audio reviews create a correctable downgrade proposal; the
+    // effective view cannot flip before separate Phase 3.17 confirmation.
     let review = services
         .practice_learning()
         .create_review_item(application::CreateReviewItem {
@@ -1103,9 +1119,43 @@ fn listening_projection_flips_on_task_failure_and_blocks_self_report_upgrade() {
     services
         .practice_learning()
         .submit_review_attempt(application::SubmitReviewAttempt {
-            item_id: review.id,
+            item_id: review.id.clone(),
             rating: ReviewRating::Again,
         })
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(2));
+    services
+        .practice_learning()
+        .submit_review_attempt(application::SubmitReviewAttempt {
+            item_id: review.id.clone(),
+            rating: ReviewRating::Again,
+        })
+        .unwrap();
+    let before_confirmation = services
+        .lexical_learning()
+        .lexical_details(&lexical.entry.id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        before_confirmation.entry.status,
+        Some(LearningStatus::KnownRecognized)
+    );
+    let audit = services
+        .projection_review()
+        .audit_and_refresh(&lexical.entry.id)
+        .unwrap();
+    let proposal = audit
+        .proposals
+        .iter()
+        .find(|value| {
+            value.capability == LexicalCapability::Listening
+                && value.proposed_conclusion == CapabilityConclusion::NotAcquired
+                && value.status == ProjectionProposalStatus::Pending
+        })
+        .unwrap();
+    services
+        .projection_review()
+        .decide(&proposal.id, ProjectionDecisionKind::Confirm, None)
         .unwrap();
     let details = services
         .lexical_learning()
@@ -1124,7 +1174,7 @@ fn listening_projection_flips_on_task_failure_and_blocks_self_report_upgrade() {
     let projection = profile.listening.projection.as_ref().unwrap();
     assert_eq!(
         projection.algorithm_version,
-        LISTENING_PROJECTION_ALGORITHM_VERSION
+        LISTENING_PROPOSAL_ALGORITHM_VERSION
     );
     assert_eq!(projection.confidence, Some(LISTENING_CONFIDENCE_TASK));
 

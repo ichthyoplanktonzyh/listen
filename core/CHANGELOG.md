@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-18 21:02 CST: Phase 3.17 Four-channel Projection & Cross-modal Review code complete。
+  按 `main@5bf8fbd3` 重审 authority 与真实 evidence 底盘，新增 SQLite v44 append-only proposal/
+  decision、Reading v1/Listening v2/Speaking v1 独立算法、Writing `insufficient_evidence`、显式
+  confirmation 唯一 projection writer、override 优先、history、算法 supersede 与全语言 rebuild。
+  observation append 和旧 upgrade confirmation 不再直写 projection；cross-modal read model 不把
+  unassessed 当失败，并保留 source ref/immutable snapshot。OpenAPI、typed Dart client、词典资产层
+  proposal gate 与跨通道队列贯通。`UserSentencePattern`、分通道 immutable attempts、Hunting List、
+  corpus/embedding 边界及 FocusTarget 拒绝保持不变；owner 真实库/重启/来源丢失体验留
+  `3.17-MANUAL-QA.md`，未执行或冒充相关 owner QA。
+
 - 2026-07-18 20:20 CST: Phase 3.16 Personal Expression & Sentence Patterns code complete。
   按 `main@c86a5952` 重审旧 PLAN，并以三 consumer razor 拒绝通用 FocusTarget：不迁移已验收的
   Hunting List，不以 3.17 未来 consumer 提前泛化。新增 SQLite v43 durable

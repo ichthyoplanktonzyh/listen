@@ -14,20 +14,20 @@ use domain::{
     PhoneticAnalysisModelDescriptor, PhoneticAnalysisModelId, PhoneticFindingFeedback,
     PhoneticFindingId, PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeItemId,
     PracticeSession, PracticeSessionId, ProductionCorpusDocument, ProductionCorpusEntry,
-    ProductionCorpusHit, ProductionCorpusSummary, ProductionGapCandidateFacts, ReadingPosition,
-    RealtimeConversationSession, RealtimeConversationSessionId, RealtimeConversationTurn,
-    RealtimeConversationTurnId, RealtimeProviderProfile, RealtimeProviderProfileId,
-    RecognitionEvidence, RecordingAsset, RecordingAssetId, ReviewAttempt, ReviewAttemptId,
-    ReviewItem, ReviewItemId, ReviewItemStatus, ReviewSchedule, SemanticJudgment,
-    SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
-    SemanticTaskAttemptId, SemanticTaskKind, SenseGroupAnalysis, SenseGroupAnalysisId,
-    SentencePronunciation, SoundFitCalibration, SubtitleSentence, SubtitleSentenceId,
-    SubtitleTrack, SubtitleTrackId, SubtitleTrackProvenance, SubtitleTrackStatus, TimeMs,
-    TranscriptionJob, TranscriptionJobId, TranscriptionModelDescriptor, TranscriptionModelId,
-    UpgradeSuggestion, UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle,
-    WordPronunciation, WordTimeline, WordTimelineId, WordTiming, WritingDraft,
-    WritingFeedbackFinding, WritingFeedbackFindingId, WritingFindingDisposition,
-    WritingFindingDispositionId,
+    ProductionCorpusHit, ProductionCorpusSummary, ProductionGapCandidateFacts, ProjectionDecision,
+    ProjectionProposal, ProjectionProposalId, ReadingPosition, RealtimeConversationSession,
+    RealtimeConversationSessionId, RealtimeConversationTurn, RealtimeConversationTurnId,
+    RealtimeProviderProfile, RealtimeProviderProfileId, RecognitionEvidence, RecordingAsset,
+    RecordingAssetId, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus,
+    ReviewSchedule, SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId,
+    SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind, SenseGroupAnalysis,
+    SenseGroupAnalysisId, SentencePronunciation, SoundFitCalibration, SubtitleSentence,
+    SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackProvenance,
+    SubtitleTrackStatus, TimeMs, TranscriptionJob, TranscriptionJobId,
+    TranscriptionModelDescriptor, TranscriptionModelId, UpgradeSuggestion, UpgradeSuggestionId,
+    UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation, WordTimeline,
+    WordTimelineId, WordTiming, WritingDraft, WritingFeedbackFinding, WritingFeedbackFindingId,
+    WritingFindingDisposition, WritingFindingDispositionId,
 };
 
 use crate::{ApplicationError, LexicalSourceContext};
@@ -290,6 +290,25 @@ pub trait LexicalCapabilityRepository: Send + Sync {
         lexical_entry_id: &LexicalEntryId,
         sense_id: Option<&LexicalSenseId>,
     ) -> Result<Vec<LexicalCapabilityHistory>, ApplicationError>;
+    fn save_projection_proposal(
+        &self,
+        proposal: &ProjectionProposal,
+    ) -> Result<ProjectionProposal, ApplicationError>;
+    fn projection_proposal(
+        &self,
+        id: &ProjectionProposalId,
+    ) -> Result<Option<ProjectionProposal>, ApplicationError>;
+    fn list_projection_proposals(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        capability: Option<LexicalCapability>,
+    ) -> Result<Vec<ProjectionProposal>, ApplicationError>;
+    fn resolve_projection_proposal(
+        &self,
+        decision: &ProjectionDecision,
+        proposal: &ProjectionProposal,
+        confirmed_projection: Option<CapabilityProjection>,
+    ) -> Result<(), ApplicationError>;
 }
 
 /// Lexical identity, lookup, normalization overrides, and vocabulary

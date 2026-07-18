@@ -10,6 +10,7 @@ pub(crate) mod personal_expression;
 pub(crate) mod phonetic_analysis;
 pub(crate) mod practice;
 pub(crate) mod production_corpus;
+pub(crate) mod projection_review;
 pub(crate) mod pronunciation;
 pub(crate) mod reading;
 pub(crate) mod realtime_conversation;

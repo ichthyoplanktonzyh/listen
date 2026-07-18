@@ -1483,7 +1483,8 @@ Phase 3.7–3.10 仍按既有计划完成，不在本轮重排。听力主线与
 11. 3.15.7 Realtime Speech Conversation ✅ CODE COMPLETE（真实 provider/device QA pending） /
     3.15.8 Semantic Embedding ✅ CODE COMPLETE（owner 首次安装/大语料体验 QA pending）；
 12. 3.16 Personal Expression ✅ CODE COMPLETE（owner manual QA pending）；
-13. 3.17 Four-channel Projection & Cross-modal Review；
+13. 3.17 Four-channel Projection & Cross-modal Review ✅ CODE COMPLETE（owner manual QA pending；
+    writing lexical projection 因无合格 target confirmation 保持 unassessed）；
 14. 3.18 Cross-modal Coach & Four-channel Closeout。
 
 上述顺序表达当前依赖与建议交付次序；phase scope 不构成长期产品非目标。各 PLAN 是方向承诺

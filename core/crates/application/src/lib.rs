@@ -45,10 +45,10 @@ use domain::{
     WordTimeline, WordTimelineId, WordTimelineLifecycleStage, WordTimelineSummary, WordTiming,
     WritingDraft, WritingFeedbackFinding, WritingFeedbackFindingId, WritingFindingDisposition,
     WritingFindingDispositionId, apply_sound_fit_calibration, content_fit_fingerprint,
-    learning_observation_id, listening_projection_v1, meaning_fit, normalize_lemma,
-    observation_spec_for_marking, observation_spec_for_practice,
-    observation_spec_for_reading_marking, observation_spec_for_review,
-    observation_spec_for_speaking_production, observation_spec_for_upgrade_confirmation, sound_fit,
+    learning_observation_id, meaning_fit, normalize_lemma, observation_spec_for_marking,
+    observation_spec_for_practice, observation_spec_for_reading_marking,
+    observation_spec_for_review, observation_spec_for_speaking_production,
+    observation_spec_for_upgrade_confirmation, projection_proposal_v1, sound_fit,
     sound_fit_calibration_outcome, validate_syntactic_analysis,
 };
 use serde::Serialize;
@@ -72,6 +72,7 @@ mod phones;
 mod phonetic_fixture;
 mod practice;
 mod production_corpus;
+mod projection_review;
 mod pronunciation;
 mod pronunciation_providers;
 mod providers;
@@ -105,6 +106,7 @@ pub use media::MediaAnalysisUseCases;
 pub use personal_expression::PersonalExpressionUseCases;
 pub use practice::PracticeUseCases;
 pub use production_corpus::ProductionCorpusUseCases;
+pub use projection_review::ProjectionReviewUseCases;
 pub use pronunciation::PronunciationUseCases;
 pub use pronunciation_providers::*;
 pub use providers::*;
@@ -241,6 +243,14 @@ impl AppServices {
 
     pub fn personal_expression(&self) -> PersonalExpressionUseCases {
         PersonalExpressionUseCases::new(self.personal_expression.clone())
+    }
+
+    pub fn projection_review(&self) -> ProjectionReviewUseCases {
+        ProjectionReviewUseCases::new(
+            self.lexical_capabilities.clone(),
+            self.learning_observations.clone(),
+            self.lexical_entries.clone(),
+        )
     }
 
     pub fn semantic_embedding(&self) -> SemanticEmbeddingUseCases {

@@ -9,8 +9,8 @@ use crate::{
     LexicalOccurrenceId, LexicalSenseFolder, LexicalSenseId, MediaAvailability, MediaId, MediaItem,
     ObservationOrigin, ObservationResult, ObservationSpec, RecognitionEvidenceSourceKind,
     RecordSpeakingProduction, SubtitleSentenceId, VocabularyAssetBundle, clean_optional,
-    clean_required, learning_observation_id, listening_projection_v1, normalize_lemma,
-    normalize_phrase, now_ms, observation_spec_for_marking, observation_spec_for_reading_marking,
+    clean_required, learning_observation_id, normalize_lemma, normalize_phrase, now_ms,
+    observation_spec_for_marking, observation_spec_for_reading_marking,
     observation_spec_for_speaking_production, require_text,
 };
 
@@ -330,58 +330,31 @@ impl LexicalLearningUseCases {
         };
         self.learning_observations
             .append_learning_observation(&observation)?;
-        if spec.capability == LexicalCapability::Listening {
-            self.reproject_listening_from_evidence(lexical_entry_id, occurred_at_ms)?;
-        }
+        self.refresh_projection_proposal(lexical_entry_id, spec.capability, occurred_at_ms)?;
         Ok(())
     }
 
-    /// Recomputes the listening projection from the channelized evidence
-    /// stream (ADR 0019, `listening-projection-v1`) and refreshes the legacy
-    /// status compat view. Runs after every listening observation append —
-    /// all writers funnel through [`Self::append_channelized_observation`].
-    pub(crate) fn reproject_listening_from_evidence(
+    /// Phase 3.17's sole automatic long-term writer creates a correctable
+    /// proposal. It never mutates projection/override; confirmation owns that.
+    pub(crate) fn refresh_projection_proposal(
         &self,
         lexical_entry_id: &LexicalEntryId,
+        capability: LexicalCapability,
         now: u64,
     ) -> Result<(), ApplicationError> {
         let observations = self.learning_observations.list_learning_observations(
             lexical_entry_id,
-            Some(LexicalCapability::Listening),
+            Some(capability),
             LISTENING_PROJECTION_EVIDENCE_LIMIT,
             0,
         )?;
-        let Some(projection) = listening_projection_v1(&observations, now) else {
+        let (_, Some(proposal)) =
+            crate::projection_proposal_v1(lexical_entry_id, capability, &observations, now)
+        else {
             return Ok(());
         };
-        // Recency guard (ADR 0019 decision 2): a non-evidence writer (compat
-        // downgrade, import) newer than our newest decisive evidence wins
-        // until newer evidence arrives.
-        let current = self
-            .lexical_capabilities
-            .lexical_capability_profile(lexical_entry_id, None)?;
-        if let Some(existing) = current.as_ref().and_then(|profile| {
-            profile
-                .dimension(LexicalCapability::Listening)
-                .projection
-                .as_ref()
-        }) && existing.source != CapabilityProjectionSource::EvidenceProjection
-            && projection
-                .evidence_as_of_ms
-                .is_some_and(|as_of| existing.updated_at_ms > as_of)
-        {
-            return Ok(());
-        }
-        let profile = self
-            .lexical_capabilities
-            .set_lexical_capability_projection(
-                lexical_entry_id,
-                None,
-                LexicalCapability::Listening,
-                Some(projection),
-                now,
-            )?;
-        self.sync_legacy_status_from_profile(lexical_entry_id, &profile)?;
+        self.lexical_capabilities
+            .save_projection_proposal(&proposal)?;
         Ok(())
     }
 

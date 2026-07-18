@@ -2291,6 +2291,72 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/UpgradeSuggestion" }
+  /v1/review/cross-modal:
+    get:
+      operationId: crossModalReviewGaps
+      description: Returns traceable lexical gaps; unassessed channels are never failures.
+      parameters:
+        - { name: language, in: query, required: true, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 200 } }
+      responses:
+        "200":
+          description: Cross-modal review candidates with immutable evidence fallback.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/CrossModalReviewCandidate" } }
+  /v1/projections/rebuild:
+    post:
+      operationId: rebuildProjectionProposals
+      parameters:
+        - { name: language, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Replayed immutable evidence into versioned proposals without changing projections or overrides.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ProjectionAudit" } }
+  /v1/projections/entries/{id}:
+    get:
+      operationId: listProjectionProposals
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Proposal history for one lexical entry.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ProjectionProposal" } }
+    post:
+      operationId: auditProjectionEntry
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Four independent qualification reports and refreshed proposals.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectionAudit" }
+  /v1/projections/proposals/{id}/decision:
+    post:
+      operationId: decideProjectionProposal
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [confirm, reject] }
+                note: { type: [string, "null"] }
+      responses:
+        "200":
+          description: Append-only decision; confirmation is the sole projection writer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectionProposal" }
   /v1/learning-resources:
     get:
       operationId: learningResources
@@ -5259,6 +5325,60 @@ components:
     ReviewCardKind:
       type: string
       enum: [word_recognition, chunk_cloze, phrase_presence, source_sentence_recall, delayed_retelling]
+    ProjectionEvidenceRef:
+      type: object
+      required: [observation_id, source_ref, task_type, outcome, occurred_at_ms, snapshot]
+      properties:
+        observation_id: { type: string }
+        source_ref: { type: [string, "null"] }
+        task_type: { type: string }
+        outcome: { type: string, enum: [success, partial, failure] }
+        occurred_at_ms: { type: integer, minimum: 0 }
+        snapshot: { type: string }
+    ProjectionProposal:
+      type: object
+      required: [id, lexical_entry_id, capability, proposed_conclusion, algorithm_version, confidence, evidence_as_of_ms, evidence, rationale, status, created_at_ms]
+      properties:
+        id: { type: string }
+        lexical_entry_id: { type: string }
+        capability: { type: string, enum: [reading, listening, speaking, writing] }
+        proposed_conclusion: { type: string, enum: [not_acquired, acquired] }
+        algorithm_version: { type: string }
+        confidence: { type: [number, "null"], minimum: 0, maximum: 1 }
+        evidence_as_of_ms: { type: integer, minimum: 0 }
+        evidence: { type: array, items: { $ref: "#/components/schemas/ProjectionEvidenceRef" } }
+        rationale: { type: string }
+        status: { type: string, enum: [pending, confirmed, rejected, superseded] }
+        created_at_ms: { type: integer, minimum: 0 }
+    ChannelQualificationReport:
+      type: object
+      required: [capability, qualification, algorithm_version, qualifying_evidence_count, reason]
+      properties:
+        capability: { type: string, enum: [reading, listening, speaking, writing] }
+        qualification: { type: string, enum: [qualified, insufficient_evidence] }
+        algorithm_version: { type: string }
+        qualifying_evidence_count: { type: integer, minimum: 0 }
+        reason: { type: string }
+    ProjectionAudit:
+      type: object
+      required: [lexical_entry_id, reports, proposals]
+      properties:
+        lexical_entry_id: { type: string }
+        reports: { type: array, items: { $ref: "#/components/schemas/ChannelQualificationReport" } }
+        proposals: { type: array, items: { $ref: "#/components/schemas/ProjectionProposal" } }
+    CrossModalReviewCandidate:
+      type: object
+      required: [lexical_entry_id, display_form, reading, listening, speaking, writing, review_kind, reason, source]
+      properties:
+        lexical_entry_id: { type: string }
+        display_form: { type: string }
+        reading: { type: string, enum: [unassessed, not_acquired, acquired] }
+        listening: { type: string, enum: [unassessed, not_acquired, acquired] }
+        speaking: { type: string, enum: [unassessed, not_acquired, acquired] }
+        writing: { type: string, enum: [unassessed, not_acquired, acquired] }
+        review_kind: { type: string, enum: [reading_check, listening_recall, constructed_speaking, writing_reconstruction] }
+        reason: { type: string }
+        source: { $ref: "#/components/schemas/ProjectionEvidenceRef" }
     ReviewCard:
       type: object
       required: [kind, cue, answer, target]

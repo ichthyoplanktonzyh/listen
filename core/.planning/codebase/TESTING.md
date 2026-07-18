@@ -339,3 +339,14 @@ scripts/validate-contracts.sh    # 单独契约验证
 - HTTP/OpenAPI: optional capability degradation, invalid filters, route/document parity.
 - Flutter: hand-written DTO/transport fixture for capability + hit provenance, analyze, and widget/full
   regression suites. Real provider/device QA for 3.15.7 and owner TTS listening QA remain out of scope.
+
+# Phase 3.17 testing delta (2026-07-18)
+
+- Domain：四通道 evidence 不互借；Writing 无 lexical-target confirmation 时保持 unassessed。
+- Persistence/application：v44 additive migration、append-only trigger、proposal idempotence、算法升级
+  supersede、确认事务唯一写 projection/history、拒绝不改 projection、override 优先与 rebuild 不改历史。
+- Writer regression：listening observation 和旧 upgrade confirmation 只刷新/提供 proposal evidence，
+  确认前不改变 acquired；原 attempt/evidence 行保持不变。
+- HTTP/OpenAPI/Flutter：proposal audit/decision、cross-modal candidate、immutable snapshot 与 unassessed
+  wire shape；Dart client focused tests 2 项，全量 Flutter 453 项及 strict analyze 通过。
+- 真实数据库、重启、来源删除降级和完整 owner 体验由 `3.17-MANUAL-QA.md` 验收，自动化不代验。

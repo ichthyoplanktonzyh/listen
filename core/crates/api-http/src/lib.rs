@@ -84,6 +84,10 @@ use routes::practice::{
 use routes::production_corpus::{
     production_gap_review, reindex_production_corpus, search_production_corpus,
 };
+use routes::projection_review::{
+    audit_projection, cross_modal_gaps, decide_projection, list_projection_proposals,
+    rebuild_projections,
+};
 use routes::pronunciation::{
     analyze_pronunciation_sentence, generate_track_pronunciation, pronunciation_lookup,
     pronunciation_providers, track_pronunciation,
@@ -653,6 +657,16 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/v1/review/items/{id}", get(review_item))
         .route("/v1/review/attempts", post(submit_review_attempt))
+        .route("/v1/review/cross-modal", get(cross_modal_gaps))
+        .route("/v1/projections/rebuild", post(rebuild_projections))
+        .route(
+            "/v1/projections/entries/{id}",
+            get(list_projection_proposals).post(audit_projection),
+        )
+        .route(
+            "/v1/projections/proposals/{id}/decision",
+            post(decide_projection),
+        )
         .route(
             "/v1/review/upgrade-suggestions",
             get(list_upgrade_suggestions),

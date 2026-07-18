@@ -540,6 +540,7 @@ mod migrations;
 mod personal_expression;
 mod phonetic_analysis;
 mod production_corpus;
+mod projection_review;
 mod reading;
 mod realtime_conversation;
 mod semantic_embedding;

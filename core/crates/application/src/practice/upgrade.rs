@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    ApplicationError, CapabilityAssessment, CapabilityConclusion, CapabilityProjection,
-    CapabilityProjectionSource, LearningEvent, LearningEventId, LearningEventKind,
+    ApplicationError, CapabilityAssessment, LearningEvent, LearningEventId, LearningEventKind,
     LearningEventSubject, LearningEventSubjectKind, LearningStatus, LexicalCapability,
     LexicalEntryId, LexicalLearningUseCases, MediaId, ObservationContext, ObservationOrigin,
     PracticeAttempt, PracticeItem, RecognitionEvidence, RecognitionEvidenceId,
@@ -241,32 +240,9 @@ impl LexicalLearningUseCases {
         let capability = suggestion
             .capability
             .unwrap_or(LexicalCapability::Listening);
-        if capability != LexicalCapability::Listening {
-            // Transitional direct write, only for channels that still have no
-            // projection algorithm. Listening fulfilled ADR 0017 decision 4:
-            // its projection now derives from the observation stream via
-            // listening-projection-v1 (ADR 0019).
-            let profile = self
-                .lexical_capabilities
-                .set_lexical_capability_projection(
-                    &suggestion.lexical_entry_id,
-                    None,
-                    capability,
-                    Some(CapabilityProjection {
-                        conclusion: CapabilityConclusion::Acquired,
-                        source: CapabilityProjectionSource::EvidenceProjection,
-                        algorithm_version: UPGRADE_EVIDENCE_CLASS.into(),
-                        confidence: None,
-                        evidence_as_of_ms: None,
-                        updated_at_ms: now,
-                    }),
-                    now,
-                )?;
-            self.sync_legacy_status_from_profile(&suggestion.lexical_entry_id, &profile)?;
-        }
-        // The confirmation lands in the observation stream as an unassisted
-        // task success; for listening the projection recompute inside the
-        // append derives the acquired conclusion from it.
+        // This confirms the old upgrade suggestion as evidence only. Phase
+        // 3.17 now owns the separate projection-proposal confirmation gate;
+        // no channel may write a projection directly from this legacy flow.
         self.append_channelized_observation(
             &suggestion.lexical_entry_id,
             observation_spec_for_upgrade_confirmation(capability),

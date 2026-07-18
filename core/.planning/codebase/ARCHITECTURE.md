@@ -98,6 +98,11 @@ application use cases and provider/repository boundaries.
 - `PersonalExpressionUseCases` owns explicit create/revise/delete, immutable
   version/attempt history, and typed export. It has no observation, capability,
   projection, proposal or confirmation repository dependency.
+- `ProjectionReviewUseCases` is the Phase 3.17 authority boundary. Channel-local
+  algorithms read immutable observations and append versioned proposals; one
+  repository transaction is the only evidence path that can append confirmation,
+  update a projection and append capability history. It never mutates overrides.
+  Cross-modal gaps are read models and keep unassessed distinct from failure.
 - Learning assets use `LexicalEntry + LexicalUnit` as the authoritative model.
 - Schema v22 persists the Phase 3.4.1 four-channel capability profile with
   evidence/projection/override separation under ADR 0015. The rollout is
@@ -110,6 +115,9 @@ application use cases and provider/repository boundaries.
 - Due-review queries derive an application-owned `ReviewCard` read model from
   durable `ReviewItem` source/anchors. Card kind and cue/answer presentation are
   not persisted, so historical review rows remain compatible as card UX evolves.
+- Cross-modal review candidates cite the exact observation/source reference plus
+  an immutable text snapshot. Missing media disables navigation but does not
+  manufacture a failure or erase the review explanation.
 - Recognition-upgrade services deduplicate successful practice/review/context
   observations by sentence (or media when no sentence exists), create a pending
   suggestion at five contexts, and keep status mutation behind explicit user

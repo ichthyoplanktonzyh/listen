@@ -436,6 +436,15 @@ expansion is ephemeral overlay state, not a fourth persisted Rhythm mode.
   deletion cannot cascade because source identity lives only in the immutable
   JSON snapshot. Attempts are read-only handoff facts for 3.17, not projection
   or proposal rows.
+- Schema v44 adds append-only `projection_proposals` and `projection_decisions`.
+  A proposal stores channel, algorithm version, conclusion, evidence window,
+  exact evidence references and an immutable fallback snapshot. Decisions never
+  rewrite proposals. Confirmation atomically updates the existing projection
+  slot and `lexical_capability_history`; rejection does not touch capability
+  state. Override remains separate and wins in the effective read model.
+- Rebuild/backfill for v44 is explicit replay, not migration-time inference:
+  v43 capability state/history and observations migrate byte-for-byte, proposal
+  tables start empty, and replay appends/supersedes by algorithm/evidence version.
 - Review scheduling v1 is recorded as `listen_review_v1_heuristic_proxy`: `again` returns in
   10 minutes, `hard` in one day, and successful intervals grow from 3 to 7 days before doubling.
   The durable attempts remain the evidence history; the schedule row is a replaceable read model.

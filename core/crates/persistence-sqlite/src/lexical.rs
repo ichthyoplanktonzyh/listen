@@ -9,8 +9,8 @@ use domain::{
     LearningObservation, LearningStatus, LexicalCapability, LexicalCapabilityHistory,
     LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails, LexicalEntryId, LexicalEntryKind,
     LexicalObservation, LexicalOccurrence, LexicalOccurrenceId, LexicalSenseFolder, LexicalSenseId,
-    LexicalStatusHistory, LexicalStatusHistoryId, MediaId, SubtitleSentenceId,
-    VocabularyAssetBundle,
+    LexicalStatusHistory, LexicalStatusHistoryId, MediaId, ProjectionDecision, ProjectionProposal,
+    ProjectionProposalId, ProjectionProposalStatus, SubtitleSentenceId, VocabularyAssetBundle,
 };
 use rusqlite::{OptionalExtension, params, params_from_iter};
 
@@ -28,6 +28,7 @@ mod import_export;
 mod rows;
 
 use capability::{capability_history_row, read_capability_profile, sense_key};
+use capability::{read_capability_state, write_capability_history, write_capability_state};
 use rows::{
     learning_observation_row, lexical_entry_row, lexical_history_row, lexical_observation_row,
     lexical_occurrence_row, read_all_lexical_sense_folder_occurrences,
@@ -116,6 +117,144 @@ impl LexicalCapabilityRepository for SqliteRepository {
             .collect::<Result<Vec<_>, _>>()
             .map_err(repo)
     }
+
+    fn save_projection_proposal(
+        &self,
+        proposal: &ProjectionProposal,
+    ) -> Result<ProjectionProposal, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.execute(
+            "INSERT OR IGNORE INTO projection_proposals
+             (id,lexical_entry_id,capability,algorithm_version,evidence_as_of_ms,proposal_json,created_at_ms)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![proposal.id.as_str(), proposal.lexical_entry_id.as_str(), json(&proposal.capability)?,
+                proposal.algorithm_version, proposal.evidence_as_of_ms, json(proposal)?, proposal.created_at_ms],
+        ).map_err(repo)?;
+        drop(conn);
+        self.projection_proposal(&proposal.id)?.ok_or_else(|| {
+            ApplicationError::Repository("projection proposal was not persisted".into())
+        })
+    }
+
+    fn projection_proposal(
+        &self,
+        id: &ProjectionProposalId,
+    ) -> Result<Option<ProjectionProposal>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        read_projection_proposal(&conn, id)
+    }
+
+    fn list_projection_proposals(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        capability: Option<LexicalCapability>,
+    ) -> Result<Vec<ProjectionProposal>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let capability_json = capability.map(|value| json(&value)).transpose()?;
+        let mut statement = conn.prepare(
+            "SELECT p.proposal_json,d.decision_json,
+                    EXISTS(SELECT 1 FROM projection_proposals newer
+                      WHERE newer.lexical_entry_id=p.lexical_entry_id AND newer.capability=p.capability
+                        AND (newer.evidence_as_of_ms>p.evidence_as_of_ms
+                          OR (newer.evidence_as_of_ms=p.evidence_as_of_ms AND newer.created_at_ms>p.created_at_ms)))
+             FROM projection_proposals p LEFT JOIN projection_decisions d ON d.proposal_id=p.id
+             WHERE p.lexical_entry_id=?1 AND (?2 IS NULL OR p.capability=?2)
+             ORDER BY p.created_at_ms DESC,p.id DESC"
+        ).map_err(repo)?;
+        statement
+            .query_map(params![lexical_entry_id.as_str(), capability_json], |row| {
+                let mut proposal: ProjectionProposal = from_json(&row.get::<_, String>(0)?)?;
+                let decision = row
+                    .get::<_, Option<String>>(1)?
+                    .map(|value| from_json::<ProjectionDecision>(&value))
+                    .transpose()?;
+                proposal.status = match decision.map(|value| value.decision) {
+                    Some(domain::ProjectionDecisionKind::Confirm) => {
+                        ProjectionProposalStatus::Confirmed
+                    }
+                    Some(domain::ProjectionDecisionKind::Reject) => {
+                        ProjectionProposalStatus::Rejected
+                    }
+                    None if row.get::<_, bool>(2)? => ProjectionProposalStatus::Superseded,
+                    None => ProjectionProposalStatus::Pending,
+                };
+                Ok(proposal)
+            })
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
+    fn resolve_projection_proposal(
+        &self,
+        decision: &ProjectionDecision,
+        proposal: &ProjectionProposal,
+        confirmed_projection: Option<CapabilityProjection>,
+    ) -> Result<(), ApplicationError> {
+        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let tx = conn.transaction().map_err(repo)?;
+        tx.execute(
+            "INSERT INTO projection_decisions(id,proposal_id,decision_json,decided_at_ms) VALUES (?1,?2,?3,?4)",
+            params![decision.id.as_str(), decision.proposal_id.as_str(), json(decision)?, decision.decided_at_ms],
+        ).map_err(repo)?;
+        if let Some(projection) = confirmed_projection {
+            let previous =
+                read_capability_state(&tx, &proposal.lexical_entry_id, None, proposal.capability)?
+                    .unwrap_or_default();
+            let mut next = previous.clone();
+            next.projection = Some(projection);
+            if previous != next {
+                write_capability_state(
+                    &tx,
+                    &proposal.lexical_entry_id,
+                    None,
+                    proposal.capability,
+                    &next,
+                    decision.decided_at_ms,
+                )?;
+                write_capability_history(
+                    &tx,
+                    &proposal.lexical_entry_id,
+                    None,
+                    proposal.capability,
+                    &previous,
+                    &next,
+                    CapabilityStateChangeKind::ProjectionUpdated,
+                    decision.decided_at_ms,
+                )?;
+            }
+        }
+        tx.commit().map_err(repo)?;
+        Ok(())
+    }
+}
+
+fn read_projection_proposal(
+    conn: &rusqlite::Connection,
+    id: &ProjectionProposalId,
+) -> Result<Option<ProjectionProposal>, ApplicationError> {
+    conn.query_row(
+        "SELECT p.proposal_json,d.decision_json FROM projection_proposals p
+         LEFT JOIN projection_decisions d ON d.proposal_id=p.id WHERE p.id=?1",
+        [id.as_str()],
+        |row| {
+            let mut proposal: ProjectionProposal = from_json(&row.get::<_, String>(0)?)?;
+            let decision = row
+                .get::<_, Option<String>>(1)?
+                .map(|value| from_json::<ProjectionDecision>(&value))
+                .transpose()?;
+            proposal.status = match decision.map(|value| value.decision) {
+                Some(domain::ProjectionDecisionKind::Confirm) => {
+                    ProjectionProposalStatus::Confirmed
+                }
+                Some(domain::ProjectionDecisionKind::Reject) => ProjectionProposalStatus::Rejected,
+                None => ProjectionProposalStatus::Pending,
+            };
+            Ok(proposal)
+        },
+    )
+    .optional()
+    .map_err(repo)
 }
 
 impl LexicalEntryRepository for SqliteRepository {

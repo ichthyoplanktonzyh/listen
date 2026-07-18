@@ -3,17 +3,25 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-18T20:20:00.000+08:00"
+last_updated: "2026-07-18T20:49:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-18 20:20 CST
-> 更新原因：Phase 3.16 Personal Expression 代码与自动化验证收口，进入 owner manual QA。
+> 最后更新：2026-07-18 20:49 CST
+> 更新原因：Phase 3.17 Four-channel Projection & Cross-modal Review 代码收口，进入 owner manual QA。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.16 Personal Expression & Sentence Patterns **✅ CODE COMPLETE —
+- **当前执行主线**：Phase 3.17 Four-channel Projection & Cross-modal Review **✅ CODE COMPLETE —
+  OWNER MANUAL QA PENDING**。schema v44 append-only proposal/decision、四通道独立 qualification、
+  proposal-only 自动 writer、原子 confirmation→projection/history、override 优先、显式 rebuild、
+  cross-modal assessed-gap 与来源 snapshot、OpenAPI/typed Flutter 资产层入口已贯通。Reading/
+  listening/speaking 只有本通道合格 evidence 才能提 proposal；writing 因无 lexical-target writing
+  confirmation 诚实保持 unassessed。旧 listening/upgrade direct evidence projection writer 已收口；
+  UserSentencePattern/Hunting List/corpus/embedding 边界未动。下一步仅由 owner 执行
+  `3.17-MANUAL-QA.md`，实现者未执行或冒充手工验收。
+- Phase 3.16 Personal Expression & Sentence Patterns **✅ CODE COMPLETE —
   OWNER MANUAL QA PENDING**。v43 durable `UserSentencePattern`、不可变 source snapshot/version、
   slots、内容内显式收藏、“我的表达”资产旅程、typed export 与 writing/speaking 分通道 attempts
   已贯通。Speaking 复用既有录音/本地 ASR 住户，来源删除诚实降级；零 observation/projection/
@@ -364,6 +372,10 @@ last_updated: "2026-07-18T20:20:00.000+08:00"
 
 ## 最近重要决策
 
+1. **2026-07-18 20:49 CST** — Phase 3.17 authority 收口（ADR 0024）：算法只读单通道
+   immutable observation 并写版本化 proposal；decision/projection/history 原子确认，override 不动且
+   读时优先。rebuild 只追加/替代 proposal，不重写 evidence。Writing 没有 lexical target confirmation，
+   因此不消费 Studio/LLM/pattern attempt 冒充 acquired；unassessed 不进入 cross-modal failure。
 1. **2026-07-16 18:10 CST** — Phase 3.15.9 code complete。以 macOS 已安装 system voice
    作为零下载离线 adapter，不复制 syntax 七态下载生命周期；application seam 保持 local/remote
    可扩展，v1 不静默联网。词典真实 provider audio、真实 media slice 优先；TTS 只作明确 synthetic
@@ -484,12 +496,15 @@ last_updated: "2026-07-18T20:20:00.000+08:00"
 
 ## 下一步工作
 
-1. **Phase 3.15.8 owner manual QA**：按 `3.15.8-MANUAL-QA.md` 验证首次安装/离线重启、真实个人
+1. **Phase 3.17 owner manual QA**：按 `3.17-MANUAL-QA.md` 验证真实库 proposal 来源、拒绝/确认、
+   override 优先、cross-modal assessed-gap、来源丢失 snapshot 与 rebuild/restart；未执行前不宣称
+   owner accepted。
+2. **Phase 3.15.8 owner manual QA**：按 `3.15.8-MANUAL-QA.md` 验证首次安装/离线重启、真实个人
    大语料 latency/RSS、stale/rebuild、语义结果与 gap explanation；完成前不宣称 owner accepted。
-2. **Phase 3.15.7 owner real-provider/device QA**：按 `3.15.7-MANUAL-QA.md`，在 App 内向 Keychain
+3. **Phase 3.15.7 owner real-provider/device QA**：按 `3.15.7-MANUAL-QA.md`，在 App 内向 Keychain
    录入至少一家 provider key，完成真实 socket、麦克风、扬声器、barge-in、local Whisper 与
    spoken corpus 闭环；未执行前不宣称 Phase COMPLETE。
-3. **Phase 3.15.9 owner GUI QA**：仍按其独立清单检查 system voice 听感；不与 3.15.7 QA 混做。
+4. **Phase 3.15.9 owner GUI QA**：仍按其独立清单检查 system voice 听感；不与 3.15.7 QA 混做。
 4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
 4. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）；

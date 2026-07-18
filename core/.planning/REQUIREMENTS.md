@@ -2881,7 +2881,10 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 
 - 优先级：P1
 - 阶段：Phase 3.17
-- 需求：reading/speaking/writing 各自按真实 evidence 资格建立版本化 projection proposal，
+- 当前状态：✅ CODE COMPLETE — OWNER MANUAL QA PENDING（2026-07-18）。schema v44、四通道
+  qualification、proposal/decision/confirmation gate、rebuild、cross-modal gap、OpenAPI 与 typed
+  Flutter 资产层 surface 已落地；writing 因无 lexical-target confirmation 诚实保持 unassessed。
+- 需求：reading/listening/speaking/writing 各自按真实 evidence 资格建立版本化 projection proposal，
   并从已评估的 cross-modal gap 派生合适复习任务；证据不足时保持 unassessed。
 - 验收标准：
   - 每通道有独立算法版本、writer exclusivity、人工 QA 与确认门禁，通道之间无隐式蕴含。

@@ -1369,6 +1369,23 @@ fn upgrade_suggestion_confirm_updates_listening_projection() {
         .unwrap();
     assert_eq!(confirmed.status, UpgradeSuggestionStatus::Accepted);
 
+    let audit = services
+        .projection_review()
+        .audit_and_refresh(&entry.entry.id)
+        .unwrap();
+    let proposal = audit
+        .proposals
+        .iter()
+        .find(|value| {
+            value.capability == LexicalCapability::Listening
+                && value.status == ProjectionProposalStatus::Pending
+        })
+        .unwrap();
+    services
+        .projection_review()
+        .decide(&proposal.id, ProjectionDecisionKind::Confirm, None)
+        .unwrap();
+
     let profile = services
         .lexical_learning()
         .lexical_capability_profile(&entry.entry.id)
@@ -1449,6 +1466,22 @@ fn legacy_suggestion_without_capability_confirms_via_profile_authority() {
         .confirm_upgrade_suggestion(&suggestion.id)
         .unwrap();
     assert_eq!(confirmed.status, UpgradeSuggestionStatus::Accepted);
+    let audit = services
+        .projection_review()
+        .audit_and_refresh(&entry.entry.id)
+        .unwrap();
+    let proposal = audit
+        .proposals
+        .iter()
+        .find(|value| {
+            value.capability == LexicalCapability::Listening
+                && value.status == ProjectionProposalStatus::Pending
+        })
+        .unwrap();
+    services
+        .projection_review()
+        .decide(&proposal.id, ProjectionDecisionKind::Confirm, None)
+        .unwrap();
     let details = services
         .lexical_learning()
         .lexical_details(&entry.entry.id)
