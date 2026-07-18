@@ -16,10 +16,18 @@ class CoachDashboardController extends ChangeNotifier {
   }
   final Store<CoachDashboardState> store;
   CoachDashboardState get state => store.state;
-  Future<void> load(LocalApi api) async {
+  Future<void> load(
+    LocalApi api, {
+    int days = 7,
+    String language = 'en',
+  }) async {
     store.replace(const CoachDashboardState(loading: true));
     try {
-      store.replace(CoachDashboardState(dashboard: await api.coachDashboard()));
+      store.replace(
+        CoachDashboardState(
+          dashboard: await api.coachDashboard(days: days, language: language),
+        ),
+      );
     } catch (error) {
       store.replace(CoachDashboardState(error: '$error'));
     }

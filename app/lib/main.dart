@@ -1472,7 +1472,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     ),
   );
 
-  Future<void> _showVocabulary({String? initialEntryId}) => showVocabularyFlow(
+  Future<void> _showVocabulary({
+    String? initialEntryId,
+    bool openCrossModalReview = false,
+  }) => showVocabularyFlow(
     context: context,
     api: api,
     settingsController: settingsController,
@@ -1483,6 +1486,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     auxiliaryAudio: auxiliaryAudioController,
     pauseBackgroundPlayback: _acquireAuxiliaryAudioFocus,
     initialEntryId: initialEntryId,
+    openCrossModalReview: openCrossModalReview,
   );
 
   Future<void> _openReviewQueue() => openReviewQueueFlow(
@@ -1497,8 +1501,13 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _openCoachDashboard() => openCoachDashboardFlow(
     context: context,
     api: api,
+    language: settingsController.resolveLearningLanguage(
+      subtitleController.primaryTrack?.language,
+    ),
     openReviewQueue: _openReviewQueue,
-    openVocabulary: _openVocabulary,
+    openVocabulary: ({bool openCrossModalReview = false}) =>
+        _showVocabulary(openCrossModalReview: openCrossModalReview),
+    openPersonalExpression: () => _openPersonalExpression(),
   );
 
   Future<void> _startReviewShadowing(ReviewQueueEntry entry) async {

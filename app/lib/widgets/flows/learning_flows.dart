@@ -239,6 +239,7 @@ Future<void> showVocabularyFlow({
   required AuxiliaryAudioController auxiliaryAudio,
   required Future<void> Function() pauseBackgroundPlayback,
   String? initialEntryId,
+  bool openCrossModalReview = false,
 }) async {
   final service = api;
   if (service == null) return;
@@ -257,6 +258,7 @@ Future<void> showVocabularyFlow({
         huntingController: huntingController,
         auxiliaryAudio: auxiliaryAudio,
         initialEntryId: initialEntryId,
+        openCrossModalReviewOnStart: openCrossModalReview,
         onPauseBackgroundPlayback: pauseBackgroundPlayback,
         onStartShadowing: practiceActions.startExternalShadowing,
       ),
@@ -296,8 +298,10 @@ Future<void> openReviewQueueFlow({
 Future<void> openCoachDashboardFlow({
   required BuildContext context,
   required LocalApi? api,
+  required String language,
   required Future<void> Function() openReviewQueue,
-  required Future<void> Function() openVocabulary,
+  required Future<void> Function({bool openCrossModalReview}) openVocabulary,
+  required Future<void> Function() openPersonalExpression,
 }) async {
   final service = api;
   if (service == null) return;
@@ -306,8 +310,14 @@ Future<void> openCoachDashboardFlow({
     MaterialPageRoute(
       builder: (_) => CoachDashboardScreen(
         api: service,
-        onOpenReview: () => unawaited(openReviewQueue()),
-        onOpenHunting: openVocabulary,
+        language: language,
+        onNavigate: (destination, _) => switch (destination.kind) {
+          'review_queue' => openReviewQueue(),
+          'hunting_list' => openVocabulary(),
+          'cross_modal_review' => openVocabulary(openCrossModalReview: true),
+          'personal_expression' => openPersonalExpression(),
+          _ => Future<void>.value(),
+        },
       ),
     ),
   );

@@ -30,6 +30,7 @@ class VocabularyScreen extends StatefulWidget {
     required this.huntingController,
     required this.auxiliaryAudio,
     this.initialEntryId,
+    this.openCrossModalReviewOnStart = false,
     this.onPauseBackgroundPlayback,
     this.onStartShadowing,
   });
@@ -41,6 +42,7 @@ class VocabularyScreen extends StatefulWidget {
   final HuntingController huntingController;
   final AuxiliaryAudioController auxiliaryAudio;
   final String? initialEntryId;
+  final bool openCrossModalReviewOnStart;
 
   /// Pauses whatever is playing behind this route (the primary player) so a
   /// slice owns audio focus alone, matching the workbench behaviour.
@@ -444,6 +446,11 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     final initialEntryId = widget.initialEntryId;
     if (initialEntryId != null) {
       unawaited(_openEntryById(initialEntryId));
+    }
+    if (widget.openCrossModalReviewOnStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_openCrossModalReview());
+      });
     }
   }
 

@@ -37,7 +37,9 @@ extension CoachLlmApi on LocalApi {
   /// Typed provider list (secret-free), convenience over [listLlmProviders].
   Future<List<LlmProviderProfileView>> llmProviders() async =>
       (await listLlmProviders())
-          .map((e) => LlmProviderProfileView.fromJson(e as Map<String, dynamic>))
+          .map(
+            (e) => LlmProviderProfileView.fromJson(e as Map<String, dynamic>),
+          )
           .toList(growable: false);
 
   /// Generates a rubric draft (information points only) for one source segment
@@ -184,11 +186,16 @@ extension CoachLlmApi on LocalApi {
             as Map<String, dynamic>,
       );
 
-  Future<CoachDashboard> coachDashboard({int days = 7}) async =>
-      CoachDashboard.fromJson(
-        (await _request('GET', '/v1/coach/dashboard?days=$days'))
-            as Map<String, dynamic>,
-      );
+  Future<CoachDashboard> coachDashboard({
+    int days = 7,
+    String language = 'en',
+  }) async => CoachDashboard.fromJson(
+    (await _request(
+          'GET',
+          '/v1/coach/dashboard?days=$days&language=${Uri.encodeQueryComponent(language)}',
+        ))
+        as Map<String, dynamic>,
+  );
 
   Future<void> graduateCoachMaterial(String mediaId) async {
     await _request(
