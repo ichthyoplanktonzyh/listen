@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-19 00:44 CST: 启动 Phase 3.19 Product Validation & Release Closeout。Phase 3.x
+  进入 feature freeze，把 3.4/3.5/3.14/3.15.7/3.15.8/3.15.9/3.16/3.17/3.18 分散的 owner QA
+  合并为五条风险优先端到端旅程，并建立统一 release acceptance、P0/P1 defect policy 与 owner
+  ACCEPT / DO NOT RELEASE 出口；不新增产品能力、不预定 Phase 4。首轮自动基线全绿：full strict
+  Rust 685、Flutter 453、contracts 5 examples，0 failed；macOS release build、zip integrity、解压后
+  deep/strict ad-hoc signature、sidecar/runtime/notices 均通过。真实 GUI 首次启动、媒体、麦克风、
+  provider、embedding scale、TTS 听感和 owner 数据旅程仍明确 pending，未由实现者代验。
+
 - 2026-07-18 23:17 CST: Phase 3.18 Cross-modal Coach code complete。按 `main@88223b0b`
   重审并收紧旧 PLAN：Coach 只聚合、解释和编排既有事实/资产，不创建综合等级、跨通道蕴含或
   第二 capability authority。SQLite bounded live read model 分层返回四通道 attempt、supporting

@@ -3,17 +3,25 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-18T23:17:00.000+08:00"
+last_updated: "2026-07-19T00:44:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-18 23:17 CST
-> 更新原因：Phase 3.18 Cross-modal Coach 代码收口，进入 owner manual QA。
+> 最后更新：2026-07-19 00:44 CST
+> 更新原因：Phase 3.19 自动化与 macOS release package 基线通过，进入 owner journeys。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.18 Cross-modal Coach **✅ CODE COMPLETE — OWNER MANUAL QA
+- **当前执行主线**：Phase 3.19 Product Validation & Release Closeout **ACTIVE — AUTOMATED
+  BASELINE PASS / OWNER JOURNEYS PENDING**。Phase 3.x 不再新增功能；full strict 已以 Rust 685、
+  Flutter 453、contracts 5 examples 全绿，macOS release build、zip integrity、解压 artifact
+  deep/strict ad-hoc signature 与 bundled runtime/notices 均通过。分散的 owner QA 已合并为五条
+  风险优先端到端旅程，下一步由 owner 在真实媒体、真实数据库副本、
+  麦克风/扬声器和 provider 环境下完成体验验收。P0 必须清零，P1 必须修复或由 owner 书面批准
+  例外；P2 只处理阻塞核心旅程、破坏 authority 或造成高频明显摩擦的项目。统一控制面见
+  `3.19-RELEASE-ACCEPTANCE.md`；实现者不代签 owner checkpoints。
+- Phase 3.18 Cross-modal Coach **✅ CODE COMPLETE — OWNER MANUAL QA
   PENDING**。3.10 listening-only dashboard 已扩为四通道只读聚合：attempt/judgment/
   adjudication/observation/proposal/confirmed projection/history/personal-expression attempt 分层，
   effective assessment 继续读取 3.17 authority，unassessed 不算失败。typed provenance + immutable
@@ -504,15 +512,15 @@ last_updated: "2026-07-18T23:17:00.000+08:00"
 
 ## 下一步工作
 
-1. **Phase 3.17 owner manual QA**：按 `3.17-MANUAL-QA.md` 验证真实库 proposal 来源、拒绝/确认、
-   override 优先、cross-modal assessed-gap、来源丢失 snapshot 与 rebuild/restart；未执行前不宣称
-   owner accepted。
-2. **Phase 3.15.8 owner manual QA**：按 `3.15.8-MANUAL-QA.md` 验证首次安装/离线重启、真实个人
-   大语料 latency/RSS、stale/rebuild、语义结果与 gap explanation；完成前不宣称 owner accepted。
-3. **Phase 3.15.7 owner real-provider/device QA**：按 `3.15.7-MANUAL-QA.md`，在 App 内向 Keychain
-   录入至少一家 provider key，完成真实 socket、麦克风、扬声器、barge-in、local Whisper 与
-   spoken corpus 闭环；未执行前不宣称 Phase COMPLETE。
-4. **Phase 3.15.9 owner GUI QA**：仍按其独立清单检查 system voice 听感；不与 3.15.7 QA 混做。
+1. **Owner packaged-app smoke**：从独立解压的 release app 首次启动，确认 sidecar ready、打开真实
+   媒体与安全退出；自动 bundle/signature 检查已通过，但实现者不代验 GUI。
+2. **Owner Journey J1/J2**：完成“核心听力资产”和“Speaking → Personal Expression →
+   Projection Review → Coach”两条跨阶段旅程；一次真实体验覆盖 3.4/3.5/3.14/3.16/3.17/3.18
+   的重复准备与返回路径，但保留每项原 QA 的可追溯映射。
+3. **Owner Journey J3–J5**：分别完成 realtime provider/device、embedding lifecycle/scale、TTS
+   听感/audio-focus；真实 key 只经 App 写 Keychain，不进入终端、截图或文档。
+4. **Defect burn-down / release decision**：P0 清零，P1 修复或书面例外；随后完成 3.19 closeout、
+   压缩 STATE、同步 3.17–3.19 架构事实，并由 owner 给出 ACCEPT / DO NOT RELEASE。
 4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
 4. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）；
