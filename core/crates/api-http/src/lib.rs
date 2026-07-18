@@ -58,6 +58,10 @@ use routes::media::{
     read_subtitle, register_media, restore_subtitle, set_media_triage_intent, track_content_fit,
     update_track_language,
 };
+use routes::personal_expression::{
+    create_pattern, delete_pattern, export_patterns, get_pattern, list_pattern_attempts,
+    list_pattern_versions, list_patterns, record_pattern_attempt, revise_pattern,
+};
 use routes::phonetic_analysis::{
     cancel_phonetic_analysis_job, cancel_phonetic_analysis_model_install,
     clear_terminal_phonetic_analysis_jobs, create_phonetic_analysis_job,
@@ -694,6 +698,23 @@ pub fn router(state: ApiState) -> Router {
             post(reindex_production_corpus),
         )
         .route("/v1/production-gap/review", get(production_gap_review))
+        .route(
+            "/v1/personal-expression/patterns",
+            get(list_patterns).post(create_pattern),
+        )
+        .route(
+            "/v1/personal-expression/patterns/{id}",
+            get(get_pattern).put(revise_pattern).delete(delete_pattern),
+        )
+        .route(
+            "/v1/personal-expression/patterns/{id}/versions",
+            get(list_pattern_versions),
+        )
+        .route(
+            "/v1/personal-expression/patterns/{id}/attempts",
+            get(list_pattern_attempts).post(record_pattern_attempt),
+        )
+        .route("/v1/personal-expression/export", get(export_patterns))
         .route(
             "/v1/semantic-embedding/capability",
             get(semantic_embedding_capability),

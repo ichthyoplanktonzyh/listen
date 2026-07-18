@@ -2867,6 +2867,8 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 
 - 优先级：P1
 - 阶段：Phase 3.16
+- 当前状态：✅ CODE COMPLETE — OWNER MANUAL QA PENDING（2026-07-18）；durable asset、不可变
+  来源/版本、分通道 attempt、内容内收藏、资产旅程与 typed export 已落地，3.17 writers 保持为零。
 - 需求：系统应允许用户从任意真实句子提炼 `UserSentencePattern`，通过 slots 在自己的
   speaking/writing 情境中复用；用户模板身份不依赖 canonical construction。
 - 验收标准：

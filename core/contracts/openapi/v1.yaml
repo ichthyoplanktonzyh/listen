@@ -2427,6 +2427,108 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ProductionGapReview" }
+  /v1/personal-expression/patterns:
+    get:
+      operationId: listSentencePatterns
+      parameters:
+        - { name: language, in: query, schema: { type: string } }
+        - { name: query, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: User-owned personal expression assets
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/UserSentencePatternAsset" } }
+    post:
+      operationId: createSentencePattern
+      description: Explicitly creates a durable pattern; candidates never call this endpoint automatically.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSentencePattern" }
+      responses:
+        "201":
+          description: Created pattern
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserSentencePatternAsset" }
+  /v1/personal-expression/patterns/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: sentencePattern
+      responses:
+        "200":
+          description: Pattern with current immutable version and source snapshot
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserSentencePatternAsset" }
+    put:
+      operationId: reviseSentencePattern
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SentencePatternVersionInput" }
+      responses:
+        "200":
+          description: Pattern after appending a version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserSentencePatternAsset" }
+    delete:
+      operationId: deleteSentencePattern
+      responses:
+        "204": { description: Explicitly deleted pattern and its own history }
+  /v1/personal-expression/patterns/{id}/versions:
+    get:
+      operationId: sentencePatternVersions
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Immutable version history
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/UserSentencePatternVersion" } }
+  /v1/personal-expression/patterns/{id}/attempts:
+    get:
+      operationId: personalExpressionAttempts
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Channel-separated use history and 3.17 handoff facts
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/PersonalExpressionAttempt" } }
+    post:
+      operationId: recordPersonalExpressionAttempt
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecordPersonalExpressionAttempt" }
+      responses:
+        "201":
+          description: Immutable completed use fact; not an observation or projection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonalExpressionAttempt" }
+  /v1/personal-expression/export:
+    get:
+      operationId: exportPersonalExpression
+      parameters:
+        - { name: language, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Portable durable pattern, version, snapshot, and use-history bundle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonalExpressionExportBundle" }
   /v1/semantic-embedding/capability:
     get:
       operationId: semanticEmbeddingCapability
@@ -3918,6 +4020,7 @@ components:
       required: [original_form, sentence_text, media_title, media_fingerprint, start_ms, end_ms]
       properties:
         media_id: { type: [string, "null"] }
+        media_fingerprint: { type: [string, "null"] }
         sentence_id: { type: [string, "null"] }
         original_form: { type: string }
         sentence_text: { type: string }
@@ -4060,6 +4163,108 @@ components:
       required: [indexed_rubrics]
       properties:
         indexed_rubrics: { type: integer, minimum: 0 }
+    PatternSourceKind:
+      enum: [transcript, dictionary_occurrence, reading, speaking_attempt, writing_attempt, production_corpus, semantic_candidate, manual]
+    PatternSourceSnapshot:
+      type: object
+      required: [kind, text]
+      properties:
+        kind: { $ref: "#/components/schemas/PatternSourceKind" }
+        text: { type: string, minLength: 1 }
+        title: { type: [string, "null"] }
+        media_id: { type: [string, "null"] }
+        track_id: { type: [string, "null"] }
+        sentence_id: { type: [string, "null"] }
+        semantic_attempt_id: { type: [string, "null"] }
+        start_ms: { type: [integer, "null"], minimum: 0 }
+        end_ms: { type: [integer, "null"], minimum: 0 }
+        candidate_ref: { type: [string, "null"] }
+    UserSentencePatternSlot:
+      type: object
+      required: [name, required]
+      properties:
+        name: { type: string, minLength: 1 }
+        prompt: { type: [string, "null"] }
+        example_value: { type: [string, "null"] }
+        required: { type: boolean }
+    SentencePatternVersionInput:
+      type: object
+      required: [name, pattern_text, slots]
+      properties:
+        name: { type: string, minLength: 1 }
+        pattern_text: { type: string, minLength: 1 }
+        slots: { type: array, items: { $ref: "#/components/schemas/UserSentencePatternSlot" } }
+        note: { type: [string, "null"] }
+        system_construction_id: { type: [string, "null"] }
+    CreateSentencePattern:
+      allOf:
+        - type: object
+          required: [language, source]
+          properties:
+            language: { type: string }
+            source: { $ref: "#/components/schemas/PatternSourceSnapshot" }
+        - { $ref: "#/components/schemas/SentencePatternVersionInput" }
+    UserSentencePatternVersion:
+      allOf:
+        - { $ref: "#/components/schemas/SentencePatternVersionInput" }
+        - type: object
+          required: [id, pattern_id, version, created_at_ms]
+          properties:
+            id: { type: string }
+            pattern_id: { type: string }
+            version: { type: integer, minimum: 1 }
+            created_at_ms: { type: integer, minimum: 0 }
+    UserSentencePatternAsset:
+      type: object
+      required: [id, language, source, current_version, created_at_ms, updated_at_ms]
+      properties:
+        id: { type: string }
+        language: { type: string }
+        source: { $ref: "#/components/schemas/PatternSourceSnapshot" }
+        current_version: { $ref: "#/components/schemas/UserSentencePatternVersion" }
+        created_at_ms: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
+    PersonalExpressionChannel:
+      enum: [speaking, writing]
+    PersonalExpressionAssistance:
+      enum: [template_visible, slot_hints, keywords, no_text]
+    PersonalExpressionSelfAssessment:
+      enum: [needs_work, partly_expressed, expressed]
+    RecordPersonalExpressionAttempt:
+      type: object
+      required: [pattern_version_id, channel, assistance, response_text, self_assessment]
+      properties:
+        pattern_version_id: { type: string }
+        channel: { $ref: "#/components/schemas/PersonalExpressionChannel" }
+        assistance: { $ref: "#/components/schemas/PersonalExpressionAssistance" }
+        response_text: { type: string, minLength: 1 }
+        raw_transcript: { type: [string, "null"] }
+        recording_asset_id: { type: [string, "null"] }
+        self_assessment: { $ref: "#/components/schemas/PersonalExpressionSelfAssessment" }
+        context_note: { type: [string, "null"] }
+    PersonalExpressionAttempt:
+      allOf:
+        - { $ref: "#/components/schemas/RecordPersonalExpressionAttempt" }
+        - type: object
+          required: [id, pattern_id, completed_at_ms]
+          properties:
+            id: { type: string }
+            pattern_id: { type: string }
+            completed_at_ms: { type: integer, minimum: 0 }
+    PersonalExpressionExportPattern:
+      type: object
+      required: [asset, versions, attempts]
+      properties:
+        asset: { $ref: "#/components/schemas/UserSentencePatternAsset" }
+        versions: { type: array, items: { $ref: "#/components/schemas/UserSentencePatternVersion" } }
+        attempts: { type: array, items: { $ref: "#/components/schemas/PersonalExpressionAttempt" } }
+    PersonalExpressionExportBundle:
+      type: object
+      required: [schema, exported_at_ms, patterns]
+      properties:
+        schema: { const: llplayer.personal-expression.v1 }
+        exported_at_ms: { type: integer, minimum: 0 }
+        patterns: { type: array, items: { $ref: "#/components/schemas/PersonalExpressionExportPattern" } }
     ProductionGapReadiness:
       enum: [empty, starter, ready]
     ProductionGapTarget:

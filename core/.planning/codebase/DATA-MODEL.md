@@ -1,6 +1,6 @@
 # Current Data Model
 
-Last updated: 2026-07-13, Phase 3.9.2 shared syntactic product composition.
+Last updated: 2026-07-18, Phase 3.16 durable personal expression assets.
 
 All persisted time values are non-negative integer milliseconds. Public IDs are
 opaque SHA-256 strings generated from a namespace and stable fingerprint; they
@@ -25,6 +25,9 @@ do not contain database row numbers or player-library identifiers.
 | Learning event | `sha256("learning-event:" + kind/subject/timestamp)` |
 | Listening Inbox item | `sha256("listening-inbox-item:" + session/target/timestamp)` |
 | Recording asset | `sha256("recording-asset:" + audio SHA-256/target/source start/timestamp)` |
+| User sentence pattern | Server-minted opaque ID at explicit user save; independent of source/canonical construction |
+| User sentence pattern version | Pattern + append-only version number + creation fingerprint |
+| Personal expression attempt | Pattern + immutable version + completed learner response/time |
 | Writing feedback finding | Attempt + learner revision/hash + project category/span/message + provider/version |
 | Writing finding disposition | Finding + accept/reject + resulting immutable attempt/revision + timestamp |
 
@@ -107,6 +110,9 @@ assets:
 | `writing_feedback_findings` | Append-only provider/manual suggestions bound to one exact typed learner revision |
 | `writing_finding_dispositions` | Append-only learner accept/reject facts; acceptance cites a later typed revision |
 | `writing_drafts` | Mutable non-evidence scratch projection keyed by rubric; deleted after immutable submission |
+| `user_sentence_patterns` | Durable user-owned asset with current searchable name/text and immutable source snapshot JSON |
+| `user_sentence_pattern_versions` | Append-only user edits; old template text/slots/system ref remain unchanged |
+| `personal_expression_attempts` | Immutable completed speaking or writing use of one exact pattern version |
 
 `PracticeAttempt` owns what the user tried and how it was evaluated. It may create
 `LexicalObservation` evidence, but it must not silently change global
@@ -115,6 +121,18 @@ assets:
 Shadowing uses `PracticeResult::Completed` when a recording finishes without an
 objective evaluator. This is an activity fact with `score = null`: it creates no
 channelized observation, review item, recognition evidence, or content-fit feedback.
+
+`UserSentencePattern` is a separate durable asset aggregate. Its source media,
+track, sentence and semantic candidate IDs are optional navigation hints inside
+the source snapshot JSON; no media/subtitle foreign key may cascade an asset.
+`system_construction_id` is optional reference metadata on a version and never
+replaces user-owned `pattern_text`.
+
+Personal-expression attempts preserve the channel, assistance, learner response,
+self-assessment and exact immutable version. Writing rejects recording/raw-ASR
+facts; speaking requires a recording asset. Neither channel writes or implies the
+other channel's capability, and these facts do not write learning observations,
+projection proposals or confirmation decisions.
 
 `ReviewItem` owns scheduling targets, not lexical identity. `LexicalEntry` remains
 the authoritative vocabulary learning asset. Anki export or AnkiConnect should
@@ -412,6 +430,12 @@ expansion is ephemeral overlay state, not a fourth persisted Rhythm mode.
   replacement and full replacement are transactional. The projection writes no
   lexical observation, capability state/history, or template identity and can
   be deleted/rebuilt from immutable semantic attempts.
+- Schema v43 adds `user_sentence_patterns`, append-only
+  `user_sentence_pattern_versions`, and immutable `personal_expression_attempts`.
+  Only explicit pattern deletion cascades within this aggregate. Source media
+  deletion cannot cascade because source identity lives only in the immutable
+  JSON snapshot. Attempts are read-only handoff facts for 3.17, not projection
+  or proposal rows.
 - Review scheduling v1 is recorded as `listen_review_v1_heuristic_proxy`: `again` returns in
   10 minutes, `hard` in one day, and successful intervals grow from 3 to 7 days before doubling.
   The durable attempts remain the evidence history; the schedule row is a replaceable read model.

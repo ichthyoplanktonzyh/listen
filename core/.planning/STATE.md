@@ -3,23 +3,26 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-16T22:21:00.000+08:00"
+last_updated: "2026-07-18T20:20:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-16 22:21 CST
-> 更新原因：Phase 3.15.8 Semantic Embedding 代码、真实 seam spike 与自动化验证收口，进入 owner manual QA。
+> 最后更新：2026-07-18 20:20 CST
+> 更新原因：Phase 3.16 Personal Expression 代码与自动化验证收口，进入 owner manual QA。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.15.8 Semantic Embedding **✅ CODE COMPLETE — OWNER MANUAL QA
-  PENDING**。FastEmbed local model + OpenAI-compatible seam、v42 disposable vector index、media/
-  production semantic top-K、3.15.6 additive near-semantic explanation 与 typed lifecycle UI 已贯通。
-  fingerprint 固定 model/runtime/artifact/dimension/normalization/purpose/index schema；source/model
-  变化 stale + full rebuild，零 learning/corpus writer。真实 FastEmbed/Ollama spike、Rust workspace、
-  Clippy/contracts、Flutter analyze/full tests 与 macOS Debug build 通过。下一步只执行
-  `3.15.8-MANUAL-QA.md`，不夹带其他 owner QA。
+- **当前执行主线**：Phase 3.16 Personal Expression & Sentence Patterns **✅ CODE COMPLETE —
+  OWNER MANUAL QA PENDING**。v43 durable `UserSentencePattern`、不可变 source snapshot/version、
+  slots、内容内显式收藏、“我的表达”资产旅程、typed export 与 writing/speaking 分通道 attempts
+  已贯通。Speaking 复用既有录音/本地 ASR 住户，来源删除诚实降级；零 observation/projection/
+  proposal/confirmation writer。FocusTarget 三 consumer razor 已重跑并拒绝提前泛化，Hunting List
+  未动。下一步仅由 owner 执行 `3.16-MANUAL-QA.md`，实现者未冒充手工验收。
+- Phase 3.15.8 Semantic Embedding **✅ CODE COMPLETE — OWNER MANUAL QA PENDING**。FastEmbed
+  local model + OpenAI-compatible seam、v42 disposable vector index、media/production semantic top-K、
+  3.15.6 additive near-semantic explanation 与 typed lifecycle UI 已贯通；独立 owner 首装/离线/
+  大语料体验 QA 仍保留，本阶段未夹带执行。
 - Phase 3.15.7 Realtime Speech Conversation **✅ CODE COMPLETE — OWNER
   REAL-PROVIDER QA PENDING**。OpenAI/Qwen 两异构 adapter、provider-neutral session/turn/audio/
   transcript lifecycle、Keychain + localhost WebSocket、macOS 24 kHz realtime PCM + 16 kHz local

@@ -1,6 +1,6 @@
 # LLPlayerNext System Architecture
 
-Last updated: 2026-07-16. Reflects Phase 3.15.5 personal production corpus.
+Last updated: 2026-07-18. Reflects Phase 3.16 personal expression assets.
 
 ## Overview
 
@@ -62,13 +62,16 @@ application use cases and provider/repository boundaries.
   dispositions append separately and acceptance must cite a new immutable
   attempt that preserves the reviewed text and adds a later typed revision.
   Provider suggestions never become authoritative learner text by mutation.
+- Phase 3.16 adds the independent `UserSentencePattern` aggregate: user-owned
+  template identity, immutable source snapshot and versions, plus channel-specific
+  completed attempts. It is not a construction, corpus projection or embedding hit.
 
 ### `application`
 
-- `AppServices` is composition-only: nine module accessors plus construction
+- `AppServices` is composition-only: focused module accessors plus construction
   builders, with no cross-domain use-case methods. `MediaAnalysisUseCases`,
   `LexicalLearningUseCases`, and `PracticeUseCases` own the three broad caller
-  clusters; `SemanticUseCases`, `LlmProviderUseCases`, `LearnerProfileUseCases`,
+  clusters; `SemanticUseCases`, `PersonalExpressionUseCases`, `LlmProviderUseCases`, `LearnerProfileUseCases`,
   `DictionaryUseCases`, `RecordingUseCases`, and `PronunciationUseCases` remain
   narrow specialist modules. Each module holds only its required ports or an
   explicit collaborating module.
@@ -88,9 +91,13 @@ application use cases and provider/repository boundaries.
   - `LearningEventRepository`
   - `RecordingRepository`
   - `ProductionCorpusRepository`
+  - `PersonalExpressionRepository`
   - transcription, phonetic analysis, dictionary cache, playback progress
 - Application-owned DTOs sit in `application::dto`; algorithm crate structs are
   mapped at the boundary instead of re-exported.
+- `PersonalExpressionUseCases` owns explicit create/revise/delete, immutable
+  version/attempt history, and typed export. It has no observation, capability,
+  projection, proposal or confirmation repository dependency.
 - Learning assets use `LexicalEntry + LexicalUnit` as the authoritative model.
 - Schema v22 persists the Phase 3.4.1 four-channel capability profile with
   evidence/projection/override separation under ADR 0015. The rollout is

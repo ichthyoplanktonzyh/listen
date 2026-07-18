@@ -781,6 +781,44 @@ pub trait ProductionCorpusRepository: Send + Sync {
     }
 }
 
+/// Phase 3.16 durable user-owned patterns. Unlike production corpus and
+/// embedding indexes, these rows are authoritative assets and are never
+/// rebuildable projections.
+pub trait PersonalExpressionRepository: Send + Sync {
+    fn create_pattern(
+        &self,
+        asset: &domain::UserSentencePatternAsset,
+    ) -> Result<domain::UserSentencePatternAsset, ApplicationError>;
+    fn append_pattern_version(
+        &self,
+        pattern_id: &domain::UserSentencePatternId,
+        version: &domain::UserSentencePatternVersion,
+        updated_at_ms: u64,
+    ) -> Result<domain::UserSentencePatternAsset, ApplicationError>;
+    fn get_pattern(
+        &self,
+        id: &domain::UserSentencePatternId,
+    ) -> Result<Option<domain::UserSentencePatternAsset>, ApplicationError>;
+    fn list_patterns(
+        &self,
+        language: Option<&LanguageCode>,
+        query: Option<&str>,
+    ) -> Result<Vec<domain::UserSentencePatternAsset>, ApplicationError>;
+    fn list_pattern_versions(
+        &self,
+        id: &domain::UserSentencePatternId,
+    ) -> Result<Vec<domain::UserSentencePatternVersion>, ApplicationError>;
+    fn delete_pattern(&self, id: &domain::UserSentencePatternId) -> Result<bool, ApplicationError>;
+    fn save_personal_expression_attempt(
+        &self,
+        attempt: &domain::PersonalExpressionAttempt,
+    ) -> Result<domain::PersonalExpressionAttempt, ApplicationError>;
+    fn list_personal_expression_attempts(
+        &self,
+        id: &domain::UserSentencePatternId,
+    ) -> Result<Vec<domain::PersonalExpressionAttempt>, ApplicationError>;
+}
+
 pub trait SemanticEmbeddingIndexRepository: Send + Sync {
     /// Atomically replaces the whole model-specific read model. A failed
     /// rebuild must leave the previous index readable.

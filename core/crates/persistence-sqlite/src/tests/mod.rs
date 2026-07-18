@@ -537,6 +537,7 @@ mod lexical;
 mod llm_provider;
 mod media_library;
 mod migrations;
+mod personal_expression;
 mod phonetic_analysis;
 mod production_corpus;
 mod reading;

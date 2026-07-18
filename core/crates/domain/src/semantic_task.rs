@@ -493,9 +493,10 @@ pub fn validate_semantic_attempt(
         _ => {}
     }
     match attempt.kind {
-        SemanticTaskKind::RoleReply => {
+        SemanticTaskKind::RoleReply | SemanticTaskKind::PatternProduction => {
             if attempt.conditions.speaking_assistance.is_none() {
-                errors.push("role_reply must snapshot its assistance level".into());
+                errors
+                    .push("constructed prompt speaking must snapshot its assistance level".into());
             }
             if attempt
                 .conditions
@@ -503,16 +504,20 @@ pub fn validate_semantic_attempt(
                 .as_deref()
                 .is_none_or(|value| value.trim().is_empty())
             {
-                errors.push("role_reply must preserve its prompt snapshot".into());
+                errors.push("constructed prompt speaking must preserve its prompt snapshot".into());
             }
         }
         _ if attempt.conditions.speaking_assistance.is_some() => {
-            errors.push("speaking assistance is only defined for role_reply".into());
+            errors.push(
+                "speaking assistance is only defined for role_reply or pattern_production".into(),
+            );
         }
         _ => {}
     }
     match attempt.kind {
-        SemanticTaskKind::L2Retelling | SemanticTaskKind::RoleReply => {
+        SemanticTaskKind::L2Retelling
+        | SemanticTaskKind::RoleReply
+        | SemanticTaskKind::PatternProduction => {
             if attempt.conditions.speaking_recall.is_none() {
                 errors.push("constructed speaking must record immediate or delayed recall".into());
             }
@@ -569,7 +574,9 @@ pub fn validate_semantic_attempt(
         }
         if matches!(
             attempt.kind,
-            SemanticTaskKind::L2Retelling | SemanticTaskKind::RoleReply
+            SemanticTaskKind::L2Retelling
+                | SemanticTaskKind::RoleReply
+                | SemanticTaskKind::PatternProduction
         ) && (response.source != ResponseTranscriptSource::Asr
             || response.recording_asset_id.is_none())
         {

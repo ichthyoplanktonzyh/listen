@@ -37,6 +37,9 @@ pub use syntactic_analysis::*;
 mod construction;
 pub use construction::*;
 
+mod personal_expression;
+pub use personal_expression::*;
+
 mod phone_timeline;
 pub use phone_timeline::*;
 
@@ -167,6 +170,8 @@ string_id!(SentenceExemplarId);
 string_id!(ConstructionId);
 string_id!(ConstructionOccurrenceId);
 string_id!(UserSentencePatternId);
+string_id!(UserSentencePatternVersionId);
+string_id!(PersonalExpressionAttemptId);
 string_id!(RecordingAssetId);
 string_id!(SemanticRubricId);
 string_id!(SemanticTaskAttemptId);

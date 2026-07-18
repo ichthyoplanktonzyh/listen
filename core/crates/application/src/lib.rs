@@ -67,6 +67,7 @@ mod lexical;
 mod listening;
 mod llm_provider;
 mod media;
+mod personal_expression;
 mod phones;
 mod phonetic_fixture;
 mod practice;
@@ -101,6 +102,7 @@ pub use learner_profile::{LearnerProfileUseCases, LearnerProfileView};
 pub use lexical::LexicalLearningUseCases;
 pub use llm_provider::LlmProviderUseCases;
 pub use media::MediaAnalysisUseCases;
+pub use personal_expression::PersonalExpressionUseCases;
 pub use practice::PracticeUseCases;
 pub use production_corpus::ProductionCorpusUseCases;
 pub use pronunciation::PronunciationUseCases;
@@ -170,6 +172,7 @@ pub struct AppServices {
     pub(crate) coach_dashboard: Arc<dyn CoachDashboardRepository>,
     pub(crate) semantic_tasks: Arc<dyn SemanticTaskRepository>,
     pub(crate) production_corpus: Arc<dyn ProductionCorpusRepository>,
+    pub(crate) personal_expression: Arc<dyn PersonalExpressionRepository>,
     pub(crate) llm_provider_profiles: Arc<dyn LlmProviderProfileRepository>,
     pub(crate) realtime_conversations: Arc<dyn RealtimeConversationRepository>,
     pub(crate) semantic_embedding_index: Arc<dyn SemanticEmbeddingIndexRepository>,
@@ -236,6 +239,10 @@ impl AppServices {
         ProductionCorpusUseCases::from_services(self)
     }
 
+    pub fn personal_expression(&self) -> PersonalExpressionUseCases {
+        PersonalExpressionUseCases::new(self.personal_expression.clone())
+    }
+
     pub fn semantic_embedding(&self) -> SemanticEmbeddingUseCases {
         SemanticEmbeddingUseCases::from_services(self)
     }
@@ -294,6 +301,7 @@ impl AppServices {
             coach_dashboard: Arc::new(DisabledCoachDashboardRepository),
             semantic_tasks: Arc::new(DisabledSemanticTaskRepository),
             production_corpus: Arc::new(DisabledProductionCorpusRepository),
+            personal_expression: Arc::new(DisabledPersonalExpressionRepository),
             llm_provider_profiles: Arc::new(DisabledLlmProviderProfileRepository),
             realtime_conversations: Arc::new(DisabledRealtimeConversationRepository),
             semantic_embedding_index: Arc::new(DisabledSemanticEmbeddingIndexRepository),
@@ -374,6 +382,14 @@ impl AppServices {
         production_corpus: Arc<dyn ProductionCorpusRepository>,
     ) -> Self {
         self.production_corpus = production_corpus;
+        self
+    }
+
+    pub fn with_personal_expression_repository(
+        mut self,
+        repository: Arc<dyn PersonalExpressionRepository>,
+    ) -> Self {
+        self.personal_expression = repository;
         self
     }
 
@@ -766,6 +782,68 @@ impl RealtimeConversationRepository for DisabledRealtimeConversationRepository {
 }
 
 struct DisabledProductionCorpusRepository;
+
+struct DisabledPersonalExpressionRepository;
+
+impl PersonalExpressionRepository for DisabledPersonalExpressionRepository {
+    fn create_pattern(
+        &self,
+        _asset: &domain::UserSentencePatternAsset,
+    ) -> Result<domain::UserSentencePatternAsset, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "personal expression repository is not configured".into(),
+        ))
+    }
+    fn append_pattern_version(
+        &self,
+        _pattern_id: &domain::UserSentencePatternId,
+        _version: &domain::UserSentencePatternVersion,
+        _updated_at_ms: u64,
+    ) -> Result<domain::UserSentencePatternAsset, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "personal expression repository is not configured".into(),
+        ))
+    }
+    fn get_pattern(
+        &self,
+        _id: &domain::UserSentencePatternId,
+    ) -> Result<Option<domain::UserSentencePatternAsset>, ApplicationError> {
+        Ok(None)
+    }
+    fn list_patterns(
+        &self,
+        _language: Option<&LanguageCode>,
+        _query: Option<&str>,
+    ) -> Result<Vec<domain::UserSentencePatternAsset>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn list_pattern_versions(
+        &self,
+        _id: &domain::UserSentencePatternId,
+    ) -> Result<Vec<domain::UserSentencePatternVersion>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn delete_pattern(
+        &self,
+        _id: &domain::UserSentencePatternId,
+    ) -> Result<bool, ApplicationError> {
+        Ok(false)
+    }
+    fn save_personal_expression_attempt(
+        &self,
+        _attempt: &domain::PersonalExpressionAttempt,
+    ) -> Result<domain::PersonalExpressionAttempt, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "personal expression repository is not configured".into(),
+        ))
+    }
+    fn list_personal_expression_attempts(
+        &self,
+        _id: &domain::UserSentencePatternId,
+    ) -> Result<Vec<domain::PersonalExpressionAttempt>, ApplicationError> {
+        Ok(Vec::new())
+    }
+}
 
 impl ProductionCorpusRepository for DisabledProductionCorpusRepository {
     fn replace_production_entries_for_rubric(

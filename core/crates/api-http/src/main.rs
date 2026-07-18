@@ -42,6 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_reading_position_repository(repository.clone())
     .with_semantic_task_repository(repository.clone())
     .with_production_corpus_repository(repository.clone())
+    .with_personal_expression_repository(repository.clone())
     .with_llm_provider_profile_repository(repository.clone())
     .with_realtime_conversation_repository(repository.clone());
     let services = services

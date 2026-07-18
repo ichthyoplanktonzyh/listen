@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-18 20:20 CST: Phase 3.16 Personal Expression & Sentence Patterns code complete。
+  按 `main@c86a5952` 重审旧 PLAN，并以三 consumer razor 拒绝通用 FocusTarget：不迁移已验收的
+  Hunting List，不以 3.17 未来 consumer 提前泛化。新增 SQLite v43 durable
+  `UserSentencePattern`、不可变来源快照/append-only version/slots、分通道 immutable attempt，
+  来源媒体无 FK cascade；system construction ref 可空且不覆盖用户模板。CRUD/search/history/
+  typed JSON export、OpenAPI/Flutter client、Reading 句内显式收藏与“我的表达”资产旅程贯通；
+  Writing 保存用户 typed response，Speaking 复用既有录音→local ASR→corrected transcript 住户。
+  embedding/corpus 只可提供显式候选 provenance，零自动收藏/扩写及 observation/projection/
+  proposal/confirmation writer。Rust workspace、strict Clippy、contracts、Flutter analyze/full tests
+  全绿；owner 真实媒体/麦克风/重启/来源删除/离线体验留 `3.16-MANUAL-QA.md`，未执行或夹带
+  3.15.7/3.15.8/3.15.9 的独立 owner QA。
+
 - 2026-07-16 22:21 CST: Phase 3.15.8 Semantic Embedding code complete。先以真实 FastEmbed
   all-MiniLM-L6-v2/ONNX 与 Ollama all-minilm 两条异构路径 spike；两者虽同为 384-d MiniLM，
   数值空间显著不同，因此 fingerprint 固定 provider/model revision/runtime/artifact SHA/dimension/
