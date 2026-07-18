@@ -177,3 +177,11 @@ python scripts/evaluate-word-timelines.py compare baseline.json candidate.json  
 scripts/test.sh --full                   # 综合验证
 scripts/validate-contracts.sh            # 契约验证
 ```
+# Phase 3.15.8 stack delta (2026-07-16)
+
+- `embedding-provider`: FastEmbed 5.17.3 + ONNX Runtime (`ort` rc.12), rustls-only model/runtime
+  retrieval, local all-MiniLM-L6-v2 384-d adapter, plus an explicit OpenAI-compatible HTTP seam.
+- Installed local weights live outside the base bundle under application support. Measured cache is about
+  97 MB and hot max RSS about 203 MB on Apple Silicon; install is explicit and offline reuse is supported.
+- SQLite v42 BLOB + application cosine is the v1 vector store. No vector extension/database or ANN runtime
+  is added until personal-corpus scale measurements justify it.

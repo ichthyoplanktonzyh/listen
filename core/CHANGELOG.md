@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- 2026-07-16 22:21 CST: Phase 3.15.8 Semantic Embedding code complete。先以真实 FastEmbed
+  all-MiniLM-L6-v2/ONNX 与 Ollama all-minilm 两条异构路径 spike；两者虽同为 384-d MiniLM，
+  数值空间显著不同，因此 fingerprint 固定 provider/model revision/runtime/artifact SHA/dimension/
+  normalization/purpose/index schema，禁止跨空间比较与迁移。新增 provider deep module、显式
+  +0B-base 本地模型 lifecycle、OpenAI-compatible seam、SQLite v42 float32 BLOB 原子可重建索引，
+  media + written/spoken local-authoritative production 按意思 top-K 与 source/model provenance。
+  3.15.6 原 top-K/readiness/ranking 不变，只给既有 target additive near-semantic clue，明确不是
+  synonym/capability truth，零 attempt/evidence/observation/capability/proposal/review/corpus writer，
+  3.17 gate 保留。OpenAPI/typed Dart/词汇册 install-rebuild-search-disable-delete UI 贯通；验证含
+  真实 production adapter smoke、Rust workspace、strict Clippy、contracts、Flutter analyze/full、
+  macOS Debug build。owner 首次安装/离线/大语料体验 QA 留独立清单；未执行 3.15.7 provider/
+  device QA、3.15.9 听感 QA或 hunting 毫秒 flaky 修复。
+
 - 2026-07-16 17:32 CST: Phase 3.15.6 Cross-channel Production Gap Review 实现。以 3.15.5
   rebuildable corpus 与 reading/listening capability、成功 observation、recognition contexts
   做只读 gap-(c) join；排序固定为 ECDICT BNC rank band → 接收证据强度 → 近期性 → lemma，

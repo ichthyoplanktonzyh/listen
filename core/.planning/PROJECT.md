@@ -234,6 +234,9 @@ A/B/C 的产品输出必须是可听结构而非类别清单：A 按书写词界
   任务，但一次行为只写入它真正支持的通道和目标粒度。
 - **语义能力厂商中立**：LLM 可作为 rubric、语义判定与写作反馈 provider；领域层不得依赖
   某个厂商的 wire format，外部 API 经可替换 adapter 接入并可离线降级。
+- **语义检索是可重建读模型**：embedding provider、模型制品与向量存储通过小 seam 隔离；
+  按意思检索和 near-semantic clue 不成为 learner-output、attempt、evidence、capability 或
+  synonym truth，模型/source 变化只触发 stale + rebuild。
 - **学习语言 ≠ 界面语言**：界面语言（已有中英文）与正在学习的语言是两件事，不得混同。
 - **能力矩阵优先，缺失干净降级**：每种语言声明支持哪些能力（分词、词典、发音、诊断、
   时间轴），不支持的能力显示为不可用/降级，而不是失败或假装支持。

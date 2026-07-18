@@ -2427,6 +2427,92 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ProductionGapReview" }
+  /v1/semantic-embedding/capability:
+    get:
+      operationId: semanticEmbeddingCapability
+      responses:
+        "200":
+          description: Optional local semantic capability without triggering installation or network access
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticEmbeddingCapability" }
+  /v1/semantic-embedding/install:
+    post:
+      operationId: installSemanticEmbedding
+      description: Explicitly downloads, validates, and enables the local embedding model.
+      responses:
+        "200":
+          description: Installed local capability
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticEmbeddingCapability" }
+  /v1/semantic-embedding/enable:
+    post:
+      operationId: enableSemanticEmbedding
+      responses:
+        "200":
+          description: Enabled installed capability
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticEmbeddingCapability" }
+  /v1/semantic-embedding/disable:
+    post:
+      operationId: disableSemanticEmbedding
+      responses:
+        "200":
+          description: Disabled capability; exact search remains available
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticEmbeddingCapability" }
+  /v1/semantic-embedding:
+    delete:
+      operationId: uninstallSemanticEmbedding
+      description: Deletes local model bytes and derived vectors, never learning facts or corpus sources.
+      responses:
+        "200":
+          description: Uninstalled capability
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticEmbeddingCapability" }
+  /v1/semantic-embedding/reindex:
+    post:
+      operationId: rebuildSemanticEmbedding
+      description: Atomically rebuilds the complete derived vector index from current media and learner-output corpus projections.
+      responses:
+        "200":
+          description: Current capability and indexed source count
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticEmbeddingCapability" }
+  /v1/semantic-search:
+    get:
+      operationId: semanticSearch
+      parameters:
+        - { name: query, in: query, required: true, schema: { type: string, minLength: 1 } }
+        - { name: language, in: query, schema: { type: string } }
+        - { name: source, in: query, schema: { enum: [all, media_corpus, production_document, production_lexeme], default: all } }
+        - { name: channel, in: query, schema: { enum: [all, written, spoken], default: all } }
+        - { name: limit, in: query, schema: { type: integer, default: 20, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: Explainable top-K hits from one exact model fingerprint; empty with typed degradation when unavailable or stale
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticSearchResult" }
+  /v1/production-gap/semantic-enrichment:
+    get:
+      operationId: semanticProductionGapEnrichment
+      description: Adds near-semantic clues to the existing read-only top-K gap review without manufacturing candidates or writing learning facts.
+      parameters:
+        - { name: language, in: query, schema: { type: string, default: en } }
+        - { name: channel, in: query, schema: { $ref: "#/components/schemas/ProductionChannel", default: written } }
+        - { name: limit, in: query, schema: { type: integer, default: 10, minimum: 1, maximum: 20 } }
+      responses:
+        "200":
+          description: Original gap review plus model-versioned explanatory relationships
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticallyEnrichedProductionGapReview" }
   /v1/vocabulary/export:
     get:
       operationId: exportVocabulary
@@ -3936,16 +4022,18 @@ components:
       enum: [content_anchored, source_reconstruction, learner_revision, explicit_target, model_suggested, direct_imitation, unknown]
     ProductionCorpusDocument:
       type: object
-      required: [id, language, channel, assistance, attempt_id, rubric_id, response_revision, task_kind, media_id, start_ms, end_ms, response_text, produced_at_ms]
+      required: [id, language, channel, assistance, response_revision, activity_kind, start_ms, end_ms, response_text, produced_at_ms]
       properties:
         id: { type: string }
         language: { type: string }
         channel: { $ref: "#/components/schemas/ProductionChannel" }
         assistance: { $ref: "#/components/schemas/ProductionAssistance" }
-        attempt_id: { type: string }
-        rubric_id: { type: string }
+        attempt_id: { type: [string, "null"] }
+        rubric_id: { type: [string, "null"] }
+        realtime_turn_id: { type: [string, "null"] }
+        realtime_session_id: { type: [string, "null"] }
         response_revision: { type: integer, minimum: 1 }
-        task_kind: { $ref: "#/components/schemas/SemanticTaskKind" }
+        activity_kind: { type: string }
         media_id: { type: [string, "null"] }
         start_ms: { type: integer, minimum: 0 }
         end_ms: { type: integer, minimum: 0 }
@@ -4005,6 +4093,90 @@ components:
         candidate_count: { type: integer, minimum: 0 }
         targets: { type: array, items: { $ref: "#/components/schemas/ProductionGapTarget" } }
         ranking_version: { type: string }
+    EmbeddingModelDescriptor:
+      type: object
+      required: [provider_id, model_id, model_version, runtime_version, artifact_sha256, dimension, normalization, purpose_contract, index_schema_version, model_fingerprint, local]
+      properties:
+        provider_id: { type: string }
+        model_id: { type: string }
+        model_version: { type: string }
+        runtime_version: { type: string }
+        artifact_sha256: { type: string }
+        dimension: { type: integer, minimum: 1 }
+        normalization: { type: string }
+        purpose_contract: { type: string }
+        index_schema_version: { type: integer, minimum: 1 }
+        model_fingerprint: { type: string }
+        local: { type: boolean }
+    SemanticEmbeddingCapability:
+      type: object
+      required: [status, indexed_source_count]
+      properties:
+        status: { enum: [not_installed, ready, stale, failed, disabled] }
+        descriptor:
+          anyOf:
+            - { $ref: "#/components/schemas/EmbeddingModelDescriptor" }
+            - { type: "null" }
+        indexed_source_count: { type: integer, minimum: 0 }
+        indexed_fingerprint: { type: [string, "null"] }
+        reason: { type: [string, "null"] }
+    SemanticEmbeddingSource:
+      type: object
+      required: [kind, source_id, language, text, start_ms, end_ms]
+      properties:
+        kind: { enum: [media_corpus, production_document, production_lexeme] }
+        source_id: { type: string }
+        language: { type: string }
+        channel:
+          anyOf:
+            - { $ref: "#/components/schemas/ProductionChannel" }
+            - { type: "null" }
+        text: { type: string }
+        media_id: { type: [string, "null"] }
+        track_id: { type: [string, "null"] }
+        sentence_id: { type: [string, "null"] }
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        produced_at_ms: { type: [integer, "null"], minimum: 0 }
+    SemanticSearchHit:
+      type: object
+      required: [source, similarity, model_fingerprint]
+      properties:
+        source: { $ref: "#/components/schemas/SemanticEmbeddingSource" }
+        similarity: { type: number, minimum: -1, maximum: 1 }
+        model_fingerprint: { type: string }
+    SemanticSearchResult:
+      type: object
+      required: [capability, query, hits]
+      properties:
+        capability: { $ref: "#/components/schemas/SemanticEmbeddingCapability" }
+        query: { type: string }
+        hits: { type: array, items: { $ref: "#/components/schemas/SemanticSearchHit" } }
+    NearSemanticProductionMatch:
+      type: object
+      required: [normalized_key, similarity, model_fingerprint, explanation]
+      properties:
+        normalized_key: { type: string }
+        similarity: { type: number, minimum: -1, maximum: 1 }
+        model_fingerprint: { type: string }
+        explanation: { type: string }
+    ProductionGapSemanticEnrichment:
+      type: object
+      required: [lexical_entry_id, target_normalized_key, matches]
+      properties:
+        lexical_entry_id: { type: string }
+        target_normalized_key: { type: string }
+        matches: { type: array, items: { $ref: "#/components/schemas/NearSemanticProductionMatch" } }
+    SemanticallyEnrichedProductionGapReview:
+      type: object
+      required: [review, semantic_capability, enrichments, threshold]
+      properties:
+        review: { $ref: "#/components/schemas/ProductionGapReview" }
+        semantic_capability: { $ref: "#/components/schemas/SemanticEmbeddingCapability" }
+        enrichments: { type: array, items: { $ref: "#/components/schemas/ProductionGapSemanticEnrichment" } }
+        threshold:
+          type: number
+          description: Model-versioned clue threshold, not a synonym or capability truth boundary.
     LexicalStatusHistory:
       type: object
       required: [id, lexical_entry_id, previous_status, new_status, changed_at_ms, change_source]

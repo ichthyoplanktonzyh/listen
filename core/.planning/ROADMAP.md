@@ -1481,7 +1481,7 @@ Phase 3.7–3.10 仍按既有计划完成，不在本轮重排。听力主线与
 10. 3.15.6 Cross-channel Production Gap Review（透明 top-K 参照系、empty/starter/ready、
     零 projection writer）✅；
 11. 3.15.7 Realtime Speech Conversation ✅ CODE COMPLETE（真实 provider/device QA pending） /
-    3.15.8 Semantic Embedding；
+    3.15.8 Semantic Embedding ✅ CODE COMPLETE（owner 首次安装/大语料体验 QA pending）；
 12. 3.16 Personal Expression；
 13. 3.17 Four-channel Projection & Cross-modal Review；
 14. 3.18 Cross-modal Coach & Four-channel Closeout。

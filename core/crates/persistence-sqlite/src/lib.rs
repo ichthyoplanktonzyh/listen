@@ -15,6 +15,7 @@ mod progress;
 mod reading;
 mod realtime_conversation;
 mod recording;
+mod semantic_embedding;
 mod semantic_task;
 mod subtitles;
 mod support;

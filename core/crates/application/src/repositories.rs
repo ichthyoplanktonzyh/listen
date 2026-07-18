@@ -692,6 +692,11 @@ pub trait CorpusIndexRepository: Send + Sync {
         &self,
         id: &CorpusOccurrenceId,
     ) -> Result<Option<CorpusOccurrence>, ApplicationError>;
+    /// Rebuild input for the semantic read model. Only phrase/chunk rows are
+    /// returned; lexical and connected-speech rows remain exact-key assets.
+    fn list_semantic_corpus_occurrences(&self) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
+        Ok(Vec::new())
+    }
     /// Connected-speech family aggregation (Phase 3.9): occurrences of kind
     /// `connected_speech` whose `normalized_key` is one of `families`,
     /// round-robin interleaved across media like word search. `media_id`
@@ -759,6 +764,37 @@ pub trait ProductionCorpusRepository: Send + Sync {
         language: &LanguageCode,
         channel: domain::ProductionChannel,
     ) -> Result<Vec<ProductionGapCandidateFacts>, ApplicationError>;
+    /// Rebuild input for semantic document search. These rows are already a
+    /// projection of immutable learner attempts/local-authoritative turns.
+    fn list_production_documents(&self) -> Result<Vec<ProductionCorpusDocument>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    /// Distinct actually-produced lemmas used only to enrich the existing
+    /// read-only gap result. This never manufactures a gap candidate.
+    fn list_production_lexemes(
+        &self,
+        language: &LanguageCode,
+        channel: domain::ProductionChannel,
+    ) -> Result<Vec<String>, ApplicationError> {
+        let _ = (language, channel);
+        Ok(Vec::new())
+    }
+}
+
+pub trait SemanticEmbeddingIndexRepository: Send + Sync {
+    /// Atomically replaces the whole model-specific read model. A failed
+    /// rebuild must leave the previous index readable.
+    fn replace_semantic_embedding_index(
+        &self,
+        model_fingerprint: &str,
+        records: &[domain::SemanticEmbeddingIndexRecord],
+    ) -> Result<(), ApplicationError>;
+    fn list_semantic_embedding_records(
+        &self,
+        model_fingerprint: &str,
+    ) -> Result<Vec<domain::SemanticEmbeddingIndexRecord>, ApplicationError>;
+    fn semantic_embedding_index_summary(&self) -> Result<Vec<(String, u32)>, ApplicationError>;
+    fn delete_semantic_embedding_index(&self) -> Result<(), ApplicationError>;
 }
 
 pub trait DifficultyRepository: Send + Sync {

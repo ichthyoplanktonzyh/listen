@@ -14,6 +14,7 @@ futures-util.workspace = true
 axum.workspace = true
 dictionary-provider = { path = "../dictionary-provider" }
 domain = { path = "../domain" }
+embedding-provider = { path = "../embedding-provider" }
 hex.workspace = true
 llm-provider = { path = "../llm-provider" }
 realtime-provider = { path = "../realtime-provider" }

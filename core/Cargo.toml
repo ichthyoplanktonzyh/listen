@@ -4,6 +4,7 @@ members = [
   "crates/api-http",
   "crates/application",
   "crates/domain",
+  "crates/embedding-provider",
   "crates/dictionary-provider",
   "crates/llm-provider",
   "crates/local-runtime",

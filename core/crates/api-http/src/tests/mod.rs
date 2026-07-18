@@ -5,6 +5,8 @@ use persistence_sqlite::SqliteRepository;
 use std::collections::BTreeSet;
 use tower::ServiceExt;
 
+mod semantic_embedding;
+
 fn test_state() -> ApiState {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     ApiState::new(

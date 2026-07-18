@@ -157,3 +157,12 @@ LLPlayerNext/
 | `third_party/fvp/` | 本地 fork | 提交到 git，FFmpeg 播放器 fork |
 | `.claude/` | Claude Code 配置 | 提交到 git，会话指令和设置 |
 | `.planning/phases/*/` | Phase 文档 | 完成即冻结 |
+# Phase 3.15.8 structure delta (2026-07-16)
+
+- `crates/embedding-provider/`: local FastEmbed model lifecycle and compatible HTTP adapter.
+- `crates/application/src/semantic_embedding.rs`: provider port and semantic read use cases.
+- `crates/domain/src/semantic_embedding.rs`: typed descriptor/capability/source/search/enrichment DTOs.
+- `crates/persistence-sqlite/migrations/0042_semantic_embedding_index.sql`: disposable vector projection.
+- `apps/desktop/lib/models|services/api/semantic_embedding.dart`: typed Dart contract; vocabulary screen
+  currently supplies the minimal opt-in install/rebuild/query consumer.
+- `spikes/semantic-embedding/`: reproducible real-model spike, excluded from production workspace.

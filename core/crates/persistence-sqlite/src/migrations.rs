@@ -14,7 +14,7 @@ use super::PersistenceError;
 // Phase 3.15 append-only writing feedback and user disposition facts. v39 adds
 // the Phase 3.15.5 rebuildable production-corpus projection. v40 adds Phase
 // 3.15.7 realtime provider config and local session/turn facts.
-pub const MIGRATION_VERSION: u32 = 41;
+pub const MIGRATION_VERSION: u32 = 42;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -302,6 +302,19 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
             ))?;
         }
         tx.pragma_update(None, "user_version", 41)?;
+        tx.commit()?;
+    }
+    if current < 42 {
+        let tx = connection.unchecked_transaction()?;
+        // Historical regression fixtures lower only user_version after
+        // constructing the latest schema; do not recreate an existing v42
+        // projection in that artificial downgrade shape.
+        if !table_has_column(&tx, "semantic_embedding_index", "source_kind")? {
+            tx.execute_batch(include_str!(
+                "../migrations/0042_semantic_embedding_index.sql"
+            ))?;
+        }
+        tx.pragma_update(None, "user_version", 42)?;
         tx.commit()?;
     }
     Ok(())

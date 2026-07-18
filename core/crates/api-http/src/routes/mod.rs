@@ -13,6 +13,7 @@ pub(crate) mod pronunciation;
 pub(crate) mod reading;
 pub(crate) mod realtime_conversation;
 pub(crate) mod semantic;
+pub(crate) mod semantic_embedding;
 pub(crate) mod sound_line;
 pub(crate) mod speech;
 pub(crate) mod subtitle_search;

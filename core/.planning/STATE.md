@@ -3,17 +3,24 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-16T20:20:00.000+08:00"
+last_updated: "2026-07-16T22:21:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-16 20:20 CST
-> 更新原因：Phase 3.15.7 Realtime Speech Conversation 代码与自动化验证收口，进入真实 provider/device QA。
+> 最后更新：2026-07-16 22:21 CST
+> 更新原因：Phase 3.15.8 Semantic Embedding 代码、真实 seam spike 与自动化验证收口，进入 owner manual QA。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.15.7 Realtime Speech Conversation **✅ CODE COMPLETE — OWNER
+- **当前执行主线**：Phase 3.15.8 Semantic Embedding **✅ CODE COMPLETE — OWNER MANUAL QA
+  PENDING**。FastEmbed local model + OpenAI-compatible seam、v42 disposable vector index、media/
+  production semantic top-K、3.15.6 additive near-semantic explanation 与 typed lifecycle UI 已贯通。
+  fingerprint 固定 model/runtime/artifact/dimension/normalization/purpose/index schema；source/model
+  变化 stale + full rebuild，零 learning/corpus writer。真实 FastEmbed/Ollama spike、Rust workspace、
+  Clippy/contracts、Flutter analyze/full tests 与 macOS Debug build 通过。下一步只执行
+  `3.15.8-MANUAL-QA.md`，不夹带其他 owner QA。
+- Phase 3.15.7 Realtime Speech Conversation **✅ CODE COMPLETE — OWNER
   REAL-PROVIDER QA PENDING**。OpenAI/Qwen 两异构 adapter、provider-neutral session/turn/audio/
   transcript lifecycle、Keychain + localhost WebSocket、macOS 24 kHz realtime PCM + 16 kHz local
   WAV、内容锚定首个 surface 与 local Whisper → spoken corpus 已贯通。provider caption 永不成为
@@ -474,13 +481,13 @@ last_updated: "2026-07-16T20:20:00.000+08:00"
 
 ## 下一步工作
 
-1. **Phase 3.15.7 owner real-provider/device QA**：按 `3.15.7-MANUAL-QA.md`，在 App 内向 Keychain
+1. **Phase 3.15.8 owner manual QA**：按 `3.15.8-MANUAL-QA.md` 验证首次安装/离线重启、真实个人
+   大语料 latency/RSS、stale/rebuild、语义结果与 gap explanation；完成前不宣称 owner accepted。
+2. **Phase 3.15.7 owner real-provider/device QA**：按 `3.15.7-MANUAL-QA.md`，在 App 内向 Keychain
    录入至少一家 provider key，完成真实 socket、麦克风、扬声器、barge-in、local Whisper 与
    spoken corpus 闭环；未执行前不宣称 Phase COMPLETE。
-2. **Phase 3.15.8 Semantic Embedding**：开工前按 3.15.5 corpus、3.15.6 read-only gap 与本 phase
-   spoken source 的实际 schema 审计 PLAN；不得把 embedding 推断自动写成 capability 事实。
 3. **Phase 3.15.9 owner GUI QA**：仍按其独立清单检查 system voice 听感；不与 3.15.7 QA 混做。
-3. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
+4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
 4. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）；
    legacy `LearningStatus` 物理删除推迟到所有 active consumer 迁移后的独立 cleanup phase；

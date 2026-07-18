@@ -105,7 +105,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | 轻量消费端资源读取 | 无强制 Milestone 1 发布项 | CONSUME-001 至 CONSUME-004 |
 | Rhythm-first 真实听感分析 | 无强制 Milestone 1 发布项 | RHY-001 至 RHY-008 |
 | 用户可见工作流语义 | 无强制 Milestone 1 发布项 | UX-001 至 UX-008 |
-| 真实内容驱动的四通道扩展 | 无强制当前发布项 | LOOP-010 至 LOOP-012、LOOP-015 至 LOOP-020 |
+| 真实内容驱动的四通道扩展 | 无强制当前发布项 | LOOP-010 至 LOOP-012、LOOP-015 至 LOOP-021 |
 | 厂商中立语义能力 | 无强制当前发布项 | LOOP-013、LOOP-014 |
 
 ## 4. 平台需求
@@ -2933,6 +2933,26 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
     3.15.7、3.15.8、3.16、3.17。
 - 依赖：Phase 3.15.5、LOOP-015、ADR 0015/0017/0019。
 
+### LOOP-021：本地优先语义索引与可解释近义增补
+
+- 优先级：P1
+- 阶段：Phase 3.15.8
+- 需求：以 provider-neutral embedding seam 对个人媒体语料与 learner-output corpus projection
+  建立可删重建的语义索引，提供按意思检索，并只对 3.15.6 已有 top-K target 增补模型版本化的
+  near-semantic clue。
+- 验收标准：
+  - 本地模型须显式 opt-in 安装，模型权重 +0B base；未安装、禁用、失败或 stale 时 exact FTS、
+    Studio、gap v1 与 TTS 可继续使用且零静默联网。
+  - descriptor/fingerprint 至少固定 provider、model/revision、runtime、artifact SHA、dimension、
+    normalization、purpose contract 与 index schema；不同 fingerprint 的向量禁止比较。
+  - 索引只引用既有 media corpus 与 production corpus source identity；source/model 变化呈 stale，
+    仅从权威 source/projection 全量原子 rebuild，不做跨向量空间 migration。
+  - semantic search 返回 top-K similarity、source snapshot/provenance 与 model fingerprint；exact search
+    不被替换。
+  - near-semantic 只 enrich 既有 gap candidate，明确不是 synonym/capability truth；查询零 attempt、
+    evidence、observation、capability、proposal、review 或 corpus writer，3.17 confirmation gate 保留。
+- 依赖：Phase 3.15.5、Phase 3.15.6、Phase 3.15.7、LOOP-020。
+
 ## 18.6 Phase 3.4.x Learning Domain Model v2 需求
 
 > 共享上下文：
@@ -3174,7 +3194,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | Phase 2.20 Rhythm-first 真实听感分析 | RHY-001 至 RHY-008 |
 | Phase 2.22 用户可见工作流语义 | UX-001 至 UX-009 |
 | Milestone 2 多语言学习基础 | LANG-001 至 LANG-010 |
-| Phase 3.0 英语听力学习闭环与四通道扩展 | LOOP-000 至 LOOP-020 |
+| Phase 3.0 英语听力学习闭环与四通道扩展 | LOOP-000 至 LOOP-021 |
 | Phase 3.4.x / 3.9.1–3.9.2 Learning Analysis Foundation | CAP-001 至 CAP-013 |
 | Phase 3.35 听力工作台 UI 重构 | UI-016 至 UI-017 |
 | Phase 3.15.9 本地优先 TTS | TTS-001 至 TTS-008 |

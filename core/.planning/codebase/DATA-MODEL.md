@@ -415,3 +415,14 @@ expansion is ephemeral overlay state, not a fourth persisted Rhythm mode.
 - Review scheduling v1 is recorded as `listen_review_v1_heuristic_proxy`: `again` returns in
   10 minutes, `hard` in one day, and successful intervals grow from 3 to 7 days before doubling.
   The durable attempts remain the evidence history; the schedule row is a replaceable read model.
+# Phase 3.15.8 / schema v42 delta (2026-07-16)
+
+- `semantic_embedding_index` is a rebuildable read model: `(model_fingerprint, source_kind, source_id)`
+  primary key, language/channel filters, source-text SHA-256, dimension, float32 little-endian BLOB, and
+  `indexed_at_ms`.
+- The table contains no authoritative text, attempt, learning observation/evidence, capability/proposal,
+  review, or portable asset identity. Full delete/rebuild is always valid.
+- A vector is readable only when descriptor fingerprint, dimension, source identity, and current source
+  text hash match. Model/runtime/purpose/index changes and source edits are stale, never migrated in place.
+- `production_lexeme` rows are distinct read sources derived from production entries and scoped by
+  language/channel. They enrich an existing gap target but do not create one.

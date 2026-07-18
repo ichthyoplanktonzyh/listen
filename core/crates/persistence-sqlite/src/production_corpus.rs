@@ -335,4 +335,41 @@ impl ProductionCorpusRepository for SqliteRepository {
             .collect::<Result<Vec<_>, _>>()
             .map_err(repo)
     }
+
+    fn list_production_documents(&self) -> Result<Vec<ProductionCorpusDocument>, ApplicationError> {
+        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = connection
+            .prepare(&format!(
+                "SELECT {DOCUMENT_COLUMNS} FROM production_corpus_documents d
+                 ORDER BY d.language,d.produced_at_ms,d.id"
+            ))
+            .map_err(repo)?;
+        statement
+            .query_map([], |row| document_from_row(row, 0))
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
+    fn list_production_lexemes(
+        &self,
+        language: &LanguageCode,
+        channel: ProductionChannel,
+    ) -> Result<Vec<String>, ApplicationError> {
+        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = connection
+            .prepare(
+                "SELECT DISTINCT e.normalized_key FROM production_corpus_entries e
+                 JOIN production_corpus_documents d ON d.id=e.document_id
+                 WHERE d.language=?1 AND d.channel=?2 ORDER BY e.normalized_key",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map(params![language.as_str(), json(&channel)?], |row| {
+                row.get(0)
+            })
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
 }

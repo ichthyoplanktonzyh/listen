@@ -75,6 +75,9 @@ pub use semantic_task::*;
 mod production_corpus;
 pub use production_corpus::*;
 
+mod semantic_embedding;
+pub use semantic_embedding::*;
+
 mod realtime_conversation;
 pub use realtime_conversation::*;
 

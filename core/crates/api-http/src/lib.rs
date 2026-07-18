@@ -98,6 +98,12 @@ use routes::semantic::{
     semantic_judgment_adjudications, semantic_rubric, semantic_rubric_attempts,
     writing_dispositions, writing_draft, writing_findings,
 };
+use routes::semantic_embedding::{
+    capability as semantic_embedding_capability, disable as disable_semantic_embedding,
+    enable as enable_semantic_embedding, enrich_gap_review as enrich_production_gap_semantically,
+    install as install_semantic_embedding, rebuild as rebuild_semantic_embedding,
+    search as semantic_search, uninstall as uninstall_semantic_embedding,
+};
 use routes::sound_line::{
     cancel_sound_line_job, create_sound_line_job, retry_sound_line_job, sound_line_job,
     sound_line_jobs,
@@ -173,6 +179,9 @@ pub struct ApiState {
     /// an in-memory store; the composition root injects the OS keychain via
     /// [`ApiState::with_secret_store`]. The secret never lives on `services`.
     pub secret_store: Arc<dyn SecretStore>,
+    /// Explicit opt-in model lifecycle. It has no learning repositories and
+    /// cannot write corpus/evidence/projection facts.
+    pub semantic_embedding: Arc<embedding_provider::ManagedFastEmbedProvider>,
 }
 
 impl ApiState {
@@ -240,6 +249,12 @@ impl ApiState {
             syntax_capability: SyntaxCapabilityManager::unmanaged(),
             syntax_analysis_lock: Arc::new(tokio::sync::Mutex::new(())),
             secret_store: Arc::new(InMemorySecretStore::new()),
+            semantic_embedding: Arc::new(embedding_provider::ManagedFastEmbedProvider::new(
+                std::env::temp_dir().join(format!(
+                    "llplayer-embedding-unmanaged-{}",
+                    std::process::id()
+                )),
+            )),
         }
     }
 
@@ -272,6 +287,14 @@ impl ApiState {
 
     pub fn with_speech_synthesis(mut self, manager: Arc<SpeechSynthesisManager>) -> Self {
         self.speech_synthesis = manager;
+        self
+    }
+
+    pub fn with_semantic_embedding_manager(
+        mut self,
+        manager: Arc<embedding_provider::ManagedFastEmbedProvider>,
+    ) -> Self {
+        self.semantic_embedding = manager;
         self
     }
 }
@@ -671,6 +694,35 @@ pub fn router(state: ApiState) -> Router {
             post(reindex_production_corpus),
         )
         .route("/v1/production-gap/review", get(production_gap_review))
+        .route(
+            "/v1/semantic-embedding/capability",
+            get(semantic_embedding_capability),
+        )
+        .route(
+            "/v1/semantic-embedding/install",
+            post(install_semantic_embedding),
+        )
+        .route(
+            "/v1/semantic-embedding/enable",
+            post(enable_semantic_embedding),
+        )
+        .route(
+            "/v1/semantic-embedding/disable",
+            post(disable_semantic_embedding),
+        )
+        .route(
+            "/v1/semantic-embedding",
+            delete(uninstall_semantic_embedding),
+        )
+        .route(
+            "/v1/semantic-embedding/reindex",
+            post(rebuild_semantic_embedding),
+        )
+        .route("/v1/semantic-search", get(semantic_search))
+        .route(
+            "/v1/production-gap/semantic-enrichment",
+            get(enrich_production_gap_semantically),
+        )
         .route("/v1/vocabulary/export", get(export_vocabulary))
         .route("/v1/vocabulary/import", post(import_vocabulary))
         .route(

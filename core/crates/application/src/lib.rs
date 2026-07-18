@@ -79,6 +79,7 @@ mod realtime_conversation;
 mod recording;
 mod repositories;
 mod secret_store;
+mod semantic_embedding;
 mod semantic_task;
 mod sense_groups;
 mod speech_synthesis;
@@ -110,6 +111,7 @@ pub use realtime_conversation::*;
 pub use recording::RecordingUseCases;
 pub use repositories::*;
 pub use secret_store::{InMemorySecretStore, SecretStore, SecretStoreError};
+pub use semantic_embedding::*;
 pub use semantic_task::SemanticUseCases;
 pub use speech_synthesis::*;
 pub use syntactic_consumers::*;
@@ -170,6 +172,8 @@ pub struct AppServices {
     pub(crate) production_corpus: Arc<dyn ProductionCorpusRepository>,
     pub(crate) llm_provider_profiles: Arc<dyn LlmProviderProfileRepository>,
     pub(crate) realtime_conversations: Arc<dyn RealtimeConversationRepository>,
+    pub(crate) semantic_embedding_index: Arc<dyn SemanticEmbeddingIndexRepository>,
+    pub(crate) embedding_provider: Arc<dyn EmbeddingProvider>,
     pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
     pub(crate) pronunciation_providers: Arc<Vec<Arc<dyn PronunciationProvider>>>,
 }
@@ -232,6 +236,10 @@ impl AppServices {
         ProductionCorpusUseCases::from_services(self)
     }
 
+    pub fn semantic_embedding(&self) -> SemanticEmbeddingUseCases {
+        SemanticEmbeddingUseCases::from_services(self)
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new<R, L>(
         media: Arc<dyn MediaRepository>,
@@ -288,6 +296,8 @@ impl AppServices {
             production_corpus: Arc::new(DisabledProductionCorpusRepository),
             llm_provider_profiles: Arc::new(DisabledLlmProviderProfileRepository),
             realtime_conversations: Arc::new(DisabledRealtimeConversationRepository),
+            semantic_embedding_index: Arc::new(DisabledSemanticEmbeddingIndexRepository),
+            embedding_provider: Arc::new(UnavailableEmbeddingProvider),
             lexical_normalizers: Arc::new(Vec::new()),
             pronunciation_providers: Arc::new(Vec::new()),
         }
@@ -383,6 +393,16 @@ impl AppServices {
         self
     }
 
+    pub fn with_semantic_embedding(
+        mut self,
+        repository: Arc<dyn SemanticEmbeddingIndexRepository>,
+        provider: Arc<dyn EmbeddingProvider>,
+    ) -> Self {
+        self.semantic_embedding_index = repository;
+        self.embedding_provider = provider;
+        self
+    }
+
     pub fn with_lexical_normalizers(
         mut self,
         providers: Vec<Arc<dyn LexicalNormalizationProvider>>,
@@ -397,6 +417,35 @@ impl AppServices {
     ) -> Self {
         self.pronunciation_providers = Arc::new(providers);
         self
+    }
+}
+
+struct DisabledSemanticEmbeddingIndexRepository;
+
+impl SemanticEmbeddingIndexRepository for DisabledSemanticEmbeddingIndexRepository {
+    fn replace_semantic_embedding_index(
+        &self,
+        _model_fingerprint: &str,
+        _records: &[domain::SemanticEmbeddingIndexRecord],
+    ) -> Result<(), ApplicationError> {
+        Err(ApplicationError::Repository(
+            "semantic embedding index repository is not configured".into(),
+        ))
+    }
+
+    fn list_semantic_embedding_records(
+        &self,
+        _model_fingerprint: &str,
+    ) -> Result<Vec<domain::SemanticEmbeddingIndexRecord>, ApplicationError> {
+        Ok(Vec::new())
+    }
+
+    fn semantic_embedding_index_summary(&self) -> Result<Vec<(String, u32)>, ApplicationError> {
+        Ok(Vec::new())
+    }
+
+    fn delete_semantic_embedding_index(&self) -> Result<(), ApplicationError> {
+        Ok(())
     }
 }
 

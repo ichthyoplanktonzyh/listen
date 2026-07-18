@@ -522,3 +522,13 @@ surface before entering production composition.
 4. Phase 3.0.1 currently implements the practice/review/event foundation only.
    Corpus search, difficulty caching, learner-profile storage, recording metadata,
    Flutter practice controllers, and dashboard aggregation remain future work.
+# Phase 3.15.8 semantic embedding delta (2026-07-16)
+
+- `application::SemanticEmbeddingUseCases` is the deep module for capability, atomic rebuild, semantic
+  search, and additive gap enrichment. HTTP/Dart/UI never compute cosine or infer stale state.
+- `application::EmbeddingProvider` is the narrow provider port: descriptor/status plus batched
+  `embed(purpose, texts)`. `embedding-provider` hides FastEmbed/ONNX/HF cache and OpenAI-compatible JSON.
+- `persistence-sqlite::SemanticEmbeddingIndexRepository` stores only disposable vectors keyed by source
+  identity and exact model fingerprint. Media/production repositories remain source owners.
+- Current vocabulary-book dialog is one consumer surface, not a domain anchor; future conversation,
+  corpus, or review surfaces may reuse the same module without inheriting this layout.

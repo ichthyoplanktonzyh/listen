@@ -331,3 +331,11 @@ scripts/validate-contracts.sh    # 单独契约验证
 | Rhythm-first 评测脚本 | P0 | 🟢 已建 | Phase 2.20 stress anchor / weak group / compression span / phrase boundary / explanation quality scorer |
 | RhythmFrame full UI widget tests | P1 | 🟡 部分 | compact 诊断卡测试已覆盖 v0；完整声音视图仍需验证 rhythm frame 分组、hotspot、缺失/低置信降级和 phone detail 展开 |
 | Manual listening QA material | P0 | 🟢 已建 | Phase 2.20 可复现标注表，避免只用 PER 判断真实听感解释质量 |
+# Phase 3.15.8 testing delta (2026-07-16)
+
+- Provider contract: compatible HTTP response ordering and explicit vector-space descriptor.
+- Persistence/application: float32 codec, mixed-fingerprint rejection, atomic replacement, source-edit and
+  model-change stale detection, semantic ranking, and learning-writer counts unchanged.
+- HTTP/OpenAPI: optional capability degradation, invalid filters, route/document parity.
+- Flutter: hand-written DTO/transport fixture for capability + hit provenance, analyze, and widget/full
+  regression suites. Real provider/device QA for 3.15.7 and owner TTS listening QA remain out of scope.

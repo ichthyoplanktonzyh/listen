@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use api_http::{ApiState, KeychainSecretStore, SyntaxCapabilityManager, router};
 use application::AppServices;
+use embedding_provider::ManagedFastEmbedProvider;
 use local_runtime::SpeechSynthesisManager;
 use persistence_sqlite::SqliteRepository;
 use rand::Rng;
@@ -17,6 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         fs::create_dir_all(parent)?;
     }
     let repository = Arc::new(SqliteRepository::open(&database_path)?);
+    let semantic_embedding = Arc::new(ManagedFastEmbedProvider::new(semantic_embedding_root()));
     let services = AppServices::new(
         repository.clone(),
         repository.clone(),
@@ -42,7 +44,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_production_corpus_repository(repository.clone())
     .with_llm_provider_profile_repository(repository.clone())
     .with_realtime_conversation_repository(repository.clone());
-    let services = services.with_coach_dashboard_repository(repository.clone());
+    let services = services
+        .with_coach_dashboard_repository(repository.clone())
+        .with_semantic_embedding(repository.clone(), semantic_embedding.clone());
     let token = env::var("LLPLAYERNEXT_API_TOKEN").unwrap_or_else(|_| random_token());
     let mut state = ApiState::new(services, repository, token.clone())
         .with_secret_store(Arc::new(KeychainSecretStore::new()));
@@ -58,6 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     state = state.with_speech_synthesis(SpeechSynthesisManager::system_default(
         speech_synthesis_cache_root(),
     ));
+    state = state.with_semantic_embedding_manager(semantic_embedding);
     let app = router(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let address = listener.local_addr()?;
@@ -177,6 +182,28 @@ fn speech_synthesis_cache_root() -> PathBuf {
                 .into_os_string()
         }))
         .join("listen/speech-synthesis")
+    }
+}
+
+fn semantic_embedding_root() -> PathBuf {
+    #[cfg(target_os = "macos")]
+    {
+        PathBuf::from(env::var_os("HOME").expect("HOME is required"))
+            .join("Library/Application Support/listen/semantic-embedding")
+    }
+    #[cfg(target_os = "windows")]
+    {
+        PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is required"))
+            .join("listen/semantic-embedding")
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        PathBuf::from(env::var_os("XDG_DATA_HOME").unwrap_or_else(|| {
+            PathBuf::from(env::var_os("HOME").expect("HOME is required"))
+                .join(".local/share")
+                .into_os_string()
+        }))
+        .join("listen/semantic-embedding")
     }
 }
 
