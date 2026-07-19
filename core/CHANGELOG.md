@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-19 08:42 CST: 将 Phase 3.19 release acceptance 从粗粒度 QA 索引扩写为可直接执行的
+  owner 测试脚本。新增统一 PASS/FAIL/BLOCKED/N/A 记录协议、数据库副本与停止规则、合法 writer
+  对比严格只读 surface 的边界、七个推荐执行批次；J0–J5 与 multilingual check 细化为逐步准备、
+  操作、预期结果和记录栏，完整覆盖 content fit/Hunting/≥8 Review cards、Speaking/Role Reply、
+  Personal Expression version/export/offline/delete、proposal reject/confirm/override/rebuild、Coach typed
+  return/source loss、realtime failure matrix、embedding lifecycle/scale、TTS audio focus/cache。附加只读
+  SQLite count snapshot 与原 phase QA disposition 映射；所有 owner 结论仍保持 pending。
+
 - 2026-07-19 00:44 CST: 启动 Phase 3.19 Product Validation & Release Closeout。Phase 3.x
   进入 feature freeze，把 3.4/3.5/3.14/3.15.7/3.15.8/3.15.9/3.16/3.17/3.18 分散的 owner QA
   合并为五条风险优先端到端旅程，并建立统一 release acceptance、P0/P1 defect policy 与 owner
