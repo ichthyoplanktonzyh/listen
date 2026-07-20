@@ -99,6 +99,7 @@ void main() {
           home: ReviewQueueScreen(
             api: api,
             onPlayRange: (startMs, endMs) async {},
+            onPausePlayback: () async {},
             onStartShadowing: (_) async {},
             onStartDelayedRetelling: (_) async {},
           ),
@@ -192,6 +193,7 @@ void main() {
           home: ReviewQueueScreen(
             api: api,
             onPlayRange: (startMs, endMs) async {},
+            onPausePlayback: () async {},
             onStartShadowing: (_) async {},
             onStartDelayedRetelling: (_) async => launched = true,
           ),
@@ -206,6 +208,103 @@ void main() {
       expect(launched, isTrue);
     },
   );
+
+  testWidgets('review source playback is a toggle that can pause in place', (
+    tester,
+  ) async {
+    var playCalls = 0;
+    var pauseCalls = 0;
+    final api = LocalApi.withTransport(
+      baseUrl: 'http://test',
+      token: 'tok',
+      transport: (method, path, body) async {
+        if (path ==
+            '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
+          return (statusCode: 200, body: '[]');
+        }
+        if (path != '/v1/review/items?limit=20') {
+          throw StateError('unexpected $method $path');
+        }
+        return (
+          statusCode: 200,
+          body: jsonEncode([
+            {
+              'item': {
+                'id': 'review-playback-1',
+                'source': {
+                  'kind': 'sentence',
+                  'id': 'sentence-1',
+                  'practice_attempt_id': null,
+                  'lexical_entry_id': null,
+                  'media_id': 'media-1',
+                  'track_id': 'track-1',
+                },
+                'anchors': [
+                  {
+                    'kind': 'sentence',
+                    'id': 'sentence-1',
+                    'label': 'en',
+                    'lexical_entry_id': null,
+                    'sentence_id': 'sentence-1',
+                    'token_start': null,
+                    'token_end': null,
+                    'start_ms': 1000,
+                    'end_ms': 3000,
+                  },
+                ],
+                'prompt_snapshot': 'A bounded source sentence.',
+                'status': 'active',
+                'created_at_ms': 1,
+                'updated_at_ms': 1,
+              },
+              'schedule': {
+                'item_id': 'review-playback-1',
+                'algorithm': 'listen_review_v1_heuristic_proxy',
+                'due_at_ms': 1,
+                'stability': null,
+                'difficulty': null,
+                'interval_days': null,
+                'lapse_count': 0,
+              },
+              'card': {
+                'kind': 'source_sentence_recall',
+                'cue': null,
+                'answer': 'A bounded source sentence.',
+                'target': null,
+              },
+            },
+          ]),
+        );
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReviewQueueScreen(
+          api: api,
+          onPlayRange: (startMs, endMs) async => playCalls++,
+          onPausePlayback: () async => pauseCalls++,
+          onStartShadowing: (_) async {},
+          onStartDelayedRetelling: (_) async {},
+          currentMediaId: 'media-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.volume_up_outlined));
+    await tester.pumpAndSettle();
+    expect(playCalls, 1);
+    expect(
+      find.byIcon(Icons.pause),
+      findsOneWidget,
+      reason: 'The same review card must expose an in-place pause action.',
+    );
+    await tester.tap(find.byIcon(Icons.pause));
+    await tester.pumpAndSettle();
+    expect(pauseCalls, 1);
+    expect(find.byIcon(Icons.volume_up_outlined), findsOneWidget);
+  });
 
   testWidgets('finished queue shows a non-blocking upgrade suggestion', (
     tester,
@@ -238,6 +337,7 @@ void main() {
         home: ReviewQueueScreen(
           api: api,
           onPlayRange: (startMs, endMs) async {},
+          onPausePlayback: () async {},
           onStartShadowing: (_) async {},
           onStartDelayedRetelling: (_) async {},
         ),

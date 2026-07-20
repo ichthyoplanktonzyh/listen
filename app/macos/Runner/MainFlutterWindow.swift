@@ -53,6 +53,19 @@ private final class RealtimeAudioBridge: NSObject, FlutterStreamHandler {
 
   private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
+    case "requestPermission":
+      switch AVCaptureDevice.authorizationStatus(for: .audio) {
+      case .authorized:
+        result(true)
+      case .notDetermined:
+        AVCaptureDevice.requestAccess(for: .audio) { granted in
+          DispatchQueue.main.async { result(granted) }
+        }
+      case .denied, .restricted:
+        result(false)
+      @unknown default:
+        result(false)
+      }
     case "start": start(call, result: result)
     case "playPcm": playPcm(call.arguments, result: result)
     case "stopPlayback": player.stop(); player.play(); result(true)

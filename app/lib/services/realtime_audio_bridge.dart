@@ -30,6 +30,16 @@ class RealtimeAudioBridge {
     await directory.create(recursive: true);
     _path =
         '${directory.path}/realtime-${DateTime.now().microsecondsSinceEpoch}.wav';
+    final granted =
+        await _methods.invokeMethod<bool>('requestPermission') ?? false;
+    if (!granted) {
+      _path = null;
+      throw PlatformException(
+        code: 'microphone_permission',
+        message:
+            'Microphone permission was denied. Enable it in System Settings.',
+      );
+    }
     await _methods.invokeMethod<bool>('start', {'path': _path});
   }
 

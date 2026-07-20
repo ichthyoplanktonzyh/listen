@@ -13,6 +13,7 @@ class ReviewQueueScreen extends StatefulWidget {
     super.key,
     required this.api,
     required this.onPlayRange,
+    required this.onPausePlayback,
     required this.onStartShadowing,
     required this.onStartDelayedRetelling,
     this.currentMediaId,
@@ -20,6 +21,7 @@ class ReviewQueueScreen extends StatefulWidget {
 
   final LocalApi api;
   final Future<void> Function(int startMs, int endMs) onPlayRange;
+  final Future<void> Function() onPausePlayback;
   final Future<void> Function(ReviewQueueEntry entry) onStartShadowing;
   final Future<void> Function(ReviewQueueEntry entry) onStartDelayedRetelling;
   final String? currentMediaId;
@@ -85,8 +87,11 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
           busy: state.busy,
           error: state.error,
           onPlay: () => _play(state.current!),
+          onPause: widget.onPausePlayback,
           onShadowing: () async {
             final entry = state.current!;
+            await widget.onPausePlayback();
+            if (!context.mounted) return;
             Navigator.of(context).pop();
             if (entry.card.kind == 'delayed_retelling') {
               await widget.onStartDelayedRetelling(entry);
@@ -129,6 +134,7 @@ class _ReviewCard extends StatefulWidget {
     required this.revealed,
     required this.busy,
     required this.onPlay,
+    required this.onPause,
     required this.onShadowing,
     required this.onReveal,
     required this.onRate,
@@ -141,7 +147,8 @@ class _ReviewCard extends StatefulWidget {
   final bool revealed;
   final bool busy;
   final String? error;
-  final VoidCallback onPlay;
+  final Future<void> Function() onPlay;
+  final Future<void> Function() onPause;
   final Future<void> Function() onShadowing;
   final VoidCallback onReveal;
   final Future<bool> Function(String rating) onRate;
@@ -153,9 +160,11 @@ class _ReviewCard extends StatefulWidget {
 class _ReviewCardState extends State<_ReviewCard> {
   final _clozeController = TextEditingController();
   String? _presenceChoice;
+  bool _playing = false;
 
   @override
   void dispose() {
+    if (_playing) unawaited(widget.onPause());
     _clozeController.dispose();
     super.dispose();
   }
@@ -205,13 +214,21 @@ class _ReviewCardState extends State<_ReviewCard> {
                   ),
                   const SizedBox(height: 32),
                   FilledButton.icon(
-                    onPressed: playable ? widget.onPlay : null,
+                    onPressed: playable ? _togglePlayback : null,
                     icon: Icon(
                       playable
-                          ? Icons.volume_up_outlined
+                          ? _playing
+                                ? Icons.pause
+                                : Icons.volume_up_outlined
                           : Icons.volume_off_outlined,
                     ),
-                    label: Text(playable ? '播放声音片段' : '原媒体不可播放，使用文字快照'),
+                    label: Text(
+                      playable
+                          ? _playing
+                                ? '暂停声音片段'
+                                : '播放声音片段'
+                          : '原媒体不可播放，使用文字快照',
+                    ),
                   ),
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
@@ -245,6 +262,16 @@ class _ReviewCardState extends State<_ReviewCard> {
         ),
       ),
     );
+  }
+
+  Future<void> _togglePlayback() async {
+    if (_playing) {
+      await widget.onPause();
+      if (mounted) setState(() => _playing = false);
+      return;
+    }
+    await widget.onPlay();
+    if (mounted) setState(() => _playing = true);
   }
 
   Widget _promptContent(BuildContext context) {

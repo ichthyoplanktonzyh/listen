@@ -288,6 +288,7 @@ Future<void> openReviewQueueFlow({
           'Looping review card',
           labelKey: 'loopReview',
         ),
+        onPausePlayback: playbackActions.pauseReviewRange,
         onStartShadowing: startReviewShadowing,
         onStartDelayedRetelling: startDelayedRetelling,
       ),

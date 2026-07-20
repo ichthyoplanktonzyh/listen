@@ -206,6 +206,13 @@ class PlaybackActionsCoordinator {
     await adapter.play();
   }
 
+  Future<void> pauseReviewRange() async {
+    await adapter.pause();
+    if (player.sourceLoopLabel == 'loopReview') {
+      player.setSourceLoop(null, null);
+    }
+  }
+
   // ── Occurrence playback ──
 
   /// Resolves a durable occurrence snapshot without changing the primary
