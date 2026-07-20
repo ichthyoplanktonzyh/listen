@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-20 20:14 CST: 记录 Phase 3.19 Owner Journeys v2 的 Q1 首轮结果：Q1.3「复习」与
+  Q1.5 Coach 主入口 PASS；Q1.1/Q1.2 因首页「我的学习」缺少「我的表达」主入口 FAIL，Q1.4
+  因词条详情缺少「证据与历史」入口 FAIL。Run 1 的 D-319-12、D-319-09 分别补充 Run 2
+  复现证据并登记 GitHub #1/#2；两项保持独立 P1 入口缺陷，修复前不允许用顶部高级菜单或
+  内部路径绕过。
+
 - 2026-07-20 14:46 CST: 将 Phase 3.19 提升为 subtraction-first 产品硬门：遗留 P1、入口、任务
   边界、结果可见性与返回路径未收口，且 Phase 3.x 假需求/假 fallback 未完成 KEEP/SIMPLIFY/
   REMOVE/UNAVAILABLE/DEFER RESEARCH 审计前，禁止规划或建设任何新功能。新增 LOOP-024/025，
