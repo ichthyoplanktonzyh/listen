@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-20T13:54:00.000+08:00"
+last_updated: "2026-07-20T14:46:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-20 13:54 CST
-> 更新原因：Phase 3.19 owner Run 1 完成首轮全局旅程，进入 product correction。
+> 最后更新：2026-07-20 14:46 CST
+> 更新原因：Phase 3.19 确立 subtraction-first 硬门并重写可执行 owner journeys。
 
 ## 当前位置
 
@@ -20,7 +20,10 @@ last_updated: "2026-07-20T13:54:00.000+08:00"
   microphone permission 阻塞，J4 embedding 安装失败尚缺精确错误，J5 在 UX 重新梳理前延期。
   两项确定性 hotfix（Review 播放暂停、Realtime 主动请求麦克风权限）已落代码并待 owner 重测；
   更大问题按 ADR 0025/0026 与 `3.19-PRODUCT-CORRECTION.md` 修正。冷启动不足保持诚实 blocked，
-  不伪造 proposal/Coach/能力记录。P1 清零或书面例外前不发布；实现者不代签 owner checkpoints。
+  不伪造 proposal/Coach/能力记录。3.19 新增硬门：对全部 Phase 3.x surface/fallback 做减法审计，
+  保留旅程没有达到真正可用、好用且 owner ACCEPT 前，不创建或实现任何新功能。Run 2 使用
+  `3.19-OWNER-JOURNEYS-V2.md`，逐步写清主入口、即时结果、任务边界、持久结果与回访位置；
+  主入口缺失直接 FAIL，不让 owner 猜路径。P1 清零或书面例外前不发布；实现者不代签验收。
 - Phase 3.18 Cross-modal Coach **✅ CODE COMPLETE — OWNER MANUAL QA
   PENDING**。3.10 listening-only dashboard 已扩为四通道只读聚合：attempt/judgment/
   adjudication/observation/proposal/confirmed projection/history/personal-expression attempt 分层，
@@ -520,9 +523,12 @@ last_updated: "2026-07-20T13:54:00.000+08:00"
    跟读、复述、评分与返回；真实本地来源解析失败才显示 unavailable，并提供恢复动作。
 4. **效果可见性与资产 IA**：解释 Hunting / completion / comprehension / recognition evidence 的
    记录落点和影响；首页增加稳定“我的表达”入口，移除内部 authority/“两通道”文案。
-5. **降级审计与重测**：按 LOOP-023 删除不保持目标的旧 fallback；随后重测 J1/J2/J3。J4 先收集
-   精确安装错误，J5 先完成 UX 角色裁决；冷启动项目等待自然数据，不伪造记录。
-6. **Release decision**：P0 清零，P1 修复或由 owner 书面批准例外后，才允许 3.19 closeout 与
+5. **全量减法审计**：以 `3.19-SUBTRACTION-AUDIT.md` 为 live control plane，按 LOOP-024 为每项
+   Phase 3.x 功能/fallback 做 KEEP/SIMPLIFY/REMOVE/UNAVAILABLE/DEFER RESEARCH 裁决；先删
+   假需求、重复入口和不保持目标的路径，再做回归。
+6. **详细 owner 重测**：按 `3.19-OWNER-JOURNEYS-V2.md` 执行 Q1–Q11；主入口、动作反馈、持久
+   结果和回访位置必须一起通过。J4 先收集精确安装错误；冷启动等待自然数据，不伪造记录。
+7. **Release decision**：P0 清零，P1 修复或由 owner 书面批准例外后，才允许 3.19 closeout 与
    owner ACCEPT；当前结论为 DO NOT RELEASE YET。
 4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。

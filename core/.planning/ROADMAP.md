@@ -70,6 +70,8 @@
 > 2026-07-20 owner 全局旅程 QA 后，Phase 3.19 从单纯 release closeout 转入 product correction：
 > 先建立显式有界 ContentSelection 与 goal-preserving fallback 契约，再重构 Review 驻留体验、
 > 资产入口和学习效果可见性；冷启动不会通过伪造数据解锁，0.7.0 在 P1 清零或书面例外前不发布。
+> 同日进一步冻结新功能路线：3.19 未达到“保留旅程真正可用、好用 + 假需求/假 fallback 审计完成”
+> 前，不创建、规划或实现任何新功能 phase。删除和简化与修复同等重要；已有实现不是保留理由。
 > 完成报告见 `docs/release/milestone-1.md`。
 
 ## 1. 路线图目标
@@ -1495,7 +1497,9 @@ Phase 3.7–3.10 仍按既有计划完成，不在本轮重排。听力主线与
     smoke 全部通过；首轮 J1/J2 揭示 Review、任务输入单位、精听入口、效果可见性与资产 IA 的
     P1 产品缺口，J3 被麦克风权限阻塞，J4 安装错误待精确证据，J5 在 UX 裁决前延期。执行顺序
     改为：确定性 hotfix → ContentSelection / fallback 契约 → Review 驻留重构 → 效果与资产入口
-    → degradation audit → owner 重测；冷启动相关项目保持诚实 blocked，不制造测试数据）。
+    → 全量 subtraction/degradation audit → owner 按 `3.19-OWNER-JOURNEYS-V2.md` 重测；冷启动
+    相关项目保持诚实 blocked，不制造测试数据。**本 phase 是所有新功能的硬门：未达到 retained
+    journeys 可用/好用与 P1 release gate 前，不启动后续功能建设**）。
 
 上述顺序表达当前依赖与建议交付次序；phase scope 不构成长期产品非目标。各 PLAN 是方向承诺
 而非永久执行规格，

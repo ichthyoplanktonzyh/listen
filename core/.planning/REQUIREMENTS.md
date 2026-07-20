@@ -105,7 +105,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | 轻量消费端资源读取 | 无强制 Milestone 1 发布项 | CONSUME-001 至 CONSUME-004 |
 | Rhythm-first 真实听感分析 | 无强制 Milestone 1 发布项 | RHY-001 至 RHY-008 |
 | 用户可见工作流语义 | 无强制 Milestone 1 发布项 | UX-001 至 UX-008 |
-| 真实内容驱动的四通道扩展 | 无强制当前发布项 | LOOP-010 至 LOOP-012、LOOP-015 至 LOOP-023 |
+| 真实内容驱动的四通道扩展 | 无强制当前发布项 | LOOP-010 至 LOOP-012、LOOP-015 至 LOOP-025 |
 | 厂商中立语义能力 | 无强制当前发布项 | LOOP-013、LOOP-014 |
 
 ## 4. 平台需求
@@ -2992,6 +2992,34 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - unassessed、append-only evidence 和 immutable source snapshot 继续作为数据完整性规则保留。
 - 依据：owner `manual_product_qa`；ADR 0026。
 
+### LOOP-024：Phase 3.x 减法审计与新功能冻结
+
+- 优先级：P0/release gate
+- 阶段：Phase 3.19
+- 需求：Phase 3.19 必须逐项审计 Phase 3.x 用户功能和 fallback，在遗留问题、假需求和假降级
+  清偿前禁止启动任何新功能建设。
+- 验收标准：
+  - 每项功能记录核心用户目标、稳定主入口、真实使用证据、不存在时的损失和 fallback 是否保持目标。
+  - 每项只能裁决为 `KEEP / SIMPLIFY / REMOVE / UNAVAILABLE / DEFER RESEARCH`，并记录依据。
+  - “代码已完成”“未来可能使用”“离线可能需要”不能单独构成 KEEP 理由。
+  - REMOVE 同时清理用户入口、状态、配置催促、死代码/契约和相应测试；不得留下假可用 UI。
+  - SIMPLIFY 删除不影响核心目标的选项、状态和中转页，并以最短 owner journey 验收。
+  - Phase 3.19 closeout、retained journeys owner ACCEPT 和 P1 release gate 前，ROADMAP 不新增功能 phase。
+- 依据：owner product decision 2026-07-20。
+
+### LOOP-025：可执行 owner journey 契约
+
+- 优先级：P0/release gate
+- 阶段：Phase 3.19
+- 需求：owner QA 不得只列功能名或抽象期望；每一步必须使非实现者无需猜测即可完成。
+- 验收标准：
+  - 每条旅程写明起点、主入口、前置数据、准确操作、页面/按钮名称和停止条件。
+  - 每一步分别写明入口结果、即时反馈、任务边界、持久结果和之后的回访位置。
+  - 主入口缺失直接 FAIL，不允许用高级菜单、开发者工具、HTTP/数据库或旧实现知识绕过。
+  - 冷启动合法无数据使用 N/A/BLOCKED，不制造 evidence/proposal；功能被正式删除才可用 N/A。
+  - 实现若改变入口或交互，必须先同步 journey 契约，再发起 owner 重测。
+- 验收脚本：`3.19-OWNER-JOURNEYS-V2.md`。
+
 ## 18.6 Phase 3.4.x Learning Domain Model v2 需求
 
 > 共享上下文：
@@ -3233,7 +3261,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | Phase 2.20 Rhythm-first 真实听感分析 | RHY-001 至 RHY-008 |
 | Phase 2.22 用户可见工作流语义 | UX-001 至 UX-009 |
 | Milestone 2 多语言学习基础 | LANG-001 至 LANG-010 |
-| Phase 3.0 英语听力学习闭环与四通道扩展 | LOOP-000 至 LOOP-023 |
+| Phase 3.0 英语听力学习闭环与四通道扩展 | LOOP-000 至 LOOP-025 |
 | Phase 3.4.x / 3.9.1–3.9.2 Learning Analysis Foundation | CAP-001 至 CAP-013 |
 | Phase 3.35 听力工作台 UI 重构 | UI-016 至 UI-017 |
 | Phase 3.15.9 本地优先 TTS | TTS-001 至 TTS-008 |

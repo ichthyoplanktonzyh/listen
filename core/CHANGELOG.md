@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-20 14:46 CST: 将 Phase 3.19 提升为 subtraction-first 产品硬门：遗留 P1、入口、任务
+  边界、结果可见性与返回路径未收口，且 Phase 3.x 假需求/假 fallback 未完成 KEEP/SIMPLIFY/
+  REMOVE/UNAVAILABLE/DEFER RESEARCH 审计前，禁止规划或建设任何新功能。新增 LOOP-024/025，
+  同步 PROJECT/ROADMAP/STATE/AGENT 与 correction plan。Run 1 J0–J5 保留为历史证据，新增
+  `3.19-OWNER-JOURNEYS-V2.md` 作为 Run 2 目标体验契约：固定首页/内容工作台主入口，并为媒体库、
+  泛听/精听、狩猎、Review、证据建议、我的表达、说写选区、Coach、Realtime、Embedding、TTS
+  逐步写明准备、准确点击、即时反馈、任务边界、持久写入、回访位置与失败条件；主入口缺失直接
+  FAIL，禁止让 owner 用高级菜单、开发者工具或内部知识替产品寻找路径。新增 live subtraction
+  audit，已对媒体模式、fit、Hunting、Review、evidence/proposal、Speaking、Personal Expression、
+  Coach、Realtime、Embedding、TTS 与数据完整性路径给出首轮 KEEP/SIMPLIFY/REMOVE/PROVE 裁决。
+
 - 2026-07-20 13:54 CST: Phase 3.19 owner Run 1 完成首轮全局旅程：J0 packaged-app smoke 全部
   PASS，J1/J2 部分通过并暴露 Review 驻留体验、精听/泛听语义、任务输入单位、效果可见性、
   Personal Expression IA/选区等 P1 缺口；J3 麦克风权限、J4 embedding 安装阻塞，J5 在 UX

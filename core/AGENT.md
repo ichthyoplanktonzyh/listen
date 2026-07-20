@@ -201,6 +201,10 @@ Follow `.planning/MAINTENANCE.md` exactly:
 
 - Every phase must use a dedicated phase branch; do not implement phase work
   directly on `main`.
+- Phase 3.19 is a subtraction-first product correction gate. Do not start or
+  plan new product features until retained Phase 3.x journeys are usable,
+  discoverable, owner-accepted, and the fake-requirement/fallback audit is
+  complete. Existing code is not evidence that a feature should be kept.
 - After the phase functionality is complete, merge its dedicated branch into
   `main` so `main` remains the integrated record of completed phases.
 
