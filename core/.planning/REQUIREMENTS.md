@@ -105,7 +105,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | 轻量消费端资源读取 | 无强制 Milestone 1 发布项 | CONSUME-001 至 CONSUME-004 |
 | Rhythm-first 真实听感分析 | 无强制 Milestone 1 发布项 | RHY-001 至 RHY-008 |
 | 用户可见工作流语义 | 无强制 Milestone 1 发布项 | UX-001 至 UX-008 |
-| 真实内容驱动的四通道扩展 | 无强制当前发布项 | LOOP-010 至 LOOP-012、LOOP-015 至 LOOP-021 |
+| 真实内容驱动的四通道扩展 | 无强制当前发布项 | LOOP-010 至 LOOP-012、LOOP-015 至 LOOP-023 |
 | 厂商中立语义能力 | 无强制当前发布项 | LOOP-013、LOOP-014 |
 
 ## 4. 平台需求
@@ -2961,6 +2961,37 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
     evidence、observation、capability、proposal、review 或 corpus writer，3.17 confirmation gate 保留。
 - 依赖：Phase 3.15.5、Phase 3.15.6、Phase 3.15.7、LOOP-020。
 
+### LOOP-022：显式内容选区与任务输入
+
+- 优先级：P1
+- 阶段：Phase 3.19 correction
+- 需求：学习任务必须接收一个有界、可见的内容选区或用户明确输入；播放现场只能帮助建立
+  选区，不能隐式充当任务输入。
+- 验收标准：
+  - Listening / Reading 明示当前使用全文还是选区；Speaking / Writing 明示一句、若干句、
+    短段或用户输入，不默认整篇内容。
+  - 任务内来源播放严格停在选区边界，提供明确的播放、暂停及按需循环控制。
+  - “精听”入口建立或请求选区并进入精听活动；“泛听”可建立全文会话，两者不得折叠成
+    同一模式。
+  - Personal Expression、Review 与 Speaking 使用用户实际选择的句段，并返回原资产或内容现场。
+  - attempt 开始时冻结选区文本、时间边界和指令；后续播放移动或来源删除不改写历史。
+- 依据：owner `manual_product_qa`；ADR 0025。
+
+### LOOP-023：仅保留目标不变的降级
+
+- 优先级：P1
+- 阶段：Phase 3.19 correction
+- 需求：降级路径只有在保持相同用户目标、事实权威和持久化语义时才可替代主路径；否则应
+  呈现明确不可用状态、原因与恢复动作。
+- 验收标准：
+  - 来源快照只用于历史与解释，不把文字快照当作音频播放、跟读或来源导航已经可用。
+  - 本地来源解析必须先使用持久 media identity / fingerprint；解析缺陷不得被“来源不可用”掩盖。
+  - 可选 provider 只在用户调用对应增强能力时出现，不为尚无明确用户价值的配置制造主流程阻塞。
+  - 每条保留的 fallback 都记录真实触发条件、恢复动作和回归测试；无明确住户或改变任务目标的
+    旧路径删除或降为独立可选动作。
+  - unassessed、append-only evidence 和 immutable source snapshot 继续作为数据完整性规则保留。
+- 依据：owner `manual_product_qa`；ADR 0026。
+
 ## 18.6 Phase 3.4.x Learning Domain Model v2 需求
 
 > 共享上下文：
@@ -3202,7 +3233,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | Phase 2.20 Rhythm-first 真实听感分析 | RHY-001 至 RHY-008 |
 | Phase 2.22 用户可见工作流语义 | UX-001 至 UX-009 |
 | Milestone 2 多语言学习基础 | LANG-001 至 LANG-010 |
-| Phase 3.0 英语听力学习闭环与四通道扩展 | LOOP-000 至 LOOP-021 |
+| Phase 3.0 英语听力学习闭环与四通道扩展 | LOOP-000 至 LOOP-023 |
 | Phase 3.4.x / 3.9.1–3.9.2 Learning Analysis Foundation | CAP-001 至 CAP-013 |
 | Phase 3.35 听力工作台 UI 重构 | UI-016 至 UI-017 |
 | Phase 3.15.9 本地优先 TTS | TTS-001 至 TTS-008 |

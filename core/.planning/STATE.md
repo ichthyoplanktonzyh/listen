@@ -3,24 +3,24 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-19T00:44:00.000+08:00"
+last_updated: "2026-07-20T13:54:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-19 00:44 CST
-> 更新原因：Phase 3.19 自动化与 macOS release package 基线通过，进入 owner journeys。
+> 最后更新：2026-07-20 13:54 CST
+> 更新原因：Phase 3.19 owner Run 1 完成首轮全局旅程，进入 product correction。
 
 ## 当前位置
 
-- **当前执行主线**：Phase 3.19 Product Validation & Release Closeout **ACTIVE — AUTOMATED
-  BASELINE PASS / OWNER JOURNEYS PENDING**。Phase 3.x 不再新增功能；full strict 已以 Rust 685、
-  Flutter 453、contracts 5 examples 全绿，macOS release build、zip integrity、解压 artifact
-  deep/strict ad-hoc signature 与 bundled runtime/notices 均通过。分散的 owner QA 已合并为五条
-  风险优先端到端旅程，下一步由 owner 在真实媒体、真实数据库副本、
-  麦克风/扬声器和 provider 环境下完成体验验收。P0 必须清零，P1 必须修复或由 owner 书面批准
-  例外；P2 只处理阻塞核心旅程、破坏 authority 或造成高频明显摩擦的项目。统一控制面见
-  `3.19-RELEASE-ACCEPTANCE.md`；实现者不代签 owner checkpoints。
+- **当前执行主线**：Phase 3.19 Product Validation & Release Closeout **ACTIVE — PRODUCT
+  CORRECTION / DO NOT RELEASE YET**。自动化与 release package 基线仍通过，owner J0.1–J0.6
+  packaged-app smoke 全部 PASS；J1/J2 核心操作部分通过，但暴露 Review 驻留体验、精听/泛听
+  语义、任务输入单位、学习效果可见性、Personal Expression 入口/选区等 P1 缺口。J3 在
+  microphone permission 阻塞，J4 embedding 安装失败尚缺精确错误，J5 在 UX 重新梳理前延期。
+  两项确定性 hotfix（Review 播放暂停、Realtime 主动请求麦克风权限）已落代码并待 owner 重测；
+  更大问题按 ADR 0025/0026 与 `3.19-PRODUCT-CORRECTION.md` 修正。冷启动不足保持诚实 blocked，
+  不伪造 proposal/Coach/能力记录。P1 清零或书面例外前不发布；实现者不代签 owner checkpoints。
 - Phase 3.18 Cross-modal Coach **✅ CODE COMPLETE — OWNER MANUAL QA
   PENDING**。3.10 listening-only dashboard 已扩为四通道只读聚合：attempt/judgment/
   adjudication/observation/proposal/confirmed projection/history/personal-expression attempt 分层，
@@ -512,15 +512,18 @@ last_updated: "2026-07-19T00:44:00.000+08:00"
 
 ## 下一步工作
 
-1. **Owner packaged-app smoke**：从独立解压的 release app 首次启动，确认 sidecar ready、打开真实
-   媒体与安全退出；自动 bundle/signature 检查已通过，但实现者不代验 GUI。
-2. **Owner Journey J1/J2**：完成“核心听力资产”和“Speaking → Personal Expression →
-   Projection Review → Coach”两条跨阶段旅程；一次真实体验覆盖 3.4/3.5/3.14/3.16/3.17/3.18
-   的重复准备与返回路径，但保留每项原 QA 的可追溯映射。
-3. **Owner Journey J3–J5**：分别完成 realtime provider/device、embedding lifecycle/scale、TTS
-   听感/audio-focus；真实 key 只经 App 写 Keychain，不进入终端、截图或文档。
-4. **Defect burn-down / release decision**：P0 清零，P1 修复或书面例外；随后完成 3.19 closeout、
-   压缩 STATE、同步 3.17–3.19 架构事实，并由 owner 给出 ACCEPT / DO NOT RELEASE。
+1. **确定性 P1 回归**：完成 Review play/pause 与 Realtime microphone permission 的全量 Flutter/
+   macOS build 验证，重打 package 后由 owner 重测 J1.12、J3.2。
+2. **内容选区与入口修正**：落实 LOOP-022，使精听/泛听保持不同任务语义，Personal Expression /
+   Speaking 使用准确句段并返回来源；所有任务内来源播放有界且可控。
+3. **Review 驻留重构**：以独立 source decoder 支持跨媒体片段，在当前 Review 页内完成播放、
+   跟读、复述、评分与返回；真实本地来源解析失败才显示 unavailable，并提供恢复动作。
+4. **效果可见性与资产 IA**：解释 Hunting / completion / comprehension / recognition evidence 的
+   记录落点和影响；首页增加稳定“我的表达”入口，移除内部 authority/“两通道”文案。
+5. **降级审计与重测**：按 LOOP-023 删除不保持目标的旧 fallback；随后重测 J1/J2/J3。J4 先收集
+   精确安装错误，J5 先完成 UX 角色裁决；冷启动项目等待自然数据，不伪造记录。
+6. **Release decision**：P0 清零，P1 修复或由 owner 书面批准例外后，才允许 3.19 closeout 与
+   owner ACCEPT；当前结论为 DO NOT RELEASE YET。
 4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。
 4. 长期挂账：C-3 重归一化策略、C-4 冗余投影字段删除（随 3.x API 演进合并做）；

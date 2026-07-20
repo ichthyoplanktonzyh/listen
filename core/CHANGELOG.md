@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-20 13:54 CST: Phase 3.19 owner Run 1 完成首轮全局旅程：J0 packaged-app smoke 全部
+  PASS，J1/J2 部分通过并暴露 Review 驻留体验、精听/泛听语义、任务输入单位、效果可见性、
+  Personal Expression IA/选区等 P1 缺口；J3 麦克风权限、J4 embedding 安装阻塞，J5 在 UX
+  裁决前延期。新增 ADR 0025/0026、项目 glossary 与 product-correction 计划，把显式有界
+  ContentSelection 和 goal-preserving fallback 固化进 PROJECT/REQUIREMENTS/ROADMAP/STATE/AGENT。
+  以 owner 原始症状先建立红测试，再修复 Review 当前页播放/暂停及 Realtime 捕获前主动请求
+  macOS 麦克风权限；两项定向回归、Flutter analyze、456 项 Flutter 全量测试及 macOS Debug
+  build 通过，等待重打 package 后 owner 复测。当前 release 结论为 DO NOT RELEASE YET，
+  冷启动数据不通过伪造学习记录解锁。
+
 - 2026-07-19 08:42 CST: 将 Phase 3.19 release acceptance 从粗粒度 QA 索引扩写为可直接执行的
   owner 测试脚本。新增统一 PASS/FAIL/BLOCKED/N/A 记录协议、数据库副本与停止规则、合法 writer
   对比严格只读 surface 的边界、七个推荐执行批次；J0–J5 与 multilingual check 细化为逐步准备、

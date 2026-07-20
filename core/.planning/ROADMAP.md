@@ -67,6 +67,9 @@
 > 容器和架构模式不构成永久产品禁令，只有真实工程条件形成硬约束。共享深模块复用事实与
 > 生命周期而不强制复用界面。Realtime conversation 首个 surface 可锚定当前内容，后续
 > GPT-like 开放聊天、角色扮演等均为合法方向，并进入共同的产出语料与复盘处理。
+> 2026-07-20 owner 全局旅程 QA 后，Phase 3.19 从单纯 release closeout 转入 product correction：
+> 先建立显式有界 ContentSelection 与 goal-preserving fallback 契约，再重构 Review 驻留体验、
+> 资产入口和学习效果可见性；冷启动不会通过伪造数据解锁，0.7.0 在 P1 清零或书面例外前不发布。
 > 完成报告见 `docs/release/milestone-1.md`。
 
 ## 1. 路线图目标
@@ -1488,9 +1491,11 @@ Phase 3.7–3.10 仍按既有计划完成，不在本轮重排。听力主线与
 14. 3.18 Cross-modal Coach & Four-channel Closeout ✅ CODE COMPLETE（owner manual QA pending；
     四通道只读聚合、分层 provenance、typed destination/return 与来源 snapshot 降级已落地，
     零 capability/projection writer）。
-15. 3.19 Product Validation & Release Closeout 🔄 ACTIVE（Phase 3.x feature freeze；把分散的
-    owner QA 合并为五条风险优先端到端旅程，执行 full strict、release build、packaged-app smoke、
-    P0/P1 defect burn-down 与 owner release decision；不新增产品能力，不预定 Phase 4 方向）。
+15. 3.19 Product Validation & Release Closeout 🔄 ACTIVE — PRODUCT CORRECTION（J0 packaged-app
+    smoke 全部通过；首轮 J1/J2 揭示 Review、任务输入单位、精听入口、效果可见性与资产 IA 的
+    P1 产品缺口，J3 被麦克风权限阻塞，J4 安装错误待精确证据，J5 在 UX 裁决前延期。执行顺序
+    改为：确定性 hotfix → ContentSelection / fallback 契约 → Review 驻留重构 → 效果与资产入口
+    → degradation audit → owner 重测；冷启动相关项目保持诚实 blocked，不制造测试数据）。
 
 上述顺序表达当前依赖与建议交付次序；phase scope 不构成长期产品非目标。各 PLAN 是方向承诺
 而非永久执行规格，

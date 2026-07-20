@@ -70,6 +70,12 @@ Local QA media:
   heavy production runtimes.
 - High-frequency playback position and current subtitle/word calculations stay
   local to the Flutter client, not round-tripped through HTTP.
+- Learning tasks must receive an explicit bounded content selection or an
+  explicit user-owned prompt. Current playback position may seed a selection,
+  but must not silently turn into an unbounded task input.
+- A fallback is valid only when it preserves the user's goal and authority
+  semantics. Source snapshots preserve history; they do not substitute text for
+  requested audio or mask a broken local-source resolver.
 - LLTimeline JSON is versioned. Backward-compatible fields need defaults;
   incompatible changes require a schema/version decision.
 - Vocabulary and learning assets outlive replaceable media/subtitle records.
