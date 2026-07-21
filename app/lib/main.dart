@@ -57,10 +57,7 @@ import 'models/timeline.dart';
 import 'models/types.dart';
 import 'services/api_service.dart';
 import 'services/external_tools.dart';
-import 'widgets/panels/intensive_practice_window.dart';
 import 'widgets/panels/l1_specialty_dialog.dart';
-import 'widgets/panels/hunting_prompt_card.dart';
-import 'widgets/panels/slice_playback_window.dart';
 import 'widgets/player/download_status_bar.dart';
 import 'widgets/app_bar/player_app_bar.dart';
 import 'widgets/flows/learning_flows.dart';
@@ -74,6 +71,7 @@ import 'widgets/channels/reading_channel.dart';
 import 'widgets/channels/speaking_channel.dart';
 import 'widgets/channels/writing_channel.dart';
 import 'widgets/layout/playback_bar.dart';
+import 'widgets/layout/player_overlays.dart';
 import 'widgets/layout/media_workbench.dart';
 import 'widgets/layout/content_channel_switcher.dart';
 import 'widgets/layout/player_stage.dart';
@@ -1497,11 +1495,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         playerController,
         subtitleController,
         learningController,
-        practiceController,
         extensiveListeningController,
         huntingController,
         huntingSessionController,
-        slicePlayerController,
         // One handle for "which content channel is on the stage"; each
         // channel's own page state stays inside its host.
         contentChannels.selection,
@@ -1786,104 +1782,17 @@ class _PlayerScreenState extends State<PlayerScreen>
                                   onCollapse: _collapseWorkbench,
                                 ),
                               ),
-                            // Keep the window mounted while a neighbouring
-                            // sentence's item is still being created (draft is
-                            // set synchronously; item is null in flight), so
-                            // sentence navigation never unmounts the panel.
-                            if (practiceController.item != null ||
-                                practiceController.draft != null)
-                              IntensivePracticeWindow(
-                                controller: practiceController,
-                                currentSentence:
-                                    (subtitleController
-                                            .currentPrimaryCue
-                                            ?.index ??
-                                        0) +
-                                    1,
-                                totalSentences:
-                                    subtitleController
-                                        .primaryTrack
-                                        ?.cues
-                                        .length ??
-                                    0,
-                                canGoPrevious:
-                                    subtitleController.primaryCursor.previous(
-                                      subtitleController.currentPrimaryCue,
-                                    ) !=
-                                    null,
-                                canGoNext:
-                                    subtitleController.primaryCursor.next(
-                                      subtitleController.currentPrimaryCue,
-                                    ) !=
-                                    null,
-                                showSentenceNavigation:
-                                    practiceController
-                                        .draft
-                                        ?.referenceMediaPath ==
-                                    null,
-                                isPlaying:
-                                    practiceController
-                                            .draft
-                                            ?.referenceMediaPath !=
-                                        null
-                                    ? slicePlayerController.state.playing
-                                    : playerController.playing,
-                                onReplay: practiceActions.replayPracticeWindow,
-                                onTogglePlayback:
-                                    practiceActions.togglePracticePlayback,
-                                onNavigate:
-                                    practiceActions.navigatePracticeSentence,
-                                onSubmit: practiceActions.submitPractice,
-                                onSaveReview:
-                                    practiceActions.savePracticeReview,
-                                onStartRecording:
-                                    practiceActions.beginShadowingRecording,
-                                onStopRecording:
-                                    practiceActions.stopShadowingRecording,
-                                onCancelRecording:
-                                    practiceController.cancelShadowingRecording,
-                                onOpenMicrophoneSettings:
-                                    practiceController.openMicrophoneSettings,
-                                onPlayReference:
-                                    practiceActions.playShadowingReferenceOnce,
-                                onPlayRecording:
-                                    practiceActions.playShadowingRecording,
-                                onPlayAba: practiceActions.playShadowingAba,
-                                onDeleteRecording: () => practiceController
-                                    .deleteCurrentRecording(api),
-                                onShadowingRateChanged:
-                                    practiceActions.setShadowingRate,
-                                onShadowingStepChanged:
-                                    practiceActions.setShadowingStep,
-                                onClose: practiceActions.closePracticeWindow,
-                              ),
-                            Positioned(
-                              top: 18,
-                              left: 24,
-                              right: 24,
-                              child: Center(
-                                child: HuntingPromptCard(
-                                  controller: huntingSessionController,
-                                  onAnswer: (answer) => unawaited(
-                                    huntingActions.answerHuntingCheck(answer),
-                                  ),
-                                  onReindex: () => unawaited(
-                                    huntingActions.reindexHuntingCorpus(),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            ListenableBuilder(
-                              listenable: slicePlayerController.store,
-                              builder: (context, _) =>
-                                  slicePlayerController.state.open
-                                  ? SlicePlaybackWindow(
-                                      controller: slicePlayerController,
-                                      onClose: _closeSlicePlayback,
-                                      onShadowing: practiceActions
-                                          .startSliceWindowShadowing,
-                                    )
-                                  : const SizedBox.shrink(),
+                            PlayerOverlays(
+                              api: api,
+                              practiceController: practiceController,
+                              slicePlayerController: slicePlayerController,
+                              huntingSessionController:
+                                  huntingSessionController,
+                              subtitleController: subtitleController,
+                              playerController: playerController,
+                              practiceActions: practiceActions,
+                              huntingActions: huntingActions,
+                              onCloseSlicePlayback: _closeSlicePlayback,
                             ),
                           ],
                         ),
