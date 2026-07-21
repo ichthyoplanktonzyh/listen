@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-21: 修复 debug 模式下应用永久卡在启动页（白屏 + "Starting local core..."）。Slice 3 把
+  `_connectApi()` 的首行状态文案换成 `l.text('statusStartingCore')` 后，该调用经 `initState`
+  同步执行，`AppLocalizations.of(context)` 在 initState 完成前访问 InheritedWidget 触发断言抛出；
+  异常又落在 `try` 之外，逃逸成未捕获的 unawaited future，于是 `connectingApi` 永远为 `true`、
+  `api` 永远为 `null`，`LocalApi.connect()` 从未执行到 `Process.start`（实测无任何 api-http 子进程）。
+  改为经 `addPostFrameCallback` 在首帧后发起连接，并把 `try` 上移包住整个函数体，使同步段的任何
+  异常都走错误态而非静默无限转圈。实测：未捕获异常归零，sidecar 正常拉起，进入首页。
+  注：此前怀疑的"僵尸进程锁 SQLite"已证伪——系统无 api-http 残留、无 `-wal`/`-shm`，
+  sidecar 单独启动握手仅 0.22s。
 - 2026-07-21: 推进 GitHub #12（Slice 3）：统一错误呈现 + 本地化全部状态栏硬编码字符串。
   `PlayerController.setStatus` 新增 `error` 标志（`statusIsError` 进入 PlayerState）；错误状态
   在播放条状态行以 error 色 + 图标渲染，并由组合根监听、每条新错误弹一次 SnackBar。约 90 处
