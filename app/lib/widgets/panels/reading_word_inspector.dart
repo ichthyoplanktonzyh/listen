@@ -76,6 +76,7 @@ class ReadingWordInspector extends StatelessWidget {
     this.onRecordSource,
     this.onOpenListeningDictionary,
     this.onPlayPronunciationAudio,
+    this.onCorrectLemma,
     this.hasSelectedCue = false,
   });
 
@@ -92,6 +93,7 @@ class ReadingWordInspector extends StatelessWidget {
   final VoidCallback? onRecordSource;
   final VoidCallback? onOpenListeningDictionary;
   final ValueChanged<String>? onPlayPronunciationAudio;
+  final VoidCallback? onCorrectLemma;
   final bool hasSelectedCue;
 
   @override
@@ -157,6 +159,7 @@ class ReadingWordInspector extends StatelessWidget {
                       onReadingMark: onReadingMark,
                       onOpenListeningDictionary: onOpenListeningDictionary,
                       onPlayPronunciationAudio: onPlayPronunciationAudio,
+                      onCorrectLemma: onCorrectLemma,
                       hasSelectedCue: hasSelectedCue,
                     ),
             ),

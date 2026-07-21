@@ -57,6 +57,7 @@ class SidePanel extends StatefulWidget {
     this.onOpenListeningDictionary,
     this.onPlayPronunciationAudio,
     this.onOpenL1Specialty,
+    this.onCorrectLemma,
     required this.onRefreshListeningInbox,
     required this.onReplayListeningInboxItem,
     required this.onProcessListeningInboxItem,
@@ -100,6 +101,10 @@ class SidePanel extends StatefulWidget {
   final Future<void> Function(String lexicalEntryId)? onOpenListeningDictionary;
   final ValueChanged<String>? onPlayPronunciationAudio;
   final Future<void> Function(L1DiagnosisHint hint)? onOpenL1Specialty;
+
+  /// Corrects the lemma of the currently selected token (#16 moved this out
+  /// of the global AppBar menu, where it had no context to act on).
+  final VoidCallback? onCorrectLemma;
   final Future<void> Function() onRefreshListeningInbox;
   final Future<void> Function(ListeningInboxItem item)
   onReplayListeningInboxItem;
@@ -236,6 +241,7 @@ class _SidePanelState extends State<SidePanel> {
                       onCapabilityOverride: _setCapabilityOverride,
                       onRecordSource: widget.onRecordCurrentSource,
                       onReadingMark: widget.onReadingMark,
+                      onCorrectLemma: widget.onCorrectLemma,
                       onOpenListeningDictionary:
                           widget.onOpenListeningDictionary == null
                           ? null

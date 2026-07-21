@@ -22,6 +22,7 @@ class WordLearningPanel extends StatefulWidget {
     this.onOpenListeningDictionary,
     this.onPlayPronunciationAudio,
     this.onReadingMark,
+    this.onCorrectLemma,
     this.hasSelectedCue = false,
   });
 
@@ -43,6 +44,11 @@ class WordLearningPanel extends StatefulWidget {
   /// Explicit reading mark (Phase 3.13); non-null only while the reading
   /// posture is open. `true` = understood while reading.
   final void Function(bool understood)? onReadingMark;
+
+  /// Overrides the lemma the normalizer picked for the selected token. It
+  /// only makes sense with a token in hand, which is why it lives here rather
+  /// than in the global AppBar menu it used to occupy (#16).
+  final VoidCallback? onCorrectLemma;
   final bool hasSelectedCue;
 
   @override
@@ -252,6 +258,13 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
                 label: Text(l.text('readNotUnderstood')),
               ),
             ],
+            if (widget.onCorrectLemma != null)
+              TextButton.icon(
+                key: const ValueKey('correct-lemma'),
+                icon: const Icon(Icons.edit_note_outlined, size: 18),
+                onPressed: widget.onCorrectLemma,
+                label: Text(l.text('correctLemma')),
+              ),
           ],
         ),
         const Divider(),

@@ -54,7 +54,6 @@ void main() {
         onOpenPhoneticAnalysisCenter: () => fired.add('phonetic-analysis'),
         onOpenLearningAssets: () => fired.add('learning-assets'),
         onOpenLearningResources: () => fired.add('learning-resources'),
-        onCorrectLemma: () => fired.add('correct-lemma'),
       ),
       body: const SizedBox.shrink(),
     ),
@@ -116,16 +115,19 @@ void main() {
     expect(fired, ['secondary-generate']);
   });
 
-  testWidgets('learning menu dispatches each destination', (tester) async {
+  testWidgets('learning menu holds only context-free destinations', (
+    tester,
+  ) async {
     await useDesktopSurface(tester);
     await tester.pumpWidget(app());
+    // Every item here opens a screen that stands on its own. Actions needing a
+    // selected token or cue live where that context exists (#16).
     expect(await openMenu(tester, 'Learning'), [
       'subtitle-resources',
       'vocabulary',
       'review',
       'learning-assets',
       'learning-resources',
-      'correct-lemma',
       'transcription',
       'phonetic-analysis',
     ]);

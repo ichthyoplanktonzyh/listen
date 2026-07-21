@@ -48,6 +48,7 @@ class ReadingChannelHost extends StatelessWidget {
     required this.onRecordReadingMark,
     required this.onOpenListeningDictionary,
     required this.onPlayPronunciationAudio,
+    required this.onCorrectLemma,
   });
 
   final LocalApi api;
@@ -70,6 +71,7 @@ class ReadingChannelHost extends StatelessWidget {
   final Future<void> Function(bool understood) onRecordReadingMark;
   final Future<void> Function(String entryId) onOpenListeningDictionary;
   final void Function(String url) onPlayPronunciationAudio;
+  final VoidCallback onCorrectLemma;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -189,6 +191,7 @@ class ReadingChannelHost extends StatelessWidget {
           if (entry != null) unawaited(onOpenListeningDictionary(entry.id));
         },
         onPlayPronunciationAudio: onPlayPronunciationAudio,
+        onCorrectLemma: onCorrectLemma,
         hasSelectedCue: subtitleController.currentPrimaryCue != null,
       ),
     );

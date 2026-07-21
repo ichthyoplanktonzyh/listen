@@ -1568,7 +1568,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                 onOpenLearningAssets: () => unawaited(_openLearningAssets()),
                 onOpenLearningResources: () =>
                     unawaited(_openLearningResources()),
-                onCorrectLemma: () => unawaited(_correctCurrentLemma()),
               ),
               body: DropTarget(
                 onDragEntered: (_) => setState(() => dragging = true),
@@ -1760,6 +1759,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                                             _openListeningDictionaryEntry,
                                         onPlayPronunciationAudio:
                                             _playPronunciationAudio,
+                                        onCorrectLemma: () =>
+                                            unawaited(_correctCurrentLemma()),
                                       ),
                                     ContentChannel.listening => null,
                                   },
@@ -1860,6 +1861,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     onOpenListeningDictionary: _openListeningDictionaryEntry,
     onPlayPronunciationAudio: _playPronunciationAudio,
     onOpenL1Specialty: _openL1Specialty,
+    onCorrectLemma: () => unawaited(_correctCurrentLemma()),
     onRefreshListeningInbox: inboxActions.refreshListeningInbox,
     onReplayListeningInboxItem: inboxActions.replayListeningInboxItem,
     onProcessListeningInboxItem: inboxActions.processListeningInboxItem,

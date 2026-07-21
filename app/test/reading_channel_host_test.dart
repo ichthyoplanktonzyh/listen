@@ -122,6 +122,7 @@ class _Harness {
         onRecordReadingMark: (_) async {},
         onOpenListeningDictionary: (_) async {},
         onPlayPronunciationAudio: (_) {},
+        onCorrectLemma: () {},
       ),
     ),
   );
