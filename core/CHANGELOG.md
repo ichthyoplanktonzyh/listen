@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-21: 推进 GitHub #12（Slice 2b）：逐词/逐块/逐音素高亮游标退出聚合通知。
+  `currentWordToken`/`currentChunkIndex`/`currentDetectedPhone` 从 `SubtitleState` 移出，
+  改为 `SubtitleController` 内部专用 `ValueNotifier`（对外暴露 `*Listenable`）——此前逐词
+  高亮每个词边界、音素彩带每个音素（开启时 10-20Hz）都会经 `Listenable.merge` 重建整棵树。
+  消费方改为局部订阅：PlayerStage 的 TokenLine（merge position/word/chunk，chunk 高亮关闭
+  时不挂 position tick）、声音结构区域（merge position/word）、SidePanel 的 DiagnosisCard
+  实时音素显示（ValueListenableBuilder）。`clearSpeechEnhancements` 同步重置游标。
+  新增回归测试：updateCurrentWord 触发 scoped 通知且聚合通知为 0。Flutter 466 项全过。
+
 - 2026-07-21: 推进 GitHub #12（Slice 2a）：消除播放期 10Hz 全树重建。`position` 从
   `PlayerState` 移出，改为 `PlayerController` 内部专用 `ValueNotifier`（`positionListenable`），
   `setPosition` 不再触发聚合 `notifyListeners`——此前每 100ms 一次的位置轮询会经
