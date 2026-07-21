@@ -1993,6 +1993,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                               onOpenSubtitleResources: () =>
                                   unawaited(_openSubtitleResources()),
                               onOpenVocabulary: _openVocabulary,
+                              onOpenPersonalExpressions: () =>
+                                  unawaited(_openPersonalExpression()),
                               onOpenReview: () => unawaited(_openReviewQueue()),
                               onOpenCoach: () =>
                                   unawaited(_openCoachDashboard()),

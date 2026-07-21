@@ -10,6 +10,7 @@ void main() {
     required VoidCallback onOpenMedia,
     VoidCallback? onOpenOnline,
     VoidCallback? onContinue,
+    VoidCallback? onOpenPersonalExpressions,
     String? recentMediaTitle,
     Duration recentPosition = Duration.zero,
     Duration recentDuration = Duration.zero,
@@ -30,6 +31,7 @@ void main() {
         onContinue: onContinue ?? () {},
         onOpenSubtitleResources: () {},
         onOpenVocabulary: () {},
+        onOpenPersonalExpressions: onOpenPersonalExpressions ?? () {},
         onOpenReview: () {},
         onOpenCoach: () {},
         onOpenSettings: () {},
@@ -76,6 +78,55 @@ void main() {
     expect(find.text('首页'), findsNothing);
     await tester.tap(find.text('打开网址'));
     expect(openOnlineCalls, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('wide home exposes my-expressions entries in sidebar and assets', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var openCalls = 0;
+
+    await tester.pumpWidget(
+      app(
+        onOpenMedia: () {},
+        onOpenPersonalExpressions: () => openCalls += 1,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // One entry in the "my learning" sidebar, one card in the asset area.
+    final entries = find.text('我的表达');
+    expect(entries, findsNWidgets(2));
+
+    await tester.tap(entries.first);
+    await tester.ensureVisible(entries.last);
+    await tester.tap(entries.last, warnIfMissed: false);
+    expect(openCalls, 2);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('compact home stacks my-expressions card without overflow', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(640, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var openCalls = 0;
+
+    await tester.pumpWidget(
+      app(
+        onOpenMedia: () {},
+        onOpenPersonalExpressions: () => openCalls += 1,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final entry = find.text('我的表达');
+    expect(entry, findsOneWidget);
+    await tester.ensureVisible(entry);
+    await tester.tap(entry, warnIfMissed: false);
+    expect(openCalls, 1);
     expect(tester.takeException(), isNull);
   });
 
