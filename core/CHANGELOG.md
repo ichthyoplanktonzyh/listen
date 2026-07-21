@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- 2026-07-21: AppBar 补测试安全网 + 本地化最后两处英文硬编码（#16 第一刀，refs #12）。
+  新增 `test/player_app_bar_test.dart`（6 例）：AppBar 是媒体载入后唯一常驻的入口面
+  （`MediaWorkbench` 会在 Stack 里盖住 `ListeningHome`），此前却没有任何 widget 测试，
+  接下来要动菜单结构，先把结构钉住。按 `PopupMenuItem<String>.value` 而非标签断言四组菜单
+  的成员与顺序——主/副字幕两组标签完全相同，按标签查找无法区分是哪一行触发了回调。
+  写测试时发现一个此前没人注意到的事实：**四个带文字标签的菜单按钮 + 设置图标塞不进
+  800×600**，默认测试画布下 `AppBar` 的 title Row 直接 overflow，因此全部用例跑在
+  1400×900。这条已单独记入 #16 待评估。
+  同时修掉两处英文硬编码：`player_app_bar.dart` 的 `'Correct selected lemma'` 与
+  `learning_flows.dart` 里 `_LemmaCorrectionDialog` 的 `'Correct lemma'`（后者是原 issue
+  漏掉的第二处，同一条链路上），统一走新增的 l10n key `correctLemma`（en/zh）。
+  末例是一条通用回归闸：zh locale 下逐个展开四组菜单，断言每个菜单项文本都含汉字，
+  任何绕过 `AppLocalizations` 的英文串都会立刻变红。全量测试 510 项绿。
+
 - 2026-07-21: 播放器浮层提出为 `PlayerOverlays`（#15 追加刀，refs #12）。精讲练习窗、
   hunting 提示卡、切片播放窗这三个"浮在当前通道之上"的窗口与通道机制无关，整体搬到
   `widgets/layout/player_overlays.dart` 并自带 `ListenableBuilder`。收益是可度量的：
