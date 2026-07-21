@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-21: 推进 GitHub #12（Slice 3）：统一错误呈现 + 本地化全部状态栏硬编码字符串。
+  `PlayerController.setStatus` 新增 `error` 标志（`statusIsError` 进入 PlayerState）；错误状态
+  在播放条状态行以 error 色 + 图标渲染，并由组合根监听、每条新错误弹一次 SnackBar。约 90 处
+  硬编码 `setStatus('English...')` 全部改走本地化 key（新增 en/zh 各 ~135 词条）：main.dart 与
+  四个 flow 文件直接用 `l.text`；media_session/vocabulary/media_library 等沿用既有 text seam；
+  resource_actions/playback_actions/practice_actions/listening_inbox/subtitle_sources 的 bind
+  新增可选 `text` seam（缺省回退 key，测试断言 key）；speaking_actions 与 backend_event 补
+  text 注入。同时本地化两处反向硬编码中文：main.dart 个人表达自评对话框（peAssess* 词条）与
+  review_queue_screen 整屏（reviewTitle/reviewKind*/reviewHint*/评分按钮等 ~38 词条），
+  presence 选择值由 '出现/没出现' 改为语义值 present/absent。更新 6 个测试文件的期望到 key
+  约定。flutter analyze 无告警，Flutter 466 项全过。
+
 - 2026-07-21: 推进 GitHub #12（Slice 2b）：逐词/逐块/逐音素高亮游标退出聚合通知。
   `currentWordToken`/`currentChunkIndex`/`currentDetectedPhone` 从 `SubtitleState` 移出，
   改为 `SubtitleController` 内部专用 `ValueNotifier`（对外暴露 `*Listenable`）——此前逐词
