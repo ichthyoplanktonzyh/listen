@@ -4,9 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/writing_task_controller.dart';
 import '../../localization.dart';
-import '../../models/semantic_task.dart';
 import '../../services/api_service.dart';
-import 'llm_judgment_assist.dart';
+import 'llm_feedback_assist.dart';
 
 class WritingTaskStudio extends StatefulWidget {
   const WritingTaskStudio({
@@ -295,9 +294,9 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
   );
 }
 
-/// LLM assist (Phase 3.12.2): shared correctable content/organization block,
-/// hidden when no judgment-capable provider is configured. Distinct from the
-/// Harper surface findings and from the learner meaning check.
+/// Teacher-style free-text LLM feedback (issue #9), hidden when no capable
+/// provider is configured. Distinct from the Harper surface findings; nothing
+/// is stored and no verdicts are assigned.
 class _WritingLlmAssist extends StatelessWidget {
   const _WritingLlmAssist({required this.controller, required this.api});
 
@@ -307,21 +306,12 @@ class _WritingLlmAssist extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = controller.state;
-    return LlmJudgmentAssist(
-      visible: state.judgeProviderId != null,
-      points: state.rubric?.points ?? const [],
-      judgment: state.llmJudgment,
-      adjudications: state.llmAdjudications,
+    return LlmFeedbackAssist(
+      visible: state.feedbackProviderId != null,
+      feedback: state.llmFeedback,
       busy: state.busy,
       keyPrefix: 'writing-task',
-      onRequest: () => unawaited(controller.requestLlmJudgment(api)),
-      onCorrect: (pointId, userVerdict) => unawaited(
-        controller.adjudicateLlm(
-          api,
-          pointId: pointId,
-          userVerdict: userVerdict,
-        ),
-      ),
+      onRequest: () => unawaited(controller.requestLlmFeedback(api)),
     );
   }
 }
@@ -473,53 +463,6 @@ class _FeedbackList extends StatelessWidget {
     final state = controller.state;
     return ListView(
       children: [
-        Text(
-          l.text('writingMeaningCheck'),
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 4),
-        Text(
-          l.text('writingMeaningCheckHint'),
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 8),
-        for (final point in state.rubric?.points ?? const <RubricPointView>[])
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(point.statement),
-                const SizedBox(height: 4),
-                SegmentedButton<String>(
-                  segments: [
-                    ButtonSegment(
-                      value: 'covered',
-                      label: Text(l.text('writingCovered')),
-                    ),
-                    ButtonSegment(
-                      value: 'partial',
-                      label: Text(l.text('writingPartial')),
-                    ),
-                    ButtonSegment(
-                      value: 'missing',
-                      label: Text(l.text('writingMissing')),
-                    ),
-                  ],
-                  selected: state.selfVerdicts[point.pointId] == null
-                      ? const {}
-                      : {state.selfVerdicts[point.pointId]!},
-                  emptySelectionAllowed: true,
-                  onSelectionChanged: (values) {
-                    if (values.isNotEmpty) {
-                      controller.setSelfVerdict(point.pointId, values.single);
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-        const Divider(height: 20),
         Text(
           l.text('writingFeedback'),
           style: Theme.of(context).textTheme.titleMedium,
