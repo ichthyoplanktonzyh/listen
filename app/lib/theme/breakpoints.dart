@@ -8,6 +8,22 @@
 /// widget needs to stay usable, so they are free to drift apart. Only merge two
 /// constants when the underlying reason is genuinely the same.
 abstract final class ListenBreakpoints {
+  /// Smallest window the layouts are supported at, enforced by the platform
+  /// shell (`macos/Runner/MainFlutterWindow.swift` sets `contentMinSize` from
+  /// these; `window_min_size_test.dart` keeps the two sides in step).
+  ///
+  /// Width: `PlayerAppBar`'s icon-only form has a hard floor of 480px in both
+  /// locales — below that it overflows no matter how it degrades, short of
+  /// folding all four menus into one popup. 640 keeps real headroom over that
+  /// floor and is already the width the compact-home tests treat as the
+  /// canonical narrow desktop layout. Every breakpoint below is ≥520, so
+  /// nothing between 480 and 640 is a shape anyone designed for.
+  ///
+  /// Height: `IntensivePracticeWindow` clamps itself to 360–560; at 560 the
+  /// window still clears that range once the toolbar is subtracted.
+  static const minWindowWidth = 640.0;
+  static const minWindowHeight = 560.0;
+
   /// [ListeningHome] keeps the navigation sidebar next to the content; below
   /// it, the content pane takes the full width.
   static const homeSidebar = 760.0;

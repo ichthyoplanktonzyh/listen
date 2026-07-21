@@ -6,11 +6,19 @@ class MainFlutterWindow: NSWindow {
   private var shadowingRecorder: ShadowingRecorder?
   private var realtimeAudio: RealtimeAudioBridge?
 
+  // Keep in step with ListenBreakpoints.minWindowWidth / minWindowHeight in
+  // lib/theme/breakpoints.dart, which documents where these numbers come from.
+  // test/window_min_size_test.dart fails if the two sides drift apart.
+  static let contentMinimumSize = NSSize(width: 640, height: 560)
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)
+    // Without this the window can be dragged narrower than any layout supports,
+    // which repainted the AppBar overflow that #18 fixed (see #19).
+    self.contentMinSize = MainFlutterWindow.contentMinimumSize
 
     RegisterGeneratedPlugins(registry: flutterViewController)
     shadowingRecorder = ShadowingRecorder(messenger: flutterViewController.engine.binaryMessenger)
