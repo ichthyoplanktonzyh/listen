@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- 2026-07-21: 修复 GitHub #5（D-319-22）：精听练习窗口切换相邻句不再闪烁。根因：切句会新建
+  practice item，`_createItemFromDraft` 先把 `item` 置空再等待 API，而窗口挂载条件是
+  `item != null`，在途期间整窗被卸载、返回后重挂。现挂载条件放宽为 `draft != null ||
+  item != null`（draft 在切句时同步更新、只有关闭才清空），窗口内容也只依赖 draft 渲染
+  prompt（在途期间 `busy` 已禁用提交），实现原位更新；prompt 视图补显 `controller.error`，
+  避免创建失败时窗口驻留却看不到错误。新增「item 在途期间 prompt 持续可见」回归测试；
+  全量 459 项 Flutter 测试通过。
+
+- 2026-07-21: 修复 GitHub #1（D-319-12）：首页新增「我的表达」稳定主入口。左侧「我的学习」
+  在词汇与复习之间加入「我的表达」项，资产区新增同名卡片（含摘要文案，中英文案均补充
+  `personalExpressions`/`personalExpressionSummary`）；点击进入既有 PersonalExpressionScreen
+  （标题、搜索、新建、列表齐备），返回后回到首页。资产区网格改为每行最多 3 张卡并自动换行，
+  避免 5 张卡挤在一行。补充宽/窄两种布局的入口 widget 测试。
+
 - 2026-07-20 21:06 CST: 撤销 Owner Journeys v2 Q3 初版并登记 D-319-23/GitHub #6。初版未按
   代码核对，错误臆造 Hunting 启动后的目标数/预算常驻 UI、三态作答后的影响说明、证据跳转与 fit
   反馈，同时遗漏 `I` 加入 Listening Inbox、`Shift+I` 开始/结束泛听、`Shift+P` 暂停捕获并快速
