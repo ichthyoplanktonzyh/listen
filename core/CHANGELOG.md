@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-21: 「更多」菜单按语义分节（#16 收尾，refs #12）。导出日志（诊断）与
+  词汇导出/导入、词表导入（数据管理）此前平铺在一起，读起来是一堆没有关系的动作。
+  用已有的 `_MenuHeader` 加「诊断」「数据管理」两个分节头 + 一条 `PopupMenuDivider`，
+  新增 l10n key `diagnostics` / `dataManagement`（en/zh；没有复用 `diagnosis`——
+  那个在 zh 下是"句子诊断"，属于另一个领域概念）。
+  `player_app_bar_test.dart` 的对应用例同步断言两个分节头存在，且菜单项集合不变
+  （分节头不带 value，不会混进派发列表）。
+  至此 #16 全部完成：必填回调 25 → 22，AppBar 不再持有任何依赖当前选中态的操作，
+  仓库内 AppBar 链路英文硬编码归零。analyze 零告警，全量测试 511 项绿。
+
 - 2026-07-21: 「纠正词元」从全局菜单移入 `WordLearningPanel`（#16 第四刀，refs #12）。
   与短语候选相反，这个功能**没有重复**，且是全应用唯一入口——后端 `correct_lemma` 是
   完整实现（写 lemma override、带"目标词已是独立词条"的冲突检测，
