@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-21: 删除 AppBar 死参数 `onSearchOpenSubtitles` 及其身后的不可达分支
+  （#16 第二刀，refs #12）。`PlayerAppBar.onSelected` 里有
+  `if (value == 'opensubtitles')`，但 `itemBuilder` 里**没有任何 value 为
+  `'opensubtitles'` 的菜单项**——这个必填回调从来不会触发，`main.dart` 的传参也是死代码。
+  字幕菜单里真正的 OpenSubtitles 搜索是主/副字幕各自的 `primary-search`/`secondary-search`
+  两项（标题本就是 `l.text('openSubtitles')`），不受影响。
+  顺着删下去发现它还挡着一段不可达代码：`searchOpenSubtitlesFlow` 的 `bool? secondary`
+  之所以可空，是为了在 null 时补弹一个"装到主字幕还是副字幕"的对话框，而**只有这个死回调
+  会传 null**。既然入口不存在，该分支永远跑不到，遂把 `secondary` 收成 `required bool`
+  并删掉 18 行对话框（`usePrimary`/`useSecondary` 两个 l10n key 另有活的调用方，保留）。
+  必填回调 25 → 24。analyze 零告警，全量测试 510 项绿。
+
 - 2026-07-21: AppBar 补测试安全网 + 本地化最后两处英文硬编码（#16 第一刀，refs #12）。
   新增 `test/player_app_bar_test.dart`（6 例）：AppBar 是媒体载入后唯一常驻的入口面
   （`MediaWorkbench` 会在 Stack 里盖住 `ListeningHome`），此前却没有任何 widget 测试，
