@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-21: 修复设置对话框在组合根重建时整棵树崩溃。`_SettingsDialogState.didUpdateWidget`
+  无条件重跑 `_initFromWidget()`，而后者会重新赋值 4 个 `late final` TextEditingController，
+  第二次即抛 `LateInitializationError`，并级联出 deactivated-ancestor、
+  `renderObject.child == child`、`_dependents.isEmpty`、Duplicate GlobalKey 等一连串断言，
+  最终红屏 + Lost connection。触发条件是"对话框打开时组合根重建"——切界面语言早已能触发，
+  Slice 4 的外观切换只是让它变成必经路径。改为：控制器在 `initState` 建一次并持有到销毁，
+  `didUpdateWidget` 只重新采纳标量设置，且仅在宿主真的改了对应路径时才覆写文本框（否则会
+  丢掉用户未保存的输入）；`_initFromWidget` 更名为 `_adoptSettings` 以反映语义。
+  仓库内 `word_learning_panel`/`intensive_practice_window`/`listening_dictionary_entry_view`
+  已是此写法，本次是让唯一的例外对齐既有约定。新增回归测试：宿主在对话框打开期间切换
+  themeMode，断言不抛异常、对话框存活、主题生效且采纳新值（已验证该测试在修复前会以生产
+  同款 `LateInitializationError` 失败）。全量 473 项测试通过。
 - 2026-07-21: 推进 GitHub #13（#12 Slice 4）：实现暗色主题 `ListenTheme.dark()` 并支持
   跟随系统/浅色/深色三态切换与持久化。`light()`/`dark()` 收敛为共享的 `_build(ColorScheme)`，
   组件主题（appBar/card/dialog/menu/input/slider/switch/chip/tooltip 等）一律从 scheme 派生，
