@@ -2204,7 +2204,12 @@ class _PlayerScreenState extends State<PlayerScreen>
                                   onCollapse: _collapseWorkbench,
                                 ),
                               ),
-                            if (practiceController.item != null)
+                            // Keep the window mounted while a neighbouring
+                            // sentence's item is still being created (draft is
+                            // set synchronously; item is null in flight), so
+                            // sentence navigation never unmounts the panel.
+                            if (practiceController.item != null ||
+                                practiceController.draft != null)
                               IntensivePracticeWindow(
                                 controller: practiceController,
                                 currentSentence:

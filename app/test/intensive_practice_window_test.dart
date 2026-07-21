@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -184,6 +185,101 @@ void main() {
     },
   );
 
+  testWidgets('window keeps prompt visible while the next item is in flight', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final controller = PracticeController();
+    const cueOne = Cue(
+      id: 'sentence-1',
+      index: 0,
+      start: Duration(milliseconds: 100),
+      end: Duration(milliseconds: 900),
+      text: 'First sentence.',
+      tokens: [],
+    );
+    const cueTwo = Cue(
+      id: 'sentence-2',
+      index: 1,
+      start: Duration(milliseconds: 900),
+      end: Duration(milliseconds: 1700),
+      text: 'Second sentence.',
+      tokens: [],
+    );
+    await controller.startSentenceDictation(
+      api: _practiceApi(),
+      cue: cueOne,
+      mediaId: 'media-1',
+      trackId: 'track-1',
+      mediaTimeMs: (value) => value.inMilliseconds,
+    );
+    expect(controller.item, isNotNull);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: const [AppLocalizations.delegate],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Stack(
+            children: [
+              IntensivePracticeWindow(
+                controller: controller,
+                currentSentence: 2,
+                totalSentences: 3,
+                canGoPrevious: true,
+                canGoNext: true,
+                isPlaying: false,
+                onReplay: () async {},
+                onTogglePlayback: () async {},
+                onNavigate: (_) async {},
+                onSubmit: () async {},
+                onSaveReview: () async {},
+                onStartRecording: () async {},
+                onStopRecording: () async {},
+                onCancelRecording: () async {},
+                onOpenMicrophoneSettings: () async {},
+                onPlayReference: () async {},
+                onPlayRecording: () async {},
+                onPlayAba: () async {},
+                onDeleteRecording: () async {},
+                onShadowingRateChanged: (_) async {},
+                onShadowingStepChanged: (_) async {},
+                onClose: () async {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Listen, then type what you heard.'), findsOneWidget);
+
+    // Navigate to the neighbouring sentence: the draft flips synchronously
+    // while the new item is created asynchronously. The prompt must stay on
+    // screen the whole time instead of falling back to the placeholder.
+    final pending = controller.startSentenceDictation(
+      api: _practiceApi(itemGate: gate.future),
+      cue: cueTwo,
+      mediaId: 'media-1',
+      trackId: 'track-1',
+      mediaTimeMs: (value) => value.inMilliseconds,
+    );
+    await tester.pump();
+    expect(controller.item, isNull);
+    expect(controller.draft, isNotNull);
+    expect(
+      find.text('Choose cloze or dictation for this sentence.'),
+      findsNothing,
+    );
+    expect(find.text('Listen, then type what you heard.'), findsOneWidget);
+
+    gate.complete();
+    await pending;
+    await tester.pump();
+    expect(controller.item, isNotNull);
+    expect(find.text('Listen, then type what you heard.'), findsOneWidget);
+    controller.dispose();
+  });
+
   testWidgets('cross-media shadowing hides primary sentence navigation', (
     tester,
   ) async {
@@ -248,11 +344,12 @@ void main() {
   });
 }
 
-LocalApi _practiceApi() => LocalApi.withTransport(
+LocalApi _practiceApi({Future<void>? itemGate}) => LocalApi.withTransport(
   baseUrl: 'http://test',
   token: 'token',
   transport: (method, path, body) async {
     final decoded = body == null ? null : jsonDecode(body);
+    if (path == '/v1/practice/items' && itemGate != null) await itemGate;
     if (path == '/v1/practice/sessions') {
       return (
         statusCode: 200,
