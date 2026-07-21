@@ -246,11 +246,11 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
                 title: l.text('phraseCandidates'),
               ),
             ),
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'correct-lemma',
               child: _MenuRow(
                 icon: Icons.edit_note_outlined,
-                title: 'Correct selected lemma',
+                title: l.text('correctLemma'),
               ),
             ),
             const PopupMenuDivider(),

@@ -184,7 +184,7 @@ class _LemmaCorrectionDialogState extends State<_LemmaCorrectionDialog> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     return AlertDialog(
-      title: const Text('Correct lemma'),
+      title: Text(l.text('correctLemma')),
       content: TextField(controller: _controller),
       actions: [
         TextButton(

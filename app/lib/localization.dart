@@ -1283,6 +1283,7 @@ class AppLocalizations {
       'title': 'Title',
       'filename': 'Filename',
       'mediaHash': 'Media hash',
+      'correctLemma': 'Correct lemma',
       'lemmaCorrectionSaved': 'Lemma correction saved',
       'configureOpenSubtitles':
           'Configure an OpenSubtitles API key in Settings',
@@ -2522,6 +2523,7 @@ class AppLocalizations {
       'title': '标题',
       'filename': '文件名',
       'mediaHash': '媒体哈希',
+      'correctLemma': '纠正词元',
       'lemmaCorrectionSaved': 'Lemma 修正已保存',
       'configureOpenSubtitles': '请先在设置中配置 OpenSubtitles API Key',
       'pronunciation': '播放发音',
