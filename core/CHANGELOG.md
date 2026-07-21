@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- 2026-07-21: 写作通道提出为 `WritingChannelCoordinator` + `WritingChannelHost`（#15 第二刀，
+  refs #12）。新增 `controllers/writing_channel_coordinator.dart`（3 个页面态字段
+  `studioSource/kind/playCount` + `openTask/close/speakText/playSource`）与
+  `widgets/channels/writing_channel.dart`（`WritingTaskStudio` 分支 + 自带
+  `ListenableBuilder`）。两处刻意的形制调整：(1) 跨通道收尾（关口语 L1 检查、关口语会话、
+  关阅读）不进写作协调器，改为 `closeOtherChannels` seam 由组合根注入——写作通道不该知道
+  "阅读""口语"是什么，这块归 #15 第四刀的通道协调器；(2) `speakWritingText` 原先在协调逻辑里
+  直接 `ScaffoldMessenger` 弹 SnackBar，现改为 `Future<bool> speakText()` 返回合成是否可用，
+  由 host 在有 context 的地方提示，协调器层不再依赖 widget。本地化 prompt/rubric 模板同阅读刀，
+  由 host 从 context 自取。顺带修掉本刀自身引入的一个回归：`writingChannel.isOpen` 同时驱动
+  组合根 build 里的 `selectedChannel` 与 `immersiveStage` 分支，而 host 的
+  `ListenableBuilder` 只覆盖 studio 子树，因此 `writingChannel` 必须留在组合根顶部的聚合
+  `Listenable.merge` 里（否则从通道切换器打开写作时组合根不重建，studio 不出现）——merge 列表
+  回到 14 项，真正的瘦身要等第四刀把通道选择收敛进 `ContentChannelCoordinator`。新增
+  `test/writing_channel_coordinator_test.dart`（5 项）覆盖锚定播放头所在段落、无字幕轨为空操作、
+  切换写作类型重置回放计数、关闭清空 source、以及合成不可用时的返回值契约。
+  `main.dart` 2329 → 2231 行。全量测试 493 项绿。
+
 - 2026-07-21: 阅读通道视图提出为 `ReadingChannelHost`（#15 第一刀收尾，refs #12）。新增
   `widgets/channels/reading_channel.dart`：`_readingView()` 的四表面选择（任务工作台 >
   读听对照 > 听力回述 > 阅读器+词条检视器）整体搬入 StatelessWidget，顺序与每个回调原样保留。
