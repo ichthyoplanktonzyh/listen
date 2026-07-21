@@ -225,7 +225,10 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
 
   Widget _practiceContent() {
     final state = controller.state;
-    if (state.draft == null || state.item == null) {
+    // Only the draft is required: while a neighbouring sentence's item is
+    // still being created the draft already carries the new prompt, and
+    // [PracticeController.busy] keeps submission disabled until it resolves.
+    if (state.draft == null) {
       return Center(
         child: Text(
           l.text('practiceChoosePrompt'),
@@ -569,6 +572,14 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
             ),
           ],
         ),
+        if (controller.error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Text(
+              controller.error!,
+              style: const TextStyle(color: ListenColors.error),
+            ),
+          ),
       ],
     );
   }

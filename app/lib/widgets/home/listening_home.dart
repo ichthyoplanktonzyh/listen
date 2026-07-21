@@ -13,6 +13,7 @@ class ListeningHome extends StatelessWidget {
     required this.onContinue,
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
+    required this.onOpenPersonalExpressions,
     required this.onOpenReview,
     required this.onOpenCoach,
     required this.onOpenSettings,
@@ -40,6 +41,7 @@ class ListeningHome extends StatelessWidget {
   final VoidCallback onContinue;
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
+  final VoidCallback onOpenPersonalExpressions;
   final VoidCallback onOpenReview;
   final VoidCallback onOpenCoach;
   final VoidCallback onOpenSettings;
@@ -78,6 +80,7 @@ class ListeningHome extends StatelessWidget {
                   onOpenOnline: onOpenOnline,
                   onOpenSubtitleResources: onOpenSubtitleResources,
                   onOpenVocabulary: onOpenVocabulary,
+                  onOpenPersonalExpressions: onOpenPersonalExpressions,
                   onOpenReview: onOpenReview,
                   onOpenCoach: onOpenCoach,
                   onOpenSettings: onOpenSettings,
@@ -91,6 +94,7 @@ class ListeningHome extends StatelessWidget {
                 onContinue: onContinue,
                 onOpenSubtitleResources: onOpenSubtitleResources,
                 onOpenVocabulary: onOpenVocabulary,
+                onOpenPersonalExpressions: onOpenPersonalExpressions,
                 onOpenReview: onOpenReview,
                 onOpenCoach: onOpenCoach,
                 mediaLibrary: mediaLibrary,
@@ -125,6 +129,7 @@ class _HomeSidebar extends StatelessWidget {
     required this.onOpenOnline,
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
+    required this.onOpenPersonalExpressions,
     required this.onOpenReview,
     required this.onOpenCoach,
     required this.onOpenSettings,
@@ -134,6 +139,7 @@ class _HomeSidebar extends StatelessWidget {
   final VoidCallback onOpenOnline;
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
+  final VoidCallback onOpenPersonalExpressions;
   final VoidCallback onOpenReview;
   final VoidCallback onOpenCoach;
   final VoidCallback onOpenSettings;
@@ -184,6 +190,11 @@ class _HomeSidebar extends StatelessWidget {
               onTap: onOpenVocabulary,
             ),
             _SidebarItem(
+              icon: Icons.format_quote_outlined,
+              label: l.text('personalExpressions'),
+              onTap: onOpenPersonalExpressions,
+            ),
+            _SidebarItem(
               icon: Icons.headphones_outlined,
               label: l.text('review'),
               onTap: onOpenReview,
@@ -214,6 +225,7 @@ class _HomeContent extends StatelessWidget {
     required this.onContinue,
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
+    required this.onOpenPersonalExpressions,
     required this.onOpenReview,
     required this.onOpenCoach,
     required this.mediaLibrary,
@@ -241,6 +253,7 @@ class _HomeContent extends StatelessWidget {
   final VoidCallback onContinue;
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
+  final VoidCallback onOpenPersonalExpressions;
   final VoidCallback onOpenReview;
   final VoidCallback onOpenCoach;
   final List<MediaLibraryEntry>? mediaLibrary;
@@ -365,6 +378,7 @@ class _HomeContent extends StatelessWidget {
               const SizedBox(height: 14),
               _ResponsiveActionGrid(
                 compact: compact,
+                maxPerRow: 3,
                 children: [
                   _SourceAction(
                     icon: Icons.inventory_2_outlined,
@@ -377,6 +391,12 @@ class _HomeContent extends StatelessWidget {
                     label: l.text('vocabulary'),
                     sourceLabel: l.text('vocabularySummary'),
                     onTap: onOpenVocabulary,
+                  ),
+                  _SourceAction(
+                    icon: Icons.format_quote_outlined,
+                    label: l.text('personalExpressions'),
+                    sourceLabel: l.text('personalExpressionSummary'),
+                    onTap: onOpenPersonalExpressions,
                   ),
                   _SourceAction(
                     icon: Icons.headphones_outlined,
@@ -401,10 +421,18 @@ class _HomeContent extends StatelessWidget {
 }
 
 class _ResponsiveActionGrid extends StatelessWidget {
-  const _ResponsiveActionGrid({required this.compact, required this.children});
+  const _ResponsiveActionGrid({
+    required this.compact,
+    required this.children,
+    this.maxPerRow,
+  });
 
   final bool compact;
   final List<Widget> children;
+
+  /// Wide-layout cap on cards per row; rows are padded with empty slots so
+  /// every card keeps the same width. Null keeps everything on one row.
+  final int? maxPerRow;
 
   @override
   Widget build(BuildContext context) {
@@ -418,12 +446,36 @@ class _ResponsiveActionGrid extends StatelessWidget {
         ],
       );
     }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final perRow = maxPerRow == null
+        ? children.length
+        : maxPerRow!.clamp(1, children.length);
+    final rows = <List<Widget?>>[];
+    for (var start = 0; start < children.length; start += perRow) {
+      final row = <Widget?>[
+        ...children.sublist(
+          start,
+          (start + perRow) > children.length ? children.length : start + perRow,
+        ),
+      ];
+      while (row.length < perRow) {
+        row.add(null);
+      }
+      rows.add(row);
+    }
+    return Column(
       children: [
-        for (var index = 0; index < children.length; index++) ...[
-          Expanded(child: children[index]),
-          if (index != children.length - 1) const SizedBox(width: 12),
+        for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var index = 0; index < rows[rowIndex].length; index++) ...[
+                Expanded(child: rows[rowIndex][index] ?? const SizedBox()),
+                if (index != rows[rowIndex].length - 1)
+                  const SizedBox(width: 12),
+              ],
+            ],
+          ),
+          if (rowIndex != rows.length - 1) const SizedBox(height: 12),
         ],
       ],
     );
