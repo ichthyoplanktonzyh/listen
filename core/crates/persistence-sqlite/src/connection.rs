@@ -21,6 +21,7 @@ impl SqliteRepository {
             }
         }
         let connection = Connection::open(path)?;
+        connection.busy_timeout(std::time::Duration::from_secs(5))?;
         migrate(&connection)?;
         Ok(Self {
             connection: Mutex::new(connection),
