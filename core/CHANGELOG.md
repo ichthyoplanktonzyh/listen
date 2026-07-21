@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- 2026-07-21: 设置最小窗口尺寸 640×560（closes #19，refs #18, #12）。#18 的收尾残留：
+  AppBar 改成纯图标后仍有一个**硬地板 480px**（实测 470 溢出 10px、460 溢出 20px、
+  440 溢出 40px，与 locale 无关，因为图标宽度固定），再往下只能把四组菜单折成单个
+  overflow popup，牺牲可发现性去迁就一个不该被支持的形态。
+  根因不在 AppBar：app 从来没设过窗口下限（`MainFlutterWindow.swift` 只有
+  `setFrame`，无 `contentMinSize`），而 480 低于仓库里**所有**断点（最小的
+  `sidePanelTabLabels` 是 520）——低于 520 时工作台、侧栏、播放控件、首页早已全部
+  处于最降级形态，继续为更窄的宽度加退化分支是在为不存在的形态写代码。正确的边界是
+  给窗口设下限，而不是让每个 widget 各自防御到 0px。
+  顺带一提，默认窗口是 `MainMenu.xib` 里的 800×600，**正好落在 #18 修掉的溢出区间里**。
+  取值 640×560：宽度在 480 硬地板之上留足余量，且 640 已是测试里当作"紧凑桌面布局"的
+  标准宽度；高度 560 让精讲练习窗（自身 clamp 在 360–560）减去工具栏后仍落在其区间内。
+  常量以 `ListenBreakpoints.minWindowWidth/Height` 为单一事实来源并写明依据，Swift 侧
+  引用同名常量。新增 `window_min_size_test.dart` 3 例：**解析 Swift 源文件断言两侧数值
+  一致**（跨语言常量最容易各改各的，仓库里已有 `breakpoint_discipline_test.dart` 读源文件
+  的先例）、断言下限严格大于 480 硬地板、以及在恰好最小尺寸下 en/zh 两 locale 渲染无
+  overflow。两次变异验证：把 Swift 侧改成 400 → 漂移那例变红；把 Dart 下限改成 470 →
+  硬地板与实际渲染两例同时变红。
+  已跑 `flutter build macos --debug` 确认 Swift 改动真能编译。
+  analyze 零告警，全量测试 517 项绿。
+
 - 2026-07-21: 修复 `PlayerAppBar` 在窄窗口下的布局溢出（closes #18，refs #12）。
   四个带文字标签的菜单按钮 + 设置图标全部固定宽度、没有任何窄屏退化路径，en locale
   下窗口窄于 836px 时 AppBar 的 title `Row` 被挤爆，debug 下显示黄黑条纹
