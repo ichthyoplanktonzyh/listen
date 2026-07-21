@@ -77,8 +77,6 @@ class ListeningHome extends StatelessWidget {
               SizedBox(
                 width: 248,
                 child: _HomeSidebar(
-                  onOpenMedia: onOpenMedia,
-                  onOpenOnline: onOpenOnline,
                   onOpenSubtitleResources: onOpenSubtitleResources,
                   onOpenVocabulary: onOpenVocabulary,
                   onOpenPersonalExpressions: onOpenPersonalExpressions,
@@ -124,10 +122,12 @@ class ListeningHome extends StatelessWidget {
   );
 }
 
+/// Where to go, not what to do (#17): the rail owns navigation to the standing
+/// learning destinations, while `_HomeContent` owns the content actions.
+/// Opening media lives only in the content pane, so no destination appears
+/// twice on one screen.
 class _HomeSidebar extends StatelessWidget {
   const _HomeSidebar({
-    required this.onOpenMedia,
-    required this.onOpenOnline,
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
     required this.onOpenPersonalExpressions,
@@ -136,8 +136,6 @@ class _HomeSidebar extends StatelessWidget {
     required this.onOpenSettings,
   });
 
-  final VoidCallback onOpenMedia;
-  final VoidCallback onOpenOnline;
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
   final VoidCallback onOpenPersonalExpressions;
@@ -166,16 +164,6 @@ class _HomeSidebar extends StatelessWidget {
               label: l.text('home'),
               selected: true,
               onTap: () {},
-            ),
-            _SidebarItem(
-              icon: Icons.video_file_outlined,
-              label: l.text('openMedia'),
-              onTap: onOpenMedia,
-            ),
-            _SidebarItem(
-              icon: Icons.language_outlined,
-              label: l.text('openUrl'),
-              onTap: onOpenOnline,
             ),
             const SizedBox(height: 24),
             _SectionLabel(label: l.text('myLearning')),
@@ -369,50 +357,56 @@ class _HomeContent extends StatelessWidget {
                   onToggleFamiliarSupply: onToggleFamiliarSupply!,
                 ),
               ],
-              const SizedBox(height: 36),
-              Text(
-                l.text('assetJourney'),
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 14),
-              _ResponsiveActionGrid(
-                compact: compact,
-                maxPerRow: 3,
-                children: [
-                  _SourceAction(
-                    icon: Icons.inventory_2_outlined,
-                    label: l.text('subtitleResources'),
-                    sourceLabel: l.text('subtitleResourceSummary'),
-                    onTap: onOpenSubtitleResources,
+              // The learning destinations live in the rail (#17). Below the
+              // sidebar breakpoint the rail is gone, so they reappear here as
+              // the narrow-window path rather than vanishing — exactly one
+              // surface owns them at any width.
+              if (compact) ...[
+                const SizedBox(height: 36),
+                Text(
+                  l.text('assetJourney'),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
                   ),
-                  _SourceAction(
-                    icon: Icons.menu_book_outlined,
-                    label: l.text('vocabulary'),
-                    sourceLabel: l.text('vocabularySummary'),
-                    onTap: onOpenVocabulary,
-                  ),
-                  _SourceAction(
-                    icon: Icons.format_quote_outlined,
-                    label: l.text('personalExpressions'),
-                    sourceLabel: l.text('personalExpressionSummary'),
-                    onTap: onOpenPersonalExpressions,
-                  ),
-                  _SourceAction(
-                    icon: Icons.headphones_outlined,
-                    label: l.text('review'),
-                    sourceLabel: l.text('audioFirstReview'),
-                    onTap: onOpenReview,
-                  ),
-                  _SourceAction(
-                    icon: Icons.insights_outlined,
-                    label: l.text('coachDashboard'),
-                    sourceLabel: l.text('coachDashboardSummary'),
-                    onTap: onOpenCoach,
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 14),
+                _ResponsiveActionGrid(
+                  compact: compact,
+                  maxPerRow: 3,
+                  children: [
+                    _SourceAction(
+                      icon: Icons.inventory_2_outlined,
+                      label: l.text('subtitleResources'),
+                      sourceLabel: l.text('subtitleResourceSummary'),
+                      onTap: onOpenSubtitleResources,
+                    ),
+                    _SourceAction(
+                      icon: Icons.menu_book_outlined,
+                      label: l.text('vocabulary'),
+                      sourceLabel: l.text('vocabularySummary'),
+                      onTap: onOpenVocabulary,
+                    ),
+                    _SourceAction(
+                      icon: Icons.format_quote_outlined,
+                      label: l.text('personalExpressions'),
+                      sourceLabel: l.text('personalExpressionSummary'),
+                      onTap: onOpenPersonalExpressions,
+                    ),
+                    _SourceAction(
+                      icon: Icons.headphones_outlined,
+                      label: l.text('review'),
+                      sourceLabel: l.text('audioFirstReview'),
+                      onTap: onOpenReview,
+                    ),
+                    _SourceAction(
+                      icon: Icons.insights_outlined,
+                      label: l.text('coachDashboard'),
+                      sourceLabel: l.text('coachDashboardSummary'),
+                      onTap: onOpenCoach,
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
