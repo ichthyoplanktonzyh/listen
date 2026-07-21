@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-21: 推进 GitHub #7（问题四）：realtime provider 对话框的 Qwen 配置支持中国站。
+  选择 Qwen 适配器后新增 Region 下拉（International dashscope-intl / China Model Studio），
+  中国站模式提供 Workspace ID 输入并实时拼出
+  `wss://{workspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime`，未填 workspace
+  时占位 endpoint 不允许保存。flutter analyze 通过。
+
+- 2026-07-21: 推进 GitHub #7（问题五）：提交 Qwen Omni Realtime 真实 provider 集成测试
+  `crates/realtime-provider/tests/qwen_integration.rs`。测试以 `#[ignore]` + `QWEN_API_KEY`
+  / `QWEN_WORKSPACE_ID` 环境变量门控，不含任何有效密钥；覆盖 WebSocket 握手 + Bearer 认证、
+  SessionReady、PCM 音频发送、事件接收与关闭。realtime-provider 增加 rustls dev 依赖。
+
 - 2026-07-21: 修复 GitHub #5（D-319-22）：精听练习窗口切换相邻句不再闪烁。根因：切句会新建
   practice item，`_createItemFromDraft` 先把 `item` 置空再等待 API，而窗口挂载条件是
   `item != null`，在途期间整窗被卸载、返回后重挂。现挂载条件放宽为 `draft != null ||

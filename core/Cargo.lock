@@ -2807,6 +2807,7 @@ dependencies = [
  "domain",
  "futures-util",
  "http",
+ "rustls",
  "serde_json",
  "tokio",
  "tokio-tungstenite 0.28.0",
