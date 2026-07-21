@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- 2026-07-21: 播放器浮层提出为 `PlayerOverlays`（#15 追加刀，refs #12）。精讲练习窗、
+  hunting 提示卡、切片播放窗这三个"浮在当前通道之上"的窗口与通道机制无关，整体搬到
+  `widgets/layout/player_overlays.dart` 并自带 `ListenableBuilder`。收益是可度量的：
+  `practiceController` 与 `slicePlayerController` 在整个组合根里只被这段 build 读到
+  （`SidePanel`/`PlaybackBar`/`PlayerStage` 都不碰），因此双双移出聚合
+  `Listenable.merge`，**11 → 9 项**（拆分前 13）。
+  过程中发现并修掉一个自己引入的真实布局回归：外层 Stack 的子树换成
+  `PlayerOverlays` 后，内层若是裸 `Stack`，它的子节点全是 `Positioned`（
+  `IntensivePracticeWindow` 的头注明确写了"必须是 Stack 的直接子节点，Positioned 的
+  parent data 才有效"），在 Stack 给非定位子节点的 loose 约束下会塌缩成 0×0，三个浮层
+  直接从屏幕上消失。改为 `Positioned.fill` 包住内层 Stack，几何与拆分前逐像素一致。
+  新增 `test/player_overlays_test.dart` 把这条钉住：断言浮层 Stack 尺寸等于外层
+  （1200×900）且提示卡保持 18px 上边距。同样做了变异验证——把 `Positioned.fill` 换成
+  `IgnorePointer` 后测试报 `Size(0.0, 0.0)` 立刻变红。`main.dart` 2013 → 1922 行。
+  全量测试 504 项绿。
+
 - 2026-07-21: 通道选择收敛为 `ContentChannelCoordinator`，`immersiveStage` 三元嵌套改 switch
   （#15 第四刀，refs #12）。新增 `controllers/content_channel_coordinator.dart`：把
   `_selectContentChannel` 里四个分支各自重复的"先拆掉别的通道"收敛成一处，`selected` 由三个
