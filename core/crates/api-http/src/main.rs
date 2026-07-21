@@ -209,5 +209,47 @@ fn semantic_embedding_root() -> PathBuf {
 }
 
 async fn shutdown_signal() {
-    let _ = tokio::signal::ctrl_c().await;
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {}
+        _ = orphaned() => {
+            // Nothing can still be talking to this server once its parent is
+            // gone, so a stalled connection must not keep the process alive.
+            tokio::spawn(async {
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                std::process::exit(0);
+            });
+        }
+    }
+}
+
+/// Resolves once the process that spawned this sidecar has exited.
+///
+/// The desktop app closes the sidecar from `dispose()`, which is best-effort:
+/// a crash, a force quit, or any SIGKILL never runs it, and the sidecar is
+/// then reparented to pid 1 and lingers — leaking a process, a database
+/// connection and a port per session. Polling the parent pid catches every one
+/// of those exits, including the ones no in-app teardown can observe.
+///
+/// The parent is captured at startup, so a sidecar that was legitimately
+/// launched with no parent to watch (already reparented, e.g. daemonized) is
+/// never mistaken for an orphan.
+#[cfg(unix)]
+async fn orphaned() {
+    // SAFETY: `getppid` is always safe to call and cannot fail.
+    let original = unsafe { libc::getppid() };
+    if original <= 1 {
+        return std::future::pending().await;
+    }
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        // SAFETY: as above.
+        if unsafe { libc::getppid() } != original {
+            return;
+        }
+    }
+}
+
+#[cfg(not(unix))]
+async fn orphaned() {
+    std::future::pending().await
 }

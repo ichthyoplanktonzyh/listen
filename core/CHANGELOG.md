@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- 2026-07-21: 修复 api-http sidecar 在桌面端异常退出后成为孤儿进程。桌面端只在 `dispose()`
+  里关闭 sidecar，而崩溃、强制退出、任何 SIGKILL 都不会执行 `dispose()`，sidecar 随即被过继给
+  pid 1 长期滞留——每次这样的退出泄漏一个进程、一条数据库连接和一个端口（本机实测确有 PPID=1
+  的残留）。修复放在 sidecar 一侧（这是唯一能覆盖父进程被 SIGKILL 的位置）：启动时记录父 pid，
+  每 2s 比对一次 `getppid()`，一旦变化即走既有的 graceful shutdown；若 5s 内没退干净则强制
+  `exit(0)`，避免挂住的连接把进程留下。启动时父 pid 已是 1 的合法场景（如已守护化）不会被误判。
+  新增 `crates/api-http/tests/orphan_watchdog.rs`：经中间 shell 拉起 sidecar，先断言父进程健在
+  时 4s 内不自杀（防止误杀比泄漏更糟），再 SIGKILL 父进程并断言 sidecar 20s 内退出；已验证该
+  测试在停用 watchdog 后会以 "sidecar outlived its parent" 失败。测试使用临时 HOME 与
+  `LLPLAYERNEXT_DB`，不触碰真实数据库。另在真实路径复核：`flutter run` 起 app 后 SIGKILL
+  app 进程，sidecar 1s 内自行退出、无残留。api-http 65 项测试通过。
+  注：桌面端 `dispose()` 目前发的是 SIGKILL（`LocalApi.kill()`），sidecar 因此在正常退出时也
+  拿不到 graceful 路径；SQLite 本身崩溃安全，故未一并改动。
 - 2026-07-21: 修复设置对话框在组合根重建时整棵树崩溃。`_SettingsDialogState.didUpdateWidget`
   无条件重跑 `_initFromWidget()`，而后者会重新赋值 4 个 `late final` TextEditingController，
   第二次即抛 `LateInitializationError`，并级联出 deactivated-ancestor、

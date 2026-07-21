@@ -35,5 +35,13 @@ tracing.workspace = true
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "3"
 
+# `getppid` for the orphan watchdog in main.rs; `kill` for the test that
+# exercises it (integration tests do not inherit the crate's dependencies).
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[target.'cfg(unix)'.dev-dependencies]
+libc.workspace = true
+
 [dev-dependencies]
 tower = { workspace = true, features = ["util"] }

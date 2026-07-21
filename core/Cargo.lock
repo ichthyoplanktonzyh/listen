@@ -96,6 +96,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "hex",
+ "libc",
  "llm-provider",
  "local-runtime",
  "persistence-sqlite",
