@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- 2026-07-21: 阅读通道视图提出为 `ReadingChannelHost`（#15 第一刀收尾，refs #12）。新增
+  `widgets/channels/reading_channel.dart`：`_readingView()` 的四表面选择（任务工作台 >
+  读听对照 > 听力回述 > 阅读器+词条检视器）整体搬入 StatelessWidget，顺序与每个回调原样保留。
+  本地化模板（`readingTaskTemplate`/`listeningRetellTemplate`）改由 host 自己从 context 取，
+  组合根不再为阅读分支持有 `l`；`PersonalExpressionSourceView` 的构造也搬进 host（只读它
+  已持有的 player/subtitle），组合根侧只剩 `onSaveSentencePattern` 一个回调。原先的
+  `api != null` 分支守卫去掉——host 只在组合根 `api != null` 的分支下构造，`api` 收为非空参数。
+  host 自带 `ListenableBuilder`（readingChannel + reading/learning/settings/subtitle），
+  组合根顶部的聚合 `Listenable.merge` 因此摘掉 `readingChannel`（14 → 13 项，#12 第 2 项的
+  首笔收益）。新增 `test/reading_channel_host_test.dart`（4 项）覆盖静息态是阅读器、
+  词条检视器开合、对照卡→回述面板的让位、以及任务工作台优先级最高。`main.dart` 2418 → 2329 行
+  （本刀累计 2639 → 2329）。全量测试 488 项绿。
+
 - 2026-07-21: 阅读通道页面状态机从组合根提出（#15 第一刀，refs #12）。新增
   `controllers/reading_channel_coordinator.dart`：`ReadingChannelCoordinator` 接管
   `_PlayerScreenState` 里的 8 个阅读页面态字段（任务工作台/读听对照/听力回述/词条检视器
