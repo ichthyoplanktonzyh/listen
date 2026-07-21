@@ -30,9 +30,20 @@ class Store<T> extends ChangeNotifier {
   /// The current immutable state snapshot.
   T get state => _state;
 
+  /// Number of registered selector slots. Slots live for the store's
+  /// lifetime, so this must stay bounded — see [select].
+  @visibleForTesting
+  int get debugSlotCount => _slots.length;
+
   /// Create a [ValueNotifier] that tracks a specific derived value.
   /// The returned notifier only fires when [selector]'s result changes
   /// (compared via `==`).
+  ///
+  /// Slots are keyed by the *identity* of [selector] and are never removed
+  /// before [dispose], so only pass long-lived selector references (e.g. a
+  /// controller field or top-level function). Widgets must NOT call this
+  /// with inline closures — use `StoreBuilder`, which evaluates its selector
+  /// locally without registering a slot.
   ValueNotifier<R> select<R>(R Function(T) selector) {
     final key = _SlotKey(selector);
     if (_slots.containsKey(key)) {
@@ -67,6 +78,15 @@ class Store<T> extends ChangeNotifier {
 
     // Notify aggregate listeners
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    for (final slot in _slots.values) {
+      slot.notifier.dispose();
+    }
+    _slots.clear();
+    super.dispose();
   }
 
   /// Replace state entirely (for initialization / reset).
