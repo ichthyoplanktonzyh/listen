@@ -268,10 +268,35 @@ class _PlayerScreenState extends State<PlayerScreen>
   // Tracks the last primary cue id for de-duplicating async calls in _onPosition.
   String? _lastPrimaryCueId;
 
+  // De-duplicates SnackBar surfacing of error statuses.
+  String? _lastSurfacedError;
+
+  /// Errors published on the status line are easy to miss; surface each new
+  /// one once as a SnackBar as well.
+  void _surfaceErrorStatus() {
+    if (!mounted || !playerController.statusIsError) return;
+    final message = playerController.status;
+    if (message.isEmpty || message == _lastSurfacedError) return;
+    _lastSurfacedError = message;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final colors = Theme.of(context).colorScheme;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message, style: TextStyle(color: colors.onError)),
+          backgroundColor: colors.error,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     readingController.addListener(_scheduleReadingPositionSave);
+    playerController.addListener(_surfaceErrorStatus);
+    speakingActions.text = (key) => l.text(key);
     _workbenchAnimController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -287,6 +312,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     resourceActions.bind(
       getApi: () => api,
       isMounted: () => mounted,
+      text: (key) => l.text(key),
       reloadSpeechEnhancements: (trackId) async {
         await mediaSession.loadSpeechEnhancements(trackId);
       },
@@ -329,6 +355,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     playbackActions.bind(
       getApi: () => api,
       isMounted: () => mounted,
+      text: (key) => l.text(key),
       reloadLearningEntries: () async {
         await vocabularyActions.loadWordEntries();
         await vocabularyActions.loadPhraseEntries();
@@ -339,10 +366,15 @@ class _PlayerScreenState extends State<PlayerScreen>
       isMounted: () => mounted,
       text: (key) => l.text(key),
     );
-    inboxActions.bind(getApi: () => api, isMounted: () => mounted);
+    inboxActions.bind(
+      getApi: () => api,
+      isMounted: () => mounted,
+      text: (key) => l.text(key),
+    );
     practiceActions.bind(
       getApi: () => api,
       isMounted: () => mounted,
+      text: (key) => l.text(key),
       refreshDiagnosis: _refreshDiagnosis,
       seekCue: _seekCue,
     );
@@ -363,6 +395,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     subtitleSources.bind(
       getApi: () => api,
       isMounted: () => mounted,
+      text: (key) => l.text(key),
       showSnackBar: _showSnackBar,
       setTaskStatus: _setTaskStatus,
       openMediaPath: mediaSession.openMediaPath,
@@ -487,7 +520,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _connectApi() async {
     if (api != null) return;
     if (mounted) {
-      playerController.setStatus('Starting local core...');
+      playerController.setStatus(l.text('statusStartingCore'));
       setState(() {
         connectingApi = true;
       });
@@ -495,7 +528,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     try {
       final value = await LocalApi.connect();
       if (!mounted) return value.close();
-      playerController.setStatus('Local core connected');
+      playerController.setStatus(l.text('statusCoreConnected'));
       setState(() {
         api = value;
         connectingApi = false;
@@ -524,7 +557,10 @@ class _PlayerScreenState extends State<PlayerScreen>
       unawaited(_runSmokeIfConfigured());
     } catch (error) {
       if (mounted) {
-        playerController.setStatus('Core unavailable: $error');
+        playerController.setStatus(
+          '${l.text('statusCoreUnavailable')}: $error',
+          error: true,
+        );
         setState(() {
           connectingApi = false;
         });
@@ -576,6 +612,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       setTaskStatus: _setTaskStatus,
       updateWordEntry: learningController.updateSingleWordEntry,
       updateCapabilityProfile: learningController.updateCapabilityProfile,
+      text: (key) => l.text(key),
     ).handle(event);
   }
 
@@ -883,13 +920,15 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _exportLogs() async {
     final source = api?.logPath;
     if (source == null || !await File(source).exists()) {
-      playerController.setStatus('No core log is available yet');
+      playerController.setStatus(l.text('statusNoCoreLog'));
       return;
     }
     final location = await getSaveLocation(suggestedName: 'listen-core.log');
     if (location == null) return;
     await File(source).copy(location.path);
-    playerController.setStatus('Exported diagnostics to ${location.path}');
+    playerController.setStatus(
+      l.text('statusExportedDiagnostics').replaceAll('{path}', location.path),
+    );
   }
 
   Future<void> _openSlicePlayback(Map<String, dynamic> occurrence) async {
@@ -1286,7 +1325,10 @@ class _PlayerScreenState extends State<PlayerScreen>
       );
       playerController.setStatus(l.text('readingMarkSaved'));
     } catch (error) {
-      playerController.setStatus('$error');
+      playerController.setStatus(
+        '${l.text('statusReadingMarkFailed')}: $error',
+        error: true,
+      );
     }
   }
 
@@ -1340,7 +1382,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         trackId: currentTrackId,
       );
     } catch (error) {
-      playerController.setStatus('Specialty clips unavailable: $error');
+      playerController.setStatus(
+        '${l.text('statusSpecialtyClipsUnavailable')}: $error',
+        error: true,
+      );
       return;
     }
     if (!mounted) return;
@@ -1378,7 +1423,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         trackId: subtitleController.primaryTrack?.id,
       );
       if (started && mounted) {
-        playerController.setStatus('Extensive listening started');
+        playerController.setStatus(l.text('statusExtensiveListeningStarted'));
       }
       return;
     }
@@ -1442,7 +1487,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     if (finished && mounted) {
       huntingSessionController.stop();
-      playerController.setStatus('Extensive listening finished');
+      playerController.setStatus(l.text('statusExtensiveListeningFinished'));
     }
   }
 
@@ -1451,7 +1496,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     await inboxActions.captureListeningInbox();
     learningController.selectSidePanel(3);
     await _refreshDiagnosis();
-    if (mounted) playerController.setStatus('Paused for quick listening check');
+    if (mounted) {
+      playerController.setStatus(l.text('statusPausedForListeningCheck'));
+    }
   }
 
   Future<void> _openVocabulary() => _showVocabulary();
@@ -1519,7 +1566,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     final path = media?.path;
     if (path == null || !File(path).existsSync()) {
       playerController.setStatus(
-        'Review source media is unavailable for shadowing',
+        l.text('statusReviewMediaUnavailable'),
+        error: true,
       );
       return;
     }
@@ -1546,7 +1594,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     final path = media.path;
     if (!File(path).existsSync()) {
       playerController.setStatus(
-        'Delayed retelling source media is unavailable.',
+        l.text('statusRetellMediaUnavailable'),
+        error: true,
       );
       return;
     }
@@ -1593,7 +1642,8 @@ class _PlayerScreenState extends State<PlayerScreen>
         );
       } catch (error) {
         playerController.setStatus(
-          'Could not save personal expression history: $error',
+          '${l.text('statusPersonalExpressionSaveFailed')}: $error',
+          error: true,
         );
       }
     }
@@ -1608,20 +1658,23 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<String?> _askPersonalExpressionAssessment() => showDialog<String>(
     context: context,
-    builder: (context) => SimpleDialog(
-      title: const Text('这个表达用得怎么样？'),
-      children: [
-        for (final (value, label) in const [
-          ('needs_work', '还需要练习'),
-          ('partly_expressed', '基本表达出来'),
-          ('expressed', '表达自然'),
-        ])
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(context, value),
-            child: Text(label),
-          ),
-      ],
-    ),
+    builder: (context) {
+      final l = AppLocalizations.of(context);
+      return SimpleDialog(
+        title: Text(l.text('peAssessTitle')),
+        children: [
+          for (final (value, labelKey) in const [
+            ('needs_work', 'peAssessNeedsWork'),
+            ('partly_expressed', 'peAssessPartly'),
+            ('expressed', 'peAssessExpressed'),
+          ])
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, value),
+              child: Text(l.text(labelKey)),
+            ),
+        ],
+      );
+    },
   );
 
   Future<void> _openSpeakingL1Check() async {
@@ -1632,9 +1685,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     final profile = await service.learnerProfile();
     final l1 = profile.l1Language;
     if (l1 == null || l1.trim().isEmpty) {
-      playerController.setStatus(
-        'Set your L1 language before using the meaning check.',
-      );
+      playerController.setStatus(l.text('statusSetL1First'));
       return;
     }
     final source = ReadingTaskSource(
@@ -1813,6 +1864,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (currentMediaId != null) {
       unawaited(api?.saveProgress(currentMediaId, currentPosition));
     }
+    playerController.removeListener(_surfaceErrorStatus);
     _workbenchAnimController.dispose();
     downloadController.dispose();
     unawaited(_saveSettings());

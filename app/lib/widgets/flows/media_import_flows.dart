@@ -188,6 +188,7 @@ Future<void> openOnlineMediaFlow({
   required ExternalTools tools,
   required void Function() onMediaSwitched,
 }) async {
+  final l = AppLocalizations.of(context);
   final source = await showDialog<OnlineSourceChoice>(
     context: context,
     builder: (context) => const OnlineSourceDialog(),
@@ -203,7 +204,7 @@ Future<void> openOnlineMediaFlow({
     );
     return;
   }
-  playerController.setStatus('Resolving online media...');
+  playerController.setStatus(l.text('statusResolvingOnlineMedia'));
   try {
     final resolved = await tools.resolveOnlineMedia(source.url);
     await adapter.open(resolved);
@@ -216,10 +217,10 @@ Future<void> openOnlineMediaFlow({
     subtitleController.clearSpeechEnhancements();
     subtitleController.setCurrentPrimaryCue(null);
     subtitleController.setCurrentSecondaryCue(null);
-    playerController.setStatus('Playing online media');
+    playerController.setStatus(l.text('statusPlayingOnlineMedia'));
     onMediaSwitched();
   } catch (error) {
-    playerController.setStatus('Online media failed: $error');
+    playerController.setStatus('${l.text('statusOnlineMediaFailed')}: $error', error: true);
   }
 }
 
@@ -250,13 +251,13 @@ Future<void> _downloadOnline({
       onCompleted: (path) =>
           playerController.setStatus('${l.text('downloadComplete')}: $path'),
       onFailed: (error) =>
-          playerController.setStatus('${l.text('downloadFailed')}: $error'),
+          playerController.setStatus('${l.text('downloadFailed')}: $error', error: true),
     );
     playerController.setStatus(l.text('downloadingInBackground'));
   } catch (error) {
     if (context.mounted) {
       downloadController.fail(error.toString());
-      playerController.setStatus('${l.text('downloadFailed')}: $error');
+      playerController.setStatus('${l.text('downloadFailed')}: $error', error: true);
     }
   }
 }
@@ -275,15 +276,15 @@ Future<void> importEmbeddedSubtitleFlow({
       !isMediaPath(path) ||
       playerController.mediaId == null ||
       api == null) {
-    playerController.setStatus('Open a local media file first');
+    playerController.setStatus(l.text('statusOpenLocalMediaFirst'));
     return;
   }
-  playerController.setStatus('Inspecting embedded subtitles...');
+  playerController.setStatus(l.text('statusInspectingEmbedded'));
   try {
     final subtitles = await tools.probeSubtitles(path);
     if (!context.mounted) return;
     if (subtitles.isEmpty) {
-      playerController.setStatus('No embedded subtitles found');
+      playerController.setStatus(l.text('statusNoEmbeddedSubtitles'));
       return;
     }
     final choice = await showDialog<(EmbeddedSubtitle, bool)>(
@@ -321,14 +322,14 @@ Future<void> importEmbeddedSubtitleFlow({
       ),
     );
     if (choice == null) {
-      playerController.setStatus('Embedded subtitle import cancelled');
+      playerController.setStatus(l.text('statusEmbeddedImportCancelled'));
       return;
     }
-    playerController.setStatus('Extracting embedded text subtitle...');
+    playerController.setStatus(l.text('statusExtractingEmbedded'));
     final extracted = await tools.extractTextSubtitle(path, choice.$1);
     await mediaSession.openSubtitlePath(extracted, secondary: choice.$2);
   } catch (error) {
-    playerController.setStatus('Embedded subtitle import failed: $error');
+    playerController.setStatus('${l.text('statusEmbeddedImportFailed')}: $error', error: true);
   }
 }
 

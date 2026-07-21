@@ -41,15 +41,20 @@ class PlaybackActionsCoordinator {
 
   late LocalApi? Function() getApi;
   late bool Function() isMounted;
+  String Function(String key)? text;
+
+  String _t(String key) => text?.call(key) ?? key;
   late Future<void> Function() reloadLearningEntries;
 
   void bind({
     required LocalApi? Function() getApi,
     required bool Function() isMounted,
+    String Function(String key)? text,
     required Future<void> Function() reloadLearningEntries,
   }) {
     this.getApi = getApi;
     this.isMounted = isMounted;
+    this.text = text;
     this.reloadLearningEntries = reloadLearningEntries;
   }
 
@@ -257,11 +262,11 @@ class PlaybackActionsCoordinator {
         value: value,
       );
       if (isMounted()) {
-        player.setStatus('Audio finding feedback saved: $value');
+        player.setStatus(_t('statusAudioFindingFeedbackSaved').replaceAll('{value}', value));
       }
     } catch (error) {
       if (isMounted()) {
-        player.setStatus('Could not save audio finding feedback: $error');
+        player.setStatus('${_t('statusAudioFindingFeedbackFailed')}: $error', error: true);
       }
     }
   }
@@ -277,7 +282,7 @@ class PlaybackActionsCoordinator {
     await File(
       location.path,
     ).writeAsString(const JsonEncoder.withIndent('  ').convert(bundle));
-    player.setStatus('Exported vocabulary assets');
+    player.setStatus(_t('statusVocabularyExported'));
   }
 
   Future<void> importVocabulary() async {
@@ -291,15 +296,13 @@ class PlaybackActionsCoordinator {
             as Map<String, dynamic>;
     await service.importVocabulary(bundle);
     await reloadLearningEntries();
-    player.setStatus('Imported vocabulary assets');
+    player.setStatus(_t('statusVocabularyImported'));
   }
 
   Future<void> archiveCurrentMedia() async {
     final service = getApi();
     if (service == null || player.mediaId == null) return;
     await service.setMediaAvailability(player.mediaId!, 'archived');
-    player.setStatus(
-      'Archived current media record; vocabulary assets preserved',
-    );
+    player.setStatus(_t('statusMediaArchived'));
   }
 }

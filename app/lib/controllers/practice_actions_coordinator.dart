@@ -47,17 +47,22 @@ class PracticeActionsCoordinator {
 
   late LocalApi? Function() getApi;
   late bool Function() isMounted;
+  String Function(String key)? text;
+
+  String _t(String key) => text?.call(key) ?? key;
   late Future<void> Function() refreshDiagnosis;
   late Future<void> Function(Cue? cue) seekCue;
 
   void bind({
     required LocalApi? Function() getApi,
     required bool Function() isMounted,
+    String Function(String key)? text,
     required Future<void> Function() refreshDiagnosis,
     required Future<void> Function(Cue? cue) seekCue,
   }) {
     this.getApi = getApi;
     this.isMounted = isMounted;
+    this.text = text;
     this.refreshDiagnosis = refreshDiagnosis;
     this.seekCue = seekCue;
   }
@@ -165,7 +170,9 @@ class PracticeActionsCoordinator {
     final attempt = practice.attempt;
     if (attempt != null && isMounted()) {
       player.setStatus(
-        'Practice ${attempt.result}; ${attempt.evaluation.summary}',
+        _t('statusPracticeResult')
+            .replaceAll('{result}', attempt.result)
+            .replaceAll('{summary}', attempt.evaluation.summary),
       );
     }
     await refreshDiagnosis();
@@ -317,7 +324,7 @@ class PracticeActionsCoordinator {
     await practice.saveCurrentFailureToReview(getApi());
     if (practice.attempt?.generatedReviewItemIds.isNotEmpty == true &&
         isMounted()) {
-      player.setStatus('Practice failure saved to review');
+      player.setStatus(_t('statusPracticeFailureSaved'));
     }
   }
 

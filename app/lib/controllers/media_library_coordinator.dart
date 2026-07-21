@@ -142,7 +142,7 @@ class MediaLibraryCoordinator {
       trackId: subtitle.primaryTrack?.id ?? entry.primaryTrackId,
     );
     if (started && isMounted()) {
-      player.setStatus('Extensive listening started');
+      player.setStatus(text('statusExtensiveListeningStarted'));
     }
   }
 
@@ -175,7 +175,7 @@ class MediaLibraryCoordinator {
       }
       requestRebuild();
     } catch (error) {
-      player.setStatus('Could not save triage intent: $error');
+      player.setStatus('${text('statusTriageIntentFailed')}: $error', error: true);
     }
   }
 
@@ -194,7 +194,7 @@ class MediaLibraryCoordinator {
       return;
     }
     if (!File(path).existsSync()) {
-      player.setStatus('Recent media is no longer available');
+      player.setStatus(text('statusRecentMediaMissing'), error: true);
       await openMedia();
       return;
     }

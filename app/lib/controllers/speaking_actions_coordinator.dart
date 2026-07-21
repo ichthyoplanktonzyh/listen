@@ -17,6 +17,11 @@ import 'subtitle_controller.dart';
 /// Content-session and audio-focus orchestration around the Speaking tenant.
 /// Durable task rules stay in [SpeakingTaskController].
 class SpeakingActionsCoordinator extends ChangeNotifier {
+  /// Localization seam; falls back to raw keys when unbound (tests).
+  String Function(String key)? text;
+
+  String _t(String key) => text?.call(key) ?? key;
+
   SpeakingActionsCoordinator({
     required this.task,
     required this.player,
@@ -73,7 +78,7 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
     final startMs = subtitle.primaryCursor.mediaStart(first).inMilliseconds;
     final endMs = subtitle.primaryCursor.mediaEnd(last).inMilliseconds;
     if (endMs - startMs < 10000 || endMs - startMs > 60000) {
-      player.setStatus('Speaking needs a 10–60 second transcript segment.');
+      player.setStatus(_t('statusSpeakingSegmentLength'));
       return;
     }
     final source = SpeakingTaskSource(
@@ -251,7 +256,7 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
       );
     }
     if (replyIndex <= 0) {
-      player.setStatus('Role reply needs a preceding dialogue cue.');
+      player.setStatus(_t('statusRoleReplyNeedsDialogue'));
       return;
     }
     final expectedReply = track.cues[replyIndex];

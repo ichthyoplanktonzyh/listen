@@ -15,28 +15,28 @@ void main() {
           cue: '',
           answer: 'would',
           target: 'would',
-          action: '显示听到的词',
+          action: 'Show the word',
         ),
         (
           kind: 'chunk_cloze',
           cue: 'I ____ gone',
           answer: 'I would have gone',
           target: 'would have',
-          action: '对照答案',
+          action: 'Check answer',
         ),
         (
           kind: 'phrase_presence',
           cue: 'would have',
           answer: 'I would have gone',
           target: 'would have',
-          action: '出现',
+          action: 'Present',
         ),
         (
           kind: 'source_sentence_recall',
           cue: '',
           answer: 'I would have gone',
           target: '',
-          action: '显示原句',
+          action: 'Show the sentence',
         ),
       ]) {
     testWidgets('${scenario.kind} exposes its distinct review interaction', (
@@ -118,9 +118,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text(scenario.answer), findsOneWidget);
-      expect(find.text('没听出'), findsOneWidget);
-      expect(find.text('模糊'), findsOneWidget);
-      expect(find.text('听出了'), findsOneWidget);
+      expect(find.text('Missed it'), findsOneWidget);
+      expect(find.text('Fuzzy'), findsOneWidget);
+      expect(find.text('Got it'), findsOneWidget);
     });
   }
 
@@ -201,9 +201,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('开始延迟复述'), findsOneWidget);
-      expect(find.text('显示原句'), findsNothing);
-      await tester.tap(find.text('开始延迟复述'));
+      expect(find.text('Start delayed retelling'), findsOneWidget);
+      expect(find.text('Show the sentence'), findsNothing);
+      await tester.tap(find.text('Start delayed retelling'));
       await tester.pumpAndSettle();
       expect(launched, isTrue);
     },

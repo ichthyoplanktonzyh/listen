@@ -31,6 +31,7 @@ class PlaybackControls extends StatelessWidget {
     required this.primarySubtitleOffset,
     required this.secondarySubtitleOffset,
     required this.status,
+    this.statusIsError = false,
     required this.taskStatuses,
     required this.extensiveListeningActive,
     this.huntingActive = false,
@@ -93,6 +94,9 @@ class PlaybackControls extends StatelessWidget {
   final Duration primarySubtitleOffset;
   final Duration secondarySubtitleOffset;
   final String status;
+
+  /// Error statuses render in the error color with a leading icon.
+  final bool statusIsError;
   final List<UserTaskStatus> taskStatuses;
   final bool extensiveListeningActive;
   final bool huntingActive;
@@ -446,13 +450,35 @@ class PlaybackControls extends StatelessWidget {
                             const SizedBox(width: 8),
                           if (status.isNotEmpty)
                             Flexible(
-                              child: Text(
-                                status,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.end,
-                                style: Theme.of(context).textTheme.labelSmall
-                                    ?.copyWith(color: colors.onSurfaceVariant),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  if (statusIsError) ...[
+                                    Icon(
+                                      Icons.error_outline,
+                                      size: 13,
+                                      color: colors.error,
+                                    ),
+                                    const SizedBox(width: 4),
+                                  ],
+                                  Flexible(
+                                    child: Text(
+                                      status,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.end,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                            color: statusIsError
+                                                ? colors.error
+                                                : colors.onSurfaceVariant,
+                                          ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                         ],

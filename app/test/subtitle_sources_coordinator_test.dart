@@ -91,7 +91,7 @@ void main() {
     expect(w.openedMedia, ['/a/movie.mp4']);
 
     await w.coordinator.handleDrop(['/a/readme.pdf']);
-    expect(w.player.status, 'Unsupported dropped file type');
+    expect(w.player.status, 'statusUnsupportedDrop');
   });
 
   test('handleDrop guards subtitles dropped before media', () async {
@@ -99,7 +99,7 @@ void main() {
 
     await w.coordinator.handleDrop(['/a/subs.srt']);
 
-    expect(w.player.status, 'Drop or open media before subtitles');
+    expect(w.player.status, 'statusDropMediaFirst');
     expect(w.openedSubtitles, isEmpty);
   });
 

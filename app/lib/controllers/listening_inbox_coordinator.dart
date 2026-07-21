@@ -24,13 +24,18 @@ class ListeningInboxCoordinator {
 
   late LocalApi? Function() getApi;
   late bool Function() isMounted;
+  String Function(String key)? text;
+
+  String _t(String key) => text?.call(key) ?? key;
 
   void bind({
     required LocalApi? Function() getApi,
     required bool Function() isMounted,
+    String Function(String key)? text,
   }) {
     this.getApi = getApi;
     this.isMounted = isMounted;
+    this.text = text;
   }
 
   Future<void> captureListeningInbox() async {
@@ -45,7 +50,7 @@ class ListeningInboxCoordinator {
       mediaTimeMs: playbackActions.mediaTimeMs,
     );
     if (captured && isMounted()) {
-      player.setStatus('Marked in Listening Inbox');
+      player.setStatus(_t('statusInboxMarked'));
     }
   }
 
@@ -57,7 +62,7 @@ class ListeningInboxCoordinator {
     final start = item.playbackStartMs;
     final end = item.playbackEndMs;
     if (start == null || end == null) {
-      player.setStatus('No playable range for this Inbox item');
+      player.setStatus(_t('statusInboxNoPlayableRange'), error: true);
       return;
     }
     await playbackActions.loopRange(
@@ -80,18 +85,18 @@ class ListeningInboxCoordinator {
     if (processed == null || !isMounted()) return;
     switch (resolution) {
       case 'review_item':
-        player.setStatus('Listening Inbox item saved to review');
+        player.setStatus(_t('statusInboxSavedToReview'));
       case 'micro_intensive':
         await replayListeningInboxItem(processed);
         if (isMounted()) {
-          player.setStatus('Micro intensive item created');
+          player.setStatus(_t('statusInboxMicroItemCreated'));
         }
       case 'favorite':
-        player.setStatus('Segment saved as favorite');
+        player.setStatus(_t('statusInboxSavedFavorite'));
       case 'dismissed':
-        player.setStatus('Listening Inbox item archived');
+        player.setStatus(_t('statusInboxArchived'));
       default:
-        player.setStatus('Listening Inbox item processed');
+        player.setStatus(_t('statusInboxProcessed'));
     }
   }
 }

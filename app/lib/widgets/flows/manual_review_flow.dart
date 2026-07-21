@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../localization.dart';
+
 import '../../controllers/manual_review_controller.dart';
 import '../../controllers/media_session_coordinator.dart';
 import '../../controllers/player_controller.dart';
@@ -24,6 +26,7 @@ Future<void> openManualReviewFlow({
   required ResourceActionsCoordinator resourceActions,
   required MediaSessionCoordinator mediaSession,
 }) async {
+  final l = AppLocalizations.of(context);
   final service = api;
   final track = subtitleController.primaryTrack;
   if (service == null || track == null) return;
@@ -44,7 +47,7 @@ Future<void> openManualReviewFlow({
     if (errors.isNotEmpty) {
       throw StateError(errors.join('; '));
     }
-    playerController.setStatus('Saving manual review timeline...');
+    playerController.setStatus(l.text('statusManualReviewSaving'));
     statusPristine = false;
     await service.createTrackWordTimeline(trackId, draft.createPayload());
     if (!context.mounted || subtitleController.primaryTrack?.id != trackId) {
@@ -52,12 +55,12 @@ Future<void> openManualReviewFlow({
     }
     await mediaSession.loadSpeechEnhancements(trackId);
     if (context.mounted) {
-      playerController.setStatus('Manual review timeline saved');
+      playerController.setStatus(l.text('statusManualReviewSaved'));
     }
   }
 
   try {
-    playerController.setStatus('Loading manual review timeline...');
+    playerController.setStatus(l.text('statusManualReviewLoading'));
     statusPristine = true;
     await resourceActions.loadTimelineResource(track.id);
     final active = subtitleController.wordTimelineSummaries
@@ -68,7 +71,7 @@ Future<void> openManualReviewFlow({
         subtitleController.llTimelineDocument?.activeWordTimelineId;
     if (activeTimelineId == null) {
       if (context.mounted) {
-        playerController.setStatus('No active WordTimeline to review');
+        playerController.setStatus(l.text('statusManualReviewNoTimeline'));
       }
       return;
     }
@@ -76,7 +79,7 @@ Future<void> openManualReviewFlow({
     final initialCue = _initialCue(subtitleController, track, timeline);
     if (initialCue == null) {
       if (context.mounted) {
-        playerController.setStatus('No sentence words to review');
+        playerController.setStatus(l.text('statusManualReviewNoWords'));
       }
       return;
     }
@@ -102,11 +105,11 @@ Future<void> openManualReviewFlow({
       playerController.setSourceLoop(previousLoopStart, previousLoopEnd);
     }
     if (context.mounted && statusPristine) {
-      playerController.setStatus('Manual review closed');
+      playerController.setStatus(l.text('statusManualReviewClosed'));
     }
   } catch (error) {
     if (context.mounted) {
-      playerController.setStatus('Manual review failed: $error');
+      playerController.setStatus('${l.text('statusManualReviewFailed')}: $error', error: true);
     }
   }
 }

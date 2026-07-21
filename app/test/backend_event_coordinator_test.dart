@@ -175,7 +175,7 @@ void main() {
         expect(recorder.generatedTracks, isEmpty);
         expect(
           recorder.statuses.single,
-          contains('Generated subtitle unavailable'),
+          contains('statusGeneratedSubtitleUnavailable'),
         );
       },
     );
@@ -194,7 +194,7 @@ void main() {
         });
         await pumpEventQueue();
 
-        expect(recorder.statuses, ['ASR running · 42%']);
+        expect(recorder.statuses, ['statusAsrProgress']);
         expect(
           recorder.taskStatuses.single.kind,
           UserTaskKind.subtitleGeneration,
@@ -237,7 +237,7 @@ void main() {
         await pumpEventQueue();
 
         expect(recorder.loadedSpeechEnhancements, ['track-1']);
-        expect(recorder.statuses, ['Audio analysis completed · 100%']);
+        expect(recorder.statuses, ['statusAudioAnalysisProgress']);
         expect(recorder.taskStatuses.single.kind, UserTaskKind.audioAnalysis);
         expect(recorder.taskStatuses.single.state, UserTaskState.success);
       },
@@ -297,7 +297,7 @@ void main() {
       await pumpEventQueue();
 
       expect(recorder.loadedSpeechEnhancements, ['track-1']);
-      expect(recorder.statuses, ['Sound line ready']);
+      expect(recorder.statuses, ['statusSoundLineReady']);
     });
 
     test('sound line for a non-primary track is ignored', () async {

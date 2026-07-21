@@ -97,7 +97,7 @@ Future<void> generateSubtitlesFlow({
 }) async {
   final l = AppLocalizations.of(context);
   if (api == null || playerController.mediaId == null) {
-    playerController.setStatus('Open media and connect the local core first');
+    playerController.setStatus(l.text('statusOpenMediaAndCoreFirst'));
     return;
   }
   final created = await showGenerateSubtitles(

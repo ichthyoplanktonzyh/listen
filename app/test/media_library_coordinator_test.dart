@@ -186,7 +186,7 @@ void main() {
 
     await w.coordinator.setLibraryTriageIntent(_libraryEntry(), 'defer');
 
-    expect(w.player.status, startsWith('Could not save triage intent:'));
+    expect(w.player.status, startsWith('statusTriageIntentFailed:'));
   });
 
   test('continueRecentMedia falls back to the picker without a path', () async {

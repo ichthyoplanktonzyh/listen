@@ -130,6 +130,7 @@ Future<void> openPhraseFlow({
   required PhraseCandidate candidate,
   required Cue cue,
 }) async {
+  final l = AppLocalizations.of(context);
   if (api == null || playerController.mediaFingerprint == null) return;
   final canonical = candidate.canonicalForm;
   final details = await showPhraseCandidate(
@@ -152,7 +153,7 @@ Future<void> openPhraseFlow({
   );
   if (details != null && context.mounted) {
     learningController.updateSinglePhraseEntry(canonical, details);
-    playerController.setStatus('Saved phrase "${candidate.displayForm}"');
+    playerController.setStatus(l.text('statusPhraseSaved').replaceAll('{phrase}', candidate.displayForm));
   }
 }
 
@@ -415,5 +416,5 @@ Future<void> importWordListFlow({
     overwriteExisting: overwrite,
   );
   await reloadWordEntries();
-  playerController.setStatus('Imported word list: $result');
+  playerController.setStatus(l.text('statusWordListImported').replaceAll('{result}', '$result'));
 }

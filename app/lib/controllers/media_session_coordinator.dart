@@ -96,7 +96,7 @@ class MediaSessionCoordinator {
         ? Future<void>.value()
         : api?.saveProgress(previousMediaId, previousPosition) ??
               Future<void>.value();
-    player.setStatus('Opening ${path.split(Platform.pathSeparator).last}');
+    player.setStatus(text('statusOpeningFile').replaceAll('{name}', path.split(Platform.pathSeparator).last));
     onMediaSwitched();
     player.clearMedia();
     player.setMediaPath(path);
@@ -113,7 +113,7 @@ class MediaSessionCoordinator {
     try {
       await adapter.open(path, play: false);
     } catch (error) {
-      if (isMounted()) player.setStatus('Playback failed: $error');
+      if (isMounted()) player.setStatus('${text('statusPlaybackFailed')}: $error', error: true);
       return;
     }
     Object? coreError;
@@ -143,12 +143,12 @@ class MediaSessionCoordinator {
       if (isMounted()) {
         player.setStatus(
           coreError == null
-              ? 'Playing ${path.split(Platform.pathSeparator).last}'
+              ? text('statusPlayingFile').replaceAll('{name}', path.split(Platform.pathSeparator).last)
               : 'Playing locally; core unavailable: $coreError',
         );
       }
     } catch (error) {
-      if (isMounted()) player.setStatus('Playback failed: $error');
+      if (isMounted()) player.setStatus('${text('statusPlaybackFailed')}: $error', error: true);
     }
   }
 
@@ -156,7 +156,7 @@ class MediaSessionCoordinator {
 
   Future<void> openSubtitle({required bool secondary}) async {
     if (player.mediaId == null || getApi() == null) {
-      player.setStatus('Open media and connect the local core first');
+      player.setStatus(text('statusOpenMediaAndCoreFirst'));
       return;
     }
     const group = XTypeGroup(label: 'subtitles', extensions: ['srt', 'vtt']);
@@ -175,8 +175,9 @@ class MediaSessionCoordinator {
           subtitle.secondaryCursor.current(player.position),
         );
         player.setStatus(
-          'Loaded secondary subtitle: '
-          '${path.split(Platform.pathSeparator).last}',
+          text(
+            'statusSecondarySubtitleLoaded',
+          ).replaceAll('{name}', path.split(Platform.pathSeparator).last),
         );
       } else {
         await usePrimarySubtitleTrack(
@@ -188,7 +189,7 @@ class MediaSessionCoordinator {
       }
       await resourceActions.loadSubtitleResources(updateStatus: false);
     } catch (error) {
-      player.setStatus('Subtitle import failed: $error');
+      player.setStatus('${text('statusSubtitleImportFailed')}: $error', error: true);
     }
   }
 
@@ -198,14 +199,14 @@ class MediaSessionCoordinator {
     final service = getApi();
     final mediaId = player.mediaId;
     if (service == null || mediaId == null) {
-      player.setStatus('Open media and connect the local core first');
+      player.setStatus(text('statusOpenMediaAndCoreFirst'));
       return;
     }
     const group = XTypeGroup(label: 'LLTimeline', extensions: ['json']);
     final file = await openFile(acceptedTypeGroups: [group]);
     if (file == null) return;
     try {
-      player.setStatus('Importing LLTimeline resource...');
+      player.setStatus(text('statusImportingLLTimeline'));
       final decoded = jsonDecode(await File(file.path).readAsString());
       if (decoded is! Map<String, dynamic>) {
         throw const FormatException('LLTimeline JSON must be an object');
@@ -221,7 +222,7 @@ class MediaSessionCoordinator {
           currentFingerprint: currentFingerprint,
         );
         if (!allowMismatch) {
-          if (isMounted()) player.setStatus('LLTimeline import cancelled');
+          if (isMounted()) player.setStatus(text('statusLLTimelineImportCancelled'));
           return;
         }
       }
@@ -246,7 +247,7 @@ class MediaSessionCoordinator {
       await resourceActions.loadSubtitleResources(updateStatus: false);
       learning.selectSidePanel(1);
     } catch (error) {
-      player.setStatus('LLTimeline import failed: $error');
+      player.setStatus('${text('statusLLTimelineImportFailed')}: $error', error: true);
     }
   }
 
@@ -353,8 +354,9 @@ class MediaSessionCoordinator {
     );
     if (result.errors.isNotEmpty && isMounted()) {
       player.setStatus(
-        'Speech enhancements partially unavailable: '
+        '${text('statusSpeechEnhancementsPartial')}: '
         '${result.errors.join('; ')}',
+        error: true,
       );
     }
     return result;

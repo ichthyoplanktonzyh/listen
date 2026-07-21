@@ -14,6 +14,7 @@ class PlayerState {
     this.mediaTitle,
     this.mediaFingerprint,
     this.status = 'Starting local core...',
+    this.statusIsError = false,
     this.duration = Duration.zero,
     this.playing = false,
     this.muted = false,
@@ -33,6 +34,10 @@ class PlayerState {
   final String? mediaTitle;
   final String? mediaFingerprint;
   final String status;
+
+  /// Whether [status] describes a failure. Error statuses get error styling
+  /// in the status line and are surfaced once via SnackBar.
+  final bool statusIsError;
   final Duration duration;
   final bool playing;
   final bool muted;
@@ -52,6 +57,7 @@ class PlayerState {
     Object? mediaTitle = _unset,
     Object? mediaFingerprint = _unset,
     String? status,
+    bool? statusIsError,
     Duration? duration,
     bool? playing,
     bool? muted,
@@ -76,6 +82,7 @@ class PlayerState {
         ? this.mediaFingerprint
         : mediaFingerprint as String?,
     status: status ?? this.status,
+    statusIsError: statusIsError ?? this.statusIsError,
     duration: duration ?? this.duration,
     playing: playing ?? this.playing,
     muted: muted ?? this.muted,
@@ -133,6 +140,7 @@ class PlayerController extends ChangeNotifier {
   String? get mediaTitle => _store.state.mediaTitle;
   String? get mediaFingerprint => _store.state.mediaFingerprint;
   String get status => _store.state.status;
+  bool get statusIsError => _store.state.statusIsError;
   bool get playing => _store.state.playing;
   bool get muted => _store.state.muted;
   Duration get position => _position.value;
@@ -198,8 +206,11 @@ class PlayerController extends ChangeNotifier {
   void setVolume(double volume) =>
       _store.update((s) => s.copyWith(volume: volume));
 
-  void setStatus(String status) =>
-      _store.update((s) => s.copyWith(status: status));
+  /// Publish a status-line message. Pass [error] for failures so the UI can
+  /// style the line and surface a SnackBar; plain progress updates clear the
+  /// error flag.
+  void setStatus(String status, {bool error = false}) =>
+      _store.update((s) => s.copyWith(status: status, statusIsError: error));
 
   void setAudioTracks(List<PlayerTrack> tracks) =>
       _store.update((s) => s.copyWith(audioTracks: tracks));

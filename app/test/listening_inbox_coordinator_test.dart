@@ -80,7 +80,7 @@ void main() {
         'review_item',
       );
 
-      expect(w.player.status, 'Listening Inbox item saved to review');
+      expect(w.player.status, 'statusInboxSavedToReview');
     },
   );
 
@@ -91,7 +91,7 @@ void main() {
 
       await w.coordinator.replayListeningInboxItem(_inboxItem());
 
-      expect(w.player.status, 'No playable range for this Inbox item');
+      expect(w.player.status, 'statusInboxNoPlayableRange');
     },
   );
 

@@ -24,6 +24,9 @@ class SubtitleSourcesCoordinator {
 
   late LocalApi? Function() getApi;
   late bool Function() isMounted;
+  String Function(String key)? text;
+
+  String _t(String key) => text?.call(key) ?? key;
   late void Function(String message) showSnackBar;
   late void Function(UserTaskStatus value) setTaskStatus;
   late Future<void> Function(String path) openMediaPath;
@@ -33,6 +36,7 @@ class SubtitleSourcesCoordinator {
   void bind({
     required LocalApi? Function() getApi,
     required bool Function() isMounted,
+    String Function(String key)? text,
     required void Function(String message) showSnackBar,
     required void Function(UserTaskStatus value) setTaskStatus,
     required Future<void> Function(String path) openMediaPath,
@@ -41,6 +45,7 @@ class SubtitleSourcesCoordinator {
   }) {
     this.getApi = getApi;
     this.isMounted = isMounted;
+    this.text = text;
     this.showSnackBar = showSnackBar;
     this.setTaskStatus = setTaskStatus;
     this.openMediaPath = openMediaPath;
@@ -158,13 +163,13 @@ class SubtitleSourcesCoordinator {
     if (media.isNotEmpty) await openMediaPath(media.first);
     for (final path in subtitles) {
       if (player.mediaId == null || getApi() == null) {
-        player.setStatus('Drop or open media before subtitles');
+        player.setStatus(_t('statusDropMediaFirst'));
         return;
       }
       await openSubtitlePath(path, secondary: subtitle.primaryTrack != null);
     }
     if (media.isEmpty && subtitles.isEmpty) {
-      player.setStatus('Unsupported dropped file type');
+      player.setStatus(_t('statusUnsupportedDrop'), error: true);
     }
   }
 

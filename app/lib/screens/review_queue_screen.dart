@@ -48,14 +48,20 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('声音复习'),
+      title: Text(AppLocalizations.of(context).text('reviewTitle')),
       actions: [
         StoreBuilder<ReviewState, int>(
           store: controller.store,
           select: (state) => state.remaining,
           builder: (context, remaining) => Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18),
-            child: Center(child: Text('到期 $remaining')),
+            child: Center(
+              child: Text(
+                AppLocalizations.of(
+                  context,
+                ).text('reviewDueCount').replaceAll('{count}', '$remaining'),
+              ),
+            ),
           ),
         ),
       ],
@@ -159,6 +165,8 @@ class _ReviewCard extends StatefulWidget {
 
 class _ReviewCardState extends State<_ReviewCard> {
   final _clozeController = TextEditingController();
+
+  AppLocalizations get l => AppLocalizations.of(context);
   String? _presenceChoice;
   bool _playing = false;
 
@@ -196,20 +204,25 @@ class _ReviewCardState extends State<_ReviewCard> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          _kindLabel(card.kind),
+                          _kindLabel(l, card.kind),
                           style: Theme.of(context).textTheme.labelLarge,
                         ),
                       ),
                       Text(
                         widget.entry.schedule.lapseCount == 0
-                            ? '新卡'
-                            : '重学 ${widget.entry.schedule.lapseCount}',
+                            ? l.text('reviewNewCard')
+                            : l
+                                  .text('reviewRelearnCount')
+                                  .replaceAll(
+                                    '{count}',
+                                    '${widget.entry.schedule.lapseCount}',
+                                  ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    _instruction(card.kind),
+                    _instruction(l, card.kind),
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 32),
@@ -225,9 +238,9 @@ class _ReviewCardState extends State<_ReviewCard> {
                     label: Text(
                       playable
                           ? _playing
-                                ? '暂停声音片段'
-                                : '播放声音片段'
-                          : '原媒体不可播放，使用文字快照',
+                                ? l.text('reviewPauseClip')
+                                : l.text('reviewPlayClip')
+                          : l.text('reviewClipUnavailable'),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -241,7 +254,9 @@ class _ReviewCardState extends State<_ReviewCard> {
                           : Icons.mic_none,
                     ),
                     label: Text(
-                      card.kind == 'delayed_retelling' ? '开始延迟复述' : '跟一下这个片段',
+                      card.kind == 'delayed_retelling'
+                          ? l.text('reviewStartDelayedRetelling')
+                          : l.text('reviewShadowClip'),
                     ),
                   ),
                   const SizedBox(height: 26),
@@ -291,23 +306,26 @@ class _ReviewCardState extends State<_ReviewCard> {
             controller: _clozeController,
             enabled: !widget.busy,
             textInputAction: TextInputAction.done,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              labelText: '填入听到的语块',
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              labelText: l.text('reviewClozeFieldLabel'),
             ),
             onSubmitted: (_) => widget.busy ? null : widget.onReveal(),
           ),
           const SizedBox(height: 12),
           OutlinedButton(
             onPressed: widget.busy ? null : widget.onReveal,
-            child: const Text('对照答案'),
+            child: Text(l.text('reviewCheckAnswer')),
           ),
         ],
       ),
       'phrase_presence' => Column(
         key: const ValueKey('phrase-presence-prompt'),
         children: [
-          Text('目标短语', style: Theme.of(context).textTheme.labelLarge),
+          Text(
+            l.text('reviewTargetPhrase'),
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
           const SizedBox(height: 8),
           Text(
             card.cue ?? card.target ?? '',
@@ -319,15 +337,19 @@ class _ReviewCardState extends State<_ReviewCard> {
             children: [
               Expanded(
                 child: FilledButton.tonal(
-                  onPressed: widget.busy ? null : () => _choosePresence('出现'),
-                  child: const Text('出现'),
+                  onPressed: widget.busy
+                      ? null
+                      : () => _choosePresence('present'),
+                  child: Text(l.text('reviewPresencePresent')),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: OutlinedButton(
-                  onPressed: widget.busy ? null : () => _choosePresence('没出现'),
-                  child: const Text('没出现'),
+                  onPressed: widget.busy
+                      ? null
+                      : () => _choosePresence('absent'),
+                  child: Text(l.text('reviewPresenceAbsent')),
                 ),
               ),
             ],
@@ -337,13 +359,13 @@ class _ReviewCardState extends State<_ReviewCard> {
       'word_recognition' => OutlinedButton(
         key: const ValueKey('word-recognition-prompt'),
         onPressed: widget.busy ? null : widget.onReveal,
-        child: const Text('显示听到的词'),
+        child: Text(l.text('reviewShowHeardWord')),
       ),
       'delayed_retelling' => const SizedBox.shrink(),
       _ => OutlinedButton(
         key: const ValueKey('source-sentence-prompt'),
         onPressed: widget.busy ? null : widget.onReveal,
-        child: const Text('显示原句'),
+        child: Text(l.text('reviewShowSourceSentence')),
       ),
     };
   }
@@ -356,16 +378,34 @@ class _ReviewCardState extends State<_ReviewCard> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (card.kind == 'chunk_cloze' && typed.isNotEmpty) ...[
-          Text('你的填写：$typed', textAlign: TextAlign.center),
+          Text(
+            l.text('reviewYourTyped').replaceAll('{typed}', typed),
+            textAlign: TextAlign.center,
+          ),
           const SizedBox(height: 10),
         ],
         if (card.kind == 'phrase_presence' && _presenceChoice != null) ...[
-          Text('你的判断：$_presenceChoice · 答案：出现', textAlign: TextAlign.center),
+          Text(
+            l
+                .text('reviewPresenceJudgement')
+                .replaceAll(
+                  '{choice}',
+                  l.text(
+                    _presenceChoice == 'present'
+                        ? 'reviewPresencePresent'
+                        : 'reviewPresenceAbsent',
+                  ),
+                )
+                .replaceAll('{answer}', l.text('reviewPresencePresent')),
+            textAlign: TextAlign.center,
+          ),
           const SizedBox(height: 10),
         ],
         if (card.target != null && card.kind == 'chunk_cloze') ...[
           Text(
-            '目标语块：${card.target}',
+            l
+                .text('reviewTargetChunk')
+                .replaceAll('{target}', '${card.target}'),
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.titleMedium,
           ),
@@ -382,21 +422,21 @@ class _ReviewCardState extends State<_ReviewCard> {
             Expanded(
               child: OutlinedButton(
                 onPressed: widget.busy ? null : () => widget.onRate('again'),
-                child: const Text('没听出'),
+                child: Text(l.text('reviewGradeMissed')),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: OutlinedButton(
                 onPressed: widget.busy ? null : () => widget.onRate('hard'),
-                child: const Text('模糊'),
+                child: Text(l.text('reviewGradeFuzzy')),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: FilledButton(
                 onPressed: widget.busy ? null : () => widget.onRate('good'),
-                child: const Text('听出了'),
+                child: Text(l.text('reviewGradeGot')),
               ),
             ),
           ],
@@ -410,23 +450,25 @@ class _ReviewCardState extends State<_ReviewCard> {
     widget.onReveal();
   }
 
-  static String _kindLabel(String kind) => switch (kind) {
-    'word_recognition' => '听音识词',
-    'chunk_cloze' => '语块填空',
-    'phrase_presence' => '短语判断',
-    'source_sentence_recall' => '原句回听',
-    'delayed_retelling' => '延迟复述',
-    _ => '声音卡',
-  };
+  static String _kindLabel(AppLocalizations l, String kind) =>
+      l.text(switch (kind) {
+        'word_recognition' => 'reviewKindWordRecognition',
+        'chunk_cloze' => 'reviewKindChunkCloze',
+        'phrase_presence' => 'reviewKindPhrasePresence',
+        'source_sentence_recall' => 'reviewKindSourceRecall',
+        'delayed_retelling' => 'reviewKindDelayedRetelling',
+        _ => 'reviewKindGeneric',
+      });
 
-  static String _instruction(String kind) => switch (kind) {
-    'word_recognition' => '只听声音，先回忆你听到的是哪个词。',
-    'chunk_cloze' => '听完整语块，把空白处补出来。',
-    'phrase_presence' => '听原句，判断目标短语是否真的出现。',
-    'source_sentence_recall' => '回听原句，先复述意思或原文，再翻面对照。',
-    'delayed_retelling' => '回听来源后进入口语场景；原文保持隐藏。',
-    _ => '先听声音，再翻面对照。',
-  };
+  static String _instruction(AppLocalizations l, String kind) =>
+      l.text(switch (kind) {
+        'word_recognition' => 'reviewHintWordRecognition',
+        'chunk_cloze' => 'reviewHintChunkCloze',
+        'phrase_presence' => 'reviewHintPhrasePresence',
+        'source_sentence_recall' => 'reviewHintSourceRecall',
+        'delayed_retelling' => 'reviewHintDelayedRetelling',
+        _ => 'reviewHintGeneric',
+      });
 
   static IconData _kindIcon(String kind) => switch (kind) {
     'word_recognition' => Icons.hearing_outlined,
@@ -450,91 +492,99 @@ class _Finished extends StatelessWidget {
   final Future<bool> Function(String id, bool confirm) onResolve;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: SingleChildScrollView(
-      padding: const EdgeInsets.all(28),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            state.error == null
-                ? Icons.check_circle_outline
-                : Icons.error_outline,
-            size: 52,
-          ),
-          const SizedBox(height: 14),
-          Text(
-            state.error ??
-                (state.completedCount == 0
-                    ? '现在没有到期声音卡'
-                    : '本轮完成 ${state.completedCount} 张'),
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 8),
-          if (state.error == null)
-            const Text('到期数量只是信息，不是欠账。')
-          else
-            TextButton(onPressed: onRetry, child: const Text('重试')),
-          if (state.upgradeSuggestions.isNotEmpty) ...[
-            const SizedBox(height: 28),
-            Text('识别状态建议', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 10),
-            for (final suggestion in state.upgradeSuggestions)
-              Card(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 560),
-                  child: Padding(
-                    padding: const EdgeInsets.all(18),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          AppLocalizations.of(context)
-                              .text('listeningUpgradeSuggestion')
-                              .replaceAll(
-                                '{count}',
-                                '${suggestion.evidenceContextCount}',
-                              )
-                              .replaceAll(
-                                '{word}',
-                                suggestion.lexicalDisplayForm,
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              state.error == null
+                  ? Icons.check_circle_outline
+                  : Icons.error_outline,
+              size: 52,
+            ),
+            const SizedBox(height: 14),
+            Text(
+              state.error ??
+                  (state.completedCount == 0
+                      ? l.text('reviewNoDueCards')
+                      : l
+                            .text('reviewRoundCompleted')
+                            .replaceAll('{count}', '${state.completedCount}')),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            if (state.error == null)
+              Text(l.text('reviewDueInfoNote'))
+            else
+              TextButton(onPressed: onRetry, child: Text(l.text('retry'))),
+            if (state.upgradeSuggestions.isNotEmpty) ...[
+              const SizedBox(height: 28),
+              Text(
+                l.text('reviewStatusSuggestions'),
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 10),
+              for (final suggestion in state.upgradeSuggestions)
+                Card(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 560),
+                    child: Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            AppLocalizations.of(context)
+                                .text('listeningUpgradeSuggestion')
+                                .replaceAll(
+                                  '{count}',
+                                  '${suggestion.evidenceContextCount}',
+                                )
+                                .replaceAll(
+                                  '{word}',
+                                  suggestion.lexicalDisplayForm,
+                                ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton(
+                                onPressed: state.busy
+                                    ? null
+                                    : () => onResolve(suggestion.id, false),
+                                child: Text(
+                                  AppLocalizations.of(
+                                    context,
+                                  ).text('deferUpgrade'),
+                                ),
                               ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            TextButton(
-                              onPressed: state.busy
-                                  ? null
-                                  : () => onResolve(suggestion.id, false),
-                              child: Text(
-                                AppLocalizations.of(
-                                  context,
-                                ).text('deferUpgrade'),
+                              const SizedBox(width: 8),
+                              FilledButton(
+                                onPressed: state.busy
+                                    ? null
+                                    : () => onResolve(suggestion.id, true),
+                                child: Text(
+                                  AppLocalizations.of(
+                                    context,
+                                  ).text('confirmListeningAcquired'),
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            FilledButton(
-                              onPressed: state.busy
-                                  ? null
-                                  : () => onResolve(suggestion.id, true),
-                              child: Text(
-                                AppLocalizations.of(
-                                  context,
-                                ).text('confirmListeningAcquired'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
+            ],
           ],
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
