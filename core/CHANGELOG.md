@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- 2026-07-21: 口语通道页面态提出为 `SpeakingChannelCoordinator` + `SpeakingChannelHost`
+  （#15 第三刀，refs #12）。这一刀与前两刀的差别是：会话与音频焦点规则本就在
+  `SpeakingActionsCoordinator` 里，留在组合根的是它上面一层的**页面态**——L1 理解检查
+  （`_speakingL1CheckSource/_speakingL1PlayCount`）、实时会话开关（`_realtimeConversationOpen`）、
+  以及会话所服务的个人表达 pattern（`_activePersonalPattern`）。新协调器持有
+  `SpeakingActionsCoordinator` 而不是取代它，`isOpen` 直接转发。
+  `_closeSpeakingSurface` 里纠缠的三件事按依赖方向拆开：自评弹窗、回评审队列、回个人表达页
+  都是组合根拥有的 dialog/flow，改为 `askPersonalExpressionAssessment`/`onReturnToReview`/
+  `onReturnToPersonalExpression` 三个 bind seam，协调器只决定"何时该问、该回哪里"；
+  3.17 handoff 事实的落库逻辑本身留在协调器。`_speakingTargetCandidates` 与
+  `_containsSpeakingTarget`（词边界匹配、非 ASCII 走子串）是纯函数，整体搬入。
+  两处等价化的守卫内置：`closeL1Check()`/`closeRealtimeConversation()` 自带"未打开则不动"
+  短路，因此三个调用点（`_selectContentChannel`、`onMediaSwitched`、写作通道的
+  `closeOtherChannels`）不再各自写 `if (xxx != null)`。`speakingChannel` **不需要**进组合根的
+  聚合 merge——`selectedChannel` 与 `immersiveStage` 的分支条件都是 `speakingActions.isOpen`
+  （已在 merge 里），三向子分支整个在 host 内部。新增
+  `test/speaking_channel_coordinator_test.dart`（9 项）覆盖候选目标的词边界/非 ASCII/
+  ASR 不可靠三条规则、实时会话与 L1 检查的开启前置条件、以及关闭表面时"未完成的个人表达
+  会话不落库"。`main.dart` 2231 → 2039 行。全量测试 502 项绿。
+
 - 2026-07-21: 写作通道提出为 `WritingChannelCoordinator` + `WritingChannelHost`（#15 第二刀，
   refs #12）。新增 `controllers/writing_channel_coordinator.dart`（3 个页面态字段
   `studioSource/kind/playCount` + `openTask/close/speakText/playSource`）与
