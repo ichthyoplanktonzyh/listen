@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- 2026-07-21: 删除 AppBar「短语候选」入口——同一功能的劣化第二套（#16 第三刀，refs #12）。
+  短语候选早就有一条更好的上下文入口：`TokenLine` 把候选内联渲染成字幕行上的可点击下划线
+  胶囊（`PhraseUnderlineSpan`，带 tooltip 与状态色），点击直接走 `openPhraseFlow` 存进
+  词汇本，候选还随 cue 自动刷新（`MediaSessionCoordinator` / 组合根各一处 `loadPhraseCandidates`）。
+  AppBar 那一项打开的是同一批数据的候选列表对话框，而且**无当前 cue 时是裸 `return`
+  静默失败**——用户在首页点它不会有任何反馈。
+  连带删除只被它引用的死代码：`showCurrentPhraseCandidatesFlow`、`showPhraseCandidates`
+  （**复数**，候选列表对话框，~90 行）、组合根的 `_showCurrentPhraseCandidates`，
+  以及随之变孤儿的 l10n key `phraseCandidates` / `noPhraseCandidates`（en/zh 各一）。
+  活路径全部保留并已由测试守住：`LearningState.phraseCandidates`、`loadPhraseCandidates`、
+  `TokenLine` 胶囊渲染（`learning_assets_ui_test.dart` 覆盖点击派发）、
+  `showPhraseCandidate`（**单数**，短语详情弹窗，仍用 `phraseCandidatesHint` /
+  `confirmPhrase`）、`openPhraseFlow`。必填回调 24 → 23。
+  analyze 零告警，全量测试 510 项绿。
+
 - 2026-07-21: 删除 AppBar 死参数 `onSearchOpenSubtitles` 及其身后的不可达分支
   （#16 第二刀，refs #12）。`PlayerAppBar.onSelected` 里有
   `if (value == 'opensubtitles')`，但 `itemBuilder` 里**没有任何 value 为
