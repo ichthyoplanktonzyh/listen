@@ -30,6 +30,7 @@ import 'controllers/playback_actions_coordinator.dart';
 import 'controllers/player_controller.dart';
 import 'controllers/practice_actions_coordinator.dart';
 import 'controllers/practice_controller.dart';
+import 'controllers/content_channel_coordinator.dart';
 import 'controllers/reading_channel_coordinator.dart';
 import 'controllers/reading_controller.dart';
 import 'controllers/reading_diff_controller.dart';
@@ -48,6 +49,7 @@ import 'controllers/vocabulary_actions_coordinator.dart';
 import 'controllers/settings_controller.dart';
 import 'controllers/slice_player_controller.dart';
 import 'models/capability_readiness.dart';
+import 'models/content_channel.dart';
 import 'models/practice.dart';
 import 'models/personal_expression.dart';
 import 'models/task_status.dart';
@@ -257,6 +259,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     learning: learningController,
     player: playerController,
   );
+  late final contentChannels = ContentChannelCoordinator(
+    reading: readingChannel,
+    speaking: speakingChannel,
+    speakingActions: speakingActions,
+    writing: writingChannel,
+  );
 
   // ── Local UI state (not managed by controllers) ──
   String get status => playerController.status;
@@ -406,6 +414,20 @@ class _PlayerScreenState extends State<PlayerScreen>
       isMounted: () => mounted,
       openSlicePlayback: _openSlicePlayback,
       openWord: vocabularyActions.openWord,
+    );
+    contentChannels.bind(
+      getApi: () => api,
+      speakingAvailable: () => Platform.isMacOS,
+      openSpeaking: (service) => speakingActions.openRetelling(
+        service,
+        fixedRubricPoints: listeningRetellTemplate(l),
+        closeReading: readingChannel.close,
+      ),
+      openWriting: () => writingChannel.openTask(
+        writingChannel.kind,
+        promptSnapshot: writingPrompt(l, writingChannel.kind),
+        fixedRubricPoints: writingTaskTemplate(l),
+      ),
     );
     speakingChannel.text = (key) => l.text(key);
     speakingChannel.bind(
@@ -999,43 +1021,6 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _closeSlicePlayback() => slicePlayerController.close();
 
-  Future<void> _selectContentChannel(ContentChannel channel) async {
-    if (channel != ContentChannel.speaking) {
-      await speakingChannel.closeRealtimeConversation();
-    }
-    switch (channel) {
-      case ContentChannel.listening:
-        if (writingChannel.isOpen) await writingChannel.close();
-        speakingChannel.closeL1Check();
-        if (speakingActions.isOpen) await speakingActions.close(api);
-        await readingChannel.close();
-        return;
-      case ContentChannel.reading:
-        if (writingChannel.isOpen) await writingChannel.close();
-        speakingChannel.closeL1Check();
-        if (speakingActions.isOpen) await speakingActions.close(api);
-        await readingChannel.open();
-        return;
-      case ContentChannel.speaking:
-        if (writingChannel.isOpen) await writingChannel.close();
-        final service = api;
-        if (service == null || !Platform.isMacOS) return;
-        await speakingActions.openRetelling(
-          service,
-          fixedRubricPoints: listeningRetellTemplate(l),
-          closeReading: readingChannel.close,
-        );
-        return;
-      case ContentChannel.writing:
-        await writingChannel.openTask(
-          writingChannel.kind,
-          promptSnapshot: writingPrompt(l, writingChannel.kind),
-          fixedRubricPoints: writingTaskTemplate(l),
-        );
-        return;
-    }
-  }
-
   /// Explicit reading mark on the selected word (Slice 5). Assistance is the
   /// honest translation visibility at marking time; one act, one
   /// reading-channel observation, nothing else.
@@ -1517,13 +1502,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         huntingController,
         huntingSessionController,
         slicePlayerController,
-        readingController,
-        // The writing channel drives the root's channel selection, so its
-        // notifications have to reach this build (the host's own
-        // ListenableBuilder only covers the studio subtree).
-        writingChannel,
-        speakingTaskController,
-        speakingActions,
+        // One handle for "which content channel is on the stage"; each
+        // channel's own page state stays inside its host.
+        contentChannels.selection,
         settingsController,
         downloadController,
       ]),
@@ -1720,13 +1701,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                                       .last,
                                   playerStage: _playerStage(),
                                   learningPanel: _sidePanel(),
-                                  selectedChannel: writingChannel.isOpen
-                                      ? ContentChannel.writing
-                                      : speakingActions.isOpen
-                                      ? ContentChannel.speaking
-                                      : readingController.isOpen
-                                      ? ContentChannel.reading
-                                      : ContentChannel.listening,
+                                  selectedChannel: contentChannels.selected,
                                   channelAvailability: {
                                     ContentChannel.listening:
                                         const ContentChannelAvailability.available(),
@@ -1753,58 +1728,57 @@ class _PlayerScreenState extends State<PlayerScreen>
                                           )
                                         : const ContentChannelAvailability.available(),
                                   },
-                                  onChannelSelected: (channel) =>
-                                      unawaited(_selectContentChannel(channel)),
-                                  immersiveStage: writingChannel.isOpen
-                                      ? WritingChannelHost(
-                                          api: api!,
-                                          writingChannel: writingChannel,
-                                          writingTaskController:
-                                              writingTaskController,
-                                        )
-                                      : speakingActions.isOpen
-                                      ? SpeakingChannelHost(
-                                          api: api!,
-                                          speakingChannel: speakingChannel,
-                                          speakingActions: speakingActions,
-                                          speakingTaskController:
-                                              speakingTaskController,
-                                          readingTaskController:
-                                              readingTaskController,
-                                          realtimeConversationController:
-                                              realtimeConversationController,
-                                        )
-                                      : readingController.isOpen
-                                      ? ReadingChannelHost(
-                                          api: api!,
-                                          readingChannel: readingChannel,
-                                          readingController: readingController,
-                                          readingTaskController:
-                                              readingTaskController,
-                                          readingDiffController:
-                                              readingDiffController,
-                                          learningController:
-                                              learningController,
-                                          settingsController:
-                                              settingsController,
-                                          subtitleController:
-                                              subtitleController,
-                                          playerController: playerController,
-                                          vocabularyActions: vocabularyActions,
-                                          onSaveSentencePattern: (source) =>
-                                              _openPersonalExpression(
-                                                source: source,
-                                              ),
-                                          onOpenSlicePlayback:
-                                              _openSlicePlayback,
-                                          onRecordReadingMark:
-                                              _recordReadingMark,
-                                          onOpenListeningDictionary:
-                                              _openListeningDictionaryEntry,
-                                          onPlayPronunciationAudio:
-                                              _playPronunciationAudio,
-                                        )
-                                      : null,
+                                  onChannelSelected: (channel) => unawaited(
+                                    contentChannels.select(channel),
+                                  ),
+                                  immersiveStage: switch (contentChannels
+                                      .selected) {
+                                    ContentChannel.writing =>
+                                      WritingChannelHost(
+                                        api: api!,
+                                        writingChannel: writingChannel,
+                                        writingTaskController:
+                                            writingTaskController,
+                                      ),
+                                    ContentChannel.speaking =>
+                                      SpeakingChannelHost(
+                                        api: api!,
+                                        speakingChannel: speakingChannel,
+                                        speakingActions: speakingActions,
+                                        speakingTaskController:
+                                            speakingTaskController,
+                                        readingTaskController:
+                                            readingTaskController,
+                                        realtimeConversationController:
+                                            realtimeConversationController,
+                                      ),
+                                    ContentChannel.reading =>
+                                      ReadingChannelHost(
+                                        api: api!,
+                                        readingChannel: readingChannel,
+                                        readingController: readingController,
+                                        readingTaskController:
+                                            readingTaskController,
+                                        readingDiffController:
+                                            readingDiffController,
+                                        learningController: learningController,
+                                        settingsController: settingsController,
+                                        subtitleController: subtitleController,
+                                        playerController: playerController,
+                                        vocabularyActions: vocabularyActions,
+                                        onSaveSentencePattern: (source) =>
+                                            _openPersonalExpression(
+                                              source: source,
+                                            ),
+                                        onOpenSlicePlayback: _openSlicePlayback,
+                                        onRecordReadingMark: _recordReadingMark,
+                                        onOpenListeningDictionary:
+                                            _openListeningDictionaryEntry,
+                                        onPlayPronunciationAudio:
+                                            _playPronunciationAudio,
+                                      ),
+                                    ContentChannel.listening => null,
+                                  },
                                   mediaFraction:
                                       settingsController.workbenchMediaFraction,
                                   onMediaFractionChanged:

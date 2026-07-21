@@ -5,6 +5,7 @@ import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/player_adapter.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/layout/media_workbench.dart';
+import 'package:llplayer_next/models/content_channel.dart';
 import 'package:llplayer_next/widgets/layout/content_channel_switcher.dart';
 import 'package:llplayer_next/widgets/player/playback_controls.dart';
 

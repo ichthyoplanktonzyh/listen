@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../models/content_channel.dart';
 import '../../theme/breakpoints.dart';
 import 'content_channel_switcher.dart';
 

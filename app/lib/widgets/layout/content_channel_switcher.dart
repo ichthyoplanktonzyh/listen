@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
-
-enum ContentChannel { listening, reading, speaking, writing }
+import '../../models/content_channel.dart';
 
 class ContentChannelAvailability {
   const ContentChannelAvailability.available() : reason = null;

@@ -85,6 +85,11 @@ class ReadingChannelCoordinator extends ChangeNotifier {
   bool get wordInspectorOpen => _wordInspectorOpen;
   bool get isOpen => reading.isOpen;
 
+  /// What [isOpen] actually depends on. Watchers of the channel *selection*
+  /// listen here rather than to this coordinator, whose page-state
+  /// notifications (which reading surface is on top) they do not need.
+  Listenable get openChanges => reading;
+
   bool get _mounted => _isMounted?.call() ?? true;
 
   /// Enters the reading posture over the current primary track. Playback is
