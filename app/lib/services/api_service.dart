@@ -237,6 +237,14 @@ class LocalApi {
     return (statusCode: response.statusCode, body: text);
   }
 
+  /// Kill the child process synchronously (SIGKILL). Safe to call from
+  /// [State.dispose] or any synchronous teardown — does not await.
+  void kill() {
+    _closed = true;
+    _client.close(force: true);
+    _process?.kill(ProcessSignal.sigkill);
+  }
+
   Future<void> close() async {
     _closed = true;
     _client.close(force: true);
