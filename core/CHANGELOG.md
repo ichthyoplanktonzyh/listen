@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-21: 推进 GitHub #12（Slice 2a）：消除播放期 10Hz 全树重建。`position` 从
+  `PlayerState` 移出，改为 `PlayerController` 内部专用 `ValueNotifier`（`positionListenable`），
+  `setPosition` 不再触发聚合 `notifyListeners`——此前每 100ms 一次的位置轮询会经
+  `Listenable.merge` 重建整个 Scaffold（AppBar/首页/工作台/侧栏/播放条）。真正渲染实时进度的
+  四处改为局部订阅：PlaybackControls 的进度条与时间标签（compact/full 各自最小包裹）、
+  PlayerStage 的 TokenLine（仅 chunk 高亮开启时才挂 10Hz tick）、音素彩带、节奏彩带区域。
+  同步读取方（saveProgress、循环判断、flows）经 getter 不受影响。删除无人使用的
+  `positionFraction`。新增回归测试：10 次 position tick 聚合通知为 0、位置通知去重。
+  flutter analyze 无告警，Flutter 465 项全过。
+
 - 2026-07-21: 推进 GitHub #12（Slice 1）：修复 `Store` selector slot 泄漏。`StoreBuilder`/
   `StoreBuilder2` 不再调用 `Store.select()` 注册 slot，改为监听聚合通知并本地 memoize 选值——
   内联闭包不再随父级 rebuild 无限累积 `ValueNotifier`，顺带修复旧实现不处理 `store` 实例
