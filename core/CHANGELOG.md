@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- 2026-07-21: 推进 GitHub #13（#12 Slice 4）：实现暗色主题 `ListenTheme.dark()` 并支持
+  跟随系统/浅色/深色三态切换与持久化。`light()`/`dark()` 收敛为共享的 `_build(ColorScheme)`，
+  组件主题（appBar/card/dialog/menu/input/slider/switch/chip/tooltip 等）一律从 scheme 派生，
+  浅色输出与改造前逐项等价；`ColorScheme` 没有槽位的两个色（disabled 前景、text/outline 按钮的
+  pressed 主色）提取为 `ListenSchemeShades` 扩展，作为唯一真源同时供主题与调用点使用。
+  暗色表面锚定在 `ListenColors.player` 近黑上（新增 15 个 `dark*` 常量），品牌青在暗色下提亮为
+  `#5cc6b8` 以满足 AA。新增 `themeMode` 设置字段（AppSettings/SettingsController/settings_dialog
+  外观三选/settings_flow 回写）与全局 `appThemeMode` ValueNotifier，`MaterialApp` 接
+  `darkTheme` + `themeMode`，`_loadSettings()` 启动时回灌，重启后保持。
+  关键前置工作：13 个 chrome 组件文件中 168 处硬编码亮度相关色（surface/border/muted/fog/
+  selected/disabled/infoSurface 与 primary/accent/info/error）全部改为 `Theme.of(context)
+  .colorScheme.*`，否则暗色下必然出现白底与低对比文字；`capabilityAssessmentColor` 等 4 个
+  枚举→色映射函数改为显式接收 `ColorScheme`。按需求保留 `widgets/subtitle/` 覆盖层的独立暗色
+  词汇（渲染在任意视频帧之上，不随主题切换）。新增 6 项测试：暗色 scheme 断言、双主题组件结构
+  一致性、WCAG AA 对比度逐对校验（正文/次要文字/四个状态色/容器对）、`themeModeFromSetting`
+  映射、themeMode 端到端生效，以及一条源码级不变量测试（`theme_palette_discipline_test.dart`）
+  防止后续再把浅色常量写回 chrome。flutter analyze 零告警，全量 472 项测试通过。
+  注：作者本机系统为浅色，暗色外观仅经上述程序化校验，未做人工目视确认。
 - 2026-07-21: 修复 debug 模式下应用永久卡在启动页（白屏 + "Starting local core..."）。Slice 3 把
   `_connectApi()` 的首行状态文案换成 `l.text('statusStartingCore')` 后，该调用经 `initState`
   同步执行，`AppLocalizations.of(context)` 在 initState 完成前访问 InheritedWidget 触发断言抛出；
