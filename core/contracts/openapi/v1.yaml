@@ -2091,6 +2091,44 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SemanticJudgment" }
+  /v1/llm/providers/{id}/feedback:
+    post:
+      operationId: feedbackViaLlmProvider
+      description: >
+        Gives teacher-style free-text qualitative feedback on one stored
+        output-task attempt (speaking/writing). The provider receives the
+        rubric source transcript, the task prompt snapshot, and the learner
+        response; the reply is ephemeral — nothing is persisted and no
+        observation/projection is written. Reading keeps the per-point judge
+        route instead. On any provider error nothing is returned and a
+        standardized, secret-free error is surfaced.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [attempt_id, response_revision]
+              properties:
+                attempt_id: { type: string }
+                response_revision: { type: integer }
+      responses:
+        "200":
+          description: Free-text feedback (not persisted)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [feedback]
+                properties:
+                  feedback: { type: string }
+                  model_id: { type: [string, "null"] }
+                  prompt_version: { type: [string, "null"] }
   /v1/llm/providers/{id}/rubric:
     post:
       operationId: generateRubricViaLlmProvider

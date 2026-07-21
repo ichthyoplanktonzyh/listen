@@ -17,7 +17,8 @@ use domain::{
 use std::sync::Arc;
 
 use crate::{
-    ApplicationError, JudgeRequest, JudgmentDraft, SemanticJudgeProvider, SemanticTaskRepository,
+    ApplicationError, JudgeRequest, JudgmentDraft, OutputFeedbackDraft, OutputFeedbackProvider,
+    OutputFeedbackRequest, SemanticJudgeProvider, SemanticTaskRepository,
 };
 
 fn invalid(errors: Vec<String>) -> ApplicationError {
@@ -504,5 +505,43 @@ impl SemanticUseCases {
         };
         let draft = provider.judge(&request).await?;
         self.record_llm_judgment(attempt_id, response_revision, draft, created_at_ms)
+    }
+
+    /// Builds the full-context feedback request from the stored attempt and
+    /// rubric source, calls the provider, and returns its free-text draft.
+    ///
+    /// Nothing is persisted: qualitative feedback is ephemeral assist for the
+    /// learner, never evidence — no judgment, observation, or projection row
+    /// is written, and on any provider error this simply propagates `Err`.
+    pub async fn feedback_on_semantic_attempt(
+        &self,
+        attempt_id: &SemanticTaskAttemptId,
+        response_revision: u32,
+        provider: &dyn OutputFeedbackProvider,
+    ) -> Result<OutputFeedbackDraft, ApplicationError> {
+        let attempt = self
+            .semantic_tasks
+            .get_semantic_attempt(attempt_id)?
+            .ok_or(ApplicationError::NotFound("semantic attempt"))?;
+        let rubric = self
+            .semantic_tasks
+            .get_semantic_rubric(&attempt.rubric_id, attempt.rubric_version)?
+            .ok_or(ApplicationError::NotFound("semantic rubric"))?;
+        let response = attempt
+            .responses
+            .iter()
+            .find(|response| response.revision == response_revision)
+            .ok_or(ApplicationError::NotFound("attempt response revision"))?;
+
+        let request = OutputFeedbackRequest {
+            task_kind: attempt.kind,
+            source_language: rubric.source.language.clone(),
+            response_language: response.language.clone(),
+            source_transcript: rubric.source.transcript_snapshot.clone(),
+            prompt_snapshot: attempt.conditions.prompt_snapshot.clone(),
+            learner_response: response.transcript.clone(),
+            asr_reliability: response.asr_reliability,
+        };
+        Ok(provider.give_feedback(&request).await?)
     }
 }

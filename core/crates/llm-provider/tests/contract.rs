@@ -10,7 +10,10 @@
 
 use std::time::Duration;
 
-use application::{JudgeRequest, LlmChatAdapter, SemanticJudgeProvider};
+use application::{
+    JudgeRequest, LlmChatAdapter, OutputFeedbackProvider, OutputFeedbackRequest,
+    SemanticJudgeProvider,
+};
 use axum::{Json, Router, extract::State, http::HeaderMap, http::StatusCode, routing::post};
 use domain::{
     AsrReliability, CapabilityClaim, LanguageCode, LlmProviderError, RubricPoint,
@@ -182,6 +185,28 @@ impl Judge {
             Judge::Anthropic(provider) => provider.adapter().probe_structured_output().await,
         }
     }
+
+    async fn feedback(
+        &self,
+        request: &OutputFeedbackRequest,
+    ) -> Result<application::OutputFeedbackDraft, LlmProviderError> {
+        match self {
+            Judge::OpenAi(provider) => provider.give_feedback(request).await,
+            Judge::Anthropic(provider) => provider.give_feedback(request).await,
+        }
+    }
+}
+
+fn feedback_request() -> OutputFeedbackRequest {
+    OutputFeedbackRequest {
+        task_kind: SemanticTaskKind::L2Retelling,
+        source_language: LanguageCode::parse("en").unwrap(),
+        response_language: LanguageCode::parse("en").unwrap(),
+        source_transcript: "The quake struck at dawn near the coast.".into(),
+        prompt_snapshot: Some("Retell what happened in your own words.".into()),
+        learner_response: "quake at dawn".into(),
+        asr_reliability: Some(AsrReliability::Reliable),
+    }
 }
 
 async fn run_judge(
@@ -217,6 +242,39 @@ async fn success_yields_identical_neutral_judgment_across_protocols() {
     }
     // The core neutrality assertion: different wire, identical domain output.
     assert_eq!(drafts[0], drafts[1]);
+}
+
+#[tokio::test]
+async fn feedback_success_yields_identical_text_across_protocols() {
+    let output = serde_json::json!({
+        "feedback": "You conveyed the quake clearly; next time add where it struck."
+    });
+    let mut texts = Vec::new();
+    for protocol in ALL_PROTOCOLS {
+        let canned = success_envelope(protocol, "output_feedback", output.clone());
+        let base = spawn(canned).await;
+        let draft = Judge::build(protocol, &base, T)
+            .feedback(&feedback_request())
+            .await
+            .expect("feedback");
+        assert!(draft.prompt_version.is_some());
+        texts.push(draft.feedback);
+    }
+    assert_eq!(texts[0], texts[1]);
+}
+
+#[tokio::test]
+async fn empty_feedback_is_rejected_as_schema_invalid() {
+    let output = serde_json::json!({ "feedback": "   " });
+    for protocol in ALL_PROTOCOLS {
+        let canned = success_envelope(protocol, "output_feedback", output.clone());
+        let base = spawn(canned).await;
+        let error = Judge::build(protocol, &base, T)
+            .feedback(&feedback_request())
+            .await
+            .unwrap_err();
+        assert!(matches!(error, LlmProviderError::SchemaInvalid { .. }));
+    }
 }
 
 #[tokio::test]
