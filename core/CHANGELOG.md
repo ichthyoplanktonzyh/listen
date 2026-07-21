@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-21: 完成 GitHub #9（前端）：移除 Speaking/Writing 的 rubric 自评，LLM 反馈改为
+  带完整上下文的教师式自由文本。Speaking 去掉 assessing 阶段（阶段条剩 听/录/核对/完成），
+  ready_feedback 保存录音、确认词汇目标后直接「完成任务」进 done，不再写 self_assessment
+  judgment；Writing 去掉意义自检（selfVerdicts/selfAssessment），提交修订只写 attempt 与
+  finding dispositions。两个 studio 的逐点 LLM judgment + 逐点纠正（adjudicateLlm）替换为
+  新的 LlmFeedbackAssist 组件（请求 `POST /v1/llm/providers/{id}/feedback`，展示 prose 点评，
+  不落库）；Reading 的 rubric 自评与逐点 judge 保持不变。main.dart 的 pattern-production
+  收尾改为弹一次性自评选择（personal expression 3.17 交接事实仍必填）。OpenAPI 登记新路由。
+  flutter analyze 无告警，Flutter 459 项全过，api-http 52+12 项全过。
+
 - 2026-07-21: 推进 GitHub #9（后端）：新增输出通道自由文本反馈 seam。application 增加
   `OutputFeedbackRequest/Draft` 与 `OutputFeedbackProvider` trait（携带 source_transcript +
   prompt_snapshot + learner_response 完整上下文）；`feedback_on_semantic_attempt` use case
