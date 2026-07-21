@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-21: 推进 GitHub #9（后端）：新增输出通道自由文本反馈 seam。application 增加
+  `OutputFeedbackRequest/Draft` 与 `OutputFeedbackProvider` trait（携带 source_transcript +
+  prompt_snapshot + learner_response 完整上下文）；`feedback_on_semantic_attempt` use case
+  从存储的 attempt/rubric 组装请求、调 provider、返回 ephemeral 草稿（不落库、不写
+  observation/projection）；llm-provider 以 `{feedback: string}` schema 实现（prompt 版本
+  output-feedback/v1，教师式定性点评、禁止打分）；HTTP 新增
+  `POST /v1/llm/providers/{id}/feedback`。Reading 的 rubric judge seam 原样保留。
+  contract 测试补双协议一致性与空反馈拒绝两条，15 项全过。
+
 - 2026-07-21: 推进 GitHub #7（问题四）：realtime provider 对话框的 Qwen 配置支持中国站。
   选择 Qwen 适配器后新增 Region 下拉（International dashscope-intl / China Model Studio），
   中国站模式提供 Workspace ID 输入并实时拼出

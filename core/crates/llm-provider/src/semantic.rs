@@ -11,9 +11,9 @@
 //! vendor layer can never become a second identity or evidence writer.
 
 use application::{
-    JudgeRequest, JudgmentDraft, LlmChatAdapter, LlmProviderDescriptor, RubricDraft,
-    RubricGenerationRequest, RubricPointDraft, SemanticJudgeProvider, SemanticRubricProvider,
-    StructuredChatRequest,
+    JudgeRequest, JudgmentDraft, LlmChatAdapter, LlmProviderDescriptor, OutputFeedbackDraft,
+    OutputFeedbackProvider, OutputFeedbackRequest, RubricDraft, RubricGenerationRequest,
+    RubricPointDraft, SemanticJudgeProvider, SemanticRubricProvider, StructuredChatRequest,
 };
 use async_trait::async_trait;
 use domain::{
@@ -24,6 +24,7 @@ use serde::Deserialize;
 
 const RUBRIC_PROMPT_VERSION: &str = "rubric-gen/v1";
 const JUDGE_PROMPT_VERSION: &str = "judge/v1";
+const FEEDBACK_PROMPT_VERSION: &str = "output-feedback/v1";
 const SCHEMA_VERSION: &str = "semantic/v1";
 const MAX_OUTPUT_TOKENS: u32 = 2048;
 
@@ -278,6 +279,103 @@ fn judge_request(req: &JudgeRequest) -> StructuredChatRequest {
         schema_name: "semantic_judgment".into(),
         max_output_tokens: MAX_OUTPUT_TOKENS,
         temperature: Some(0.0),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Output feedback (speaking/writing qualitative teacher feedback)
+// ---------------------------------------------------------------------------
+
+fn feedback_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "feedback": { "type": "string" }
+        },
+        "required": ["feedback"]
+    })
+}
+
+#[derive(Debug, Deserialize)]
+struct FeedbackOutput {
+    feedback: String,
+}
+
+fn feedback_request(req: &OutputFeedbackRequest) -> StructuredChatRequest {
+    let asr_note = match req.asr_reliability {
+        Some(domain::AsrReliability::Unreliable) => {
+            " The learner response is an ASR transcript flagged UNRELIABLE; \
+             say so and keep the feedback tentative."
+        }
+        Some(domain::AsrReliability::Suspect) => {
+            " The learner response is an ASR transcript that may contain \
+             recognition errors; do not nitpick likely mis-transcriptions."
+        }
+        _ => "",
+    };
+    let system = format!(
+        "You are a supportive language teacher reviewing a learner's {} \
+         response. Read the source material and the task, then give short \
+         qualitative feedback in {}: first name concretely what the learner \
+         did well, then the one or two most useful improvements, quoting \
+         their own wording where helpful. Do not assign scores, verdicts, or \
+         checklists.{asr_note} Return only JSON matching the schema.",
+        purpose_label(req.task_kind),
+        req.response_language.as_str(),
+    );
+    let prompt_block = req
+        .prompt_snapshot
+        .as_deref()
+        .map(|prompt| format!("Task prompt:\n{prompt}\n\n"))
+        .unwrap_or_default();
+    let user = format!(
+        "Source material ({}):\n{}\n\n{}Learner response ({}):\n{}",
+        req.source_language.as_str(),
+        req.source_transcript,
+        prompt_block,
+        req.response_language.as_str(),
+        req.learner_response,
+    );
+    StructuredChatRequest {
+        system,
+        user,
+        json_schema: feedback_schema(),
+        schema_name: "output_feedback".into(),
+        max_output_tokens: MAX_OUTPUT_TOKENS,
+        temperature: Some(0.3),
+    }
+}
+
+#[async_trait]
+impl<A: LlmChatAdapter> OutputFeedbackProvider for LlmSemanticProvider<A> {
+    fn descriptor(&self) -> LlmProviderDescriptor {
+        self.adapter.descriptor()
+    }
+
+    async fn give_feedback(
+        &self,
+        request: &OutputFeedbackRequest,
+    ) -> Result<OutputFeedbackDraft, LlmProviderError> {
+        let response = self
+            .adapter
+            .complete_structured(&feedback_request(request))
+            .await?;
+        let parsed: FeedbackOutput = serde_json::from_str(&response.json_text).map_err(|error| {
+            LlmProviderError::SchemaInvalid {
+                detail: format!("output did not match feedback schema: {error}"),
+            }
+        })?;
+        if parsed.feedback.trim().is_empty() {
+            return Err(LlmProviderError::SchemaInvalid {
+                detail: "feedback text was empty".into(),
+            });
+        }
+        Ok(OutputFeedbackDraft {
+            feedback: parsed.feedback,
+            model_id: response.model_id,
+            prompt_version: Some(FEEDBACK_PROMPT_VERSION.into()),
+        })
     }
 }
 

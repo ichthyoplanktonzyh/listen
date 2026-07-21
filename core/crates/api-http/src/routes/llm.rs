@@ -213,6 +213,45 @@ pub(crate) async fn judge_via_llm_provider(
 }
 
 #[derive(Debug, Deserialize)]
+pub(crate) struct ProviderFeedbackRequest {
+    pub attempt_id: String,
+    pub response_revision: u32,
+}
+
+/// Free-text qualitative feedback view. Ephemeral by design: nothing is
+/// persisted server-side, so a refused or cut-off answer costs nothing.
+#[derive(Debug, Serialize)]
+pub(crate) struct OutputFeedbackView {
+    pub feedback: String,
+    pub model_id: Option<String>,
+    pub prompt_version: Option<String>,
+}
+
+/// Gives teacher-style free-text feedback on one stored output-task attempt
+/// (speaking/writing), with the rubric source transcript and task prompt as
+/// context. Distinct from `judge_via_llm_provider`, which Reading keeps for
+/// per-point rubric judgments.
+pub(crate) async fn feedback_via_llm_provider(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(request): Json<ProviderFeedbackRequest>,
+) -> Result<Json<OutputFeedbackView>, ApiError> {
+    let attempt_id =
+        SemanticTaskAttemptId::parse(request.attempt_id).map_err(ApplicationError::from)?;
+    let provider = build_provider(&state, &id)?;
+    let draft = state
+        .services
+        .semantic()
+        .feedback_on_semantic_attempt(&attempt_id, request.response_revision, provider.as_feedback())
+        .await?;
+    Ok(Json(OutputFeedbackView {
+        feedback: draft.feedback,
+        model_id: draft.model_id,
+        prompt_version: draft.prompt_version,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
 pub(crate) struct ProviderRubricRequest {
     pub purpose: SemanticTaskKind,
     pub source_language: LanguageCode,

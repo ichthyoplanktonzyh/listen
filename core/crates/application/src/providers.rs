@@ -283,13 +283,48 @@ pub trait SemanticRubricProvider: Send + Sync {
 }
 
 /// Application seam for judging one response against a fixed rubric version.
-/// Dictogloss/summary writing feedback is judged through this same seam over
-/// the corresponding `SemanticTaskKind`; there is no separate writing-feedback
-/// trait until Phase 3.15 reveals its real shape (§3.6 seam discipline).
+/// Since the Phase 3.19 output-feedback redesign this seam serves Reading
+/// only; speaking/writing qualitative feedback goes through
+/// [`OutputFeedbackProvider`] instead.
 #[async_trait]
 pub trait SemanticJudgeProvider: Send + Sync {
     fn descriptor(&self) -> LlmProviderDescriptor;
     async fn judge(&self, request: &JudgeRequest) -> Result<JudgmentDraft, LlmProviderError>;
+}
+
+/// Free-text qualitative feedback request over one output-task (speaking or
+/// writing) response. Unlike [`JudgeRequest`] it carries the full source
+/// context — transcript and task prompt — so the provider can respond like a
+/// teacher instead of filling a per-point scorecard.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OutputFeedbackRequest {
+    pub task_kind: SemanticTaskKind,
+    pub source_language: LanguageCode,
+    pub response_language: LanguageCode,
+    pub source_transcript: String,
+    pub prompt_snapshot: Option<String>,
+    pub learner_response: String,
+    pub asr_reliability: Option<AsrReliability>,
+}
+
+/// Content-only free-text feedback. Deliberately identity-free and never
+/// persisted: the client shows it as ephemeral assist, and no observation or
+/// projection is ever derived from it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OutputFeedbackDraft {
+    pub feedback: String,
+    pub model_id: Option<String>,
+    pub prompt_version: Option<String>,
+}
+
+/// Application seam for qualitative feedback on output tasks.
+#[async_trait]
+pub trait OutputFeedbackProvider: Send + Sync {
+    fn descriptor(&self) -> LlmProviderDescriptor;
+    async fn give_feedback(
+        &self,
+        request: &OutputFeedbackRequest,
+    ) -> Result<OutputFeedbackDraft, LlmProviderError>;
 }
 
 #[cfg(test)]
