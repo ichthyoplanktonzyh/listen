@@ -38,6 +38,7 @@ import 'controllers/realtime_conversation_controller.dart';
 import 'controllers/resource_actions_coordinator.dart';
 import 'controllers/speech_enhancement_workflow_controller.dart';
 import 'controllers/speaking_actions_coordinator.dart';
+import 'controllers/speaking_channel_coordinator.dart';
 import 'controllers/speaking_task_controller.dart';
 import 'controllers/writing_channel_coordinator.dart';
 import 'controllers/writing_task_controller.dart';
@@ -57,10 +58,7 @@ import 'services/external_tools.dart';
 import 'widgets/panels/intensive_practice_window.dart';
 import 'widgets/panels/l1_specialty_dialog.dart';
 import 'widgets/panels/hunting_prompt_card.dart';
-import 'widgets/panels/listening_check_panel.dart';
-import 'widgets/panels/realtime_conversation_panel.dart';
 import 'widgets/panels/slice_playback_window.dart';
-import 'widgets/panels/speaking_task_studio.dart';
 import 'widgets/player/download_status_bar.dart';
 import 'widgets/app_bar/player_app_bar.dart';
 import 'widgets/flows/learning_flows.dart';
@@ -71,6 +69,7 @@ import 'widgets/flows/manual_review_flow.dart';
 import 'widgets/flows/media_import_flows.dart';
 import 'widgets/flows/subtitle_resource_flows.dart';
 import 'widgets/channels/reading_channel.dart';
+import 'widgets/channels/speaking_channel.dart';
 import 'widgets/channels/writing_channel.dart';
 import 'widgets/layout/playback_bar.dart';
 import 'widgets/layout/media_workbench.dart';
@@ -151,10 +150,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   final realtimeConversationController = RealtimeConversationController();
   final writingTaskController = WritingTaskController();
   final readingDiffController = ReadingDiffController();
-  ReadingTaskSource? _speakingL1CheckSource;
-  SentencePatternAssetView? _activePersonalPattern;
-  int _speakingL1PlayCount = 0;
-  bool _realtimeConversationOpen = false;
   final extensiveListeningController = ExtensiveListeningController();
   final huntingController = HuntingController();
   final huntingSessionController = HuntingSessionController();
@@ -254,6 +249,14 @@ class _PlayerScreenState extends State<PlayerScreen>
     auxiliaryAudio: auxiliaryAudioController,
     task: writingTaskController,
   );
+  late final speakingChannel = SpeakingChannelCoordinator(
+    actions: speakingActions,
+    task: speakingTaskController,
+    readingTask: readingTaskController,
+    realtimeConversation: realtimeConversationController,
+    learning: learningController,
+    player: playerController,
+  );
 
   // ── Local UI state (not managed by controllers) ──
   String get status => playerController.status;
@@ -341,7 +344,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       onMediaSwitched: () {
         unawaited(slicePlayerController.close());
         if (speakingActions.isOpen) {
-          if (_speakingL1CheckSource != null) _closeSpeakingL1Check();
+          speakingChannel.closeL1Check();
           unawaited(speakingActions.close(api, restorePosition: false));
         }
         huntingSessionController.stop();
@@ -404,12 +407,20 @@ class _PlayerScreenState extends State<PlayerScreen>
       openSlicePlayback: _openSlicePlayback,
       openWord: vocabularyActions.openWord,
     );
+    speakingChannel.text = (key) => l.text(key);
+    speakingChannel.bind(
+      getApi: () => api,
+      isMounted: () => mounted,
+      askPersonalExpressionAssessment: _askPersonalExpressionAssessment,
+      onReturnToReview: () => unawaited(_openReviewQueue()),
+      onReturnToPersonalExpression: () => unawaited(_openPersonalExpression()),
+    );
     writingChannel.bind(
       getApi: () => api,
       isMounted: () => mounted,
       openSlicePlayback: _openSlicePlayback,
       closeOtherChannels: () async {
-        if (_speakingL1CheckSource != null) _closeSpeakingL1Check();
+        speakingChannel.closeL1Check();
         if (speakingActions.isOpen) await speakingActions.close(api);
         await readingChannel.close();
       },
@@ -872,7 +883,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   ) async {
     final service = api;
     if (service == null || !Platform.isMacOS) return;
-    _activePersonalPattern = pattern;
+    speakingChannel.activePersonalPattern = pattern;
     setState(() => _workbenchExpanded = true);
     _workbenchAnimController.forward();
     await speakingActions.openPersonalPattern(
@@ -989,20 +1000,19 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _closeSlicePlayback() => slicePlayerController.close();
 
   Future<void> _selectContentChannel(ContentChannel channel) async {
-    if (channel != ContentChannel.speaking && _realtimeConversationOpen) {
-      await realtimeConversationController.cancel();
-      if (mounted) setState(() => _realtimeConversationOpen = false);
+    if (channel != ContentChannel.speaking) {
+      await speakingChannel.closeRealtimeConversation();
     }
     switch (channel) {
       case ContentChannel.listening:
         if (writingChannel.isOpen) await writingChannel.close();
-        if (_speakingL1CheckSource != null) _closeSpeakingL1Check();
+        speakingChannel.closeL1Check();
         if (speakingActions.isOpen) await speakingActions.close(api);
         await readingChannel.close();
         return;
       case ContentChannel.reading:
         if (writingChannel.isOpen) await writingChannel.close();
-        if (_speakingL1CheckSource != null) _closeSpeakingL1Check();
+        speakingChannel.closeL1Check();
         if (speakingActions.isOpen) await speakingActions.close(api);
         await readingChannel.open();
         return;
@@ -1024,18 +1034,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         );
         return;
     }
-  }
-
-  void _openRealtimeConversation() {
-    final source = speakingTaskController.state.source;
-    final modelId = speakingTaskController.state.asrModelId;
-    if (source == null || modelId == null) return;
-    setState(() => _realtimeConversationOpen = true);
-  }
-
-  Future<void> _closeRealtimeConversation() async {
-    await realtimeConversationController.cancel();
-    if (mounted) setState(() => _realtimeConversationOpen = false);
   }
 
   /// Explicit reading mark on the selected word (Slice 5). Assistance is the
@@ -1316,47 +1314,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
-  Future<void> _closeSpeakingSurface() async {
-    if (_speakingL1CheckSource != null) _closeSpeakingL1Check();
-    final returnToReview = speakingActions.source?.recall == 'delayed';
-    final personalPattern = _activePersonalPattern;
-    final personalState = speakingTaskController.state;
-    if (personalPattern != null &&
-        personalState.phase == 'done' &&
-        personalState.recording != null &&
-        personalState.correctedTranscript.trim().isNotEmpty) {
-      // The speaking rubric self-assessment is gone (issue #9); the 3.17
-      // handoff fact still needs its one-shot self-assessment, so ask the
-      // same single question the Personal Expression screen uses.
-      final assessment =
-          await _askPersonalExpressionAssessment() ?? 'partly_expressed';
-      try {
-        await api?.recordPersonalExpressionAttempt(
-          patternId: personalPattern.id,
-          patternVersionId: personalPattern.currentVersion.id,
-          channel: 'speaking',
-          assistance: 'no_text',
-          responseText: personalState.correctedTranscript.trim(),
-          rawTranscript: personalState.rawTranscript,
-          recordingAssetId: personalState.recording!.id,
-          selfAssessment: assessment,
-        );
-      } catch (error) {
-        playerController.setStatus(
-          '${l.text('statusPersonalExpressionSaveFailed')}: $error',
-          error: true,
-        );
-      }
-    }
-    _activePersonalPattern = null;
-    await speakingActions.close(api);
-    if (returnToReview && mounted) {
-      unawaited(_openReviewQueue());
-    } else if (personalPattern != null && mounted) {
-      unawaited(_openPersonalExpression());
-    }
-  }
-
   Future<String?> _askPersonalExpressionAssessment() => showDialog<String>(
     context: context,
     builder: (context) {
@@ -1377,96 +1334,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       );
     },
   );
-
-  Future<void> _openSpeakingL1Check() async {
-    final service = api;
-    final speakingSource = speakingActions.source;
-    final rubric = speakingTaskController.state.rubric;
-    if (service == null || speakingSource == null || rubric == null) return;
-    final profile = await service.learnerProfile();
-    final l1 = profile.l1Language;
-    if (l1 == null || l1.trim().isEmpty) {
-      playerController.setStatus(l.text('statusSetL1First'));
-      return;
-    }
-    final source = ReadingTaskSource(
-      anchorCueId: speakingSource.anchorCueId,
-      mediaId: speakingSource.mediaId,
-      trackId: speakingSource.trackId,
-      startMs: speakingSource.startMs,
-      endMs: speakingSource.endMs,
-      sourceLanguage: speakingSource.language,
-      responseLanguage: l1,
-      transcriptSnapshot: speakingSource.transcriptSnapshot,
-    );
-    _speakingL1PlayCount = 0;
-    setState(() => _speakingL1CheckSource = source);
-    await readingTaskController.openTask(
-      service,
-      source: source,
-      templatePoints: rubric.points,
-      purpose: ReadingTaskController.listeningPurpose,
-    );
-  }
-
-  void _closeSpeakingL1Check() {
-    readingTaskController.closeTask();
-    setState(() => _speakingL1CheckSource = null);
-  }
-
-  List<SpeakingTargetCandidate> _speakingTargetCandidates() {
-    final transcript = speakingTaskController.state.correctedTranscript
-        .toLowerCase();
-    if (transcript.isEmpty ||
-        speakingTaskController.state.asrReliability == 'unreliable') {
-      return const [];
-    }
-    final entries = <LexicalEntry>{
-      ...learningController.wordEntries.values,
-      ...learningController.phraseEntries.values.map(
-        (details) => details.entry,
-      ),
-    };
-    return entries
-        .where(
-          (entry) =>
-              entry.displayForm.trim().isNotEmpty &&
-              _containsSpeakingTarget(
-                transcript,
-                entry.displayForm.trim().toLowerCase(),
-              ),
-        )
-        .take(12)
-        .map(
-          (entry) => SpeakingTargetCandidate(
-            lexicalEntryId: entry.id,
-            surfaceForm: entry.displayForm.trim(),
-          ),
-        )
-        .toList(growable: false);
-  }
-
-  bool _containsSpeakingTarget(String transcript, String surface) {
-    if (surface.runes.any((rune) => rune > 0x7f)) {
-      return transcript.contains(surface);
-    }
-    var start = transcript.indexOf(surface);
-    while (start >= 0) {
-      final before = start == 0 ? null : transcript.codeUnitAt(start - 1);
-      final afterIndex = start + surface.length;
-      final after = afterIndex == transcript.length
-          ? null
-          : transcript.codeUnitAt(afterIndex);
-      bool isAlphaNumeric(int? code) =>
-          code != null &&
-          ((code >= 48 && code <= 57) ||
-              (code >= 65 && code <= 90) ||
-              (code >= 97 && code <= 122));
-      if (!isAlphaNumeric(before) && !isAlphaNumeric(after)) return true;
-      start = transcript.indexOf(surface, start + 1);
-    }
-    return false;
-  }
 
   Future<void> _openSubtitleResources() => openSubtitleResourcesFlow(
     context: context,
@@ -1602,6 +1469,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     auxiliaryAudioController.dispose();
     readingChannel.dispose();
     writingChannel.dispose();
+    speakingChannel.dispose();
     readingController.dispose();
     readingTaskController.dispose();
     speakingTaskController.dispose();
@@ -1895,81 +1763,17 @@ class _PlayerScreenState extends State<PlayerScreen>
                                               writingTaskController,
                                         )
                                       : speakingActions.isOpen
-                                      ? _realtimeConversationOpen
-                                            ? RealtimeConversationPanel(
-                                                controller:
-                                                    realtimeConversationController,
-                                                api: api!,
-                                                source: speakingTaskController
-                                                    .state
-                                                    .source!,
-                                                modelId: speakingTaskController
-                                                    .state
-                                                    .asrModelId!,
-                                                acquireAudioFocus:
-                                                    speakingActions
-                                                        .acquireRecordingFocus,
-                                                onClose: () => unawaited(
-                                                  _closeRealtimeConversation(),
-                                                ),
-                                              )
-                                            : _speakingL1CheckSource != null
-                                            ? ListeningCheckPanel(
-                                                controller:
-                                                    readingTaskController,
-                                                api: api!,
-                                                audioPlayCount: () =>
-                                                    _speakingL1PlayCount,
-                                                onPlaySegment: () {
-                                                  setState(
-                                                    () =>
-                                                        _speakingL1PlayCount++,
-                                                  );
-                                                  unawaited(
-                                                    speakingActions
-                                                        .playSource(),
-                                                  );
-                                                },
-                                                onClose: _closeSpeakingL1Check,
-                                              )
-                                            : SpeakingTaskStudio(
-                                                controller:
-                                                    speakingTaskController,
-                                                api: api!,
-                                                onPlaySource:
-                                                    speakingActions.playSource,
-                                                onPlayRecording: speakingActions
-                                                    .playRecording,
-                                                onAcquireRecordingFocus:
-                                                    speakingActions
-                                                        .acquireRecordingFocus,
-                                                onShowRetelling: () =>
-                                                    speakingActions.showRetelling(
-                                                      api!,
-                                                      fixedRubricPoints:
-                                                          listeningRetellTemplate(
-                                                            l,
-                                                          ),
-                                                    ),
-                                                onShowRoleReply: (assistance) =>
-                                                    speakingActions
-                                                        .showRoleReply(
-                                                          api!,
-                                                          assistance:
-                                                              assistance,
-                                                          fixedRubricPoints:
-                                                              roleReplyTemplate(
-                                                                l,
-                                                              ),
-                                                        ),
-                                                onOpenL1Check:
-                                                    _openSpeakingL1Check,
-                                                onOpenRealtimeConversation:
-                                                    _openRealtimeConversation,
-                                                targetCandidates:
-                                                    _speakingTargetCandidates(),
-                                                onClose: _closeSpeakingSurface,
-                                              )
+                                      ? SpeakingChannelHost(
+                                          api: api!,
+                                          speakingChannel: speakingChannel,
+                                          speakingActions: speakingActions,
+                                          speakingTaskController:
+                                              speakingTaskController,
+                                          readingTaskController:
+                                              readingTaskController,
+                                          realtimeConversationController:
+                                              realtimeConversationController,
+                                        )
                                       : readingController.isOpen
                                       ? ReadingChannelHost(
                                           api: api!,
