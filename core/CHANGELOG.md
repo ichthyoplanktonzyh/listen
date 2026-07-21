@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-21: 推进 GitHub #12（Slice 1）：修复 `Store` selector slot 泄漏。`StoreBuilder`/
+  `StoreBuilder2` 不再调用 `Store.select()` 注册 slot，改为监听聚合通知并本地 memoize 选值——
+  内联闭包不再随父级 rebuild 无限累积 `ValueNotifier`，顺带修复旧实现不处理 `store` 实例
+  变化导致监听残留在旧 store 上的 bug。`Store` 新增 `dispose()`（释放全部 slot notifier）与
+  `debugSlotCount`（测试用），并在文档中明确 slot 仅供长生命周期 selector 使用的契约。
+  新增回归测试：20 次父级 rebuild 后 slot 数为 0、新闭包仍持续跟踪更新、store 换绑后旧 store
+  更新被忽略、dispose 释放 notifier。Flutter 464 项全过。
+
 - 2026-07-21: 完成 GitHub #9（前端）：移除 Speaking/Writing 的 rubric 自评，LLM 反馈改为
   带完整上下文的教师式自由文本。Speaking 去掉 assessing 阶段（阶段条剩 听/录/核对/完成），
   ready_feedback 保存录音、确认词汇目标后直接「完成任务」进 done，不再写 self_assessment
