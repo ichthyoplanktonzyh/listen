@@ -34,6 +34,16 @@ abstract final class ListenBreakpoints {
   /// (roughly 800px) still fits comfortably.
   static const playbackControlsRoomy = 900.0;
 
+  /// [PlayerAppBar]'s four menu buttons keep their text labels; below it only
+  /// the icons remain (the tooltips already carry the same wording, so no
+  /// information is lost).
+  ///
+  /// Derived from the widest locale, not the narrowest: English needs 836px
+  /// for `Content / Subtitles / Learning / More actions` plus the settings
+  /// icon, while Chinese fits under 700. Sized at 860 for margin, so a longer
+  /// translation does not immediately reintroduce the overflow this fixed.
+  static const appBarLabels = 860.0;
+
   /// Reading surfaces (view header, task studio) drop to their compact
   /// arrangement below this width.
   static const readingCompact = 900.0;

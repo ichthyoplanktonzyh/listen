@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../theme/breakpoints.dart';
 
 class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
   const PlayerAppBar({
@@ -56,7 +57,12 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) =>
+        _bar(context, constraints.maxWidth >= ListenBreakpoints.appBarLabels),
+  );
+
+  Widget _bar(BuildContext context, bool showLabels) {
     final l = AppLocalizations.of(context);
     return AppBar(
       titleSpacing: 20,
@@ -73,6 +79,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
       ),
       actions: [
         _ToolbarMenuButton(
+          showLabel: showLabels,
           tooltip: l.text('contentActions'),
           icon: Icons.folder_open_outlined,
           label: l.text('contentActions'),
@@ -109,6 +116,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
           ],
         ),
         _ToolbarMenuButton(
+          showLabel: showLabels,
           tooltip: l.text('subtitleActions'),
           icon: Icons.subtitles_outlined,
           label: l.text('subtitleActions'),
@@ -178,6 +186,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
           ],
         ),
         _ToolbarMenuButton(
+          showLabel: showLabels,
           tooltip: l.text('learningActions'),
           icon: Icons.school_outlined,
           label: l.text('learningActions'),
@@ -301,6 +310,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
 
 class _ToolbarMenuButton extends StatelessWidget {
   const _ToolbarMenuButton({
+    required this.showLabel,
     required this.tooltip,
     required this.icon,
     required this.label,
@@ -308,6 +318,10 @@ class _ToolbarMenuButton extends StatelessWidget {
     required this.itemBuilder,
   });
 
+  /// Below [ListenBreakpoints.appBarLabels] the text is dropped and only the
+  /// icon remains. The tooltip carries the same wording either way, so this
+  /// costs discoverability at a glance, not the name of the menu.
+  final bool showLabel;
   final String tooltip;
   final IconData icon;
   final String label;
@@ -325,14 +339,18 @@ class _ToolbarMenuButton extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 21),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
-          ),
+          if (showLabel) ...[
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ],
           const SizedBox(width: 2),
+          // Kept in the narrow form too: without it an icon-only button reads
+          // as a plain action rather than something that opens a menu.
           const Icon(Icons.arrow_drop_down, size: 18),
         ],
       ),

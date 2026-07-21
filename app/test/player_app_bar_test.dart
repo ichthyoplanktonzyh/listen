@@ -14,8 +14,8 @@ void main() {
 
   setUp(() => fired = []);
 
-  /// The four labelled menu buttons plus the settings icon do not fit the
-  /// 800x600 default surface, so every case runs on a desktop-sized window.
+  /// The labelled form needs [ListenBreakpoints.appBarLabels]; the 800x600
+  /// default surface is below it, so cases about the wide form say so.
   Future<void> useDesktopSurface(WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(1400, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -161,6 +161,45 @@ void main() {
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
     expect(fired, ['settings']);
+  });
+
+  testWidgets('narrow windows drop the labels instead of overflowing', (
+    tester,
+  ) async {
+    // Regression for #18: the labelled form needs 836px in English, and
+    // nothing enforced a minimum window width, so every size below that
+    // painted the debug overflow stripes over the title. Chinese labels are
+    // short enough to fit, which is why this sweeps both locales — the
+    // threshold has to come from the widest one.
+    for (final locale in const [Locale('en'), Locale('zh')]) {
+      for (final width in const [700.0, 760.0, 800.0]) {
+        await tester.binding.setSurfaceSize(Size(width, 700));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await tester.pumpWidget(app(locale: locale));
+        await tester.pump();
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: '$locale at ${width}px overflows',
+        );
+      }
+    }
+  });
+
+  testWidgets('narrow menus keep their tooltips and still dispatch', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(700, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(app());
+
+    // The visible text is gone, but the menu is still identifiable and usable
+    // — dropping the label must not cost reachability.
+    expect(find.text('Learning'), findsNothing);
+    expect(await openMenu(tester, 'Learning'), contains('vocabulary'));
+
+    await tapItem(tester, 'vocabulary');
+    expect(fired, ['vocabulary']);
   });
 
   testWidgets('no menu label survives as a hardcoded English string', (
