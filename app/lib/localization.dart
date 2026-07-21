@@ -121,6 +121,8 @@ class AppLocalizations {
       'statusLLTimelineImportCancelled': 'LLTimeline import cancelled',
       'statusLLTimelineImportFailed': 'LLTimeline import failed',
       'statusPlayingFile': 'Playing {name}',
+      'statusPlayingCoreUnavailable':
+          'Playing locally; local core unavailable: {error}',
       'statusSecondarySubtitleLoaded': 'Loaded secondary subtitle: {name}',
       'statusSpeechEnhancementsPartial':
           'Speech enhancements partially unavailable',
@@ -1472,6 +1474,7 @@ class AppLocalizations {
       'statusLLTimelineImportCancelled': '已取消 LLTimeline 导入',
       'statusLLTimelineImportFailed': 'LLTimeline 导入失败',
       'statusPlayingFile': '正在播放 {name}',
+      'statusPlayingCoreUnavailable': '正在本地播放；本地内核不可用：{error}',
       'statusSecondarySubtitleLoaded': '已加载第二字幕：{name}',
       'statusSpeechEnhancementsPartial': '语音增强部分不可用',
       'statusTimelineResourceRefreshed': 'Timeline 资源已刷新',

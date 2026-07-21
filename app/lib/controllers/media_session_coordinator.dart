@@ -146,7 +146,9 @@ class MediaSessionCoordinator {
         player.setStatus(
           coreError == null
               ? text('statusPlayingFile').replaceAll('{name}', path.split(Platform.pathSeparator).last)
-              : 'Playing locally; core unavailable: $coreError',
+              : text(
+                  'statusPlayingCoreUnavailable',
+                ).replaceAll('{error}', '$coreError'),
           playback: coreError == null,
         );
       }
