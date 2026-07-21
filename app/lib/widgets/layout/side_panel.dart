@@ -375,69 +375,73 @@ class _SidePanelState extends State<SidePanel> {
     onStartColdStart: widget.onStartColdStart,
   );
 
-  Widget _diagnosisCard() => DiagnosisCard(
-    diagnosis: learningController.diagnosis!,
-    pronunciation: subtitleController.currentPrimaryCue == null
-        ? null
-        : subtitleController.pronunciationBySentence[subtitleController
-              .currentPrimaryCue!
-              .id],
-    ruleHintsLevel: settingsController.ruleHintsLevel,
-    pronunciationProviders: subtitleController.pronunciationProviders,
-    timingQuality:
-        subtitleController.currentPrimaryCue == null ||
-            (subtitleController.timingsBySentence[subtitleController
-                        .currentPrimaryCue!
-                        .id] ??
-                    const [])
-                .isEmpty
-        ? null
-        : _timingQuality(subtitleController.currentPrimaryCue!.id),
-    rhythmFrame: _currentRhythmFrame,
-    phoneticAnalysis: subtitleController.currentPrimaryCue == null
-        ? null
-        : subtitleController.phoneticAnalysisBySentence[subtitleController
-              .currentPrimaryCue!
-              .id],
-    currentDetectedPhone: subtitleController.currentDetectedPhone,
-    onLoopDetectedPhone: (phone) => unawaited(
-      playbackActions.loopRange(
-        phone.start.inMilliseconds,
-        phone.end.inMilliseconds,
-        'Looping detected phone ${phone.displayIpa}',
-        labelKey: 'loopPhone',
+  Widget _diagnosisCard() => ValueListenableBuilder<DetectedPhone?>(
+    valueListenable: subtitleController.currentDetectedPhoneListenable,
+    builder: (context, currentDetectedPhone, _) => DiagnosisCard(
+      diagnosis: learningController.diagnosis!,
+      pronunciation: subtitleController.currentPrimaryCue == null
+          ? null
+          : subtitleController.pronunciationBySentence[subtitleController
+                .currentPrimaryCue!
+                .id],
+      ruleHintsLevel: settingsController.ruleHintsLevel,
+      pronunciationProviders: subtitleController.pronunciationProviders,
+      timingQuality:
+          subtitleController.currentPrimaryCue == null ||
+              (subtitleController.timingsBySentence[subtitleController
+                          .currentPrimaryCue!
+                          .id] ??
+                      const [])
+                  .isEmpty
+          ? null
+          : _timingQuality(subtitleController.currentPrimaryCue!.id),
+      rhythmFrame: _currentRhythmFrame,
+      phoneticAnalysis: subtitleController.currentPrimaryCue == null
+          ? null
+          : subtitleController.phoneticAnalysisBySentence[subtitleController
+                .currentPrimaryCue!
+                .id],
+      currentDetectedPhone: currentDetectedPhone,
+      onLoopDetectedPhone: (phone) => unawaited(
+        playbackActions.loopRange(
+          phone.start.inMilliseconds,
+          phone.end.inMilliseconds,
+          'Looping detected phone ${phone.displayIpa}',
+          labelKey: 'loopPhone',
+        ),
       ),
-    ),
-    onLoopHotspot: (hotspot) => unawaited(
-      playbackActions.loopRange(
-        hotspot.start.inMilliseconds,
-        hotspot.end.inMilliseconds,
-        'Looping listening hotspot ${hotspot.label}',
-        labelKey: 'loopHotspot',
+      onLoopHotspot: (hotspot) => unawaited(
+        playbackActions.loopRange(
+          hotspot.start.inMilliseconds,
+          hotspot.end.inMilliseconds,
+          'Looping listening hotspot ${hotspot.label}',
+          labelKey: 'loopHotspot',
+        ),
       ),
-    ),
-    onLoopFinding: (finding) => unawaited(
-      playbackActions.loopRange(
-        finding.audioStartMs,
-        finding.audioEndMs,
-        'Looping audio finding evidence',
-        labelKey: 'loopEvidence',
+      onLoopFinding: (finding) => unawaited(
+        playbackActions.loopRange(
+          finding.audioStartMs,
+          finding.audioEndMs,
+          'Looping audio finding evidence',
+          labelKey: 'loopEvidence',
+        ),
       ),
-    ),
-    onFindingFeedback: (finding, value) =>
-        unawaited(playbackActions.savePhoneticFindingFeedback(finding, value)),
-    onOpenListeningDictionary: widget.onOpenListeningDictionary,
-    onLoopL1Span: (span) => unawaited(
-      playbackActions.loopRange(
-        span.startMs,
-        span.endMs,
-        'Looping L1 difficulty evidence ${span.label}',
-        labelKey: 'l1ListenAgain',
+      onFindingFeedback: (finding, value) => unawaited(
+        playbackActions.savePhoneticFindingFeedback(finding, value),
       ),
+      onOpenListeningDictionary: widget.onOpenListeningDictionary,
+      onLoopL1Span: (span) => unawaited(
+        playbackActions.loopRange(
+          span.startMs,
+          span.endMs,
+          'Looping L1 difficulty evidence ${span.label}',
+          labelKey: 'l1ListenAgain',
+        ),
+      ),
+      onOpenL1Specialty: widget.onOpenL1Specialty == null
+          ? null
+          : (hint) => unawaited(widget.onOpenL1Specialty!(hint)),
     ),
-    onOpenL1Specialty: widget.onOpenL1Specialty == null
-        ? null
-        : (hint) => unawaited(widget.onOpenL1Specialty!(hint)),
   );
 
   Widget _postureActions() {

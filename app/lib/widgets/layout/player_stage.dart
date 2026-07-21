@@ -197,15 +197,18 @@ class _PlayerStageState extends State<PlayerStage> {
                                 ),
                                 // Chunk highlight is the only reason the token
                                 // line needs the live position; when it is off,
-                                // stay off the 10Hz tick entirely.
-                                child: ValueListenableBuilder<Duration>(
-                                  valueListenable:
-                                      settingsController.chunkHighlightActive
-                                      ? playerController.positionListenable
-                                      : const AlwaysStoppedAnimation<Duration>(
-                                          Duration.zero,
-                                        ),
-                                  builder: (context, livePosition, _) => TokenLine(
+                                // only the speech-rate word/chunk cursors
+                                // drive rebuilds.
+                                child: ListenableBuilder(
+                                  listenable: Listenable.merge([
+                                    if (settingsController.chunkHighlightActive)
+                                      playerController.positionListenable,
+                                    subtitleController
+                                        .currentWordTokenListenable,
+                                    subtitleController
+                                        .currentChunkIndexListenable,
+                                  ]),
+                                  builder: (context, _) => TokenLine(
                                     cue: subtitleController.currentPrimaryCue!,
                                     profiles: learningController.wordEntries,
                                     capabilityProfiles:
@@ -258,7 +261,7 @@ class _PlayerStageState extends State<PlayerStage> {
                                         const [],
                                     mediaPosition:
                                         settingsController.chunkHighlightActive
-                                        ? livePosition
+                                        ? playerController.position
                                         : null,
                                     subtitleOffset: subtitleController
                                         .primarySubtitleOffset,
@@ -307,10 +310,14 @@ class _PlayerStageState extends State<PlayerStage> {
                               ),
                             if (settingsController.soundPatternRibbonVisible &&
                                 subtitleController.currentPrimaryCue != null)
-                              ValueListenableBuilder<Duration>(
-                                valueListenable:
-                                    playerController.positionListenable,
-                                builder: (context, livePosition, _) {
+                              ListenableBuilder(
+                                listenable: Listenable.merge([
+                                  playerController.positionListenable,
+                                  subtitleController.currentWordTokenListenable,
+                                ]),
+                                builder: (context, _) {
+                                  final livePosition =
+                                      playerController.position;
                                   final cueId =
                                       subtitleController.currentPrimaryCue!.id;
                                   final analysis = subtitleController

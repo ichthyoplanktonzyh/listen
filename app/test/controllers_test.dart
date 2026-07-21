@@ -68,6 +68,14 @@ void main() {
     expect(subtitle.currentPrimaryCue, cue);
     expect(subtitleNotifications, 1);
     subtitle.dispose();
+
+    final learning = LearningController();
+    var learningNotifications = 0;
+    learning.addListener(() => learningNotifications++);
+    learning.selectSidePanel(1);
+    expect(learning.sidePanel, 1);
+    expect(learningNotifications, 1);
+    learning.dispose();
   });
 
   test('position ticks bypass the aggregate notifier entirely', () {
@@ -91,14 +99,50 @@ void main() {
     player.setPosition(const Duration(milliseconds: 1000));
     expect(positionNotifications, 10);
     player.dispose();
+  });
 
-    final learning = LearningController();
-    var learningNotifications = 0;
-    learning.addListener(() => learningNotifications++);
-    learning.selectSidePanel(1);
-    expect(learning.sidePanel, 1);
-    expect(learningNotifications, 1);
-    learning.dispose();
+  test('word/chunk highlight cursors bypass the aggregate notifier', () {
+    final controller = SubtitleController()
+      ..setPrimaryTrack(track)
+      ..setCurrentPrimaryCue(cue)
+      ..setSpeechEnhancements(
+        pronunciationBySentence: const {},
+        pronunciationProviders: const [],
+        timingsBySentence: const {
+          'sentence-1': [
+            WordTiming(
+              sentenceId: 'sentence-1',
+              tokenIndex: 0,
+              text: 'Hello',
+              start: Duration(milliseconds: 100),
+              end: Duration(milliseconds: 300),
+              source: 'asr',
+              provider: 'test',
+            ),
+          ],
+        },
+      );
+
+    var aggregateNotifications = 0;
+    var wordNotifications = 0;
+    controller.addListener(() => aggregateNotifications++);
+    controller.currentWordTokenListenable.addListener(
+      () => wordNotifications++,
+    );
+
+    controller.updateCurrentWord(
+      const Duration(milliseconds: 200),
+      enabled: true,
+    );
+
+    expect(controller.currentWordToken, 0);
+    expect(wordNotifications, 1);
+    expect(
+      aggregateNotifications,
+      0,
+      reason: 'speech-rate cursors must not rebuild the merged tree',
+    );
+    controller.dispose();
   });
 
   test('subtitle controller clears tracks and follows local word timings', () {
