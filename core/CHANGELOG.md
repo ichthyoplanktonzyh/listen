@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- 2026-07-21: 「纠正词元」从全局菜单移入 `WordLearningPanel`（#16 第四刀，refs #12）。
+  与短语候选相反，这个功能**没有重复**，且是全应用唯一入口——后端 `correct_lemma` 是
+  完整实现（写 lemma override、带"目标词已是独立词条"的冲突检测，
+  `crates/application/src/lexical.rs`），删掉等于让一个已实现的后端能力彻底无法触达。
+  问题只在位置：它依赖 `learningController.selectedToken`，放在全局菜单里，无选中词时
+  同样是裸 `return` 静默失败。
+  改为 `WordLearningPanel` 动作行上的一个可选按钮（`onCorrectLemma == null` 时不渲染），
+  沿现成的可选回调管道透传，与 `onOpenListeningDictionary` 同型：组合根 → `SidePanel`
+  → 面板，组合根 → `ReadingChannelHost` → `ReadingWordInspector` → 面板，听/读两条
+  路径都能触达。`correctCurrentLemmaFlow` 本体不动。必填回调 23 → 22。
+  新增 `vocabulary_book_test.dart` 一例：不传回调时按钮不存在，传了才渲染且点击派发。
+  做过变异验证——把 `if (widget.onCorrectLemma != null)` 改成 `if (true)` 后该例立刻变红，
+  确认不是空断言。analyze 零告警，全量测试 511 项绿。
+
 - 2026-07-21: 删除 AppBar「短语候选」入口——同一功能的劣化第二套（#16 第三刀，refs #12）。
   短语候选早就有一条更好的上下文入口：`TokenLine` 把候选内联渲染成字幕行上的可点击下划线
   胶囊（`PhraseUnderlineSpan`，带 tooltip 与状态色），点击直接走 `openPhraseFlow` 存进
