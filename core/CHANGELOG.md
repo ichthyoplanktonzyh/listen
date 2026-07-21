@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- 2026-07-21: 通道选择收敛为 `ContentChannelCoordinator`，`immersiveStage` 三元嵌套改 switch
+  （#15 第四刀，refs #12）。新增 `controllers/content_channel_coordinator.dart`：把
+  `_selectContentChannel` 里四个分支各自重复的"先拆掉别的通道"收敛成一处，`selected` 由三个
+  通道协调器的 `isOpen` 派生。它**刻意不是 ChangeNotifier**——自身无状态，`selected` 是派生值。
+  `ContentChannel` 枚举从 `widgets/layout/content_channel_switcher.dart` 迁到
+  `models/content_channel.dart`：通道机制是领域逻辑，协调器不该 import widget 层
+  （`ContentChannelAvailability` 是"为什么这个 chip 不可点"的呈现概念，留在 switcher 里）。
+  组合根 build 里 118 行的 `immersiveStage` 三元嵌套变成 4 分支 switch，读起来与
+  `ContentChannel` 一一对应。
+  聚合 `Listenable.merge` 从 13 项降到 **11 项**（拆分前 13）：新增
+  `contentChannels.selection` 一个句柄取代 `readingController + writingChannel +
+  speakingActions` 三项，组合根从此看不到各通道内部的页面态抖动；`speakingTaskController`
+  也一并移出——它在组合根 build 里只作为参数传给 `SpeakingChannelHost`，状态读取全在 host 内部。
+  配套在 `ReadingChannelCoordinator` 上加 `openChanges` getter，明确"关心通道选择的监听者
+  该听哪个"，避免误听协调器自身的页面态通知。
+  新增 `test/content_channel_switching_test.dart`：按组合根同款接线（一个
+  `ListenableBuilder` 监听 `selection`，`selectedChannel`/`immersiveStage` 全部派生）挂载
+  `MediaWorkbench`，点击切换器走完 听→读→写→说→听 主链路，逐步断言当前 host 类型与
+  上一个通道确实被拆掉。做过一次变异验证：去掉协调器里的写作拆除后该测试立刻变红
+  （说通道停在 writing），确认不是空测试。`main.dart` 2039 → 2013 行。全量测试 503 项绿。
+
 - 2026-07-21: 口语通道页面态提出为 `SpeakingChannelCoordinator` + `SpeakingChannelHost`
   （#15 第三刀，refs #12）。这一刀与前两刀的差别是：会话与音频焦点规则本就在
   `SpeakingActionsCoordinator` 里，留在组合根的是它上面一层的**页面态**——L1 理解检查
