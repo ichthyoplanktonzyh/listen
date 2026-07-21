@@ -13,6 +13,11 @@ use syntactic_provider::{PythonSyntacticKind, PythonSyntacticProvider};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Installed before anything else: the parent learns our pid the moment it
+    // spawns us, so a stop request can arrive long before the server is up.
+    // Registering the handler lazily would let those early signals fall through
+    // to the default action and kill us instead of shutting us down.
+    let interrupt = Interrupt::install()?;
     let database_path = database_path();
     if let Some(parent) = database_path.parent() {
         fs::create_dir_all(parent)?;
@@ -80,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
     );
     axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
+        .with_graceful_shutdown(shutdown_signal(interrupt))
         .await?;
     println!(
         "{}",
@@ -208,17 +213,51 @@ fn semantic_embedding_root() -> PathBuf {
     }
 }
 
-async fn shutdown_signal() {
+async fn shutdown_signal(mut interrupt: Interrupt) {
     tokio::select! {
-        _ = tokio::signal::ctrl_c() => {}
-        _ = orphaned() => {
-            // Nothing can still be talking to this server once its parent is
-            // gone, so a stalled connection must not keep the process alive.
-            tokio::spawn(async {
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                std::process::exit(0);
-            });
-        }
+        _ = interrupt.recv() => {}
+        _ = orphaned() => {}
+    }
+    // Whichever of the two asked us to stop, the graceful drain must not be
+    // able to hang the process: a stalled connection outliving the desktop app
+    // is the very leak this shutdown path exists to prevent.
+    tokio::spawn(async {
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        std::process::exit(0);
+    });
+}
+
+/// The stop request the desktop app sends from `dispose()`.
+///
+/// Registered eagerly rather than awaited lazily so the handler exists for the
+/// whole process lifetime; see the call site in `main`.
+#[cfg(unix)]
+struct Interrupt(tokio::signal::unix::Signal);
+
+#[cfg(unix)]
+impl Interrupt {
+    fn install() -> std::io::Result<Self> {
+        Ok(Self(tokio::signal::unix::signal(
+            tokio::signal::unix::SignalKind::interrupt(),
+        )?))
+    }
+
+    async fn recv(&mut self) {
+        self.0.recv().await;
+    }
+}
+
+#[cfg(not(unix))]
+struct Interrupt;
+
+#[cfg(not(unix))]
+impl Interrupt {
+    fn install() -> std::io::Result<Self> {
+        Ok(Self)
+    }
+
+    async fn recv(&mut self) {
+        let _ = tokio::signal::ctrl_c().await;
     }
 }
 

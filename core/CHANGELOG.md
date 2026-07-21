@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-21: sidecar 正常退出改走优雅关闭。桌面端 `dispose()` 原先发 SIGKILL，sidecar 因此
+  在常规退出时也拿不到 graceful 路径、数据库只能靠崩溃恢复。有了孤儿 watchdog 兜底后，
+  `LocalApi.kill()` 改名 `requestStop()` 并改发 SIGINT：常规退出优雅关库，若 app 先一步消失
+  则由 watchdog 在 2s 内回收。连带修掉两个由此暴露的问题：(1) 强制退出兜底原先只挂在
+  `orphaned()` 分支上，改发 SIGINT 后走的是 ctrl_c 分支，兜底永不武装、graceful drain 卡住
+  就会重新变成孤儿——现改为无论哪个分支触发都武装；(2) SIGINT 处理器原先要等 `axum::serve`
+  首次 poll 才安装，而握手在那之前打印，父进程一见握手就发信号会落到默认动作上被杀——现改为
+  在 `main` 开头即安装（新增 `Interrupt` 类型，non-unix 回落 `ctrl_c`）。
+  `tests/orphan_watchdog.rs` 更名 `tests/shutdown_lifecycle.rs` 并新增 SIGINT 用例：断言退出码
+  为 0（若信号未被处理则是被信号杀死、无退出码，测试首次运行正是这样失败并暴露了竞态）。
+  实机复核：`osascript quit` 后 app 与 sidecar 死亡间隔 266ms，远小于 watchdog 的 0~2s 轮询
+  窗口，证明 `dispose()` 确实执行且 SIGINT 确实送达。api-http 66 项、Flutter 473 项测试通过。
 - 2026-07-21: 修复 api-http sidecar 在桌面端异常退出后成为孤儿进程。桌面端只在 `dispose()`
   里关闭 sidecar，而崩溃、强制退出、任何 SIGKILL 都不会执行 `dispose()`，sidecar 随即被过继给
   pid 1 长期滞留——每次这样的退出泄漏一个进程、一条数据库连接和一个端口（本机实测确有 PPID=1
