@@ -17,4 +17,5 @@ tokio-tungstenite.workspace = true
 url.workspace = true
 
 [dev-dependencies]
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 tokio = { workspace = true, features = ["net"] }
