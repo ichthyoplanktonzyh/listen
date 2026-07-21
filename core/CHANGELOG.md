@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-21: 修复 GitHub #1（D-319-12）：首页新增「我的表达」稳定主入口。左侧「我的学习」
+  在词汇与复习之间加入「我的表达」项，资产区新增同名卡片（含摘要文案，中英文案均补充
+  `personalExpressions`/`personalExpressionSummary`）；点击进入既有 PersonalExpressionScreen
+  （标题、搜索、新建、列表齐备），返回后回到首页。资产区网格改为每行最多 3 张卡并自动换行，
+  避免 5 张卡挤在一行。补充宽/窄两种布局的入口 widget 测试。
+
 - 2026-07-20 21:06 CST: 撤销 Owner Journeys v2 Q3 初版并登记 D-319-23/GitHub #6。初版未按
   代码核对，错误臆造 Hunting 启动后的目标数/预算常驻 UI、三态作答后的影响说明、证据跳转与 fit
   反馈，同时遗漏 `I` 加入 Listening Inbox、`Shift+I` 开始/结束泛听、`Shift+P` 暂停捕获并快速
