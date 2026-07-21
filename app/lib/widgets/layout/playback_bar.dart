@@ -86,7 +86,7 @@ class _PlaybackBarState extends State<PlaybackBar> {
     final currentChunk = playbackActions.currentChunkRef();
     return PlaybackControls(
       adapter: adapter,
-      position: playerController.position,
+      position: playerController.positionListenable,
       duration: playerController.duration,
       playing: playerController.playing,
       loopCue: subtitleController.loopCue,

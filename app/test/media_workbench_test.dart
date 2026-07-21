@@ -173,7 +173,9 @@ void main() {
       localized(
         PlaybackControls(
           adapter: adapter,
-          position: const Duration(seconds: 15),
+          position: const AlwaysStoppedAnimation<Duration>(
+            Duration(seconds: 15),
+          ),
           duration: const Duration(minutes: 10),
           playing: false,
           loopCue: false,
@@ -243,7 +245,9 @@ void main() {
       localized(
         PlaybackControls(
           adapter: adapter,
-          position: const Duration(minutes: 5, seconds: 54),
+          position: const AlwaysStoppedAnimation<Duration>(
+            Duration(minutes: 5, seconds: 54),
+          ),
           duration: const Duration(minutes: 10, seconds: 21),
           playing: false,
           loopCue: false,

@@ -56,8 +56,8 @@ void main() {
     final player = PlayerController();
     var playerNotifications = 0;
     player.addListener(() => playerNotifications++);
-    player.setPosition(const Duration(milliseconds: 250));
-    expect(player.position, const Duration(milliseconds: 250));
+    player.setStatus('probe');
+    expect(player.status, 'probe');
     expect(playerNotifications, 1);
     player.dispose();
 
@@ -68,6 +68,29 @@ void main() {
     expect(subtitle.currentPrimaryCue, cue);
     expect(subtitleNotifications, 1);
     subtitle.dispose();
+  });
+
+  test('position ticks bypass the aggregate notifier entirely', () {
+    final player = PlayerController();
+    var aggregateNotifications = 0;
+    var positionNotifications = 0;
+    player.addListener(() => aggregateNotifications++);
+    player.positionListenable.addListener(() => positionNotifications++);
+
+    // Simulate the 100ms polling loop: aggregate listeners (the merged
+    // Listenable driving the whole Scaffold) must stay silent.
+    for (var ms = 100; ms <= 1000; ms += 100) {
+      player.setPosition(Duration(milliseconds: ms));
+    }
+
+    expect(player.position, const Duration(milliseconds: 1000));
+    expect(positionNotifications, 10);
+    expect(aggregateNotifications, 0);
+
+    // A repeated identical position is de-duplicated by the notifier.
+    player.setPosition(const Duration(milliseconds: 1000));
+    expect(positionNotifications, 10);
+    player.dispose();
 
     final learning = LearningController();
     var learningNotifications = 0;

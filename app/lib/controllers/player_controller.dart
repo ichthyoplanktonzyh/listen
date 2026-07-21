@@ -14,7 +14,6 @@ class PlayerState {
     this.mediaTitle,
     this.mediaFingerprint,
     this.status = 'Starting local core...',
-    this.position = Duration.zero,
     this.duration = Duration.zero,
     this.playing = false,
     this.muted = false,
@@ -34,7 +33,6 @@ class PlayerState {
   final String? mediaTitle;
   final String? mediaFingerprint;
   final String status;
-  final Duration position;
   final Duration duration;
   final bool playing;
   final bool muted;
@@ -54,7 +52,6 @@ class PlayerState {
     Object? mediaTitle = _unset,
     Object? mediaFingerprint = _unset,
     String? status,
-    Duration? position,
     Duration? duration,
     bool? playing,
     bool? muted,
@@ -79,7 +76,6 @@ class PlayerState {
         ? this.mediaFingerprint
         : mediaFingerprint as String?,
     status: status ?? this.status,
-    position: position ?? this.position,
     duration: duration ?? this.duration,
     playing: playing ?? this.playing,
     muted: muted ?? this.muted,
@@ -104,10 +100,6 @@ class PlayerState {
         ? this.sourceLoopLabel
         : sourceLoopLabel as String?,
   );
-
-  double get positionFraction => duration == Duration.zero
-      ? 0.0
-      : position.inMilliseconds / duration.inMilliseconds;
 }
 
 /// Controls media playback state and actions.
@@ -116,6 +108,13 @@ class PlayerState {
 /// Keeps [ChangeNotifier] for backward compatibility.
 class PlayerController extends ChangeNotifier {
   final Store<PlayerState> _store;
+
+  /// Playback position ticks ~10x/sec while media plays, so it lives outside
+  /// [PlayerState]: writes go to this dedicated notifier and deliberately do
+  /// NOT fire the aggregate [ChangeNotifier]. Widgets that render the live
+  /// position must subscribe via [positionListenable]; everything else reads
+  /// the [position] getter synchronously.
+  final ValueNotifier<Duration> _position = ValueNotifier(Duration.zero);
 
   PlayerController() : _store = Store(const PlayerState()) {
     _store.addListener(notifyListeners);
@@ -136,8 +135,11 @@ class PlayerController extends ChangeNotifier {
   String get status => _store.state.status;
   bool get playing => _store.state.playing;
   bool get muted => _store.state.muted;
-  Duration get position => _store.state.position;
+  Duration get position => _position.value;
   Duration get duration => _store.state.duration;
+
+  /// High-frequency playback position for widgets that render it live.
+  ValueListenable<Duration> get positionListenable => _position;
   double get rate => _store.state.rate;
   double get volume => _store.state.volume;
   Duration? get sourceLoopStart => _store.state.sourceLoopStart;
@@ -155,8 +157,7 @@ class PlayerController extends ChangeNotifier {
   ValueNotifier<R> select<R>(R Function(PlayerState) selector) =>
       _store.select(selector);
 
-  void setPosition(Duration position) =>
-      _store.update((s) => s.copyWith(position: position));
+  void setPosition(Duration position) => _position.value = position;
 
   void setDuration(Duration duration) =>
       _store.update((s) => s.copyWith(duration: duration));
@@ -226,6 +227,7 @@ class PlayerController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _position.dispose();
     _store.dispose();
     super.dispose();
   }

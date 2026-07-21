@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
@@ -69,7 +70,10 @@ class PlaybackControls extends StatelessWidget {
   });
 
   final DesktopPlayerAdapter adapter;
-  final Duration position;
+
+  /// Live playback position. Only the progress slider and the time labels
+  /// subscribe to it, so 10Hz ticks never rebuild the rest of the bar.
+  final ValueListenable<Duration> position;
   final Duration duration;
   final bool playing;
   final bool loopCue;
@@ -141,7 +145,6 @@ class PlaybackControls extends StatelessWidget {
     ColorScheme colors,
   ) {
     final maxMs = duration.inMilliseconds.clamp(1, 1 << 31).toDouble();
-    final posMs = position.inMilliseconds.clamp(0, maxMs.toInt()).toDouble();
     return Material(
       color: colors.surfaceContainerLowest,
       child: DecoratedBox(
@@ -172,12 +175,17 @@ class PlaybackControls extends StatelessWidget {
                       ),
                       thumbColor: colors.primary,
                     ),
-                    child: Slider(
-                      padding: EdgeInsets.zero,
-                      value: posMs,
-                      max: maxMs,
-                      onChanged: (value) =>
-                          onSeek(Duration(milliseconds: value.round())),
+                    child: ValueListenableBuilder<Duration>(
+                      valueListenable: position,
+                      builder: (context, positionValue, _) => Slider(
+                        padding: EdgeInsets.zero,
+                        value: positionValue.inMilliseconds
+                            .clamp(0, maxMs.toInt())
+                            .toDouble(),
+                        max: maxMs,
+                        onChanged: (value) =>
+                            onSeek(Duration(milliseconds: value.round())),
+                      ),
                     ),
                   ),
                 ),
@@ -228,14 +236,19 @@ class PlaybackControls extends StatelessWidget {
                                             ),
                                       ),
                                       const SizedBox(height: 3),
-                                      Text(
-                                        '${formatDuration(position)} / ${formatDuration(duration)}',
-                                        maxLines: 1,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelSmall
-                                            ?.copyWith(
-                                              color: colors.onSurfaceVariant,
+                                      ValueListenableBuilder<Duration>(
+                                        valueListenable: position,
+                                        builder: (context, positionValue, _) =>
+                                            Text(
+                                              '${formatDuration(positionValue)} / ${formatDuration(duration)}',
+                                              maxLines: 1,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .labelSmall
+                                                  ?.copyWith(
+                                                    color:
+                                                        colors.onSurfaceVariant,
+                                                  ),
                                             ),
                                       ),
                                     ],
@@ -356,39 +369,42 @@ class PlaybackControls extends StatelessWidget {
                   height: 38,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 18),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 54,
-                          child: Text(
-                            formatDuration(position),
-                            style: Theme.of(context).textTheme.labelMedium,
+                    child: ValueListenableBuilder<Duration>(
+                      valueListenable: position,
+                      builder: (context, positionValue, _) => Row(
+                        children: [
+                          SizedBox(
+                            width: 54,
+                            child: Text(
+                              formatDuration(positionValue),
+                              style: Theme.of(context).textTheme.labelMedium,
+                            ),
                           ),
-                        ),
-                        Expanded(
-                          child: Slider(
-                            value: position.inMilliseconds
-                                .clamp(
-                                  0,
-                                  duration.inMilliseconds.clamp(1, 1 << 31),
-                                )
-                                .toDouble(),
-                            max: duration.inMilliseconds
-                                .clamp(1, 1 << 31)
-                                .toDouble(),
-                            onChanged: (value) =>
-                                onSeek(Duration(milliseconds: value.round())),
+                          Expanded(
+                            child: Slider(
+                              value: positionValue.inMilliseconds
+                                  .clamp(
+                                    0,
+                                    duration.inMilliseconds.clamp(1, 1 << 31),
+                                  )
+                                  .toDouble(),
+                              max: duration.inMilliseconds
+                                  .clamp(1, 1 << 31)
+                                  .toDouble(),
+                              onChanged: (value) =>
+                                  onSeek(Duration(milliseconds: value.round())),
+                            ),
                           ),
-                        ),
-                        SizedBox(
-                          width: 54,
-                          child: Text(
-                            formatDuration(duration),
-                            textAlign: TextAlign.end,
-                            style: Theme.of(context).textTheme.labelMedium,
+                          SizedBox(
+                            width: 54,
+                            child: Text(
+                              formatDuration(duration),
+                              textAlign: TextAlign.end,
+                              style: Theme.of(context).textTheme.labelMedium,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
