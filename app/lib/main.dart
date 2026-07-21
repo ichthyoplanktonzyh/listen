@@ -1885,7 +1885,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     syntaxCapabilityTimer?.cancel();
     unawaited(adapter.dispose());
     unawaited(recordingAdapter.dispose());
-    api?.kill();
+    api?.requestStop();
     playerController.dispose();
     subtitleController.dispose();
     learningController.dispose();

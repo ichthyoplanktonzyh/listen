@@ -237,12 +237,17 @@ class LocalApi {
     return (statusCode: response.statusCode, body: text);
   }
 
-  /// Kill the child process synchronously (SIGKILL). Safe to call from
-  /// [State.dispose] or any synchronous teardown — does not await.
-  void kill() {
+  /// Asks the sidecar to stop without awaiting it. Safe to call from
+  /// [State.dispose] or any other synchronous teardown, where [close] cannot
+  /// be awaited.
+  ///
+  /// Sends SIGINT rather than SIGKILL so the sidecar runs its own graceful
+  /// shutdown and closes the database cleanly. Not awaiting it is safe: if the
+  /// app exits first, the sidecar notices its parent is gone and reaps itself.
+  void requestStop() {
     _closed = true;
     _client.close(force: true);
-    _process?.kill(ProcessSignal.sigkill);
+    _process?.kill(ProcessSignal.sigint);
   }
 
   Future<void> close() async {
