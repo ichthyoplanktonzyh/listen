@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- 2026-07-21: 集中响应式断点 + 三个小修（#14，refs #12）。(1) 新增
+  `lib/theme/breakpoints.dart`：9 处散落在 `LayoutBuilder` 里的宽度阈值收敛为
+  `ListenBreakpoints` 的语义化常量（含 issue 未列出的 `reading_word_inspector.dart` 980）。
+  数值相同但理由不同的（760 出现在首页侧栏与播放控制条、900 出现在播放控制条与阅读面板）
+  保留为两个常量而非合并——它们各自来自所在部件的可用宽度，本就可以独立漂移；播放控制条
+  900 的原有注释原样搬进常量文档。新增 `test/breakpoint_discipline_test.dart` 扫描 `lib/`，
+  禁止再出现裸数字阈值（仿 `theme_palette_discipline_test.dart`，三位数以上才算断点，
+  避免误伤 `maxWidth <= 0` 这类退化约束守卫）。(2) `_timingQuality` 去掉 map 查找上的 `!`：
+  数据缺失时返回空串而非崩溃；`side_panel.dart` 调用侧本就有 timings 非空守卫，
+  `diagnosis_card.dart` 的显示条件顺带收紧为非 null 且非空。(3) 修复 `dispose()` 里最后一次
+  进度保存与 sidecar 关停的竞态：`requestStop()` 会 `_client.close(force: true)`，与
+  `unawaited(saveProgress(...))` 并发即中断在途请求、丢掉退出时的播放位置。改为抽出
+  `_stopApiAfterFinalProgressSave()`，保存完成后再串行 `requestStop`（2s 超时兜底），
+  仍不阻塞 `dispose` 本身；app 先退出时由 sidecar 的孤儿 watchdog 回收。(4) 首页"本地内核"
+  卡片不再用 `statusText.startsWith('Playing')` 判断——Slice 3 本地化后该前缀对中文永远不成立，
+  播放中会把"正在播放 X"当成内核状态显示。改为 `PlayerState` 新增 `statusIsPlayback` 标志
+  （与既有 `statusIsError` 同构），由 `setStatus(..., playback: true)` 在两处播放状态设置点标注，
+  组合根据此过滤后传入更名后的 `coreStatusText`。顺带修掉旧启发式的一个副作用：
+  "Playing locally; core unavailable: …" 这条真正的内核降级消息此前也被前缀匹配吞掉，
+  现在标为非 playback、可以正常显示。新增两项测试（播放标志的置位/清除、zh 语言下的卡片渲染）。
+  analyze 零告警，Flutter 476 项测试通过。
 - 2026-07-21: sidecar 正常退出改走优雅关闭。桌面端 `dispose()` 原先发 SIGKILL，sidecar 因此
   在常规退出时也拿不到 graceful 路径、数据库只能靠崩溃恢复。有了孤儿 watchdog 兜底后，
   `LocalApi.kill()` 改名 `requestStop()` 并改发 SIGINT：常规退出优雅关库，若 app 先一步消失
