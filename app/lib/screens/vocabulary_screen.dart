@@ -1589,7 +1589,10 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
               _assessmentChip(
                 l.text(value),
                 value,
-                color: capabilityAssessmentColor(value),
+                color: capabilityAssessmentColor(
+                  Theme.of(context).colorScheme,
+                  value,
+                ),
               ),
           ],
         ),

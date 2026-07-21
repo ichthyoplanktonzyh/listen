@@ -15,6 +15,7 @@ class SettingsDialog extends StatefulWidget {
     this.api,
     this.currentTrackId,
     required this.language,
+    required this.themeMode,
     required this.subtitlePreset,
     required this.primaryFontSize,
     required this.primaryFontFamily,
@@ -53,6 +54,7 @@ class SettingsDialog extends StatefulWidget {
     required this.onLearningLanguageChanged,
     required this.onL1LanguageChanged,
     required this.onLanguageChanged,
+    required this.onThemeModeChanged,
     required this.onSubtitlePresetChanged,
     required this.onPrimaryFontSizeChanged,
     required this.onPrimaryFontFamilyChanged,
@@ -90,6 +92,7 @@ class SettingsDialog extends StatefulWidget {
   final LocalApi? api;
   final String? currentTrackId;
   final String language;
+  final String themeMode;
   final String subtitlePreset;
   final double primaryFontSize;
   final String primaryFontFamily;
@@ -133,6 +136,7 @@ class SettingsDialog extends StatefulWidget {
   final ValueChanged<String> onLearningLanguageChanged;
   final ValueChanged<String> onL1LanguageChanged;
   final ValueChanged<String> onLanguageChanged;
+  final ValueChanged<String> onThemeModeChanged;
   final ValueChanged<String> onSubtitlePresetChanged;
   final ValueChanged<double> onPrimaryFontSizeChanged;
   final ValueChanged<String> onPrimaryFontFamilyChanged;
@@ -178,6 +182,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   final List<GlobalKey> _categoryKeys = List.generate(7, (_) => GlobalKey());
   int _selectedCategory = 2;
   late String language;
+  late String themeMode;
   late String subtitlePreset;
   late double primaryFontSize;
   late String primaryFontFamily;
@@ -227,6 +232,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   void _initFromWidget() {
     language = widget.language;
+    themeMode = widget.themeMode;
     subtitlePreset = widget.subtitlePreset;
     primaryFontSize = widget.primaryFontSize;
     primaryFontFamily = widget.primaryFontFamily;
@@ -418,7 +424,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       initialValue: groupingMode,
                       decoration: InputDecoration(
                         labelText: l.text('groupingMode'),
-                        helperText: !widget.senseGroupsAvailable &&
+                        helperText:
+                            !widget.senseGroupsAvailable &&
                                 (groupingMode == 'semantic' ||
                                     groupingMode == 'compare')
                             ? l.text('senseGroupDataNotReadyHint')
@@ -714,6 +721,33 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         if (value == null) return;
                         language = value;
                         widget.onLanguageChanged(value);
+                        refresh(() {});
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      initialValue: themeMode,
+                      decoration: InputDecoration(
+                        labelText: l.text('appearance'),
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'system',
+                          child: Text(l.text('appearanceSystem')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'light',
+                          child: Text(l.text('appearanceLight')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'dark',
+                          child: Text(l.text('appearanceDark')),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        themeMode = value;
+                        widget.onThemeModeChanged(value);
                         refresh(() {});
                       },
                     ),

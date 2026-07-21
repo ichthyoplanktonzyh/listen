@@ -14,6 +14,7 @@ class SettingsController extends ChangeNotifier {
   // ── Convenience accessors ──
 
   String get language => _settings.language;
+  String get themeMode => _settings.themeMode;
   String get subtitlePreset => _settings.subtitlePreset;
   String get primaryFontFamily => _settings.primaryFontFamily;
   String get secondaryFontFamily => _settings.secondaryFontFamily;

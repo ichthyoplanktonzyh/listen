@@ -365,9 +365,9 @@ class _ListeningDictionaryEntryViewState
           entry.kind == 'phrase'
               ? l.text('dictionaryPhrase')
               : l.text('dictionaryWord'),
-          style: Theme.of(
-            context,
-          ).textTheme.labelLarge?.copyWith(color: ListenColors.muted),
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 16),
         for (final suggestion in widget.suggestions)
@@ -400,16 +400,16 @@ class _ListeningDictionaryEntryViewState
           else if (widget.productionLoadFailed)
             Text(
               l.text('myOutputUnavailable'),
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: ListenColors.muted),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             )
           else if (widget.productionHits!.isEmpty)
             Text(
               l.text('myOutputEmpty'),
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: ListenColors.muted),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             )
           else ...[
             Text(
@@ -420,9 +420,9 @@ class _ListeningDictionaryEntryViewState
                         : 'myOutputCount',
                   )
                   .replaceAll('{count}', '${widget.productionHits!.length}'),
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: ListenColors.muted),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
             for (final hit in productionDocuments.values)
               ListTile(
@@ -494,9 +494,9 @@ class _ListeningDictionaryEntryViewState
           l
               .text('dictionaryCoverage')
               .replaceAll('{count}', '${occurrences.length}'),
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: ListenColors.muted),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 10),
         if (unassignedOccurrences.isNotEmpty)
@@ -584,7 +584,9 @@ class _ListeningDictionaryEntryViewState
                         return Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           child: Card(
-                            color: selected ? ListenColors.selected : null,
+                            color: selected
+                                ? Theme.of(context).colorScheme.primaryContainer
+                                : null,
                             child: Row(
                               children: [
                                 Expanded(
@@ -612,8 +614,10 @@ class _ListeningDictionaryEntryViewState
                                           const SizedBox(height: 4),
                                           Text(
                                             '${wpm == null ? '' : l.text('dictionaryWpm').replaceAll('{wpm}', '$wpm')} · ${index + 1}/${occurrences.length}',
-                                            style: const TextStyle(
-                                              color: ListenColors.muted,
+                                            style: TextStyle(
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onSurfaceVariant,
                                             ),
                                           ),
                                         ],
@@ -674,7 +678,9 @@ class _ListeningDictionaryEntryViewState
         else if (unassignedOccurrences.isEmpty)
           Text(
             l.text('dictionaryNoClips'),
-            style: const TextStyle(color: ListenColors.muted),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         if (widget.onSearchLibrary != null) ..._librarySection(l),
       ],
@@ -713,15 +719,17 @@ class _ListeningDictionaryEntryViewState
       ),
       Text(
         l.text('dictionarySenseFoldersHint'),
-        style: Theme.of(
-          context,
-        ).textTheme.bodySmall?.copyWith(color: ListenColors.muted),
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
       const SizedBox(height: 8),
       if (widget.details.senseFolders.isEmpty)
         Text(
           l.text('dictionaryNoSenseFolders'),
-          style: const TextStyle(color: ListenColors.muted),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         )
       else
         for (final details in widget.details.senseFolders)
@@ -901,7 +909,10 @@ class _ListeningDictionaryEntryViewState
       children: [
         Text(
           l.text('dictionaryExternalHint'),
-          style: const TextStyle(color: ListenColors.muted, fontSize: 12),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontSize: 12,
+          ),
         ),
         if (canPlayAudio)
           PronunciationButton(
@@ -959,7 +970,9 @@ class _ListeningDictionaryEntryViewState
       else if (results.isEmpty) ...[
         Text(
           l.text('dictionaryNoLibraryResults'),
-          style: const TextStyle(color: ListenColors.muted),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         if (external != null) ...[const SizedBox(height: 10), external],
       ] else ...[
@@ -968,7 +981,10 @@ class _ListeningDictionaryEntryViewState
             l
                 .text('dictionarySampledHint')
                 .replaceAll('{count}', '${widget.libraryResultLimit}'),
-            style: const TextStyle(color: ListenColors.muted, fontSize: 12),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 12,
+            ),
           ),
           const SizedBox(height: 8),
         ],
@@ -1361,14 +1377,16 @@ class _ClipTile extends StatelessWidget {
                     style: TextStyle(
                       color: mark!
                           ? ListenColors.learningRecognized
-                          : ListenColors.accent,
+                          : Theme.of(context).colorScheme.secondary,
                       fontWeight: FontWeight.w700,
                     ),
                   )
                 else if (onHeard == null)
                   Text(
                     l.text('dictionaryMarkUnavailable'),
-                    style: const TextStyle(color: ListenColors.muted),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   )
                 else
                   Wrap(
@@ -1453,8 +1471,8 @@ class _HighlightedSentence extends StatelessWidget {
           TextSpan(text: sentence.substring(0, start)),
           TextSpan(
             text: sentence.substring(start, end),
-            style: const TextStyle(
-              color: ListenColors.primary,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.primary,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -1507,6 +1525,7 @@ class _CapabilityEditor extends StatelessWidget {
                   icon,
                   size: 17,
                   color: _color(
+                    Theme.of(context).colorScheme,
                     _dimension(channel)?.effectiveAssessment ?? 'unassessed',
                   ),
                 ),
@@ -1572,9 +1591,9 @@ class _CapabilityEditor extends StatelessWidget {
     );
   }
 
-  Color _color(String assessment) => switch (assessment) {
+  Color _color(ColorScheme colors, String assessment) => switch (assessment) {
     'acquired' => ListenColors.learningRecognized,
-    'not_acquired' => ListenColors.accent,
-    _ => ListenColors.muted,
+    'not_acquired' => colors.secondary,
+    _ => colors.onSurfaceVariant,
   };
 }

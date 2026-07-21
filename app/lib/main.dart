@@ -101,12 +101,12 @@ class ListenApp extends StatelessWidget {
   const ListenApp({super.key});
 
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder<String>(
-    valueListenable: appLanguage,
-    builder: (context, language, _) => MaterialApp(
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([appLanguage, appThemeMode]),
+    builder: (context, _) => MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'listen',
-      locale: language == 'system' ? null : Locale(language),
+      locale: appLanguage.value == 'system' ? null : Locale(appLanguage.value),
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [
         AppLocalizations.delegate,
@@ -115,6 +115,8 @@ class ListenApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       theme: ListenTheme.light(),
+      darkTheme: ListenTheme.dark(),
+      themeMode: appThemeMode.value,
       home: const PlayerScreen(),
     ),
   );
@@ -460,6 +462,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     playerController.setRate(s.rate);
     playerController.setVolume(s.volume);
     appLanguage.value = s.language;
+    appThemeMode.value = themeModeFromSetting(s.themeMode);
     await adapter.setRate(playerController.rate);
     await adapter.setVolume(playerController.volume);
   }

@@ -77,9 +77,13 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
         chunkSummaries.isNotEmpty;
     final artifacts = document?.artifacts ?? const <LLTimelineArtifact>[];
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: ListenColors.surface,
-        border: Border(bottom: BorderSide(color: ListenColors.border)),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+        ),
       ),
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
@@ -125,15 +129,15 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                       ? l.text('lltimelinePresent')
                       : l.text('legacyTimelineFallback'),
                   color: hasResource
-                      ? ListenColors.primary
-                      : ListenColors.muted,
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
                 if (document?.metadata.humanReviewed == true ||
                     active?.humanReviewed == true)
                   _Chip(
                     icon: Icons.verified_user_outlined,
                     label: l.text('humanReviewed'),
-                    color: ListenColors.accent,
+                    color: Theme.of(context).colorScheme.secondary,
                   ),
               ],
             ),
@@ -193,7 +197,7 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                             icon: Icons.memory,
                             label:
                                 '${document!.metadata.generatorId} ${document!.metadata.generatorVersion}',
-                            color: ListenColors.primary,
+                            color: Theme.of(context).colorScheme.primary,
                           ),
                           _Chip(
                             icon: _productionReady(artifacts)
@@ -203,8 +207,10 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                                 ? l.text('productionReportReady')
                                 : l.text('productionReportMissing'),
                             color: _productionReady(artifacts)
-                                ? ListenColors.primary
-                                : ListenColors.muted,
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
                           ),
                         ],
                       ),
@@ -306,8 +312,8 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                                       ? artifact.kind
                                       : '${artifact.kind} · ${artifact.providerId}',
                                   color: artifact.kind.contains('failure')
-                                      ? ListenColors.accent
-                                      : ListenColors.info,
+                                      ? Theme.of(context).colorScheme.secondary
+                                      : Theme.of(context).colorScheme.tertiary,
                                 ),
                               )
                               .toList(growable: false),
@@ -367,12 +373,12 @@ class _CapabilityReadinessTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final color = _stateColor(readiness.state);
+    final color = _stateColor(Theme.of(context).colorScheme, readiness.state);
     return SizedBox(
       width: 232,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: ListenColors.fog,
+          color: Theme.of(context).colorScheme.surfaceContainer,
           border: Border.all(color: color.withValues(alpha: 0.55)),
           borderRadius: BorderRadius.circular(8),
         ),
@@ -403,9 +409,9 @@ class _CapabilityReadinessTile extends StatelessWidget {
                 _detailText(l, readiness),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: ListenColors.muted),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ),
@@ -432,15 +438,16 @@ class _CapabilityReadinessTile extends StatelessWidget {
     CapabilityReadinessState.error => Icons.error_outline,
   };
 
-  Color _stateColor(CapabilityReadinessState state) => switch (state) {
-    CapabilityReadinessState.available => ListenColors.primary,
-    CapabilityReadinessState.generating => ListenColors.info,
-    CapabilityReadinessState.degraded => ListenColors.accent,
-    CapabilityReadinessState.unavailable => ListenColors.muted,
-    CapabilityReadinessState.unsupported => ListenColors.disabled,
-    CapabilityReadinessState.stale => ListenColors.accent,
-    CapabilityReadinessState.error => ListenColors.error,
-  };
+  Color _stateColor(ColorScheme colors, CapabilityReadinessState state) =>
+      switch (state) {
+        CapabilityReadinessState.available => colors.primary,
+        CapabilityReadinessState.generating => colors.tertiary,
+        CapabilityReadinessState.degraded => colors.secondary,
+        CapabilityReadinessState.unavailable => colors.onSurfaceVariant,
+        CapabilityReadinessState.unsupported => colors.disabledForeground,
+        CapabilityReadinessState.stale => colors.secondary,
+        CapabilityReadinessState.error => colors.error,
+      };
 }
 
 class _StateBadge extends StatelessWidget {
@@ -501,8 +508,8 @@ class _ActiveTimelineLine extends StatelessWidget {
               : Icons.radio_button_checked,
           size: 16,
           color: active == null && !hasFallback
-              ? ListenColors.muted
-              : ListenColors.primary,
+              ? Theme.of(context).colorScheme.onSurfaceVariant
+              : Theme.of(context).colorScheme.primary,
         ),
         const SizedBox(width: 6),
         Expanded(
@@ -534,7 +541,9 @@ class _ActiveChunkLine extends StatelessWidget {
         Icon(
           active == null ? Icons.splitscreen_outlined : Icons.grid_view,
           size: 16,
-          color: active == null ? ListenColors.muted : ListenColors.primary,
+          color: active == null
+              ? Theme.of(context).colorScheme.onSurfaceVariant
+              : Theme.of(context).colorScheme.primary,
         ),
         const SizedBox(width: 6),
         Expanded(
@@ -566,7 +575,9 @@ class _ActivePhoneLine extends StatelessWidget {
         Icon(
           active == null ? Icons.hearing_outlined : Icons.graphic_eq,
           size: 16,
-          color: active == null ? ListenColors.muted : ListenColors.primary,
+          color: active == null
+              ? Theme.of(context).colorScheme.onSurfaceVariant
+              : Theme.of(context).colorScheme.primary,
         ),
         const SizedBox(width: 6),
         Expanded(
@@ -601,11 +612,13 @@ class _CandidateTile extends StatelessWidget {
       constraints: const BoxConstraints.tightFor(width: 236, height: 74),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: summary.isActive ? ListenColors.selected : ListenColors.fog,
+          color: summary.isActive
+              ? Theme.of(context).colorScheme.primaryContainer
+              : Theme.of(context).colorScheme.surfaceContainer,
           border: Border.all(
             color: summary.isActive
-                ? ListenColors.primary
-                : ListenColors.border,
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.outlineVariant,
           ),
           borderRadius: BorderRadius.circular(8),
         ),
@@ -619,8 +632,8 @@ class _CandidateTile extends StatelessWidget {
                     : Icons.radio_button_unchecked,
                 size: 18,
                 color: summary.isActive
-                    ? ListenColors.primary
-                    : ListenColors.muted,
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -695,11 +708,13 @@ class _PhoneCandidateTile extends StatelessWidget {
       constraints: const BoxConstraints.tightFor(width: 250, height: 74),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: summary.isActive ? ListenColors.selected : ListenColors.fog,
+          color: summary.isActive
+              ? Theme.of(context).colorScheme.primaryContainer
+              : Theme.of(context).colorScheme.surfaceContainer,
           border: Border.all(
             color: summary.isActive
-                ? ListenColors.primary
-                : ListenColors.border,
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.outlineVariant,
           ),
           borderRadius: BorderRadius.circular(8),
         ),
@@ -711,8 +726,8 @@ class _PhoneCandidateTile extends StatelessWidget {
                 summary.isActive ? Icons.check_circle : Icons.graphic_eq,
                 size: 18,
                 color: summary.isActive
-                    ? ListenColors.primary
-                    : ListenColors.muted,
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -796,11 +811,13 @@ class _ChunkCandidateTile extends StatelessWidget {
       constraints: const BoxConstraints.tightFor(width: 250, height: 74),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: summary.isActive ? ListenColors.selected : ListenColors.fog,
+          color: summary.isActive
+              ? Theme.of(context).colorScheme.primaryContainer
+              : Theme.of(context).colorScheme.surfaceContainer,
           border: Border.all(
             color: summary.isActive
-                ? ListenColors.primary
-                : ListenColors.border,
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.outlineVariant,
           ),
           borderRadius: BorderRadius.circular(8),
         ),
@@ -812,8 +829,8 @@ class _ChunkCandidateTile extends StatelessWidget {
                 summary.isActive ? Icons.check_circle : Icons.grid_view,
                 size: 18,
                 color: summary.isActive
-                    ? ListenColors.primary
-                    : ListenColors.muted,
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
               const SizedBox(width: 8),
               Expanded(

@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/task_status.dart';
 import '../../player_adapter.dart';
-import '../../theme/listen_theme.dart';
 import '../../utils/format_duration.dart';
 
 class PlaybackControls extends StatelessWidget {
@@ -1275,7 +1274,7 @@ class _SourceLoopChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: ListenColors.accent.withValues(alpha: 0.15),
+        color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Padding(
@@ -1283,13 +1282,17 @@ class _SourceLoopChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.loop, size: 13, color: ListenColors.accent),
+            Icon(
+              Icons.loop,
+              size: 13,
+              color: Theme.of(context).colorScheme.secondary,
+            ),
             const SizedBox(width: 4),
             Text(
               label,
-              style: Theme.of(
-                context,
-              ).textTheme.labelSmall?.copyWith(color: ListenColors.accent),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(context).colorScheme.secondary,
+              ),
             ),
             SizedBox(
               width: 22,
@@ -1298,7 +1301,10 @@ class _SourceLoopChip extends StatelessWidget {
                 onPressed: onStop,
                 padding: EdgeInsets.zero,
                 iconSize: 14,
-                icon: Icon(Icons.close, color: ListenColors.accent),
+                icon: Icon(
+                  Icons.close,
+                  color: Theme.of(context).colorScheme.secondary,
+                ),
                 tooltip: AppLocalizations.of(context).text('stopSourceLoop'),
               ),
             ),
@@ -1317,7 +1323,7 @@ class _TaskStatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final color = _stateColor(status.state);
+    final color = _stateColor(Theme.of(context).colorScheme, status.state);
     return DecoratedBox(
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
@@ -1335,12 +1341,12 @@ class _TaskStatusChip extends StatelessWidget {
     );
   }
 
-  Color _stateColor(UserTaskState state) => switch (state) {
-    UserTaskState.working => ListenColors.info,
-    UserTaskState.success => ListenColors.primary,
-    UserTaskState.warning => ListenColors.accent,
-    UserTaskState.error => ListenColors.error,
-    UserTaskState.cancelled => ListenColors.muted,
-    UserTaskState.unknown => ListenColors.muted,
+  Color _stateColor(ColorScheme colors, UserTaskState state) => switch (state) {
+    UserTaskState.working => colors.tertiary,
+    UserTaskState.success => colors.primary,
+    UserTaskState.warning => colors.secondary,
+    UserTaskState.error => colors.error,
+    UserTaskState.cancelled => colors.onSurfaceVariant,
+    UserTaskState.unknown => colors.onSurfaceVariant,
   };
 }

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'localization.dart';
 import 'models/runtime_resources.dart';
 import 'services/api_service.dart';
-import 'theme/listen_theme.dart';
 
 class PhoneticAnalysisCenter extends StatefulWidget {
   const PhoneticAnalysisCenter({
@@ -124,10 +123,10 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
     final active = jobs.where((job) => _isActive(job.status)).length;
     final failed = jobs.where((job) => job.status == 'failed').length;
     final color = failed > 0
-        ? ListenColors.error
+        ? Theme.of(context).colorScheme.error
         : active > 0
-        ? ListenColors.info
-        : ListenColors.muted;
+        ? Theme.of(context).colorScheme.tertiary
+        : Theme.of(context).colorScheme.onSurfaceVariant;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
@@ -232,9 +231,9 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
       );
     }
     if (state == 'custom' || state == 'installed') {
-      return const Icon(
+      return Icon(
         Icons.check_circle_outline,
-        color: ListenColors.primary,
+        color: Theme.of(context).colorScheme.primary,
       );
     }
     return null;
@@ -300,7 +299,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
               child: LinearProgressIndicator(
                 value: progress,
                 minHeight: 3,
-                backgroundColor: ListenColors.border,
+                backgroundColor: Theme.of(context).colorScheme.outlineVariant,
               ),
             ),
           if (active) const SizedBox(height: 4),
@@ -342,26 +341,42 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
   Widget _statusIcon(String status) {
     switch (status) {
       case 'completed':
-        return const Icon(
+        return Icon(
           Icons.check_circle,
-          color: ListenColors.primary,
+          color: Theme.of(context).colorScheme.primary,
           size: 22,
         );
       case 'failed':
-        return const Icon(Icons.error, color: ListenColors.error, size: 22);
+        return Icon(
+          Icons.error,
+          color: Theme.of(context).colorScheme.error,
+          size: 22,
+        );
       case 'cancelled':
-        return const Icon(Icons.cancel, color: ListenColors.accent, size: 22);
+        return Icon(
+          Icons.cancel,
+          color: Theme.of(context).colorScheme.secondary,
+          size: 22,
+        );
       case 'interrupted':
-        return Icon(Icons.warning_amber, color: ListenColors.accent, size: 22);
+        return Icon(
+          Icons.warning_amber,
+          color: Theme.of(context).colorScheme.secondary,
+          size: 22,
+        );
       case 'queued':
-        return const Icon(Icons.schedule, color: ListenColors.info, size: 22);
+        return Icon(
+          Icons.schedule,
+          color: Theme.of(context).colorScheme.tertiary,
+          size: 22,
+        );
       default:
         return SizedBox(
           width: 22,
           height: 22,
           child: CircularProgressIndicator(
             strokeWidth: 2,
-            color: ListenColors.info,
+            color: Theme.of(context).colorScheme.tertiary,
           ),
         );
     }
@@ -369,19 +384,37 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
 
   Widget _statusChip(String status, AppLocalizations l) {
     final (label, color) = switch (status) {
-      'completed' => (l.text('jobCompleted'), ListenColors.primary),
-      'failed' => (l.text('jobFailed'), ListenColors.error),
-      'cancelled' => (l.text('jobCancelled'), ListenColors.accent),
-      'interrupted' => (l.text('jobInterrupted'), ListenColors.accent),
-      'queued' => (l.text('jobQueued'), ListenColors.info),
-      'extracting' => (l.text('jobExtracting'), ListenColors.info),
+      'completed' => (
+        l.text('jobCompleted'),
+        Theme.of(context).colorScheme.primary,
+      ),
+      'failed' => (l.text('jobFailed'), Theme.of(context).colorScheme.error),
+      'cancelled' => (
+        l.text('jobCancelled'),
+        Theme.of(context).colorScheme.secondary,
+      ),
+      'interrupted' => (
+        l.text('jobInterrupted'),
+        Theme.of(context).colorScheme.secondary,
+      ),
+      'queued' => (l.text('jobQueued'), Theme.of(context).colorScheme.tertiary),
+      'extracting' => (
+        l.text('jobExtracting'),
+        Theme.of(context).colorScheme.tertiary,
+      ),
       'recognizing_phones' => (
         l.text('jobRecognizingPhones'),
-        ListenColors.info,
+        Theme.of(context).colorScheme.tertiary,
       ),
-      'aligning' => (l.text('jobAligning'), ListenColors.info),
-      'analyzing' => (l.text('jobAnalyzing'), ListenColors.info),
-      _ => (status, ListenColors.muted),
+      'aligning' => (
+        l.text('jobAligning'),
+        Theme.of(context).colorScheme.tertiary,
+      ),
+      'analyzing' => (
+        l.text('jobAnalyzing'),
+        Theme.of(context).colorScheme.tertiary,
+      ),
+      _ => (status, Theme.of(context).colorScheme.onSurfaceVariant),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

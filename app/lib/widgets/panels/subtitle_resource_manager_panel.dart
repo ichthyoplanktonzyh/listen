@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
-import '../../theme/listen_theme.dart';
 import 'content_fit_card.dart';
 import 'timeline_resource_summary_panel.dart';
 
@@ -88,7 +87,7 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
         ? activeWordTimingCount
         : resourceWordTimingCount;
     return Material(
-      color: ListenColors.surface,
+      color: Theme.of(context).colorScheme.surface,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -296,7 +295,7 @@ class _ResourceSplitter extends StatelessWidget {
           child: Center(
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: ListenColors.border,
+                color: Theme.of(context).colorScheme.outlineVariant,
                 borderRadius: BorderRadius.circular(999),
               ),
               child: const SizedBox(width: 42, height: 2),
@@ -338,9 +337,13 @@ class _SubtitleResourceTile extends StatelessWidget {
     final l = AppLocalizations.of(context);
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: active ? ListenColors.selected : ListenColors.fog,
+        color: active
+            ? Theme.of(context).colorScheme.primaryContainer
+            : Theme.of(context).colorScheme.surfaceContainer,
         border: Border.all(
-          color: active ? ListenColors.primary : ListenColors.border,
+          color: active
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).colorScheme.outlineVariant,
         ),
         borderRadius: BorderRadius.circular(8),
       ),
@@ -351,7 +354,9 @@ class _SubtitleResourceTile extends StatelessWidget {
             Icon(
               active ? Icons.check_circle : Icons.subtitles_outlined,
               size: 18,
-              color: active ? ListenColors.primary : ListenColors.muted,
+              color: active
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -382,7 +387,7 @@ class _SubtitleResourceTile extends StatelessWidget {
                   Text(
                     l.text('resourceLearningCapabilities'),
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: ListenColors.muted,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -463,7 +468,11 @@ class _SubtitleResourceTile extends StatelessWidget {
                         title: Text(
                           l.text('technicalDetails'),
                           style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(color: ListenColors.muted),
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
                         ),
                         children: [
                           Align(
@@ -566,12 +575,18 @@ class _CapabilityChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? ListenColors.primary : ListenColors.muted;
+    final color = active
+        ? Theme.of(context).colorScheme.primary
+        : Theme.of(context).colorScheme.onSurfaceVariant;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: active ? ListenColors.selected : ListenColors.fog,
+        color: active
+            ? Theme.of(context).colorScheme.primaryContainer
+            : Theme.of(context).colorScheme.surfaceContainer,
         border: Border.all(
-          color: active ? ListenColors.primary : ListenColors.border,
+          color: active
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).colorScheme.outlineVariant,
         ),
         borderRadius: BorderRadius.circular(999),
       ),
@@ -636,8 +651,8 @@ class _LanguageChip extends StatelessWidget {
       ],
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: ListenColors.infoSurface,
-          border: Border.all(color: ListenColors.info),
+          color: Theme.of(context).colorScheme.tertiaryContainer,
+          border: Border.all(color: Theme.of(context).colorScheme.tertiary),
           borderRadius: BorderRadius.circular(999),
         ),
         child: Padding(
@@ -645,12 +660,16 @@ class _LanguageChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.language, size: 12, color: ListenColors.info),
+              Icon(
+                Icons.language,
+                size: 12,
+                color: Theme.of(context).colorScheme.tertiary,
+              ),
               const SizedBox(width: 3),
               Text(
                 label,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: ListenColors.info,
+                  color: Theme.of(context).colorScheme.tertiary,
                   fontWeight: FontWeight.w600,
                 ),
               ),

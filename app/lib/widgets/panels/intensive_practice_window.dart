@@ -7,7 +7,6 @@ import '../../controllers/practice_controller.dart';
 import '../../localization.dart';
 import '../../models/practice.dart';
 import '../../services/shadowing_recorder.dart';
-import '../../theme/listen_theme.dart';
 
 /// A transient practice surface for one intensive-listening prompt.
 ///
@@ -128,7 +127,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
         elevation: 18,
         borderRadius: BorderRadius.circular(16),
         clipBehavior: Clip.antiAlias,
-        color: ListenColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         child: Column(
           children: [
             _titleBar(constraints, width, height),
@@ -232,7 +231,9 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
       return Center(
         child: Text(
           l.text('practiceChoosePrompt'),
-          style: const TextStyle(color: ListenColors.muted),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -261,7 +262,10 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
             padding: const EdgeInsets.only(top: 8),
             child: Text(
               draft.degradedMessage!,
-              style: const TextStyle(fontSize: 12, color: ListenColors.accent),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.secondary,
+              ),
             ),
           ),
         const SizedBox(height: 14),
@@ -329,7 +333,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
             else ...[
               FilledButton.icon(
                 style: FilledButton.styleFrom(
-                  backgroundColor: ListenColors.error,
+                  backgroundColor: Theme.of(context).colorScheme.error,
                 ),
                 onPressed: controller.busy
                     ? null
@@ -351,10 +355,10 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
             padding: const EdgeInsets.only(top: 10),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.fiber_manual_record,
                   size: 14,
-                  color: ListenColors.error,
+                  color: Theme.of(context).colorScheme.error,
                 ),
                 const SizedBox(width: 6),
                 Text(l.text('shadowingRecordingActive')),
@@ -415,13 +419,13 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
             _waveformRow(
               l.text('shadowingOriginal'),
               comparison.referenceWaveform,
-              ListenColors.info,
+              Theme.of(context).colorScheme.tertiary,
             ),
             const SizedBox(height: 8),
             _waveformRow(
               l.text('shadowingMine'),
               comparison.recordingWaveform,
-              ListenColors.accent,
+              Theme.of(context).colorScheme.secondary,
             ),
           ],
           if (state.comparisonWarning != null)
@@ -429,8 +433,8 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
               padding: const EdgeInsets.only(top: 10),
               child: Text(
                 state.comparisonWarning!,
-                style: const TextStyle(
-                  color: ListenColors.accent,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.secondary,
                   fontSize: 12,
                 ),
               ),
@@ -441,7 +445,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
             padding: const EdgeInsets.only(top: 10),
             child: Text(
               controller.error!,
-              style: const TextStyle(color: ListenColors.error),
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ),
       ],
@@ -507,7 +511,10 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
             padding: const EdgeInsets.only(top: 8),
             child: Text(
               draft.degradedMessage!,
-              style: const TextStyle(fontSize: 12, color: ListenColors.accent),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.secondary,
+              ),
             ),
           ),
         Padding(
@@ -524,7 +531,10 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
             padding: const EdgeInsets.only(top: 8),
             child: Text(
               l.text('practiceHiddenText'),
-              style: const TextStyle(fontSize: 12, color: ListenColors.muted),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
         Padding(
@@ -577,7 +587,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
             padding: const EdgeInsets.only(top: 10),
             child: Text(
               controller.error!,
-              style: const TextStyle(color: ListenColors.error),
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ),
       ],
@@ -603,7 +613,9 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
           padding: const EdgeInsets.only(top: 6),
           child: Text(
             attempt.evaluation.summary,
-            style: const TextStyle(color: ListenColors.muted),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
         if (attempt.evaluation.tokenResults.isNotEmpty) _diff(attempt),
@@ -756,7 +768,9 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
         Text(
           draft.focusLabel!,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: ListenColors.muted),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
     ],
   );
@@ -805,11 +819,11 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
   };
 
   Color _resultColor(String result) => switch (result) {
-    'correct' => ListenColors.primary,
-    'missing' => ListenColors.accent,
-    'extra' => ListenColors.info,
-    'mismatch' => ListenColors.error,
-    _ => ListenColors.muted,
+    'correct' => Theme.of(context).colorScheme.primary,
+    'missing' => Theme.of(context).colorScheme.secondary,
+    'extra' => Theme.of(context).colorScheme.tertiary,
+    'mismatch' => Theme.of(context).colorScheme.error,
+    _ => Theme.of(context).colorScheme.onSurfaceVariant,
   };
 }
 

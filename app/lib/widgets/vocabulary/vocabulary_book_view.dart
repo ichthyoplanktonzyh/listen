@@ -6,11 +6,12 @@ import '../../theme/listen_theme.dart';
 
 /// Shared color for a capability channel's effective assessment, used by both
 /// the list snapshot icons and the filter chips so the two read as one system.
-Color capabilityAssessmentColor(String assessment) => switch (assessment) {
-  'acquired' => ListenColors.learningRecognized,
-  'not_acquired' => ListenColors.accent,
-  _ => ListenColors.muted.withValues(alpha: 0.45),
-};
+Color capabilityAssessmentColor(ColorScheme colors, String assessment) =>
+    switch (assessment) {
+      'acquired' => ListenColors.learningRecognized,
+      'not_acquired' => colors.secondary,
+      _ => colors.onSurfaceVariant.withValues(alpha: 0.45),
+    };
 
 class VocabularyBookView extends StatelessWidget {
   const VocabularyBookView({
@@ -122,7 +123,10 @@ class _CapabilitySummary extends StatelessWidget {
               child: Icon(
                 icon,
                 size: 15,
-                color: capabilityAssessmentColor(_assessment(channel)),
+                color: capabilityAssessmentColor(
+                  Theme.of(context).colorScheme,
+                  _assessment(channel),
+                ),
               ),
             ),
           ),

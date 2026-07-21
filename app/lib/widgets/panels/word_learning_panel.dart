@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/types.dart';
-import '../../theme/listen_theme.dart';
 import '../../utils/format_duration.dart';
 import '../vocabulary/pronunciation_button.dart';
 
@@ -167,8 +166,10 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
             ),
             DecoratedBox(
               decoration: BoxDecoration(
-                color: ListenColors.selected,
-                border: Border.all(color: ListenColors.primary),
+                color: Theme.of(context).colorScheme.primaryContainer,
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Padding(
@@ -176,7 +177,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
                 child: Text(
                   l.status(entry.status),
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: ListenColors.primary,
+                    color: Theme.of(context).colorScheme.primary,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -469,7 +470,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
   Widget _sectionHeader(BuildContext context, String title, IconData icon) =>
       Row(
         children: [
-          Icon(icon, size: 18, color: ListenColors.primary),
+          Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
           const SizedBox(width: 8),
           Text(title, style: Theme.of(context).textTheme.titleSmall),
         ],
@@ -514,7 +515,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: ListenColors.primary),
+          Icon(icon, size: 16, color: Theme.of(context).colorScheme.primary),
           const SizedBox(width: 6),
           SizedBox(
             width: 48,

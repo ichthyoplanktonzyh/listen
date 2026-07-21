@@ -72,6 +72,7 @@ Future<void> _pumpSettingsDialog(
       home: Scaffold(
         body: SettingsDialog(
           language: 'en',
+          themeMode: 'system',
           subtitlePreset: 'learning',
           primaryFontSize: 24,
           primaryFontFamily: 'system',
@@ -110,6 +111,7 @@ Future<void> _pumpSettingsDialog(
           onLearningLanguageChanged: (_) {},
           onL1LanguageChanged: (_) {},
           onLanguageChanged: (_) {},
+          onThemeModeChanged: (_) {},
           onSubtitlePresetChanged: (_) {},
           onPrimaryFontSizeChanged: (_) {},
           onPrimaryFontFamilyChanged: (_) {},
