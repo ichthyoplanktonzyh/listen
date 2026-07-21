@@ -110,23 +110,6 @@ Map<String, dynamic> _providerJson({
   'created_at_ms': 1,
 };
 
-Map<String, dynamic> _llmJudgment(String attemptId, int revision) => {
-  'id': 'llm-judgment-$revision',
-  'attempt_id': attemptId,
-  'response_revision': revision,
-  'rubric_id': 'rubric-writing',
-  'rubric_version': 1,
-  'rubric_source_sha256': 'h1',
-  'response_transcript_sha256': 'h2',
-  'points': [
-    {'point_id': 'task_fulfillment', 'verdict': 'partial'},
-  ],
-  'abstain': null,
-  'provenance': {'kind': 'llm', 'model_id': 'm'},
-  'evidence_class': 'heuristic_proxy',
-  'created_at_ms': 25,
-};
-
 class _Backend {
   final requests = <(String, String, Map<String, dynamic>?)>[];
   var attemptPosts = 0;
@@ -190,35 +173,14 @@ class _Backend {
         };
       } else if (method == 'GET' && path == '/v1/llm/providers') {
         response = providers;
-      } else if (method == 'POST' && path == '/v1/llm/providers/prov-1/judge') {
-        response = _llmJudgment(
-          decoded!['attempt_id'] as String,
-          decoded['response_revision'] as int,
-        );
-      } else if (method == 'POST' && path == '/v1/semantic/adjudications') {
+      } else if (method == 'POST' &&
+          path == '/v1/llm/providers/prov-1/feedback') {
         response = {
-          'id': 'adjudication-1',
-          'judgment_id': decoded!['judgment_id'],
-          'point_id': decoded['point_id'],
-          'prior_verdict': decoded['prior_verdict'],
-          'user_verdict': decoded['user_verdict'],
-          'note': decoded['note'],
-          'occurred_at_ms': 40,
-        };
-      } else if (method == 'POST' && path == '/v1/semantic/judgments') {
-        response = {
-          'id': 'judgment-1',
-          'attempt_id': 'attempt-revised',
-          'response_revision': 2,
-          'rubric_id': 'rubric-writing',
-          'rubric_version': 1,
-          'rubric_source_sha256': 'source-hash',
-          'response_transcript_sha256': 'response-hash',
-          'points': decoded!['points'],
-          'abstain': null,
-          'provenance': decoded['provenance'],
-          'evidence_class': decoded['evidence_class'],
-          'created_at_ms': 31,
+          'feedback':
+              'Good summary of ${decoded!['attempt_id']} '
+              'rev ${decoded['response_revision']}.',
+          'model_id': 'm',
+          'prompt_version': 'output-feedback/v1',
         };
       } else {
         throw StateError('Unexpected request: $method $path');
@@ -252,13 +214,19 @@ void main() {
       expect(controller.state.findings.single.providerId, 'harper');
 
       controller.decide('finding-1', 'accepted');
-      controller.setSelfVerdict('task_fulfillment', 'covered');
       // Accepting a suggestion records intent only; text remains learner-owned.
       expect(controller.state.revisionDraft, 'This is an useful summary.');
       controller.updateRevision('This is a useful summary.');
       await controller.submitRevision(backend.api);
       expect(controller.state.phase, 'done');
-      expect(controller.state.selfAssessment?.evidenceClass, 'self_assessment');
+      // No rubric self-assessment exists anymore (issue #9): submitting the
+      // revision writes the attempt and dispositions, never a judgment.
+      expect(
+        backend.requests.where(
+          (request) => request.$2 == '/v1/semantic/judgments',
+        ),
+        isEmpty,
+      );
 
       final attempts = backend.requests
           .where((request) => request.$2 == '/v1/semantic/attempts')
@@ -277,7 +245,7 @@ void main() {
     },
   );
 
-  test('LLM assist judges the latest revision and resets across attempts',
+  test('LLM feedback cites the latest revision and resets across attempts',
       () async {
     final backend = _Backend()..providers = [_providerJson()];
     final controller = WritingTaskController();
@@ -290,54 +258,32 @@ void main() {
     );
     controller.updateDraft('First version.');
     await controller.submitDraft(backend.api);
-    // A judgment-capable provider was discovered, but nothing is judged yet.
-    expect(controller.state.judgeProviderId, 'prov-1');
-    expect(controller.state.llmJudgment, isNull);
+    // A capable provider was discovered, but no feedback yet.
+    expect(controller.state.feedbackProviderId, 'prov-1');
+    expect(controller.state.llmFeedback, isNull);
 
-    await controller.requestLlmJudgment(backend.api);
-    final judgment = controller.state.llmJudgment!;
-    // Never gold: the content/organization verdict stays a heuristic proxy,
-    // separate from Harper findings and from the learner meaning check.
-    expect(judgment.evidenceClass, 'heuristic_proxy');
-    expect(judgment.provenance.kind, 'llm');
-    var judgeBodies = backend.requests
-        .where((r) => r.$2 == '/v1/llm/providers/prov-1/judge')
-        .toList();
-    expect(judgeBodies.single.$3!['attempt_id'], 'attempt-original');
-    expect(judgeBodies.single.$3!['response_revision'], 1);
-
-    // Correcting the LLM verdict appends an adjudication citing the LLM row.
-    await controller.adjudicateLlm(
-      backend.api,
-      pointId: 'task_fulfillment',
-      userVerdict: 'covered',
+    await controller.requestLlmFeedback(backend.api);
+    expect(
+      controller.state.llmFeedback,
+      'Good summary of attempt-original rev 1.',
     );
-    final adjBody = backend.requests
-        .firstWhere((r) => r.$2 == '/v1/semantic/adjudications')
-        .$3!;
-    expect(adjBody['judgment_id'], 'llm-judgment-1');
-    expect(adjBody['prior_verdict'], 'partial');
-    expect(adjBody['user_verdict'], 'covered');
 
-    // The revised attempt gets a fresh request; the old judgment (which cited
+    // The revised attempt gets a fresh request; the old feedback (which cited
     // revision 1 of the initial attempt) never carries over.
     controller.startRevisionWithoutFeedback();
     controller.updateRevision('Second version.');
     await controller.submitRevision(backend.api);
     expect(controller.state.phase, 'done');
-    expect(controller.state.llmJudgment, isNull);
-    expect(controller.state.llmAdjudications, isEmpty);
+    expect(controller.state.llmFeedback, isNull);
 
-    await controller.requestLlmJudgment(backend.api);
-    judgeBodies = backend.requests
-        .where((r) => r.$2 == '/v1/llm/providers/prov-1/judge')
-        .toList();
-    expect(judgeBodies.last.$3!['attempt_id'], 'attempt-revised');
-    expect(judgeBodies.last.$3!['response_revision'], 2);
+    await controller.requestLlmFeedback(backend.api);
+    expect(
+      controller.state.llmFeedback,
+      'Good summary of attempt-revised rev 2.',
+    );
   });
 
-  test('LLM assist stays hidden without a judgment-capable provider',
-      () async {
+  test('LLM feedback stays hidden without a capable provider', () async {
     final backend = _Backend()
       ..providers = [
         _providerJson(allowedUses: ['rubric_generation']),
@@ -352,10 +298,10 @@ void main() {
     );
     controller.updateDraft('First version.');
     await controller.submitDraft(backend.api);
-    expect(controller.state.judgeProviderId, isNull);
-    await controller.requestLlmJudgment(backend.api);
-    expect(controller.state.llmJudgment, isNull);
-    expect(backend.requests.where((r) => r.$2.endsWith('/judge')), isEmpty);
+    expect(controller.state.feedbackProviderId, isNull);
+    await controller.requestLlmFeedback(backend.api);
+    expect(controller.state.llmFeedback, isNull);
+    expect(backend.requests.where((r) => r.$2.endsWith('/feedback')), isEmpty);
   });
 
   test('autosaved draft survives a new controller instance', () async {

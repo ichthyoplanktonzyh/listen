@@ -1575,17 +1575,11 @@ class _PlayerScreenState extends State<PlayerScreen>
         personalState.phase == 'done' &&
         personalState.recording != null &&
         personalState.correctedTranscript.trim().isNotEmpty) {
-      final verdicts =
-          personalState.rubric?.points
-              .map((point) => personalState.effectiveVerdict(point.pointId))
-              .whereType<String>()
-              .toList(growable: false) ??
-          const <String>[];
-      final assessment = verdicts.any((value) => value == 'missing')
-          ? 'needs_work'
-          : verdicts.isNotEmpty && verdicts.every((value) => value == 'covered')
-          ? 'expressed'
-          : 'partly_expressed';
+      // The speaking rubric self-assessment is gone (issue #9); the 3.17
+      // handoff fact still needs its one-shot self-assessment, so ask the
+      // same single question the Personal Expression screen uses.
+      final assessment =
+          await _askPersonalExpressionAssessment() ?? 'partly_expressed';
       try {
         await api?.recordPersonalExpressionAttempt(
           patternId: personalPattern.id,
@@ -1611,6 +1605,24 @@ class _PlayerScreenState extends State<PlayerScreen>
       unawaited(_openPersonalExpression());
     }
   }
+
+  Future<String?> _askPersonalExpressionAssessment() => showDialog<String>(
+    context: context,
+    builder: (context) => SimpleDialog(
+      title: const Text('这个表达用得怎么样？'),
+      children: [
+        for (final (value, label) in const [
+          ('needs_work', '还需要练习'),
+          ('partly_expressed', '基本表达出来'),
+          ('expressed', '表达自然'),
+        ])
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, value),
+            child: Text(label),
+          ),
+      ],
+    ),
+  );
 
   Future<void> _openSpeakingL1Check() async {
     final service = api;

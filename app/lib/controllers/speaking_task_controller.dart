@@ -61,13 +61,8 @@ class SpeakingTaskState {
     this.asrReliability = 'suspect',
     this.assistance,
     this.attempt,
-    this.feedbackRequested = false,
-    this.draftVerdicts = const {},
-    this.judgment,
-    this.adjudications = const [],
-    this.judgeProviderId,
-    this.llmJudgment,
-    this.llmAdjudications = const [],
+    this.feedbackProviderId,
+    this.llmFeedback,
     this.delayedReviewItemId,
     this.delayedReviewCompleted = false,
     this.confirmedTargetIds = const {},
@@ -78,7 +73,7 @@ class SpeakingTaskState {
   });
 
   /// idle | listening | recording | transcribing | reviewing | ready_feedback
-  /// | assessing | done
+  /// | done
   final String phase;
   final String kind;
   final SpeakingTaskSource? source;
@@ -94,17 +89,12 @@ class SpeakingTaskState {
   final String asrReliability;
   final String? assistance;
   final SemanticAttemptView? attempt;
-  final bool feedbackRequested;
-  final Map<String, String> draftVerdicts;
-  final SemanticJudgmentView? judgment;
-  final List<JudgmentAdjudicationView> adjudications;
 
-  /// Phase 3.12.2: an optional LLM judgment shown as correctable assist. It
-  /// never replaces the manual self-assessment; both are stored, honest
-  /// `heuristic_proxy` rows that write no observation/projection.
-  final String? judgeProviderId;
-  final SemanticJudgmentView? llmJudgment;
-  final List<JudgmentAdjudicationView> llmAdjudications;
+  /// Optional teacher-style free-text LLM feedback (issue #9): the provider
+  /// sees the full source context and answers in prose. Ephemeral assist
+  /// only — nothing is persisted and no observation/projection is written.
+  final String? feedbackProviderId;
+  final String? llmFeedback;
   final String? delayedReviewItemId;
   final bool delayedReviewCompleted;
   final Set<String> confirmedTargetIds;
@@ -114,16 +104,6 @@ class SpeakingTaskState {
   final String? error;
 
   bool get canRetry => phase == 'done' && retryCount == 0;
-  bool get allPointsJudged =>
-      rubric != null &&
-      rubric!.points.every((point) => draftVerdicts.containsKey(point.pointId));
-
-  String? effectiveVerdict(String pointId) {
-    for (final adjudication in adjudications.reversed) {
-      if (adjudication.pointId == pointId) return adjudication.userVerdict;
-    }
-    return judgment?.verdictFor(pointId);
-  }
 
   SpeakingTaskState copyWith({
     String? phase,
@@ -141,13 +121,8 @@ class SpeakingTaskState {
     String? asrReliability,
     Object? assistance = _unset,
     Object? attempt = _unset,
-    bool? feedbackRequested,
-    Map<String, String>? draftVerdicts,
-    Object? judgment = _unset,
-    List<JudgmentAdjudicationView>? adjudications,
-    Object? judgeProviderId = _unset,
-    Object? llmJudgment = _unset,
-    List<JudgmentAdjudicationView>? llmAdjudications,
+    Object? feedbackProviderId = _unset,
+    Object? llmFeedback = _unset,
     Object? delayedReviewItemId = _unset,
     bool? delayedReviewCompleted,
     Set<String>? confirmedTargetIds,
@@ -187,19 +162,12 @@ class SpeakingTaskState {
     attempt: identical(attempt, _unset)
         ? this.attempt
         : attempt as SemanticAttemptView?,
-    feedbackRequested: feedbackRequested ?? this.feedbackRequested,
-    draftVerdicts: draftVerdicts ?? this.draftVerdicts,
-    judgment: identical(judgment, _unset)
-        ? this.judgment
-        : judgment as SemanticJudgmentView?,
-    adjudications: adjudications ?? this.adjudications,
-    judgeProviderId: identical(judgeProviderId, _unset)
-        ? this.judgeProviderId
-        : judgeProviderId as String?,
-    llmJudgment: identical(llmJudgment, _unset)
-        ? this.llmJudgment
-        : llmJudgment as SemanticJudgmentView?,
-    llmAdjudications: llmAdjudications ?? this.llmAdjudications,
+    feedbackProviderId: identical(feedbackProviderId, _unset)
+        ? this.feedbackProviderId
+        : feedbackProviderId as String?,
+    llmFeedback: identical(llmFeedback, _unset)
+        ? this.llmFeedback
+        : llmFeedback as String?,
     delayedReviewItemId: identical(delayedReviewItemId, _unset)
         ? this.delayedReviewItemId
         : delayedReviewItemId as String?,
@@ -230,7 +198,6 @@ class SpeakingTaskController extends ChangeNotifier {
   static const retellingKind = 'l2_retelling';
   static const roleReplyKind = 'role_reply';
   static const patternProductionKind = 'pattern_production';
-  static const evidenceClass = 'self_assessment';
 
   final ShadowingRecorder _recorder;
   final Future<void> Function(Duration) _delay;
@@ -540,185 +507,47 @@ class SpeakingTaskController extends ChangeNotifier {
         (s) =>
             s.copyWith(phase: 'ready_feedback', attempt: attempt, busy: false),
       );
-      // Resolve the (optional) judge provider now that the attempt exists —
-      // the assist entry only appears from the assessing phase onward, and the
-      // manual self-assessment path never depends on any provider.
-      final judgeProviderId = await api.preferredLlmProviderId(
-        'semantic_judgment',
-      );
-      if (judgeProviderId != null && state.judgeProviderId != judgeProviderId) {
-        _store.update((s) => s.copyWith(judgeProviderId: judgeProviderId));
+      // Resolve the (optional) feedback provider now that the attempt exists —
+      // the assist entry only appears once there is something to comment on,
+      // and the task flow never depends on any provider.
+      final providerId = await api.preferredLlmProviderId('semantic_judgment');
+      if (providerId != null && state.feedbackProviderId != providerId) {
+        _store.update((s) => s.copyWith(feedbackProviderId: providerId));
       }
     } catch (error) {
       _store.update((s) => s.copyWith(busy: false, error: '$error'));
     }
   }
 
-  void requestFeedback() {
+  /// Ends the task after the saved-recording stage. There is no rubric
+  /// self-assessment (issue #9): the attempt itself, confirmed vocabulary
+  /// targets, and the optional LLM feedback are all the task produces.
+  void finishTask() {
     if (state.phase != 'ready_feedback') return;
-    _store.update(
-      (s) => s.copyWith(
-        phase: 'assessing',
-        feedbackRequested: true,
-        draftVerdicts: const {},
-      ),
-    );
-  }
-
-  void setVerdict(String pointId, String verdict) {
-    if (state.phase != 'assessing' ||
-        !const {'covered', 'partial', 'missing'}.contains(verdict)) {
-      return;
+    _store.update((s) => s.copyWith(phase: 'done'));
+    final source = state.source;
+    if (source != null) {
+      _drafts.remove(_draftKey(source, state.kind, state.assistance));
     }
-    _store.update(
-      (s) => s.copyWith(draftVerdicts: {...s.draftVerdicts, pointId: verdict}),
-    );
   }
 
-  Future<void> submitSelfAssessment(LocalApi api) async {
-    final rubric = state.rubric;
+  /// Requests teacher-style free-text feedback on the stored attempt through
+  /// the configured provider. The provider sees the source transcript, task
+  /// prompt, and learner response; the reply is ephemeral assist — nothing is
+  /// stored, and on any provider failure only the error surfaces.
+  Future<void> requestLlmFeedback(LocalApi api) async {
     final attempt = state.attempt;
-    if (state.phase != 'assessing' ||
-        rubric == null ||
-        attempt == null ||
-        !state.allPointsJudged) {
-      return;
-    }
-    final response = attempt.responses.single;
-    final charCount = response.transcript.runes.length;
-    final points = [
-      for (final point in rubric.points)
-        PointJudgmentView(
-          pointId: point.pointId,
-          verdict: state.draftVerdicts[point.pointId]!,
-          supportingSpans: switch (state.draftVerdicts[point.pointId]!) {
-            'covered' ||
-            'partial' => [ResponseSpanView(startChar: 0, endChar: charCount)],
-            _ => const [],
-          },
-        ),
-    ];
-    _store.update((s) => s.copyWith(busy: true, error: null));
-    try {
-      final judgment = await api.createSemanticJudgment(
-        attemptId: attempt.id,
-        responseRevision: response.revision,
-        rubricId: rubric.id,
-        rubricVersion: rubric.version,
-        rubricTranscriptSnapshot: rubric.source.transcriptSnapshot,
-        responseTranscript: response.transcript,
-        points: points,
-        provenance: const SemanticProvenanceView(
-          kind: 'manual',
-          detail: 'Speaking Studio learner self-assessment',
-        ),
-        evidenceClass: evidenceClass,
-      );
-      _store.update(
-        (s) => s.copyWith(
-          phase: 'done',
-          judgment: judgment,
-          adjudications: const [],
-          busy: false,
-        ),
-      );
-      final source = state.source;
-      if (source != null) {
-        _drafts.remove(_draftKey(source, state.kind, state.assistance));
-      }
-    } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
-    }
-  }
-
-  /// Appends a learner correction without rewriting the saved self-assessment.
-  Future<void> adjudicate(
-    LocalApi api, {
-    required String pointId,
-    required String userVerdict,
-  }) async {
-    final judgment = state.judgment;
-    final prior = judgment?.verdictFor(pointId);
-    if (state.phase != 'done' ||
-        judgment == null ||
-        prior == null ||
-        state.effectiveVerdict(pointId) == userVerdict) {
-      return;
-    }
-    _store.update((s) => s.copyWith(busy: true, error: null));
-    try {
-      final adjudication = await api.createJudgmentAdjudication(
-        judgmentId: judgment.id,
-        pointId: pointId,
-        priorVerdict: prior,
-        userVerdict: userVerdict,
-        note: 'Speaking Studio learner correction',
-      );
-      _store.update(
-        (s) => s.copyWith(
-          adjudications: [...s.adjudications, adjudication],
-          busy: false,
-        ),
-      );
-    } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
-    }
-  }
-
-  /// Phase 3.12.2: judges the stored attempt response through the configured
-  /// provider and shows the result as correctable assist. The judgment is
-  /// recorded server-side as a `heuristic_proxy` (no observation/projection).
-  /// On any provider failure nothing is stored and the error surfaces — the
-  /// manual path is unaffected.
-  Future<void> requestLlmJudgment(LocalApi api) async {
-    final attempt = state.attempt;
-    final providerId = state.judgeProviderId;
+    final providerId = state.feedbackProviderId;
     if (attempt == null || providerId == null) return;
     final response = attempt.responses.single;
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      final judgment = await api.judgeViaLlmProvider(
+      final feedback = await api.feedbackViaLlmProvider(
         providerId,
         attemptId: attempt.id,
         responseRevision: response.revision,
       );
-      _store.update(
-        (s) => s.copyWith(
-          llmJudgment: judgment,
-          llmAdjudications: const [],
-          busy: false,
-        ),
-      );
-    } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
-    }
-  }
-
-  /// Corrects one point of the LLM judgment. Mirrors [adjudicate]: the stored
-  /// judgment row is never rewritten; the correction is an append-only
-  /// adjudication citing the LLM judgment id.
-  Future<void> adjudicateLlm(
-    LocalApi api, {
-    required String pointId,
-    required String userVerdict,
-  }) async {
-    final judgment = state.llmJudgment;
-    final prior = judgment?.verdictFor(pointId);
-    if (judgment == null || prior == null || prior == userVerdict) return;
-    _store.update((s) => s.copyWith(busy: true, error: null));
-    try {
-      final adjudication = await api.createJudgmentAdjudication(
-        judgmentId: judgment.id,
-        pointId: pointId,
-        priorVerdict: prior,
-        userVerdict: userVerdict,
-      );
-      _store.update(
-        (s) => s.copyWith(
-          llmAdjudications: [...s.llmAdjudications, adjudication],
-          busy: false,
-        ),
-      );
+      _store.update((s) => s.copyWith(llmFeedback: feedback, busy: false));
     } catch (error) {
       _store.update((s) => s.copyWith(busy: false, error: '$error'));
     }
@@ -737,12 +566,7 @@ class SpeakingTaskController extends ChangeNotifier {
         correctedTranscript: '',
         asrReliability: 'suspect',
         attempt: null,
-        feedbackRequested: false,
-        draftVerdicts: const {},
-        judgment: null,
-        adjudications: const [],
-        llmJudgment: null,
-        llmAdjudications: const [],
+        llmFeedback: null,
         delayedReviewItemId: null,
         delayedReviewCompleted: false,
         confirmedTargetIds: const {},
@@ -823,7 +647,7 @@ class SpeakingTaskController extends ChangeNotifier {
     final source = state.source;
     if (attempt == null ||
         source == null ||
-        !const {'ready_feedback', 'assessing', 'done'}.contains(state.phase) ||
+        !const {'ready_feedback', 'done'}.contains(state.phase) ||
         state.asrReliability == 'unreliable' ||
         state.confirmedTargetIds.contains(lexicalEntryId)) {
       return;

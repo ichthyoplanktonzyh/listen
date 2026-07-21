@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/speaking_task_controller.dart';
 import '../../localization.dart';
 import '../../services/api_service.dart';
-import 'llm_judgment_assist.dart';
+import 'llm_feedback_assist.dart';
 
 class SpeakingTargetCandidate {
   const SpeakingTargetCandidate({
@@ -81,7 +81,7 @@ class SpeakingTaskStudio extends StatelessWidget {
     ColorScheme colors,
   ) {
     final l = AppLocalizations.of(context);
-    const stages = ['listening', 'recording', 'reviewing', 'assessing', 'done'];
+    const stages = ['listening', 'recording', 'reviewing', 'done'];
     final normalized = switch (state.phase) {
       'transcribing' => 'recording',
       'ready_feedback' => 'reviewing',
@@ -115,7 +115,6 @@ class SpeakingTaskStudio extends StatelessWidget {
                         'listening' => 'speakingStageListen',
                         'recording' => 'speakingStageRecord',
                         'reviewing' => 'speakingStageReview',
-                        'assessing' => 'speakingStageAssess',
                         _ => 'speakingStageDone',
                       }),
                       active: i == current,
@@ -148,7 +147,6 @@ class SpeakingTaskStudio extends StatelessWidget {
           'transcribing' => _transcribing(context),
           'reviewing' => _reviewing(context, state),
           'ready_feedback' => _readyFeedback(context, state),
-          'assessing' => _assessing(context, state),
           'done' => _done(context, state),
           _ => Text(l.text('speakingPreparing')),
         },
@@ -461,10 +459,10 @@ class SpeakingTaskStudio extends StatelessWidget {
         ],
         const SizedBox(height: 22),
         FilledButton.icon(
-          key: const ValueKey('speaking-request-feedback'),
-          onPressed: controller.requestFeedback,
-          icon: const Icon(Icons.fact_check_outlined),
-          label: Text(l.text('speakingRequestFeedback')),
+          key: const ValueKey('speaking-finish-task'),
+          onPressed: state.busy ? null : controller.finishTask,
+          icon: const Icon(Icons.task_alt),
+          label: Text(l.text('speakingFinishTask')),
         ),
         const SizedBox(height: 8),
         TextButton.icon(
@@ -472,89 +470,24 @@ class SpeakingTaskStudio extends StatelessWidget {
           icon: const Icon(Icons.translate_outlined),
           label: Text(l.text('speakingOpenL1Check')),
         ),
-      ],
-    );
-  }
-
-  Widget _assessing(BuildContext context, SpeakingTaskState state) {
-    final l = AppLocalizations.of(context);
-    final rubric = state.rubric!;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          l.text('speakingAssessTitle'),
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
-        const SizedBox(height: 6),
-        Text(l.text('speakingAssessBody')),
-        const SizedBox(height: 18),
-        for (final point in rubric.points) ...[
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(point.statement),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      for (final verdict in const [
-                        'covered',
-                        'partial',
-                        'missing',
-                      ])
-                        ChoiceChip(
-                          label: Text(l.text('speakingVerdict_$verdict')),
-                          selected:
-                              state.draftVerdicts[point.pointId] == verdict,
-                          onSelected: (_) =>
-                              controller.setVerdict(point.pointId, verdict),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-        const SizedBox(height: 10),
-        Align(
-          alignment: Alignment.centerRight,
-          child: FilledButton(
-            onPressed: state.allPointsJudged && !state.busy
-                ? () => controller.submitSelfAssessment(api)
-                : null,
-            child: Text(l.text('speakingSaveAssessment')),
-          ),
-        ),
         _llmFeedback(state),
       ],
     );
   }
 
-  /// LLM assist (Phase 3.12.2): shared correctable block, hidden when no
-  /// judgment-capable provider is configured. Shown next to — never instead
-  /// of — the learner self-assessment.
-  Widget _llmFeedback(SpeakingTaskState state) => LlmJudgmentAssist(
-    visible: state.judgeProviderId != null,
-    points: state.rubric?.points ?? const [],
-    judgment: state.llmJudgment,
-    adjudications: state.llmAdjudications,
+  /// Teacher-style free-text LLM feedback (issue #9), hidden when no capable
+  /// provider is configured. Ephemeral assist: nothing is stored and no
+  /// verdicts are assigned.
+  Widget _llmFeedback(SpeakingTaskState state) => LlmFeedbackAssist(
+    visible: state.feedbackProviderId != null,
+    feedback: state.llmFeedback,
     busy: state.busy,
     keyPrefix: 'speaking-task',
-    onRequest: () => unawaited(controller.requestLlmJudgment(api)),
-    onCorrect: (pointId, userVerdict) => unawaited(
-      controller.adjudicateLlm(api, pointId: pointId, userVerdict: userVerdict),
-    ),
+    onRequest: () => unawaited(controller.requestLlmFeedback(api)),
   );
 
   Widget _done(BuildContext context, SpeakingTaskState state) {
     final l = AppLocalizations.of(context);
-    final rubric = state.rubric!;
     return Column(
       children: [
         const Icon(Icons.task_alt, size: 72),
@@ -563,38 +496,6 @@ class SpeakingTaskStudio extends StatelessWidget {
           l.text('speakingDoneTitle'),
           style: Theme.of(context).textTheme.headlineSmall,
         ),
-        const SizedBox(height: 16),
-        for (final point in rubric.points)
-          Card(
-            child: ListTile(
-              title: Text(point.statement),
-              subtitle: Text(
-                l.text(
-                  'speakingVerdict_${state.effectiveVerdict(point.pointId) ?? 'missing'}',
-                ),
-              ),
-              trailing: PopupMenuButton<String>(
-                key: ValueKey('speaking-adjudicate-${point.pointId}'),
-                tooltip: l.text('speakingCorrectAssessment'),
-                enabled: !state.busy,
-                onSelected: (verdict) => unawaited(
-                  controller.adjudicate(
-                    api,
-                    pointId: point.pointId,
-                    userVerdict: verdict,
-                  ),
-                ),
-                itemBuilder: (context) => [
-                  for (final verdict in const ['covered', 'partial', 'missing'])
-                    if (verdict != state.effectiveVerdict(point.pointId))
-                      PopupMenuItem(
-                        value: verdict,
-                        child: Text(l.text('speakingVerdict_$verdict')),
-                      ),
-                ],
-              ),
-            ),
-          ),
         _llmFeedback(state),
         if (state.source?.recall == 'delayed' &&
             !state.delayedReviewCompleted) ...[

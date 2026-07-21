@@ -84,6 +84,26 @@ extension CoachLlmApi on LocalApi {
         as Map<String, dynamic>,
   );
 
+  /// Requests teacher-style free-text feedback on one stored output-task
+  /// attempt (speaking/writing). The server sends the rubric source
+  /// transcript, task prompt, and learner response to the provider; nothing
+  /// is persisted — the feedback is ephemeral assist, never evidence. Throws
+  /// on any provider error.
+  Future<String> feedbackViaLlmProvider(
+    String providerId, {
+    required String attemptId,
+    required int responseRevision,
+  }) async {
+    final result =
+        await _request(
+              'POST',
+              '/v1/llm/providers/${Uri.encodeComponent(providerId)}/feedback',
+              {'attempt_id': attemptId, 'response_revision': responseRevision},
+            )
+            as Map<String, dynamic>;
+    return result['feedback'] as String;
+  }
+
   /// Registers or updates a provider. When [secret] is non-empty it is stored
   /// in the OS keychain and never echoed back.
   Future<LlmProviderProfileView> registerLlmProvider({

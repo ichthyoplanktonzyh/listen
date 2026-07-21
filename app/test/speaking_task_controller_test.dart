@@ -184,24 +184,6 @@ Map<String, dynamic> _providerJson({
   'created_at_ms': 1,
 };
 
-Map<String, dynamic> _llmJudgmentJson() => {
-  'id': 'llm-judgment-1',
-  'attempt_id': 'attempt-1',
-  'response_revision': 1,
-  'rubric_id': 'rubric-1',
-  'rubric_version': 1,
-  'rubric_source_sha256': 'h1',
-  'response_transcript_sha256': 'h2',
-  'points': [
-    {'point_id': 'main-idea', 'verdict': 'covered'},
-    {'point_id': 'detail', 'verdict': 'missing'},
-  ],
-  'abstain': null,
-  'provenance': {'kind': 'llm', 'model_id': 'm'},
-  'evidence_class': 'heuristic_proxy',
-  'created_at_ms': 25,
-};
-
 class _FakeBackend {
   final requests = <(String, String, Map<String, dynamic>?)>[];
   List<Map<String, dynamic>> providers = [];
@@ -244,7 +226,11 @@ class _FakeBackend {
         ('POST', '/v1/review/items') => _reviewItemJson(),
         ('POST', '/v1/semantic/attempts/attempt-1/speaking-targets') => null,
         ('GET', '/v1/llm/providers') => providers,
-        ('POST', '/v1/llm/providers/prov-1/judge') => _llmJudgmentJson(),
+        ('POST', '/v1/llm/providers/prov-1/feedback') => {
+          'feedback': 'Clear retelling; add the timing detail next time.',
+          'model_id': 'm',
+          'prompt_version': 'output-feedback/v1',
+        },
         ('POST', '/v1/semantic/adjudications') => {
           'id': 'adjudication-1',
           'judgment_id': decoded!['judgment_id'],
@@ -335,7 +321,8 @@ void main() {
   });
 
   test(
-    'record, transcribe, correct, then explicitly request self-assessment',
+    'record, transcribe, correct, confirm targets, then finish without '
+    'self-assessment',
     () async {
       final backend = _FakeBackend();
       final recorder = _FakeRecorder(MicrophonePermissionStatus.granted);
@@ -384,7 +371,6 @@ void main() {
       await controller.acceptTranscript(backend.api);
 
       expect(controller.state.phase, 'ready_feedback');
-      expect(controller.state.feedbackRequested, isFalse);
       final attemptBody = backend.requests
           .firstWhere((request) => request.$2 == '/v1/semantic/attempts')
           .$3!;
@@ -399,15 +385,8 @@ void main() {
       );
       expect(response['asr_reliability'], 'suspect');
 
-      controller.requestFeedback();
-      expect(controller.state.phase, 'assessing');
-      expect(controller.state.feedbackRequested, isTrue);
-      controller.setVerdict('main-idea', 'covered');
-      controller.setVerdict('detail', 'partial');
-      await controller.submitSelfAssessment(backend.api);
-      expect(controller.state.phase, 'done');
-      expect(controller.state.canRetry, isTrue);
-
+      // No rubric self-assessment (issue #9): confirming a target and
+      // finishing are all that remains after the attempt is saved.
       await controller.confirmSpeakingTarget(
         backend.api,
         lexicalEntryId: 'lexical-until-tuesday',
@@ -417,18 +396,16 @@ void main() {
         controller.state.confirmedTargetIds,
         contains('lexical-until-tuesday'),
       );
-
-      await controller.adjudicate(
-        backend.api,
-        pointId: 'detail',
-        userVerdict: 'covered',
+      expect(
+        backend.requests.where(
+          (request) => request.$2 == '/v1/semantic/judgments',
+        ),
+        isEmpty,
       );
-      expect(controller.state.effectiveVerdict('detail'), 'covered');
-      final adjudicationBody = backend.requests
-          .firstWhere((request) => request.$2 == '/v1/semantic/adjudications')
-          .$3!;
-      expect(adjudicationBody['prior_verdict'], 'partial');
-      expect(adjudicationBody['user_verdict'], 'covered');
+
+      controller.finishTask();
+      expect(controller.state.phase, 'done');
+      expect(controller.state.canRetry, isTrue);
 
       await controller.scheduleDelayedRetelling(backend.api);
       expect(controller.state.delayedReviewItemId, 'review-speaking-1');
@@ -496,7 +473,7 @@ void main() {
   );
 
   test(
-    'LLM assist: judge spoken attempt, correct it, stays honest heuristic',
+    'LLM assist: free-text feedback cites the stored attempt, stores nothing',
     () async {
       final backend = _FakeBackend()..providers = [_providerJson()];
       final controller = SpeakingTaskController(
@@ -511,44 +488,36 @@ void main() {
       await controller.beginRecording(acquireAudioFocus: () async {});
       await controller.stopRecording(backend.api);
       await controller.acceptTranscript(backend.api);
-      // A judgment-capable provider was discovered, but nothing is judged yet.
+      // A capable provider was discovered, but no feedback yet.
       expect(controller.state.phase, 'ready_feedback');
-      expect(controller.state.judgeProviderId, 'prov-1');
-      expect(controller.state.llmJudgment, isNull);
+      expect(controller.state.feedbackProviderId, 'prov-1');
+      expect(controller.state.llmFeedback, isNull);
 
-      await controller.requestLlmJudgment(backend.api);
-      final judgment = controller.state.llmJudgment!;
-      expect(judgment.id, 'llm-judgment-1');
-      // Never gold: an unqualified provider verdict stays a heuristic proxy,
-      // and it does not touch the manual self-assessment slot.
-      expect(judgment.evidenceClass, 'heuristic_proxy');
-      expect(judgment.provenance.kind, 'llm');
-      expect(controller.state.judgment, isNull);
-
-      // The judge request cites the stored attempt + revision.
-      final judgeBody = backend.requests
-          .firstWhere((r) => r.$2 == '/v1/llm/providers/prov-1/judge')
-          .$3!;
-      expect(judgeBody['attempt_id'], 'attempt-1');
-      expect(judgeBody['response_revision'], 1);
-
-      // Correcting the LLM verdict appends an adjudication citing the LLM row.
-      await controller.adjudicateLlm(
-        backend.api,
-        pointId: 'detail',
-        userVerdict: 'partial',
+      await controller.requestLlmFeedback(backend.api);
+      expect(
+        controller.state.llmFeedback,
+        'Clear retelling; add the timing detail next time.',
       );
-      expect(controller.state.llmAdjudications, hasLength(1));
-      final adjBody = backend.requests
-          .firstWhere((r) => r.$2 == '/v1/semantic/adjudications')
+
+      // The feedback request cites the stored attempt + revision, and no
+      // judgment or adjudication row is ever written.
+      final feedbackBody = backend.requests
+          .firstWhere((r) => r.$2 == '/v1/llm/providers/prov-1/feedback')
           .$3!;
-      expect(adjBody['judgment_id'], 'llm-judgment-1');
-      expect(adjBody['prior_verdict'], 'missing');
-      expect(adjBody['user_verdict'], 'partial');
+      expect(feedbackBody['attempt_id'], 'attempt-1');
+      expect(feedbackBody['response_revision'], 1);
+      expect(
+        backend.requests.where(
+          (r) =>
+              r.$2 == '/v1/semantic/judgments' ||
+              r.$2 == '/v1/semantic/adjudications',
+        ),
+        isEmpty,
+      );
     },
   );
 
-  test('LLM assist stays hidden without a judgment-capable provider', () async {
+  test('LLM assist stays hidden without a capable provider', () async {
     final backend = _FakeBackend()
       ..providers = [
         _providerJson(allowedUses: ['rubric_generation']),
@@ -566,11 +535,11 @@ void main() {
     await controller.stopRecording(backend.api);
     await controller.acceptTranscript(backend.api);
     expect(controller.state.phase, 'ready_feedback');
-    expect(controller.state.judgeProviderId, isNull);
-    // Requesting without a provider is a no-op; no judge call is recorded.
-    await controller.requestLlmJudgment(backend.api);
-    expect(controller.state.llmJudgment, isNull);
-    expect(backend.requests.where((r) => r.$2.endsWith('/judge')), isEmpty);
+    expect(controller.state.feedbackProviderId, isNull);
+    // Requesting without a provider is a no-op; no feedback call is recorded.
+    await controller.requestLlmFeedback(backend.api);
+    expect(controller.state.llmFeedback, isNull);
+    expect(backend.requests.where((r) => r.$2.endsWith('/feedback')), isEmpty);
   });
 
   test('future-stage intents cannot skip recording and review', () async {
@@ -584,9 +553,7 @@ void main() {
       fixedRubricPoints: _points,
     );
     await controller.acceptTranscript(backend.api);
-    controller.requestFeedback();
-    controller.setVerdict('main-idea', 'covered');
-    await controller.submitSelfAssessment(backend.api);
+    controller.finishTask();
 
     expect(controller.state.phase, 'listening');
     expect(
