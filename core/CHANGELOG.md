@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- 2026-07-21: 阅读通道页面状态机从组合根提出（#15 第一刀，refs #12）。新增
+  `controllers/reading_channel_coordinator.dart`：`ReadingChannelCoordinator` 接管
+  `_PlayerScreenState` 里的 8 个阅读页面态字段（任务工作台/读听对照/听力回述/词条检视器
+  各自的 source，听力回述播放计数，以及阅读游标的防抖计时器与最后保存锚点）与 12 个相关方法
+  （`open/close/openWord/openTask/openDiff/openListeningCheck/playRange/savePosition` 等）。
+  形制照抄 `SpeakingActionsCoordinator`（`isOpen` + open/close + `bind()` 注入
+  `getApi/isMounted` 与宿主 seam），getter 名镜像原字段名，便于逐处比对。`api`/`isMounted`
+  走 bind seam 而非构造参数，`close()` 因此保持无参，可直接作为 `closeReading` 回调传给
+  口语协调器。切片回放与词条打开经 `openSlicePlayback`/`openWord` 两个回调回到宿主，
+  协调器本身不依赖 widget 层。行为等价搬运：`setState` 换成 `notifyListeners()`（组合根
+  build 顶部的 `Listenable.merge` 加入 `readingChannel`），唯一签名变化是
+  `openListeningCheck` 去掉了原先从未使用的 `paragraph` 形参。新增
+  `test/reading_channel_coordinator_test.dart`（8 项，走注入 transport 的假后端）覆盖游标恢复、
+  任务/对照/回述三个面板的开合、`close()` 一次性收尾全部表面、切片回放 occurrence 快照，
+  以及游标写入的防抖与去重。`main.dart` 2639 → 2418 行。全量测试 484 项绿。
+
 - 2026-07-21: 内核降级播放状态改走本地化（承接上一条的副作用修复）。
   `media_session_coordinator.dart` 里 `'Playing locally; core unavailable: $coreError'`
   是硬编码英文，违反"用户可见文案一律走 `AppLocalizations`"的约定；此前被
