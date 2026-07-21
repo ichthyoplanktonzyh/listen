@@ -401,7 +401,11 @@ class _PlayerScreenState extends State<PlayerScreen>
       openMediaPath: mediaSession.openMediaPath,
       openSubtitlePath: mediaSession.openSubtitlePath,
     );
-    unawaited(_connectApi());
+    // `_connectApi` reads localized status strings off `context`, which is only
+    // legal once initState has completed and dependencies are resolved.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_connectApi());
+    });
     unawaited(_loadSettings());
     subscriptions.addAll([
       adapter.position.listen(_onPosition),
@@ -519,13 +523,15 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _connectApi() async {
     if (api != null) return;
-    if (mounted) {
-      playerController.setStatus(l.text('statusStartingCore'));
-      setState(() {
-        connectingApi = true;
-      });
-    }
+    // Everything lives inside the try: a throw before `connectingApi` is
+    // cleared would strand the boot screen on a spinner forever.
     try {
+      if (mounted) {
+        playerController.setStatus(l.text('statusStartingCore'));
+        setState(() {
+          connectingApi = true;
+        });
+      }
       final value = await LocalApi.connect();
       if (!mounted) return value.close();
       playerController.setStatus(l.text('statusCoreConnected'));
