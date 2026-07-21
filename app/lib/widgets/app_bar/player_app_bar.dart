@@ -255,6 +255,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
             if (value == 'import-word-list') onImportWordList();
           },
           itemBuilder: (_) => [
+            _MenuHeader(label: l.text('diagnostics')),
             PopupMenuItem(
               value: 'logs',
               child: _MenuRow(
@@ -262,6 +263,8 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
                 title: l.text('exportLogs'),
               ),
             ),
+            const PopupMenuDivider(),
+            _MenuHeader(label: l.text('dataManagement')),
             PopupMenuItem(
               value: 'export-vocabulary',
               child: _MenuRow(

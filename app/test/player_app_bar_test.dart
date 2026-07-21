@@ -136,7 +136,7 @@ void main() {
     expect(fired, ['vocabulary']);
   });
 
-  testWidgets('more menu dispatches diagnostics and data management', (
+  testWidgets('more menu separates diagnostics from data management', (
     tester,
   ) async {
     await useDesktopSurface(tester);
@@ -147,6 +147,9 @@ void main() {
       'import-vocabulary',
       'import-word-list',
     ]);
+
+    expect(find.text('Diagnostics'), findsOneWidget);
+    expect(find.text('Data management'), findsOneWidget);
 
     await tapItem(tester, 'import-word-list');
     expect(fired, ['import-word-list']);
