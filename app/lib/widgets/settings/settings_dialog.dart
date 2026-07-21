@@ -213,24 +213,46 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late String learningLanguage;
   late String l1Language;
 
-  late final TextEditingController ffmpegController;
-  late final TextEditingController ffprobeController;
-  late final TextEditingController ytDlpController;
-  late final TextEditingController openSubtitlesController;
+  // Owned for the dialog's lifetime, never rebuilt: they hold text the user
+  // has typed but not yet saved.
+  final ffmpegController = TextEditingController();
+  final ffprobeController = TextEditingController();
+  final ytDlpController = TextEditingController();
+  final openSubtitlesController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _initFromWidget();
+    _adoptSettings();
+    ffmpegController.text = widget.ffmpegPath;
+    ffprobeController.text = widget.ffprobePath;
+    ytDlpController.text = widget.ytDlpPath;
+    openSubtitlesController.text = widget.openSubtitlesApiKey;
   }
 
   @override
   void didUpdateWidget(covariant SettingsDialog oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _initFromWidget();
+    // Changing the app theme or UI language rebuilds the composition root,
+    // which rebuilds this dialog while it is open. Re-adopt the host's scalar
+    // values, but only overwrite a text field when the host itself changed it
+    // — otherwise an unrelated rebuild would discard what the user typed.
+    _adoptSettings();
+    if (oldWidget.ffmpegPath != widget.ffmpegPath) {
+      ffmpegController.text = widget.ffmpegPath;
+    }
+    if (oldWidget.ffprobePath != widget.ffprobePath) {
+      ffprobeController.text = widget.ffprobePath;
+    }
+    if (oldWidget.ytDlpPath != widget.ytDlpPath) {
+      ytDlpController.text = widget.ytDlpPath;
+    }
+    if (oldWidget.openSubtitlesApiKey != widget.openSubtitlesApiKey) {
+      openSubtitlesController.text = widget.openSubtitlesApiKey;
+    }
   }
 
-  void _initFromWidget() {
+  void _adoptSettings() {
     language = widget.language;
     themeMode = widget.themeMode;
     subtitlePreset = widget.subtitlePreset;
@@ -262,12 +284,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
     phoneticAnalysisPreference = widget.phoneticAnalysisPreference;
     learningLanguage = widget.learningLanguage;
     l1Language = widget.l1Language;
-    ffmpegController = TextEditingController(text: widget.ffmpegPath);
-    ffprobeController = TextEditingController(text: widget.ffprobePath);
-    ytDlpController = TextEditingController(text: widget.ytDlpPath);
-    openSubtitlesController = TextEditingController(
-      text: widget.openSubtitlesApiKey,
-    );
   }
 
   @override
