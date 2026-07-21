@@ -30,6 +30,7 @@ import 'controllers/playback_actions_coordinator.dart';
 import 'controllers/player_controller.dart';
 import 'controllers/practice_actions_coordinator.dart';
 import 'controllers/practice_controller.dart';
+import 'controllers/reading_channel_coordinator.dart';
 import 'controllers/reading_controller.dart';
 import 'controllers/reading_diff_controller.dart';
 import 'controllers/reading_task_controller.dart';
@@ -153,13 +154,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   final realtimeConversationController = RealtimeConversationController();
   final writingTaskController = WritingTaskController();
   final readingDiffController = ReadingDiffController();
-  ReadingTaskSource? _readingTaskStudioSource;
-  ReadingTaskSource? _readingDiffSource;
-  ReadingParagraph? _readingDiffParagraph;
-  bool _readingWordInspectorOpen = false;
-  // Non-null while the listening-retell surface replaces the reading view.
-  ReadingTaskSource? _listeningCheckSource;
-  int _listeningPlayCount = 0;
   ReadingTaskSource? _speakingL1CheckSource;
   SentencePatternAssetView? _activePersonalPattern;
   WritingTaskSource? _writingTaskStudioSource;
@@ -167,8 +161,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   int _writingPlayCount = 0;
   int _speakingL1PlayCount = 0;
   bool _realtimeConversationOpen = false;
-  Timer? _readingSaveTimer;
-  String? _lastSavedReadingAnchor;
   final extensiveListeningController = ExtensiveListeningController();
   final huntingController = HuntingController();
   final huntingSessionController = HuntingSessionController();
@@ -249,6 +241,15 @@ class _PlayerScreenState extends State<PlayerScreen>
     subtitle: subtitleController,
     settings: settingsController,
   );
+  late final readingChannel = ReadingChannelCoordinator(
+    adapter: adapter,
+    player: playerController,
+    subtitle: subtitleController,
+    settings: settingsController,
+    reading: readingController,
+    readingTask: readingTaskController,
+    readingDiff: readingDiffController,
+  );
 
   // ── Local UI state (not managed by controllers) ──
   String get status => playerController.status;
@@ -296,7 +297,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   @override
   void initState() {
     super.initState();
-    readingController.addListener(_scheduleReadingPositionSave);
     playerController.addListener(_surfaceErrorStatus);
     speakingActions.text = (key) => l.text(key);
     _workbenchAnimController = AnimationController(
@@ -393,6 +393,12 @@ class _PlayerScreenState extends State<PlayerScreen>
       requestRebuild: () => setState(() {}),
       openMediaPath: mediaSession.openMediaPath,
       openMedia: mediaSession.openMedia,
+    );
+    readingChannel.bind(
+      getApi: () => api,
+      isMounted: () => mounted,
+      openSlicePlayback: _openSlicePlayback,
+      openWord: vocabularyActions.openWord,
     );
     subtitleSources.bind(
       getApi: () => api,
@@ -866,7 +872,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       startMs: pattern.source.startMs,
       endMs: pattern.source.endMs,
       fixedRubricPoints: personalExpressionTemplate(l),
-      closeReading: _closeReading,
+      closeReading: readingChannel.close,
     );
   }
 
@@ -968,143 +974,6 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _closeSlicePlayback() => slicePlayerController.close();
 
-  /// Enters the reading posture over the current primary track. Playback is
-  /// paused (reading has its own rhythm); the position is untouched so
-  /// closing returns to the exact playback context.
-  Future<void> _openReading() async {
-    final track = subtitleController.primaryTrack;
-    if (track == null) return;
-    await adapter.pause();
-    // Restore the saved reading cursor; a fetch failure just starts from the
-    // top (the cursor is a convenience, never a gate).
-    String? resumeAnchor;
-    try {
-      final saved = await api?.readingPosition(track.id);
-      resumeAnchor = saved?.anchorCueId;
-    } catch (_) {}
-    _lastSavedReadingAnchor = resumeAnchor;
-    readingController.open(
-      track,
-      secondaryTrack: subtitleController.secondaryTrack,
-      resumeAnchorCueId: resumeAnchor,
-    );
-  }
-
-  Future<void> _closeReading() async {
-    if (_listeningCheckSource != null) _closeListeningCheck();
-    if (_readingTaskStudioSource != null) _closeReadingTaskStudio();
-    if (_readingDiffSource != null) _closeReadingDiff();
-    _readingSaveTimer?.cancel();
-    unawaited(_saveReadingPosition());
-    readingController.close();
-    if (mounted) setState(() => _readingWordInspectorOpen = false);
-  }
-
-  Future<void> _openReadingWord(SubtitleToken token, Cue cue) async {
-    if (!_readingWordInspectorOpen) {
-      setState(() => _readingWordInspectorOpen = true);
-    }
-    await vocabularyActions.openWord(token, cue);
-  }
-
-  /// Debounced cursor write: paragraph taps arrive in bursts while the user
-  /// settles; only the resting anchor is worth a backend round trip.
-  void _scheduleReadingPositionSave() {
-    final state = readingController.state;
-    if (!state.open ||
-        state.anchorCueId == null ||
-        state.anchorCueId == _lastSavedReadingAnchor) {
-      return;
-    }
-    _readingSaveTimer?.cancel();
-    _readingSaveTimer = Timer(const Duration(milliseconds: 800), () {
-      unawaited(_saveReadingPosition());
-    });
-  }
-
-  Future<void> _saveReadingPosition() async {
-    final state = readingController.state;
-    final trackId = state.trackId;
-    final anchor = state.anchorCueId;
-    if (trackId == null || anchor == null) return;
-    if (anchor == _lastSavedReadingAnchor) return;
-    try {
-      await api?.saveReadingPosition(
-        trackId: trackId,
-        mediaId: subtitleController.primaryTrack?.mediaId,
-        anchorCueId: anchor,
-        paragraphIndex: state.anchorParagraphIndex,
-      );
-      _lastSavedReadingAnchor = anchor;
-    } catch (_) {
-      // Cursor writes are best-effort; the next tap retries.
-    }
-  }
-
-  /// Builds the shared segment descriptor for reading/listening tasks and
-  /// the diff card. The response language defaults to the learner's L1
-  /// (comprehension is best demonstrated in the language they think in),
-  /// falling back to the track language when L1 was never set.
-  Future<ReadingTaskSource?> _readingTaskSource(
-    ReadingParagraph paragraph,
-  ) async {
-    final track = subtitleController.primaryTrack;
-    final service = api;
-    if (track == null || service == null) return null;
-    final cursor = subtitleController.primaryCursor;
-    final sourceLanguage = settingsController.resolveLearningLanguage(
-      track.language,
-    );
-    var responseLanguage = sourceLanguage;
-    try {
-      final profile = await service.learnerProfile();
-      final l1 = profile.l1Language;
-      if (l1 != null && l1.isNotEmpty) responseLanguage = l1;
-    } catch (_) {}
-    final anchor = Cue(
-      id: paragraph.anchorCueId,
-      index: 0,
-      start: paragraph.start,
-      end: paragraph.end,
-      text: '',
-      tokens: const [],
-    );
-    return ReadingTaskSource(
-      anchorCueId: paragraph.anchorCueId,
-      mediaId: track.mediaId ?? playerController.mediaId,
-      trackId: track.id,
-      startMs: cursor.mediaStart(anchor).inMilliseconds,
-      endMs: cursor.mediaEnd(anchor).inMilliseconds,
-      sourceLanguage: sourceLanguage,
-      responseLanguage: responseLanguage,
-      transcriptSnapshot: paragraph.sentences
-          .map((sentence) => sentence.text)
-          .join(' '),
-    );
-  }
-
-  /// Opens the paragraph-task flow (Slice 3): manual rubric + typed answer +
-  /// per-point self-assessment through the 3.11 semantic fact family.
-  Future<void> _openReadingTask(ReadingParagraph paragraph) async {
-    final source = await _readingTaskSource(paragraph);
-    final service = api;
-    if (source == null || service == null || !mounted) return;
-    await adapter.pause();
-    setState(() => _readingTaskStudioSource = source);
-    unawaited(
-      readingTaskController.openTask(
-        service,
-        source: source,
-        templatePoints: readingTaskTemplate(l),
-      ),
-    );
-  }
-
-  void _closeReadingTaskStudio() {
-    readingTaskController.closeTask();
-    setState(() => _readingTaskStudioSource = null);
-  }
-
   Future<void> _selectContentChannel(ContentChannel channel) async {
     if (channel != ContentChannel.speaking && _realtimeConversationOpen) {
       await realtimeConversationController.cancel();
@@ -1115,13 +984,13 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (_writingTaskStudioSource != null) await _closeWritingTaskStudio();
         if (_speakingL1CheckSource != null) _closeSpeakingL1Check();
         if (speakingActions.isOpen) await speakingActions.close(api);
-        await _closeReading();
+        await readingChannel.close();
         return;
       case ContentChannel.reading:
         if (_writingTaskStudioSource != null) await _closeWritingTaskStudio();
         if (_speakingL1CheckSource != null) _closeSpeakingL1Check();
         if (speakingActions.isOpen) await speakingActions.close(api);
-        await _openReading();
+        await readingChannel.open();
         return;
       case ContentChannel.speaking:
         if (_writingTaskStudioSource != null) await _closeWritingTaskStudio();
@@ -1130,7 +999,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         await speakingActions.openRetelling(
           service,
           fixedRubricPoints: listeningRetellTemplate(l),
-          closeReading: _closeReading,
+          closeReading: readingChannel.close,
         );
         return;
       case ContentChannel.writing:
@@ -1192,7 +1061,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     await adapter.pause();
     if (_speakingL1CheckSource != null) _closeSpeakingL1Check();
     if (speakingActions.isOpen) await speakingActions.close(api);
-    await _closeReading();
+    await readingChannel.close();
     if (!mounted) return;
     setState(() {
       _writingKind = kind;
@@ -1260,60 +1129,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
-  /// Opens the read-listen pairing card (Slice 4): both sides' facts over
-  /// the same segment, reduced independently — never a causal claim.
-  Future<void> _openReadingDiff(ReadingParagraph paragraph) async {
-    final source = await _readingTaskSource(paragraph);
-    final service = api;
-    if (source == null || service == null || !mounted) return;
-    setState(() {
-      _readingDiffSource = source;
-      _readingDiffParagraph = paragraph;
-    });
-    unawaited(readingDiffController.loadDiff(service, source));
-  }
-
-  void _closeReadingDiff() {
-    setState(() {
-      _readingDiffSource = null;
-      _readingDiffParagraph = null;
-    });
-  }
-
-  /// Swaps the reading view for the listening-retell surface. The reading
-  /// rubric's points seed the retell template when they exist, so both
-  /// sides interrogate the same content; otherwise the generic template
-  /// applies. Text hidden by construction: the panel replaces the view.
-  void _openListeningCheck(
-    ReadingParagraph paragraph,
-    ReadingTaskSource source,
-  ) {
-    final service = api;
-    if (service == null) return;
-    final l = AppLocalizations.of(context);
-    final readingPoints = readingDiffController.state.read.rubric?.points;
-    final template = readingPoints == null || readingPoints.isEmpty
-        ? listeningRetellTemplate(l)
-        : readingPoints;
-    setState(() {
-      _listeningCheckSource = source;
-      _listeningPlayCount = 0;
-    });
-    unawaited(
-      readingTaskController.openTask(
-        service,
-        source: source,
-        templatePoints: template,
-        purpose: ReadingTaskController.listeningPurpose,
-      ),
-    );
-  }
-
-  void _closeListeningCheck() {
-    readingTaskController.closeTask();
-    setState(() => _listeningCheckSource = null);
-  }
-
   /// Explicit reading mark on the selected word (Slice 5). Assistance is the
   /// honest translation visibility at marking time; one act, one
   /// reading-channel observation, nothing else.
@@ -1339,38 +1154,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         error: true,
       );
     }
-  }
-
-  /// Replays a reading range through the slice window (3.5.7) so the primary
-  /// playback position never moves while reading.
-  Future<void> _playReadingRange(
-    Duration start,
-    Duration end,
-    String anchorCueId,
-    String textSnapshot,
-  ) async {
-    final track = subtitleController.primaryTrack;
-    if (track == null) return;
-    final cursor = subtitleController.primaryCursor;
-    final anchor = Cue(
-      id: anchorCueId,
-      index: 0,
-      start: start,
-      end: end,
-      text: textSnapshot,
-      tokens: const [],
-    );
-    await _openSlicePlayback(
-      currentMediaSliceOccurrence(
-        mediaId: track.mediaId ?? playerController.mediaId,
-        trackId: track.id,
-        sentenceId: anchorCueId,
-        textSnapshot: textSnapshot,
-        startMs: cursor.mediaStart(anchor).inMilliseconds,
-        endMs: cursor.mediaEnd(anchor).inMilliseconds,
-        mediaFingerprint: playerController.mediaFingerprint,
-      ),
-    );
   }
 
   /// Opens the same-family clip aggregation for one L1 difficulty hint
@@ -1620,7 +1403,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       entry: entry,
       mediaPath: path,
       fixedRubricPoints: listeningRetellTemplate(l),
-      closeReading: _closeReading,
+      closeReading: readingChannel.close,
     );
   }
 
@@ -1908,8 +1691,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     practiceController.dispose();
     slicePlayerController.dispose();
     auxiliaryAudioController.dispose();
-    _readingSaveTimer?.cancel();
-    readingController.removeListener(_scheduleReadingPositionSave);
+    readingChannel.dispose();
     readingController.dispose();
     readingTaskController.dispose();
     speakingTaskController.dispose();
@@ -1958,6 +1740,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         huntingSessionController,
         slicePlayerController,
         readingController,
+        readingChannel,
         speakingTaskController,
         speakingActions,
         settingsController,
@@ -2442,7 +2225,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Widget _readingView() {
-    final taskSource = _readingTaskStudioSource;
+    final taskSource = readingChannel.taskStudioSource;
     if (taskSource != null && api != null) {
       return ReadingTaskStudio(
         controller: readingTaskController,
@@ -2450,48 +2233,41 @@ class _PlayerScreenState extends State<PlayerScreen>
         source: taskSource,
         audioPlayCount: () =>
             readingController.slicePlayCount(taskSource.anchorCueId),
-        onClose: _closeReadingTaskStudio,
+        onClose: readingChannel.closeTaskStudio,
       );
     }
-    final diffSource = _readingDiffSource;
-    final diffParagraph = _readingDiffParagraph;
+    final diffSource = readingChannel.diffSource;
+    final diffParagraph = readingChannel.diffParagraph;
     if (diffSource != null && diffParagraph != null) {
       return ReadingDiffPanel(
         controller: readingDiffController,
         onOpenReadingTask: () {
-          _closeReadingDiff();
-          unawaited(_openReadingTask(diffParagraph));
+          readingChannel.closeDiff();
+          unawaited(
+            readingChannel.openTask(
+              diffParagraph,
+              templatePoints: readingTaskTemplate(l),
+            ),
+          );
         },
         onOpenListeningCheck: () {
-          _closeReadingDiff();
-          _openListeningCheck(diffParagraph, diffSource);
+          readingChannel.closeDiff();
+          readingChannel.openListeningCheck(
+            diffSource,
+            fallbackTemplatePoints: listeningRetellTemplate(l),
+          );
         },
-        onClose: _closeReadingDiff,
+        onClose: readingChannel.closeDiff,
       );
     }
-    final listeningSource = _listeningCheckSource;
+    final listeningSource = readingChannel.listeningCheckSource;
     if (listeningSource != null && api != null) {
       return ListeningCheckPanel(
         controller: readingTaskController,
         api: api!,
-        audioPlayCount: () => _listeningPlayCount,
-        onPlaySegment: () {
-          setState(() => _listeningPlayCount++);
-          unawaited(
-            _openSlicePlayback(
-              currentMediaSliceOccurrence(
-                mediaId: listeningSource.mediaId,
-                trackId: listeningSource.trackId,
-                sentenceId: listeningSource.anchorCueId,
-                textSnapshot: '',
-                startMs: listeningSource.startMs,
-                endMs: listeningSource.endMs,
-                mediaFingerprint: playerController.mediaFingerprint,
-              ),
-            ),
-          );
-        },
-        onClose: _closeListeningCheck,
+        audioPlayCount: () => readingChannel.listeningPlayCount,
+        onPlaySegment: readingChannel.playListeningCheckSegment,
+        onClose: readingChannel.closeListeningCheck,
       );
     }
     final reader = ReadingView(
@@ -2499,20 +2275,23 @@ class _PlayerScreenState extends State<PlayerScreen>
       wordEntries: learningController.wordEntries,
       capabilityProfiles: learningController.capabilityProfiles,
       showStyles: settingsController.statusStylesVisible,
-      onWord: _openReadingWord,
-      onPlaySentence: (sentence) => _playReadingRange(
+      onWord: readingChannel.openWord,
+      onPlaySentence: (sentence) => readingChannel.playRange(
         sentence.start,
         sentence.end,
         sentence.cues.first.id,
         sentence.text,
       ),
-      onPlayParagraph: (paragraph) => _playReadingRange(
+      onPlayParagraph: (paragraph) => readingChannel.playRange(
         paragraph.start,
         paragraph.end,
         paragraph.anchorCueId,
         paragraph.sentences.first.text,
       ),
-      onStartTask: _openReadingTask,
+      onStartTask: (paragraph) => readingChannel.openTask(
+        paragraph,
+        templatePoints: readingTaskTemplate(l),
+      ),
       onSaveSentencePattern: (sentence) => _openPersonalExpression(
         source: PersonalExpressionSourceView(
           kind: 'reading',
@@ -2526,15 +2305,15 @@ class _PlayerScreenState extends State<PlayerScreen>
           endMs: sentence.end.inMilliseconds,
         ),
       ),
-      onOpenDiff: _openReadingDiff,
-      onClose: () => unawaited(_closeReading()),
+      onOpenDiff: readingChannel.openDiff,
+      onClose: () => unawaited(readingChannel.close()),
     );
     return ReadingContextLayout(
       reader: reader,
-      inspectorOpen: _readingWordInspectorOpen,
+      inspectorOpen: readingChannel.wordInspectorOpen,
       inspector: ReadingWordInspector(
         learningController: learningController,
-        onClose: () => setState(() => _readingWordInspectorOpen = false),
+        onClose: readingChannel.closeWordInspector,
         onStatus: (selected) =>
             unawaited(vocabularyActions.setSelectedWordStatus(selected)),
         onSave: vocabularyActions.saveSelectedLearningContent,
@@ -2583,7 +2362,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     onStartSentenceDictationPractice:
         practiceActions.startSentenceDictationPractice,
     onStartShadowingPractice: practiceActions.startShadowingPractice,
-    onOpenReading: () => unawaited(_openReading()),
+    onOpenReading: () => unawaited(readingChannel.open()),
     onOpenDiagnosisView: _openDiagnosisView,
     onOpenSlicePlayback: _openSlicePlayback,
     onOpenListeningDictionary: _openListeningDictionaryEntry,
