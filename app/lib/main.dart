@@ -58,10 +58,6 @@ import 'widgets/panels/intensive_practice_window.dart';
 import 'widgets/panels/l1_specialty_dialog.dart';
 import 'widgets/panels/hunting_prompt_card.dart';
 import 'widgets/panels/listening_check_panel.dart';
-import 'widgets/panels/reading_diff_panel.dart';
-import 'widgets/panels/reading_task_studio.dart';
-import 'widgets/panels/reading_view.dart';
-import 'widgets/panels/reading_word_inspector.dart';
 import 'widgets/panels/realtime_conversation_panel.dart';
 import 'widgets/panels/slice_playback_window.dart';
 import 'widgets/panels/speaking_task_studio.dart';
@@ -75,6 +71,7 @@ import 'widgets/flows/writing_flows.dart';
 import 'widgets/flows/manual_review_flow.dart';
 import 'widgets/flows/media_import_flows.dart';
 import 'widgets/flows/subtitle_resource_flows.dart';
+import 'widgets/channels/reading_channel.dart';
 import 'widgets/layout/playback_bar.dart';
 import 'widgets/layout/media_workbench.dart';
 import 'widgets/layout/content_channel_switcher.dart';
@@ -1740,7 +1737,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         huntingSessionController,
         slicePlayerController,
         readingController,
-        readingChannel,
         speakingTaskController,
         speakingActions,
         settingsController,
@@ -2069,7 +2065,35 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                 onClose: _closeSpeakingSurface,
                                               )
                                       : readingController.isOpen
-                                      ? _readingView()
+                                      ? ReadingChannelHost(
+                                          api: api!,
+                                          readingChannel: readingChannel,
+                                          readingController: readingController,
+                                          readingTaskController:
+                                              readingTaskController,
+                                          readingDiffController:
+                                              readingDiffController,
+                                          learningController:
+                                              learningController,
+                                          settingsController:
+                                              settingsController,
+                                          subtitleController:
+                                              subtitleController,
+                                          playerController: playerController,
+                                          vocabularyActions: vocabularyActions,
+                                          onSaveSentencePattern: (source) =>
+                                              _openPersonalExpression(
+                                                source: source,
+                                              ),
+                                          onOpenSlicePlayback:
+                                              _openSlicePlayback,
+                                          onRecordReadingMark:
+                                              _recordReadingMark,
+                                          onOpenListeningDictionary:
+                                              _openListeningDictionaryEntry,
+                                          onPlayPronunciationAudio:
+                                              _playPronunciationAudio,
+                                        )
                                       : null,
                                   mediaFraction:
                                       settingsController.workbenchMediaFraction,
@@ -2222,119 +2246,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (timings == null || timings.isEmpty) return '';
     final first = timings.first;
     return '${first.source.replaceAll('_', ' ')} · ${first.provider}';
-  }
-
-  Widget _readingView() {
-    final taskSource = readingChannel.taskStudioSource;
-    if (taskSource != null && api != null) {
-      return ReadingTaskStudio(
-        controller: readingTaskController,
-        api: api!,
-        source: taskSource,
-        audioPlayCount: () =>
-            readingController.slicePlayCount(taskSource.anchorCueId),
-        onClose: readingChannel.closeTaskStudio,
-      );
-    }
-    final diffSource = readingChannel.diffSource;
-    final diffParagraph = readingChannel.diffParagraph;
-    if (diffSource != null && diffParagraph != null) {
-      return ReadingDiffPanel(
-        controller: readingDiffController,
-        onOpenReadingTask: () {
-          readingChannel.closeDiff();
-          unawaited(
-            readingChannel.openTask(
-              diffParagraph,
-              templatePoints: readingTaskTemplate(l),
-            ),
-          );
-        },
-        onOpenListeningCheck: () {
-          readingChannel.closeDiff();
-          readingChannel.openListeningCheck(
-            diffSource,
-            fallbackTemplatePoints: listeningRetellTemplate(l),
-          );
-        },
-        onClose: readingChannel.closeDiff,
-      );
-    }
-    final listeningSource = readingChannel.listeningCheckSource;
-    if (listeningSource != null && api != null) {
-      return ListeningCheckPanel(
-        controller: readingTaskController,
-        api: api!,
-        audioPlayCount: () => readingChannel.listeningPlayCount,
-        onPlaySegment: readingChannel.playListeningCheckSegment,
-        onClose: readingChannel.closeListeningCheck,
-      );
-    }
-    final reader = ReadingView(
-      controller: readingController,
-      wordEntries: learningController.wordEntries,
-      capabilityProfiles: learningController.capabilityProfiles,
-      showStyles: settingsController.statusStylesVisible,
-      onWord: readingChannel.openWord,
-      onPlaySentence: (sentence) => readingChannel.playRange(
-        sentence.start,
-        sentence.end,
-        sentence.cues.first.id,
-        sentence.text,
-      ),
-      onPlayParagraph: (paragraph) => readingChannel.playRange(
-        paragraph.start,
-        paragraph.end,
-        paragraph.anchorCueId,
-        paragraph.sentences.first.text,
-      ),
-      onStartTask: (paragraph) => readingChannel.openTask(
-        paragraph,
-        templatePoints: readingTaskTemplate(l),
-      ),
-      onSaveSentencePattern: (sentence) => _openPersonalExpression(
-        source: PersonalExpressionSourceView(
-          kind: 'reading',
-          text: sentence.text,
-          title: playerController.mediaTitle,
-          mediaId: playerController.mediaId,
-          mediaFingerprint: playerController.mediaFingerprint,
-          trackId: subtitleController.primaryTrack?.id,
-          sentenceId: sentence.cues.first.id,
-          startMs: sentence.start.inMilliseconds,
-          endMs: sentence.end.inMilliseconds,
-        ),
-      ),
-      onOpenDiff: readingChannel.openDiff,
-      onClose: () => unawaited(readingChannel.close()),
-    );
-    return ReadingContextLayout(
-      reader: reader,
-      inspectorOpen: readingChannel.wordInspectorOpen,
-      inspector: ReadingWordInspector(
-        learningController: learningController,
-        onClose: readingChannel.closeWordInspector,
-        onStatus: (selected) =>
-            unawaited(vocabularyActions.setSelectedWordStatus(selected)),
-        onSave: vocabularyActions.saveSelectedLearningContent,
-        onSource: (occurrence) => unawaited(_openSlicePlayback(occurrence)),
-        onHeard: () => unawaited(vocabularyActions.observeSelected(true)),
-        onNotHeard: () => unawaited(vocabularyActions.observeSelected(false)),
-        onCapabilityOverride: vocabularyActions.setCapabilityOverride,
-        onRecordSource: () =>
-            unawaited(vocabularyActions.recordCurrentSource()),
-        onReadingMark: (understood) =>
-            unawaited(_recordReadingMark(understood)),
-        onOpenListeningDictionary: () {
-          final entry = learningController.selectedLexicalDetails?.entry;
-          if (entry != null) {
-            unawaited(_openListeningDictionaryEntry(entry.id));
-          }
-        },
-        onPlayPronunciationAudio: _playPronunciationAudio,
-        hasSelectedCue: subtitleController.currentPrimaryCue != null,
-      ),
-    );
   }
 
   Widget _sidePanel() => SidePanel(
