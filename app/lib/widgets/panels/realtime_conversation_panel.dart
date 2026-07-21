@@ -220,7 +220,20 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
     final model = TextEditingController(text: 'gpt-realtime');
     final voice = TextEditingController(text: 'marin');
     final secret = TextEditingController();
+    final qwenWorkspace = TextEditingController();
     var adapter = 'open_ai_realtime';
+    var qwenRegion = 'intl';
+    void applyQwenEndpoint() {
+      if (qwenRegion == 'cn') {
+        final workspace = qwenWorkspace.text.trim();
+        endpoint.text = workspace.isEmpty
+            ? 'wss://<workspace-id>.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime'
+            : 'wss://$workspace.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime';
+      } else {
+        endpoint.text = 'wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime';
+      }
+    }
+
     await showDialog<void>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -248,14 +261,48 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                       setDialogState(() {
                         adapter = value;
                         if (value == 'qwen_omni_realtime') {
-                          endpoint.text =
-                              'wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime';
                           model.text = 'qwen3-omni-flash-realtime';
+                          applyQwenEndpoint();
                         }
                       });
                     }
                   },
                 ),
+                if (adapter == 'qwen_omni_realtime') ...[
+                  DropdownButtonFormField<String>(
+                    initialValue: qwenRegion,
+                    decoration: const InputDecoration(labelText: 'Region'),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'intl',
+                        child: Text('International (dashscope-intl)'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'cn',
+                        child: Text('China (Model Studio / 百炼)'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() {
+                          qwenRegion = value;
+                          applyQwenEndpoint();
+                        });
+                      }
+                    },
+                  ),
+                  if (qwenRegion == 'cn')
+                    TextField(
+                      controller: qwenWorkspace,
+                      decoration: const InputDecoration(
+                        labelText: 'Workspace ID',
+                        helperText:
+                            'Model Studio workspace id, becomes '
+                            '{id}.cn-beijing.maas.aliyuncs.com',
+                      ),
+                      onChanged: (_) => setDialogState(applyQwenEndpoint),
+                    ),
+                ],
                 TextField(
                   controller: name,
                   decoration: const InputDecoration(labelText: 'Display name'),
@@ -291,6 +338,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
             ),
             FilledButton(
               onPressed: () async {
+                if (endpoint.text.contains('<workspace-id>')) return;
                 await widget.controller.registerProfile(
                   widget.api,
                   displayName: name.text.trim().isEmpty
