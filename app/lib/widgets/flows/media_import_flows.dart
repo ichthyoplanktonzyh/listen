@@ -339,7 +339,7 @@ Future<void> searchOpenSubtitlesFlow({
   required SettingsController settingsController,
   required MediaSessionCoordinator mediaSession,
   required LocalApi? api,
-  bool? secondary,
+  required bool secondary,
 }) async {
   final l = AppLocalizations.of(context);
   if (api == null) return;
@@ -410,25 +410,5 @@ Future<void> searchOpenSubtitlesFlow({
     mediaPath: playerController.mediaPath,
   );
   if (path == null || !context.mounted) return;
-  final destination =
-      secondary ??
-      await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(l.text('openSubtitles')),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: Text(l.text('usePrimary')),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(l.text('useSecondary')),
-            ),
-          ],
-        ),
-      );
-  if (destination != null) {
-    await mediaSession.openSubtitlePath(path, secondary: destination);
-  }
+  await mediaSession.openSubtitlePath(path, secondary: secondary);
 }

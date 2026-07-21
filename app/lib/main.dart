@@ -967,7 +967,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     learningController: learningController,
   );
 
-  Future<void> _searchOpenSubtitles({bool? secondary}) =>
+  Future<void> _searchOpenSubtitles({required bool secondary}) =>
       searchOpenSubtitlesFlow(
         context: context,
         playerController: playerController,
@@ -1580,7 +1580,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                 onShowPhraseCandidates: () =>
                     unawaited(_showCurrentPhraseCandidates()),
                 onCorrectLemma: () => unawaited(_correctCurrentLemma()),
-                onSearchOpenSubtitles: () => unawaited(_searchOpenSubtitles()),
               ),
               body: DropTarget(
                 onDragEntered: (_) => setState(() => dragging = true),

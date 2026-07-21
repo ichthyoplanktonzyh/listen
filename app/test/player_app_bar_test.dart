@@ -56,7 +56,6 @@ void main() {
         onOpenLearningResources: () => fired.add('learning-resources'),
         onShowPhraseCandidates: () => fired.add('phrase-candidates'),
         onCorrectLemma: () => fired.add('correct-lemma'),
-        onSearchOpenSubtitles: () => fired.add('opensubtitles'),
       ),
       body: const SizedBox.shrink(),
     ),

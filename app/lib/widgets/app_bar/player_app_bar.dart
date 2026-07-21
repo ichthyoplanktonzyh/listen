@@ -29,7 +29,6 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onOpenLearningResources,
     required this.onShowPhraseCandidates,
     required this.onCorrectLemma,
-    required this.onSearchOpenSubtitles,
   });
 
   final VoidCallback onOpenSubtitleResources;
@@ -56,7 +55,6 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onOpenLearningResources;
   final VoidCallback onShowPhraseCandidates;
   final VoidCallback onCorrectLemma;
-  final VoidCallback onSearchOpenSubtitles;
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -126,7 +124,6 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
             if (value == 'secondary-generate') onGenerateSecondarySubtitles();
             if (value == 'secondary-search') onSearchSecondarySubtitles();
             if (value == 'embedded') onImportEmbeddedSubtitle();
-            if (value == 'opensubtitles') onSearchOpenSubtitles();
           },
           itemBuilder: (_) => [
             _MenuHeader(label: l.text('primarySubtitle')),
