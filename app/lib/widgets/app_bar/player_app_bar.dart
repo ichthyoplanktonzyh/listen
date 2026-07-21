@@ -27,7 +27,6 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onOpenPhoneticAnalysisCenter,
     required this.onOpenLearningAssets,
     required this.onOpenLearningResources,
-    required this.onShowPhraseCandidates,
     required this.onCorrectLemma,
   });
 
@@ -53,7 +52,6 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onOpenPhoneticAnalysisCenter;
   final VoidCallback onOpenLearningAssets;
   final VoidCallback onOpenLearningResources;
-  final VoidCallback onShowPhraseCandidates;
   final VoidCallback onCorrectLemma;
 
   @override
@@ -191,7 +189,6 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
             if (value == 'review') onOpenReview();
             if (value == 'learning-assets') onOpenLearningAssets();
             if (value == 'learning-resources') onOpenLearningResources();
-            if (value == 'phrase-candidates') onShowPhraseCandidates();
             if (value == 'correct-lemma') onCorrectLemma();
             if (value == 'transcription') onOpenTranscriptionCenter();
             if (value == 'phonetic-analysis') onOpenPhoneticAnalysisCenter();
@@ -236,13 +233,6 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
               ),
             ),
             const PopupMenuDivider(),
-            PopupMenuItem(
-              value: 'phrase-candidates',
-              child: _MenuRow(
-                icon: Icons.segment,
-                title: l.text('phraseCandidates'),
-              ),
-            ),
             PopupMenuItem(
               value: 'correct-lemma',
               child: _MenuRow(

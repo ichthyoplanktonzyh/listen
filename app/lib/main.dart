@@ -937,15 +937,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _openLearningResources() =>
       openLearningResourcesFlow(context: context, api: api);
 
-  Future<void> _showCurrentPhraseCandidates() =>
-      showCurrentPhraseCandidatesFlow(
-        context: context,
-        api: api,
-        playerController: playerController,
-        subtitleController: subtitleController,
-        settingsController: settingsController,
-      );
-
   Future<void> _openPhrase(PhraseCandidate candidate, Cue cue) =>
       openPhraseFlow(
         context: context,
@@ -1577,8 +1568,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                 onOpenLearningAssets: () => unawaited(_openLearningAssets()),
                 onOpenLearningResources: () =>
                     unawaited(_openLearningResources()),
-                onShowPhraseCandidates: () =>
-                    unawaited(_showCurrentPhraseCandidates()),
                 onCorrectLemma: () => unawaited(_correctCurrentLemma()),
               ),
               body: DropTarget(

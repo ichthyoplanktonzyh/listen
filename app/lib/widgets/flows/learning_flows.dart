@@ -90,36 +90,6 @@ Future<void> openLearningResourcesFlow({
   );
 }
 
-Future<void> showCurrentPhraseCandidatesFlow({
-  required BuildContext context,
-  required LocalApi? api,
-  required PlayerController playerController,
-  required SubtitleController subtitleController,
-  required SettingsController settingsController,
-}) async {
-  final cue = subtitleController.currentPrimaryCue;
-  if (api == null || cue == null || playerController.mediaFingerprint == null) {
-    return;
-  }
-  await showPhraseCandidates(
-    context: context,
-    api: api,
-    sentenceId: cue.id,
-    source: {
-      'language': settingsController.resolveLearningLanguage(
-        subtitleController.primaryTrack?.language,
-      ),
-      'media_id': playerController.mediaId,
-      'sentence_id': cue.id,
-      'sentence_text': cue.text,
-      'media_title': playerController.mediaTitle ?? '',
-      'media_fingerprint': playerController.mediaFingerprint,
-      'start_ms': cue.start.inMilliseconds,
-      'end_ms': cue.end.inMilliseconds,
-    },
-  );
-}
-
 Future<void> openPhraseFlow({
   required BuildContext context,
   required LocalApi? api,
