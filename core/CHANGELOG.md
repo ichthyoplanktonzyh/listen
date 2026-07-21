@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-21: 内核降级播放状态改走本地化（承接上一条的副作用修复）。
+  `media_session_coordinator.dart` 里 `'Playing locally; core unavailable: $coreError'`
+  是硬编码英文，违反"用户可见文案一律走 `AppLocalizations`"的约定；此前被
+  `startsWith('Playing')` 吞掉所以看不见，上一条把它放出来后这个问题才显形。新增
+  `statusPlayingCoreUnavailable`（en/zh），措辞同时点明"本地播放中"与"本地内核不可用"。
+  顺带核对了 en/zh 的键覆盖：zh 多出的 9 个 `l1_difficulty_*` 是有意为之——`l1Difficulty()`
+  在缺键时回落到后端给出的英文解释，因此 en 侧本就不该有这些键，不是遗漏。
 - 2026-07-21: 集中响应式断点 + 三个小修（#14，refs #12）。(1) 新增
   `lib/theme/breakpoints.dart`：9 处散落在 `LayoutBuilder` 里的宽度阈值收敛为
   `ListenBreakpoints` 的语义化常量（含 issue 未列出的 `reading_word_inspector.dart` 980）。
