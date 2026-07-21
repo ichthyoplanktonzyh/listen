@@ -217,7 +217,7 @@ Future<void> openOnlineMediaFlow({
     subtitleController.clearSpeechEnhancements();
     subtitleController.setCurrentPrimaryCue(null);
     subtitleController.setCurrentSecondaryCue(null);
-    playerController.setStatus(l.text('statusPlayingOnlineMedia'));
+    playerController.setStatus(l.text('statusPlayingOnlineMedia'), playback: true);
     onMediaSwitched();
   } catch (error) {
     playerController.setStatus('${l.text('statusOnlineMediaFailed')}: $error', error: true);

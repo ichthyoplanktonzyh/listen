@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../theme/breakpoints.dart';
 import 'content_channel_switcher.dart';
 
 class MediaWorkbench extends StatefulWidget {
@@ -80,7 +81,7 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
             widget.immersiveStage ??
             LayoutBuilder(
               builder: (context, constraints) {
-                if (constraints.maxWidth < 820) {
+                if (constraints.maxWidth < ListenBreakpoints.workbenchStacked) {
                   final availableHeight = constraints.maxHeight - splitterWidth;
                   final minimumFraction = (240 / availableHeight).clamp(
                     0.28,

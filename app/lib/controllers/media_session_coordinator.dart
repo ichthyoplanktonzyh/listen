@@ -141,10 +141,13 @@ class MediaSessionCoordinator {
     try {
       await adapter.play();
       if (isMounted()) {
+        // Only the healthy branch is playback chatter; the degraded one
+        // reports on the core, so health indicators must keep showing it.
         player.setStatus(
           coreError == null
               ? text('statusPlayingFile').replaceAll('{name}', path.split(Platform.pathSeparator).last)
               : 'Playing locally; core unavailable: $coreError',
+          playback: coreError == null,
         );
       }
     } catch (error) {

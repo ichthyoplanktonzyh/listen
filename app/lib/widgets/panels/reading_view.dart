@@ -7,6 +7,7 @@ import '../../localization.dart';
 import '../../models/reading.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
+import '../../theme/breakpoints.dart';
 import '../../utils/format_duration.dart';
 import '../subtitle/token_line.dart';
 
@@ -150,7 +151,7 @@ class _ReadingViewState extends State<ReadingView> {
     ),
     child: LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 900;
+        final compact = constraints.maxWidth < ListenBreakpoints.readingCompact;
         return Padding(
           padding: const EdgeInsets.fromLTRB(20, 10, 10, 10),
           child: Row(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/types.dart';
+import '../../theme/breakpoints.dart';
 import '../../utils/format_duration.dart';
 import 'media_library_section.dart';
 
@@ -33,7 +34,7 @@ class ListeningHome extends StatelessWidget {
     this.vocabularyCapped = false,
     this.vocabularyKnown = false,
     this.listeningInboxCount = 0,
-    this.statusText = '',
+    this.coreStatusText = '',
   });
 
   final VoidCallback onOpenMedia;
@@ -62,12 +63,12 @@ class ListeningHome extends StatelessWidget {
   final bool vocabularyCapped;
   final bool vocabularyKnown;
   final int listeningInboxCount;
-  final String statusText;
+  final String coreStatusText;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final showSidebar = constraints.maxWidth >= 760;
+      final showSidebar = constraints.maxWidth >= ListenBreakpoints.homeSidebar;
       return ColoredBox(
         color: Theme.of(context).colorScheme.surface,
         child: Row(
@@ -113,7 +114,7 @@ class ListeningHome extends StatelessWidget {
                 vocabularyCapped: vocabularyCapped,
                 vocabularyKnown: vocabularyKnown,
                 listeningInboxCount: listeningInboxCount,
-                statusText: statusText,
+                coreStatusText: coreStatusText,
               ),
             ),
           ],
@@ -244,7 +245,7 @@ class _HomeContent extends StatelessWidget {
     required this.vocabularyCapped,
     required this.vocabularyKnown,
     required this.listeningInboxCount,
-    required this.statusText,
+    required this.coreStatusText,
   });
 
   final bool compact;
@@ -273,7 +274,7 @@ class _HomeContent extends StatelessWidget {
   final bool vocabularyCapped;
   final bool vocabularyKnown;
   final int listeningInboxCount;
-  final String statusText;
+  final String coreStatusText;
 
   @override
   Widget build(BuildContext context) {
@@ -323,7 +324,7 @@ class _HomeContent extends StatelessWidget {
                 vocabularyCapped: vocabularyCapped,
                 vocabularyKnown: vocabularyKnown,
                 listeningInboxCount: listeningInboxCount,
-                statusText: statusText,
+                coreStatusText: coreStatusText,
               ),
               const SizedBox(height: 32),
               Text(
@@ -595,7 +596,7 @@ class _ResourceStatusStrip extends StatelessWidget {
     required this.vocabularyCapped,
     required this.vocabularyKnown,
     required this.listeningInboxCount,
-    required this.statusText,
+    required this.coreStatusText,
   });
 
   final int recentSubtitleCount;
@@ -604,14 +605,20 @@ class _ResourceStatusStrip extends StatelessWidget {
   final bool vocabularyCapped;
   final bool vocabularyKnown;
   final int listeningInboxCount;
-  final String statusText;
+
+  /// Health line for the "local core" tile. Empty means "nothing to report",
+  /// which the tile renders as its ready state. The composition root filters
+  /// playback notices out (see `PlayerController.statusIsPlayback`) rather
+  /// than matching on the localized text here.
+  final String coreStatusText;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 720;
+        final compact =
+            constraints.maxWidth < ListenBreakpoints.homeStatusStrip;
         final items = [
           _StatusItem(
             icon: Icons.subtitles_outlined,
@@ -639,9 +646,9 @@ class _ResourceStatusStrip extends StatelessWidget {
           _StatusItem(
             icon: Icons.memory_outlined,
             label: l.text('localCore'),
-            value: statusText.isEmpty || statusText.startsWith('Playing')
+            value: coreStatusText.isEmpty
                 ? l.text('coreReady')
-                : statusText,
+                : coreStatusText,
           ),
         ];
         if (compact) {

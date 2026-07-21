@@ -1866,13 +1866,30 @@ class _PlayerScreenState extends State<PlayerScreen>
     await adapter.seek(subtitleController.primaryCursor.mediaStart(cue));
   }
 
+  /// Saves the last playback position, then stops the sidecar — in that order.
+  /// [ApiService.requestStop] force-closes the HTTP client, so firing it
+  /// alongside the save would abort the request and lose the position.
+  ///
+  /// Never awaited: `dispose` must stay synchronous. If the app exits before
+  /// the chain finishes, the sidecar reaps itself once its parent is gone.
+  void _stopApiAfterFinalProgressSave() {
+    final api = this.api;
+    if (api == null) return;
+    final mediaId = playerController.mediaId;
+    final pendingSave = mediaId == null
+        ? Future<void>.value()
+        : api.saveProgress(mediaId, playerController.position);
+    unawaited(
+      pendingSave
+          .timeout(const Duration(seconds: 2))
+          .catchError((Object _) {})
+          .whenComplete(api.requestStop),
+    );
+  }
+
   @override
   void dispose() {
-    final currentMediaId = playerController.mediaId;
-    final currentPosition = playerController.position;
-    if (currentMediaId != null) {
-      unawaited(api?.saveProgress(currentMediaId, currentPosition));
-    }
+    _stopApiAfterFinalProgressSave();
     playerController.removeListener(_surfaceErrorStatus);
     _workbenchAnimController.dispose();
     downloadController.dispose();
@@ -1885,7 +1902,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     syntaxCapabilityTimer?.cancel();
     unawaited(adapter.dispose());
     unawaited(recordingAdapter.dispose());
-    api?.requestStop();
     playerController.dispose();
     subtitleController.dispose();
     learningController.dispose();
@@ -2127,7 +2143,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                                   mediaLibraryActions.savedVocabulary != null,
                               listeningInboxCount:
                                   extensiveListeningController.activeItemCount,
-                              statusText: playerController.status,
+                              coreStatusText: playerController.statusIsPlayback
+                                  ? ''
+                                  : playerController.status,
                             ),
                             if (playerController.mediaPath != null)
                               SlideTransition(
@@ -2413,8 +2431,13 @@ class _PlayerScreenState extends State<PlayerScreen>
         : subtitleSources.analyzePhonetics,
   );
 
+  /// Describes where the word timings for [sentenceId] came from. Returns an
+  /// empty string when the sentence has no timings; callers are expected to
+  /// skip the label in that case (see [SidePanel]'s `timingQuality` guard).
   String _timingQuality(String sentenceId) {
-    final first = subtitleController.timingsBySentence[sentenceId]!.first;
+    final timings = subtitleController.timingsBySentence[sentenceId];
+    if (timings == null || timings.isEmpty) return '';
+    final first = timings.first;
     return '${first.source.replaceAll('_', ' ')} · ${first.provider}';
   }
 

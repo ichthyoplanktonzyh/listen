@@ -153,7 +153,7 @@ class DiagnosisCard extends StatelessWidget {
                             '${provider.diagnostic == null ? '' : ' · ${provider.diagnostic}'}',
                           ),
                         ),
-                      if (timingQuality != null)
+                      if (timingQuality != null && timingQuality!.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 6),
                           child: Text(

@@ -15,6 +15,7 @@ class PlayerState {
     this.mediaFingerprint,
     this.status = 'Starting local core...',
     this.statusIsError = false,
+    this.statusIsPlayback = false,
     this.duration = Duration.zero,
     this.playing = false,
     this.muted = false,
@@ -38,6 +39,12 @@ class PlayerState {
   /// Whether [status] describes a failure. Error statuses get error styling
   /// in the status line and are surfaced once via SnackBar.
   final bool statusIsError;
+
+  /// Whether [status] merely reports what is playing. Surfaces that show
+  /// system health (the home "local core" tile) hide these, since playback
+  /// chatter says nothing about the core. Never match on the text to decide
+  /// this — [status] is localized.
+  final bool statusIsPlayback;
   final Duration duration;
   final bool playing;
   final bool muted;
@@ -58,6 +65,7 @@ class PlayerState {
     Object? mediaFingerprint = _unset,
     String? status,
     bool? statusIsError,
+    bool? statusIsPlayback,
     Duration? duration,
     bool? playing,
     bool? muted,
@@ -83,6 +91,7 @@ class PlayerState {
         : mediaFingerprint as String?,
     status: status ?? this.status,
     statusIsError: statusIsError ?? this.statusIsError,
+    statusIsPlayback: statusIsPlayback ?? this.statusIsPlayback,
     duration: duration ?? this.duration,
     playing: playing ?? this.playing,
     muted: muted ?? this.muted,
@@ -141,6 +150,7 @@ class PlayerController extends ChangeNotifier {
   String? get mediaFingerprint => _store.state.mediaFingerprint;
   String get status => _store.state.status;
   bool get statusIsError => _store.state.statusIsError;
+  bool get statusIsPlayback => _store.state.statusIsPlayback;
   bool get playing => _store.state.playing;
   bool get muted => _store.state.muted;
   Duration get position => _position.value;
@@ -208,9 +218,16 @@ class PlayerController extends ChangeNotifier {
 
   /// Publish a status-line message. Pass [error] for failures so the UI can
   /// style the line and surface a SnackBar; plain progress updates clear the
-  /// error flag.
-  void setStatus(String status, {bool error = false}) =>
-      _store.update((s) => s.copyWith(status: status, statusIsError: error));
+  /// error flag. Pass [playback] for "now playing" notices so health
+  /// indicators can skip them without matching on localized text.
+  void setStatus(String status, {bool error = false, bool playback = false}) =>
+      _store.update(
+        (s) => s.copyWith(
+          status: status,
+          statusIsError: error,
+          statusIsPlayback: playback,
+        ),
+      );
 
   void setAudioTracks(List<PlayerTrack> tracks) =>
       _store.update((s) => s.copyWith(audioTracks: tracks));

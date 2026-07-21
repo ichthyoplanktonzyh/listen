@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/reading_task_controller.dart';
 import '../../localization.dart';
 import '../../services/api_service.dart';
+import '../../theme/breakpoints.dart';
 import 'reading_task_sheet.dart';
 
 /// Stage-adaptive whole-scene host for semantic tasks. The controller owns
@@ -40,7 +41,8 @@ class ReadingTaskStudio extends StatelessWidget {
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final compact = constraints.maxWidth < 900;
+                  final compact =
+                      constraints.maxWidth < ListenBreakpoints.readingCompact;
                   final sourcePane = _SourceSnapshot(
                     source: source,
                     hideText: state.isListening,

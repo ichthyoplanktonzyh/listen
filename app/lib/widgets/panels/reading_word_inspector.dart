@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/learning_controller.dart';
 import '../../localization.dart';
+import '../../theme/breakpoints.dart';
 import 'word_learning_panel.dart';
 
 /// Keeps reading as the primary scene while giving an explicitly requested
@@ -23,7 +24,8 @@ class ReadingContextLayout extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       if (!inspectorOpen) return reader;
-      if (constraints.maxWidth >= 980) {
+      if (constraints.maxWidth >=
+          ListenBreakpoints.readingInspectorSideBySide) {
         return Row(
           children: [
             Expanded(child: reader),

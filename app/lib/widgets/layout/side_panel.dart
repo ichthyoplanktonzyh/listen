@@ -14,6 +14,7 @@ import '../../localization.dart';
 import '../../models/listening.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
+import '../../theme/breakpoints.dart';
 import '../panels/content_fit_card.dart';
 import '../panels/diagnosis_card.dart';
 import '../panels/listening_inbox_panel.dart';
@@ -290,7 +291,8 @@ class _SidePanelState extends State<SidePanel> {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final showLabels = constraints.maxWidth >= 520;
+          final showLabels =
+              constraints.maxWidth >= ListenBreakpoints.sidePanelTabLabels;
           return SizedBox(
             height: showLabels ? 58 : 52,
             child: Row(

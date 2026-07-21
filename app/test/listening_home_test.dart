@@ -14,6 +14,7 @@ void main() {
     String? recentMediaTitle,
     Duration recentPosition = Duration.zero,
     Duration recentDuration = Duration.zero,
+    String coreStatusText = '',
   }) => MaterialApp(
     theme: ListenTheme.light(),
     locale: const Locale('zh'),
@@ -38,6 +39,7 @@ void main() {
         recentMediaTitle: recentMediaTitle,
         recentPosition: recentPosition,
         recentDuration: recentDuration,
+        coreStatusText: coreStatusText,
       ),
     ),
   );
@@ -81,31 +83,32 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('wide home exposes my-expressions entries in sidebar and assets', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(1200, 900));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    var openCalls = 0;
+  testWidgets(
+    'wide home exposes my-expressions entries in sidebar and assets',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      var openCalls = 0;
 
-    await tester.pumpWidget(
-      app(
-        onOpenMedia: () {},
-        onOpenPersonalExpressions: () => openCalls += 1,
-      ),
-    );
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        app(
+          onOpenMedia: () {},
+          onOpenPersonalExpressions: () => openCalls += 1,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    // One entry in the "my learning" sidebar, one card in the asset area.
-    final entries = find.text('我的表达');
-    expect(entries, findsNWidgets(2));
+      // One entry in the "my learning" sidebar, one card in the asset area.
+      final entries = find.text('我的表达');
+      expect(entries, findsNWidgets(2));
 
-    await tester.tap(entries.first);
-    await tester.ensureVisible(entries.last);
-    await tester.tap(entries.last, warnIfMissed: false);
-    expect(openCalls, 2);
-    expect(tester.takeException(), isNull);
-  });
+      await tester.tap(entries.first);
+      await tester.ensureVisible(entries.last);
+      await tester.tap(entries.last, warnIfMissed: false);
+      expect(openCalls, 2);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('compact home stacks my-expressions card without overflow', (
     tester,
@@ -115,10 +118,7 @@ void main() {
     var openCalls = 0;
 
     await tester.pumpWidget(
-      app(
-        onOpenMedia: () {},
-        onOpenPersonalExpressions: () => openCalls += 1,
-      ),
+      app(onOpenMedia: () {}, onOpenPersonalExpressions: () => openCalls += 1),
     );
     await tester.pumpAndSettle();
 
@@ -155,5 +155,22 @@ void main() {
     expect(continueCalls, 1);
     expect(openMediaCalls, 0);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('local core tile shows the ready state under a zh locale while '
+      'playing, and real core messages otherwise', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    // Playback notices are filtered out by the composition root, so the tile
+    // sees an empty string regardless of the UI language.
+    await tester.pumpWidget(app(onOpenMedia: () {}));
+    await tester.pumpAndSettle();
+    expect(find.text('就绪'), findsOneWidget);
+
+    await tester.pumpWidget(app(onOpenMedia: () {}, coreStatusText: '本地内核不可用'));
+    await tester.pumpAndSettle();
+    expect(find.text('本地内核不可用'), findsOneWidget);
+    expect(find.text('就绪'), findsNothing);
   });
 }

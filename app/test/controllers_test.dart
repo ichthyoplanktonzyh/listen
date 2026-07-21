@@ -52,6 +52,24 @@ void main() {
     expect(controller.embeddedSubtitleTracks, const [track]);
   });
 
+  test('playback notices are flagged so health surfaces can skip them', () {
+    final player = PlayerController();
+    addTearDown(player.dispose);
+
+    player.setStatus('Playing sample.mp4', playback: true);
+    expect(player.statusIsPlayback, isTrue);
+    expect(player.statusIsError, isFalse);
+
+    // A later plain status must clear the flag, otherwise the home core tile
+    // would keep hiding real messages after playback started.
+    player.setStatus('Subtitle exported');
+    expect(player.statusIsPlayback, isFalse);
+
+    player.setStatus('Playback failed', error: true);
+    expect(player.statusIsPlayback, isFalse);
+    expect(player.statusIsError, isTrue);
+  });
+
   test('store-backed controllers notify aggregate listeners', () {
     final player = PlayerController();
     var playerNotifications = 0;

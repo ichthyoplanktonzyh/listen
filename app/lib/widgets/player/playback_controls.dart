@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/task_status.dart';
+import '../../theme/breakpoints.dart';
 import '../../player_adapter.dart';
 import '../../utils/format_duration.dart';
 
@@ -156,7 +157,8 @@ class PlaybackControls extends StatelessWidget {
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final narrow = constraints.maxWidth < 760;
+            final narrow =
+                constraints.maxWidth < ListenBreakpoints.playbackControlsNarrow;
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -360,11 +362,8 @@ class PlaybackControls extends StatelessWidget {
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            // Below this the flat function buttons (extensive listening / chunk
-            // / subtitle menus) collapse into a single overflow popup rather
-            // than disappearing. ~900 keeps the flat toolbar while the function
-            // area (roughly 800px) still fits comfortably.
-            final roomy = constraints.maxWidth >= 900;
+            final roomy =
+                constraints.maxWidth >= ListenBreakpoints.playbackControlsRoomy;
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
