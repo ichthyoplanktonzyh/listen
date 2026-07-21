@@ -39,6 +39,7 @@ import 'controllers/resource_actions_coordinator.dart';
 import 'controllers/speech_enhancement_workflow_controller.dart';
 import 'controllers/speaking_actions_coordinator.dart';
 import 'controllers/speaking_task_controller.dart';
+import 'controllers/writing_channel_coordinator.dart';
 import 'controllers/writing_task_controller.dart';
 import 'controllers/subtitle_controller.dart';
 import 'controllers/subtitle_sources_coordinator.dart';
@@ -49,7 +50,6 @@ import 'models/capability_readiness.dart';
 import 'models/practice.dart';
 import 'models/personal_expression.dart';
 import 'models/task_status.dart';
-import 'models/reading.dart';
 import 'models/timeline.dart';
 import 'models/types.dart';
 import 'services/api_service.dart';
@@ -61,7 +61,6 @@ import 'widgets/panels/listening_check_panel.dart';
 import 'widgets/panels/realtime_conversation_panel.dart';
 import 'widgets/panels/slice_playback_window.dart';
 import 'widgets/panels/speaking_task_studio.dart';
-import 'widgets/panels/writing_task_studio.dart';
 import 'widgets/player/download_status_bar.dart';
 import 'widgets/app_bar/player_app_bar.dart';
 import 'widgets/flows/learning_flows.dart';
@@ -72,6 +71,7 @@ import 'widgets/flows/manual_review_flow.dart';
 import 'widgets/flows/media_import_flows.dart';
 import 'widgets/flows/subtitle_resource_flows.dart';
 import 'widgets/channels/reading_channel.dart';
+import 'widgets/channels/writing_channel.dart';
 import 'widgets/layout/playback_bar.dart';
 import 'widgets/layout/media_workbench.dart';
 import 'widgets/layout/content_channel_switcher.dart';
@@ -153,9 +153,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   final readingDiffController = ReadingDiffController();
   ReadingTaskSource? _speakingL1CheckSource;
   SentencePatternAssetView? _activePersonalPattern;
-  WritingTaskSource? _writingTaskStudioSource;
-  String _writingKind = WritingTaskController.summaryKind;
-  int _writingPlayCount = 0;
   int _speakingL1PlayCount = 0;
   bool _realtimeConversationOpen = false;
   final extensiveListeningController = ExtensiveListeningController();
@@ -246,6 +243,16 @@ class _PlayerScreenState extends State<PlayerScreen>
     reading: readingController,
     readingTask: readingTaskController,
     readingDiff: readingDiffController,
+  );
+  late final writingChannel = WritingChannelCoordinator(
+    adapter: adapter,
+    recordingAdapter: recordingAdapter,
+    player: playerController,
+    subtitle: subtitleController,
+    settings: settingsController,
+    slicePlayer: slicePlayerController,
+    auxiliaryAudio: auxiliaryAudioController,
+    task: writingTaskController,
   );
 
   // ── Local UI state (not managed by controllers) ──
@@ -396,6 +403,16 @@ class _PlayerScreenState extends State<PlayerScreen>
       isMounted: () => mounted,
       openSlicePlayback: _openSlicePlayback,
       openWord: vocabularyActions.openWord,
+    );
+    writingChannel.bind(
+      getApi: () => api,
+      isMounted: () => mounted,
+      openSlicePlayback: _openSlicePlayback,
+      closeOtherChannels: () async {
+        if (_speakingL1CheckSource != null) _closeSpeakingL1Check();
+        if (speakingActions.isOpen) await speakingActions.close(api);
+        await readingChannel.close();
+      },
     );
     subtitleSources.bind(
       getApi: () => api,
@@ -978,19 +995,19 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     switch (channel) {
       case ContentChannel.listening:
-        if (_writingTaskStudioSource != null) await _closeWritingTaskStudio();
+        if (writingChannel.isOpen) await writingChannel.close();
         if (_speakingL1CheckSource != null) _closeSpeakingL1Check();
         if (speakingActions.isOpen) await speakingActions.close(api);
         await readingChannel.close();
         return;
       case ContentChannel.reading:
-        if (_writingTaskStudioSource != null) await _closeWritingTaskStudio();
+        if (writingChannel.isOpen) await writingChannel.close();
         if (_speakingL1CheckSource != null) _closeSpeakingL1Check();
         if (speakingActions.isOpen) await speakingActions.close(api);
         await readingChannel.open();
         return;
       case ContentChannel.speaking:
-        if (_writingTaskStudioSource != null) await _closeWritingTaskStudio();
+        if (writingChannel.isOpen) await writingChannel.close();
         final service = api;
         if (service == null || !Platform.isMacOS) return;
         await speakingActions.openRetelling(
@@ -1000,7 +1017,11 @@ class _PlayerScreenState extends State<PlayerScreen>
         );
         return;
       case ContentChannel.writing:
-        await _openWritingTask(_writingKind);
+        await writingChannel.openTask(
+          writingChannel.kind,
+          promptSnapshot: writingPrompt(l, writingChannel.kind),
+          fixedRubricPoints: writingTaskTemplate(l),
+        );
         return;
     }
   }
@@ -1015,115 +1036,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _closeRealtimeConversation() async {
     await realtimeConversationController.cancel();
     if (mounted) setState(() => _realtimeConversationOpen = false);
-  }
-
-  Future<void> _openWritingTask(String kind) async {
-    final service = api;
-    final track = subtitleController.primaryTrack;
-    if (service == null || track == null) return;
-    final paragraphs = deriveReadingParagraphs(
-      track.cues,
-    ).where((paragraph) => !paragraph.nonSpeech).toList(growable: false);
-    if (paragraphs.isEmpty) return;
-    final currentCueId = subtitleController.currentPrimaryCue?.id;
-    final paragraph = paragraphs.firstWhere(
-      (candidate) => candidate.sentences.any(
-        (sentence) => sentence.cues.any((cue) => cue.id == currentCueId),
-      ),
-      orElse: () => paragraphs.first,
-    );
-    final cursor = subtitleController.primaryCursor;
-    final anchor = Cue(
-      id: paragraph.anchorCueId,
-      index: 0,
-      start: paragraph.start,
-      end: paragraph.end,
-      text: '',
-      tokens: const [],
-    );
-    final language = settingsController.resolveLearningLanguage(track.language);
-    final source = WritingTaskSource(
-      anchorCueId: paragraph.anchorCueId,
-      mediaId: track.mediaId ?? playerController.mediaId,
-      trackId: track.id,
-      startMs: cursor.mediaStart(anchor).inMilliseconds,
-      endMs: cursor.mediaEnd(anchor).inMilliseconds,
-      sourceLanguage: language,
-      responseLanguage: language,
-      transcriptSnapshot: paragraph.sentences
-          .map((sentence) => sentence.text)
-          .join(' '),
-    );
-    await _closeSlicePlayback();
-    await adapter.pause();
-    if (_speakingL1CheckSource != null) _closeSpeakingL1Check();
-    if (speakingActions.isOpen) await speakingActions.close(api);
-    await readingChannel.close();
-    if (!mounted) return;
-    setState(() {
-      _writingKind = kind;
-      _writingPlayCount = 0;
-      _writingTaskStudioSource = source;
-    });
-    unawaited(
-      writingTaskController.openTask(
-        service,
-        source: source,
-        kind: kind,
-        promptSnapshot: writingPrompt(l, kind),
-        fixedRubricPoints: writingTaskTemplate(l),
-      ),
-    );
-  }
-
-  Future<void> _closeWritingTaskStudio() async {
-    await auxiliaryAudioController.stop();
-    await _closeSlicePlayback();
-    writingTaskController.closeTask();
-    if (mounted) setState(() => _writingTaskStudioSource = null);
-  }
-
-  Future<void> _speakWritingText(String text) async {
-    final service = api;
-    final source = _writingTaskStudioSource;
-    if (service == null || source == null || text.trim().isEmpty) return;
-    final asset = await auxiliaryAudioController.speak(
-      service,
-      text: text,
-      language: source.responseLanguage,
-      purpose: 'writing_readback',
-      acquireAudioFocus: () async {
-        await adapter.pause();
-        await recordingAdapter.pause();
-        await slicePlayerController.pause();
-      },
-    );
-    if (asset == null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context).text('ttsUnavailable')),
-        ),
-      );
-    }
-  }
-
-  void _playWritingSource() {
-    final source = _writingTaskStudioSource;
-    if (source == null) return;
-    setState(() => _writingPlayCount++);
-    unawaited(
-      _openSlicePlayback(
-        currentMediaSliceOccurrence(
-          mediaId: source.mediaId,
-          trackId: source.trackId,
-          sentenceId: source.anchorCueId,
-          textSnapshot: '',
-          startMs: source.startMs,
-          endMs: source.endMs,
-          mediaFingerprint: playerController.mediaFingerprint,
-        ),
-      ),
-    );
   }
 
   /// Explicit reading mark on the selected word (Slice 5). Assistance is the
@@ -1689,6 +1601,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     slicePlayerController.dispose();
     auxiliaryAudioController.dispose();
     readingChannel.dispose();
+    writingChannel.dispose();
     readingController.dispose();
     readingTaskController.dispose();
     speakingTaskController.dispose();
@@ -1737,6 +1650,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         huntingSessionController,
         slicePlayerController,
         readingController,
+        // The writing channel drives the root's channel selection, so its
+        // notifications have to reach this build (the host's own
+        // ListenableBuilder only covers the studio subtree).
+        writingChannel,
         speakingTaskController,
         speakingActions,
         settingsController,
@@ -1935,8 +1852,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                                       .last,
                                   playerStage: _playerStage(),
                                   learningPanel: _sidePanel(),
-                                  selectedChannel:
-                                      _writingTaskStudioSource != null
+                                  selectedChannel: writingChannel.isOpen
                                       ? ContentChannel.writing
                                       : speakingActions.isOpen
                                       ? ContentChannel.speaking
@@ -1971,22 +1887,12 @@ class _PlayerScreenState extends State<PlayerScreen>
                                   },
                                   onChannelSelected: (channel) =>
                                       unawaited(_selectContentChannel(channel)),
-                                  immersiveStage:
-                                      _writingTaskStudioSource != null
-                                      ? WritingTaskStudio(
-                                          controller: writingTaskController,
+                                  immersiveStage: writingChannel.isOpen
+                                      ? WritingChannelHost(
                                           api: api!,
-                                          audioPlayCount: () =>
-                                              _writingPlayCount,
-                                          onKindChanged: (kind) =>
-                                              unawaited(_openWritingTask(kind)),
-                                          onPlaySource: _playWritingSource,
-                                          onSpeakText: (text) => unawaited(
-                                            _speakWritingText(text),
-                                          ),
-                                          onClose: () => unawaited(
-                                            _closeWritingTaskStudio(),
-                                          ),
+                                          writingChannel: writingChannel,
+                                          writingTaskController:
+                                              writingTaskController,
                                         )
                                       : speakingActions.isOpen
                                       ? _realtimeConversationOpen
