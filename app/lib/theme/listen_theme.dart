@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 /// App-wide appearance preference, mirrored from the persisted `themeMode`
 /// setting. Mirrors the `appLanguage` notifier so `ListenApp` can rebuild the
 /// single `MaterialApp` without threading the value through the widget tree.
-final appThemeMode = ValueNotifier<ThemeMode>(ThemeMode.system);
+/// Defaults to dark — "暗色为家" per the design charter
+/// (design-notes/listen-design-charter.md) — so the first frame is already the
+/// dimmed room instead of flashing a bright theme before settings load.
+final appThemeMode = ValueNotifier<ThemeMode>(ThemeMode.dark);
 
 /// Maps the persisted `system` / `light` / `dark` string onto [ThemeMode],
 /// degrading unknown values to [ThemeMode.system].

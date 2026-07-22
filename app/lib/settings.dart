@@ -20,7 +20,7 @@ class AppSettings {
     this.secondaryFontFamily = 'system',
     this.subtitlePreset = 'learning',
     this.language = 'system',
-    this.themeMode = 'system',
+    this.themeMode = 'dark',
     this.subtitlePositionX = 0.5,
     this.subtitlePositionY = 0.82,
     this.subtitleBackgroundOpacity = 0.72,
@@ -112,7 +112,7 @@ class AppSettings {
       secondaryFontFamily: json['secondary_font_family'] as String? ?? 'system',
       subtitlePreset: json['subtitle_preset'] as String? ?? 'learning',
       language: json['language'] as String? ?? 'system',
-      themeMode: json['theme_mode'] as String? ?? 'system',
+      themeMode: json['theme_mode'] as String? ?? 'dark',
       subtitlePositionX: _number(json['subtitle_position_x'], 0.5, 0, 1),
       subtitlePositionY: version >= 4
           ? _number(json['subtitle_position_y'], 0.82, 0, 1)
