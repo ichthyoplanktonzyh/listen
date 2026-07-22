@@ -116,6 +116,7 @@ class AppLocalizations {
       'statusPlaybackFailed': 'Playback failed',
       'statusOpenMediaAndCoreFirst':
           'Open media and connect the local core first',
+      'statusConnectLocalCoreFirst': 'Connect the local core first',
       'statusSubtitleImportFailed': 'Subtitle import failed',
       'statusImportingLLTimeline': 'Importing LLTimeline resource...',
       'statusLLTimelineImportCancelled': 'LLTimeline import cancelled',
@@ -1497,6 +1498,7 @@ class AppLocalizations {
       'statusOpeningFile': '正在打开 {name}',
       'statusPlaybackFailed': '播放失败',
       'statusOpenMediaAndCoreFirst': '请先打开媒体并连接本地核心',
+      'statusConnectLocalCoreFirst': '请先连接本地核心',
       'statusSubtitleImportFailed': '字幕导入失败',
       'statusImportingLLTimeline': '正在导入 LLTimeline 资源…',
       'statusLLTimelineImportCancelled': '已取消 LLTimeline 导入',

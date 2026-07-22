@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
+import 'package:llplayer_next/widgets/app_bar/app_bar_capabilities.dart';
 import 'package:llplayer_next/widgets/app_bar/player_app_bar.dart';
 
 /// The AppBar is the only entry surface that stays mounted once media loads —
@@ -21,7 +22,10 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
   }
 
-  Widget app({Locale locale = const Locale('en')}) => MaterialApp(
+  Widget app({
+    Locale locale = const Locale('en'),
+    AppBarCapabilities capabilities = const AppBarCapabilities.available(),
+  }) => MaterialApp(
     locale: locale,
     supportedLocales: AppLocalizations.supportedLocales,
     localizationsDelegates: const [
@@ -32,6 +36,7 @@ void main() {
     ],
     home: Scaffold(
       appBar: PlayerAppBar(
+        capabilities: capabilities,
         onOpenSubtitleResources: () => fired.add('subtitle-resources'),
         onOpenVocabulary: () => fired.add('vocabulary'),
         onOpenReview: () => fired.add('review'),
@@ -92,6 +97,55 @@ void main() {
 
     await tapItem(tester, 'archive-media');
     expect(fired, ['archive-media']);
+  });
+
+  testWidgets('media-bound items disable with a reason when nothing is loaded', (
+    tester,
+  ) async {
+    // #24: availability must be visible the moment the menu opens — a menu
+    // item is never a clickable promise that answers "no" after the click.
+    await useDesktopSurface(tester);
+    await tester.pumpWidget(
+      app(
+        capabilities: const AppBarCapabilities(
+          hasMedia: false,
+          coreReady: true,
+        ),
+      ),
+    );
+
+    bool enabledOf(String value) =>
+        tester.widget<PopupMenuItem<String>>(itemOf(value)).enabled;
+
+    await openMenu(tester, 'Content');
+    // Opening media stays available — it is the recovery action itself.
+    expect(enabledOf('open-media'), isTrue);
+    expect(enabledOf('open-online'), isTrue);
+    expect(enabledOf('archive-media'), isFalse);
+    expect(
+      find.text('Open media and connect the local core first'),
+      findsOneWidget,
+    );
+
+    // A disabled item swallows the click instead of dispatching.
+    await tapItem(tester, 'archive-media');
+    expect(fired, isEmpty);
+    // Dismiss the still-open menu via the barrier.
+    await tester.tapAt(const Offset(40, 560));
+    await tester.pumpAndSettle();
+
+    await openMenu(tester, 'Subtitles');
+    for (final value in const [
+      'primary-import',
+      'primary-generate',
+      'primary-search',
+      'secondary-import',
+      'secondary-generate',
+      'secondary-search',
+      'embedded',
+    ]) {
+      expect(enabledOf(value), isFalse, reason: '$value without media');
+    }
   });
 
   testWidgets('subtitle menu covers both tracks plus embedded import', (

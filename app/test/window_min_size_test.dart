@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/theme/breakpoints.dart';
+import 'package:llplayer_next/widgets/app_bar/app_bar_capabilities.dart';
 import 'package:llplayer_next/widgets/app_bar/player_app_bar.dart';
 import 'package:llplayer_next/widgets/home/listening_home.dart';
 
@@ -58,6 +59,7 @@ void main() {
     ],
     home: Scaffold(
       appBar: PlayerAppBar(
+        capabilities: const AppBarCapabilities.available(),
         onOpenSubtitleResources: () {},
         onOpenVocabulary: () {},
         onOpenReview: () {},

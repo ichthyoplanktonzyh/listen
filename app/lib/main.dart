@@ -62,6 +62,7 @@ import 'utils/format_duration.dart';
 import 'widgets/panels/l1_specialty_dialog.dart';
 import 'widgets/panels/realtime_conversation_panel.dart';
 import 'widgets/player/download_status_bar.dart';
+import 'widgets/app_bar/app_bar_capabilities.dart';
 import 'widgets/app_bar/player_app_bar.dart';
 import 'widgets/flows/learning_flows.dart';
 import 'widgets/flows/content_speaking_activity_dialog.dart';
@@ -1629,6 +1630,14 @@ class _PlayerScreenState extends State<PlayerScreen>
             autofocus: true,
             child: Scaffold(
               appBar: PlayerAppBar(
+                // One definition of availability for every menu (#24); the
+                // native macOS menu (#23) must reuse it. `api` is non-null on
+                // this branch, but the capability object states it explicitly
+                // rather than baking the screen-level invariant into the bar.
+                capabilities: AppBarCapabilities(
+                  hasMedia: playerController.mediaId != null,
+                  coreReady: api != null,
+                ),
                 onOpenSubtitleResources: () =>
                     unawaited(_openSubtitleResources()),
                 onOpenVocabulary: _openVocabulary,

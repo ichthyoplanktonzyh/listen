@@ -255,7 +255,10 @@ class PlaybackActionsCoordinator {
     String value,
   ) async {
     final service = getApi();
-    if (service == null) return;
+    if (service == null) {
+      player.setStatus(_t('statusConnectLocalCoreFirst'));
+      return;
+    }
     try {
       await service.updatePhoneticFindingFeedback(
         findingId: finding.id,
@@ -273,7 +276,10 @@ class PlaybackActionsCoordinator {
 
   Future<void> exportVocabulary() async {
     final service = getApi();
-    if (service == null) return;
+    if (service == null) {
+      player.setStatus(_t('statusConnectLocalCoreFirst'));
+      return;
+    }
     final location = await getSaveLocation(
       suggestedName: 'listen-vocabulary-v1.json',
     );
@@ -287,7 +293,10 @@ class PlaybackActionsCoordinator {
 
   Future<void> importVocabulary() async {
     final service = getApi();
-    if (service == null) return;
+    if (service == null) {
+      player.setStatus(_t('statusConnectLocalCoreFirst'));
+      return;
+    }
     const group = XTypeGroup(label: 'JSON', extensions: ['json']);
     final file = await openFile(acceptedTypeGroups: [group]);
     if (file == null) return;
@@ -301,7 +310,13 @@ class PlaybackActionsCoordinator {
 
   Future<void> archiveCurrentMedia() async {
     final service = getApi();
-    if (service == null || player.mediaId == null) return;
+    if (service == null || player.mediaId == null) {
+      // Unavailable State (CONTEXT.md): name the cause and the recovery
+      // action instead of silently doing nothing (#24). The menu item is
+      // disabled in this state, but other entry paths still land here.
+      player.setStatus(_t('statusOpenMediaAndCoreFirst'));
+      return;
+    }
     await service.setMediaAvailability(player.mediaId!, 'archived');
     player.setStatus(_t('statusMediaArchived'));
   }
