@@ -228,6 +228,7 @@ class RealtimeConversationController extends ChangeNotifier {
     RealtimeConnectionFactory? connect,
     Future<void> Function(Duration)? delay,
     int Function()? nowMs,
+    this.providerDrainTimeout = const Duration(seconds: 15),
   }) : _audio = audio ?? RealtimeAudioBridge(),
        _connect = connect ?? _connectRealtime,
        _delay = delay ?? Future<void>.delayed,
@@ -237,6 +238,7 @@ class RealtimeConversationController extends ChangeNotifier {
   final RealtimeConnectionFactory _connect;
   final Future<void> Function(Duration) _delay;
   final int Function() _nowMs;
+  final Duration providerDrainTimeout;
 
   RealtimeConversationState state = const RealtimeConversationState();
   RealtimeConnection? _connection;
@@ -913,7 +915,7 @@ class RealtimeConversationController extends ChangeNotifier {
       if (_providerResponseActive && _responseDone != null) {
         providerDrained = await _responseDone!.future
             .then((_) => true)
-            .timeout(const Duration(seconds: 15), onTimeout: () => false);
+            .timeout(providerDrainTimeout, onTimeout: () => false);
       }
       final activeAssistant = _turns.activeAssistantSequence;
       if (activeAssistant != null) {
@@ -1016,6 +1018,7 @@ class RealtimeConversationController extends ChangeNotifier {
     state = state.copyWith(
       phase: RealtimeConversationPhase.idle,
       activity: RealtimeConversationActivity.inactive,
+      postProcessingCount: 0,
       error: null,
     );
     notifyListeners();

@@ -314,6 +314,130 @@ void main() {
         );
       },
     );
+
+    test(
+      'provider drain timeout preserves partial assistant as interrupted',
+      () async {
+        final harness = _Harness(
+          transcripts: const ['learner'],
+          providerDrainTimeout: Duration.zero,
+        );
+        await harness.start();
+        await harness.learnerTurn('user-1', 'provider learner');
+        harness.connection.emit(
+          jsonEncode({
+            'type': 'assistant_transcript_delta',
+            'provider_item_id': 'assistant-1',
+            'delta': 'partial reply',
+          }),
+        );
+        await _settle();
+
+        await harness.controller.finish();
+
+        expect(harness.controller.state.phase, RealtimeConversationPhase.done);
+        expect(
+          harness.savedTurns.any(
+            (turn) =>
+                turn['role'] == 'assistant' &&
+                turn['status'] == 'interrupted' &&
+                turn['failure_kind'] == 'provider_drain_timeout',
+          ),
+          isTrue,
+        );
+        expect(harness.lastSessionStatus, 'completed');
+      },
+    );
+
+    test('cancel fences a learner turn waiting to poll local ASR', () async {
+      final harness = _Harness(
+        transcripts: const ['must not finalize'],
+        holdTranscription: true,
+      );
+      await harness.start();
+      await harness.learnerTurn('user-1', 'provider learner');
+      expect(harness.controller.state.postProcessingCount, 1);
+
+      await harness.controller.cancel();
+      harness.transcriptionGate.complete();
+      await _settle();
+
+      expect(harness.controller.state.phase, RealtimeConversationPhase.idle);
+      expect(harness.controller.state.postProcessingCount, 0);
+      expect(harness.controller.state.items.single.status, 'interrupted');
+      expect(
+        harness.savedTurns.where((turn) => turn['status'] == 'finalized'),
+        isEmpty,
+      );
+      expect(harness.lastSessionStatus, 'interrupted');
+    });
+
+    test(
+      'a failed provider connection can retry without stale session state',
+      () async {
+        final harness = _Harness(transcripts: const [], connectFailures: 1);
+        await harness.controller.loadProfiles(harness.api);
+
+        await harness.controller.start(
+          harness.api,
+          RealtimeConversationLaunch.free(language: 'en', modelId: 'asr-model'),
+          acquireAudioFocus: () async {},
+        );
+        expect(
+          harness.controller.state.phase,
+          RealtimeConversationPhase.failed,
+        );
+
+        await harness.controller.start(
+          harness.api,
+          RealtimeConversationLaunch.free(language: 'en', modelId: 'asr-model'),
+          acquireAudioFocus: () async {},
+        );
+
+        expect(harness.controller.state.phase, RealtimeConversationPhase.live);
+        expect(harness.controller.state.items, isEmpty);
+        expect(harness.controller.state.postProcessingCount, 0);
+        expect(
+          harness.controller.state.activity,
+          RealtimeConversationActivity.listening,
+        );
+        await harness.controller.cancel();
+      },
+    );
+
+    test(
+      'a failed microphone start can retry without stale session state',
+      () async {
+        final harness = _Harness(transcripts: const [], audioStartFailures: 1);
+        await harness.controller.loadProfiles(harness.api);
+
+        await harness.controller.start(
+          harness.api,
+          RealtimeConversationLaunch.free(language: 'en', modelId: 'asr-model'),
+          acquireAudioFocus: () async {},
+        );
+        expect(
+          harness.controller.state.phase,
+          RealtimeConversationPhase.failed,
+        );
+        expect(harness.lifecycle, isNot(contains('provider_connect')));
+
+        await harness.controller.start(
+          harness.api,
+          RealtimeConversationLaunch.free(language: 'en', modelId: 'asr-model'),
+          acquireAudioFocus: () async {},
+        );
+
+        expect(harness.controller.state.phase, RealtimeConversationPhase.live);
+        expect(harness.controller.state.items, isEmpty);
+        expect(harness.controller.state.postProcessingCount, 0);
+        expect(
+          harness.controller.state.activity,
+          RealtimeConversationActivity.listening,
+        );
+        await harness.controller.cancel();
+      },
+    );
   });
 }
 
@@ -321,16 +445,29 @@ class _Harness {
   _Harness({
     required List<String?> transcripts,
     this.adapterKind = 'open_ai_realtime',
+    this.connectFailures = 0,
+    this.audioStartFailures = 0,
+    this.holdTranscription = false,
+    this.providerDrainTimeout = const Duration(seconds: 15),
   }) : _transcripts = List<String?>.from(transcripts) {
-    audio = _FakeAudio(onStart: () => lifecycle.add('audio_start'));
+    audio = _FakeAudio(
+      onStart: () => lifecycle.add('audio_start'),
+      startFailures: audioStartFailures,
+    );
     controller = RealtimeConversationController(
       audio: audio,
       connect: (_, _) async {
         lifecycle.add('provider_connect');
+        if (connectFailures > 0) {
+          connectFailures--;
+          throw StateError('fixture connection failure');
+        }
         return connection;
       },
-      delay: (_) async {},
+      delay: (_) =>
+          holdTranscription ? transcriptionGate.future : Future<void>.value(),
       nowMs: _clock,
+      providerDrainTimeout: providerDrainTimeout,
     );
     api = LocalApi.withTransport(
       baseUrl: 'http://127.0.0.1:4321',
@@ -344,6 +481,11 @@ class _Harness {
 
   final List<String?> _transcripts;
   final String adapterKind;
+  int connectFailures;
+  final int audioStartFailures;
+  final bool holdTranscription;
+  final Duration providerDrainTimeout;
+  final Completer<void> transcriptionGate = Completer<void>();
   late final RealtimeConversationController controller;
   late final _FakeAudio audio;
   late final LocalApi api;
@@ -470,6 +612,23 @@ class _Harness {
     }
     if (method == 'POST' && path == '/v1/recording-transcriptions') {
       final request = jsonDecode(body!) as Map<String, dynamic>;
+      if (holdTranscription) {
+        _transcriptionCount++;
+        return (
+          statusCode: 200,
+          body: jsonEncode({
+            ..._job(
+              id: 'job-$_transcriptionCount',
+              recordingId: request['recording_id'] as String,
+              transcript: null,
+            ),
+            'status': 'running',
+            'error_code': null,
+            'error_message': null,
+            'completed_at_ms': null,
+          }),
+        );
+      }
       final transcript = _transcripts[_transcriptionCount++];
       return (
         statusCode: 200,
@@ -548,9 +707,10 @@ class _FakeConnection implements RealtimeConnection {
 }
 
 class _FakeAudio implements RealtimeAudioSession {
-  _FakeAudio({required this.onStart});
+  _FakeAudio({required this.onStart, required this.startFailures});
 
   final void Function() onStart;
+  int startFailures;
   final _pcm = StreamController<Uint8List>.broadcast();
   int beginTurnCount = 0;
   final List<int?> beginTurnAudioStartMs = [];
@@ -568,6 +728,10 @@ class _FakeAudio implements RealtimeAudioSession {
   Future<void> start({required int inputSampleRateHz}) async {
     this.inputSampleRateHz = inputSampleRateHz;
     onStart();
+    if (startFailures > 0) {
+      startFailures--;
+      throw StateError('fixture microphone start failure');
+    }
   }
 
   @override

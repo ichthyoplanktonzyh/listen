@@ -39,6 +39,7 @@ class RealtimeConversationPanel extends StatefulWidget {
 class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
   final ScrollController _scrollController = ScrollController();
   int _timelineSignature = 0;
+  bool _closePromptOpen = false;
 
   @override
   void initState() {
@@ -88,13 +89,16 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
       final canClose = state.canConfigure;
       return PopScope(
         canPop: canClose,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && state.canCancel) _requestClose();
+        },
         child: Material(
           color: Theme.of(context).colorScheme.surface,
           child: Column(
             children: [
               ListTile(
                 leading: IconButton(
-                  onPressed: canClose ? widget.onClose : null,
+                  onPressed: canClose || state.canCancel ? _requestClose : null,
                   icon: const Icon(Icons.arrow_back),
                 ),
                 title: const Text('Realtime speech conversation'),
@@ -226,7 +230,8 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                               ),
                             if (state.canCancel)
                               TextButton(
-                                onPressed: widget.controller.cancel,
+                                key: const ValueKey('realtime-cancel'),
+                                onPressed: _cancelAndClose,
                                 child: const Text('Cancel and discard'),
                               ),
                             if (state.isWorking)
@@ -287,6 +292,46 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
       );
     },
   );
+
+  Future<void> _requestClose() async {
+    final state = widget.controller.state;
+    if (state.canConfigure) {
+      widget.onClose();
+      return;
+    }
+    if (!state.canCancel || _closePromptOpen) return;
+    _closePromptOpen = true;
+    bool? discard;
+    try {
+      discard = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Discard this conversation?'),
+          content: const Text(
+            'The active conversation and unfinished local transcription will be discarded.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Keep talking'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Discard and close'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      _closePromptOpen = false;
+    }
+    if (discard == true) await _cancelAndClose();
+  }
+
+  Future<void> _cancelAndClose() async {
+    await widget.controller.cancel();
+    if (mounted) widget.onClose();
+  }
 
   String _activityLabel(RealtimeConversationActivity activity) =>
       switch (activity) {
