@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-22: 设计资产落库 —— `design-notes/` 新增三份 listen 视觉稿（refs #28）。
+  `listen-visual-identity.html`（整体气质定稿，暗色墨绿炭 `#1a2420` + 信号青 `#4db8a8`
+  + 琥珀 `#e6b45c`，是 #28 宪章的视觉锚点）、`listen-mark-exploration.html`（wordmark/
+  符号四方向探索，#32 的取材来源）、`listen-motion.html`（动效语言，已列出可直接抄进
+  #32 的 motion token：`--dur-tap/hover/base/slow/ambient` + 三条 ease）。此前这三份稿子
+  只在本地未提交，导致 #28 指向 `blob/HEAD/...visual-identity.html` 的链接是断的；本次
+  提交修复断链，并给后续设计 slice（#29–#32）一个仓内可引用的事实来源。纯文档，不含代码，
+  不触及测试。
+
 - 2026-07-21: 设置最小窗口尺寸 640×560（closes #19，refs #18, #12）。#18 的收尾残留：
   AppBar 改成纯图标后仍有一个**硬地板 480px**（实测 470 溢出 10px、460 溢出 20px、
   440 溢出 40px，与 locale 无关，因为图标宽度固定），再往下只能把四组菜单折成单个
