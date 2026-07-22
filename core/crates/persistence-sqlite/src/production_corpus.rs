@@ -139,11 +139,8 @@ fn replace_projection(
             .map_err(repo)?;
         }
         None => {
-            tx.execute(
-                "DELETE FROM production_corpus_documents WHERE attempt_id IS NOT NULL",
-                [],
-            )
-            .map_err(repo)?;
+            tx.execute("DELETE FROM production_corpus_documents", [])
+                .map_err(repo)?;
         }
     }
     insert_projection(&tx, documents, entries)?;

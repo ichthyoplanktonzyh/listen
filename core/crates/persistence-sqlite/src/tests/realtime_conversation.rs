@@ -16,6 +16,7 @@ fn services(repo: &Arc<SqliteRepository>) -> AppServices {
         repo.clone(),
         repo.clone(),
     )
+    .with_semantic_task_repository(repo.clone())
     .with_realtime_conversation_repository(repo.clone())
     .with_production_corpus_repository(repo.clone())
 }
@@ -50,7 +51,7 @@ fn only_local_finalized_learner_turn_projects_into_spoken_corpus() {
     let recording_id = RecordingAssetId::parse("recording-spoken").unwrap();
     let mut turn = RealtimeConversationTurn {
         id: RealtimeConversationTurnId::parse("learner-spoken").unwrap(),
-        session_id: session.id,
+        session_id: session.id.clone(),
         sequence: 1,
         role: RealtimeTurnRole::Learner,
         status: RealtimeTurnStatus::Streaming,
@@ -79,6 +80,36 @@ fn only_local_finalized_learner_turn_projects_into_spoken_corpus() {
         .production_corpus()
         .record_realtime_turn_and_index(turn)
         .unwrap();
+    let mut assistant = RealtimeConversationTurn {
+        id: RealtimeConversationTurnId::parse("assistant-spoken").unwrap(),
+        session_id: session.id.clone(),
+        sequence: 2,
+        role: RealtimeTurnRole::Assistant,
+        status: RealtimeTurnStatus::Streaming,
+        assistance: ProductionAssistance::Unknown,
+        provider_transcript: Some(ProviderTranscript {
+            text: "Assistant words must stay out".into(),
+            provider_item_id: Some("provider-assistant".into()),
+            received_at_ms: 41,
+        }),
+        local_transcript: None,
+        recording_asset_id: None,
+        started_at_ms: 41,
+        ended_at_ms: None,
+        failure_kind: None,
+    };
+    assistant.finalize_assistant(42).unwrap();
+    services
+        .production_corpus()
+        .record_realtime_turn_and_index(assistant)
+        .unwrap();
+    assert_eq!(
+        services
+            .production_corpus()
+            .rebuild_production_corpus()
+            .unwrap(),
+        0
+    );
     let summary = services
         .production_corpus()
         .production_gap_review("en", ProductionChannel::Spoken, 10)

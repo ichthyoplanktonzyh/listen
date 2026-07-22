@@ -62,65 +62,11 @@ impl ProductionCorpusUseCases {
         turn: domain::RealtimeConversationTurn,
     ) -> Result<domain::RealtimeConversationTurn, ApplicationError> {
         let saved = self.realtime_conversations.save_realtime_turn(&turn)?;
-        let mut documents = Vec::new();
-        let mut entries = Vec::new();
-        if saved.is_authoritative_learner_output() {
-            let session = self
-                .realtime_conversations
-                .get_realtime_session(&saved.session_id)?
-                .ok_or(ApplicationError::NotFound("realtime conversation session"))?;
-            let transcript = saved
-                .local_transcript
-                .as_ref()
-                .expect("authority predicate requires local transcript");
-            let anchor = session
-                .context
-                .as_ref()
-                .and_then(|context| context.content_anchor.as_ref());
-            let document_id = ProductionCorpusDocumentId::from_fingerprint(
-                "production-corpus-document",
-                &format!("realtime:{}", saved.id.as_str()),
-            );
-            documents.push(ProductionCorpusDocument {
-                id: document_id.clone(),
-                language: session.language.clone(),
-                channel: ProductionChannel::Spoken,
-                assistance: saved.assistance,
-                attempt_id: None,
-                rubric_id: None,
-                realtime_turn_id: Some(saved.id.clone()),
-                realtime_session_id: Some(saved.session_id.clone()),
-                response_revision: 1,
-                activity_kind: "realtime_conversation".into(),
-                media_id: anchor.map(|value| value.media_id.clone()),
-                start_ms: anchor.map_or(0, |value| value.start_ms),
-                end_ms: anchor.map_or(0, |value| value.end_ms),
-                response_text: transcript.text.clone(),
-                produced_at_ms: transcript.completed_at_ms,
-            });
-            for token in subtitle_core::tokenize(Some(&session.language), &transcript.text)
-                .into_iter()
-                .filter(|token| token.kind == SubtitleTokenKind::Word && token.normalized.is_some())
-            {
-                let surface = token.normalized.expect("filtered to Some");
-                let normalized_key = self
-                    .lexical_learning
-                    .normalize_lexical_form(session.language.as_str(), &surface)
-                    .map(|normalization| normalization.normalized)
-                    .unwrap_or(surface);
-                entries.push(ProductionCorpusEntry {
-                    id: ProductionCorpusEntryId::from_fingerprint(
-                        "production-corpus-entry",
-                        &format!("{}:token:{}", document_id.as_str(), token.index),
-                    ),
-                    document_id: document_id.clone(),
-                    normalized_key,
-                    display_text: token.text,
-                    start_char: token.start_char,
-                    end_char: token.end_char,
-                });
-            }
-        }
+        let session = self
+            .realtime_conversations
+            .get_realtime_session(&saved.session_id)?
+            .ok_or(ApplicationError::NotFound("realtime conversation session"))?;
+        let (documents, entries) = self.derive_realtime_entries(&session, &saved)?;
         let _ = self
             .production_corpus
             .replace_production_entries_for_realtime_turn(&saved.id, &documents, &entries);
@@ -174,8 +120,22 @@ impl ProductionCorpusUseCases {
             documents.append(&mut derived_documents);
             entries.append(&mut derived_entries);
         }
+        for session in self.realtime_conversations.list_realtime_sessions()? {
+            for turn in self
+                .realtime_conversations
+                .list_realtime_turns(&session.id)?
+            {
+                let (mut derived_documents, mut derived_entries) =
+                    self.derive_realtime_entries(&session, &turn)?;
+                documents.append(&mut derived_documents);
+                entries.append(&mut derived_entries);
+            }
+        }
         self.production_corpus
             .replace_all_production_entries(&documents, &entries)?;
+        // Preserve the existing endpoint contract: this count reports indexed
+        // semantic rubrics, while realtime turns are an additional projection
+        // source rather than synthetic rubrics.
         Ok(by_rubric.len() as u32)
     }
 
@@ -426,6 +386,69 @@ impl ProductionCorpusUseCases {
                     end_char: token.end_char,
                 });
             }
+        }
+        Ok((documents, entries))
+    }
+
+    fn derive_realtime_entries(
+        &self,
+        session: &domain::RealtimeConversationSession,
+        turn: &domain::RealtimeConversationTurn,
+    ) -> Result<(Vec<ProductionCorpusDocument>, Vec<ProductionCorpusEntry>), ApplicationError> {
+        if !turn.is_authoritative_learner_output() {
+            return Ok((Vec::new(), Vec::new()));
+        }
+        let transcript = turn
+            .local_transcript
+            .as_ref()
+            .expect("authority predicate requires local transcript");
+        let anchor = session
+            .context
+            .as_ref()
+            .and_then(|context| context.content_anchor.as_ref());
+        let document_id = ProductionCorpusDocumentId::from_fingerprint(
+            "production-corpus-document",
+            &format!("realtime:{}", turn.id.as_str()),
+        );
+        let documents = vec![ProductionCorpusDocument {
+            id: document_id.clone(),
+            language: session.language.clone(),
+            channel: ProductionChannel::Spoken,
+            assistance: turn.assistance,
+            attempt_id: None,
+            rubric_id: None,
+            realtime_turn_id: Some(turn.id.clone()),
+            realtime_session_id: Some(turn.session_id.clone()),
+            response_revision: 1,
+            activity_kind: "realtime_conversation".into(),
+            media_id: anchor.map(|value| value.media_id.clone()),
+            start_ms: anchor.map_or(0, |value| value.start_ms),
+            end_ms: anchor.map_or(0, |value| value.end_ms),
+            response_text: transcript.text.clone(),
+            produced_at_ms: transcript.completed_at_ms,
+        }];
+        let mut entries = Vec::new();
+        for token in subtitle_core::tokenize(Some(&session.language), &transcript.text)
+            .into_iter()
+            .filter(|token| token.kind == SubtitleTokenKind::Word && token.normalized.is_some())
+        {
+            let surface = token.normalized.expect("filtered to Some");
+            let normalized_key = self
+                .lexical_learning
+                .normalize_lexical_form(session.language.as_str(), &surface)
+                .map(|normalization| normalization.normalized)
+                .unwrap_or(surface);
+            entries.push(ProductionCorpusEntry {
+                id: ProductionCorpusEntryId::from_fingerprint(
+                    "production-corpus-entry",
+                    &format!("{}:token:{}", document_id.as_str(), token.index),
+                ),
+                document_id: document_id.clone(),
+                normalized_key,
+                display_text: token.text,
+                start_char: token.start_char,
+                end_char: token.end_char,
+            });
         }
         Ok((documents, entries))
     }

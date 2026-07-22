@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- 2026-07-22: 完成 Phase 3.19.1 方案 B4。内容通道的「说」现在先明确选择复述、跟读或围绕内容
+  对话；话题对话直接进入 Realtime route，不再先创建 Speaking task，也从 Speaking Studio、host 与
+  coordinator 删除 Realtime 页面状态。Pattern Production 的两类事实改为显式关联：semantic attempt
+  继续权威持有 prompt/录音/文稿，Personal Expression Use 只记录 pattern version 使用、辅助等级与
+  learner self-assessment；新 speaking use 必须携带 `semantic_attempt_id`，writing 禁止携带，旧 JSON
+  不伪造回填关系。补充审计 LiveKit Agents 当前 HEAD `c67c44e` 的分层事件、ordered ChatContext、
+  drain/aclose 与 interrupted playout 测试方法，未引入运行时依赖。同步完成 B5 的状态分层子切片：
+  Realtime session phase 与 learner speaking/thinking/assistant speaking activity 分开建模，timeline 仅在
+  用户仍靠近 live edge 时自动跟随，手动回看不会被强制拉回底部。
+
+- 2026-07-22: 推进 Phase 3.19.1 方案 B 的边界收敛。Realtime 新增本地 sequence 权威的纯 turn
+  assembler，barge-in 会把未完成 assistant item 记为 interrupted，Cancel 会阻断待处理 learner
+  turn 后续 finalize，Finish 会在 provider drain 后显式 flush 最后一条 assistant transcript；Realtime
+  launch 改用自有显式 topic anchor，不再依赖 Speaking task prompt。Production Corpus 全量 rebuild
+  现在以单事务同时重建 writing attempts 与 finalized local-authoritative realtime learner turns，
+  assistant/failed/interrupted turns 继续不进入个人产出。方案 B 的保留能力、参考项目映射、后续入口
+  取舍与测试切片记录于 `3.19.1-SCHEME-B.md`。
+
 - 2026-07-22 15:10 CST: 完成 Speaking / Realtime 产品减法：删除把字幕下一句当预设回答的 Role
   Reply，不再保留三档文字辅助、Flutter 入口、controller 创建路径、领域枚举、LLM/Coach 分支或
   OpenAPI kind。schema v45 破坏性清理既有 Role Reply rubric、attempt、judgment/adjudication、延迟

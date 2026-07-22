@@ -7,9 +7,9 @@ use domain::{
     ConstructionId, LanguageCode, MediaId, PatternSourceKind, PatternSourceSnapshot,
     PersonalExpressionAssistance, PersonalExpressionAttempt, PersonalExpressionAttemptId,
     PersonalExpressionChannel, PersonalExpressionSelfAssessment, RecordingAssetId,
-    SemanticTaskAttemptId, SubtitleSentenceId, SubtitleTrackId, UserSentencePatternAsset,
-    UserSentencePatternId, UserSentencePatternSlot, UserSentencePatternVersion,
-    UserSentencePatternVersionId,
+    SemanticTaskAttemptId, SemanticTaskKind, SubtitleSentenceId, SubtitleTrackId,
+    UserSentencePatternAsset, UserSentencePatternId, UserSentencePatternSlot,
+    UserSentencePatternVersion, UserSentencePatternVersionId,
 };
 use serde::Deserialize;
 
@@ -62,6 +62,7 @@ pub(crate) struct RecordAttemptRequest {
     response_text: String,
     raw_transcript: Option<String>,
     recording_asset_id: Option<String>,
+    semantic_attempt_id: Option<String>,
     self_assessment: PersonalExpressionSelfAssessment,
     context_note: Option<String>,
 }
@@ -252,10 +253,40 @@ pub(crate) async fn record_pattern_attempt(
         response_text: request.response_text,
         raw_transcript: request.raw_transcript,
         recording_asset_id: optional_id(request.recording_asset_id, RecordingAssetId::parse)?,
+        semantic_attempt_id: optional_id(
+            request.semantic_attempt_id,
+            SemanticTaskAttemptId::parse,
+        )?,
         self_assessment: request.self_assessment,
         context_note: request.context_note,
         completed_at_ms: now,
     };
+    if attempt.channel == PersonalExpressionChannel::Speaking {
+        let semantic_attempt_id = attempt.semantic_attempt_id.as_ref().ok_or_else(|| {
+            application::ApplicationError::Invalid(
+                "speaking use requires a semantic attempt".into(),
+            )
+        })?;
+        let source_attempt = state
+            .services
+            .semantic()
+            .semantic_attempt(semantic_attempt_id)?
+            .ok_or(application::ApplicationError::NotFound("semantic attempt"))?;
+        let source_response = source_attempt.responses.last().ok_or_else(|| {
+            application::ApplicationError::Invalid(
+                "linked semantic attempt has no learner response".into(),
+            )
+        })?;
+        if source_attempt.kind != SemanticTaskKind::PatternProduction
+            || source_response.transcript.trim() != attempt.response_text.trim()
+            || source_response.recording_asset_id != attempt.recording_asset_id
+        {
+            return Err(application::ApplicationError::Invalid(
+                "speaking use must summarize its linked pattern-production attempt".into(),
+            )
+            .into());
+        }
+    }
     let saved = state
         .services
         .personal_expression()

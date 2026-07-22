@@ -4397,6 +4397,7 @@ components:
         response_text: { type: string, minLength: 1 }
         raw_transcript: { type: [string, "null"] }
         recording_asset_id: { type: [string, "null"] }
+        semantic_attempt_id: { type: [string, "null"] }
         self_assessment: { $ref: "#/components/schemas/PersonalExpressionSelfAssessment" }
         context_note: { type: [string, "null"] }
     PersonalExpressionAttempt:

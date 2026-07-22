@@ -110,6 +110,10 @@ pub struct PersonalExpressionAttempt {
     pub response_text: String,
     pub raw_transcript: Option<String>,
     pub recording_asset_id: Option<RecordingAssetId>,
+    /// Constructed Speaking Task that owns the transcript and recording facts.
+    /// Historical pre-3.19.1 rows deserialize without the relationship.
+    #[serde(default)]
+    pub semantic_attempt_id: Option<SemanticTaskAttemptId>,
     pub self_assessment: PersonalExpressionSelfAssessment,
     pub context_note: Option<String>,
     pub completed_at_ms: u64,
@@ -151,13 +155,16 @@ pub fn validate_personal_expression_attempt(
     }
     match value.channel {
         PersonalExpressionChannel::Writing => {
-            if value.raw_transcript.is_some() || value.recording_asset_id.is_some() {
+            if value.raw_transcript.is_some()
+                || value.recording_asset_id.is_some()
+                || value.semantic_attempt_id.is_some()
+            {
                 return Err("writing use cannot carry speaking recording facts".into());
             }
         }
         PersonalExpressionChannel::Speaking => {
-            if value.recording_asset_id.is_none() {
-                return Err("speaking use requires a recording asset".into());
+            if value.recording_asset_id.is_none() || value.semantic_attempt_id.is_none() {
+                return Err("speaking use requires a recording asset and semantic attempt".into());
             }
         }
     }
@@ -179,10 +186,34 @@ mod tests {
             response_text: "I ended up fixing it on Sunday.".into(),
             raw_transcript: Some("raw".into()),
             recording_asset_id: None,
+            semantic_attempt_id: None,
             self_assessment: PersonalExpressionSelfAssessment::Expressed,
             context_note: None,
             completed_at_ms: 1,
         };
         assert!(validate_personal_expression_attempt(&attempt).is_err());
+    }
+
+    #[test]
+    fn speaking_use_references_its_authoritative_semantic_attempt() {
+        let attempt = PersonalExpressionAttempt {
+            id: PersonalExpressionAttemptId::parse("a").unwrap(),
+            pattern_id: UserSentencePatternId::parse("p").unwrap(),
+            pattern_version_id: UserSentencePatternVersionId::parse("v").unwrap(),
+            channel: PersonalExpressionChannel::Speaking,
+            assistance: PersonalExpressionAssistance::NoText,
+            response_text: "I ended up fixing it on Sunday.".into(),
+            raw_transcript: Some("raw".into()),
+            recording_asset_id: Some(RecordingAssetId::parse("recording").unwrap()),
+            semantic_attempt_id: None,
+            self_assessment: PersonalExpressionSelfAssessment::Expressed,
+            context_note: None,
+            completed_at_ms: 1,
+        };
+        assert!(
+            validate_personal_expression_attempt(&attempt)
+                .unwrap_err()
+                .contains("semantic attempt")
+        );
     }
 }
