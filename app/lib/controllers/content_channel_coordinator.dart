@@ -85,6 +85,7 @@ class ContentChannelCoordinator {
       case ContentChannel.speaking:
         final service = _getApi?.call();
         if (service == null || !(_speakingAvailable?.call() ?? false)) return;
+        await speakingActions.acquireRecordingFocus();
         await _openSpeaking?.call(service);
       case ContentChannel.writing:
         await _openWriting?.call();

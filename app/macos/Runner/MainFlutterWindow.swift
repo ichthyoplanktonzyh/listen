@@ -2,6 +2,11 @@ import Cocoa
 import AVFoundation
 import FlutterMacOS
 
+func realtimePreRollSuffix(_ data: Data, droppingByteCount: Int) -> Data {
+  let boundedOffset = min(data.count, max(0, droppingByteCount))
+  return Data(data.dropFirst(boundedOffset))
+}
+
 class MainFlutterWindow: NSWindow {
   private var shadowingRecorder: ShadowingRecorder?
   private var realtimeAudio: RealtimeAudioBridge?
@@ -225,7 +230,7 @@ private final class RealtimeAudioBridge: NSObject, FlutterStreamHandler {
       let captureStartFrame = min(recordedFrames, max(availableStartFrame, requestedStartFrame))
       let skippedFrames = captureStartFrame - availableStartFrame
       let captureByteOffset = Int(skippedFrames) * MemoryLayout<Int16>.size
-      let capturedPreRoll = preRoll.suffix(from: min(preRoll.count, captureByteOffset))
+      let capturedPreRoll = realtimePreRollSuffix(preRoll, droppingByteCount: captureByteOffset)
       if !capturedPreRoll.isEmpty,
          let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(capturedPreRoll.count / 2)),
          let samples = buffer.int16ChannelData?[0] {

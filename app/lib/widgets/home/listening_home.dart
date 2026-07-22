@@ -158,60 +158,75 @@ class _HomeSidebar extends StatelessWidget {
         color: colors.surfaceContainerLow,
         border: Border(right: BorderSide(color: colors.outlineVariant)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 22, 14, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _SectionLabel(label: l.text('listenNow')),
-            const SizedBox(height: 8),
-            _SidebarItem(
-              icon: Icons.home_outlined,
-              label: l.text('home'),
-              selected: true,
-              onTap: () {},
+      child: CustomScrollView(
+        key: const ValueKey('home-sidebar-scroll'),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(14, 22, 14, 0),
+            sliver: SliverList.list(
+              children: [
+                _SectionLabel(label: l.text('listenNow')),
+                const SizedBox(height: 8),
+                _SidebarItem(
+                  icon: Icons.home_outlined,
+                  label: l.text('home'),
+                  selected: true,
+                  onTap: () {},
+                ),
+                const SizedBox(height: 24),
+                _SectionLabel(label: l.text('myLearning')),
+                const SizedBox(height: 8),
+                _SidebarItem(
+                  icon: Icons.inventory_2_outlined,
+                  label: l.text('subtitleResources'),
+                  onTap: onOpenSubtitleResources,
+                ),
+                _SidebarItem(
+                  icon: Icons.menu_book_outlined,
+                  label: l.text('vocabulary'),
+                  onTap: onOpenVocabulary,
+                ),
+                _SidebarItem(
+                  icon: Icons.format_quote_outlined,
+                  label: l.text('personalExpressions'),
+                  onTap: onOpenPersonalExpressions,
+                ),
+                _SidebarItem(
+                  icon: Icons.forum_outlined,
+                  label: l.text('conversation'),
+                  onTap: onOpenConversation,
+                ),
+                _SidebarItem(
+                  icon: Icons.headphones_outlined,
+                  label: l.text('review'),
+                  onTap: onOpenReview,
+                ),
+                _SidebarItem(
+                  icon: Icons.insights_outlined,
+                  label: l.text('coachDashboard'),
+                  onTap: onOpenCoach,
+                ),
+              ],
             ),
-            const SizedBox(height: 24),
-            _SectionLabel(label: l.text('myLearning')),
-            const SizedBox(height: 8),
-            _SidebarItem(
-              icon: Icons.inventory_2_outlined,
-              label: l.text('subtitleResources'),
-              onTap: onOpenSubtitleResources,
+          ),
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _SidebarItem(
+                    icon: Icons.settings_outlined,
+                    label: l.text('settings'),
+                    onTap: onOpenSettings,
+                  ),
+                ],
+              ),
             ),
-            _SidebarItem(
-              icon: Icons.menu_book_outlined,
-              label: l.text('vocabulary'),
-              onTap: onOpenVocabulary,
-            ),
-            _SidebarItem(
-              icon: Icons.format_quote_outlined,
-              label: l.text('personalExpressions'),
-              onTap: onOpenPersonalExpressions,
-            ),
-            _SidebarItem(
-              icon: Icons.forum_outlined,
-              label: l.text('conversation'),
-              onTap: onOpenConversation,
-            ),
-            _SidebarItem(
-              icon: Icons.headphones_outlined,
-              label: l.text('review'),
-              onTap: onOpenReview,
-            ),
-            _SidebarItem(
-              icon: Icons.insights_outlined,
-              label: l.text('coachDashboard'),
-              onTap: onOpenCoach,
-            ),
-            const Spacer(),
-            _SidebarItem(
-              icon: Icons.settings_outlined,
-              label: l.text('settings'),
-              onTap: onOpenSettings,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
