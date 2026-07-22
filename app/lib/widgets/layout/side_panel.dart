@@ -615,7 +615,9 @@ class _PanelTab extends StatelessWidget {
         onTap: onTap,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: selected ? colors.primaryContainer : Colors.transparent,
+            // Shell recedes (#30): the teal underline and glyph carry the
+            // selection alone — a filled block made the chrome itself glow.
+            color: Colors.transparent,
             border: Border(
               bottom: BorderSide(
                 color: selected ? colors.primary : Colors.transparent,

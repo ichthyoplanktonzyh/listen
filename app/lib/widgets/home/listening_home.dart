@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/types.dart';
 import '../../theme/breakpoints.dart';
+import '../../theme/listen_theme.dart';
 import '../../utils/format_duration.dart';
 import 'media_library_section.dart';
 
@@ -886,11 +887,20 @@ class _SidebarItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    // Shell recedes (#30): the rail is unlit chrome. Unselected rows drop to
+    // the variant shade; the selected row rises one neutral surface step and
+    // lets the teal show only through icon, label and a faint ring — a solid
+    // teal block would make the shell itself a light source.
     return Padding(
       padding: const EdgeInsets.only(bottom: 3),
       child: Material(
-        color: selected ? colors.primaryContainer : Colors.transparent,
-        borderRadius: BorderRadius.circular(6),
+        color: selected ? colors.surfaceContainerHigh : Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(6),
+          side: selected
+              ? BorderSide(color: colors.primary.withValues(alpha: 0.33))
+              : BorderSide.none,
+        ),
         child: InkWell(
           borderRadius: BorderRadius.circular(6),
           onTap: onTap,
@@ -903,7 +913,12 @@ class _SidebarItem extends StatelessWidget {
                   Icon(
                     icon,
                     size: 20,
-                    color: selected ? colors.primary : colors.onSurfaceVariant,
+                    // pressedPrimary is the primary shade made for sitting on
+                    // a surface — plain primary misses AA on the raised row
+                    // in the light theme (4.3:1).
+                    color: selected
+                        ? colors.pressedPrimary
+                        : colors.onSurfaceVariant,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -912,7 +927,9 @@ class _SidebarItem extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: selected ? colors.primary : colors.onSurface,
+                        color: selected
+                            ? colors.pressedPrimary
+                            : colors.onSurfaceVariant,
                         fontWeight: selected
                             ? FontWeight.w700
                             : FontWeight.w500,

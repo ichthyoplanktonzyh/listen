@@ -200,7 +200,30 @@ void main() {
       'word_highlight_style': 'underline',
     });
 
-    expect(settings.wordHighlightStyle, 'background');
+    // Unknown values take the charter default (#30: glow is the caption's
+    // dimmed-room treatment), never an error.
+    expect(settings.wordHighlightStyle, 'glow');
+  });
+
+  test('word highlight style defaults to glow but keeps explicit choices', () {
+    // #30: fresh installs get the charter glow; every persisted choice —
+    // including 'background', the pre-glow default — survives.
+    expect(const AppSettings().wordHighlightStyle, 'glow');
+    expect(AppSettings.fromJson({'version': 8}).wordHighlightStyle, 'glow');
+    expect(
+      AppSettings.fromJson({
+        'version': 8,
+        'word_highlight_style': 'background',
+      }).wordHighlightStyle,
+      'background',
+    );
+    expect(
+      AppSettings.fromJson({
+        'version': 8,
+        'word_highlight_style': 'bounce',
+      }).wordHighlightStyle,
+      'bounce',
+    );
   });
 
   test('loads independently configured chunk presentation settings v8', () {

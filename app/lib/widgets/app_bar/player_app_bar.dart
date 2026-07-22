@@ -310,6 +310,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
         IconButton(
           tooltip: l.text('settings'),
           onPressed: onOpenSettings,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
           icon: const Icon(Icons.settings_outlined),
         ),
         const SizedBox(width: 8),
@@ -339,33 +340,39 @@ class _ToolbarMenuButton extends StatelessWidget {
   final PopupMenuItemBuilder<String> itemBuilder;
 
   @override
-  Widget build(BuildContext context) => PopupMenuButton<String>(
-    tooltip: tooltip,
-    onSelected: onSelected,
-    itemBuilder: itemBuilder,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 21),
-          if (showLabel) ...[
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
-            ),
+  Widget build(BuildContext context) {
+    // Shell recedes (#30): the bar's menus sit at the variant shade so the
+    // stage below stays the brightest thing on screen.
+    final quiet = Theme.of(context).colorScheme.onSurfaceVariant;
+    return PopupMenuButton<String>(
+      tooltip: tooltip,
+      onSelected: onSelected,
+      itemBuilder: itemBuilder,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 21, color: quiet),
+            if (showLabel) ...[
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: quiet,
+                ),
+              ),
+            ],
+            const SizedBox(width: 2),
+            // Kept in the narrow form too: without it an icon-only button
+            // reads as a plain action rather than something opening a menu.
+            Icon(Icons.arrow_drop_down, size: 18, color: quiet),
           ],
-          const SizedBox(width: 2),
-          // Kept in the narrow form too: without it an icon-only button reads
-          // as a plain action rather than something that opens a menu.
-          const Icon(Icons.arrow_drop_down, size: 18),
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _MenuHeader extends PopupMenuItem<String> {
