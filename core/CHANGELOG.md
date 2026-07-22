@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- 2026-07-22: 外壳退后、内容发光（refs #28, closes #30 · design Slice 2）。宪章原则 2 的强调层
+  重排——外壳安静下沉，声音/词/画面成为唯一光源。① **信号青校准**：`darkPrimary`
+  `#5cc6b8` → 设计稿 `#4db8a8`，WCAG AA 逐对断言保持绿灯。② **Transport 退后**：
+  compact/full 两形态共用一份 `_progressSliderTheme`（3px 细轨、未播部分近乎隐入、把手
+  实心青点带静态柔晕，高对比模式自动去晕）；prev/next/restart 与未选中 toggle/菜单 chip
+  全部降到 variant 层，播放键是这条栏上唯一发光的控件；时间标签退为 muted。③ **Rail/侧栏
+  退后**：首页 `_SidebarItem` 选中态从实心 `primaryContainer` 色块改为中性抬起面 + 淡青描边
+  + `pressedPrimary` 前景（顺带修掉亮色主题下 primary-on-container 仅 4.1:1 的既有 AA 缺口）；
+  未选中文字降到 variant；side_panel `_PanelTab` 去掉选中色块、只留青色下划线与字形。
+  ④ **AppBar 退后**：菜单按钮图标/标签/箭头与设置图标降到 variant 层。⑤ **当前词发光**：
+  `token_line` glow 样式当前词直接用信号青 + 柔晕；新增 `ListenColors.overlaySignal`
+  （overlay 恒暗，信号青不得随亮色主题翻转成深青沉入墨底）；`wordHighlightStyle` 默认
+  `background` → `glow`（三种显式选择均保留，未知值回退 glow）；reduced-motion 下 bounce
+  静态化、发光本为静态不受影响。字幕带本身的重画归 Slice 3，尺寸/字号 token 归 Slice 4。
+  测试：settings_test 词高亮默认/保留断言更新+新增；全量 547 项绿；`flutter analyze` 零告警。
+
 - 2026-07-22: AppBar 菜单项按状态禁用 + 归档媒体不再静默空点击（refs #20, closes #24）。
   ① 新增 `AppBarCapabilities` 值对象（hasMedia/coreReady），组合根从
   `playerController.mediaId != null` 与 `api != null` 一处计算——#23 原生菜单栏必须复用同一份
