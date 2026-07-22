@@ -164,4 +164,107 @@ void main() {
 
     controller.dispose();
   });
+
+  ({LocalApi api, List<String> paths}) sessionOnlyApi() {
+    final paths = <String>[];
+    final api = LocalApi.withTransport(
+      baseUrl: 'http://test',
+      token: 'tok',
+      transport: (method, path, body) async {
+        paths.add(path);
+        if (path == '/v1/practice/sessions') {
+          return (
+            statusCode: 200,
+            body:
+                '{"id":"session-1","mode":"extensive","media_id":"media-1","track_id":"track-1","source":"extensive_listening","started_at_ms":1,"ended_at_ms":null}',
+          );
+        }
+        if (path.startsWith('/v1/listening-inbox/items')) {
+          return (statusCode: 200, body: '[]');
+        }
+        if (path == '/v1/listening/sessions/session-1/complete') {
+          return (
+            statusCode: 200,
+            body:
+                '{"id":"session-1","mode":"extensive","media_id":"media-1","track_id":"track-1","source":"extensive_listening","started_at_ms":1,"ended_at_ms":5}',
+          );
+        }
+        throw StateError('unexpected $method $path');
+      },
+    );
+    return (api: api, paths: paths);
+  }
+
+  test('played duration counts only playing time during the session', () async {
+    var now = DateTime(2026, 7, 22, 10);
+    final fake = sessionOnlyApi();
+    final controller = ExtensiveListeningController(clock: () => now);
+
+    expect(
+      await controller.startSession(
+        api: fake.api,
+        mediaId: 'media-1',
+        trackId: 'track-1',
+      ),
+      isTrue,
+    );
+    controller.notePlaybackState(true);
+    now = now.add(const Duration(minutes: 5));
+    controller.notePlaybackState(false);
+    // A paused stretch must not count: this is what separates the figure from
+    // started→ended wall clock.
+    now = now.add(const Duration(minutes: 3));
+    controller.notePlaybackState(true);
+    now = now.add(const Duration(minutes: 2));
+    expect(controller.playedDuration, const Duration(minutes: 7));
+
+    expect(
+      await controller.finishSession(fake.api, comprehensionReport: 'unclear'),
+      isTrue,
+    );
+    // Frozen at completion: post-session playback no longer accumulates.
+    now = now.add(const Duration(minutes: 9));
+    expect(controller.playedDuration, const Duration(minutes: 7));
+
+    controller.dispose();
+  });
+
+  test('session starting mid-playback ticks from session start and '
+      'resets per session', () async {
+    var now = DateTime(2026, 7, 22, 10);
+    final fake = sessionOnlyApi();
+    final controller = ExtensiveListeningController(clock: () => now);
+
+    controller.notePlaybackState(true);
+    // Pre-session playback is not this session's listening time.
+    now = now.add(const Duration(minutes: 4));
+    expect(
+      await controller.startSession(
+        api: fake.api,
+        mediaId: 'media-1',
+        trackId: 'track-1',
+      ),
+      isTrue,
+    );
+    now = now.add(const Duration(minutes: 6));
+    expect(controller.playedDuration, const Duration(minutes: 6));
+
+    expect(
+      await controller.finishSession(fake.api, comprehensionReport: null),
+      isTrue,
+    );
+    expect(
+      await controller.startSession(
+        api: fake.api,
+        mediaId: 'media-1',
+        trackId: 'track-1',
+      ),
+      isTrue,
+    );
+    now = now.add(const Duration(minutes: 2));
+    // The second session starts from zero even though playback never paused.
+    expect(controller.playedDuration, const Duration(minutes: 2));
+
+    controller.dispose();
+  });
 }

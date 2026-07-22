@@ -58,6 +58,7 @@ import 'models/timeline.dart';
 import 'models/types.dart';
 import 'services/api_service.dart';
 import 'services/external_tools.dart';
+import 'utils/format_duration.dart';
 import 'widgets/panels/l1_specialty_dialog.dart';
 import 'widgets/panels/realtime_conversation_panel.dart';
 import 'widgets/player/download_status_bar.dart';
@@ -309,10 +310,16 @@ class _PlayerScreenState extends State<PlayerScreen>
     });
   }
 
+  /// Keeps the extensive-listening played clock honest: it ticks only while
+  /// the main player is actually playing (issue #3).
+  void _trackExtensivePlayback() =>
+      extensiveListeningController.notePlaybackState(playerController.playing);
+
   @override
   void initState() {
     super.initState();
     playerController.addListener(_surfaceErrorStatus);
+    playerController.addListener(_trackExtensivePlayback);
     speakingActions.text = (key) => l.text(key);
     _workbenchAnimController = AnimationController(
       vsync: this,
@@ -1189,6 +1196,9 @@ class _PlayerScreenState extends State<PlayerScreen>
             notNoticedCount: huntingState.notNoticedCount,
           )
         : null;
+    // Snapshot before the dialog opens so the figure the user confirms is the
+    // one that gets reported; it is accumulated playing time, not wall clock.
+    final playedDuration = extensiveListeningController.playedDuration;
     final report = await showDialog<String?>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1197,6 +1207,12 @@ class _PlayerScreenState extends State<PlayerScreen>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(
+              l
+                  .text('extensiveSessionPlayedDuration')
+                  .replaceAll('{duration}', formatDuration(playedDuration)),
+            ),
+            const SizedBox(height: 12),
             Text(l.text('comprehensionReportPrompt')),
             if (huntingSummary != null) ...[
               const SizedBox(height: 12),
@@ -1504,6 +1520,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   void dispose() {
     _stopApiAfterFinalProgressSave();
     playerController.removeListener(_surfaceErrorStatus);
+    playerController.removeListener(_trackExtensivePlayback);
     _workbenchAnimController.dispose();
     downloadController.dispose();
     unawaited(_saveSettings());

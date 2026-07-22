@@ -838,6 +838,7 @@ class AppLocalizations {
       'listeningInbox': 'Listening Inbox',
       'listeningInboxEmpty': 'No marked listening moments yet.',
       'comprehensionReportPrompt': 'How much did this session make sense?',
+      'extensiveSessionPlayedDuration': 'Listened this session: {duration}',
       'huntingCompletionSummary':
           'Hunting: {prompted} prompts / {recognized} recognized',
       'skipReport': 'Skip',
@@ -2116,6 +2117,7 @@ class AppLocalizations {
       'listeningInbox': 'Listening Inbox',
       'listeningInboxEmpty': '还没有标记的泛听片段。',
       'comprehensionReportPrompt': '这次泛听理解得怎么样？',
+      'extensiveSessionPlayedDuration': '本次实际泛听时长：{duration}',
       'huntingCompletionSummary': '狩猎：命中 {prompted} 次 / 听出 {recognized} 次',
       'skipReport': '跳过',
       'reportUnderstoodAll': '全懂',
