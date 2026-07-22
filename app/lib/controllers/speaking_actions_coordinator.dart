@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/reading.dart';
+import '../models/content_activity.dart';
 import '../models/practice.dart';
 import '../models/semantic_task.dart';
 import '../models/timeline.dart';
@@ -43,7 +44,6 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
   final Future<void> Function()? stopAuxiliaryAudio;
 
   SpeakingTaskSource? _source;
-  SpeakingTaskSource? _retellingSource;
   Duration? _returnPosition;
   int _audioGeneration = 0;
 
@@ -55,12 +55,36 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
     required List<RubricPointView> fixedRubricPoints,
     required Future<void> Function() closeReading,
   }) async {
+    final selection = selectCurrentSegment();
+    if (selection == null) return;
+    final source = SpeakingTaskSource(
+      anchorCueId: selection.anchorCueId,
+      mediaId: selection.mediaId,
+      trackId: selection.trackId,
+      startMs: selection.startMs,
+      endMs: selection.endMs,
+      language: selection.language,
+      transcriptSnapshot: selection.transcriptSnapshot,
+    );
+    await closeReading();
+    await acquireRecordingFocus();
+    _returnPosition = player.position;
+    _source = source;
+    notifyListeners();
+    unawaited(
+      task.openTask(api, source: source, fixedRubricPoints: fixedRubricPoints),
+    );
+  }
+
+  /// Selects the current content window without assigning it to a learning
+  /// activity. Realtime and Speaking each adapt this neutral selection.
+  ContentSegmentSelection? selectCurrentSegment() {
     final track = subtitle.primaryTrack;
-    if (track == null) return;
+    if (track == null) return null;
     final paragraphs = deriveReadingParagraphs(
       track.cues,
     ).where((paragraph) => !paragraph.nonSpeech).toList(growable: false);
-    if (paragraphs.isEmpty) return;
+    if (paragraphs.isEmpty) return null;
     final currentCueId = subtitle.currentPrimaryCue?.id;
     var paragraph = paragraphs.first;
     for (final candidate in paragraphs) {
@@ -71,33 +95,23 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
         break;
       }
     }
-    final sourceLanguage = settings.resolveLearningLanguage(track.language);
-    final cues = _speakingWindow(track.cues, currentCueId, paragraph);
+    final cues = _contentWindow(track.cues, currentCueId, paragraph);
     final first = cues.first;
     final last = cues.last;
     final startMs = subtitle.primaryCursor.mediaStart(first).inMilliseconds;
     final endMs = subtitle.primaryCursor.mediaEnd(last).inMilliseconds;
     if (endMs - startMs < 10000 || endMs - startMs > 60000) {
       player.setStatus(_t('statusSpeakingSegmentLength'));
-      return;
+      return null;
     }
-    final source = SpeakingTaskSource(
+    return ContentSegmentSelection(
       anchorCueId: first.id,
       mediaId: track.mediaId ?? player.mediaId,
       trackId: track.id,
       startMs: startMs,
       endMs: endMs,
-      language: sourceLanguage,
+      language: settings.resolveLearningLanguage(track.language),
       transcriptSnapshot: cues.map((cue) => cue.text.trim()).join(' '),
-    );
-    await closeReading();
-    await acquireRecordingFocus();
-    _returnPosition = player.position;
-    _source = source;
-    _retellingSource = source;
-    notifyListeners();
-    unawaited(
-      task.openTask(api, source: source, fixedRubricPoints: fixedRubricPoints),
     );
   }
 
@@ -112,7 +126,6 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
       await adapter.seek(returnPosition);
     }
     _source = null;
-    _retellingSource = null;
     _returnPosition = null;
     notifyListeners();
   }
@@ -170,30 +183,10 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
     await acquireRecordingFocus();
     _returnPosition = player.position;
     _source = source;
-    _retellingSource = source;
     notifyListeners();
     await task.openTask(
       api,
       source: source,
-      fixedRubricPoints: fixedRubricPoints,
-    );
-  }
-
-  Future<void> showRetelling(
-    LocalApi api, {
-    required List<RubricPointView> fixedRubricPoints,
-  }) async {
-    final retelling = _retellingSource;
-    if (retelling == null ||
-        task.state.kind == SpeakingTaskController.retellingKind) {
-      return;
-    }
-    await task.closeTask(api);
-    _source = retelling;
-    notifyListeners();
-    await task.openTask(
-      api,
-      source: retelling,
       fixedRubricPoints: fixedRubricPoints,
     );
   }
@@ -228,7 +221,6 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
     await acquireRecordingFocus();
     _returnPosition = player.position;
     _source = source;
-    _retellingSource = null;
     notifyListeners();
     await task.openTask(
       api,
@@ -236,69 +228,6 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
       fixedRubricPoints: fixedRubricPoints,
       kind: SpeakingTaskController.patternProductionKind,
       assistance: 'no_text',
-    );
-  }
-
-  Future<void> showRoleReply(
-    LocalApi api, {
-    required String assistance,
-    required List<RubricPointView> fixedRubricPoints,
-  }) async {
-    final track = subtitle.primaryTrack;
-    final retelling = _retellingSource;
-    if (track == null || retelling == null) return;
-    var replyIndex = track.cues.indexWhere(
-      (cue) => cue.id == subtitle.currentPrimaryCue?.id,
-    );
-    if (replyIndex <= 0) {
-      replyIndex = track.cues.indexWhere(
-        (cue) => cue.id == retelling.anchorCueId,
-      );
-    }
-    if (replyIndex <= 0) {
-      player.setStatus(_t('statusRoleReplyNeedsDialogue'));
-      return;
-    }
-    final expectedReply = track.cues[replyIndex];
-    var promptStart = replyIndex - 1;
-    while (promptStart > 0 &&
-        expectedReply.start.inMilliseconds -
-                track.cues[promptStart].start.inMilliseconds <
-            10000) {
-      promptStart--;
-    }
-    final promptCues = track.cues.sublist(promptStart, replyIndex);
-    final visiblePrompt = switch (assistance) {
-      'full_sentence' => expectedReply.text.trim(),
-      'keywords' => _keywordCue(expectedReply),
-      'no_text' => '(no text shown; reply after the audio prompt)',
-      _ => throw ArgumentError.value(assistance, 'assistance'),
-    };
-    final roleSource = SpeakingTaskSource(
-      anchorCueId: promptCues.first.id,
-      semanticSentenceId: expectedReply.id,
-      mediaId: track.mediaId ?? player.mediaId,
-      trackId: track.id,
-      startMs: subtitle.primaryCursor
-          .mediaStart(promptCues.first)
-          .inMilliseconds,
-      endMs: subtitle.primaryCursor.mediaEnd(promptCues.last).inMilliseconds,
-      language: settings.resolveLearningLanguage(track.language),
-      transcriptSnapshot: expectedReply.text.trim(),
-      audioTranscriptSnapshot: promptCues
-          .map((cue) => cue.text.trim())
-          .join(' '),
-      promptSnapshot: visiblePrompt,
-    );
-    await task.closeTask(api);
-    _source = roleSource;
-    notifyListeners();
-    await task.openTask(
-      api,
-      source: roleSource,
-      fixedRubricPoints: fixedRubricPoints,
-      kind: SpeakingTaskController.roleReplyKind,
-      assistance: assistance,
     );
   }
 
@@ -327,7 +256,7 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
   /// Keeps content-launched retelling inside the v1 10–60 second task range.
   /// A normal paragraph is preserved; pathological short/long subtitle
   /// grouping falls back to a cue window anchored at the current position.
-  List<Cue> _speakingWindow(
+  List<Cue> _contentWindow(
     List<Cue> trackCues,
     String? currentCueId,
     ReadingParagraph paragraph,
@@ -374,19 +303,5 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
       end++;
     }
     return trackCues.sublist(start, end + 1);
-  }
-
-  String _keywordCue(Cue cue) {
-    final words = <String>[];
-    for (final token in cue.tokens.where((token) => token.kind == 'word')) {
-      final word = token.text.trim();
-      if (word.length < 3 || words.contains(word)) continue;
-      words.add(word);
-      if (words.length == 4) break;
-    }
-    if (words.isEmpty) {
-      return cue.text.trim().split(RegExp(r'\s+')).take(4).join(' ');
-    }
-    return words.join(' · ');
   }
 }

@@ -27,10 +27,7 @@ class SpeakingTaskStudio extends StatelessWidget {
     required this.onPlaySource,
     required this.onPlayRecording,
     required this.onAcquireRecordingFocus,
-    required this.onShowRetelling,
-    required this.onShowRoleReply,
     required this.onOpenL1Check,
-    required this.onOpenRealtimeConversation,
     this.targetCandidates = const [],
     required this.onClose,
   });
@@ -40,10 +37,7 @@ class SpeakingTaskStudio extends StatelessWidget {
   final Future<void> Function() onPlaySource;
   final Future<void> Function() onPlayRecording;
   final Future<void> Function() onAcquireRecordingFocus;
-  final Future<void> Function() onShowRetelling;
-  final Future<void> Function(String assistance) onShowRoleReply;
   final Future<void> Function() onOpenL1Check;
-  final VoidCallback onOpenRealtimeConversation;
   final List<SpeakingTargetCandidate> targetCandidates;
   final Future<void> Function() onClose;
 
@@ -158,57 +152,7 @@ class SpeakingTaskStudio extends StatelessWidget {
     final l = AppLocalizations.of(context);
     return Column(
       children: [
-        SegmentedButton<String>(
-          segments: [
-            ButtonSegment(
-              value: SpeakingTaskController.retellingKind,
-              label: Text(l.text('speakingModeRetelling')),
-              icon: const Icon(Icons.record_voice_over_outlined),
-            ),
-            ButtonSegment(
-              value: SpeakingTaskController.roleReplyKind,
-              label: Text(l.text('speakingModeRoleReply')),
-              icon: const Icon(Icons.forum_outlined),
-            ),
-          ],
-          selected: {state.kind},
-          onSelectionChanged: state.busy || state.source?.recall == 'delayed'
-              ? null
-              : (selected) {
-                  if (selected.single == SpeakingTaskController.roleReplyKind) {
-                    onShowRoleReply('full_sentence');
-                  } else {
-                    onShowRetelling();
-                  }
-                },
-        ),
-        if (state.kind == SpeakingTaskController.roleReplyKind) ...[
-          const SizedBox(height: 16),
-          Text(l.text('speakingAssistanceLabel')),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            alignment: WrapAlignment.center,
-            children: [
-              for (final value in const [
-                'full_sentence',
-                'keywords',
-                'no_text',
-              ])
-                ChoiceChip(
-                  label: Text(l.text('speakingAssistance_$value')),
-                  selected: state.assistance == value,
-                  onSelected: state.busy ? null : (_) => onShowRoleReply(value),
-                ),
-            ],
-          ),
-          if (state.assistance != 'no_text' &&
-              state.source?.promptSnapshot != null) ...[
-            const SizedBox(height: 12),
-            _Notice(text: state.source!.promptSnapshot!),
-          ],
-        ],
-        const SizedBox(height: 24),
+        const SizedBox(height: 8),
         Icon(
           Icons.headphones_rounded,
           size: 72,
@@ -216,21 +160,13 @@ class SpeakingTaskStudio extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         Text(
-          l.text(
-            state.kind == SpeakingTaskController.roleReplyKind
-                ? 'speakingRoleListenTitle'
-                : 'speakingListenTitle',
-          ),
+          l.text('speakingListenTitle'),
           style: Theme.of(context).textTheme.headlineSmall,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 8),
         Text(
-          l.text(
-            state.kind == SpeakingTaskController.roleReplyKind
-                ? 'speakingRoleListenBody'
-                : 'speakingListenBody',
-          ),
+          l.text('speakingListenBody'),
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodyLarge,
         ),
@@ -265,14 +201,6 @@ class SpeakingTaskStudio extends StatelessWidget {
                     ),
               icon: const Icon(Icons.mic),
               label: Text(l.text('speakingStartRecording')),
-            ),
-            OutlinedButton.icon(
-              key: const ValueKey('speaking-open-realtime'),
-              onPressed: state.busy || state.asrModelId == null
-                  ? null
-                  : onOpenRealtimeConversation,
-              icon: const Icon(Icons.forum_outlined),
-              label: const Text('Realtime conversation'),
             ),
           ],
         ),

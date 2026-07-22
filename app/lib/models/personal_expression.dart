@@ -160,6 +160,7 @@ class PersonalExpressionAttemptView {
     required this.responseText,
     this.rawTranscript,
     this.recordingAssetId,
+    this.semanticAttemptId,
     required this.selfAssessment,
     this.contextNote,
     required this.completedAtMs,
@@ -175,6 +176,7 @@ class PersonalExpressionAttemptView {
         responseText: json['response_text'] as String,
         rawTranscript: json['raw_transcript'] as String?,
         recordingAssetId: json['recording_asset_id'] as String?,
+        semanticAttemptId: json['semantic_attempt_id'] as String?,
         selfAssessment: json['self_assessment'] as String,
         contextNote: json['context_note'] as String?,
         completedAtMs: json['completed_at_ms'] as int,
@@ -187,7 +189,7 @@ class PersonalExpressionAttemptView {
       assistance,
       responseText,
       selfAssessment;
-  final String? rawTranscript, recordingAssetId, contextNote;
+  final String? rawTranscript, recordingAssetId, semanticAttemptId, contextNote;
   final int completedAtMs;
 }
 

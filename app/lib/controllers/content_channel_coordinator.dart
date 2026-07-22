@@ -70,9 +70,6 @@ class ContentChannelCoordinator {
   /// Re-selecting the current channel is meaningful for writing (it re-opens
   /// on the segment under the playhead), so this is not short-circuited.
   Future<void> select(ContentChannel channel) async {
-    if (channel != ContentChannel.speaking) {
-      await speaking.closeRealtimeConversation();
-    }
     // Writing survives only a re-selection of itself; `openTask` handles its
     // own re-entry.
     if (channel != ContentChannel.writing && writing.isOpen) {
@@ -88,6 +85,7 @@ class ContentChannelCoordinator {
       case ContentChannel.speaking:
         final service = _getApi?.call();
         if (service == null || !(_speakingAvailable?.call() ?? false)) return;
+        await speakingActions.acquireRecordingFocus();
         await _openSpeaking?.call(service);
       case ContentChannel.writing:
         await _openWriting?.call();

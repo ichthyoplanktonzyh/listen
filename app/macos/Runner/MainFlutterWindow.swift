@@ -2,6 +2,11 @@ import Cocoa
 import AVFoundation
 import FlutterMacOS
 
+func realtimePreRollSuffix(_ data: Data, droppingByteCount: Int) -> Data {
+  let boundedOffset = min(data.count, max(0, droppingByteCount))
+  return Data(data.dropFirst(boundedOffset))
+}
+
 class MainFlutterWindow: NSWindow {
   private var shadowingRecorder: ShadowingRecorder?
   private var realtimeAudio: RealtimeAudioBridge?
@@ -39,7 +44,18 @@ private final class RealtimeAudioBridge: NSObject, FlutterStreamHandler {
   private var recordingFile: AVAudioFile?
   private var recordingPath: String?
   private var recordedFrames: AVAudioFramePosition = 0
+  private var turnRecordingFile: AVAudioFile?
+  private var turnRecordingPath: String?
+  private var turnRecordedFrames: AVAudioFramePosition = 0
+  private var preRoll = Data()
+  // Provider VAD events arrive after the detected onset. Keep enough verified
+  // mono PCM to recover the provider's absolute audio timeline position.
+  private let preRollByteLimit = 320_000 // 10 seconds of mono PCM16 at 16 kHz.
+  private let fallbackPreRollFrames: AVAudioFramePosition = 8_000 // 500 ms.
+  private let onsetPaddingFrames: AVAudioFramePosition = 4_800 // 300 ms.
+  private let recordingLock = NSLock()
   private var inputTapInstalled = false
+  private var voiceProcessingEnabled = false
 
   init(messenger: FlutterBinaryMessenger) {
     methodChannel = FlutterMethodChannel(name: "app.llplayernext/realtime_audio", binaryMessenger: messenger)
@@ -75,6 +91,9 @@ private final class RealtimeAudioBridge: NSObject, FlutterStreamHandler {
         result(false)
       }
     case "start": start(call, result: result)
+    case "beginTurn": beginTurn(call, result: result)
+    case "endTurn": endTurn(discard: false, result: result)
+    case "discardTurn": endTurn(discard: true, result: result)
     case "playPcm": playPcm(call.arguments, result: result)
     case "stopPlayback": player.stop(); player.play(); result(true)
     case "shutdown": cleanup(discard: false); result(true)
@@ -90,10 +109,12 @@ private final class RealtimeAudioBridge: NSObject, FlutterStreamHandler {
     }
     guard recordingFile == nil,
           let arguments = call.arguments as? [String: Any],
-          let path = arguments["path"] as? String else {
-      result(FlutterError(code: "invalid_state", message: "Realtime audio is active or path is missing.", details: nil)); return
+          let path = arguments["path"] as? String,
+          let inputSampleRateHz = arguments["inputSampleRateHz"] as? Int,
+          inputSampleRateHz == 16_000 || inputSampleRateHz == 24_000 else {
+      result(FlutterError(code: "invalid_state", message: "Realtime audio is active, path is missing, or the input sample rate is unsupported.", details: nil)); return
     }
-    guard let streamFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 24_000, channels: 1, interleaved: true),
+    guard let streamFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: Double(inputSampleRateHz), channels: 1, interleaved: true),
           let fileFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: true),
           let playbackFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 24_000, channels: 1, interleaved: false) else {
       result(FlutterError(code: "audio_format", message: "Required PCM formats are unavailable.", details: nil)); return
@@ -102,14 +123,30 @@ private final class RealtimeAudioBridge: NSObject, FlutterStreamHandler {
     do {
       try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
       let input = engine.inputNode
+      engine.attach(player)
+      engine.connect(player, to: engine.mainMixerNode, format: playbackFormat)
+      // Voice-processing I/O must be enabled before reading the hardware input
+      // format or installing the tap. It supplies Apple's AEC/NS/AGC path so
+      // assistant playback is not treated as a new learner turn.
+      try input.setVoiceProcessingEnabled(true)
+      voiceProcessingEnabled = true
+      // A tap observes the input node's output bus. Voice Processing exposes
+      // that bus as an aggregate on this macOS hardware.
       let inputFormat = input.outputFormat(forBus: 0)
       streamConverter = AVAudioConverter(from: inputFormat, to: streamFormat)
-      fileConverter = AVAudioConverter(from: inputFormat, to: fileFormat)
+      fileConverter = streamFormat.sampleRate == fileFormat.sampleRate
+        ? nil
+        : AVAudioConverter(from: streamFormat, to: fileFormat)
+      // The macOS Voice Processing aggregate exposes nine source channels on
+      // this hardware. Its implicit 9 -> 1 layout conversion produces silence,
+      // even though the tap buffers contain the processed uplink signal. Make
+      // the mono source explicit for transport. Local recording then reuses
+      // this verified mono stream instead of independently converting 9 -> 1.
+      streamConverter?.channelMap = [0]
       recordingFile = try AVAudioFile(forWriting: url, settings: fileFormat.settings, commonFormat: .pcmFormatInt16, interleaved: true)
       recordingPath = path
       recordedFrames = 0
-      engine.attach(player)
-      engine.connect(player, to: engine.mainMixerNode, format: playbackFormat)
+      preRoll.removeAll(keepingCapacity: true)
       input.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in self?.consume(buffer, streamFormat: streamFormat, fileFormat: fileFormat) }
       inputTapInstalled = true
       engine.prepare()
@@ -135,14 +172,101 @@ private final class RealtimeAudioBridge: NSObject, FlutterStreamHandler {
   }
 
   private func consume(_ input: AVAudioPCMBuffer, streamFormat: AVAudioFormat, fileFormat: AVAudioFormat) {
-    if let stream = converted(input, converter: streamConverter, format: streamFormat),
+    let stream = converted(input, converter: streamConverter, format: streamFormat)
+    if let stream,
        let samples = stream.int16ChannelData?[0] {
       let data = Data(bytes: samples, count: Int(stream.frameLength) * MemoryLayout<Int16>.size)
-      DispatchQueue.main.async { [weak self] in self?.eventSink?(FlutterStandardTypedData(bytes: data)) }
+      DispatchQueue.main.async { [weak self] in
+        self?.eventSink?(FlutterStandardTypedData(bytes: data))
+      }
     }
-    if let local = converted(input, converter: fileConverter, format: fileFormat) {
+    if let stream,
+       let local = fileConverter == nil
+         ? stream
+         : converted(stream, converter: fileConverter, format: fileFormat) {
+      recordingLock.lock()
       try? recordingFile?.write(from: local)
       recordedFrames += AVAudioFramePosition(local.frameLength)
+      if turnRecordingFile != nil {
+        try? turnRecordingFile?.write(from: local)
+        turnRecordedFrames += AVAudioFramePosition(local.frameLength)
+      }
+      if let samples = local.int16ChannelData?[0] {
+        preRoll.append(Data(bytes: samples, count: Int(local.frameLength) * MemoryLayout<Int16>.size))
+        if preRoll.count > preRollByteLimit {
+          preRoll.removeFirst(preRoll.count - preRollByteLimit)
+        }
+      }
+      recordingLock.unlock()
+    }
+  }
+
+  private func beginTurn(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard recordingFile != nil,
+          let arguments = call.arguments as? [String: Any],
+          let path = arguments["path"] as? String,
+          let format = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: true)
+    else {
+      result(FlutterError(code: "invalid_state", message: "Realtime session is inactive or turn path is missing.", details: nil)); return
+    }
+    recordingLock.lock()
+    defer { recordingLock.unlock() }
+    guard turnRecordingFile == nil else {
+      result(FlutterError(code: "turn_active", message: "A realtime learner turn is already being recorded.", details: nil)); return
+    }
+    do {
+      let url = URL(fileURLWithPath: path)
+      try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+      let file = try AVAudioFile(forWriting: url, settings: format.settings, commonFormat: .pcmFormatInt16, interleaved: true)
+      let audioStartMs = arguments["audioStartMs"] as? Int
+      let bufferedFrames = AVAudioFramePosition(preRoll.count / 2)
+      let availableStartFrame = max(0, recordedFrames - bufferedFrames)
+      let requestedStartFrame: AVAudioFramePosition
+      if let audioStartMs {
+        requestedStartFrame = max(0, AVAudioFramePosition(audioStartMs * 16) - onsetPaddingFrames)
+      } else {
+        requestedStartFrame = max(0, recordedFrames - fallbackPreRollFrames)
+      }
+      let captureStartFrame = min(recordedFrames, max(availableStartFrame, requestedStartFrame))
+      let skippedFrames = captureStartFrame - availableStartFrame
+      let captureByteOffset = Int(skippedFrames) * MemoryLayout<Int16>.size
+      let capturedPreRoll = realtimePreRollSuffix(preRoll, droppingByteCount: captureByteOffset)
+      if !capturedPreRoll.isEmpty,
+         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(capturedPreRoll.count / 2)),
+         let samples = buffer.int16ChannelData?[0] {
+        buffer.frameLength = buffer.frameCapacity
+        capturedPreRoll.withUnsafeBytes { raw in
+          if let baseAddress = raw.baseAddress {
+            memcpy(samples, baseAddress, capturedPreRoll.count)
+          }
+        }
+        try file.write(from: buffer)
+      }
+      turnRecordingFile = file
+      turnRecordingPath = path
+      turnRecordedFrames = AVAudioFramePosition(capturedPreRoll.count / 2)
+      result(true)
+    } catch {
+      result(FlutterError(code: "realtime_turn_start_failed", message: error.localizedDescription, details: nil))
+    }
+  }
+
+  private func endTurn(discard: Bool, result: @escaping FlutterResult) {
+    recordingLock.lock()
+    guard let path = turnRecordingPath else {
+      recordingLock.unlock()
+      result(FlutterError(code: "no_active_turn", message: "No realtime learner turn is active.", details: nil)); return
+    }
+    let durationMs = Int(Double(turnRecordedFrames) / 16_000.0 * 1000.0)
+    turnRecordingFile = nil
+    turnRecordingPath = nil
+    turnRecordedFrames = 0
+    recordingLock.unlock()
+    if discard {
+      try? FileManager.default.removeItem(atPath: path)
+      result(true)
+    } else {
+      result(["path": path, "durationMs": durationMs])
     }
   }
 
@@ -178,10 +302,20 @@ private final class RealtimeAudioBridge: NSObject, FlutterStreamHandler {
     if inputTapInstalled { engine.inputNode.removeTap(onBus: 0); inputTapInstalled = false }
     player.stop()
     engine.stop()
+    if voiceProcessingEnabled {
+      try? engine.inputNode.setVoiceProcessingEnabled(false)
+      voiceProcessingEnabled = false
+    }
     if engine.attachedNodes.contains(player) { engine.detach(player) }
     let path = recordingPath
+    recordingLock.lock()
+    let turnPath = turnRecordingPath
+    turnRecordingFile = nil; turnRecordingPath = nil; turnRecordedFrames = 0
+    preRoll.removeAll(keepingCapacity: false)
     recordingFile = nil; recordingPath = nil; streamConverter = nil; fileConverter = nil; recordedFrames = 0
+    recordingLock.unlock()
     if discard, let path { try? FileManager.default.removeItem(atPath: path) }
+    if let turnPath { try? FileManager.default.removeItem(atPath: turnPath) }
   }
 }
 

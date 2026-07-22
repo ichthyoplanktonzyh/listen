@@ -88,6 +88,7 @@ void main() {
         onOpenSubtitleResources: () {},
         onOpenVocabulary: () {},
         onOpenPersonalExpressions: () {},
+        onOpenConversation: () {},
         onOpenReview: () {},
         onOpenCoach: () {},
         onOpenSettings: () {},

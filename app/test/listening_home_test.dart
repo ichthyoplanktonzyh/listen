@@ -11,6 +11,7 @@ void main() {
     VoidCallback? onOpenOnline,
     VoidCallback? onContinue,
     VoidCallback? onOpenPersonalExpressions,
+    VoidCallback? onOpenConversation,
     String? recentMediaTitle,
     Duration recentPosition = Duration.zero,
     Duration recentDuration = Duration.zero,
@@ -33,6 +34,7 @@ void main() {
         onOpenSubtitleResources: () {},
         onOpenVocabulary: () {},
         onOpenPersonalExpressions: onOpenPersonalExpressions ?? () {},
+        onOpenConversation: onOpenConversation ?? () {},
         onOpenReview: () {},
         onOpenCoach: () {},
         onOpenSettings: () {},
@@ -64,6 +66,34 @@ void main() {
 
     await tester.tap(find.text('打开视频或音频'));
     expect(openMediaCalls, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('wide short home keeps every sidebar destination visible', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 384));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(app(onOpenMedia: () {}));
+    await tester.pumpAndSettle();
+
+    for (final destination in const [
+      '字幕资源',
+      '词汇本',
+      '我的表达',
+      '对话',
+      '复习',
+      '学习教练',
+    ]) {
+      expect(find.text(destination), findsOneWidget, reason: destination);
+    }
+    await tester.drag(
+      find.byKey(const ValueKey('home-sidebar-scroll')),
+      const Offset(0, -240),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('设置'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -106,6 +136,7 @@ void main() {
         '字幕资源',
         '词汇本',
         '我的表达',
+        '对话',
         '复习',
         '学习教练',
       ]) {
@@ -141,6 +172,7 @@ void main() {
       '字幕资源',
       '词汇本',
       '我的表达',
+      '对话',
       '复习',
       '学习教练',
     ]) {

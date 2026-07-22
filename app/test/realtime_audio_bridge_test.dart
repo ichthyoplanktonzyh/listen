@@ -35,7 +35,7 @@ void main() {
       );
       final bridge = RealtimeAudioBridge(methods: channel);
 
-      await bridge.start();
+      await bridge.start(inputSampleRateHz: 16000);
 
       expect(calls, ['requestPermission', 'start']);
     },
@@ -59,7 +59,7 @@ void main() {
       final bridge = RealtimeAudioBridge(methods: channel);
 
       await expectLater(
-        bridge.start(),
+        bridge.start(inputSampleRateHz: 16000),
         throwsA(
           isA<PlatformException>()
               .having((error) => error.code, 'code', 'microphone_permission')
