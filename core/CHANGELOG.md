@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-22: Phase 3.19 彻底收口（owner closeout）。纯文档刀，不含代码：
+  ① `3.19-RELEASE-ACCEPTANCE.md` 新增 §O 收口权威记录——纠偏 issue #1–#7 全部关闭的
+  处置映射（#4 记为前提不成立而非修复）、Run 2 未整轮重跑的显式豁免口径（3.19.1 真机 QA +
+  每刀 web review 替代）、遗留 P1 十三条 owner 书面例外逐条移交（设计/UX 重构轨、复习模块
+  轨 #10/#11、ADR 0025 契约、D-319-18 独立技术项）；J3 结论标注被 3.19.1 owner QA 取代；
+  D-319-09/12/17/20/22 状态更新带 issue/commit 引用，Run 1 记录保持原样不改写。
+  ② `3.19-SUBTRACTION-AUDIT.md` 七个 `PROVE OR ...` 灰区全部由 owner 裁决为规则允许的
+  终态（SIMPLIFY×1 / REMOVE×1 / DEFER RESEARCH×4 / UNAVAILABLE×1），逐行标注裁决日期与
+  移交去向——裁决只定终态，不伪造验证结论。③ `3.19-PRODUCT-CORRECTION.md` 标 CLOSED。
+  ④ 新增 `3.19-CLOSEOUT.md` 总记录。Release 判定如实维持 `DO NOT RELEASE YET`——发布门
+  随后继轨道继续，不随 phase 关闭而消失。
+
 - 2026-07-22: 词条详情新增「证据与历史」入口（closes #2）。能力状态和能力建议此前是词条详情里
   仅有的"结论层"，用户无法回访结论背后的真实学习记录（Phase 3.19 Owner Journey Q1.4 因此失败）。
   后端证据链其实早已存在——ADR 0017 的 append-only 通道化 `LearningObservation`（通道/任务/
