@@ -1,6 +1,6 @@
 use application::{
     RealtimeAudioFormat, RealtimeConversationAdapter, RealtimeEvent, RealtimeSessionRequest,
-    RealtimeTurnDetection,
+    RealtimeTransportKind, RealtimeTurnDetection,
 };
 use domain::LanguageCode;
 use futures_util::{SinkExt, StreamExt};
@@ -10,6 +10,7 @@ use realtime_provider::{
 };
 use std::time::Duration;
 use tokio::net::TcpListener;
+use tokio_tungstenite::tungstenite::protocol::{CloseFrame, frame::coding::CloseCode};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
 fn request() -> RealtimeSessionRequest {
@@ -23,16 +24,108 @@ fn request() -> RealtimeSessionRequest {
     }
 }
 
+fn qwen_request() -> RealtimeSessionRequest {
+    RealtimeSessionRequest {
+        input_audio: RealtimeAudioFormat::Pcm16Mono16Khz,
+        ..request()
+    }
+}
+
+#[test]
+fn descriptors_report_implemented_capabilities_instead_of_vendor_promises() {
+    for adapter in adapters() {
+        let descriptor = adapter.descriptor();
+        let capabilities = descriptor.capabilities;
+        assert_eq!(capabilities.transport, RealtimeTransportKind::WebSocket);
+        assert_eq!(
+            capabilities.input_audio,
+            match descriptor.adapter_kind.as_str() {
+                "qwen_omni_realtime" => RealtimeAudioFormat::Pcm16Mono16Khz,
+                _ => RealtimeAudioFormat::Pcm16Mono24Khz,
+            }
+        );
+        assert_eq!(
+            capabilities.output_audio,
+            RealtimeAudioFormat::Pcm16Mono24Khz
+        );
+        assert!(capabilities.supports_server_vad);
+        assert!(capabilities.supports_manual_turns);
+        assert!(capabilities.supports_provider_input_transcript);
+        assert!(capabilities.supports_assistant_transcript);
+        assert!(capabilities.supports_response_cancel);
+        assert!(!capabilities.supports_output_audio_clear);
+        assert!(!capabilities.supports_conversation_truncate);
+        assert!(!capabilities.supports_function_calls);
+        assert!(!capabilities.supports_image_input);
+        assert!(!capabilities.supports_session_resume);
+    }
+}
+
 #[test]
 fn both_protocols_encode_the_same_neutral_audio_contract() {
     let pcm = [0_u8, 1, 2, 3];
-    for codec in codecs() {
-        let session = codec.session_update(&request());
+    for (codec, request) in [
+        (
+            Box::new(OpenAiRealtimeCodec::default()) as Box<dyn RealtimeProtocolCodec>,
+            request(),
+        ),
+        (
+            Box::new(QwenRealtimeCodec) as Box<dyn RealtimeProtocolCodec>,
+            qwen_request(),
+        ),
+    ] {
+        let session = codec.session_update(&request);
         assert_eq!(session["type"], "session.update");
         let append = codec.audio_append(&pcm);
         assert_eq!(append["type"], "input_audio_buffer.append");
         assert_eq!(append["audio"], "AAECAw==");
     }
+}
+
+#[test]
+fn qwen_baseline_uses_the_current_full_duplex_audio_session_shape() {
+    let session = QwenRealtimeCodec.session_update(&qwen_request());
+    assert_eq!(session["session"]["input_audio_format"], "pcm");
+    assert_eq!(session["session"]["output_audio_format"], "pcm");
+    assert_eq!(session["session"]["voice"], "test-voice");
+    assert_eq!(
+        session["session"]["turn_detection"],
+        serde_json::json!({
+            "type": "semantic_vad",
+            "threshold": 0.2,
+            "silence_duration_ms": 800,
+        })
+    );
+    assert!(
+        session["session"]
+            .get("input_audio_transcription")
+            .is_none()
+    );
+}
+
+#[test]
+fn openai_baseline_uses_the_current_ga_audio_session_shape() {
+    let session = OpenAiRealtimeCodec::default().session_update(&request());
+    assert_eq!(session["session"]["type"], "realtime");
+    assert_eq!(
+        session["session"]["output_modalities"],
+        serde_json::json!(["audio"])
+    );
+    assert_eq!(
+        session["session"]["audio"]["input"]["format"],
+        serde_json::json!({"type": "audio/pcm", "rate": 24000})
+    );
+    assert_eq!(
+        session["session"]["audio"]["output"]["format"],
+        serde_json::json!({"type": "audio/pcm", "rate": 24000})
+    );
+    assert_eq!(
+        session["session"]["audio"]["input"]["transcription"],
+        serde_json::json!({
+            "model": "gpt-4o-mini-transcribe",
+            "language": "en",
+        })
+    );
 }
 
 #[test]
@@ -110,10 +203,14 @@ fn vad_commit_response_done_and_client_controls_share_one_contract() {
         assert!(matches!(
             codec
                 .decode(&serde_json::json!({
-                    "type":"input_audio_buffer.speech_started", "item_id":"learner-1"
+                    "type":"input_audio_buffer.speech_started", "item_id":"learner-1",
+                    "audio_start_ms": 3647
                 }))
                 .unwrap(),
-            Some(RealtimeEvent::SpeechStarted { .. })
+            Some(RealtimeEvent::SpeechStarted {
+                audio_start_ms: Some(3647),
+                ..
+            })
         ));
         assert!(matches!(
             codec
@@ -209,7 +306,12 @@ async fn both_adapters_cross_a_real_websocket_transport_without_leaking_protocol
             "openai" => Box::new(OpenAiRealtimeAdapter::new(config)),
             _ => Box::new(QwenRealtimeAdapter::new(config)),
         };
-        let mut session = adapter.connect(&request()).await.unwrap();
+        let request = if kind == "qwen" {
+            qwen_request()
+        } else {
+            request()
+        };
+        let mut session = adapter.connect(&request).await.unwrap();
         assert!(matches!(
             session.next_event().await.unwrap(),
             Some(RealtimeEvent::SessionReady { .. })
@@ -244,6 +346,40 @@ async fn invalid_configuration_degrades_before_opening_a_socket() {
     ));
 }
 
+#[tokio::test]
+async fn provider_close_reason_is_preserved_instead_of_becoming_bare_disconnect() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut socket = accept_async(stream).await.unwrap();
+        let _session_update = socket.next().await.unwrap().unwrap();
+        socket
+            .send(Message::Close(Some(CloseFrame {
+                code: CloseCode::Policy,
+                reason: "semantic_vad rejected".into(),
+            })))
+            .await
+            .unwrap();
+    });
+    let adapter = QwenRealtimeAdapter::new(RealtimeAdapterConfig {
+        base_url: format!("ws://{address}/realtime"),
+        model_id: "contract-model".into(),
+        credential: "contract-secret".into(),
+        timeout: Duration::from_secs(2),
+    });
+    let mut session = adapter.connect(&qwen_request()).await.unwrap();
+
+    let error = session.next_event().await.unwrap_err();
+
+    assert!(matches!(
+        error,
+        domain::RealtimeProviderError::Protocol { detail }
+            if detail.contains("1008") && detail.contains("semantic_vad rejected")
+    ));
+    server.await.unwrap();
+}
+
 fn text_json(message: Message) -> serde_json::Value {
     match message {
         Message::Text(text) => serde_json::from_str(&text).unwrap(),
@@ -255,5 +391,18 @@ fn codecs() -> Vec<Box<dyn RealtimeProtocolCodec>> {
     vec![
         Box::new(OpenAiRealtimeCodec::default()),
         Box::new(QwenRealtimeCodec),
+    ]
+}
+
+fn adapters() -> Vec<Box<dyn RealtimeConversationAdapter>> {
+    let config = RealtimeAdapterConfig {
+        base_url: "wss://example.invalid/realtime".into(),
+        model_id: "contract-model".into(),
+        credential: "contract-secret".into(),
+        timeout: Duration::from_secs(2),
+    };
+    vec![
+        Box::new(OpenAiRealtimeAdapter::new(config.clone())),
+        Box::new(QwenRealtimeAdapter::new(config)),
     ]
 }

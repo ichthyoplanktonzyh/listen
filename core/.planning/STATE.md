@@ -3,27 +3,36 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-20T14:46:00.000+08:00"
+last_updated: "2026-07-22T11:33:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-20 14:46 CST
-> 更新原因：Phase 3.19 确立 subtraction-first 硬门并重写可执行 owner journeys。
+> 最后更新：2026-07-22 11:33 CST
+> 更新原因：Phase 3.19.1 多轮实现与自动门完成，进入真实 provider/device QA。
 
 ## 当前位置
 
 - **当前执行主线**：Phase 3.19 Product Validation & Release Closeout **ACTIVE — PRODUCT
   CORRECTION / DO NOT RELEASE YET**。自动化与 release package 基线仍通过，owner J0.1–J0.6
   packaged-app smoke 全部 PASS；J1/J2 核心操作部分通过，但暴露 Review 驻留体验、精听/泛听
-  语义、任务输入单位、学习效果可见性、Personal Expression 入口/选区等 P1 缺口。J3 在
-  microphone permission 阻塞，J4 embedding 安装失败尚缺精确错误，J5 在 UX 重新梳理前延期。
+  语义、任务输入单位、学习效果可见性、Personal Expression 入口/选区等 P1 缺口。J3 的
+  microphone permission hotfix 后，真实 Qwen 集成进一步暴露整场录音压成单 turn 的根本问题；
+  J4 embedding 安装失败尚缺精确错误，J5 在 UX 重新梳理前延期。
   两项确定性 hotfix（Review 播放暂停、Realtime 主动请求麦克风权限）已落代码并待 owner 重测；
   更大问题按 ADR 0025/0026 与 `3.19-PRODUCT-CORRECTION.md` 修正。冷启动不足保持诚实 blocked，
   不伪造 proposal/Coach/能力记录。3.19 新增硬门：对全部 Phase 3.x surface/fallback 做减法审计，
   保留旅程没有达到真正可用、好用且 owner ACCEPT 前，不创建或实现任何新功能。Run 2 使用
   `3.19-OWNER-JOURNEYS-V2.md`，逐步写清主入口、即时结果、任务边界、持久结果与回访位置；
   主入口缺失直接 FAIL，不让 owner 猜路径。P1 清零或书面例外前不发布；实现者不代签验收。
+- **Phase 3.19.1 Realtime Conversation Product Correction**：✅ IMPLEMENTED / AUTOMATED GATES PASS /
+  OWNER REAL-PROVIDER QA PENDING。ADR 0027 固定 session/turn/corpus authority；Flutter 使用 typed ordered
+  turn assembler，macOS bridge 按 learner turn 产出带 500ms pre-roll 的独立 16 kHz WAV，每轮独立走
+  local Whisper，单轮失败不抹掉 completed session。首页自由对话与内容内话题锚定共用同一深模块；
+  双方 history 可按 session/sequence 回看；只有 finalized local learner turns 进入 Production Corpus。
+  权限在 provider socket 前获取，finish drain、dedup、partial ASR、历史 GET 与窄/宽首页入口均有自动
+  回归，Rust focused、Flutter tests/analyze、macOS Debug build 已通过。下一步仅执行 replacement Q9
+  的真实三轮 OpenAI/Qwen/device boundary、barge-in、最后一轮 drain 与 owner ACCEPT；实现者未代签。
 - Phase 3.18 Cross-modal Coach **✅ CODE COMPLETE — OWNER MANUAL QA
   PENDING**。3.10 listening-only dashboard 已扩为四通道只读聚合：attempt/judgment/
   adjudication/observation/proposal/confirmed projection/history/personal-expression attempt 分层，
@@ -515,20 +524,23 @@ last_updated: "2026-07-20T14:46:00.000+08:00"
 
 ## 下一步工作
 
-1. **确定性 P1 回归**：完成 Review play/pause 与 Realtime microphone permission 的全量 Flutter/
+1. **3.19.1 设计门**：基于 `3.19.1-RESEARCH.md` 定义 free/topic surface、turn correlation、
+   per-turn/session partial terminal 与 retention；用真实三轮音频比较 native per-turn、PCM ring buffer、
+   local VAD boundary，完成裁决后再开始实现。
+2. **确定性 P1 回归**：完成 Review play/pause 与 Realtime microphone permission 的全量 Flutter/
    macOS build 验证，重打 package 后由 owner 重测 J1.12、J3.2。
-2. **内容选区与入口修正**：落实 LOOP-022，使精听/泛听保持不同任务语义，Personal Expression /
+3. **内容选区与入口修正**：落实 LOOP-022，使精听/泛听保持不同任务语义，Personal Expression /
    Speaking 使用准确句段并返回来源；所有任务内来源播放有界且可控。
-3. **Review 驻留重构**：以独立 source decoder 支持跨媒体片段，在当前 Review 页内完成播放、
+4. **Review 驻留重构**：以独立 source decoder 支持跨媒体片段，在当前 Review 页内完成播放、
    跟读、复述、评分与返回；真实本地来源解析失败才显示 unavailable，并提供恢复动作。
-4. **效果可见性与资产 IA**：解释 Hunting / completion / comprehension / recognition evidence 的
+5. **效果可见性与资产 IA**：解释 Hunting / completion / comprehension / recognition evidence 的
    记录落点和影响；首页增加稳定“我的表达”入口，移除内部 authority/“两通道”文案。
-5. **全量减法审计**：以 `3.19-SUBTRACTION-AUDIT.md` 为 live control plane，按 LOOP-024 为每项
+6. **全量减法审计**：以 `3.19-SUBTRACTION-AUDIT.md` 为 live control plane，按 LOOP-024 为每项
    Phase 3.x 功能/fallback 做 KEEP/SIMPLIFY/REMOVE/UNAVAILABLE/DEFER RESEARCH 裁决；先删
    假需求、重复入口和不保持目标的路径，再做回归。
-6. **详细 owner 重测**：按 `3.19-OWNER-JOURNEYS-V2.md` 执行 Q1–Q11；主入口、动作反馈、持久
+7. **详细 owner 重测**：按 `3.19-OWNER-JOURNEYS-V2.md` 执行 Q1–Q11；主入口、动作反馈、持久
    结果和回访位置必须一起通过。J4 先收集精确安装错误；冷启动等待自然数据，不伪造记录。
-7. **Release decision**：P0 清零，P1 修复或由 owner 书面批准例外后，才允许 3.19 closeout 与
+8. **Release decision**：P0 清零，P1 修复或由 owner 书面批准例外后，才允许 3.19 closeout 与
    owner ACCEPT；当前结论为 DO NOT RELEASE YET。
 4. 3.x 工作方式约定：learning_loop 纸面抽象按切片验证、允许改形状（C-6）；
    新增 Dart DTO 沿用手写 + fixture 契约测试（ADR 0014）。

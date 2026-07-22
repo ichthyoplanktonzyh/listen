@@ -204,6 +204,130 @@ async fn realtime_provider_registration_is_write_only_and_listable() {
 }
 
 #[tokio::test]
+async fn realtime_history_lists_sessions_and_ordered_turns() {
+    let app = test_app();
+    let profile_response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/realtime/providers")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "display_name":"History provider",
+                        "adapter_kind":"open_ai_realtime",
+                        "base_url":"wss://api.example/realtime",
+                        "model_id":"realtime-model",
+                        "voice":"marin",
+                        "secret":"provider-secret"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let profile: serde_json::Value = serde_json::from_slice(
+        &to_bytes(profile_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let profile_id = profile["id"].as_str().unwrap();
+    let session_id = "history-session";
+    let save_session = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/realtime/sessions")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "id":session_id,
+                        "profile_id":profile_id,
+                        "language":"en",
+                        "context":null,
+                        "status":"active",
+                        "started_at_ms":10,
+                        "ended_at_ms":null,
+                        "failure_kind":null
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(save_session.status(), StatusCode::OK);
+
+    for (sequence, id, text) in [
+        (2, "assistant-later", "Second"),
+        (1, "assistant-first", "First"),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/v1/realtime/turns")
+                    .header(AUTHORIZATION, "Bearer secret")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "id":id,
+                            "session_id":session_id,
+                            "sequence":sequence,
+                            "role":"assistant",
+                            "status":"finalized",
+                            "assistance":"unknown",
+                            "provider_transcript":{
+                                "text":text,
+                                "provider_item_id":null,
+                                "received_at_ms":20
+                            },
+                            "local_transcript":null,
+                            "recording_asset_id":null,
+                            "started_at_ms":11,
+                            "ended_at_ms":20,
+                            "failure_kind":null
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    let sessions = app
+        .clone()
+        .oneshot(
+            Request::get("/v1/realtime/sessions")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let sessions: serde_json::Value =
+        serde_json::from_slice(&to_bytes(sessions.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(sessions[0]["id"], session_id);
+
+    let turns = app
+        .oneshot(
+            Request::get(format!("/v1/realtime/sessions/{session_id}/turns"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let turns: serde_json::Value =
+        serde_json::from_slice(&to_bytes(turns.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(turns[0]["sequence"], 1);
+    assert_eq!(turns[1]["sequence"], 2);
+}
+
+#[tokio::test]
 async fn coach_dashboard_is_channel_ready_and_uses_starter_state() {
     let app = test_app();
     let response = app

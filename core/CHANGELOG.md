@@ -2,6 +2,65 @@
 
 ## Unreleased
 
+- 2026-07-22: Realtime conversation baseline 从 OpenAI 调整为 Qwen
+  `qwen3.5-omni-plus-realtime`，新 profile 默认北京 workspace endpoint 与 `Tina` 音色，并支持
+  Singapore workspace endpoint。修正 provider 音频协商：Qwen capture/input 使用官方要求的
+  16 kHz PCM，assistant output 保持 24 kHz；OpenAI 继续使用 24 kHz input/output 并作为可选参考实现。
+  Qwen session contract 删除当前官方 schema 不包含的独立 ASR 配置，真实 smoke gate 固定单一 baseline
+  model，并接受 `DASHSCOPE_API_KEY`、`QWEN_WORKSPACE_ID` 与可选 `QWEN_REGION=cn|sg`。
+
+- 2026-07-22 12:34 CST: GPT Live-like macOS audio baseline 启用 Apple voice-processing I/O。
+  `RealtimeAudioBridge` 在读取硬件 input format 与安装 capture tap 之前调用
+  `setVoiceProcessingEnabled(true)`，使 capture/playback 进入系统 AEC/NS/AGC 路径，并在 cleanup
+  关闭；这降低 assistant 播放泄漏被误判为 learner turn 的结构性风险。新增调用顺序/关闭回归测试，
+  `flutter build macos --debug` 通过；真实扬声器/麦克风的 echo、首尾音素和不同设备质量仍待人工测量。
+
+- 2026-07-22 12:31 CST: OpenAI realtime baseline 提升为 `gpt-realtime-2.1`。新增 profile 的 UI 默认
+  使用该 model，切换 Qwen/OpenAI 时同步恢复各自明确默认；既有持久 profile 不做静默迁移。OpenAI
+  codec 按当前 GA contract 把旧 `pcm16` shape 更新为 `audio/pcm` 24 kHz，显式锁定 audio output，
+  并启用 `gpt-4o-mini-transcribe` 作为仅供 live guidance 的 provider caption（本地 Whisper 继续是
+  learner authority）。新增精确 session-shape contract 与需要 `OPENAI_API_KEY` 的真实
+  `session.created` + `session.updated` smoke gate；本机无凭据，因此真实 gate 保持 ignored，没有冒充
+  provider/device 验收完成。
+
+- 2026-07-22 12:22 CST: Phase 3.19.1 开始推进 GPT Live-like 基础设施。新增 realtime provider
+  capability contract v2，把 transport、输入/输出音频、VAD/manual turn、双方 transcript、response
+  cancel、output clear、conversation truncate、function calling、image input 与 session resume 明确为
+  **adapter 已实现能力**，避免从模型厂商宣传反推当前代码可用；OpenAI/Qwen 当前诚实报告共同的
+  WebSocket + 24 kHz PCM + transcript + cancel 子集，contract test 9 项通过。新增 Live foundation
+  调研与交付顺序，确认豆包端到端实时语音属于原生 S2S 候选，但豆包语音直连和火山 RTC 编排层是
+  不同接入面；未固定 endpoint/auth/event schema 前不伪装成 OpenAI-compatible model，也不调整默认。
+
+- 2026-07-22 11:33 CST: Phase 3.19.1 Realtime Conversation Product Correction 完成第一轮实现与
+  自动门。Flutter controller 从整场三个字符串重构为本地 sequence 排序的 typed learner/assistant
+  turn assembler，provider item id 仅作 correlation；macOS audio bridge 按 learner turn 输出带 500ms
+  pre-roll 的独立 16 kHz WAV，每轮单独创建 recording asset 与 local Whisper job。单轮 ASR 失败只标记
+  该 turn，finish 会 drain provider 最后一轮并等待全部 post-processing，正常 session 仍 completed；
+  Production Corpus 继续只接收 finalized local learner turns。首页新增宽/窄各唯一的自由对话入口，
+  内容选区保留话题锚定入口，session/ordered turns 新增只读 GET 并在同一 panel 支持历史回看。
+  权限获取移到 provider socket 之前，replacement Q9、ADR/architecture/data-model/phase 状态同步更新。
+  自动验证：4 个 controller 权限顺序/多轮/partial/dedup 测试、首页/最小窗口测试、Rust application/persistence/
+  API focused tests、Flutter analyze 与 `flutter build macos --debug` 全部通过；真实 provider/device 三轮
+  boundary、barge-in、最后一轮 drain 与 owner ACCEPT 仍待执行，未冒充完成。
+
+- 2026-07-22 11:15 CST: Phase 3.19.1 durable contract gate 完成。新增 ADR 0027 与 realtime
+  conversation domain glossary：Conversation Session 只描述 provider conversation 生命周期；双方
+  Conversation Turn 使用本地 sequence 排序，provider item id 仅作 correlation；Provider Caption
+  只服务 live guidance；每个 learner turn 只有自己的本地录音与 Whisper 完成后才成为 learner
+  output。Conversation History 保存双方，Production Corpus 仍只投影 finalized learner turns；单轮
+  local ASR 失败不抹掉同 session 其它成功轮，也不把正常结束的 provider session 改成 failed。
+  下一门为带真实三轮音频的 boundary spike 与 free/topic 产品入口契约。
+
+- 2026-07-22 11:05 CST: 为 GitHub Issue #7 建立 Phase 3.19.1 Realtime Conversation Product
+  Correction（3.19 的纠偏子阶段，不绕过新功能冻结），保持已完成 3.15.7 历史文档冻结。新增
+  CONTEXT/PLAN/RESEARCH，审计当前整场录音在 Flutter `finish()` 中被压成单 learner turn 的根因，
+  并固定调研 OpenAI Realtime Agents、LiveKit Agents/Flutter starter 与 Pipecat 的具体 commit。
+  结论是复用现有 provider-neutral Rust session/turn/SQLite/Production Corpus 深模块，后续引入本地
+  turn assembler、逐 learner turn audio + Whisper authority 和 ordered 双方 timeline；assistant 只进
+  conversation facts，不进 learner corpus，Gap Review 保持既有只读路径。PROJECT/REQUIREMENTS
+  （LOOP-026）/ROADMAP/STATE 与 3.19 subtraction audit 同步该方向。当前只完成调研与 phase 建立，
+  未开始实现；下一门是 durable lifecycle 设计与真实三轮 audio-boundary spike。
+
 - 2026-07-22: 设计资产落库 —— `design-notes/` 新增三份 listen 视觉稿（refs #28）。
   `listen-visual-identity.html`（整体气质定稿，暗色墨绿炭 `#1a2420` + 信号青 `#4db8a8`
   + 琥珀 `#e6b45c`，是 #28 宪章的视觉锚点）、`listen-mark-exploration.html`（wordmark/

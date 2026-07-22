@@ -1087,6 +1087,7 @@ pub trait RealtimeConversationRepository: Send + Sync {
         &self,
         id: &RealtimeConversationSessionId,
     ) -> Result<Option<RealtimeConversationSession>, ApplicationError>;
+    fn list_realtime_sessions(&self) -> Result<Vec<RealtimeConversationSession>, ApplicationError>;
     fn save_realtime_turn(
         &self,
         turn: &RealtimeConversationTurn,

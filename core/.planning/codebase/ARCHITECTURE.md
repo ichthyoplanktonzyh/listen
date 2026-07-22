@@ -1,6 +1,6 @@
 # LLPlayerNext System Architecture
 
-Last updated: 2026-07-18. Reflects Phase 3.16 personal expression assets.
+Last updated: 2026-07-22. Reflects Phase 3.19.1 realtime conversation correction.
 
 ## Overview
 
@@ -98,6 +98,9 @@ application use cases and provider/repository boundaries.
 - `PersonalExpressionUseCases` owns explicit create/revise/delete, immutable
   version/attempt history, and typed export. It has no observation, capability,
   projection, proposal or confirmation repository dependency.
+- `RealtimeConversationUseCases` owns provider profiles and durable session/turn
+  facts. Local sequence is the ordering authority; the production-corpus collaborator
+  accepts only finalized local learner turns. Session/turn history queries are read-only.
 - `ProjectionReviewUseCases` is the Phase 3.17 authority boundary. Channel-local
   algorithms read immutable observations and append versioned proposals; one
   repository transaction is the only evidence path that can append confirmation,
@@ -163,6 +166,9 @@ application use cases and provider/repository boundaries.
 - Owns transcription, phonetic-analysis, speech-batch and sound-line job
   lifecycles plus syntax capability, downloadable learning resources and
   subtitle provider coordination.
+- Realtime learner audio is segmented by the macOS audio bridge per provider VAD
+  boundary with a short PCM pre-roll. Each learner turn enters the existing recording
+  transcription runtime independently; the whole-session WAV is cleanup-only.
 - `ProcessRunner` and `ArtifactDownloader` are real seams with production and
   deterministic fake adapters. Runtime modules do not depend on Axum, HTTP
   status codes or `ApiState`.

@@ -3020,6 +3020,28 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - 实现若改变入口或交互，必须先同步 journey 契约，再发起 owner 重测。
 - 验收脚本：`3.19-OWNER-JOURNEYS-V2.md`。
 
+### LOOP-026：多轮 Realtime Conversation 事实与个人产出
+
+- 优先级：P1/release gate
+- 阶段：Phase 3.19.1（Phase 3.19 correction child）
+- 需求：Realtime Conversation 必须保存完整、有序的多轮 learner/assistant conversation facts，
+  支持无需内容锚定的自由对话与用户明确选择范围的话题锚定；不得在 session 结束时把整场录音
+  压成一个 learner turn。
+- 验收标准：
+  - 自由对话有稳定主入口；话题锚定发送的句段/话题范围在开始前和对话中可见，不静默使用整篇内容。
+  - learner/assistant turns 使用本地顺序 identity；provider item id 只作 correlation，重复/乱序事件
+    不产生重复 turn。
+  - provider caption 仅为 live guidance；每个 learner turn 只有在对应本地音频与 Whisper 转写完成后
+    才成为 finalized learner output。
+  - conversation history 保存双方有序事实；个人 Production Corpus 只投影 finalized learner turns，
+    assistant output、失败/中断半截 turn 永不进入 learner corpus。
+  - 单轮 local ASR 失败不得抹掉同 session 其它成功轮；session/turn/post-processing 终态必须诚实可查。
+  - 既有 Gap Review 只读消费多轮 spoken projection；零 capability、observation、proposal、review、
+    rubric writer。
+  - 至少一家真实 provider 完成三轮以上、barge-in、finish drain、cancel/retry 与 history/corpus 回访；
+    OpenAI/Qwen neutral contract 与 Qwen intl/CN workspace 配置有自动回归。
+- 依据：Issue #7 `manual_product_qa`；`3.19.1-RESEARCH.md`。
+
 ## 18.6 Phase 3.4.x Learning Domain Model v2 需求
 
 > 共享上下文：

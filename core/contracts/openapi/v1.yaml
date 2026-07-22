@@ -1960,6 +1960,17 @@ paths:
       responses:
         "101": { description: WebSocket switching protocols }
   /v1/realtime/sessions:
+    get:
+      operationId: listRealtimeSessions
+      description: Lists recent local conversation session facts newest first.
+      responses:
+        "200":
+          description: Recent realtime conversation sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object }
     post:
       operationId: saveRealtimeSession
       requestBody:
@@ -1969,6 +1980,20 @@ paths:
             schema: { type: object }
       responses:
         "200": { description: Saved local session fact }
+  /v1/realtime/sessions/{id}/turns:
+    get:
+      operationId: listRealtimeSessionTurns
+      description: Lists both roles by local monotonic sequence for history replay.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Ordered learner and assistant turn facts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object }
   /v1/realtime/turns:
     post:
       operationId: saveRealtimeTurn

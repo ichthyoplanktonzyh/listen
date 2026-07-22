@@ -1,8 +1,9 @@
 use std::time::Duration;
 
 use application::{
-    RealtimeConversationAdapter, RealtimeConversationSession, RealtimeEvent,
-    RealtimeProviderDescriptor, RealtimeSessionRequest,
+    RealtimeAudioFormat, RealtimeConversationAdapter, RealtimeConversationSession, RealtimeEvent,
+    RealtimeProviderCapabilities, RealtimeProviderDescriptor, RealtimeSessionRequest,
+    RealtimeTransportKind,
 };
 use async_trait::async_trait;
 use domain::RealtimeProviderError;
@@ -69,7 +70,18 @@ impl<C: RealtimeProtocolCodec> RealtimeConversationSession for WireSession<C> {
                         return Ok(Some(event));
                     }
                 }
-                Some(Ok(Message::Close(_))) | None => return Ok(None),
+                Some(Ok(Message::Close(Some(frame)))) => {
+                    return Err(RealtimeProviderError::Protocol {
+                        detail: format!(
+                            "provider closed WebSocket: code={} reason={}",
+                            u16::from(frame.code),
+                            frame.reason
+                        ),
+                    });
+                }
+                Some(Ok(Message::Close(None))) | None => {
+                    return Err(RealtimeProviderError::Disconnected);
+                }
                 Some(Ok(Message::Ping(payload))) => {
                     self.sink
                         .send(Message::Pong(payload))
@@ -151,7 +163,7 @@ async fn connect<C: RealtimeProtocolCodec>(
 }
 
 macro_rules! adapter {
-    ($name:ident, $codec:ty, $kind:literal) => {
+    ($name:ident, $codec:ty, $kind:literal, $input_audio:expr) => {
         pub struct $name {
             config: RealtimeAdapterConfig,
         }
@@ -168,9 +180,21 @@ macro_rules! adapter {
                     adapter_kind: $kind.into(),
                     model_id: self.config.model_id.clone(),
                     protocol_version: codec.protocol_version().into(),
-                    supports_server_vad: true,
-                    supports_manual_turns: true,
-                    supports_function_calls: false,
+                    capabilities: RealtimeProviderCapabilities {
+                        transport: RealtimeTransportKind::WebSocket,
+                        input_audio: $input_audio,
+                        output_audio: RealtimeAudioFormat::Pcm16Mono24Khz,
+                        supports_server_vad: true,
+                        supports_manual_turns: true,
+                        supports_provider_input_transcript: true,
+                        supports_assistant_transcript: true,
+                        supports_response_cancel: true,
+                        supports_output_audio_clear: false,
+                        supports_conversation_truncate: false,
+                        supports_function_calls: false,
+                        supports_image_input: false,
+                        supports_session_resume: false,
+                    },
                 }
             }
             async fn connect(
@@ -186,6 +210,12 @@ macro_rules! adapter {
 adapter!(
     OpenAiRealtimeAdapter,
     OpenAiRealtimeCodec,
-    "openai_realtime"
+    "openai_realtime",
+    RealtimeAudioFormat::Pcm16Mono24Khz
 );
-adapter!(QwenRealtimeAdapter, QwenRealtimeCodec, "qwen_omni_realtime");
+adapter!(
+    QwenRealtimeAdapter,
+    QwenRealtimeCodec,
+    "qwen_omni_realtime",
+    RealtimeAudioFormat::Pcm16Mono16Khz
+);

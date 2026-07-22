@@ -770,6 +770,11 @@ impl RealtimeConversationRepository for DisabledRealtimeConversationRepository {
     ) -> Result<Option<DomainRealtimeConversationSession>, ApplicationError> {
         Ok(None)
     }
+    fn list_realtime_sessions(
+        &self,
+    ) -> Result<Vec<DomainRealtimeConversationSession>, ApplicationError> {
+        Ok(Vec::new())
+    }
     fn save_realtime_turn(
         &self,
         _turn: &RealtimeConversationTurn,

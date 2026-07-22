@@ -96,7 +96,8 @@ use routes::pronunciation::{
 use routes::reading::{reading_position, record_reading_marking, save_reading_position};
 use routes::realtime_conversation::{
     connect as connect_realtime_conversation, delete_profile as delete_realtime_profile,
-    list_profiles as list_realtime_profiles, register_profile as register_realtime_profile,
+    list_profiles as list_realtime_profiles, list_sessions as list_realtime_sessions,
+    list_turns as list_realtime_turns, register_profile as register_realtime_profile,
     save_session as save_realtime_session, save_turn as save_realtime_turn,
 };
 use routes::semantic::{
@@ -846,7 +847,11 @@ pub fn router(state: ApiState) -> Router {
             "/v1/realtime/conversations/ws",
             get(connect_realtime_conversation),
         )
-        .route("/v1/realtime/sessions", post(save_realtime_session))
+        .route(
+            "/v1/realtime/sessions",
+            get(list_realtime_sessions).post(save_realtime_session),
+        )
+        .route("/v1/realtime/sessions/{id}/turns", get(list_realtime_turns))
         .route("/v1/realtime/turns", post(save_realtime_turn))
         .route("/v1/llm/providers/{id}/judge", post(judge_via_llm_provider))
         .route(

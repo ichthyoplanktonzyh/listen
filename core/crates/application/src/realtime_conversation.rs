@@ -90,6 +90,10 @@ impl RealtimeConversationUseCases {
         self.repository.get_realtime_session(id)
     }
 
+    pub fn sessions(&self) -> Result<Vec<ConversationSession>, ApplicationError> {
+        self.repository.list_realtime_sessions()
+    }
+
     pub fn save_turn(
         &self,
         turn: RealtimeConversationTurn,
@@ -120,6 +124,7 @@ impl RealtimeConversationUseCases {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RealtimeAudioFormat {
+    Pcm16Mono16Khz,
     Pcm16Mono24Khz,
 }
 
@@ -144,9 +149,35 @@ pub struct RealtimeProviderDescriptor {
     pub adapter_kind: String,
     pub model_id: String,
     pub protocol_version: String,
+    /// Capabilities implemented by this adapter, not every capability marketed
+    /// by the selected provider/model.
+    pub capabilities: RealtimeProviderCapabilities,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RealtimeTransportKind {
+    WebSocket,
+    WebRtc,
+    BidirectionalStream,
+}
+
+/// Honest feature boundary for a concrete realtime adapter. A `false` value
+/// means callers must not infer support from provider documentation alone.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RealtimeProviderCapabilities {
+    pub transport: RealtimeTransportKind,
+    pub input_audio: RealtimeAudioFormat,
+    pub output_audio: RealtimeAudioFormat,
     pub supports_server_vad: bool,
     pub supports_manual_turns: bool,
+    pub supports_provider_input_transcript: bool,
+    pub supports_assistant_transcript: bool,
+    pub supports_response_cancel: bool,
+    pub supports_output_audio_clear: bool,
+    pub supports_conversation_truncate: bool,
     pub supports_function_calls: bool,
+    pub supports_image_input: bool,
+    pub supports_session_resume: bool,
 }
 
 /// Opaque provider ids correlate wire events only. They are never promoted to
@@ -159,6 +190,9 @@ pub enum RealtimeEvent {
     },
     SpeechStarted {
         provider_item_id: Option<String>,
+        /// Provider audio-timeline position of the detected speech onset.
+        /// Used only for correlation/capture boundaries, never as turn identity.
+        audio_start_ms: Option<u64>,
     },
     SpeechStopped {
         provider_item_id: Option<String>,
