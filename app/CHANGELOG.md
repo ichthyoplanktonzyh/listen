@@ -2,6 +2,16 @@
 
 All notable changes to the listen desktop app.
 
+## 2026-07-22 — Phase 3.19.1 Realtime Conversation
+
+- Realtime Conversation is now the single ordered multi-turn container for free and explicitly content-anchored
+  conversation, with local learner transcripts and learner-only Production Corpus projection.
+- Speaking now stays focused on retelling, shadowing and Pattern Production; entering it immediately acquires audio
+  focus before showing the activity chooser.
+- Added honest retry, drain, post-processing, cancel and route-close semantics plus a live ordered message timeline.
+- Fixed short-window home navigation overflow and a macOS native pre-roll buffer indexing crash during learner-turn
+  recording.
+
 ## 2026-07-16 — Phase 3.15.8 Semantic Search (Code Complete)
 
 - Added an opt-in local semantic model lifecycle and “Search by meaning” dialog with rebuild, status,
