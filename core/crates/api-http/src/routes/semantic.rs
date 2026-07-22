@@ -11,12 +11,12 @@ use domain::{
     LexicalEntryId, PointJudgment, PointVerdict, PracticeAnchor, PracticeTarget, RubricPoint,
     RubricRevisionNote, RubricSource, SemanticAttemptStatus, SemanticGeneratorProvenance,
     SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
-    SemanticTaskAttemptId, SemanticTaskConditions, SemanticTaskKind, SpeakingAssistanceLevel,
-    SubtitleSentenceId, WritingDraft, WritingFeedbackFinding, WritingFeedbackFindingId,
-    WritingFeedbackLayer, WritingFeedbackProvenance, WritingFindingDecision,
-    WritingFindingDisposition, WritingFindingSeverity, WritingSourceSpan, judgment_adjudication_id,
-    semantic_judgment_id, semantic_rubric_id, semantic_task_attempt_id,
-    writing_feedback_finding_id, writing_finding_disposition_id,
+    SemanticTaskAttemptId, SemanticTaskConditions, SemanticTaskKind, SubtitleSentenceId,
+    WritingDraft, WritingFeedbackFinding, WritingFeedbackFindingId, WritingFeedbackLayer,
+    WritingFeedbackProvenance, WritingFindingDecision, WritingFindingDisposition,
+    WritingFindingSeverity, WritingSourceSpan, judgment_adjudication_id, semantic_judgment_id,
+    semantic_rubric_id, semantic_task_attempt_id, writing_feedback_finding_id,
+    writing_finding_disposition_id,
 };
 
 #[derive(Debug, Deserialize)]
@@ -420,10 +420,8 @@ pub(crate) async fn confirm_speaking_target(
         .semantic()
         .semantic_attempt(&attempt_id)?
         .ok_or_else(|| ApiError::not_found("semantic attempt"))?;
-    if !matches!(
-        attempt.kind,
-        SemanticTaskKind::L2Retelling | SemanticTaskKind::RoleReply
-    ) || attempt.status != SemanticAttemptStatus::Completed
+    if attempt.kind != SemanticTaskKind::L2Retelling
+        || attempt.status != SemanticAttemptStatus::Completed
     {
         return Err(ApplicationError::Validation("constructed speaking attempt").into());
     }
@@ -438,16 +436,7 @@ pub(crate) async fn confirm_speaking_target(
     if surface.is_empty() || !contains_literal_target(&response.transcript, surface) {
         return Err(ApplicationError::Validation("literal target in speaking response").into());
     }
-    let assistance = match attempt.kind {
-        SemanticTaskKind::L2Retelling => AssistanceLevel::None,
-        SemanticTaskKind::RoleReply => match attempt.conditions.speaking_assistance {
-            Some(SpeakingAssistanceLevel::FullSentence) => AssistanceLevel::FullText,
-            Some(SpeakingAssistanceLevel::Keywords) => AssistanceLevel::PartialText,
-            Some(SpeakingAssistanceLevel::NoText) => AssistanceLevel::None,
-            None => return Err(ApplicationError::Validation("role reply assistance").into()),
-        },
-        _ => unreachable!(),
-    };
+    let assistance = AssistanceLevel::None;
     let rubric = state
         .services
         .semantic()

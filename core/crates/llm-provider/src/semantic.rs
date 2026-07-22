@@ -48,7 +48,6 @@ fn purpose_label(kind: SemanticTaskKind) -> &'static str {
         SemanticTaskKind::ReadingComprehension => "reading comprehension",
         SemanticTaskKind::L1Retelling => "L1 (native-language) retelling",
         SemanticTaskKind::L2Retelling => "L2 (target-language) retelling",
-        SemanticTaskKind::RoleReply => "role reply",
         SemanticTaskKind::Dictogloss => "dictogloss reconstruction",
         SemanticTaskKind::OneSentenceSummary => "one-sentence summary",
         SemanticTaskKind::Summary => "summary",
@@ -361,11 +360,12 @@ impl<A: LlmChatAdapter> OutputFeedbackProvider for LlmSemanticProvider<A> {
             .adapter
             .complete_structured(&feedback_request(request))
             .await?;
-        let parsed: FeedbackOutput = serde_json::from_str(&response.json_text).map_err(|error| {
-            LlmProviderError::SchemaInvalid {
-                detail: format!("output did not match feedback schema: {error}"),
-            }
-        })?;
+        let parsed: FeedbackOutput =
+            serde_json::from_str(&response.json_text).map_err(|error| {
+                LlmProviderError::SchemaInvalid {
+                    detail: format!("output did not match feedback schema: {error}"),
+                }
+            })?;
         if parsed.feedback.trim().is_empty() {
             return Err(LlmProviderError::SchemaInvalid {
                 detail: "feedback text was empty".into(),

@@ -4,9 +4,9 @@ use application::{AppServices, PersonalExpressionRepository};
 use domain::{
     LanguageCode, PatternSourceKind, PatternSourceSnapshot, PersonalExpressionAssistance,
     PersonalExpressionAttempt, PersonalExpressionAttemptId, PersonalExpressionChannel,
-    PersonalExpressionSelfAssessment, RecordingAssetId, UserSentencePatternAsset,
-    UserSentencePatternId, UserSentencePatternSlot, UserSentencePatternVersion,
-    UserSentencePatternVersionId,
+    PersonalExpressionSelfAssessment, RecordingAssetId, SemanticTaskAttemptId,
+    UserSentencePatternAsset, UserSentencePatternId, UserSentencePatternSlot,
+    UserSentencePatternVersion, UserSentencePatternVersionId,
 };
 
 use super::SqliteRepository;
@@ -131,6 +131,8 @@ fn durable_pattern_versions_and_channel_attempts_are_independent() {
                 response_text: "I ended up shipping the fix after dinner.".into(),
                 raw_transcript: recording.as_ref().map(|_| "raw words".into()),
                 recording_asset_id: recording,
+                semantic_attempt_id: (channel == PersonalExpressionChannel::Speaking)
+                    .then(|| SemanticTaskAttemptId::parse("semantic-speaking-1").unwrap()),
                 self_assessment: PersonalExpressionSelfAssessment::PartlyExpressed,
                 context_note: None,
                 completed_at_ms: 3,
@@ -140,6 +142,14 @@ fn durable_pattern_versions_and_channel_attempts_are_independent() {
     let attempts = use_cases.attempts(&original.id).unwrap();
     assert_eq!(attempts.len(), 2);
     assert_ne!(attempts[0].channel, attempts[1].channel);
+    assert_eq!(
+        attempts
+            .iter()
+            .find(|attempt| attempt.channel == PersonalExpressionChannel::Speaking)
+            .and_then(|attempt| attempt.semantic_attempt_id.as_ref())
+            .map(SemanticTaskAttemptId::as_str),
+        Some("semantic-speaking-1")
+    );
     let after = long_term_writer_counts(&repo);
     assert_eq!(
         before, after,
@@ -173,6 +183,7 @@ fn writing_attempt_cannot_smuggle_speaking_recording() {
             response_text: "my text".into(),
             raw_transcript: None,
             recording_asset_id: Some(RecordingAssetId::parse("wrong-channel").unwrap()),
+            semantic_attempt_id: None,
             self_assessment: PersonalExpressionSelfAssessment::NeedsWork,
             context_note: None,
             completed_at_ms: 2,

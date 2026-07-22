@@ -29,6 +29,31 @@ One completed or explicitly abandoned response to one Task Prompt. Its source, a
 about that attempt, not proof of capability in another channel.
 _Avoid_: Capability, score
 
+**Constructed Speaking Task**:
+A bounded speaking activity with one Task Prompt and one learner response, such as L2 retelling or Pattern
+Production. Immediate and delayed recall remain attempts against a prompt; they do not become conversations.
+_Avoid_: Chat, conversation turn
+
+**Personal Expression Use**:
+One completed use of an immutable user-owned sentence-pattern version, including assistance and learner
+self-assessment. A speaking use references the Constructed Speaking Task that owns its transcript and recording;
+it is not a second transcript authority.
+_Avoid_: Duplicate speaking attempt, conversation
+
+**Realtime Conversation**:
+One continuous free or explicitly topic-anchored interaction made of ordered learner and assistant turns. It is
+not a fixed-answer task and does not use a provider item identifier as user-owned identity.
+_Avoid_: Speaking attempt, role exercise
+
+**Conversation History**:
+The durable ordered learner and assistant turns from a Realtime Conversation.
+_Avoid_: Production Corpus, combined learner answer
+
+**Production Corpus**:
+A rebuildable projection of finalized learner-owned output. Assistant output and provider-only captions never
+enter it.
+_Avoid_: Conversation History, evidence writer
+
 ## Availability Language
 
 **Unavailable State**:

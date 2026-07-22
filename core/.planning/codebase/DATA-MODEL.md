@@ -1,6 +1,6 @@
 # Current Data Model
 
-Last updated: 2026-07-18, Phase 3.16 durable personal expression assets.
+Last updated: 2026-07-22, Phase 3.19.1 realtime conversation correction.
 
 All persisted time values are non-negative integer milliseconds. Public IDs are
 opaque SHA-256 strings generated from a namespace and stable fingerprint; they
@@ -30,6 +30,8 @@ do not contain database row numbers or player-library identifiers.
 | Personal expression attempt | Pattern + immutable version + completed learner response/time |
 | Writing feedback finding | Attempt + learner revision/hash + project category/span/message + provider/version |
 | Writing finding disposition | Finding + accept/reject + resulting immutable attempt/revision + timestamp |
+| Realtime conversation session | Local opaque session ID; provider lifecycle envelope only |
+| Realtime conversation turn | Session + local monotonic sequence + role; provider item ID is correlation metadata |
 
 Media path is mutable metadata, not identity. Registering the same media
 fingerprint updates path/title metadata while retaining the media ID.
@@ -234,6 +236,20 @@ has no identity, table, lifecycle, writer, cascade, or export semantics. Absence
 from `production_corpus_entries` is only a corpus fact; even a `ready` review does
 not become speaking/writing observation or capability projection without the
 separate Phase 3.17 confirmation path.
+
+## Realtime Conversation Facts
+
+`realtime_conversation_sessions` stores free (`open_chat`) and topic-anchored
+session envelopes. `realtime_conversation_turns` stores every learner and assistant
+turn ordered by a local monotonic `sequence`; provider item IDs never define order
+or identity. Provider transcripts are live/correlation facts. Only a finalized
+learner turn with its own local WAV, recording asset, completed local transcription
+job and `LocalLearnerTranscript` is authoritative learner output.
+
+Conversation History reads both roles. The rebuildable Production Corpus projects
+only finalized local learner turns, so assistant turns and failed/interrupted
+learner turns cannot affect Gap Review. A single learner ASR failure is a turn-level
+failure and does not change an otherwise completed session into failed.
 
 Losing or deleting media/subtitle rows preserves lexical occurrence snapshots and
 status history. Media availability changes should archive replaceable content;
@@ -445,6 +461,12 @@ expansion is ephemeral overlay state, not a fourth persisted Rhythm mode.
 - Rebuild/backfill for v44 is explicit replay, not migration-time inference:
   v43 capability state/history and observations migrate byte-for-byte, proposal
   tables start empty, and replay appends/supersedes by algorithm/evidence version.
+- Schema v45 is an explicit product-subtraction migration: it removes every
+  `role_reply` rubric/attempt and directly traceable judgment, review, recording,
+  speaking observation and projection proposal. A still-current confirmed Role
+  Reply projection is withdrawn while any user override is preserved. The
+  retired enum is removed from the domain, so no legacy Role Reply JSON remains
+  readable or creatable after migration.
 - Review scheduling v1 is recorded as `listen_review_v1_heuristic_proxy`: `again` returns in
   10 minutes, `hard` in one day, and successful intervals grow from 3 to 7 days before doubling.
   The durable attempts remain the evidence history; the schedule row is a replaceable read model.

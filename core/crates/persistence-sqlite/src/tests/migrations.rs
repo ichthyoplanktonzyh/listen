@@ -15,6 +15,97 @@ fn new_database_migrates_to_latest() {
 }
 
 #[test]
+fn v45_removes_role_reply_facts_projections_and_recording_file() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let recording_path =
+        std::env::temp_dir().join(format!("llplayer-role-reply-{}.wav", std::process::id()));
+    std::fs::write(&recording_path, b"role reply audio").unwrap();
+    let connection = repo.connection.lock().unwrap();
+    connection
+        .execute_batch(&format!(
+            r#"
+            PRAGMA user_version=44;
+            INSERT INTO lexical_entries
+              (id,language,kind,granularity,normalization,normalized_key,canonical_form,
+               normalized_form,display_form,normalization_provider,normalization_version,
+               updated_at_ms,learning_updated_at_ms)
+            VALUES ('role-word','en','"word"','word','lemma','ticket','ticket','ticket',
+                    'ticket','test','1',1,1);
+            INSERT INTO recording_assets
+              (id,language,file_path,duration_ms,created_at_ms,asset_json)
+            VALUES ('role-recording','en','{}',1000,1,'{{}}');
+            INSERT INTO semantic_rubrics
+              (id,version,purpose,start_ms,end_ms,source_language,response_language,
+               source_sha256,created_at_ms,rubric_json)
+            VALUES ('role-rubric',1,'"role_reply"',0,1000,'en','en','hash',1,'{{}}');
+            INSERT INTO semantic_task_attempts
+              (id,kind,rubric_id,rubric_version,status,started_at_ms,attempt_json)
+            VALUES ('role-attempt','"role_reply"','role-rubric',1,'"completed"',2,
+                    '{{"responses":[{{"recording_asset_id":"role-recording"}}]}}');
+            INSERT INTO semantic_judgments
+              (id,attempt_id,response_revision,rubric_id,rubric_version,abstained,
+               created_at_ms,judgment_json)
+            VALUES ('role-judgment','role-attempt',1,'role-rubric',1,0,3,'{{}}');
+            INSERT INTO judgment_adjudications
+              (id,judgment_id,point_id,occurred_at_ms,adjudication_json)
+            VALUES ('role-adjudication','role-judgment','point',4,'{{}}');
+            INSERT INTO learning_observations
+              (id,lexical_entry_id,sense_id,capability,task_type,outcome,assistance,
+               surface_form,origin,source_ref,occurred_at_ms)
+            VALUES ('role-observation','role-word','','"speaking"','"constructed_speaking"',
+                    '"success"','"none"','ticket','"practice_task"',
+                    'speaking:role-attempt:role-word',5);
+            INSERT INTO projection_proposals
+              (id,lexical_entry_id,capability,algorithm_version,evidence_as_of_ms,
+               proposal_json,created_at_ms)
+            VALUES ('role-proposal','role-word','"speaking"','speaking-proposal-v1',5,
+                    '{{"evidence":[{{"observation_id":"role-observation"}}]}}',6);
+            INSERT INTO projection_decisions
+              (id,proposal_id,decision_json,decided_at_ms)
+            VALUES ('role-decision','role-proposal','{{"decision":"confirm"}}',7);
+            INSERT INTO lexical_capability_states
+              (lexical_entry_id,sense_id,capability,projection_json,updated_at_ms)
+            VALUES ('role-word','','"speaking"','{{"conclusion":"acquired"}}',7);
+            INSERT INTO lexical_capability_history
+              (id,lexical_entry_id,sense_id,capability,previous_state_json,new_state_json,
+               change_kind,changed_at_ms)
+            VALUES ('role-history','role-word','','"speaking"','{{}}','{{}}',
+                    '"projection_updated"',7);
+            INSERT INTO review_items
+              (id,source_kind,status,created_at_ms,updated_at_ms,item_json)
+            VALUES ('role-review','"speaking_attempt"','"active"',8,8,
+                    '{{"source":{{"id":"role-attempt"}}}}');
+            "#,
+            recording_path.to_string_lossy().replace('\'', "''")
+        ))
+        .unwrap();
+
+    migrate(&connection).unwrap();
+
+    for table in [
+        "semantic_rubrics",
+        "semantic_task_attempts",
+        "semantic_judgments",
+        "judgment_adjudications",
+        "learning_observations",
+        "projection_proposals",
+        "projection_decisions",
+        "lexical_capability_states",
+        "lexical_capability_history",
+        "review_items",
+        "recording_assets",
+    ] {
+        let count: u32 = connection
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(count, 0, "{table} retained Role Reply data");
+    }
+    assert!(!recording_path.exists());
+}
+
+#[test]
 fn v23_backfills_uncleared_legacy_observations_with_explicit_provenance() {
     let connection = Connection::open_in_memory().unwrap();
     connection

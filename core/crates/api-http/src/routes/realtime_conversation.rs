@@ -130,6 +130,20 @@ pub(crate) async fn save_session(
     ))
 }
 
+pub(crate) async fn list_sessions(
+    State(state): State<ApiState>,
+) -> Result<Json<Vec<RealtimeConversationSession>>, ApiError> {
+    Ok(Json(state.services.realtime_conversations().sessions()?))
+}
+
+pub(crate) async fn list_turns(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<RealtimeConversationTurn>>, ApiError> {
+    let id = domain::RealtimeConversationSessionId::parse(id).map_err(ApplicationError::from)?;
+    Ok(Json(state.services.realtime_conversations().turns(&id)?))
+}
+
 pub(crate) async fn save_turn(
     State(state): State<ApiState>,
     Json(turn): Json<RealtimeConversationTurn>,
@@ -211,11 +225,15 @@ async fn run_socket(
         RealtimeAdapterKind::OpenAiRealtime => Box::new(OpenAiRealtimeAdapter::new(config)),
         RealtimeAdapterKind::QwenOmniRealtime => Box::new(QwenRealtimeAdapter::new(config)),
     };
+    let input_audio = match profile.adapter_kind {
+        RealtimeAdapterKind::OpenAiRealtime => RealtimeAudioFormat::Pcm16Mono24Khz,
+        RealtimeAdapterKind::QwenOmniRealtime => RealtimeAudioFormat::Pcm16Mono16Khz,
+    };
     let request = RealtimeSessionRequest {
         instructions,
         language,
         voice: profile.voice,
-        input_audio: RealtimeAudioFormat::Pcm16Mono24Khz,
+        input_audio,
         output_audio: RealtimeAudioFormat::Pcm16Mono24Khz,
         turn_detection: if manual_turns {
             RealtimeTurnDetection::Manual
@@ -240,15 +258,21 @@ async fn run_socket(
     loop {
         tokio::select! {
             incoming = client_rx.next() => match incoming {
-                Some(Ok(Message::Binary(bytes))) => if provider.send_audio(&bytes).await.is_err() { break; },
+                Some(Ok(Message::Binary(bytes))) => {
+                    if provider.send_audio(&bytes).await.is_err() { break; }
+                },
                 Some(Ok(Message::Text(command))) if command == "commit" => { if provider.commit_turn().await.is_err() { break; } },
                 Some(Ok(Message::Text(command))) if command == "cancel" => { let _ = provider.cancel_response().await; },
                 Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
                 _ => {}
             },
             event = provider.next_event() => match event {
-                Ok(Some(RealtimeEvent::AssistantAudioDelta { pcm16_mono_24khz, .. })) => if client_tx.send(Message::Binary(pcm16_mono_24khz.into())).await.is_err() { break; },
-                Ok(Some(event)) => if client_tx.send(Message::Text(serde_json::to_string(&event).unwrap_or_else(|_| "{\"type\":\"protocol_error\"}".into()).into())).await.is_err() { break; },
+                Ok(Some(RealtimeEvent::AssistantAudioDelta { pcm16_mono_24khz, .. })) => {
+                    if client_tx.send(Message::Binary(pcm16_mono_24khz.into())).await.is_err() { break; }
+                },
+                Ok(Some(event)) => {
+                    if client_tx.send(Message::Text(serde_json::to_string(&event).unwrap_or_else(|_| "{\"type\":\"protocol_error\"}".into()).into())).await.is_err() { break; }
+                },
                 Ok(None) => break,
                 Err(error) => { let _ = client_tx.send(Message::Text(serde_json::json!({"type":"provider_error","error":error}).to_string().into())).await; break; }
             }

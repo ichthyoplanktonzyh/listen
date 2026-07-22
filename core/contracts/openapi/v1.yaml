@@ -1960,6 +1960,17 @@ paths:
       responses:
         "101": { description: WebSocket switching protocols }
   /v1/realtime/sessions:
+    get:
+      operationId: listRealtimeSessions
+      description: Lists recent local conversation session facts newest first.
+      responses:
+        "200":
+          description: Recent realtime conversation sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object }
     post:
       operationId: saveRealtimeSession
       requestBody:
@@ -1969,6 +1980,20 @@ paths:
             schema: { type: object }
       responses:
         "200": { description: Saved local session fact }
+  /v1/realtime/sessions/{id}/turns:
+    get:
+      operationId: listRealtimeSessionTurns
+      description: Lists both roles by local monotonic sequence for history replay.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Ordered learner and assistant turn facts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object }
   /v1/realtime/turns:
     post:
       operationId: saveRealtimeTurn
@@ -4372,6 +4397,7 @@ components:
         response_text: { type: string, minLength: 1 }
         raw_transcript: { type: [string, "null"] }
         recording_asset_id: { type: [string, "null"] }
+        semantic_attempt_id: { type: [string, "null"] }
         self_assessment: { $ref: "#/components/schemas/PersonalExpressionSelfAssessment" }
         context_note: { type: [string, "null"] }
     PersonalExpressionAttempt:
@@ -4833,7 +4859,7 @@ components:
         start_ms: { type: [integer, "null"], minimum: 0 }
         end_ms: { type: [integer, "null"], minimum: 0 }
     SemanticTaskKind:
-      enum: [reading_comprehension, l1_retelling, l2_retelling, role_reply, dictogloss, one_sentence_summary, summary, opinion_response, pattern_production]
+      enum: [reading_comprehension, l1_retelling, l2_retelling, dictogloss, one_sentence_summary, summary, opinion_response, pattern_production]
     RubricPointImportance:
       enum: [required, optional]
     RubricPoint:

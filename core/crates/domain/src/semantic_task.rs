@@ -24,7 +24,6 @@ pub enum SemanticTaskKind {
     ReadingComprehension,
     L1Retelling,
     L2Retelling,
-    RoleReply,
     Dictogloss,
     OneSentenceSummary,
     Summary,
@@ -469,7 +468,6 @@ pub fn validate_semantic_attempt(
     let hidden_source_kinds = [
         SemanticTaskKind::L1Retelling,
         SemanticTaskKind::L2Retelling,
-        SemanticTaskKind::RoleReply,
         SemanticTaskKind::Dictogloss,
     ];
     if hidden_source_kinds.contains(&attempt.kind) && attempt.conditions.source_text_visible {
@@ -493,10 +491,9 @@ pub fn validate_semantic_attempt(
         _ => {}
     }
     match attempt.kind {
-        SemanticTaskKind::RoleReply | SemanticTaskKind::PatternProduction => {
+        SemanticTaskKind::PatternProduction => {
             if attempt.conditions.speaking_assistance.is_none() {
-                errors
-                    .push("constructed prompt speaking must snapshot its assistance level".into());
+                errors.push("pattern production must snapshot its assistance level".into());
             }
             if attempt
                 .conditions
@@ -504,20 +501,16 @@ pub fn validate_semantic_attempt(
                 .as_deref()
                 .is_none_or(|value| value.trim().is_empty())
             {
-                errors.push("constructed prompt speaking must preserve its prompt snapshot".into());
+                errors.push("pattern production must preserve its prompt snapshot".into());
             }
         }
         _ if attempt.conditions.speaking_assistance.is_some() => {
-            errors.push(
-                "speaking assistance is only defined for role_reply or pattern_production".into(),
-            );
+            errors.push("speaking assistance is only defined for pattern_production".into());
         }
         _ => {}
     }
     match attempt.kind {
-        SemanticTaskKind::L2Retelling
-        | SemanticTaskKind::RoleReply
-        | SemanticTaskKind::PatternProduction => {
+        SemanticTaskKind::L2Retelling | SemanticTaskKind::PatternProduction => {
             if attempt.conditions.speaking_recall.is_none() {
                 errors.push("constructed speaking must record immediate or delayed recall".into());
             }
@@ -574,9 +567,7 @@ pub fn validate_semantic_attempt(
         }
         if matches!(
             attempt.kind,
-            SemanticTaskKind::L2Retelling
-                | SemanticTaskKind::RoleReply
-                | SemanticTaskKind::PatternProduction
+            SemanticTaskKind::L2Retelling | SemanticTaskKind::PatternProduction
         ) && (response.source != ResponseTranscriptSource::Asr
             || response.recording_asset_id.is_none())
         {
@@ -1045,29 +1036,6 @@ mod tests {
         let mut missing_raw = corrected_asr;
         missing_raw.responses[0].raw_transcript = None;
         assert!(validate_semantic_attempt(&missing_raw, &fixture.rubric).is_err());
-
-        let mut role_rubric = fixture.rubric.clone();
-        role_rubric.purpose = SemanticTaskKind::RoleReply;
-        let mut role_reply = attempt;
-        role_reply.kind = SemanticTaskKind::RoleReply;
-        role_reply.conditions.l1_trigger = None;
-        role_reply.conditions.speaking_assistance = Some(SpeakingAssistanceLevel::Keywords);
-        role_reply.conditions.speaking_recall = Some(SpeakingRecallKind::Immediate);
-        role_reply.conditions.prompt_snapshot = Some("Reply to the shop clerk".into());
-        role_reply.responses[0].source = ResponseTranscriptSource::Asr;
-        role_reply.responses[0].raw_transcript = Some("I need two ticket".into());
-        role_reply.responses[0].transcript = "I need two tickets".into();
-        role_reply.responses[0].recording_asset_id =
-            Some(RecordingAssetId::parse("recording-role").unwrap());
-        role_reply.responses[0].asr_reliability = Some(AsrReliability::Suspect);
-        role_reply.responses[0].language = role_rubric.response_language.clone();
-        assert!(validate_semantic_attempt(&role_reply, &role_rubric).is_ok());
-
-        role_reply.conditions.speaking_recall = None;
-        assert!(validate_semantic_attempt(&role_reply, &role_rubric).is_err());
-        role_reply.conditions.speaking_recall = Some(SpeakingRecallKind::Immediate);
-        role_reply.conditions.speaking_assistance = None;
-        assert!(validate_semantic_attempt(&role_reply, &role_rubric).is_err());
 
         let mut l1_with_speaking_recall = fixture.attempts[0].clone();
         l1_with_speaking_recall.conditions.speaking_recall = Some(SpeakingRecallKind::Delayed);

@@ -108,6 +108,21 @@ impl RealtimeConversationRepository for SqliteRepository {
             .map_err(repo)
     }
 
+    fn list_realtime_sessions(&self) -> Result<Vec<RealtimeConversationSession>, ApplicationError> {
+        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = connection
+            .prepare(
+                "SELECT session_json FROM realtime_conversation_sessions
+                 ORDER BY started_at_ms DESC, id DESC LIMIT 50",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map([], |row| from_json(&row.get::<_, String>(0)?))
+            .map_err(repo)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(repo)
+    }
+
     fn save_realtime_turn(
         &self,
         turn: &RealtimeConversationTurn,

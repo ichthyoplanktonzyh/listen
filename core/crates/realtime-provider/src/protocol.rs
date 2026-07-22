@@ -27,10 +27,12 @@ pub trait RealtimeProtocolCodec: Send + Sync + 'static {
     ) -> Result<Option<RealtimeEvent>, RealtimeProviderError>;
 }
 
-fn require_pcm(format: RealtimeAudioFormat) -> &'static str {
-    match format {
-        RealtimeAudioFormat::Pcm16Mono24Khz => "pcm16",
-    }
+fn require_openai_pcm(format: RealtimeAudioFormat) -> serde_json::Value {
+    let rate = match format {
+        RealtimeAudioFormat::Pcm16Mono16Khz => 16000,
+        RealtimeAudioFormat::Pcm16Mono24Khz => 24000,
+    };
+    serde_json::json!({"type": "audio/pcm", "rate": rate})
 }
 
 fn string(value: &serde_json::Value, path: &[&str]) -> Option<String> {
@@ -39,6 +41,14 @@ fn string(value: &serde_json::Value, path: &[&str]) -> Option<String> {
         current = current.get(*key)?;
     }
     current.as_str().map(ToOwned::to_owned)
+}
+
+fn unsigned(value: &serde_json::Value, path: &[&str]) -> Option<u64> {
+    let mut current = value;
+    for key in path {
+        current = current.get(*key)?;
+    }
+    current.as_u64()
 }
 
 fn provider_error(value: &serde_json::Value) -> RealtimeProviderError {
@@ -86,23 +96,37 @@ impl RealtimeProtocolCodec for OpenAiRealtimeCodec {
     }
 
     fn session_update(&self, request: &RealtimeSessionRequest) -> serde_json::Value {
-        let format = require_pcm(request.input_audio);
-        debug_assert_eq!(format, require_pcm(request.output_audio));
+        let input_format = require_openai_pcm(request.input_audio);
+        let output_format = match request.output_audio {
+            RealtimeAudioFormat::Pcm16Mono16Khz => serde_json::json!({
+                "type": "audio/pcm",
+                "rate": 16000,
+            }),
+            RealtimeAudioFormat::Pcm16Mono24Khz => serde_json::json!({
+                "type": "audio/pcm",
+                "rate": 24000,
+            }),
+        };
         serde_json::json!({
             "type": "session.update",
             "session": {
                 "type": "realtime",
+                "output_modalities": ["audio"],
                 "instructions": request.instructions,
                 "audio": {
                     "input": {
-                        "format": {"type": format, "rate": 24000},
+                        "format": input_format,
+                        "transcription": {
+                            "model": "gpt-4o-mini-transcribe",
+                            "language": request.language.as_str(),
+                        },
                         "turn_detection": match request.turn_detection {
                             RealtimeTurnDetection::ServerVad => serde_json::json!({"type": "server_vad"}),
                             RealtimeTurnDetection::Manual => serde_json::Value::Null,
                         }
                     },
                     "output": {
-                        "format": {"type": format, "rate": 24000},
+                        "format": output_format,
                         "voice": request.voice,
                     }
                 }
@@ -126,6 +150,7 @@ impl RealtimeProtocolCodec for OpenAiRealtimeCodec {
             }),
             "input_audio_buffer.speech_started" => Some(RealtimeEvent::SpeechStarted {
                 provider_item_id: item_id(),
+                audio_start_ms: unsigned(value, &["audio_start_ms"]),
             }),
             "input_audio_buffer.speech_stopped" => Some(RealtimeEvent::SpeechStopped {
                 provider_item_id: item_id(),
@@ -209,9 +234,12 @@ impl RealtimeProtocolCodec for QwenRealtimeCodec {
                 "instructions": request.instructions,
                 "input_audio_format": "pcm",
                 "output_audio_format": "pcm",
-                "input_audio_transcription": {"model": "qwen3-asr-flash-realtime"},
                 "turn_detection": match request.turn_detection {
-                    RealtimeTurnDetection::ServerVad => serde_json::json!({"type": "server_vad"}),
+                    RealtimeTurnDetection::ServerVad => serde_json::json!({
+                        "type": "semantic_vad",
+                        "threshold": 0.2,
+                        "silence_duration_ms": 800,
+                    }),
                     RealtimeTurnDetection::Manual => serde_json::Value::Null,
                 }
             }
@@ -234,6 +262,7 @@ impl RealtimeProtocolCodec for QwenRealtimeCodec {
             }),
             "input_audio_buffer.speech_started" => Some(RealtimeEvent::SpeechStarted {
                 provider_item_id: item_id(),
+                audio_start_ms: unsigned(value, &["audio_start_ms"]),
             }),
             "input_audio_buffer.speech_stopped" => Some(RealtimeEvent::SpeechStopped {
                 provider_item_id: item_id(),

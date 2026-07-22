@@ -916,7 +916,8 @@ Phase 2.18 新学习资产架构之上，把英语作为第一门语言做成完
 
 2026-07-11 确立。Phase 3.0 的听力闭环仍是当前执行楔子；其收口后，产品以同一真实内容
 逐步建立 reading、speaking、writing 的独立任务与证据。优先候选为媒体伴生阅读与读听
-差异诊断、片段复述与角色接话、dictogloss 与摘要/回应、个人句模与跨语境迁移。
+差异诊断、片段复述、dictogloss 与摘要/回应、个人句模与跨语境迁移。原字幕固定下一句式
+Role Reply 已在 Phase 3.19.1 删除；交互式口语统一由 Realtime Conversation 承担。
 
 语义评分尺、回答判定和写作反馈可使用 LLM，但必须满足：
 
@@ -929,11 +930,12 @@ Phase 2.18 新学习资产架构之上，把英语作为第一门语言做成完
 最终讨论稿：
 `.planning/discuss/four-channel-product-and-vendor-neutral-llm-final.zh.md`。
 
-Realtime conversation 是可被多个场景消费的能力，不绑定单一产品外形。当前内容段落锚定的
-语音对话可作为首个 surface；后续允许 GPT-like 开放连续聊天、角色扮演、个人表达模板和
-文字/语音混合会话等独立场景。它们可以拥有不同界面和导航，但复用 session/turn/audio/
-transcript 事实、个人产出语料摄入与复盘处理。开放聊天在首个 realtime phase 中未交付时，
-只属于执行延期，不是产品非目标。复盘处理与复盘呈现分离：finalized session 应可进入统一
+Realtime conversation 是可被多个场景消费的能力，不绑定单一产品外形。Issue #7 的真实 provider
+QA 已证明仅在 Speaking 内提供内容锚定、结束时压成一个 learner turn 的 surface 不能满足对话
+目标；Phase 3.19.1 因此把自由连续聊天与显式话题锚定确立为当前纠偏范围，而不再只是未来可能。
+两种 surface 可以拥有不同界面和导航，但复用 session/turn/audio/transcript 事实、个人产出语料
+摄入与复盘处理。conversation history 保存双方有序事实，个人 Production Corpus 只接收本地转写
+成功的 learner turns。复盘处理与复盘呈现分离：finalized session 应可进入统一
 复盘管线，而具体 surface 可选择跳转复盘页、聊天内卡片、后台生成或稍后回访，不强制一种流程。
 
 当前落地顺序见 ROADMAP/STATE；阶段范围控制交付规模，不冻结后续产品形态。
