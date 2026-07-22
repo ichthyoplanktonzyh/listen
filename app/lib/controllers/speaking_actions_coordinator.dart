@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/reading.dart';
+import '../models/content_activity.dart';
 import '../models/practice.dart';
 import '../models/semantic_task.dart';
 import '../models/timeline.dart';
@@ -54,12 +55,36 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
     required List<RubricPointView> fixedRubricPoints,
     required Future<void> Function() closeReading,
   }) async {
+    final selection = selectCurrentSegment();
+    if (selection == null) return;
+    final source = SpeakingTaskSource(
+      anchorCueId: selection.anchorCueId,
+      mediaId: selection.mediaId,
+      trackId: selection.trackId,
+      startMs: selection.startMs,
+      endMs: selection.endMs,
+      language: selection.language,
+      transcriptSnapshot: selection.transcriptSnapshot,
+    );
+    await closeReading();
+    await acquireRecordingFocus();
+    _returnPosition = player.position;
+    _source = source;
+    notifyListeners();
+    unawaited(
+      task.openTask(api, source: source, fixedRubricPoints: fixedRubricPoints),
+    );
+  }
+
+  /// Selects the current content window without assigning it to a learning
+  /// activity. Realtime and Speaking each adapt this neutral selection.
+  ContentSegmentSelection? selectCurrentSegment() {
     final track = subtitle.primaryTrack;
-    if (track == null) return;
+    if (track == null) return null;
     final paragraphs = deriveReadingParagraphs(
       track.cues,
     ).where((paragraph) => !paragraph.nonSpeech).toList(growable: false);
-    if (paragraphs.isEmpty) return;
+    if (paragraphs.isEmpty) return null;
     final currentCueId = subtitle.currentPrimaryCue?.id;
     var paragraph = paragraphs.first;
     for (final candidate in paragraphs) {
@@ -70,32 +95,23 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
         break;
       }
     }
-    final sourceLanguage = settings.resolveLearningLanguage(track.language);
-    final cues = _speakingWindow(track.cues, currentCueId, paragraph);
+    final cues = _contentWindow(track.cues, currentCueId, paragraph);
     final first = cues.first;
     final last = cues.last;
     final startMs = subtitle.primaryCursor.mediaStart(first).inMilliseconds;
     final endMs = subtitle.primaryCursor.mediaEnd(last).inMilliseconds;
     if (endMs - startMs < 10000 || endMs - startMs > 60000) {
       player.setStatus(_t('statusSpeakingSegmentLength'));
-      return;
+      return null;
     }
-    final source = SpeakingTaskSource(
+    return ContentSegmentSelection(
       anchorCueId: first.id,
       mediaId: track.mediaId ?? player.mediaId,
       trackId: track.id,
       startMs: startMs,
       endMs: endMs,
-      language: sourceLanguage,
+      language: settings.resolveLearningLanguage(track.language),
       transcriptSnapshot: cues.map((cue) => cue.text.trim()).join(' '),
-    );
-    await closeReading();
-    await acquireRecordingFocus();
-    _returnPosition = player.position;
-    _source = source;
-    notifyListeners();
-    unawaited(
-      task.openTask(api, source: source, fixedRubricPoints: fixedRubricPoints),
     );
   }
 
@@ -240,7 +256,7 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
   /// Keeps content-launched retelling inside the v1 10–60 second task range.
   /// A normal paragraph is preserved; pathological short/long subtitle
   /// grouping falls back to a cue window anchored at the current position.
-  List<Cue> _speakingWindow(
+  List<Cue> _contentWindow(
     List<Cue> trackCues,
     String? currentCueId,
     ReadingParagraph paragraph,

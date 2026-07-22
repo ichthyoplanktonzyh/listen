@@ -10,12 +10,11 @@ import '../widgets/panels/speaking_task_studio.dart'
 import 'learning_controller.dart';
 import 'player_controller.dart';
 import 'reading_task_controller.dart';
-import 'realtime_conversation_controller.dart';
 import 'speaking_actions_coordinator.dart';
 import 'speaking_task_controller.dart';
 
 /// Owns the speaking channel's page state: which surface sits on top of the
-/// speaking session (studio, L1 comprehension check, realtime conversation)
+/// speaking session (studio or L1 comprehension check)
 /// and which personal-expression pattern the session was launched from.
 /// Extracted from the composition root; getter names mirror the host's former
 /// field names.
@@ -28,7 +27,6 @@ class SpeakingChannelCoordinator extends ChangeNotifier {
     required this.actions,
     required this.task,
     required this.readingTask,
-    required this.realtimeConversation,
     required this.learning,
     required this.player,
   });
@@ -36,7 +34,6 @@ class SpeakingChannelCoordinator extends ChangeNotifier {
   final SpeakingActionsCoordinator actions;
   final SpeakingTaskController task;
   final ReadingTaskController readingTask;
-  final RealtimeConversationController realtimeConversation;
   final LearningController learning;
   final PlayerController player;
 
@@ -70,7 +67,6 @@ class SpeakingChannelCoordinator extends ChangeNotifier {
 
   ReadingTaskSource? _l1CheckSource;
   int _l1PlayCount = 0;
-  bool _realtimeConversationOpen = false;
 
   /// Which personal-expression pattern this speaking session serves, so
   /// closing the surface can file the 3.17 handoff attempt. Assigned by the
@@ -79,7 +75,6 @@ class SpeakingChannelCoordinator extends ChangeNotifier {
 
   ReadingTaskSource? get l1CheckSource => _l1CheckSource;
   int get l1PlayCount => _l1PlayCount;
-  bool get realtimeConversationOpen => _realtimeConversationOpen;
   bool get isOpen => actions.isOpen;
 
   bool get _mounted => _isMounted?.call() ?? true;
@@ -132,21 +127,6 @@ class SpeakingChannelCoordinator extends ChangeNotifier {
     unawaited(actions.playSource());
   }
 
-  void openRealtimeConversation() {
-    final state = task.state;
-    if (state.source == null || state.asrModelId == null) return;
-    _realtimeConversationOpen = true;
-    notifyListeners();
-  }
-
-  Future<void> closeRealtimeConversation() async {
-    if (!_realtimeConversationOpen) return;
-    await realtimeConversation.cancel();
-    if (!_mounted) return;
-    _realtimeConversationOpen = false;
-    notifyListeners();
-  }
-
   /// Leaves the speaking channel. A personal-expression session files its
   /// one-shot self-assessment first (issue #9 removed the rubric assessment,
   /// but the 3.17 handoff fact still needs one), then the learner is returned
@@ -158,6 +138,7 @@ class SpeakingChannelCoordinator extends ChangeNotifier {
     final personalState = task.state;
     if (personalPattern != null &&
         personalState.phase == 'done' &&
+        personalState.attempt != null &&
         personalState.recording != null &&
         personalState.correctedTranscript.trim().isNotEmpty) {
       final assessment =
@@ -171,6 +152,7 @@ class SpeakingChannelCoordinator extends ChangeNotifier {
           responseText: personalState.correctedTranscript.trim(),
           rawTranscript: personalState.rawTranscript,
           recordingAssetId: personalState.recording!.id,
+          semanticAttemptId: personalState.attempt!.id,
           selfAssessment: assessment,
         );
       } catch (error) {

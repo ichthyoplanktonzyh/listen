@@ -113,10 +113,12 @@ void main() {
         responseText: 'I ended up shipping it.',
         rawTranscript: 'raw words',
         recordingAssetId: 'recording-1',
+        semanticAttemptId: 'semantic-attempt-1',
         selfAssessment: 'partly_expressed',
       );
       expect(bodies[0]['recording_asset_id'], isNull);
       expect(bodies[1]['recording_asset_id'], 'recording-1');
+      expect(bodies[1]['semantic_attempt_id'], 'semantic-attempt-1');
       expect(bodies.map((body) => body['channel']), ['writing', 'speaking']);
     },
   );

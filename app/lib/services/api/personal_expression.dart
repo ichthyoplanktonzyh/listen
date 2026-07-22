@@ -110,6 +110,7 @@ extension PersonalExpressionApi on LocalApi {
     required String responseText,
     String? rawTranscript,
     String? recordingAssetId,
+    String? semanticAttemptId,
     required String selfAssessment,
     String? contextNote,
   }) async => PersonalExpressionAttemptView.fromJson(
@@ -123,6 +124,7 @@ extension PersonalExpressionApi on LocalApi {
             'response_text': responseText,
             'raw_transcript': rawTranscript,
             'recording_asset_id': recordingAssetId,
+            'semantic_attempt_id': semanticAttemptId,
             'self_assessment': selfAssessment,
             'context_note': contextNote,
           },

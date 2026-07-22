@@ -28,7 +28,6 @@ class SpeakingTaskStudio extends StatelessWidget {
     required this.onPlayRecording,
     required this.onAcquireRecordingFocus,
     required this.onOpenL1Check,
-    required this.onOpenRealtimeConversation,
     this.targetCandidates = const [],
     required this.onClose,
   });
@@ -39,7 +38,6 @@ class SpeakingTaskStudio extends StatelessWidget {
   final Future<void> Function() onPlayRecording;
   final Future<void> Function() onAcquireRecordingFocus;
   final Future<void> Function() onOpenL1Check;
-  final VoidCallback onOpenRealtimeConversation;
   final List<SpeakingTargetCandidate> targetCandidates;
   final Future<void> Function() onClose;
 
@@ -203,14 +201,6 @@ class SpeakingTaskStudio extends StatelessWidget {
                     ),
               icon: const Icon(Icons.mic),
               label: Text(l.text('speakingStartRecording')),
-            ),
-            OutlinedButton.icon(
-              key: const ValueKey('speaking-open-realtime'),
-              onPressed: state.busy || state.asrModelId == null
-                  ? null
-                  : onOpenRealtimeConversation,
-              icon: const Icon(Icons.forum_outlined),
-              label: const Text('Realtime conversation'),
             ),
           ],
         ),

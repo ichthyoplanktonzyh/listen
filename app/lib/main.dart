@@ -50,6 +50,7 @@ import 'controllers/settings_controller.dart';
 import 'controllers/slice_player_controller.dart';
 import 'models/capability_readiness.dart';
 import 'models/content_channel.dart';
+import 'models/content_activity.dart';
 import 'models/practice.dart';
 import 'models/personal_expression.dart';
 import 'models/task_status.dart';
@@ -62,6 +63,7 @@ import 'widgets/panels/realtime_conversation_panel.dart';
 import 'widgets/player/download_status_bar.dart';
 import 'widgets/app_bar/player_app_bar.dart';
 import 'widgets/flows/learning_flows.dart';
+import 'widgets/flows/content_speaking_activity_dialog.dart';
 import 'widgets/flows/reading_flows.dart';
 import 'widgets/flows/speaking_flows.dart';
 import 'widgets/flows/writing_flows.dart';
@@ -254,7 +256,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     actions: speakingActions,
     task: speakingTaskController,
     readingTask: readingTaskController,
-    realtimeConversation: realtimeConversationController,
     learning: learningController,
     player: playerController,
   );
@@ -417,11 +418,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     contentChannels.bind(
       getApi: () => api,
       speakingAvailable: () => Platform.isMacOS,
-      openSpeaking: (service) => speakingActions.openRetelling(
-        service,
-        fixedRubricPoints: listeningRetellTemplate(l),
-        closeReading: readingChannel.close,
-      ),
+      openSpeaking: _openContentSpeakingActivity,
       openWriting: () => writingChannel.openTask(
         writingChannel.kind,
         promptSnapshot: writingPrompt(l, writingChannel.kind),
@@ -869,12 +866,36 @@ class _PlayerScreenState extends State<PlayerScreen>
     api: api,
   );
 
-  Future<void> _openFreeConversation() async {
+  Future<void> _openContentSpeakingActivity(LocalApi service) async {
+    final activity = await showContentSpeakingActivityDialog(context);
+    if (!mounted || activity == null) return;
+    switch (activity) {
+      case ContentSpeakingActivity.retelling:
+        await speakingActions.openRetelling(
+          service,
+          fixedRubricPoints: listeningRetellTemplate(l),
+          closeReading: readingChannel.close,
+        );
+      case ContentSpeakingActivity.shadowing:
+        await practiceActions.startShadowingPractice();
+      case ContentSpeakingActivity.conversation:
+        final selection = speakingActions.selectCurrentSegment();
+        if (selection != null) await _openRealtimeConversation(selection);
+    }
+  }
+
+  Future<void> _openFreeConversation() => _openRealtimeConversation();
+
+  Future<void> _openRealtimeConversation([
+    ContentSegmentSelection? selection,
+  ]) async {
     final service = api;
     if (service == null || !Platform.isMacOS) return;
-    final language = settingsController.resolveLearningLanguage(
-      subtitleController.primaryTrack?.language,
-    );
+    final language =
+        selection?.language ??
+        settingsController.resolveLearningLanguage(
+          subtitleController.primaryTrack?.language,
+        );
     final models = await service.transcriptionModels();
     final installed = models.where(
       (model) => model.state == 'installed' || model.state == 'custom',
@@ -905,10 +926,21 @@ class _PlayerScreenState extends State<PlayerScreen>
         builder: (routeContext) => RealtimeConversationPanel(
           controller: realtimeConversationController,
           api: service,
-          launch: RealtimeConversationLaunch.free(
-            language: language,
-            modelId: model.id,
-          ),
+          launch: selection == null
+              ? RealtimeConversationLaunch.free(
+                  language: language,
+                  modelId: model.id,
+                )
+              : RealtimeConversationLaunch.topic(
+                  anchor: RealtimeConversationAnchor(
+                    language: selection.language,
+                    text: selection.transcriptSnapshot,
+                    mediaId: selection.mediaId,
+                    startMs: selection.startMs,
+                    endMs: selection.endMs,
+                  ),
+                  modelId: model.id,
+                ),
           acquireAudioFocus: speakingActions.acquireRecordingFocus,
           onClose: () => Navigator.pop(routeContext),
         ),
@@ -1782,8 +1814,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                                             speakingTaskController,
                                         readingTaskController:
                                             readingTaskController,
-                                        realtimeConversationController:
-                                            realtimeConversationController,
                                       ),
                                     ContentChannel.reading =>
                                       ReadingChannelHost(

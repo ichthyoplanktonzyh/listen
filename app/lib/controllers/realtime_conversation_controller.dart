@@ -9,7 +9,7 @@ import '../models/realtime_conversation.dart';
 import '../services/api_service.dart';
 import '../services/realtime_audio_bridge.dart';
 import '../services/shadowing_recorder.dart';
-import 'speaking_task_controller.dart';
+import 'realtime_turn_assembler.dart';
 
 abstract interface class RealtimeConnection {
   Stream<Object?> get messages;
@@ -53,17 +53,17 @@ class RealtimeConversationLaunch {
     required this.mode,
     required this.language,
     required this.modelId,
-    this.source,
+    this.anchor,
   });
 
   factory RealtimeConversationLaunch.topic({
-    required SpeakingTaskSource source,
+    required RealtimeConversationAnchor anchor,
     required String modelId,
   }) => RealtimeConversationLaunch(
     mode: RealtimeConversationMode.topicAnchored,
-    language: source.language,
+    language: anchor.language,
     modelId: modelId,
-    source: source,
+    anchor: anchor,
   );
 
   factory RealtimeConversationLaunch.free({
@@ -78,12 +78,52 @@ class RealtimeConversationLaunch {
   final RealtimeConversationMode mode;
   final String language;
   final String modelId;
-  final SpeakingTaskSource? source;
+  final RealtimeConversationAnchor? anchor;
+}
+
+/// Explicit bounded context for a topic-anchored conversation.
+///
+/// This type deliberately belongs to Realtime rather than Speaking: selecting
+/// content may launch either a retelling task or a conversation, but neither
+/// activity owns the other's prompt type.
+class RealtimeConversationAnchor {
+  const RealtimeConversationAnchor({
+    required this.language,
+    required this.text,
+    this.mediaId,
+    this.startMs = 0,
+    this.endMs = 0,
+  });
+
+  final String language;
+  final String text;
+  final String? mediaId;
+  final int startMs;
+  final int endMs;
+}
+
+enum RealtimeConversationPhase {
+  idle,
+  connecting,
+  live,
+  draining,
+  postProcessing,
+  done,
+  failed,
+}
+
+enum RealtimeConversationActivity {
+  inactive,
+  listening,
+  learnerSpeaking,
+  thinking,
+  assistantSpeaking,
 }
 
 class RealtimeConversationState {
   const RealtimeConversationState({
-    this.phase = 'idle',
+    this.phase = RealtimeConversationPhase.idle,
+    this.activity = RealtimeConversationActivity.inactive,
     this.profiles = const [],
     this.selectedProfileId,
     this.mode = RealtimeConversationMode.topicAnchored,
@@ -97,7 +137,8 @@ class RealtimeConversationState {
     this.error,
   });
 
-  final String phase;
+  final RealtimeConversationPhase phase;
+  final RealtimeConversationActivity activity;
   final List<RealtimeProviderProfileView> profiles;
   final String? selectedProfileId;
   final RealtimeConversationMode mode;
@@ -109,6 +150,20 @@ class RealtimeConversationState {
   final bool historyLoading;
   final String? historyError;
   final String? error;
+
+  bool get canConfigure =>
+      phase == RealtimeConversationPhase.idle ||
+      phase == RealtimeConversationPhase.done ||
+      phase == RealtimeConversationPhase.failed;
+
+  bool get canCancel =>
+      phase == RealtimeConversationPhase.connecting ||
+      phase == RealtimeConversationPhase.live;
+
+  bool get isWorking =>
+      phase == RealtimeConversationPhase.connecting ||
+      phase == RealtimeConversationPhase.draining ||
+      phase == RealtimeConversationPhase.postProcessing;
 
   String get providerTranscript => items
       .where((item) => item.role == 'learner')
@@ -129,7 +184,8 @@ class RealtimeConversationState {
       .join('\n');
 
   RealtimeConversationState copyWith({
-    String? phase,
+    RealtimeConversationPhase? phase,
+    RealtimeConversationActivity? activity,
     List<RealtimeProviderProfileView>? profiles,
     Object? selectedProfileId = _unset,
     RealtimeConversationMode? mode,
@@ -143,6 +199,7 @@ class RealtimeConversationState {
     Object? error = _unset,
   }) => RealtimeConversationState(
     phase: phase ?? this.phase,
+    activity: activity ?? this.activity,
     profiles: profiles ?? this.profiles,
     selectedProfileId: identical(selectedProfileId, _unset)
         ? this.selectedProfileId
@@ -192,11 +249,9 @@ class RealtimeConversationController extends ChangeNotifier {
   RealtimeConversationLaunch? _launch;
   Completer<void>? _responseDone;
   bool _providerResponseActive = false;
-  int _nextSequence = 1;
-  int? _activeLearnerSequence;
-  int? _activeAssistantSequence;
-  final Map<String, int> _providerItemSequences = {};
+  final RealtimeTurnAssembler _turns = RealtimeTurnAssembler();
   final List<Future<void>> _postProcessing = [];
+  final Map<int, String> _recordingAssetIds = {};
 
   Future<void> loadProfiles(LocalApi api) async {
     try {
@@ -322,7 +377,7 @@ class RealtimeConversationController extends ChangeNotifier {
       return;
     }
     if (launch.mode == RealtimeConversationMode.topicAnchored &&
-        launch.source == null) {
+        launch.anchor == null) {
       state = state.copyWith(error: 'Choose a topic before starting.');
       notifyListeners();
       return;
@@ -330,7 +385,8 @@ class RealtimeConversationController extends ChangeNotifier {
     final generation = ++_generation;
     _resetConversationState();
     state = state.copyWith(
-      phase: 'connecting',
+      phase: RealtimeConversationPhase.connecting,
+      activity: RealtimeConversationActivity.inactive,
       mode: launch.mode,
       items: const [],
       postProcessingCount: 0,
@@ -368,7 +424,8 @@ class RealtimeConversationController extends ChangeNotifier {
           unawaited(_failAndCleanup('Realtime connection failed: $error'));
         },
         onDone: () {
-          if (state.phase == 'live' || state.phase == 'draining') {
+          if (state.phase == RealtimeConversationPhase.live ||
+              state.phase == RealtimeConversationPhase.draining) {
             unawaited(_failAndCleanup('Realtime provider disconnected.'));
           }
         },
@@ -391,12 +448,16 @@ class RealtimeConversationController extends ChangeNotifier {
           startedAtMs: now,
         ),
       );
-      state = state.copyWith(phase: 'live');
+      state = state.copyWith(
+        phase: RealtimeConversationPhase.live,
+        activity: RealtimeConversationActivity.listening,
+      );
       notifyListeners();
     } catch (error) {
       await _cleanup(discard: true);
       state = state.copyWith(
-        phase: 'failed',
+        phase: RealtimeConversationPhase.failed,
+        activity: RealtimeConversationActivity.inactive,
         error: 'Could not start realtime conversation: $error',
       );
       notifyListeners();
@@ -404,11 +465,11 @@ class RealtimeConversationController extends ChangeNotifier {
   }
 
   String _instructions(RealtimeConversationLaunch launch) {
-    final source = launch.source;
-    if (launch.mode == RealtimeConversationMode.free || source == null) {
+    final anchor = launch.anchor;
+    if (launch.mode == RealtimeConversationMode.free || anchor == null) {
       return 'Have a natural spoken conversation with the learner. Keep replies concise and invite genuine back-and-forth.';
     }
-    return 'Discuss the selected topic naturally. Do not merely recite it. Selected topic: ${source.transcriptSnapshot}';
+    return 'Discuss the selected topic naturally. Do not merely recite it. Selected topic: ${anchor.text}';
   }
 
   void _onConnectionMessage(Object? message) {
@@ -421,6 +482,9 @@ class RealtimeConversationController extends ChangeNotifier {
       final value = jsonDecode(message) as Map<String, dynamic>;
       switch (value['type']) {
         case 'speech_started':
+          state = state.copyWith(
+            activity: RealtimeConversationActivity.learnerSpeaking,
+          );
           unawaited(
             _startLearnerTurn(
               value['provider_item_id'] as String?,
@@ -428,6 +492,9 @@ class RealtimeConversationController extends ChangeNotifier {
             ),
           );
         case 'speech_stopped':
+          state = state.copyWith(
+            activity: RealtimeConversationActivity.thinking,
+          );
           _providerResponseActive = true;
           _responseDone = Completer<void>();
           unawaited(_stopLearnerTurn(value['provider_item_id'] as String?));
@@ -444,6 +511,9 @@ class RealtimeConversationController extends ChangeNotifier {
             value['transcript'] as String? ?? '',
           );
         case 'assistant_transcript_delta':
+          state = state.copyWith(
+            activity: RealtimeConversationActivity.assistantSpeaking,
+          );
           _updateAssistantText(
             value['provider_item_id'] as String?,
             value['delta'] as String? ?? '',
@@ -458,6 +528,9 @@ class RealtimeConversationController extends ChangeNotifier {
           );
         case 'response_done':
           _providerResponseActive = false;
+          state = state.copyWith(
+            activity: RealtimeConversationActivity.listening,
+          );
           if (_responseDone?.isCompleted == false) _responseDone!.complete();
         case 'provider_error' || 'connection_failed':
           unawaited(_failAndCleanup(value['error'].toString()));
@@ -472,23 +545,28 @@ class RealtimeConversationController extends ChangeNotifier {
     String? providerItemId,
     int? audioStartMs,
   ) async {
-    if (state.phase != 'live' || _activeLearnerSequence != null) return;
+    if (state.phase != RealtimeConversationPhase.live) return;
     await _audio.stopPlayback();
     if (_connection?.isOpen == true) _connection!.send('cancel');
-    final sequence = _nextSequence++;
-    _activeLearnerSequence = sequence;
-    if (providerItemId != null) {
-      _providerItemSequences[providerItemId] = sequence;
-    }
-    _appendItem(
-      RealtimeConversationItem(
-        sequence: sequence,
-        role: 'learner',
-        status: 'streaming',
-        startedAtMs: _nowMs(),
-        providerItemId: providerItemId,
-      ),
+    final interruptedAssistant = _turns.interruptAssistant(_nowMs());
+    final interruptedItem = interruptedAssistant == null
+        ? null
+        : _item(interruptedAssistant);
+    _syncItems();
+    final sequence = _turns.startLearner(
+      startedAtMs: _nowMs(),
+      providerItemId: providerItemId,
     );
+    _syncItems();
+    if (sequence == null) return;
+    if (interruptedItem != null) {
+      unawaited(
+        _persistInterruptedItem(
+          interruptedItem,
+          failureKind: 'learner_barge_in',
+        ),
+      );
+    }
     try {
       await _audio.beginTurn(
         '${_sessionId ?? 'realtime'}-learner-$sequence',
@@ -499,16 +577,15 @@ class RealtimeConversationController extends ChangeNotifier {
         sequence,
         (item) => item.copyWith(status: 'failed', error: '$error'),
       );
-      _activeLearnerSequence = null;
+      _turns.activeLearnerSequence = null;
     }
     notifyListeners();
   }
 
   Future<void> _stopLearnerTurn(String? providerItemId) async {
-    final sequence = _activeLearnerSequence;
+    final sequence = _turns.closeLearnerCorrelation(providerItemId);
     if (sequence == null) return;
-    _correlate(sequence, providerItemId);
-    _activeLearnerSequence = null;
+    _syncItems();
     try {
       final captured = await _audio.endTurn();
       final endedAt = _nowMs();
@@ -519,7 +596,8 @@ class RealtimeConversationController extends ChangeNotifier {
           endedAtMs: endedAt,
         ),
       );
-      final work = _processLearnerTurn(sequence, captured, endedAt);
+      final generation = _generation;
+      final work = _processLearnerTurn(sequence, captured, endedAt, generation);
       _postProcessing.add(work);
       state = state.copyWith(
         postProcessingCount: state.postProcessingCount + 1,
@@ -527,6 +605,7 @@ class RealtimeConversationController extends ChangeNotifier {
       unawaited(
         work.whenComplete(() {
           _postProcessing.remove(work);
+          if (generation != _generation) return;
           state = state.copyWith(
             postProcessingCount: state.postProcessingCount > 0
                 ? state.postProcessingCount - 1
@@ -552,6 +631,7 @@ class RealtimeConversationController extends ChangeNotifier {
     int sequence,
     CapturedRecording captured,
     int endedAt,
+    int generation,
   ) async {
     final api = _activeApi;
     final launch = _launch;
@@ -559,7 +639,7 @@ class RealtimeConversationController extends ChangeNotifier {
     if (api == null || launch == null || sessionId == null) return;
     RecordingAsset? asset;
     try {
-      final source = launch.source;
+      final anchor = launch.anchor;
       asset = await api.createRecordingAsset(
         CreateRecordingAsset(
           filePath: captured.path,
@@ -568,18 +648,18 @@ class RealtimeConversationController extends ChangeNotifier {
             // Recording targets describe the captured media span. Realtime
             // turn identity is stored separately on the conversation turn.
             kind: 'segment',
-            startMs: source?.startMs ?? 0,
-            endMs: source?.endMs ?? 0,
+            startMs: anchor?.startMs ?? 0,
+            endMs: anchor?.endMs ?? 0,
           ),
           sourceSegment: PlayableSegment(
-            mediaId: source?.mediaId,
-            startMs: source?.startMs ?? 0,
-            endMs: source?.endMs ?? 0,
+            mediaId: anchor?.mediaId,
+            startMs: anchor?.startMs ?? 0,
+            endMs: anchor?.endMs ?? 0,
             label: launch.mode == RealtimeConversationMode.free
                 ? 'free realtime conversation'
                 : 'realtime conversation topic',
-            subtitleSnapshot: source?.transcriptSnapshot ?? '',
-            availability: source?.mediaId == null
+            subtitleSnapshot: anchor?.text ?? '',
+            availability: anchor?.mediaId == null
                 ? 'missing_media'
                 : 'available',
           ),
@@ -596,6 +676,13 @@ class RealtimeConversationController extends ChangeNotifier {
           recorderVersion: 'macos-avfoundation-realtime-turn-preroll-v2',
         ),
       );
+      if (generation != _generation) {
+        try {
+          await api.deleteRecordingAsset(asset.id);
+        } catch (_) {}
+        return;
+      }
+      _recordingAssetIds[sequence] = asset.id;
       await api.saveRealtimeTurn(
         _learnerTurnJson(
           sequence,
@@ -605,6 +692,7 @@ class RealtimeConversationController extends ChangeNotifier {
           endedAt: endedAt,
         ),
       );
+      if (generation != _generation) return;
       var job = await api.createRecordingTranscription(
         recordingId: asset.id,
         modelId: launch.modelId,
@@ -612,10 +700,13 @@ class RealtimeConversationController extends ChangeNotifier {
       );
       while (job.status != 'completed' &&
           job.status != 'failed' &&
-          job.status != 'cancelled') {
+          job.status != 'cancelled' &&
+          generation == _generation) {
         await _delay(const Duration(milliseconds: 150));
+        if (generation != _generation) return;
         job = await api.recordingTranscriptionJob(job.id);
       }
+      if (generation != _generation) return;
       final local = job.status == 'completed'
           ? (job.rawTranscript?.trim() ?? '')
           : '';
@@ -659,6 +750,7 @@ class RealtimeConversationController extends ChangeNotifier {
         (item) => item.copyWith(status: 'finalized', localText: local),
       );
     } catch (error) {
+      if (generation != _generation) return;
       if (asset != null) {
         try {
           await api.saveRealtimeTurn(
@@ -727,14 +819,8 @@ class RealtimeConversationController extends ChangeNotifier {
   }
 
   void _updateLearnerProviderText(String? providerItemId, String text) {
-    final sequence = _sequenceFor(
-      providerItemId,
-      role: 'learner',
-      fallback: _activeLearnerSequence,
-    );
-    if (sequence == null) return;
-    _correlate(sequence, providerItemId);
-    _replaceItem(sequence, (item) => item.copyWith(providerText: text));
+    _turns.updateLearnerProviderText(providerItemId, text);
+    _syncItems();
   }
 
   void _updateAssistantText(
@@ -742,63 +828,29 @@ class RealtimeConversationController extends ChangeNotifier {
     String text, {
     required bool append,
   }) {
-    var sequence = _sequenceFor(
+    _turns.updateAssistantText(
       providerItemId,
-      role: 'assistant',
-      fallback: _activeAssistantSequence,
+      text,
+      append: append,
+      startedAtMs: _nowMs(),
     );
-    if (sequence == null) {
-      sequence = _nextSequence++;
-      _activeAssistantSequence = sequence;
-      if (providerItemId != null) {
-        _providerItemSequences[providerItemId] = sequence;
-      }
-      _appendItem(
-        RealtimeConversationItem(
-          sequence: sequence,
-          role: 'assistant',
-          status: 'streaming',
-          startedAtMs: _nowMs(),
-          providerItemId: providerItemId,
-        ),
-      );
-    }
-    _correlate(sequence, providerItemId);
-    _replaceItem(
-      sequence,
-      (item) =>
-          item.copyWith(providerText: append ? item.providerText + text : text),
-    );
+    _syncItems();
   }
 
   Future<void> _finalizeAssistantTurn(
     String? providerItemId,
     String transcript,
   ) async {
-    final existingSequence = _sequenceFor(
+    final endedAt = _nowMs();
+    final sequence = _turns.finalizeAssistant(
       providerItemId,
-      role: 'assistant',
-      fallback: _activeAssistantSequence,
+      transcript,
+      endedAt,
     );
-    if (existingSequence != null &&
-        _item(existingSequence).status == 'finalized') {
-      return;
-    }
-    _updateAssistantText(providerItemId, transcript, append: false);
-    final sequence = _sequenceFor(
-      providerItemId,
-      role: 'assistant',
-      fallback: _activeAssistantSequence,
-    );
+    _syncItems();
     final api = _activeApi;
     final sessionId = _sessionId;
     if (sequence == null || api == null || sessionId == null) return;
-    final endedAt = _nowMs();
-    _replaceItem(
-      sequence,
-      (item) => item.copyWith(status: 'finalized', endedAtMs: endedAt),
-    );
-    _activeAssistantSequence = null;
     final item = _item(sequence);
     try {
       await api.saveRealtimeTurn({
@@ -836,11 +888,19 @@ class RealtimeConversationController extends ChangeNotifier {
   Future<void> finish() async {
     final api = _activeApi;
     final launch = _launch;
-    if (state.phase != 'live' || api == null || launch == null) return;
-    state = state.copyWith(phase: 'draining', error: null);
+    if (state.phase != RealtimeConversationPhase.live ||
+        api == null ||
+        launch == null) {
+      return;
+    }
+    state = state.copyWith(
+      phase: RealtimeConversationPhase.draining,
+      activity: RealtimeConversationActivity.inactive,
+      error: null,
+    );
     notifyListeners();
     try {
-      if (_activeLearnerSequence != null) {
+      if (_turns.activeLearnerSequence != null) {
         await _stopLearnerTurn(null);
       }
       await _audioSubscription?.cancel();
@@ -849,18 +909,39 @@ class RealtimeConversationController extends ChangeNotifier {
       try {
         await File(sessionRecording.path).delete();
       } catch (_) {}
+      var providerDrained = true;
       if (_providerResponseActive && _responseDone != null) {
-        await _responseDone!.future.timeout(
-          const Duration(seconds: 15),
-          onTimeout: () {},
-        );
+        providerDrained = await _responseDone!.future
+            .then((_) => true)
+            .timeout(const Duration(seconds: 15), onTimeout: () => false);
+      }
+      final activeAssistant = _turns.activeAssistantSequence;
+      if (activeAssistant != null) {
+        final item = _item(activeAssistant);
+        if (providerDrained && item.providerText.trim().isNotEmpty) {
+          await _finalizeAssistantTurn(item.providerItemId, item.providerText);
+        } else {
+          final sequence = _turns.interruptAssistant(_nowMs());
+          _syncItems();
+          if (sequence != null) {
+            await _persistInterruptedItem(
+              _item(sequence),
+              failureKind: providerDrained
+                  ? 'assistant_response_incomplete'
+                  : 'provider_drain_timeout',
+            );
+          }
+        }
       }
       await _connectionSubscription?.cancel();
       _connectionSubscription = null;
       await _connection?.close();
       _connection = null;
       await _audio.shutdown();
-      state = state.copyWith(phase: 'post_processing');
+      state = state.copyWith(
+        phase: RealtimeConversationPhase.postProcessing,
+        activity: RealtimeConversationActivity.inactive,
+      );
       notifyListeners();
       while (_postProcessing.isNotEmpty) {
         await Future.wait(List<Future<void>>.from(_postProcessing));
@@ -871,7 +952,7 @@ class RealtimeConversationController extends ChangeNotifier {
         failureKind: null,
         endedAtMs: endedAt,
       );
-      state = state.copyWith(phase: 'done');
+      state = state.copyWith(phase: RealtimeConversationPhase.done);
       await loadHistory(api);
     } catch (error) {
       await _persistTerminalSession(
@@ -880,7 +961,8 @@ class RealtimeConversationController extends ChangeNotifier {
         endedAtMs: _nowMs(),
       );
       state = state.copyWith(
-        phase: 'failed',
+        phase: RealtimeConversationPhase.failed,
+        activity: RealtimeConversationActivity.inactive,
         error: 'Could not finish realtime conversation: $error',
       );
     }
@@ -889,14 +971,41 @@ class RealtimeConversationController extends ChangeNotifier {
 
   Future<void> cancel() async {
     ++_generation;
-    if (_activeLearnerSequence != null) {
+    final activeLearner = _turns.activeLearnerSequence;
+    if (activeLearner != null) {
       await _audio.discardTurn();
-      final sequence = _activeLearnerSequence!;
       _replaceItem(
-        sequence,
+        activeLearner,
         (item) => item.copyWith(status: 'interrupted', endedAtMs: _nowMs()),
       );
-      _activeLearnerSequence = null;
+      _turns.activeLearnerSequence = null;
+    }
+    final activeAssistant = _turns.interruptAssistant(_nowMs());
+    _syncItems();
+    final unfinished = state.items.where(
+      (item) =>
+          item.status == 'streaming' ||
+          item.status == 'local_transcription_pending',
+    );
+    for (final item in unfinished.toList(growable: false)) {
+      _replaceItem(
+        item.sequence,
+        (current) => current.copyWith(
+          status: 'interrupted',
+          endedAtMs: current.endedAtMs ?? _nowMs(),
+        ),
+      );
+    }
+    final interruptedSequences = <int>{
+      ?activeLearner,
+      ?activeAssistant,
+      ...unfinished.map((item) => item.sequence),
+    };
+    for (final sequence in interruptedSequences) {
+      await _persistInterruptedItem(
+        _item(sequence),
+        failureKind: 'user_cancelled',
+      );
     }
     await _cleanup(discard: true);
     await _persistTerminalSession(
@@ -904,8 +1013,54 @@ class RealtimeConversationController extends ChangeNotifier {
       failureKind: 'user_cancelled',
       endedAtMs: _nowMs(),
     );
-    state = state.copyWith(phase: 'idle', error: null);
+    state = state.copyWith(
+      phase: RealtimeConversationPhase.idle,
+      activity: RealtimeConversationActivity.inactive,
+      error: null,
+    );
     notifyListeners();
+  }
+
+  Future<void> _persistInterruptedItem(
+    RealtimeConversationItem item, {
+    required String failureKind,
+  }) async {
+    final api = _activeApi;
+    final sessionId = _sessionId;
+    if (api == null || sessionId == null) return;
+    final endedAt = item.endedAtMs ?? _nowMs();
+    try {
+      await api.saveRealtimeTurn({
+        'id': '$sessionId-${item.role}-${item.sequence}',
+        'session_id': sessionId,
+        'sequence': item.sequence,
+        'role': item.role,
+        'status': 'interrupted',
+        'assistance':
+            item.role == 'learner' &&
+                state.mode == RealtimeConversationMode.topicAnchored
+            ? 'content_anchored'
+            : 'unknown',
+        'provider_transcript': item.providerText.isEmpty
+            ? null
+            : {
+                'text': item.providerText,
+                'provider_item_id': item.providerItemId,
+                'received_at_ms': endedAt,
+              },
+        'local_transcript': null,
+        'recording_asset_id': _recordingAssetIds[item.sequence],
+        'started_at_ms': item.startedAtMs,
+        'ended_at_ms': endedAt,
+        'failure_kind': failureKind,
+      });
+    } catch (error) {
+      _replaceItem(
+        item.sequence,
+        (current) =>
+            current.copyWith(error: 'Could not save interrupted turn: $error'),
+      );
+    }
   }
 
   Map<String, dynamic> _sessionJson({
@@ -916,7 +1071,7 @@ class RealtimeConversationController extends ChangeNotifier {
     int? endedAtMs,
     String? failureKind,
   }) {
-    final source = launch.source;
+    final anchor = launch.anchor;
     return {
       'id': _sessionId,
       'profile_id': profileId,
@@ -925,13 +1080,13 @@ class RealtimeConversationController extends ChangeNotifier {
         'surface_kind': launch.mode == RealtimeConversationMode.free
             ? 'open_chat'
             : 'topic_anchored',
-        'content_anchor': source?.mediaId == null
+        'content_anchor': anchor?.mediaId == null
             ? null
             : {
-                'media_id': source!.mediaId,
-                'start_ms': source.startMs,
-                'end_ms': source.endMs,
-                'source_text': source.transcriptSnapshot,
+                'media_id': anchor!.mediaId,
+                'start_ms': anchor.startMs,
+                'end_ms': anchor.endMs,
+                'source_text': anchor.text,
               },
       },
       'status': status,
@@ -993,69 +1148,39 @@ class RealtimeConversationController extends ChangeNotifier {
       failureKind: 'provider_connection_failed',
       endedAtMs: _nowMs(),
     );
-    state = state.copyWith(phase: 'failed', error: message);
+    state = state.copyWith(
+      phase: RealtimeConversationPhase.failed,
+      activity: RealtimeConversationActivity.inactive,
+      error: message,
+    );
     notifyListeners();
   }
 
   void _correlateActiveLearner(String? providerItemId) {
-    final sequence = _activeLearnerSequence;
-    if (sequence != null) _correlate(sequence, providerItemId);
-  }
-
-  void _correlate(int sequence, String? providerItemId) {
-    if (providerItemId == null) return;
-    _providerItemSequences[providerItemId] = sequence;
-    _replaceItem(
-      sequence,
-      (item) => item.copyWith(providerItemId: providerItemId),
-    );
-  }
-
-  int? _sequenceFor(
-    String? providerItemId, {
-    required String role,
-    int? fallback,
-  }) {
-    final correlated = providerItemId == null
-        ? null
-        : _providerItemSequences[providerItemId];
-    if (correlated != null && _item(correlated).role == role) return correlated;
-    if (fallback != null && _item(fallback).role == role) return fallback;
-    for (final item in state.items.reversed) {
-      if (item.role == role && item.status != 'finalized') return item.sequence;
-    }
-    return null;
-  }
-
-  void _appendItem(RealtimeConversationItem item) {
-    state = state.copyWith(
-      items: [...state.items, item]
-        ..sort((a, b) => a.sequence.compareTo(b.sequence)),
-    );
+    _turns.correlateActiveLearner(providerItemId);
+    _syncItems();
   }
 
   void _replaceItem(
     int sequence,
     RealtimeConversationItem Function(RealtimeConversationItem) update,
   ) {
-    state = state.copyWith(
-      items: state.items
-          .map((item) => item.sequence == sequence ? update(item) : item)
-          .toList(growable: false),
-    );
+    _turns.replace(sequence, update);
+    _syncItems();
   }
 
-  RealtimeConversationItem _item(int sequence) =>
-      state.items.firstWhere((item) => item.sequence == sequence);
+  RealtimeConversationItem _item(int sequence) => _turns.item(sequence);
+
+  void _syncItems() {
+    state = state.copyWith(items: _turns.items);
+  }
 
   void _resetConversationState() {
-    _nextSequence = 1;
+    _turns.reset();
     _providerResponseActive = false;
     _responseDone = null;
-    _activeLearnerSequence = null;
-    _activeAssistantSequence = null;
-    _providerItemSequences.clear();
     _postProcessing.clear();
+    _recordingAssetIds.clear();
   }
 
   @override

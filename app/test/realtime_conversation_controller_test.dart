@@ -85,8 +85,9 @@ void main() {
         expect(harness.audio.beginTurnCount, 2);
         expect(harness.audio.endTurnCount, 2);
         expect(
-          harness.recordingRequests
-              .map((request) => (request['target'] as Map<String, dynamic>)['kind']),
+          harness.recordingRequests.map(
+            (request) => (request['target'] as Map<String, dynamic>)['kind'],
+          ),
           everyElement('segment'),
         );
       },
@@ -147,22 +148,25 @@ void main() {
       );
     });
 
-    test('preserves provider speech onset when beginning local capture', () async {
-      final harness = _Harness(transcripts: const []);
-      await harness.start();
+    test(
+      'preserves provider speech onset when beginning local capture',
+      () async {
+        final harness = _Harness(transcripts: const []);
+        await harness.start();
 
-      harness.connection.emit(
-        jsonEncode({
-          'type': 'speech_started',
-          'provider_item_id': 'user-1',
-          'audio_start_ms': 3647,
-        }),
-      );
-      await _settle();
+        harness.connection.emit(
+          jsonEncode({
+            'type': 'speech_started',
+            'provider_item_id': 'user-1',
+            'audio_start_ms': 3647,
+          }),
+        );
+        await _settle();
 
-      expect(harness.audio.beginTurnAudioStartMs, [3647]);
-      await harness.controller.cancel();
-    });
+        expect(harness.audio.beginTurnAudioStartMs, [3647]);
+        await harness.controller.cancel();
+      },
+    );
 
     test('forwards every captured PCM frame to the provider socket', () async {
       final harness = _Harness(
@@ -178,6 +182,138 @@ void main() {
       expect(harness.connection.sent, contains(same(pcm)));
       await harness.controller.cancel();
     });
+
+    test('publishes voice activity separately from committed turns', () async {
+      final harness = _Harness(transcripts: const ['learner']);
+      await harness.start();
+      expect(
+        harness.controller.state.activity,
+        RealtimeConversationActivity.listening,
+      );
+
+      harness.connection.emit(_event('speech_started', 'user-1'));
+      await _settle();
+      expect(
+        harness.controller.state.activity,
+        RealtimeConversationActivity.learnerSpeaking,
+      );
+
+      harness.connection.emit(_event('speech_stopped', 'user-1'));
+      await _settle();
+      expect(
+        harness.controller.state.activity,
+        RealtimeConversationActivity.thinking,
+      );
+
+      harness.connection.emit(
+        jsonEncode({
+          'type': 'assistant_transcript_delta',
+          'provider_item_id': 'assistant-1',
+          'delta': 'Hello',
+        }),
+      );
+      await _settle();
+      expect(
+        harness.controller.state.activity,
+        RealtimeConversationActivity.assistantSpeaking,
+      );
+
+      harness.connection.emit(jsonEncode({'type': 'response_done'}));
+      await _settle();
+      expect(
+        harness.controller.state.activity,
+        RealtimeConversationActivity.listening,
+      );
+      await harness.controller.cancel();
+    });
+
+    test(
+      'barge-in interrupts and persists the active assistant item',
+      () async {
+        final harness = _Harness(transcripts: ['first learner']);
+        await harness.start();
+        await harness.learnerTurn('user-1', 'provider first');
+        harness.connection.emit(
+          jsonEncode({
+            'type': 'assistant_transcript_delta',
+            'provider_item_id': 'assistant-1',
+            'delta': 'unfinished reply',
+          }),
+        );
+        await _settle();
+
+        harness.connection.emit(_event('speech_started', 'user-2'));
+        await _settle();
+
+        final assistant = harness.controller.state.items.singleWhere(
+          (item) => item.role == 'assistant',
+        );
+        expect(assistant.status, 'interrupted');
+        expect(
+          harness.savedTurns.any(
+            (turn) =>
+                turn['role'] == 'assistant' && turn['status'] == 'interrupted',
+          ),
+          isTrue,
+        );
+        await harness.controller.cancel();
+      },
+    );
+
+    test(
+      'cancel closes an active learner without starting local ASR',
+      () async {
+        final harness = _Harness(transcripts: const []);
+        await harness.start();
+        harness.connection.emit(_event('speech_started', 'user-1'));
+        await _settle();
+
+        await harness.controller.cancel();
+
+        expect(harness.controller.state.phase, RealtimeConversationPhase.idle);
+        expect(harness.controller.state.items.single.status, 'interrupted');
+        expect(harness.recordingRequests, isEmpty);
+        expect(
+          harness.savedTurns.singleWhere(
+            (turn) => turn['role'] == 'learner',
+          )['status'],
+          'interrupted',
+        );
+        expect(harness.lastSessionStatus, 'interrupted');
+      },
+    );
+
+    test(
+      'finish flushes an assistant transcript after response done',
+      () async {
+        final harness = _Harness(transcripts: ['learner']);
+        await harness.start();
+        await harness.learnerTurn('user-1', 'provider learner');
+        harness.connection.emit(
+          jsonEncode({
+            'type': 'assistant_transcript_delta',
+            'provider_item_id': 'assistant-1',
+            'delta': 'drained reply',
+          }),
+        );
+        await _settle();
+
+        await harness.finish();
+
+        final assistant = harness.controller.state.items.singleWhere(
+          (item) => item.role == 'assistant',
+        );
+        expect(assistant.status, 'finalized');
+        expect(assistant.providerText, 'drained reply');
+        expect(
+          harness.savedTurns.any(
+            (turn) =>
+                turn['role'] == 'assistant' && turn['status'] == 'finalized',
+          ),
+          isTrue,
+        );
+      },
+    );
   });
 }
 
@@ -229,7 +365,7 @@ class _Harness {
       RealtimeConversationLaunch.free(language: 'en', modelId: 'asr-model'),
       acquireAudioFocus: () async => lifecycle.add('audio_focus'),
     );
-    expect(controller.state.phase, 'live');
+    expect(controller.state.phase, RealtimeConversationPhase.live);
   }
 
   Future<void> learnerTurn(String itemId, String providerText) async {

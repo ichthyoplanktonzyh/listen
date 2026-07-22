@@ -37,12 +37,46 @@ class RealtimeConversationPanel extends StatefulWidget {
 }
 
 class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
+  final ScrollController _scrollController = ScrollController();
+  int _timelineSignature = 0;
+
   @override
   void initState() {
     super.initState();
+    widget.controller.addListener(_followLiveTimeline);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.controller.loadProfiles(widget.api);
       widget.controller.loadHistory(widget.api);
+    });
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_followLiveTimeline);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _followLiveTimeline() {
+    final state = widget.controller.state;
+    final signature = Object.hashAll([
+      for (final item in state.items)
+        Object.hash(item.sequence, item.status, item.displayText),
+    ]);
+    if (signature == _timelineSignature) return;
+    _timelineSignature = signature;
+    final shouldFollow =
+        !_scrollController.hasClients ||
+        _scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 120;
+    if (!shouldFollow || state.phase != RealtimeConversationPhase.live) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      );
     });
   }
 
@@ -51,10 +85,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
     listenable: widget.controller,
     builder: (context, _) {
       final state = widget.controller.state;
-      final canClose =
-          state.phase == 'idle' ||
-          state.phase == 'done' ||
-          state.phase == 'failed';
+      final canClose = state.canConfigure;
       return PopScope(
         canPop: canClose,
         child: Material(
@@ -74,6 +105,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
               const Divider(height: 1),
               Expanded(
                 child: SingleChildScrollView(
+                  controller: _scrollController,
                   padding: const EdgeInsets.all(24),
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 760),
@@ -88,7 +120,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          widget.launch.source?.transcriptSnapshot ??
+                          widget.launch.anchor?.text ??
                               'Start without sending media or subtitle context.',
                         ),
                         const SizedBox(height: 20),
@@ -111,10 +143,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                                       ),
                                     )
                                     .toList(),
-                                onChanged:
-                                    state.phase == 'idle' ||
-                                        state.phase == 'done' ||
-                                        state.phase == 'failed'
+                                onChanged: state.canConfigure
                                     ? (value) {
                                         if (value != null) {
                                           widget.controller.selectProfile(
@@ -134,9 +163,24 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                           ],
                         ),
                         const SizedBox(height: 22),
+                        if (state.phase == RealtimeConversationPhase.live) ...[
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Chip(
+                              key: const ValueKey('realtime-activity'),
+                              avatar: Icon(
+                                _activityIcon(state.activity),
+                                size: 18,
+                              ),
+                              label: Text(_activityLabel(state.activity)),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
                         if (state.error != null)
                           _notice(context, state.error!, true),
-                        if (state.items.isEmpty && state.phase == 'live')
+                        if (state.items.isEmpty &&
+                            state.phase == RealtimeConversationPhase.live)
                           const Padding(
                             padding: EdgeInsets.symmetric(vertical: 20),
                             child: Text(
@@ -157,9 +201,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                         Wrap(
                           spacing: 12,
                           children: [
-                            if (state.phase == 'idle' ||
-                                state.phase == 'done' ||
-                                state.phase == 'failed')
+                            if (state.canConfigure)
                               FilledButton.icon(
                                 key: const ValueKey('realtime-start'),
                                 onPressed: state.selectedProfileId == null
@@ -173,7 +215,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                                 icon: const Icon(Icons.mic),
                                 label: const Text('Start conversation'),
                               ),
-                            if (state.phase == 'live')
+                            if (state.phase == RealtimeConversationPhase.live)
                               FilledButton.icon(
                                 key: const ValueKey('realtime-finish'),
                                 onPressed: widget.controller.finish,
@@ -182,24 +224,19 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                                   'Finish and transcribe locally',
                                 ),
                               ),
-                            if (state.phase == 'connecting' ||
-                                state.phase == 'live')
+                            if (state.canCancel)
                               TextButton(
                                 onPressed: widget.controller.cancel,
                                 child: const Text('Cancel and discard'),
                               ),
-                            if (state.phase == 'connecting' ||
-                                state.phase == 'draining' ||
-                                state.phase == 'post_processing')
+                            if (state.isWorking)
                               const Padding(
                                 padding: EdgeInsets.all(8),
                                 child: CircularProgressIndicator(),
                               ),
                           ],
                         ),
-                        if (state.phase == 'idle' ||
-                            state.phase == 'done' ||
-                            state.phase == 'failed') ...[
+                        if (state.canConfigure) ...[
                           const SizedBox(height: 32),
                           const Divider(),
                           const SizedBox(height: 12),
@@ -250,6 +287,25 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
       );
     },
   );
+
+  String _activityLabel(RealtimeConversationActivity activity) =>
+      switch (activity) {
+        RealtimeConversationActivity.learnerSpeaking => 'You are speaking',
+        RealtimeConversationActivity.thinking => 'Thinking',
+        RealtimeConversationActivity.assistantSpeaking =>
+          'Assistant is speaking',
+        RealtimeConversationActivity.listening => 'Listening',
+        RealtimeConversationActivity.inactive => 'Preparing',
+      };
+
+  IconData _activityIcon(RealtimeConversationActivity activity) =>
+      switch (activity) {
+        RealtimeConversationActivity.learnerSpeaking => Icons.mic,
+        RealtimeConversationActivity.thinking => Icons.more_horiz,
+        RealtimeConversationActivity.assistantSpeaking => Icons.volume_up,
+        RealtimeConversationActivity.listening => Icons.hearing,
+        RealtimeConversationActivity.inactive => Icons.hourglass_top,
+      };
 
   Widget _notice(BuildContext context, String text, bool error) => Container(
     padding: const EdgeInsets.all(12),

@@ -10,7 +10,6 @@ import 'package:llplayer_next/controllers/reading_channel_coordinator.dart';
 import 'package:llplayer_next/controllers/reading_controller.dart';
 import 'package:llplayer_next/controllers/reading_diff_controller.dart';
 import 'package:llplayer_next/controllers/reading_task_controller.dart';
-import 'package:llplayer_next/controllers/realtime_conversation_controller.dart';
 import 'package:llplayer_next/controllers/settings_controller.dart';
 import 'package:llplayer_next/controllers/slice_player_controller.dart';
 import 'package:llplayer_next/controllers/speaking_actions_coordinator.dart';
@@ -132,7 +131,6 @@ class _Harness {
   final readingTask = ReadingTaskController();
   final readingDiff = ReadingDiffController();
   final speakingTask = SpeakingTaskController();
-  final realtime = RealtimeConversationController();
   final writingTask = WritingTaskController();
 
   late final vocabulary = VocabularyActionsCoordinator(
@@ -167,7 +165,6 @@ class _Harness {
     actions: speakingActions,
     task: speakingTask,
     readingTask: readingTask,
-    realtimeConversation: realtime,
     learning: learning,
     player: player,
   );
@@ -226,7 +223,6 @@ class _Harness {
               speakingActions: speakingActions,
               speakingTaskController: speakingTask,
               readingTaskController: readingTask,
-              realtimeConversationController: realtime,
             ),
             ContentChannel.reading => ReadingChannelHost(
               api: api,
@@ -268,7 +264,6 @@ class _Harness {
     readingTask.dispose();
     readingDiff.dispose();
     speakingTask.dispose();
-    realtime.dispose();
     writingTask.dispose();
   }
 }

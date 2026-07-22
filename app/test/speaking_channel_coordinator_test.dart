@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/learning_controller.dart';
 import 'package:llplayer_next/controllers/player_controller.dart';
 import 'package:llplayer_next/controllers/reading_task_controller.dart';
-import 'package:llplayer_next/controllers/realtime_conversation_controller.dart';
 import 'package:llplayer_next/controllers/settings_controller.dart';
 import 'package:llplayer_next/controllers/slice_player_controller.dart';
 import 'package:llplayer_next/controllers/speaking_actions_coordinator.dart';
@@ -43,7 +42,6 @@ class _Harness {
   final slicePlayer = SlicePlayerController();
   final task = SpeakingTaskController();
   final readingTask = ReadingTaskController();
-  final realtime = RealtimeConversationController();
   final learning = LearningController();
 
   late final actions = SpeakingActionsCoordinator(
@@ -60,7 +58,6 @@ class _Harness {
     actions: actions,
     task: task,
     readingTask: readingTask,
-    realtimeConversation: realtime,
     learning: learning,
     player: player,
   );
@@ -70,7 +67,6 @@ class _Harness {
     actions.dispose();
     task.dispose();
     readingTask.dispose();
-    realtime.dispose();
     learning.dispose();
     subtitle.dispose();
     player.dispose();
@@ -131,20 +127,6 @@ void main() {
   });
 
   group('surfaces', () {
-    test('realtime conversation needs a source and an ASR model', () {
-      final harness = _Harness();
-      harness.coordinator.openRealtimeConversation();
-      expect(harness.coordinator.realtimeConversationOpen, isFalse);
-      harness.dispose();
-    });
-
-    test('closing the realtime panel when it is shut is a no-op', () async {
-      final harness = _Harness();
-      await harness.coordinator.closeRealtimeConversation();
-      expect(harness.coordinator.realtimeConversationOpen, isFalse);
-      harness.dispose();
-    });
-
     test('closing the L1 check without one open leaves the task alone', () {
       final harness = _Harness();
       harness.readingTask.store.replace(
