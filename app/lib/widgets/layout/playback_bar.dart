@@ -86,7 +86,7 @@ class _PlaybackBarState extends State<PlaybackBar> {
     final currentChunk = playbackActions.currentChunkRef();
     return PlaybackControls(
       adapter: adapter,
-      position: playerController.position,
+      position: playerController.positionListenable,
       duration: playerController.duration,
       playing: playerController.playing,
       loopCue: subtitleController.loopCue,
@@ -106,6 +106,7 @@ class _PlaybackBarState extends State<PlaybackBar> {
       primarySubtitleOffset: subtitleController.primarySubtitleOffset,
       secondarySubtitleOffset: subtitleController.secondarySubtitleOffset,
       status: status,
+      statusIsError: playerController.statusIsError,
       taskStatuses: taskStatuses,
       extensiveListeningActive: extensiveListeningController.active,
       huntingActive: widget.huntingSessionController.state.enabled,

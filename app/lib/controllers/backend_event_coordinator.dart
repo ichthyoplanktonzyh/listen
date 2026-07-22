@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../models/backend_event.dart';
 import '../models/task_status.dart';
+import '../models/timeline.dart';
 import '../models/types.dart';
 
 class BackendEventCoordinator {
@@ -17,14 +18,20 @@ class BackendEventCoordinator {
     required this.setTaskStatus,
     required this.updateWordEntry,
     required this.updateCapabilityProfile,
+    this.text,
   });
+
+  /// Localization seam; falls back to raw keys when unbound (tests).
+  final String Function(String key)? text;
+
+  String _t(String key) => text?.call(key) ?? key;
 
   final String? Function() currentMediaId;
   final String? Function() currentPrimaryTrackId;
   final Future<void> Function() loadWordEntries;
   final Future<void> Function(String trackId) loadTimelineResource;
-  final Future<Map<String, dynamic>> Function(String trackId) readSubtitle;
-  final Future<void> Function(Map<String, dynamic> track, bool secondary)
+  final Future<SubtitleTrack> Function(String trackId) readSubtitle;
+  final Future<void> Function(SubtitleTrack track, bool secondary)
   loadGeneratedTrack;
   final Future<void> Function(String trackId) loadSpeechEnhancements;
   final void Function(String status) setStatus;
@@ -81,7 +88,11 @@ class BackendEventCoordinator {
       unawaited(_loadCompletedTranscription(event));
       return;
     }
-    setStatus('ASR ${event.status} · ${event.phaseProgress}%');
+    setStatus(
+      _t('statusAsrProgress')
+          .replaceAll('{status}', event.status)
+          .replaceAll('{progress}', '${event.phaseProgress}'),
+    );
   }
 
   Future<void> _loadCompletedTranscription(
@@ -92,7 +103,7 @@ class BackendEventCoordinator {
       if (event.mediaId != currentMediaId()) return;
       await loadGeneratedTrack(track, event.destination == 'secondary');
     } catch (error) {
-      setStatus('Generated subtitle unavailable: $error');
+      setStatus('${_t('statusGeneratedSubtitleUnavailable')}: $error');
     }
   }
 
@@ -108,7 +119,7 @@ class BackendEventCoordinator {
   void _handleSoundLineCompleted(SoundLineCompletedEvent event) {
     if (event.trackId != currentPrimaryTrackId()) return;
     unawaited(loadSpeechEnhancements(event.trackId));
-    setStatus('Sound line ready');
+    setStatus(_t('statusSoundLineReady'));
   }
 
   // The full profile update is handled by LexicalEntryChangedEvent (which
@@ -121,6 +132,10 @@ class BackendEventCoordinator {
     if (event.status == 'completed' && event.trackId != null) {
       unawaited(loadSpeechEnhancements(event.trackId!));
     }
-    setStatus('Audio analysis ${event.status} · ${event.phaseProgress}%');
+    setStatus(
+      _t('statusAudioAnalysisProgress')
+          .replaceAll('{status}', event.status)
+          .replaceAll('{progress}', '${event.phaseProgress}'),
+    );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../theme/breakpoints.dart';
 
 class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
   const PlayerAppBar({
@@ -27,9 +28,6 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onOpenPhoneticAnalysisCenter,
     required this.onOpenLearningAssets,
     required this.onOpenLearningResources,
-    required this.onShowPhraseCandidates,
-    required this.onCorrectLemma,
-    required this.onSearchOpenSubtitles,
   });
 
   final VoidCallback onOpenSubtitleResources;
@@ -54,15 +52,17 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onOpenPhoneticAnalysisCenter;
   final VoidCallback onOpenLearningAssets;
   final VoidCallback onOpenLearningResources;
-  final VoidCallback onShowPhraseCandidates;
-  final VoidCallback onCorrectLemma;
-  final VoidCallback onSearchOpenSubtitles;
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) =>
+        _bar(context, constraints.maxWidth >= ListenBreakpoints.appBarLabels),
+  );
+
+  Widget _bar(BuildContext context, bool showLabels) {
     final l = AppLocalizations.of(context);
     return AppBar(
       titleSpacing: 20,
@@ -79,6 +79,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
       ),
       actions: [
         _ToolbarMenuButton(
+          showLabel: showLabels,
           tooltip: l.text('contentActions'),
           icon: Icons.folder_open_outlined,
           label: l.text('contentActions'),
@@ -115,6 +116,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
           ],
         ),
         _ToolbarMenuButton(
+          showLabel: showLabels,
           tooltip: l.text('subtitleActions'),
           icon: Icons.subtitles_outlined,
           label: l.text('subtitleActions'),
@@ -126,7 +128,6 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
             if (value == 'secondary-generate') onGenerateSecondarySubtitles();
             if (value == 'secondary-search') onSearchSecondarySubtitles();
             if (value == 'embedded') onImportEmbeddedSubtitle();
-            if (value == 'opensubtitles') onSearchOpenSubtitles();
           },
           itemBuilder: (_) => [
             _MenuHeader(label: l.text('primarySubtitle')),
@@ -185,6 +186,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
           ],
         ),
         _ToolbarMenuButton(
+          showLabel: showLabels,
           tooltip: l.text('learningActions'),
           icon: Icons.school_outlined,
           label: l.text('learningActions'),
@@ -194,8 +196,6 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
             if (value == 'review') onOpenReview();
             if (value == 'learning-assets') onOpenLearningAssets();
             if (value == 'learning-resources') onOpenLearningResources();
-            if (value == 'phrase-candidates') onShowPhraseCandidates();
-            if (value == 'correct-lemma') onCorrectLemma();
             if (value == 'transcription') onOpenTranscriptionCenter();
             if (value == 'phonetic-analysis') onOpenPhoneticAnalysisCenter();
           },
@@ -240,21 +240,6 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
             ),
             const PopupMenuDivider(),
             PopupMenuItem(
-              value: 'phrase-candidates',
-              child: _MenuRow(
-                icon: Icons.segment,
-                title: l.text('phraseCandidates'),
-              ),
-            ),
-            const PopupMenuItem(
-              value: 'correct-lemma',
-              child: _MenuRow(
-                icon: Icons.edit_note_outlined,
-                title: 'Correct selected lemma',
-              ),
-            ),
-            const PopupMenuDivider(),
-            PopupMenuItem(
               value: 'transcription',
               child: _MenuRow(
                 icon: Icons.record_voice_over_outlined,
@@ -279,6 +264,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
             if (value == 'import-word-list') onImportWordList();
           },
           itemBuilder: (_) => [
+            _MenuHeader(label: l.text('diagnostics')),
             PopupMenuItem(
               value: 'logs',
               child: _MenuRow(
@@ -286,6 +272,8 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
                 title: l.text('exportLogs'),
               ),
             ),
+            const PopupMenuDivider(),
+            _MenuHeader(label: l.text('dataManagement')),
             PopupMenuItem(
               value: 'export-vocabulary',
               child: _MenuRow(
@@ -322,6 +310,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
 
 class _ToolbarMenuButton extends StatelessWidget {
   const _ToolbarMenuButton({
+    required this.showLabel,
     required this.tooltip,
     required this.icon,
     required this.label,
@@ -329,6 +318,10 @@ class _ToolbarMenuButton extends StatelessWidget {
     required this.itemBuilder,
   });
 
+  /// Below [ListenBreakpoints.appBarLabels] the text is dropped and only the
+  /// icon remains. The tooltip carries the same wording either way, so this
+  /// costs discoverability at a glance, not the name of the menu.
+  final bool showLabel;
   final String tooltip;
   final IconData icon;
   final String label;
@@ -346,14 +339,18 @@ class _ToolbarMenuButton extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 21),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
-          ),
+          if (showLabel) ...[
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ],
           const SizedBox(width: 2),
+          // Kept in the narrow form too: without it an icon-only button reads
+          // as a plain action rather than something that opens a menu.
           const Icon(Icons.arrow_drop_down, size: 18),
         ],
       ),

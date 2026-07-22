@@ -7,12 +7,13 @@ import '../../theme/listen_theme.dart';
 
 /// Renders a subtitle [Cue] as a line of style-aware tokens,
 /// with clickable words and phrase underlines.
-class TokenLine extends StatelessWidget {
+class TokenLine extends StatefulWidget {
   const TokenLine({
     super.key,
     required this.cue,
     required this.profiles,
     this.capabilityProfiles = const {},
+    this.capabilityDisplayChannel,
     required this.showStyles,
     required this.onWord,
     this.onChunk,
@@ -31,11 +32,16 @@ class TokenLine extends StatelessWidget {
     this.currentWordIntensity = 0.35,
     this.senseGroups = const [],
     this.groupingMode = 'off',
+    this.wordTimings = const [],
+    this.mediaPosition,
+    this.subtitleOffset = Duration.zero,
+    this.textAlign = TextAlign.center,
   });
 
   final Cue cue;
   final Map<String, LexicalEntry> profiles;
   final Map<String, LexicalCapabilityProfile> capabilityProfiles;
+  final String? capabilityDisplayChannel;
   final bool showStyles;
   final double fontSize;
   final String? fontFamily;
@@ -48,6 +54,13 @@ class TokenLine extends StatelessWidget {
   final String currentWordStyle;
   final double currentWordIntensity;
   final List<SenseGroup> senseGroups;
+  final List<WordTiming> wordTimings;
+  final Duration? mediaPosition;
+  final Duration subtitleOffset;
+
+  /// Center for subtitle/transcript surfaces; start for the reading view's
+  /// flowing paragraphs.
+  final TextAlign textAlign;
 
   /// Unified grouping presentation: `off`, `prosodic`, `semantic`, `compare`.
   /// The prosodic ([chunkPartition]) and semantic ([senseGroups]) data both
@@ -60,9 +73,67 @@ class TokenLine extends StatelessWidget {
   final Future<void> Function(PhraseCandidate candidate, Cue cue)? onPhrase;
 
   @override
+  State<TokenLine> createState() => _TokenLineState();
+}
+
+class _TokenLineState extends State<TokenLine> {
+  late Map<String, ({int startMs, int endMs})?> _sensePlaybackRanges;
+
+  Cue get cue => widget.cue;
+  Map<String, LexicalEntry> get profiles => widget.profiles;
+  Map<String, LexicalCapabilityProfile> get capabilityProfiles =>
+      widget.capabilityProfiles;
+  String? get capabilityDisplayChannel => widget.capabilityDisplayChannel;
+  bool get showStyles => widget.showStyles;
+  double get fontSize => widget.fontSize;
+  String? get fontFamily => widget.fontFamily;
+  Color? get baseColor => widget.baseColor;
+  int? get currentTokenIndex => widget.currentTokenIndex;
+  SentenceChunkPartition? get chunkPartition => widget.chunkPartition;
+  int? get currentChunkIndex => widget.currentChunkIndex;
+  String get chunkDisplayStyle => widget.chunkDisplayStyle;
+  String get chunkHighlightStyle => widget.chunkHighlightStyle;
+  String get currentWordStyle => widget.currentWordStyle;
+  double get currentWordIntensity => widget.currentWordIntensity;
+  List<SenseGroup> get senseGroups => widget.senseGroups;
+  String get groupingMode => widget.groupingMode;
+  Future<void> Function(SubtitleToken token, Cue cue) get onWord =>
+      widget.onWord;
+  Future<void> Function(DisplayChunk chunk)? get onChunk => widget.onChunk;
+  List<PhraseCandidate> get phraseCandidates => widget.phraseCandidates;
+  Map<String, LexicalEntryDetails> get phraseEntries => widget.phraseEntries;
+  Future<void> Function(PhraseCandidate candidate, Cue cue)? get onPhrase =>
+      widget.onPhrase;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshSensePlaybackRanges();
+  }
+
+  @override
+  void didUpdateWidget(covariant TokenLine oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.senseGroups, widget.senseGroups) ||
+        !identical(oldWidget.wordTimings, widget.wordTimings)) {
+      _refreshSensePlaybackRanges();
+    }
+  }
+
+  void _refreshSensePlaybackRanges() {
+    // Playback ticks rebuild this widget, but the timeline lists keep their
+    // identity. Cache projections until either source list is replaced so the
+    // hot path only compares the current position with precomputed ranges.
+    _sensePlaybackRanges = {
+      for (final group in widget.senseGroups)
+        group.id: senseGroupPlaybackRange(group, widget.wordTimings),
+    };
+  }
+
+  @override
   Widget build(BuildContext context) => Text.rich(
     TextSpan(children: _spans(context)),
-    textAlign: TextAlign.center,
+    textAlign: widget.textAlign,
   );
 
   List<InlineSpan> _spans(BuildContext context) => switch (groupingMode) {
@@ -106,10 +177,10 @@ class TokenLine extends StatelessWidget {
       spans.add(
         _capsuleSpan(
           context,
+          keyPrefix: 'chunk',
           keyIndex: chunk.index,
           tokens: chunkTokens,
           active: chunk.index == currentChunkIndex,
-          provisional: false,
           onTap: onChunk == null ? null : () => onChunk!(chunk),
           divergenceBoundaries: divergenceBoundaries,
         ),
@@ -118,9 +189,8 @@ class TokenLine extends StatelessWidget {
     return spans;
   }
 
-  /// Semantic (sense-group) capsules — a provisional, heuristic "marker" of how
-  /// meaning groups the line. Rendered with the same capsule geometry but a
-  /// dashed, accent-tinted border so it never reads as acoustic evidence.
+  /// Semantic (sense-group) capsules, projected through the active word
+  /// timeline for playback following and seeking (ADR 0016).
   List<InlineSpan> _senseCapsuleSpans(BuildContext context) {
     if (senseGroups.isEmpty) return _spansForTokens(context, cue.tokens);
     final groups = [...senseGroups]
@@ -139,14 +209,34 @@ class TokenLine extends StatelessWidget {
           )
           .toList(growable: false);
       if (groupTokens.isEmpty) continue;
+      final range = _sensePlaybackRanges[group.id];
+      final subtitlePosition = widget.mediaPosition == null
+          ? null
+          : widget.mediaPosition! - widget.subtitleOffset;
+      final active =
+          range != null &&
+          subtitlePosition != null &&
+          subtitlePosition >= Duration(milliseconds: range.startMs) &&
+          subtitlePosition < Duration(milliseconds: range.endMs);
       spans.add(
         _capsuleSpan(
           context,
+          keyPrefix: 'sense',
           keyIndex: group.groupIndex,
           tokens: groupTokens,
-          active: false,
-          provisional: true,
-          onTap: null,
+          active: active,
+          onTap: range == null || onChunk == null
+              ? null
+              : () => onChunk!(
+                  DisplayChunk(
+                    index: group.groupIndex,
+                    tokenStart: group.startTokenIndex,
+                    tokenEnd: group.endTokenIndex,
+                    text: group.text,
+                    start: Duration(milliseconds: range.startMs),
+                    end: Duration(milliseconds: range.endMs),
+                  ),
+                ),
           divergenceBoundaries: const {},
         ),
       );
@@ -175,23 +265,19 @@ class TokenLine extends StatelessWidget {
     };
   }
 
-  /// Shared capsule renderer. [provisional] switches the prosodic solid capsule
-  /// to the semantic dashed/lighter marker; [divergenceBoundaries] threads the
+  /// Shared solid capsule renderer. [divergenceBoundaries] threads the
   /// compare-mode overlay into the inner token spans.
   InlineSpan _capsuleSpan(
     BuildContext context, {
+    required String keyPrefix,
     required int keyIndex,
     required List<SubtitleToken> tokens,
     required bool active,
-    required bool provisional,
     required VoidCallback? onTap,
     required Set<int> divergenceBoundaries,
   }) {
     final primary = Theme.of(context).colorScheme.primary;
-    // Semantic markers always use capsule geometry; prosodic honors the display
-    // style setting (capsule vs spacing).
-    final capsule = provisional || chunkDisplayStyle == 'capsule';
-    final prefix = provisional ? 'sense' : 'chunk';
+    final capsule = chunkDisplayStyle == 'capsule';
     final content = Text.rich(
       TextSpan(
         children: _spansForTokens(
@@ -201,8 +287,8 @@ class TokenLine extends StatelessWidget {
         ),
       ),
     );
-    Widget container = AnimatedContainer(
-      key: ValueKey('$prefix-container-$keyIndex'),
+    final container = AnimatedContainer(
+      key: ValueKey('$keyPrefix-container-$keyIndex'),
       duration: const Duration(milliseconds: 280),
       padding: EdgeInsets.symmetric(
         horizontal: capsule ? 10 : 2,
@@ -211,16 +297,10 @@ class TokenLine extends StatelessWidget {
       decoration: BoxDecoration(
         color: active
             ? primary.withValues(alpha: 0.18)
-            : provisional
-            ? ListenColors.accent.withValues(alpha: 0.07)
             : capsule
             ? ListenColors.overlayText.withValues(alpha: 0.08)
             : Colors.transparent,
-        // The dashed provisional outline is painted separately; a solid border
-        // here is only for real (prosodic) capsules.
-        border: provisional
-            ? null
-            : capsule
+        border: capsule
             ? Border.all(
                 color: active
                     ? primary.withValues(alpha: 0.42)
@@ -240,29 +320,14 @@ class TokenLine extends StatelessWidget {
       ),
       child: content,
     );
-    if (provisional) {
-      container = CustomPaint(
-        key: ValueKey('sense-provisional-$keyIndex'),
-        foregroundPainter: _DashedCapsuleBorder(
-          color: ListenColors.accent.withValues(alpha: 0.75),
-        ),
-        child: container,
-      );
-    }
-    Widget capsuleWidget = GestureDetector(onTap: onTap, child: container);
-    if (provisional) {
-      capsuleWidget = Tooltip(
-        message: AppLocalizations.of(context).text('groupingSemanticProvisional'),
-        child: capsuleWidget,
-      );
-    }
+    final capsuleWidget = GestureDetector(onTap: onTap, child: container);
     return WidgetSpan(
       alignment: PlaceholderAlignment.baseline,
       baseline: TextBaseline.alphabetic,
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: capsule ? 5 : 4),
         child: AnimatedScale(
-          key: ValueKey('$prefix-scale-$keyIndex'),
+          key: ValueKey('$keyPrefix-scale-$keyIndex'),
           scale: active && chunkHighlightStyle == 'bounce' ? 1.045 : 1,
           alignment: Alignment.bottomCenter,
           duration: const Duration(milliseconds: 280),
@@ -313,8 +378,9 @@ class TokenLine extends StatelessWidget {
       }
       final canonical = candidate.canonicalForm;
       final phraseDetails = phraseEntries[canonical];
-      final status = _statusFromProfile(phraseDetails?.capabilityProfile)
-          ?? phraseDetails?.entry.status;
+      final status =
+          _statusFromProfile(phraseDetails?.capabilityProfile) ??
+          phraseDetails?.entry.status;
       spans.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.baseline,
@@ -345,7 +411,9 @@ class TokenLine extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 1.5),
           child: Tooltip(
-            message: AppLocalizations.of(context).text('groupingDivergenceHint'),
+            message: AppLocalizations.of(
+              context,
+            ).text('groupingDivergenceHint'),
             child: _DivergenceMarker(
               key: ValueKey('divergence-marker-$tokenIndex'),
               height: fontSize,
@@ -382,9 +450,24 @@ class TokenLine extends StatelessWidget {
   String? _effectiveDisplayStatus(String? normalized) {
     if (normalized == null) return null;
     final cap = capabilityProfiles[normalized];
-    if (cap != null) return _statusFromProfile(cap);
+    if (cap != null) {
+      return switch (capabilityDisplayChannel) {
+        'reading' => _statusForDimension(cap.reading, reading: true),
+        'listening' => _statusForDimension(cap.listening, reading: false),
+        _ => _statusFromProfile(cap),
+      };
+    }
     return profiles[normalized]?.status;
   }
+
+  static String? _statusForDimension(
+    CapabilityDimensionState dimension, {
+    required bool reading,
+  }) => switch (dimension.effectiveAssessment) {
+    'not_acquired' => reading ? 'unknown_meaning' : 'known_not_recognized',
+    'acquired' => 'known_recognized',
+    _ => null,
+  };
 
   static String? _statusFromProfile(LexicalCapabilityProfile? cap) {
     if (cap == null) return null;
@@ -526,44 +609,6 @@ class PhraseUnderlineSpan extends StatelessWidget {
       ),
     ],
   );
-}
-
-/// Paints a dashed stadium outline for provisional (semantic) capsules, so they
-/// read as a heuristic marker rather than acoustic evidence.
-class _DashedCapsuleBorder extends CustomPainter {
-  const _DashedCapsuleBorder({required this.color});
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (size.isEmpty) return;
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
-    final outline = Path()
-      ..addRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(0.6, 0.6, size.width - 1.2, size.height - 1.2),
-          Radius.circular((size.height - 1.2) / 2),
-        ),
-      );
-    const dash = 3.0;
-    const gap = 2.5;
-    for (final metric in outline.computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        final next = (distance + dash).clamp(0.0, metric.length);
-        canvas.drawPath(metric.extractPath(distance, next), paint);
-        distance = next + gap;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_DashedCapsuleBorder oldDelegate) =>
-      oldDelegate.color != color;
 }
 
 /// A small caret + dashed tick used as the compare-mode divergence marker.

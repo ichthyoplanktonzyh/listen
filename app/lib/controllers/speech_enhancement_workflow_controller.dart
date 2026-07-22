@@ -57,6 +57,8 @@ class SpeechEnhancementLoadResult {
 }
 
 class SpeechEnhancementWorkflowController {
+  final Set<String> _senseGroupFallbackAttemptedTrackIds = {};
+
   Future<SpeechEnhancementLoadResult> loadSpeechEnhancements({
     required LocalApi service,
     required String trackId,
@@ -101,15 +103,10 @@ class SpeechEnhancementWorkflowController {
       timingsBySentence: _groupWordTimings(timings),
       chunkPartitionsBySentence: partitions,
       senseGroupsBySentence: senseGroups,
-      pronunciationBySentence: Map<String, PronunciationAnalysis>.fromEntries(
-        analyses.map((value) {
-          final analysis = PronunciationAnalysis.fromJson(value);
-          return MapEntry(analysis.sentenceId, analysis);
-        }),
-      ),
-      pronunciationProviders: providers
-          .map(PronunciationProvider.fromJson)
-          .toList(growable: false),
+      pronunciationBySentence: {
+        for (final analysis in analyses) analysis.sentenceId: analysis,
+      },
+      pronunciationProviders: providers,
       phoneticAnalysisBySentence: soundPatterns,
       errors: errors,
     );
@@ -127,42 +124,45 @@ class SpeechEnhancementWorkflowController {
     LLTimelineDocument? document;
 
     try {
-      final values = await service.trackWordTimelineSummaries(trackId);
-      summaries = values
-          .map((raw) => WordTimelineSummary.fromJson(raw))
-          .toList(growable: false);
+      summaries = await service.trackWordTimelineSummaries(trackId);
     } catch (error) {
       errors.add('summary: $error');
       summaries = previous.wordSummaries;
     }
 
     try {
-      final values = await service.trackPhoneTimelineSummaries(trackId);
-      phoneSummaries = values
-          .map((raw) => PhoneTimelineSummary.fromJson(raw))
-          .toList(growable: false);
+      phoneSummaries = await service.trackPhoneTimelineSummaries(trackId);
     } catch (error) {
       errors.add('phone summary: $error');
       phoneSummaries = previous.phoneSummaries;
     }
 
     try {
-      final values = await service.trackChunkTimelineSummaries(trackId);
-      chunkSummaries = values
-          .map((raw) => ChunkTimelineSummary.fromJson(raw))
-          .toList(growable: false);
+      chunkSummaries = await service.trackChunkTimelineSummaries(trackId);
     } catch (error) {
       errors.add('chunk summary: $error');
       chunkSummaries = previous.chunkSummaries;
     }
 
     try {
-      final value = await service.exportTrackLLTimeline(trackId);
-      final exportedDocument = LLTimelineDocument.fromJson(value);
+      final exportedDocument = await service.exportTrackLLTimeline(trackId);
+      final preservedArtifacts = previous.document?.artifacts ?? const [];
+      // The export endpoint derives fresh rhythm frames from the current word
+      // timeline. An older imported document may still carry artifacts that
+      // are not re-emitted by that endpoint, but it must never replace the
+      // freshly exported document wholesale: doing so discards the derived
+      // rhythm frames and makes A/B appear unavailable after transcription.
       document =
-          exportedDocument.artifacts.isEmpty &&
-              previous.document?.artifacts.isNotEmpty == true
-          ? previous.document
+          exportedDocument.artifacts.isEmpty && preservedArtifacts.isNotEmpty
+          ? LLTimelineDocument(
+              schema: exportedDocument.schema,
+              metadata: exportedDocument.metadata,
+              activeWordTimelineId: exportedDocument.activeWordTimelineId,
+              activePhoneTimelineId: exportedDocument.activePhoneTimelineId,
+              activeChunkTimelineId: exportedDocument.activeChunkTimelineId,
+              rhythmFrames: exportedDocument.rhythmFrames,
+              artifacts: preservedArtifacts,
+            )
           : exportedDocument;
     } catch (error) {
       errors.add('export: $error');
@@ -206,9 +206,7 @@ class SpeechEnhancementWorkflowController {
         .firstOrNull;
     if (active != null) {
       try {
-        final timeline = PhoneTimeline.fromJson(
-          await service.phoneTimeline(active.id),
-        );
+        final timeline = await service.phoneTimeline(active.id);
         final sentenceId = timeline.sentenceId;
         if (sentenceId != null) {
           return {
@@ -226,14 +224,15 @@ class SpeechEnhancementWorkflowController {
       'phone',
       errors,
     );
-    final latest = latestPhoneticAnalysesBySentence(phoneticAnalyses);
-    return latest.map(
-      (sentenceId, value) =>
-          MapEntry(sentenceId, PhoneticAnalysis.fromJson(value)),
-    );
+    final latest = <String, PhoneticAnalysis>{};
+    for (final analysis in phoneticAnalyses) {
+      final sentenceId = analysis.sentenceId;
+      if (sentenceId != null) latest.putIfAbsent(sentenceId, () => analysis);
+    }
+    return latest;
   }
 
-  Future<List<Map<String, dynamic>>> _loadPronunciationEnhancements(
+  Future<List<PronunciationAnalysis>> _loadPronunciationEnhancements(
     LocalApi service,
     String trackId,
     List<String> errors,
@@ -258,7 +257,7 @@ class SpeechEnhancementWorkflowController {
     if (active != null) {
       try {
         return chunkPartitionsFromTimeline(
-          ChunkTimeline.fromJson(await service.chunkTimeline(active.id)),
+          await service.chunkTimeline(active.id),
         );
       } catch (error) {
         errors.add('chunk timeline: $error');
@@ -269,12 +268,9 @@ class SpeechEnhancementWorkflowController {
       'chunk',
       errors,
     );
-    return Map<String, SentenceChunkPartition>.fromEntries(
-      partitions.map((raw) {
-        final partition = SentenceChunkPartition.fromJson(raw);
-        return MapEntry(partition.sentenceId, partition);
-      }),
-    );
+    return {
+      for (final partition in partitions) partition.sentenceId: partition,
+    };
   }
 
   Future<Map<String, List<SenseGroup>>> _loadSenseGroups(
@@ -282,26 +278,46 @@ class SpeechEnhancementWorkflowController {
     String trackId,
     List<String> errors,
   ) async {
+    late List<SenseGroupAnalysis> analyses;
     try {
-      final rawAnalyses = await service.trackSenseGroupAnalyses(trackId);
-      final analyses = rawAnalyses
-          .map(SenseGroupAnalysis.fromJson)
-          .toList(growable: false);
-      final active = analyses.where((a) => a.isActive).firstOrNull;
-      if (active == null) return const {};
-      final grouped = <String, List<SenseGroup>>{};
-      for (final group in active.groups) {
-        grouped.putIfAbsent(group.sentenceId, () => []).add(group);
-      }
-      return grouped;
+      analyses = await service.trackSenseGroupAnalyses(trackId);
     } catch (error) {
       errors.add('sense groups: $error');
       return const {};
     }
+
+    final grouped = _activeSenseGroupsBySentence(analyses);
+    if (grouped.isNotEmpty ||
+        !_senseGroupFallbackAttemptedTrackIds.add(trackId)) {
+      return grouped;
+    }
+
+    try {
+      final generated = await service.generateSenseGroupAnalysis(trackId);
+      await service.activateSenseGroupAnalysis(generated.id);
+      return _activeSenseGroupsBySentence(
+        await service.trackSenseGroupAnalyses(trackId),
+      );
+    } catch (error) {
+      errors.add('sense group fallback: $error');
+      return const {};
+    }
   }
 
-  Future<List<Map<String, dynamic>>> _loadOptionalResourceCapability(
-    Future<List<Map<String, dynamic>>> Function() loader,
+  Map<String, List<SenseGroup>> _activeSenseGroupsBySentence(
+    List<SenseGroupAnalysis> analyses,
+  ) {
+    final active = analyses.where((analysis) => analysis.isActive).firstOrNull;
+    if (active == null) return const {};
+    final grouped = <String, List<SenseGroup>>{};
+    for (final group in active.groups) {
+      grouped.putIfAbsent(group.sentenceId, () => []).add(group);
+    }
+    return grouped;
+  }
+
+  Future<List<T>> _loadOptionalResourceCapability<T>(
+    Future<List<T>> Function() loader,
     String label,
     List<String> errors,
   ) async {
@@ -313,12 +329,9 @@ class SpeechEnhancementWorkflowController {
     }
   }
 
-  Map<String, List<WordTiming>> _groupWordTimings(
-    List<Map<String, dynamic>> timings,
-  ) {
+  Map<String, List<WordTiming>> _groupWordTimings(List<WordTiming> timings) {
     final grouped = <String, List<WordTiming>>{};
-    for (final raw in timings) {
-      final value = WordTiming.fromJson(raw);
+    for (final value in timings) {
       grouped.putIfAbsent(value.sentenceId, () => []).add(value);
     }
     for (final values in grouped.values) {

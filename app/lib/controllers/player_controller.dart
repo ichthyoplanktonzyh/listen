@@ -14,7 +14,8 @@ class PlayerState {
     this.mediaTitle,
     this.mediaFingerprint,
     this.status = 'Starting local core...',
-    this.position = Duration.zero,
+    this.statusIsError = false,
+    this.statusIsPlayback = false,
     this.duration = Duration.zero,
     this.playing = false,
     this.muted = false,
@@ -34,7 +35,16 @@ class PlayerState {
   final String? mediaTitle;
   final String? mediaFingerprint;
   final String status;
-  final Duration position;
+
+  /// Whether [status] describes a failure. Error statuses get error styling
+  /// in the status line and are surfaced once via SnackBar.
+  final bool statusIsError;
+
+  /// Whether [status] merely reports what is playing. Surfaces that show
+  /// system health (the home "local core" tile) hide these, since playback
+  /// chatter says nothing about the core. Never match on the text to decide
+  /// this — [status] is localized.
+  final bool statusIsPlayback;
   final Duration duration;
   final bool playing;
   final bool muted;
@@ -54,7 +64,8 @@ class PlayerState {
     Object? mediaTitle = _unset,
     Object? mediaFingerprint = _unset,
     String? status,
-    Duration? position,
+    bool? statusIsError,
+    bool? statusIsPlayback,
     Duration? duration,
     bool? playing,
     bool? muted,
@@ -79,7 +90,8 @@ class PlayerState {
         ? this.mediaFingerprint
         : mediaFingerprint as String?,
     status: status ?? this.status,
-    position: position ?? this.position,
+    statusIsError: statusIsError ?? this.statusIsError,
+    statusIsPlayback: statusIsPlayback ?? this.statusIsPlayback,
     duration: duration ?? this.duration,
     playing: playing ?? this.playing,
     muted: muted ?? this.muted,
@@ -104,10 +116,6 @@ class PlayerState {
         ? this.sourceLoopLabel
         : sourceLoopLabel as String?,
   );
-
-  double get positionFraction => duration == Duration.zero
-      ? 0.0
-      : position.inMilliseconds / duration.inMilliseconds;
 }
 
 /// Controls media playback state and actions.
@@ -116,6 +124,13 @@ class PlayerState {
 /// Keeps [ChangeNotifier] for backward compatibility.
 class PlayerController extends ChangeNotifier {
   final Store<PlayerState> _store;
+
+  /// Playback position ticks ~10x/sec while media plays, so it lives outside
+  /// [PlayerState]: writes go to this dedicated notifier and deliberately do
+  /// NOT fire the aggregate [ChangeNotifier]. Widgets that render the live
+  /// position must subscribe via [positionListenable]; everything else reads
+  /// the [position] getter synchronously.
+  final ValueNotifier<Duration> _position = ValueNotifier(Duration.zero);
 
   PlayerController() : _store = Store(const PlayerState()) {
     _store.addListener(notifyListeners);
@@ -134,10 +149,15 @@ class PlayerController extends ChangeNotifier {
   String? get mediaTitle => _store.state.mediaTitle;
   String? get mediaFingerprint => _store.state.mediaFingerprint;
   String get status => _store.state.status;
+  bool get statusIsError => _store.state.statusIsError;
+  bool get statusIsPlayback => _store.state.statusIsPlayback;
   bool get playing => _store.state.playing;
   bool get muted => _store.state.muted;
-  Duration get position => _store.state.position;
+  Duration get position => _position.value;
   Duration get duration => _store.state.duration;
+
+  /// High-frequency playback position for widgets that render it live.
+  ValueListenable<Duration> get positionListenable => _position;
   double get rate => _store.state.rate;
   double get volume => _store.state.volume;
   Duration? get sourceLoopStart => _store.state.sourceLoopStart;
@@ -155,8 +175,7 @@ class PlayerController extends ChangeNotifier {
   ValueNotifier<R> select<R>(R Function(PlayerState) selector) =>
       _store.select(selector);
 
-  void setPosition(Duration position) =>
-      _store.update((s) => s.copyWith(position: position));
+  void setPosition(Duration position) => _position.value = position;
 
   void setDuration(Duration duration) =>
       _store.update((s) => s.copyWith(duration: duration));
@@ -197,8 +216,18 @@ class PlayerController extends ChangeNotifier {
   void setVolume(double volume) =>
       _store.update((s) => s.copyWith(volume: volume));
 
-  void setStatus(String status) =>
-      _store.update((s) => s.copyWith(status: status));
+  /// Publish a status-line message. Pass [error] for failures so the UI can
+  /// style the line and surface a SnackBar; plain progress updates clear the
+  /// error flag. Pass [playback] for "now playing" notices so health
+  /// indicators can skip them without matching on localized text.
+  void setStatus(String status, {bool error = false, bool playback = false}) =>
+      _store.update(
+        (s) => s.copyWith(
+          status: status,
+          statusIsError: error,
+          statusIsPlayback: playback,
+        ),
+      );
 
   void setAudioTracks(List<PlayerTrack> tracks) =>
       _store.update((s) => s.copyWith(audioTracks: tracks));
@@ -226,6 +255,7 @@ class PlayerController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _position.dispose();
     _store.dispose();
     super.dispose();
   }

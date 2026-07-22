@@ -52,12 +52,30 @@ void main() {
     expect(controller.embeddedSubtitleTracks, const [track]);
   });
 
+  test('playback notices are flagged so health surfaces can skip them', () {
+    final player = PlayerController();
+    addTearDown(player.dispose);
+
+    player.setStatus('Playing sample.mp4', playback: true);
+    expect(player.statusIsPlayback, isTrue);
+    expect(player.statusIsError, isFalse);
+
+    // A later plain status must clear the flag, otherwise the home core tile
+    // would keep hiding real messages after playback started.
+    player.setStatus('Subtitle exported');
+    expect(player.statusIsPlayback, isFalse);
+
+    player.setStatus('Playback failed', error: true);
+    expect(player.statusIsPlayback, isFalse);
+    expect(player.statusIsError, isTrue);
+  });
+
   test('store-backed controllers notify aggregate listeners', () {
     final player = PlayerController();
     var playerNotifications = 0;
     player.addListener(() => playerNotifications++);
-    player.setPosition(const Duration(milliseconds: 250));
-    expect(player.position, const Duration(milliseconds: 250));
+    player.setStatus('probe');
+    expect(player.status, 'probe');
     expect(playerNotifications, 1);
     player.dispose();
 
@@ -76,6 +94,73 @@ void main() {
     expect(learning.sidePanel, 1);
     expect(learningNotifications, 1);
     learning.dispose();
+  });
+
+  test('position ticks bypass the aggregate notifier entirely', () {
+    final player = PlayerController();
+    var aggregateNotifications = 0;
+    var positionNotifications = 0;
+    player.addListener(() => aggregateNotifications++);
+    player.positionListenable.addListener(() => positionNotifications++);
+
+    // Simulate the 100ms polling loop: aggregate listeners (the merged
+    // Listenable driving the whole Scaffold) must stay silent.
+    for (var ms = 100; ms <= 1000; ms += 100) {
+      player.setPosition(Duration(milliseconds: ms));
+    }
+
+    expect(player.position, const Duration(milliseconds: 1000));
+    expect(positionNotifications, 10);
+    expect(aggregateNotifications, 0);
+
+    // A repeated identical position is de-duplicated by the notifier.
+    player.setPosition(const Duration(milliseconds: 1000));
+    expect(positionNotifications, 10);
+    player.dispose();
+  });
+
+  test('word/chunk highlight cursors bypass the aggregate notifier', () {
+    final controller = SubtitleController()
+      ..setPrimaryTrack(track)
+      ..setCurrentPrimaryCue(cue)
+      ..setSpeechEnhancements(
+        pronunciationBySentence: const {},
+        pronunciationProviders: const [],
+        timingsBySentence: const {
+          'sentence-1': [
+            WordTiming(
+              sentenceId: 'sentence-1',
+              tokenIndex: 0,
+              text: 'Hello',
+              start: Duration(milliseconds: 100),
+              end: Duration(milliseconds: 300),
+              source: 'asr',
+              provider: 'test',
+            ),
+          ],
+        },
+      );
+
+    var aggregateNotifications = 0;
+    var wordNotifications = 0;
+    controller.addListener(() => aggregateNotifications++);
+    controller.currentWordTokenListenable.addListener(
+      () => wordNotifications++,
+    );
+
+    controller.updateCurrentWord(
+      const Duration(milliseconds: 200),
+      enabled: true,
+    );
+
+    expect(controller.currentWordToken, 0);
+    expect(wordNotifications, 1);
+    expect(
+      aggregateNotifications,
+      0,
+      reason: 'speech-rate cursors must not rebuild the merged tree',
+    );
+    controller.dispose();
   });
 
   test('subtitle controller clears tracks and follows local word timings', () {

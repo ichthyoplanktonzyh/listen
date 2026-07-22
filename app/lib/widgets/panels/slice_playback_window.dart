@@ -6,7 +6,6 @@ import 'package:video_player/video_player.dart';
 
 import '../../controllers/slice_player_controller.dart';
 import '../../localization.dart';
-import '../../theme/listen_theme.dart';
 
 /// A transient, independent playback surface for one vocabulary source clip.
 /// It is mounted in the workbench stack just like the practice window, but it
@@ -58,7 +57,7 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
         elevation: 18,
         borderRadius: BorderRadius.circular(16),
         clipBehavior: Clip.antiAlias,
-        color: ListenColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         child: Column(
           children: [
             _titleBar(size, width, height),
@@ -137,7 +136,10 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
         const SizedBox(height: 8),
         Text(
           '${state.mediaTitle ?? l.text('slicePlaybackSourceMedia')} · ${_time(state.start)}–${_time(state.end)}',
-          style: const TextStyle(color: ListenColors.muted, fontSize: 12),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontSize: 12,
+          ),
         ),
         const SizedBox(height: 18),
         if (wantsVideo)
@@ -150,7 +152,7 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
 
   Widget _audioSurface() => DecoratedBox(
     decoration: BoxDecoration(
-      color: ListenColors.fog,
+      color: Theme.of(context).colorScheme.surfaceContainer,
       borderRadius: BorderRadius.circular(12),
     ),
     child: SizedBox(
@@ -159,7 +161,11 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.graphic_eq, size: 34, color: ListenColors.accent),
+            Icon(
+              Icons.graphic_eq,
+              size: 34,
+              color: Theme.of(context).colorScheme.secondary,
+            ),
             const SizedBox(height: 8),
             Text(l.text('slicePlaybackAudioFirst')),
           ],
@@ -218,7 +224,9 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
             onPressed: state.loading ? null : widget.controller.toggleLooping,
             icon: Icon(
               Icons.repeat,
-              color: state.looping ? ListenColors.accent : ListenColors.muted,
+              color: state.looping
+                  ? Theme.of(context).colorScheme.secondary
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
           IconButton(

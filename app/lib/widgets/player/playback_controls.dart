@@ -1,9 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/task_status.dart';
+import '../../theme/breakpoints.dart';
 import '../../player_adapter.dart';
-import '../../theme/listen_theme.dart';
 import '../../utils/format_duration.dart';
 
 class PlaybackControls extends StatelessWidget {
@@ -30,6 +31,7 @@ class PlaybackControls extends StatelessWidget {
     required this.primarySubtitleOffset,
     required this.secondarySubtitleOffset,
     required this.status,
+    this.statusIsError = false,
     required this.taskStatuses,
     required this.extensiveListeningActive,
     this.huntingActive = false,
@@ -69,7 +71,10 @@ class PlaybackControls extends StatelessWidget {
   });
 
   final DesktopPlayerAdapter adapter;
-  final Duration position;
+
+  /// Live playback position. Only the progress slider and the time labels
+  /// subscribe to it, so 10Hz ticks never rebuild the rest of the bar.
+  final ValueListenable<Duration> position;
   final Duration duration;
   final bool playing;
   final bool loopCue;
@@ -89,6 +94,9 @@ class PlaybackControls extends StatelessWidget {
   final Duration primarySubtitleOffset;
   final Duration secondarySubtitleOffset;
   final String status;
+
+  /// Error statuses render in the error color with a leading icon.
+  final bool statusIsError;
   final List<UserTaskStatus> taskStatuses;
   final bool extensiveListeningActive;
   final bool huntingActive;
@@ -141,7 +149,6 @@ class PlaybackControls extends StatelessWidget {
     ColorScheme colors,
   ) {
     final maxMs = duration.inMilliseconds.clamp(1, 1 << 31).toDouble();
-    final posMs = position.inMilliseconds.clamp(0, maxMs.toInt()).toDouble();
     return Material(
       color: colors.surfaceContainerLowest,
       child: DecoratedBox(
@@ -150,7 +157,8 @@ class PlaybackControls extends StatelessWidget {
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final narrow = constraints.maxWidth < 760;
+            final narrow =
+                constraints.maxWidth < ListenBreakpoints.playbackControlsNarrow;
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -172,12 +180,17 @@ class PlaybackControls extends StatelessWidget {
                       ),
                       thumbColor: colors.primary,
                     ),
-                    child: Slider(
-                      padding: EdgeInsets.zero,
-                      value: posMs,
-                      max: maxMs,
-                      onChanged: (value) =>
-                          onSeek(Duration(milliseconds: value.round())),
+                    child: ValueListenableBuilder<Duration>(
+                      valueListenable: position,
+                      builder: (context, positionValue, _) => Slider(
+                        padding: EdgeInsets.zero,
+                        value: positionValue.inMilliseconds
+                            .clamp(0, maxMs.toInt())
+                            .toDouble(),
+                        max: maxMs,
+                        onChanged: (value) =>
+                            onSeek(Duration(milliseconds: value.round())),
+                      ),
                     ),
                   ),
                 ),
@@ -228,14 +241,19 @@ class PlaybackControls extends StatelessWidget {
                                             ),
                                       ),
                                       const SizedBox(height: 3),
-                                      Text(
-                                        '${formatDuration(position)} / ${formatDuration(duration)}',
-                                        maxLines: 1,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelSmall
-                                            ?.copyWith(
-                                              color: colors.onSurfaceVariant,
+                                      ValueListenableBuilder<Duration>(
+                                        valueListenable: position,
+                                        builder: (context, positionValue, _) =>
+                                            Text(
+                                              '${formatDuration(positionValue)} / ${formatDuration(duration)}',
+                                              maxLines: 1,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .labelSmall
+                                                  ?.copyWith(
+                                                    color:
+                                                        colors.onSurfaceVariant,
+                                                  ),
                                             ),
                                       ),
                                     ],
@@ -344,11 +362,8 @@ class PlaybackControls extends StatelessWidget {
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            // Below this the flat function buttons (extensive listening / chunk
-            // / subtitle menus) collapse into a single overflow popup rather
-            // than disappearing. ~900 keeps the flat toolbar while the function
-            // area (roughly 800px) still fits comfortably.
-            final roomy = constraints.maxWidth >= 900;
+            final roomy =
+                constraints.maxWidth >= ListenBreakpoints.playbackControlsRoomy;
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -356,39 +371,42 @@ class PlaybackControls extends StatelessWidget {
                   height: 38,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 18),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 54,
-                          child: Text(
-                            formatDuration(position),
-                            style: Theme.of(context).textTheme.labelMedium,
+                    child: ValueListenableBuilder<Duration>(
+                      valueListenable: position,
+                      builder: (context, positionValue, _) => Row(
+                        children: [
+                          SizedBox(
+                            width: 54,
+                            child: Text(
+                              formatDuration(positionValue),
+                              style: Theme.of(context).textTheme.labelMedium,
+                            ),
                           ),
-                        ),
-                        Expanded(
-                          child: Slider(
-                            value: position.inMilliseconds
-                                .clamp(
-                                  0,
-                                  duration.inMilliseconds.clamp(1, 1 << 31),
-                                )
-                                .toDouble(),
-                            max: duration.inMilliseconds
-                                .clamp(1, 1 << 31)
-                                .toDouble(),
-                            onChanged: (value) =>
-                                onSeek(Duration(milliseconds: value.round())),
+                          Expanded(
+                            child: Slider(
+                              value: positionValue.inMilliseconds
+                                  .clamp(
+                                    0,
+                                    duration.inMilliseconds.clamp(1, 1 << 31),
+                                  )
+                                  .toDouble(),
+                              max: duration.inMilliseconds
+                                  .clamp(1, 1 << 31)
+                                  .toDouble(),
+                              onChanged: (value) =>
+                                  onSeek(Duration(milliseconds: value.round())),
+                            ),
                           ),
-                        ),
-                        SizedBox(
-                          width: 54,
-                          child: Text(
-                            formatDuration(duration),
-                            textAlign: TextAlign.end,
-                            style: Theme.of(context).textTheme.labelMedium,
+                          SizedBox(
+                            width: 54,
+                            child: Text(
+                              formatDuration(duration),
+                              textAlign: TextAlign.end,
+                              style: Theme.of(context).textTheme.labelMedium,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -430,13 +448,35 @@ class PlaybackControls extends StatelessWidget {
                             const SizedBox(width: 8),
                           if (status.isNotEmpty)
                             Flexible(
-                              child: Text(
-                                status,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.end,
-                                style: Theme.of(context).textTheme.labelSmall
-                                    ?.copyWith(color: colors.onSurfaceVariant),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  if (statusIsError) ...[
+                                    Icon(
+                                      Icons.error_outline,
+                                      size: 13,
+                                      color: colors.error,
+                                    ),
+                                    const SizedBox(width: 4),
+                                  ],
+                                  Flexible(
+                                    child: Text(
+                                      status,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.end,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                            color: statusIsError
+                                                ? colors.error
+                                                : colors.onSurfaceVariant,
+                                          ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                         ],
@@ -1233,7 +1273,7 @@ class _SourceLoopChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: ListenColors.accent.withValues(alpha: 0.15),
+        color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Padding(
@@ -1241,13 +1281,17 @@ class _SourceLoopChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.loop, size: 13, color: ListenColors.accent),
+            Icon(
+              Icons.loop,
+              size: 13,
+              color: Theme.of(context).colorScheme.secondary,
+            ),
             const SizedBox(width: 4),
             Text(
               label,
-              style: Theme.of(
-                context,
-              ).textTheme.labelSmall?.copyWith(color: ListenColors.accent),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(context).colorScheme.secondary,
+              ),
             ),
             SizedBox(
               width: 22,
@@ -1256,7 +1300,10 @@ class _SourceLoopChip extends StatelessWidget {
                 onPressed: onStop,
                 padding: EdgeInsets.zero,
                 iconSize: 14,
-                icon: Icon(Icons.close, color: ListenColors.accent),
+                icon: Icon(
+                  Icons.close,
+                  color: Theme.of(context).colorScheme.secondary,
+                ),
                 tooltip: AppLocalizations.of(context).text('stopSourceLoop'),
               ),
             ),
@@ -1275,7 +1322,7 @@ class _TaskStatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final color = _stateColor(status.state);
+    final color = _stateColor(Theme.of(context).colorScheme, status.state);
     return DecoratedBox(
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
@@ -1293,12 +1340,12 @@ class _TaskStatusChip extends StatelessWidget {
     );
   }
 
-  Color _stateColor(UserTaskState state) => switch (state) {
-    UserTaskState.working => ListenColors.info,
-    UserTaskState.success => ListenColors.primary,
-    UserTaskState.warning => ListenColors.accent,
-    UserTaskState.error => ListenColors.error,
-    UserTaskState.cancelled => ListenColors.muted,
-    UserTaskState.unknown => ListenColors.muted,
+  Color _stateColor(ColorScheme colors, UserTaskState state) => switch (state) {
+    UserTaskState.working => colors.tertiary,
+    UserTaskState.success => colors.primary,
+    UserTaskState.warning => colors.secondary,
+    UserTaskState.error => colors.error,
+    UserTaskState.cancelled => colors.onSurfaceVariant,
+    UserTaskState.unknown => colors.onSurfaceVariant,
   };
 }

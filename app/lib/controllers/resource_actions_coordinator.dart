@@ -30,6 +30,9 @@ class ResourceActionsCoordinator {
 
   late LocalApi? Function() getApi;
   late bool Function() isMounted;
+  String Function(String key)? text;
+
+  String _t(String key) => text?.call(key) ?? key;
   late Future<void> Function(String trackId) reloadSpeechEnhancements;
   late Future<void> Function(SubtitleTrack track, {required String nextStatus})
   activatePrimaryTrack;
@@ -38,6 +41,7 @@ class ResourceActionsCoordinator {
   void bind({
     required LocalApi? Function() getApi,
     required bool Function() isMounted,
+    String Function(String key)? text,
     required Future<void> Function(String trackId) reloadSpeechEnhancements,
     required Future<void> Function(
       SubtitleTrack track, {
@@ -48,6 +52,7 @@ class ResourceActionsCoordinator {
   }) {
     this.getApi = getApi;
     this.isMounted = isMounted;
+    this.text = text;
     this.reloadSpeechEnhancements = reloadSpeechEnhancements;
     this.activatePrimaryTrack = activatePrimaryTrack;
     this.reloadLearningEntries = reloadLearningEntries;
@@ -75,9 +80,7 @@ class ResourceActionsCoordinator {
     if (service == null) return;
     ContentDifficultyProfile? profile;
     try {
-      profile = ContentDifficultyProfile.fromJson(
-        await service.trackContentFit(trackId),
-      );
+      profile = await service.trackContentFit(trackId);
     } catch (_) {
       profile = null;
     }
@@ -113,7 +116,7 @@ class ResourceActionsCoordinator {
     final trackId = subtitle.primaryTrack?.id;
     if (trackId == null) return;
     await loadTimelineResource(trackId);
-    if (isMounted()) player.setStatus('Timeline resource refreshed');
+    if (isMounted()) player.setStatus(_t('statusTimelineResourceRefreshed'));
   }
 
   // ── Subtitle resource list / capabilities ──
@@ -127,10 +130,7 @@ class ResourceActionsCoordinator {
       return;
     }
     try {
-      final values = await service.mediaSubtitles(mediaId);
-      final tracks = values
-          .map((raw) => SubtitleTrack.fromJson(raw))
-          .toList(growable: false);
+      final tracks = await service.mediaSubtitles(mediaId);
       final capabilities = await _loadSubtitleResourceCapabilities(
         service,
         tracks,
@@ -138,10 +138,10 @@ class ResourceActionsCoordinator {
       if (!isMounted() || player.mediaId != mediaId) return;
       subtitle.setSubtitleResources(tracks);
       subtitle.setSubtitleResourceCapabilities(capabilities);
-      if (updateStatus) player.setStatus('Subtitle resources refreshed');
+      if (updateStatus) player.setStatus(_t('statusSubtitleResourcesRefreshed'));
     } catch (error) {
       if (isMounted() && updateStatus) {
-        player.setStatus('Subtitle resources unavailable: $error');
+        player.setStatus('${_t('statusSubtitleResourcesUnavailable')}: $error', error: true);
       }
     }
   }
@@ -176,11 +176,11 @@ class ResourceActionsCoordinator {
             wordTimingCount: wordTimings.length,
             chunkCount: chunkSummaries.fold<int>(
               0,
-              (total, raw) => total + (raw['chunk_count'] as int? ?? 0),
+              (total, summary) => total + summary.chunkCount,
             ),
             phoneCount: phoneSummaries.fold<int>(
               0,
-              (total, raw) => total + (raw['phone_count'] as int? ?? 0),
+              (total, summary) => total + summary.phoneCount,
             ),
             error: errors.isEmpty ? null : errors.join('; '),
           ),
@@ -190,8 +190,8 @@ class ResourceActionsCoordinator {
     return Map<String, SubtitleResourceCapabilities>.fromEntries(entries);
   }
 
-  Future<List<Map<String, dynamic>>> _loadOptionalResourceCapability(
-    Future<List<Map<String, dynamic>>> Function() loader,
+  Future<List<T>> _loadOptionalResourceCapability<T>(
+    Future<List<T>> Function() loader,
     String label,
     List<String> errors,
   ) async {
@@ -219,7 +219,7 @@ class ResourceActionsCoordinator {
       await loadSubtitleResources(updateStatus: false);
     } catch (error) {
       if (isMounted()) {
-        player.setStatus('Subtitle activation failed: $error');
+        player.setStatus('${_t('statusSubtitleActivationFailed')}: $error', error: true);
       }
     }
   }
@@ -231,9 +231,9 @@ class ResourceActionsCoordinator {
       await service.archiveSubtitle(track.id);
       _clearPrimaryTrackIfMatches(track);
       await loadSubtitleResources(updateStatus: false);
-      if (isMounted()) player.setStatus('Archived subtitle resource');
+      if (isMounted()) player.setStatus(_t('statusSubtitleArchived'));
     } catch (error) {
-      if (isMounted()) player.setStatus('Subtitle archive failed: $error');
+      if (isMounted()) player.setStatus('${_t('statusSubtitleArchiveFailed')}: $error', error: true);
     }
   }
 
@@ -243,9 +243,9 @@ class ResourceActionsCoordinator {
     try {
       await service.restoreSubtitle(track.id);
       await loadSubtitleResources(updateStatus: false);
-      if (isMounted()) player.setStatus('Restored subtitle resource');
+      if (isMounted()) player.setStatus(_t('statusSubtitleRestored'));
     } catch (error) {
-      if (isMounted()) player.setStatus('Subtitle restore failed: $error');
+      if (isMounted()) player.setStatus('${_t('statusSubtitleRestoreFailed')}: $error', error: true);
     }
   }
 
@@ -258,9 +258,9 @@ class ResourceActionsCoordinator {
       await service.deleteSubtitle(track.id);
       _clearPrimaryTrackIfMatches(track);
       await loadSubtitleResources(updateStatus: false);
-      if (isMounted()) player.setStatus('Deleted subtitle resource');
+      if (isMounted()) player.setStatus(_t('statusSubtitleDeleted'));
     } catch (error) {
-      if (isMounted()) player.setStatus('Subtitle delete failed: $error');
+      if (isMounted()) player.setStatus('${_t('statusSubtitleDeleteFailed')}: $error', error: true);
     }
   }
 
@@ -281,9 +281,9 @@ class ResourceActionsCoordinator {
       if (location == null) return;
       final srt = await service.exportSubtitleSrt(track.id);
       await File(location.path).writeAsString(srt);
-      if (isMounted()) player.setStatus('Exported SRT subtitle resource');
+      if (isMounted()) player.setStatus(_t('statusSubtitleExportedSrt'));
     } catch (error) {
-      if (isMounted()) player.setStatus('Subtitle export failed: $error');
+      if (isMounted()) player.setStatus('${_t('statusSubtitleExportFailed')}: $error', error: true);
     }
   }
 
@@ -296,12 +296,12 @@ class ResourceActionsCoordinator {
       );
       if (location == null) return;
       final document = await service.exportTrackLLTimeline(track.id);
-      await File(
-        location.path,
-      ).writeAsString(const JsonEncoder.withIndent('  ').convert(document));
-      if (isMounted()) player.setStatus('Exported LLTimeline resource');
+      await File(location.path).writeAsString(
+        const JsonEncoder.withIndent('  ').convert(document.toJson()),
+      );
+      if (isMounted()) player.setStatus(_t('statusLLTimelineExported'));
     } catch (error) {
-      if (isMounted()) player.setStatus('LLTimeline export failed: $error');
+      if (isMounted()) player.setStatus('${_t('statusLLTimelineExportFailed')}: $error', error: true);
     }
   }
 
@@ -320,10 +320,10 @@ class ResourceActionsCoordinator {
         }
         await reloadLearningEntries();
       }
-      if (isMounted()) player.setStatus('Language set to $language');
+      if (isMounted()) player.setStatus(_t('statusLanguageSet').replaceAll('{language}', language));
     } catch (error) {
       if (isMounted()) {
-        player.setStatus('Failed to update language: $error');
+        player.setStatus('${_t('statusLanguageUpdateFailed')}: $error', error: true);
       }
     }
   }
@@ -425,7 +425,7 @@ class ResourceActionsCoordinator {
       if (isMounted()) player.setStatus(doneStatus);
     } catch (error) {
       if (isMounted()) {
-        player.setStatus('$failurePrefix: $error');
+        player.setStatus('$failurePrefix: $error', error: true);
       }
     }
   }

@@ -20,6 +20,7 @@ class AppSettings {
     this.secondaryFontFamily = 'system',
     this.subtitlePreset = 'learning',
     this.language = 'system',
+    this.themeMode = 'system',
     this.subtitlePositionX = 0.5,
     this.subtitlePositionY = 0.82,
     this.subtitleBackgroundOpacity = 0.72,
@@ -111,6 +112,7 @@ class AppSettings {
       secondaryFontFamily: json['secondary_font_family'] as String? ?? 'system',
       subtitlePreset: json['subtitle_preset'] as String? ?? 'learning',
       language: json['language'] as String? ?? 'system',
+      themeMode: json['theme_mode'] as String? ?? 'system',
       subtitlePositionX: _number(json['subtitle_position_x'], 0.5, 0, 1),
       subtitlePositionY: version >= 4
           ? _number(json['subtitle_position_y'], 0.82, 0, 1)
@@ -207,6 +209,9 @@ class AppSettings {
   final String secondaryFontFamily;
   final String subtitlePreset;
   final String language;
+
+  /// Appearance preference: `system`, `light`, or `dark`.
+  final String themeMode;
   final double subtitlePositionX;
   final double subtitlePositionY;
   final double subtitleBackgroundOpacity;
@@ -228,11 +233,12 @@ class AppSettings {
   final String openSubtitlesApiKey;
   final bool pronunciationVisible;
   final bool wordSyncVisible;
+
   /// Unified subtitle grouping presentation. One of:
-  /// `off`, `prosodic` (chunk capsules), `semantic` (provisional sense-group
-  /// capsules), `compare` (prosodic base + divergence markers). The prosodic
-  /// and semantic data layers stay separate per ADR 0016; this only unifies
-  /// how a single active grouping is drawn.
+  /// `off`, `prosodic` (chunk capsules), `semantic` (sense-group capsules),
+  /// `compare` (prosodic base + divergence markers). The prosodic and semantic
+  /// data layers stay separate per ADR 0016; this only unifies how a single
+  /// active grouping is drawn.
   final String groupingMode;
   final String chunkDisplayStyle;
   final bool highlightCurrentChunk;
@@ -314,6 +320,7 @@ class AppSettings {
         'secondary_font_family': secondaryFontFamily,
         'subtitle_preset': subtitlePreset,
         'language': language,
+        'theme_mode': themeMode,
         'subtitle_position_x': subtitlePositionX,
         'subtitle_position_y': subtitlePositionY,
         'subtitle_background_opacity': subtitleBackgroundOpacity,
@@ -375,6 +382,7 @@ class AppSettings {
     String? secondaryFontFamily,
     String? subtitlePreset,
     String? language,
+    String? themeMode,
     double? subtitlePositionX,
     double? subtitlePositionY,
     double? subtitleBackgroundOpacity,
@@ -435,6 +443,7 @@ class AppSettings {
     secondaryFontFamily: secondaryFontFamily ?? this.secondaryFontFamily,
     subtitlePreset: subtitlePreset ?? this.subtitlePreset,
     language: language ?? this.language,
+    themeMode: themeMode ?? this.themeMode,
     subtitlePositionX: subtitlePositionX ?? this.subtitlePositionX,
     subtitlePositionY: subtitlePositionY ?? this.subtitlePositionY,
     subtitleBackgroundOpacity:

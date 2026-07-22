@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
 import '../../theme/listen_theme.dart';
+import 'following_structure_viewport.dart';
 
 typedef RhythmCueLoopCallback =
     void Function(Duration start, Duration end, String label);
@@ -33,6 +34,8 @@ class RhythmFrameRibbon extends StatelessWidget {
     this.onLoopCue,
     this.predicted = false,
     this.predictedLabel,
+    this.expandTooltip = 'Show full sentence',
+    this.collapseTooltip = 'Collapse sentence',
   });
 
   final RhythmFrame frame;
@@ -55,6 +58,8 @@ class RhythmFrameRibbon extends StatelessWidget {
   /// text-prior prediction and must not read as measured audio.
   final bool predicted;
   final String? predictedLabel;
+  final String expandTooltip;
+  final String collapseTooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -62,11 +67,12 @@ class RhythmFrameRibbon extends StatelessWidget {
     if (items.isEmpty && frame.phraseBoundaries.isEmpty) {
       return const SizedBox.shrink();
     }
+    final sequence = _sequence(items);
 
     final content = Semantics(
       label: tooltip ?? title,
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: MainAxisSize.max,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _RhythmBadge(
@@ -78,14 +84,13 @@ class RhythmFrameRibbon extends StatelessWidget {
             predictedLabel: predictedLabel,
           ),
           const SizedBox(width: 10),
-          Flexible(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: _sequence(items),
-              ),
+          Expanded(
+            child: FollowingStructureViewport(
+              activeIndex: sequence.indexWhere((entry) => entry.active),
+              spacing: 0,
+              expandTooltip: expandTooltip,
+              collapseTooltip: collapseTooltip,
+              children: sequence.map((entry) => entry.widget).toList(),
             ),
           ),
         ],
@@ -97,8 +102,8 @@ class RhythmFrameRibbon extends StatelessWidget {
         : Tooltip(message: tooltip!, child: content);
   }
 
-  List<Widget> _sequence(List<_AudibleItem> items) {
-    final widgets = <Widget>[];
+  List<_SequenceNode> _sequence(List<_AudibleItem> items) {
+    final widgets = <_SequenceNode>[];
     var boundaryCursor = 0;
     final boundaries = [...frame.phraseBoundaries]
       ..sort((a, b) => a.at.compareTo(b.at));
@@ -108,23 +113,29 @@ class RhythmFrameRibbon extends StatelessWidget {
           boundaries[boundaryCursor].at <= item.start) {
         if (widgets.isNotEmpty) {
           widgets.add(
-            _PhraseDivider(
-              boundary: boundaries[boundaryCursor],
-              height: height,
+            _SequenceNode(
+              widget: _PhraseDivider(
+                boundary: boundaries[boundaryCursor],
+                height: height,
+              ),
             ),
           );
         }
         boundaryCursor += 1;
       }
+      final active = item.contains(position);
       widgets.add(
-        Padding(
-          padding: EdgeInsets.only(right: index == items.length - 1 ? 0 : 7),
-          child: _AudibleNode(
-            item: item,
-            active: item.contains(position),
-            fontSize: fontSize,
-            height: height,
-            onLoopCue: onLoopCue,
+        _SequenceNode(
+          active: active,
+          widget: Padding(
+            padding: EdgeInsets.only(right: index == items.length - 1 ? 0 : 7),
+            child: _AudibleNode(
+              item: item,
+              active: active,
+              fontSize: fontSize,
+              height: height,
+              onLoopCue: onLoopCue,
+            ),
           ),
         ),
       );
@@ -133,7 +144,7 @@ class RhythmFrameRibbon extends StatelessWidget {
   }
 
   List<_AudibleItem> _audibleItems() {
-    final values = <_AudibleItem>[];
+    final values = <_AudibleItem>[..._actualConnectedItems()];
     if (frame.informationAnchors.isNotEmpty) {
       for (final anchor in frame.informationAnchors) {
         if (!predicted &&
@@ -248,6 +259,48 @@ class RhythmFrameRibbon extends StatelessWidget {
       if (item != null) values.add(item);
     }
     values.sort(_audibleSort);
+    return values;
+  }
+
+  List<_AudibleItem> _actualConnectedItems() {
+    if (predicted) return const [];
+    final values = <_AudibleItem>[];
+    for (final reference in frame.connectedSpeechRefs) {
+      final structure = reference.actualStructure;
+      if (structure == null ||
+          structure.learnerCue.trim().isEmpty ||
+          !reference.signalSources.contains('phone_segmental')) {
+        continue;
+      }
+      ListeningHotspot? hotspot;
+      for (final value in frame.listeningHotspots) {
+        if (value.kind == 'connected_speech' &&
+            value.tokenStart == reference.tokenStart &&
+            value.tokenEnd == reference.tokenEnd &&
+            value.label == reference.label) {
+          hotspot = value;
+          break;
+        }
+      }
+      if (hotspot == null || hotspot.end <= hotspot.start) continue;
+      final family = (reference.family ?? reference.label).replaceAll('_', ' ');
+      values.add(
+        _AudibleItem(
+          kind: _AudibleKind.connected,
+          label: structure.learnerCue,
+          caption: reference.surfaceText,
+          start: hotspot.start,
+          end: hotspot.end,
+          confidence: reference.confidence,
+          tooltip: [
+            'Actual audible structure: ${reference.surfaceText}',
+            '/${structure.displayIpa}/',
+            family,
+            'audio supported · phone segmental',
+          ].join('\n'),
+        ),
+      );
+    }
     return values;
   }
 
@@ -535,6 +588,7 @@ class _AudibleNode extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final nucleus = item.kind == _AudibleKind.nucleus;
+    final connected = item.kind == _AudibleKind.connected;
     final weak = item.kind == _AudibleKind.weak;
     final color = nucleus
         ? ListenColors.soundNucleus
@@ -551,8 +605,16 @@ class _AudibleNode extends StatelessWidget {
     final labelSize = weak
         ? math.max(9.0, fontSize * 0.78)
         : math.max(12.0, fontSize * (nucleus ? 1.18 : 1.02));
-    final meaningLabel = item.caption.isEmpty ? item.label : item.caption;
-    final soundLabel = item.caption.isEmpty ? '' : '/${item.label}/';
+    final meaningLabel = connected
+        ? item.label
+        : item.caption.isEmpty
+        ? item.label
+        : item.caption;
+    final soundLabel = connected
+        ? item.caption
+        : item.caption.isEmpty
+        ? ''
+        : '/${item.label}/';
     final foreground = !weak;
     final foregroundNode = Container(
       padding: EdgeInsets.symmetric(
@@ -688,7 +750,7 @@ class _PhraseDivider extends StatelessWidget {
   );
 }
 
-enum _AudibleKind { nucleus, anchor, weak }
+enum _AudibleKind { nucleus, connected, anchor, weak }
 
 class _AudibleItem {
   const _AudibleItem({
@@ -710,6 +772,13 @@ class _AudibleItem {
   final String tooltip;
 
   bool contains(Duration value) => value >= start && value < end;
+}
+
+class _SequenceNode {
+  const _SequenceNode({required this.widget, this.active = false});
+
+  final Widget widget;
+  final bool active;
 }
 
 String _formatPercent(double value) =>

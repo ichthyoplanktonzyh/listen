@@ -275,8 +275,21 @@ void main() {
                     id: 'cs1',
                     tokenStart: 0,
                     tokenEnd: 1,
+                    family: 'weak_form',
+                    surfaceText: 'could have',
                     label: 'weak form',
                     defaultDisplayIpa: 'kədəv',
+                    actualStructure: RhythmAudibleStructure(
+                      groups: [
+                        RhythmAudibleGroup(
+                          symbols: ['K', 'AH', 'D', 'V'],
+                          displayIpa: 'kədv',
+                          sourceTokenIndices: [0, 1],
+                        ),
+                      ],
+                      displayIpa: 'kədv',
+                      learnerCue: 'kədv',
+                    ),
                     divergence: 'clip_specific',
                     signalSources: ['phone_segmental'],
                     evidenceClass: 'heuristic_proxy',
@@ -292,6 +305,20 @@ void main() {
                     label: 'weak group',
                     hint: 'backgrounded',
                     signalSources: ['timing'],
+                    evidenceClass: 'heuristic_proxy',
+                    claimStatus: 'audio_supported',
+                    confidence: 0.7,
+                  ),
+                  ListeningHotspot(
+                    id: 'hs2',
+                    kind: 'connected_speech',
+                    tokenStart: 0,
+                    tokenEnd: 1,
+                    start: Duration(milliseconds: 0),
+                    end: Duration(milliseconds: 90),
+                    label: 'weak form',
+                    hint: 'observed reduction',
+                    signalSources: ['phone_segmental'],
                     evidenceClass: 'heuristic_proxy',
                     claimStatus: 'audio_supported',
                     confidence: 0.7,
@@ -318,6 +345,7 @@ void main() {
     expect(find.text('/ɑ/'), findsOneWidget);
     expect(find.textContaining('market'), findsWidgets);
     expect(find.text('kədəv'), findsOneWidget);
+    expect(find.text('kədv'), findsOneWidget);
     expect(find.textContaining('could have been'), findsNothing);
     expect(find.text('weak group'), findsNothing);
     expect(find.textContaining('predicted only'), findsNothing);
@@ -543,6 +571,7 @@ void main() {
       ),
     );
 
+    await tester.pumpAndSettle();
     await tester.tap(find.text('weak group'));
 
     expect(loopStart, const Duration(milliseconds: 20));
@@ -673,6 +702,102 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'linking reference shows written boundary becoming audible groups',
+    (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Center(
+            child: SizedBox(
+              width: 420,
+              child: ConnectedSpeechReferenceRibbon(
+                title: 'Common speech',
+                tokens: [
+                  SubtitleToken(
+                    index: 0,
+                    kind: 'word',
+                    text: 'pick',
+                    normalized: 'pick',
+                  ),
+                  SubtitleToken(
+                    index: 1,
+                    kind: 'whitespace',
+                    text: ' ',
+                    normalized: null,
+                  ),
+                  SubtitleToken(
+                    index: 2,
+                    kind: 'word',
+                    text: 'up',
+                    normalized: 'up',
+                  ),
+                ],
+                references: [
+                  RhythmConnectedSpeechRef(
+                    id: 'cs-link',
+                    tokenStart: 0,
+                    tokenEnd: 2,
+                    family: 'linking',
+                    surfaceText: 'pick up',
+                    label: 'default linking',
+                    hint: 'The final consonant starts the next audible group.',
+                    citationStructure: RhythmAudibleStructure(
+                      groups: [
+                        RhythmAudibleGroup(
+                          symbols: ['P', 'IH', 'K'],
+                          displayIpa: 'pɪk',
+                          sourceTokenIndices: [0],
+                        ),
+                        RhythmAudibleGroup(
+                          symbols: ['AH', 'P'],
+                          displayIpa: 'ʌp',
+                          sourceTokenIndices: [2],
+                        ),
+                      ],
+                      displayIpa: 'pɪk | ʌp',
+                      learnerCue: 'pɪk-ʌp',
+                    ),
+                    predictedStructure: RhythmAudibleStructure(
+                      groups: [
+                        RhythmAudibleGroup(
+                          symbols: ['P', 'IH'],
+                          displayIpa: 'pɪ',
+                          sourceTokenIndices: [0],
+                        ),
+                        RhythmAudibleGroup(
+                          symbols: ['K', 'AH', 'P'],
+                          displayIpa: 'kʌp',
+                          sourceTokenIndices: [0, 2],
+                        ),
+                      ],
+                      displayIpa: 'pɪ.kʌp',
+                      learnerCue: 'pɪ-kʌp',
+                    ),
+                    divergence: 'teachable_rule',
+                    signalSources: ['text_prior'],
+                    evidenceClass: 'heuristic_proxy',
+                    confidence: 0.66,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('pick up →'), findsOneWidget);
+      expect(find.text('pɪ-kʌp'), findsOneWidget);
+      expect(find.text('/pɪk | ʌp/ → /pɪ.kʌp/'), findsOneWidget);
+      expect(
+        find.byTooltip(
+          'pick up\nHear it as: pɪ-kʌp\n/pɪk | ʌp/ → /pɪ.kʌp/\n'
+          'The final consonant starts the next audible group.\nlinking',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets(
     'expected pronunciation reference shows word IPA and current word',

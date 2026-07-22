@@ -31,9 +31,7 @@ class LearningWorkflowController {
           _isCurrentPhraseRequest(generation, cue.id, currentCueId())) {
         learning.setPhraseCandidates(const []);
       }
-      final candidates = (await api.phraseCandidates(
-        cue.id,
-      )).map(PhraseCandidate.fromJson).toList(growable: false);
+      final candidates = await api.phraseCandidates(cue.id);
       if (isMounted() &&
           _isCurrentPhraseRequest(generation, cue.id, currentCueId())) {
         learning.setPhraseCandidates(candidates);
@@ -66,10 +64,7 @@ class LearningWorkflowController {
     );
     if (!isMounted()) return;
     final entries = Map<String, LexicalEntry>.fromEntries(
-      values.map((entry) {
-        final value = LexicalEntry.fromJson(entry);
-        return MapEntry(value.normalizedForm, value);
-      }),
+      values.map((entry) => MapEntry(entry.normalizedForm, entry)),
     );
     learning.setWordEntries(entries);
   }
@@ -84,10 +79,7 @@ class LearningWorkflowController {
     final values = await api.lexicalEntries(kind: 'phrase', language: language);
     if (!isMounted()) return;
     final entries = Map<String, LexicalEntryDetails>.fromEntries(
-      values.map((details) {
-        final value = LexicalEntryDetails.fromJson(details);
-        return MapEntry(value.entry.normalizedForm, value);
-      }),
+      values.map((details) => MapEntry(details.entry.normalizedForm, details)),
     );
     learning.setPhraseEntries(entries);
   }
@@ -114,14 +106,12 @@ class LearningWorkflowController {
     final source = sourceFor?.call(token, cue);
     var entry = learning.wordEntries[lemma];
     if (entry == null) {
-      final details = LexicalEntryDetails.fromJson(
-        await api.upsertWordLexicalEntry(
-          lemma,
-          token.text,
-          null,
-          language: language,
-          source: source,
-        ),
+      final details = await api.upsertWordLexicalEntry(
+        lemma,
+        token.text,
+        null,
+        language: language,
+        source: source,
       );
       entry = details.entry;
       if (!_isCurrentOpenWord(generation, isMounted)) return;
@@ -158,17 +148,14 @@ class LearningWorkflowController {
     }
 
     final dictionary = await _tryLoad(
-      () async => DictionaryLookupBundle.fromJson(
-        await api.lookupDictionary(lemma, language: language),
-      ),
+      () => api.lookupDictionary(lemma, language: language),
     );
     if (dictionary != null && _isCurrentOpenWord(generation, isMounted)) {
       learning.setSelectedDictionary(dictionary);
     }
 
     final pronunciation = await _tryLoad(
-      () async =>
-          WordPronunciation.fromJson(await api.lookupPronunciation(token.text)),
+      () => api.lookupPronunciation(token.text),
     );
     if (pronunciation != null && _isCurrentOpenWord(generation, isMounted)) {
       learning.setSelectedPronunciation(pronunciation);
@@ -176,8 +163,7 @@ class LearningWorkflowController {
 
     if (learning.languageProfileFor(language) != null) return;
     final languageProfile = await _tryLoad(
-      () async =>
-          LanguageProfile.fromJson(await api.lookupLanguageProfile(language)),
+      () => api.lookupLanguageProfile(language),
     );
     if (languageProfile != null && _isCurrentOpenWord(generation, isMounted)) {
       learning.setLanguageProfile(languageProfile);
@@ -192,9 +178,7 @@ class LearningWorkflowController {
     LexicalEntry entry,
   ) async {
     try {
-      return LexicalEntryDetails.fromJson(
-        await api.lexicalEntryDetails(entry.id),
-      );
+      return await api.lexicalEntryDetails(entry.id);
     } catch (_) {
       return LexicalEntryDetails(entry: entry);
     }
@@ -224,14 +208,12 @@ class LearningWorkflowController {
         .toList(growable: false);
     final token = tokens.isEmpty ? null : tokens.first;
     if (token == null) return null;
-    final details = LexicalEntryDetails.fromJson(
-      await api.upsertWordLexicalEntry(
-        token.normalized!,
-        token.text,
-        wordStatus,
-        language: language,
-        source: sourceFor(token, cue),
-      ),
+    final details = await api.upsertWordLexicalEntry(
+      token.normalized!,
+      token.text,
+      wordStatus,
+      language: language,
+      source: sourceFor(token, cue),
     );
     if (isMounted()) {
       learning.updateSingleWordEntry(token.normalized!, details.entry);
@@ -251,14 +233,12 @@ class LearningWorkflowController {
     final token = learning.selectedToken;
     final cue = learning.selectedCue;
     if (token?.normalized == null || cue == null || api == null) return null;
-    final details = LexicalEntryDetails.fromJson(
-      await api.upsertWordLexicalEntry(
-        token!.normalized!,
-        token.text,
-        selected,
-        language: language,
-        source: sourceFor(token, cue),
-      ),
+    final details = await api.upsertWordLexicalEntry(
+      token!.normalized!,
+      token.text,
+      selected,
+      language: language,
+      source: sourceFor(token, cue),
     );
     if (!isMounted()) return null;
     learning.updateSingleWordEntry(token.normalized!, details.entry);
@@ -275,12 +255,10 @@ class LearningWorkflowController {
   }) async {
     final entry = learning.selectedLexicalDetails?.entry;
     if (entry == null || api == null) return;
-    final details = LexicalEntryDetails.fromJson(
-      await api.updateLexicalLearningContent(
-        entry.id,
-        userDefinition: definition,
-        personalNote: note,
-      ),
+    final details = await api.updateLexicalLearningContent(
+      entry.id,
+      userDefinition: definition,
+      personalNote: note,
     );
     if (isMounted()) learning.selectWord(details);
   }
@@ -318,7 +296,11 @@ class LearningWorkflowController {
   }) async {
     final entry = learning.selectedLexicalDetails?.entry;
     if (entry == null || api == null) return;
-    await api.setCapabilityOverride(entry.id, capability, conclusion: conclusion);
+    await api.setCapabilityOverride(
+      entry.id,
+      capability,
+      conclusion: conclusion,
+    );
     if (conclusion == 'not_acquired' && sourceFor != null) {
       final token = learning.selectedToken;
       final cue = learning.selectedCue;
@@ -340,9 +322,7 @@ class LearningWorkflowController {
         }
       }
     }
-    final details = LexicalEntryDetails.fromJson(
-      await api.lexicalEntryDetails(entry.id),
-    );
+    final details = await api.lexicalEntryDetails(entry.id);
     if (!isMounted()) return;
     final lemma = entry.normalizedForm;
     learning.updateSingleWordEntry(lemma, details.entry);
@@ -381,21 +361,19 @@ class LearningWorkflowController {
     required LearningController learning,
     required bool Function() isMounted,
     required Map<String, dynamic>? Function(SubtitleToken token, Cue cue)
-        sourceFor,
+    sourceFor,
   }) async {
     final token = learning.selectedToken;
     final cue = learning.selectedCue;
     if (token?.normalized == null || cue == null || api == null) return;
     final source = sourceFor(token!, cue);
     if (source == null) return;
-    final details = LexicalEntryDetails.fromJson(
-      await api.upsertWordLexicalEntry(
-        token.normalized!,
-        token.text,
-        null,
-        language: language,
-        source: source,
-      ),
+    final details = await api.upsertWordLexicalEntry(
+      token.normalized!,
+      token.text,
+      null,
+      language: language,
+      source: source,
     );
     if (!isMounted()) return;
     learning.selectWord(details);

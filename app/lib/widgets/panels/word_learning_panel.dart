@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/types.dart';
-import '../../theme/listen_theme.dart';
 import '../../utils/format_duration.dart';
 import '../vocabulary/pronunciation_button.dart';
 
@@ -21,6 +20,9 @@ class WordLearningPanel extends StatefulWidget {
     this.onCapabilityOverride,
     this.onRecordSource,
     this.onOpenListeningDictionary,
+    this.onPlayPronunciationAudio,
+    this.onReadingMark,
+    this.onCorrectLemma,
     this.hasSelectedCue = false,
   });
 
@@ -37,6 +39,16 @@ class WordLearningPanel extends StatefulWidget {
   onCapabilityOverride;
   final VoidCallback? onRecordSource;
   final VoidCallback? onOpenListeningDictionary;
+  final ValueChanged<String>? onPlayPronunciationAudio;
+
+  /// Explicit reading mark (Phase 3.13); non-null only while the reading
+  /// posture is open. `true` = understood while reading.
+  final void Function(bool understood)? onReadingMark;
+
+  /// Overrides the lemma the normalizer picked for the selected token. It
+  /// only makes sense with a token in hand, which is why it lives here rather
+  /// than in the global AppBar menu it used to occupy (#16).
+  final VoidCallback? onCorrectLemma;
   final bool hasSelectedCue;
 
   @override
@@ -160,8 +172,10 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
             ),
             DecoratedBox(
               decoration: BoxDecoration(
-                color: ListenColors.selected,
-                border: Border.all(color: ListenColors.primary),
+                color: Theme.of(context).colorScheme.primaryContainer,
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Padding(
@@ -169,7 +183,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
                 child: Text(
                   l.status(entry.status),
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: ListenColors.primary,
+                    color: Theme.of(context).colorScheme.primary,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -230,6 +244,27 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
               onPressed: widget.onNotHeard,
               label: Text(l.text('notHeard')),
             ),
+            if (widget.onReadingMark != null) ...[
+              TextButton.icon(
+                key: const ValueKey('reading-mark-understood'),
+                icon: const Icon(Icons.chrome_reader_mode_outlined, size: 18),
+                onPressed: () => widget.onReadingMark!(true),
+                label: Text(l.text('readUnderstood')),
+              ),
+              TextButton.icon(
+                key: const ValueKey('reading-mark-not-understood'),
+                icon: const Icon(Icons.help_outline, size: 18),
+                onPressed: () => widget.onReadingMark!(false),
+                label: Text(l.text('readNotUnderstood')),
+              ),
+            ],
+            if (widget.onCorrectLemma != null)
+              TextButton.icon(
+                key: const ValueKey('correct-lemma'),
+                icon: const Icon(Icons.edit_note_outlined, size: 18),
+                onPressed: widget.onCorrectLemma,
+                label: Text(l.text('correctLemma')),
+              ),
           ],
         ),
         const Divider(),
@@ -319,7 +354,15 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
                         title: Text(value.text),
                         trailing:
                             value.audioUrl != null && value.audioUrl!.isNotEmpty
-                            ? PronunciationButton(audioUrl: value.audioUrl!)
+                            ? PronunciationButton(
+                                tooltip: l.text('pronunciation'),
+                                onPressed:
+                                    widget.onPlayPronunciationAudio == null
+                                    ? null
+                                    : () => widget.onPlayPronunciationAudio!(
+                                        value.audioUrl!,
+                                      ),
+                              )
                             : null,
                       ),
                   if (lookup != null)
@@ -440,7 +483,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
   Widget _sectionHeader(BuildContext context, String title, IconData icon) =>
       Row(
         children: [
-          Icon(icon, size: 18, color: ListenColors.primary),
+          Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
           const SizedBox(width: 8),
           Text(title, style: Theme.of(context).textTheme.titleSmall),
         ],
@@ -485,7 +528,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: ListenColors.primary),
+          Icon(icon, size: 16, color: Theme.of(context).colorScheme.primary),
           const SizedBox(width: 6),
           SizedBox(
             width: 48,

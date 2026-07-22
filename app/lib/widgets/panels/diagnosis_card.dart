@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
-import '../../theme/listen_theme.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
 
@@ -53,7 +52,7 @@ class DiagnosisCard extends StatelessWidget {
     final activeRhythmFrame =
         rhythmFrame ?? phoneticAnalysis?.soundAnalysis?.rhythmFrame;
     return Material(
-      color: ListenColors.surface,
+      color: Theme.of(context).colorScheme.surface,
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
@@ -85,9 +84,11 @@ class DiagnosisCard extends StatelessWidget {
                         child: Text(
                           '${l.text('possibleListeningFactors')} '
                           '${hint.reasons.map(l.diagnosisReason).join(' · ')}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: ListenColors.muted,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ),
@@ -120,9 +121,9 @@ class DiagnosisCard extends StatelessWidget {
               padding: const EdgeInsets.only(top: 8),
               child: Text(
                 l.text('l1UnsupportedPair'),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: ListenColors.muted,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
             ),
@@ -152,7 +153,7 @@ class DiagnosisCard extends StatelessWidget {
                             '${provider.diagnostic == null ? '' : ' · ${provider.diagnostic}'}',
                           ),
                         ),
-                      if (timingQuality != null)
+                      if (timingQuality != null && timingQuality!.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 6),
                           child: Text(
@@ -280,9 +281,13 @@ class DiagnosisCard extends StatelessWidget {
                               materialTapTargetSize:
                                   MaterialTapTargetSize.shrinkWrap,
                               avatar: const Icon(Icons.replay, size: 14),
-                              backgroundColor: ListenColors.info.withAlpha(42),
+                              backgroundColor: Theme.of(
+                                context,
+                              ).colorScheme.tertiary.withAlpha(42),
                               side: BorderSide(
-                                color: ListenColors.info.withAlpha(115),
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.tertiary.withAlpha(115),
                               ),
                               label: Text(
                                 span.surfaceText.isEmpty
@@ -299,7 +304,10 @@ class DiagnosisCard extends StatelessWidget {
                         if (onOpenL1Specialty != null)
                           TextButton.icon(
                             onPressed: () => onOpenL1Specialty!(hint),
-                            icon: const Icon(Icons.grid_view_outlined, size: 14),
+                            icon: const Icon(
+                              Icons.grid_view_outlined,
+                              size: 14,
+                            ),
                             label: Text(
                               l.text('l1SimilarClips'),
                               style: const TextStyle(fontSize: 12),
@@ -349,7 +357,7 @@ class DiagnosisCard extends StatelessWidget {
                   nucleus.claimStatus,
                 ),
               ),
-              ListenColors.error,
+              Theme.of(context).colorScheme.error,
             ),
           if (frame.stressAnchors.isNotEmpty)
             _chipLine(
@@ -361,7 +369,7 @@ class DiagnosisCard extends StatelessWidget {
                   anchor.claimStatus,
                 ),
               ),
-              ListenColors.info,
+              Theme.of(context).colorScheme.tertiary,
             ),
           if (frame.weakGroups.isNotEmpty)
             _chipLine(
@@ -373,7 +381,7 @@ class DiagnosisCard extends StatelessWidget {
                   group.claimStatus,
                 ),
               ),
-              ListenColors.muted,
+              Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           if (frame.compressionSpans.isNotEmpty)
             _chipLine(
@@ -385,7 +393,7 @@ class DiagnosisCard extends StatelessWidget {
                   span.claimStatus,
                 ),
               ),
-              ListenColors.accent,
+              Theme.of(context).colorScheme.secondary,
             ),
           if (frame.listeningHotspots.isNotEmpty)
             _hotspotLine(context, frame.listeningHotspots.take(4)),
@@ -396,7 +404,10 @@ class DiagnosisCard extends StatelessWidget {
               '${frame.quality.timingSource.replaceAll('_', ' ')} · '
               'prominence ${_sourceLabel(frame.quality.prominenceSources)} · '
               'boundary ${_sourceLabel(frame.quality.boundarySources)}',
-              style: const TextStyle(fontSize: 12, color: ListenColors.muted),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
         ],
@@ -440,7 +451,7 @@ class DiagnosisCard extends StatelessWidget {
     final l = AppLocalizations.of(context);
     final hotspots = values.toList(growable: false);
     if (hotspots.isEmpty) return const SizedBox.shrink();
-    const color = ListenColors.accent;
+    final color = Theme.of(context).colorScheme.secondary;
     return Padding(
       padding: const EdgeInsets.only(top: 5),
       child: Wrap(

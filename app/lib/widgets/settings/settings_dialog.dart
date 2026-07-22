@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../services/api_service.dart';
 import 'llm_provider_settings.dart';
+import 'syntax_capability_settings.dart';
 
 /// Settings dialog content widget. Takes all setting values via constructor
 /// and communicates changes back through callbacks.
@@ -12,7 +13,9 @@ class SettingsDialog extends StatefulWidget {
   const SettingsDialog({
     super.key,
     this.api,
+    this.currentTrackId,
     required this.language,
+    required this.themeMode,
     required this.subtitlePreset,
     required this.primaryFontSize,
     required this.primaryFontFamily,
@@ -33,6 +36,7 @@ class SettingsDialog extends StatefulWidget {
     required this.openSubtitlesApiKey,
     required this.wordSyncVisible,
     required this.groupingMode,
+    required this.senseGroupsAvailable,
     required this.chunkDisplayStyle,
     required this.highlightCurrentChunk,
     required this.chunkHighlightStyle,
@@ -50,6 +54,7 @@ class SettingsDialog extends StatefulWidget {
     required this.onLearningLanguageChanged,
     required this.onL1LanguageChanged,
     required this.onLanguageChanged,
+    required this.onThemeModeChanged,
     required this.onSubtitlePresetChanged,
     required this.onPrimaryFontSizeChanged,
     required this.onPrimaryFontFamilyChanged,
@@ -85,7 +90,9 @@ class SettingsDialog extends StatefulWidget {
   /// Phase 3.12: when a sidecar is connected, the AI-providers section can
   /// manage vendor-neutral LLM providers. Null keeps that section inert.
   final LocalApi? api;
+  final String? currentTrackId;
   final String language;
+  final String themeMode;
   final String subtitlePreset;
   final double primaryFontSize;
   final String primaryFontFamily;
@@ -106,6 +113,7 @@ class SettingsDialog extends StatefulWidget {
   final String openSubtitlesApiKey;
   final bool wordSyncVisible;
   final String groupingMode;
+  final bool senseGroupsAvailable;
   final String chunkDisplayStyle;
   final bool highlightCurrentChunk;
   final String chunkHighlightStyle;
@@ -128,6 +136,7 @@ class SettingsDialog extends StatefulWidget {
   final ValueChanged<String> onLearningLanguageChanged;
   final ValueChanged<String> onL1LanguageChanged;
   final ValueChanged<String> onLanguageChanged;
+  final ValueChanged<String> onThemeModeChanged;
   final ValueChanged<String> onSubtitlePresetChanged;
   final ValueChanged<double> onPrimaryFontSizeChanged;
   final ValueChanged<String> onPrimaryFontFamilyChanged;
@@ -173,6 +182,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   final List<GlobalKey> _categoryKeys = List.generate(7, (_) => GlobalKey());
   int _selectedCategory = 2;
   late String language;
+  late String themeMode;
   late String subtitlePreset;
   late double primaryFontSize;
   late String primaryFontFamily;
@@ -203,25 +213,48 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late String learningLanguage;
   late String l1Language;
 
-  late final TextEditingController ffmpegController;
-  late final TextEditingController ffprobeController;
-  late final TextEditingController ytDlpController;
-  late final TextEditingController openSubtitlesController;
+  // Owned for the dialog's lifetime, never rebuilt: they hold text the user
+  // has typed but not yet saved.
+  final ffmpegController = TextEditingController();
+  final ffprobeController = TextEditingController();
+  final ytDlpController = TextEditingController();
+  final openSubtitlesController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _initFromWidget();
+    _adoptSettings();
+    ffmpegController.text = widget.ffmpegPath;
+    ffprobeController.text = widget.ffprobePath;
+    ytDlpController.text = widget.ytDlpPath;
+    openSubtitlesController.text = widget.openSubtitlesApiKey;
   }
 
   @override
   void didUpdateWidget(covariant SettingsDialog oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _initFromWidget();
+    // Changing the app theme or UI language rebuilds the composition root,
+    // which rebuilds this dialog while it is open. Re-adopt the host's scalar
+    // values, but only overwrite a text field when the host itself changed it
+    // — otherwise an unrelated rebuild would discard what the user typed.
+    _adoptSettings();
+    if (oldWidget.ffmpegPath != widget.ffmpegPath) {
+      ffmpegController.text = widget.ffmpegPath;
+    }
+    if (oldWidget.ffprobePath != widget.ffprobePath) {
+      ffprobeController.text = widget.ffprobePath;
+    }
+    if (oldWidget.ytDlpPath != widget.ytDlpPath) {
+      ytDlpController.text = widget.ytDlpPath;
+    }
+    if (oldWidget.openSubtitlesApiKey != widget.openSubtitlesApiKey) {
+      openSubtitlesController.text = widget.openSubtitlesApiKey;
+    }
   }
 
-  void _initFromWidget() {
+  void _adoptSettings() {
     language = widget.language;
+    themeMode = widget.themeMode;
     subtitlePreset = widget.subtitlePreset;
     primaryFontSize = widget.primaryFontSize;
     primaryFontFamily = widget.primaryFontFamily;
@@ -251,12 +284,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
     phoneticAnalysisPreference = widget.phoneticAnalysisPreference;
     learningLanguage = widget.learningLanguage;
     l1Language = widget.l1Language;
-    ffmpegController = TextEditingController(text: widget.ffmpegPath);
-    ffprobeController = TextEditingController(text: widget.ffprobePath);
-    ytDlpController = TextEditingController(text: widget.ytDlpPath);
-    openSubtitlesController = TextEditingController(
-      text: widget.openSubtitlesApiKey,
-    );
   }
 
   @override
@@ -413,7 +440,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       initialValue: groupingMode,
                       decoration: InputDecoration(
                         labelText: l.text('groupingMode'),
-                        helperText: l.text('groupingModeHint'),
+                        helperText:
+                            !widget.senseGroupsAvailable &&
+                                (groupingMode == 'semantic' ||
+                                    groupingMode == 'compare')
+                            ? l.text('senseGroupDataNotReadyHint')
+                            : l.text('groupingModeHint'),
                         helperMaxLines: 2,
                       ),
                       items: [
@@ -427,11 +459,17 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         ),
                         DropdownMenuItem(
                           value: 'semantic',
-                          child: Text(l.text('groupingModeSemantic')),
+                          child: Text(
+                            '${l.text('groupingModeSemantic')} · '
+                            '${l.text(widget.senseGroupsAvailable ? 'senseGroupDataAvailable' : 'senseGroupDataNotReady')}',
+                          ),
                         ),
                         DropdownMenuItem(
                           value: 'compare',
-                          child: Text(l.text('groupingModeCompare')),
+                          child: Text(
+                            '${l.text('groupingModeCompare')} · '
+                            '${l.text(widget.senseGroupsAvailable ? 'senseGroupDataAvailable' : 'senseGroupDataNotReady')}',
+                          ),
                         ),
                       ],
                       onChanged: (value) {
@@ -702,6 +740,33 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         refresh(() {});
                       },
                     ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      initialValue: themeMode,
+                      decoration: InputDecoration(
+                        labelText: l.text('appearance'),
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'system',
+                          child: Text(l.text('appearanceSystem')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'light',
+                          child: Text(l.text('appearanceLight')),
+                        ),
+                        DropdownMenuItem(
+                          value: 'dark',
+                          child: Text(l.text('appearanceDark')),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        themeMode = value;
+                        widget.onThemeModeChanged(value);
+                        refresh(() {});
+                      },
+                    ),
                     const Divider(),
                     Text(
                       key: _categoryKeys[1],
@@ -920,6 +985,19 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         refresh(() {});
                       },
                     ),
+                    const Divider(),
+                    Text(
+                      l.text('syntaxCapabilityTitle'),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    if (widget.api != null)
+                      SyntaxCapabilitySettings(
+                        api: widget.api!,
+                        currentTrackId: widget.currentTrackId,
+                      )
+                    else
+                      Text(l.text('syntaxCoreUnavailable')),
                     const Divider(),
                     Text(
                       key: _categoryKeys[4],

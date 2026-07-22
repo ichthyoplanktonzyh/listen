@@ -39,6 +39,19 @@ void main() {
       expect(coordinator.mediaTime(const Duration(seconds: 1)), Duration.zero);
     });
 
+    test('mediaTimeMs mirrors mediaTime in milliseconds', () {
+      final subtitle = SubtitleController();
+      final coordinator = build(subtitle: subtitle);
+      subtitle.setPrimarySubtitleOffset(const Duration(milliseconds: 250));
+      expect(coordinator.mediaTimeMs(const Duration(seconds: 1)), 1250);
+    });
+
+    test('practice-chunk helpers return empty without a current cue', () {
+      final coordinator = build();
+      expect(coordinator.currentPracticeChunk(), isNull);
+      expect(coordinator.currentPracticeChunks(), isEmpty);
+    });
+
     test('loopRange ignores empty or inverted ranges', () async {
       final player = PlayerController();
       final coordinator = build(player: player);

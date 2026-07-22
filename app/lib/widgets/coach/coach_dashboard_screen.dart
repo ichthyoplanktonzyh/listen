@@ -8,26 +8,33 @@ class CoachDashboardScreen extends StatefulWidget {
   const CoachDashboardScreen({
     super.key,
     required this.api,
-    required this.onOpenReview,
-    required this.onOpenHunting,
+    required this.language,
+    required this.onNavigate,
   });
   final LocalApi api;
-  final VoidCallback onOpenReview, onOpenHunting;
+  final String language;
+  final Future<void> Function(
+    CoachSuggestionDestination destination,
+    CoachReturnContext returnContext,
+  )
+  onNavigate;
   @override
   State<CoachDashboardScreen> createState() => _CoachDashboardScreenState();
 }
 
 class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
   final controller = CoachDashboardController();
+  final scrollController = ScrollController();
   @override
   void initState() {
     super.initState();
-    controller.load(widget.api);
+    controller.load(widget.api, language: widget.language);
   }
 
   @override
   void dispose() {
     controller.dispose();
+    scrollController.dispose();
     super.dispose();
   }
 
@@ -45,24 +52,29 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
         }
         if (state.error != null) return Center(child: Text(state.error!));
         final dashboard = state.dashboard!;
-        final listening = dashboard.channels.first;
         return ListView(
+          controller: scrollController,
           padding: const EdgeInsets.all(24),
           children: [
             Text(
-              AppLocalizations.of(context).text('coachThisWeek'),
+              AppLocalizations.of(context).text('coachFourChannels'),
               style: Theme.of(context).textTheme.headlineSmall,
             ),
+            Text(
+              AppLocalizations.of(context)
+                  .text('coachGeneratedAt')
+                  .replaceFirst(
+                    '{time}',
+                    DateTime.fromMillisecondsSinceEpoch(
+                      dashboard.generatedAtMs,
+                    ).toLocal().toString().substring(0, 16),
+                  ),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             const SizedBox(height: 16),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: listening.metrics
-                  .map(
-                    (m) =>
-                        _MetricCard(metric: m, onTap: () => _showEvidence(m)),
-                  )
-                  .toList(),
+            ...dashboard.channels.map(
+              (channel) =>
+                  _ChannelCard(channel: channel, onMetric: _showEvidence),
             ),
             const SizedBox(height: 28),
             Text(
@@ -80,11 +92,7 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
                     '${AppLocalizations.of(context).text(s.reasonKey)} · ${s.evidenceCount} · ${s.evidenceSource}',
                   ),
                   trailing: const Icon(Icons.arrow_forward),
-                  onTap: () {
-                    if (s.action == 'open_review') widget.onOpenReview();
-                    if (s.action == 'open_hunting') widget.onOpenHunting();
-                    if (s.action == 'close_dashboard') Navigator.pop(context);
-                  },
+                  onTap: () => _openSuggestion(s),
                 ),
               ),
             ),
@@ -144,18 +152,24 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
                 ),
               ),
             ],
-            const SizedBox(height: 24),
-            ...dashboard.channels
-                .skip(1)
-                .map(
-                  (c) => ListTile(
-                    leading: const Icon(Icons.hourglass_empty),
-                    title: Text(c.channel),
-                    subtitle: Text(
-                      AppLocalizations.of(context).text('coachUnassessed'),
-                    ),
+            if (dashboard.features.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              ...dashboard.features.map(
+                (feature) => ListTile(
+                  leading: const Icon(Icons.hub_outlined),
+                  title: Text(
+                    AppLocalizations.of(
+                      context,
+                    ).text('coachFeature_${feature.feature}'),
+                  ),
+                  subtitle: Text(
+                    AppLocalizations.of(
+                      context,
+                    ).text('coachFeatureStatus_${feature.status}'),
                   ),
                 ),
+              ),
+            ],
           ],
         );
       },
@@ -164,6 +178,32 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
 
   String _reportLabel(String? report) =>
       AppLocalizations.of(context).text('coachReport_${report ?? 'unknown'}');
+
+  Future<void> _openSuggestion(CoachSuggestion suggestion) async {
+    if (suggestion.destination.kind == 'content_home') {
+      Navigator.pop(context);
+      return;
+    }
+    final offset = scrollController.hasClients ? scrollController.offset : 0.0;
+    await widget.onNavigate(
+      suggestion.destination,
+      CoachReturnContext(
+        days: 7,
+        language: widget.language,
+        scrollOffset: offset,
+        suggestionId: suggestion.id,
+      ),
+    );
+    if (!mounted) return;
+    await controller.load(widget.api, language: widget.language);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && scrollController.hasClients) {
+        scrollController.jumpTo(
+          offset.clamp(0, scrollController.position.maxScrollExtent),
+        );
+      }
+    });
+  }
 
   Future<void> _graduate(CoachMaterialInsight material) async {
     final confirmed = await showDialog<bool>(
@@ -189,7 +229,9 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
     );
     if (confirmed != true) return;
     await widget.api.graduateCoachMaterial(material.mediaId);
-    if (mounted) await controller.load(widget.api);
+    if (mounted) {
+      await controller.load(widget.api, language: widget.language);
+    }
   }
 
   Future<void> _setIntent(CoachMaterialInsight material) async {
@@ -219,7 +261,9 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
       material.mediaId,
       material.recommendedIntent,
     );
-    if (mounted) await controller.load(widget.api);
+    if (mounted) {
+      await controller.load(widget.api, language: widget.language);
+    }
   }
 
   Future<void> _showEvidence(CoachMetric metric) async {
@@ -241,8 +285,11 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
                       .map(
                         (item) => ListTile(
                           dense: true,
-                          title: Text(item.result),
-                          subtitle: Text(item.id),
+                          title: Text(item.snapshot),
+                          subtitle: Text(
+                            '${item.sourceKind} · ${item.id}'
+                            '${item.sourceAvailable ? '' : ' · ${AppLocalizations.of(context).text('coachSourceUnavailable')}'}',
+                          ),
                           trailing: Text(
                             DateTime.fromMillisecondsSinceEpoch(
                               item.occurredAtMs,
@@ -259,6 +306,87 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
             child: Text(MaterialLocalizations.of(context).closeButtonLabel),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ChannelCard extends StatelessWidget {
+  const _ChannelCard({required this.channel, required this.onMetric});
+
+  final CoachChannelSummary channel;
+  final Future<void> Function(CoachMetric metric) onMetric;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final assessments = channel.effectiveAssessments;
+    final visibleMetrics = channel.metrics
+        .where((metric) => metric.value > 0)
+        .toList(growable: false);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  channel.status == 'unassessed'
+                      ? Icons.hourglass_empty
+                      : Icons.insights_outlined,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  l.text('coachChannel_${channel.channel}'),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (assessments.acquired + assessments.notAcquired == 0)
+              Text(l.text('coachUnassessed'))
+            else
+              Wrap(
+                spacing: 8,
+                children: [
+                  Chip(
+                    label: Text(
+                      '${l.text('coachAssessmentAcquired')} ${assessments.acquired}',
+                    ),
+                  ),
+                  Chip(
+                    label: Text(
+                      '${l.text('coachAssessmentNotAcquired')} ${assessments.notAcquired}',
+                    ),
+                  ),
+                  if (assessments.unassessed > 0)
+                    Chip(
+                      label: Text(
+                        '${l.text('coachAssessmentUnassessed')} ${assessments.unassessed}',
+                      ),
+                    ),
+                ],
+              ),
+            if (visibleMetrics.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: visibleMetrics
+                    .map(
+                      (metric) => _MetricCard(
+                        metric: metric,
+                        onTap: () => onMetric(metric),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

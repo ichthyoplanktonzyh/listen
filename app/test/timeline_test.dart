@@ -10,6 +10,26 @@ Cue cue(String id, int start, int end) => Cue(
   tokens: const [],
 );
 
+const _senseGroup = SenseGroup(
+  id: 'group-1',
+  sentenceId: 'sentence-1',
+  groupIndex: 0,
+  startTokenIndex: 2,
+  endTokenIndex: 4,
+  text: 'a sense group',
+  confidence: 0.9,
+  sources: [],
+);
+
+WordTiming wordTiming(int tokenIndex, int startMs, int endMs) => WordTiming(
+  sentenceId: 'sentence-1',
+  tokenIndex: tokenIndex,
+  start: Duration(milliseconds: startMs),
+  end: Duration(milliseconds: endMs),
+  source: 'test',
+  provider: 'test',
+);
+
 void main() {
   final cues = [
     cue('0', 500, 2000),
@@ -229,6 +249,64 @@ void main() {
     expect(timing.toJson()['end_ms'], 300);
   });
 
+  group('senseGroupPlaybackRange', () {
+    test('projects the inclusive token span to its minimum and maximum', () {
+      expect(
+        senseGroupPlaybackRange(_senseGroup, [
+          wordTiming(2, 100, 250),
+          wordTiming(3, 260, 420),
+          wordTiming(4, 430, 600),
+        ]),
+        (startMs: 100, endMs: 600),
+      );
+    });
+
+    test('returns null for empty timings', () {
+      expect(senseGroupPlaybackRange(_senseGroup, const []), isNull);
+    });
+
+    test('uses available timings when some group tokens are missing', () {
+      expect(senseGroupPlaybackRange(_senseGroup, [wordTiming(3, 260, 420)]), (
+        startMs: 260,
+        endMs: 420,
+      ));
+    });
+
+    test('does not assume timings are ordered', () {
+      expect(
+        senseGroupPlaybackRange(_senseGroup, [
+          wordTiming(4, 430, 600),
+          wordTiming(2, 100, 250),
+          wordTiming(3, 260, 420),
+        ]),
+        (startMs: 100, endMs: 600),
+      );
+    });
+
+    test('includes timings exactly on both token boundaries', () {
+      expect(
+        senseGroupPlaybackRange(_senseGroup, [
+          wordTiming(1, 10, 90),
+          wordTiming(2, 100, 250),
+          wordTiming(4, 430, 600),
+          wordTiming(5, 610, 700),
+        ]),
+        (startMs: 100, endMs: 600),
+      );
+    });
+
+    test('still projects when boundary tokens have no timing', () {
+      expect(
+        senseGroupPlaybackRange(_senseGroup, [
+          wordTiming(1, 10, 90),
+          wordTiming(3, 260, 420),
+          wordTiming(5, 610, 700),
+        ]),
+        (startMs: 260, endMs: 420),
+      );
+    });
+  });
+
   test('parses complete word timeline resources', () {
     final timeline = WordTimeline.fromJson(const {
       'id': 'timeline-1',
@@ -351,6 +429,33 @@ void main() {
                 'default_symbols': ['K', 'UH', 'D', 'AH', 'V'],
                 'expected_display_ipa': 'kʊdhæv',
                 'default_display_ipa': 'kʊdəv',
+                'citation_structure': {
+                  'groups': [
+                    {
+                      'symbols': ['K', 'UH', 'D'],
+                      'display_ipa': 'kʊd',
+                      'source_token_indices': [1],
+                    },
+                    {
+                      'symbols': ['HH', 'AE', 'V'],
+                      'display_ipa': 'hæv',
+                      'source_token_indices': [2],
+                    },
+                  ],
+                  'display_ipa': 'kʊd | hæv',
+                  'learner_cue': 'kʊd-hæv',
+                },
+                'predicted_structure': {
+                  'groups': [
+                    {
+                      'symbols': ['K', 'UH', 'D', 'AH', 'V'],
+                      'display_ipa': 'kʊdəv',
+                      'source_token_indices': [1, 2],
+                    },
+                  ],
+                  'display_ipa': 'kʊdəv',
+                  'learner_cue': 'kʊdəv',
+                },
                 'divergence': 'teachable_rule',
                 'signal_sources': ['text_prior'],
                 'evidence_class': 'heuristic_proxy',
@@ -388,8 +493,27 @@ void main() {
     expect(connectedRef.family, 'contraction');
     expect(connectedRef.expectedDisplayIpa, 'kʊdhæv');
     expect(connectedRef.defaultDisplayIpa, 'kʊdəv');
+    expect(connectedRef.citationStructure?.displayIpa, 'kʊd | hæv');
+    expect(connectedRef.predictedStructure?.learnerCue, 'kʊdəv');
+    expect(connectedRef.citationStructure?.groups.last.sourceTokenIndices, [2]);
+    expect(connectedRef.actualStructure, isNull);
     expect(document.rhythmFrameForSentence('missing'), isNull);
     expect(document.importedResource, true);
+    final roundTrip = LLTimelineDocument.fromJson(document.toJson());
+    expect(roundTrip.schema, document.schema);
+    expect(
+      roundTrip.metadata.mediaFingerprint,
+      document.metadata.mediaFingerprint,
+    );
+    expect(roundTrip.rhythmFrames.single.id, 'rhythm-1');
+    expect(
+      roundTrip
+          .rhythmFrameForSentence('sentence-1')
+          ?.connectedSpeechRefs
+          .single
+          .surfaceText,
+      'could have',
+    );
   });
 
   test('parses phone timeline sound analysis for grouped ribbon display', () {

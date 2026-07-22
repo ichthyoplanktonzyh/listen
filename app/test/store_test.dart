@@ -77,6 +77,26 @@ void main() {
       expect(aggregateFires, 1);
     });
 
+    test('select memoization keeps the slot count bounded', () {
+      final store = Store(const _CounterState(count: 0, label: 'a'));
+      int selectCount(_CounterState s) => s.count;
+      for (var i = 0; i < 100; i++) {
+        store.select(selectCount);
+      }
+      expect(store.debugSlotCount, 1);
+    });
+
+    test('dispose disposes every slot notifier', () {
+      final store = Store(const _CounterState(count: 0, label: 'a'));
+      final notifier = store.select((s) => s.count);
+
+      store.dispose();
+
+      expect(store.debugSlotCount, 0);
+      // A disposed ValueNotifier throws on listener registration.
+      expect(() => notifier.addListener(() {}), throwsFlutterError);
+    });
+
     test('replace refreshes every selector and notifies aggregate', () {
       final store = Store(const _CounterState(count: 0, label: 'a'));
       final countNotifier = store.select((s) => s.count);

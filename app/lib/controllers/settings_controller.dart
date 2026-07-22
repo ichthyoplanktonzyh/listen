@@ -14,6 +14,7 @@ class SettingsController extends ChangeNotifier {
   // ── Convenience accessors ──
 
   String get language => _settings.language;
+  String get themeMode => _settings.themeMode;
   String get subtitlePreset => _settings.subtitlePreset;
   String get primaryFontFamily => _settings.primaryFontFamily;
   String get secondaryFontFamily => _settings.secondaryFontFamily;
@@ -56,6 +57,16 @@ class SettingsController extends ChangeNotifier {
   String get soundPatternDisplayMode => _settings.soundPatternDisplayMode;
   String get phonemeRibbonStyle => _settings.phonemeRibbonStyle;
   String get learningLanguage => _settings.learningLanguage;
+
+  /// Resolves the effective learning language for vocabulary, dictionary,
+  /// source-snapshot and diagnosis queries. Priority: user setting > active
+  /// subtitle track language > `en` fallback.
+  String resolveLearningLanguage(String? trackLanguage) {
+    final preferred = _settings.learningLanguage;
+    if (preferred != 'auto') return preferred;
+    return trackLanguage ?? 'en';
+  }
+
   bool get familiarMaterialSuggestions => _settings.familiarMaterialSuggestions;
   Color get primaryColor => Color(_settings.primaryColor);
   Color get secondaryColor => Color(_settings.secondaryColor);

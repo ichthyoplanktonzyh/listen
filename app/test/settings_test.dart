@@ -1,7 +1,25 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/controllers/settings_controller.dart';
 import 'package:llplayer_next/settings.dart';
 
 void main() {
+  test(
+    'resolveLearningLanguage prefers explicit setting, else track, else en',
+    () {
+      final controller = SettingsController();
+      addTearDown(controller.dispose);
+      // Default learningLanguage is 'auto' -> resolves to the track language,
+      // falling back to English when the track has none.
+      expect(controller.resolveLearningLanguage('fr'), 'fr');
+      expect(controller.resolveLearningLanguage(null), 'en');
+      // An explicit setting wins over the track language.
+      controller.setSettings(
+        controller.settings.copyWith(learningLanguage: 'ja'),
+      );
+      expect(controller.resolveLearningLanguage('fr'), 'ja');
+    },
+  );
+
   test('loads versioned settings values', () {
     final settings = AppSettings.fromJson({
       'version': 2,

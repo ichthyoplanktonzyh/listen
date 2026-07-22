@@ -9,7 +9,7 @@ import '../../controllers/subtitle_controller.dart';
 import '../../localization.dart';
 import '../../models/timeline.dart';
 import '../../models/capability_readiness.dart'
-    show rhythmFrameHasAudioSupport;
+    show canDisplayActualRhythmFrame;
 import '../../models/types.dart';
 import '../../player_adapter.dart';
 import '../../utils/subtitle_style.dart';
@@ -195,58 +195,88 @@ class _PlayerStageState extends State<PlayerStage> {
                                 onTap: () => _seekCue(
                                   subtitleController.currentPrimaryCue,
                                 ),
-                                child: TokenLine(
-                                  cue: subtitleController.currentPrimaryCue!,
-                                  profiles: learningController.wordEntries,
-                                  capabilityProfiles:
-                                      learningController.capabilityProfiles,
-                                  phraseCandidates:
-                                      learningController.phraseCandidates,
-                                  phraseEntries:
-                                      learningController.phraseEntries,
-                                  showStyles:
-                                      subtitleController.statusStylesVisible,
-                                  fontSize: primarySize,
-                                  fontFamily: _subtitleFont(
-                                    subtitleController.primaryFontFamily,
+                                // Chunk highlight is the only reason the token
+                                // line needs the live position; when it is off,
+                                // only the speech-rate word/chunk cursors
+                                // drive rebuilds.
+                                child: ListenableBuilder(
+                                  listenable: Listenable.merge([
+                                    if (settingsController.chunkHighlightActive)
+                                      playerController.positionListenable,
+                                    subtitleController
+                                        .currentWordTokenListenable,
+                                    subtitleController
+                                        .currentChunkIndexListenable,
+                                  ]),
+                                  builder: (context, _) => TokenLine(
+                                    cue: subtitleController.currentPrimaryCue!,
+                                    profiles: learningController.wordEntries,
+                                    capabilityProfiles:
+                                        learningController.capabilityProfiles,
+                                    phraseCandidates:
+                                        learningController.phraseCandidates,
+                                    phraseEntries:
+                                        learningController.phraseEntries,
+                                    showStyles:
+                                        subtitleController.statusStylesVisible,
+                                    fontSize: primarySize,
+                                    fontFamily: _subtitleFont(
+                                      subtitleController.primaryFontFamily,
+                                    ),
+                                    baseColor: settingsController.primaryColor,
+                                    currentTokenIndex:
+                                        subtitleController.currentWordToken,
+                                    groupingMode:
+                                        settingsController.groupingMode,
+                                    // Both grouping layers flow in independently
+                                    // (ADR 0016); TokenLine draws one per mode.
+                                    chunkPartition:
+                                        subtitleController
+                                            .chunkPartitionsBySentence[subtitleController
+                                            .currentPrimaryCue!
+                                            .id],
+                                    currentChunkIndex:
+                                        settingsController.chunkHighlightActive
+                                        ? subtitleController.currentChunkIndex
+                                        : null,
+                                    chunkDisplayStyle:
+                                        settingsController.chunkDisplayStyle,
+                                    chunkHighlightStyle:
+                                        settingsController.chunkHighlightStyle,
+                                    currentWordStyle:
+                                        settingsController.wordHighlightStyle,
+                                    currentWordIntensity: settingsController
+                                        .wordAnimationIntensity,
+                                    senseGroups:
+                                        subtitleController
+                                            .senseGroupsBySentence[subtitleController
+                                            .currentPrimaryCue!
+                                            .id] ??
+                                        const [],
+                                    wordTimings:
+                                        subtitleController
+                                            .timingsBySentence[subtitleController
+                                            .currentPrimaryCue!
+                                            .id] ??
+                                        const [],
+                                    mediaPosition:
+                                        settingsController.chunkHighlightActive
+                                        ? playerController.position
+                                        : null,
+                                    subtitleOffset: subtitleController
+                                        .primarySubtitleOffset,
+                                    onWord: _openWord,
+                                    onPhrase: _openPhrase,
+                                    onChunk: _seekChunk,
                                   ),
-                                  baseColor: settingsController.primaryColor,
-                                  currentTokenIndex:
-                                      subtitleController.currentWordToken,
-                                  groupingMode:
-                                      settingsController.groupingMode,
-                                  // Both grouping layers flow in independently
-                                  // (ADR 0016); TokenLine draws one per mode.
-                                  chunkPartition: subtitleController
-                                      .chunkPartitionsBySentence[subtitleController
-                                      .currentPrimaryCue!
-                                      .id],
-                                  currentChunkIndex:
-                                      settingsController.chunkHighlightActive
-                                      ? subtitleController.currentChunkIndex
-                                      : null,
-                                  chunkDisplayStyle:
-                                      settingsController.chunkDisplayStyle,
-                                  chunkHighlightStyle:
-                                      settingsController.chunkHighlightStyle,
-                                  currentWordStyle:
-                                      settingsController.wordHighlightStyle,
-                                  currentWordIntensity:
-                                      settingsController.wordAnimationIntensity,
-                                  senseGroups:
-                                      subtitleController.senseGroupsBySentence[subtitleController
-                                              .currentPrimaryCue!
-                                              .id] ??
-                                      const [],
-                                  onWord: _openWord,
-                                  onPhrase: _openPhrase,
-                                  onChunk: _seekChunk,
                                 ),
                               ),
                             if (settingsController.phonemeRibbonVisible &&
                                 subtitleController.currentPrimaryCue != null)
-                              Builder(
-                                builder: (_) {
+                              ValueListenableBuilder<Duration>(
+                                valueListenable:
+                                    playerController.positionListenable,
+                                builder: (context, livePosition, _) {
                                   final cueId =
                                       subtitleController.currentPrimaryCue!.id;
                                   final analysis = subtitleController
@@ -268,7 +298,7 @@ class _PlayerStageState extends State<PlayerStage> {
                                     padding: const EdgeInsets.only(top: 4),
                                     child: PhonemeRibbon(
                                       phones: phones,
-                                      position: playerController.position,
+                                      position: livePosition,
                                       fontSize: primarySize * 0.45,
                                       height: primarySize * 1.1,
                                       style:
@@ -280,8 +310,14 @@ class _PlayerStageState extends State<PlayerStage> {
                               ),
                             if (settingsController.soundPatternRibbonVisible &&
                                 subtitleController.currentPrimaryCue != null)
-                              Builder(
-                                builder: (_) {
+                              ListenableBuilder(
+                                listenable: Listenable.merge([
+                                  playerController.positionListenable,
+                                  subtitleController.currentWordTokenListenable,
+                                ]),
+                                builder: (context, _) {
+                                  final livePosition =
+                                      playerController.position;
                                   final cueId =
                                       subtitleController.currentPrimaryCue!.id;
                                   final analysis = subtitleController
@@ -412,6 +448,12 @@ class _PlayerStageState extends State<PlayerStage> {
                                               tooltip: l.text(
                                                 'expectedPronunciationTooltip',
                                               ),
+                                              expandTooltip: l.text(
+                                                'showFullSoundStructure',
+                                              ),
+                                              collapseTooltip: l.text(
+                                                'collapseSoundStructure',
+                                              ),
                                             ),
                                     );
                                   }
@@ -451,15 +493,24 @@ class _PlayerStageState extends State<PlayerStage> {
                                               tooltip: l.text(
                                                 'connectedSpeechReferenceTooltip',
                                               ),
+                                              expandTooltip: l.text(
+                                                'showFullSoundStructure',
+                                              ),
+                                              collapseTooltip: l.text(
+                                                'collapseSoundStructure',
+                                              ),
                                             ),
                                     );
                                   }
 
-                                  if (rhythmFrame == null) {
-                                    // C ("this audio") has no forced-alignment
-                                    // data yet: offer to load it in place rather
-                                    // than only reporting it missing. Suppressed
-                                    // when phonetic analysis is turned off.
+                                  if (!canDisplayActualRhythmFrame(
+                                    rhythmFrame,
+                                    hasPhoneEvidence: hasPhoneEvidence,
+                                  )) {
+                                    // C ("this audio") is phone-observed only.
+                                    // A text/word-timeline RhythmFrame belongs
+                                    // to A/B and must never be shown here as a
+                                    // predicted substitute for actual evidence.
                                     final canLoad =
                                         widget.onLoadSoundReference != null &&
                                         settingsController
@@ -493,13 +544,10 @@ class _PlayerStageState extends State<PlayerStage> {
                                       offerPhoneEvidence: true,
                                     );
                                   }
-                                  final predicted = !rhythmFrameHasAudioSupport(
-                                    rhythmFrame,
-                                  );
                                   final actualView = RhythmFrameRibbon(
-                                    frame: rhythmFrame,
+                                    frame: rhythmFrame!,
                                     pronunciation: pronunciation,
-                                    position: playerController.position,
+                                    position: livePosition,
                                     title: l.text('rhythmReferenceActual'),
                                     anchorLabel: l.text('stressAnchors'),
                                     weakGroupLabel: l.text('weakGroups'),
@@ -507,12 +555,16 @@ class _PlayerStageState extends State<PlayerStage> {
                                     hotspotLabel: l.text('listeningHotspots'),
                                     fontSize: primarySize * 0.44,
                                     height: primarySize * 1.15,
-                                    tooltip: predicted
-                                        ? l.text('listeningPredictedTooltip')
-                                        : l.text('rhythmRibbonHint'),
-                                    predicted: predicted,
+                                    tooltip: l.text('rhythmRibbonHint'),
+                                    predicted: false,
                                     predictedLabel: l.text(
                                       'listeningPredictedBadge',
+                                    ),
+                                    expandTooltip: l.text(
+                                      'showFullSoundStructure',
+                                    ),
+                                    collapseTooltip: l.text(
+                                      'collapseSoundStructure',
                                     ),
                                     onLoopCue: (start, end, label) => unawaited(
                                       _loopRhythmCue(start, end, label),
@@ -529,8 +581,7 @@ class _PlayerStageState extends State<PlayerStage> {
                                               const SizedBox(height: 4),
                                               PhonemeRibbon(
                                                 phones: phones,
-                                                position:
-                                                    playerController.position,
+                                                position: livePosition,
                                                 fontSize: primarySize * 0.42,
                                                 height: primarySize,
                                                 style: settingsController

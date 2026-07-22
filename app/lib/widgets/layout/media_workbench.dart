@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../models/content_channel.dart';
+import '../../theme/breakpoints.dart';
+import 'content_channel_switcher.dart';
 
 class MediaWorkbench extends StatefulWidget {
   const MediaWorkbench({
@@ -11,6 +14,10 @@ class MediaWorkbench extends StatefulWidget {
     required this.mediaFraction,
     required this.onMediaFractionChanged,
     this.onCollapse,
+    this.selectedChannel = ContentChannel.listening,
+    this.channelAvailability = const {},
+    this.onChannelSelected,
+    this.immersiveStage,
   });
 
   final String mediaTitle;
@@ -19,6 +26,13 @@ class MediaWorkbench extends StatefulWidget {
   final double mediaFraction;
   final ValueChanged<double> onMediaFractionChanged;
   final VoidCallback? onCollapse;
+  final ContentChannel selectedChannel;
+  final Map<ContentChannel, ContentChannelAvailability> channelAvailability;
+  final ValueChanged<ContentChannel>? onChannelSelected;
+
+  /// A channel-native surface that owns the workbench body. Reading and task
+  /// scenes use this instead of pretending to be the media pane of a split.
+  final Widget? immersiveStage;
 
   @override
   State<MediaWorkbench> createState() => _MediaWorkbenchState();
@@ -54,93 +68,177 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
   }
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      if (constraints.maxWidth < 820) {
-        final availableHeight = constraints.maxHeight - splitterWidth;
-        final minimumFraction = (240 / availableHeight).clamp(0.28, 0.7);
-        final maximumFraction = ((availableHeight - 260) / availableHeight)
-            .clamp(minimumFraction, 0.72);
-        final effectiveFraction = _mediaFraction.clamp(
-          minimumFraction,
-          maximumFraction,
-        );
-        return Column(
-          children: [
-            SizedBox(
-              height: availableHeight * effectiveFraction,
-              child: _MediaPane(
-                mediaTitle: widget.mediaTitle,
-                playerStage: widget.playerStage,
-                onCompactMedia: () => _setMediaFraction(compactMediaFraction),
-                onResetLayout: () => _setMediaFraction(defaultMediaFraction),
-                onCollapse: widget.onCollapse,
-              ),
-            ),
-            _WorkbenchSplitter.horizontal(
-              onDrag: (delta) {
-                _setMediaFraction(
-                  (_mediaFraction + delta / availableHeight).clamp(
+  Widget build(BuildContext context) => Column(
+    children: [
+      _SessionHeader(
+        mediaTitle: widget.mediaTitle,
+        selectedChannel: widget.selectedChannel,
+        availability: widget.channelAvailability,
+        onSelected: widget.onChannelSelected,
+        onCollapse: widget.onCollapse,
+      ),
+      Expanded(
+        child:
+            widget.immersiveStage ??
+            LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth < ListenBreakpoints.workbenchStacked) {
+                  final availableHeight = constraints.maxHeight - splitterWidth;
+                  final minimumFraction = (240 / availableHeight).clamp(
+                    0.28,
+                    0.7,
+                  );
+                  final maximumFraction =
+                      ((availableHeight - 260) / availableHeight).clamp(
+                        minimumFraction,
+                        0.72,
+                      );
+                  final effectiveFraction = _mediaFraction.clamp(
                     minimumFraction,
                     maximumFraction,
-                  ),
+                  );
+                  return Column(
+                    children: [
+                      SizedBox(
+                        height: availableHeight * effectiveFraction,
+                        child: _MediaPane(
+                          playerStage: widget.playerStage,
+                          onCompactMedia: () =>
+                              _setMediaFraction(compactMediaFraction),
+                          onResetLayout: () =>
+                              _setMediaFraction(defaultMediaFraction),
+                          onCollapse: widget.onCollapse,
+                        ),
+                      ),
+                      _WorkbenchSplitter.horizontal(
+                        onDrag: (delta) {
+                          _setMediaFraction(
+                            (_mediaFraction + delta / availableHeight).clamp(
+                              minimumFraction,
+                              maximumFraction,
+                            ),
+                          );
+                        },
+                      ),
+                      Expanded(child: widget.learningPanel),
+                    ],
+                  );
+                }
+
+                final availableWidth = constraints.maxWidth - splitterWidth;
+                final minimumFraction = (320 / availableWidth).clamp(0.28, 0.7);
+                final maximumFraction =
+                    ((availableWidth - 420) / availableWidth).clamp(
+                      minimumFraction,
+                      0.7,
+                    );
+                final effectiveFraction = _mediaFraction.clamp(
+                  minimumFraction,
+                  maximumFraction,
+                );
+                return Row(
+                  children: [
+                    SizedBox(
+                      width: availableWidth * effectiveFraction,
+                      child: _MediaPane(
+                        playerStage: widget.playerStage,
+                        onCompactMedia: () =>
+                            _setMediaFraction(compactMediaFraction),
+                        onResetLayout: () =>
+                            _setMediaFraction(defaultMediaFraction),
+                        onCollapse: widget.onCollapse,
+                      ),
+                    ),
+                    _WorkbenchSplitter(
+                      onDrag: (delta) {
+                        _setMediaFraction(
+                          (_mediaFraction + delta / availableWidth).clamp(
+                            minimumFraction,
+                            maximumFraction,
+                          ),
+                        );
+                      },
+                    ),
+                    Expanded(child: widget.learningPanel),
+                  ],
                 );
               },
             ),
-            Expanded(child: widget.learningPanel),
-          ],
-        );
-      }
-
-      final availableWidth = constraints.maxWidth - splitterWidth;
-      final minimumFraction = (320 / availableWidth).clamp(0.28, 0.7);
-      final maximumFraction = ((availableWidth - 420) / availableWidth).clamp(
-        minimumFraction,
-        0.7,
-      );
-      final effectiveFraction = _mediaFraction.clamp(
-        minimumFraction,
-        maximumFraction,
-      );
-      return Row(
-        children: [
-          SizedBox(
-            width: availableWidth * effectiveFraction,
-            child: _MediaPane(
-              mediaTitle: widget.mediaTitle,
-              playerStage: widget.playerStage,
-              onCompactMedia: () => _setMediaFraction(compactMediaFraction),
-              onResetLayout: () => _setMediaFraction(defaultMediaFraction),
-              onCollapse: widget.onCollapse,
-            ),
-          ),
-          _WorkbenchSplitter(
-            onDrag: (delta) {
-              _setMediaFraction(
-                (_mediaFraction + delta / availableWidth).clamp(
-                  minimumFraction,
-                  maximumFraction,
-                ),
-              );
-            },
-          ),
-          Expanded(child: widget.learningPanel),
-        ],
-      );
-    },
+      ),
+    ],
   );
+}
+
+class _SessionHeader extends StatelessWidget {
+  const _SessionHeader({
+    required this.mediaTitle,
+    required this.selectedChannel,
+    required this.availability,
+    required this.onSelected,
+    required this.onCollapse,
+  });
+
+  final String mediaTitle;
+  final ContentChannel selectedChannel;
+  final Map<ContentChannel, ContentChannelAvailability> availability;
+  final ValueChanged<ContentChannel>? onSelected;
+  final VoidCallback? onCollapse;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final l = AppLocalizations.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border(bottom: BorderSide(color: colors.outlineVariant)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        child: Row(
+          children: [
+            if (onCollapse != null)
+              IconButton(
+                tooltip: l.text('backToHome'),
+                onPressed: onCollapse,
+                icon: const Icon(Icons.home_outlined),
+              ),
+            Flexible(
+              child: Text(
+                mediaTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: 20),
+            ContentChannelSwitcher(
+              selected: selectedChannel,
+              availability: availability,
+              onSelected: onSelected ?? (_) {},
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _WorkbenchSplitter extends StatelessWidget {
   const _WorkbenchSplitter({required this.onDrag}) : _vertical = false;
-  const _WorkbenchSplitter.horizontal({required this.onDrag}) : _vertical = true;
+  const _WorkbenchSplitter.horizontal({required this.onDrag})
+    : _vertical = true;
 
   final ValueChanged<double> onDrag;
   final bool _vertical;
 
   @override
   Widget build(BuildContext context) {
-    final divider = Container(color: Theme.of(context).colorScheme.outlineVariant);
+    final divider = Container(
+      color: Theme.of(context).colorScheme.outlineVariant,
+    );
     return Semantics(
       label: 'Resize media and transcript',
       child: MouseRegion(
@@ -173,14 +271,12 @@ class _WorkbenchSplitter extends StatelessWidget {
 
 class _MediaPane extends StatelessWidget {
   const _MediaPane({
-    required this.mediaTitle,
     required this.playerStage,
     required this.onCompactMedia,
     required this.onResetLayout,
     this.onCollapse,
   });
 
-  final String mediaTitle;
   final Widget playerStage;
   final VoidCallback? onCompactMedia;
   final VoidCallback? onResetLayout;
@@ -201,31 +297,12 @@ class _MediaPane extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
                 children: [
-                  if (onCollapse != null)
-                    IconButton(
-                      tooltip: l.text('backToHome'),
-                      onPressed: onCollapse,
-                      icon: Icon(
-                        Icons.keyboard_arrow_down,
-                        color: colors.onSurfaceVariant,
-                      ),
-                    ),
                   Icon(
                     Icons.play_circle_outline,
                     size: 20,
                     color: colors.primary,
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      mediaTitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
+                  const Spacer(),
                   if (onCompactMedia != null)
                     IconButton(
                       tooltip: l.text('compactMediaPane'),

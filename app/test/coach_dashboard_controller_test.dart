@@ -18,7 +18,14 @@ void main() {
             return (
               statusCode: 200,
               body: jsonEncode([
-                {'id': 'attempt-1', 'occurred_at_ms': 2, 'result': 'correct'},
+                {
+                  'id': 'attempt-1',
+                  'occurred_at_ms': 2,
+                  'result': 'correct',
+                  'source_kind': 'practice_attempt',
+                  'snapshot': 'correct',
+                  'source_available': true,
+                },
               ]),
             );
           }
@@ -37,24 +44,43 @@ void main() {
                       'key': 'practice_attempts',
                       'value': 4,
                       'source': 'practice_attempts',
+                      'authority_layer': 'attempt',
                     },
                   ],
+                  'effective_assessments': {
+                    'acquired': 2,
+                    'not_acquired': 1,
+                    'unassessed': 3,
+                  },
                 },
                 {
                   'channel': 'reading',
                   'status': 'unassessed',
                   'unavailable_reason': 'no_active_validation',
                   'metrics': [],
+                  'effective_assessments': {
+                    'acquired': 0,
+                    'not_acquired': 0,
+                    'unassessed': 6,
+                  },
                 },
               ],
               'suggestions': [
                 {
                   'kind': 'due_review',
+                  'id': 'due-review',
                   'title_key': 'coachSuggestionReview',
                   'reason_key': 'coachSuggestionReviewReason',
-                  'action': 'open_review',
+                  'destination': {'kind': 'review_queue'},
                   'evidence_source': 'review_schedules',
                   'evidence_count': 3,
+                },
+              ],
+              'features': [
+                {
+                  'feature': 'llm_feedback',
+                  'status': 'not_configured',
+                  'reason': 'coach_core_is_provider_independent',
                 },
               ],
               'starter_checklist': <String>[],
@@ -81,7 +107,7 @@ void main() {
       final controller = CoachDashboardController();
       addTearDown(controller.dispose);
       await controller.load(api);
-      expect(requestedPaths.single, '/v1/coach/dashboard?days=7');
+      expect(requestedPaths.single, '/v1/coach/dashboard?days=7&language=en');
       expect(controller.state.dashboard!.channels[1].status, 'unassessed');
       expect(
         controller.state.dashboard!.suggestions.single.evidenceSource,

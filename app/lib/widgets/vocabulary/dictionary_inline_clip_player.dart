@@ -5,7 +5,6 @@ import 'package:video_player/video_player.dart';
 
 import '../../controllers/slice_player_controller.dart';
 import '../../models/types.dart';
-import '../../theme/listen_theme.dart';
 import '../../utils/format_duration.dart';
 
 /// Dictionary-detail renderer for the shared second-decoder slice player.
@@ -63,13 +62,15 @@ class DictionaryInlineClipPlayer extends StatelessWidget {
                 '${occurrence.mediaTitleSnapshot} · '
                 '${formatDuration(Duration(milliseconds: occurrence.startMsSnapshot))}–'
                 '${formatDuration(Duration(milliseconds: occurrence.endMsSnapshot))}',
-                style: const TextStyle(color: ListenColors.muted),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 14),
               if (state.error != null)
                 Text(
                   state.error!,
-                  style: const TextStyle(color: ListenColors.error),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 )
               else if (state.showVideo && video != null)
                 SizedBox(
@@ -86,15 +87,17 @@ class DictionaryInlineClipPlayer extends StatelessWidget {
                   ),
                 )
               else
-                const DecoratedBox(
-                  decoration: BoxDecoration(color: ListenColors.fog),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainer,
+                  ),
                   child: SizedBox(
                     height: 88,
                     child: Center(
                       child: Icon(
                         Icons.graphic_eq,
                         size: 36,
-                        color: ListenColors.accent,
+                        color: Theme.of(context).colorScheme.secondary,
                       ),
                     ),
                   ),
@@ -131,8 +134,8 @@ class DictionaryInlineClipPlayer extends StatelessWidget {
                     icon: Icon(
                       Icons.repeat,
                       color: state.looping
-                          ? ListenColors.accent
-                          : ListenColors.muted,
+                          ? Theme.of(context).colorScheme.secondary
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                   IconButton(

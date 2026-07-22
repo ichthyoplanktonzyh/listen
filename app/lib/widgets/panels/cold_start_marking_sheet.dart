@@ -36,12 +36,10 @@ class _ColdStartMarkingSheetState extends State<ColdStartMarkingSheet> {
 
   Future<void> _load() async {
     try {
-      final raw = await widget.api.coldStartWords(widget.trackId);
+      final candidates = await widget.api.coldStartWords(widget.trackId);
       if (!mounted) return;
       setState(() {
-        _candidates = raw
-            .map((json) => ColdStartWordCandidate.fromJson(json))
-            .toList(growable: false);
+        _candidates = candidates;
         _loading = false;
       });
     } catch (_) {
@@ -126,11 +124,7 @@ class _ColdStartMarkingSheetState extends State<ColdStartMarkingSheet> {
     );
   }
 
-  Widget _body(
-    BuildContext context,
-    AppLocalizations l,
-    ColorScheme colors,
-  ) {
+  Widget _body(BuildContext context, AppLocalizations l, ColorScheme colors) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -140,9 +134,9 @@ class _ColdStartMarkingSheetState extends State<ColdStartMarkingSheet> {
         child: Text(
           l.text('coldStartEmpty'),
           textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: colors.onSurfaceVariant,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
         ),
       );
     }
@@ -156,16 +150,16 @@ class _ColdStartMarkingSheetState extends State<ColdStartMarkingSheet> {
       children: [
         Text(
           progress,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: colors.onSurfaceVariant,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
         ),
         const SizedBox(height: 16),
         Text(
           candidate.displayForm,
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 28),
         _ActionButton(

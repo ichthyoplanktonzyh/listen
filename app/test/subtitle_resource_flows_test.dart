@@ -1,0 +1,162 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/controllers/player_controller.dart';
+import 'package:llplayer_next/controllers/resource_actions_coordinator.dart';
+import 'package:llplayer_next/controllers/speech_enhancement_workflow_controller.dart';
+import 'package:llplayer_next/controllers/subtitle_controller.dart';
+import 'package:llplayer_next/localization.dart';
+import 'package:llplayer_next/models/timeline.dart';
+import 'package:llplayer_next/services/api_service.dart';
+import 'package:llplayer_next/widgets/flows/subtitle_resource_flows.dart';
+
+const _track = SubtitleTrack(id: 'track-1', cues: []);
+
+LocalApi _fakeApi(
+  ({int statusCode, String body}) Function(String, String, String?) handler,
+) => LocalApi.withTransport(
+  baseUrl: 'http://test',
+  token: 'tok',
+  transport: (method, path, body) async => handler(method, path, body),
+);
+
+ResourceActionsCoordinator _resourceActions(LocalApi? Function() getApi) =>
+    ResourceActionsCoordinator(
+      player: PlayerController(),
+      subtitle: SubtitleController(),
+      speechEnhancement: SpeechEnhancementWorkflowController(),
+    )..bind(
+      getApi: getApi,
+      isMounted: () => true,
+      reloadSpeechEnhancements: (_) async {},
+      activatePrimaryTrack: (_, {required nextStatus}) async {},
+      reloadLearningEntries: () async {},
+    );
+
+class _Harness extends StatelessWidget {
+  const _Harness({required this.onPressed});
+
+  final Future<void> Function(BuildContext context) onPressed;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    supportedLocales: AppLocalizations.supportedLocales,
+    localizationsDelegates: const [
+      AppLocalizations.delegate,
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+    ],
+    home: Scaffold(
+      body: Builder(
+        builder: (context) => TextButton(
+          onPressed: () => onPressed(context),
+          child: const Text('go'),
+        ),
+      ),
+    ),
+  );
+}
+
+void main() {
+  testWidgets('delete flow cancel leaves the resource untouched', (
+    tester,
+  ) async {
+    final calls = <String>[];
+    final api = _fakeApi((method, path, body) {
+      calls.add('$method $path');
+      return (statusCode: 200, body: '{}');
+    });
+    await tester.pumpWidget(
+      _Harness(
+        onPressed: (context) => deleteSubtitleResourceFlow(
+          context: context,
+          resourceActions: _resourceActions(() => api),
+          track: _track,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('go'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(calls, isEmpty);
+  });
+
+  testWidgets('delete flow confirm issues the DELETE request', (tester) async {
+    final calls = <String>[];
+    final api = _fakeApi((method, path, body) {
+      calls.add('$method $path');
+      return (statusCode: 200, body: method == 'GET' ? '[]' : '{}');
+    });
+    await tester.pumpWidget(
+      _Harness(
+        onPressed: (context) => deleteSubtitleResourceFlow(
+          context: context,
+          resourceActions: _resourceActions(() => api),
+          track: _track,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('go'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete resource'));
+    await tester.pumpAndSettle();
+
+    expect(calls, contains('DELETE /v1/subtitles/track-1'));
+  });
+
+  testWidgets('export flow with a null api never opens a dialog', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _Harness(
+        onPressed: (context) => exportSubtitleResourceFlow(
+          context: context,
+          api: null,
+          resourceActions: _resourceActions(() => null),
+          track: _track,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('go'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SimpleDialog), findsNothing);
+  });
+
+  testWidgets('export flow offers both formats and honors dismissal', (
+    tester,
+  ) async {
+    final calls = <String>[];
+    final api = _fakeApi((method, path, body) {
+      calls.add('$method $path');
+      return (statusCode: 200, body: '{}');
+    });
+    await tester.pumpWidget(
+      _Harness(
+        onPressed: (context) => exportSubtitleResourceFlow(
+          context: context,
+          api: api,
+          resourceActions: _resourceActions(() => api),
+          track: _track,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('go'));
+    await tester.pumpAndSettle();
+    expect(find.text('.srt'), findsOneWidget);
+    expect(find.text('.lltimeline.json'), findsOneWidget);
+
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+
+    expect(calls, isEmpty);
+    expect(find.byType(SimpleDialog), findsNothing);
+  });
+}

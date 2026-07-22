@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../localization.dart';
 import '../../models/practice.dart';
+import '../../models/production_corpus.dart';
 import '../../models/types.dart';
 import '../../theme/listen_theme.dart';
 import '../../utils/format_duration.dart';
@@ -35,6 +36,10 @@ class ListeningDictionaryEntryView extends StatefulWidget {
   const ListeningDictionaryEntryView({
     super.key,
     required this.details,
+    this.showProductionCorpus = false,
+    this.productionHits,
+    this.productionLoadFailed = false,
+    this.onOpenProductionAttempt,
     this.slicePlayer,
     required this.onPlay,
     required this.onMark,
@@ -56,10 +61,22 @@ class ListeningDictionaryEntryView extends StatefulWidget {
     this.externalLookupUrl,
     this.onOpenExternal,
     this.pronunciationAudioUrl,
+    this.onPlayPronunciationAudio,
+    this.onSpeakSynthetic,
+    this.speechBusy = false,
     this.libraryResultLimit = 50,
   });
 
   final LexicalEntryDetails details;
+
+  /// The vocabulary screen enables this section; reusable detail surfaces
+  /// remain layout-compatible until they opt into the projection.
+  final bool showProductionCorpus;
+
+  /// `null` while loading; an empty list is an honest no-output state.
+  final List<ProductionCorpusHitView>? productionHits;
+  final bool productionLoadFailed;
+  final ValueChanged<ProductionCorpusHitView>? onOpenProductionAttempt;
   final SlicePlayerController? slicePlayer;
   final ValueChanged<LexicalOccurrence> onPlay;
   final Future<bool> Function(LexicalOccurrence occurrence, bool heard) onMark;
@@ -117,6 +134,12 @@ class ListeningDictionaryEntryView extends StatefulWidget {
 
   /// Dictionary-provider pronunciation audio, when a lookup produced one.
   final String? pronunciationAudioUrl;
+  final ValueChanged<String>? onPlayPronunciationAudio;
+
+  /// Synthetic speech is a supplemental rendering of the supplied text. It
+  /// never replaces a real media slice or becomes learning evidence.
+  final void Function(String text, String purpose)? onSpeakSynthetic;
+  final bool speechBusy;
 
   /// The request limit used by [onSearchLibrary]; hitting it means the
   /// results were sampled, which the coverage-honest UI must say.
@@ -322,6 +345,11 @@ class _ListeningDictionaryEntryViewState
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final occurrences = _sortedOccurrences();
+    final productionDocuments = <String, ProductionCorpusHitView>{};
+    for (final hit
+        in widget.productionHits ?? const <ProductionCorpusHitView>[]) {
+      productionDocuments.putIfAbsent(hit.document.id, () => hit);
+    }
     final unassignedOccurrences = occurrences
         .where((occurrence) => !_assignedOccurrenceIds.contains(occurrence.id))
         .toList(growable: false);
@@ -337,9 +365,9 @@ class _ListeningDictionaryEntryViewState
           entry.kind == 'phrase'
               ? l.text('dictionaryPhrase')
               : l.text('dictionaryWord'),
-          style: Theme.of(
-            context,
-          ).textTheme.labelLarge?.copyWith(color: ListenColors.muted),
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 16),
         for (final suggestion in widget.suggestions)
@@ -359,6 +387,78 @@ class _ListeningDictionaryEntryViewState
         if (widget.onCreateSenseFolder != null) ...[
           const SizedBox(height: 20),
           _senseFolderSection(l),
+        ],
+        if (widget.showProductionCorpus) ...[
+          const SizedBox(height: 20),
+          Text(
+            l.text('myOutput'),
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 4),
+          if (widget.productionHits == null && !widget.productionLoadFailed)
+            const LinearProgressIndicator()
+          else if (widget.productionLoadFailed)
+            Text(
+              l.text('myOutputUnavailable'),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            )
+          else if (widget.productionHits!.isEmpty)
+            Text(
+              l.text('myOutputEmpty'),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            )
+          else ...[
+            Text(
+              l
+                  .text(
+                    widget.productionHits!.length == 1
+                        ? 'myOutputCountOne'
+                        : 'myOutputCount',
+                  )
+                  .replaceAll('{count}', '${widget.productionHits!.length}'),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            for (final hit in productionDocuments.values)
+              ListTile(
+                key: ValueKey('production-output-${hit.document.id}'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  hit.document.responseText,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  '${_assistanceLabel(l, hit.document.assistance)} · '
+                  '${l.text('revision')} ${hit.document.responseRevision}',
+                ),
+                trailing: Wrap(
+                  spacing: 4,
+                  children: [
+                    if (widget.onSpeakSynthetic != null)
+                      PronunciationButton(
+                        key: ValueKey('production-speech-${hit.document.id}'),
+                        tooltip: l.text('readAloudSynthetic'),
+                        busy: widget.speechBusy,
+                        synthetic: true,
+                        onPressed: () => widget.onSpeakSynthetic!(
+                          hit.document.responseText,
+                          'production_corpus_readback',
+                        ),
+                      ),
+                    const Icon(Icons.open_in_new),
+                  ],
+                ),
+                onTap: widget.onOpenProductionAttempt == null
+                    ? null
+                    : () => widget.onOpenProductionAttempt!(hit),
+              ),
+          ],
         ],
         const SizedBox(height: 20),
         Row(
@@ -394,9 +494,9 @@ class _ListeningDictionaryEntryViewState
           l
               .text('dictionaryCoverage')
               .replaceAll('{count}', '${occurrences.length}'),
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: ListenColors.muted),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 10),
         if (unassignedOccurrences.isNotEmpty)
@@ -484,7 +584,9 @@ class _ListeningDictionaryEntryViewState
                         return Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           child: Card(
-                            color: selected ? ListenColors.selected : null,
+                            color: selected
+                                ? Theme.of(context).colorScheme.primaryContainer
+                                : null,
                             child: Row(
                               children: [
                                 Expanded(
@@ -512,8 +614,10 @@ class _ListeningDictionaryEntryViewState
                                           const SizedBox(height: 4),
                                           Text(
                                             '${wpm == null ? '' : l.text('dictionaryWpm').replaceAll('{wpm}', '$wpm')} · ${index + 1}/${occurrences.length}',
-                                            style: const TextStyle(
-                                              color: ListenColors.muted,
+                                            style: TextStyle(
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onSurfaceVariant,
                                             ),
                                           ),
                                         ],
@@ -574,12 +678,24 @@ class _ListeningDictionaryEntryViewState
         else if (unassignedOccurrences.isEmpty)
           Text(
             l.text('dictionaryNoClips'),
-            style: const TextStyle(color: ListenColors.muted),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         if (widget.onSearchLibrary != null) ..._librarySection(l),
       ],
     );
   }
+
+  String _assistanceLabel(AppLocalizations l, String value) => switch (value) {
+    'content_anchored' => l.text('productionAssistanceContent'),
+    'source_reconstruction' => l.text('productionAssistanceReconstruction'),
+    'learner_revision' => l.text('productionAssistanceRevision'),
+    'explicit_target' => l.text('productionAssistanceTarget'),
+    'model_suggested' => l.text('productionAssistanceModel'),
+    'direct_imitation' => l.text('productionAssistanceImitation'),
+    _ => l.text('productionAssistanceUnknown'),
+  };
 
   Widget _senseFolderSection(AppLocalizations l) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -603,15 +719,17 @@ class _ListeningDictionaryEntryViewState
       ),
       Text(
         l.text('dictionarySenseFoldersHint'),
-        style: Theme.of(
-          context,
-        ).textTheme.bodySmall?.copyWith(color: ListenColors.muted),
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
       const SizedBox(height: 8),
       if (widget.details.senseFolders.isEmpty)
         Text(
           l.text('dictionaryNoSenseFolders'),
-          style: const TextStyle(color: ListenColors.muted),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         )
       else
         for (final details in widget.details.senseFolders)
@@ -780,7 +898,10 @@ class _ListeningDictionaryEntryViewState
     final audio = widget.pronunciationAudioUrl;
     final openExternal = widget.onOpenExternal;
     final hasLink = url != null && openExternal != null;
-    if (!hasLink && audio == null) return null;
+    final canPlayAudio =
+        audio != null && widget.onPlayPronunciationAudio != null;
+    final canSynthesize = audio == null && widget.onSpeakSynthetic != null;
+    if (!hasLink && !canPlayAudio && !canSynthesize) return null;
     return Wrap(
       crossAxisAlignment: WrapCrossAlignment.center,
       spacing: 8,
@@ -788,9 +909,27 @@ class _ListeningDictionaryEntryViewState
       children: [
         Text(
           l.text('dictionaryExternalHint'),
-          style: const TextStyle(color: ListenColors.muted, fontSize: 12),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontSize: 12,
+          ),
         ),
-        if (audio != null) PronunciationButton(audioUrl: audio),
+        if (canPlayAudio)
+          PronunciationButton(
+            tooltip: l.text('pronunciation'),
+            busy: widget.speechBusy,
+            onPressed: () => widget.onPlayPronunciationAudio!(audio),
+          )
+        else if (canSynthesize)
+          PronunciationButton(
+            tooltip: l.text('dictionarySyntheticFallback'),
+            busy: widget.speechBusy,
+            synthetic: true,
+            onPressed: () => widget.onSpeakSynthetic!(
+              entry.displayForm,
+              'dictionary_pronunciation_fallback',
+            ),
+          ),
         if (hasLink)
           OutlinedButton.icon(
             onPressed: () => openExternal(url),
@@ -831,7 +970,9 @@ class _ListeningDictionaryEntryViewState
       else if (results.isEmpty) ...[
         Text(
           l.text('dictionaryNoLibraryResults'),
-          style: const TextStyle(color: ListenColors.muted),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         if (external != null) ...[const SizedBox(height: 10), external],
       ] else ...[
@@ -840,7 +981,10 @@ class _ListeningDictionaryEntryViewState
             l
                 .text('dictionarySampledHint')
                 .replaceAll('{count}', '${widget.libraryResultLimit}'),
-            style: const TextStyle(color: ListenColors.muted, fontSize: 12),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 12,
+            ),
           ),
           const SizedBox(height: 8),
         ],
@@ -1233,14 +1377,16 @@ class _ClipTile extends StatelessWidget {
                     style: TextStyle(
                       color: mark!
                           ? ListenColors.learningRecognized
-                          : ListenColors.accent,
+                          : Theme.of(context).colorScheme.secondary,
                       fontWeight: FontWeight.w700,
                     ),
                   )
                 else if (onHeard == null)
                   Text(
                     l.text('dictionaryMarkUnavailable'),
-                    style: const TextStyle(color: ListenColors.muted),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   )
                 else
                   Wrap(
@@ -1325,8 +1471,8 @@ class _HighlightedSentence extends StatelessWidget {
           TextSpan(text: sentence.substring(0, start)),
           TextSpan(
             text: sentence.substring(start, end),
-            style: const TextStyle(
-              color: ListenColors.primary,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.primary,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -1379,6 +1525,7 @@ class _CapabilityEditor extends StatelessWidget {
                   icon,
                   size: 17,
                   color: _color(
+                    Theme.of(context).colorScheme,
                     _dimension(channel)?.effectiveAssessment ?? 'unassessed',
                   ),
                 ),
@@ -1444,9 +1591,9 @@ class _CapabilityEditor extends StatelessWidget {
     );
   }
 
-  Color _color(String assessment) => switch (assessment) {
+  Color _color(ColorScheme colors, String assessment) => switch (assessment) {
     'acquired' => ListenColors.learningRecognized,
-    'not_acquired' => ListenColors.accent,
-    _ => ListenColors.muted,
+    'not_acquired' => colors.secondary,
+    _ => colors.onSurfaceVariant,
   };
 }

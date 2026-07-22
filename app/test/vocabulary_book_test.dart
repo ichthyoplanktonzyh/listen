@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/practice.dart';
+import 'package:llplayer_next/models/production_corpus.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/widgets/panels/word_learning_panel.dart';
 import 'package:llplayer_next/widgets/vocabulary/vocabulary_book_view.dart';
@@ -12,6 +13,23 @@ import 'package:llplayer_next/widgets/vocabulary/vocabulary_transfer_actions.dar
 import 'package:llplayer_next/utils/subtitle_position.dart';
 import 'package:llplayer_next/utils/subtitle_style.dart';
 import 'package:llplayer_next/utils/word_list_parser.dart';
+
+LexicalEntryDetails vocabularyDetails({
+  required String displayForm,
+  String kind = 'word',
+  List<LexicalOccurrence> occurrences = const [],
+  LexicalCapabilityProfile? capabilityProfile,
+}) => LexicalEntryDetails(
+  entry: LexicalEntry(
+    id: 'entry-$displayForm',
+    normalizedForm: displayForm.toLowerCase(),
+    displayForm: displayForm,
+    kind: kind,
+    language: 'en',
+  ),
+  occurrences: occurrences,
+  capabilityProfile: capabilityProfile,
+);
 
 Widget localized(Widget child, {Locale locale = const Locale('en')}) =>
     MaterialApp(
@@ -82,16 +100,20 @@ void main() {
   testWidgets('vocabulary book shows durable source and unavailable state', (
     tester,
   ) async {
-    Map<String, dynamic>? selected;
-    final word = <String, dynamic>{
-      'entry': {'display_form': 'Hello'},
-      'occurrences': [
-        {
-          'sentence_text_snapshot': 'Hello from a durable snapshot.',
-          'media_id': null,
-        },
+    LexicalEntryDetails? selected;
+    final word = vocabularyDetails(
+      displayForm: 'Hello',
+      occurrences: const [
+        LexicalOccurrence(
+          mediaTitleSnapshot: 'Example',
+          mediaFingerprintSnapshot: 'sha256:example',
+          sentenceTextSnapshot: 'Hello from a durable snapshot.',
+          startMsSnapshot: 0,
+          endMsSnapshot: 1000,
+          encounterCount: 1,
+        ),
       ],
-    };
+    );
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -113,17 +135,17 @@ void main() {
   testWidgets('vocabulary book shows a four-channel snapshot and phrase badge', (
     tester,
   ) async {
-    final word = <String, dynamic>{
-      'entry': {'display_form': 'take care of', 'kind': 'phrase'},
-      'occurrences': const [],
-      'capability_profile': {
+    final word = vocabularyDetails(
+      displayForm: 'take care of',
+      kind: 'phrase',
+      capabilityProfile: LexicalCapabilityProfile.fromJson({
         'lexical_entry_id': 'e1',
         'reading': <String, dynamic>{},
         'listening': <String, dynamic>{},
         'speaking': <String, dynamic>{},
         'writing': <String, dynamic>{},
-      },
-    };
+      }),
+    );
     await tester.pumpWidget(
       localized(VocabularyBookView(words: [word], onWord: (_) {})),
     );
@@ -554,13 +576,154 @@ void main() {
     expect(find.textContaining('Open hello from a subtitle'), findsOneWidget);
   });
 
+  testWidgets('dictionary prefers provider audio over synthetic fallback', (
+    tester,
+  ) async {
+    String? providerAudio;
+    String? syntheticText;
+    await tester.pumpWidget(
+      localized(
+        ListeningDictionaryEntryView(
+          details: const LexicalEntryDetails(
+            entry: LexicalEntry(
+              id: 'hello',
+              normalizedForm: 'hello',
+              displayForm: 'hello',
+              kind: 'word',
+              language: 'en',
+            ),
+          ),
+          onPlay: _ignoreOccurrence,
+          onMark: _ignoreMark,
+          pronunciationAudioUrl: 'https://example.test/hello.mp3',
+          onPlayPronunciationAudio: (url) => providerAudio = url,
+          onSpeakSynthetic: (text, _) => syntheticText = text,
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Play pronunciation'));
+    expect(providerAudio, 'https://example.test/hello.mp3');
+    expect(syntheticText, isNull);
+    expect(find.byTooltip('Play synthetic pronunciation'), findsNothing);
+  });
+
+  testWidgets(
+    'dictionary labels synthetic speech when provider audio is absent',
+    (tester) async {
+      String? syntheticText;
+      String? purpose;
+      await tester.pumpWidget(
+        localized(
+          ListeningDictionaryEntryView(
+            details: const LexicalEntryDetails(
+              entry: LexicalEntry(
+                id: 'hello',
+                normalizedForm: 'hello',
+                displayForm: 'hello',
+                kind: 'word',
+                language: 'en',
+              ),
+            ),
+            onPlay: _ignoreOccurrence,
+            onMark: _ignoreMark,
+            onSpeakSynthetic: (text, value) {
+              syntheticText = text;
+              purpose = value;
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.byTooltip('Play synthetic pronunciation'));
+      expect(syntheticText, 'hello');
+      expect(purpose, 'dictionary_pronunciation_fallback');
+    },
+  );
+
+  testWidgets('dictionary shows submitted output and opens its attempt', (
+    tester,
+  ) async {
+    const document = ProductionCorpusDocumentView(
+      id: 'document-1',
+      language: 'en',
+      channel: 'written',
+      assistance: 'learner_revision',
+      attemptId: 'attempt-1',
+      rubricId: 'rubric-1',
+      responseRevision: 2,
+      activityKind: 'opinion',
+      mediaId: null,
+      startMs: 0,
+      endMs: 1000,
+      responseText: 'This proposal is worth discussing.',
+      producedAtMs: 42,
+    );
+    const hit = ProductionCorpusHitView(
+      document: document,
+      entry: ProductionCorpusEntryView(
+        id: 'entry-1',
+        documentId: 'document-1',
+        normalizedKey: 'proposal',
+        displayText: 'proposal',
+        startChar: 5,
+        endChar: 13,
+      ),
+    );
+    ProductionCorpusHitView? opened;
+
+    await tester.pumpWidget(
+      localized(
+        ListeningDictionaryEntryView(
+          details: vocabularyDetails(displayForm: 'proposal'),
+          showProductionCorpus: true,
+          productionHits: const [hit],
+          onOpenProductionAttempt: (value) => opened = value,
+          onPlay: _ignoreOccurrence,
+          onMark: _ignoreMark,
+        ),
+      ),
+    );
+
+    expect(find.text('My output'), findsOneWidget);
+    expect(
+      find.text('You used this word once in submitted writing.'),
+      findsOneWidget,
+    );
+    expect(find.text('This proposal is worth discussing.'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('production-output-document-1')),
+    );
+    expect(opened, same(hit));
+  });
+
+  testWidgets('dictionary distinguishes unavailable output from no output', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      localized(
+        ListeningDictionaryEntryView(
+          details: vocabularyDetails(displayForm: 'proposal'),
+          showProductionCorpus: true,
+          productionHits: const [],
+          productionLoadFailed: true,
+          onPlay: _ignoreOccurrence,
+          onMark: _ignoreMark,
+        ),
+      ),
+    );
+
+    expect(
+      find.text('Your writing output is temporarily unavailable.'),
+      findsOneWidget,
+    );
+    expect(find.text('No writing output for this word yet.'), findsNothing);
+  });
+
   testWidgets('status movement removes a word from the previous dynamic book', (
     tester,
   ) async {
-    final word = <String, dynamic>{
-      'entry': {'display_form': 'Move me'},
-      'occurrences': const [],
-    };
+    final word = vocabularyDetails(displayForm: 'Move me');
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -639,6 +802,49 @@ void main() {
     expect(exported, isTrue);
     expect(imported, isTrue);
   });
+
+  testWidgets(
+    'lemma correction is offered only where a token is selected',
+    (tester) async {
+      // #16 moved this out of the global AppBar menu, where it silently did
+      // nothing without a selected token. The panel only shows it when the
+      // host actually wires it up.
+      await tester.pumpWidget(
+        localized(
+          WordLearningPanel(
+            details: _helloDetails,
+            dictionary: _helloDictionary,
+            onStatus: (_) {},
+            onSave: (_, _) async {},
+            onSource: (_) {},
+            onHeard: () {},
+            onNotHeard: () {},
+          ),
+        ),
+      );
+      expect(find.byKey(const ValueKey('correct-lemma')), findsNothing);
+
+      var corrections = 0;
+      await tester.pumpWidget(
+        localized(
+          WordLearningPanel(
+            details: _helloDetails,
+            dictionary: _helloDictionary,
+            onStatus: (_) {},
+            onSave: (_, _) async {},
+            onSource: (_) {},
+            onHeard: () {},
+            onNotHeard: () {},
+            onCorrectLemma: () => corrections += 1,
+          ),
+        ),
+      );
+      expect(find.text('Correct lemma'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('correct-lemma')));
+      expect(corrections, 1);
+    },
+  );
 
   testWidgets(
     'word learning panel groups providers and edits durable content',

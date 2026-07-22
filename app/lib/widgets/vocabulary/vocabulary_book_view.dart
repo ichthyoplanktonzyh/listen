@@ -6,11 +6,12 @@ import '../../theme/listen_theme.dart';
 
 /// Shared color for a capability channel's effective assessment, used by both
 /// the list snapshot icons and the filter chips so the two read as one system.
-Color capabilityAssessmentColor(String assessment) => switch (assessment) {
-  'acquired' => ListenColors.learningRecognized,
-  'not_acquired' => ListenColors.accent,
-  _ => ListenColors.muted.withValues(alpha: 0.45),
-};
+Color capabilityAssessmentColor(ColorScheme colors, String assessment) =>
+    switch (assessment) {
+      'acquired' => ListenColors.learningRecognized,
+      'not_acquired' => colors.secondary,
+      _ => colors.onSurfaceVariant.withValues(alpha: 0.45),
+    };
 
 class VocabularyBookView extends StatelessWidget {
   const VocabularyBookView({
@@ -19,8 +20,8 @@ class VocabularyBookView extends StatelessWidget {
     required this.onWord,
   });
 
-  final List<Map<String, dynamic>> words;
-  final ValueChanged<Map<String, dynamic>> onWord;
+  final List<LexicalEntryDetails> words;
+  final ValueChanged<LexicalEntryDetails> onWord;
 
   @override
   Widget build(BuildContext context) {
@@ -33,30 +34,20 @@ class VocabularyBookView extends StatelessWidget {
       separatorBuilder: (_, _) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final value = words[index];
-        final entry = value['entry'] as Map<String, dynamic>;
-        final occurrences = (value['occurrences'] as List<dynamic>?) ?? const [];
-        final profile = value['capability_profile'] is Map
-            ? LexicalCapabilityProfile.fromJson(
-                Map<String, dynamic>.from(value['capability_profile'] as Map),
-              )
-            : null;
-        final isPhrase = entry['kind'] == 'phrase';
+        final entry = value.entry;
+        final occurrences = value.occurrences;
+        final profile = value.capabilityProfile;
+        final isPhrase = entry.kind == 'phrase';
         final snapshot = occurrences.isEmpty
             ? l.text('noSourceSnapshot')
-            : (occurrences.first as Map<String, dynamic>)['sentence_text_snapshot']
-                      as String? ??
-                  l.text('noSourceSnapshot');
+            : occurrences.first.sentenceTextSnapshot;
         final hasMedia =
-            occurrences.isNotEmpty &&
-            (occurrences.first as Map<String, dynamic>)['media_id'] != null;
+            occurrences.isNotEmpty && occurrences.first.mediaId != null;
         return ListTile(
           title: Row(
             children: [
               Flexible(
-                child: Text(
-                  entry['display_form'] as String,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                child: Text(entry.displayForm, overflow: TextOverflow.ellipsis),
               ),
               if (isPhrase) ...[
                 const SizedBox(width: 8),
@@ -132,7 +123,10 @@ class _CapabilitySummary extends StatelessWidget {
               child: Icon(
                 icon,
                 size: 15,
-                color: capabilityAssessmentColor(_assessment(channel)),
+                color: capabilityAssessmentColor(
+                  Theme.of(context).colorScheme,
+                  _assessment(channel),
+                ),
               ),
             ),
           ),

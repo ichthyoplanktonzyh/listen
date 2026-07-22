@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/types.dart';
+import '../../theme/breakpoints.dart';
 import '../../utils/format_duration.dart';
 import 'media_library_section.dart';
 
@@ -13,6 +14,7 @@ class ListeningHome extends StatelessWidget {
     required this.onContinue,
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
+    required this.onOpenPersonalExpressions,
     required this.onOpenReview,
     required this.onOpenCoach,
     required this.onOpenSettings,
@@ -32,7 +34,7 @@ class ListeningHome extends StatelessWidget {
     this.vocabularyCapped = false,
     this.vocabularyKnown = false,
     this.listeningInboxCount = 0,
-    this.statusText = '',
+    this.coreStatusText = '',
   });
 
   final VoidCallback onOpenMedia;
@@ -40,6 +42,7 @@ class ListeningHome extends StatelessWidget {
   final VoidCallback onContinue;
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
+  final VoidCallback onOpenPersonalExpressions;
   final VoidCallback onOpenReview;
   final VoidCallback onOpenCoach;
   final VoidCallback onOpenSettings;
@@ -60,12 +63,12 @@ class ListeningHome extends StatelessWidget {
   final bool vocabularyCapped;
   final bool vocabularyKnown;
   final int listeningInboxCount;
-  final String statusText;
+  final String coreStatusText;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final showSidebar = constraints.maxWidth >= 760;
+      final showSidebar = constraints.maxWidth >= ListenBreakpoints.homeSidebar;
       return ColoredBox(
         color: Theme.of(context).colorScheme.surface,
         child: Row(
@@ -74,10 +77,9 @@ class ListeningHome extends StatelessWidget {
               SizedBox(
                 width: 248,
                 child: _HomeSidebar(
-                  onOpenMedia: onOpenMedia,
-                  onOpenOnline: onOpenOnline,
                   onOpenSubtitleResources: onOpenSubtitleResources,
                   onOpenVocabulary: onOpenVocabulary,
+                  onOpenPersonalExpressions: onOpenPersonalExpressions,
                   onOpenReview: onOpenReview,
                   onOpenCoach: onOpenCoach,
                   onOpenSettings: onOpenSettings,
@@ -91,6 +93,7 @@ class ListeningHome extends StatelessWidget {
                 onContinue: onContinue,
                 onOpenSubtitleResources: onOpenSubtitleResources,
                 onOpenVocabulary: onOpenVocabulary,
+                onOpenPersonalExpressions: onOpenPersonalExpressions,
                 onOpenReview: onOpenReview,
                 onOpenCoach: onOpenCoach,
                 mediaLibrary: mediaLibrary,
@@ -109,7 +112,7 @@ class ListeningHome extends StatelessWidget {
                 vocabularyCapped: vocabularyCapped,
                 vocabularyKnown: vocabularyKnown,
                 listeningInboxCount: listeningInboxCount,
-                statusText: statusText,
+                coreStatusText: coreStatusText,
               ),
             ),
           ],
@@ -119,21 +122,23 @@ class ListeningHome extends StatelessWidget {
   );
 }
 
+/// Where to go, not what to do (#17): the rail owns navigation to the standing
+/// learning destinations, while `_HomeContent` owns the content actions.
+/// Opening media lives only in the content pane, so no destination appears
+/// twice on one screen.
 class _HomeSidebar extends StatelessWidget {
   const _HomeSidebar({
-    required this.onOpenMedia,
-    required this.onOpenOnline,
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
+    required this.onOpenPersonalExpressions,
     required this.onOpenReview,
     required this.onOpenCoach,
     required this.onOpenSettings,
   });
 
-  final VoidCallback onOpenMedia;
-  final VoidCallback onOpenOnline;
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
+  final VoidCallback onOpenPersonalExpressions;
   final VoidCallback onOpenReview;
   final VoidCallback onOpenCoach;
   final VoidCallback onOpenSettings;
@@ -160,16 +165,6 @@ class _HomeSidebar extends StatelessWidget {
               selected: true,
               onTap: () {},
             ),
-            _SidebarItem(
-              icon: Icons.video_file_outlined,
-              label: l.text('openMedia'),
-              onTap: onOpenMedia,
-            ),
-            _SidebarItem(
-              icon: Icons.language_outlined,
-              label: l.text('openUrl'),
-              onTap: onOpenOnline,
-            ),
             const SizedBox(height: 24),
             _SectionLabel(label: l.text('myLearning')),
             const SizedBox(height: 8),
@@ -182,6 +177,11 @@ class _HomeSidebar extends StatelessWidget {
               icon: Icons.menu_book_outlined,
               label: l.text('vocabulary'),
               onTap: onOpenVocabulary,
+            ),
+            _SidebarItem(
+              icon: Icons.format_quote_outlined,
+              label: l.text('personalExpressions'),
+              onTap: onOpenPersonalExpressions,
             ),
             _SidebarItem(
               icon: Icons.headphones_outlined,
@@ -214,6 +214,7 @@ class _HomeContent extends StatelessWidget {
     required this.onContinue,
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
+    required this.onOpenPersonalExpressions,
     required this.onOpenReview,
     required this.onOpenCoach,
     required this.mediaLibrary,
@@ -232,7 +233,7 @@ class _HomeContent extends StatelessWidget {
     required this.vocabularyCapped,
     required this.vocabularyKnown,
     required this.listeningInboxCount,
-    required this.statusText,
+    required this.coreStatusText,
   });
 
   final bool compact;
@@ -241,6 +242,7 @@ class _HomeContent extends StatelessWidget {
   final VoidCallback onContinue;
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
+  final VoidCallback onOpenPersonalExpressions;
   final VoidCallback onOpenReview;
   final VoidCallback onOpenCoach;
   final List<MediaLibraryEntry>? mediaLibrary;
@@ -260,7 +262,7 @@ class _HomeContent extends StatelessWidget {
   final bool vocabularyCapped;
   final bool vocabularyKnown;
   final int listeningInboxCount;
-  final String statusText;
+  final String coreStatusText;
 
   @override
   Widget build(BuildContext context) {
@@ -281,12 +283,19 @@ class _HomeContent extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                l.text('library'),
+                l.text('contentHome'),
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 20),
+              Text(
+                l.text('currentContentJourney'),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 12),
               _ContinueLearningCard(
                 mediaTitle: recentMediaTitle,
                 mediaPath: recentMediaPath,
@@ -303,11 +312,11 @@ class _HomeContent extends StatelessWidget {
                 vocabularyCapped: vocabularyCapped,
                 vocabularyKnown: vocabularyKnown,
                 listeningInboxCount: listeningInboxCount,
-                statusText: statusText,
+                coreStatusText: coreStatusText,
               ),
               const SizedBox(height: 32),
               Text(
-                l.text('startListening'),
+                l.text('addContentSource'),
                 style: Theme.of(
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
@@ -348,43 +357,56 @@ class _HomeContent extends StatelessWidget {
                   onToggleFamiliarSupply: onToggleFamiliarSupply!,
                 ),
               ],
-              const SizedBox(height: 36),
-              Text(
-                l.text('learningTools'),
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 14),
-              _ResponsiveActionGrid(
-                compact: compact,
-                children: [
-                  _SourceAction(
-                    icon: Icons.inventory_2_outlined,
-                    label: l.text('subtitleResources'),
-                    sourceLabel: l.text('subtitleResourceSummary'),
-                    onTap: onOpenSubtitleResources,
+              // The learning destinations live in the rail (#17). Below the
+              // sidebar breakpoint the rail is gone, so they reappear here as
+              // the narrow-window path rather than vanishing — exactly one
+              // surface owns them at any width.
+              if (compact) ...[
+                const SizedBox(height: 36),
+                Text(
+                  l.text('assetJourney'),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
                   ),
-                  _SourceAction(
-                    icon: Icons.menu_book_outlined,
-                    label: l.text('vocabulary'),
-                    sourceLabel: l.text('vocabularySummary'),
-                    onTap: onOpenVocabulary,
-                  ),
-                  _SourceAction(
-                    icon: Icons.headphones_outlined,
-                    label: l.text('review'),
-                    sourceLabel: l.text('audioFirstReview'),
-                    onTap: onOpenReview,
-                  ),
-                  _SourceAction(
-                    icon: Icons.insights_outlined,
-                    label: l.text('coachDashboard'),
-                    sourceLabel: l.text('coachDashboardSummary'),
-                    onTap: onOpenCoach,
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 14),
+                _ResponsiveActionGrid(
+                  compact: compact,
+                  maxPerRow: 3,
+                  children: [
+                    _SourceAction(
+                      icon: Icons.inventory_2_outlined,
+                      label: l.text('subtitleResources'),
+                      sourceLabel: l.text('subtitleResourceSummary'),
+                      onTap: onOpenSubtitleResources,
+                    ),
+                    _SourceAction(
+                      icon: Icons.menu_book_outlined,
+                      label: l.text('vocabulary'),
+                      sourceLabel: l.text('vocabularySummary'),
+                      onTap: onOpenVocabulary,
+                    ),
+                    _SourceAction(
+                      icon: Icons.format_quote_outlined,
+                      label: l.text('personalExpressions'),
+                      sourceLabel: l.text('personalExpressionSummary'),
+                      onTap: onOpenPersonalExpressions,
+                    ),
+                    _SourceAction(
+                      icon: Icons.headphones_outlined,
+                      label: l.text('review'),
+                      sourceLabel: l.text('audioFirstReview'),
+                      onTap: onOpenReview,
+                    ),
+                    _SourceAction(
+                      icon: Icons.insights_outlined,
+                      label: l.text('coachDashboard'),
+                      sourceLabel: l.text('coachDashboardSummary'),
+                      onTap: onOpenCoach,
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -394,10 +416,18 @@ class _HomeContent extends StatelessWidget {
 }
 
 class _ResponsiveActionGrid extends StatelessWidget {
-  const _ResponsiveActionGrid({required this.compact, required this.children});
+  const _ResponsiveActionGrid({
+    required this.compact,
+    required this.children,
+    this.maxPerRow,
+  });
 
   final bool compact;
   final List<Widget> children;
+
+  /// Wide-layout cap on cards per row; rows are padded with empty slots so
+  /// every card keeps the same width. Null keeps everything on one row.
+  final int? maxPerRow;
 
   @override
   Widget build(BuildContext context) {
@@ -411,12 +441,36 @@ class _ResponsiveActionGrid extends StatelessWidget {
         ],
       );
     }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final perRow = maxPerRow == null
+        ? children.length
+        : maxPerRow!.clamp(1, children.length);
+    final rows = <List<Widget?>>[];
+    for (var start = 0; start < children.length; start += perRow) {
+      final row = <Widget?>[
+        ...children.sublist(
+          start,
+          (start + perRow) > children.length ? children.length : start + perRow,
+        ),
+      ];
+      while (row.length < perRow) {
+        row.add(null);
+      }
+      rows.add(row);
+    }
+    return Column(
       children: [
-        for (var index = 0; index < children.length; index++) ...[
-          Expanded(child: children[index]),
-          if (index != children.length - 1) const SizedBox(width: 12),
+        for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var index = 0; index < rows[rowIndex].length; index++) ...[
+                Expanded(child: rows[rowIndex][index] ?? const SizedBox()),
+                if (index != rows[rowIndex].length - 1)
+                  const SizedBox(width: 12),
+              ],
+            ],
+          ),
+          if (rowIndex != rows.length - 1) const SizedBox(height: 12),
         ],
       ],
     );
@@ -536,7 +590,7 @@ class _ResourceStatusStrip extends StatelessWidget {
     required this.vocabularyCapped,
     required this.vocabularyKnown,
     required this.listeningInboxCount,
-    required this.statusText,
+    required this.coreStatusText,
   });
 
   final int recentSubtitleCount;
@@ -545,14 +599,20 @@ class _ResourceStatusStrip extends StatelessWidget {
   final bool vocabularyCapped;
   final bool vocabularyKnown;
   final int listeningInboxCount;
-  final String statusText;
+
+  /// Health line for the "local core" tile. Empty means "nothing to report",
+  /// which the tile renders as its ready state. The composition root filters
+  /// playback notices out (see `PlayerController.statusIsPlayback`) rather
+  /// than matching on the localized text here.
+  final String coreStatusText;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 720;
+        final compact =
+            constraints.maxWidth < ListenBreakpoints.homeStatusStrip;
         final items = [
           _StatusItem(
             icon: Icons.subtitles_outlined,
@@ -580,9 +640,9 @@ class _ResourceStatusStrip extends StatelessWidget {
           _StatusItem(
             icon: Icons.memory_outlined,
             label: l.text('localCore'),
-            value: statusText.isEmpty || statusText.startsWith('Playing')
+            value: coreStatusText.isEmpty
                 ? l.text('coreReady')
-                : statusText,
+                : coreStatusText,
           ),
         ];
         if (compact) {

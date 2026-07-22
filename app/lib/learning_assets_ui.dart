@@ -4,23 +4,33 @@ import 'package:flutter/material.dart';
 
 import 'services/api_service.dart';
 import 'localization.dart';
+import 'models/runtime_resources.dart';
+import 'models/types.dart';
+import 'models/personal_expression.dart';
+import 'screens/personal_expression_screen.dart';
 
 class LearningAssetsScreen extends StatefulWidget {
   const LearningAssetsScreen({
     super.key,
     required this.api,
     required this.language,
+    this.onPlayExpressionSource,
+    this.onStartExpressionSpeaking,
   });
 
   final LocalApi api;
   final String language;
+  final Future<void> Function(PersonalExpressionSourceView source)?
+  onPlayExpressionSource;
+  final Future<void> Function(SentencePatternAssetView pattern)?
+  onStartExpressionSpeaking;
 
   @override
   State<LearningAssetsScreen> createState() => _LearningAssetsScreenState();
 }
 
 class _LearningAssetsScreenState extends State<LearningAssetsScreen> {
-  List<Map<String, dynamic>> values = const [];
+  List<LexicalEntryDetails> values = const [];
   String kind = 'phrase';
   String? status;
   String search = '';
@@ -41,21 +51,17 @@ class _LearningAssetsScreenState extends State<LearningAssetsScreen> {
     if (mounted) setState(() => values = next);
   }
 
-  Future<void> _details(Map<String, dynamic> details) async {
-    final entry = details['entry'] as Map<String, dynamic>;
-    var selectedStatus = entry['status'] as String? ?? 'known_not_recognized';
-    final definition = TextEditingController(
-      text: entry['user_definition'] as String? ?? '',
-    );
-    final note = TextEditingController(
-      text: entry['personal_note'] as String? ?? '',
-    );
+  Future<void> _details(LexicalEntryDetails details) async {
+    final entry = details.entry;
+    var selectedStatus = entry.status ?? 'known_not_recognized';
+    final definition = TextEditingController(text: entry.userDefinition ?? '');
+    final note = TextEditingController(text: entry.personalNote ?? '');
     if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: Text(entry['display_form'] as String),
+          title: Text(entry.displayForm),
           content: SizedBox(
             width: 640,
             height: 520,
@@ -98,23 +104,16 @@ class _LearningAssetsScreenState extends State<LearningAssetsScreen> {
                 Expanded(
                   child: ListView(
                     children: [
-                      for (final raw in details['occurrences'] as List<dynamic>)
+                      for (final occurrence in details.occurrences)
                         ListTile(
-                          title: Text(
-                            (raw
-                                    as Map<
-                                      String,
-                                      dynamic
-                                    >)['sentence_text_snapshot']
-                                as String,
-                          ),
+                          title: Text(occurrence.sentenceTextSnapshot),
                           subtitle: Text(
-                            '${raw['media_title_snapshot']} · ${raw['encounter_count']}',
+                            '${occurrence.mediaTitleSnapshot} · ${occurrence.encounterCount}',
                           ),
                           trailing: const Icon(Icons.play_arrow),
                           onTap: () {
                             Navigator.pop(context);
-                            Navigator.pop(this.context, raw);
+                            Navigator.pop(this.context, occurrence.toJson());
                           },
                         ),
                     ],
@@ -127,10 +126,10 @@ class _LearningAssetsScreenState extends State<LearningAssetsScreen> {
             FilledButton(
               onPressed: () async {
                 await widget.api.upsertLexicalEntry({
-                  'language': entry['language'],
-                  'kind': entry['kind'],
-                  'canonical_form': entry['canonical_form'],
-                  'display_form': entry['display_form'],
+                  'language': entry.language,
+                  'kind': entry.kind,
+                  'canonical_form': entry.normalizedForm,
+                  'display_form': entry.displayForm,
                   'status': selectedStatus,
                   'user_definition': definition.text,
                   'personal_note': note.text,
@@ -155,6 +154,29 @@ class _LearningAssetsScreenState extends State<LearningAssetsScreen> {
       appBar: AppBar(title: Text(l.text('learningAssets'))),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: Card(
+              child: ListTile(
+                leading: const Icon(Icons.auto_stories_outlined),
+                title: const Text('我的表达'),
+                subtitle: const Text('收藏真实句子，编辑成自己的模板，并分别练习书面与口头表达'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  await Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => PersonalExpressionScreen(
+                        api: widget.api,
+                        language: widget.language,
+                        onPlaySource: widget.onPlayExpressionSource,
+                        onStartSpeaking: widget.onStartExpressionSpeaking,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
@@ -214,7 +236,7 @@ class LearningResourceScreen extends StatefulWidget {
 }
 
 class _LearningResourceScreenState extends State<LearningResourceScreen> {
-  List<Map<String, dynamic>> resources = const [];
+  List<LearningResourceDescriptor> resources = const [];
   String? busy;
 
   @override
@@ -228,11 +250,11 @@ class _LearningResourceScreenState extends State<LearningResourceScreen> {
     if (mounted) setState(() => resources = values);
   }
 
-  Future<void> _toggle(Map<String, dynamic> value) async {
-    final id = value['id'] as String;
+  Future<void> _toggle(LearningResourceDescriptor value) async {
+    final id = value.id;
     setState(() => busy = id);
     try {
-      if (value['state'] == 'installed') {
+      if (value.state == 'installed') {
         await widget.api.removeLearningResource(id);
       } else {
         await widget.api.installLearningResource(id);
@@ -251,7 +273,7 @@ class _LearningResourceScreenState extends State<LearningResourceScreen> {
         for (final value in resources)
           LearningResourceTile(
             value: value,
-            busy: busy == value['id'],
+            busy: busy == value.id,
             onToggle: () => _toggle(value),
           ),
       ],
@@ -266,22 +288,20 @@ class LearningAssetTile extends StatelessWidget {
     required this.onTap,
   });
 
-  final Map<String, dynamic> details;
+  final LexicalEntryDetails details;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final entry = details['entry'] as Map<String, dynamic>;
+    final entry = details.entry;
     return ListTile(
-      title: Text(entry['display_form'] as String),
+      title: Text(entry.displayForm),
       subtitle: Text(
-        '${l.text(entry['kind'] as String)} · '
-        '${l.status(entry['status'] as String?)}',
+        '${l.text(entry.kind)} · '
+        '${l.status(entry.status)}',
       ),
-      trailing: Text(
-        '${(details['occurrences'] as List<dynamic>).length} ${l.text('sources')}',
-      ),
+      trailing: Text('${details.occurrences.length} ${l.text('sources')}'),
       onTap: onTap,
     );
   }
@@ -295,23 +315,23 @@ class LearningResourceTile extends StatelessWidget {
     required this.onToggle,
   });
 
-  final Map<String, dynamic> value;
+  final LearningResourceDescriptor value;
   final bool busy;
   final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context) => ListTile(
-    title: Text(value['display_name'] as String),
+    title: Text(value.displayName),
     subtitle: Text(
-      '${value['version']} · ${value['license']} · ${value['state']}\n'
-      '${value['checksum_sha256']}',
+      '${value.version} · ${value.license} · ${value.state}\n'
+      '${value.checksumSha256}',
     ),
     isThreeLine: true,
     trailing: busy
         ? const CircularProgressIndicator()
         : IconButton(
             icon: Icon(
-              value['state'] == 'installed'
+              value.state == 'installed'
                   ? Icons.delete_outline
                   : Icons.download,
             ),
@@ -320,115 +340,20 @@ class LearningResourceTile extends StatelessWidget {
   );
 }
 
-Future<void> showPhraseCandidates({
+Future<LexicalEntryDetails?> showPhraseCandidate({
   required BuildContext context,
   required LocalApi api,
-  required String sentenceId,
-  required Map<String, dynamic> source,
-}) async {
-  final candidates = await api.phraseCandidates(sentenceId);
-  var status = 'known_not_recognized';
-  if (!context.mounted) return;
-  await showDialog<void>(
-    context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
-        title: Text(AppLocalizations.of(context).text('phraseCandidates')),
-        content: SizedBox(
-          width: 560,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                initialValue: status,
-                items: [
-                  DropdownMenuItem(
-                    value: 'unknown_meaning',
-                    child: Text(
-                      AppLocalizations.of(context).status('unknown_meaning'),
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'known_not_recognized',
-                    child: Text(
-                      AppLocalizations.of(
-                        context,
-                      ).status('known_not_recognized'),
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'known_recognized',
-                    child: Text(
-                      AppLocalizations.of(context).status('known_recognized'),
-                    ),
-                  ),
-                ],
-                onChanged: (value) => setState(() => status = value ?? status),
-              ),
-              Flexible(
-                child: candidates.isEmpty
-                    ? Text(
-                        AppLocalizations.of(context).text('noPhraseCandidates'),
-                      )
-                    : ListView(
-                        shrinkWrap: true,
-                        children: [
-                          for (final candidate in candidates)
-                            ListTile(
-                              title: Text(candidate['display_form'] as String),
-                              subtitle: Text(candidate['reason'] as String),
-                              trailing: FilledButton(
-                                onPressed: () async {
-                                  await api.upsertLexicalEntry({
-                                    'language':
-                                        source['language'] as String? ?? 'en',
-                                    'kind': 'phrase',
-                                    'canonical_form':
-                                        candidate['canonical_form'],
-                                    'display_form': candidate['display_form'],
-                                    'status': status,
-                                    'source': {
-                                      ...source,
-                                      'original_form':
-                                          candidate['display_form'],
-                                      'token_start': candidate['token_start'],
-                                      'token_end': candidate['token_end'],
-                                    },
-                                  });
-                                  if (context.mounted) Navigator.pop(context);
-                                },
-                                child: Text(
-                                  AppLocalizations.of(
-                                    context,
-                                  ).text('confirmPhrase'),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-Future<Map<String, dynamic>?> showPhraseCandidate({
-  required BuildContext context,
-  required LocalApi api,
-  required Map<String, dynamic> candidate,
+  required PhraseCandidate candidate,
   required Map<String, dynamic> source,
   String? initialStatus,
 }) async {
   var status = initialStatus ?? 'known_not_recognized';
-  Map<String, dynamic>? saved;
+  LexicalEntryDetails? saved;
   await showDialog<void>(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setState) => AlertDialog(
-        title: Text(candidate['display_form'] as String),
+        title: Text(candidate.displayForm),
         content: SizedBox(
           width: 480,
           child: Column(
@@ -437,7 +362,7 @@ Future<Map<String, dynamic>?> showPhraseCandidate({
             children: [
               Text(AppLocalizations.of(context).text('phraseCandidatesHint')),
               const SizedBox(height: 12),
-              Text(candidate['reason'] as String),
+              Text(candidate.reason ?? ''),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: status,
@@ -467,14 +392,14 @@ Future<Map<String, dynamic>?> showPhraseCandidate({
               saved = await api.upsertLexicalEntry({
                 'language': source['language'] as String? ?? 'en',
                 'kind': 'phrase',
-                'canonical_form': candidate['canonical_form'],
-                'display_form': candidate['display_form'],
+                'canonical_form': candidate.canonicalForm,
+                'display_form': candidate.displayForm,
                 'status': status,
                 'source': {
                   ...source,
-                  'original_form': candidate['display_form'],
-                  'token_start': candidate['token_start'],
-                  'token_end': candidate['token_end'],
+                  'original_form': candidate.displayForm,
+                  'token_start': candidate.tokenStart,
+                  'token_end': candidate.tokenEnd,
                 },
               });
               if (context.mounted) Navigator.pop(context);
@@ -497,7 +422,7 @@ Future<String?> showOpenSubtitlesSearch({
   required String? mediaPath,
 }) async {
   final controller = TextEditingController(text: initialTitle);
-  var values = <Map<String, dynamic>>[];
+  var values = <OpenSubtitleCandidate>[];
   var loading = false;
   var mode = 'title';
   String? error;
@@ -565,14 +490,14 @@ Future<String?> showOpenSubtitlesSearch({
                   children: [
                     for (final value in values)
                       ListTile(
-                        title: Text(value['release'] as String),
+                        title: Text(value.release),
                         subtitle: Text(
-                          '${value['language']} · rating ${value['rating']} · ${value['download_count']} downloads',
+                          '${value.language} · rating ${value.rating} · ${value.downloadCount} downloads',
                         ),
                         onTap: () async {
                           selected = await api.downloadOpenSubtitle(
                             apiKey: apiKey,
-                            fileId: value['file_id'] as int,
+                            fileId: value.fileId,
                           );
                           if (context.mounted) Navigator.pop(context);
                         },

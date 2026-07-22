@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -95,7 +96,7 @@ class MediaSessionCoordinator {
         ? Future<void>.value()
         : api?.saveProgress(previousMediaId, previousPosition) ??
               Future<void>.value();
-    player.setStatus('Opening ${path.split(Platform.pathSeparator).last}');
+    player.setStatus(text('statusOpeningFile').replaceAll('{name}', path.split(Platform.pathSeparator).last));
     onMediaSwitched();
     player.clearMedia();
     player.setMediaPath(path);
@@ -112,7 +113,7 @@ class MediaSessionCoordinator {
     try {
       await adapter.open(path, play: false);
     } catch (error) {
-      if (isMounted()) player.setStatus('Playback failed: $error');
+      if (isMounted()) player.setStatus('${text('statusPlaybackFailed')}: $error', error: true);
       return;
     }
     Object? coreError;
@@ -120,13 +121,13 @@ class MediaSessionCoordinator {
       await previousProgressSave;
       final media = await api?.registerMedia(path);
       if (media != null) {
-        final id = media['id'] as String;
+        final id = media.id;
         final saved = await api?.readProgress(id);
         player.setMedia(
           id: id,
           path: path,
-          title: media['title'] as String,
-          fingerprint: media['fingerprint'] as String,
+          title: media.title,
+          fingerprint: media.fingerprint,
         );
         if (saved != null && saved > Duration.zero) {
           await adapter.seek(saved);
@@ -140,14 +141,19 @@ class MediaSessionCoordinator {
     try {
       await adapter.play();
       if (isMounted()) {
+        // Only the healthy branch is playback chatter; the degraded one
+        // reports on the core, so health indicators must keep showing it.
         player.setStatus(
           coreError == null
-              ? 'Playing ${path.split(Platform.pathSeparator).last}'
-              : 'Playing locally; core unavailable: $coreError',
+              ? text('statusPlayingFile').replaceAll('{name}', path.split(Platform.pathSeparator).last)
+              : text(
+                  'statusPlayingCoreUnavailable',
+                ).replaceAll('{error}', '$coreError'),
+          playback: coreError == null,
         );
       }
     } catch (error) {
-      if (isMounted()) player.setStatus('Playback failed: $error');
+      if (isMounted()) player.setStatus('${text('statusPlaybackFailed')}: $error', error: true);
     }
   }
 
@@ -155,7 +161,7 @@ class MediaSessionCoordinator {
 
   Future<void> openSubtitle({required bool secondary}) async {
     if (player.mediaId == null || getApi() == null) {
-      player.setStatus('Open media and connect the local core first');
+      player.setStatus(text('statusOpenMediaAndCoreFirst'));
       return;
     }
     const group = XTypeGroup(label: 'subtitles', extensions: ['srt', 'vtt']);
@@ -166,17 +172,17 @@ class MediaSessionCoordinator {
 
   Future<void> openSubtitlePath(String path, {required bool secondary}) async {
     try {
-      final value = await getApi()!.importSubtitle(player.mediaId!, path);
+      final imported = await getApi()!.importSubtitle(player.mediaId!, path);
       await adapter.disableNativeSubtitles();
-      final imported = SubtitleTrack.fromJson(value);
       if (secondary) {
         subtitle.setSecondaryTrack(imported);
         subtitle.setCurrentSecondaryCue(
           subtitle.secondaryCursor.current(player.position),
         );
         player.setStatus(
-          'Loaded secondary subtitle: '
-          '${path.split(Platform.pathSeparator).last}',
+          text(
+            'statusSecondarySubtitleLoaded',
+          ).replaceAll('{name}', path.split(Platform.pathSeparator).last),
         );
       } else {
         await usePrimarySubtitleTrack(
@@ -188,7 +194,7 @@ class MediaSessionCoordinator {
       }
       await resourceActions.loadSubtitleResources(updateStatus: false);
     } catch (error) {
-      player.setStatus('Subtitle import failed: $error');
+      player.setStatus('${text('statusSubtitleImportFailed')}: $error', error: true);
     }
   }
 
@@ -198,14 +204,14 @@ class MediaSessionCoordinator {
     final service = getApi();
     final mediaId = player.mediaId;
     if (service == null || mediaId == null) {
-      player.setStatus('Open media and connect the local core first');
+      player.setStatus(text('statusOpenMediaAndCoreFirst'));
       return;
     }
     const group = XTypeGroup(label: 'LLTimeline', extensions: ['json']);
     final file = await openFile(acceptedTypeGroups: [group]);
     if (file == null) return;
     try {
-      player.setStatus('Importing LLTimeline resource...');
+      player.setStatus(text('statusImportingLLTimeline'));
       final decoded = jsonDecode(await File(file.path).readAsString());
       if (decoded is! Map<String, dynamic>) {
         throw const FormatException('LLTimeline JSON must be an object');
@@ -221,16 +227,15 @@ class MediaSessionCoordinator {
           currentFingerprint: currentFingerprint,
         );
         if (!allowMismatch) {
-          if (isMounted()) player.setStatus('LLTimeline import cancelled');
+          if (isMounted()) player.setStatus(text('statusLLTimelineImportCancelled'));
           return;
         }
       }
-      final value = await service.importLLTimelineForMedia(
+      final imported = await service.importLLTimelineForMedia(
         mediaId,
         decoded,
         allowMismatch: allowMismatch,
       );
-      final imported = SubtitleTrack.fromJson(value);
       await usePrimarySubtitleTrack(
         imported,
         nextStatus:
@@ -247,7 +252,7 @@ class MediaSessionCoordinator {
       await resourceActions.loadSubtitleResources(updateStatus: false);
       learning.selectSidePanel(1);
     } catch (error) {
-      player.setStatus('LLTimeline import failed: $error');
+      player.setStatus('${text('statusLLTimelineImportFailed')}: $error', error: true);
     }
   }
 
@@ -278,16 +283,29 @@ class MediaSessionCoordinator {
     player.setStatus(nextStatus);
     await reloadLearningEntries();
     await loadPhraseCandidates(subtitle.currentPrimaryCue);
+    unawaited(_analyzeSyntaxWhenAvailable(track.id));
     return loadSpeechEnhancements(track.id);
   }
 
+  Future<void> _analyzeSyntaxWhenAvailable(String trackId) async {
+    final service = getApi();
+    if (service == null) return;
+    try {
+      final capability = await service.syntaxCapability();
+      if (capability.isReady) {
+        await service.runTrackSyntaxAnalysis(trackId);
+      }
+    } catch (_) {
+      // Optional enhancement: never disturb subtitle import or playback.
+    }
+  }
+
   Future<void> loadGeneratedTrack(
-    Map<String, dynamic> value,
+    SubtitleTrack imported,
     bool secondary,
   ) async {
     await adapter.disableNativeSubtitles();
     if (!isMounted()) return;
-    final imported = SubtitleTrack.fromJson(value);
     if (secondary) {
       subtitle.setSecondaryTrack(imported);
       subtitle.setCurrentSecondaryCue(
@@ -341,8 +359,9 @@ class MediaSessionCoordinator {
     );
     if (result.errors.isNotEmpty && isMounted()) {
       player.setStatus(
-        'Speech enhancements partially unavailable: '
+        '${text('statusSpeechEnhancementsPartial')}: '
         '${result.errors.join('; ')}',
+        error: true,
       );
     }
     return result;

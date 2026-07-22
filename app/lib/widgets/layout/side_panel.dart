@@ -14,6 +14,7 @@ import '../../localization.dart';
 import '../../models/listening.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
+import '../../theme/breakpoints.dart';
 import '../panels/content_fit_card.dart';
 import '../panels/diagnosis_card.dart';
 import '../panels/listening_inbox_panel.dart';
@@ -50,16 +51,20 @@ class SidePanel extends StatefulWidget {
     required this.onStartChunkDictationPractice,
     required this.onStartSentenceDictationPractice,
     required this.onStartShadowingPractice,
+    this.onOpenReading,
     required this.onOpenDiagnosisView,
     required this.onOpenSlicePlayback,
     this.onOpenListeningDictionary,
+    this.onPlayPronunciationAudio,
     this.onOpenL1Specialty,
+    this.onCorrectLemma,
     required this.onRefreshListeningInbox,
     required this.onReplayListeningInboxItem,
     required this.onProcessListeningInboxItem,
     required this.timingQuality,
     this.onStartColdStart,
     this.onRecordCurrentSource,
+    this.onReadingMark,
   });
 
   final PlayerController playerController;
@@ -86,11 +91,20 @@ class SidePanel extends StatefulWidget {
   final Future<void> Function() onStartChunkDictationPractice;
   final Future<void> Function() onStartSentenceDictationPractice;
   final Future<void> Function() onStartShadowingPractice;
+
+  /// Enters the reading posture (Phase 3.13); available whenever a transcript
+  /// is loaded — reading does not need a current sentence.
+  final VoidCallback? onOpenReading;
   final Future<void> Function() onOpenDiagnosisView;
   final Future<void> Function(Map<String, dynamic> occurrence)
   onOpenSlicePlayback;
   final Future<void> Function(String lexicalEntryId)? onOpenListeningDictionary;
+  final ValueChanged<String>? onPlayPronunciationAudio;
   final Future<void> Function(L1DiagnosisHint hint)? onOpenL1Specialty;
+
+  /// Corrects the lemma of the currently selected token (#16 moved this out
+  /// of the global AppBar menu, where it had no context to act on).
+  final VoidCallback? onCorrectLemma;
   final Future<void> Function() onRefreshListeningInbox;
   final Future<void> Function(ListeningInboxItem item)
   onReplayListeningInboxItem;
@@ -99,6 +113,10 @@ class SidePanel extends StatefulWidget {
   final String Function(String sentenceId) timingQuality;
   final VoidCallback? onStartColdStart;
   final VoidCallback? onRecordCurrentSource;
+
+  /// Explicit reading mark for the selected word; non-null only while the
+  /// reading posture is open (Phase 3.13 Slice 5).
+  final void Function(bool understood)? onReadingMark;
 
   @override
   State<SidePanel> createState() => _SidePanelState();
@@ -222,6 +240,8 @@ class _SidePanelState extends State<SidePanel> {
                       onNotHeard: () => _observeSelected(false),
                       onCapabilityOverride: _setCapabilityOverride,
                       onRecordSource: widget.onRecordCurrentSource,
+                      onReadingMark: widget.onReadingMark,
+                      onCorrectLemma: widget.onCorrectLemma,
                       onOpenListeningDictionary:
                           widget.onOpenListeningDictionary == null
                           ? null
@@ -233,6 +253,7 @@ class _SidePanelState extends State<SidePanel> {
                                     .id,
                               ),
                             ),
+                      onPlayPronunciationAudio: widget.onPlayPronunciationAudio,
                       hasSelectedCue:
                           subtitleController.currentPrimaryCue != null,
                     ),
@@ -276,7 +297,8 @@ class _SidePanelState extends State<SidePanel> {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final showLabels = constraints.maxWidth >= 520;
+          final showLabels =
+              constraints.maxWidth >= ListenBreakpoints.sidePanelTabLabels;
           return SizedBox(
             height: showLabels ? 58 : 52,
             child: Row(
@@ -361,69 +383,73 @@ class _SidePanelState extends State<SidePanel> {
     onStartColdStart: widget.onStartColdStart,
   );
 
-  Widget _diagnosisCard() => DiagnosisCard(
-    diagnosis: learningController.diagnosis!,
-    pronunciation: subtitleController.currentPrimaryCue == null
-        ? null
-        : subtitleController.pronunciationBySentence[subtitleController
-              .currentPrimaryCue!
-              .id],
-    ruleHintsLevel: settingsController.ruleHintsLevel,
-    pronunciationProviders: subtitleController.pronunciationProviders,
-    timingQuality:
-        subtitleController.currentPrimaryCue == null ||
-            (subtitleController.timingsBySentence[subtitleController
-                        .currentPrimaryCue!
-                        .id] ??
-                    const [])
-                .isEmpty
-        ? null
-        : _timingQuality(subtitleController.currentPrimaryCue!.id),
-    rhythmFrame: _currentRhythmFrame,
-    phoneticAnalysis: subtitleController.currentPrimaryCue == null
-        ? null
-        : subtitleController.phoneticAnalysisBySentence[subtitleController
-              .currentPrimaryCue!
-              .id],
-    currentDetectedPhone: subtitleController.currentDetectedPhone,
-    onLoopDetectedPhone: (phone) => unawaited(
-      playbackActions.loopRange(
-        phone.start.inMilliseconds,
-        phone.end.inMilliseconds,
-        'Looping detected phone ${phone.displayIpa}',
-        labelKey: 'loopPhone',
+  Widget _diagnosisCard() => ValueListenableBuilder<DetectedPhone?>(
+    valueListenable: subtitleController.currentDetectedPhoneListenable,
+    builder: (context, currentDetectedPhone, _) => DiagnosisCard(
+      diagnosis: learningController.diagnosis!,
+      pronunciation: subtitleController.currentPrimaryCue == null
+          ? null
+          : subtitleController.pronunciationBySentence[subtitleController
+                .currentPrimaryCue!
+                .id],
+      ruleHintsLevel: settingsController.ruleHintsLevel,
+      pronunciationProviders: subtitleController.pronunciationProviders,
+      timingQuality:
+          subtitleController.currentPrimaryCue == null ||
+              (subtitleController.timingsBySentence[subtitleController
+                          .currentPrimaryCue!
+                          .id] ??
+                      const [])
+                  .isEmpty
+          ? null
+          : _timingQuality(subtitleController.currentPrimaryCue!.id),
+      rhythmFrame: _currentRhythmFrame,
+      phoneticAnalysis: subtitleController.currentPrimaryCue == null
+          ? null
+          : subtitleController.phoneticAnalysisBySentence[subtitleController
+                .currentPrimaryCue!
+                .id],
+      currentDetectedPhone: currentDetectedPhone,
+      onLoopDetectedPhone: (phone) => unawaited(
+        playbackActions.loopRange(
+          phone.start.inMilliseconds,
+          phone.end.inMilliseconds,
+          'Looping detected phone ${phone.displayIpa}',
+          labelKey: 'loopPhone',
+        ),
       ),
-    ),
-    onLoopHotspot: (hotspot) => unawaited(
-      playbackActions.loopRange(
-        hotspot.start.inMilliseconds,
-        hotspot.end.inMilliseconds,
-        'Looping listening hotspot ${hotspot.label}',
-        labelKey: 'loopHotspot',
+      onLoopHotspot: (hotspot) => unawaited(
+        playbackActions.loopRange(
+          hotspot.start.inMilliseconds,
+          hotspot.end.inMilliseconds,
+          'Looping listening hotspot ${hotspot.label}',
+          labelKey: 'loopHotspot',
+        ),
       ),
-    ),
-    onLoopFinding: (finding) => unawaited(
-      playbackActions.loopRange(
-        finding.audioStartMs,
-        finding.audioEndMs,
-        'Looping audio finding evidence',
-        labelKey: 'loopEvidence',
+      onLoopFinding: (finding) => unawaited(
+        playbackActions.loopRange(
+          finding.audioStartMs,
+          finding.audioEndMs,
+          'Looping audio finding evidence',
+          labelKey: 'loopEvidence',
+        ),
       ),
-    ),
-    onFindingFeedback: (finding, value) =>
-        unawaited(playbackActions.savePhoneticFindingFeedback(finding, value)),
-    onOpenListeningDictionary: widget.onOpenListeningDictionary,
-    onLoopL1Span: (span) => unawaited(
-      playbackActions.loopRange(
-        span.startMs,
-        span.endMs,
-        'Looping L1 difficulty evidence ${span.label}',
-        labelKey: 'l1ListenAgain',
+      onFindingFeedback: (finding, value) => unawaited(
+        playbackActions.savePhoneticFindingFeedback(finding, value),
       ),
+      onOpenListeningDictionary: widget.onOpenListeningDictionary,
+      onLoopL1Span: (span) => unawaited(
+        playbackActions.loopRange(
+          span.startMs,
+          span.endMs,
+          'Looping L1 difficulty evidence ${span.label}',
+          labelKey: 'l1ListenAgain',
+        ),
+      ),
+      onOpenL1Specialty: widget.onOpenL1Specialty == null
+          ? null
+          : (hint) => unawaited(widget.onOpenL1Specialty!(hint)),
     ),
-    onOpenL1Specialty: widget.onOpenL1Specialty == null
-        ? null
-        : (hint) => unawaited(widget.onOpenL1Specialty!(hint)),
   );
 
   Widget _postureActions() {
@@ -503,6 +529,14 @@ class _SidePanelState extends State<SidePanel> {
               label: Text(l.text('shadowPosture')),
             ),
           ),
+          if (widget.onOpenReading != null)
+            OutlinedButton.icon(
+              onPressed: subtitleController.primaryTrack == null
+                  ? null
+                  : widget.onOpenReading,
+              icon: const Icon(Icons.chrome_reader_mode_outlined),
+              label: Text(l.text('readPosture')),
+            ),
         ],
       ),
     );

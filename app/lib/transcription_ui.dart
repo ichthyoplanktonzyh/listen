@@ -4,11 +4,13 @@ import 'dart:io';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
+import 'models/timeline.dart';
+import 'models/runtime_resources.dart';
 import 'services/api_service.dart';
 import 'localization.dart';
 
 typedef LoadGeneratedTrack =
-    Future<void> Function(Map<String, dynamic> track, bool secondary);
+    Future<void> Function(SubtitleTrack track, bool secondary);
 
 Future<bool> showGenerateSubtitles({
   required BuildContext context,
@@ -22,9 +24,7 @@ Future<bool> showGenerateSubtitles({
   final l = AppLocalizations.of(context);
   final models = await api.transcriptionModels();
   final installed = models
-      .where(
-        (model) => model['state'] == 'installed' || model['state'] == 'custom',
-      )
+      .where((model) => model.state == 'installed' || model.state == 'custom')
       .toList(growable: false);
   if (!context.mounted) return false;
   if (installed.isEmpty) {
@@ -44,9 +44,9 @@ Future<bool> showGenerateSubtitles({
     return false;
   }
   final preferred = installed
-      .where((model) => model['quality'] == preferredQuality)
+      .where((model) => model.quality == preferredQuality)
       .firstOrNull;
-  var modelId = (preferred ?? installed.first)['id'] as String;
+  var modelId = (preferred ?? installed.first).id;
   var language = preferredLanguage;
   var translate = false;
   var created = false;
@@ -66,10 +66,8 @@ Future<bool> showGenerateSubtitles({
                 items: installed
                     .map(
                       (model) => DropdownMenuItem(
-                        value: model['id'] as String,
-                        child: Text(
-                          '${model['display_name']} · ${model['quality']}',
-                        ),
+                        value: model.id,
+                        child: Text('${model.displayName} · ${model.quality}'),
                       ),
                     )
                     .toList(growable: false),
@@ -149,9 +147,9 @@ class TranscriptionCenter extends StatefulWidget {
 }
 
 class _TranscriptionCenterState extends State<TranscriptionCenter> {
-  List<Map<String, dynamic>> models = const [];
-  List<Map<String, dynamic>> jobs = const [];
-  List<Map<String, dynamic>> providers = const [];
+  List<TranscriptionModelView> models = const [];
+  List<TranscriptionJobView> jobs = const [];
+  List<TranscriptionProviderView> providers = const [];
   Timer? timer;
   String? error;
 
@@ -164,16 +162,14 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
 
   Future<void> _refresh() async {
     try {
-      final values = await Future.wait([
-        widget.api.transcriptionProviders(),
-        widget.api.transcriptionModels(),
-        widget.api.transcriptionJobs(),
-      ]);
+      final providerValues = await widget.api.transcriptionProviders();
+      final modelValues = await widget.api.transcriptionModels();
+      final jobValues = await widget.api.transcriptionJobs();
       if (!mounted) return;
       setState(() {
-        providers = values[0];
-        models = values[1];
-        jobs = values[2];
+        providers = providerValues;
+        models = modelValues;
+        jobs = jobValues;
         error = null;
       });
     } catch (value) {
@@ -238,18 +234,15 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
       for (final provider in providers)
         ListTile(
           leading: Icon(
-            provider['available'] == true
+            provider.available
                 ? Icons.check_circle_outline
                 : Icons.error_outline,
           ),
-          title: Text(
-            '${provider['display_name']} · ${provider['runtime_id']}',
-          ),
+          title: Text('${provider.displayName} · ${provider.runtimeId}'),
           subtitle: Text(
-            provider['available'] == true
-                ? '${provider['runtime_version']} · ${l.text('runtimeReady')}'
-                : (provider['diagnostic'] as String? ??
-                      l.text('providerUnavailable')),
+            provider.available
+                ? '${provider.runtimeVersion} · ${l.text('runtimeReady')}'
+                : (provider.diagnostic ?? l.text('providerUnavailable')),
           ),
         ),
       Expanded(
@@ -257,31 +250,29 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
           itemCount: models.length,
           itemBuilder: (context, index) {
             final model = models[index];
-            final state = model['state'] as String;
-            final installed = model['installed_bytes'] as int? ?? 0;
-            final size = model['size_bytes'] as int? ?? 0;
+            final state = model.state;
+            final installed = model.installedBytes;
+            final size = model.sizeBytes;
             return ListTile(
-              title: Text('${model['display_name']} · ${model['quality']}'),
+              title: Text('${model.displayName} · ${model.quality}'),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${state.toUpperCase()} · ${_size(size)} · ${model['english_only'] == true ? 'English' : l.text('multilingual')}',
+                    '${state.toUpperCase()} · ${_size(size)} · ${model.englishOnly ? 'English' : l.text('multilingual')}',
                   ),
                   if (state == 'installing')
                     LinearProgressIndicator(
                       value: size == 0 ? null : installed / size,
                     ),
-                  if (model['error'] != null) Text(model['error'] as String),
+                  if (model.error != null) Text(model.error!),
                 ],
               ),
               trailing: switch (state) {
                 'downloadable' || 'failed' => IconButton(
                   tooltip: l.text('install'),
                   onPressed: () async {
-                    await widget.api.installTranscriptionModel(
-                      model['id'] as String,
-                    );
+                    await widget.api.installTranscriptionModel(model.id);
                     await _refresh();
                   },
                   icon: const Icon(Icons.download),
@@ -289,9 +280,7 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                 'installing' => IconButton(
                   tooltip: l.text('cancel'),
                   onPressed: () async {
-                    await widget.api.cancelTranscriptionModelInstall(
-                      model['id'] as String,
-                    );
+                    await widget.api.cancelTranscriptionModelInstall(model.id);
                     await _refresh();
                   },
                   icon: const Icon(Icons.cancel_outlined),
@@ -299,9 +288,7 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                 _ => IconButton(
                   tooltip: l.text('remove'),
                   onPressed: () async {
-                    await widget.api.deleteTranscriptionModel(
-                      model['id'] as String,
-                    );
+                    await widget.api.deleteTranscriptionModel(model.id);
                     await _refresh();
                   },
                   icon: const Icon(Icons.delete_outline),
@@ -320,7 +307,7 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
           itemCount: jobs.length,
           itemBuilder: (context, index) {
             final job = jobs[index];
-            final status = job['status'] as String;
+            final status = job.status;
             final active = const {
               'queued',
               'extracting',
@@ -328,19 +315,16 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
               'importing',
             }.contains(status);
             return ListTile(
-              title: Text(job['media_title'] as String),
+              title: Text(job.mediaTitle),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${job['destination']} · ${job['model_id']} · ${status.toUpperCase()}',
+                    '${job.destination} · ${job.modelId} · ${status.toUpperCase()}',
                   ),
                   if (active)
-                    LinearProgressIndicator(
-                      value: (job['phase_progress'] as int) / 100,
-                    ),
-                  if (job['error_message'] != null)
-                    Text(job['error_message'] as String),
+                    LinearProgressIndicator(value: job.phaseProgress / 100),
+                  if (job.errorMessage != null) Text(job.errorMessage!),
                 ],
               ),
               trailing: Wrap(
@@ -348,18 +332,15 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                   if (active)
                     IconButton(
                       tooltip: l.text('cancel'),
-                      onPressed: () => widget.api.cancelTranscriptionJob(
-                        job['id'] as String,
-                      ),
+                      onPressed: () =>
+                          widget.api.cancelTranscriptionJob(job.id),
                       icon: const Icon(Icons.stop_circle_outlined),
                     ),
                   if (status == 'failed' || status == 'cancelled')
                     IconButton(
                       tooltip: l.text('retry'),
                       onPressed: () async {
-                        await widget.api.retryTranscriptionJob(
-                          job['id'] as String,
-                        );
+                        await widget.api.retryTranscriptionJob(job.id);
                         await _refresh();
                       },
                       icon: const Icon(Icons.replay),
@@ -369,11 +350,11 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                       tooltip: l.text('loadGeneratedSubtitle'),
                       onPressed: () async {
                         final track = await widget.api.readSubtitle(
-                          job['generated_track_id'] as String,
+                          job.generatedTrackId!,
                         );
                         await widget.loadTrack(
                           track,
-                          job['destination'] == 'secondary',
+                          job.destination == 'secondary',
                         );
                       },
                       icon: const Icon(Icons.subtitles),
@@ -383,11 +364,11 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                       tooltip: l.text('exportSrt'),
                       onPressed: () async {
                         final location = await getSaveLocation(
-                          suggestedName: '${job['media_title']}.generated.srt',
+                          suggestedName: '${job.mediaTitle}.generated.srt',
                         );
                         if (location == null) return;
                         final content = await widget.api.exportSubtitleSrt(
-                          job['generated_track_id'] as String,
+                          job.generatedTrackId!,
                         );
                         await File(location.path).writeAsString(content);
                       },
@@ -400,8 +381,8 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                         final created = await showGenerateSubtitles(
                           context: context,
                           api: widget.api,
-                          mediaId: job['media_id'] as String,
-                          secondary: job['destination'] == 'secondary',
+                          mediaId: job.mediaId,
+                          secondary: job.destination == 'secondary',
                           force: true,
                         );
                         if (created) await _refresh();
@@ -412,9 +393,7 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                     IconButton(
                       tooltip: l.text('archive'),
                       onPressed: () async {
-                        await widget.api.archiveTranscriptionJob(
-                          job['id'] as String,
-                        );
+                        await widget.api.archiveTranscriptionJob(job.id);
                         await _refresh();
                       },
                       icon: const Icon(Icons.archive_outlined),

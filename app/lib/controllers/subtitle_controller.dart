@@ -41,10 +41,7 @@ class SubtitleState {
     this.chunkTimelineSummaries = const [],
     this.llTimelineDocument,
     this.timelineResourceError,
-    this.currentWordToken,
     this.phoneticAnalysisBySentence = const {},
-    this.currentDetectedPhone,
-    this.currentChunkIndex,
     this.contentFit,
   });
 
@@ -79,10 +76,7 @@ class SubtitleState {
   final List<ChunkTimelineSummary> chunkTimelineSummaries;
   final LLTimelineDocument? llTimelineDocument;
   final String? timelineResourceError;
-  final int? currentWordToken;
   final Map<String, PhoneticAnalysis> phoneticAnalysisBySentence;
-  final DetectedPhone? currentDetectedPhone;
-  final int? currentChunkIndex;
   final ContentDifficultyProfile? contentFit;
 
   SubtitleState copyWith({
@@ -117,10 +111,7 @@ class SubtitleState {
     List<ChunkTimelineSummary>? chunkTimelineSummaries,
     Object? llTimelineDocument = _unset,
     Object? timelineResourceError = _unset,
-    Object? currentWordToken = _unset,
     Map<String, PhoneticAnalysis>? phoneticAnalysisBySentence,
-    Object? currentDetectedPhone = _unset,
-    Object? currentChunkIndex = _unset,
     Object? contentFit = _unset,
   }) => SubtitleState(
     primaryTrack: identical(primaryTrack, _unset)
@@ -158,8 +149,7 @@ class SubtitleState {
     timingsBySentence: timingsBySentence ?? this.timingsBySentence,
     chunkPartitionsBySentence:
         chunkPartitionsBySentence ?? this.chunkPartitionsBySentence,
-    senseGroupsBySentence:
-        senseGroupsBySentence ?? this.senseGroupsBySentence,
+    senseGroupsBySentence: senseGroupsBySentence ?? this.senseGroupsBySentence,
     pronunciationProviders:
         pronunciationProviders ?? this.pronunciationProviders,
     subtitleResources: subtitleResources ?? this.subtitleResources,
@@ -176,17 +166,8 @@ class SubtitleState {
     timelineResourceError: identical(timelineResourceError, _unset)
         ? this.timelineResourceError
         : timelineResourceError as String?,
-    currentWordToken: identical(currentWordToken, _unset)
-        ? this.currentWordToken
-        : currentWordToken as int?,
     phoneticAnalysisBySentence:
         phoneticAnalysisBySentence ?? this.phoneticAnalysisBySentence,
-    currentDetectedPhone: identical(currentDetectedPhone, _unset)
-        ? this.currentDetectedPhone
-        : currentDetectedPhone as DetectedPhone?,
-    currentChunkIndex: identical(currentChunkIndex, _unset)
-        ? this.currentChunkIndex
-        : currentChunkIndex as int?,
     contentFit: identical(contentFit, _unset)
         ? this.contentFit
         : contentFit as ContentDifficultyProfile?,
@@ -209,6 +190,14 @@ class SubtitleState {
 /// Uses [Store] internally for fine-grained reactive state.
 class SubtitleController extends ChangeNotifier {
   final Store<SubtitleState> _store;
+
+  // Speech-rate highlight cursors; see the listenable getters below for the
+  // notification contract.
+  final ValueNotifier<int?> _currentWordToken = ValueNotifier(null);
+  final ValueNotifier<int?> _currentChunkIndex = ValueNotifier(null);
+  final ValueNotifier<DetectedPhone?> _currentDetectedPhone = ValueNotifier(
+    null,
+  );
 
   SubtitleController() : _store = Store(const SubtitleState()) {
     _store.addListener(notifyListeners);
@@ -264,11 +253,20 @@ class SubtitleController extends ChangeNotifier {
       _store.state.chunkTimelineSummaries;
   LLTimelineDocument? get llTimelineDocument => _store.state.llTimelineDocument;
   String? get timelineResourceError => _store.state.timelineResourceError;
-  int? get currentWordToken => _store.state.currentWordToken;
+  int? get currentWordToken => _currentWordToken.value;
   Map<String, PhoneticAnalysis> get phoneticAnalysisBySentence =>
       _store.state.phoneticAnalysisBySentence;
-  DetectedPhone? get currentDetectedPhone => _store.state.currentDetectedPhone;
-  int? get currentChunkIndex => _store.state.currentChunkIndex;
+  DetectedPhone? get currentDetectedPhone => _currentDetectedPhone.value;
+  int? get currentChunkIndex => _currentChunkIndex.value;
+
+  /// High-frequency word/chunk/phone highlight cursors. They advance at
+  /// speech rate while media plays, so they live outside [SubtitleState]:
+  /// writes do NOT fire the aggregate [ChangeNotifier], and widgets that
+  /// render them must subscribe to these listenables.
+  ValueListenable<int?> get currentWordTokenListenable => _currentWordToken;
+  ValueListenable<int?> get currentChunkIndexListenable => _currentChunkIndex;
+  ValueListenable<DetectedPhone?> get currentDetectedPhoneListenable =>
+      _currentDetectedPhone;
   Duration get primarySubtitleOffset => _store.state.primarySubtitleOffset;
   Duration get secondarySubtitleOffset => _store.state.secondarySubtitleOffset;
   TimelineCursor get primaryCursor => _store.state.primaryCursor;
@@ -395,25 +393,27 @@ class SubtitleController extends ChangeNotifier {
     _store.update((st) => st.copyWith(pronunciationBySentence: values));
   }
 
-  void clearSpeechEnhancements() => _store.update(
-    (s) => s.copyWith(
-      pronunciationBySentence: const {},
-      timingsBySentence: const {},
-      chunkPartitionsBySentence: const {},
-      senseGroupsBySentence: const {},
-      pronunciationProviders: const [],
-      wordTimelineSummaries: const [],
-      phoneTimelineSummaries: const [],
-      chunkTimelineSummaries: const [],
-      llTimelineDocument: null,
-      timelineResourceError: null,
-      currentWordToken: null,
-      phoneticAnalysisBySentence: const {},
-      currentDetectedPhone: null,
-      currentChunkIndex: null,
-      contentFit: null,
-    ),
-  );
+  void clearSpeechEnhancements() {
+    _currentWordToken.value = null;
+    _currentChunkIndex.value = null;
+    _currentDetectedPhone.value = null;
+    _store.update(
+      (s) => s.copyWith(
+        pronunciationBySentence: const {},
+        timingsBySentence: const {},
+        chunkPartitionsBySentence: const {},
+        senseGroupsBySentence: const {},
+        pronunciationProviders: const [],
+        wordTimelineSummaries: const [],
+        phoneTimelineSummaries: const [],
+        chunkTimelineSummaries: const [],
+        llTimelineDocument: null,
+        timelineResourceError: null,
+        phoneticAnalysisBySentence: const {},
+        contentFit: null,
+      ),
+    );
+  }
 
   void setTimelineResource({
     required List<WordTimelineSummary> summaries,
@@ -471,11 +471,8 @@ class SubtitleController extends ChangeNotifier {
             offset: s.primarySubtitleOffset,
           )
         : null;
-    if (token != s.currentWordToken || chunk != s.currentChunkIndex) {
-      _store.update(
-        (st) => st.copyWith(currentWordToken: token, currentChunkIndex: chunk),
-      );
-    }
+    _currentWordToken.value = token;
+    _currentChunkIndex.value = chunk;
   }
 
   void updateCurrentDetectedPhone(
@@ -492,10 +489,11 @@ class SubtitleController extends ChangeNotifier {
       mediaPosition,
       offset: s.primarySubtitleOffset,
     );
-    if (phone?.symbol != s.currentDetectedPhone?.symbol ||
-        phone?.start != s.currentDetectedPhone?.start ||
-        phone?.end != s.currentDetectedPhone?.end) {
-      _store.update((st) => st.copyWith(currentDetectedPhone: phone));
+    final previous = _currentDetectedPhone.value;
+    if (phone?.symbol != previous?.symbol ||
+        phone?.start != previous?.start ||
+        phone?.end != previous?.end) {
+      _currentDetectedPhone.value = phone;
     }
   }
 

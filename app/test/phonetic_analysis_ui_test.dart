@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/phonetic_analysis_ui.dart';
+import 'package:llplayer_next/models/runtime_resources.dart';
 
 Future<void> pumpAnalysisCenterFrame(WidgetTester tester) async {
   await tester.pump();
@@ -15,25 +16,15 @@ void main() {
   ) async {
     String? cancelled;
     String? retried;
-    var jobs = <Map<String, dynamic>>[
-      {
-        'id': 'active-job',
-        'scope': 'track',
-        'status': 'recognizing_phones',
-        'phase_progress': 50,
-        'provider_id': 'fixture',
-        'model_revision': 'v1',
-        'error_message': null,
-      },
-      {
-        'id': 'failed-job',
-        'scope': 'sentence',
-        'status': 'failed',
-        'phase_progress': 25,
-        'provider_id': 'fixture',
-        'model_revision': 'v1',
-        'error_message': 'research failure',
-      },
+    var jobs = <PhoneticJobView>[
+      phoneticJob(id: 'active-job', status: 'recognizing_phones', progress: 50),
+      phoneticJob(
+        id: 'failed-job',
+        scope: 'sentence',
+        status: 'failed',
+        progress: 25,
+        error: 'research failure',
+      ),
     ];
 
     await tester.pumpWidget(
@@ -47,34 +38,41 @@ void main() {
         ],
         home: PhoneticAnalysisCenter(
           loadProviders: () async => [
-            {
-              'display_name': 'Research fixture',
-              'available': false,
-              'experimental': true,
-              'diagnostic': 'Disabled outside verification',
-            },
+            const PhoneticProviderView(
+              id: 'fixture',
+              displayName: 'Research fixture',
+              runtimeId: 'fixture-runtime',
+              runtimeVersion: 'v1',
+              available: false,
+              experimental: true,
+              diagnostic: 'Disabled outside verification',
+            ),
           ],
           loadModels: () async => [
-            {
-              'display_name': 'Fixture model',
-              'state': 'custom',
-              'license': 'Research only',
-              'revision': 'v1',
-              'training_data_provenance': 'Synthetic',
-              'application_verified': false,
-              'distribution_allowed': false,
-            },
+            const PhoneticModelView(
+              id: 'fixture-model',
+              providerId: 'fixture',
+              displayName: 'Fixture model',
+              revision: 'v1',
+              sizeBytes: 0,
+              state: 'custom',
+              installedBytes: 0,
+              license: 'Research only',
+              trainingDataProvenance: 'Synthetic',
+              distributionAllowed: false,
+              applicationVerified: false,
+            ),
           ],
           loadJobs: () async => jobs,
           cancelJob: (id) async {
             cancelled = id;
             jobs = [];
-            return {'id': id, 'status': 'cancelled'};
+            return phoneticJob(id: id, status: 'cancelled');
           },
           retryJob: (id) async {
             retried = id;
             jobs = [];
-            return {'id': id, 'status': 'queued'};
+            return phoneticJob(id: id, status: 'queued');
           },
         ),
       ),
@@ -95,15 +93,13 @@ void main() {
     expect(cancelled, 'active-job');
 
     jobs = [
-      {
-        'id': 'failed-job',
-        'scope': 'sentence',
-        'status': 'failed',
-        'phase_progress': 25,
-        'provider_id': 'fixture',
-        'model_revision': 'v1',
-        'error_message': 'research failure',
-      },
+      phoneticJob(
+        id: 'failed-job',
+        scope: 'sentence',
+        status: 'failed',
+        progress: 25,
+        error: 'research failure',
+      ),
     ];
     await tester.tap(find.byIcon(Icons.refresh).first);
     await pumpAnalysisCenterFrame(tester);
@@ -114,3 +110,23 @@ void main() {
     expect(retried, 'failed-job');
   });
 }
+
+PhoneticJobView phoneticJob({
+  required String id,
+  required String status,
+  String scope = 'track',
+  int progress = 0,
+  String? error,
+}) => PhoneticJobView(
+  id: id,
+  trackId: 'track-1',
+  scope: scope,
+  providerId: 'fixture',
+  runtimeId: 'fixture-runtime',
+  runtimeVersion: 'v1',
+  modelRevision: 'v1',
+  status: status,
+  phaseProgress: progress,
+  createdAtMs: 1,
+  errorMessage: error,
+);
