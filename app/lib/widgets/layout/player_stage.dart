@@ -208,67 +208,90 @@ class _PlayerStageState extends State<PlayerStage> {
                                     subtitleController
                                         .currentChunkIndexListenable,
                                   ]),
-                                  builder: (context, _) => TokenLine(
-                                    cue: subtitleController.currentPrimaryCue!,
-                                    profiles: learningController.wordEntries,
-                                    capabilityProfiles:
-                                        learningController.capabilityProfiles,
-                                    phraseCandidates:
-                                        learningController.phraseCandidates,
-                                    phraseEntries:
-                                        learningController.phraseEntries,
-                                    showStyles:
-                                        subtitleController.statusStylesVisible,
-                                    fontSize: primarySize,
-                                    fontFamily: _subtitleFont(
-                                      subtitleController.primaryFontFamily,
-                                    ),
-                                    baseColor: settingsController.primaryColor,
-                                    currentTokenIndex:
-                                        subtitleController.currentWordToken,
-                                    groupingMode:
-                                        settingsController.groupingMode,
-                                    // Both grouping layers flow in independently
-                                    // (ADR 0016); TokenLine draws one per mode.
-                                    chunkPartition:
+                                  builder: (context, _) {
+                                    final cueId = subtitleController
+                                        .currentPrimaryCue!
+                                        .id;
+                                    // Display-only (#31): the caption's ‿
+                                    // ties read the same rhythm frame the
+                                    // ribbons already consume — no new
+                                    // analysis path.
+                                    final tieFrame =
+                                        subtitleController.llTimelineDocument
+                                            ?.rhythmFrameForSentence(cueId) ??
                                         subtitleController
-                                            .chunkPartitionsBySentence[subtitleController
-                                            .currentPrimaryCue!
-                                            .id],
-                                    currentChunkIndex:
-                                        settingsController.chunkHighlightActive
-                                        ? subtitleController.currentChunkIndex
-                                        : null,
-                                    chunkDisplayStyle:
-                                        settingsController.chunkDisplayStyle,
-                                    chunkHighlightStyle:
-                                        settingsController.chunkHighlightStyle,
-                                    currentWordStyle:
-                                        settingsController.wordHighlightStyle,
-                                    currentWordIntensity: settingsController
-                                        .wordAnimationIntensity,
-                                    senseGroups:
-                                        subtitleController
-                                            .senseGroupsBySentence[subtitleController
-                                            .currentPrimaryCue!
-                                            .id] ??
-                                        const [],
-                                    wordTimings:
-                                        subtitleController
-                                            .timingsBySentence[subtitleController
-                                            .currentPrimaryCue!
-                                            .id] ??
-                                        const [],
-                                    mediaPosition:
-                                        settingsController.chunkHighlightActive
-                                        ? playerController.position
-                                        : null,
-                                    subtitleOffset: subtitleController
-                                        .primarySubtitleOffset,
-                                    onWord: _openWord,
-                                    onPhrase: _openPhrase,
-                                    onChunk: _seekChunk,
-                                  ),
+                                            .phoneticAnalysisBySentence[cueId]
+                                            ?.soundAnalysis
+                                            ?.rhythmFrame;
+                                    return TokenLine(
+                                      cue:
+                                          subtitleController.currentPrimaryCue!,
+                                      profiles: learningController.wordEntries,
+                                      capabilityProfiles:
+                                          learningController.capabilityProfiles,
+                                      phraseCandidates:
+                                          learningController.phraseCandidates,
+                                      phraseEntries:
+                                          learningController.phraseEntries,
+                                      showStyles: subtitleController
+                                          .statusStylesVisible,
+                                      fontSize: primarySize,
+                                      fontFamily: _subtitleFont(
+                                        subtitleController.primaryFontFamily,
+                                      ),
+                                      baseColor:
+                                          settingsController.primaryColor,
+                                      currentTokenIndex:
+                                          subtitleController.currentWordToken,
+                                      groupingMode:
+                                          settingsController.groupingMode,
+                                      // Both grouping layers flow in independently
+                                      // (ADR 0016); TokenLine draws one per mode.
+                                      chunkPartition:
+                                          subtitleController
+                                              .chunkPartitionsBySentence[subtitleController
+                                              .currentPrimaryCue!
+                                              .id],
+                                      currentChunkIndex:
+                                          settingsController
+                                              .chunkHighlightActive
+                                          ? subtitleController.currentChunkIndex
+                                          : null,
+                                      chunkDisplayStyle:
+                                          settingsController.chunkDisplayStyle,
+                                      chunkHighlightStyle: settingsController
+                                          .chunkHighlightStyle,
+                                      currentWordStyle:
+                                          settingsController.wordHighlightStyle,
+                                      currentWordIntensity: settingsController
+                                          .wordAnimationIntensity,
+                                      senseGroups:
+                                          subtitleController
+                                              .senseGroupsBySentence[subtitleController
+                                              .currentPrimaryCue!
+                                              .id] ??
+                                          const [],
+                                      wordTimings:
+                                          subtitleController
+                                              .timingsBySentence[subtitleController
+                                              .currentPrimaryCue!
+                                              .id] ??
+                                          const [],
+                                      mediaPosition:
+                                          settingsController
+                                              .chunkHighlightActive
+                                          ? playerController.position
+                                          : null,
+                                      subtitleOffset: subtitleController
+                                          .primarySubtitleOffset,
+                                      connectedSpeechRefs:
+                                          tieFrame?.connectedSpeechRefs ??
+                                          const [],
+                                      onWord: _openWord,
+                                      onPhrase: _openPhrase,
+                                      onChunk: _seekChunk,
+                                    );
+                                  },
                                 ),
                               ),
                             if (settingsController.phonemeRibbonVisible &&

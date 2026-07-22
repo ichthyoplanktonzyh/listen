@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
@@ -33,6 +35,7 @@ class TokenLine extends StatefulWidget {
     this.senseGroups = const [],
     this.groupingMode = 'off',
     this.wordTimings = const [],
+    this.connectedSpeechRefs = const [],
     this.mediaPosition,
     this.subtitleOffset = Duration.zero,
     this.textAlign = TextAlign.center,
@@ -55,6 +58,11 @@ class TokenLine extends StatefulWidget {
   final double currentWordIntensity;
   final List<SenseGroup> senseGroups;
   final List<WordTiming> wordTimings;
+
+  /// Connected-speech references for this sentence, display-only (#31): they
+  /// place the ‿ tie between linked words (been‿meaning). Pure presentation
+  /// wiring — this widget never filters or reinterprets the analysis.
+  final List<RhythmConnectedSpeechRef> connectedSpeechRefs;
   final Duration? mediaPosition;
   final Duration subtitleOffset;
 
@@ -78,6 +86,12 @@ class TokenLine extends StatefulWidget {
 
 class _TokenLineState extends State<TokenLine> {
   late Map<String, ({int startMs, int endMs})?> _sensePlaybackRanges;
+
+  /// Tie placements derived from [TokenLine.connectedSpeechRefs]:
+  /// space-token indices whose glyph is replaced by a ‿ tie, and word-token
+  /// indices that get a tie inserted before them (direct adjacency).
+  late Map<int, RhythmConnectedSpeechRef> _tieReplacesSpace;
+  late Map<int, RhythmConnectedSpeechRef> _tieBeforeToken;
 
   Cue get cue => widget.cue;
   Map<String, LexicalEntry> get profiles => widget.profiles;
@@ -109,6 +123,7 @@ class _TokenLineState extends State<TokenLine> {
   void initState() {
     super.initState();
     _refreshSensePlaybackRanges();
+    _refreshTieJunctions();
   }
 
   @override
@@ -118,6 +133,49 @@ class _TokenLineState extends State<TokenLine> {
         !identical(oldWidget.wordTimings, widget.wordTimings)) {
       _refreshSensePlaybackRanges();
     }
+    if (!identical(oldWidget.connectedSpeechRefs, widget.connectedSpeechRefs) ||
+        !identical(oldWidget.cue, widget.cue)) {
+      _refreshTieJunctions();
+    }
+  }
+
+  /// Projects each reference's token range onto junctions between consecutive
+  /// word tokens. A single whitespace junction is drawn as the tie itself; a
+  /// direct adjacency gets the tie inserted between; junctions containing
+  /// punctuation are left unmarked — a link across punctuation would claim
+  /// something the sentence text contradicts.
+  void _refreshTieJunctions() {
+    final replace = <int, RhythmConnectedSpeechRef>{};
+    final before = <int, RhythmConnectedSpeechRef>{};
+    for (final ref in widget.connectedSpeechRefs) {
+      final start = ref.tokenStart;
+      final end = ref.tokenEnd;
+      if (start == null || end == null || end <= start) continue;
+      final words = widget.cue.tokens
+          .where(
+            (token) =>
+                token.kind == 'word' &&
+                token.index >= start &&
+                token.index <= end,
+          )
+          .toList(growable: false);
+      for (var i = 0; i + 1 < words.length; i += 1) {
+        final between = widget.cue.tokens
+            .where(
+              (token) =>
+                  token.index > words[i].index &&
+                  token.index < words[i + 1].index,
+            )
+            .toList(growable: false);
+        if (between.isEmpty) {
+          before[words[i + 1].index] = ref;
+        } else if (between.every((token) => token.text.trim().isEmpty)) {
+          replace[between.first.index] = ref;
+        }
+      }
+    }
+    _tieReplacesSpace = replace;
+    _tieBeforeToken = before;
   }
 
   void _refreshSensePlaybackRanges() {
@@ -364,6 +422,16 @@ class _TokenLineState extends State<TokenLine> {
       if (divergenceBoundaries.contains(tokens[cursor].index)) {
         spans.add(_divergenceMarkerSpan(context, tokens[cursor].index));
       }
+      final tieBefore = _tieBeforeToken[tokens[cursor].index];
+      if (tieBefore != null) {
+        spans.add(_tieSpan(context, tieBefore));
+      }
+      final tieReplacing = _tieReplacesSpace[tokens[cursor].index];
+      if (tieReplacing != null) {
+        spans.add(_tieSpan(context, tieReplacing));
+        cursor += 1;
+        continue;
+      }
       final candidate = byStart[tokens[cursor].index];
       if (candidate == null) {
         spans.add(_tokenSpan(context, tokens[cursor]));
@@ -391,9 +459,16 @@ class _TokenLineState extends State<TokenLine> {
             onTap: onPhrase == null ? null : () => onPhrase!(candidate, cue),
             child: Text.rich(
               TextSpan(
-                children: phraseTokens
-                    .map((token) => _tokenSpan(context, token))
-                    .toList(growable: false),
+                children: [
+                  for (final token in phraseTokens) ...[
+                    if (_tieBeforeToken[token.index] case final ref?)
+                      _tieSpan(context, ref),
+                    if (_tieReplacesSpace[token.index] case final ref?)
+                      _tieSpan(context, ref)
+                    else
+                      _tokenSpan(context, token),
+                  ],
+                ],
               ),
             ),
           ),
@@ -401,6 +476,37 @@ class _TokenLineState extends State<TokenLine> {
       );
     }
     return spans;
+  }
+
+  /// The ‿ tie between linked words (#31): painted, so the mark never depends
+  /// on font glyph coverage. It brightens while the current word sits inside
+  /// the reference's range — cooperating with the current-word glow instead
+  /// of competing with it. Static; nothing here animates.
+  InlineSpan _tieSpan(BuildContext context, RhythmConnectedSpeechRef ref) {
+    final active =
+        currentTokenIndex != null &&
+        ref.tokenStart != null &&
+        ref.tokenEnd != null &&
+        currentTokenIndex! >= ref.tokenStart! &&
+        currentTokenIndex! <= ref.tokenEnd!;
+    final hint = ref.hint.trim();
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      child: Tooltip(
+        message: hint.isNotEmpty ? hint : ref.label,
+        child: SizedBox(
+          width: math.max(8.0, fontSize * 0.5),
+          height: fontSize,
+          child: CustomPaint(
+            painter: _TiePainter(
+              color: ListenColors.soundConnected.withAlpha(active ? 235 : 150),
+              glow: active,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   /// Compare-mode overlay: a small accent caret + dashed tick sitting between
@@ -639,6 +745,51 @@ class _DivergenceMarker extends StatelessWidget {
     height: height,
     child: CustomPaint(painter: _DivergenceMarkerPainter(color: color)),
   );
+}
+
+class _TiePainter extends CustomPainter {
+  const _TiePainter({required this.color, required this.glow});
+
+  final Color color;
+  final bool glow;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 2 || size.height <= 2) return;
+    final tie = Path()
+      ..moveTo(1, size.height * 0.72)
+      ..quadraticBezierTo(
+        size.width / 2,
+        size.height * 1.04,
+        size.width - 1,
+        size.height * 0.72,
+      );
+    if (glow) {
+      // Static halo while the current word is inside the link; decoration
+      // only — the tie stroke itself stays fully legible without it.
+      canvas.drawPath(
+        tie,
+        Paint()
+          ..color = color.withAlpha(90)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 4
+          ..strokeCap = StrokeCap.round
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
+      );
+    }
+    canvas.drawPath(
+      tie,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_TiePainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.glow != glow;
 }
 
 class _DivergenceMarkerPainter extends CustomPainter {
