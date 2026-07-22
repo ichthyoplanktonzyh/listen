@@ -67,6 +67,42 @@ pub(crate) async fn get_capability_profile(
 }
 
 #[derive(Debug, Deserialize)]
+pub(crate) struct ObservationHistoryQuery {
+    capability: Option<String>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+}
+
+/// Newest-first page size when the client does not ask for one; capped so a
+/// long history cannot balloon a single response.
+const OBSERVATION_HISTORY_DEFAULT_LIMIT: u32 = 50;
+const OBSERVATION_HISTORY_MAX_LIMIT: u32 = 200;
+
+pub(crate) async fn list_learning_observation_history(
+    State(state): State<ApiState>,
+    Path(entry_id): Path<String>,
+    Query(query): Query<ObservationHistoryQuery>,
+) -> Result<Json<Vec<domain::LearningObservation>>, ApiError> {
+    let entry_id = LexicalEntryId::parse(entry_id).map_err(ApplicationError::from)?;
+    let capability = query
+        .capability
+        .as_deref()
+        .map(parse_capability)
+        .transpose()?;
+    let limit = query
+        .limit
+        .unwrap_or(OBSERVATION_HISTORY_DEFAULT_LIMIT)
+        .min(OBSERVATION_HISTORY_MAX_LIMIT);
+    let observations = state.services.lexical_learning().learning_observation_history(
+        &entry_id,
+        capability,
+        limit,
+        query.offset.unwrap_or(0),
+    )?;
+    Ok(Json(observations))
+}
+
+#[derive(Debug, Deserialize)]
 pub(crate) struct UpsertSenseFolderRequest {
     label: String,
     definition: Option<String>,

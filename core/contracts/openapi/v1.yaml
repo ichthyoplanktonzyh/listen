@@ -960,6 +960,20 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/LexicalCapabilityProfile" }
+  /v1/lexical-entries/{id}/observations:
+    get:
+      operationId: listLearningObservationHistory
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: capability, in: query, required: false, schema: { enum: [reading, listening, speaking, writing] } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 200 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: Append-only channelized evidence trail, newest first (read-only consumer)
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/LearningObservation" } }
   /v1/lexical-entries/{id}/capability/{capability}:
     put:
       operationId: setCapabilityOverride
@@ -5582,6 +5596,23 @@ components:
     UpgradeSuggestionStatus:
       type: string
       enum: [pending, accepted, rejected, obsolete]
+    LearningObservation:
+      type: object
+      required: [id, lexical_entry_id, sense_id, capability, task_type, outcome, assistance, surface_form, sentence_id, media_id, origin, source_ref, occurred_at_ms]
+      properties:
+        id: { type: string }
+        lexical_entry_id: { type: string }
+        sense_id: { type: [string, "null"] }
+        capability: { enum: [reading, listening, speaking, writing] }
+        task_type: { enum: [context_marking, cloze, dictation, subtitle_fade, shadowing, review_recall, upgrade_confirmation, reading_context_marking, speaking_production] }
+        outcome: { enum: [success, partial, failure] }
+        assistance: { enum: [none, partial_text, full_text] }
+        surface_form: { type: [string, "null"] }
+        sentence_id: { type: [string, "null"] }
+        media_id: { type: [string, "null"] }
+        origin: { enum: [user_marking, practice_task, review_task, legacy_backfill] }
+        source_ref: { type: [string, "null"] }
+        occurred_at_ms: { type: integer, minimum: 0 }
     UpgradeSuggestion:
       type: object
       required: [id, lexical_entry_id, lexical_display_form, previous_status, suggested_status, status, evidence_context_count, evidence_ids, threshold, evidence_class, created_at_ms, resolved_at_ms, cooldown_until_ms]

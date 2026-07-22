@@ -358,6 +358,29 @@ impl LexicalLearningUseCases {
         Ok(())
     }
 
+    /// User-readable evidence trail for one entry (issue #2): the append-only
+    /// channelized observations, newest first, optionally filtered by
+    /// capability. Strictly read-only — evidence/history rendering must never
+    /// write observations, proposals or projections (3.19.1 authority
+    /// boundary: review/evidence is a read-only consumer).
+    pub fn learning_observation_history(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        capability: Option<LexicalCapability>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<LearningObservation>, ApplicationError> {
+        self.lexical_entries
+            .lexical_details(lexical_entry_id)?
+            .ok_or(ApplicationError::NotFound("lexical entry"))?;
+        self.learning_observations.list_learning_observations(
+            lexical_entry_id,
+            capability,
+            limit,
+            offset,
+        )
+    }
+
     /// Reading-posture word marking (Phase 3.13 Slice 5): one explicit user
     /// act on one word writes exactly one reading-channel observation.
     /// Deliberately narrower than the listening marking path — no legacy
