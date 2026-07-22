@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- 2026-07-22: 语流/节奏带重设计——发光的节奏骨架（refs #28, closes #31 · design Slice 3）。
+  产品独有的语流呈现按宪章气质重画，**只动呈现、不动分析与 evidence 门控**。
+  ① **节奏骨架**（rhythm_frame_ribbon）：`_AudibleNode` 从胶囊 chip 改为节拍柱骨架——柱高
+  即重音层级（核心最高 0.56h、anchor 0.42h、连读 0.30h、弱读近平 0.14h），柱底共线成节奏
+  剪影；只有重音柱发光、当前拍最亮（+12% 高度、blur 12）；去掉胶囊底/描边（盒子让每一拍
+  同样吵，违反原则 5）。**配色语义保留**（owner 裁决：核心粉/anchor 黄/弱读暗只重排明暗）；
+  弱读仍显示可听声形（item.label）而非书面 caption——测试逼出的语义边界。
+  ② **连读带**（connected_speech_reference_ribbon）：每个连读标记从两笔（上弧+下划线）减为
+  一笔 undertie ‿，选中时青晕。③ **字幕行内 ‿**（token_line + player_stage，owner 裁决本刀做）：
+  新增纯显示管线——TokenLine 接收 `connectedSpeechRefs`（复用带子已消费的 rhythm frame，
+  无新分析路径），把连读引用的 token 区间投影到相邻词结点：单空格结点直接画成 ‿、紧邻词间
+  插入 ‿、含标点的结点不标（连读跨标点是句面自相矛盾的宣称）；‿ 为绘制而非字形（不赌字体
+  覆盖），tooltip 带规则提示，当前词进入连读区间时与词发光协同变亮；bounce/淡入尊重
+  reduced-motion，AnimatedContainer/Opacity 时长归零。测试：新增 token_line_tie_test 3 项
+  （空格替换为带 tooltip 的 ‿、无引用无 ‿、无 token 区间忽略）；phoneme_ribbon_test 全绿；
+  全量 550 项绿；`flutter analyze` 零告警。
+
 - 2026-07-22: 外壳退后、内容发光（refs #28, closes #30 · design Slice 2）。宪章原则 2 的强调层
   重排——外壳安静下沉，声音/词/画面成为唯一光源。① **信号青校准**：`darkPrimary`
   `#5cc6b8` → 设计稿 `#4db8a8`，WCAG AA 逐对断言保持绿灯。② **Transport 退后**：
