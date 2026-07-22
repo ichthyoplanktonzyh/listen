@@ -1507,6 +1507,12 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
             _rejectSuggestion(value.entry, suggestion),
         onCapabilityOverride: (capability, conclusion) =>
             _setOverride(value.entry, capability, conclusion),
+        onLoadEvidenceHistory: ({String? capability, int offset = 0}) =>
+            widget.api.learningObservationHistory(
+              value.entry.id,
+              capability: capability,
+              offset: offset,
+            ),
         onSaveContent: (definition, note) =>
             _saveContent(value.entry, definition, note),
         onCreateSenseFolder: (label, definition, gloss, externalRef) =>

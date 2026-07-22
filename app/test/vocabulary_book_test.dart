@@ -214,6 +214,101 @@ void main() {
   );
 
   testWidgets(
+    'evidence history loads lazily, filters by channel, and shows an honest '
+    'empty state',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(900, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final requestedCapabilities = <String?>[];
+      const observations = [
+        LearningObservationView(
+          id: 'obs-1',
+          lexicalEntryId: 'hello',
+          capability: 'listening',
+          taskType: 'context_marking',
+          outcome: 'success',
+          assistance: 'full_text',
+          surfaceForm: 'hello',
+          origin: 'user_marking',
+          occurredAtMs: 1753142400000,
+        ),
+        LearningObservationView(
+          id: 'obs-2',
+          lexicalEntryId: 'hello',
+          capability: 'reading',
+          taskType: 'reading_context_marking',
+          outcome: 'failure',
+          assistance: 'none',
+          surfaceForm: 'hellos',
+          origin: 'user_marking',
+          occurredAtMs: 1753056000000,
+        ),
+      ];
+      await tester.pumpWidget(
+        localized(
+          ListeningDictionaryEntryView(
+            details: const LexicalEntryDetails(
+              entry: LexicalEntry(
+                id: 'hello',
+                normalizedForm: 'hello',
+                displayForm: 'hello',
+                kind: 'word',
+                language: 'en',
+              ),
+            ),
+            onPlay: (_) {},
+            onMark: (_, _) async => true,
+            onLoadEvidenceHistory: ({String? capability, int offset = 0}) {
+              requestedCapabilities.add(capability);
+              return Future.value(
+                capability == null
+                    ? observations
+                    : observations
+                          .where((value) => value.capability == capability)
+                          .toList(growable: false),
+              );
+            },
+          ),
+        ),
+      );
+
+      // The entry is stable and visible, but collapsed: nothing is fetched
+      // until the user explicitly comes to look.
+      expect(find.text('Evidence & history'), findsOneWidget);
+      expect(requestedCapabilities, isEmpty);
+      expect(find.text('In-context listening mark'), findsNothing);
+
+      await tester.tap(find.text('Evidence & history'));
+      await tester.pump();
+      await tester.pump();
+      expect(requestedCapabilities, [null]);
+      expect(find.text('In-context listening mark'), findsOneWidget);
+      expect(find.text('In-context reading mark'), findsOneWidget);
+      // Assistance is the honest boundary of what a row can prove.
+      expect(find.textContaining('full text visible'), findsOneWidget);
+      expect(find.textContaining('no assistance'), findsOneWidget);
+
+      // The channel filter narrows to reading only.
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Reading'));
+      await tester.pump();
+      await tester.pump();
+      expect(requestedCapabilities, [null, 'reading']);
+      expect(find.text('In-context listening mark'), findsNothing);
+      expect(find.text('In-context reading mark'), findsOneWidget);
+
+      // A channel without evidence says so instead of pretending.
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Writing'));
+      await tester.pump();
+      await tester.pump();
+      expect(requestedCapabilities, [null, 'reading', 'writing']);
+      expect(
+        find.text('No recorded learning evidence here yet.'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
     'sense folders stay optional and create through the detail view',
     (tester) async {
       String? createdLabel;
