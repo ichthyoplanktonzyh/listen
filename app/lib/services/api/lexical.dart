@@ -67,6 +67,36 @@ extension LexicalApi on LocalApi {
     });
   }
 
+  /// Evidence & history for one entry (issue #2): the append-only channelized
+  /// observation trail, newest first. [capability] narrows to one channel;
+  /// paging via [limit]/[offset] (server caps limit at 200).
+  Future<List<LearningObservationView>> learningObservationHistory(
+    String lexicalEntryId, {
+    String? capability,
+    int? limit,
+    int? offset,
+  }) async {
+    final query = <String, String>{
+      'capability': ?capability,
+      if (limit != null) 'limit': '$limit',
+      if (offset != null) 'offset': '$offset',
+    };
+    final suffix = query.isEmpty ? '' : '?${Uri(queryParameters: query).query}';
+    final values =
+        await _request(
+              'GET',
+              '/v1/lexical-entries/${Uri.encodeComponent(lexicalEntryId)}/observations$suffix',
+              null,
+            )
+            as List<dynamic>;
+    return values
+        .map(
+          (value) =>
+              LearningObservationView.fromJson(value as Map<String, dynamic>),
+        )
+        .toList(growable: false);
+  }
+
   /// Lists the vocabulary book. All filters are optional and additive: [status]
   /// is the legacy status axis; [capability] + [assessment] together filter by a
   /// four-channel capability dimension (both required to take effect); [kind]
