@@ -237,3 +237,70 @@ async fn reading_marking_rejects_unknown_entry_over_http() {
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
 }
+
+#[tokio::test]
+async fn learning_observation_history_reads_back_marking_evidence() {
+    let app = test_app();
+    let (status, lexical) = put_json(
+        &app,
+        "/v1/lexical-entries",
+        serde_json::json!({
+            "language": "en",
+            "kind": "word",
+            "canonical_form": "quake",
+            "display_form": "quake",
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{lexical}");
+    let entry_id = lexical["entry"]["id"].as_str().unwrap();
+
+    // One reading marking writes exactly one reading-channel observation; the
+    // history endpoint must read the same row back, not a re-derivation.
+    // (Raw request: the route answers 204 with an empty body, which
+    // `post_json` would refuse to parse.)
+    let marking_response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/reading/markings")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "lexical_entry_id": entry_id,
+                        "sentence_id": "cue-1",
+                        "surface_form": "quakes",
+                        "translation_visible": true,
+                        "understood": true,
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(marking_response.status(), StatusCode::NO_CONTENT);
+
+    let (status, history) =
+        get_json(&app, &format!("/v1/lexical-entries/{entry_id}/observations")).await;
+    assert_eq!(status, StatusCode::OK, "{history}");
+    let rows = history.as_array().unwrap();
+    assert_eq!(rows.len(), 1, "{history}");
+    assert_eq!(rows[0]["capability"], "reading");
+    assert_eq!(rows[0]["surface_form"], "quakes");
+    assert_eq!(rows[0]["origin"], "user_marking");
+    assert!(rows[0]["occurred_at_ms"].as_u64().unwrap() > 0);
+
+    // The capability filter is a real filter, not decoration.
+    let (status, filtered) = get_json(
+        &app,
+        &format!("/v1/lexical-entries/{entry_id}/observations?capability=listening"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{filtered}");
+    assert!(filtered.as_array().unwrap().is_empty(), "{filtered}");
+
+    let (status, missing) =
+        get_json(&app, "/v1/lexical-entries/no-such-entry/observations").await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{missing}");
+}

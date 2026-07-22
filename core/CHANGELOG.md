@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+- 2026-07-22: 词条详情新增「证据与历史」入口（closes #2）。能力状态和能力建议此前是词条详情里
+  仅有的"结论层"，用户无法回访结论背后的真实学习记录（Phase 3.19 Owner Journey Q1.4 因此失败）。
+  后端证据链其实早已存在——ADR 0017 的 append-only 通道化 `LearningObservation`（通道/任务/
+  结果/辅助/surface form/来源/时间戳齐全），缺的只是读取面：新增 GET
+  `/v1/lexical-entries/{id}/observations?capability=&limit=&offset=`（application 用例
+  `learning_observation_history`，默认 50 条/上限 200，按时间倒序），**严格只读**——对齐 3.19.1
+  的 authority 边界（review/evidence 是 corpus 与 observation 的只读消费者，不新增任何 writer）。
+  OpenAPI 同步 path + `LearningObservation` schema（防漂移测试逼出来的，这个门真的在工作）。
+  前端：`LearningObservationView` DTO + `learningObservationHistory` API；详情页在能力画像
+  正下方新增「证据与历史」折叠区——**默认收起、点开才拉取**（宪章原则 3：系统对用户的了解
+  等用户自己来看）；展开后按通道筛选（全部/听/读/说/写 chips）、逐行显示任务类型、结果、
+  辅助边界（无辅助/部分文本/完整文本——这是单行证据能证明什么的诚实边界）、来源与时间，
+  整页可分页加载更早证据。层级刻意与能力建议 banner 分开：建议说"接下来做什么"，
+  证据说"实际发生过什么"。未知的未来 task/outcome 枚举降级为原样 snake_case 而非错误标签。
+  颜色全走 `colorScheme`（palette discipline 绿）。测试：Rust 路由测试（reading marking 播种 →
+  历史读回同一行、capability 过滤真在过滤、未知词条 404）、OpenAPI 防漂移 2 项、Dart 契约测试
+  钉 wire shape、widget 测试（懒加载不提前请求、筛选、诚实空态）。zh/en 双语 29 个新键。
+  `flutter analyze` 零告警，Flutter 全量 543 项绿，api-http/application 全量绿。
+
+- 2026-07-22: 泛听完成摘要显示本次实际泛听时长（closes #3）。结束泛听的确认弹窗此前只问理解度
+  和狩猎摘要，用户在提交当下无法确认这次听了多久。issue 明确要求**真实播放累计**——既不是媒体
+  总时长，也不是 started→ended 墙钟差（中途暂停去查词的时间不该算听的时间）。实现为
+  `ExtensiveListeningController` 内一只跟随播放状态的秒表：组合根把 `playerController` 的
+  play/pause 转换喂给 `notePlaybackState`，只有「会话激活 && 正在播放」的墙钟段被累计；seek 不
+  扰动它（播放中时间照常流逝）。累计量**刻意放在 Store 之外**——它连续前进，进 Store 会白白
+  churn 监听者，读方按需采样 `playedDuration`（播放中含未闭合段，实时）。三个生命周期点：
+  `startSession` 与 soft-interrupt 隐式建会话时清零（正在播放则立即起跳），`finishSession` 冻结。
+  时钟可注入（`clock` 构造参数），新增 2 个测试用假时钟断言「暂停段不计入」「完成后冻结」
+  「会话中途开始从会话起点计」「下一会话清零」。变异验证：废掉暂停 flush → 用例红；去掉
+  开会话清零 → 用例红。弹窗在打开前快照时长，作为 completion 摘要首行（`HH:MM:SS`，复用
+  `formatDuration`），zh/en 两 locale 均新增 `extensiveSessionPlayedDuration` 键，无单语硬编码
+  （吸取 #21 教训）。时长暂不回传后端（issue 只要求提交前展示；持久化属于另一刀）。
+  analyze 零告警。
+
 - 2026-07-22: 完成 Phase 3.19.1 方案 B5 的恢复与关闭语义。Realtime route 在 active/connecting 时返回会
   先确认丢弃，显式 Cancel 会先 fence pending learner ASR 再关闭 route；draining/post-processing 期间
   不允许半途退出。provider drain timeout 可注入测试，超时时保留 partial assistant 为 interrupted，

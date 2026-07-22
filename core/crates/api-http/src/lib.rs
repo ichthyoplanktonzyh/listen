@@ -151,9 +151,10 @@ use routes::transcription::{
 use routes::tts::{clear_speech_synthesis_cache, speech_synthesis_capability, synthesize_speech};
 use routes::vocabulary::{
     assign_sense_folder_occurrence, create_sense_folder, delete_sense_folder, export_vocabulary,
-    get_capability_profile, import_external_vocabulary, import_vocabulary, list_vocabulary,
-    read_progress, set_capability_override, unassign_sense_folder_occurrence,
-    update_media_availability, update_progress, update_sense_folder,
+    get_capability_profile, import_external_vocabulary, import_vocabulary,
+    list_learning_observation_history, list_vocabulary, read_progress, set_capability_override,
+    unassign_sense_folder_occurrence, update_media_availability, update_progress,
+    update_sense_folder,
 };
 pub use secret_store_keychain::KeychainSecretStore;
 
@@ -560,6 +561,10 @@ pub fn router(state: ApiState) -> Router {
         .route(
             "/v1/lexical-entries/{id}/capability-profile",
             get(get_capability_profile),
+        )
+        .route(
+            "/v1/lexical-entries/{id}/observations",
+            get(list_learning_observation_history),
         )
         .route(
             "/v1/lexical-entries/{id}/capability/{capability}",
