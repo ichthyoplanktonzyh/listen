@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-22T11:33:00.000+08:00"
+last_updated: "2026-07-22T17:20:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-22 11:33 CST
-> 更新原因：Phase 3.19.1 多轮实现与自动门完成，进入真实 provider/device QA。
+> 最后更新：2026-07-22 17:20 CST
+> 更新原因：Phase 3.19.1 真实 Qwen owner QA 与缺陷回归通过，阶段收口。
 
 ## 当前位置
 
@@ -25,14 +25,15 @@ last_updated: "2026-07-22T11:33:00.000+08:00"
   保留旅程没有达到真正可用、好用且 owner ACCEPT 前，不创建或实现任何新功能。Run 2 使用
   `3.19-OWNER-JOURNEYS-V2.md`，逐步写清主入口、即时结果、任务边界、持久结果与回访位置；
   主入口缺失直接 FAIL，不让 owner 猜路径。P1 清零或书面例外前不发布；实现者不代签验收。
-- **Phase 3.19.1 Realtime Conversation Product Correction**：✅ IMPLEMENTED / AUTOMATED GATES PASS /
-  OWNER REAL-PROVIDER QA PENDING。ADR 0027 固定 session/turn/corpus authority；Flutter 使用 typed ordered
+- **Phase 3.19.1 Realtime Conversation Product Correction**：✅ COMPLETE — OWNER REAL-PROVIDER QA
+  ACCEPT（2026-07-22）。ADR 0027 固定 session/turn/corpus authority；Flutter 使用 typed ordered
   turn assembler，macOS bridge 按 learner turn 产出带 500ms pre-roll 的独立 16 kHz WAV，每轮独立走
   local Whisper，单轮失败不抹掉 completed session。首页自由对话与内容内话题锚定共用同一深模块；
   双方 history 可按 session/sequence 回看；只有 finalized local learner turns 进入 Production Corpus。
   权限在 provider socket 前获取，finish drain、dedup、partial ASR、历史 GET 与窄/宽首页入口均有自动
-  回归，Rust focused、Flutter tests/analyze、macOS Debug build 已通过。下一步仅执行 replacement Q9
-  的真实三轮 OpenAI/Qwen/device boundary、barge-in、最后一轮 drain 与 owner ACCEPT；实现者未代签。
+  回归，Rust focused、Flutter 539 tests/analyze、macOS XCTest/Debug build 已通过。真实 Qwen
+  `qwen3.5-omni-plus-realtime` 多轮双方音频/文本、barge-in、本地 learner Whisper 与 history 已由
+  owner 验收；随后 #34/#35/#36 三个 QA 缺陷修复并复测通过。详见 `3.19.1-CLOSEOUT.md`。
 - **2026-07-22 15:10 CST 产品减法裁决**：Role Reply 只是播放前置字幕后复现预设下一句，与真实
   Realtime Conversation 的产品承诺冲突，已从 Flutter、领域枚举、LLM/Coach/OpenAPI 创建面删除。
   schema v45 破坏性清理其 rubric/attempt/judgment/adjudication/review/recording、显式 speaking

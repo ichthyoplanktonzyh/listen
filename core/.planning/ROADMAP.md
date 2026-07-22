@@ -1500,12 +1500,11 @@ Phase 3.7–3.10 仍按既有计划完成，不在本轮重排。听力主线与
     → 全量 subtraction/degradation audit → owner 按 `3.19-OWNER-JOURNEYS-V2.md` 重测；冷启动
     相关项目保持诚实 blocked，不制造测试数据。**本 phase 是所有新功能的硬门：未达到 retained
     journeys 可用/好用与 P1 release gate 前，不启动后续功能建设**）。
-    - 3.19.1 Realtime Conversation Product Correction ✅ IMPLEMENTED / AUTOMATED GATES PASS /
-      OWNER REAL-PROVIDER QA PENDING：free/topic 两入口、ordered 双方 turn facts、逐 learner turn
+    - 3.19.1 Realtime Conversation Product Correction ✅ COMPLETE — OWNER REAL-PROVIDER QA ACCEPT
+      （2026-07-22）：free/topic 两入口、ordered 双方 turn facts、逐 learner turn
       local Whisper authority、learner-only corpus 与 history revisit 已贯通；权限先于 provider socket，
-      finish drain/partial failure/dedup 有回归，macOS Debug build 通过。下一门为 replacement Q9 的
-      真实三轮 provider/device boundary 与 owner ACCEPT；研究见
-      `.planning/phases/3.19.1-realtime-conversation-product-correction/3.19.1-RESEARCH.md`。
+      finish drain/partial failure/dedup 有回归，真实 Qwen 多轮设备旅程与修复后 owner 回归通过；
+      研究与收口证据见 `.planning/phases/3.19.1-realtime-conversation-product-correction/`。
 
 上述顺序表达当前依赖与建议交付次序；phase scope 不构成长期产品非目标。各 PLAN 是方向承诺
 而非永久执行规格，
