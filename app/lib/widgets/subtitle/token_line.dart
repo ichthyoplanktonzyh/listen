@@ -429,17 +429,22 @@ class _TokenLineState extends State<TokenLine> {
     final current = token.index == currentTokenIndex;
     final style = _style(context, status, current: current);
     if (!clickable) return TextSpan(text: token.text, style: style);
+    // Reduced motion keeps the highlight styles but freezes the bounce: the
+    // word still reads as current through color/weight, nothing moves.
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return WidgetSpan(
       alignment: PlaceholderAlignment.baseline,
       baseline: TextBaseline.alphabetic,
       child: InkWell(
         onTap: () => onWord(token, cue),
         child: AnimatedScale(
-          scale: current && currentWordStyle == 'bounce'
+          scale: !reduceMotion && current && currentWordStyle == 'bounce'
               ? 1 + currentWordIntensity * 0.22
               : 1,
           alignment: Alignment.bottomCenter,
-          duration: const Duration(milliseconds: 120),
+          duration: reduceMotion
+              ? Duration.zero
+              : const Duration(milliseconds: 120),
           curve: Curves.easeOutBack,
           child: Text(token.text, style: style),
         ),
@@ -498,12 +503,18 @@ class _TokenLineState extends State<TokenLine> {
     final base = TextStyle(
       fontSize: fontSize,
       fontFamily: fontFamily,
+      // Glow is the charter's caption treatment (#30): the current word IS
+      // the signal teal with a soft halo; the other styles keep the gentler
+      // lerp. overlaySignal, not colorScheme.primary — over video the light
+      // theme's deep teal would sink into the overlay ink.
       color: current
-          ? Color.lerp(
-              baseColor ?? ListenColors.overlayText,
-              Theme.of(context).colorScheme.primary,
-              currentWordIntensity,
-            )
+          ? currentWordStyle == 'glow'
+                ? ListenColors.overlaySignal
+                : Color.lerp(
+                    baseColor ?? ListenColors.overlayText,
+                    Theme.of(context).colorScheme.primary,
+                    currentWordIntensity,
+                  )
           : baseColor,
       backgroundColor: current && currentWordStyle == 'background'
           ? Theme.of(context).colorScheme.primary.withValues(
@@ -514,7 +525,7 @@ class _TokenLineState extends State<TokenLine> {
       shadows: current && currentWordStyle == 'glow'
           ? [
               Shadow(
-                color: Theme.of(context).colorScheme.primary.withValues(
+                color: ListenColors.overlaySignal.withValues(
                   alpha: 0.45 + currentWordIntensity * 0.45,
                 ),
                 blurRadius: 4 + currentWordIntensity * 12,

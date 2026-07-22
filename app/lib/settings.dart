@@ -47,7 +47,7 @@ class AppSettings {
     this.highlightCurrentChunk = false,
     this.chunkHighlightStyle = 'background',
     this.phonemeDisplay = 'ipa',
-    this.wordHighlightStyle = 'background',
+    this.wordHighlightStyle = 'glow',
     this.wordAnimationIntensity = 0.35,
     this.ruleHintsLevel = 'likely',
     this.precomputePronunciation = true,
@@ -507,8 +507,13 @@ class AppSettings {
     double maximum,
   ) => value is num ? value.toDouble().clamp(minimum, maximum) : fallback;
 
+  // All three persisted choices survive; only absent/unknown values take the
+  // charter default (glow, #30). `toJson` always writes the key, so users who
+  // saved 'background' before glow became the default keep it.
   static String _wordHighlightStyle(Object? value) =>
-      value == 'bounce' || value == 'glow' ? value as String : 'background';
+      value == 'bounce' || value == 'glow' || value == 'background'
+      ? value as String
+      : 'glow';
 
   static String _chunkDisplayStyle(Object? value) =>
       value == 'spacing' ? value as String : 'capsule';

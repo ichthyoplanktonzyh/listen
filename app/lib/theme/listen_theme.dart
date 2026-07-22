@@ -44,6 +44,12 @@ abstract final class ListenColors {
   static const overlayTextFaint = Color(0x76eef3f1);
   static const overlayInk = Color(0xdc101715);
 
+  /// The charter signal teal for content rendered over video. Overlays keep
+  /// one dark vocabulary in both themes, so the "current word" light source
+  /// must not flip to the light theme's deep teal — it would sink into the
+  /// overlay ink (#30).
+  static const overlaySignal = Color(0xff4db8a8);
+
   static const soundCitation = Color(0xff8fd3ff);
   static const soundConnected = Color(0xff6dd6c3);
   static const soundConnectedStrong = Color(0xffa7f3e8);
@@ -72,7 +78,10 @@ abstract final class ListenColors {
   static const darkOutline = Color(0xff6d7a76);
   static const darkBorder = Color(0xff333f3b);
   static const darkDisabled = Color(0xff6b7874);
-  static const darkPrimary = Color(0xff5cc6b8);
+  // Charter signal teal (design-notes/listen-design-charter.md): the one
+  // color that means "this is the content speaking" — current word, progress,
+  // selection. Calibrated from #5cc6b8 in Slice 2 (#30).
+  static const darkPrimary = Color(0xff4db8a8);
   static const darkPrimaryPressed = Color(0xff8bdcd0);
   static const darkSelected = Color(0xff1d4f49);
   static const darkAccent = Color(0xffe6b45c);

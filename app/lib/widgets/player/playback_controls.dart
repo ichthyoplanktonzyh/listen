@@ -7,6 +7,72 @@ import '../../theme/breakpoints.dart';
 import '../../player_adapter.dart';
 import '../../utils/format_duration.dart';
 
+/// One receded look for both transport progress bars (#30): a thin track that
+/// nearly sinks into the bar, where only the played portion and the handle
+/// carry the signal teal. Shared so the compact and full forms cannot drift.
+SliderThemeData _progressSliderTheme(BuildContext context, ColorScheme colors) =>
+    SliderThemeData(
+      trackHeight: 3,
+      trackShape: const RectangularSliderTrackShape(),
+      thumbShape: _GlowThumbShape(
+        glowColor: colors.primary.withValues(alpha: 0.33),
+        glow: !MediaQuery.highContrastOf(context),
+      ),
+      overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
+      activeTrackColor: colors.primary,
+      inactiveTrackColor: colors.outlineVariant.withValues(alpha: 0.4),
+      thumbColor: colors.primary,
+    );
+
+/// The transport handle from the charter's dimmed room: a small solid dot
+/// with a soft static halo, so progress reads as the one lit thing on an
+/// otherwise receded bar. Legibility never depends on the halo — it is pure
+/// decoration and high-contrast mode drops it.
+class _GlowThumbShape extends RoundSliderThumbShape {
+  const _GlowThumbShape({required this.glowColor, required this.glow})
+    : super(enabledThumbRadius: 5);
+
+  final Color glowColor;
+  final bool glow;
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    if (glow) {
+      final halo = Paint()
+        ..color = glowColor
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+      context.canvas.drawCircle(center, 8, halo);
+    }
+    super.paint(
+      context,
+      center,
+      activationAnimation: activationAnimation,
+      enableAnimation: enableAnimation,
+      isDiscrete: isDiscrete,
+      labelPainter: labelPainter,
+      parentBox: parentBox,
+      sliderTheme: sliderTheme,
+      textDirection: textDirection,
+      value: value,
+      textScaleFactor: textScaleFactor,
+      sizeWithOverflow: sizeWithOverflow,
+    );
+  }
+}
+
 class PlaybackControls extends StatelessWidget {
   const PlaybackControls({
     super.key,
@@ -165,21 +231,7 @@ class PlaybackControls extends StatelessWidget {
                 SizedBox(
                   height: 12,
                   child: SliderTheme(
-                    data: SliderThemeData(
-                      trackHeight: 3,
-                      trackShape: const RectangularSliderTrackShape(),
-                      thumbShape: const RoundSliderThumbShape(
-                        enabledThumbRadius: 4,
-                      ),
-                      overlayShape: const RoundSliderOverlayShape(
-                        overlayRadius: 10,
-                      ),
-                      activeTrackColor: colors.primary,
-                      inactiveTrackColor: colors.outlineVariant.withValues(
-                        alpha: 0.5,
-                      ),
-                      thumbColor: colors.primary,
-                    ),
+                    data: _progressSliderTheme(context, colors),
                     child: ValueListenableBuilder<Duration>(
                       valueListenable: position,
                       builder: (context, positionValue, _) => Slider(
@@ -267,6 +319,7 @@ class PlaybackControls extends StatelessWidget {
                           tooltip: l.text('previousSentence'),
                           onPressed: onSeekToPreviousCue,
                           iconSize: 24,
+                          color: colors.onSurfaceVariant,
                           icon: const Icon(Icons.skip_previous_rounded),
                         ),
                         SizedBox(
@@ -289,6 +342,7 @@ class PlaybackControls extends StatelessWidget {
                           tooltip: l.text('nextSentence'),
                           onPressed: onSeekToNextCue,
                           iconSize: 24,
+                          color: colors.onSurfaceVariant,
                           icon: const Icon(Icons.skip_next_rounded),
                         ),
                         if (!narrow) ...[
@@ -379,22 +433,27 @@ class PlaybackControls extends StatelessWidget {
                             width: 54,
                             child: Text(
                               formatDuration(positionValue),
-                              style: Theme.of(context).textTheme.labelMedium,
+                              style: Theme.of(context).textTheme.labelMedium
+                                  ?.copyWith(color: colors.onSurfaceVariant),
                             ),
                           ),
                           Expanded(
-                            child: Slider(
-                              value: positionValue.inMilliseconds
-                                  .clamp(
-                                    0,
-                                    duration.inMilliseconds.clamp(1, 1 << 31),
-                                  )
-                                  .toDouble(),
-                              max: duration.inMilliseconds
-                                  .clamp(1, 1 << 31)
-                                  .toDouble(),
-                              onChanged: (value) =>
-                                  onSeek(Duration(milliseconds: value.round())),
+                            child: SliderTheme(
+                              data: _progressSliderTheme(context, colors),
+                              child: Slider(
+                                value: positionValue.inMilliseconds
+                                    .clamp(
+                                      0,
+                                      duration.inMilliseconds.clamp(1, 1 << 31),
+                                    )
+                                    .toDouble(),
+                                max: duration.inMilliseconds
+                                    .clamp(1, 1 << 31)
+                                    .toDouble(),
+                                onChanged: (value) => onSeek(
+                                  Duration(milliseconds: value.round()),
+                                ),
+                              ),
                             ),
                           ),
                           SizedBox(
@@ -402,7 +461,8 @@ class PlaybackControls extends StatelessWidget {
                             child: Text(
                               formatDuration(duration),
                               textAlign: TextAlign.end,
-                              style: Theme.of(context).textTheme.labelMedium,
+                              style: Theme.of(context).textTheme.labelMedium
+                                  ?.copyWith(color: colors.onSurfaceVariant),
                             ),
                           ),
                         ],
@@ -492,17 +552,22 @@ class PlaybackControls extends StatelessWidget {
   }
 
   Widget _fullControlRow(BuildContext context, AppLocalizations l, bool roomy) {
+    final colors = Theme.of(context).colorScheme;
+    // Shell recedes (#30): secondary transport steps drop to the variant
+    // shade; the play button is the one lit control on this bar.
     return Row(
       children: [
         IconButton(
           tooltip: l.text('previousSentence'),
           onPressed: onSeekToPreviousCue,
+          color: colors.onSurfaceVariant,
           icon: const Icon(Icons.skip_previous),
         ),
         if (roomy)
           IconButton(
             tooltip: l.text('restartMedia'),
             onPressed: onSeekToZero,
+            color: colors.onSurfaceVariant,
             icon: const Icon(Icons.restart_alt),
           ),
         IconButton.filled(
@@ -513,6 +578,7 @@ class PlaybackControls extends StatelessWidget {
         IconButton(
           tooltip: l.text('nextSentence'),
           onPressed: onSeekToNextCue,
+          color: colors.onSurfaceVariant,
           icon: const Icon(Icons.skip_next),
         ),
         const SizedBox(width: 8),
@@ -1058,10 +1124,12 @@ class _PlaybackMenuButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    // Unselected toggles sit with the shell (variant shade); only a selected
+    // state carries the signal teal (#30).
     final foreground = enabled
         ? selected
               ? colors.primary
-              : colors.onSurface
+              : colors.onSurfaceVariant
         : colors.onSurfaceVariant.withValues(alpha: 0.55);
     final iconWidget = Icon(icon, size: 18, color: foreground);
     return Padding(
@@ -1182,6 +1250,8 @@ class _ToggleIcon extends StatelessWidget {
     tooltip: tooltip,
     isSelected: selected,
     onPressed: onPressed,
+    // Unselected toggles recede with the shell; selection is what lights up.
+    color: Theme.of(context).colorScheme.onSurfaceVariant,
     icon: Icon(icon),
     selectedIcon: Icon(icon, color: Theme.of(context).colorScheme.primary),
     style: selected
