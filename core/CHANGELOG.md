@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-22: AppBar 菜单项按状态禁用 + 归档媒体不再静默空点击（refs #20, closes #24）。
+  ① 新增 `AppBarCapabilities` 值对象（hasMedia/coreReady），组合根从
+  `playerController.mediaId != null` 与 `api != null` 一处计算——#23 原生菜单栏必须复用同一份
+  判定，不写第二套。② 归档媒体与 7 个字幕动作（导入/生成/搜索主副轨、导入内嵌）在无媒体时
+  `enabled: false` 灰化，并在 subtitle 槽位显示原因（复用 `statusOpenMediaAndCoreFirst` 文案，
+  对齐 `ContentChannelAvailability` 带 reason 的既有模式）；打开媒体/打开链接保持可用——它们
+  本身就是恢复动作。③ `playback_actions_coordinator` 四处静默 `return`（归档、词汇导出/导入、
+  语音发现反馈）改为诚实的 Unavailable 反馈（CONTEXT.md：说明原因 + 恢复动作），新增
+  `statusConnectLocalCoreFirst` zh/en 键；其余 coordinator 的同类静默 return 已扫描、
+  记为独立后续任务（用户触发 vs 后台被动需逐一判断，不在本刀发胖）。④ `player_app_bar_test`
+  新增无媒体态断言：受限项 `enabled == false`、原因可见、点击不派发、恢复动作保持可用。
+
 - 2026-07-22: 设计宪章落库 + 暗色为家（refs #28, closes #29 · design Slice 1）。
   ① 新增 `design-notes/listen-design-charter.md`——把 #28 的一句话气质（「一个正在专注倾听
   你的、安静的房间」）、五条可检验原则、墨绿炭底色定义与定调期关键裁决固化为仓库内唯一
