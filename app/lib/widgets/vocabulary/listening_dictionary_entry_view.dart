@@ -51,6 +51,7 @@ class ListeningDictionaryEntryView extends StatefulWidget {
     this.onConfirmSuggestion,
     this.onRejectSuggestion,
     this.onCapabilityOverride,
+    this.onLoadEvidenceHistory,
     this.onSaveContent,
     this.onCreateSenseFolder,
     this.onUpdateSenseFolder,
@@ -99,6 +100,15 @@ class ListeningDictionaryEntryView extends StatefulWidget {
   /// Sets or clears (conclusion == null) one channel's user override.
   final Future<void> Function(String capability, String? conclusion)?
   onCapabilityOverride;
+
+  /// Loads one page of the append-only evidence trail (issue #2). Read-only:
+  /// the section renders history and never writes. `capability == null` means
+  /// all channels; paging via [offset].
+  final Future<List<LearningObservationView>> Function({
+    String? capability,
+    int offset,
+  })?
+  onLoadEvidenceHistory;
 
   /// Persists the user definition and personal note.
   final Future<void> Function(String? definition, String? note)? onSaveContent;
@@ -380,6 +390,16 @@ class _ListeningDictionaryEntryViewState
           profile: widget.details.capabilityProfile,
           onOverride: widget.onCapabilityOverride,
         ),
+        // Evidence & history (issue #2) sits directly under the capability
+        // status it explains, but is its own layer: suggestions above say
+        // "what to do next", this says "what actually happened".
+        if (widget.onLoadEvidenceHistory != null) ...[
+          const SizedBox(height: 12),
+          _EvidenceHistorySection(
+            key: ValueKey('evidence-${widget.details.entry.id}'),
+            loader: widget.onLoadEvidenceHistory!,
+          ),
+        ],
         if (widget.onSaveContent != null) ...[
           const SizedBox(height: 12),
           _contentEditor(l),
@@ -1012,6 +1032,255 @@ class _ListeningDictionaryEntryViewState
 /// One pending listening upgrade suggestion with its evidence count and the
 /// confirm/defer resolution actions (restored from the pre-dictionary detail
 /// dialog).
+/// Issue #2: the user-readable evidence trail. Strictly read-only — it renders
+/// what the append-only observation store says and never writes back.
+/// Collapsed by default so the capability summary stays the first read;
+/// expanding is the explicit "show me the evidence" act (the system's
+/// knowledge waits for the user to come look, it never pushes).
+class _EvidenceHistorySection extends StatefulWidget {
+  const _EvidenceHistorySection({super.key, required this.loader});
+
+  final Future<List<LearningObservationView>> Function({
+    String? capability,
+    int offset,
+  })
+  loader;
+
+  @override
+  State<_EvidenceHistorySection> createState() =>
+      _EvidenceHistorySectionState();
+}
+
+class _EvidenceHistorySectionState extends State<_EvidenceHistorySection> {
+  /// Mirrors the server's default page size; a full page means there may be
+  /// earlier evidence to fetch.
+  static const _pageSize = 50;
+
+  bool expanded = false;
+  bool loading = false;
+  bool loadFailed = false;
+
+  /// `null` selects all channels.
+  String? capability;
+
+  /// `null` while never loaded; an empty list is an honest no-evidence state.
+  List<LearningObservationView>? rows;
+  bool maybeMore = false;
+
+  Future<void> _load({required int offset}) async {
+    setState(() {
+      loading = true;
+      loadFailed = false;
+    });
+    try {
+      final page = await widget.loader(capability: capability, offset: offset);
+      if (!mounted) return;
+      setState(() {
+        loading = false;
+        rows = offset == 0 ? page : [...?rows, ...page];
+        maybeMore = page.length >= _pageSize;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        loading = false;
+        loadFailed = true;
+      });
+    }
+  }
+
+  void _toggle() {
+    setState(() => expanded = !expanded);
+    if (expanded && rows == null && !loading) unawaited(_load(offset: 0));
+  }
+
+  void _selectCapability(String? value) {
+    if (value == capability) return;
+    setState(() {
+      capability = value;
+      rows = null;
+      maybeMore = false;
+    });
+    unawaited(_load(offset: 0));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: _toggle,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.history_outlined,
+                  size: 18,
+                  color: colors.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  l.text('evidenceHistoryTitle'),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const Spacer(),
+                Icon(
+                  expanded ? Icons.expand_less : Icons.expand_more,
+                  color: colors.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (expanded) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final option in const [
+                (null, 'evidenceFilterAll'),
+                ('listening', 'capabilityListening'),
+                ('reading', 'capabilityReading'),
+                ('speaking', 'capabilitySpeaking'),
+                ('writing', 'capabilityWriting'),
+              ])
+                ChoiceChip(
+                  label: Text(l.text(option.$2)),
+                  selected: capability == option.$1,
+                  onSelected: (_) => _selectCapability(option.$1),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (loading && rows == null) const LinearProgressIndicator(),
+          if (loadFailed)
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    l.text('evidenceHistoryLoadFailed'),
+                    style: TextStyle(color: colors.error),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => unawaited(_load(offset: rows?.length ?? 0)),
+                  child: Text(l.text('retry')),
+                ),
+              ],
+            ),
+          if (rows != null && rows!.isEmpty && !loading && !loadFailed)
+            Text(
+              l.text('evidenceHistoryEmpty'),
+              style: TextStyle(color: colors.onSurfaceVariant),
+            ),
+          if (rows != null)
+            for (final row in rows!) _EvidenceRow(observation: row),
+          if (maybeMore && !loading && !loadFailed)
+            TextButton(
+              onPressed: () => unawaited(_load(offset: rows!.length)),
+              child: Text(l.text('evidenceHistoryLoadMore')),
+            ),
+        ],
+      ],
+    );
+  }
+}
+
+class _EvidenceRow extends StatelessWidget {
+  const _EvidenceRow({required this.observation});
+
+  final LearningObservationView observation;
+
+  /// Localized label when the key is known; the raw wire value otherwise, so
+  /// a future kind degrades to honest snake_case instead of a wrong label.
+  static String _label(AppLocalizations l, String prefix, String value) {
+    final key =
+        '$prefix${value.split('_').map((part) => part.isEmpty ? part : '${part[0].toUpperCase()}${part.substring(1)}').join()}';
+    final resolved = l.text(key);
+    return resolved == key ? value : resolved;
+  }
+
+  static String _formatTime(int milliseconds) {
+    final value = DateTime.fromMillisecondsSinceEpoch(milliseconds).toLocal();
+    String twoDigits(int part) => part.toString().padLeft(2, '0');
+    return '${value.year}-${twoDigits(value.month)}-${twoDigits(value.day)} '
+        '${twoDigits(value.hour)}:${twoDigits(value.minute)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    final (outcomeIcon, outcomeColor) = switch (observation.outcome) {
+      'success' => (Icons.check_circle_outline, colors.primary),
+      'partial' => (Icons.remove_circle_outline, colors.onSurfaceVariant),
+      _ => (Icons.highlight_off, colors.error),
+    };
+    final channelIcon = switch (observation.capability) {
+      'listening' => Icons.hearing_outlined,
+      'reading' => Icons.menu_book_outlined,
+      'speaking' => Icons.record_voice_over_outlined,
+      _ => Icons.edit_outlined,
+    };
+    final detail = [
+      if (observation.surfaceForm != null &&
+          observation.surfaceForm!.isNotEmpty)
+        observation.surfaceForm!,
+      _label(l, 'obsAssistance', observation.assistance),
+      _label(l, 'obsOrigin', observation.origin),
+      _formatTime(observation.occurredAtMs),
+    ].join(' · ');
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(channelIcon, size: 16, color: colors.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _label(l, 'obsTask', observation.taskType),
+                        style: Theme.of(context).textTheme.bodyMedium,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(outcomeIcon, size: 15, color: outcomeColor),
+                    const SizedBox(width: 3),
+                    Text(
+                      _label(l, 'obsOutcome', observation.outcome),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: outcomeColor),
+                    ),
+                  ],
+                ),
+                Text(
+                  detail,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SuggestionBanner extends StatelessWidget {
   const _SuggestionBanner({
     required this.suggestion,

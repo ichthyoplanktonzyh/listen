@@ -502,6 +502,58 @@ class LexicalCapabilityProfile {
   };
 }
 
+/// One row of the append-only channelized evidence trail
+/// (`GET /v1/lexical-entries/{id}/observations`, ADR 0017). Read-only on the
+/// client: history rendering never writes observations or projections.
+class LearningObservationView {
+  const LearningObservationView({
+    required this.id,
+    required this.lexicalEntryId,
+    this.senseId,
+    required this.capability,
+    required this.taskType,
+    required this.outcome,
+    required this.assistance,
+    this.surfaceForm,
+    this.sentenceId,
+    this.mediaId,
+    required this.origin,
+    this.sourceRef,
+    required this.occurredAtMs,
+  });
+
+  factory LearningObservationView.fromJson(Map<String, dynamic> json) =>
+      LearningObservationView(
+        id: json['id'] as String,
+        lexicalEntryId: json['lexical_entry_id'] as String,
+        senseId: json['sense_id'] as String?,
+        capability: json['capability'] as String,
+        taskType: json['task_type'] as String,
+        outcome: json['outcome'] as String,
+        assistance: json['assistance'] as String,
+        surfaceForm: json['surface_form'] as String?,
+        sentenceId: json['sentence_id'] as String?,
+        mediaId: json['media_id'] as String?,
+        origin: json['origin'] as String,
+        sourceRef: json['source_ref'] as String?,
+        occurredAtMs: json['occurred_at_ms'] as int,
+      );
+
+  final String id;
+  final String lexicalEntryId;
+  final String? senseId;
+  final String capability;
+  final String taskType;
+  final String outcome;
+  final String assistance;
+  final String? surfaceForm;
+  final String? sentenceId;
+  final String? mediaId;
+  final String origin;
+  final String? sourceRef;
+  final int occurredAtMs;
+}
+
 class LexicalNormalization {
   const LexicalNormalization({
     required this.original,

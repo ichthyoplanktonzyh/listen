@@ -47,12 +47,25 @@ class ExtensiveListeningState {
 }
 
 class ExtensiveListeningController extends ChangeNotifier {
-  ExtensiveListeningController()
-    : _store = Store(const ExtensiveListeningState()) {
+  ExtensiveListeningController({DateTime Function()? clock})
+    : _clock = clock ?? DateTime.now,
+      _store = Store(const ExtensiveListeningState()) {
     _store.addListener(notifyListeners);
   }
 
   final Store<ExtensiveListeningState> _store;
+
+  /// Injectable wall clock so played-time accumulation is testable.
+  final DateTime Function() _clock;
+
+  /// Played-time accumulation for the completion summary (issue #3): wall time
+  /// spent in the playing state while a session is active. Pauses stop the
+  /// clock; seeks do not disturb it (time keeps passing at 1x while playing).
+  /// Kept outside the [Store] on purpose — it advances continuously and must
+  /// not churn listeners; readers sample [playedDuration] on demand.
+  Duration _playedAccum = Duration.zero;
+  DateTime? _playingSince;
+  bool _lastPlaying = false;
 
   Store<ExtensiveListeningState> get store => _store;
   ExtensiveListeningState get state => _store.state;
@@ -65,6 +78,41 @@ class ExtensiveListeningController extends ChangeNotifier {
 
   ValueNotifier<R> select<R>(R Function(ExtensiveListeningState) selector) =>
       _store.select(selector);
+
+  /// Actual accumulated playback time for the current (or just-finished)
+  /// session. Live while playing: the open segment is included.
+  Duration get playedDuration {
+    final since = _playingSince;
+    return since == null
+        ? _playedAccum
+        : _playedAccum + _clock().difference(since);
+  }
+
+  /// Feed playback state transitions from the composition root. Cheap and
+  /// idempotent; outside an active session it only remembers the latest state
+  /// so a session that starts mid-playback begins ticking immediately.
+  void notePlaybackState(bool playing) {
+    if (playing == _lastPlaying) return;
+    _lastPlaying = playing;
+    if (!active) return;
+    if (playing) {
+      _playingSince = _clock();
+    } else {
+      _flushPlayed();
+    }
+  }
+
+  void _beginPlayedTracking() {
+    _playedAccum = Duration.zero;
+    _playingSince = _lastPlaying ? _clock() : null;
+  }
+
+  void _flushPlayed() {
+    final since = _playingSince;
+    if (since == null) return;
+    _playedAccum += _clock().difference(since);
+    _playingSince = null;
+  }
 
   Future<bool> startSession({
     required LocalApi? api,
@@ -86,6 +134,7 @@ class ExtensiveListeningController extends ChangeNotifier {
       _store.update(
         (s) => s.copyWith(session: session, items: items, busy: false),
       );
+      _beginPlayedTracking();
       return true;
     } catch (error) {
       return _fail('Could not start extensive listening: $error');
@@ -102,6 +151,9 @@ class ExtensiveListeningController extends ChangeNotifier {
       return _fail('No extensive listening session is active.');
     }
     _store.update((s) => s.copyWith(busy: true, error: null));
+    // Freeze the played clock at completion time; the value stays readable
+    // until the next session resets it.
+    _flushPlayed();
     try {
       final session = await api.completeListeningSession(
         current.id,
@@ -148,7 +200,8 @@ class ExtensiveListeningController extends ChangeNotifier {
     }
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      final currentSession = active
+      final wasActive = active;
+      final currentSession = wasActive
           ? session!
           : await api.createPracticeSession(
               CreatePracticeSession(
@@ -200,6 +253,9 @@ class ExtensiveListeningController extends ChangeNotifier {
           lastCapturedAtMs: captured.capturedAtMs,
         ),
       );
+      // A soft-interrupt capture may have implicitly opened the session; the
+      // played clock starts with it.
+      if (!wasActive) _beginPlayedTracking();
       return true;
     } catch (error) {
       return _fail('Could not capture Listening Inbox item: $error');
