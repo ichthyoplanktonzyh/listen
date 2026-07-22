@@ -461,6 +461,12 @@ expansion is ephemeral overlay state, not a fourth persisted Rhythm mode.
 - Rebuild/backfill for v44 is explicit replay, not migration-time inference:
   v43 capability state/history and observations migrate byte-for-byte, proposal
   tables start empty, and replay appends/supersedes by algorithm/evidence version.
+- Schema v45 is an explicit product-subtraction migration: it removes every
+  `role_reply` rubric/attempt and directly traceable judgment, review, recording,
+  speaking observation and projection proposal. A still-current confirmed Role
+  Reply projection is withdrawn while any user override is preserved. The
+  retired enum is removed from the domain, so no legacy Role Reply JSON remains
+  readable or creatable after migration.
 - Review scheduling v1 is recorded as `listen_review_v1_heuristic_proxy`: `again` returns in
   10 minutes, `hard` in one day, and successful intervals grow from 3 to 7 days before doubling.
   The durable attempts remain the evidence history; the schedule row is a replaceable read model.

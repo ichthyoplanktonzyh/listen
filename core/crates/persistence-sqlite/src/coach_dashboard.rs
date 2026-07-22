@@ -151,7 +151,7 @@ fn task_kind_sql(channel: &str) -> &'static str {
     match channel {
         "listening" => "'\"l1_retelling\"'",
         "reading" => "'\"reading_comprehension\"'",
-        "speaking" => "'\"l2_retelling\"','\"role_reply\"'",
+        "speaking" => "'\"l2_retelling\"'",
         "writing" => {
             "'\"dictogloss\"','\"one_sentence_summary\"','\"summary\"','\"opinion_response\"'"
         }

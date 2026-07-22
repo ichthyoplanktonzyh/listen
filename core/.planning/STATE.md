@@ -33,6 +33,10 @@ last_updated: "2026-07-22T11:33:00.000+08:00"
   权限在 provider socket 前获取，finish drain、dedup、partial ASR、历史 GET 与窄/宽首页入口均有自动
   回归，Rust focused、Flutter tests/analyze、macOS Debug build 已通过。下一步仅执行 replacement Q9
   的真实三轮 OpenAI/Qwen/device boundary、barge-in、最后一轮 drain 与 owner ACCEPT；实现者未代签。
+- **2026-07-22 15:10 CST 产品减法裁决**：Role Reply 只是播放前置字幕后复现预设下一句，与真实
+  Realtime Conversation 的产品承诺冲突，已从 Flutter、领域枚举、LLM/Coach/OpenAPI 创建面删除。
+  schema v45 破坏性清理其 rubric/attempt/judgment/adjudication/review/recording、显式 speaking
+  observation 及可追踪 projection，不保留历史兼容；Retelling、Shadowing、Personal Expression 保留。
 - Phase 3.18 Cross-modal Coach **✅ CODE COMPLETE — OWNER MANUAL QA
   PENDING**。3.10 listening-only dashboard 已扩为四通道只读聚合：attempt/judgment/
   adjudication/observation/proposal/confirmed projection/history/personal-expression attempt 分层，
@@ -81,11 +85,10 @@ last_updated: "2026-07-22T11:33:00.000+08:00"
   验收通过）：Writing 内容通道、immutable attempts/revisions、manual self-assessment、
   Harper 表面 finding 与 disposition 全贯通；v1 零 writing observation/projection
   writer。详见 `3.15-CLOSEOUT.md`。
-- Phase 3.14 Speaking Studio v1 **CODE COMPLETE — OWNER QA 延期**。Slice 0–5 已落地
-  （短录音 whisper.cpp job、L2 Retelling + 三档 Role Reply、固定 rubric 自评 +
-  adjudication、客观音频事实、literal-hit anchored speaking observation 零 projection）；
-  详见其 phase 文档。owner 按 `3.14-MANUAL-QA.md` 的真实体验 QA 未重开，此前不宣称
-  owner accepted。LLM judge 反馈已由 3.12.2 后置补上（显示诚实边界）。
+- Phase 3.14 Speaking Studio v1 **HISTORICAL CODE COMPLETE — PRODUCT SUBTRACTED IN 3.19.1**。
+  其短录音/local ASR、L2 Retelling、客观音频事实与 literal-hit speaking observation 仍保留；
+  三档 Role Reply 因与真实 Realtime Conversation 冲突，已在 3.19.1 连同数据兼容删除。3.14
+  历史 phase 文档保持冻结，不再执行其中 Role Reply owner QA。
 - Phase 3.9.4 已收口合回 main（语义分组四层断链修复 + ADR 0016 投影交互对等，
   见 `3.9.4-REAL-MEDIA-QA.md`，GUI 交互项留 owner 清单）。
 - Phase 3.9.3 已完成并冻结；spaCy syntax capability 已具 App 内 opt-in

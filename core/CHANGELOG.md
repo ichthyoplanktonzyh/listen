@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-22 15:10 CST: 完成 Speaking / Realtime 产品减法：删除把字幕下一句当预设回答的 Role
+  Reply，不再保留三档文字辅助、Flutter 入口、controller 创建路径、领域枚举、LLM/Coach 分支或
+  OpenAPI kind。schema v45 破坏性清理既有 Role Reply rubric、attempt、judgment/adjudication、延迟
+  review、录音与音频文件、显式 speaking observation，以及可追踪到这些 observation 的 proposal；
+  若被确认 proposal 仍是当前 speaking projection，则撤回 projection 但保留用户 override。L2
+  Retelling、Shadowing、Personal Expression 与真正的 free/topic Realtime Conversation 保持独立。
+
 - 2026-07-22: Realtime conversation baseline 从 OpenAI 调整为 Qwen
   `qwen3.5-omni-plus-realtime`，新 profile 默认北京 workspace endpoint 与 `Tina` 音色，并支持
   Singapore workspace endpoint。修正 provider 音频协商：Qwen capture/input 使用官方要求的

@@ -4858,7 +4858,7 @@ components:
         start_ms: { type: [integer, "null"], minimum: 0 }
         end_ms: { type: [integer, "null"], minimum: 0 }
     SemanticTaskKind:
-      enum: [reading_comprehension, l1_retelling, l2_retelling, role_reply, dictogloss, one_sentence_summary, summary, opinion_response, pattern_production]
+      enum: [reading_comprehension, l1_retelling, l2_retelling, dictogloss, one_sentence_summary, summary, opinion_response, pattern_production]
     RubricPointImportance:
       enum: [required, optional]
     RubricPoint:

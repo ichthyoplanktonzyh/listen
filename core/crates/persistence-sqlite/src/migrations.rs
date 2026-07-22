@@ -14,7 +14,7 @@ use super::PersistenceError;
 // Phase 3.15 append-only writing feedback and user disposition facts. v39 adds
 // the Phase 3.15.5 rebuildable production-corpus projection. v40 adds Phase
 // 3.15.7 realtime provider config and local session/turn facts.
-pub const MIGRATION_VERSION: u32 = 44;
+pub const MIGRATION_VERSION: u32 = 45;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -331,7 +331,69 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         tx.pragma_update(None, "user_version", 44)?;
         tx.commit()?;
     }
+    if current < 45 {
+        let has_complete_base_schema = table_exists(connection, "media_items")?;
+        let recording_paths = if has_complete_base_schema {
+            role_reply_recording_paths(connection)?
+        } else {
+            Vec::new()
+        };
+        let tx = connection.unchecked_transaction()?;
+        // Some historical regression fixtures intentionally model a sparse
+        // pre-v22 schema and therefore omit the v1 media foundation while
+        // still exercising later backfills. Such a database cannot contain a
+        // valid Role Reply attempt; advance it without traversing dangling FK
+        // references created by the deliberately incomplete fixture.
+        if has_complete_base_schema {
+            if table_exists(&tx, "review_items")? {
+                tx.execute(
+                    "DELETE FROM review_items
+                     WHERE source_kind = '\"speaking_attempt\"'
+                       AND json_extract(item_json, '$.source.id') IN (
+                         SELECT id FROM semantic_task_attempts
+                         WHERE kind = '\"role_reply\"'
+                       )",
+                    [],
+                )?;
+            }
+            tx.execute_batch(include_str!("../migrations/0045_remove_role_reply.sql"))?;
+        }
+        tx.pragma_update(None, "user_version", 45)?;
+        tx.commit()?;
+        for path in recording_paths {
+            let _ = std::fs::remove_file(path);
+        }
+    }
     Ok(())
+}
+
+fn role_reply_recording_paths(connection: &Connection) -> Result<Vec<String>, PersistenceError> {
+    if !table_exists(connection, "semantic_task_attempts")?
+        || !table_exists(connection, "recording_assets")?
+    {
+        return Ok(Vec::new());
+    }
+    let mut statement = connection.prepare(
+        "SELECT DISTINCT recording.file_path
+         FROM semantic_task_attempts AS attempt,
+              json_each(attempt.attempt_json, '$.responses') AS response
+         JOIN recording_assets AS recording
+           ON recording.id = json_extract(response.value, '$.recording_asset_id')
+         WHERE attempt.kind = '\"role_reply\"'",
+    )?;
+    Ok(statement
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?)
+}
+
+fn table_exists(connection: &Connection, table: &str) -> Result<bool, PersistenceError> {
+    Ok(connection.query_row(
+        "SELECT EXISTS(
+           SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1
+         )",
+        [table],
+        |row| row.get(0),
+    )?)
 }
 
 fn table_has_column(
